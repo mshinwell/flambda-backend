@@ -5,7 +5,7 @@ The Flambda backend project for OCaml.
 
 Only currently tested on Linux/x86-64 and macOS/x86-64.
 ```
-$ opam switch 4.11.1
+$ opam switch 4.11.1  # or "opam switch create 4.11.1" if you haven't got that switch already
 $ eval $(opam env)
 $ git clone https://github.com/ocaml-flambda/dune
 $ cd dune
