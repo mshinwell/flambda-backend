@@ -37,7 +37,10 @@
 (library
  (name ocamlcommon)
  (wrapped false)
- (flags (:standard -principal -nostdlib))
+ (flags (
+   -nostdlib -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48-66
+   -warn-error A -bin-annot -safe-string -strict-formats
+ ))
  (library_flags -linkall)
  (libraries stdlib)
  (modules_without_implementation
@@ -82,7 +85,10 @@
 (library
  (name ocamlbytecomp)
  (wrapped false)
- (flags (:standard -principal -nostdlib))
+ (flags (
+   -nostdlib -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48-66
+   -warn-error A -bin-annot -safe-string -strict-formats
+ ))
  (libraries stdlib ocamlcommon)
  ; The bytecode system needs export-dynamic capabilities analogous to those
  ; required for natdynlink.
@@ -222,7 +228,11 @@
  ; which doesn't exist.  Since we don't seem to be able to do this, we
  ; currently don't add "runtime_byte" as a "libraries" dependency, but
  ; instead explicitly provide "-cclib" flags to pull it in.
- (flags (:standard -principal -nostdlib -cclib "-I runtime" -cclib "-L runtime" -cclib -lcamlrun))
+ (flags (
+   -nostdlib -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48-66
+   -warn-error A -bin-annot -safe-string -strict-formats
+   -cclib "-I runtime" -cclib "-L runtime" -cclib -lcamlrun
+ ))
  (link_deps (file stdlib/camlheader) (file runtime/libcamlrun.a))
 ; (modules_without_implementation
 ;   annot asttypes backend_intf cmo_format cmx_format cmxs_format
@@ -234,7 +244,10 @@
 (executable
  (name main_native)
  (modes native)
- (flags (:standard -principal -nostdlib))
+ (flags (
+   -nostdlib -strict-sequence -principal -absname -w +a-4-9-40-41-42-44-45-48-66
+   -warn-error A -bin-annot -safe-string -strict-formats
+ ))
 ; (modules_without_implementation
 ;   annot asttypes backend_intf cmo_format cmx_format cmxs_format
 ;   inlining_decision_intf outcometree parsetree simplify_boxed_integer_ops_intf
