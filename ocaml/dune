@@ -46,7 +46,7 @@
    ;; UTILS
    config build_path_prefix_map misc identifiable numbers arg_helper clflags
    profile terminfo ccomp warnings consistbl strongly_connected_components
-   targetint load_path int_replace_polymorphic_compare
+   targetint load_path int_replace_polymorphic_compare domainstate
 
    ;; PARSING
    location longident docstrings syntaxerr ast_helper camlinternalMenhirLib
@@ -1228,6 +1228,7 @@
     (compile_common.mli as compiler-libs/compile_common.mli)
     (cmo_format.mli as compiler-libs/cmo_format.mli)
     (debug_event.mli as compiler-libs/debug_event.mli)
+    (domainstate.mli as compiler-libs/domainstate.mli)
 
     (.ocamlcommon.objs/byte/annot.cmi as compiler-libs/annot.cmi)
     (.ocamlcommon.objs/byte/annot.cmti as compiler-libs/annot.cmti)
@@ -1348,6 +1349,10 @@
     (.ocamlcommon.objs/byte/docstrings.cmo as compiler-libs/docstrings.cmo)
     (.ocamlcommon.objs/byte/docstrings.cmt as compiler-libs/docstrings.cmt)
     (.ocamlcommon.objs/byte/docstrings.cmti as compiler-libs/docstrings.cmti)
+    (.ocamlcommon.objs/byte/domainstate.cmi as compiler-libs/domainstate.cmi)
+    (.ocamlcommon.objs/byte/domainstate.cmo as compiler-libs/domainstate.cmo)
+    (.ocamlcommon.objs/byte/domainstate.cmt as compiler-libs/domainstate.cmt)
+    (.ocamlcommon.objs/byte/domainstate.cmti as compiler-libs/domainstate.cmti)
     (.ocamlcommon.objs/byte/env.cmi as compiler-libs/env.cmi)
     (.ocamlcommon.objs/byte/env.cmo as compiler-libs/env.cmo)
     (.ocamlcommon.objs/byte/env.cmt as compiler-libs/env.cmt)
@@ -1670,6 +1675,7 @@
     (.ocamlcommon.objs/native/depend.cmx as compiler-libs/depend.cmx)
     (.ocamlcommon.objs/native/dll.cmx as compiler-libs/dll.cmx)
     (.ocamlcommon.objs/native/docstrings.cmx as compiler-libs/docstrings.cmx)
+    (.ocamlcommon.objs/native/domainstate.cmx as compiler-libs/domainstate.cmx)
     (.ocamlcommon.objs/native/env.cmx as compiler-libs/env.cmx)
     (.ocamlcommon.objs/native/envaux.cmx as compiler-libs/envaux.cmx)
     (.ocamlcommon.objs/native/ident.cmx as compiler-libs/ident.cmx)

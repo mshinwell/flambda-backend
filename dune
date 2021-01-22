@@ -27,7 +27,6 @@
 
 (copy_files ocaml/driver/opterrors.ml{,i})
 (copy_files ocaml/file_formats/cmxs_format.mli)
-(copy_files ocaml/utils/domainstate.ml{,i})
 
 (library
   (name ocamloptcomp)
@@ -87,9 +86,6 @@
     liveness mach printcmm printlinear printmach proc reg reload reloadgen
     schedgen scheduling selectgen selection spacetime_profiling spill split
     strmatch x86_ast x86_dsl x86_gas x86_masm x86_proc
-
-    ;; mystery:
-    domainstate
 
     ;; file_formats/
     linear_format
@@ -288,7 +284,6 @@
     (x86_gas.mli as compiler-libs/x86_gas.mli)
     (x86_masm.mli as compiler-libs/x86_masm.mli)
     (x86_proc.mli as compiler-libs/x86_proc.mli)
-    (domainstate.mli as compiler-libs/domainstate.mli)
     (linear_format.mli as compiler-libs/linear_format.mli)
     (reg_availability_set.mli as compiler-libs/reg_availability_set.mli)
     (available_regs.mli as compiler-libs/available_regs.mli)
@@ -379,10 +374,6 @@
     (.ocamloptcomp.objs/byte/deadcode.cmo as compiler-libs/deadcode.cmo)
     (.ocamloptcomp.objs/byte/deadcode.cmt as compiler-libs/deadcode.cmt)
     (.ocamloptcomp.objs/byte/deadcode.cmti as compiler-libs/deadcode.cmti)
-    (.ocamloptcomp.objs/byte/domainstate.cmi as compiler-libs/domainstate.cmi)
-    (.ocamloptcomp.objs/byte/domainstate.cmo as compiler-libs/domainstate.cmo)
-    (.ocamloptcomp.objs/byte/domainstate.cmt as compiler-libs/domainstate.cmt)
-    (.ocamloptcomp.objs/byte/domainstate.cmti as compiler-libs/domainstate.cmti)
     (.ocamloptcomp.objs/byte/emit.cmi as compiler-libs/emit.cmi)
     (.ocamloptcomp.objs/byte/emit.cmo as compiler-libs/emit.cmo)
     (.ocamloptcomp.objs/byte/emit.cmt as compiler-libs/emit.cmt)
@@ -533,7 +524,6 @@
     (.ocamloptcomp.objs/native/compute_ranges.cmx as compiler-libs/compute_ranges.cmx)
     (.ocamloptcomp.objs/native/compute_ranges_intf.cmx as compiler-libs/compute_ranges_intf.cmx)
     (.ocamloptcomp.objs/native/deadcode.cmx as compiler-libs/deadcode.cmx)
-    (.ocamloptcomp.objs/native/domainstate.cmx as compiler-libs/domainstate.cmx)
     (.ocamloptcomp.objs/native/emit.cmx as compiler-libs/emit.cmx)
     (.ocamloptcomp.objs/native/emitaux.cmx as compiler-libs/emitaux.cmx)
     (.ocamloptcomp.objs/native/interf.cmx as compiler-libs/interf.cmx)
