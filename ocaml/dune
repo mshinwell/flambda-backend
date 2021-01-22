@@ -41,7 +41,7 @@
  (library_flags -linkall)
  (libraries stdlib)
  (modules_without_implementation
-   annot asttypes cmo_format outcometree parsetree)
+   annot asttypes cmo_format outcometree parsetree debug_event)
  (modules
    ;; UTILS
    config build_path_prefix_map misc identifiable numbers arg_helper clflags
@@ -71,14 +71,12 @@
    translattribute translclass translcore translmod translobj translprim
 
    ;; bytecomp/
-   meta opcodes bytesections dll symtable
+   debug_event meta opcodes bytesections dll symtable
 
    ;; some of COMP
    pparse main_args compenv compmisc makedepend compile_common
    ; manual update: mli only files
    cmo_format
-   ; manual update: this is required.
-   instruct
  ))
 
 (library
@@ -89,7 +87,7 @@
  (library_flags -ccopt -Wl,-E) ;; XXX this is Linux-specific
  (modules
     ;; bytecomp/
-    bytegen bytelibrarian bytelink bytepackager emitcode printinstr
+    bytegen bytelibrarian bytelink bytepackager emitcode instruct printinstr
 
     ;; driver/
     errors compile
@@ -401,6 +399,7 @@
 ;    (optcompile.mli as compiler-libs/optcompile.mli)
 ;    (opterrors.mli as compiler-libs/opterrors.mli)
     (printinstr.mli as compiler-libs/printinstr.mli)
+    (instruct.mli as compiler-libs/instruct.mli)
 
     (.ocamlbytecomp.objs/byte/bytegen.cmi as compiler-libs/bytegen.cmi)
     (.ocamlbytecomp.objs/byte/bytegen.cmo as compiler-libs/bytegen.cmo)
@@ -434,6 +433,10 @@
     (.ocamlbytecomp.objs/byte/printinstr.cmo as compiler-libs/printinstr.cmo)
     (.ocamlbytecomp.objs/byte/printinstr.cmt as compiler-libs/printinstr.cmt)
     (.ocamlbytecomp.objs/byte/printinstr.cmti as compiler-libs/printinstr.cmti)
+    (.ocamlbytecomp.objs/byte/instruct.cmi as compiler-libs/instruct.cmi)
+    (.ocamlbytecomp.objs/byte/instruct.cmo as compiler-libs/instruct.cmo)
+    (.ocamlbytecomp.objs/byte/instruct.cmt as compiler-libs/instruct.cmt)
+    (.ocamlbytecomp.objs/byte/instruct.cmti as compiler-libs/instruct.cmti)
     (.ocamlbytecomp.objs/native/bytegen.cmx as compiler-libs/bytegen.cmx)
     (.ocamlbytecomp.objs/native/bytelibrarian.cmx as compiler-libs/bytelibrarian.cmx)
     (.ocamlbytecomp.objs/native/bytelink.cmx as compiler-libs/bytelink.cmx)
@@ -441,6 +444,7 @@
     (.ocamlbytecomp.objs/native/compile.cmx as compiler-libs/compile.cmx)
     (.ocamlbytecomp.objs/native/emitcode.cmx as compiler-libs/emitcode.cmx)
     (.ocamlbytecomp.objs/native/errors.cmx as compiler-libs/errors.cmx)
+    (.ocamlbytecomp.objs/native/instruct.cmx as compiler-libs/instruct.cmx)
     (.ocamlbytecomp.objs/native/printinstr.cmx as compiler-libs/printinstr.cmx)
   ))
 ;
@@ -1221,7 +1225,7 @@
     (makedepend.mli as compiler-libs/makedepend.mli)
     (compile_common.mli as compiler-libs/compile_common.mli)
     (cmo_format.mli as compiler-libs/cmo_format.mli)
-    (instruct.mli as compiler-libs/instruct.mli)
+    (debug_event.mli as compiler-libs/debug_event.mli)
 
     (.ocamlcommon.objs/byte/annot.cmi as compiler-libs/annot.cmi)
     (.ocamlcommon.objs/byte/annot.cmti as compiler-libs/annot.cmti)
@@ -1324,6 +1328,8 @@
     (.ocamlcommon.objs/byte/datarepr.cmo as compiler-libs/datarepr.cmo)
     (.ocamlcommon.objs/byte/datarepr.cmt as compiler-libs/datarepr.cmt)
     (.ocamlcommon.objs/byte/datarepr.cmti as compiler-libs/datarepr.cmti)
+    (.ocamlcommon.objs/byte/debug_event.cmi as compiler-libs/debug_event.cmi)
+    (.ocamlcommon.objs/byte/debug_event.cmti as compiler-libs/debug_event.cmti)
     (.ocamlcommon.objs/byte/debuginfo.cmi as compiler-libs/debuginfo.cmi)
     (.ocamlcommon.objs/byte/debuginfo.cmo as compiler-libs/debuginfo.cmo)
     (.ocamlcommon.objs/byte/debuginfo.cmt as compiler-libs/debuginfo.cmt)
@@ -1368,10 +1374,6 @@
     (.ocamlcommon.objs/byte/includemod.cmo as compiler-libs/includemod.cmo)
     (.ocamlcommon.objs/byte/includemod.cmt as compiler-libs/includemod.cmt)
     (.ocamlcommon.objs/byte/includemod.cmti as compiler-libs/includemod.cmti)
-    (.ocamlcommon.objs/byte/instruct.cmi as compiler-libs/instruct.cmi)
-    (.ocamlcommon.objs/byte/instruct.cmo as compiler-libs/instruct.cmo)
-    (.ocamlcommon.objs/byte/instruct.cmt as compiler-libs/instruct.cmt)
-    (.ocamlcommon.objs/byte/instruct.cmti as compiler-libs/instruct.cmti)
     (.ocamlcommon.objs/byte/int_replace_polymorphic_compare.cmi as compiler-libs/int_replace_polymorphic_compare.cmi)
     (.ocamlcommon.objs/byte/int_replace_polymorphic_compare.cmo as compiler-libs/int_replace_polymorphic_compare.cmo)
     (.ocamlcommon.objs/byte/int_replace_polymorphic_compare.cmt as compiler-libs/int_replace_polymorphic_compare.cmt)
@@ -1673,7 +1675,6 @@
     (.ocamlcommon.objs/native/includeclass.cmx as compiler-libs/includeclass.cmx)
     (.ocamlcommon.objs/native/includecore.cmx as compiler-libs/includecore.cmx)
     (.ocamlcommon.objs/native/includemod.cmx as compiler-libs/includemod.cmx)
-    (.ocamlcommon.objs/native/instruct.cmx as compiler-libs/instruct.cmx)
     (.ocamlcommon.objs/native/int_replace_polymorphic_compare.cmx as compiler-libs/int_replace_polymorphic_compare.cmx)
     (.ocamlcommon.objs/native/lambda.cmx as compiler-libs/lambda.cmx)
     (.ocamlcommon.objs/native/lexer.cmx as compiler-libs/lexer.cmx)
