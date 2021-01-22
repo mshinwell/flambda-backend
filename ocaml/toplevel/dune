@@ -118,6 +118,8 @@
 (install
   (files
     (expunge.bc as expunge)
+    (.expunge.eobjs/byte/expunge.cmi as compiler-libs/expunge.cmi)
+    (.expunge.eobjs/byte/expunge.cmt as compiler-libs/expunge.cmt)
     (ocamltoplevel.cma as compiler-libs/ocamltoplevel.cma)
     (genprintval.mli as compiler-libs/genprintval.mli)
     (trace.mli as compiler-libs/trace.mli)

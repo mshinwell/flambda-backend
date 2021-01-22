@@ -17,6 +17,7 @@
  (wrapped false)
  (modes byte native)
  (flags (:standard -nostdlib -nolabels))
+ (library_flags (:standard -linkall))
  (foreign_stubs
    (language c)
    (names spacetime_offline)
