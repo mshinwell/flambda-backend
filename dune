@@ -126,7 +126,6 @@
  (libraries
    flambda_backend_driver
    ocamloptcomp
-;   ocamlmiddleend
    ocamlcommon
    stdlib
    runtime_native)
@@ -144,13 +143,8 @@
 (install
   (files
     (ocamloptcomp.a as compiler-libs/ocamloptcomp.a)
-;    (ocamlmiddleend.a as compiler-libs/ocamlmiddleend.a)
-
     (ocamloptcomp.cmxa as compiler-libs/ocamloptcomp.cmxa)
-;    (ocamlmiddleend.cmxa as compiler-libs/ocamlmiddleend.cmxa)
-
     (ocamloptcomp.cma as compiler-libs/ocamloptcomp.cma)
-;    (ocamlmiddleend.cma as compiler-libs/ocamlmiddleend.cma)
   )
   (section lib)
   (package ocaml))
