@@ -38,6 +38,7 @@ ensure_exists () {
 list_object_file_symbols () {
   file=$1
   symbols=$2
+  symbols_all=$3
 
   # suffix removal:
 
@@ -47,6 +48,10 @@ list_object_file_symbols () {
     | grep -v '^.L[0-9]*$' \
     | sed 's/_[0-9]*$//' \
     > $symbols
+
+  nm $file \
+    | sed 's/^...................//' \
+    > $symbols_all
 }
 
 compare_object_file_symbols () {
@@ -56,15 +61,24 @@ compare_object_file_symbols () {
   upstream_symbols=$(mktemp)
   flambda_backend_symbols=$(mktemp)
 
-  list_object_file_symbols $upstream_file $upstream_symbols
-  list_object_file_symbols $flambda_backend_file $flambda_backend_symbols
+  upstream_symbols_all=$(mktemp)
+  flambda_backend_symbols_all=$(mktemp)
+
+  list_object_file_symbols $upstream_file $upstream_symbols \
+    $upstream_symbols_all
+  list_object_file_symbols $flambda_backend_file $flambda_backend_symbols \
+    $flambda_backend_symbols_all
 
   patdiff $upstream_symbols $flambda_backend_symbols \
     || (echo "Symbols do not match."; \
         rm -f $upstream_symbols $flambda_backend_symbols; \
+        rm -f $upstream_symbols_all $flambda_backend_symbols_all; \
         exit 1)
 
+  patdiff $upstream_symbols_all $flambda_backend_symbols_all || true
+
   rm -f $upstream_symbols $flambda_backend_symbols
+  rm -f $upstream_symbols_all $flambda_backend_symbols_all
 }
 
 compare_archive () {
