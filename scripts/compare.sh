@@ -1,13 +1,23 @@
 #!/bin/bash
 
-# This script should be run on Linux.
-
 set -eu -o pipefail
 
+if [ "$(uname)" != "Linux" ]; then
+  echo "This script should be run on a Linux machine."
+  exit 1
+fi
+
+if ! which patdiff > /dev/null 2>&1 ; then
+  echo "Please install patdiff."
+  exit 1
+fi
+
+# Installation root (--prefix) for the upstream and Flambda backend compilers
 upstream_tree=$(pwd)/ocaml-install
 flambda_backend_tree=$(pwd)/flambda-backend-install
 
 # These filenames are the ones from the Flambda backend install tree.
+# ocamloptcomp.a will diverge in time, but it's ok to compare right now.
 archives_to_compare="\
   libasmrun.a \
   libasmrund.a \
@@ -43,7 +53,16 @@ archives_to_compare="\
 
 # compiler-libs/ocamlmiddleend.a is not built in the Flambda backend.
 # We should try to remove this from upstream by fixing the ocamlobjinfo
-# problem.
+# problem.  Note that ocamloptcomp.a contains the middle end, both in
+# the Flambda backend and upstream builds.
+
+# These filenames are the ones from the Flambda backend install tree.
+stublibs_to_compare="\
+  dllraw_spacetime_lib_stubs.so \
+  dllstr_stubs.so \
+  dllthreads_stubs.so \
+  dllunix_stubs.so
+  "
 
 upstream_filename_of_archive_member () {
   filename=$1
@@ -83,6 +102,18 @@ upstream_filename_of_archive () {
   esac
 }
 
+upstream_filename_of_stublibs () {
+  filename=$1
+
+  case "$filename" in
+    dllraw_spacetime_lib_stubs.so) echo dllraw_spacetime_lib.so ;;
+    dllstr_stubs.so) echo dllcamlstr.so ;;
+    dllthreads_stubs.so) echo dllthreads.so ;;
+    dllunix_stubs.so) echo dllunix.so ;;
+    *) echo $filename ;;
+  esac
+}
+
 ensure_exists () {
   file=$1
 
@@ -103,15 +134,28 @@ list_object_file_symbols () {
   # If there are differences in stamps, those will be printed, but the script
   # won't fail.
 
+  # We currently ignore references to ceil () and nextafter () which in
+  # the Unix bytecode stublibs seem to be referencing the non-versioned
+  # symbols instead of the glibc-versioned symbols.  This is probably some
+  # artifact of exactly how the libraries were produced but seems harmless.
+
   nm $file \
     | sed 's/^...................//' \
     | grep -v '^.LC[0-9]*$' \
     | grep -v '^.L[0-9]*$' \
     | sed 's/_[0-9]*$//' \
+    | grep -v '^ceil@@GLIBC' \
+    | grep -v '^ceil$' \
+    | grep -v '^nextafter@@GLIBC' \
+    | grep -v '^nextafter$' \
     > $symbols
 
   nm $file \
     | sed 's/^...................//' \
+    | grep -v '^ceil@@GLIBC' \
+    | grep -v '^ceil$' \
+    | grep -v '^nextafter@@GLIBC' \
+    | grep -v '^nextafter$' \
     | grep -v '^camlCamlinternalMenhirLib__' \
     > $symbols_all
 }
@@ -199,8 +243,29 @@ compare_archive () {
   rm -f $flambda_backend_contents
 }
 
+compare_stublibs () {
+  stublibs=$1
+  upstream_stublibs=$(upstream_filename_of_stublibs $stublibs)
+
+  if [ "$stublibs" = "$upstream_stublibs" ]; then
+    echo "Comparing stublibs: $stublibs"
+  else
+    echo "Comparing stublibs: $stublibs (upstream: $upstream_stublibs)"
+  fi
+
+  upstream_stublibs=$upstream_tree/lib/ocaml/stublibs/$upstream_stublibs
+  flambda_backend_stublibs=$flambda_backend_tree/lib/ocaml/stublibs/$stublibs
+
+  ensure_exists $upstream_stublibs
+  ensure_exists $flambda_backend_stublibs
+
+  compare_object_file_symbols $upstream_stublibs $flambda_backend_stublibs
+}
+
 # 1. Check immediate subdirs of installation root match (just the names of
 # the subdirs, not the contents).
+
+echo "** Immediate subdirs of installation root"
 
 # The Flambda backend does not build or install man pages.
 upstream_subdirs=$(ls -1 $upstream_tree | grep -v '^man$')
@@ -213,6 +278,8 @@ fi
 
 # 2. Check that everything provided upstream in the bin/ directory that we
 # want is present.
+
+echo "** Executables in bin/"
 
 upstream_bin=$(ls $upstream_tree/bin \
   | grep -v '^ocamlcp$' \
@@ -236,6 +303,8 @@ fi
 
 # 3. Make sure executables in lib/ocaml/ are present.
 
+echo "** Executables in lib/ocaml/"
+
 lib_exes="expunge extract_crc objinfo_helper"
 
 for exe in $lib_exes; do
@@ -251,6 +320,8 @@ done
 
 # 4. Check that immediate subdirs of lib/ match (just the names, not contents).
 
+echo "** Immediate subdirs of lib/"
+
 upstream_subdirs=$(ls -1 $upstream_tree/lib)
 flambda_backend_subdirs=$(ls -1 $flambda_backend_tree/lib)
 
@@ -261,6 +332,8 @@ fi
 
 # 5. Check that the VERSION files match.
 
+echo "** VERSION files"
+
 upstream_version=$(cat $upstream_tree/lib/ocaml/VERSION)
 flambda_backend_version=$(cat $flambda_backend_tree/lib/ocaml/VERSION)
 
@@ -270,11 +343,49 @@ if [ "$upstream_version" != "$flambda_backend_version" ]; then
   exit 1
 fi
 
-# 6. Check .a files match (archive filenames, archive member filenames, symbols
-# defined by archive members).  Some rewrites are performed as above.
+# 6. Check .ml and .mli files in lib/ocaml/ are all present and identical.
+
+echo "** .ml and .mli files in lib/ocaml/"
+
+upstream_files=$(cd $upstream_tree/lib/ocaml/ && ls *.ml{,i})
+for file in $upstream_files; do
+  if [ ! -f "$flambda_backend_tree/lib/ocaml/$file" ]; then
+    echo "lib/ocaml/$file is missing"
+    exit 1
+  fi
+  patdiff $upstream_tree/lib/ocaml/$file \
+    $flambda_backend_tree/lib/ocaml/$file
+done
+
+# 7. Check all files in lib/ocaml/caml, the runtime headers, are identical.
+
+echo "** All files in lib/ocaml/caml/"
+
+upstream_files=$(cd $upstream_tree/lib/ocaml/caml/ && ls)
+for file in $upstream_files; do
+  if [ ! -f "$flambda_backend_tree/lib/ocaml/caml/$file" ]; then
+    echo "lib/ocaml/$file is missing"
+    exit 1
+  fi
+  patdiff $upstream_tree/lib/ocaml/caml/$file \
+    $flambda_backend_tree/lib/ocaml/caml/$file
+done
+
+# 8. Check .a files match (archive filenames, archive member filenames, symbols
+# defined by archive members).  Some rewrites are performed as above.  This is
+# the closest we get to comparing compiled code.
+
+echo "** Archive filenames, members and symbols"
 
 for archive in $archives_to_compare; do
   compare_archive $archive
 done
 
-# 7. 
+# 9. Check .so bytecode stubs files match (in lib/ocaml/stublibs/).
+
+echo "** Bytecode stubs .so files"
+
+for stublibs in $stublibs_to_compare; do
+  compare_stublibs $stublibs
+done
+
