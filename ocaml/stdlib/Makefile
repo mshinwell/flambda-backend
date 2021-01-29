@@ -22,9 +22,9 @@ TARGET_BINDIR ?= $(BINDIR)
 
 COMPILER=$(ROOTDIR)/ocamlc
 CAMLC=$(CAMLRUN) $(COMPILER)
-COMPFLAGS=-strict-sequence -absname -w +a-4-9-41-42-44-45-48 \
+COMPFLAGS=-strict-sequence -absname -w +a-4-9-41-42-44-45-48-66 \
           -g -warn-error A -bin-annot -nostdlib \
-          -safe-string -strict-formats
+          -safe-string -strict-formats -nopervasives -no-alias-deps
 ifeq "$(FLAMBDA)" "true"
 OPTCOMPFLAGS += -O3
 endif
@@ -39,9 +39,6 @@ include StdlibModules
 
 OBJS=$(addsuffix .cmo,$(STDLIB_MODULES))
 OTHERS=$(filter-out camlinternalFormatBasics.cmo stdlib.cmo,$(OBJS))
-
-PREFIXED_OBJS=$(filter stdlib__%.cmo,$(OBJS))
-UNPREFIXED_OBJS=$(PREFIXED_OBJS:stdlib__%.cmo=%)
 
 .PHONY: all
 all: stdlib.cma std_exit.cmo camlheader target_camlheader camlheader_ur
@@ -203,26 +200,36 @@ clean::
 
 .SUFFIXES: .mli .ml .cmi .cmo .cmx
 
-export AWK
+stdlib.cmi: stdlib.mli
+	$(CAMLC) $(COMPFLAGS) \
+	  -pp "$(AWK) -f ./expand_module_aliases.awk" -c $<
+
+stdlib.cmo: stdlib.ml
+	$(CAMLC) $(COMPFLAGS) \
+	  -pp "$(AWK) -f ./expand_module_aliases.awk" -c $<
+
+stdlib.cmx: stdlib.ml
+	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) \
+          -pp "$(AWK) -f ./expand_module_aliases.awk" -c $<
 
 %.cmi: %.mli
-	$(CAMLC) $(COMPFLAGS) $(shell ./Compflags $@) -c $<
+	$(CAMLC) $(COMPFLAGS) -c $<
 
-stdlib__%.cmi: %.mli
-	$(CAMLC) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+stdlib__%.cmi:
+	$(CAMLC) $(COMPFLAGS) -o $@ -c $(filter %.mli, $^)
 
 %.cmo: %.ml
-	$(CAMLC) $(COMPFLAGS) $(shell ./Compflags $@) -c $<
+	$(CAMLC) $(COMPFLAGS) -c $<
 
-stdlib__%.cmo: %.ml
-	$(CAMLC) $(COMPFLAGS) $(shell ./Compflags $@) -o $@ -c $<
+stdlib__%.cmo:
+	$(CAMLC) $(COMPFLAGS) -o $@ -c $(filter %.ml, $^)
 
 %.cmx: %.ml
-	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) $(shell ./Compflags $@) -c $<
+	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) -c $<
 
-stdlib__%.cmx: %.ml
-	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) $(shell ./Compflags $@) \
-	           -o $@ -c $<
+stdlib__%.cmx:
+	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) \
+          -o $@ -c $(filter %.ml, $^)
 
 # Dependencies on the compiler
 COMPILER_DEPS=$(filter-out -use-prims $(CAMLRUN), $(CAMLC))
@@ -246,6 +253,11 @@ include .depend
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
 
+RAW_OBJS=$(addsuffix .cmo,$(STDLIB_DEP_MODULES))
+PREFIXED_OBJS=$(filter stdlib__%.cmo,$(RAW_OBJS))
+UNPREFIXED_OBJS=$(PREFIXED_OBJS:stdlib__%.cmo=%)
+UNPREFIXED_OBJS_DISJUNCTION=${subst ${SPACE},|,${UNPREFIXED_OBJS}}
+
 .PHONY: depend
 depend:
 	$(CAMLDEP) $(DEPFLAGS) $(filter-out stdlib.%,$(wildcard *.mli *.ml)) \
@@ -253,6 +265,7 @@ depend:
 	$(CAMLDEP) $(DEPFLAGS) -pp "$(AWK) -f ./remove_module_aliases.awk" \
 	  stdlib.ml stdlib.mli >> .depend.tmp
 	sed -Ee \
-	  's#(^| )(${subst ${SPACE},|,${UNPREFIXED_OBJS}})[.]#\1stdlib__\2.#g' \
+	   's#(^| )(${UNPREFIXED_OBJS_DISJUNCTION})[.]#\1stdlib__\u\2.#g' \
+	-e 's/^stdlib__(.)(.*)(\.[^i]*)(i?) :/stdlib__\1\2\3\4 : \l\1\2.ml\4/' \
 	  .depend.tmp > .depend
 	rm -f .depend.tmp
