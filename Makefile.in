@@ -4,11 +4,31 @@ stage2_prefix=@stage2_prefix@
 middle_end=@middle_end@
 dune=@dune@
 
-.PHONY: all stage1 stage2 install clean runtest
+.PHONY: all stage0 stage1 stage2 install clean runtest runtest-upstream
 
 .DEFAULT_GOAL := build
 
 # How do we get the equivalent of "set -u" for the "rm -rf"...?
+
+stage0:
+	rm -rf _build0
+	mkdir _build0
+	rsync --hard-links --recursive \
+	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
+	(cd _build0 && \
+          ./configure --prefix=@stage0_prefix@ \
+	    --disable-ocamldoc \
+	    --disable-ocamltest \
+	    --disable-instrumented-runtime \
+	    --disable-shared \
+	    --disable-debugger && \
+	  make -j8 world.opt && \
+	  make -j8 ocamlnat && \
+	  make install \
+	)
+
+rebuild_stage0:
+	echo foo
 
 # We need to ensure that the ocaml/ directory is correctly configured
 # especially when running incremental builds.  For example if we have just
@@ -20,7 +40,7 @@ dune=@dune@
 # the configure script.)
 
 # This should use build contexts instead of --build-dir.
-stage1: ocaml-stage1-config.status
+stage1: stage0 ocaml-stage1-config.status
 	cp ocaml-stage1-config.status ocaml/config.status
 	(cd ocaml && ./config.status)
 	# We need to augment dune's substitutions so this part isn't so difficult.
@@ -50,6 +70,7 @@ stage1: ocaml-stage1-config.status
     else \
 	  /bin/echo -n "-bin-annot" > ocaml/otherlibs/dynlink/natdynlinkops1; \
 	fi
+	PATH=$(stage0_prefix)/bin:$$PATH \
 	$(dune) build --profile=release --build-dir=_build1 --verbose @install
 
 ocaml-stage2-config.status: stage1 Makefile

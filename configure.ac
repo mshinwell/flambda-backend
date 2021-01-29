@@ -42,11 +42,13 @@ AC_ARG_ENABLE([middle-end],
     [*],       [AC_MSG_ERROR([Bad middle end (not closure or flambda)])])],
   [AC_MSG_ERROR([--enable-middle-end=closure|flambda must be provided])])
 
+stage0_prefix=$ac_abs_confdir/_build0/_install
 stage1_prefix=$ac_abs_confdir/_build1/install/default
 stage2_prefix=$ac_abs_confdir/_build2/install/default
 
 AC_SUBST([prefix])
 AC_SUBST([middle_end])
+AC_SUBST([stage0_prefix])
 AC_SUBST([stage1_prefix])
 AC_SUBST([stage2_prefix])
 AC_SUBST([dune])
