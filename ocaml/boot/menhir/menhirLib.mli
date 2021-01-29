@@ -1,3 +1,4 @@
+[@@@ocaml.warning "-67"]
 module General : sig
 (******************************************************************************)
 (*                                                                            *)
@@ -1105,7 +1106,7 @@ module Make
 
   (I : IncrementalEngine.EVERYTHING)
 
-  (_ : sig
+  (User : sig
 
     (* [print s] is supposed to send the string [s] to some output channel. *)
 
@@ -1647,7 +1648,7 @@ end)
    [InspectionTableFormat]. *)
 
 module Make
-  (_ : TableFormat.TABLES)
+  (TT : TableFormat.TABLES)
   (IT : InspectionTableFormat.TABLES
         with type 'a lr1state = int)
   (ET : EngineTypes.TABLE
