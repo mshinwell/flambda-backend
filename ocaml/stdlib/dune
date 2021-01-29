@@ -69,7 +69,7 @@
     arrayLabels.ml
     arrayLabels.mli
     bigarray.ml
-    bigarray.mli
+    ; bigarray.mli is installed from otherlibs/bigarray/
     bool.ml
     bool.mli
     buffer.ml

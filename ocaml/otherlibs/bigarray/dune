@@ -28,6 +28,7 @@
     bigarray.cma
     .bigarray.objs/byte/bigarray.cmi
     .bigarray.objs/byte/bigarray.cmti
+    bigarray.mli
   )
   (section lib)
   (package ocaml))
