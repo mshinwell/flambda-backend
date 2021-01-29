@@ -5,6 +5,7 @@ set -eu -o pipefail
 upstream_tree=$(pwd)/ocaml-install
 flambda_backend_tree=$(pwd)/flambda-backend-install
 
+# These filenames are the ones from the Flambda backend install tree.
 archives_to_compare="\
   libasmrun.a \
   libasmrund.a \
@@ -23,7 +24,20 @@ archives_to_compare="\
   str.a \
   threads/threads.a \
   unix.a \
+  raw_spacetime_lib.a \
+  libraw_spacetime_lib_stubs.a \
+  libraw_spacetime_lib_stubs_native.a \
+  libthreads_stubs.a \
+  libthreads_stubs_native.a \
+  libunix_stubs.a \
+  libunix_stubs_native.a \
+  libstr_stubs.a \
+  libstr_stubs_native.a
   "
+
+# compiler-libs/ocamlmiddleend.a is not built in the Flambda backend.
+# We should try to remove this from upstream by fixing the ocamlobjinfo
+# problem.
 
 # dynlink.a
 
@@ -33,6 +47,8 @@ upstream_filename_of_archive_member () {
   case "$filename" in
     cSEgen.o) echo CSEgen.o ;;
     cSE.o) echo CSE.o ;;
+    st_stubs_byte.o) echo st_stubs_b.o ;;
+    st_stubs_native.o) echo st_stubs_n.o ;;
     *) echo $filename ;;
   esac
 }
@@ -45,6 +61,22 @@ upstream_filenames_of_archive_members () {
     filename=$(echo $ar_output | awk '{print $3}')
     upstream_filename_of_archive_member "$filename"
   done
+}
+
+upstream_filename_of_archive () {
+  filename=$1
+
+  case "$filename" in
+    libthreads_stubs.a) echo libthreads.a ;;
+    libthreads_stubs_native.a) echo libthreadsnat.a ;;
+    libraw_spacetime_lib_stubs.a) echo libraw_spacetime_lib.a ;;
+    libraw_spacetime_lib_stubs_native.a) echo libraw_spacetime_lib.a ;;
+    libunix_stubs.a) echo libunix.a ;;
+    libunix_stubs_native.a) echo libunix.a ;;
+    libstr_stubs.a) echo libcamlstr.a ;;
+    libstr_stubs_native.a) echo libcamlstr.a ;;
+    *) echo $filename ;;
+  esac
 }
 
 ensure_exists () {
@@ -109,8 +141,13 @@ compare_object_file_symbols () {
 
 compare_archive () {
   archive=$1
+  upstream_archive=$(upstream_filename_of_archive $archive)
 
-  echo "Comparing archive: $archive"
+  if [ "$archive" = "$upstream_archive" ]; then
+    echo "Comparing archive: $archive"
+  else
+    echo "Comparing archive: $archive (upstream: $upstream_archive)"
+  fi
 
   upstream=$(mktemp -d)
   flambda_backend=$(mktemp -d)
@@ -118,8 +155,8 @@ compare_archive () {
   upstream_contents=$(mktemp)
   flambda_backend_contents=$(mktemp)
 
-  upstream_archive=$upstream_tree/$archive
-  flambda_backend_archive=$flambda_backend_tree/$archive
+  upstream_archive=$upstream_tree/lib/ocaml/$upstream_archive
+  flambda_backend_archive=$flambda_backend_tree/lib/ocaml/$archive
 
   ensure_exists $upstream_archive
   ensure_exists $flambda_backend_archive
@@ -159,6 +196,6 @@ compare_archive () {
 }
 
 for archive in $archives_to_compare; do
-  compare_archive lib/ocaml/$archive
+  compare_archive $archive
 done
 
