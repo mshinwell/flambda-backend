@@ -29,6 +29,23 @@
   (deps %{project_root}/ocaml/toplevel/genprintval.ml)
   (action (copy %{deps} %{targets})))
 
+(executable
+ (name opttopstart)
+ (modes native)
+ (flags (:standard -principal -nostdlib))
+ (libraries
+   ocamlopttoplevel
+   stdlib
+   runtime_native)
+ (modules opttopstart))
+
+(install
+  (files
+    (opttopstart.exe as ocamlnat)
+  )
+  (section bin)
+  (package ocaml))
+
 (install
   (files
     (ocamlopttoplevel.a as compiler-libs/ocamlopttoplevel.a)
