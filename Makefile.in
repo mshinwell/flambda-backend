@@ -100,6 +100,7 @@ install:
 	rm -f $(prefix)/lib/ocaml/META
 	rm -f $(prefix)/lib/ocaml/dune-package
 	rm -f $(prefix)/lib/ocaml/compiler-libs/*.cmo
+	rm -f $(prefix)/lib/flambda_backend
 	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.cmi $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.mli $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.cmt $(prefix)/lib/ocaml
