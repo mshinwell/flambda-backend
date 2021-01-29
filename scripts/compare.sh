@@ -17,6 +17,7 @@ archives_to_compare="\
   bigarray.a \
   compiler-libs/ocamlbytecomp.a \
   compiler-libs/ocamlcommon.a \
+  compiler-libs/ocamloptcomp.a \
   raw_spacetime_lib.a \
   stdlib.a \
   str.a \
@@ -25,6 +26,26 @@ archives_to_compare="\
   "
 
 # dynlink.a
+
+upstream_filename_of_archive_member () {
+  filename=$1
+
+  case "$filename" in
+    cSEgen.o) echo CSEgen.o ;;
+    cSE.o) echo CSE.o ;;
+    *) echo $filename ;;
+  esac
+}
+
+upstream_filenames_of_archive_members () {
+  # Dune doesn't follow the capitalisation convention of the compiler for
+  # build artifacts.  This seems like a bug, but it should be harmless in
+  # the following cases.
+  while read ar_output; do
+    filename=$(echo $ar_output | awk '{print $3}')
+    upstream_filename_of_archive_member "$filename"
+  done
+}
 
 ensure_exists () {
   file=$1
@@ -40,7 +61,11 @@ list_object_file_symbols () {
   symbols=$2
   symbols_all=$3
 
-  # suffix removal:
+  # We expect there may be some discrepancies in camlinternalMenhirLib,
+  # but those are harmless.
+  # The script will fail if there are differences in symbols modulo stamps.
+  # If there are differences in stamps, those will be printed, but the script
+  # won't fail.
 
   nm $file \
     | sed 's/^...................//' \
@@ -51,6 +76,7 @@ list_object_file_symbols () {
 
   nm $file \
     | sed 's/^...................//' \
+    | grep -v '^camlCamlinternalMenhirLib__' \
     > $symbols_all
 }
 
@@ -103,7 +129,8 @@ compare_archive () {
   cd $flambda_backend \
     && ar xv $flambda_backend_archive | sort > $flambda_backend_contents
 
-  patdiff $upstream_contents $flambda_backend_contents \
+  patdiff <(cat $upstream_contents | awk '{print $3}') \
+    <(cat $flambda_backend_contents | upstream_filenames_of_archive_members) \
     || (echo "File names inside archive $archive do not match"; \
         rm -rf $upstream; \
         rm -rf $flambda_backend; \
@@ -111,15 +138,18 @@ compare_archive () {
         rm -f $flambda_backend_contents; \
         exit 1)
 
-  files=$(ls $upstream)
+  files=$(ls $flambda_backend)
 
   for file in $files; do
-    echo "... Comparing symbols in $file"
+    upstream_file=$(upstream_filename_of_archive_member $file)
 
-    upstream_file=$upstream/$file
-    flambda_backend_file=$flambda_backend/$file
+    if [ "$file" = "$upstream_file" ]; then
+      echo "... Comparing symbols in $file"
+    else
+      echo "... Comparing symbols in $file (upstream $upstream_file)"
+    fi
 
-    compare_object_file_symbols $upstream_file $flambda_backend_file
+    compare_object_file_symbols $upstream/$upstream_file $flambda_backend/$file
   done
 
   rm -rf $upstream
@@ -127,9 +157,6 @@ compare_archive () {
   rm -f $upstream_contents
   rm -f $flambda_backend_contents
 }
-
-#upstream_archives=$(find $upstream_tree -name "*.a" | sort)
-#flambda_backend_archives=$(find $flambda_backend_tree -name "*.a" | sort)
 
 for archive in $archives_to_compare; do
   compare_archive lib/ocaml/$archive
