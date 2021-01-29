@@ -16,8 +16,26 @@ fi
 upstream_tree=$(pwd)/ocaml-install
 flambda_backend_tree=$(pwd)/flambda-backend-install
 
+ocamlobjinfo=$upstream_tree/bin/ocamlobjinfo
+
+if [ ! -x "$ocamlobjinfo" ]; then
+  echo "Missing ocamlobjinfo, expected at: $ocamlobjinfo"
+  exit 1
+fi
+
+# Avoid silent failure to detect installation of ocamlnat on the Flambda
+# backend side.
+if [ ! -x "$upstream_tree/bin/ocamlnat" ]; then
+  echo "'make ocamlnat' was not run on the upstream tree"
+  exit 1
+fi
+
 # These filenames are the ones from the Flambda backend install tree.
 # ocamloptcomp.a will diverge in time, but it's ok to compare right now.
+
+# It would be nice in the future to automatically determine the list of
+# .a, .so, .cma and .cmxa files to compare.
+
 archives_to_compare="\
   libasmrun.a \
   libasmrund.a \
@@ -47,6 +65,10 @@ archives_to_compare="\
   libstr_stubs_native.a
   "
 
+# XXX Genprintval.Make is missing from the upstream build (also
+# checked by hand).  There is an extra anon fn though.
+# compiler-libs/ocamlopttoplevel.a
+
 # We don't currently check dynlink.a because the build process is quite
 # different and we currently have a source code patch in the Flambda backend
 # to work around limitations of Dune.
@@ -64,6 +86,34 @@ stublibs_to_compare="\
   dllunix_stubs.so
   "
 
+cma_to_compare="\
+  stdlib.cma \
+  raw_spacetime_lib.cma \
+  bigarray.cma \
+  threads/threads.cma \
+  compiler-libs/ocamlbytecomp.cma \
+  compiler-libs/ocamloptcomp.cma \
+  compiler-libs/ocamlcommon.cma \
+  compiler-libs/ocamltoplevel.cma \
+  unix.cma \
+  str.cma
+  "
+# and dynlink.cma
+
+cmxa_to_compare="\
+  stdlib.cmxa \
+  raw_spacetime_lib.cmxa \
+  bigarray.cmxa \
+  unix.cmxa \
+  threads/threads.cmxa \
+  str.cmxa \
+  compiler-libs/ocamlcommon.cmxa \
+  compiler-libs/ocamloptcomp.cmxa \
+  compiler-libs/ocamlbytecomp.cmxa \
+  compiler-libs/ocamlopttoplevel.cmxa
+  "
+# and dynlink.cmxa
+
 upstream_filename_of_archive_member () {
   filename=$1
 
@@ -72,6 +122,7 @@ upstream_filename_of_archive_member () {
     cSE.o) echo CSE.o ;;
     st_stubs_byte.o) echo st_stubs_b.o ;;
     st_stubs_native.o) echo st_stubs_n.o ;;
+    genprintval_native.o) echo genprintval.o ;;
     *) echo $filename ;;
   esac
 }
@@ -139,6 +190,10 @@ list_object_file_symbols () {
   # symbols instead of the glibc-versioned symbols.  This is probably some
   # artifact of exactly how the libraries were produced but seems harmless.
 
+  # Genprintval is named differently in ocamlopttoplevel.cmxa, we probably
+  # don't need to do anything about that yet, as the toplevel code is
+  # being refactored by Louis and Jeremie at present.
+
   nm $file \
     | sed 's/^...................//' \
     | grep -v '^.LC[0-9]*$' \
@@ -148,6 +203,7 @@ list_object_file_symbols () {
     | grep -v '^ceil$' \
     | grep -v '^nextafter@@GLIBC' \
     | grep -v '^nextafter$' \
+    | sed 's/camlGenprintval_native/camlGenprintval/' \
     > $symbols
 
   nm $file \
@@ -157,6 +213,7 @@ list_object_file_symbols () {
     | grep -v '^ceil$' \
     | grep -v '^nextafter@@GLIBC' \
     | grep -v '^nextafter$' \
+    | sed 's/camlGenprintval_native/camlGenprintval/' \
     > $symbols_all
 }
 
@@ -288,6 +345,34 @@ compare_ml_and_mli_files () {
   done
 }
 
+remove_digests_from_objinfo_output () {
+  # We don't currently require digests to match.
+
+  # The replacement pattern isn't significant, but this makes the output
+  # easy to inspect manually.
+  sed -r 's/\t[a-f0-9]{32}\t/\t--------------------------------\t/'
+}
+
+compare_cma_files () {
+  cma=$1
+
+  echo "Comparing .cma file: $cma"
+
+  upstream_cma=$upstream_tree/$cma
+  flambda_backend_cma=$flambda_backend_tree/$cma
+
+  ensure_exists $upstream_cma
+  ensure_exists $flambda_backend_cma
+
+  # XXX This is a disaster, the compilation units don't get printed in
+  # the same order.  Will probably need to cut up into separate files then
+  # reassemble in a fixed order.
+
+  patdiff \
+    <(ocamlobjinfo $upstream_cma | remove_digests_from_objinfo_output) \
+    <(ocamlobjinfo $flambda_backend_cma | remove_digests_from_objinfo_output)
+}
+
 # 1. Check immediate subdirs of installation root match (just the names of
 # the subdirs, not the contents).
 
@@ -393,8 +478,7 @@ for file in $upstream_files; do
 done
 
 # 8. Check .a files match (archive filenames, archive member filenames, symbols
-# defined by archive members).  Some rewrites are performed as above.  This is
-# the closest we get to comparing compiled code.
+# defined by archive members).  Some rewrites are performed as above.
 
 echo "** Archive filenames, members and symbols"
 
@@ -410,4 +494,29 @@ echo "** Bytecode stubs .so files"
 for stublibs in $stublibs_to_compare; do
   compare_stublibs $stublibs
 done
+
+# 10. Check .cmo files are all present and contain the same imports.
+
+
+# 11. Check .cmx files are all present and contain the same imports.
+
+
+# 12. Check .cma files contain the same modules.
+
+echo "** .cma files in lib/ocaml/ and subdirs"
+
+for cma in $cma_to_compare; do
+  compare_cma_files "lib/ocaml/$cma"
+done
+
+# 13. Check .cmxa files contain the same modules.
+
+# TODO: C compiler flags etc in cma + cmxa files.
+# OCaml compilation flags in cmt files.
+
+# 14. Check .cmi files (how?)
+
+# 15. Check .cmt files (how?)
+
+# 16. Check .cmti files (how?)
 
