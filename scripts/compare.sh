@@ -152,11 +152,11 @@ list_object_file_symbols () {
 
   nm $file \
     | sed 's/^...................//' \
+    | grep -v '^camlCamlinternalMenhirLib__' \
     | grep -v '^ceil@@GLIBC' \
     | grep -v '^ceil$' \
     | grep -v '^nextafter@@GLIBC' \
     | grep -v '^nextafter$' \
-    | grep -v '^camlCamlinternalMenhirLib__' \
     > $symbols_all
 }
 
@@ -262,6 +262,32 @@ compare_stublibs () {
   compare_object_file_symbols $upstream_stublibs $flambda_backend_stublibs
 }
 
+compare_ml_and_mli_files () {
+  dir=$1
+  upstream_files=$(cd $upstream_tree/$dir && ls *.ml{,i} 2>/dev/null || true)
+  for file in $upstream_files; do
+    # We don't have Optmain in the Flambda backend at present (it's called
+    # Flambda_backend_main instead).
+    if [ "$file" = "optmain.ml" ] || [ "$file" = "optmain.mli" ]; then
+      echo "... skipping optmain.ml{,i}"
+    else
+      if [ ! -f "$flambda_backend_tree/$dir/$file" ]; then
+        echo "$dir/$file is missing"
+        exit 1
+      fi
+
+      # For some reason certain source files have location lines added of
+      # the form:
+      #   # 1 "ocaml/driver/compenv.mli"
+      # which are harmless, so we filter them out.
+
+      patdiff \
+        <(cat $upstream_tree/$dir/$file | grep -v '^# [0-9]\+ \"') \
+        <(cat $flambda_backend_tree/$dir/$file | grep -v '^# [0-9]\+ \"')
+    fi
+  done
+}
+
 # 1. Check immediate subdirs of installation root match (just the names of
 # the subdirs, not the contents).
 
@@ -343,19 +369,14 @@ if [ "$upstream_version" != "$flambda_backend_version" ]; then
   exit 1
 fi
 
-# 6. Check .ml and .mli files in lib/ocaml/ are all present and identical.
+# 6. Check .ml and .mli files in lib/ocaml/ and various of its subdirectories
+# are all present and identical.
 
-echo "** .ml and .mli files in lib/ocaml/"
+echo "** .ml and .mli files in lib/ocaml/ and subdirs"
 
-upstream_files=$(cd $upstream_tree/lib/ocaml/ && ls *.ml{,i})
-for file in $upstream_files; do
-  if [ ! -f "$flambda_backend_tree/lib/ocaml/$file" ]; then
-    echo "lib/ocaml/$file is missing"
-    exit 1
-  fi
-  patdiff $upstream_tree/lib/ocaml/$file \
-    $flambda_backend_tree/lib/ocaml/$file
-done
+compare_ml_and_mli_files "lib/ocaml"
+compare_ml_and_mli_files "lib/ocaml/compiler-libs"
+compare_ml_and_mli_files "lib/ocaml/threads"
 
 # 7. Check all files in lib/ocaml/caml, the runtime headers, are identical.
 
@@ -381,7 +402,8 @@ for archive in $archives_to_compare; do
   compare_archive $archive
 done
 
-# 9. Check .so bytecode stubs files match (in lib/ocaml/stublibs/).
+# 9. Check .so bytecode stubs files (in lib/ocaml/stublibs/) are present
+# and have the same symbols.
 
 echo "** Bytecode stubs .so files"
 
