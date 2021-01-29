@@ -317,6 +317,17 @@
   )
 )
 
+(executable
+ (name extract_crc)
+ (modes byte)
+ (flags (:standard -principal -nostdlib
+   -cclib "-I ../../runtime" -cclib "-L ../../runtime" -cclib -lcamlrun))
+ (link_deps (file ../../stdlib/camlheader) (file ../../runtime/libcamlrun.a))
+ (libraries
+   dynlink_internal
+   stdlib)
+ (modules extract_crc))
+
 (install
   (files
     .dynlink_internal.objs/native/dynlink_common.cmx
@@ -330,6 +341,7 @@
     dynlink.mli
     dynlink.cmi
     (.dynlink_internal.objs/byte/dynlink.cmti as dynlink.cmti)
+    (extract_crc.bc as extract_crc)
   )
   (section lib)
   (package ocaml))

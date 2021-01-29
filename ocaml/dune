@@ -212,6 +212,7 @@
     (errors.mli as compiler-libs/errors.mli)
     (printinstr.mli as compiler-libs/printinstr.mli)
     (instruct.mli as compiler-libs/instruct.mli)
+    (opcodes.mli as compiler-libs/opcodes.mli)
 
     (.ocamlbytecomp.objs/byte/bytegen.cmi as compiler-libs/bytegen.cmi)
     (.ocamlbytecomp.objs/byte/bytegen.cmo as compiler-libs/bytegen.cmo)
@@ -264,6 +265,8 @@
   (section lib)
   (package ocaml)
   (files
+    (main.mli as compiler-libs/main.mli)
+
     (config.mli as compiler-libs/config.mli)
     (build_path_prefix_map.mli as compiler-libs/build_path_prefix_map.mli)
     (misc.mli as compiler-libs/misc.mli)
@@ -575,6 +578,7 @@
     (.ocamlcommon.objs/byte/opcodes.cmi as compiler-libs/opcodes.cmi)
     (.ocamlcommon.objs/byte/opcodes.cmo as compiler-libs/opcodes.cmo)
     (.ocamlcommon.objs/byte/opcodes.cmt as compiler-libs/opcodes.cmt)
+    (.ocamlcommon.objs/byte/opcodes.cmti as compiler-libs/opcodes.cmti)
 
     ; Why is there no rule for opcodes.cmti?
 

@@ -130,6 +130,7 @@ install:
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.mli $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmt $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmti $(prefix)/lib/ocaml
+	cp ./_build2/install/default/lib/ocaml/objinfo_helper $(prefix)/lib/ocaml
 	# only .cmo files should be: main, optmain, topstart.
 
 # stage2 is expected to have been built before runtest / runtest-upstream.
