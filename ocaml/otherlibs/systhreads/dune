@@ -24,7 +24,7 @@
     threadUnix)
   (flags :standard \ -strict-sequence)
   (libraries stdlib unix)
-  (library_flags -cclib -lpthread -linkall)
+  (library_flags -linkall)
   (c_library_flags -lpthread)
   (foreign_stubs
     (language c)
