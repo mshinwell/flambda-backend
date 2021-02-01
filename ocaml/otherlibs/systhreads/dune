@@ -20,8 +20,7 @@
     condition
     event
     mutex
-    thread
-    threadUnix)
+    thread)
   (flags :standard \ -strict-sequence)
   (libraries stdlib unix)
   (library_flags -linkall)
