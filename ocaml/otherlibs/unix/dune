@@ -17,7 +17,7 @@
  (wrapped false)
  (modes byte native)
  (flags (:standard -nostdlib -nolabels))
- (ocamlc_flags (:standard -linkall))
+ (library_flags (:standard -linkall))
  (libraries stdlib)
  (foreign_stubs (language c) (names
    accept access addrofstr alarm bind channels chdir chmod chown chroot close
