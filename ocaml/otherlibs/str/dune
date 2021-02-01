@@ -16,7 +16,7 @@
  (name str)
  (wrapped false)
  (modes byte native)
- (flags (:standard -nostdlib))
+ (flags (:standard -nostdlib -linkall))
  (libraries stdlib)
  (foreign_stubs (language c) (names strstubs)))
 
