@@ -16,7 +16,8 @@
  (name str)
  (wrapped false)
  (modes byte native)
- (flags (:standard -nostdlib -linkall))
+ (flags (:standard -nostdlib))
+ (ocamlc_flags (:standard -linkall))
  (libraries stdlib)
  (foreign_stubs (language c) (names strstubs)))
 
