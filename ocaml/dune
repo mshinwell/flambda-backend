@@ -578,6 +578,7 @@
     (.ocamlcommon.objs/byte/opcodes.cmi as compiler-libs/opcodes.cmi)
     (.ocamlcommon.objs/byte/opcodes.cmo as compiler-libs/opcodes.cmo)
     (.ocamlcommon.objs/byte/opcodes.cmt as compiler-libs/opcodes.cmt)
+    (.ocamlcommon.objs/byte/opcodes.cmti as compiler-libs/opcodes.cmti)
 
     ; Why is there no rule for opcodes.cmti?
 
