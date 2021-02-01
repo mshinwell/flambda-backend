@@ -90,7 +90,9 @@
  (libraries stdlib ocamlcommon)
  ; The bytecode system needs export-dynamic capabilities analogous to those
  ; required for natdynlink.
- (library_flags (:include ocamlbytecomp_library_flags.sexp))
+ ; mshinwell: except that the comparison script doesn't seem to think these
+ ; flags should be here...
+ ; (library_flags (:include ocamlbytecomp_library_flags.sexp))
  (modules
     ;; bytecomp/
     bytegen bytelibrarian bytelink bytepackager emitcode instruct printinstr
