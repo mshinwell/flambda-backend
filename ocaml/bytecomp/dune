@@ -24,4 +24,4 @@
  (mode    fallback)
  (deps    (:instr (file opcodes.ml)))
  (action
-  (bash "ocamlc -i %{instr} -o %{targets}")))
+  (bash "ocamlc -i %{instr} > %{targets}")))
