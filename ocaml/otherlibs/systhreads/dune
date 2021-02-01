@@ -59,7 +59,6 @@
     (dllthreads_stubs.so as stublibs/dllthreads_stubs.so)
 
     (thread.mli as threads/thread.mli)
-    (threadUnix.mli as threads/threadUnix.mli)
     (condition.mli as threads/condition.mli)
     (event.mli as threads/event.mli)
     (mutex.mli as threads/mutex.mli)
@@ -70,7 +69,6 @@
     (.threads.objs/native/event.cmx as threads/event.cmx)
     (.threads.objs/native/mutex.cmx as threads/mutex.cmx)
     (.threads.objs/native/thread.cmx as threads/thread.cmx)
-    (.threads.objs/native/threadUnix.cmx as threads/threadUnix.cmx)
 
     (.threads.objs/byte/condition.cmi as threads/condition.cmi)
     (.threads.objs/byte/condition.cmti as threads/condition.cmti)
@@ -80,8 +78,6 @@
     (.threads.objs/byte/mutex.cmti as threads/mutex.cmti)
     (.threads.objs/byte/thread.cmi as threads/thread.cmi)
     (.threads.objs/byte/thread.cmti as threads/thread.cmti)
-    (.threads.objs/byte/threadUnix.cmi as threads/threadUnix.cmi)
-    (.threads.objs/byte/threadUnix.cmti as threads/threadUnix.cmti)
   )
   (section lib)
   (package ocaml))
