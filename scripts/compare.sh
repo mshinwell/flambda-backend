@@ -353,6 +353,67 @@ remove_digests_from_objinfo_output () {
   sed -r 's/\t[a-f0-9]{32}\t/\t--------------------------------\t/'
 }
 
+header_of_objinfo_output () {
+  grep -B 100 -m 1 "^Unit name: " | grep -v "^Unit name: " \
+    | grep -v "^File "
+}
+
+sort_body_of_objinfo_output () {
+  # This ensures that the order of compilation units in the objinfo output
+  # is consistent, even if it isn't in the file being examined (which
+  # doesn't matter).
+
+  objinfo_output=$1
+  temp=$(mktemp -d)
+
+  cat $objinfo_output \
+    | grep -A 100000 -m 1 "^Unit name" \
+    | while read line; do
+        if [[ "$line" =~ ^Unit\ name:\ (.*)$ ]]; then
+          # The wonders of dynamic scoping...
+          compunit=${BASH_REMATCH[1]}
+          echo $line > $temp/$compunit
+        else
+          echo $line >> $temp/$compunit
+        fi
+      done
+
+  # This expansion is guaranteed to be in a particular order.
+  result=$(cat $temp/*)
+
+  rm -rf $temp
+
+  echo "$result"
+}
+
+rewrite_flambda_backend_objinfo_c_library_names () {
+  while read line; do
+    key=$(echo $line | sed 's/: .*//')
+    data=$(echo $line | sed 's/^[^:]*: //')
+    case "$key" in
+      "Extra C object files" | "Extra dynamically-loaded libraries")
+        echo -n "$key: "
+        for flag in $data; do
+          if [[ "$flag" =~ ^-l(.*)$ ]]; then
+            lib_name=${BASH_REMATCH[1]}
+            archive_name=lib${lib_name}.a
+            upstream_archive_name=$(upstream_filename_of_archive $archive_name)
+            upstream_lib_name=$(echo $upstream_archive_name \
+              | sed 's/\.a$//' \
+              | sed 's/^lib//')
+            echo -n "-l$upstream_lib_name"
+          else
+            echo -n $flag
+          fi
+          echo -n " "
+        done
+        echo
+        ;;
+      *) echo $line ;;
+    esac
+  done
+}
+
 compare_cma_files () {
   cma=$1
 
@@ -364,13 +425,34 @@ compare_cma_files () {
   ensure_exists $upstream_cma
   ensure_exists $flambda_backend_cma
 
-  # XXX This is a disaster, the compilation units don't get printed in
-  # the same order.  Will probably need to cut up into separate files then
-  # reassemble in a fixed order.
+  upstream=$(mktemp)
+  flambda_backend=$(mktemp)
 
-  patdiff \
-    <(ocamlobjinfo $upstream_cma | remove_digests_from_objinfo_output) \
-    <(ocamlobjinfo $flambda_backend_cma | remove_digests_from_objinfo_output)
+  ocamlobjinfo $upstream_cma \
+    | remove_digests_from_objinfo_output \
+    > $upstream
+
+  ocamlobjinfo $flambda_backend_cma \
+    | remove_digests_from_objinfo_output \
+    | rewrite_flambda_backend_objinfo_c_library_names \
+    > $flambda_backend
+
+  patdiff <(cat $upstream | header_of_objinfo_output) \
+    <(cat $flambda_backend | header_of_objinfo_output) \
+    || (rm -f $upstream;
+        rm -f $flambda_backend;
+        exit 1
+       )
+
+  patdiff <(sort_body_of_objinfo_output $upstream) \
+    <(sort_body_of_objinfo_output $flambda_backend) \
+    || (rm -f $upstream;
+        rm -f $flambda_backend;
+        exit 1
+       )
+
+  rm -f $upstream
+  rm -f $flambda_backend
 }
 
 # 1. Check immediate subdirs of installation root match (just the names of
@@ -482,9 +564,10 @@ done
 
 echo "** Archive filenames, members and symbols"
 
-for archive in $archives_to_compare; do
-  compare_archive $archive
-done
+echo SKIPPED
+##for archive in $archives_to_compare; do
+##  compare_archive $archive
+##done
 
 # 9. Check .so bytecode stubs files (in lib/ocaml/stublibs/) are present
 # and have the same symbols.
