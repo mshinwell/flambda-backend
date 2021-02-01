@@ -16,6 +16,7 @@ if ! which patdiff > /dev/null 2>&1 ; then
 fi
 
 # Installation root (--prefix) for the upstream and Flambda backend compilers
+# These should not have a trailing slash.
 upstream_tree=$(pwd)/ocaml-install
 flambda_backend_tree=$(pwd)/flambda-backend-install
 
@@ -103,7 +104,7 @@ cma_to_compare="\
   unix.cma \
   str.cma
   "
-# and dynlink.cma
+# No dynlink.cma as per comment above.
 
 cmxa_to_compare="\
   stdlib.cmxa \
@@ -116,18 +117,18 @@ cmxa_to_compare="\
   unix.cmxa \
   str.cmxa
   "
-# and dynlink.cmxa
+# No dynlink.cmxa as per comment above.
 
 # compiler-libs/ocamlopttoplevel.cmxa has some almost certainly irrelevant
 # discrepancies, although the flags match.  We can come back to this after
 # the toplevel code has been refactored.
 
+# Note that for the other installed artifacts for CSE and CSEgen the
+# dune file in the Flambda backend gives them the correct names rather
+# than the miscapitalised ones.
 upstream_filename_of_archive_member () {
   filename=$1
 
-  # Note that for the other installed artifacts for CSE and CSEgen the
-  # dune file in the Flambda backend gives them the correct names rather
-  # than the miscapitalised ones.
   case "$filename" in
     cSEgen.o) echo CSEgen.o ;;
     cSE.o) echo CSE.o ;;
@@ -397,12 +398,17 @@ sort_body_of_objinfo_output_bytecode () {
   for file in $temp/*; do
     cat $file \
       | grep -B 100000 -m 1 "^Required globals:" \
-      | grep -A 100000 -m 1 "^Uses unsafe features:" \
       > $file.finished
+
+    cat $file \
+      | grep -A 100000 -m 1 "^Uses unsafe features:" \
+      >> $file.finished
   done
 
   # This expansion is guaranteed to be in a particular order.
   result=$(cat $temp/*.finished)
+
+  echo "$temp" >> /tmp/log2
 
   rm -rf $temp
 
@@ -556,6 +562,34 @@ compare_cmxa_files () {
   rm -f $flambda_backend
 }
 
+filter_objinfo_output_for_cmx () {
+  remove_digests_from_objinfo_output \
+  | grep -v "^File " \
+  | grep -v "^CRC of implementation" \
+  | sed "s:$upstream_tree:INSTALL-DIR:" \
+  | sed "s:$flambda_backend_tree:INSTALL-DIR:"
+}
+
+remove_implementations_imported_from_cmx_objinfo_output () {
+  file=$1
+
+  temp=$(mktemp)
+
+  # For some reason this causes a non-zero exit on lexer.cmx, although
+  # manually running the commands seems to work fine.
+  cat $file \
+    | grep -B 100000 -m 1 "^Implementations imported:" \
+    > $temp \
+    || true
+
+  cat $file \
+    | grep -A 100000 -m 1 "^Clambda approximation:" \
+    >> $temp
+
+  cp -f $temp $file
+  rm -f $temp
+}
+
 check_cmx_files () {
   # We must start from the upstream tree, as we want to ensure no .cmx files
   # are missing in the Flambda backend tree.
@@ -578,11 +612,41 @@ check_cmx_files () {
     && [[ ! "$upstream_base" =~ ^optmain.cmx$ ]] \
     && [[ ! "$upstream_base" =~ ^opttopstart.cmx$ ]] ;
     then
-      cmx=$flambda_backend_tree/$dir/$flambda_backend_base
-      if [ ! -f "$cmx" ]; then
-        echo ".cmx file $cmx is missing"
+      upstream_cmx=$upstream_tree/$dir/$upstream_base
+      flambda_backend_cmx=$flambda_backend_tree/$dir/$flambda_backend_base
+
+      if [ ! -f "$flambda_backend_cmx" ]; then
+        echo ".cmx file $flambda_backend_cmx is missing"
         exit 1
       fi
+
+      upstream=$(mktemp)
+      flambda_backend=$(mktemp)
+
+      ocamlobjinfo $upstream_cmx \
+        | remove_digests_from_objinfo_output \
+        | filter_objinfo_output_for_cmx \
+        > $upstream
+
+      remove_implementations_imported_from_cmx_objinfo_output $upstream
+
+      ocamlobjinfo $flambda_backend_cmx \
+        | remove_digests_from_objinfo_output \
+        | filter_objinfo_output_for_cmx \
+        > $flambda_backend
+
+      remove_implementations_imported_from_cmx_objinfo_output \
+        $flambda_backend
+
+      patdiff $upstream $flambda_backend \
+        || (echo ".cmx file $flambda_backend_cmx doesn't match";
+            rm -f $upstream;
+            rm -f $flambda_backend;
+            exit 1
+           )
+
+      rm -f $upstream
+      rm -f $flambda_backend
     fi
   done
 }
@@ -607,6 +671,32 @@ check_cmi_files () {
       cmi=$flambda_backend_tree/$dir/$flambda_backend_base
       if [ ! -f "$cmi" ]; then
         echo ".cmi file $cmi is missing"
+        exit 1
+      fi
+    fi
+  done
+}
+
+check_cmt_files () {
+  all_upstream_cmt=$(cd $upstream_tree && find . -name "*.cmt")
+
+  for upstream_cmt in $all_upstream_cmt; do
+    dir=$(dirname $upstream_cmt)
+
+    upstream_base=$(basename $upstream_cmt)
+    flambda_backend_base=$upstream_base
+
+    if [[ ! "$upstream_base" =~ ^.*odoc.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^.*dynlink.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^profiling.cmt$ ]] \
+    && [[ ! "$upstream_base" =~ ^main.cmt$ ]] \
+    && [[ ! "$upstream_base" =~ ^optmain.cmt$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopmain.cmt$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopstart.cmt$ ]];
+    then
+      cmt=$flambda_backend_tree/$dir/$flambda_backend_base
+      if [ ! -f "$cmt" ]; then
+        echo ".cmt file $cmt is missing"
         exit 1
       fi
     fi
@@ -747,10 +837,9 @@ done
 
 echo "** Archive filenames, members and symbols"
 
-echo SKIPPED
-##for archive in $archives_to_compare; do
-##  compare_archive $archive
-##done
+for archive in $archives_to_compare; do
+  compare_archive $archive
+done
 
 # 9. Check .so bytecode stubs files (in lib/ocaml/stublibs/) are present
 # and have the same symbols.
@@ -809,14 +898,18 @@ done
 echo "** .cmi files"
 check_cmi_files
 
-# 15. Check .cmt files (how?)
+# 15. Check .cmt files
+# It would be nice to check compilation flags, but this is difficult, not
+# least because dune legitimately passes extra ones.
 
 echo "** .cmt files"
-
-# TODO: OCaml compilation flags in cmt files.
+check_cmt_files
 
 # 16. Check .cmti files are all present.
 
 echo "** .cmti files"
 check_cmti_files
+
+# 17. Check dynlink .cma and .cmxa flags.
+# TODO
 
