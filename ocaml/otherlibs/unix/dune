@@ -16,7 +16,7 @@
  (name unix)
  (wrapped false)
  (modes byte native)
- (flags (:standard -nostdlib -nolabels))
+ (flags (:standard -nostdlib -nolabels -linkall))
  (libraries stdlib)
  (foreign_stubs (language c) (names
    accept access addrofstr alarm bind channels chdir chmod chown chroot close
