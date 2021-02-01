@@ -16,7 +16,8 @@
  (name bigarray)
  (wrapped false)
  (modes byte native)
- (flags (:standard -nostdlib -nolabels -linkall))
+ (flags (:standard -nostdlib -nolabels))
+ (ocamlc_flags (:standard -linkall))
  (libraries stdlib))
 
 (install
