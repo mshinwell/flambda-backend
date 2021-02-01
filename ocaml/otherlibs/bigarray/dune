@@ -16,7 +16,7 @@
  (name bigarray)
  (wrapped false)
  (modes byte native)
- (flags (:standard -nostdlib -nolabels))
+ (flags (:standard -nostdlib -nolabels -linkall))
  (libraries stdlib))
 
 (install
