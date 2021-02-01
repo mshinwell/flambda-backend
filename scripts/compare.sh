@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Compare the installation tree produced by the Flambda backend build
+# process against that from an upstream compiler built with make.
+
 set -eu -o pipefail
 
 if [ "$(uname)" != "Linux" ]; then
@@ -65,13 +68,15 @@ archives_to_compare="\
   libstr_stubs_native.a
   "
 
-# XXX Genprintval.Make is missing from the upstream build (also
-# checked by hand).  There is an extra anon fn though.
-# compiler-libs/ocamlopttoplevel.a
+# compiler-libs/ocamlopttoplevel.a has a discrepancy: Genprintval.Make is
+# missing in favour of an extra anonymous function.  It is not clear why
+# this is the case; the source is the same.  The toplevel is being refactored
+# in any case, so it seems reasonable to defer until that happens.
 
-# We don't currently check dynlink.a because the build process is quite
-# different and we currently have a source code patch in the Flambda backend
-# to work around limitations of Dune.
+# We don't currently check dynlink.a or the other Dynlink artifacts because the
+# build process is quite different and we currently have a source code patch in
+# the Flambda backend to work around limitations of Dune.  We have execution
+# tests for dynlink in the JS tree in any case.
 
 # compiler-libs/ocamlmiddleend.a is not built in the Flambda backend.
 # We should try to remove this from upstream by fixing the ocamlobjinfo
@@ -91,9 +96,9 @@ cma_to_compare="\
   raw_spacetime_lib.cma \
   bigarray.cma \
   threads/threads.cma \
+  compiler-libs/ocamlcommon.cma \
   compiler-libs/ocamlbytecomp.cma \
   compiler-libs/ocamloptcomp.cma \
-  compiler-libs/ocamlcommon.cma \
   compiler-libs/ocamltoplevel.cma \
   unix.cma \
   str.cma
@@ -104,19 +109,25 @@ cmxa_to_compare="\
   stdlib.cmxa \
   raw_spacetime_lib.cmxa \
   bigarray.cmxa \
-  unix.cmxa \
   threads/threads.cmxa \
-  str.cmxa \
   compiler-libs/ocamlcommon.cmxa \
-  compiler-libs/ocamloptcomp.cmxa \
   compiler-libs/ocamlbytecomp.cmxa \
-  compiler-libs/ocamlopttoplevel.cmxa
+  compiler-libs/ocamloptcomp.cmxa \
+  unix.cmxa \
+  str.cmxa
   "
 # and dynlink.cmxa
+
+# compiler-libs/ocamlopttoplevel.cmxa has some almost certainly irrelevant
+# discrepancies, although the flags match.  We can come back to this after
+# the toplevel code has been refactored.
 
 upstream_filename_of_archive_member () {
   filename=$1
 
+  # Note that for the other installed artifacts for CSE and CSEgen the
+  # dune file in the Flambda backend gives them the correct names rather
+  # than the miscapitalised ones.
   case "$filename" in
     cSEgen.o) echo CSEgen.o ;;
     cSE.o) echo CSE.o ;;
@@ -189,6 +200,8 @@ list_object_file_symbols () {
   # the Unix bytecode stublibs seem to be referencing the non-versioned
   # symbols instead of the glibc-versioned symbols.  This is probably some
   # artifact of exactly how the libraries were produced but seems harmless.
+  # (Might be due to an explicit provision of "-lm" to the linker, or
+  # similar?)
 
   # Genprintval is named differently in ocamlopttoplevel.cmxa, we probably
   # don't need to do anything about that yet, as the toplevel code is
@@ -358,7 +371,7 @@ header_of_objinfo_output () {
     | grep -v "^File "
 }
 
-sort_body_of_objinfo_output () {
+sort_body_of_objinfo_output_bytecode () {
   # This ensures that the order of compilation units in the objinfo output
   # is consistent, even if it isn't in the file being examined (which
   # doesn't matter).
@@ -379,8 +392,50 @@ sort_body_of_objinfo_output () {
         fi
       done
 
+  # We don't compare "required globals" since the use of -no-alias-deps
+  # everywhere in Dune causes some discrepancies.
+  for file in $temp/*; do
+    cat $file \
+      | grep -B 100000 -m 1 "^Required globals:" \
+      | grep -A 100000 -m 1 "^Uses unsafe features:" \
+      > $file.finished
+  done
+
   # This expansion is guaranteed to be in a particular order.
-  result=$(cat $temp/*)
+  result=$(cat $temp/*.finished)
+
+  rm -rf $temp
+
+  echo "$result"
+}
+
+sort_body_of_objinfo_output_native () {
+  objinfo_output=$1
+  temp=$(mktemp -d)
+
+  cat $objinfo_output \
+    | grep -A 100000 -m 1 "^Name: " \
+    | while read line; do
+        if [[ "$line" =~ ^Name:\ (.*)$ ]]; then
+          compunit=${BASH_REMATCH[1]}
+          echo > $temp/$compunit
+          echo $line >> $temp/$compunit
+        else
+          echo $line >> $temp/$compunit
+        fi
+      done
+
+  for file in $temp/*; do
+    cat $file \
+      | grep -B 100000 -m 1 "^Implementations imported:" \
+      > $file.finished
+
+    cat $file \
+      | grep -A 100000 -m 1 "^Clambda approximation:" \
+      >> $file.finished
+  done
+
+  result=$(cat $temp/*.finished)
 
   rm -rf $temp
 
@@ -445,8 +500,8 @@ compare_cma_files () {
         exit 1
        )
 
-  patdiff <(sort_body_of_objinfo_output $upstream) \
-    <(sort_body_of_objinfo_output $flambda_backend) \
+  patdiff <(sort_body_of_objinfo_output_bytecode $upstream) \
+    <(sort_body_of_objinfo_output_bytecode $flambda_backend) \
     || (rm -f $upstream;
         rm -f $flambda_backend;
         exit 1
@@ -454,6 +509,133 @@ compare_cma_files () {
 
   rm -f $upstream
   rm -f $flambda_backend
+}
+
+compare_cmxa_files () {
+  cmxa=$1
+
+  echo "Comparing .cmxa file: $cmxa"
+
+  upstream_cmxa=$upstream_tree/$cmxa
+  flambda_backend_cmxa=$flambda_backend_tree/$cmxa
+
+  ensure_exists $upstream_cmxa
+  ensure_exists $flambda_backend_cmxa
+
+  upstream=$(mktemp)
+  flambda_backend=$(mktemp)
+
+  # Implementation CRCs are not checked.
+
+  ocamlobjinfo $upstream_cmxa \
+    | remove_digests_from_objinfo_output \
+    | grep -v "^CRC of implementation" \
+    > $upstream
+
+  ocamlobjinfo $flambda_backend_cmxa \
+    | remove_digests_from_objinfo_output \
+    | rewrite_flambda_backend_objinfo_c_library_names \
+    | grep -v "^CRC of implementation" \
+    > $flambda_backend
+
+  patdiff <(cat $upstream | header_of_objinfo_output) \
+    <(cat $flambda_backend | header_of_objinfo_output) \
+    || (rm -f $upstream;
+        rm -f $flambda_backend;
+        exit 1
+       )
+
+  patdiff <(sort_body_of_objinfo_output_native $upstream) \
+    <(sort_body_of_objinfo_output_native $flambda_backend) \
+    || (rm -f $upstream;
+        rm -f $flambda_backend;
+        exit 1
+       )
+
+  rm -f $upstream
+  rm -f $flambda_backend
+}
+
+check_cmx_files () {
+  # We must start from the upstream tree, as we want to ensure no .cmx files
+  # are missing in the Flambda backend tree.
+  all_upstream_cmx=$(cd $upstream_tree && find . -name "*.cmx")
+
+  for upstream_cmx in $all_upstream_cmx; do
+    dir=$(dirname $upstream_cmx)
+
+    upstream_base=$(basename $upstream_cmx)
+    # No rewriting currently required.
+    flambda_backend_base=$upstream_base
+
+    # Skip ocamldoc artifacts, those for dynlink (see comment above) and
+    # profiling.cmx (which we don't support).  Likewise for main, optmain and
+    # opttopstart which have different names in the Flambda backend build.
+    if [[ ! "$upstream_base" =~ ^.*odoc.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^.*dynlink.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^profiling.cmx$ ]] \
+    && [[ ! "$upstream_base" =~ ^main.cmx$ ]] \
+    && [[ ! "$upstream_base" =~ ^optmain.cmx$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopstart.cmx$ ]] ;
+    then
+      cmx=$flambda_backend_tree/$dir/$flambda_backend_base
+      if [ ! -f "$cmx" ]; then
+        echo ".cmx file $cmx is missing"
+        exit 1
+      fi
+    fi
+  done
+}
+
+check_cmi_files () {
+  all_upstream_cmi=$(cd $upstream_tree && find . -name "*.cmi")
+
+  for upstream_cmi in $all_upstream_cmi; do
+    dir=$(dirname $upstream_cmi)
+
+    upstream_base=$(basename $upstream_cmi)
+    flambda_backend_base=$upstream_base
+
+    if [[ ! "$upstream_base" =~ ^.*odoc.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^.*dynlink.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^profiling.cmi$ ]] \
+    && [[ ! "$upstream_base" =~ ^main.cmi$ ]] \
+    && [[ ! "$upstream_base" =~ ^optmain.cmi$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopmain.cmi$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopstart.cmi$ ]] ;
+    then
+      cmi=$flambda_backend_tree/$dir/$flambda_backend_base
+      if [ ! -f "$cmi" ]; then
+        echo ".cmi file $cmi is missing"
+        exit 1
+      fi
+    fi
+  done
+}
+
+check_cmti_files () {
+  all_upstream_cmti=$(cd $upstream_tree && find . -name "*.cmti")
+
+  for upstream_cmti in $all_upstream_cmti; do
+    dir=$(dirname $upstream_cmti)
+
+    upstream_base=$(basename $upstream_cmti)
+    flambda_backend_base=$upstream_base
+
+    if [[ ! "$upstream_base" =~ ^.*odoc.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^.*dynlink.*$ ]] \
+    && [[ ! "$upstream_base" =~ ^profiling.cmti$ ]] \
+    && [[ ! "$upstream_base" =~ ^main.cmti$ ]] \
+    && [[ ! "$upstream_base" =~ ^optmain.cmti$ ]] \
+    && [[ ! "$upstream_base" =~ ^opttopmain.cmti$ ]];
+    then
+      cmti=$flambda_backend_tree/$dir/$flambda_backend_base
+      if [ ! -f "$cmti" ]; then
+        echo ".cmti file $cmti is missing"
+        exit 1
+      fi
+    fi
+  done
 }
 
 # 1. Check immediate subdirs of installation root match (just the names of
@@ -579,13 +761,34 @@ for stublibs in $stublibs_to_compare; do
   compare_stublibs $stublibs
 done
 
-# 10. Check .cmo files are all present and contain the same imports.
+# 10. Check .cmo files are all present.
+# At present the only .cmo files upstream are:
+#   lib/ocaml/compiler-libs/std_exit.cmo
+#   lib/ocaml/compiler-libs/main.cmo
+#   lib/ocaml/compiler-libs/topstart.cmo
+#   lib/ocaml/compiler-libs/optmain.cmo
+#   lib/ocaml/profiling.cmo
+# We don't use [Profiling] and the three driver files have different
+# names in the Flambda backend build.  It seems unlikely the absence of
+# these .cmo files will cause a problem.  So we just check for std_exit.cmo.
 
+if [ ! -f "$upstream_tree/lib/ocaml/std_exit.o" ]; then
+  echo Expected lib/ocaml/std_exit.o in upstream tree
+  exit 1
+fi
 
-# 11. Check .cmx files are all present and contain the same imports.
+if [ ! -f "$flambda_backend_tree/lib/ocaml/std_exit.o" ]; then
+  echo Expected lib/ocaml/std_exit.o in Flambda backend tree
+  exit 1
+fi
 
+# 11. Check .cmx files are all present; there are also some checks on
+# their contents.
 
-# 12. Check .cma files contain the same modules.
+echo "** .cmx files"
+check_cmx_files
+
+# 12. Check .cma files contain the same modules, flags etc.
 
 echo "** .cma files in lib/ocaml/ and subdirs"
 
@@ -593,14 +796,27 @@ for cma in $cma_to_compare; do
   compare_cma_files "lib/ocaml/$cma"
 done
 
-# 13. Check .cmxa files contain the same modules.
+# 13. Check .cmxa files contain the same modules, flags etc.
 
-# TODO: C compiler flags etc in cma + cmxa files.
-# OCaml compilation flags in cmt files.
+echo "** .cmxa files in lib/ocaml/ and subdirs"
 
-# 14. Check .cmi files (how?)
+for cmxa in $cmxa_to_compare; do
+  compare_cmxa_files "lib/ocaml/$cmxa"
+done
+
+# 14. Check .cmi files are all present.
+
+echo "** .cmi files"
+check_cmi_files
 
 # 15. Check .cmt files (how?)
 
-# 16. Check .cmti files (how?)
+echo "** .cmt files"
+
+# TODO: OCaml compilation flags in cmt files.
+
+# 16. Check .cmti files are all present.
+
+echo "** .cmti files"
+check_cmti_files
 
