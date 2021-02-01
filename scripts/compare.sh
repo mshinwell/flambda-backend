@@ -372,7 +372,8 @@ sort_body_of_objinfo_output () {
         if [[ "$line" =~ ^Unit\ name:\ (.*)$ ]]; then
           # The wonders of dynamic scoping...
           compunit=${BASH_REMATCH[1]}
-          echo $line > $temp/$compunit
+          echo > $temp/$compunit
+          echo $line >> $temp/$compunit
         else
           echo $line >> $temp/$compunit
         fi
