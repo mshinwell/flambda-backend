@@ -75,14 +75,18 @@ archives_to_compare="\
 # in any case, so it seems reasonable to defer until that happens.
 
 # We don't currently check dynlink.a or the other Dynlink artifacts because the
-# build process is quite different and we currently have a source code patch in
-# the Flambda backend to work around limitations of Dune.  We have execution
-# tests for dynlink in the JS tree in any case.
+# build process is quite different (and we currently have a source code patch in
+# the Flambda backend to work around limitations of Dune, although we will
+# try to upstream that).  We have execution tests for dynlink in the JS tree in
+# any case.
 
 # compiler-libs/ocamlmiddleend.a is not built in the Flambda backend.
 # We should try to remove this from upstream by fixing the ocamlobjinfo
 # problem.  Note that ocamloptcomp.a contains the middle end, both in
 # the Flambda backend and upstream builds.
+
+# We don't yet check libcamlrun_shared.so or libasmrun_shared.so, which seem
+# unlikely to be used.  The latter will diverge anyway in due course.
 
 # These filenames are the ones from the Flambda backend install tree.
 stublibs_to_compare="\
@@ -728,6 +732,20 @@ check_cmti_files () {
   done
 }
 
+check_dynlink_cma_and_cmxa () {
+  upstream_cma=$upstream_tree/lib/ocaml/dynlink.cma
+  flambda_backend_cma=$flambda_backend_tree/lib/ocaml/dynlink.cma
+
+  upstream_cmxa=$upstream_tree/lib/ocaml/dynlink.cmxa
+  flambda_backend_cmxa=$flambda_backend_tree/lib/ocaml/dynlink.cmxa
+
+  patdiff <(ocamlobjinfo $upstream_cma | header_of_objinfo_output) \
+    <(ocamlobjinfo $flambda_backend_cma | header_of_objinfo_output)
+
+  patdiff <(ocamlobjinfo $upstream_cmxa | header_of_objinfo_output) \
+    <(ocamlobjinfo $flambda_backend_cmxa | header_of_objinfo_output)
+}
+
 # 1. Check immediate subdirs of installation root match (just the names of
 # the subdirs, not the contents).
 
@@ -910,6 +928,7 @@ check_cmt_files
 echo "** .cmti files"
 check_cmti_files
 
-# 17. Check dynlink .cma and .cmxa flags.
-# TODO
+# 17. Check dynlink .cma and .cmxa flags (see comment near the top of this
+# script for why we don't do a full comparison at present).
+check_dynlink_cma_and_cmxa
 
