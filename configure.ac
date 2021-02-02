@@ -1,6 +1,7 @@
 AC_PREREQ([2.69])
+
 AC_INIT([The Flambda backend for OCaml],
-        4.11-0,
+        m4_esyscmd([head -n1 ocaml/VERSION | tr -d '\r\n']),
         [mshinwell@janestreet.com],
         [flambda_backend],
         [http://github.com/ocaml-flambda/flambda_backend])
