@@ -85,15 +85,28 @@ archives_to_compare="\
 # problem.  Note that ocamloptcomp.a contains the middle end, both in
 # the Flambda backend and upstream builds.
 
-# We don't yet check libcamlrun_shared.so or libasmrun_shared.so, which seem
-# unlikely to be used.  The latter will diverge anyway in due course.
-
 # These filenames are the ones from the Flambda backend install tree.
 stublibs_to_compare="\
   dllraw_spacetime_lib_stubs.so \
   dllstr_stubs.so \
   dllthreads_stubs.so \
   dllunix_stubs.so
+  "
+
+shared_objects_to_compare="\
+  bigarray.cmxs \
+  raw_spacetime_lib.cmxs \
+  str.cmxs \
+  unix.cmxs
+  "
+
+sundry_text_files_to_compare="\
+  camlheader \
+  camlheaderd \
+  camlheaderi \
+  camlheader_ur \
+  eventlog_metadata \
+  ld.conf
   "
 
 cma_to_compare="\
@@ -318,18 +331,21 @@ compare_archive () {
   rm -f $flambda_backend_contents
 }
 
-compare_stublibs () {
+compare_stublibs_or_other_dot_so_or_cmxs () {
   stublibs=$1
+  subdir=$2
+
   upstream_stublibs=$(upstream_filename_of_stublibs $stublibs)
 
   if [ "$stublibs" = "$upstream_stublibs" ]; then
-    echo "Comparing stublibs: $stublibs"
+    echo "Comparing stublibs or other .so / .cmxs: $stublibs"
   else
-    echo "Comparing stublibs: $stublibs (upstream: $upstream_stublibs)"
+    echo -n "Comparing stublibs or other .so / .cmxs: $stublibs "
+    echo "(upstream: $upstream_stublibs)"
   fi
 
-  upstream_stublibs=$upstream_tree/lib/ocaml/stublibs/$upstream_stublibs
-  flambda_backend_stublibs=$flambda_backend_tree/lib/ocaml/stublibs/$stublibs
+  upstream_stublibs=$upstream_tree/lib/ocaml/$subdir/$upstream_stublibs
+  flambda_backend_stublibs=$flambda_backend_tree/lib/ocaml/$subdir/$stublibs
 
   ensure_exists $upstream_stublibs
   ensure_exists $flambda_backend_stublibs
@@ -856,6 +872,7 @@ done
 echo "** Archive filenames, members and symbols"
 
 for archive in $archives_to_compare; do
+  echo $archive
   compare_archive $archive
 done
 
@@ -865,7 +882,7 @@ done
 echo "** Bytecode stubs .so files"
 
 for stublibs in $stublibs_to_compare; do
-  compare_stublibs $stublibs
+  compare_stublibs_or_other_dot_so_or_cmxs $stublibs "stublibs"
 done
 
 # 10. Check .cmo files are all present.
@@ -877,7 +894,8 @@ done
 #   lib/ocaml/profiling.cmo
 # We don't use [Profiling] and the three driver files have different
 # names in the Flambda backend build.  It seems unlikely the absence of
-# these .cmo files will cause a problem.  So we just check for std_exit.cmo.
+# these .cmo files will cause a problem.  So we just check for std_exit.cmo
+# and the corresponding .o file for native use.
 
 if [ ! -f "$upstream_tree/lib/ocaml/std_exit.o" ]; then
   echo Expected lib/ocaml/std_exit.o in upstream tree
@@ -886,6 +904,16 @@ fi
 
 if [ ! -f "$flambda_backend_tree/lib/ocaml/std_exit.o" ]; then
   echo Expected lib/ocaml/std_exit.o in Flambda backend tree
+  exit 1
+fi
+
+if [ ! -f "$upstream_tree/lib/ocaml/std_exit.cmo" ]; then
+  echo Expected lib/ocaml/std_exit.cmo in upstream tree
+  exit 1
+fi
+
+if [ ! -f "$flambda_backend_tree/lib/ocaml/std_exit.cmo" ]; then
+  echo Expected lib/ocaml/std_exit.cmo in Flambda backend tree
   exit 1
 fi
 
@@ -931,4 +959,39 @@ check_cmti_files
 # 17. Check dynlink .cma and .cmxa flags (see comment near the top of this
 # script for why we don't do a full comparison at present).
 check_dynlink_cma_and_cmxa
+
+# 18. Compare various sundry .so and .cmxs files.
+
+echo "** Sundry .so and .cmxs files"
+
+for shared_object in $shared_objects_to_compare; do
+  compare_stublibs_or_other_dot_so_or_cmxs "$shared_object" ""
+done
+
+# 19. Remaining sundry text files of various kinds.
+
+echo "** Sundry text files"
+
+for file in $sundry_text_files_to_compare; do
+  echo $file
+  # The extra "echo"s are to suppress "No newline at end of file"
+  # messages for camlheader* files.
+  patdiff \
+    <((cat $upstream_tree/lib/ocaml/$file \
+        | sed "s:$upstream_tree:INSTALL-DIR:"); echo) \
+    <((cat $flambda_backend_tree/lib/ocaml/$file \
+        | sed "s:$flambda_backend_tree:INSTALL-DIR:"); echo)
+done
+
+# 20. Makefile.config comparison.
+
+echo "** Makefile.config"
+
+patdiff \
+  <(cat $upstream_tree/lib/ocaml/Makefile.config \
+      | grep -v "^CONFIGURE_ARGS=" \
+      | grep -v "^prefix=") \
+  <(cat $flambda_backend_tree/lib/ocaml/Makefile.config \
+      | grep -v "^CONFIGURE_ARGS=" \
+      | grep -v "^prefix=") \
 
