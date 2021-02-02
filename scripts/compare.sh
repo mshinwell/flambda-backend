@@ -872,7 +872,6 @@ done
 echo "** Archive filenames, members and symbols"
 
 for archive in $archives_to_compare; do
-  echo $archive
   compare_archive $archive
 done
 
