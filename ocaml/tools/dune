@@ -200,6 +200,7 @@
 (install
   (files
     objinfo_helper
+    eventlog_metadata
   )
   (section lib)
   (package ocaml))
