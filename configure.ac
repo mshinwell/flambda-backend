@@ -12,13 +12,6 @@ m4_include([autoconf-aux/ax_subdirs_configure.m4])
 
 AC_CONFIG_AUX_DIR([autoconf-aux])
 
-AC_CHECK_PROG([ocamlopt], [ocamlopt], [true], [false])
-
-AS_IF([test x"$ocamlopt" = "xfalse"],
-  [AC_MSG_ERROR([ocamlopt not found on PATH, please select 4.11 OPAM switch])])
-
-AC_MSG_NOTICE([ocamlopt found ok on PATH])
-
 AC_PATH_PROG([dune], [dune], [])
 
 AC_ARG_WITH([dune],
