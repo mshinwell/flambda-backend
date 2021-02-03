@@ -13,62 +13,24 @@ stage2_prefix=@stage2_prefix@
 middle_end=@middle_end@
 dune=@dune@
 
+# CR mshinwell: Find out how to get something like "set -eu" in effect.
+
 .PHONY: install clean runtest runtest-upstream
 
 .DEFAULT_GOAL := build
 
-# How do we get the equivalent of "set -u" for the "rm -rf"...?
+# The Flambda backend compiler build proceeds, from cold, in three stages.
+# We call these (in order) stage0, stage1 and stage2.
 
-# The stage0 configure step configures the tree to build pretty much the
-# bare minimum that we need for building stage1.  Note that the middle end
-# used here does not need to match the middle end selected for the remaining
-# stages.
-# To avoid polluting the ocaml/ directory with build artifacts from make,
-# which dune will complain about, we hard-link the tree.  This also means
-# that we can keep the configure-generated artifacts separate.
-ocaml-stage0-config.status:
-	rm -rf _build0
-	mkdir _build0
-	rsync --hard-links --recursive \
-	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
-	(cd _build0 && \
-          ./configure --prefix=@stage0_prefix@ \
-	    --disable-ocamldoc \
-	    --disable-ocamltest \
-	    --disable-debug-runtime \
-	    --disable-instrumented-runtime \
-	    --disable-shared \
-	    --disable-debugger && \
-	  cp config.status ../ocaml-stage0-config.status)
-
-# stage1 has already been configured by running the configure script.
-# It is configured according to any options requested by the user, including
-# selection of the middle end, but the prefix is set to a temporary build
-# directory.
-
-# This configures stage2 to have the same configure options as stage1
-# except that the prefix is set to the ultimate installation directory.
-# We save the config.status file (which is executable) for fast reconfiguration
-# of the ocaml/ subdirectory during the dune builds for stage1 and stage2.
-# We use hard-linking here to enable the configuration of stage2 to be run in
-# parallel with other things.
-ocaml-stage2-config.status:
-	rm -rf _stage2_configure
-	mkdir _stage2_configure
-	rsync --hard-links --recursive \
-	  --link-dest=$$(pwd)/_stage2_configure $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
-	(cd _stage2_configure && \
-	  ./configure -C \
-	    $$(grep CONFIGURE_ARGS Makefile.config | sed 's/^[A-Z_ ]*=//') \
-	    --prefix=$(prefix) && \
-	  cp config.status ../ocaml-stage2-config.status)
-
-# Building stage0 is the same as an upstream compiler build with make.  We need
-# to make sure the hard-linked tree is in sync with the ocaml/ directory first,
-# in case files were added or removed.  (This does currently mean a redundant
-# rsync when building from cold, but it is fast.)
+# Building stage0 is the same as an upstream compiler build with make.  This is
+# done in a hard-linked tree to avoid polluting the ocaml/ subdirectory (see
+# below for more details).  We need to make sure the hard-linked tree is in
+# sync with the ocaml/ directory first, in case files were added or removed.
+# (This does currently mean a redundant rsync when building from cold, but it
+# is fast.)
 # Note: it's important that ocaml-stage0-config.status replaces anything
 # that might have been rsynced from ocaml/, e.g. an incorrect config.status file.
+# CR mshinwell: We should replace this with a coldstart using dune.
 .PHONY: stage0
 stage0: ocaml-stage0-config.status
 	rsync --hard-links --recursive \
@@ -85,7 +47,8 @@ stage0: ocaml-stage0-config.status
 #
 # At the end, we have a working Flambda backend compiler, equivalent to having
 # done "make ocamlopt" upstream.  For testing with a broken middle or backend,
-# e.g. if the stdlib doesn't compile, you can stop here.
+# e.g. if the stdlib doesn't compile, you can stop here and run
+# _build1/default/flambda_backend_main.exe.
 # 
 # At this point we don't yet have a standard library and a set of otherlibs
 # whose .cmx files are compatible with this new compiler.  Neither are the
@@ -140,22 +103,66 @@ stage2: stage1 ocaml-stage2-config.status
 
 build: stage2
 
+# The stage0 configure step configures the tree to build pretty much the
+# bare minimum that we need for building stage1.  Note that the middle end
+# used here does not need to match the middle end selected for the remaining
+# stages.
+# To avoid polluting the ocaml/ directory with build artifacts from make,
+# which dune will complain about, we hard-link the tree.  This also means
+# that we can keep the configure-generated artifacts separate.
+ocaml-stage0-config.status:
+	rm -rf _build0
+	mkdir _build0
+	rsync --hard-links --recursive \
+	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
+	(cd _build0 && \
+          ./configure --prefix=@stage0_prefix@ \
+	    --disable-ocamldoc \
+	    --disable-ocamltest \
+	    --disable-debug-runtime \
+	    --disable-instrumented-runtime \
+	    --disable-shared \
+	    --disable-debugger && \
+	  cp config.status ../ocaml-stage0-config.status)
+
+# stage1 has already been configured by running the configure script.
+# It is configured according to any options requested by the user, including
+# selection of the middle end, but the prefix is set to a temporary build
+# directory.
+
+# This configures stage2 to have the same configure options as stage1
+# except that the prefix is set to the ultimate installation directory.
+# We save the config.status file (which is executable) for fast reconfiguration
+# of the ocaml/ subdirectory during the dune builds for stage1 and stage2.
+# We use hard-linking here to enable the configuration of stage2 to be run in
+# parallel with other things.
+ocaml-stage2-config.status:
+	rm -rf _stage2_configure
+	mkdir _stage2_configure
+	rsync --hard-links --recursive \
+	  --link-dest=$$(pwd)/_stage2_configure $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
+	(cd _stage2_configure && \
+	  ./configure -C \
+	    $$(grep CONFIGURE_ARGS Makefile.config | sed 's/^[A-Z_ ]*=//') \
+	    --prefix=$(prefix) && \
+	  cp config.status ../ocaml-stage2-config.status)
+
 install:
 	rm -rf $(prefix)
 	mkdir -p $(prefix)
 	# Work out how to tidy this up...
 	if [ "$$(uname)" = "Darwin" ]; then \
-      cp -rv $(stage2_prefix)/bin $(prefix); \
-    fi
+	  cp -rv $(stage2_prefix)/bin $(prefix); \
+	fi
 	if [ "$$(uname)" != "Darwin" ]; then \
-      cp -Lrv $(stage2_prefix)/bin $(prefix); \
-    fi
+	  cp -Lrv $(stage2_prefix)/bin $(prefix); \
+	fi
 	if [ "$$(uname)" = "Darwin" ]; then \
-      cp -rv $(stage2_prefix)/lib $(prefix); \
-    fi
+	  cp -rv $(stage2_prefix)/lib $(prefix); \
+	fi
 	if [ "$$(uname)" != "Darwin" ]; then \
-      cp -Lrv $(stage2_prefix)/lib $(prefix); \
-    fi
+	  cp -Lrv $(stage2_prefix)/lib $(prefix); \
+	fi
 	ln -s $(prefix)/bin/ocamllex.opt $(prefix)/bin/ocamllex
 	rm -f $(prefix)/bin/flambda_backend.main
 	rm -f $(prefix)/bin/flambda_backend.main_native
@@ -173,7 +180,6 @@ install:
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.mli $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmt $(prefix)/lib/ocaml
 	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmti $(prefix)/lib/ocaml
-	# only .cmo files should be: main, optmain, topstart.
 
 # stage2 is expected to have been built before runtest / runtest-upstream.
 # We need some way of identifying what state the build tree is currently in
@@ -184,7 +190,7 @@ runtest:
 	# Ideally that would be inaccessible within tests (to prevent mistakes
 	# such as running "ocamlopt" rather than one of the stage2 binaries).
 	PATH=$(stage1_prefix)/bin:$$PATH \
-      $(dune) runtest --profile=release --build-dir=_build2
+	  $(dune) runtest --profile=release --build-dir=_build2
 
 runtest-upstream:
 	rm -rf _runtest
@@ -231,11 +237,11 @@ runtest-upstream:
 	cp _build2/default/ocaml/.ocamlcommon.objs/native/config.o _runtest/utils
 	# Suppress linker errors about -I directories not existing.
 	for dir in asmcomp bytecomp driver file_formats lambda middle_end \
-      parsing typing; do ln -s utils _runtest/$$dir; done
+	  parsing typing; do ln -s utils _runtest/$$dir; done
 	# dynlink
 	mkdir -p _runtest/otherlibs/dynlink
 	cp _build2/install/default/lib/ocaml/dynlink* \
-      _runtest/otherlibs/dynlink
+	  _runtest/otherlibs/dynlink
 	# str
 	mkdir -p _runtest/otherlibs/str
 	cp _build2/install/default/lib/ocaml/stublibs/dllstr_stubs.so \
@@ -295,7 +301,7 @@ runtest-upstream:
 	mkdir _runtest/tools
 	cp _build2/default/ocaml/tools/ocamlmklib_byte.bc _runtest/tools/ocamlmklib
 	cp _build2/default/ocaml/tools/ocamlobjinfo_byte.bc \
-      _runtest/tools/ocamlobjinfo
+	  _runtest/tools/ocamlobjinfo
 	cp ./_build2/install/default/lib/ocaml/objinfo_helper _runtest/tools
 	# ocamltest itself
 	mkdir _runtest/ocamltest
@@ -310,10 +316,10 @@ runtest-upstream:
 	cp _build1/default/ocaml/tools/cmpbyt.bc _runtest/tools/cmpbyt
 	# We should build the native ocamltest too.
 	cp _build1/default/ocaml/ocamltest/ocamltest.byte \
-      _runtest/ocamltest/ocamltest
+	  _runtest/ocamltest/ocamltest
 	# need otherlibs/unix/, toplevel/ and tools/
 	(export OCAMLSRCDIR=$$(pwd)/_runtest; cd _runtest/testsuite \
-      && if $$(which parallel > /dev/null 2>&1); \
-         then make parallel; \
-         else make all; \
-         fi)
+	  && if $$(which parallel > /dev/null 2>&1); \
+             then make parallel; \
+             else make all; \
+             fi)
