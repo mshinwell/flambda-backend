@@ -13,7 +13,7 @@ stage2_prefix=@stage2_prefix@
 middle_end=@middle_end@
 dune=@dune@
 
-.PHONY: all stage0 stage1 stage2 install clean runtest runtest-upstream
+.PHONY: install clean runtest runtest-upstream
 
 .DEFAULT_GOAL := build
 
@@ -35,6 +35,7 @@ ocaml-stage0-config.status:
           ./configure --prefix=@stage0_prefix@ \
 	    --disable-ocamldoc \
 	    --disable-ocamltest \
+	    --disable-debug-runtime \
 	    --disable-instrumented-runtime \
 	    --disable-shared \
 	    --disable-debugger && \
@@ -66,16 +67,33 @@ ocaml-stage2-config.status:
 # to make sure the hard-linked tree is in sync with the ocaml/ directory first,
 # in case files were added or removed.  (This does currently mean a redundant
 # rsync when building from cold, but it is fast.)
-stage0: ocaml-stage0-config.status NONEXISTENT
+# Note: it's important that ocaml-stage0-config.status replaces anything
+# that might have been rsynced from ocaml/, e.g. an incorrect config.status file.
+.PHONY: stage0
+stage0: ocaml-stage0-config.status
 	rsync --hard-links --recursive \
 	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
+	cp ocaml-stage0-config.status _build0/config.status
 	(cd _build0 && \
+	  ./config.status && \
 	  make -j8 world.opt && \
 	  make -j8 ocamlnat && \
 	  make install \
 	)
 
-# This should use build contexts instead of --build-dir.
+# stage1 builds the Flambda backend compiler using the stage0 compiler.
+#
+# At the end, we have a working Flambda backend compiler, equivalent to having
+# done "make ocamlopt" upstream.  For testing with a broken middle or backend,
+# e.g. if the stdlib doesn't compile, you can stop here.
+# 
+# At this point we don't yet have a standard library and a set of otherlibs
+# whose .cmx files are compatible with this new compiler.  Neither are the
+# Flambda backend compiler, or the compilerlibs that form it, built with the
+# Flambda backend compiler itself.  These steps comprise stage2.
+#
+# This code should use build contexts instead of --build-dir.
+.PHONY: stage1
 stage1: stage0 ocaml-stage1-config.status
 	cp ocaml-stage1-config.status ocaml/config.status
 	(cd ocaml && ./config.status)
@@ -85,35 +103,40 @@ stage1: stage0 ocaml-stage1-config.status
 	# Unfortunately if there are no NATDYNLINKOPS, we need to provide a
 	# harmless option, otherwise dune will provide '' on the command line to
 	# ocamlopt which causes an error.
+	# CR mshinwell: This should be moved into the upstream dune build system.
 	cat ocaml/Makefile.config \
 	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-g/' \
 	  | grep '^NATDYNLINKOPTS=' \
 	  | sed 's/^[^=]*=\(.*\)/-ccopt\n"\1"/' \
-      > ocaml/otherlibs/dynlink/natdynlinkops
+	  > ocaml/otherlibs/dynlink/natdynlinkops
 	cat ocaml/otherlibs/dynlink/natdynlinkops \
-		| sed 's/^/"/' | sed 's/$$/"/' \
-		| xargs \
-		| sed 's/^/(/' | sed 's/$$/)/' \
-		> ocaml/ocamlbytecomp_library_flags.sexp
+	  | sed 's/^/"/' | sed 's/$$/"/' \
+	  | xargs \
+	  | sed 's/^/(/' | sed 's/$$/)/' \
+	  > ocaml/ocamlbytecomp_library_flags.sexp
 	/bin/echo -n $$(cat ocaml/Makefile.config \
 	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-bin-annot/' \
 	  | grep '^NATDYNLINKOPTS=' \
 	  | sed 's/^[^=]*=\(.*\)/\1/') \
-      > ocaml/otherlibs/dynlink/natdynlinkops2
+	  > ocaml/otherlibs/dynlink/natdynlinkops2
 	if [ "$$(cat ocaml/otherlibs/dynlink/natdynlinkops2)" != "-bin-annot" ]; \
 	then \
 	  /bin/echo -n "-ccopt" > ocaml/otherlibs/dynlink/natdynlinkops1; \
-    else \
+	else \
 	  /bin/echo -n "-bin-annot" > ocaml/otherlibs/dynlink/natdynlinkops1; \
 	fi
 	PATH=$(stage0_prefix)/bin:$$PATH \
-	$(dune) build --profile=release --build-dir=_build1 --verbose @install
+	  $(dune) build --profile=release --build-dir=_build1 @install
 
+# stage2 rebuilds the whole compiler system with the Flambda backend compiler
+# itself, including the stdlib, otherlibs, compilerlibs, etc.  The result is
+# equivalent to having done "make world.opt && make ocamlnat" upstream.
+.PHONY: stage2
 stage2: stage1 ocaml-stage2-config.status
 	cp ocaml-stage2-config.status ocaml/config.status
 	(cd ocaml && ./config.status)
 	PATH=$(stage1_prefix)/bin:$$PATH \
-      $(dune) build --profile=release --build-dir=_build2 --verbose @install
+	  $(dune) build --profile=release --build-dir=_build2 @install
 
 build: stage2
 
@@ -161,7 +184,7 @@ runtest:
 	# Ideally that would be inaccessible within tests (to prevent mistakes
 	# such as running "ocamlopt" rather than one of the stage2 binaries).
 	PATH=$(stage1_prefix)/bin:$$PATH \
-      $(dune) runtest --profile=release --build-dir=_build2 --verbose
+      $(dune) runtest --profile=release --build-dir=_build2
 
 runtest-upstream:
 	rm -rf _runtest
@@ -280,9 +303,9 @@ runtest-upstream:
 	# compiler is used, in case the new one is broken.  As such, we use the
 	# stage1 build dir, not that from stage2.
 	# This might be causing a spurious rebuild of the runtime
-	$(dune) build --profile=release --build-dir=_build1 --verbose \
+	$(dune) build --profile=release --build-dir=_build1 \
 	  ocaml/tools/cmpbyt.bc
-	$(dune) build --profile=release --build-dir=_build1 --verbose \
+	$(dune) build --profile=release --build-dir=_build1 \
 	  ocaml/ocamltest/ocamltest.byte
 	cp _build1/default/ocaml/tools/cmpbyt.bc _runtest/tools/cmpbyt
 	# We should build the native ocamltest too.
