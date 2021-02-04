@@ -25,10 +25,9 @@ Error: The type of M does not match Set.Make's parameter
        is not included in
          Set.OrderedType
        The value `compare' is required but not provided
-       File "ocaml/stdlib/set.mli", line 52, characters 4-31:
+       File "ocaml/stdlib/set.mli", line 54, characters 4-31:
          Expected declaration
 |} ]
-
 
 (* We would report the wrong error here if we didn't strengthen the
    type of the argument (type t wouldn't match). *)
