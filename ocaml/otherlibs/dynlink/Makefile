@@ -38,16 +38,13 @@ ifeq "$(FLAMBDA)" "true"
 OPTCOMPFLAGS += -O3
 endif
 
-COMPFLAGS += -I byte
-OPTCOMPFLAGS += -I native
-
 LOCAL_SRC=dynlink_compilerlibs
 
-OBJS=byte/dynlink_compilerlibs.cmo dynlink_types.cmo \
-  dynlink_platform_intf.cmo dynlink_common.cmo byte/dynlink.cmo
+OBJS=dynlink_compilerlibs.cmo dynlink_types.cmo \
+  dynlink_platform_intf.cmo dynlink_common.cmo dynlink.cmo
 
-NATOBJS=native/dynlink_compilerlibs.cmx dynlink_types.cmx \
-  dynlink_platform_intf.cmx dynlink_common.cmx native/dynlink.cmx
+NATOBJS=dynlink_compilerlibs.cmx dynlink_types.cmx \
+  dynlink_platform_intf.cmx dynlink_common.cmx dynlink.cmx
 
 # We need/desire access to compilerlibs for various reasons:
 # - The bytecode dynamic linker is in compilerlibs and has many dependencies
@@ -188,12 +185,12 @@ $(LOCAL_SRC)/%.cmx: $(LOCAL_SRC)/%.ml
 # Rules for building the [Dynlink_compilerlibs] bytecode and native packs
 # from their components.
 
-byte/dynlink_compilerlibs.cmo: $(COMPILERLIBS_CMO)
+dynlink_compilerlibs.cmo: $(COMPILERLIBS_CMO)
 	$(OCAMLC) $(COMPFLAGS) -pack -o $@ $(COMPILERLIBS_CMO)
 
-byte/dynlink_compilerlibs.cmi: byte/dynlink_compilerlibs.cmo
+dynlink_compilerlibs.cmi: dynlink_compilerlibs.cmo
 
-native/dynlink_compilerlibs.cmx: $(COMPILERLIBS_CMX)
+dynlink_compilerlibs.cmx: $(COMPILERLIBS_CMX)
 	$(OCAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) -pack -o $@ $(COMPILERLIBS_CMX)
 
 %/dynlink.cmi: dynlink.cmi dynlink.mli
@@ -211,7 +208,7 @@ all: dynlink.cma extract_crc
 allopt: dynlink.cmxa
 
 dynlink.cma: $(OBJS)
-	$(OCAMLC) $(COMPFLAGS) -ccopt "$(NATDYNLINKOPTS)" -a -I byte -o $@ $^
+	$(OCAMLC) $(COMPFLAGS) -ccopt "$(NATDYNLINKOPTS)" -a -o $@ $^
 
 dynlink.cmxa: $(NATOBJS)
 	$(OCAMLOPT) $(COMPFLAGS) -ccopt "$(NATDYNLINKOPTS)" -a -o $@ $^
@@ -223,7 +220,7 @@ dynlink.cmxa: $(NATOBJS)
 dynlink_platform_intf.mli: dynlink_platform_intf.ml
 	cp $< $@
 
-extract_crc: dynlink.cma byte/dynlink_compilerlibs.cmo extract_crc.cmo
+extract_crc: dynlink.cma dynlink_compilerlibs.cmo extract_crc.cmo
 	$(OCAMLC) -o $@ $^
 
 install:
@@ -248,8 +245,7 @@ installopt:
 
 partialclean:
 	rm -f extract_crc *.cm[ioaxt] *.cmti *.cmxa \
-	      byte/*.cm[iot] byte/*.cmti \
-	      native/*.cm[ixt] native/*.cmti native/*.o native/*.obj \
+	      *.cm[iotx] *.cmti *.o *.obj \
 	      $(LOCAL_SRC)/*.cm[ioaxt] $(LOCAL_SRC)/*.cmti \
         $(LOCAL_SRC)/*.o $(LOCAL_SRC)/*.obj
 
@@ -267,15 +263,13 @@ depend:
 	$(error Dependencies cannot be regenerated using the MSVC ports)
 else
 DEPEND_DUMMY_FILES=\
-  native/dynlink_compilerlibs.ml \
-  byte/dynlink_compilerlibs.mli
+  dynlink_compilerlibs.ml \
+  dynlink_compilerlibs.mli
 
 depend: beforedepend
 	touch $(DEPEND_DUMMY_FILES)
 	$(CAMLRUN) $(ROOTDIR)/boot/ocamlc -depend -slash \
-	  -I byte -bytecode *.mli *.ml byte/dynlink.ml > .depend
-	$(CAMLRUN) $(ROOTDIR)/boot/ocamlc -depend -slash \
-	  -I native -native *.ml native/dynlink.ml >> .depend
+	  -bytecode -native *.mli *.ml dynlink.ml > .depend
 	rm -f $(DEPEND_DUMMY_FILES)
 endif
 
