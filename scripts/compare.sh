@@ -6,21 +6,28 @@
 set -eu -o pipefail
 
 if [ "$(uname)" != "Linux" ]; then
-  echo "This script should be run on a Linux machine."
+  echo "This script ($0) should be run on a Linux machine."
   exit 1
 fi
 
-if ! which patdiff > /dev/null 2>&1 ; then
-  echo "Please install patdiff."
+if [ $# != 3 ]; then
+  echo "syntax: $0 UPSTREAM-INSTALL-DIR FLAMBDA-BACKEND-INSTALL-DIR OCAMLOBJINFO"
   exit 1
+fi
+
+difftool="patdiff"
+if ! which patdiff > /dev/null 2>&1 ; then
+  echo "Warning: patdiff not found, falling back to diff"
+  echo
+  difftool="diff -U3"
 fi
 
 # Installation root (--prefix) for the upstream and Flambda backend compilers
-# These should not have a trailing slash.
-upstream_tree=$(pwd)/ocaml-install
-flambda_backend_tree=$(pwd)/flambda-backend-install
-
-ocamlobjinfo=$upstream_tree/bin/ocamlobjinfo
+# We'd like these not to have trailing slashes as they are used for matching
+# below.
+upstream_tree=$(echo $1 | sed 's:/$::')
+flambda_backend_tree=$(echo $2 | sed 's:/$::')
+ocamlobjinfo=$3
 
 if [ ! -x "$ocamlobjinfo" ]; then
   echo "Missing ocamlobjinfo, expected at: $ocamlobjinfo"
@@ -52,7 +59,6 @@ archives_to_compare="\
   bigarray.a \
   compiler-libs/ocamlbytecomp.a \
   compiler-libs/ocamlcommon.a \
-  compiler-libs/ocamloptcomp.a \
   raw_spacetime_lib.a \
   stdlib.a \
   str.a \
@@ -68,6 +74,11 @@ archives_to_compare="\
   libstr_stubs.a \
   libstr_stubs_native.a
   "
+
+# CR mshinwell: Put this back in the list when we've got the ocaml/ dir
+# resurrected properly at the correct rev.  (Or maybe not, since it will
+# diverge and cause CI failures.)
+#  compiler-libs/ocamloptcomp.a
 
 # compiler-libs/ocamlopttoplevel.a has a discrepancy: Genprintval.Make is
 # missing in favour of an extra anonymous function.  It is not clear why
@@ -116,12 +127,12 @@ cma_to_compare="\
   threads/threads.cma \
   compiler-libs/ocamlcommon.cma \
   compiler-libs/ocamlbytecomp.cma \
-  compiler-libs/ocamloptcomp.cma \
   compiler-libs/ocamltoplevel.cma \
   unix.cma \
   str.cma
   "
 # No dynlink.cma as per comment above.
+# Also no compiler-libs/ocamloptcomp.cma, see above.
 
 cmxa_to_compare="\
   stdlib.cmxa \
@@ -130,15 +141,147 @@ cmxa_to_compare="\
   threads/threads.cmxa \
   compiler-libs/ocamlcommon.cmxa \
   compiler-libs/ocamlbytecomp.cmxa \
-  compiler-libs/ocamloptcomp.cmxa \
   unix.cmxa \
   str.cmxa
   "
 # No dynlink.cmxa as per comment above.
+# Also no compiler-libs/ocamloptcomp.cmxa, see above.
 
 # compiler-libs/ocamlopttoplevel.cmxa has some almost certainly irrelevant
 # discrepancies, although the flags match.  We can come back to this after
 # the toplevel code has been refactored.
+
+# Middle end and back end .cmx files which are excluded from comparison,
+# since they will diverge.
+cmx_exclusions="\
+    reg.cmx \
+    linscan.cmx \
+    printlinear.cmx \
+    CSEgen.cmx \
+    selection.cmx \
+    coloring.cmx \
+    interval.cmx \
+    schedgen.cmx \
+    strmatch.cmx \
+    CSE.cmx \
+    reloadgen.cmx \
+    cmm.cmx \
+    asmgen.cmx \
+    deadcode.cmx \
+    reg_availability_set.cmx \
+    available_regs.cmx \
+    compute_ranges_intf.cmx \
+    compute_ranges.cmx \
+    reg_with_debug_info.cmx \
+    liveness.cmx \
+    x86_gas.cmx \
+    linearize.cmx \
+    proc.cmx \
+    emit.cmx \
+    cmmgen_state.cmx \
+    interf.cmx \
+    branch_relaxation_intf.cmx \
+    arch.cmx \
+    selectgen.cmx \
+    afl_instrument.cmx \
+    asmlibrarian.cmx \
+    printmach.cmx \
+    emitaux.cmx \
+    asmlink.cmx \
+    reload.cmx \
+    x86_dsl.cmx \
+    scheduling.cmx \
+    split.cmx \
+    spacetime_profiling.cmx \
+    x86_masm.cmx \
+    comballoc.cmx \
+    cmm_helpers.cmx \
+    x86_proc.cmx \
+    linear.cmx \
+    branch_relaxation.cmx \
+    spill.cmx \
+    asmpackager.cmx \
+    cmmgen.cmx \
+    printcmm.cmx \
+    mach.cmx \
+    printclambda.cmx \
+    ref_to_variables.cmx \
+    parameter.cmx \
+    traverse_for_exported_symbols.cmx \
+    share_constants.cmx \
+    simple_value_approx.cmx \
+    export_info.cmx \
+    remove_free_vars_equal_to_args.cmx \
+    inconstant_idents.cmx \
+    closure_conversion.cmx \
+    closure_conversion_aux.cmx \
+    extract_projections.cmx \
+    flambda_invariants.cmx \
+    inlining_stats_types.cmx \
+    flambda_utils.cmx \
+    inline_and_simplify_aux.cmx \
+    export_info_for_pack.cmx \
+    inline_and_simplify.cmx \
+    inlining_transforms.cmx \
+    flambda_to_clambda.cmx \
+    alias_analysis.cmx \
+    closure_offsets.cmx \
+    lift_constants.cmx \
+    flambda_middle_end.cmx \
+    flambda.cmx \
+    import_approx.cmx \
+    augment_specialised_args.cmx \
+    lift_code.cmx \
+    inlining_cost.cmx \
+    unbox_specialised_args.cmx \
+    unbox_free_vars_of_closures.cmx \
+    allocated_const.cmx \
+    simplify_boxed_integer_ops.cmx \
+    remove_unused_closure_vars.cmx \
+    find_recursive_functions.cmx \
+    inlining_decision.cmx \
+    pass_wrapper.cmx \
+    projection.cmx \
+    closure_element.cmx \
+    static_exception.cmx \
+    tag.cmx \
+    id_types.cmx \
+    set_of_closures_origin.cmx \
+    closure_id.cmx \
+    mutable_variable.cmx \
+    set_of_closures_id.cmx \
+    export_id.cmx \
+    var_within_closure.cmx \
+    closure_origin.cmx \
+    unbox_closures.cmx \
+    simplify_primitives.cmx \
+    freshening.cmx \
+    flambda_iterators.cmx \
+    build_export_info.cmx \
+    remove_unused_arguments.cmx \
+    invariant_params.cmx \
+    lift_let_to_initialize_symbol.cmx \
+    remove_unused_program_constructs.cmx \
+    inlining_stats.cmx \
+    initialize_symbol_to_let_symbol.cmx \
+    effect_analysis.cmx \
+    simplify_common.cmx \
+    un_anf.cmx \
+    compilenv.cmx \
+    printclambda_primitives.cmx \
+    clambda_primitives.cmx \
+    symbol.cmx \
+    closure_middle_end.cmx \
+    closure.cmx \
+    variable.cmx \
+    compilation_unit.cmx \
+    clambda.cmx \
+    semantics_of_primitives.cmx \
+    backend_var.cmx \
+    convert_primitives.cmx \
+    linkage_name.cmx \
+    internal_variable_names.cmx \
+  "
 
 # Note that for the other installed artifacts for CSE and CSEgen the
 # dune file in the Flambda backend gives them the correct names rather
@@ -263,13 +406,13 @@ compare_object_file_symbols () {
   list_object_file_symbols $flambda_backend_file $flambda_backend_symbols \
     $flambda_backend_symbols_all
 
-  patdiff $upstream_symbols $flambda_backend_symbols \
+  $difftool $upstream_symbols $flambda_backend_symbols \
     || (echo "Symbols do not match."; \
         rm -f $upstream_symbols $flambda_backend_symbols; \
         rm -f $upstream_symbols_all $flambda_backend_symbols_all; \
         exit 1)
 
-  patdiff $upstream_symbols_all $flambda_backend_symbols_all || true
+  $difftool $upstream_symbols_all $flambda_backend_symbols_all || true
 
   rm -f $upstream_symbols $flambda_backend_symbols
   rm -f $upstream_symbols_all $flambda_backend_symbols_all
@@ -302,7 +445,7 @@ compare_archive () {
   cd $flambda_backend \
     && ar xv $flambda_backend_archive | sort > $flambda_backend_contents
 
-  patdiff <(cat $upstream_contents | awk '{print $3}') \
+  $difftool <(cat $upstream_contents | awk '{print $3}') \
     <(cat $flambda_backend_contents | upstream_filenames_of_archive_members) \
     || (echo "File names inside archive $archive do not match"; \
         rm -rf $upstream; \
@@ -359,8 +502,13 @@ compare_ml_and_mli_files () {
   for file in $upstream_files; do
     # We don't have Optmain in the Flambda backend at present (it's called
     # Flambda_backend_main instead).
+    # Skip camlinternalMenhirLib until this warning 67 nonsense is sorted.
     if [ "$file" = "optmain.ml" ] || [ "$file" = "optmain.mli" ]; then
       echo "... skipping optmain.ml{,i}"
+    elif [ "$file" = "camlinternalMenhirLib.ml" ]; then
+      echo "... skipping camlinternalMenhirLib.ml"
+    elif [ "$file" = "camlinternalMenhirLib.mli" ]; then
+      echo "... skipping camlinternalMenhirLib.mli"
     else
       if [ ! -f "$flambda_backend_tree/$dir/$file" ]; then
         echo "$dir/$file is missing"
@@ -372,7 +520,7 @@ compare_ml_and_mli_files () {
       #   # 1 "ocaml/driver/compenv.mli"
       # which are harmless, so we filter them out.
 
-      patdiff \
+      $difftool \
         <(cat $upstream_tree/$dir/$file | grep -v '^# [0-9]\+ \"') \
         <(cat $flambda_backend_tree/$dir/$file | grep -v '^# [0-9]\+ \"')
     fi
@@ -510,23 +658,23 @@ compare_cma_files () {
   upstream=$(mktemp)
   flambda_backend=$(mktemp)
 
-  ocamlobjinfo $upstream_cma \
+  $ocamlobjinfo $upstream_cma \
     | remove_digests_from_objinfo_output \
     > $upstream
 
-  ocamlobjinfo $flambda_backend_cma \
+  $ocamlobjinfo $flambda_backend_cma \
     | remove_digests_from_objinfo_output \
     | rewrite_flambda_backend_objinfo_c_library_names \
     > $flambda_backend
 
-  patdiff <(cat $upstream | header_of_objinfo_output) \
+  $difftool <(cat $upstream | header_of_objinfo_output) \
     <(cat $flambda_backend | header_of_objinfo_output) \
     || (rm -f $upstream;
         rm -f $flambda_backend;
         exit 1
        )
 
-  patdiff <(sort_body_of_objinfo_output_bytecode $upstream) \
+  $difftool <(sort_body_of_objinfo_output_bytecode $upstream) \
     <(sort_body_of_objinfo_output_bytecode $flambda_backend) \
     || (rm -f $upstream;
         rm -f $flambda_backend;
@@ -553,25 +701,25 @@ compare_cmxa_files () {
 
   # Implementation CRCs are not checked.
 
-  ocamlobjinfo $upstream_cmxa \
+  $ocamlobjinfo $upstream_cmxa \
     | remove_digests_from_objinfo_output \
     | grep -v "^CRC of implementation" \
     > $upstream
 
-  ocamlobjinfo $flambda_backend_cmxa \
+  $ocamlobjinfo $flambda_backend_cmxa \
     | remove_digests_from_objinfo_output \
     | rewrite_flambda_backend_objinfo_c_library_names \
     | grep -v "^CRC of implementation" \
     > $flambda_backend
 
-  patdiff <(cat $upstream | header_of_objinfo_output) \
+  $difftool <(cat $upstream | header_of_objinfo_output) \
     <(cat $flambda_backend | header_of_objinfo_output) \
     || (rm -f $upstream;
         rm -f $flambda_backend;
         exit 1
        )
 
-  patdiff <(sort_body_of_objinfo_output_native $upstream) \
+  $difftool <(sort_body_of_objinfo_output_native $upstream) \
     <(sort_body_of_objinfo_output_native $flambda_backend) \
     || (rm -f $upstream;
         rm -f $flambda_backend;
@@ -615,6 +763,8 @@ check_cmx_files () {
   # are missing in the Flambda backend tree.
   all_upstream_cmx=$(cd $upstream_tree && find . -name "*.cmx")
 
+  cmx_exclusions_pipe_sep=$(echo $cmx_exclusions | sed 's/ /|/g')
+
   for upstream_cmx in $all_upstream_cmx; do
     dir=$(dirname $upstream_cmx)
 
@@ -630,7 +780,8 @@ check_cmx_files () {
     && [[ ! "$upstream_base" =~ ^profiling.cmx$ ]] \
     && [[ ! "$upstream_base" =~ ^main.cmx$ ]] \
     && [[ ! "$upstream_base" =~ ^optmain.cmx$ ]] \
-    && [[ ! "$upstream_base" =~ ^opttopstart.cmx$ ]] ;
+    && [[ ! "$upstream_base" =~ ^opttopstart.cmx$ ]] \
+    && [[ ! "$upstream_base" =~ ^\($cmx_exclusions_pipe_sep\)$ ]] ;
     then
       upstream_cmx=$upstream_tree/$dir/$upstream_base
       flambda_backend_cmx=$flambda_backend_tree/$dir/$flambda_backend_base
@@ -643,14 +794,14 @@ check_cmx_files () {
       upstream=$(mktemp)
       flambda_backend=$(mktemp)
 
-      ocamlobjinfo $upstream_cmx \
+      $ocamlobjinfo $upstream_cmx \
         | remove_digests_from_objinfo_output \
         | filter_objinfo_output_for_cmx \
         > $upstream
 
       remove_implementations_imported_from_cmx_objinfo_output $upstream
 
-      ocamlobjinfo $flambda_backend_cmx \
+      $ocamlobjinfo $flambda_backend_cmx \
         | remove_digests_from_objinfo_output \
         | filter_objinfo_output_for_cmx \
         > $flambda_backend
@@ -658,7 +809,7 @@ check_cmx_files () {
       remove_implementations_imported_from_cmx_objinfo_output \
         $flambda_backend
 
-      patdiff $upstream $flambda_backend \
+      $difftool $upstream $flambda_backend \
         || (echo ".cmx file $flambda_backend_cmx doesn't match";
             rm -f $upstream;
             rm -f $flambda_backend;
@@ -755,11 +906,11 @@ check_dynlink_cma_and_cmxa () {
   upstream_cmxa=$upstream_tree/lib/ocaml/dynlink.cmxa
   flambda_backend_cmxa=$flambda_backend_tree/lib/ocaml/dynlink.cmxa
 
-  patdiff <(ocamlobjinfo $upstream_cma | header_of_objinfo_output) \
-    <(ocamlobjinfo $flambda_backend_cma | header_of_objinfo_output)
+  $difftool <($ocamlobjinfo $upstream_cma | header_of_objinfo_output) \
+    <($ocamlobjinfo $flambda_backend_cma | header_of_objinfo_output)
 
-  patdiff <(ocamlobjinfo $upstream_cmxa | header_of_objinfo_output) \
-    <(ocamlobjinfo $flambda_backend_cmxa | header_of_objinfo_output)
+  $difftool <($ocamlobjinfo $upstream_cmxa | header_of_objinfo_output) \
+    <($ocamlobjinfo $flambda_backend_cmxa | header_of_objinfo_output)
 }
 
 # 1. Check immediate subdirs of installation root match (just the names of
@@ -797,7 +948,7 @@ flambda_backend_bin=$(ls $flambda_backend_tree/bin)
 
 if [ "$upstream_bin" != "$flambda_backend_bin" ]; then
   echo "Executables in bin/ don't match:"
-  patdiff <(echo $upstream_bin) <(echo $flambda_backend_bin)
+  $difftool <(echo $upstream_bin) <(echo $flambda_backend_bin)
   exit 1
 fi
 
@@ -839,7 +990,7 @@ flambda_backend_version=$(cat $flambda_backend_tree/lib/ocaml/VERSION)
 
 if [ "$upstream_version" != "$flambda_backend_version" ]; then
   echo -e "VERSION files in lib/ocaml/ do not match:"
-  patdiff <(echo $upstream_version) <(echo $flambda_backend_version)
+  $difftool <(echo $upstream_version) <(echo $flambda_backend_version)
   exit 1
 fi
 
@@ -862,7 +1013,7 @@ for file in $upstream_files; do
     echo "lib/ocaml/$file is missing"
     exit 1
   fi
-  patdiff $upstream_tree/lib/ocaml/caml/$file \
+  $difftool $upstream_tree/lib/ocaml/caml/$file \
     $flambda_backend_tree/lib/ocaml/caml/$file
 done
 
@@ -938,6 +1089,10 @@ for cmxa in $cmxa_to_compare; do
   compare_cmxa_files "lib/ocaml/$cmxa"
 done
 
+# CR mshinwell: Some of the following checks will need to be restricted
+# so they exclude the ocamloptcomp build artifacts, since they will
+# diverge.
+
 # 14. Check .cmi files are all present.
 
 echo "** .cmi files"
@@ -975,7 +1130,7 @@ for file in $sundry_text_files_to_compare; do
   echo $file
   # The extra "echo"s are to suppress "No newline at end of file"
   # messages for camlheader* files.
-  patdiff \
+  $difftool \
     <((cat $upstream_tree/lib/ocaml/$file \
         | sed "s:$upstream_tree:INSTALL-DIR:"); echo) \
     <((cat $flambda_backend_tree/lib/ocaml/$file \
@@ -986,11 +1141,15 @@ done
 
 echo "** Makefile.config"
 
-patdiff \
+$difftool \
   <(cat $upstream_tree/lib/ocaml/Makefile.config \
       | grep -v "^CONFIGURE_ARGS=" \
+      | grep -v "^WITH_OCAMLTEST=" \
+      | grep -v "^STDLIB_MANPAGES=" \
       | grep -v "^prefix=") \
   <(cat $flambda_backend_tree/lib/ocaml/Makefile.config \
       | grep -v "^CONFIGURE_ARGS=" \
+      | grep -v "^WITH_OCAMLTEST=" \
+      | grep -v "^STDLIB_MANPAGES=" \
       | grep -v "^prefix=") \
 
