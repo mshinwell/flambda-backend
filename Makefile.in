@@ -2,7 +2,7 @@
 #*                                                                        *
 #*                 The Flambda backend project for OCaml                  *
 #*                                                                        *
-#*   Copyright 2020 Jane Street Group LLC                                 *
+#*   Copyright 2020--2021 Jane Street Group LLC                           *
 #*                                                                        *
 #**************************************************************************
 
@@ -15,33 +15,41 @@ dune=@dune@
 
 # CR mshinwell: Find out how to get something like "set -eu" in effect.
 
-.PHONY: install clean runtest runtest-upstream
-
 .DEFAULT_GOAL := build
 
 # The Flambda backend compiler build proceeds, from cold, in three stages.
 # We call these (in order) stage0, stage1 and stage2.
 
 # Building stage0 is the same as an upstream compiler build with make.  This is
-# done in a hard-linked tree to avoid polluting the ocaml/ subdirectory (see
-# below for more details).  We need to make sure the hard-linked tree is in
+# done in an rsynced tree to avoid polluting the ocaml/ subdirectory (see
+# below for more details).  We need to make sure the separate tree is in
 # sync with the ocaml/ directory first, in case files were added or removed.
-# (This does currently mean a redundant rsync when building from cold, but it
-# is fast.)
-# Note: it's important that ocaml-stage0-config.status replaces anything
-# that might have been rsynced from ocaml/, e.g. an incorrect config.status file.
+#
+# We need to take care not to rsync config.status-generated files otherwise
+# they will clobber the existing configuration (and we don't want to rerun the
+# correct config.status every time or it will trigger rebuilding).
+#
+# Note: it's important that ocaml-stage0-config.status replaces anything that
+# might have been rsynced from ocaml/, e.g. an incorrect config.status file.
+#
 # CR mshinwell: We should replace this with a coldstart using dune.
 .PHONY: stage0
-stage0: ocaml-stage0-config.status
-	rsync --hard-links --recursive \
-	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
-	cp ocaml-stage0-config.status _build0/config.status
-	(cd _build0 && \
-	  ./config.status && \
-	  make -j8 world.opt && \
-	  make -j8 ocamlnat && \
-	  make install \
-	)
+stage0: _build0/config.status
+	rm -f .rsync-output
+	rsync -i -a \
+	  --exclude=Makefile.common \
+	  --exclude=Makefile.config \
+	  --exclude=tools/eventlog_metadata \
+	  $$(pwd)/ocaml/ $$(pwd)/_build0 \
+	  | (grep -v '/$$' || true) \
+	  | egrep -v ' (config.log|config.status|libtool)$$' \
+	  | tee .rsync-output
+	if [ -s .rsync-output ]; then \
+	  (cd _build0 && \
+	    $(MAKE) world.opt && \
+	    $(MAKE) ocamlnat && \
+	    $(MAKE) install); \
+	fi
 
 # stage1 builds the Flambda backend compiler using the stage0 compiler.
 #
@@ -57,73 +65,53 @@ stage0: ocaml-stage0-config.status
 #
 # This code should use build contexts instead of --build-dir.
 .PHONY: stage1
-stage1: stage0 ocaml-stage1-config.status
+stage1: ocaml-stage1-config.status stage0 \
+          ocaml/otherlibs/dynlink/natdynlinkops2
 	cp ocaml-stage1-config.status ocaml/config.status
 	(cd ocaml && ./config.status)
-	# We need to augment dune's substitutions so this part isn't so difficult.
-	# We use /bin/echo to avoid builtin variants of "echo" which don't
-	# accept "-n".
-	# Unfortunately if there are no NATDYNLINKOPS, we need to provide a
-	# harmless option, otherwise dune will provide '' on the command line to
-	# ocamlopt which causes an error.
-	# CR mshinwell: This should be moved into the upstream dune build system.
-	cat ocaml/Makefile.config \
-	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-g/' \
-	  | grep '^NATDYNLINKOPTS=' \
-	  | sed 's/^[^=]*=\(.*\)/-ccopt\n"\1"/' \
-	  > ocaml/otherlibs/dynlink/natdynlinkops
-	cat ocaml/otherlibs/dynlink/natdynlinkops \
-	  | sed 's/^/"/' | sed 's/$$/"/' \
-	  | xargs \
-	  | sed 's/^/(/' | sed 's/$$/)/' \
-	  > ocaml/ocamlbytecomp_library_flags.sexp
-	/bin/echo -n $$(cat ocaml/Makefile.config \
-	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-bin-annot/' \
-	  | grep '^NATDYNLINKOPTS=' \
-	  | sed 's/^[^=]*=\(.*\)/\1/') \
-	  > ocaml/otherlibs/dynlink/natdynlinkops2
-	if [ "$$(cat ocaml/otherlibs/dynlink/natdynlinkops2)" != "-bin-annot" ]; \
-	then \
-	  /bin/echo -n "-ccopt" > ocaml/otherlibs/dynlink/natdynlinkops1; \
-	else \
-	  /bin/echo -n "-bin-annot" > ocaml/otherlibs/dynlink/natdynlinkops1; \
-	fi
 	PATH=$(stage0_prefix)/bin:$$PATH \
 	  $(dune) build --profile=release --build-dir=_build1 @install
+
+.PHONY: stage1-polling
+stage1-polling: ocaml-stage1-config.status stage0 \
+          ocaml/otherlibs/dynlink/natdynlinkops2
+	cp ocaml-stage1-config.status ocaml/config.status
+	(cd ocaml && ./config.status)
+	PATH=$(stage0_prefix)/bin:$$PATH \
+	  $(dune) build -w --profile=release --build-dir=_build1 @install
+
+# CR mshinwell: We should add targets that don't use --profile=release, for
+# speed, and also ensuring that warnings are errors.  We should also consider
+# adding a new Dune profile that is like "release" but has warnings as errors.
 
 # stage2 rebuilds the whole compiler system with the Flambda backend compiler
 # itself, including the stdlib, otherlibs, compilerlibs, etc.  The result is
 # equivalent to having done "make world.opt && make ocamlnat" upstream.
 .PHONY: stage2
-stage2: stage1 ocaml-stage2-config.status
+stage2: ocaml-stage2-config.status stage1
 	cp ocaml-stage2-config.status ocaml/config.status
 	(cd ocaml && ./config.status)
 	PATH=$(stage1_prefix)/bin:$$PATH \
 	  $(dune) build --profile=release --build-dir=_build2 @install
 
+.PHONY: build
 build: stage2
 
 # The stage0 configure step configures the tree to build pretty much the
 # bare minimum that we need for building stage1.  Note that the middle end
 # used here does not need to match the middle end selected for the remaining
 # stages.
-# To avoid polluting the ocaml/ directory with build artifacts from make,
-# which dune will complain about, we hard-link the tree.  This also means
-# that we can keep the configure-generated artifacts separate.
-ocaml-stage0-config.status:
+_build0/config.status:
 	rm -rf _build0
 	mkdir _build0
-	rsync --hard-links --recursive \
-	  --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
+	rsync -a --link-dest=$$(pwd)/_build0 $$(pwd)/ocaml/ $$(pwd)/_build0
 	(cd _build0 && \
           ./configure --prefix=@stage0_prefix@ \
 	    --disable-ocamldoc \
 	    --disable-ocamltest \
 	    --disable-debug-runtime \
 	    --disable-instrumented-runtime \
-	    --disable-shared \
-	    --disable-debugger && \
-	  cp config.status ../ocaml-stage0-config.status)
+	    --disable-debugger)
 
 # stage1 has already been configured by running the configure script.
 # It is configured according to any options requested by the user, including
@@ -139,52 +127,69 @@ ocaml-stage0-config.status:
 ocaml-stage2-config.status:
 	rm -rf _stage2_configure
 	mkdir _stage2_configure
-	rsync --hard-links --recursive \
-	  --link-dest=$$(pwd)/_stage2_configure $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
+	rsync -a --link-dest=$$(pwd)/_stage2_configure \
+	  $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
 	(cd _stage2_configure && \
 	  ./configure -C \
 	    $$(grep CONFIGURE_ARGS Makefile.config | sed 's/^[A-Z_ ]*=//') \
 	    --prefix=$(prefix) && \
 	  cp config.status ../ocaml-stage2-config.status)
 
+# We need to augment dune's substitutions so this part isn't so
+# difficult.  We use /bin/echo to avoid builtin variants of "echo"
+# which don't accept "-n".  Unfortunately if there are no
+# NATDYNLINKOPS, we need to provide a harmless option, otherwise dune
+# will provide '' on the command line to ocamlopt which causes an
+# error.
+# CR mshinwell: This should be moved into the upstream dune build system.
+ocaml/otherlibs/dynlink/natdynlinkops2: ocaml-stage1-config.status
+	cp ocaml-stage1-config.status ocaml/config.status
+	(cd ocaml && ./config.status)
+	cat ocaml/Makefile.config \
+	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-g/' \
+	  | grep '^NATDYNLINKOPTS=' \
+	  | sed 's/^[^=]*=\(.*\)/-ccopt\n"\1"/' \
+	  > ocaml/otherlibs/dynlink/natdynlinkops
+	cat ocaml/otherlibs/dynlink/natdynlinkops \
+	  | sed 's/^/"/' | sed 's/$$/"/' \
+	  | xargs \
+	  | sed 's/^/(/' | sed 's/$$/)/' \
+	  > ocaml/ocamlbytecomp_library_flags.sexp
+	/bin/echo -n $$(cat ocaml/Makefile.config \
+	  | sed 's/^NATDYNLINKOPTS=$$/NATDYNLINKOPTS=-bin-annot/' \
+	  | grep '^NATDYNLINKOPTS=' \
+	  | sed 's/^[^=]*=\(.*\)/\1/') \
+	  > ocaml/otherlibs/dynlink/natdynlinkops2
+	if [ "$$(cat ocaml/otherlibs/dynlink/natdynlinkops2)" \
+	       != "-bin-annot" ]; \
+	then \
+	  /bin/echo -n "-ccopt" > ocaml/otherlibs/dynlink/natdynlinkops1; \
+	else \
+	  /bin/echo -n "-bin-annot" > ocaml/otherlibs/dynlink/natdynlinkops1; \
+	fi
+
+.PHONY: install
 install:
-	rm -rf $(prefix)
 	mkdir -p $(prefix)
-	# Work out how to tidy this up...
-	if [ "$$(uname)" = "Darwin" ]; then \
-	  cp -rv $(stage2_prefix)/bin $(prefix); \
-	fi
-	if [ "$$(uname)" != "Darwin" ]; then \
-	  cp -Lrv $(stage2_prefix)/bin $(prefix); \
-	fi
-	if [ "$$(uname)" = "Darwin" ]; then \
-	  cp -rv $(stage2_prefix)/lib $(prefix); \
-	fi
-	if [ "$$(uname)" != "Darwin" ]; then \
-	  cp -Lrv $(stage2_prefix)/lib $(prefix); \
-	fi
+	rsync --copy-links -r $(stage2_prefix)/bin $(prefix)
+	rsync --copy-links -r $(stage2_prefix)/lib $(prefix)
 	ln -s $(prefix)/bin/ocamllex.opt $(prefix)/bin/ocamllex
-	rm -f $(prefix)/bin/flambda_backend.main
-	rm -f $(prefix)/bin/flambda_backend.main_native
+	rm -f $(prefix)/bin/flambda_backend.main*
 	rm -rf $(prefix)/lib/ocaml-variants
 	rm -rf $(prefix)/lib/stublibs
 	rm -f $(prefix)/lib/ocaml/META
 	rm -f $(prefix)/lib/ocaml/dune-package
 	rm -f $(prefix)/lib/ocaml/compiler-libs/*.cmo
 	rm -rf $(prefix)/lib/flambda_backend
-	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.cmi $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.mli $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.cmt $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/topdirs.cmti $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmi $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.mli $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmt $(prefix)/lib/ocaml
-	cp $(prefix)/lib/ocaml/compiler-libs/opttopdirs.cmti $(prefix)/lib/ocaml
+	for file in topdirs opttopdirs; do \
+	  for ext in cmi mli cmt cmti; do \
+	    cp $(prefix)/lib/ocaml/compiler-libs/$${file}.$$ext \
+	      $(prefix)/lib/ocaml; \
+	  done; \
+	done
 
-# stage2 is expected to have been built before runtest / runtest-upstream.
-# We need some way of identifying what state the build tree is currently in
-# perhaps (ready for stage1 or stage2)?
-
+# This target only runs the dune-based tests, not the upstream testsuite.
+.PHONY: runtest
 runtest:
 	# It's a shame that dune needs the stage1 compiler on the path here.
 	# Ideally that would be inaccessible within tests (to prevent mistakes
@@ -192,6 +197,9 @@ runtest:
 	PATH=$(stage1_prefix)/bin:$$PATH \
 	  $(dune) runtest --profile=release --build-dir=_build2
 
+# The following horror will be removed when work to allow the testsuite to
+# run on an installed tree (led by David Allsopp) is completed.
+.PHONY: runtest-upstream
 runtest-upstream:
 	rm -rf _runtest
 	mkdir _runtest
@@ -234,7 +242,8 @@ runtest-upstream:
 	cp _build2/install/default/lib/ocaml/*.cma _runtest/utils
 	cp _build2/install/default/lib/ocaml/*.a _runtest/utils
 	cp _build2/install/default/lib/ocaml/*.cmxa _runtest/utils
-	cp _build2/default/ocaml/.ocamlcommon.objs/native/config.o _runtest/utils
+	cp _build2/default/ocaml/.ocamlcommon.objs/native/config.o \
+	  _runtest/utils
 	# Suppress linker errors about -I directories not existing.
 	for dir in asmcomp bytecomp driver file_formats lambda middle_end \
 	  parsing typing; do ln -s utils _runtest/$$dir; done
@@ -291,15 +300,18 @@ runtest-upstream:
 	# ocamldebug
 	mkdir _runtest/debugger
 	mv _runtest/ocamldebug _runtest/debugger
-	cp _build2/default/ocaml/debugger/.main.eobjs/byte/*.cm* _runtest/debugger
+	cp _build2/default/ocaml/debugger/.main.eobjs/byte/*.cm* \
+	  _runtest/debugger
 	# The ast_invariants test needs VERSION to be present.  In fact ideally
-	# we should have all the source files in _runtest too for this test, but
-	# for the moment we accept it being a weaker check.  We're not working
-	# on parts of the compiler that deal with the AST anyway in this repo.
+	# we should have all the source files in _runtest too for this test,
+	# but for the moment we accept it being a weaker check.  We're not
+	# working on parts of the compiler that deal with the AST anyway in
+	# this repo.
 	touch _runtest/VERSION
 	# tools
 	mkdir _runtest/tools
-	cp _build2/default/ocaml/tools/ocamlmklib_byte.bc _runtest/tools/ocamlmklib
+	cp _build2/default/ocaml/tools/ocamlmklib_byte.bc \
+	  _runtest/tools/ocamlmklib
 	cp _build2/default/ocaml/tools/ocamlobjinfo_byte.bc \
 	  _runtest/tools/ocamlobjinfo
 	cp ./_build2/install/default/lib/ocaml/objinfo_helper _runtest/tools
