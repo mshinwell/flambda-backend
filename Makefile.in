@@ -42,7 +42,7 @@ stage0: _build0/config.status
 	  --exclude=tools/eventlog_metadata \
 	  $$(pwd)/ocaml/ $$(pwd)/_build0 \
 	  | (grep -v '/$$' || true) \
-	  | egrep -v ' (config.log|config.status|libtool)$$' \
+	  | egrep -v '(\.merlin|config\.log|config\.status|libtool)$$' \
 	  | tee .rsync-output
 	if [ -s .rsync-output ]; then \
 	  (cd _build0 && \
@@ -71,6 +71,9 @@ stage1: ocaml-stage1-config.status stage0 \
 	(cd ocaml && ./config.status)
 	PATH=$(stage0_prefix)/bin:$$PATH \
 	  $(dune) build --profile=release --build-dir=_build1 @install
+	(cd _build1/install/default/bin && \
+	  rm -f ocamllex && \
+	  ln -s ocamllex.opt ocamllex)
 
 .PHONY: stage1-polling
 stage1-polling: ocaml-stage1-config.status stage0 \
@@ -173,6 +176,7 @@ install:
 	mkdir -p $(prefix)
 	rsync --copy-links -r $(stage2_prefix)/bin $(prefix)
 	rsync --copy-links -r $(stage2_prefix)/lib $(prefix)
+	rm -f $(prefix)/bin/ocamllex
 	ln -s $(prefix)/bin/ocamllex.opt $(prefix)/bin/ocamllex
 	rm -f $(prefix)/bin/flambda_backend.main*
 	rm -rf $(prefix)/lib/ocaml-variants
@@ -183,7 +187,7 @@ install:
 	rm -rf $(prefix)/lib/flambda_backend
 	for file in topdirs opttopdirs; do \
 	  for ext in cmi mli cmt cmti; do \
-	    cp $(prefix)/lib/ocaml/compiler-libs/$${file}.$$ext \
+	    cp -f $(prefix)/lib/ocaml/compiler-libs/$${file}.$$ext \
 	      $(prefix)/lib/ocaml; \
 	  done; \
 	done
