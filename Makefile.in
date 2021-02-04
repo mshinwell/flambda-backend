@@ -33,6 +33,10 @@ dune=@dune@
 # might have been rsynced from ocaml/, e.g. an incorrect config.status file.
 #
 # CR mshinwell: We should replace this with a coldstart using dune.
+
+# XXX We need to make sure we don't rsync build artifacts produced by make
+# in the ocaml/ dir into other dirs that dune might build in.  Check.
+
 .PHONY: stage0
 stage0: _build0/config.status
 	rm -f .rsync-output
