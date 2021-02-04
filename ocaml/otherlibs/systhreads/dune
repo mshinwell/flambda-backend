@@ -21,7 +21,7 @@
     event
     mutex
     thread)
-  (flags :standard \ -strict-sequence)
+  (flags :standard \ -strict-sequence -gbasenames)
   (libraries stdlib unix)
   (library_flags -linkall)
   (c_library_flags -lpthread)
