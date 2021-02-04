@@ -37,6 +37,11 @@ dune=@dune@
 # XXX We need to make sure we don't rsync build artifacts produced by make
 # in the ocaml/ dir into other dirs that dune might build in.  Check.
 
+# XXX related: things go wrong if the ocaml/ tree is configured.  We should
+# check if it is, and refuse to go further until it's cleaned.  This will
+# also mean we don't need the build artifacts check.  The question is how we
+# check it was configured by the user, not by us...
+
 .PHONY: stage0
 stage0: _build0/config.status
 	rm -f .rsync-output
