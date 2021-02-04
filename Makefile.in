@@ -101,6 +101,11 @@ stage2: ocaml-stage2-config.status stage1
 	PATH=$(stage1_prefix)/bin:$$PATH \
 	  $(dune) build --profile=release --build-dir=_build2 @install
 
+# Compatibility aliases with upstream.
+.PHONY: world.opt
+world.opt: stage2
+ocamlnat:
+
 # The stage0 configure step configures the tree to build pretty much the
 # bare minimum that we need for building stage1.  Note that the middle end
 # used here does not need to match the middle end selected for the remaining
@@ -395,5 +400,10 @@ _compare/config.status: ocaml/configure
 
 # For Github Actions checks
 .PHONY: ci
-ci: stage2 install runtest runtest_upstream compare
+ci:
+	$(MAKE) stage2
+	$(MAKE) install
+	$(MAKE) runtest
+	$(MAKE) runtest-upstream
+	$(MAKE) compare
 
