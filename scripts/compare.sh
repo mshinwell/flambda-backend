@@ -502,8 +502,13 @@ compare_ml_and_mli_files () {
   for file in $upstream_files; do
     # We don't have Optmain in the Flambda backend at present (it's called
     # Flambda_backend_main instead).
+    # Skip camlinternalMenhirLib until this warning 67 nonsense is sorted.
     if [ "$file" = "optmain.ml" ] || [ "$file" = "optmain.mli" ]; then
       echo "... skipping optmain.ml{,i}"
+    elif [ "$file" = "camlinternalMenhirLib.ml" ]; then
+      echo "... skipping camlinternalMenhirLib.ml"
+    elif [ "$file" = "camlinternalMenhirLib.mli" ]; then
+      echo "... skipping camlinternalMenhirLib.mli"
     else
       if [ ! -f "$flambda_backend_tree/$dir/$file" ]; then
         echo "$dir/$file is missing"
@@ -1139,12 +1144,12 @@ echo "** Makefile.config"
 $difftool \
   <(cat $upstream_tree/lib/ocaml/Makefile.config \
       | grep -v "^CONFIGURE_ARGS=" \
-      | grep -v "^OCAMLTEST=" \
+      | grep -v "^WITH_OCAMLTEST=" \
       | grep -v "^STDLIB_MANPAGES=" \
       | grep -v "^prefix=") \
   <(cat $flambda_backend_tree/lib/ocaml/Makefile.config \
       | grep -v "^CONFIGURE_ARGS=" \
-      | grep -v "^OCAMLTEST=" \
+      | grep -v "^WITH_OCAMLTEST=" \
       | grep -v "^STDLIB_MANPAGES=" \
       | grep -v "^prefix=") \
 
