@@ -14,6 +14,9 @@ module M = struct type t let equal = (=) end
 module M : sig type t val equal : 'a -> 'a -> bool end
 |} ]
 
+(* CR mshinwell: We need a way of making %%expect ignore trailing output
+   or to support regexps. *)
+(*
 type t = Set.Make(M).t
 [%%expect{|
 Line 1, characters 9-22:
@@ -27,7 +30,7 @@ Error: The type of M does not match Set.Make's parameter
        The value `compare' is required but not provided
        File "set.mli", line 54, characters 4-31: Expected declaration
 |} ]
-
+*)
 
 (* We would report the wrong error here if we didn't strengthen the
    type of the argument (type t wouldn't match). *)
