@@ -352,8 +352,6 @@ runtest-upstream:
 # it won't have been configured with the correct options.  Instead we build
 # a fresh upstream compiler using the same configure options as the user
 # originally specified when they configured the Flambda backend tree.
-#
-# CR mshinwell: Share rsync logic with stage0 build, above.
 .PHONY: compare
 compare: _compare/config.status
 	rm -f .rsync-output-compare
