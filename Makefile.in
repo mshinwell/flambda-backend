@@ -34,6 +34,7 @@ stage0: _build0/config.status
 	rm -f .rsync-output
 	rsync -i -a --filter=':- $$(pwd)/ocaml/.gitignore' \
 	  $$(pwd)/ocaml/ $$(pwd)/_build0 \
+	  | grep -v '/$$' \
 	  | tee .rsync-output
 	if [ -s .rsync-output ] || ! [ -d @stage0_prefix@ ]; then \
 	  (cd _build0 && \
@@ -358,7 +359,8 @@ compare: _compare/config.status
 	rm -f .rsync-output-compare
 	rsync -i -a --filter=':- $$(pwd)/ocaml/.gitignore' \
 	  $$(pwd)/ocaml/ $$(pwd)/_compare \
-	| tee .rsync-output-compare
+	  | grep -v '/$$' \
+	  | tee .rsync-output-compare
 	if [ -s .rsync-output-compare ] || ! [ -d _compare/_install ]; then \
 	  (cd _compare && \
 	    $(MAKE) world.opt && \
