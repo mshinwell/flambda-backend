@@ -25,36 +25,15 @@ dune=@dune@
 # below for more details).  We need to make sure the separate tree is in
 # sync with the ocaml/ directory first, in case files were added or removed.
 #
-# We need to take care not to rsync config.status-generated files otherwise
-# they will clobber the existing configuration (and we don't want to rerun the
-# correct config.status every time or it will trigger rebuilding).
+# We use the -i option to rsync in order to short-circuit a null build with
+# make, since it seems faster.
 #
-# Note: it's important that ocaml-stage0-config.status replaces anything that
-# might have been rsynced from ocaml/, e.g. an incorrect config.status file.
-#
-# CR mshinwell: We should replace this with a coldstart using dune.
-
-# XXX Need to fix -gbasenames so the backtrace tests pass.
-
-# XXX We need to make sure we don't rsync build artifacts produced by make
-# in the ocaml/ dir into other dirs that dune might build in.  Check.
-
-# XXX related: things go wrong if the ocaml/ tree is configured.  We should
-# check if it is, and refuse to go further until it's cleaned.  This will
-# also mean we don't need the build artifacts check.  The question is how we
-# check it was configured by the user, not by us...  Maybe just look for
-# *.cm*, *.a, *.o, *.so.
-
+# CR-someday mshinwell: We should replace this with a coldstart using dune.
 .PHONY: stage0
 stage0: _build0/config.status
 	rm -f .rsync-output
-	rsync -i -a \
-	  --exclude=Makefile.common \
-	  --exclude=Makefile.config \
-	  --exclude=tools/eventlog_metadata \
+	rsync -i -a --filter=':- $$(pwd)/ocaml/.gitignore' \
 	  $$(pwd)/ocaml/ $$(pwd)/_build0 \
-	  | (grep -v '/$$' || true) \
-	  | egrep -v '(\.merlin|config\.log|config\.status|libtool)$$' \
 	  | tee .rsync-output
 	if [ -s .rsync-output ] || ! [ -d @stage0_prefix@ ]; then \
 	  (cd _build0 && \
@@ -87,18 +66,6 @@ stage1: ocaml-stage1-config.status stage0 \
 	  rm -f ocamllex && \
 	  ln -s ocamllex.opt ocamllex)
 
-# This target is like a polling version of upstream "make ocamlopt".
-# It is likely to be what's most often wanted for day-to-day development of
-# features, especially large ones that take a long time to get to compile,
-# in the middle end and backend.
-.PHONY: hacking
-hacking: ocaml-stage1-config.status stage0 \
-          ocaml/otherlibs/dynlink/natdynlinkops2
-	cp ocaml-stage1-config.status ocaml/config.status
-	(cd ocaml && ./config.status)
-	PATH=$(stage0_prefix)/bin:$$PATH \
-	  $(dune) build -w --profile=release --build-dir=_build1 @install
-
 # CR mshinwell: We should add targets that don't use --profile=release, for
 # speed, and also ensuring that warnings are errors.  We should also consider
 # adding a new Dune profile that is like "release" but has warnings as errors.
@@ -113,10 +80,18 @@ stage2: ocaml-stage2-config.status stage1
 	PATH=$(stage1_prefix)/bin:$$PATH \
 	  $(dune) build --profile=release --build-dir=_build2 @install
 
-# Compatibility aliases with upstream.
-.PHONY: world.opt
-world.opt: stage2
-ocamlnat:
+# This target is like a polling version of upstream "make ocamlopt" (based
+# on the stage1 target, above).
+# It is likely to be what's most often wanted for day-to-day development of
+# features, especially large ones that take a long time to get to compile,
+# in the middle end and backend.
+.PHONY: hacking
+hacking: ocaml-stage1-config.status stage0 \
+          ocaml/otherlibs/dynlink/natdynlinkops2
+	cp ocaml-stage1-config.status ocaml/config.status
+	(cd ocaml && ./config.status)
+	PATH=$(stage0_prefix)/bin:$$PATH \
+	  $(dune) build -w --profile=release --build-dir=_build1 @install
 
 # The stage0 configure step configures the tree to build pretty much the
 # bare minimum that we need for building stage1.  Note that the middle end
@@ -151,7 +126,8 @@ _build0/config.status: ocaml/configure
 ocaml-stage2-config.status: ocaml/configure
 	rm -rf _stage2_configure
 	mkdir _stage2_configure
-	rsync -a $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
+	rsync -a --filter=':- $$(pwd)/ocaml/.gitignore' \
+	  $$(pwd)/ocaml/ $$(pwd)/_stage2_configure
 	(cd _stage2_configure && \
 	  ./configure -C \
 	    $$(grep CONFIGURE_ARGS Makefile.config | sed 's/^[A-Z_ ]*=//' \
@@ -380,13 +356,8 @@ runtest-upstream:
 .PHONY: compare
 compare: _compare/config.status
 	rm -f .rsync-output-compare
-	rsync -i -a \
-	  --exclude=Makefile.common \
-	  --exclude=Makefile.config \
-	  --exclude=tools/eventlog_metadata \
+	rsync -i -a --filter=':- $$(pwd)/ocaml/.gitignore' \
 	  $$(pwd)/ocaml/ $$(pwd)/_compare \
-	| (grep -v '/$$' || true) \
-	| egrep -v '(\.merlin|config\.log|config\.status|libtool)$$' \
 	| tee .rsync-output-compare
 	if [ -s .rsync-output-compare ] || ! [ -d _compare/_install ]; then \
 	  (cd _compare && \
@@ -402,7 +373,8 @@ compare: _compare/config.status
 _compare/config.status: ocaml/configure
 	rm -rf _compare
 	mkdir _compare
-	rsync -a $$(pwd)/ocaml/ $$(pwd)/_compare
+	rsync -a --filter=':- $$(pwd)/ocaml/.gitignore' \
+	  $$(pwd)/ocaml/ $$(pwd)/_compare
 	(cd _compare && \
           ./configure \
 	    $$(grep CONFIGURE_ARGS ../_stage2_configure/Makefile.config \
