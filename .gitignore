@@ -35,13 +35,16 @@ _ocamltestd
 *.odoc
 .merlin
 
-_build
-_build1
-_build2
+_build/
+_build0/
+_build1/
+_build2/
+.rsync-output
+_stage2_configure/
 autom4te.cache
-config.log
 
 Makefile
+config.log
 config.status
 configure
 ocaml-stage1-config.status
