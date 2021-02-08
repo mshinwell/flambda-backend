@@ -200,7 +200,6 @@ let print_loc ppf loc =
     (* According to the comment in location.mli, if [pos_fname] is "", we must
        use [!input_name]. *)
     if loc.loc_start.pos_fname = "" then !input_name
-    else if !Clflags.debug_basenames then Filename.basename loc.loc_start.pos_fname
     else loc.loc_start.pos_fname
   in
   let startline = loc.loc_start.pos_lnum in
