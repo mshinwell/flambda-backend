@@ -193,9 +193,6 @@ dynlink_compilerlibs.cmi: dynlink_compilerlibs.cmo
 dynlink_compilerlibs.cmx: $(COMPILERLIBS_CMX)
 	$(OCAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) -pack -o $@ $(COMPILERLIBS_CMX)
 
-%/dynlink.cmi: dynlink.cmi dynlink.mli
-	cp $^ $*/
-
 # Rules for building the interface of the [Dynlink_compilerlibs] packs.
 # To avoid falling foul of the problem described below, the .cmo and .cmx
 # files for the dynlink-specific compilerlibs packs generated here---and in
