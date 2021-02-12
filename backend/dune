@@ -49,7 +49,6 @@
 ; e.g. proc.ml, then we can't use "include_subdirs unqualified".  Instead we
 ; extract the files manually from subdirectories.
 ;(copy_files debug/*.ml{,i})
-;(copy_files ../ocaml/utils/domainstate.ml{,i})
 ;
 ;(library
 ;  (name ocamloptcomp)
@@ -70,9 +69,6 @@
 ;    printlinear printmach proc reg reload reloadgen schedgen scheduling
 ;    selectgen selection spacetime_profiling spill split strmatch x86_ast
 ;    x86_dsl x86_gas x86_masm x86_proc
-;
-;    ;; mystery
-;    domainstate
 ;
 ;    ;; asmcomp/debug/
 ;    reg_availability_set compute_ranges_intf available_regs reg_with_debug_info
