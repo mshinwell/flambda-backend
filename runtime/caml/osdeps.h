@@ -113,6 +113,21 @@ void caml_plat_mem_unmap(void *, uintnat);
 void caml_plat_mem_name_map(void *, size_t, const char *);
 
 
+/* caml_locate_standard_library returns the location of the Standard Library.
+   The location returned is absolute, if stdlib_default is a relative path then
+   the result is computed relative to the directory portion of exe_name.
+
+   If dirname is not NULL and stdlib_default is a relative path, a copy of the
+   directory name part of exe_name is returned. If stdlib_default is an absolute
+   path, dirname is never changed.
+
+   Both strings are allocated with [caml_stat_alloc], so should be freed using
+   [caml_stat_free].
+*/
+CAMLextern char_os *caml_locate_standard_library (const char_os *exe_name,
+                                                  const char_os *stdlib_default,
+                                                  char_os **dirname);
+
 #ifdef _WIN32
 
 /* Map a Win32 error code (as returned by GetLastError) to a POSIX error code
@@ -171,6 +186,18 @@ CAMLextern value caml_win32_xdg_defaults(void);
 extern uint64_t caml_time_counter(void);
 
 extern void caml_init_os_params(void);
+
+/* True if:
+   - dir equals "."
+   - dir equals ".."
+   - dir begins "./"
+   - dir begins "../"
+   The tests for null avoid the need to call strlen_os. */
+#define Is_relative_dir(dir) \
+  (dir[0] == '.' \
+   && (dir[1] == 0 \
+       || Is_separator(dir[1]) \
+       || (dir[1] == '.' && (dir[2] == 0 || Is_separator(dir[2])))))
 
 #endif /* CAML_INTERNALS */
 

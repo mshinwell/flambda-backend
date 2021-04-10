@@ -24,15 +24,32 @@ val version: string
 (** The current version number of the system *)
 
 val bindir: string
-(** The directory containing the binary programs *)
+(** The directory containing the binary programs. If the compiler was configured
+    with [--with-relative-libdir] then this will be the directory containing the
+    currently executing runtime. *)
 
 val standard_library_default: string
-(** The configured value for the directory containing the standard libraries
+(** The configured value for the directory containing the standard libraries.
+    May be a relative path if the compiler was configured with
+    [--with-relative-libdir].
+
+    @since 5.5 *)
+
+val standard_library_effective: string
+(** The standard library directory, computed taking {!standard_library_relative}
+    and {!standard_library_default} into account, but not taking CAMLLIB or
+    OCAMLLIB into account.
+
+    @since 5.5 *)
+
+val standard_library_relative: bool
+(** Whether {!standard_library_effective} is computed relative to the runtime
 
     @since 5.5 *)
 
 val standard_library: string
-(** The effective directory containing the standard libraries *)
+(** The effective directory containing the standard libraries, taking CAMLLIB
+    and OCAMLLIB into account. *)
 
 val ccomp_type: string
 (** The "kind" of the C compiler, assembler and linker used: one of

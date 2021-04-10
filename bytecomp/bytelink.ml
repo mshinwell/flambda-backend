@@ -568,7 +568,7 @@ let link_bytecode ?final_name tolink exec_name standalone =
          if standalone && needs_stdlib then
            (* -set-runtime-default *)
            if !Clflags.standard_library_default = None then
-             Some Config.standard_library_default
+             Some Config.standard_library_effective
            else
              !Clflags.standard_library_default
          else
@@ -691,7 +691,7 @@ let c_string_literal_of_string s =
 
 let emit_runtime_standard_library_default outchan =
   let stdlib =
-    let default = Config.standard_library_default in
+    let default = Config.standard_library_effective in
     Option.value ~default !Clflags.standard_library_default in
   let literal = c_string_literal_of_string stdlib in
   Printf.fprintf outchan

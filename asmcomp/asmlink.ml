@@ -107,7 +107,7 @@ let make_startup_file linkenv unix ~ppf_dump ~sourcefile_for_dwarf genfns units
     (fun i name -> compile_phrase (Cmm_helpers.predef_exception i name))
     Runtimedef.builtin_exceptions;
   let standard_library_default =
-    Option.value ~default:Config.standard_library_default
+    Option.value ~default:Config.standard_library_effective
                  !Clflags.standard_library_default
   in
   compile_phrase

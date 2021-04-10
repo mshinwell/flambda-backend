@@ -206,7 +206,8 @@ let ld_library_path_contents () =
 let init_compile nostdlib =
   search_path :=
     ld_library_path_contents() @
-    (if nostdlib then [] else ld_conf_contents Config.standard_library_default)
+    (if nostdlib then [] else
+      ld_conf_contents Config.standard_library_effective)
 
 (* Initialization for linking in core (dynlink or toplevel) *)
 
