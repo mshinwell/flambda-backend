@@ -152,12 +152,12 @@ CAMLextern clock_t caml_win32_clock(void);
 CAMLextern value caml_win32_xdg_defaults(void);
 
 #define CAML_DIR_SEP T("\\")
-#define Is_dir_separator(c) (c == '\\' || c == '/')
+#define Is_separator(c) (c == '\\' || c == '/')
 
 #else
 
-#define CAML_DIR_SEP "/"
-#define Is_dir_separator(c) (c == '/')
+#define CAML_DIR_SEP T("/")
+#define Is_separator(c) (c == '/')
 
 #endif /* _WIN32 */
 
