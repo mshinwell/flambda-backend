@@ -998,11 +998,13 @@ AS_CASE([$host],
   [*-*-mingw32*|*-pc-windows],
     [unix_or_win32="win32"
     ln='cp -pf'
+    default_separator='\'
     ocamltest_libunix="Some false"
     ocamlsrcdir="$(LC_ALL=C.UTF-8 cygpath -w -- "$ocamlsrcdir")"
     ocamlyacc_wstr_module="yacc/wstr"],
   [unix_or_win32="unix"
   ln='ln -sf'
+  default_separator='/'
   ocamltest_libunix="Some true"
   ocamlyacc_wstr_module=""])
 
@@ -3343,11 +3345,12 @@ AC_CONFIG_COMMANDS([runtime/ld.conf],
   [rm -f runtime/ld.conf
   test x"$ocaml_additional_stublibs_dir" = 'x' || \
     echo "$ocaml_additional_stublibs_dir" > runtime/ld.conf
-  echo "$ocaml_libdir/stublibs" >> runtime/ld.conf
-  echo "$ocaml_libdir" >> runtime/ld.conf],
+  echo ".${default_separator}stublibs" >> runtime/ld.conf
+  echo "." >> runtime/ld.conf],
   [ocaml_additional_stublibs_dir=\
 '$(echo "$ocaml_additional_stublibs_dir" | sed -e "s/'/'\"'\"'/g")'
-  ocaml_libdir='$(echo "$ocaml_libdir" | sed -e "s/'/'\"'\"'/g")'])
+  ocaml_libdir='$(echo "$ocaml_libdir" | sed -e "s/'/'\"'\"'/g")'
+  default_separator='$default_separator'])
 
 # Just before config.status is generated, determine the final values for MKEXE,
 # MKDLL, MKMAINDLL and MKEXE_VIA_CC. The final variables controlling these are:
