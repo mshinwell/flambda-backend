@@ -46,12 +46,18 @@ let runtime_lib () =
     then ""
     else !Clflags.runtime_variant
   in
-  let libname = "libasmrun" ^ variant ^ ext_lib in
-  try
-    if !Clflags.nopervasives || not !Clflags.with_runtime
-    then []
-    else [Load_path.find libname]
-  with Not_found -> raise (Linkenv.Error (File_not_found libname))
+  if variant = "_shared" then
+    if Config.suffixing then
+      [Misc.RuntimeID.shared_runtime Sys.Native]
+    else
+      ["-lasmrun_shared"]
+  else
+    let libname = "libasmrun" ^ variant ^ ext_lib in
+    try
+      if !Clflags.nopervasives || not !Clflags.with_runtime
+      then []
+      else [Load_path.find libname]
+    with Not_found -> raise (Linkenv.Error (File_not_found libname))
 
 (* Second pass: generate the startup file and link it with everything else *)
 

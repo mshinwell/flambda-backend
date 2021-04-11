@@ -404,6 +404,12 @@ type search_method =
                            if that fails *)
 | Search               (** Always search for the interpreter *)
 
+val suffixing : bool
+(** Whether the runtime executable and shared library filenames are being
+    mangled with Runtime IDs and the {!target}.
+
+    @since 5.5 *)
+
 val bytecode_runtime_id : string
 (** The Runtime ID for this build of the bytecode runtime system
 
