@@ -20,6 +20,11 @@
 (* The main OCaml version string has moved to ../build-aux/ocaml_version.m4 *)
 let version = Sys.ocaml_version
 
+(* is_release and release_number are automatically updated autoconf from values
+   in ../build-aux/ocaml_version.m4 - do not edit these lines directly. *)
+let is_release = true
+let release_number = 18
+
 (* OxCaml port: the upstream [%standard_library_default] primitive and the
    [caml_sys_get_stdlib_dirs] C primitive cannot be used here because this
    module ends up in compiler-libs, which the OxCaml boot stage links against

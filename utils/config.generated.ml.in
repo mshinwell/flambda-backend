@@ -70,6 +70,9 @@ let afl_instrument = @afl@
 let stack_allocation = @stack_allocation@
 let poll_insertion = @poll_insertion@
 
+let bytecode_runtime_id = {@QS@|@bytecode_runtime_id@|@QS@}
+let native_runtime_id = {@QS@|@native_runtime_id@|@QS@}
+
 let native_compiler = @native_compiler@
 
 let architecture = {@QS@|@arch@|@QS@}

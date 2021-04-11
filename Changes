@@ -188,6 +188,11 @@ OCaml 5.2 maintenance version
   trying `argv[0]`.
   (David Allsopp, review by ???)
 
+- #14???: Introduce Runtime IDs for use in filename mangling to allow different
+  configurations and different versions of the runtime system to coexist
+  harmoniously on a single system.
+  (David Allsopp, review by ???)
+
 ### Tools:
 
 - #14???: ocamlobjinfo now displays the runtime invoked by a bytecode
