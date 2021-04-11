@@ -83,7 +83,6 @@ let target = host
 let systhread_supported = false
 let flexdll_dirs = []
 let ar_supports_response_files = true
-<<<<<<< HEAD
 
 (* mshinwell: at present always use runtime4 for bootstrap *)
 let runtime5 = false
@@ -91,7 +90,4 @@ let no_stack_checks = false
 (* This setting is only for bootstrap, does not affect dune-built compilers: *)
 let naked_pointers = false
 let parameterised_modules = true
-||||||| parent of 8d09f36533 (Remove metadata from runtime-launch-info)
-=======
 let launch_method = "sh"
->>>>>>> 8d09f36533 (Remove metadata from runtime-launch-info)

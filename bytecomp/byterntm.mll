@@ -19,6 +19,22 @@ type search_method =
 | Search
 
 type state = Exec | R | C of string
+
+let cut_runtime_id search name =
+  let len = String.length name in
+  let id =
+    if len < 6 || name.[len - 5] <> '-' then
+      None
+    else
+      Misc.RuntimeID.of_string (String.sub name (len - 4) 4)
+  in
+  let name =
+    if id = None then
+      name
+    else
+      String.sub name 0 (len - 5)
+  in
+  Some (name, id, search)
 }
 
 rule analyze = parse
@@ -29,19 +45,21 @@ rule analyze = parse
     ([^ '\\' '/' '\000']+ as runtime) eof           (* Runtime portion *)
       { if sep = '\000' then
           if dir = "" then
-            Some (runtime, Search)
+            cut_runtime_id Search runtime
           else
-            Some (runtime, Absolute_then_search (Filename.concat dir ""))
+            let dir = Filename.concat dir "" in
+            cut_runtime_id (Absolute_then_search dir) runtime
         else
-          Some (runtime, Absolute (dir ^ String.make 1 sep)) }
+          let dir = dir ^ String.make 1 sep in
+          cut_runtime_id (Absolute dir) runtime }
 
 (* Legacy RNTM (remove after bootstrap) *)
   | (([^ '\000']* ['/' '\\']) as dir)
     ([^ '\\' '/' '\000']+ as runtime) '\000' eof
       { if dir = "" then
-          Some (runtime, Search)
+          Some (runtime, None, Search)
         else
-          Some (runtime, Absolute dir) }
+          Some (runtime, None, Absolute dir) }
 
 (* Shell script launcher (if it matches, this always matches more than the above
    regexp) *)
@@ -68,7 +86,7 @@ and analyze_sh_launcher state b = parse
           let dir =
             String.sub name 0 (String.length name - String.length runtime)
           in
-          Some (runtime, Absolute dir)
+          cut_runtime_id (Absolute dir) runtime
         else
           None }
 
@@ -77,7 +95,7 @@ and analyze_sh_launcher state b = parse
       { if state = R then
           let runtime = Buffer.contents b in
           if c = None then
-            Some (runtime, Search)
+            cut_runtime_id Search runtime
           else
             analyze_sh_launcher (C runtime) (Buffer.clear b; b) lexbuf
         else
@@ -87,7 +105,7 @@ and analyze_sh_launcher state b = parse
   | "'\"$r\"\n"
       { match state with
         | C runtime ->
-            Some (runtime, Absolute_then_search (Buffer.contents b))
+            cut_runtime_id (Absolute_then_search (Buffer.contents b)) runtime
         | _ ->
             None }
 

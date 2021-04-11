@@ -453,6 +453,37 @@ let write_sh_launcher outchan bin_sh bindir search runtime =
    called) *)
 
 let write_header outchan =
+  let zinc_runtime_id, write_exe_launcher =
+    let header =
+      let header = "runtime-launch-info" in
+      try Load_path.find header
+      with Not_found -> raise (Error (File_not_found header))
+    in
+    let data =
+      try In_channel.with_open_bin header In_channel.input_all
+      with Sys_error msg -> raise (Error (Camlheader (msg, header)))
+    in
+    let zinc_runtime_id, offset =
+      if String.length data < 2 then
+        raise (Error (Camlheader ("corrupt header", header)))
+      (* Compatibility with previous header format - remove post-bootstrap *)
+      else if List.mem data.[0] ['/'; 'e'; 's'] then
+        None, String.index data '\000' + 2
+      else if data.[0] = '\000' then
+        None, 1
+      else
+        let zinc = Misc.RuntimeID.of_zinc_hi (String.sub data 0 2) in
+        if Option.fold ~none:false ~some:Misc.RuntimeID.is_zinc zinc then
+          zinc, 2
+        else
+          raise (Error (Camlheader ("corrupt header", header)))
+    in
+    let write_exe_header outchan =
+      let len = String.length data in
+      Out_channel.output_substring outchan data offset (len - offset)
+    in
+    zinc_runtime_id, write_exe_header
+  in
   (* Determine which method will be used for launching the executable:
      Executable: concatenate the bytecode image to the executable stub
      Shebang_runtime: #! line with the required runtime
@@ -468,7 +499,11 @@ let write_header outchan =
     if String.length !Clflags.use_runtime > 0 then
       make_absolute !Clflags.use_runtime, Config.Absolute
     else
-      let runtime = "ocamlrun" ^ !Clflags.runtime_variant in
+      let runtime =
+        let runtime = "ocamlrun" ^ !Clflags.runtime_variant in
+        let some = Misc.RuntimeID.ocamlrun !Clflags.runtime_variant in
+        Option.fold ~none:runtime ~some zinc_runtime_id
+      in
       if !Clflags.search_method <> Config.Absolute then
         runtime, !Clflags.search_method
       else
@@ -495,18 +530,6 @@ let write_header outchan =
       else
         Shebang_runtime
   in
-  let write_exe_launcher data =
-    (* Compatibility with previous header format - remove post-bootstrap *)
-    let data =
-      if data = "" || not (List.mem data.[0] ['/'; 'e'; 's']) then
-        data
-      else
-        let exe_start = String.index data '\000' + 2 in
-        let len = String.length data in
-        String.sub data exe_start (len - exe_start)
-    in
-    Out_channel.output_string outchan data
-  in
   (* Write the header *)
   match launcher with
   | Shebang_runtime ->
@@ -520,16 +543,7 @@ let write_header outchan =
       Bytesections.init_record outchan
   | Executable ->
       (* Use the executable stub launcher *)
-      let header =
-        let header = "runtime-launch-info" in
-        try Load_path.find header
-        with Not_found -> raise (Error (File_not_found header))
-      in
-      let data =
-        try In_channel.with_open_bin header In_channel.input_all
-        with Sys_error msg -> raise (Error (Camlheader (msg, header)))
-      in
-      write_exe_launcher data;
+      write_exe_launcher outchan;
       (* The runtime name needs recording in RNTM *)
       let toc_writer = Bytesections.init_record outchan in
       (* stdlib/header.c determines which mode is needed based on whether the

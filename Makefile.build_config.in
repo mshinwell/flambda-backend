@@ -100,6 +100,7 @@ MKEXE_VIA_CC=\
   $(CC) $(OC_EXE_LDFLAGS) $(OC_CFLAGS) $(CFLAGS) @mkexe_via_cc_ldflags@
 
 LAUNCH_METHOD = @launch_method@
+SUFFIXING = @suffixing@
 
 # Which tool to use to display differences between files
 DIFF=@DIFF@

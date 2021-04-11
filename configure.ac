@@ -485,6 +485,7 @@ AC_SUBST([zinc_runtime_id_lo])
 AC_SUBST([zinc_runtime_id_hi])
 AC_SUBST([bytecode_runtime_id])
 AC_SUBST([native_runtime_id])
+AC_SUBST([suffixing])
 
 ## Generated files
 
@@ -868,6 +869,12 @@ AC_ARG_WITH([relative-libdir],
     [bindir_to_libdir=''],
     [bindir_to_libdir="$withval"])],
   [bindir_to_libdir=''])
+
+AC_ARG_ENABLE([suffixing],
+  [AS_HELP_STRING([--enable-suffixing],
+    [enable suffixing of runtime executables and shared libraries])],
+  [AS_IF([test "x$enableval" = 'xno'], [suffixing=false], [suffixing=true])],
+  [suffixing=false])
 
 AC_ARG_WITH([afl],
   [AS_HELP_STRING([--with-afl],
