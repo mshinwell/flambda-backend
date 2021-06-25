@@ -2834,9 +2834,10 @@ let combine_constructor loc arg pat_env cstr partial ctx def
             match
               (cstr.cstr_consts, cstr.cstr_nonconsts, consts, nonconsts)
             with
-            | 1, 1, [ (0, act1) ], [ (0, act2) ] ->
+            | 1, 1, [ (0, act1) ], [ (0, act2) ]
+              when not (Clflags.is_flambda2 ()) ->
                 (* Typically, match on lists, will avoid isint primitive in that
-              case *)
+                   case *)
                 Lifthenelse (arg, act2, act1)
             | n, 0, _, [] ->
                 (* The type defines constant constructors only *)
@@ -2854,12 +2855,12 @@ let combine_constructor loc arg pat_env cstr partial ctx def
                   | None, _ -> same_actions nonconsts
                 in
                 match act0 with
-                | Some act ->
+                | Some act when not (Clflags.is_flambda2 ()) ->
                     Lifthenelse
                       ( Lprim (Pisint, [ arg ], loc),
                         call_switcher loc fail_opt arg 0 (n - 1) consts,
                         act )
-                | None ->
+                | Some _ | None ->
                     (* Emit a switch, as bytecode implements this sophisticated
                       instruction *)
                     let sw =
