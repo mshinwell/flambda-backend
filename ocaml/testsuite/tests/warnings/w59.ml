@@ -42,14 +42,18 @@ let p = fun x -> x
 let q = 3.14
 let r = 1
 
+(* %obj_set_field is OK here for Flambda 2 because we never use
+   it on an array. *)
+external set_field : t -> int -> Obj.t -> unit = "%obj_set_field"
+
 let () =
-  Obj.set_field (Obj.repr o) 0 (Obj.repr 3);
-  Obj.set_field (Obj.repr p) 0 (Obj.repr 3);
-  Obj.set_field (Obj.repr q) 0 (Obj.repr 3);
-  Obj.set_field (Obj.repr r) 0 (Obj.repr 3)
+  set_field (Obj.repr o) 0 (Obj.repr 3);
+  set_field (Obj.repr p) 0 (Obj.repr 3);
+  set_field (Obj.repr q) 0 (Obj.repr 3);
+  set_field (Obj.repr r) 0 (Obj.repr 3)
 
 let set v =
-  Obj.set_field (Obj.repr v) 0 (Obj.repr 3)
+  set_field (Obj.repr v) 0 (Obj.repr 3)
   [@@inline]
 
 let () =
@@ -59,7 +63,7 @@ let () =
 
 let opaque = Sys.opaque_identity (1,2)
 let set_opaque =
-  Obj.set_field
+  set_field
     (Obj.repr opaque)
     0
     (Obj.repr 3)
