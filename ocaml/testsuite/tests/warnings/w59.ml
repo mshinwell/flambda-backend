@@ -44,7 +44,7 @@ let r = 1
 
 (* %obj_set_field is OK here for Flambda 2 because we never use
    it on an array. *)
-external set_field : t -> int -> Obj.t -> unit = "%obj_set_field"
+external set_field : Obj.t -> int -> Obj.t -> unit = "%obj_set_field"
 
 let () =
   set_field (Obj.repr o) 0 (Obj.repr 3);
