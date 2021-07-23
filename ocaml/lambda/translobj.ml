@@ -104,7 +104,7 @@ let transl_label_init_general f =
   expr, size
 
 let transl_label_init_flambda f =
-  assert(Config.flambda);
+  assert(Config.flambda || Config.flambda2);
   let method_cache_id = Ident.create_local "method_cache" in
   method_cache := Lvar method_cache_id;
   (* Calling f (usually Translmod.transl_struct) requires the
