@@ -601,11 +601,13 @@ type unary_primitive =
       kind : Duplicate_block_kind.t;
       source_mutability : Mutability.t;
       destination_mutability : Mutability.t;
+      exn_continuation : Exn_continuation.t;
     }
   | Duplicate_array of {
       kind : Duplicate_array_kind.t;
       source_mutability : Mutability.t;
       destination_mutability : Mutability.t;
+      exn_continuation : Exn_continuation.t;
     }
   | Is_int
   | Get_tag
@@ -623,7 +625,7 @@ type unary_primitive =
   | Boolean_not
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  | Box_number of Flambda_kind.Boxable_number.t
+  | Box_number of Flambda_kind.Boxable_number.t * Exn_continuation.t
   | Select_closure of {
       move_from : Closure_id.t;
       move_to : Closure_id.t;
@@ -641,11 +643,22 @@ let unary_primitive_eligible_for_cse p ~arg =
       kind = _;
       source_mutability = Immutable;
       destination_mutability = Immutable;
+      (* The result of the primitive (and similar ones) are independent of
+         the particular exception continuation.  However the CSE maps use
+         an equality on primitives that will distinguish exception
+         continuations; this should only lead to slightly worse CSE and
+         nothing else.  In the future we hope to implement some kind of
+         "superexception" mechanism, redirecting exceptions that would
+         otherwise come out of GC/safe points into distinguished handlers;
+         that would enable all of these exception continuation values in
+         primitives to be removed. *)
+      exn_continuation = _;
     }
   | Duplicate_block {
       kind = _;
       source_mutability = Immutable;
       destination_mutability = Immutable;
+      exn_continuation = _;
     } -> true
   | Duplicate_array _ | Duplicate_block _ -> false
   | Is_int
@@ -695,10 +708,12 @@ let compare_unary_primitive p1 p2 =
   | Duplicate_array { kind = kind1;
         source_mutability = source_mutability1;
         destination_mutability = destination_mutability1;
+        exn_continuation = exn_continuation1;
       },
     Duplicate_array { kind = kind2;
         source_mutability = source_mutability2;
         destination_mutability = destination_mutability2;
+        exn_continuation = exn_continuation2;
       } ->
     let c = Duplicate_array_kind.compare kind1 kind2 in
     if c <> 0 then c
@@ -706,14 +721,18 @@ let compare_unary_primitive p1 p2 =
       let c = Stdlib.compare source_mutability1 source_mutability2 in
       if c <> 0 then c
       else
-        Stdlib.compare destination_mutability1 destination_mutability2
+        let c = Exn_continuation.compare exn_continuation1 exn_continuation2 in
+        if c <> 0 then c
+        else Stdlib.compare destination_mutability1 destination_mutability2
   | Duplicate_block { kind = kind1;
         source_mutability = source_mutability1;
         destination_mutability = destination_mutability1;
+        exn_continuation = exn_continuation1;
       },
     Duplicate_block { kind = kind2;
         source_mutability = source_mutability2;
         destination_mutability = destination_mutability2;
+        exn_continuation = exn_continuation2;
       } ->
     let c = Duplicate_block_kind.compare kind1 kind2 in
     if c <> 0 then c
@@ -721,7 +740,9 @@ let compare_unary_primitive p1 p2 =
       let c = Stdlib.compare source_mutability1 source_mutability2 in
       if c <> 0 then c
       else
-        Stdlib.compare destination_mutability1 destination_mutability2
+        let c = Exn_continuation.compare exn_continuation1 exn_continuation2 in
+        if c <> 0 then c
+        else Stdlib.compare destination_mutability1 destination_mutability2
   | Is_int, Is_int -> 0
   | Get_tag, Get_tag -> 0
   | String_length kind1, String_length kind2 ->
@@ -744,8 +765,11 @@ let compare_unary_primitive p1 p2 =
     Stdlib.compare dim1 dim2
   | Unbox_number kind1, Unbox_number kind2 ->
     K.Boxable_number.compare kind1 kind2
-  | Box_number kind1, Box_number kind2 ->
-    K.Boxable_number.compare kind1 kind2
+  | Box_number (kind1, exn_continuation1),
+    Box_number (kind2, exn_continuation2) ->
+    let c = K.Boxable_number.compare kind1 kind2 in
+    if c <> 0 then c
+    else Exn_continuation.compare exn_continuation1 exn_continuation2
   | Select_closure {
         move_from = move_from1; move_to = move_to1; },
       Select_closure {
@@ -786,16 +810,22 @@ let equal_unary_primitive p1 p2 = compare_unary_primitive p1 p2 = 0
 let print_unary_primitive ppf p =
   let fprintf = Format.fprintf in
   match p with
-  | Duplicate_block { kind; source_mutability; destination_mutability; } ->
-    fprintf ppf "@[<hov 1>(Duplicate_block %a (source %a) (dest %a))@]"
+  | Duplicate_block { kind; source_mutability; destination_mutability;
+      exn_continuation; } ->
+    fprintf ppf "@[<hov 1>(Duplicate_block %a (source %a) (dest %a)@ \
+        (exn_continuation@ %a))@]"
       Duplicate_block_kind.print kind
       Mutability.print source_mutability
       Mutability.print destination_mutability
-  | Duplicate_array { kind; source_mutability; destination_mutability; } ->
-    fprintf ppf "@[<hov 1>(Duplicate_array %a (source %a) (dest %a))@]"
+      Exn_continuation.print exn_continuation
+  | Duplicate_array { kind; source_mutability; destination_mutability;
+      exn_continuation; } ->
+    fprintf ppf "@[<hov 1>(Duplicate_array %a (source %a) (dest %a)@ \
+        (exn_continuation@ %a))@]"
       Duplicate_array_kind.print kind
       Mutability.print source_mutability
       Mutability.print destination_mutability
+      Exn_continuation.print exn_continuation
   | Is_int -> fprintf ppf "Is_int"
   | Get_tag -> fprintf ppf "Get_tag"
   | String_length _ -> fprintf ppf "String_length"
@@ -815,11 +845,15 @@ let print_unary_primitive ppf p =
   | Bigarray_length { dimension; } ->
     fprintf ppf "Bigarray_length %a" print_num_dimensions dimension
   | Unbox_number Untagged_immediate -> fprintf ppf "Untag_imm"
-  | Unbox_number k ->
-    fprintf ppf "Unbox_%a" K.Boxable_number.print_lowercase_short k
-  | Box_number Untagged_immediate -> fprintf ppf "Tag_imm"
-  | Box_number k ->
-    fprintf ppf "Box_%a" K.Boxable_number.print_lowercase_short k
+  | Unbox_number kind ->
+    fprintf ppf "Unbox_%a" K.Boxable_number.print_lowercase_short kind
+  | Box_number (Untagged_immediate, exn_continuation) ->
+    fprintf ppf "Tag_imm@<1>\u{300a}%a@<1>\u{300b}"
+      Exn_continuation.print exn_continuation
+  | Box_number (kind, exn_continuation) ->
+    fprintf ppf "Box_%a@<1>\u{300a}%a@<1>\u{300b}"
+      K.Boxable_number.print_lowercase_short kind
+      Exn_continuation.print exn_continuation
   | Select_closure { move_from; move_to; } ->
     Format.fprintf ppf "@[(Select_closure@ \
         (%a \u{2192} %a@<0>%s))@]"
@@ -849,7 +883,7 @@ let arg_kind_of_unary_primitive p =
   | Array_length _
   | Bigarray_length _ -> K.value
   | Unbox_number _ -> K.value
-  | Box_number kind -> K.Boxable_number.to_kind kind
+  | Box_number (kind, _) -> K.Boxable_number.to_kind kind
   | Select_closure _
   | Project_var _ -> K.value
 
@@ -880,6 +914,9 @@ let result_kind_of_unary_primitive p : result_kind =
   | Project_var _ -> Singleton K.value
 
 let effects_and_coeffects_of_unary_primitive p =
+  (* Primitives that may raise exceptions from GC/safe points may still be
+     deemed as not having any effects, since the raising of these exceptions is
+     entirely incidental to the semantics of such primitives. *)
   match p with
   | Duplicate_array { kind = _;
       source_mutability; destination_mutability; _ }
@@ -928,12 +965,34 @@ let effects_and_coeffects_of_unary_primitive p =
     reading_from_a_block Mutable
   | Unbox_number _ ->
     Effects.No_effects, Coeffects.No_coeffects
-  | Box_number Untagged_immediate ->
+  | Box_number (Untagged_immediate, _) ->
     Effects.No_effects, Coeffects.No_coeffects
   | Box_number _ ->
     Effects.Only_generative_effects Immutable, Coeffects.No_coeffects
   | Select_closure _
   | Project_var _ -> Effects.No_effects, Coeffects.No_coeffects
+
+let free_names_of_unary_primitive p =
+  match p with
+  | Duplicate_array { exn_continuation; _ }
+  | Duplicate_block { exn_continuation; _ }
+  | Box_number (_, exn_continuation) ->
+    Exn_continuation.free_names exn_continuation
+  | String_length _
+  | Get_tag
+  | Is_int
+  | Int_as_pointer
+  | Opaque_identity
+  | Int_arith _
+  | Num_conv _
+  | Boolean_not
+  | Reinterpret_int64_as_float
+  | Float_arith _
+  | Array_length _
+  | Bigarray_length _
+  | Unbox_number _
+  | Select_closure _
+  | Project_var _ -> Name_occurrences.empty
 
 let unary_classify_for_printing p =
   match p with
@@ -1193,6 +1252,19 @@ let effects_and_coeffects_of_binary_primitive p =
   | Float_arith (Add | Sub | Mul | Div) -> Effects.No_effects, Coeffects.No_coeffects
   | Float_comp _ -> Effects.No_effects, Coeffects.No_coeffects
 
+let free_names_of_binary_primitive p =
+  match p with
+  | Block_load _
+  | Array_load _
+  | Phys_equal _
+  | Int_arith _
+  | Int_shift _
+  | Int_comp _
+  | Float_arith _
+  | Float_comp _
+  | Bigarray_load _
+  | String_or_bigstring_load _ -> Name_occurrences.empty
+
 let binary_classify_for_printing p =
   match p with
   | Block_load _
@@ -1320,6 +1392,13 @@ let effects_and_coeffects_of_ternary_primitive p =
   | Bytes_or_bigstring_set _ -> writing_to_bytes_or_bigstring
   | Bigarray_set (_, kind, _) -> writing_to_a_bigarray kind
 
+let free_names_of_ternary_primitive p =
+  match p with
+  | Block_set _
+  | Array_set _
+  | Bytes_or_bigstring_set _
+  | Bigarray_set _ -> Name_occurrences.empty
+
 let ternary_classify_for_printing p =
   match p with
   | Block_set _
@@ -1328,29 +1407,37 @@ let ternary_classify_for_printing p =
   | Bigarray_set _ -> Neither
 
 type variadic_primitive =
-  | Make_block of Block_kind.t * Mutability.t
-  | Make_array of Array_kind.t * Mutability.t
+  | Make_block of Block_kind.t * Mutability.t * Exn_continuation.t
+  | Make_array of Array_kind.t * Mutability.t * Exn_continuation.t
 
 let variadic_primitive_eligible_for_cse p ~args =
   match p with
-  | Make_block (_, Immutable) | Make_array (_, Immutable) ->
+  | Make_block (_, Immutable, _) | Make_array (_, Immutable, _) ->
     (* See comment in [unary_primitive_eligible_for_cse], above, on
        [Box_number] case. *)
     List.exists (fun arg -> Simple.is_var arg) args
-  | Make_block (_, Immutable_unique)
-  | Make_array (_, Immutable_unique) -> false
-  | Make_block (_, Mutable) | Make_array (_, Mutable) -> false
+  | Make_block (_, Immutable_unique, _)
+  | Make_array (_, Immutable_unique, _) -> false
+  | Make_block (_, Mutable, _) | Make_array (_, Mutable, _) -> false
 
 let compare_variadic_primitive p1 p2 =
   match p1, p2 with
-  | Make_block (kind1, mut1), Make_block (kind2, mut2) ->
+  | Make_block (kind1, mut1, exn_continuation1),
+    Make_block (kind2, mut2, exn_continuation2) ->
     let c = Block_kind.compare kind1 kind2 in
     if c <> 0 then c
-    else Stdlib.compare mut1 mut2
-  | Make_array (kind1, mut1), Make_array (kind2, mut2) ->
+    else
+      let c = Exn_continuation.compare exn_continuation1 exn_continuation2 in
+      if c <> 0 then c
+      else Stdlib.compare mut1 mut2
+  | Make_array (kind1, mut1, exn_continuation1),
+    Make_array (kind2, mut2, exn_continuation2) ->
     let c = Array_kind.compare kind1 kind2 in
     if c <> 0 then c
-    else Stdlib.compare mut1 mut2
+    else
+      let c = Exn_continuation.compare exn_continuation1 exn_continuation2 in
+      if c <> 0 then c
+      else Stdlib.compare mut1 mut2
   | Make_block _, Make_array _ -> -1
   | Make_array _, Make_block _ -> 1
 
@@ -1359,20 +1446,22 @@ let equal_variadic_primitive p1 p2 = compare_variadic_primitive p1 p2 = 0
 let print_variadic_primitive ppf p =
   let fprintf = Format.fprintf in
   match p with
-  | Make_block (kind, mut) ->
-    fprintf ppf "@[<hov 1>(Make_block@ %a@ %a)@]"
+  | Make_block (kind, mut, exn_continuation) ->
+    fprintf ppf "@[<hov 1>(Make_block@ %a@ %a@ %a)@]"
       Block_kind.print kind
       Mutability.print mut
-  | Make_array (kind, mut) ->
-    fprintf ppf "@[<hov 1>(Make_array@ %a@ %a)@]"
+      Exn_continuation.print exn_continuation
+  | Make_array (kind, mut, exn_continuation) ->
+    fprintf ppf "@[<hov 1>(Make_array@ %a@ %a@ %a)@]"
       Array_kind.print kind
       Mutability.print mut
+      Exn_continuation.print exn_continuation
 
 let args_kind_of_variadic_primitive p : arg_kinds =
   match p with
-  | Make_block (kind, _) ->
+  | Make_block (kind, _, _) ->
     Variadic_all_of_kind (Block_kind.element_kind kind)
-  | Make_array (kind, _) ->
+  | Make_array (kind, _, _) ->
     Variadic_all_of_kind (Array_kind.element_kind_for_creation kind)
 
 let result_kind_of_variadic_primitive p : result_kind =
@@ -1382,11 +1471,17 @@ let result_kind_of_variadic_primitive p : result_kind =
 
 let effects_and_coeffects_of_variadic_primitive p ~args =
   match p with
-  | Make_block (_, mut) | Make_array (_, mut) ->
+  | Make_block (_, mut, _) | Make_array (_, mut, _) ->
     if List.length args >= 1 then
       Effects.Only_generative_effects mut, Coeffects.No_coeffects
     else  (* zero-sized blocks and arrays are preallocated ("atoms"). *)
       Effects.No_effects, Coeffects.No_coeffects
+
+let free_names_of_variadic_primitive p =
+  match p with
+  | Make_block (_, _, exn_continuation)
+  | Make_array (_, _, exn_continuation) ->
+    Exn_continuation.free_names exn_continuation
 
 let variadic_classify_for_printing p =
   match p with
@@ -1591,19 +1686,25 @@ let free_names t =
   | Unary (Project_var { var = clos_var; project_from = _ }, x0) ->
     Name_occurrences.add_closure_var (Simple.free_names x0)
       clos_var Name_mode.normal
-  | Unary (_prim, x0) -> Simple.free_names x0
-  | Binary (_prim, x0, x1) ->
+  | Unary (prim, x0) ->
+    Name_occurrences.union (free_names_of_unary_primitive prim)
+      (Simple.free_names x0)
+  | Binary (prim, x0, x1) ->
     Name_occurrences.union_list [
+      free_names_of_binary_primitive prim;
       Simple.free_names x0;
       Simple.free_names x1;
     ]
-  | Ternary (_prim, x0, x1, x2) ->
+  | Ternary (prim, x0, x1, x2) ->
     Name_occurrences.union_list [
+      free_names_of_ternary_primitive prim;
       Simple.free_names x0;
       Simple.free_names x1;
       Simple.free_names x2;
     ]
-  | Variadic (_prim, xs) -> Simple.List.free_names xs
+  | Variadic (prim, xs) ->
+    Name_occurrences.union (free_names_of_variadic_primitive prim)
+      (Simple.List.free_names xs)
 
 let apply_renaming t perm =
   (* CR mshinwell: add phys-equal checks *)

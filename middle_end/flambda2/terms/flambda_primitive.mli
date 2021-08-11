@@ -213,12 +213,14 @@ type unary_primitive =
       kind : Duplicate_block_kind.t;
       source_mutability : Mutability.t;
       destination_mutability : Mutability.t;
+      exn_continuation : Exn_continuation.t;
     }
     (** [Duplicate_block] may not be used to change the tag of a block. *)
   | Duplicate_array of {
       kind : Duplicate_array_kind.t;
       source_mutability : Mutability.t;
       destination_mutability : Mutability.t;
+      exn_continuation : Exn_continuation.t;
     }
   | Is_int
   | Get_tag
@@ -257,7 +259,7 @@ type unary_primitive =
      [Flambda_kind.Of_naked_number.t] arguments (one input, one output). *)
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  | Box_number of Flambda_kind.Boxable_number.t
+  | Box_number of Flambda_kind.Boxable_number.t * Exn_continuation.t
   | Select_closure of {
       move_from : Closure_id.t;
       move_to : Closure_id.t;
@@ -312,8 +314,8 @@ type ternary_primitive =
 
 (** Primitives taking zero or more arguments. *)
 type variadic_primitive =
-  | Make_block of Block_kind.t * Mutability.t
-  | Make_array of Array_kind.t * Mutability.t
+  | Make_block of Block_kind.t * Mutability.t * Exn_continuation.t
+  | Make_array of Array_kind.t * Mutability.t * Exn_continuation.t
   (* CR mshinwell: Invariant checks -- e.g. that the number of arguments
      matches [num_dimensions] *)
 

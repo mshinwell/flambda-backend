@@ -137,7 +137,8 @@ let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t)
   reachable, env_extension, dacc
 
 let simplify_box_number (boxable_number_kind : K.Boxable_number.t)
-      dacc ~original_term ~arg:_ ~arg_ty:naked_number_ty ~result_var =
+      exn_continuation dacc original_term ~arg:_ ~arg_ty:naked_number_ty
+      ~result_var =
   (* CR mshinwell: This should check the kind of [naked_number_ty] (or
      the creation functions used below should). *)
   let ty =
@@ -147,6 +148,14 @@ let simplify_box_number (boxable_number_kind : K.Boxable_number.t)
     | Naked_int64 -> T.box_int64 naked_number_ty
     | Naked_nativeint -> T.box_nativeint naked_number_ty
     | Untagged_immediate -> T.tag_immediate naked_number_ty
+  in
+  let dacc, exn_cont_use_id =
+    DA.record_continuation_use dacc
+      (Exn_continuation.exn_handler exn_continuation)
+      (Non_inlinable { escaping = true; })
+      ~env_at_use:(DA.denv dacc)
+      ~arg_types:(T.unknown_types_from_arity_with_subkinds (
+        Exn_continuation.arity exn_continuation))
   in
   Simplified_named.reachable original_term,
     TEE.one_equation (Name.var (Var_in_binding_pos.var result_var)) ty,
@@ -464,8 +473,8 @@ let simplify_unary_primitive dacc (prim : P.unary_primitive)
       simplify_select_closure ~move_from ~move_to
     | Unbox_number boxable_number_kind ->
       simplify_unbox_number boxable_number_kind
-    | Box_number boxable_number_kind ->
-      simplify_box_number boxable_number_kind
+    | Box_number (boxable_number_kind, exn_continuation) ->
+      simplify_box_number boxable_number_kind exn_continuation
     | Is_int -> simplify_is_int
     | Get_tag -> simplify_get_tag
     | Array_length _ -> simplify_array_length
