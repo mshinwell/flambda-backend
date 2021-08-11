@@ -202,6 +202,10 @@ let mk_H_manifest f =
   "-H-manifest", Arg.String f, "<file>  Same as -I-manifest, but adds given\n\
   \    paths to the list of \"hidden\" files (see -H for more details)"
 
+let mk_set_runtime_default f =
+  "-set-runtime-default", Arg.String f, "<param>=<value>  Set the default for \
+      runtime parameter <param> to <value>"
+
 let mk_impl f =
   "-impl", Arg.String f, "<file>  Compile <file> as a .ml file"
 
@@ -1198,6 +1202,7 @@ module type Compiler_options = sig
   val _ocamlrunparam : string -> unit
   val _with_runtime : unit -> unit
   val _without_runtime : unit -> unit
+  val _set_runtime_default : string -> unit
   val _short_paths : unit -> unit
   val _thread : unit -> unit
   val _v : unit -> unit
@@ -1483,6 +1488,7 @@ struct
     mk_without_runtime F._without_runtime;
     mk_safe_string;
     mk_safer_matching F._safer_matching;
+    mk_set_runtime_default F._set_runtime_default;
     mk_short_paths F._short_paths;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
@@ -1752,6 +1758,7 @@ struct
     mk_S F._S;
     mk_safe_string;
     mk_safer_matching F._safer_matching;
+    mk_set_runtime_default F._set_runtime_default;
     mk_shared F._shared;
     mk_short_paths F._short_paths;
     mk_strict_sequence F._strict_sequence;
@@ -2471,6 +2478,7 @@ module Default = struct
     let _pp s = preprocessor := (Some s)
     let _runtime_variant s = runtime_variant := s
     let _ocamlrunparam s = ocamlrunparam := s
+    let _set_runtime_default s = Compenv.parse_runtime_parameter s
     let _stop_after pass =
       let module P = Compiler_pass in
         match P.of_string pass with

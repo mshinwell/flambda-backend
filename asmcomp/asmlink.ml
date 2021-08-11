@@ -106,9 +106,13 @@ let make_startup_file linkenv unix ~ppf_dump ~sourcefile_for_dwarf genfns units
   Array.iteri
     (fun i name -> compile_phrase (Cmm_helpers.predef_exception i name))
     Runtimedef.builtin_exceptions;
+  let standard_library_default =
+    Option.value ~default:Config.standard_library_default
+                 !Clflags.standard_library_default
+  in
   compile_phrase
     (Cmm_helpers.emit_global_string_constant
-      "caml_standard_library_nat" Config.standard_library_default);
+      "caml_standard_library_nat" standard_library_default);
   compile_phrase (Cmm_helpers.global_table init_name_list);
   let globals_map = Linkenv.make_globals_map linkenv units in
   compile_phrase (Cmm_helpers.globals_map globals_map);

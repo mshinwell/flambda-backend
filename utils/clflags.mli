@@ -81,6 +81,7 @@ val include_dirs : string list ref
 val hidden_include_dirs : string list ref
 val include_manifests : string list ref
 val hidden_include_manifests : string list ref
+val standard_library_default : string option ref
 val no_std_include : bool ref
 val no_cwd : bool ref
 val print_types : bool ref

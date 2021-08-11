@@ -566,7 +566,11 @@ let link_bytecode ?final_name tolink exec_name standalone =
        Bytesections.record toc_writer DATA;
        let standard_library_default =
          if standalone && needs_stdlib then
-           Some Config.standard_library_default
+           (* -set-runtime-default *)
+           if !Clflags.standard_library_default = None then
+             Some Config.standard_library_default
+           else
+             !Clflags.standard_library_default
          else
            (* -custom executables don't need OSLD sections - the correct value
               is already included in the runtime. *)
@@ -686,7 +690,10 @@ let c_string_literal_of_string s =
   Buffer.contents b
 
 let emit_runtime_standard_library_default outchan =
-  let literal = c_string_literal_of_string Config.standard_library_default in
+  let stdlib =
+    let default = Config.standard_library_default in
+    Option.value ~default !Clflags.standard_library_default in
+  let literal = c_string_literal_of_string stdlib in
   Printf.fprintf outchan
     "const char_os * caml_runtime_standard_library_default = %s;\n" literal
 
