@@ -24,7 +24,10 @@
 #include "mlvalues.h"
 
 /* interpret a bytecode */
-value caml_interprete (code_t prog, asize_t prog_size);
+/* If [catch_async_exns] is non-zero, then this function will return
+   asynchronous exceptions raised by [prog]; otherwise, they will be
+   raised directly to the preceding asynchronous exception trap. */
+value caml_interprete (code_t prog, asize_t prog_size, int catch_async_exns);
 
 #endif /* CAML_INTERNALS */
 
