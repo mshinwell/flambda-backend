@@ -964,7 +964,7 @@ void caml_memprof_track_young(uintnat wosize, int from_caml,
   caml_memprof_set_suspended(0);
 
   if (Is_exception_result(res))
-    caml_raise(Extract_exception(res));
+    caml_raise_async(Extract_exception(res));
 
   /* /!\ Since the heap is in an invalid state before initialization,
      very little heap operations are allowed until then. */

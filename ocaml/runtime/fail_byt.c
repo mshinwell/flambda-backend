@@ -203,6 +203,11 @@ CAMLexport value caml_raise_if_exception(value res)
   return res;
 }
 
+CAMLexport void caml_raise_async(value exn)
+{
+  caml_raise(exn);
+}
+
 int caml_is_special_exception(value exn) {
   /* this function is only used in caml_format_exception to produce
      a more readable textual representation of some exceptions. It is

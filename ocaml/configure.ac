@@ -1810,7 +1810,8 @@ AS_IF([test x"$enable_flambda" = "xyes"],
 
 AS_IF([test x"$enable_flambda2" = "xyes"],
   [flambda2=true
-   flambda=false],
+   flambda=false
+   AC_DEFINE([CAML_FLAMBDA2])],
   [flambda2=false])
 
 AS_IF([test x"$enable_flambda_invariants" = "xyes"],

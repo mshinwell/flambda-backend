@@ -17049,6 +17049,8 @@ fi
 if test x"$enable_flambda2" = "xyes"; then :
   flambda2=true
    flambda=false
+   $as_echo "#define CAML_FLAMBDA2 1" >>confdefs.h
+
 else
   flambda2=false
 fi
