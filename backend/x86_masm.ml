@@ -247,7 +247,7 @@ let print_line b = function
   | Mode386 -> bprintf b "\t.386"
   | Model name -> bprintf b "\t.MODEL %s" name (* name = FLAT *)
 
-  (* gas only *)
+  (* gas / MacOS only *)
   | Cfi_adjust_cfa_offset _
   | Cfi_endproc
   | Cfi_startproc
@@ -261,6 +261,7 @@ let print_line b = function
   | Hidden _
   | Weak _
   | Reloc _
+  | Direct_assignment _
     -> assert false
 
 let generate_asm oc lines =
