@@ -23,12 +23,16 @@ script = "sh ${test_source_directory}/has-stackoverflow-detection.sh"
 
 *)
 
-let rec f x =
+let [@inline never] rec f x =
   if not (x = 0 || x = 10000 || x = 20000)
   then 1 + f (x + 1)
   else
     try
-      1 + f (x + 1)
+      let [@inline never] recurse () =
+        1 + f (x + 1)
+      in
+      let result = recurse () in  (* prevent tail call *)
+      Sys.opaque_identity result
     with Stack_overflow ->
       print_string "x = "; print_int x; print_newline();
       raise Stack_overflow
