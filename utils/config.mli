@@ -405,8 +405,8 @@ type search_method =
 | Search               (** Always search for the interpreter *)
 
 val suffixing : bool
-(** Whether the runtime executable and shared library filenames are being
-    mangled with Runtime IDs and the {!target}.
+(** Whether the runtime executable and shared library filenames and C stub
+    library filenames are being mangled with Runtime IDs and the {!target}.
 
     @since 5.5 *)
 

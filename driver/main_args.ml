@@ -102,6 +102,11 @@ let mk_custom f =
 let mk_dllib f =
   "-dllib", Arg.String f, "<lib>  Use the dynamically-loaded library <lib>"
 
+let mk_dllib_suffixed f =
+  "-dllib-suffixed", Arg.String f,
+  "<lib>  Use the dynamically-loaded library <lib>, with the runtime suffix \
+          appended to the name"
+
 let mk_dllpath f =
   "-dllpath", Arg.String f,
   "<dir>  Add <dir> to the run-time search path for shared libraries"
@@ -1266,6 +1271,7 @@ module type Bytecomp_options = sig
   val _custom : unit -> unit
   val _no_check_prims : unit -> unit
   val _dllib : string -> unit
+  val _dllib_suffixed : string -> unit
   val _dllpath : string -> unit
   val _make_runtime : unit -> unit
   val _vmthread : unit -> unit
@@ -1446,6 +1452,7 @@ struct
     mk_disable_all_extensions F._disable_all_extensions;
     mk_only_erasable_extensions F._only_erasable_extensions;
     mk_dllib F._dllib;
+    mk_dllib_suffixed F._dllib_suffixed;
     mk_dllpath F._dllpath;
     mk_dtypes F._annot;
     mk_extension F._extension;
@@ -2674,7 +2681,9 @@ third-party libraries such as Lwt, but with a different API."
     let _custom = set custom_runtime
     let _dcamlprimc = set keep_camlprimc_file
     let _dinstr = set dump_instr
-    let _dllib s = Compenv.defer (ProcessDLLs (Misc.rev_split_words s))
+    let _dllib s = Compenv.defer (ProcessDLLs (false, Misc.rev_split_words s))
+    let _dllib_suffixed s =
+      Compenv.defer (ProcessDLLs (true, Misc.rev_split_words s))
     let _dllpath s = dllpaths := ((!dllpaths) @ [s])
     let _make_runtime () =
       custom_runtime := true; make_runtime := true; link_everything := true
