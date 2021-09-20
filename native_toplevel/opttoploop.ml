@@ -258,14 +258,11 @@ let load_lambda ppf ~module_ident ~required_globals lam size =
   in
   let filename = Filename.chop_extension dll in
   if Config.flambda2 then begin
-    let backend = (module Flambda2_backend_impl : Flambda2.Flambda_backend_intf.S) in
-    let middle_end = Flambda2.Flambda_middle_end.middle_end in
-    let flambda2_to_cmm = Flambda2_to_cmm.To_cmm.unit in
     Asmgen.compile_implementation_flambda2 () ~toplevel:need_symbol
-      ~backend ~filename ~prefixname:filename
-      ~middle_end ~ppf_dump:ppf
+      ~filename ~prefixname:filename
+      ~flambda2:Flambda2.lambda_to_cmm ~ppf_dump:ppf
       ~size ~module_ident ~module_initializer:slam
-      ~flambda2_to_cmm ~required_globals
+      ~required_globals
   end
   else begin
     let program =

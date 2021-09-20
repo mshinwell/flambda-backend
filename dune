@@ -232,7 +232,7 @@
   ; The driver should be in here too, but is not at present.  This might
   ; be tricky because it has a different name...
   )
- (libraries ocamlcommon stdlib flambda2))
+ (libraries ocamlcommon stdlib flambda2_identifiers flambda2_cmx))
 
 (executable
  (name flambda_backend_main)
@@ -254,8 +254,8 @@
   flambda_backend_driver
   memtrace
   flambda2
+  flambda2_ui
   flambda2_to_cmm
-  flambda2_backend_impl
   ocamloptcomp
   ocamlcommon
   stdlib)
@@ -275,8 +275,8 @@
   flambda_backend_driver
   memtrace
   flambda2
+  flambda2_ui
   flambda2_to_cmm
-  flambda2_backend_impl
   ocamloptcomp
   ocamlcommon
   stdlib
@@ -289,10 +289,23 @@
   (run
    %{dep:tools/merge_dot_a_files.sh}
    %{targets}
-   %{dep:middle_end/flambda2/flambda2.a}
-   %{dep:ocamloptcomp.a}
+   %{dep:middle_end/flambda2/ui/flambda2_ui.a}
+   %{dep:middle_end/flambda2/algorithms/flambda2_algorithms.a}
+   %{dep:middle_end/flambda2/lattices/flambda2_lattices.a}
+   %{dep:middle_end/flambda2/numbers/flambda2_numbers.a}
+   %{dep:middle_end/flambda2/identifiers/flambda2_identifiers.a}
+   %{dep:middle_end/flambda2/nominal/flambda2_nominal.a}
+   %{dep:middle_end/flambda2/bound_identifiers/flambda2_bound_identifiers.a}
+   %{dep:middle_end/flambda2/term_basics/flambda2_term_basics.a}
+   %{dep:middle_end/flambda2/terms/flambda2_terms.a}
+   %{dep:middle_end/flambda2/from_lambda/flambda2_from_lambda.a}
+   %{dep:middle_end/flambda2/cmx/flambda2_cmx.a}
+   %{dep:middle_end/flambda2/types/flambda2_types.a}
+   %{dep:middle_end/flambda2/simplify/flambda2_simplify.a}
    %{dep:middle_end/flambda2/to_cmm/flambda2_to_cmm.a}
-   %{dep:middle_end/flambda2/backend_intf/flambda2_backend_impl.a})))
+   %{dep:middle_end/flambda2/parser/flambda2_parser.a}
+   %{dep:ocamloptcomp.a}
+   %{dep:middle_end/flambda2/flambda2.a})))
 
 (rule
  (targets ocamloptcomp_with_flambda2.cmxa)
@@ -300,10 +313,23 @@
   (run
    %{dep:tools/merge_archives.exe}
    %{targets}
-   %{dep:middle_end/flambda2/flambda2.cmxa}
-   %{dep:ocamloptcomp.cmxa}
+   %{dep:middle_end/flambda2/ui/flambda2_ui.cmxa}
+   %{dep:middle_end/flambda2/algorithms/flambda2_algorithms.cmxa}
+   %{dep:middle_end/flambda2/lattices/flambda2_lattices.cmxa}
+   %{dep:middle_end/flambda2/numbers/flambda2_numbers.cmxa}
+   %{dep:middle_end/flambda2/identifiers/flambda2_identifiers.cmxa}
+   %{dep:middle_end/flambda2/nominal/flambda2_nominal.cmxa}
+   %{dep:middle_end/flambda2/bound_identifiers/flambda2_bound_identifiers.cmxa}
+   %{dep:middle_end/flambda2/term_basics/flambda2_term_basics.cmxa}
+   %{dep:middle_end/flambda2/terms/flambda2_terms.cmxa}
+   %{dep:middle_end/flambda2/from_lambda/flambda2_from_lambda.cmxa}
+   %{dep:middle_end/flambda2/cmx/flambda2_cmx.cmxa}
+   %{dep:middle_end/flambda2/types/flambda2_types.cmxa}
+   %{dep:middle_end/flambda2/simplify/flambda2_simplify.cmxa}
    %{dep:middle_end/flambda2/to_cmm/flambda2_to_cmm.cmxa}
-   %{dep:middle_end/flambda2/backend_intf/flambda2_backend_impl.cmxa})))
+   %{dep:middle_end/flambda2/parser/flambda2_parser.cmxa}
+   %{dep:ocamloptcomp.cmxa}
+   %{dep:middle_end/flambda2/flambda2.cmxa})))
 
 (install
  (files
