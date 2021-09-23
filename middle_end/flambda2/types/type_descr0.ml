@@ -28,11 +28,8 @@ module Make (Head : sig
   val apply_coercion : t -> Coercion.t -> t Or_bottom.t
 end) =
 struct
-  module Descr = No_alias_or_equals.Make (Head)
-
-  (* CR mshinwell: Flambda 2 compilation is causing calls to e.g. [descr] to be
-     indirect. *)
-  include With_delayed_permutation.Make (Descr)
+  module Descr = No_alias_or_equals.Make [@inlined hint] (Head)
+  include With_delayed_permutation.Make [@inlined hint] (Descr)
 
   let all_ids_for_export t =
     match descr t with

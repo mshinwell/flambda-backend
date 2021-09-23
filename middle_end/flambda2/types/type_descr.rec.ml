@@ -29,7 +29,7 @@ module Make
               with type typing_env_extension := Typing_env_extension.t
               with type type_grammar := Type_grammar.t) =
 struct
-  include Type_descr0.Make (Head)
+  include Type_descr0.Make [@inlined hint] (Head)
 
   let force_to_head ~force_to_kind t =
     match descr (force_to_kind t) with
