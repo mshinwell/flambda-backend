@@ -14,30 +14,33 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 type t
 
 val print : Format.formatter -> t -> unit
 
-(* val invariant : t -> unit *)
-
 val empty : unit -> t
 
 val is_empty : t -> bool
 
-(* val defined_vars : t -> Flambda_kind.t Variable.Map.t *)
+val create :
+  defined_vars:Flambda_kind.t Variable.Map.t ->
+  binding_times:Variable.Set.t Binding_time.Map.t ->
+  equations:Type_grammar.t Name.Map.t ->
+  symbol_projections:Symbol_projection.t Variable.Map.t ->
+  t
+
+val defined_variables : t -> Variable.Set.t
+
+val defined_variables_with_kinds : t -> Flambda_kind.t Variable.Map.t
 
 val defined_names : t -> Name.Set.t
-
-(* val defines_name_but_no_equations : t -> Name.t -> bool *)
 
 val fold_on_defined_vars :
   (Variable.t -> Flambda_kind.t -> 'a -> 'a) -> t -> 'a -> 'a
 
 val equations : t -> Type_grammar.t Name.Map.t
-
-(* val one_equation : Name.t -> Type_grammar.t -> t *)
 
 val add_definition : t -> Variable.t -> Flambda_kind.t -> Binding_time.t -> t
 
@@ -49,15 +52,11 @@ val symbol_projections : t -> Symbol_projection.t Variable.Map.t
 
 val concat : t -> t -> t
 
-(* val meet : Meet_env.t -> t -> t -> t *)
+val find_kind : t -> Variable.t -> Flambda_kind.t
 
-val n_way_join :
-  env_at_fork:Typing_env.t ->
-  (Typing_env.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t * t) list ->
-  params:Bound_parameter.t list ->
-  extra_lifted_consts_in_use_envs:Symbol.Set.t ->
-  extra_allowed_names:Name_occurrences.t ->
-  t
+val variables_by_binding_time : t -> Variable.Set.t Binding_time.Map.t
+
+val variable_is_defined : t -> Variable.t -> bool
 
 (* CR vlaviron: this is only needed because Typing_env_extension creates a
    Name_abstraction over it. These functions should not be called, as levels are

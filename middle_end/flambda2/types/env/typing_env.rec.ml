@@ -1158,8 +1158,8 @@ let cut_and_n_way_join definition_typing_env ts_and_use_ids ~params
       ts_and_use_ids
   in
   let level =
-    Typing_env_level.n_way_join ~env_at_fork:definition_typing_env after_cuts
-      ~params ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+    Typing_env_level_join.n_way_join ~env_at_fork:definition_typing_env
+      after_cuts ~params ~extra_lifted_consts_in_use_envs ~extra_allowed_names
   in
   add_env_extension_from_level definition_typing_env level
 
