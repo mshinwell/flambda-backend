@@ -84,77 +84,22 @@ type t =
     min_binding_time : Binding_time.t (* Earlier variables have mode In_types *)
   }
 
-module Serializable : sig
+module Serializable = struct
   type typing_env = t
 
-  type t
+  include Serializable_typing_env.Make (Type_grammar) (Cached)
 
-  val create : typing_env -> t
+  let create t =
+    create ~defined_symbols:t.defined_symbols
+      ~code_age_relation:t.code_age_relation
+      ~just_after_level:(One_level.just_after_level t.current_level)
+      ~next_binding_time:t.next_binding_time
 
-  val print : Format.formatter -> t -> unit
-
-  val to_typing_env :
-    t ->
-    resolver:(Compilation_unit.t -> typing_env option) ->
-    get_imported_names:(unit -> Name.Set.t) ->
-    typing_env
-
-  val all_ids_for_export : t -> Ids_for_export.t
-
-  val apply_renaming : t -> Renaming.t -> t
-
-  val merge : t -> t -> t
-end = struct
-  type typing_env = t
-
-  type t =
-    { defined_symbols : Symbol.Set.t;
-      code_age_relation : Code_age_relation.t;
-      just_after_level : Cached.t;
-      next_binding_time : Binding_time.t
-    }
-
-  let create
-      ({ resolver = _;
-         get_imported_names = _;
-         defined_symbols;
-         code_age_relation;
-         prev_levels = _;
-         current_level;
-         next_binding_time;
-         min_binding_time = _
-       } :
-        typing_env) =
-    { defined_symbols;
-      code_age_relation;
-      just_after_level = One_level.just_after_level current_level;
-      next_binding_time
-    }
-
-  let [@ocamlformat "disable"] print ppf { defined_symbols;
-                  code_age_relation;
-                  just_after_level;
-                  next_binding_time = _;
-                } =
-    Format.fprintf ppf
-      "@[<hov 1>(\
-          @[<hov 1>(defined_symbols@ %a)@]@ \
-          @[<hov 1>(code_age_relation@ %a)@]@ \
-          @[<hov 1>(type_equations@ %a)@]@ \
-          @[<hov 1>(aliases@ %a)@]\
-          )@]"
-      Symbol.Set.print defined_symbols
-      Code_age_relation.print code_age_relation
-      (Name.Map.print (fun ppf (ty, _bt, _mode) -> Type_grammar.print ppf ty))
-      (Cached.names_to_types just_after_level)
-      Aliases.print (Cached.aliases just_after_level)
-
-  let to_typing_env
-      { defined_symbols;
-        code_age_relation;
-        just_after_level;
-        next_binding_time
-      } ~resolver ~get_imported_names =
+  let to_typing_env serializable ~resolver ~get_imported_names =
+    let defined_symbols = defined_symbols serializable in
+    let code_age_relation = code_age_relation serializable in
+    let just_after_level = just_after_level serializable in
+    let next_binding_time = next_binding_time serializable in
     { resolver;
       get_imported_names;
       defined_symbols;
@@ -170,81 +115,6 @@ end = struct
       next_binding_time;
       min_binding_time = next_binding_time
     }
-
-  (* CR mshinwell for vlaviron: Shouldn't some of this be in
-     [Cached.all_ids_for_export]? *)
-  let all_ids_for_export
-      { defined_symbols;
-        code_age_relation;
-        just_after_level;
-        next_binding_time = _
-      } =
-    let symbols = defined_symbols in
-    let code_ids =
-      Code_age_relation.all_code_ids_for_export code_age_relation
-    in
-    let ids = Ids_for_export.create ~symbols ~code_ids () in
-    let ids =
-      Name.Map.fold
-        (fun name (typ, _binding_time, _name_mode) ids ->
-          Ids_for_export.add_name
-            (Ids_for_export.union ids (Type_grammar.all_ids_for_export typ))
-            name)
-        (Cached.names_to_types just_after_level)
-        ids
-    in
-    let ids =
-      Ids_for_export.union ids
-        (Aliases.all_ids_for_export (Cached.aliases just_after_level))
-    in
-    let ids =
-      Variable.Map.fold
-        (fun var proj ids ->
-          let ids =
-            Ids_for_export.union ids (Symbol_projection.all_ids_for_export proj)
-          in
-          Ids_for_export.add_variable ids var)
-        (Cached.symbol_projections just_after_level)
-        ids
-    in
-    ids
-
-  let apply_renaming
-      { defined_symbols;
-        code_age_relation;
-        just_after_level;
-        next_binding_time
-      } renaming =
-    let defined_symbols =
-      Symbol.Set.fold
-        (fun sym symbols ->
-          Symbol.Set.add (Renaming.apply_symbol renaming sym) symbols)
-        defined_symbols Symbol.Set.empty
-    in
-    let code_age_relation =
-      Code_age_relation.apply_renaming code_age_relation renaming
-    in
-    let just_after_level = Cached.apply_renaming just_after_level renaming in
-    { defined_symbols; code_age_relation; just_after_level; next_binding_time }
-
-  let merge t1 t2 =
-    let defined_symbols =
-      Symbol.Set.union t1.defined_symbols t2.defined_symbols
-    in
-    let code_age_relation =
-      Code_age_relation.union t1.code_age_relation t2.code_age_relation
-    in
-    let just_after_level =
-      Cached.merge t1.just_after_level t2.just_after_level
-    in
-    let next_binding_time =
-      (* Take the latest one *)
-      if Binding_time.strictly_earlier t1.next_binding_time
-           ~than:t2.next_binding_time
-      then t2.next_binding_time
-      else t1.next_binding_time
-    in
-    { defined_symbols; code_age_relation; just_after_level; next_binding_time }
 end
 
 let is_empty t =
