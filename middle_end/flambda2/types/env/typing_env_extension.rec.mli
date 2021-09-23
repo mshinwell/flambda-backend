@@ -14,8 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Typing environment extensions: typing environment levels that are surrounded
-    by a binder that captures defined names as existentials. *)
+(** Typing environment extensions that do not define existential variables. *)
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
@@ -39,11 +38,9 @@ val one_equation : Name.t -> Type_grammar.t -> t
 
 val from_map : Type_grammar.t Name.Map.t -> t
 
+val to_map : t -> Type_grammar.t Name.Map.t
+
 val add_or_replace_equation : t -> Name.t -> Type_grammar.t -> t
-
-val meet : Meet_env.t -> t -> t -> t Or_bottom.t
-
-val join : Join_env.t -> t -> t -> t
 
 module With_extra_variables : sig
   type t

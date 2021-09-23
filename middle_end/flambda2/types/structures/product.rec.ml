@@ -70,7 +70,10 @@ module Make (Index : Product_intf.Index) = struct
         (fun _index ty1 ty2 ->
           match Type_grammar.meet env ty1 ty2 with
           | Ok (ty, env_extension') -> begin
-            match TEE.meet env !env_extension env_extension' with
+            match
+              Typing_env_extension_meet_and_join.meet env !env_extension
+                env_extension'
+            with
             | Bottom ->
               any_bottom := true;
               Some (Type_grammar.bottom_like ty1)
@@ -218,7 +221,10 @@ module Int_indexed = struct
           | Some ty1, Some ty2 -> begin
             match Type_grammar.meet env ty1 ty2 with
             | Ok (ty, env_extension') -> begin
-              match TEE.meet env !env_extension env_extension' with
+              match
+                Typing_env_extension_meet_and_join.meet env !env_extension
+                  env_extension'
+              with
               | Bottom ->
                 any_bottom := true;
                 Type_grammar.bottom_like ty1

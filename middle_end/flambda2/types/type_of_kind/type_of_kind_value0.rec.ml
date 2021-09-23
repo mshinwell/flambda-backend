@@ -250,7 +250,8 @@ let meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
     let env_extension =
       let env = Meet_env.env env in
       let join_env = Join_env.create env ~left_env:env ~right_env:env in
-      TEE.join join_env env_extension1 env_extension2
+      Typing_env_extension_meet_and_join.join join_env env_extension1
+        env_extension2
     in
     Ok (blocks, immediates, env_extension)
 

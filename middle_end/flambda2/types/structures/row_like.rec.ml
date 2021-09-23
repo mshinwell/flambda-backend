@@ -179,7 +179,8 @@ struct
       | None -> env_extension := Some ext
       | Some ext2 ->
         assert need_join;
-        env_extension := Some (TEE.join join_env ext2 ext)
+        env_extension
+          := Some (Typing_env_extension_meet_and_join.join join_env ext2 ext)
     in
     let meet_index i1 i2 : index Or_bottom.t =
       match i1, i2 with
@@ -201,10 +202,16 @@ struct
         match Maps_to.meet meet_env case1.maps_to case2.maps_to with
         | Bottom -> None
         | Ok (maps_to, env_extension') -> (
-          match TEE.meet meet_env case1.env_extension case2.env_extension with
+          match
+            Typing_env_extension_meet_and_join.meet meet_env case1.env_extension
+              case2.env_extension
+          with
           | Bottom -> None
           | Ok env_extension'' -> (
-            match TEE.meet meet_env env_extension' env_extension'' with
+            match
+              Typing_env_extension_meet_and_join.meet meet_env env_extension'
+                env_extension''
+            with
             | Bottom -> None
             | Ok env_extension ->
               join_env_extension env_extension;
@@ -276,7 +283,8 @@ struct
       let index = join_index case1.index case2.index in
       let maps_to = Maps_to.join env case1.maps_to case2.maps_to in
       let env_extension =
-        TEE.join env case1.env_extension case2.env_extension
+        Typing_env_extension_meet_and_join.join env case1.env_extension
+          case2.env_extension
       in
       { maps_to; index; env_extension }
     in

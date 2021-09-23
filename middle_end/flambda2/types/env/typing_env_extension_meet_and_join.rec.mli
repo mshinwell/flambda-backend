@@ -14,6 +14,16 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-include Typing_env_extension0.Make (Type_grammar)
+val meet :
+  Meet_env.t ->
+  Typing_env_extension.t ->
+  Typing_env_extension.t ->
+  Typing_env_extension.t Or_bottom.t
+
+val join :
+  Join_env.t ->
+  Typing_env_extension.t ->
+  Typing_env_extension.t ->
+  Typing_env_extension.t

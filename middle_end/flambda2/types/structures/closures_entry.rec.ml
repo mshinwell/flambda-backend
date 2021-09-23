@@ -73,7 +73,10 @@ let meet env
             None
           | Ok (func_decl, env_extension) ->
             begin
-              match TEE.meet env !env_extensions env_extension with
+              match
+                Typing_env_extension_meet_and_join.meet env !env_extensions
+                  env_extension
+              with
               | Bottom -> any_bottom := true
               | Ok env_extension -> env_extensions := env_extension
             end;
@@ -90,10 +93,13 @@ let meet env
             let closures_entry =
               { function_decls; closure_types; closure_var_types }
             in
-            Or_bottom.bind (TEE.meet env !env_extensions env_extension1)
-              ~f:(fun env_extension ->
-                Or_bottom.bind (TEE.meet env env_extension env_extension2)
-                  ~f:(fun env_extension -> Ok (closures_entry, env_extension)))))
+            Or_bottom.bind
+              (Typing_env_extension_meet_and_join.meet env !env_extensions
+                 env_extension1) ~f:(fun env_extension ->
+                Or_bottom.bind
+                  (Typing_env_extension_meet_and_join.meet env env_extension
+                     env_extension2) ~f:(fun env_extension ->
+                    Ok (closures_entry, env_extension)))))
 
 let join env
     { function_decls = function_decls1;
