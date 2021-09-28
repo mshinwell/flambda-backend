@@ -17,7 +17,9 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 module Int = Numeric_types.Int
-module TEE = Typing_env_extension
+module TEE = Typing_env.Typing_env_extension
+module Meet_env = Typing_env.Meet_env
+module Join_env = Typing_env.Join_env
 
 module Make
     (Tag : Container_types.S) (Index : sig
@@ -39,7 +41,7 @@ module Make
                  with type typing_env := Typing_env.t
                  with type meet_env := Meet_env.t
                  with type join_env := Join_env.t
-                 with type typing_env_extension := Typing_env_extension.t) =
+                 with type typing_env_extension := TEE.t) =
 struct
   (* Note: it wouldn't require much changes to change it to an interval:
    * type index = { at_least : Index.t; at_most : Index.t }
@@ -139,8 +141,7 @@ struct
    *    *   other_tags = Bottom;
    *    * } *\) *)
 
-  let meet (meet_env : Meet_env.t) t1 t2 :
-      (t * Typing_env_extension.t) Or_bottom.t =
+  let meet (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
     let ({ known_tags = known1; other_tags = other1 } : t) = t1 in
     let ({ known_tags = known2; other_tags = other2 } : t) = t2 in
     let env_extension = ref None in

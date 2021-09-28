@@ -19,7 +19,7 @@
 module FDT = Function_declaration_type
 module PC = Product.Closure_id_indexed
 module PV = Product.Var_within_closure_indexed
-module TEE = Typing_env_extension
+module TEE = Typing_env.Typing_env_extension
 
 type t =
   { (* CR pchambart: This is exactly a Product with a different kind of fields

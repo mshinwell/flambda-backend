@@ -16,6 +16,10 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+module Typing_env_extension = Typing_env.Typing_env_extension
+module Typing_env_level = Typing_env.Typing_env_level
+module Join_env = Typing_env.Join_env
+
 let join_types ~params ~env_at_fork envs_with_levels =
   (* Add all the variables defined by the branches as existentials to the
      [env_at_fork].
@@ -367,3 +371,21 @@ let n_way_join ~env_at_fork envs_with_levels ~params
   | envs_with_levels ->
     join ~env_at_fork envs_with_levels ~params ~extra_lifted_consts_in_use_envs
       ~extra_allowed_names
+
+let cut_and_n_way_join definition_typing_env ts_and_use_ids ~params
+    ~unknown_if_defined_at_or_later_than ~extra_lifted_consts_in_use_envs
+    ~extra_allowed_names =
+  (* CR mshinwell: Can't [unknown_if_defined_at_or_later_than] just be computed
+     by this function? *)
+  let after_cuts =
+    List.map
+      (fun (t, use_id, use_kind) ->
+        let level = Typing_env.cut t ~unknown_if_defined_at_or_later_than in
+        t, use_id, use_kind, level)
+      ts_and_use_ids
+  in
+  let level =
+    n_way_join ~env_at_fork:definition_typing_env after_cuts ~params
+      ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+  in
+  Typing_env.add_env_extension_from_level definition_typing_env level

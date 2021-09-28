@@ -32,32 +32,10 @@ module K = Flambda_kind
 
 include Type_grammar
 
-module Typing_env = struct
-  include Typing_env
-
-  let cut_and_n_way_join definition_typing_env ts_and_use_ids ~params
-      ~unknown_if_defined_at_or_later_than ~extra_lifted_consts_in_use_envs
-      ~extra_allowed_names =
-    (* CR mshinwell: Can't [unknown_if_defined_at_or_later_than] just be
-       computed by this function? *)
-    let after_cuts =
-      List.map
-        (fun (t, use_id, use_kind) ->
-          let level = Typing_env.cut t ~unknown_if_defined_at_or_later_than in
-          t, use_id, use_kind, level)
-        ts_and_use_ids
-    in
-    let level =
-      Typing_env_level_join.n_way_join ~env_at_fork:definition_typing_env
-        after_cuts ~params ~extra_lifted_consts_in_use_envs ~extra_allowed_names
-    in
-    Typing_env.add_env_extension_from_level definition_typing_env level
-end
-
 type flambda_type = t
 
 let meet env t1 t2 : _ Or_bottom.t =
-  let meet_env = Meet_env.create env in
+  let meet_env = Typing_env.Meet_env.create env in
   meet meet_env t1 t2
 
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
@@ -68,7 +46,7 @@ let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   | Ok (_meet_ty, env_extension) -> Ok env_extension
 
 let join ?bound_name central_env ~left_env ~left_ty ~right_env ~right_ty =
-  let join_env = Join_env.create central_env ~left_env ~right_env in
+  let join_env = Typing_env.Join_env.create central_env ~left_env ~right_env in
   match join ?bound_name join_env left_ty right_ty with
   | Unknown -> unknown_like left_ty
   | Known ty -> ty
@@ -77,7 +55,11 @@ let arity_of_list ts = Flambda_arity.create (List.map kind ts)
 
 type typing_env = Typing_env.t
 
-type typing_env_extension = Typing_env_extension.t
+type typing_env_extension = Typing_env.Typing_env_extension.t
+
+module Typing_env_extension = Typing_env.Typing_env_extension
+
+let cut_and_n_way_join = Typing_env_level_join.cut_and_n_way_join
 
 type 'a type_accessor = Typing_env.t -> 'a
 

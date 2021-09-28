@@ -17,7 +17,9 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module TE = Typing_env
-module TEE = Typing_env_extension
+module TEE = TE.Typing_env_extension
+module Meet_env = TE.Meet_env
+module Join_env = TE.Join_env
 
 module T0 = struct
   type t =

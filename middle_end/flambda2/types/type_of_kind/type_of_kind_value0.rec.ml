@@ -17,8 +17,10 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module T = Type_grammar
-module TEE = Typing_env_extension
+module TEE = Typing_env.Typing_env_extension
 module Blocks = Row_like.For_blocks
+module Meet_env = Typing_env.Meet_env
+module Join_env = Typing_env.Join_env
 
 type t =
   | Variant of Variant.t

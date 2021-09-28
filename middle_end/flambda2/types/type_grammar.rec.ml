@@ -18,8 +18,8 @@
 
 module K = Flambda_kind
 module TE = Typing_env
-module TEE = Typing_env_extension
-module TEEV = Typing_env_extension.With_extra_variables
+module TEE = TE.Typing_env_extension
+module TEEV = TEE.With_extra_variables
 module T_V = Type_of_kind_value
 module T_NI = Type_of_kind_naked_immediate
 module T_Nf = Type_of_kind_naked_float

@@ -19,7 +19,7 @@
 module I = Targetint_31_63
 module T = Type_grammar
 module TE = Typing_env
-module TEE = Typing_env_extension
+module TEE = TE.Typing_env_extension
 
 type t =
   | Naked_immediates of I.Set.t

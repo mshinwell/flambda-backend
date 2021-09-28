@@ -16,14 +16,11 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-val n_way_join :
-  env_at_fork:Typing_env.t ->
-  (Typing_env.t
-  * Apply_cont_rewrite_id.t
-  * Continuation_use_kind.t
-  * Typing_env_level.t)
-  list ->
+val cut_and_n_way_join :
+  Typing_env.t ->
+  (Typing_env.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
   params:Bound_parameter.t list ->
+  unknown_if_defined_at_or_later_than:Scope.t ->
   extra_lifted_consts_in_use_envs:Symbol.Set.t ->
   extra_allowed_names:Name_occurrences.t ->
-  Typing_env_level.t
+  Typing_env.t

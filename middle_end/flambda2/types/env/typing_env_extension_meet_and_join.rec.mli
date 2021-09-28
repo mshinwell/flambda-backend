@@ -17,13 +17,13 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 val meet :
-  Meet_env.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t Or_bottom.t
+  Typing_env.Meet_env.t ->
+  Typing_env.Typing_env_extension.t ->
+  Typing_env.Typing_env_extension.t ->
+  Typing_env.Typing_env_extension.t Or_bottom.t
 
 val join :
-  Join_env.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t ->
-  Typing_env_extension.t
+  Typing_env.Join_env.t ->
+  Typing_env.Typing_env_extension.t ->
+  Typing_env.Typing_env_extension.t ->
+  Typing_env.Typing_env_extension.t

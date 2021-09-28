@@ -16,7 +16,7 @@
 
 module K = Flambda_kind
 module T = Type_grammar
-module TEE = Typing_env_extension
+module TEE = Typing_env.Typing_env_extension
 
 module Make (Index : Product_intf.Index) = struct
   (* Product are a set of constraints: each new field reduces the concrete set.

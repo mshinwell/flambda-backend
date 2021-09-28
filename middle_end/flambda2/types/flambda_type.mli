@@ -150,16 +150,6 @@ module Typing_env : sig
 
   val with_code_age_relation : t -> Code_age_relation.t -> t
 
-  (* CR mshinwell: Consider labelling arguments e.g. [definition_typing_env] *)
-  val cut_and_n_way_join :
-    t ->
-    (t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
-    params:Bound_parameter.t list ->
-    unknown_if_defined_at_or_later_than:Scope.t ->
-    extra_lifted_consts_in_use_envs:Symbol.Set.t ->
-    extra_allowed_names:Name_occurrences.t ->
-    t
-
   val free_names_transitive : t -> flambda_type -> Name_occurrences.t
 
   val aliases_of_simple :
@@ -189,6 +179,16 @@ module Typing_env : sig
     val merge : t -> t -> t
   end
 end
+
+(* CR mshinwell: Consider labelling arguments e.g. [definition_typing_env] *)
+val cut_and_n_way_join :
+  Typing_env.t ->
+  (Typing_env.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
+  params:Bound_parameter.t list ->
+  unknown_if_defined_at_or_later_than:Scope.t ->
+  extra_lifted_consts_in_use_envs:Symbol.Set.t ->
+  extra_allowed_names:Name_occurrences.t ->
+  Typing_env.t
 
 val meet : Typing_env.t -> t -> t -> (t * Typing_env_extension.t) Or_bottom.t
 

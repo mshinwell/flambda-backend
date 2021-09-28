@@ -35,7 +35,7 @@ let meet _env t1 t2 : _ Or_bottom.t =
   (* CR lmaurer: This could be doing things like discovering two depth variables
      are equal *)
   if Rec_info_expr.equal t1 t2
-  then Ok (t1, Typing_env_extension.empty ())
+  then Ok (t1, Typing_env.Typing_env_extension.empty ())
   else Bottom
 
 let join _env t1 t2 : _ Or_unknown.t =

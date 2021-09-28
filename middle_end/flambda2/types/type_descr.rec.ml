@@ -18,15 +18,17 @@
 
 module T = Type_grammar
 module TE = Typing_env
-module TEE = Typing_env_extension
-module TEL = Typing_env_level
+module TEE = TE.Typing_env_extension
+module TEL = TE.Typing_env_level
+module Meet_env = TE.Meet_env
+module Join_env = TE.Join_env
 
 module Make
     (Head : Type_head_intf.S
               with type meet_env := Meet_env.t
               with type join_env := Join_env.t
-              with type typing_env := Typing_env.t
-              with type typing_env_extension := Typing_env_extension.t
+              with type typing_env := TE.t
+              with type typing_env_extension := TEE.t
               with type type_grammar := Type_grammar.t) =
 struct
   include Type_descr0.Make [@inlined hint] (Head)

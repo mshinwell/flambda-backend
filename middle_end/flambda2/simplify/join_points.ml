@@ -87,7 +87,7 @@ let normal_join denv typing_env params ~env_at_fork_plus_params
     | Some cse_join_result -> cse_join_result.extra_allowed_names
   in
   let env =
-    TE.cut_and_n_way_join typing_env use_envs_with_ids'
+    T.cut_and_n_way_join typing_env use_envs_with_ids'
       ~params
         (* CR-someday mshinwell: If this didn't do Scope.next then TE could
            probably be slightly more efficient, as it wouldn't need to look at
