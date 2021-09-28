@@ -48,6 +48,6 @@ include
     with type t := t
     with type flambda_type := Type_grammar.t
     with type typing_env := Typing_env.t
-    with type meet_env := Meet_env.t
-    with type join_env := Join_env.t
-    with type typing_env_extension := Typing_env_extension.t
+    with type meet_env := Typing_env.Meet_env.t
+    with type join_env := Typing_env.Join_env.t
+    with type typing_env_extension := Typing_env.Typing_env_extension.t

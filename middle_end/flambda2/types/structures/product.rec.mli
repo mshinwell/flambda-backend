@@ -19,9 +19,9 @@ module Make (Index : Product_intf.Index) :
     with module Index := Index
     with type flambda_type := Type_grammar.t
     with type typing_env := Typing_env.t
-    with type meet_env := Meet_env.t
-    with type join_env := Join_env.t
-    with type typing_env_extension := Typing_env_extension.t
+    with type meet_env := Typing_env.Meet_env.t
+    with type join_env := Typing_env.Join_env.t
+    with type typing_env_extension := Typing_env.Typing_env_extension.t
 
 module Int_indexed : sig
   include
@@ -29,9 +29,9 @@ module Int_indexed : sig
       with module Index := Numeric_types.Int
       with type flambda_type := Type_grammar.t
       with type typing_env := Typing_env.t
-      with type meet_env := Meet_env.t
-      with type join_env := Join_env.t
-      with type typing_env_extension := Typing_env_extension.t
+      with type meet_env := Typing_env.Meet_env.t
+      with type join_env := Typing_env.Join_env.t
+      with type typing_env_extension := Typing_env.Typing_env_extension.t
 
   val create_from_list : Flambda_kind.t -> Type_grammar.t list -> t
 end
@@ -41,15 +41,15 @@ module Closure_id_indexed :
     with module Index := Closure_id
     with type flambda_type := Type_grammar.t
     with type typing_env := Typing_env.t
-    with type meet_env := Meet_env.t
-    with type join_env := Join_env.t
-    with type typing_env_extension := Typing_env_extension.t
+    with type meet_env := Typing_env.Meet_env.t
+    with type join_env := Typing_env.Join_env.t
+    with type typing_env_extension := Typing_env.Typing_env_extension.t
 
 module Var_within_closure_indexed :
   Product_intf.S
     with module Index := Var_within_closure
     with type flambda_type := Type_grammar.t
     with type typing_env := Typing_env.t
-    with type meet_env := Meet_env.t
-    with type join_env := Join_env.t
-    with type typing_env_extension := Typing_env_extension.t
+    with type meet_env := Typing_env.Meet_env.t
+    with type join_env := Typing_env.Join_env.t
+    with type typing_env_extension := Typing_env.Typing_env_extension.t
