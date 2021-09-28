@@ -28,6 +28,12 @@ module Typing_env_extension :
 module Typing_env_level :
   Typing_env_level_intf.S with type flambda_type := Type_grammar.t
 
+type meet_type =
+  Meet_env.t ->
+  Type_grammar.t ->
+  Type_grammar.t ->
+  (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
+
 val invariant : t -> unit
 
 val print : Format.formatter -> t -> unit
@@ -54,7 +60,7 @@ val add_definition : t -> Bound_name.t -> Flambda_kind.t -> t
 
 (** The caller is to ensure that the supplied type is the most precise available
     for the given name. *)
-val add_equation : t -> Name.t -> Type_grammar.t -> t
+val add_equation : t -> Name.t -> Type_grammar.t -> meet_type:meet_type -> t
 
 val add_definitions_of_params : t -> params:Bound_parameter.t list -> t
 
@@ -67,7 +73,11 @@ val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
 val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
 
 val add_equations_on_params :
-  t -> params:Bound_parameter.t list -> param_types:Type_grammar.t list -> t
+  t ->
+  params:Bound_parameter.t list ->
+  param_types:Type_grammar.t list ->
+  meet_type:meet_type ->
+  t
 
 (** If the kind of the name is known, it should be specified, otherwise it can
     be omitted. Such omission will cause an error if the name satisfies
@@ -89,12 +99,13 @@ val mem_simple : ?min_name_mode:Name_mode.t -> t -> Simple.t -> bool
    variables, then there is no guarantee that the binding order in the result
    will match the binding order used to create the level. If they don't match,
    then adding equations in the wrong order can make equations disappear. *)
-val add_env_extension : t -> Typing_env_extension.t -> t
+val add_env_extension : t -> Typing_env_extension.t -> meet_type:meet_type -> t
 
 val add_env_extension_with_extra_variables :
-  t -> Typing_env_extension.With_extra_variables.t -> t
+  t -> Typing_env_extension.With_extra_variables.t -> meet_type:meet_type -> t
 
-val add_env_extension_from_level : t -> Typing_env_level.t -> t
+val add_env_extension_from_level :
+  t -> Typing_env_level.t -> meet_type:meet_type -> t
 
 val type_simple_in_term_exn :
   t -> ?min_name_mode:Name_mode.t -> Simple.t -> Type_grammar.t

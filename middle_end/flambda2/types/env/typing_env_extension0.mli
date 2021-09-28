@@ -29,7 +29,7 @@ module Make (Type_grammar : sig
 
   val check_equation : Name.t -> t -> unit
 end) : sig
-  type t
+  type t = private { equations : Type_grammar.t Name.Map.t } [@@unboxed]
 
   val print_equations : Format.formatter -> Type_grammar.t Name.Map.t -> unit
 

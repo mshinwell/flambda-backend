@@ -607,6 +607,12 @@ struct
     let print = print
   end)
 
+  type meet_type =
+    Meet_env.t ->
+    Type_grammar.t ->
+    Type_grammar.t ->
+    (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
+
   module Join_env = Join_env0.Make (struct
     type nonrec t = t
 
@@ -671,7 +677,7 @@ struct
     (* invariant_for_aliases res; *)
     res
 
-  and add_equation t name ty ~meet_type =
+  and add_equation t name ty ~(meet_type : meet_type) =
     (if Flambda_features.check_invariants ()
     then
       let existing_ty = find t name None in
@@ -776,8 +782,8 @@ struct
           let env = Meet_env.create t in
           let existing_ty = find t eqn_name (Some (Type_grammar.kind ty)) in
           match meet_type env ty existing_ty with
-          | Or_bottom.Bottom -> Type_grammar.bottom (Type_grammar.kind ty), t
-          | Or_bottom.Ok (meet_ty, env_extension) ->
+          | Bottom -> Type_grammar.bottom (Type_grammar.kind ty), t
+          | Ok (meet_ty, env_extension) ->
             meet_ty, add_env_extension t env_extension ~meet_type
       in
       Simple.pattern_match bare_lhs ~name ~const:(fun _ -> ty, t)

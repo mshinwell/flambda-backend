@@ -69,8 +69,6 @@
   structures/function_declaration_type.rec.ml
   env/typing_env_extension_meet_and_join.rec.ml
   env/typing_env_extension_meet_and_join.rec.mli
-  env/typing_env_level_join.rec.ml
-  env/typing_env_level_join.rec.mli
   env/typing_env.rec.ml
   structures/product.rec.ml
   structures/row_like.rec.ml
