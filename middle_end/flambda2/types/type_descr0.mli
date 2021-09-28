@@ -16,58 +16,90 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Make (Head : sig
-  type t
+module Descr : sig
+  type 'head t = private
+    | No_alias of 'head Or_unknown_or_bottom.t
+    | Equals of Simple.t
 
-  include Contains_ids.S with type t := t
+  val print :
+    print_head:(Format.formatter -> 'head -> unit) ->
+    Format.formatter ->
+    'head t ->
+    unit
 
-  include Contains_names.S with type t := t
+  val apply_renaming :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    'head t ->
+    Renaming.t ->
+    'head t
 
-  val print : Format.formatter -> t -> unit
-
-  val apply_coercion : t -> Coercion.t -> t Or_bottom.t
-end) : sig
-  module Descr : sig
-    type t = private
-      | No_alias of Head.t Or_unknown_or_bottom.t
-      | Equals of Simple.t
-
-    val print : Format.formatter -> t -> unit
-
-    val apply_renaming : t -> Renaming.t -> t
-
-    val free_names : t -> Name_occurrences.t
-  end
-
-  type t
-
-  val descr : t -> Descr.t
-
-  val peek_descr : t -> Descr.t
-
-  val free_names : t -> Name_occurrences.t
-
-  val apply_renaming : t -> Renaming.t -> t
-
-  val all_ids_for_export : t -> Ids_for_export.t
-
-  val print : Format.formatter -> t -> unit
-
-  val create_no_alias : Head.t Or_unknown_or_bottom.t -> t
-
-  val create_equals : Simple.t -> t
-
-  val bottom : unit -> t
-
-  val unknown : unit -> t
-
-  val create : Head.t -> t
-
-  val is_obviously_bottom : t -> bool
-
-  val is_obviously_unknown : t -> bool
-
-  val get_alias_exn : t -> Simple.t
-
-  val apply_coercion : t -> Coercion.t -> t Or_bottom.t
+  val free_names :
+    free_names_head:('head -> Name_occurrences.t) ->
+    'head t ->
+    Name_occurrences.t
 end
+
+type 'head t
+
+val print :
+  print_head:(Format.formatter -> 'head -> unit) ->
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  Format.formatter ->
+  'head t ->
+  unit
+
+val create : 'head -> 'head t
+
+val create_no_alias : 'head Or_unknown_or_bottom.t -> 'head t
+
+val create_equals : Simple.t -> _ t
+
+val bottom : _ t
+
+val unknown : _ t
+
+val is_obviously_bottom : _ t -> bool
+
+val is_obviously_unknown : _ t -> bool
+
+val get_alias_exn :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  'head t ->
+  Simple.t
+
+val apply_coercion :
+  apply_coercion_head:('head -> Coercion.t -> 'head Or_bottom.t) ->
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  Coercion.t ->
+  'head t ->
+  'head t Or_bottom.t
+
+val descr :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  'head t ->
+  'head Descr.t
+
+val peek_descr : 'head t -> 'head Descr.t
+
+val free_names :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  'head t ->
+  Name_occurrences.t
+
+val apply_renaming :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  'head t ->
+  Renaming.t ->
+  'head t
+
+val all_ids_for_export :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  all_ids_for_export_head:('head -> Ids_for_export.t) ->
+  'head t ->
+  Ids_for_export.t
