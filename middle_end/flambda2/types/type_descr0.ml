@@ -90,8 +90,6 @@ let bottom : _ t = Bottom
 
 let unknown : _ t = Unknown
 
-let create head = Ok (create_no_alias head)
-
 let is_obviously_bottom (t : _ t) =
   match t with Bottom -> true | Unknown | Ok _ -> false
 

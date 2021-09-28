@@ -51,8 +51,6 @@ val print :
 
 val create : 'head -> 'head t
 
-val create_no_alias : 'head Or_unknown_or_bottom.t -> 'head t
-
 val create_equals : Simple.t -> _ t
 
 val bottom : _ t
