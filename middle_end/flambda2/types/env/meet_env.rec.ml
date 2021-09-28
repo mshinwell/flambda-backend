@@ -17,3 +17,5 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 include Meet_env0.Make (Typing_env)
+
+let _print = print
