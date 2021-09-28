@@ -671,7 +671,7 @@ struct
     (* invariant_for_aliases res; *)
     res
 
-  and add_equation t name ty =
+  and add_equation t name ty ~meet_type =
     (if Flambda_features.check_invariants ()
     then
       let existing_ty = find t name None in
@@ -775,10 +775,10 @@ struct
         else
           let env = Meet_env.create t in
           let existing_ty = find t eqn_name (Some (Type_grammar.kind ty)) in
-          match Type_grammar.meet env ty existing_ty with
-          | Bottom -> Type_grammar.bottom (Type_grammar.kind ty), t
-          | Ok (meet_ty, env_extension) ->
-            meet_ty, add_env_extension t env_extension
+          match meet_type env ty existing_ty with
+          | Or_bottom.Bottom -> Type_grammar.bottom (Type_grammar.kind ty), t
+          | Or_bottom.Ok (meet_ty, env_extension) ->
+            meet_ty, add_env_extension t env_extension ~meet_type
       in
       Simple.pattern_match bare_lhs ~name ~const:(fun _ -> ty, t)
     in
@@ -789,29 +789,29 @@ struct
     in
     Simple.pattern_match bare_lhs ~name ~const:(fun _ -> t)
 
-  and add_env_extension t (env_extension : Typing_env_extension.t) =
+  and add_env_extension t (env_extension : Typing_env_extension.t) ~meet_type =
     Typing_env_extension.fold
-      ~equation:(fun name ty t -> add_equation t name ty)
+      ~equation:(fun name ty t -> add_equation t name ty ~meet_type)
       env_extension t
 
   and add_env_extension_with_extra_variables t
-      (env_extension : Typing_env_extension.With_extra_variables.t) =
+      (env_extension : Typing_env_extension.With_extra_variables.t) ~meet_type =
     Typing_env_extension.With_extra_variables.fold
       ~variable:(fun var kind t ->
         add_variable_definition t var kind Name_mode.in_types)
-      ~equation:(fun name ty t -> add_equation t name ty)
+      ~equation:(fun name ty t -> add_equation t name ty ~meet_type)
       env_extension t
 
   (* These version is outside the [let rec] and thus does not cause
      [caml_apply*] to be used when calling from outside this module. *)
-  let add_equation t name ty = add_equation t name ty
+  let add_equation t name ty ~meet_type = add_equation t name ty ~meet_type
 
   let add_env_extension t env_extension = add_env_extension t env_extension
 
   let add_env_extension_with_extra_variables t env_extension =
     add_env_extension_with_extra_variables t env_extension
 
-  let add_env_extension_from_level t level : t =
+  let add_env_extension_from_level t level ~meet_type : t =
     let t =
       Typing_env_level.fold_on_defined_vars
         (fun var kind t ->
@@ -820,7 +820,7 @@ struct
     in
     let t =
       Name.Map.fold
-        (fun name ty t -> add_equation t name ty)
+        (fun name ty t -> add_equation t name ty ~meet_type)
         (Typing_env_level.equations level)
         t
     in
@@ -849,11 +849,11 @@ struct
         (Format.pp_print_list ~pp_sep:Format.pp_print_space Type_grammar.print)
         param_types
 
-  let add_equations_on_params t ~params ~param_types =
+  let add_equations_on_params t ~params ~param_types ~meet_type =
     check_params_and_types ~params ~param_types;
     List.fold_left2
       (fun t param param_type ->
-        add_equation t (Bound_parameter.name param) param_type)
+        add_equation t (Bound_parameter.name param) param_type ~meet_type)
       t params param_types
 
   let add_to_code_age_relation t ~new_code_id ~old_code_id =
