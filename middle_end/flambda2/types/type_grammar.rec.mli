@@ -229,15 +229,20 @@ val make_suitable_for_environment :
   Typing_env.t ->
   suitable_for:Typing_env.t ->
   bind_to:Name.t ->
-  Typing_env_extension.With_extra_variables.t
+  Typing_env.Typing_env_extension.With_extra_variables.t
 
 val expand_head : t -> Typing_env.t -> Resolved_type.t
 
 (** Greatest lower bound of two types. *)
-val meet : Meet_env.t -> t -> t -> (t * Typing_env_extension.t) Or_bottom.t
+val meet :
+  Typing_env.Meet_env.t ->
+  t ->
+  t ->
+  (t * Typing_env.Typing_env_extension.t) Or_bottom.t
 
 (** Least upper bound of two types. *)
-val join : ?bound_name:Name.t -> Join_env.t -> t -> t -> t Or_unknown.t
+val join :
+  ?bound_name:Name.t -> Typing_env.Join_env.t -> t -> t -> t Or_unknown.t
 
 (* Checks that the equation is not directly recursive (x : =x) (Depends on
    [Flambda_features.invariant_checks ()]) *)

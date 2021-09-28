@@ -18,6 +18,16 @@
 
 type t
 
+module Meet_env : Meet_env_intf.S with type typing_env := t
+
+module Join_env : Join_env_intf.S with type typing_env := t
+
+module Typing_env_extension :
+  Typing_env_extension_intf.S with type flambda_type := Type_grammar.t
+
+module Typing_env_level :
+  Typing_env_level_intf.S with type flambda_type := Type_grammar.t
+
 val invariant : t -> unit
 
 val print : Format.formatter -> t -> unit
@@ -59,9 +69,6 @@ val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
 val add_equations_on_params :
   t -> params:Bound_parameter.t list -> param_types:Type_grammar.t list -> t
 
-val meet_equations_on_params :
-  t -> params:Bound_parameter.t list -> param_types:Type_grammar.t list -> t
-
 (** If the kind of the name is known, it should be specified, otherwise it can
     be omitted. Such omission will cause an error if the name satisfies
     [variable_is_from_missing_cmx_file]. *)
@@ -86,6 +93,8 @@ val add_env_extension : t -> Typing_env_extension.t -> t
 
 val add_env_extension_with_extra_variables :
   t -> Typing_env_extension.With_extra_variables.t -> t
+
+val add_env_extension_from_level : t -> Typing_env_level.t -> t
 
 val type_simple_in_term_exn :
   t -> ?min_name_mode:Name_mode.t -> Simple.t -> Type_grammar.t
@@ -118,15 +127,7 @@ val code_age_relation : t -> Code_age_relation.t
 
 val with_code_age_relation : t -> Code_age_relation.t -> t
 
-(* CR mshinwell: Consider labelling arguments e.g. [definition_typing_env] *)
-val cut_and_n_way_join :
-  t ->
-  (t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
-  params:Bound_parameter.t list ->
-  unknown_if_defined_at_or_later_than:Scope.t ->
-  extra_lifted_consts_in_use_envs:Symbol.Set.t ->
-  extra_allowed_names:Name_occurrences.t ->
-  t
+val cut : t -> unknown_if_defined_at_or_later_than:Scope.t -> Typing_env_level.t
 
 val free_names_transitive : t -> Type_grammar.t -> Name_occurrences.t
 

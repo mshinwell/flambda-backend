@@ -20,21 +20,4 @@ module Make (Typing_env : sig
   type t
 
   val print : Format.formatter -> t -> unit
-end) : sig
-  type t
-
-  val print : Format.formatter -> t -> unit
-
-  val create :
-    Typing_env.t -> left_env:Typing_env.t -> right_env:Typing_env.t -> t
-
-  val target_join_env : t -> Typing_env.t
-
-  val left_join_env : t -> Typing_env.t
-
-  val right_join_env : t -> Typing_env.t
-
-  val now_joining : t -> Simple.t -> Simple.t -> t
-
-  val already_joining : t -> Simple.t -> Simple.t -> bool
-end
+end) : Join_env_intf.S with type typing_env := Typing_env.t

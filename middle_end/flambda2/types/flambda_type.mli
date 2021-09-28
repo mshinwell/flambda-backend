@@ -106,9 +106,6 @@ module Typing_env : sig
   val add_equations_on_params :
     t -> params:Bound_parameter.t list -> param_types:flambda_type list -> t
 
-  val meet_equations_on_params :
-    t -> params:Bound_parameter.t list -> param_types:flambda_type list -> t
-
   val mem : ?min_name_mode:Name_mode.t -> t -> Name.t -> bool
 
   val mem_simple : ?min_name_mode:Name_mode.t -> t -> Simple.t -> bool
@@ -153,6 +150,7 @@ module Typing_env : sig
 
   val with_code_age_relation : t -> Code_age_relation.t -> t
 
+  (* CR mshinwell: Consider labelling arguments e.g. [definition_typing_env] *)
   val cut_and_n_way_join :
     t ->
     (t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->

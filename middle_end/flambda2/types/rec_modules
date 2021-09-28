@@ -18,12 +18,8 @@ type_of_kind/boilerplate/type_of_kind_rec_info.rec.ml
 type_of_kind/type_of_kind_rec_info0.rec.ml
 structures/closures_entry.rec.ml
 structures/function_declaration_type.rec.ml
-env/typing_env_extension.rec.ml
 env/typing_env_extension_meet_and_join.rec.ml
 env/typing_env_level_join.rec.ml
-env/typing_env_level.rec.ml
 env/typing_env.rec.ml
-env/meet_env.rec.ml
-env/join_env.rec.ml
 structures/product.rec.ml
 structures/row_like.rec.ml

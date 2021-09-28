@@ -32,6 +32,28 @@ module K = Flambda_kind
 
 include Type_grammar
 
+module Typing_env = struct
+  include Typing_env
+
+  let cut_and_n_way_join definition_typing_env ts_and_use_ids ~params
+      ~unknown_if_defined_at_or_later_than ~extra_lifted_consts_in_use_envs
+      ~extra_allowed_names =
+    (* CR mshinwell: Can't [unknown_if_defined_at_or_later_than] just be
+       computed by this function? *)
+    let after_cuts =
+      List.map
+        (fun (t, use_id, use_kind) ->
+          let level = Typing_env.cut t ~unknown_if_defined_at_or_later_than in
+          t, use_id, use_kind, level)
+        ts_and_use_ids
+    in
+    let level =
+      Typing_env_level_join.n_way_join ~env_at_fork:definition_typing_env
+        after_cuts ~params ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+    in
+    Typing_env.add_env_extension_from_level definition_typing_env level
+end
+
 type flambda_type = t
 
 let meet env t1 t2 : _ Or_bottom.t =

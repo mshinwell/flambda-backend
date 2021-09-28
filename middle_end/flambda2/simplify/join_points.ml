@@ -115,6 +115,28 @@ let normal_join denv typing_env params ~env_at_fork_plus_params
   in
   denv, extra_params_and_args
 
+let meet_equations_on_params typing_env ~params ~param_types =
+  if Flambda_features.check_invariants ()
+     && List.compare_lengths params param_types <> 0
+  then
+    Misc.fatal_errorf
+      "Mismatch between number of continuation parameters and arguments at a \
+       use site:@ (%a)@ and@ %a"
+      Bound_parameter.List.print params
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
+      param_types;
+  List.fold_left2
+    (fun typing_env param param_type ->
+      let kind = Bound_parameter.kind param |> Flambda_kind.With_subkind.kind in
+      let name = Bound_parameter.name param in
+      let existing_type = TE.find typing_env name (Some kind) in
+      match T.meet typing_env existing_type param_type with
+      | Bottom -> TE.add_equation typing_env name (T.bottom kind)
+      | Ok (meet_ty, env_extension) ->
+        let typing_env = TE.add_equation typing_env name meet_ty in
+        TE.add_env_extension typing_env env_extension)
+    typing_env params param_types
+
 let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
     ~params ~code_age_relation_after_body : Continuation_env_and_param_types.t =
   (* Augment the environment at each use with the necessary equations about the
@@ -135,7 +157,7 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
         let add_or_meet_param_type typing_env =
           let param_types = U.arg_types use in
           if need_to_meet_param_types
-          then TE.meet_equations_on_params typing_env ~params ~param_types
+          then meet_equations_on_params typing_env ~params ~param_types
           else TE.add_equations_on_params typing_env ~params ~param_types
         in
         let use_env =
