@@ -16,42 +16,32 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Descr = struct
-  type 'head t =
-    | No_alias of 'head
-    | Equals of Simple.t
-
-  let print ~print_head ppf t =
-    match t with
-    | No_alias head -> print_head ppf head
-    | Equals simple ->
-      Format.fprintf ppf "@[(@<0>%s=@<0>%s %a)@]" (Flambda_colours.error ())
-        (Flambda_colours.normal ())
-        Simple.print simple
-
-  let[@inline always] apply_renaming ~apply_renaming_head t renaming =
-    if Renaming.is_empty renaming
-    then t
-    else
-      match t with
-      | No_alias head ->
-        let head' = apply_renaming_head head renaming in
-        if head == head' then t else No_alias head'
-      | Equals simple ->
-        let simple' = Simple.apply_renaming simple renaming in
-        if simple == simple' then t else Equals simple'
-
-  let[@inline always] free_names ~free_names_head t =
-    match t with
-    | No_alias head -> free_names_head head
-    | Equals simple ->
-      Name_occurrences.downgrade_occurrences_at_strictly_greater_kind
-        (Simple.free_names simple) Name_mode.in_types
-end
-
 (* This module conceals the implementation of type ['head t]. Functions such as
    [T.descr] can be inlined with return values unboxed by Flambda 2. *)
 module T : sig
+  module Descr : sig
+    type 'head t = private
+      | No_alias of 'head
+      | Equals of Simple.t
+
+    val print :
+      print_head:(Format.formatter -> 'head -> unit) ->
+      Format.formatter ->
+      'head t ->
+      unit
+
+    val apply_renaming :
+      apply_renaming_head:('head -> Renaming.t -> 'head) ->
+      'head t ->
+      Renaming.t ->
+      'head t
+
+    val free_names :
+      free_names_head:('head -> Name_occurrences.t) ->
+      'head t ->
+      Name_occurrences.t
+  end
+
   type 'head t
 
   val create : 'head -> 'head t
@@ -86,6 +76,39 @@ module T : sig
     'head t ->
     Name_occurrences.t
 end = struct
+  module Descr = struct
+    type 'head t =
+      | No_alias of 'head
+      | Equals of Simple.t
+
+    let print ~print_head ppf t =
+      match t with
+      | No_alias head -> print_head ppf head
+      | Equals simple ->
+        Format.fprintf ppf "@[(@<0>%s=@<0>%s %a)@]" (Flambda_colours.error ())
+          (Flambda_colours.normal ())
+          Simple.print simple
+
+    let[@inline always] apply_renaming ~apply_renaming_head t renaming =
+      if Renaming.is_empty renaming
+      then t
+      else
+        match t with
+        | No_alias head ->
+          let head' = apply_renaming_head head renaming in
+          if head == head' then t else No_alias head'
+        | Equals simple ->
+          let simple' = Simple.apply_renaming simple renaming in
+          if simple == simple' then t else Equals simple'
+
+    let[@inline always] free_names ~free_names_head t =
+      match t with
+      | No_alias head -> free_names_head head
+      | Equals simple ->
+        Name_occurrences.downgrade_occurrences_at_strictly_greater_kind
+          (Simple.free_names simple) Name_mode.in_types
+  end
+
   module WDP = With_delayed_permutation
 
   type 'head t = 'head Descr.t WDP.t Or_unknown_or_bottom.t
