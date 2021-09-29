@@ -27,7 +27,11 @@ module type S = sig
 
   val env : t -> typing_env
 
+  (** Note that we are now in the process of meeting the given two [Simple]s. *)
   val now_meeting : t -> Simple.t -> Simple.t -> t
 
+  (** Determine whether we are now in the process of meeting the given two
+      [Simple]s. The arguments do not have to be provided in the same order as
+      when [now_meeting] was called. *)
   val already_meeting : t -> Simple.t -> Simple.t -> bool
 end

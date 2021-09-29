@@ -27,9 +27,6 @@ module Float = Numeric_types.Float_by_bit_pattern
 module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
 module K = Flambda_kind
-
-(* -- module rec binding here -- *)
-
 include Type_grammar
 
 type flambda_type = t

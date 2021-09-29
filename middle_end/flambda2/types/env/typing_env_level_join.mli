@@ -16,23 +16,11 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-type t
-
-(* val print : Format.formatter -> t -> unit *)
-
-val create :
-  Typing_env.t -> left_env:Typing_env.t -> right_env:Typing_env.t -> t
-
-(* val create_for_meet : Meet_env.t -> t *)
-
-val target_join_env : t -> Typing_env.t
-
-val left_join_env : t -> Typing_env.t
-
-val right_join_env : t -> Typing_env.t
-
-(* val flip_join_envs : t -> t *)
-
-val now_joining : t -> Simple.t -> Simple.t -> t
-
-val already_joining : t -> Simple.t -> Simple.t -> bool
+val cut_and_n_way_join :
+  Typing_env.t ->
+  (Typing_env.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
+  params:Bound_parameter.t list ->
+  unknown_if_defined_at_or_later_than:Scope.t ->
+  extra_lifted_consts_in_use_envs:Symbol.Set.t ->
+  extra_allowed_names:Name_occurrences.t ->
+  Typing_env.t
