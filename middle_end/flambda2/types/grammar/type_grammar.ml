@@ -156,42 +156,41 @@ let rec apply_renaming t renaming =
 and apply_renaming_head_of_kind_value head renaming =
   match head with
   | Variant { blocks; immediates; is_unique } -> (
-    match apply_renaming_variant blocks immediates perm with
-    | None -> t
+    match apply_renaming_variant blocks immediates renaming with
+    | None -> head
     | Some (blocks, immediates) ->
-      Variant (Variant.create ~is_unique ~blocks ~immediates))
+      Variant (create_variant ~is_unique ~blocks ~immediates))
   | Boxed_float ty ->
-    let ty' = T.apply_renaming ty perm in
-    if ty == ty' then t else Boxed_float ty'
+    let ty' = apply_renaming ty renaming in
+    if ty == ty' then head else Boxed_float ty'
   | Boxed_int32 ty ->
-    let ty' = T.apply_renaming ty perm in
-    if ty == ty' then t else Boxed_int32 ty'
+    let ty' = apply_renaming ty renaming in
+    if ty == ty' then head else Boxed_int32 ty'
   | Boxed_int64 ty ->
-    let ty' = T.apply_renaming ty perm in
-    if ty == ty' then t else Boxed_int64 ty'
+    let ty' = apply_renaming ty renaming in
+    if ty == ty' then head else Boxed_int64 ty'
   | Boxed_nativeint ty ->
-    let ty' = T.apply_renaming ty perm in
-    if ty == ty' then t else Boxed_nativeint ty'
+    let ty' = apply_renaming ty renaming in
+    if ty == ty' then head else Boxed_nativeint ty'
   | Closures { by_closure_id } ->
     let by_closure_id' =
-      Row_like.For_closures_entry_by_set_of_closures_contents.apply_renaming
-        by_closure_id perm
+      apply_renaming_row_like_for_closures by_closure_id renaming
     in
     if by_closure_id == by_closure_id'
-    then t
+    then head
     else Closures { by_closure_id = by_closure_id' }
-  | String _ -> t
+  | String _ -> head
   | Array { length } ->
-    let length' = T.apply_renaming length perm in
-    if length == length' then t else Array { length = length' }
+    let length' = apply_renaming length renaming in
+    if length == length' then head else Array { length = length' }
 
 and apply_renaming_variant blocks immediates perm =
   let immediates' =
     Or_unknown.map immediates ~f:(fun immediates ->
-        T.apply_renaming immediates perm)
+        apply_renaming immediates perm)
   in
   let blocks' =
-    Or_unknown.map blocks ~f:(fun blocks -> Blocks.apply_renaming blocks perm)
+    Or_unknown.map blocks ~f:(fun blocks -> apply_renaming_blocks blocks perm)
   in
   if immediates == immediates' && blocks == blocks'
   then None
@@ -216,7 +215,7 @@ and apply_renaming_row_like ({ known_tags; other_tags } as t) renaming =
     Tag.Map.map_sharing
       (fun { index; maps_to; env_extension } ->
         { index = rename_index index;
-          env_extension = TEE.apply_renaming env_extension renaming;
+          env_extension = apply_renaming_env_extension env_extension renaming;
           maps_to = Maps_to.apply_renaming maps_to renaming
         })
       known_tags
@@ -227,7 +226,7 @@ and apply_renaming_row_like ({ known_tags; other_tags } as t) renaming =
     | Ok { index; maps_to; env_extension } ->
       Ok
         { index = rename_index index;
-          env_extension = TEE.apply_renaming env_extension renaming;
+          env_extension = apply_renaming_env_extension env_extension renaming;
           maps_to = Maps_to.apply_renaming maps_to renaming
         }
   in
@@ -254,15 +253,13 @@ and free_names_head_of_kind_value head =
   match head with
   | Variant { blocks; immediates; is_unique = _ } ->
     Name_occurrences.union
-      (Or_unknown.free_names Blocks.free_names blocks)
+      (Or_unknown.free_names free_names_blocks blocks)
       (Or_unknown.free_names free_names immediates)
   | Boxed_float ty -> free_names ty
   | Boxed_int32 ty -> free_names ty
   | Boxed_int64 ty -> free_names ty
   | Boxed_nativeint ty -> free_names ty
-  | Closures { by_closure_id } ->
-    Row_like.For_closures_entry_by_set_of_closures_contents.free_names
-      by_closure_id
+  | Closures { by_closure_id } -> free_names_row_like_for_closures by_closure_id
   | String _ -> Name_occurrences.empty
   | Array { length } -> free_names length
 
@@ -289,23 +286,46 @@ and free_names_row_like { known_tags; other_tags } =
       (Name_occurrences.union from_known_tags (TEE.free_names env_extension))
 
 let rec print ppf t =
+  let no_renaming thing _ = thing in
+  let no_free_names _ = Name_occurrences.empty in
   match t with
   | Value ty ->
-    Format.fprintf ppf "@[<hov 1>(Val@ %a)@]" TD.print
-      ~print_head:print_head_of_kind_value
-      ~apply_renaming_head:apply_renaming_head_of_kind_value
-      ~free_names_head:free_names_head_of_kind_value ppf ty
+    Format.fprintf ppf "@[<hov 1>(Val@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_value
+         ~apply_renaming_head:apply_renaming_head_of_kind_value
+         ~free_names_head:free_names_head_of_kind_value)
+      ty
   | Naked_immediate ty ->
-    Format.fprintf ppf "@[<hov 1>(Naked_immediate@ %a)@]" TD.print ty
+    Format.fprintf ppf "@[<hov 1>(Naked_immediate@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_naked_immediate
+         ~apply_renaming_head:no_renaming ~free_names_head:no_free_names)
+      ty
   | Naked_float ty ->
-    Format.fprintf ppf "@[<hov 1>(Naked_float@ %a)@]" T_Nf.print ty
+    Format.fprintf ppf "@[<hov 1>(Naked_float@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_naked_float
+         ~apply_renaming_head:no_renaming ~free_names_head:no_free_names)
+      ty
   | Naked_int32 ty ->
-    Format.fprintf ppf "@[<hov 1>(Naked_int32@ %a)@]" T_N32.print ty
+    Format.fprintf ppf "@[<hov 1>(Naked_int32@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_naked_int32
+         ~apply_renaming_head:no_renaming ~free_names_head:no_free_names)
+      ty
   | Naked_int64 ty ->
-    Format.fprintf ppf "@[<hov 1>(Naked_int64@ %a)@]" T_N64.print ty
+    Format.fprintf ppf "@[<hov 1>(Naked_int64@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_naked_int64
+         ~apply_renaming_head:no_renaming ~free_names_head:no_free_names)
+      ty
   | Naked_nativeint ty ->
-    Format.fprintf ppf "@[<hov 1>(Naked_nativeint@ %a)@]" TD.print ty
-  | Rec_info ty -> Format.fprintf ppf "@[<hov 1>(Rec_info@ %a)@]" TD.print ty
+    Format.fprintf ppf "@[<hov 1>(Naked_nativeint@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_naked_nativeint
+         ~apply_renaming_head:no_renaming ~free_names_head:no_free_names)
+      ty
+  | Rec_info ty ->
+    Format.fprintf ppf "@[<hov 1>(Rec_info@ %a)@]"
+      (TD.print ~print_head:Rec_info_expr.print
+         ~apply_renaming_head:Rec_info_expr.apply_renaming
+         ~free_names_head:Rec_info_expr.free_names)
+      ty
 
 and print_head_of_kind_value ppf head =
   match head with
@@ -318,14 +338,11 @@ and print_head_of_kind_value ppf head =
       (if is_unique then " unique" else "")
       (Or_unknown.print Blocks.print)
       blocks (Or_unknown.print T.print) immediates
-  | Boxed_float naked_ty ->
-    Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a)@]" T.print naked_ty
-  | Boxed_int32 naked_ty ->
-    Format.fprintf ppf "@[<hov 1>(Boxed_int32@ %a)@]" T.print naked_ty
-  | Boxed_int64 naked_ty ->
-    Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a)@]" T.print naked_ty
-  | Boxed_nativeint naked_ty ->
-    Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a)@]" T.print naked_ty
+  | Boxed_float ty -> Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a)@]" print ty
+  | Boxed_int32 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int32@ %a)@]" print ty
+  | Boxed_int64 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a)@]" print ty
+  | Boxed_nativeint ty ->
+    Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a)@]" print ty
   | Closures { by_closure_id } ->
     Row_like.For_closures_entry_by_set_of_closures_contents.print ppf
       by_closure_id
@@ -333,7 +350,7 @@ and print_head_of_kind_value ppf head =
     Format.fprintf ppf "@[<hov 1>(Strings@ (%a))@]" String_info.Set.print
       str_infos
   | Array { length } ->
-    Format.fprintf ppf "@[<hov 1>(Array@ (length@ %a))@]" T.print length
+    Format.fprintf ppf "@[<hov 1>(Array@ (length@ %a))@]" print length
 
 and print_head_of_kind_naked_immediate ppf head =
   match head with

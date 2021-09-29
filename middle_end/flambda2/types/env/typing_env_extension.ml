@@ -54,7 +54,7 @@ struct
     if Flambda_features.check_invariants ()
     then Name.Map.iter Type_grammar.check_equation equations
 
-  let empty () = { equations = Name.Map.empty }
+  let empty = { equations = Name.Map.empty }
 
   let is_empty { equations } = Name.Map.is_empty equations
 

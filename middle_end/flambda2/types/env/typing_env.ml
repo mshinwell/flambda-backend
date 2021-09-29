@@ -1238,6 +1238,18 @@ let clean_for_export t ~reachable_names =
   in
   { t with current_level }
 
+type resolved_type =
+  | Const of Reg_width_const.Descr.t
+  | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
+  | Naked_immediate of
+      Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+  | Naked_float of Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+  | Naked_int32 of Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
+  | Naked_int64 of Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
+  | Naked_nativeint of
+      Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+  | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
+
 let expand_head ~force_to_kind t env kind : _ Or_unknown_or_bottom.t =
   match TG.descr t with
   | No_alias head -> head
@@ -1290,7 +1302,7 @@ let expand_head' ~force_to_kind t env kind =
   | Ok head -> create_no_alias (Ok head)
   | Bottom -> bottom ()
 
-let expand_head t env : Resolved_type.t =
+let expand_head t env : resolved_type =
   match t with
   | Value ty ->
     let head =

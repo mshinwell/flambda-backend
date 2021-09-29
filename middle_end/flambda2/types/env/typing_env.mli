@@ -181,7 +181,19 @@ val make_suitable_for_environment :
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
 
-val expand_head : t -> Type_grammar.t -> Resolved_type.t
+type resolved_type = private
+  | Const of Reg_width_const.Descr.t
+  | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
+  | Naked_immediate of
+      Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+  | Naked_float of Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+  | Naked_int32 of Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
+  | Naked_int64 of Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
+  | Naked_nativeint of
+      Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+  | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
+
+val expand_head : t -> Type_grammar.t -> resolved_type
 
 module Serializable : sig
   type typing_env = t

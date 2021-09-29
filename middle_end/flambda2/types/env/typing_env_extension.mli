@@ -26,7 +26,7 @@ val fold : equation:(Name.t -> Type_grammar.t -> 'a -> 'a) -> t -> 'a -> 'a
 
 val invariant : t -> unit
 
-val empty : unit -> t
+val empty : t
 
 val is_empty : t -> bool
 

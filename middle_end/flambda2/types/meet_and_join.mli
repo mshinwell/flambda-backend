@@ -16,8 +16,13 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+module Meet_env = Typing_env.Meet_env
+module Join_env = Typing_env.Join_env
+module TG = Type_grammar
+module TEE = Typing_env_extension
+
 (** Greatest lower bound of two types. *)
-val meet : Meet_env.t -> t -> t -> (t * Typing_env_extension.t) Or_bottom.t
+val meet : Meet_env.t -> TG.t -> TG.t -> (TG.t * TEE.t) Or_bottom.t
 
 (** Least upper bound of two types. *)
-val join : ?bound_name:Name.t -> Join_env.t -> t -> t -> t Or_unknown.t
+val join : ?bound_name:Name.t -> Join_env.t -> TG.t -> TG.t -> TG.t Or_unknown.t

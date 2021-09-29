@@ -16,6 +16,12 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+module K = Flambda_kind
+module Float = Numeric_types.Float_by_bit_pattern
+module Int32 = Numeric_types.Int32
+module Int64 = Numeric_types.Int64
+module Meet_env = Typing_env.Meet_env
+module Join_env = Typing_env.Join_env
 module TG = Type_grammar
 module TE = Typing_env
 module TEE = Typing_env_extension
@@ -48,8 +54,8 @@ let all_aliases_of env simple_opt ~in_env =
       ~f:(fun simple -> Typing_env.mem_simple in_env simple)
       simples
 
-let[@inline always] get_canonical_simples_and_expand_heads ~force_to_kind
-    ~to_type kind ~left_env ~left_ty ~right_env ~right_ty =
+let[@inline always] get_canonical_simples_and_expand_heads ~to_type ~left_env
+    ~left_ty ~right_env ~right_ty =
   let canonical_simple1 =
     match
       TE.get_alias_then_canonical_simple_exn left_env (to_type left_ty)
@@ -58,7 +64,7 @@ let[@inline always] get_canonical_simples_and_expand_heads ~force_to_kind
     | exception Not_found -> None
     | canonical_simple -> Some canonical_simple
   in
-  let head1 = expand_head ~force_to_kind left_ty left_env kind in
+  let head1 = TE.expand_head left_env left_ty in
   let canonical_simple2 =
     match
       TE.get_alias_then_canonical_simple_exn right_env (to_type right_ty)
@@ -67,7 +73,7 @@ let[@inline always] get_canonical_simples_and_expand_heads ~force_to_kind
     | exception Not_found -> None
     | canonical_simple -> Some canonical_simple
   in
-  let head2 = expand_head ~force_to_kind right_ty right_env kind in
+  let head2 = TE.expand_head right_env right_ty in
   canonical_simple1, head1, canonical_simple2, head2
 
 type 'head meet_or_join_head_or_unknown_or_bottom_result =
@@ -344,7 +350,7 @@ and meet_generic_product env ~components_by_index1 ~components_by_index2 ~union
   let components_by_index =
     union
       (fun _index ty1 ty2 ->
-        match Type_grammar.meet env ty1 ty2 with
+        match meet env ty1 ty2 with
         | Ok (ty, env_extension') -> begin
           match
             Typing_env_extension_meet_and_join.meet env !env_extension
@@ -352,14 +358,14 @@ and meet_generic_product env ~components_by_index1 ~components_by_index2 ~union
           with
           | Bottom ->
             any_bottom := true;
-            Some (Type_grammar.bottom_like ty1)
+            Some (TG.bottom_like ty1)
           | Ok extension ->
             env_extension := extension;
             Some ty
         end
         | Bottom ->
           any_bottom := true;
-          Some (Type_grammar.bottom_like ty1))
+          Some (TG.bottom_like ty1))
       components_by_index1 components_by_index2
   in
   if !any_bottom then Bottom else Ok (components_by_index, !env_extension)
@@ -393,11 +399,11 @@ and meet_var_within_closure_indexed_product env
         env_extension )
 
 and meet_int_indexed_product env t1 t2 : _ Or_bottom.t =
-  if not (Flambda_kind.equal t1.kind t2.kind)
+  if not (K.equal t1.kind t2.kind)
   then
     Misc.fatal_errorf
-      "meet_int_indexed_product between mismatching kinds %a and %a@."
-      Flambda_kind.print t1.kind Flambda_kind.print t2.kind;
+      "meet_int_indexed_product between mismatching kinds %a and %a@." K.print
+      t1.kind K.print t2.kind;
   let fields1 = t1.fields in
   let fields2 = t2.fields in
   let any_bottom = ref false in
@@ -412,7 +418,7 @@ and meet_int_indexed_product env t1 t2 : _ Or_bottom.t =
         | None, None -> assert false
         | Some t, None | None, Some t -> t
         | Some ty1, Some ty2 -> begin
-          match Type_grammar.meet env ty1 ty2 with
+          match meet env ty1 ty2 with
           | Ok (ty, env_extension') -> begin
             match
               Typing_env_extension_meet_and_join.meet env !env_extension
@@ -420,14 +426,14 @@ and meet_int_indexed_product env t1 t2 : _ Or_bottom.t =
             with
             | Bottom ->
               any_bottom := true;
-              Type_grammar.bottom_like ty1
+              TG.bottom_like ty1
             | Ok extension ->
               env_extension := extension;
               ty
           end
           | Bottom ->
             any_bottom := true;
-            Type_grammar.bottom_like ty1
+            TG.bottom_like ty1
         end)
   in
   if !any_bottom then Bottom else Ok ({ fields; kind = t1.kind }, !env_extension)
@@ -706,13 +712,13 @@ and meet_env_extension0 env t1 t2 extra_extensions =
       (fun name ty (eqs, extra_extensions) ->
         match Name.Map.find_opt name eqs with
         | None ->
-          Type_grammar.check_equation name ty;
+          TG.check_equation name ty;
           Name.Map.add name ty eqs, extra_extensions
         | Some ty0 -> begin
-          match Type_grammar.meet env ty0 ty with
+          match meet env ty0 ty with
           | Bottom -> raise Bottom_meet
           | Ok (ty, new_ext) ->
-            Type_grammar.check_equation name ty;
+            TG.check_equation name ty;
             Name.Map.add (*replace*) name ty eqs, new_ext :: extra_extensions
         end)
       (TEE.to_map t2)
@@ -758,9 +764,9 @@ let join_head_of_kind_rec_info _env t1 t2 : _ Or_unknown.t =
   if Rec_info_expr.equal t1 t2 then Known t1 else Unknown
 
 let rec join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
-  let blocks_join env b1 b2 : _ Or_unknown.t = Known (Blocks.join env b1 b2) in
+  let blocks_join env b1 b2 : _ Or_unknown.t = Known (join_blocks env b1 b2) in
   let blocks = join_unknown blocks_join env blocks1 blocks2 in
-  let imms = join_unknown (T.join ?bound_name:None) env imms1 imms2 in
+  let imms = join_unknown (join ?bound_name:None) env imms1 imms2 in
   match blocks, imms with
   | Unknown, Unknown -> Unknown
   | Known _, Unknown | Unknown, Known _ | Known _, Known _ ->
@@ -772,14 +778,16 @@ let rec join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
    case gracefully. All join functions for structures can handle [Unknown]
    results from generic [join]s without needing to propagate them. *)
 and join_closures_entry env
-    { function_decls = function_decls1;
-      closure_types = closure_types1;
-      closure_var_types = closure_var_types1
-    }
-    { function_decls = function_decls2;
-      closure_types = closure_types2;
-      closure_var_types = closure_var_types2
-    } =
+    ({ function_decls = function_decls1;
+       closure_types = closure_types1;
+       closure_var_types = closure_var_types1
+     } :
+      TG.closures_entry)
+    ({ function_decls = function_decls2;
+       closure_types = closure_types2;
+       closure_var_types = closure_var_types2
+     } :
+      TG.closures_entry) : TG.closures_entry =
   let function_decls =
     Closure_id.Map.merge
       (fun _closure_id func_decl1 func_decl2 ->
@@ -791,11 +799,16 @@ and join_closures_entry env
         | None, Some _ ->
           None
         | Some func_decl1, Some func_decl2 ->
-          Some (FDT.join env func_decl1 func_decl2))
+          Some (join_function_type env func_decl1 func_decl2))
       function_decls1 function_decls2
   in
-  let closure_types = PC.join env closure_types1 closure_types2 in
-  let closure_var_types = PV.join env closure_var_types1 closure_var_types2 in
+  let closure_types =
+    join_closure_id_indexed_product env closure_types1 closure_types2
+  in
+  let closure_var_types =
+    join_var_within_closure_indexed_product env closure_var_types1
+      closure_var_types2
+  in
   { function_decls; closure_types; closure_var_types }
 
 and join_row_like (env : Join_env.t) row_like1 row_like2 =
@@ -816,7 +829,7 @@ and join_row_like (env : Join_env.t) row_like1 row_like2 =
       At_least (Index.inter i1' i2')
   in
   let matching_kinds case1 case2 =
-    Flambda_kind.equal
+    K.equal
       (Maps_to.fields_kind case1.maps_to)
       (Maps_to.fields_kind case2.maps_to)
   in
@@ -917,9 +930,9 @@ and join_env_extension env t1 t2 =
         match ty1_opt, ty2_opt with
         | None, _ | _, None -> None
         | Some ty1, Some ty2 -> begin
-          match Type_grammar.join env ty1 ty2 with
+          match join env ty1 ty2 with
           | Known ty ->
-            if Type_grammar.is_alias_of_name ty name
+            if TG.is_alias_of_name ty name
             then
               (* This is rare but not anomalous. It may mean that [ty1] and
                  [ty2] are both alias types which canonicalize to [name], for
@@ -930,7 +943,7 @@ and join_env_extension env t1 t2 =
               None
             else begin
               (* This should always pass due to the [is_alias_of_name] check. *)
-              Type_grammar.check_equation name ty;
+              TG.check_equation name ty;
               Some ty
             end
           | Unknown -> None
@@ -939,41 +952,49 @@ and join_env_extension env t1 t2 =
   in
   TEE.from_map equations
 
-and join_generic_product env
-    { components_by_index = components_by_index1; kind = kind1 }
-    { components_by_index = components_by_index2; kind = kind2 } ~merge =
-  if not (Flambda_kind.equal kind1 kind2)
-  then
-    Misc.fatal_errorf "Product.join between mismatching kinds %a and %a@."
-      Flambda_kind.print kind1 Flambda_kind.print kind2;
-  let components_by_index =
-    merge
-      (fun _index ty1_opt ty2_opt ->
-        match ty1_opt, ty2_opt with
-        | None, _ | _, None -> None
-        | Some ty1, Some ty2 -> begin
-          match Type_grammar.join env ty1 ty2 with
-          | Known ty -> Some ty
-          | Unknown -> None
-        end)
-      components_by_index1 components_by_index2
+and join_generic_product env ~components_by_index1 ~components_by_index2 ~merge
+    =
+  merge
+    (fun _index ty1_opt ty2_opt ->
+      match ty1_opt, ty2_opt with
+      | None, _ | _, None -> None
+      | Some ty1, Some ty2 -> begin
+        match join env ty1 ty2 with Known ty -> Some ty | Unknown -> None
+      end)
+    components_by_index1 components_by_index2
+
+and join_closure_id_indexed_product env
+    ({ closure_id_components_by_index = components_by_index1 } :
+      TG.closure_id_indexed_product)
+    ({ closure_id_components_by_index = components_by_index2 } :
+      TG.closure_id_indexed_product) : TG.closure_id_indexed_product =
+  let closure_id_components_by_index =
+    join_generic_product env ~components_by_index1 ~components_by_index2
+      ~merge:Closure_id.Map.merge
   in
-  { components_by_index; kind = kind1 }
+  { closure_id_components_by_index }
 
-and join_closure_id_indexed_product env prod1 prod2 =
-  join_generic_product env prod1 prod2 ~merge:Closure_id.Map.merge
+and join_var_within_closure_indexed_product env
+    ({ var_within_closure_components_by_index = components_by_index1 } :
+      TG.var_within_closure_indexed_product)
+    ({ var_within_closure_components_by_index = components_by_index2 } :
+      TG.var_within_closure_indexed_product) :
+    TG.var_within_closure_indexed_product =
+  let var_within_closure_components_by_index =
+    join_generic_product env ~components_by_index1 ~components_by_index2
+      ~merge:Closure_id.Map.merge
+  in
+  { var_within_closure_components_by_index }
 
-and join_var_within_closure_indexed_product env prod1 prod2 =
-  join_generic_product env prod1 prod2 ~merge:Var_within_closure.Map.merge
-
-and join_int_indexed_product env t1 t2 =
-  if not (Flambda_kind.equal t1.kind t2.kind)
+and join_int_indexed_product env
+    ({ fields = fields1; kind = kind1 } : TG.int_indexed_product)
+    ({ fields = fields2; kind = kind2 } : TG.int_indexed_product) :
+    TG.int_indexed_product =
+  if not (K.equal kind1 kind2)
   then
     Misc.fatal_errorf
-      "join_int_indexed_product between mismatching kinds %a and %a@."
-      Flambda_kind.print t1.kind Flambda_kind.print t2.kind;
-  let fields1 = t1.fields in
-  let fields2 = t2.fields in
+      "join_int_indexed_product between mismatching kinds %a and %a@." K.print
+      kind1 K.print kind2;
   let length1 = Array.length fields1 in
   let length2 = Array.length fields2 in
   let length = min length1 length2 in
@@ -1000,8 +1021,8 @@ and join_int_indexed_product env t1 t2 =
           if fields1.(index) == fields2.(index)
           then fields1.(index)
           else
-            match Type_grammar.join env fields1.(index) fields2.(index) with
-            | Unknown -> Type_grammar.unknown t1.kind
+            match join env fields1.(index) fields2.(index) with
+            | Unknown -> TG.unknown t1.kind
             | Known ty -> ty)
   in
   { kind = t1.kind; fields }
@@ -1137,7 +1158,7 @@ and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
   (* Format.eprintf "Shared aliases:@ %a\n%!" Simple.Set.print
      shared_aliases; *)
   match Aliases.Alias_set.find_best shared_aliases with
-  | Some alias -> Known (to_type (create_equals alias))
+  | Some alias -> Known (to_type (TG.create_equals alias))
   | None -> (
     match canonical_simple1, canonical_simple2 with
     | Some simple1, Some simple2
