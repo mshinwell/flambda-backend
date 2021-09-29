@@ -19,18 +19,6 @@ module T = Type_grammar
 module TEE = Typing_env.Typing_env_extension
 
 module Make (Index : Product_intf.Index) = struct
-  (* Product are a set of constraints: each new field reduces the concrete set.
-     The empty product is Top. There is no bottom. All components must be of the
-     same kind.
-
-     { 1 => Unknown; 2 => V } is equal to { 2 => V } *)
-  type t =
-    { components_by_index : T.t Index.Map.t;
-      (* Consider moving that field to row_like instead. It is not required for
-         the closures_entry cases which are always values *)
-      kind : Flambda_kind.t
-    }
-
   let [@ocamlformat "disable"] print ppf { components_by_index; kind = _ } =
     Format.fprintf ppf
       "@[<hov 1>(\
@@ -55,60 +43,6 @@ module Make (Index : Product_intf.Index) = struct
     match Index.Map.find_opt index t.components_by_index with
     | None -> Unknown
     | Some ty -> Known ty
-
-  let meet env { components_by_index = components_by_index1; kind = kind1 }
-      { components_by_index = components_by_index2; kind = kind2 } :
-      _ Or_bottom.t =
-    if not (Flambda_kind.equal kind1 kind2)
-    then
-      Misc.fatal_errorf "Product.meet between mismatching kinds %a and %a@."
-        Flambda_kind.print kind1 Flambda_kind.print kind2;
-    let any_bottom = ref false in
-    let env_extension = ref (TEE.empty ()) in
-    let components_by_index =
-      Index.Map.union
-        (fun _index ty1 ty2 ->
-          match Type_grammar.meet env ty1 ty2 with
-          | Ok (ty, env_extension') -> begin
-            match
-              Typing_env_extension_meet_and_join.meet env !env_extension
-                env_extension'
-            with
-            | Bottom ->
-              any_bottom := true;
-              Some (Type_grammar.bottom_like ty1)
-            | Ok extension ->
-              env_extension := extension;
-              Some ty
-          end
-          | Bottom ->
-            any_bottom := true;
-            Some (Type_grammar.bottom_like ty1))
-        components_by_index1 components_by_index2
-    in
-    if !any_bottom
-    then Bottom
-    else Ok ({ components_by_index; kind = kind1 }, !env_extension)
-
-  let join env { components_by_index = components_by_index1; kind = kind1 }
-      { components_by_index = components_by_index2; kind = kind2 } =
-    if not (Flambda_kind.equal kind1 kind2)
-    then
-      Misc.fatal_errorf "Product.join between mismatching kinds %a and %a@."
-        Flambda_kind.print kind1 Flambda_kind.print kind2;
-    let components_by_index =
-      Index.Map.merge
-        (fun _index ty1_opt ty2_opt ->
-          match ty1_opt, ty2_opt with
-          | None, _ | _, None -> None
-          | Some ty1, Some ty2 -> begin
-            match Type_grammar.join env ty1 ty2 with
-            | Known ty -> Some ty
-            | Unknown -> None
-          end)
-        components_by_index1 components_by_index2
-    in
-    { components_by_index; kind = kind1 }
 
   let apply_renaming { components_by_index; kind } renaming =
     let components_by_index =
@@ -176,10 +110,6 @@ module Var_within_closure_indexed = Make (Var_within_closure_index)
 module Int_indexed = struct
   (* CR mshinwell: Add [Or_bottom]. However what should [width] return for
      [Bottom]? Maybe we can circumvent that question if removing [Row_like]. *)
-  type t =
-    { fields : T.t array;
-      kind : Flambda_kind.t
-    }
 
   let [@ocamlformat "disable"] print ppf t =
     Format.fprintf ppf "@[<hov 1>(%a)@]"
@@ -198,88 +128,6 @@ module Int_indexed = struct
 
   let project t index : _ Or_unknown.t =
     if Array.length t.fields <= index then Unknown else Known t.fields.(index)
-
-  let meet env t1 t2 : _ Or_bottom.t =
-    if not (Flambda_kind.equal t1.kind t2.kind)
-    then
-      Misc.fatal_errorf
-        "Product.Int_indexed.meet between mismatching kinds %a and %a@."
-        Flambda_kind.print t1.kind Flambda_kind.print t2.kind;
-    let fields1 = t1.fields in
-    let fields2 = t2.fields in
-    let any_bottom = ref false in
-    let env_extension = ref (TEE.empty ()) in
-    let length = max (Array.length fields1) (Array.length fields2) in
-    let fields =
-      Array.init length (fun index ->
-          let get_opt fields =
-            if index >= Array.length fields then None else Some fields.(index)
-          in
-          match get_opt fields1, get_opt fields2 with
-          | None, None -> assert false
-          | Some t, None | None, Some t -> t
-          | Some ty1, Some ty2 -> begin
-            match Type_grammar.meet env ty1 ty2 with
-            | Ok (ty, env_extension') -> begin
-              match
-                Typing_env_extension_meet_and_join.meet env !env_extension
-                  env_extension'
-              with
-              | Bottom ->
-                any_bottom := true;
-                Type_grammar.bottom_like ty1
-              | Ok extension ->
-                env_extension := extension;
-                ty
-            end
-            | Bottom ->
-              any_bottom := true;
-              Type_grammar.bottom_like ty1
-          end)
-    in
-    if !any_bottom
-    then Bottom
-    else Ok ({ fields; kind = t1.kind }, !env_extension)
-
-  let join env t1 t2 =
-    if not (Flambda_kind.equal t1.kind t2.kind)
-    then
-      Misc.fatal_errorf
-        "Product.Int_indexed.join between mismatching kinds %a and %a@."
-        Flambda_kind.print t1.kind Flambda_kind.print t2.kind;
-    let fields1 = t1.fields in
-    let fields2 = t2.fields in
-    let length1 = Array.length fields1 in
-    let length2 = Array.length fields2 in
-    let length = min length1 length2 in
-    let exception Exit in
-    let all_phys_equal =
-      try
-        for index = 0 to length - 1 do
-          if fields1.(index) != fields2.(index) then raise Exit
-        done;
-        true
-      with Exit -> false
-    in
-    let fields =
-      if all_phys_equal
-      then
-        if length1 = length
-        then fields1
-        else begin
-          assert (length2 = length);
-          fields2
-        end
-      else
-        Array.init length (fun index ->
-            if fields1.(index) == fields2.(index)
-            then fields1.(index)
-            else
-              match Type_grammar.join env fields1.(index) fields2.(index) with
-              | Unknown -> Type_grammar.unknown t1.kind
-              | Known ty -> ty)
-    in
-    { kind = t1.kind; fields }
 
   let apply_renaming { kind; fields } perm =
     let fields = Array.copy fields in
