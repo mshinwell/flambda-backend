@@ -19,7 +19,10 @@
 
     Unknown = "Any value can flow to this point": the top element.
 
-    Bottom = "No value can flow to this point": the least element. *)
+    Bottom = "No value can flow to this point": the least element.
+
+    If you're looking for the full grammar of the Flambda type system please go
+    to type_grammar.mli instead. *)
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 

@@ -5,8 +5,8 @@
 (*                       Pierre Chambart, OCamlPro                        *)
 (*           Mark Shinwell and Leo White, Jane Street Europe              *)
 (*                                                                        *)
-(*   Copyright 2013--2019 OCamlPro SAS                                    *)
-(*   Copyright 2014--2019 Jane Street Group LLC                           *)
+(*   Copyright 2013--2021 OCamlPro SAS                                    *)
+(*   Copyright 2014--2021 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -16,17 +16,101 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-(** The definition of types together with their constructors and operations upon
-    them. *)
+(** The grammar of Flambda types plus the basic operations upon them that do not
+    require an environment. *)
+
+module TD = Type_descr
+module Float = Numeric_types.Float_by_bit_pattern
+module Int32 = Numeric_types.Int32
+module Int64 = Numeric_types.Int64
+
+module Block_size : sig
+  type t
+end
 
 type t = private
-  | Value of Type_of_kind_value.t
-  | Naked_immediate of Type_of_kind_naked_immediate.t
-  | Naked_float of Type_of_kind_naked_float.t
-  | Naked_int32 of Type_of_kind_naked_int32.t
-  | Naked_int64 of Type_of_kind_naked_int64.t
-  | Naked_nativeint of Type_of_kind_naked_nativeint.t
-  | Rec_info of Type_of_kind_rec_info.t
+  | Value of head_of_kind_value TD.t
+  | Naked_immediate of head_of_kind_naked_immediate TD.t
+  | Naked_float of head_of_kind_naked_float TD.t
+  | Naked_int32 of head_of_kind_naked_int32 TD.t
+  | Naked_int64 of head_of_kind_naked_int64 TD.t
+  | Naked_nativeint of head_of_kind_naked_nativeint TD.t
+  | Rec_info of head_of_kind_rec_info TD.t
+
+and head_of_kind_value = private
+  | Variant of
+      { immediates : t Or_unknown.t;
+        blocks : row_like_for_blocks;
+        is_unique : bool
+      }
+  | Boxed_float of t
+  | Boxed_int32 of t
+  | Boxed_int64 of t
+  | Boxed_nativeint of t
+  | Closures of { by_closure_id : row_like_for_closures }
+  | String of String_info.Set.t
+  | Array of { length : t }
+
+and head_of_kind_naked_immediate = private
+  | Naked_immediates of Targetint_31_63.Set.t
+  | Is_int of t
+  | Get_tag of t
+
+and head_of_kind_naked_float = Float.Set.t
+
+and head_of_kind_naked_int32 = Int32.Set.t
+
+and head_of_kind_naked_int64 = Int64.Set.t
+
+and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
+
+and head_of_kind_rec_info = Rec_info_expr.t
+
+and 'index row_like_index = private
+  | Known of 'index
+  | At_least of 'index
+
+and ('index, 'maps_to) row_like_case = private
+  { maps_to : 'maps_to;
+    index : 'index;
+    env_extension : env_extension
+  }
+
+and row_like_for_blocks = private
+  { known_tags : (Block_size.t, int_indexed_product) row_like_case Tag.Map.t;
+    other_tags : (Block_size.t, int_indexed_product) row_like_case Or_bottom.t
+  }
+
+and row_like_for_closures = private
+  { known_tags :
+      (Set_of_closures_contents.t, closures_entry) row_like_case Tag.Map.t;
+    other_tags :
+      (Set_of_closures_contents.t, closures_entry) row_like_case Or_bottom.t
+  }
+
+and closures_entry = private
+  { function_decls : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
+    closure_types : closure_id_indexed_product;
+    closure_var_types : var_within_closure_indexed_product
+  }
+
+and closure_id_indexed_product = private
+  { closure_id_components_by_index : t Closure_id.Map.t }
+
+and var_within_closure_indexed_product = private
+  { var_within_closure_components_by_index : t Var_within_closure.Map.t }
+
+and int_indexed_product = private
+  { fields : t array;
+    kind : Flambda_kind.t
+  }
+
+and function_type = private
+  { code_id : Code_id.t;
+    rec_info : t
+  }
+
+and env_extension = private { equations : t Name.Map.t } [@@unboxed]
 
 val print : Format.formatter -> t -> unit
 
@@ -39,8 +123,6 @@ val kind : t -> Flambda_kind.t
 val alias_type_of : Flambda_kind.t -> Simple.t -> t
 
 val apply_coercion : t -> Coercion.t -> t Or_bottom.t
-
-val eviscerate : t -> Typing_env.t -> t
 
 val get_alias_exn : t -> Simple.t
 
@@ -200,12 +282,11 @@ val type_for_const : Reg_width_const.t -> t
 
 val kind_for_const : Reg_width_const.t -> Flambda_kind.t
 
-val create_function_declaration :
-  Code_id.t -> rec_info:t -> Function_declaration_type.t
+val create_function_declaration : Code_id.t -> rec_info:t -> function_type
 
 val exactly_this_closure :
   Closure_id.t ->
-  all_function_decls_in_set:Function_declaration_type.t Closure_id.Map.t ->
+  all_function_decls_in_set:function_type Closure_id.Map.t ->
   all_closures_in_set:t Closure_id.Map.t ->
   all_closure_vars_in_set:t Var_within_closure.Map.t ->
   t
@@ -224,26 +305,6 @@ val closure_with_at_least_these_closure_vars :
 
 val array_of_length : length:t -> t
 
-val make_suitable_for_environment :
-  t ->
-  Typing_env.t ->
-  suitable_for:Typing_env.t ->
-  bind_to:Name.t ->
-  Typing_env.Typing_env_extension.With_extra_variables.t
-
-val expand_head : t -> Typing_env.t -> Resolved_type.t
-
-(** Greatest lower bound of two types. *)
-val meet :
-  Typing_env.Meet_env.t ->
-  t ->
-  t ->
-  (t * Typing_env.Typing_env_extension.t) Or_bottom.t
-
-(** Least upper bound of two types. *)
-val join :
-  ?bound_name:Name.t -> Typing_env.Join_env.t -> t -> t -> t Or_unknown.t
-
-(* Checks that the equation is not directly recursive (x : =x) (Depends on
-   [Flambda_features.invariant_checks ()]) *)
+(** Checks that the equation is not directly recursive (x : =x) when
+    [Flambda_features.invariant_checks ()] is enabled. *)
 val check_equation : Name.t -> t -> unit

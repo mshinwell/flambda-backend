@@ -176,6 +176,15 @@ end) : sig
 
   val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
 
+  val make_suitable_for_environment :
+    t ->
+    Type_grammar.t ->
+    suitable_for:t ->
+    bind_to:Name.t ->
+    Typing_env.Typing_env_extension.With_extra_variables.t
+
+  val expand_head : t -> Type_grammar.t -> Resolved_type.t
+
   module Serializable : sig
     type typing_env = t
 

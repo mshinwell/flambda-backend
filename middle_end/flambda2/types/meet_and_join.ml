@@ -660,6 +660,7 @@ and meet_type_descr ~force_to_kind ~to_type env kind ty1 ty2 t1 t2 :
           )
       end)
 
+(* The entry point for meeting types. *)
 and meet env t1 t2 =
   match t1, t2 with
   | Value ty1, Value ty2 ->
@@ -765,6 +766,11 @@ let rec join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
   | Known _, Unknown | Unknown, Known _ | Known _, Known _ ->
     Known (blocks, imms)
 
+(* Note that unlike the [join] function on types, for structures (closures
+   entry, row-like, etc.) the return type is [t] (and not [t Or_unknown.t]).
+   This simplifies some parts of the code a bit that cannot handle the Unknown
+   case gracefully. All join functions for structures can handle [Unknown]
+   results from generic [join]s without needing to propagate them. *)
 and join_closures_entry env
     { function_decls = function_decls1;
       closure_types = closure_types1;
@@ -903,6 +909,35 @@ and join_row_like (env : Join_env.t) row_like1 row_like2 =
     | Ok other1, Ok other2 -> Ok (join_case env other1 other2)
   in
   { known_tags; other_tags }
+
+and join_env_extension env t1 t2 =
+  let equations =
+    Name.Map.merge
+      (fun name ty1_opt ty2_opt ->
+        match ty1_opt, ty2_opt with
+        | None, _ | _, None -> None
+        | Some ty1, Some ty2 -> begin
+          match Type_grammar.join env ty1 ty2 with
+          | Known ty ->
+            if Type_grammar.is_alias_of_name ty name
+            then
+              (* This is rare but not anomalous. It may mean that [ty1] and
+                 [ty2] are both alias types which canonicalize to [name], for
+                 instance. In any event, if the best type available for [name]
+                 is [= name], we effectively know nothing, so we drop [name].
+                 ([name = name] would be rejected by [Typing_env.add_equation]
+                 anyway.) *)
+              None
+            else begin
+              (* This should always pass due to the [is_alias_of_name] check. *)
+              Type_grammar.check_equation name ty;
+              Some ty
+            end
+          | Unknown -> None
+        end)
+      (TEE.to_map t1) (TEE.to_map t2)
+  in
+  TEE.from_map equations
 
 and join_generic_product env
     { components_by_index = components_by_index1; kind = kind1 }
@@ -1121,6 +1156,7 @@ and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
       | Unknown -> Known (to_type (unknown ()))
       | Ok head -> Known (to_type (create head))))
 
+(* The entry point for joining types. *)
 and join ?bound_name env t1 t2 =
   match t1, t2 with
   | Value ty1, Value ty2 ->
@@ -1154,32 +1190,3 @@ and join ?bound_name env t1 t2 =
       _ ) ->
     Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" print t1 print
       t2
-
-and join_env_extension env t1 t2 =
-  let equations =
-    Name.Map.merge
-      (fun name ty1_opt ty2_opt ->
-        match ty1_opt, ty2_opt with
-        | None, _ | _, None -> None
-        | Some ty1, Some ty2 -> begin
-          match Type_grammar.join env ty1 ty2 with
-          | Known ty ->
-            if Type_grammar.is_alias_of_name ty name
-            then
-              (* This is rare but not anomalous. It may mean that [ty1] and
-                 [ty2] are both alias types which canonicalize to [name], for
-                 instance. In any event, if the best type available for [name]
-                 is [= name], we effectively know nothing, so we drop [name].
-                 ([name = name] would be rejected by [Typing_env.add_equation]
-                 anyway.) *)
-              None
-            else begin
-              (* This should always pass due to the [is_alias_of_name] check. *)
-              Type_grammar.check_equation name ty;
-              Some ty
-            end
-          | Unknown -> None
-        end)
-      (TEE.to_map t1) (TEE.to_map t2)
-  in
-  TEE.from_map equations
