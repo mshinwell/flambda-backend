@@ -29,7 +29,7 @@ let create descr =
 
 let peek_descr t = t.descr
 
-let descr ~apply_renaming_descr ~free_names_descr t =
+let[@inline always] descr ~apply_renaming_descr ~free_names_descr t =
   if Renaming.is_empty t.delayed_permutation
   then t.descr
   else
@@ -51,7 +51,7 @@ let apply_renaming t perm =
   in
   { t with delayed_permutation }
 
-let free_names ~apply_renaming_descr ~free_names_descr t =
+let[@inline always] free_names ~apply_renaming_descr ~free_names_descr t =
   let descr = descr ~apply_renaming_descr ~free_names_descr t in
   match t.free_names with
   | Some free_names -> free_names

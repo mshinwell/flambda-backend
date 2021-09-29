@@ -29,7 +29,7 @@ module Descr = struct
         (Flambda_colours.normal ())
         Simple.print simple
 
-  let apply_renaming ~apply_renaming_head t renaming =
+  let[@inline always] apply_renaming ~apply_renaming_head t renaming =
     if Renaming.is_empty renaming
     then t
     else
@@ -41,7 +41,7 @@ module Descr = struct
         let simple' = Simple.apply_renaming simple renaming in
         if simple == simple' then t else Equals simple'
 
-  let free_names ~free_names_head t =
+  let[@inline always] free_names ~free_names_head t =
     match t with
     | No_alias head -> free_names_head head
     | Equals simple ->
@@ -49,21 +49,114 @@ module Descr = struct
         (Simple.free_names simple) Name_mode.in_types
 end
 
-module WDP = With_delayed_permutation
+(* This module conceals the implementation of type ['head t]. Functions such as
+   [T.descr] can be inlined with return values unboxed by Flambda 2. *)
+module T : sig
+  type 'head t
 
-type 'head t = 'head Descr.t WDP.t Or_unknown_or_bottom.t
+  val create : 'head -> 'head t
 
-let descr ~apply_renaming_head ~free_names_head t : _ Descr.t =
-  WDP.descr
-    ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-    ~free_names_descr:(Descr.free_names ~free_names_head)
-    t
+  val create_equals : Simple.t -> _ t
 
-let peek_descr t : _ Descr.t = WDP.peek_descr t
+  val bottom : _ t
 
-let print ~print_head ~apply_renaming_head ~free_names_head ppf (t : _ t) =
+  val unknown : _ t
+
+  val descr :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    free_names_head:('head -> Name_occurrences.t) ->
+    'head t ->
+    'head Descr.t Or_unknown_or_bottom.t
+
+  val is_obviously_bottom : _ t -> bool
+
+  val is_obviously_unknown : _ t -> bool
+
+  val get_alias_exn :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    free_names_head:('head -> Name_occurrences.t) ->
+    'head t ->
+    Simple.t
+
+  val apply_renaming : 'head t -> Renaming.t -> 'head t
+
+  val free_names :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    free_names_head:('head -> Name_occurrences.t) ->
+    'head t ->
+    Name_occurrences.t
+end = struct
+  module WDP = With_delayed_permutation
+
+  type 'head t = 'head Descr.t WDP.t Or_unknown_or_bottom.t
+
+  let[@inline always] descr ~apply_renaming_head ~free_names_head (t : _ t) :
+      _ Descr.t Or_unknown_or_bottom.t =
+    match t with
+    | Unknown -> Unknown
+    | Bottom -> Bottom
+    | Ok wdp ->
+      Ok
+        (WDP.descr
+           ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
+           ~free_names_descr:(Descr.free_names ~free_names_head)
+           wdp)
+
+  let create head : _ t = Ok (WDP.create (Descr.No_alias head))
+
+  let create_equals simple : _ t = Ok (WDP.create (Descr.Equals simple))
+
+  let bottom : _ t = Bottom
+
+  let unknown : _ t = Unknown
+
+  let is_obviously_bottom (t : _ t) =
+    match t with Bottom -> true | Unknown | Ok _ -> false
+
+  let is_obviously_unknown (t : _ t) =
+    match t with Bottom -> false | Unknown | Ok _ -> true
+
+  let[@inline always] get_alias_exn ~apply_renaming_head ~free_names_head
+      (t : _ t) =
+    match t with
+    | Unknown | Bottom -> raise Not_found
+    | Ok wdp -> (
+      (* This uses [peek_descr] first to avoid unnecessary application of
+         permutations. *)
+      match WDP.peek_descr wdp with
+      | No_alias _ -> raise Not_found
+      | Equals _ -> (
+        match
+          WDP.descr
+            ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
+            ~free_names_descr:(Descr.free_names ~free_names_head)
+            wdp
+        with
+        | Equals alias -> alias
+        | No_alias _ -> assert false))
+
+  let apply_renaming (t : _ t) renaming : _ t =
+    match t with
+    | Unknown | Bottom -> t
+    | Ok wdp ->
+      let wdp' = WDP.apply_renaming wdp renaming in
+      if wdp == wdp' then t else Ok wdp'
+
+  let free_names ~apply_renaming_head ~free_names_head (t : _ t) =
+    match t with
+    | Unknown | Bottom -> Name_occurrences.empty
+    | Ok wdp ->
+      WDP.free_names
+        ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
+        ~free_names_descr:(Descr.free_names ~free_names_head)
+        wdp
+end
+
+include T
+
+let print ~print_head ~apply_renaming_head ~free_names_head ppf t =
   let colour = Flambda_colours.top_or_bottom_type () in
-  match t with
+  match descr ~apply_renaming_head ~free_names_head t with
   | Unknown ->
     if Flambda_features.unicode ()
     then
@@ -76,65 +169,23 @@ let print ~print_head ~apply_renaming_head ~free_names_head ppf (t : _ t) =
       Format.fprintf ppf "@<0>%s@<1>\u{22a5}@<0>%s" colour
         (Flambda_colours.normal ())
     else Format.fprintf ppf "@<0>%s_|_@<0>%s" colour (Flambda_colours.normal ())
-  | Ok wdp ->
-    WDP.print ~print_descr:(Descr.print ~print_head)
-      ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-      ~free_names_descr:(Descr.free_names ~free_names_head)
-      ppf wdp
+  | Ok descr -> Descr.print ~print_head ppf descr
 
-let create_no_alias head = Ok (WDP.create (Descr.No_alias head))
-
-let create_equals simple = Ok (WDP.create (Descr.Equals simple))
-
-let bottom : _ t = Bottom
-
-let unknown : _ t = Unknown
-
-let is_obviously_bottom (t : _ t) =
-  match t with Bottom -> true | Unknown | Ok _ -> false
-
-let is_obviously_unknown (t : _ t) =
-  match t with Unknown -> true | Bottom | Ok _ -> false
-
-let get_alias_exn ~apply_renaming_head ~free_names_head (t : _ t) =
-  match t with
-  | Unknown | Bottom -> raise Not_found
-  | Ok wdp -> (
-    match WDP.peek_descr wdp with
-    | No_alias _ -> raise Not_found
-    | Equals _ -> (
-      match WDP.descr ~apply_renaming_head ~free_names_head wdp with
-      | Equals alias -> alias
-      | No_alias _ -> assert false))
-
-let apply_coercion ~apply_coercion_head ~apply_renaming_head ~free_names_head
-    coercion t : _ Or_bottom.t =
+let[@inline always] apply_coercion ~apply_coercion_head ~apply_renaming_head
+    ~free_names_head coercion t : _ t Or_bottom.t =
   match descr ~apply_renaming_head ~free_names_head t with
-  | Equals simple -> begin
+  | Unknown | Bottom -> Ok t
+  | Ok (Equals simple) -> (
     match Simple.apply_coercion simple coercion with
     | None -> Bottom
-    | Some simple -> Ok (create_equals simple)
-  end
-  | No_alias Unknown -> Ok t
-  | No_alias Bottom -> Bottom
-  | No_alias (Ok head) ->
+    | Some simple -> Ok (create_equals simple))
+  | Ok (No_alias head) ->
     Or_bottom.map (apply_coercion_head head coercion) ~f:(fun head ->
         create head)
 
 let all_ids_for_export ~apply_renaming_head ~free_names_head
-    ~all_ids_for_export_head t =
+    ~all_ids_for_export_head (t : _ t) =
   match descr ~apply_renaming_head ~free_names_head t with
-  | No_alias Bottom | No_alias Unknown -> Ids_for_export.empty
-  | No_alias (Ok head) -> all_ids_for_export_head head
-  | Equals simple -> Ids_for_export.from_simple simple
-
-let apply_renaming ~apply_renaming_head t renaming =
-  WDP.apply_renaming
-    ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-    t renaming
-
-let free_names ~apply_renaming_head ~free_names_head t =
-  WDP.free_names
-    ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-    ~free_names_descr:(Descr.free_names ~free_names_head)
-    t
+  | Unknown | Bottom -> Ids_for_export.empty
+  | Ok (No_alias head) -> all_ids_for_export_head head
+  | Ok (Equals simple) -> Ids_for_export.from_simple simple

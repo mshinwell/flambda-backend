@@ -18,7 +18,7 @@
 
 module Descr : sig
   type 'head t = private
-    | No_alias of 'head Or_unknown_or_bottom.t
+    | No_alias of 'head
     | Equals of Simple.t
 
   val print :
@@ -79,21 +79,15 @@ val descr :
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
   free_names_head:('head -> Name_occurrences.t) ->
   'head t ->
-  'head Descr.t
+  'head Descr.t Or_unknown_or_bottom.t
 
-val peek_descr : 'head t -> 'head Descr.t
+val apply_renaming : 'head t -> Renaming.t -> 'head t
 
 val free_names :
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
   free_names_head:('head -> Name_occurrences.t) ->
   'head t ->
   Name_occurrences.t
-
-val apply_renaming :
-  apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  'head t ->
-  Renaming.t ->
-  'head t
 
 val all_ids_for_export :
   apply_renaming_head:('head -> Renaming.t -> 'head) ->

@@ -90,28 +90,6 @@ struct
     | Ok head -> create_no_alias (Ok head)
     | Bottom -> bottom ()
 
-  let eviscerate ~force_to_kind t env kind =
-    match descr t with
-    | No_alias (Bottom | Unknown) -> t
-    | No_alias (Ok head) -> begin
-      match Head.eviscerate head with
-      | Known head -> create_no_alias (Ok head)
-      | Unknown -> unknown ()
-    end
-    | Equals simple -> (
-      if Simple.is_symbol simple || Simple.is_const simple
-      then t
-      else
-        let t = expand_head' ~force_to_kind t env kind in
-        match descr t with
-        | No_alias (Bottom | Unknown) -> t
-        | No_alias (Ok head) -> begin
-          match Head.eviscerate head with
-          | Known head -> create_no_alias (Ok head)
-          | Unknown -> unknown ()
-        end
-        | Equals _ -> assert false)
-
   let add_equation _env (simple : Simple.t) ty_of_simple env_extension ~to_type
       =
     match Simple.must_be_name simple with
