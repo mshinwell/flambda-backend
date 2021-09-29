@@ -16,18 +16,48 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Make (Type_grammar : sig
-  type t
+type t
 
-  val all_ids_for_export : t -> Ids_for_export.t
+val print_equations : Format.formatter -> Type_grammar.t Name.Map.t -> unit
 
-  val free_names : t -> Name_occurrences.t
+val print : Format.formatter -> t -> unit
 
-  val apply_renaming : t -> Renaming.t -> t
+val empty : unit -> t
 
-  val print : Format.formatter -> t -> unit
+val is_empty : t -> bool
 
-  val check_equation : Name.t -> t -> unit
+val create :
+  defined_vars:Flambda_kind.t Variable.Map.t ->
+  binding_times:Variable.Set.t Binding_time.Map.t ->
+  equations:Type_grammar.t Name.Map.t ->
+  symbol_projections:Symbol_projection.t Variable.Map.t ->
+  t
 
-  val is_obviously_unknown : t -> bool
-end) : Typing_env_level_intf.S with type flambda_type := Type_grammar.t
+val defined_variables : t -> Variable.Set.t
+
+val defined_variables_with_kinds : t -> Flambda_kind.t Variable.Map.t
+
+val defined_names : t -> Name.Set.t
+
+val equations : t -> Type_grammar.t Name.Map.t
+
+val symbol_projections : t -> Symbol_projection.t Variable.Map.t
+
+val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
+
+val add_definition : t -> Variable.t -> Flambda_kind.t -> Binding_time.t -> t
+
+val add_or_replace_equation : t -> Name.t -> Type_grammar.t -> t
+
+val concat : t -> t -> t
+
+val all_ids_for_export : t -> Ids_for_export.t
+
+val find_kind : t -> Variable.t -> Flambda_kind.t
+
+val variables_by_binding_time : t -> Variable.Set.t Binding_time.Map.t
+
+val variable_is_defined : t -> Variable.t -> bool
+
+val fold_on_defined_vars :
+  (Variable.t -> Flambda_kind.t -> 'a -> 'a) -> t -> 'a -> 'a

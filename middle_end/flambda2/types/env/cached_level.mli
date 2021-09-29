@@ -16,45 +16,37 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Make (Type_grammar : sig
-  type t
+type t
 
-  include Contains_names.S with type t := t
+val print_name_modes :
+  restrict_to:Name.Set.t ->
+  min_binding_time:Binding_time.t ->
+  Format.formatter ->
+  t ->
+  unit
 
-  val kind : t -> Flambda_kind.t
-end) : sig
-  type t
+val empty : t
 
-  val print_name_modes :
-    restrict_to:Name.Set.t ->
-    min_binding_time:Binding_time.t ->
-    Format.formatter ->
-    t ->
-    unit
+val names_to_types :
+  t -> (Type_grammar.t * Binding_time.t * Name_mode.t) Name.Map.t
 
-  val empty : t
+val aliases : t -> Aliases.t
 
-  val names_to_types :
-    t -> (Type_grammar.t * Binding_time.t * Name_mode.t) Name.Map.t
+val add_or_replace_binding :
+  t -> Name.t -> Type_grammar.t -> Binding_time.t -> Name_mode.t -> t
 
-  val aliases : t -> Aliases.t
+val replace_variable_binding : t -> Variable.t -> Type_grammar.t -> t
 
-  val add_or_replace_binding :
-    t -> Name.t -> Type_grammar.t -> Binding_time.t -> Name_mode.t -> t
+val with_aliases : t -> aliases:Aliases.t -> t
 
-  val replace_variable_binding : t -> Variable.t -> Type_grammar.t -> t
+val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
 
-  val with_aliases : t -> aliases:Aliases.t -> t
+val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
 
-  val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
+val symbol_projections : t -> Symbol_projection.t Variable.Map.t
 
-  val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
+val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
 
-  val symbol_projections : t -> Symbol_projection.t Variable.Map.t
+val apply_renaming : t -> Renaming.t -> t
 
-  val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
-
-  val apply_renaming : t -> Renaming.t -> t
-
-  val merge : t -> t -> t
-end
+val merge : t -> t -> t

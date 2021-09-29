@@ -18,192 +18,189 @@
 
 module K = Flambda2_kinds.Flambda_kind
 
-module Make (Type_grammar : sig
+type typing_env
+
+type t = typing_env
+
+module Meet_env : sig
   type t
-
-  include Contains_ids.S with type t := t
-
-  include Contains_names.S with type t := t
 
   val print : Format.formatter -> t -> unit
 
-  val check_equation : Name.t -> t -> unit
+  val create : typing_env -> t
 
-  val is_obviously_unknown : t -> bool
+  val env : t -> typing_env
 
-  val kind : t -> K.t
+  (** Note that we are now in the process of meeting the given two [Simple]s. *)
+  val now_meeting : t -> Simple.t -> Simple.t -> t
 
-  val bottom : K.t -> t
+  (** Determine whether we are now in the process of meeting the given two
+      [Simple]s. The arguments do not have to be provided in the same order as
+      when [now_meeting] was called. *)
+  val already_meeting : t -> Simple.t -> Simple.t -> bool
+end
 
-  val unknown : K.t -> t
-
-  val type_for_const : Reg_width_const.t -> t
-
-  val get_alias_exn : t -> Simple.t
-
-  val alias_type_of : K.t -> Simple.t -> t
-
-  val apply_coercion : t -> Coercion.t -> t Or_bottom.t
-end) : sig
+module Join_env : sig
   type t
-
-  module Meet_env : Meet_env_intf.S with type typing_env := t
-
-  module Join_env : Join_env_intf.S with type typing_env := t
-
-  module Typing_env_extension :
-    Typing_env_extension_intf.S with type flambda_type := Type_grammar.t
-
-  module Typing_env_level :
-    Typing_env_level_intf.S with type flambda_type := Type_grammar.t
-
-  type meet_type =
-    Meet_env.t ->
-    Type_grammar.t ->
-    Type_grammar.t ->
-    (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
-
-  val invariant : t -> unit
 
   val print : Format.formatter -> t -> unit
 
-  val create :
-    resolver:(Compilation_unit.t -> t option) ->
+  val create : typing_env -> left_env:typing_env -> right_env:typing_env -> t
+
+  val target_join_env : t -> typing_env
+
+  val left_join_env : t -> typing_env
+
+  val right_join_env : t -> typing_env
+
+  val now_joining : t -> Simple.t -> Simple.t -> t
+
+  val already_joining : t -> Simple.t -> Simple.t -> bool
+end
+
+type meet_type =
+  Meet_env.t ->
+  Type_grammar.t ->
+  Type_grammar.t ->
+  (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
+
+val invariant : t -> unit
+
+val print : Format.formatter -> t -> unit
+
+val create :
+  resolver:(Compilation_unit.t -> t option) ->
+  get_imported_names:(unit -> Name.Set.t) ->
+  t
+
+val closure_env : t -> t
+
+val resolver : t -> Compilation_unit.t -> t option
+
+val code_age_relation_resolver :
+  t -> Compilation_unit.t -> Code_age_relation.t option
+
+val name_domain : t -> Name.Set.t
+
+val current_scope : t -> Scope.t
+
+val increment_scope : t -> t
+
+val add_definition : t -> Bound_name.t -> Flambda_kind.t -> t
+
+(** The caller is to ensure that the supplied type is the most precise available
+    for the given name. *)
+val add_equation : t -> Name.t -> Type_grammar.t -> meet_type:meet_type -> t
+
+val add_definitions_of_params : t -> params:Bound_parameter.t list -> t
+
+val add_symbol_definition : t -> Symbol.t -> t
+
+val add_symbol_definitions : t -> Symbol.Set.t -> t
+
+val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
+
+val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
+
+val add_equations_on_params :
+  t ->
+  params:Bound_parameter.t list ->
+  param_types:Type_grammar.t list ->
+  meet_type:meet_type ->
+  t
+
+(** If the kind of the name is known, it should be specified, otherwise it can
+    be omitted. Such omission will cause an error if the name satisfies
+    [variable_is_from_missing_cmx_file]. *)
+val find : t -> Name.t -> Flambda_kind.t option -> Type_grammar.t
+
+val find_or_missing : t -> Name.t -> Type_grammar.t option
+
+val find_params : t -> Bound_parameter.t list -> Type_grammar.t list
+
+val variable_is_from_missing_cmx_file : t -> Name.t -> bool
+
+val mem : ?min_name_mode:Name_mode.t -> t -> Name.t -> bool
+
+val mem_simple : ?min_name_mode:Name_mode.t -> t -> Simple.t -> bool
+
+(* CR mshinwell: clarify that this does not meet *)
+(* CR vlaviron: If the underlying level in the extension defines several
+   variables, then there is no guarantee that the binding order in the result
+   will match the binding order used to create the level. If they don't match,
+   then adding equations in the wrong order can make equations disappear. *)
+val add_env_extension : t -> Typing_env_extension.t -> meet_type:meet_type -> t
+
+val add_env_extension_with_extra_variables :
+  t -> Typing_env_extension.With_extra_variables.t -> meet_type:meet_type -> t
+
+val add_env_extension_from_level :
+  t -> Typing_env_level.t -> meet_type:meet_type -> t
+
+val type_simple_in_term_exn :
+  t -> ?min_name_mode:Name_mode.t -> Simple.t -> Type_grammar.t
+
+(** [name_mode_of_existing_simple] can be provided to improve performance of
+    this function. *)
+val get_canonical_simple_exn :
+  t ->
+  ?min_name_mode:Name_mode.t ->
+  ?name_mode_of_existing_simple:Name_mode.t ->
+  Simple.t ->
+  Simple.t
+
+val get_alias_then_canonical_simple_exn :
+  t ->
+  ?min_name_mode:Name_mode.t ->
+  ?name_mode_of_existing_simple:Name_mode.t ->
+  Type_grammar.t ->
+  Simple.t
+
+val aliases_of_simple :
+  t -> min_name_mode:Name_mode.t -> Simple.t -> Aliases.Alias_set.t
+
+val aliases_of_simple_allowable_in_types : t -> Simple.t -> Aliases.Alias_set.t
+
+val add_to_code_age_relation :
+  t -> new_code_id:Code_id.t -> old_code_id:Code_id.t option -> t
+
+val code_age_relation : t -> Code_age_relation.t
+
+val with_code_age_relation : t -> Code_age_relation.t -> t
+
+val cut : t -> unknown_if_defined_at_or_later_than:Scope.t -> Typing_env_level.t
+
+val free_names_transitive : t -> Type_grammar.t -> Name_occurrences.t
+
+val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
+
+val make_suitable_for_environment :
+  t ->
+  Type_grammar.t ->
+  suitable_for:t ->
+  bind_to:Name.t ->
+  Typing_env_extension.With_extra_variables.t
+
+val expand_head : t -> Type_grammar.t -> Resolved_type.t
+
+module Serializable : sig
+  type typing_env = t
+
+  type t
+
+  val create : typing_env -> t
+
+  val print : Format.formatter -> t -> unit
+
+  val to_typing_env :
+    t ->
+    resolver:(Compilation_unit.t -> typing_env option) ->
     get_imported_names:(unit -> Name.Set.t) ->
-    t
+    typing_env
 
-  val closure_env : t -> t
+  val all_ids_for_export : t -> Ids_for_export.t
 
-  val resolver : t -> Compilation_unit.t -> t option
+  val apply_renaming : t -> Renaming.t -> t
 
-  val code_age_relation_resolver :
-    t -> Compilation_unit.t -> Code_age_relation.t option
-
-  val name_domain : t -> Name.Set.t
-
-  val current_scope : t -> Scope.t
-
-  val increment_scope : t -> t
-
-  val add_definition : t -> Bound_name.t -> Flambda_kind.t -> t
-
-  (** The caller is to ensure that the supplied type is the most precise
-      available for the given name. *)
-  val add_equation : t -> Name.t -> Type_grammar.t -> meet_type:meet_type -> t
-
-  val add_definitions_of_params : t -> params:Bound_parameter.t list -> t
-
-  val add_symbol_definition : t -> Symbol.t -> t
-
-  val add_symbol_definitions : t -> Symbol.Set.t -> t
-
-  val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
-
-  val find_symbol_projection : t -> Variable.t -> Symbol_projection.t option
-
-  val add_equations_on_params :
-    t ->
-    params:Bound_parameter.t list ->
-    param_types:Type_grammar.t list ->
-    meet_type:meet_type ->
-    t
-
-  (** If the kind of the name is known, it should be specified, otherwise it can
-      be omitted. Such omission will cause an error if the name satisfies
-      [variable_is_from_missing_cmx_file]. *)
-  val find : t -> Name.t -> Flambda_kind.t option -> Type_grammar.t
-
-  val find_or_missing : t -> Name.t -> Type_grammar.t option
-
-  val find_params : t -> Bound_parameter.t list -> Type_grammar.t list
-
-  val variable_is_from_missing_cmx_file : t -> Name.t -> bool
-
-  val mem : ?min_name_mode:Name_mode.t -> t -> Name.t -> bool
-
-  val mem_simple : ?min_name_mode:Name_mode.t -> t -> Simple.t -> bool
-
-  (* CR mshinwell: clarify that this does not meet *)
-  (* CR vlaviron: If the underlying level in the extension defines several
-     variables, then there is no guarantee that the binding order in the result
-     will match the binding order used to create the level. If they don't match,
-     then adding equations in the wrong order can make equations disappear. *)
-  val add_env_extension :
-    t -> Typing_env_extension.t -> meet_type:meet_type -> t
-
-  val add_env_extension_with_extra_variables :
-    t -> Typing_env_extension.With_extra_variables.t -> meet_type:meet_type -> t
-
-  val add_env_extension_from_level :
-    t -> Typing_env_level.t -> meet_type:meet_type -> t
-
-  val type_simple_in_term_exn :
-    t -> ?min_name_mode:Name_mode.t -> Simple.t -> Type_grammar.t
-
-  (** [name_mode_of_existing_simple] can be provided to improve performance of
-      this function. *)
-  val get_canonical_simple_exn :
-    t ->
-    ?min_name_mode:Name_mode.t ->
-    ?name_mode_of_existing_simple:Name_mode.t ->
-    Simple.t ->
-    Simple.t
-
-  val get_alias_then_canonical_simple_exn :
-    t ->
-    ?min_name_mode:Name_mode.t ->
-    ?name_mode_of_existing_simple:Name_mode.t ->
-    Type_grammar.t ->
-    Simple.t
-
-  val aliases_of_simple :
-    t -> min_name_mode:Name_mode.t -> Simple.t -> Aliases.Alias_set.t
-
-  val aliases_of_simple_allowable_in_types :
-    t -> Simple.t -> Aliases.Alias_set.t
-
-  val add_to_code_age_relation :
-    t -> new_code_id:Code_id.t -> old_code_id:Code_id.t option -> t
-
-  val code_age_relation : t -> Code_age_relation.t
-
-  val with_code_age_relation : t -> Code_age_relation.t -> t
-
-  val cut :
-    t -> unknown_if_defined_at_or_later_than:Scope.t -> Typing_env_level.t
-
-  val free_names_transitive : t -> Type_grammar.t -> Name_occurrences.t
-
-  val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
-
-  val make_suitable_for_environment :
-    t ->
-    Type_grammar.t ->
-    suitable_for:t ->
-    bind_to:Name.t ->
-    Typing_env.Typing_env_extension.With_extra_variables.t
-
-  val expand_head : t -> Type_grammar.t -> Resolved_type.t
-
-  module Serializable : sig
-    type typing_env = t
-
-    type t
-
-    val create : typing_env -> t
-
-    val print : Format.formatter -> t -> unit
-
-    val to_typing_env :
-      t ->
-      resolver:(Compilation_unit.t -> typing_env option) ->
-      get_imported_names:(unit -> Name.Set.t) ->
-      typing_env
-
-    val all_ids_for_export : t -> Ids_for_export.t
-
-    val apply_renaming : t -> Renaming.t -> t
-
-    val merge : t -> t -> t
-  end
+  val merge : t -> t -> t
 end

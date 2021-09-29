@@ -18,10 +18,12 @@
 
 type t =
   | Const of Reg_width_const.Descr.t
-  | Value of Type_of_kind_value0.t Or_unknown_or_bottom.t
-  | Naked_immediate of Type_of_kind_naked_immediate0.t Or_unknown_or_bottom.t
-  | Naked_float of Type_of_kind_naked_float0.t Or_unknown_or_bottom.t
-  | Naked_int32 of Type_of_kind_naked_int32_0.t Or_unknown_or_bottom.t
-  | Naked_int64 of Type_of_kind_naked_int64_0.t Or_unknown_or_bottom.t
-  | Naked_nativeint of Type_of_kind_naked_nativeint0.t Or_unknown_or_bottom.t
-  | Rec_info of Type_of_kind_rec_info0.t Or_unknown_or_bottom.t
+  | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
+  | Naked_immediate of
+      Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+  | Naked_float of Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+  | Naked_int32 of Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
+  | Naked_int64 of Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
+  | Naked_nativeint of
+      Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+  | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
