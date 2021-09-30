@@ -200,6 +200,17 @@ and apply_renaming_head_of_kind_naked_immediate head renaming =
     let ty' = apply_renaming ty renaming in
     if ty == ty' then head else Get_tag ty'
 
+and apply_renaming_head_of_kind_naked_float head _ = head
+
+and apply_renaming_head_of_kind_naked_int32 head _ = head
+
+and apply_renaming_head_of_kind_naked_int64 head _ = head
+
+and apply_renaming_head_of_kind_naked_nativeint head _ = head
+
+and apply_renaming_head_of_kind_rec_info head renaming =
+  Rec_info_expr.apply_renaming head renaming
+
 and apply_renaming_row_like :
       'index 'maps_to 'known.
       apply_renaming_index:('index -> Renaming.t -> 'index) ->
@@ -337,11 +348,22 @@ let rec free_names t =
     TD.free_names
       ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
       ~free_names_head:free_names_head_of_kind_naked_immediate ty
-  | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ ->
-    Name_occurrences.empty
+  | Naked_float ty ->
+    TD.free_names ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+      ~free_names_head:free_names_head_of_kind_naked_float ty
+  | Naked_int32 ty ->
+    TD.free_names ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+      ~free_names_head:free_names_head_of_kind_naked_int32 ty
+  | Naked_int64 ty ->
+    TD.free_names ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+      ~free_names_head:free_names_head_of_kind_naked_int64 ty
+  | Naked_nativeint ty ->
+    TD.free_names
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+      ~free_names_head:free_names_head_of_kind_naked_nativeint ty
   | Rec_info ty ->
     TD.free_names ~apply_renaming_head:Rec_info_expr.apply_renaming
-      ~free_names_head:Rec_info_expr.free_names ty
+      ~free_names_head:free_names_head_of_kind_rec_info ty
 
 and free_names_head_of_kind_value head =
   match head with
@@ -361,6 +383,16 @@ and free_names_head_of_kind_naked_immediate head =
   match head with
   | Naked_immediates _ -> Name_occurrences.empty
   | Is_int ty | Get_tag ty -> free_names ty
+
+and free_names_head_of_kind_naked_float _ = Name_occurrences.empty
+
+and free_names_head_of_kind_naked_int32 _ = Name_occurrences.empty
+
+and free_names_head_of_kind_naked_int64 _ = Name_occurrences.empty
+
+and free_names_head_of_kind_naked_nativeint _ = Name_occurrences.empty
+
+and free_names_head_of_kind_rec_info head = Rec_info_expr.free_names head
 
 and free_names_row_like :
       'row_tag 'index 'maps_to 'known.
@@ -578,9 +610,6 @@ and [@ocamlformat "disable"] print_closures_entry ppf
     print_var_within_closure_indexed_product closure_var_types
 
 let rec all_ids_for_export t =
-  let no_renaming thing _ = thing in
-  let no_free_names _ = Name_occurrences.empty in
-  let no_ids_for_export _ = Ids_for_export.empty in
   match t with
   | Value ty ->
     TD.all_ids_for_export ~apply_renaming_head:apply_renaming_head_of_kind_value
@@ -593,25 +622,31 @@ let rec all_ids_for_export t =
       ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_immediate
       ty
   | Naked_float ty ->
-    TD.all_ids_for_export ~apply_renaming_head:no_renaming
-      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
-      ty
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+      ~free_names_head:free_names_head_of_kind_naked_float
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_float ty
   | Naked_int32 ty ->
-    TD.all_ids_for_export ~apply_renaming_head:no_renaming
-      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
-      ty
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+      ~free_names_head:free_names_head_of_kind_naked_int32
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_int32 ty
   | Naked_int64 ty ->
-    TD.all_ids_for_export ~apply_renaming_head:no_renaming
-      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
-      ty
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+      ~free_names_head:free_names_head_of_kind_naked_int64
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_int64 ty
   | Naked_nativeint ty ->
-    TD.all_ids_for_export ~apply_renaming_head:no_renaming
-      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+      ~free_names_head:free_names_head_of_kind_naked_nativeint
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_nativeint
       ty
   | Rec_info ty ->
-    TD.all_ids_for_export ~apply_renaming_head:Rec_info_expr.apply_renaming
-      ~free_names_head:Rec_info_expr.free_names
-      ~all_ids_for_export_head:Rec_info_expr.all_ids_for_export ty
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+      ~free_names_head:free_names_head_of_kind_rec_info
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_rec_info ty
 
 and all_ids_for_export_head_of_kind_value head =
   match head with
@@ -634,36 +669,103 @@ and all_ids_for_export_head_of_kind_naked_immediate head =
   | Naked_immediates _ -> Ids_for_export.empty
   | Is_int t | Get_tag t -> all_ids_for_export t
 
-and all_ids_for_export_row_like { known_tags; other_tags } =
-  let from_known_tags =
-    Tag.Map.fold
+and all_ids_for_export_head_of_kind_naked_float _ = Ids_for_export.empty
+
+and all_ids_for_export_head_of_kind_naked_int32 _ = Ids_for_export.empty
+
+and all_ids_for_export_head_of_kind_naked_int64 _ = Ids_for_export.empty
+
+and all_ids_for_export_head_of_kind_naked_nativeint _ = Ids_for_export.empty
+
+and all_ids_for_export_head_of_kind_rec_info head =
+  Rec_info_expr.all_ids_for_export head
+
+and all_ids_for_export_row_like :
+      'row_tag 'index 'maps_to 'known.
+      all_ids_for_export_maps_to:('maps_to -> Ids_for_export.t) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      fold_known:
+        (('row_tag -> ('index, 'maps_to) row_like_case -> 'acc -> 'acc) ->
+        'known ->
+        'acc ->
+        'acc) ->
+      Ids_for_export.t =
+ fun ~all_ids_for_export_maps_to ~known ~other ~fold_known ->
+  let from_known =
+    fold_known
       (fun _tag { maps_to; env_extension; index = _ } ids ->
         Ids_for_export.union ids
           (Ids_for_export.union
-             (Maps_to.all_ids_for_export maps_to)
-             (TEE.all_ids_for_export env_extension)))
-      known_tags Ids_for_export.empty
+             (all_ids_for_export_maps_to maps_to)
+             (all_ids_for_export_env_extension env_extension)))
+      known Ids_for_export.empty
   in
-  match other_tags with
-  | Bottom -> from_known_tags
+  match other with
+  | Bottom -> from_known
   | Ok { maps_to; env_extension; index = _ } ->
     Ids_for_export.union
-      (Maps_to.all_ids_for_export maps_to)
-      (Ids_for_export.union from_known_tags
-         (TEE.all_ids_for_export env_extension))
+      (all_ids_for_export_maps_to maps_to)
+      (Ids_for_export.union from_known
+         (all_ids_for_export_env_extension env_extension))
+
+and all_ids_for_export_row_like_for_blocks { known_tags; other_tags } =
+  all_ids_for_export_row_like
+    ~all_ids_for_export_maps_to:all_ids_for_export_int_indexed_product
+    ~known:known_tags ~other:other_tags ~fold_known:Tag.Map.fold
+
+and all_ids_for_export_row_like_for_closures { known_closures; other_closures }
+    =
+  all_ids_for_export_row_like
+    ~all_ids_for_export_maps_to:all_ids_for_export_closures_entry
+    ~known:known_closures ~other:other_closures ~fold_known:Closure_id.Map.fold
 
 and all_ids_for_export_closures_entry
     { function_decls; closure_types; closure_var_types } =
   let function_decls_ids =
     Closure_id.Map.fold
-      (fun _closure_id function_decl ids ->
-        Ids_for_export.union ids (FDT.all_ids_for_export function_decl))
+      (fun _closure_id (function_type : _ Or_unknown_or_bottom.t) ids ->
+        match function_type with
+        | Unknown | Bottom -> ids
+        | Ok function_type ->
+          Ids_for_export.union ids
+            (all_ids_for_export_function_type function_type))
       function_decls Ids_for_export.empty
   in
   Ids_for_export.union function_decls_ids
     (Ids_for_export.union
-       (PC.all_ids_for_export closure_types)
-       (PV.all_ids_for_export closure_var_types))
+       (all_ids_for_export_closure_id_indexed_product closure_types)
+       (all_ids_for_export_var_within_closure_indexed_product closure_var_types))
+
+and all_ids_for_export_closure_id_indexed_product
+    { closure_id_components_by_index } =
+  Closure_id.Map.fold
+    (fun _ t ids -> Ids_for_export.union ids (all_ids_for_export t))
+    closure_id_components_by_index Ids_for_export.empty
+
+and all_ids_for_export_var_within_closure_indexed_product
+    { var_within_closure_components_by_index } =
+  Var_within_closure.Map.fold
+    (fun _ t ids -> Ids_for_export.union ids (all_ids_for_export t))
+    var_within_closure_components_by_index Ids_for_export.empty
+
+and all_ids_for_export_int_indexed_product { fields; kind = _ } =
+  Array.fold_left
+    (fun ids field -> Ids_for_export.union ids (all_ids_for_export field))
+    Ids_for_export.empty fields
+
+and all_ids_for_export_function_type { code_id; rec_info } =
+  Ids_for_export.union
+    (Ids_for_export.singleton_code_id code_id)
+    (all_ids_for_export rec_info)
+
+and all_ids_for_export_env_extension { equations } =
+  Name.Map.fold
+    (fun name t ids ->
+      Ids_for_export.add_name
+        (Ids_for_export.union ids (all_ids_for_export t))
+        name)
+    equations Ids_for_export.empty
 
 let rec apply_coercion t coercion : t Or_bottom.t =
   match t with
@@ -682,21 +784,17 @@ let rec apply_coercion t coercion : t Or_bottom.t =
       ~f:(fun ty' -> if ty == ty' then t else Naked_immediate ty')
   | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ ->
     if Coercion.is_id coercion then Ok t else Bottom
-  | Rec_info ty ->
+  | Rec_info _ ->
     (* Currently no coercion has an effect on a depth variable and
        [Rec_info_expr.t] does not contain any other variety of name. *)
     if Coercion.is_id coercion then Ok t else Bottom
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
-  | Closures { by_closure_id } -> begin
-    match apply_coercion_row_like_for_blocks by_closure_id coercion with
+  | Closures { by_closure_id } -> (
+    match apply_coercion_row_like_for_closures by_closure_id coercion with
     | Bottom -> Bottom
-    | Ok by_closure_id -> (
-      match apply_coercion_row_like_for_closures by_closure_id coercion with
-      | Bottom -> Bottom
-      | Ok by_closure_id -> Ok (Closures { by_closure_id }))
-  end
+    | Ok by_closure_id -> Ok (Closures { by_closure_id }))
   | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
   | Boxed_nativeint _ | String _ | Array _ ->
     if Coercion.is_id coercion then Ok head else Bottom
@@ -711,36 +809,15 @@ and apply_coercion_head_of_kind_naked_immediate head coercion : _ Or_bottom.t =
     Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
         if t == t' then head else Get_tag t')
 
-and apply_coercion_closures_entry
-    { function_decls; closure_types; closure_var_types } coercion :
-    _ Or_bottom.t =
-  (* CR mshinwell: This needs to deal with [closure_types] too. Deferring until
-     new approach for [Rec_info] is sorted out. *)
-  let bottom = ref false in
-  let function_decls =
-    Closure_id.Map.map
-      (fun function_decl ->
-        match f function_decl with
-        | Ok function_decl -> function_decl
-        | Bottom ->
-          bottom := true;
-          function_decl)
-      function_decls
-  in
-  if !bottom
-  then Bottom
-  else
-    let t = { function_decls; closure_types; closure_var_types } in
-    Ok t
-
 and apply_coercion_row_like :
-      'maps_to.
+      'index 'maps_to 'row_tag 'known.
       apply_coercion_maps_to:('maps_to -> Coercion.t -> 'maps_to Or_bottom.t) ->
       known:'known ->
       other:('index, 'maps_to) row_like_case Or_bottom.t ->
       is_empty_map_known:('known -> bool) ->
       filter_map_known:
-        ((('index, 'maps_to) row_like_case ->
+        (('row_tag ->
+         ('index, 'maps_to) row_like_case ->
          ('index, 'maps_to) row_like_case option) ->
         'known ->
         'known) ->
@@ -750,46 +827,157 @@ and apply_coercion_row_like :
      coercion ->
   let known =
     filter_map_known
-      (fun case ->
-        match apply_coercion_maps_to case.maps_to coercion with
+      (fun _ { maps_to; index; env_extension } ->
+        match apply_coercion_maps_to maps_to coercion with
         | Bottom -> None
-        | Ok maps_to -> Some { case with maps_to })
+        | Ok maps_to -> (
+          match apply_coercion_env_extension env_extension coercion with
+          | Bottom -> None
+          | Ok env_extension -> Some { maps_to; index; env_extension }))
       known
   in
   let other : _ Or_bottom.t =
     match other with
     | Bottom -> Bottom
-    | Ok case ->
-      Or_bottom.map (apply_coercion_maps_to case.maps_to coercion)
-        ~f:(fun maps_to -> { case with maps_to })
+    | Ok { maps_to; index; env_extension } ->
+      Or_bottom.bind (apply_coercion_maps_to maps_to coercion)
+        ~f:(fun maps_to ->
+          Or_bottom.map (apply_coercion_env_extension env_extension coercion)
+            ~f:(fun env_extension -> { maps_to; index; env_extension }))
   in
   if is_empty_map_known known
      && match other with Bottom -> true | Ok _ -> false
   then Bottom
   else Ok (known, other)
 
-and apply_coercion_row_like_for_blocks by_closure_id coercion =
-  apply_coercion_row_like ~apply_coercion_maps_to:(fun closures_entry ->
-      apply_coercion_closures_entry closures_entry coercion)
+and apply_coercion_row_like_for_blocks { known_tags; other_tags } coercion :
+    row_like_for_blocks Or_bottom.t =
+  Or_bottom.map
+    (apply_coercion_row_like
+       ~apply_coercion_maps_to:apply_coercion_int_indexed_product
+       ~known:known_tags ~other:other_tags ~is_empty_map_known:Tag.Map.is_empty
+       ~filter_map_known:Tag.Map.filter_map coercion) ~f:(fun (known, other) ->
+      { known_tags = known; other_tags = other })
 
-and apply_coercion_row_like_for_closures by_closure_id coercion = assert false
+and apply_coercion_row_like_for_closures { known_closures; other_closures }
+    coercion : row_like_for_closures Or_bottom.t =
+  Or_bottom.map
+    (apply_coercion_row_like
+       ~apply_coercion_maps_to:apply_coercion_closures_entry
+       ~known:known_closures ~other:other_closures
+       ~is_empty_map_known:Closure_id.Map.is_empty
+       ~filter_map_known:Closure_id.Map.filter_map coercion)
+    ~f:(fun (known, other) ->
+      { known_closures = known; other_closures = other })
+
+and apply_coercion_closures_entry
+    { function_decls; closure_types; closure_var_types } coercion :
+    _ Or_bottom.t =
+  let bottom = ref false in
+  let function_decls =
+    Closure_id.Map.map
+      (fun function_type ->
+        match apply_coercion_function_type function_type coercion with
+        | Ok function_type -> function_type
+        | Bottom ->
+          bottom := true;
+          function_type
+        (* will never be looked at *))
+      function_decls
+  in
+  if !bottom
+  then Bottom
+  else
+    Or_bottom.bind
+      (apply_coercion_closure_id_indexed_product closure_types coercion)
+      ~f:(fun closure_types ->
+        Or_bottom.map
+          (apply_coercion_var_within_closure_indexed_product closure_var_types
+             coercion) ~f:(fun closure_var_types ->
+            { function_decls; closure_types; closure_var_types }))
+
+and apply_coercion_closure_id_indexed_product
+    ({ closure_id_components_by_index } as product) coercion : _ Or_bottom.t =
+  let found_bottom = ref false in
+  let closure_id_components_by_index' =
+    Closure_id.Map.map_sharing
+      (fun t ->
+        match apply_coercion t coercion with
+        | Bottom ->
+          found_bottom := true;
+          t
+        | Ok t -> t)
+      closure_id_components_by_index
+  in
+  if !found_bottom
+  then Bottom
+  else if closure_id_components_by_index == closure_id_components_by_index'
+  then Ok product
+  else Ok { closure_id_components_by_index = closure_id_components_by_index' }
+
+and apply_coercion_var_within_closure_indexed_product
+    ({ var_within_closure_components_by_index } as product) coercion :
+    _ Or_bottom.t =
+  let found_bottom = ref false in
+  let var_within_closure_components_by_index' =
+    Var_within_closure.Map.map_sharing
+      (fun t ->
+        match apply_coercion t coercion with
+        | Bottom ->
+          found_bottom := true;
+          t
+        | Ok t -> t)
+      var_within_closure_components_by_index
+  in
+  if !found_bottom
+  then Bottom
+  else if var_within_closure_components_by_index
+          == var_within_closure_components_by_index'
+  then Ok product
+  else
+    Ok
+      { var_within_closure_components_by_index =
+          var_within_closure_components_by_index'
+      }
+
+and apply_coercion_int_indexed_product { fields; kind } coercion : _ Or_bottom.t
+    =
+  let found_bottom = ref false in
+  let fields = Array.copy fields in
+  for i = 0 to Array.length fields - 1 do
+    match apply_coercion fields.(i) coercion with
+    | Bottom -> found_bottom := true
+    | Ok typ -> fields.(i) <- typ
+  done;
+  if !found_bottom then Bottom else Ok { fields; kind }
 
 and apply_coercion_function_type
     (function_type : function_type Or_unknown_or_bottom.t)
-    (coercion : Coercion.t) : t Or_bottom.t =
+    (coercion : Coercion.t) : _ Or_bottom.t =
   match coercion with
   | Id -> Ok function_type
   | Change_depth { from; to_ } -> (
     match function_type with
     | Unknown | Bottom -> Ok function_type
-    | Ok ({ rec_info; _ } as t0) ->
+    | Ok { code_id; rec_info } ->
       (* CR lmaurer: We should really be checking that [from] matches the
          current [rec_info], but that requires either passing in a typing
          environment or making absolutely sure that rec_infos get
          canonicalized. *)
       ignore (from, rec_info);
-      let rec_info = Type_grammar.this_rec_info to_ in
-      Ok (Ok { t0 with rec_info }))
+      let rec_info = Rec_info (TD.create to_) in
+      Ok (Or_unknown_or_bottom.Ok { code_id; rec_info }))
+
+and apply_coercion_env_extension { equations } coercion : _ Or_bottom.t =
+  let equations : t Name.Map.t Or_bottom.t =
+    Name.Map.fold
+      (fun name t (result : _ Or_bottom.t) ->
+        Or_bottom.bind result ~f:(fun result ->
+            Or_bottom.map (apply_coercion t coercion) ~f:(fun t ->
+                Name.Map.add name t result)))
+      equations (Or_bottom.Ok Name.Map.empty)
+  in
+  Or_bottom.map equations ~f:(fun equations -> { equations })
 
 let kind t =
   match t with
@@ -815,7 +1003,8 @@ let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks =
   end;
   Value (TD.create (Variant { immediates; blocks; is_unique }))
 
-let create_closures by_closure_id = assert false
+let create_closures by_closure_id =
+  Value (TD.create (Closures { by_closure_id }))
 
 module Row_like = struct
   let create_bottom () = { known_tags = Tag.Map.empty; other_tags = Bottom }
@@ -887,8 +1076,8 @@ module Row_like_for_blocks = struct
   let create ~(field_kind : Flambda_kind.t) ~field_tys
       (open_or_closed : open_or_closed) =
     let field_kind' =
-      List.map Type_grammar.kind field_tys
-      |> Flambda_kind.Set.of_list |> Flambda_kind.Set.get_singleton
+      List.map kind field_tys |> Flambda_kind.Set.of_list
+      |> Flambda_kind.Set.get_singleton
     in
     (* CR pchambart: move to invariant check *)
     begin
@@ -979,7 +1168,7 @@ module Row_like_for_blocks = struct
           let field_kind =
             match field_tys with
             | [] -> Flambda_kind.value
-            | field_ty :: _ -> Type_grammar.kind field_ty
+            | field_ty :: _ -> kind field_ty
           in
           let maps_to =
             Product.Int_indexed.create_from_list field_kind field_tys
@@ -1170,11 +1359,26 @@ let get_alias_exn t =
     TD.get_alias_exn ty
       ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
       ~free_names_head:free_names_head_of_kind_naked_immediate
-  | Naked_float ty -> TD.get_alias_exn ty
-  | Naked_int32 ty -> TD.get_alias_exn ty
-  | Naked_int64 ty -> TD.get_alias_exn ty
-  | Naked_nativeint ty -> TD.get_alias_exn ty
-  | Rec_info ty -> TD.get_alias_exn ty
+  | Naked_float ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+      ~free_names_head:free_names_head_of_kind_naked_float
+  | Naked_int32 ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+      ~free_names_head:free_names_head_of_kind_naked_int32
+  | Naked_int64 ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+      ~free_names_head:free_names_head_of_kind_naked_int64
+  | Naked_nativeint ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+      ~free_names_head:free_names_head_of_kind_naked_nativeint
+  | Rec_info ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+      ~free_names_head:free_names_head_of_kind_naked_nativeint
 
 let is_obviously_bottom t =
   match t with
@@ -1633,15 +1837,4 @@ module Int_indexed = struct
       (fun ids ty ->
         Ids_for_export.union (Type_grammar.all_ids_for_export ty) ids)
       Ids_for_export.empty t.fields
-
-  let map_types t ~(f : Type_grammar.t -> Type_grammar.t Or_bottom.t) :
-      _ Or_bottom.t =
-    let found_bottom = ref false in
-    let fields = Array.copy t.fields in
-    for i = 0 to Array.length fields - 1 do
-      match f fields.(i) with
-      | Bottom -> found_bottom := true
-      | Ok typ -> fields.(i) <- typ
-    done;
-    if !found_bottom then Bottom else Ok { t with fields }
 end
