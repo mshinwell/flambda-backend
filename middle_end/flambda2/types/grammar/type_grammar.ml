@@ -5,8 +5,8 @@
 (*                       Pierre Chambart, OCamlPro                        *)
 (*           Mark Shinwell and Leo White, Jane Street Europe              *)
 (*                                                                        *)
-(*   Copyright 2013--2019 OCamlPro SAS                                    *)
-(*   Copyright 2014--2019 Jane Street Group LLC                           *)
+(*   Copyright 2013--2021 OCamlPro SAS                                    *)
+(*   Copyright 2014--2021 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -769,6 +769,8 @@ let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks =
   end;
   Value (TD.create (Variant { immediates; blocks; is_unique }))
 
+let create_closures by_closure_id = assert false
+
 module Row_like = struct
   let create_bottom () = { known_tags = Tag.Map.empty; other_tags = Bottom }
 
@@ -1200,19 +1202,6 @@ let bottom_naked_nativeint = Naked_nativeint TD.bottom
 
 let bottom_rec_info = Rec_info TD.bottom
 
-let bottom (kind : K.t) =
-  match kind with
-  | Value -> bottom_value
-  | Naked_number Naked_immediate -> bottom_naked_immediate
-  | Naked_number Naked_float -> bottom_naked_float
-  | Naked_number Naked_int32 -> bottom_naked_int32
-  | Naked_number Naked_int64 -> bottom_naked_int64
-  | Naked_number Naked_nativeint -> bottom_naked_nativeint
-  | Rec_info -> bottom_rec_info
-  | Fabricated -> Misc.fatal_error "Unused kind to be removed"
-
-let bottom_like t = bottom (kind t)
-
 let any_value = Value TD.unknown
 
 let any_naked_immediate = Naked_immediate TD.unknown
@@ -1226,19 +1215,6 @@ let any_naked_int64 = Naked_int64 TD.unknown
 let any_naked_nativeint = Naked_nativeint TD.unknown
 
 let any_rec_info = Rec_info TD.unknown
-
-let unknown (kind : K.t) =
-  match kind with
-  | Value -> any_value
-  | Naked_number Naked_immediate -> any_naked_immediate
-  | Naked_number Naked_float -> any_naked_float
-  | Naked_number Naked_int32 -> any_naked_int32
-  | Naked_number Naked_int64 -> any_naked_int64
-  | Naked_number Naked_nativeint -> any_naked_nativeint
-  | Rec_info -> any_rec_info
-  | Fabricated -> Misc.fatal_error "Unused kind to be removed"
-
-let unknown_like t = unknown (kind t)
 
 let this_naked_immediate i : t =
   Naked_immediate (TD.create_equals (Simple.const (RWC.naked_immediate i)))
@@ -1409,26 +1385,6 @@ let is_int_for_scrutinee ~scrutinee : t =
 let get_tag_for_block ~block : t =
   Naked_immediate (TD.create (Get_tag (alias_type_of K.value block)))
 
-let any_tagged_bool = these_tagged_immediates Targetint_31_63.all_bools
-
-let any_naked_bool = these_naked_immediates Targetint_31_63.all_bools
-
-let this_boxed_float f = box_float (this_naked_float f)
-
-let this_boxed_int32 i = box_int32 (this_naked_int32 i)
-
-let this_boxed_int64 i = box_int64 (this_naked_int64 i)
-
-let this_boxed_nativeint i = box_nativeint (this_naked_nativeint i)
-
-let these_boxed_floats fs = box_float (these_naked_floats fs)
-
-let these_boxed_int32s is = box_int32 (these_naked_int32s is)
-
-let these_boxed_int64s is = box_int64 (these_naked_int64s is)
-
-let these_boxed_nativeints is = box_nativeint (these_naked_nativeints is)
-
 let boxed_float_alias_to ~naked_float =
   box_float (Naked_float (TD.create_equals (Simple.var naked_float)))
 
@@ -1478,55 +1434,6 @@ let immutable_block ~is_unique tag ~field_kind ~fields =
                      (Closed tag))
             }))
 
-let immutable_block_with_size_at_least ~tag ~n ~field_kind ~field_n_minus_one =
-  let n = Targetint_31_63.Imm.to_int n in
-  let field_tys =
-    List.init n (fun index ->
-        if index < n - 1
-        then unknown field_kind
-        else alias_type_of field_kind (Simple.var field_n_minus_one))
-  in
-  Value
-    (TD.create
-       (Variant
-          { is_unique = false;
-            immediates = Known (bottom K.naked_immediate);
-            blocks =
-              Known
-                (Row_like.For_blocks.create ~field_kind ~field_tys (Open tag))
-          }))
-
-let variant ~const_ctors ~non_const_ctors =
-  let blocks =
-    let field_tys_by_tag =
-      Tag.Scannable.Map.fold
-        (fun tag ty non_const_ctors ->
-          Tag.Map.add (Tag.Scannable.to_tag tag) ty non_const_ctors)
-        non_const_ctors Tag.Map.empty
-    in
-    Row_like.For_blocks.create_exactly_multiple ~field_tys_by_tag
-  in
-  create_variant ~is_unique:false ~immediates:(Known const_ctors)
-    ~blocks:(Known blocks)
-
-let open_variant_from_const_ctors_type ~const_ctors =
-  create_variant ~is_unique:false ~immediates:(Known const_ctors)
-    ~blocks:Unknown
-
-let open_variant_from_non_const_ctor_with_size_at_least ~n ~field_n_minus_one =
-  let n = Targetint_31_63.Imm.to_int n in
-  let field_tys =
-    List.init n (fun index ->
-        if index < n - 1
-        then any_value
-        else alias_type_of K.value (Simple.var field_n_minus_one))
-  in
-  create_variant ~is_unique:false ~immediates:Unknown
-    ~blocks:
-      (Known
-         (Row_like.For_blocks.create ~field_kind:K.value ~field_tys
-            (Open Unknown)))
-
 let this_immutable_string str =
   (* CR mshinwell: Use "length" not "size" for strings *)
   let size = Targetint_31_63.Imm.of_int (String.length str) in
@@ -1543,98 +1450,6 @@ let mutable_string ~size =
       (String_info.create ~contents:Unknown_or_mutable ~size)
   in
   Value (TD.create (String string_info))
-
-let any_boxed_float = box_float any_naked_float
-
-let any_boxed_int32 = box_int32 any_naked_int32
-
-let any_boxed_int64 = box_int64 any_naked_int64
-
-let any_boxed_nativeint () = box_nativeint any_naked_nativeint
-
-let create_function_declaration code_id ~rec_info =
-  Function_declaration_type.create code_id ~rec_info
-
-let exactly_this_closure closure_id ~all_function_decls_in_set:function_decls
-    ~all_closures_in_set:closure_types
-    ~all_closure_vars_in_set:closure_var_types =
-  let closure_types = { closure_id_components_by_index = closure_types } in
-  let closures_entry =
-    let closure_var_types =
-      Product.Var_within_closure_indexed.create Flambda_kind.value
-        closure_var_types
-    in
-    Closures_entry.create ~function_decls ~closure_types ~closure_var_types
-  in
-  let by_closure_id =
-    let set_of_closures_contents =
-      Set_of_closures_contents.create
-        (Closure_id.Map.keys function_decls)
-        (Var_within_closure.Map.keys closure_var_types)
-    in
-    Row_like.For_closures_entry_by_set_of_closures_contents.create_exactly
-      closure_id set_of_closures_contents closures_entry
-  in
-  Value (TD.create (Closures { by_closure_id }))
-
-let at_least_the_closures_with_ids ~this_closure closure_ids_and_bindings =
-  let closure_id_components_by_index =
-    Closure_id.Map.map
-      (fun bound_to -> alias_type_of K.value bound_to)
-      closure_ids_and_bindings
-  in
-  let function_decls =
-    Closure_id.Map.map
-      (fun _ -> Or_unknown_or_bottom.Unknown)
-      closure_ids_and_bindings
-  in
-  let closure_types = { closure_id_components_by_index } in
-  let closures_entry =
-    { function_decls;
-      closure_types;
-      closure_var_types =
-        Product.Var_within_closure_indexed.create_top Flambda_kind.value
-    }
-  in
-  let by_closure_id =
-    let set_of_closures_contents =
-      Set_of_closures_contents.create
-        (Closure_id.Map.keys closure_id_components_by_index)
-        Var_within_closure.Set.empty
-    in
-    Row_like.For_closures_entry_by_set_of_closures_contents.create_at_least
-      this_closure set_of_closures_contents closures_entry
-  in
-  Value (TD.create (Closures { by_closure_id }))
-
-let closure_with_at_least_these_closure_vars ~this_closure closure_vars : t =
-  let closure_var_types =
-    let type_of_var v = alias_type_of K.value (Simple.var v) in
-    let var_within_closure_components_by_index =
-      Var_within_closure.Map.map type_of_var closure_vars
-    in
-    { var_within_closure_components_by_index }
-  in
-  let closures_entry =
-    { function_decls = Closure_id.Map.empty;
-      closure_types = Product.Closure_id_indexed.create_top Flambda_kind.value;
-      closure_var_types
-    }
-  in
-  let by_closure_id =
-    let set_of_closures_contents =
-      Set_of_closures_contents.create Closure_id.Set.empty
-        (Var_within_closure.Map.keys closure_vars)
-    in
-    Row_like.For_closures_entry_by_set_of_closures_contents.create_at_least
-      this_closure set_of_closures_contents closures_entry
-  in
-  Value (TD.create (Closures { by_closure_id }))
-
-let closure_with_at_least_this_closure_var ~this_closure closure_var
-    ~closure_element_var : t =
-  closure_with_at_least_these_closure_vars ~this_closure
-    (Var_within_closure.Map.singleton closure_var closure_element_var)
 
 let array_of_length ~length = Value (TD.create (Array { length }))
 
