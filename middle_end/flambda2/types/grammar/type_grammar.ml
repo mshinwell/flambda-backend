@@ -20,6 +20,7 @@ module K = Flambda_kind
 module Float = Numeric_types.Float_by_bit_pattern
 module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
+module RWC = Reg_width_const
 module TD = Type_descr
 
 module Block_size = struct
@@ -50,7 +51,7 @@ type t =
 and head_of_kind_value =
   | Variant of
       { immediates : t Or_unknown.t;
-        blocks : row_like_for_blocks;
+        blocks : row_like_for_blocks Or_unknown.t;
         is_unique : bool
       }
   | Boxed_float of t
@@ -76,6 +77,8 @@ and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
 
 and head_of_kind_rec_info = Rec_info_expr.t
 
+(* For row-like, ['index] must not contain any names. *)
+
 (* Note: it wouldn't require many changes to change this to an interval:
  * type 'index row_like_index = { at_least : 'index; at_most : 'index }
  * representing { x | at_least \subset x /\ x \subset at_most }
@@ -90,7 +93,7 @@ and ('index, 'maps_to) row_like_case =
         (** Kinds different from [Value] are only allowed in cases with known
             tags. Currently cases with tag 254 must have fields of kind
             [Naked_float] and all other must have fields of kind [Value]. *)
-    index : 'index;
+    index : 'index row_like_index;
     env_extension : env_extension
   }
 
@@ -100,17 +103,13 @@ and row_like_for_blocks =
   }
 
 and row_like_for_closures =
-  { known_tags :
-      (Set_of_closures_contents.t, closures_entry) row_like_case Tag.Map.t;
-    other_tags :
+  { known_closures :
+      (Set_of_closures_contents.t, closures_entry) row_like_case
+      Closure_id.Map.t;
+    other_closures :
       (Set_of_closures_contents.t, closures_entry) row_like_case Or_bottom.t
   }
 
-(* CR pchambart: This is exactly a product with a different kind of fields
-   Product should maybe be functorized once more to represent this. Maybe not
-   because product also contains a kind which we don't want in that case. Also
-   the closure_types and closure_var_types products shouldn't have to store the
-   kind because it is always the same. *)
 and closures_entry =
   { function_decls : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
     closure_types : closure_id_indexed_product;
@@ -140,7 +139,7 @@ and function_type =
 
 and env_extension = { equations : t Name.Map.t } [@@unboxed]
 
-let rec apply_renaming t renaming =
+let apply_renaming t renaming =
   match t with
   | Value ty ->
     let ty' = TD.apply_renaming ty renaming in
@@ -153,13 +152,20 @@ let rec apply_renaming t renaming =
     let ty' = TD.apply_renaming ty renaming in
     if ty == ty' then t else Rec_info ty'
 
-and apply_renaming_head_of_kind_value head renaming =
+let rec apply_renaming_head_of_kind_value head renaming =
   match head with
-  | Variant { blocks; immediates; is_unique } -> (
-    match apply_renaming_variant blocks immediates renaming with
-    | None -> head
-    | Some (blocks, immediates) ->
-      Variant (create_variant ~is_unique ~blocks ~immediates))
+  | Variant { blocks; immediates; is_unique } ->
+    let immediates' =
+      Or_unknown.map immediates ~f:(fun immediates ->
+          apply_renaming immediates renaming)
+    in
+    let blocks' =
+      Or_unknown.map blocks ~f:(fun blocks ->
+          apply_renaming_row_like_for_blocks blocks renaming)
+    in
+    if immediates == immediates' && blocks == blocks'
+    then head
+    else Variant { is_unique; blocks = blocks'; immediates = immediates' }
   | Boxed_float ty ->
     let ty' = apply_renaming ty renaming in
     if ty == ty' then head else Boxed_float ty'
@@ -184,18 +190,6 @@ and apply_renaming_head_of_kind_value head renaming =
     let length' = apply_renaming length renaming in
     if length == length' then head else Array { length = length' }
 
-and apply_renaming_variant blocks immediates perm =
-  let immediates' =
-    Or_unknown.map immediates ~f:(fun immediates ->
-        apply_renaming immediates perm)
-  in
-  let blocks' =
-    Or_unknown.map blocks ~f:(fun blocks -> apply_renaming_blocks blocks perm)
-  in
-  if immediates == immediates' && blocks == blocks'
-  then None
-  else Some (blocks', immediates')
-
 and apply_renaming_head_of_kind_naked_immediate head renaming =
   match head with
   | Naked_immediates _ -> head
@@ -206,33 +200,133 @@ and apply_renaming_head_of_kind_naked_immediate head renaming =
     let ty' = apply_renaming ty renaming in
     if ty == ty' then head else Get_tag ty'
 
-and apply_renaming_row_like ({ known_tags; other_tags } as t) renaming =
+and apply_renaming_row_like :
+      'index 'maps_to 'known.
+      apply_renaming_index:('index -> Renaming.t -> 'index) ->
+      apply_renaming_maps_to:('maps_to -> Renaming.t -> 'maps_to) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      map_known:
+        ((('index, 'maps_to) row_like_case -> ('index, 'maps_to) row_like_case) ->
+        'known ->
+        'known) ->
+      Renaming.t ->
+      ('known * ('index, 'maps_to) row_like_case Or_bottom.t) option =
+ fun ~apply_renaming_index ~apply_renaming_maps_to ~known ~other ~map_known
+     renaming ->
   let rename_index = function
-    | Known index -> Known (Index.apply_renaming index renaming)
-    | At_least index -> At_least (Index.apply_renaming index renaming)
+    | Known index -> Known (apply_renaming_index index renaming)
+    | At_least index -> At_least (apply_renaming_index index renaming)
   in
-  let known_tags' =
-    Tag.Map.map_sharing
+  let known' =
+    map_known
       (fun { index; maps_to; env_extension } ->
         { index = rename_index index;
           env_extension = apply_renaming_env_extension env_extension renaming;
-          maps_to = Maps_to.apply_renaming maps_to renaming
+          maps_to = apply_renaming_maps_to maps_to renaming
         })
-      known_tags
+      known
   in
-  let other_tags' : _ Or_bottom.t =
-    match other_tags with
+  let other' : _ Or_bottom.t =
+    match other with
     | Bottom -> Bottom
     | Ok { index; maps_to; env_extension } ->
       Ok
         { index = rename_index index;
           env_extension = apply_renaming_env_extension env_extension renaming;
-          maps_to = Maps_to.apply_renaming maps_to renaming
+          maps_to = apply_renaming_maps_to maps_to renaming
         }
   in
-  if known_tags == known_tags' && other_tags == other_tags'
-  then t
-  else { known_tags = known_tags'; other_tags = other_tags' }
+  if known == known' && other == other' then None else Some (known', other')
+
+and apply_renaming_row_like_for_blocks
+    ({ known_tags; other_tags } as row_like_for_tags) renaming =
+  match
+    apply_renaming_row_like
+      ~apply_renaming_index:(fun block_size _ -> block_size)
+      ~apply_renaming_maps_to:apply_renaming_int_indexed_product
+      ~known:known_tags ~other:other_tags ~map_known:Tag.Map.map_sharing
+      renaming
+  with
+  | None -> row_like_for_tags
+  | Some (known_tags, other_tags) -> { known_tags; other_tags }
+
+and apply_renaming_row_like_for_closures
+    ({ known_closures; other_closures } as row_like_for_closures) renaming =
+  match
+    apply_renaming_row_like
+      ~apply_renaming_index:Set_of_closures_contents.apply_renaming
+      ~apply_renaming_maps_to:apply_renaming_closures_entry
+      ~known:known_closures ~other:other_closures
+      ~map_known:Closure_id.Map.map_sharing renaming
+  with
+  | None -> row_like_for_closures
+  | Some (known_closures, other_closures) -> { known_closures; other_closures }
+
+and apply_renaming_closures_entry
+    { function_decls; closure_types; closure_var_types } renaming =
+  { function_decls =
+      Closure_id.Map.map_sharing
+        (fun function_type ->
+          Or_unknown_or_bottom.map function_type ~f:(fun function_type ->
+              apply_renaming_function_type function_type renaming))
+        function_decls;
+    closure_types =
+      apply_renaming_closure_id_indexed_product closure_types renaming;
+    closure_var_types =
+      apply_renaming_var_within_closure_indexed_product closure_var_types
+        renaming
+  }
+
+and apply_renaming_closure_id_indexed_product { closure_id_components_by_index }
+    renaming =
+  let closure_id_components_by_index =
+    Closure_id.Map.map_sharing
+      (fun ty -> apply_renaming ty renaming)
+      closure_id_components_by_index
+  in
+  { closure_id_components_by_index }
+
+and apply_renaming_var_within_closure_indexed_product
+    { var_within_closure_components_by_index } renaming =
+  let var_within_closure_components_by_index =
+    (* CR-someday mshinwell: some loss of sharing here, potentially *)
+    Var_within_closure.Map.filter_map
+      (fun closure_var ty ->
+        if not (Renaming.closure_var_is_used renaming closure_var)
+        then None
+        else Some (apply_renaming ty renaming))
+      var_within_closure_components_by_index
+  in
+  { var_within_closure_components_by_index }
+
+and apply_renaming_int_indexed_product { fields; kind } renaming =
+  let fields = Array.copy fields in
+  for i = 0 to Array.length fields - 1 do
+    fields.(i) <- apply_renaming fields.(i) renaming
+  done;
+  { fields; kind }
+
+and apply_renaming_function_type ({ code_id; rec_info } as function_type)
+    renaming =
+  let code_id' = Renaming.apply_code_id renaming code_id in
+  let rec_info' = apply_renaming rec_info renaming in
+  if code_id == code_id' && rec_info == rec_info'
+  then function_type
+  else { code_id = code_id'; rec_info = rec_info' }
+
+and apply_renaming_env_extension ({ equations } as env_extension) renaming =
+  let changed = ref false in
+  let equations' =
+    Name.Map.fold
+      (fun name ty acc ->
+        let ty' = apply_renaming ty renaming in
+        let name' = Renaming.apply_name renaming name in
+        if not (ty == ty' && name == name') then changed := true;
+        Name.Map.add name' ty' acc)
+      equations Name.Map.empty
+  in
+  if !changed then { equations = equations' } else env_extension
 
 let rec free_names t =
   match t with
@@ -253,7 +347,7 @@ and free_names_head_of_kind_value head =
   match head with
   | Variant { blocks; immediates; is_unique = _ } ->
     Name_occurrences.union
-      (Or_unknown.free_names free_names_blocks blocks)
+      (Or_unknown.free_names free_names_row_like_for_blocks blocks)
       (Or_unknown.free_names free_names immediates)
   | Boxed_float ty -> free_names ty
   | Boxed_int32 ty -> free_names ty
@@ -268,22 +362,88 @@ and free_names_head_of_kind_naked_immediate head =
   | Naked_immediates _ -> Name_occurrences.empty
   | Is_int ty | Get_tag ty -> free_names ty
 
-and free_names_row_like { known_tags; other_tags } =
-  let from_known_tags =
-    Tag.Map.fold
-      (fun _tag { maps_to; env_extension; index = _ } free_names ->
+and free_names_row_like :
+      'row_tag 'index 'maps_to 'known.
+      free_names_maps_to:('maps_to -> Name_occurrences.t) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      fold_known:
+        (('row_tag -> ('index, 'maps_to) row_like_case -> 'acc -> 'acc) ->
+        'known ->
+        'acc ->
+        'acc) ->
+      Name_occurrences.t =
+ fun ~free_names_maps_to ~known ~other ~fold_known ->
+  let from_known =
+    fold_known
+      (fun _ { maps_to; env_extension; index = _ } free_names ->
         Name_occurrences.union free_names
           (Name_occurrences.union
-             (TEE.free_names env_extension)
-             (Maps_to.free_names maps_to)))
-      known_tags Name_occurrences.empty
+             (free_names_env_extension env_extension)
+             (free_names_maps_to maps_to)))
+      known Name_occurrences.empty
   in
-  match other_tags with
-  | Bottom -> from_known_tags
+  match other with
+  | Bottom -> from_known
   | Ok { maps_to; env_extension; index = _ } ->
     Name_occurrences.union
-      (Maps_to.free_names maps_to)
-      (Name_occurrences.union from_known_tags (TEE.free_names env_extension))
+      (free_names_maps_to maps_to)
+      (Name_occurrences.union from_known
+         (free_names_env_extension env_extension))
+
+and free_names_row_like_for_blocks { known_tags; other_tags } =
+  free_names_row_like ~free_names_maps_to:free_names_int_indexed_product
+    ~known:known_tags ~other:other_tags ~fold_known:Tag.Map.fold
+
+and free_names_row_like_for_closures { known_closures; other_closures } =
+  free_names_row_like ~free_names_maps_to:free_names_closures_entry
+    ~known:known_closures ~other:other_closures ~fold_known:Closure_id.Map.fold
+
+and free_names_closures_entry
+    { function_decls; closure_types; closure_var_types } =
+  let function_decls_free_names =
+    Closure_id.Map.fold
+      (fun _closure_id function_decl free_names ->
+        Name_occurrences.union free_names
+          (free_names_function_type function_decl))
+      function_decls Name_occurrences.empty
+  in
+  Name_occurrences.union function_decls_free_names
+    (Name_occurrences.union
+       (free_names_closure_id_indexed_product closure_types)
+       (free_names_var_within_closure_indexed_product closure_var_types))
+
+and free_names_closure_id_indexed_product { closure_id_components_by_index } =
+  Closure_id.Map.fold
+    (fun _ t free_names_acc ->
+      Name_occurrences.union (free_names t) free_names_acc)
+    closure_id_components_by_index Name_occurrences.empty
+
+and free_names_var_within_closure_indexed_product
+    { var_within_closure_components_by_index } =
+  Var_within_closure.Map.fold
+    (fun _ t free_names_acc ->
+      Name_occurrences.union (free_names t) free_names_acc)
+    var_within_closure_components_by_index Name_occurrences.empty
+
+and free_names_int_indexed_product { fields; kind = _ } =
+  Array.fold_left
+    (fun free_names_acc t ->
+      Name_occurrences.union (free_names t) free_names_acc)
+    Name_occurrences.empty fields
+
+and free_names_function_type (function_type : _ Or_unknown_or_bottom.t) =
+  match function_type with
+  | Bottom | Unknown -> Name_occurrences.empty
+  | Ok { code_id; rec_info } ->
+    Name_occurrences.add_code_id (free_names rec_info) code_id Name_mode.normal
+
+and free_names_env_extension { equations } =
+  Name.Map.fold
+    (fun name t acc ->
+      let acc = Name_occurrences.union acc (free_names t) in
+      Name_occurrences.add_name acc name Name_mode.in_types)
+    equations Name_occurrences.empty
 
 let rec print ppf t =
   let no_renaming thing _ = thing in
@@ -336,16 +496,14 @@ and print_head_of_kind_value ppf head =
       "@[<hov 1>(Variant%s@ @[<hov 1>(blocks@ %a)@]@ @[<hov 1>(tagged_imms@ \
        %a)@])@]"
       (if is_unique then " unique" else "")
-      (Or_unknown.print Blocks.print)
-      blocks (Or_unknown.print T.print) immediates
+      (Or_unknown.print print_row_like_for_blocks)
+      blocks (Or_unknown.print print) immediates
   | Boxed_float ty -> Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a)@]" print ty
   | Boxed_int32 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int32@ %a)@]" print ty
   | Boxed_int64 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a)@]" print ty
   | Boxed_nativeint ty ->
     Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a)@]" print ty
-  | Closures { by_closure_id } ->
-    Row_like.For_closures_entry_by_set_of_closures_contents.print ppf
-      by_closure_id
+  | Closures { by_closure_id } -> print_row_like_for_closures by_closure_id
   | String str_infos ->
     Format.fprintf ppf "@[<hov 1>(Strings@ (%a))@]" String_info.Set.print
       str_infos
@@ -374,8 +532,7 @@ and print_head_of_kind_naked_nativeint ppf head =
 
 and print_head_of_kind_rec_info ppf head = Rec_info_expr.print ppf head
 
-and [@ocamlformat "disable"] print_row_like ppf
-    (({ known_tags; other_tags } as t) : t) =
+and [@ocamlformat "disable"] print_row_like ~print_index ppf ~known ~other =
   let print_index ppf = function
     | Known index -> Format.fprintf ppf "(Known @[<2>%a@])" Index.print index
     | At_least min_index ->
@@ -391,53 +548,91 @@ and [@ocamlformat "disable"] print_row_like ppf
       Format.fprintf ppf "%s_|_%s" colour (Flambda_colours.normal ())
   else
     let pp_env_extension ppf env_extension =
-      if not (TEE.is_empty env_extension) then
-        Format.fprintf ppf "@ %a" TEE.print env_extension
+      if not (Name.Map.is_empty env_extension.equations) then
+        Format.fprintf ppf "@ %a" print_env_extension env_extension
     in
     let [@ocamlformat "disable"] print ppf { maps_to; index; env_extension } =
       Format.fprintf ppf "=> %a,@ %a%a"
         print_index index
-        Maps_to.print maps_to
+        print_maps_to maps_to
         pp_env_extension env_extension
     in
     Format.fprintf ppf
       "@[<hov 1>(\
-         @[<hov 1>(known_tags@ %a)@]@ \
-         @[<hov 1>(other_tags@ %a)@]\
+         @[<hov 1>(known@ %a)@]@ \
+         @[<hov 1>(other@ %a)@]\
          )@]"
-      (Tag.Map.print print) known_tags
-      (Or_bottom.print print) other_tags
+      (Tag.Map.print print) known
+      (Or_bottom.print print) other
+
+and [@ocamlformat "disable"] print_closures_entry ppf
+      { function_decls; closure_types; closure_var_types; } =
+  Format.fprintf ppf
+    "@[<hov 1>(\
+      @[<hov 1>(function_decls@ %a)@]@ \
+      @[<hov 1>(closure_types@ %a)@]@ \
+      @[<hov 1>(closure_var_types@ %a)@]\
+      )@]"
+    (Closure_id.Map.print print_function_type) function_decls
+    print_closure_id_indexed_product closure_types
+    print_var_within_closure_indexed_product closure_var_types
 
 let rec all_ids_for_export t =
+  let no_renaming thing _ = thing in
+  let no_free_names _ = Name_occurrences.empty in
+  let no_ids_for_export _ = Ids_for_export.empty in
   match t with
-  | Value ty -> TD.all_ids_for_export ty
-  | Naked_immediate ty -> TD.all_ids_for_export ty
-  | Naked_float ty -> T_Nf.all_ids_for_export ty
-  | Naked_int32 ty -> T_N32.all_ids_for_export ty
-  | Naked_int64 ty -> T_N64.all_ids_for_export ty
-  | Naked_nativeint ty -> TD.all_ids_for_export ty
+  | Value ty ->
+    TD.all_ids_for_export ~apply_renaming_head:apply_renaming_head_of_kind_value
+      ~free_names_head:free_names_head_of_kind_value
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_value ty
+  | Naked_immediate ty ->
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+      ~free_names_head:free_names_head_of_kind_naked_immediate
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_naked_immediate
+      ty
+  | Naked_float ty ->
+    TD.all_ids_for_export ~apply_renaming_head:no_renaming
+      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
+      ty
+  | Naked_int32 ty ->
+    TD.all_ids_for_export ~apply_renaming_head:no_renaming
+      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
+      ty
+  | Naked_int64 ty ->
+    TD.all_ids_for_export ~apply_renaming_head:no_renaming
+      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
+      ty
+  | Naked_nativeint ty ->
+    TD.all_ids_for_export ~apply_renaming_head:no_renaming
+      ~free_names_head:no_free_names ~all_ids_for_export_head:no_ids_for_export
+      ty
+  | Rec_info ty ->
+    TD.all_ids_for_export ~apply_renaming_head:Rec_info_expr.apply_renaming
+      ~free_names_head:Rec_info_expr.free_names
+      ~all_ids_for_export_head:Rec_info_expr.all_ids_for_export ty
 
 and all_ids_for_export_head_of_kind_value head =
   match head with
   | Variant { blocks; immediates; is_unique = _ } ->
     Ids_for_export.union
-      (Or_unknown.all_ids_for_export Blocks.all_ids_for_export blocks)
-      (Or_unknown.all_ids_for_export T.all_ids_for_export immediates)
-  | Boxed_float ty -> T.all_ids_for_export ty
-  | Boxed_int32 ty -> T.all_ids_for_export ty
-  | Boxed_int64 ty -> T.all_ids_for_export ty
-  | Boxed_nativeint ty -> T.all_ids_for_export ty
+      (Or_unknown.all_ids_for_export all_ids_for_export_row_like_for_blocks
+         blocks)
+      (Or_unknown.all_ids_for_export all_ids_for_export immediates)
+  | Boxed_float t -> all_ids_for_export t
+  | Boxed_int32 t -> all_ids_for_export t
+  | Boxed_int64 t -> all_ids_for_export t
+  | Boxed_nativeint t -> all_ids_for_export t
   | Closures { by_closure_id } ->
-    Row_like.For_closures_entry_by_set_of_closures_contents.all_ids_for_export
-      by_closure_id
+    all_ids_for_export_row_like_for_closures by_closure_id
   | String _ -> Ids_for_export.empty
-  | Array { length } -> T.all_ids_for_export length
-  | Rec_info ty -> TD.all_ids_for_export ty
+  | Array { length } -> all_ids_for_export length
 
 and all_ids_for_export_head_of_kind_naked_immediate head =
-  match t with
+  match head with
   | Naked_immediates _ -> Ids_for_export.empty
-  | Is_int ty | Get_tag ty -> T.all_ids_for_export ty
+  | Is_int t | Get_tag t -> all_ids_for_export t
 
 and all_ids_for_export_row_like { known_tags; other_tags } =
   let from_known_tags =
@@ -456,6 +651,19 @@ and all_ids_for_export_row_like { known_tags; other_tags } =
       (Maps_to.all_ids_for_export maps_to)
       (Ids_for_export.union from_known_tags
          (TEE.all_ids_for_export env_extension))
+
+and all_ids_for_export_closures_entry
+    { function_decls; closure_types; closure_var_types } =
+  let function_decls_ids =
+    Closure_id.Map.fold
+      (fun _closure_id function_decl ids ->
+        Ids_for_export.union ids (FDT.all_ids_for_export function_decl))
+      function_decls Ids_for_export.empty
+  in
+  Ids_for_export.union function_decls_ids
+    (Ids_for_export.union
+       (PC.all_ids_for_export closure_types)
+       (PV.all_ids_for_export closure_var_types))
 
 let rec apply_coercion t coercion : t Or_bottom.t =
   match t with
@@ -498,13 +706,60 @@ and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   | Boxed_nativeint _ | String _ | Array _ ->
     if Coercion.is_id coercion then Ok t else Bottom
 
-let kind _ = ()
+and apply_coercion_closures_entry
+    { function_decls; closure_types; closure_var_types } coercion :
+    _ Or_bottom.t =
+  (* CR mshinwell: This needs to deal with [closure_types] too. Deferring until
+     new approach for [Rec_info] is sorted out. *)
+  let bottom = ref false in
+  let function_decls =
+    Closure_id.Map.map
+      (fun function_decl ->
+        match f function_decl with
+        | Ok function_decl -> function_decl
+        | Bottom ->
+          bottom := true;
+          function_decl)
+      function_decls
+  in
+  if !bottom
+  then Bottom
+  else
+    let t = { function_decls; closure_types; closure_var_types } in
+    Ok t
 
-let create_variant ~is_unique ~immediates ~blocks =
+and apply_coercion_function_type
+    (function_type : function_type Or_unknown_or_bottom.t)
+    (coercion : Coercion.t) : t Or_bottom.t =
+  match coercion with
+  | Id -> Ok function_type
+  | Change_depth { from; to_ } -> (
+    match function_type with
+    | Unknown | Bottom -> Ok function_type
+    | Ok ({ rec_info; _ } as t0) ->
+      (* CR lmaurer: We should really be checking that [from] matches the
+         current [rec_info], but that requires either passing in a typing
+         environment or making absolutely sure that rec_infos get
+         canonicalized. *)
+      ignore (from, rec_info);
+      let rec_info = Type_grammar.this_rec_info to_ in
+      Ok (Ok { t0 with rec_info }))
+
+let kind t =
+  match t with
+  | Value _ -> K.value
+  | Naked_immediate _ -> K.naked_immediate
+  | Naked_float _ -> K.naked_float
+  | Naked_int32 _ -> K.naked_int32
+  | Naked_int64 _ -> K.naked_int64
+  | Naked_nativeint _ -> K.naked_nativeint
+  | Rec_info _ -> K.rec_info
+
+let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks =
   begin
     match immediates with
-    | Or_unknown.Unknown -> ()
-    | Or_unknown.Known immediates ->
+    | Unknown -> ()
+    | Known immediates ->
       if not (K.equal (kind immediates) K.naked_immediate)
       then
         Misc.fatal_errorf
@@ -512,7 +767,7 @@ let create_variant ~is_unique ~immediates ~blocks =
            [Naked_immediate]:@ %a"
           print immediates
   end;
-  Variant { immediates; blocks; is_unique }
+  Value (TD.create (Variant { immediates; blocks; is_unique }))
 
 module Row_like = struct
   let create_bottom () = { known_tags = Tag.Map.empty; other_tags = Bottom }
@@ -520,21 +775,31 @@ module Row_like = struct
   let create_exactly tag index maps_to =
     { known_tags =
         Tag.Map.singleton tag
-          { maps_to; index = Known index; env_extension = TEE.empty () };
+          { maps_to;
+            index = Known index;
+            env_extension = { equations = Name.Map.empty }
+          };
       other_tags = Bottom
     }
 
   let create_at_least tag index maps_to =
     { known_tags =
         Tag.Map.singleton tag
-          { maps_to; index = At_least index; env_extension = TEE.empty () };
+          { maps_to;
+            index = At_least index;
+            env_extension = { equations = Name.Map.empty }
+          };
       other_tags = Bottom
     }
 
   let create_at_least_unknown_tag index maps_to =
     { known_tags = Tag.Map.empty;
       other_tags =
-        Ok { maps_to; index = At_least index; env_extension = TEE.empty () }
+        Ok
+          { maps_to;
+            index = At_least index;
+            env_extension = { equations = Name.Map.empty }
+          }
     }
 
   let is_bottom { known_tags; other_tags } =
@@ -581,6 +846,229 @@ module Row_like = struct
     in
     let result = { known_tags; other_tags } in
     if is_bottom result then Bottom else Ok result
+end
+
+module Row_like_for_blocks = struct
+  module Tag_or_unknown = Tag_or_unknown_and_size.Tag_or_unknown
+
+  type open_or_closed =
+    | Open of Tag.t Or_unknown.t
+    | Closed of Tag.t
+
+  let create ~(field_kind : Flambda_kind.t) ~field_tys
+      (open_or_closed : open_or_closed) =
+    let field_kind' =
+      List.map Type_grammar.kind field_tys
+      |> Flambda_kind.Set.of_list |> Flambda_kind.Set.get_singleton
+    in
+    (* CR pchambart: move to invariant check *)
+    begin
+      match field_kind' with
+      | None ->
+        if List.length field_tys <> 0
+        then Misc.fatal_error "[field_tys] must all be of the same kind"
+      | Some field_kind' ->
+        if not (Flambda_kind.equal field_kind field_kind')
+        then
+          Misc.fatal_errorf "Declared field kind %a doesn't match [field_tys]"
+            Flambda_kind.print field_kind
+    end;
+
+    let tag : _ Or_unknown.t =
+      let tag : _ Or_unknown.t =
+        match open_or_closed with
+        | Open (Known tag) -> Known tag
+        | Open Unknown -> Unknown
+        | Closed tag -> Known tag
+      in
+      match tag with
+      | Unknown -> begin
+        match field_kind with
+        | Value -> Unknown
+        | Naked_number Naked_float -> Known Tag.double_array_tag
+        | Naked_number Naked_immediate
+        | Naked_number Naked_int32
+        | Naked_number Naked_int64
+        | Naked_number Naked_nativeint
+        | Fabricated | Rec_info ->
+          Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
+            field_kind
+      end
+      | Known tag -> begin
+        match field_kind with
+        | Value -> begin
+          match Tag.Scannable.of_tag tag with
+          | Some _ -> Known tag
+          | None ->
+            Misc.fatal_error
+              "Blocks full of [Value]s must have a tag less than [No_scan_tag]"
+        end
+        | Naked_number Naked_float ->
+          if not (Tag.equal tag Tag.double_array_tag)
+          then
+            Misc.fatal_error
+              "Blocks full of naked floats must have tag [Tag.double_array_tag]";
+          Known tag
+        | Naked_number Naked_immediate
+        | Naked_number Naked_int32
+        | Naked_number Naked_int64
+        | Naked_number Naked_nativeint
+        | Fabricated | Rec_info ->
+          Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
+            field_kind
+      end
+    in
+    let product = Product.Int_indexed.create_from_list field_kind field_tys in
+    let size = Targetint_31_63.Imm.of_int (List.length field_tys) in
+    match open_or_closed with
+    | Open _ -> begin
+      match tag with
+      | Known tag -> Row_like.create_at_least tag size product
+      | Unknown -> Row_like.create_at_least_unknown_tag size product
+    end
+    | Closed _ -> (
+      match tag with
+      | Known tag -> Row_like.create_exactly tag size product
+      | Unknown -> assert false)
+  (* see above *)
+
+  let create_blocks_with_these_tags ~field_kind tags =
+    let maps_to = Product.Int_indexed.create_top field_kind in
+    let case =
+      { maps_to;
+        index = At_least Targetint_31_63.Imm.zero;
+        env_extension = { equations = Name.Map.empty }
+      }
+    in
+    { known_tags = Tag.Map.of_set (fun _ -> case) tags; other_tags = Bottom }
+
+  let create_exactly_multiple ~field_tys_by_tag =
+    let known_tags =
+      Tag.Map.map
+        (fun field_tys ->
+          (* CR mshinwell: Validate [field_tys] like [create] does, above *)
+          let field_kind =
+            match field_tys with
+            | [] -> Flambda_kind.value
+            | field_ty :: _ -> Type_grammar.kind field_ty
+          in
+          let maps_to =
+            Product.Int_indexed.create_from_list field_kind field_tys
+          in
+          let size = Targetint_31_63.Imm.of_int (List.length field_tys) in
+          { maps_to;
+            index = Known size;
+            env_extension = { equations = Name.Map.empty }
+          })
+        field_tys_by_tag
+    in
+    { known_tags; other_tags = Bottom }
+
+  let all_tags_and_sizes t : Targetint_31_63.Imm.t Tag.Map.t Or_unknown.t =
+    match Row_like.all_tags_and_indexes t with
+    | Unknown -> Unknown
+    | Known tags_and_indexes ->
+      let any_unknown = ref false in
+      let by_tag =
+        Tag.Map.map
+          (fun index ->
+            match index with
+            | Known index -> index
+            | At_least index ->
+              any_unknown := true;
+              index)
+          tags_and_indexes
+      in
+      if !any_unknown then Unknown else Known by_tag
+
+  let get_field t field_index : _ Or_unknown_or_bottom.t =
+    match get_singleton t with
+    | None -> Unknown
+    | Some ((_tag, size), maps_to) -> (
+      let index = Targetint_31_63.to_targetint field_index in
+      if Targetint_31_63.Imm.( <= ) size index
+      then Bottom
+      else
+        match
+          Product.Int_indexed.project maps_to (Targetint_31_63.Imm.to_int index)
+        with
+        | Unknown -> Unknown
+        | Known res -> Ok res)
+
+  let get_variant_field t variant_tag field_index : _ Or_unknown_or_bottom.t =
+    let index = Targetint_31_63.to_targetint field_index in
+    let aux { index = size; maps_to; env_extension = _ } :
+        _ Or_unknown_or_bottom.t =
+      match size with
+      | Known i when i <= index -> Bottom
+      | _ -> (
+        match
+          Product.Int_indexed.project maps_to (Targetint_31_63.Imm.to_int index)
+        with
+        | Unknown -> Unknown
+        | Known res -> Ok res)
+    in
+    match Tag.Map.find variant_tag t.known_tags with
+    | case -> aux case
+    | exception Not_found -> begin
+      match t.other_tags with Bottom -> Bottom | Ok case -> aux case
+    end
+end
+
+module Row_like_for_closures = struct
+  let map_function_decl_types t ~f =
+    Row_like.map_maps_to t ~f:(fun closures_entry ->
+        Closures_entry.map_function_decl_types closures_entry ~f)
+
+  let map_closure_types t ~f =
+    Row_like.map_maps_to t ~f:(fun closures_entry ->
+        Closures_entry.map_closure_types closures_entry ~f)
+
+  let create_exactly (closure_id : Closure_id.t)
+      (contents : Set_of_closures_contents.t)
+      (closures_entry : Closures_entry.t) : t =
+    let known_tags =
+      Closure_id.Map.singleton closure_id
+        { index = Known contents;
+          maps_to = closures_entry;
+          env_extension = { equations = Name.Map.empty }
+        }
+    in
+    { known_tags; other_tags = Bottom }
+
+  let create_at_least (closure_id : Closure_id.t)
+      (contents : Set_of_closures_contents.t)
+      (closures_entry : Closures_entry.t) : t =
+    let known_tags =
+      Closure_id.Map.singleton closure_id
+        { index = At_least contents;
+          maps_to = closures_entry;
+          env_extension = { equations = Name.Map.empty }
+        }
+    in
+    { known_tags; other_tags = Bottom }
+
+  let get_env_var t env_var : _ Or_unknown.t =
+    match get_singleton t with
+    | None -> Unknown
+    | Some ((_tag, index), maps_to) ->
+      if not
+           (Var_within_closure.Set.mem env_var
+              (Set_of_closures_contents.closure_vars index))
+      then Unknown
+      else
+        let env_var_ty =
+          try
+            Var_within_closure.Map.find env_var
+              (Closures_entry.closure_var_types maps_to)
+          with Not_found ->
+            Misc.fatal_errorf
+              "Environment variable %a is bound in index but not in \
+               maps_to@.Index:@ %a@.Maps_to:@ %a"
+              Var_within_closure.print env_var Set_of_closures_contents.print
+              index Closures_entry.print maps_to
+        in
+        Known env_var_ty
 end
 
 let force_to_kind_value t =
@@ -638,7 +1126,7 @@ let force_to_kind_rec_info t =
     Misc.fatal_errorf "Type has wrong kind (expected [Rec_info]):@ %a" print t
 
 let force_to_head ~force_to_kind t =
-  match descr (force_to_kind t) with
+  match TD.descr (force_to_kind t) with
   | No_alias head -> head
   | Equals _ -> Misc.fatal_errorf "Expected [No_alias]:@ %a" T.print t
 
@@ -654,19 +1142,18 @@ let kind t =
 
 let get_alias_exn t =
   match t with
-  | Value ty -> TD.get_alias_exn ty
-  | Naked_immediate ty -> TD.get_alias_exn ty
-  | Naked_float ty -> T_Nf.get_alias_exn ty
-  | Naked_int32 ty -> T_N32.get_alias_exn ty
-  | Naked_int64 ty -> T_N64.get_alias_exn ty
+  | Value ty ->
+    TD.get_alias_exn ty ~apply_renaming_head:apply_renaming_head_of_kind_value
+      ~free_names_head:free_names_head_of_kind_value
+  | Naked_immediate ty ->
+    TD.get_alias_exn ty
+      ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+      ~free_names_head:free_names_head_of_kind_naked_immediate
+  | Naked_float ty -> TD.get_alias_exn ty
+  | Naked_int32 ty -> TD.get_alias_exn ty
+  | Naked_int64 ty -> TD.get_alias_exn ty
   | Naked_nativeint ty -> TD.get_alias_exn ty
   | Rec_info ty -> TD.get_alias_exn ty
-
-(* CR mshinwell: We should have transformations and invariant checks to enforce
-   that, when a type can be expressed just using [Equals] (e.g. to a tagged
-   immediate [Simple]), then it should be. In the tagged immediate case this
-   would mean forbidding Variant with only a single immediate. Although this
-   state needs to exist during [meet] or whenever heads are expanded. *)
 
 let is_obviously_bottom t =
   match t with
@@ -754,24 +1241,19 @@ let unknown (kind : K.t) =
 let unknown_like t = unknown (kind t)
 
 let this_naked_immediate i : t =
-  Naked_immediate
-    (TD.create_equals (Simple.const (Reg_width_const.naked_immediate i)))
+  Naked_immediate (TD.create_equals (Simple.const (RWC.naked_immediate i)))
 
 let this_naked_float f : t =
-  Naked_float
-    (T_Nf.create_equals (Simple.const (Reg_width_const.naked_float f)))
+  Naked_float (TD.create_equals (Simple.const (RWC.naked_float f)))
 
 let this_naked_int32 i : t =
-  Naked_int32
-    (T_N32.create_equals (Simple.const (Reg_width_const.naked_int32 i)))
+  Naked_int32 (TD.create_equals (Simple.const (RWC.naked_int32 i)))
 
 let this_naked_int64 i : t =
-  Naked_int64
-    (T_N64.create_equals (Simple.const (Reg_width_const.naked_int64 i)))
+  Naked_int64 (TD.create_equals (Simple.const (RWC.naked_int64 i)))
 
 let this_naked_nativeint i : t =
-  Naked_nativeint
-    (TD.create_equals (Simple.const (Reg_width_const.naked_nativeint i)))
+  Naked_nativeint (TD.create_equals (Simple.const (RWC.naked_nativeint i)))
 
 let these_naked_immediates0 ~no_alias is =
   match Targetint_31_63.Set.get_singleton is with
@@ -779,7 +1261,7 @@ let these_naked_immediates0 ~no_alias is =
   | _ ->
     if Targetint_31_63.Set.is_empty is
     then bottom K.naked_immediate
-    else Naked_immediate (TD.create (Ok (Naked_immediates is)))
+    else Naked_immediate (TD.create (Naked_immediates is))
 
 let these_naked_floats0 ~no_alias fs =
   match Float.Set.get_singleton fs with
@@ -787,7 +1269,7 @@ let these_naked_floats0 ~no_alias fs =
   | _ ->
     if Float.Set.is_empty fs
     then bottom K.naked_float
-    else Naked_float (T_Nf.create (Ok fs))
+    else Naked_float (TD.create fs)
 
 let these_naked_int32s0 ~no_alias is =
   match Int32.Set.get_singleton is with
@@ -795,7 +1277,7 @@ let these_naked_int32s0 ~no_alias is =
   | _ ->
     if Int32.Set.is_empty is
     then bottom K.naked_int32
-    else Naked_int32 (T_N32.create (Ok is))
+    else Naked_int32 (TD.create is)
 
 let these_naked_int64s0 ~no_alias is =
   match Int64.Set.get_singleton is with
@@ -803,7 +1285,7 @@ let these_naked_int64s0 ~no_alias is =
   | _ ->
     if Int64.Set.is_empty is
     then bottom K.naked_int64
-    else Naked_int64 (T_N64.create (Ok is))
+    else Naked_int64 (TD.create is)
 
 let these_naked_nativeints0 ~no_alias is =
   match Targetint_32_64.Set.get_singleton is with
@@ -811,7 +1293,7 @@ let these_naked_nativeints0 ~no_alias is =
   | _ ->
     if Targetint_32_64.Set.is_empty is
     then bottom K.naked_nativeint
-    else Naked_nativeint (TD.create (Ok is))
+    else Naked_nativeint (TD.create is)
 
 let this_naked_immediate_without_alias i =
   these_naked_immediates0 ~no_alias:true (Targetint_31_63.Set.singleton i)
@@ -869,13 +1351,14 @@ let box_nativeint (t : t) : t =
 let any_tagged_immediate () : t =
   Value
     (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false ~immediates:Unknown
-                ~blocks:(Known (Row_like.For_blocks.create_bottom ()))))))
+       (Variant
+          { is_unique = false;
+            immediates = Unknown;
+            blocks = Known (Row_like.For_blocks.create_bottom ())
+          }))
 
 let this_tagged_immediate imm : t =
-  Value (TD.create_equals (Simple.const (Reg_width_const.tagged_immediate imm)))
+  Value (TD.create_equals (Simple.const (RWC.tagged_immediate imm)))
 
 let these_tagged_immediates0 ~no_alias imms : t =
   match Targetint_31_63.Set.get_singleton imms with
@@ -886,11 +1369,11 @@ let these_tagged_immediates0 ~no_alias imms : t =
     else
       Value
         (TD.create
-           (Ok
-              (Variant
-                 (Variant.create ~is_unique:false
-                    ~immediates:(Known (these_naked_immediates imms))
-                    ~blocks:(Known (Row_like.For_blocks.create_bottom ()))))))
+           (Variant
+              { is_unique = false;
+                immediates = Known (these_naked_immediates imms);
+                blocks = Known (Row_like.For_blocks.create_bottom ())
+              }))
 
 let these_tagged_immediates imms = these_tagged_immediates0 ~no_alias:false imms
 
@@ -902,10 +1385,11 @@ let tag_immediate t : t =
   | Naked_immediate _ ->
     Value
       (TD.create
-         (Ok
-            (Variant
-               (Variant.create ~is_unique:false ~immediates:(Known t)
-                  ~blocks:(Known (Row_like.For_blocks.create_bottom ()))))))
+         (Variant
+            { is_unique = false;
+              immediates = Known t;
+              blocks = Known (Row_like.For_blocks.create_bottom ())
+            }))
   | Value _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
   | Rec_info _ ->
     Misc.fatal_errorf "Type of wrong kind for [tag_immediate]: %a" print t
@@ -914,14 +1398,10 @@ let tagged_immediate_alias_to ~naked_immediate : t =
   tag_immediate
     (Naked_immediate (TD.create_equals (Simple.var naked_immediate)))
 
-let any_block () : t =
-  Value
-    (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false
-                ~immediates:(Known (bottom K.naked_immediate))
-                ~blocks:Unknown))))
+let any_block =
+  create_variant ~is_unique:false
+    ~immediates:(Known (bottom K.naked_immediate))
+    ~blocks:Unknown
 
 let is_int_for_scrutinee ~scrutinee : t =
   Naked_immediate (TD.create (Is_int (alias_type_of K.value scrutinee)))
@@ -929,9 +1409,9 @@ let is_int_for_scrutinee ~scrutinee : t =
 let get_tag_for_block ~block : t =
   Naked_immediate (TD.create (Get_tag (alias_type_of K.value block)))
 
-let any_tagged_bool () = these_tagged_immediates Targetint_31_63.all_bools
+let any_tagged_bool = these_tagged_immediates Targetint_31_63.all_bools
 
-let any_naked_bool () = these_naked_immediates Targetint_31_63.all_bools
+let any_naked_bool = these_naked_immediates Targetint_31_63.all_bools
 
 let this_boxed_float f = box_float (this_naked_float f)
 
@@ -950,21 +1430,22 @@ let these_boxed_int64s is = box_int64 (these_naked_int64s is)
 let these_boxed_nativeints is = box_nativeint (these_naked_nativeints is)
 
 let boxed_float_alias_to ~naked_float =
-  box_float (Naked_float (T_Nf.create_equals (Simple.var naked_float)))
+  box_float (Naked_float (TD.create_equals (Simple.var naked_float)))
 
 let boxed_int32_alias_to ~naked_int32 =
-  box_int32 (Naked_int32 (T_N32.create_equals (Simple.var naked_int32)))
+  box_int32 (Naked_int32 (TD.create_equals (Simple.var naked_int32)))
 
 let boxed_int64_alias_to ~naked_int64 =
-  box_int64 (Naked_int64 (T_N64.create_equals (Simple.var naked_int64)))
+  box_int64 (Naked_int64 (TD.create_equals (Simple.var naked_int64)))
 
 let boxed_nativeint_alias_to ~naked_nativeint =
   box_nativeint
     (Naked_nativeint (TD.create_equals (Simple.var naked_nativeint)))
 
 let blocks_with_these_tags tags : _ Or_unknown.t =
-  if Tag.Set.for_all Tag.is_structured_block tags
-  then
+  if not (Tag.Set.for_all Tag.is_structured_block tags)
+  then Unknown
+  else
     let blocks =
       Row_like.For_blocks.create_blocks_with_these_tags
         ~field_kind:Flambda_kind.value tags
@@ -974,12 +1455,11 @@ let blocks_with_these_tags tags : _ Or_unknown.t =
     Known
       (Value
          (TD.create
-            (Ok
-               (Variant
-                  (Variant.create ~is_unique:false
-                     ~immediates:(Known (bottom K.naked_immediate))
-                     ~blocks:(Known blocks))))))
-  else Unknown
+            (Variant
+               { is_unique = false;
+                 immediates = Known (bottom K.naked_immediate);
+                 blocks = Known blocks
+               })))
 
 let immutable_block ~is_unique tag ~field_kind ~fields =
   match Targetint_31_63.Imm.of_int_option (List.length fields) with
@@ -989,14 +1469,14 @@ let immutable_block ~is_unique tag ~field_kind ~fields =
   | Some _size ->
     Value
       (TD.create
-         (Ok
-            (Variant
-               (Variant.create ~is_unique
-                  ~immediates:(Known (bottom K.naked_immediate))
-                  ~blocks:
-                    (Known
-                       (Row_like.For_blocks.create ~field_kind ~field_tys:fields
-                          (Closed tag)))))))
+         (Variant
+            { is_unique;
+              immediates = Known (bottom K.naked_immediate);
+              blocks =
+                Known
+                  (Row_like.For_blocks.create ~field_kind ~field_tys:fields
+                     (Closed tag))
+            }))
 
 let immutable_block_with_size_at_least ~tag ~n ~field_kind ~field_n_minus_one =
   let n = Targetint_31_63.Imm.to_int n in
@@ -1008,14 +1488,13 @@ let immutable_block_with_size_at_least ~tag ~n ~field_kind ~field_n_minus_one =
   in
   Value
     (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false
-                ~immediates:(Known (bottom K.naked_immediate))
-                ~blocks:
-                  (Known
-                     (Row_like.For_blocks.create ~field_kind ~field_tys
-                        (Open tag)))))))
+       (Variant
+          { is_unique = false;
+            immediates = Known (bottom K.naked_immediate);
+            blocks =
+              Known
+                (Row_like.For_blocks.create ~field_kind ~field_tys (Open tag))
+          }))
 
 let variant ~const_ctors ~non_const_ctors =
   let blocks =
@@ -1027,38 +1506,26 @@ let variant ~const_ctors ~non_const_ctors =
     in
     Row_like.For_blocks.create_exactly_multiple ~field_tys_by_tag
   in
-  Value
-    (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false ~immediates:(Known const_ctors)
-                ~blocks:(Known blocks)))))
+  create_variant ~is_unique:false ~immediates:(Known const_ctors)
+    ~blocks:(Known blocks)
 
 let open_variant_from_const_ctors_type ~const_ctors =
-  Value
-    (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false ~immediates:(Known const_ctors)
-                ~blocks:Unknown))))
+  create_variant ~is_unique:false ~immediates:(Known const_ctors)
+    ~blocks:Unknown
 
 let open_variant_from_non_const_ctor_with_size_at_least ~n ~field_n_minus_one =
   let n = Targetint_31_63.Imm.to_int n in
   let field_tys =
     List.init n (fun index ->
         if index < n - 1
-        then any_value ()
+        then any_value
         else alias_type_of K.value (Simple.var field_n_minus_one))
   in
-  Value
-    (TD.create
-       (Ok
-          (Variant
-             (Variant.create ~is_unique:false ~immediates:Unknown
-                ~blocks:
-                  (Known
-                     (Row_like.For_blocks.create ~field_kind:K.value ~field_tys
-                        (Open Unknown)))))))
+  create_variant ~is_unique:false ~immediates:Unknown
+    ~blocks:
+      (Known
+         (Row_like.For_blocks.create ~field_kind:K.value ~field_tys
+            (Open Unknown)))
 
 let this_immutable_string str =
   (* CR mshinwell: Use "length" not "size" for strings *)
@@ -1077,13 +1544,13 @@ let mutable_string ~size =
   in
   Value (TD.create (String string_info))
 
-let any_boxed_float () = box_float (any_naked_float ())
+let any_boxed_float = box_float any_naked_float
 
-let any_boxed_int32 () = box_int32 (any_naked_int32 ())
+let any_boxed_int32 = box_int32 any_naked_int32
 
-let any_boxed_int64 () = box_int64 (any_naked_int64 ())
+let any_boxed_int64 = box_int64 any_naked_int64
 
-let any_boxed_nativeint () = box_nativeint (any_naked_nativeint ())
+let any_boxed_nativeint () = box_nativeint any_naked_nativeint
 
 let create_function_declaration code_id ~rec_info =
   Function_declaration_type.create code_id ~rec_info
@@ -1091,9 +1558,7 @@ let create_function_declaration code_id ~rec_info =
 let exactly_this_closure closure_id ~all_function_decls_in_set:function_decls
     ~all_closures_in_set:closure_types
     ~all_closure_vars_in_set:closure_var_types =
-  let closure_types =
-    Product.Closure_id_indexed.create Flambda_kind.value closure_types
-  in
+  let closure_types = { closure_id_components_by_index = closure_types } in
   let closures_entry =
     let closure_var_types =
       Product.Var_within_closure_indexed.create Flambda_kind.value
@@ -1113,7 +1578,7 @@ let exactly_this_closure closure_id ~all_function_decls_in_set:function_decls
   Value (TD.create (Closures { by_closure_id }))
 
 let at_least_the_closures_with_ids ~this_closure closure_ids_and_bindings =
-  let closure_ids_and_types =
+  let closure_id_components_by_index =
     Closure_id.Map.map
       (fun bound_to -> alias_type_of K.value bound_to)
       closure_ids_and_bindings
@@ -1123,18 +1588,18 @@ let at_least_the_closures_with_ids ~this_closure closure_ids_and_bindings =
       (fun _ -> Or_unknown_or_bottom.Unknown)
       closure_ids_and_bindings
   in
-  let closure_types =
-    Product.Closure_id_indexed.create Flambda_kind.value closure_ids_and_types
-  in
+  let closure_types = { closure_id_components_by_index } in
   let closures_entry =
-    Closures_entry.create ~function_decls ~closure_types
-      ~closure_var_types:
-        (Product.Var_within_closure_indexed.create_top Flambda_kind.value)
+    { function_decls;
+      closure_types;
+      closure_var_types =
+        Product.Var_within_closure_indexed.create_top Flambda_kind.value
+    }
   in
   let by_closure_id =
     let set_of_closures_contents =
       Set_of_closures_contents.create
-        (Closure_id.Map.keys closure_ids_and_types)
+        (Closure_id.Map.keys closure_id_components_by_index)
         Var_within_closure.Set.empty
     in
     Row_like.For_closures_entry_by_set_of_closures_contents.create_at_least
@@ -1145,13 +1610,16 @@ let at_least_the_closures_with_ids ~this_closure closure_ids_and_bindings =
 let closure_with_at_least_these_closure_vars ~this_closure closure_vars : t =
   let closure_var_types =
     let type_of_var v = alias_type_of K.value (Simple.var v) in
-    let map = Var_within_closure.Map.map type_of_var closure_vars in
-    Product.Var_within_closure_indexed.create Flambda_kind.value map
+    let var_within_closure_components_by_index =
+      Var_within_closure.Map.map type_of_var closure_vars
+    in
+    { var_within_closure_components_by_index }
   in
   let closures_entry =
-    Closures_entry.create ~function_decls:Closure_id.Map.empty
-      ~closure_types:(Product.Closure_id_indexed.create_top Flambda_kind.value)
-      ~closure_var_types
+    { function_decls = Closure_id.Map.empty;
+      closure_types = Product.Closure_id_indexed.create_top Flambda_kind.value;
+      closure_var_types
+    }
   in
   let by_closure_id =
     let set_of_closures_contents =
@@ -1171,7 +1639,7 @@ let closure_with_at_least_this_closure_var ~this_closure closure_var
 let array_of_length ~length = Value (TD.create (Array { length }))
 
 let type_for_const const =
-  match Reg_width_const.descr const with
+  match RWC.descr const with
   | Naked_immediate i -> this_naked_immediate i
   | Tagged_immediate i -> this_tagged_immediate i
   | Naked_float f -> this_naked_float f
@@ -1204,37 +1672,10 @@ let check_equation name ty =
 
 (* Closures_entry *)
 
-let function_decl_types t = t.function_decls
-
-let closure_types t = PC.to_map t.closure_types
-
-let closure_var_types t = PV.to_map t.closure_var_types
-
 let find_function_declaration t closure_id : _ Or_bottom.t =
   match Closure_id.Map.find closure_id t.function_decls with
   | exception Not_found -> Bottom
   | func_decl -> Ok func_decl
-
-let map_function_decl_types { function_decls; closure_types; closure_var_types }
-    ~(f : FDT.t -> FDT.t Or_bottom.t) : _ Or_bottom.t =
-  (* CR mshinwell: This needs to deal with [closure_types] too. Deferring until
-     new approach for [Rec_info] is sorted out. *)
-  let bottom = ref false in
-  let function_decls =
-    Closure_id.Map.map
-      (fun function_decl ->
-        match f function_decl with
-        | Ok function_decl -> function_decl
-        | Bottom ->
-          bottom := true;
-          function_decl)
-      function_decls
-  in
-  if !bottom
-  then Bottom
-  else
-    let t = { function_decls; closure_types; closure_var_types } in
-    Ok t
 
 let map_closure_types { function_decls; closure_types; closure_var_types }
     ~(f : Type_grammar.t -> Type_grammar.t Or_bottom.t) : _ Or_bottom.t =
@@ -1244,226 +1685,227 @@ let map_closure_types { function_decls; closure_types; closure_var_types }
 
 let fields_kind _ = Flambda_kind.value
 
-(* Row_like *)
-module For_blocks = struct
-  module Tag_or_unknown = Tag_or_unknown_and_size.Tag_or_unknown
-  include Make (Tag) (Targetint_ocaml_index) (Product.Int_indexed)
+(* Closures_entry *)
 
-  type open_or_closed =
-    | Open of Tag.t Or_unknown.t
-    | Closed of Tag.t
+let find_function_declaration t closure_id : _ Or_bottom.t =
+  match Closure_id.Map.find closure_id t.function_decls with
+  | exception Not_found -> Bottom
+  | func_decl -> Ok func_decl
 
-  let create ~(field_kind : Flambda_kind.t) ~field_tys
-      (open_or_closed : open_or_closed) =
-    let field_kind' =
-      List.map Type_grammar.kind field_tys
-      |> Flambda_kind.Set.of_list |> Flambda_kind.Set.get_singleton
-    in
-    (* CR pchambart: move to invariant check *)
-    begin
-      match field_kind' with
-      | None ->
-        if List.length field_tys <> 0
-        then Misc.fatal_error "[field_tys] must all be of the same kind"
-      | Some field_kind' ->
-        if not (Flambda_kind.equal field_kind field_kind')
-        then
-          Misc.fatal_errorf "Declared field kind %a doesn't match [field_tys]"
-            Flambda_kind.print field_kind
-    end;
+let map_closure_types { function_decls; closure_types; closure_var_types }
+    ~(f : Type_grammar.t -> Type_grammar.t Or_bottom.t) : _ Or_bottom.t =
+  let closure_types = Product.Closure_id_indexed.map_types closure_types ~f in
+  Or_bottom.map closure_types ~f:(fun closure_types ->
+      { function_decls; closure_types; closure_var_types })
 
-    let tag : _ Or_unknown.t =
-      let tag : _ Or_unknown.t =
-        match open_or_closed with
-        | Open (Known tag) -> Known tag
-        | Open Unknown -> Unknown
-        | Closed tag -> Known tag
-      in
-      match tag with
-      | Unknown -> begin
-        match field_kind with
-        | Value -> Unknown
-        | Naked_number Naked_float -> Known Tag.double_array_tag
-        | Naked_number Naked_immediate
-        | Naked_number Naked_int32
-        | Naked_number Naked_int64
-        | Naked_number Naked_nativeint
-        | Fabricated | Rec_info ->
-          Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
-            field_kind
-      end
-      | Known tag -> begin
-        match field_kind with
-        | Value -> begin
-          match Tag.Scannable.of_tag tag with
-          | Some _ -> Known tag
-          | None ->
-            Misc.fatal_error
-              "Blocks full of [Value]s must have a tag less than [No_scan_tag]"
-        end
-        | Naked_number Naked_float ->
-          if not (Tag.equal tag Tag.double_array_tag)
-          then
-            Misc.fatal_error
-              "Blocks full of naked floats must have tag [Tag.double_array_tag]";
-          Known tag
-        | Naked_number Naked_immediate
-        | Naked_number Naked_int32
-        | Naked_number Naked_int64
-        | Naked_number Naked_nativeint
-        | Fabricated | Rec_info ->
-          Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
-            field_kind
-      end
-    in
-    let product = Product.Int_indexed.create_from_list field_kind field_tys in
-    let size = Targetint_31_63.Imm.of_int (List.length field_tys) in
-    match open_or_closed with
-    | Open _ -> begin
-      match tag with
-      | Known tag -> create_at_least tag size product
-      | Unknown -> create_at_least_unknown_tag size product
-    end
-    | Closed _ -> (
-      match tag with
-      | Known tag -> create_exactly tag size product
-      | Unknown -> assert false)
-  (* see above *)
+(* FDT *)
 
-  let create_blocks_with_these_tags ~field_kind tags =
-    let maps_to = Product.Int_indexed.create_top field_kind in
-    let case =
-      { maps_to;
-        index = At_least Targetint_31_63.Imm.zero;
-        env_extension = TEE.empty ()
-      }
-    in
-    { known_tags = Tag.Map.of_set (fun _ -> case) tags; other_tags = Bottom }
+module T0 = struct
+  let [@ocamlformat "disable"] print ppf { code_id; rec_info } =
+    Format.fprintf ppf
+      "@[<hov 1>(function_decl@ \
+        @[<hov 1>(code_id@ %a)@]@ \
+        @[<hov 1>(rec_info@ %a)@]\
+        )@]"
+      Code_id.print code_id
+      Type_grammar.print rec_info
 
-  let create_exactly_multiple ~field_tys_by_tag =
-    let known_tags =
-      Tag.Map.map
-        (fun field_tys ->
-          (* CR mshinwell: Validate [field_tys] like [create] does, above *)
-          let field_kind =
-            match field_tys with
-            | [] -> Flambda_kind.value
-            | field_ty :: _ -> Type_grammar.kind field_ty
-          in
-          let maps_to =
-            Product.Int_indexed.create_from_list field_kind field_tys
-          in
-          let size = Targetint_31_63.Imm.of_int (List.length field_tys) in
-          { maps_to; index = Known size; env_extension = TEE.empty () })
-        field_tys_by_tag
-    in
-    { known_tags; other_tags = Bottom }
-
-  let all_tags_and_sizes t : Targetint_31_63.Imm.t Tag.Map.t Or_unknown.t =
-    match all_tags_and_indexes t with
-    | Unknown -> Unknown
-    | Known tags_and_indexes ->
-      let any_unknown = ref false in
-      let by_tag =
-        Tag.Map.map
-          (fun index ->
-            match index with
-            | Known index -> index
-            | At_least index ->
-              any_unknown := true;
-              index)
-          tags_and_indexes
-      in
-      if !any_unknown then Unknown else Known by_tag
-
-  let get_field t field_index : _ Or_unknown_or_bottom.t =
-    match get_singleton t with
-    | None -> Unknown
-    | Some ((_tag, size), maps_to) -> (
-      let index = Targetint_31_63.to_targetint field_index in
-      if Targetint_31_63.Imm.( <= ) size index
-      then Bottom
-      else
-        match
-          Product.Int_indexed.project maps_to (Targetint_31_63.Imm.to_int index)
-        with
-        | Unknown -> Unknown
-        | Known res -> Ok res)
-
-  let get_variant_field t variant_tag field_index : _ Or_unknown_or_bottom.t =
-    let index = Targetint_31_63.to_targetint field_index in
-    let aux { index = size; maps_to; env_extension = _ } :
-        _ Or_unknown_or_bottom.t =
-      match size with
-      | Known i when i <= index -> Bottom
-      | _ -> (
-        match
-          Product.Int_indexed.project maps_to (Targetint_31_63.Imm.to_int index)
-        with
-        | Unknown -> Unknown
-        | Known res -> Ok res)
-    in
-    match Tag.Map.find variant_tag t.known_tags with
-    | case -> aux case
-    | exception Not_found -> begin
-      match t.other_tags with Bottom -> Bottom | Ok case -> aux case
-    end
+  let all_ids_for_export { code_id; rec_info } =
+    Ids_for_export.add_code_id
+      (Type_grammar.all_ids_for_export rec_info)
+      code_id
 end
 
-module For_closures_entry_by_set_of_closures_contents = struct
-  include Make (Closure_id) (Set_of_closures_contents) (Closures_entry)
+(* Product *)
 
-  let map_function_decl_types t ~f =
-    map_maps_to t ~f:(fun closures_entry ->
-        Closures_entry.map_function_decl_types closures_entry ~f)
+module Make (Index : Product_intf.Index) = struct
+  let [@ocamlformat "disable"] print ppf { components_by_index; kind = _ } =
+    Format.fprintf ppf
+      "@[<hov 1>(\
+        @[<hov 1>(components_by_index@ %a)@]\
+        )@]"
+      (Index.Map.print Type_grammar.print) components_by_index
 
-  let map_closure_types t ~f =
-    map_maps_to t ~f:(fun closures_entry ->
-        Closures_entry.map_closure_types closures_entry ~f)
+  let fields_kind t = t.kind
 
-  let create_exactly (closure_id : Closure_id.t)
-      (contents : Set_of_closures_contents.t)
-      (closures_entry : Closures_entry.t) : t =
-    let known_tags =
-      Closure_id.Map.singleton closure_id
-        { index = Known contents;
-          maps_to = closures_entry;
-          env_extension = TEE.empty ()
-        }
-    in
-    { known_tags; other_tags = Bottom }
+  let create kind components_by_index =
+    (* CR mshinwell: Check that the types are all of the same kind *)
+    { components_by_index; kind }
 
-  let create_at_least (closure_id : Closure_id.t)
-      (contents : Set_of_closures_contents.t)
-      (closures_entry : Closures_entry.t) : t =
-    let known_tags =
-      Closure_id.Map.singleton closure_id
-        { index = At_least contents;
-          maps_to = closures_entry;
-          env_extension = TEE.empty ()
-        }
-    in
-    { known_tags; other_tags = Bottom }
+  let create_top kind = create kind Index.Map.empty
 
-  let get_env_var t env_var : _ Or_unknown.t =
-    match get_singleton t with
+  let width t =
+    Targetint_31_63.Imm.of_int (Index.Map.cardinal t.components_by_index)
+
+  let components t = Index.Map.data t.components_by_index
+
+  let project t index : _ Or_unknown.t =
+    match Index.Map.find_opt index t.components_by_index with
     | None -> Unknown
-    | Some ((_tag, index), maps_to) ->
-      if not
-           (Var_within_closure.Set.mem env_var
-              (Set_of_closures_contents.closure_vars index))
-      then Unknown
-      else
-        let env_var_ty =
-          try
-            Var_within_closure.Map.find env_var
-              (Closures_entry.closure_var_types maps_to)
-          with Not_found ->
-            Misc.fatal_errorf
-              "Environment variable %a is bound in index but not in \
-               maps_to@.Index:@ %a@.Maps_to:@ %a"
-              Var_within_closure.print env_var Set_of_closures_contents.print
-              index Closures_entry.print maps_to
-        in
-        Known env_var_ty
+    | Some ty -> Known ty
+
+  let all_ids_for_export { components_by_index; kind = _ } =
+    Index.Map.fold
+      (fun _index ty ids ->
+        Ids_for_export.union (Type_grammar.all_ids_for_export ty) ids)
+      components_by_index Ids_for_export.empty
+
+  let map_types ({ components_by_index; kind } as t)
+      ~(f : Type_grammar.t -> Type_grammar.t Or_bottom.t) : _ Or_bottom.t =
+    let found_bottom = ref false in
+    let components_by_index' =
+      Index.Map.map_sharing
+        (fun ty ->
+          match f ty with
+          | Bottom ->
+            found_bottom := true;
+            ty
+          | Ok ty -> ty)
+        components_by_index
+    in
+    if !found_bottom
+    then Bottom
+    else if components_by_index == components_by_index'
+    then Ok t
+    else Ok { components_by_index = components_by_index'; kind }
+
+  let to_map t = t.components_by_index
+end
+
+module Int_indexed = struct
+  (* CR mshinwell: Add [Or_bottom]. However what should [width] return for
+     [Bottom]? Maybe we can circumvent that question if removing [Row_like]. *)
+
+  let [@ocamlformat "disable"] print ppf t =
+    Format.fprintf ppf "@[<hov 1>(%a)@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
+      (Array.to_list t.fields)
+
+  let fields_kind t = t.kind
+
+  let create_from_list kind tys = { kind; fields = Array.of_list tys }
+
+  let create_top kind = { kind; fields = [||] }
+
+  let width t = Targetint_31_63.Imm.of_int (Array.length t.fields)
+
+  let components t = Array.to_list t.fields
+
+  let project t index : _ Or_unknown.t =
+    if Array.length t.fields <= index then Unknown else Known t.fields.(index)
+
+  let all_ids_for_export t =
+    Array.fold_left
+      (fun ids ty ->
+        Ids_for_export.union (Type_grammar.all_ids_for_export ty) ids)
+      Ids_for_export.empty t.fields
+
+  let map_types t ~(f : Type_grammar.t -> Type_grammar.t Or_bottom.t) :
+      _ Or_bottom.t =
+    let found_bottom = ref false in
+    let fields = Array.copy t.fields in
+    for i = 0 to Array.length fields - 1 do
+      match f fields.(i) with
+      | Bottom -> found_bottom := true
+      | Ok typ -> fields.(i) <- typ
+    done;
+    if !found_bottom then Bottom else Ok { t with fields }
+end
+
+module type Old_row_like = sig
+  module For_blocks : sig
+    type t
+
+    val create_bottom : unit -> t
+
+    type open_or_closed =
+      | Open of Tag.t Or_unknown.t
+      | Closed of Tag.t
+
+    val create :
+      field_kind:Flambda_kind.t ->
+      field_tys:Type_grammar.t list ->
+      open_or_closed ->
+      t
+
+    val create_blocks_with_these_tags :
+      field_kind:Flambda_kind.t -> Tag.Set.t -> t
+
+    val create_exactly_multiple :
+      field_tys_by_tag:Type_grammar.t list Tag.Map.t -> t
+
+    val all_tags : t -> Tag.Set.t Or_unknown.t
+
+    val all_tags_and_sizes : t -> Targetint_31_63.Imm.t Tag.Map.t Or_unknown.t
+
+    val get_singleton : t -> (Tag_and_size.t * Product.Int_indexed.t) option
+
+    (** Get the nth field of the block if it is unambiguous.
+
+        This can be done precisely using Type_grammar.meet_shape, but this meet
+        can be expensive. This function allows to give a precise answer quickly
+        in the common case where the block type is known exactly (for example,
+        it is the result of a previous record or module allocation).
+
+        This will return Unknown if:
+
+        - There is no nth field (the read is invalid, and will produce bottom)
+
+        - The block type represents a disjunction (several possible tags)
+
+        - The tag or size is not exactly known
+
+        - The nth field exists, is unique, but has Unknown type
+
+        The handling of those cases could be improved:
+
+        - When there is no valid field, Bottom could be returned instead
+
+        - In the case of disjunctions, if all possible nth fields point to the
+        same type, this type could be returned directly.
+
+        - When the tag or size is not known but there is a unique possible
+        value, it could be returned anyway
+
+        - There could be a distinction between the first three cases (where we
+        expect that doing the actual meet could give us a better result) and the
+        last case where we already know what the result of the meet will be. *)
+    val get_field :
+      t -> Targetint_31_63.t -> Type_grammar.t Or_unknown_or_bottom.t
+
+    val get_variant_field :
+      t -> Tag.t -> Targetint_31_63.t -> Type_grammar.t Or_unknown_or_bottom.t
+
+    val is_bottom : t -> bool
+
+    (** The [Maps_to] value which [meet] returns contains the join of all
+        [Maps_to] values in the range of the row-like structure after the meet
+        operation has been completed. *)
+  end
+
+  module For_closures_entry_by_set_of_closures_contents : sig
+    type t
+
+    val create_exactly :
+      Closure_id.t -> Set_of_closures_contents.t -> Closures_entry.t -> t
+
+    val create_at_least :
+      Closure_id.t -> Set_of_closures_contents.t -> Closures_entry.t -> t
+
+    val get_singleton :
+      t ->
+      ((Closure_id.t * Set_of_closures_contents.t) * Closures_entry.t) option
+
+    (** Same as For_blocks.get_field: attempt to find the type associated to the
+        given environment variable without an expensive meet. *)
+    val get_env_var : t -> Var_within_closure.t -> Type_grammar.t Or_unknown.t
+
+    val map_function_decl_types :
+      t ->
+      f:(Function_declaration_type.t -> Function_declaration_type.t Or_bottom.t) ->
+      t Or_bottom.t
+
+    val map_closure_types :
+      t -> f:(Type_grammar.t -> Type_grammar.t Or_bottom.t) -> t Or_bottom.t
+  end
 end

@@ -229,6 +229,32 @@ and meet_closures_entry env
                      env_extension2) ~f:(fun env_extension ->
                     Ok (closures_entry, env_extension)))))
 
+and meet_function_type (env : Meet_env.t) (t1 : t) (t2 : t) :
+    (t * TEE.t) Or_bottom.t =
+  match t1, t2 with
+  | Bottom, _ | _, Bottom -> Ok (Bottom, { equations = Name.Map.empty })
+  | Unknown, t | t, Unknown -> Ok (t, { equations = Name.Map.empty })
+  | ( Ok { code_id = code_id1; rec_info = rec_info1 },
+      Ok { code_id = code_id2; rec_info = rec_info2 } ) -> (
+    let typing_env = Meet_env.env env in
+    match
+      Code_age_relation.meet
+        (TE.code_age_relation typing_env)
+        ~resolver:(TE.code_age_relation_resolver typing_env)
+        code_id1 code_id2
+    with
+    | Bottom -> Bottom
+    | Ok code_id -> (
+      (* It's possible that [code_id] corresponds to [Deleted] code. In that
+         case, any attempt to inline will fail, as the code will not be found in
+         the simplifier's environment -- see
+         [Simplify_apply_expr.simplify_direct_function_call]. *)
+      match Type_grammar.meet env rec_info1 rec_info2 with
+      | Ok (rec_info, extension) ->
+        let t = create code_id ~rec_info in
+        Ok (t, extension)
+      | Bottom -> Bottom))
+
 and meet_row_like (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
   let ({ known_tags = known1; other_tags = other1 } : t) = t1 in
   let ({ known_tags = known2; other_tags = other2 } : t) = t2 in
@@ -810,6 +836,27 @@ and join_closures_entry env
       closure_var_types2
   in
   { function_decls; closure_types; closure_var_types }
+
+and join_function_type (env : Join_env.t) (t1 : t) (t2 : t) : t =
+  match t1, t2 with
+  | Bottom, t | t, Bottom -> t
+  | Unknown, _ | _, Unknown -> Unknown
+  | ( Ok { code_id = code_id1; rec_info = rec_info1 },
+      Ok { code_id = code_id2; rec_info = rec_info2 } ) -> (
+    let target_typing_env = Join_env.target_join_env env in
+    match
+      Code_age_relation.join
+        ~target_t:(TE.code_age_relation target_typing_env)
+        ~resolver:(TE.code_age_relation_resolver target_typing_env)
+        (TE.code_age_relation (Join_env.left_join_env env))
+        (TE.code_age_relation (Join_env.right_join_env env))
+        code_id1 code_id2
+    with
+    | Unknown -> Unknown
+    | Known code_id -> (
+      match Type_grammar.join env rec_info1 rec_info2 with
+      | Known rec_info -> create code_id ~rec_info
+      | Unknown -> Unknown))
 
 and join_row_like (env : Join_env.t) row_like1 row_like2 =
   let ({ known_tags = known1; other_tags = other1 } : t) = t1 in

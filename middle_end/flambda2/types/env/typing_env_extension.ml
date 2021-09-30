@@ -93,26 +93,6 @@ struct
         Ids_for_export.add_name acc name)
       equations Ids_for_export.empty
 
-  let free_names { equations } =
-    Name.Map.fold
-      (fun name ty acc ->
-        let acc = Name_occurrences.union acc (Type_grammar.free_names ty) in
-        Name_occurrences.add_name acc name Name_mode.in_types)
-      equations Name_occurrences.empty
-
-  let apply_renaming ({ equations } as t) perm =
-    let changed = ref false in
-    let equations' =
-      Name.Map.fold
-        (fun name ty acc ->
-          let ty' = Type_grammar.apply_renaming ty perm in
-          let name' = Renaming.apply_name perm name in
-          if not (ty == ty' && name == name') then changed := true;
-          Name.Map.add name' ty' acc)
-        equations Name.Map.empty
-    in
-    if !changed then { equations = equations' } else t
-
   module With_extra_variables = struct
     type t =
       { existential_vars : Flambda_kind.t Variable.Map.t;
