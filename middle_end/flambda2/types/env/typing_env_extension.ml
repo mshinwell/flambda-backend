@@ -30,24 +30,6 @@ end) =
 struct
   type t = { equations : Type_grammar.t Name.Map.t } [@@unboxed]
 
-  let print_equations ppf equations =
-    let equations = Name.Map.bindings equations in
-    match equations with
-    | [] -> Format.pp_print_string ppf "()"
-    | _ :: _ ->
-      Format.pp_print_string ppf "(";
-      Format.pp_print_list ~pp_sep:Format.pp_print_space
-        (fun ppf (name, ty) ->
-          Format.fprintf ppf "@[<hov 1>%a@ :@ %a@]" Name.print name
-            Type_grammar.print ty)
-        ppf equations;
-      Format.pp_print_string ppf ")"
-
-  let [@ocamlformat "disable"] print ppf t =
-    Format.fprintf ppf
-      "@[<hov 1>(equations@ @[<v 1>%a@])@]"
-      print_equations t.equations
-
   let fold ~equation t acc = Name.Map.fold equation t.equations acc
 
   let invariant { equations } =

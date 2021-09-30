@@ -477,6 +477,9 @@ and free_names_env_extension { equations } =
       Name_occurrences.add_name acc name Name_mode.in_types)
     equations Name_occurrences.empty
 
+let row_like_is_bottom ~known ~(other : _ Or_bottom.t) ~is_empty_map_known =
+  is_empty_map_known known && match other with Bottom -> true | Ok _ -> false
+
 let rec print ppf t =
   let no_renaming thing _ = thing in
   let no_free_names _ = Name_occurrences.empty in
@@ -535,7 +538,7 @@ and print_head_of_kind_value ppf head =
   | Boxed_int64 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a)@]" print ty
   | Boxed_nativeint ty ->
     Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a)@]" print ty
-  | Closures { by_closure_id } -> print_row_like_for_closures by_closure_id
+  | Closures { by_closure_id } -> print_row_like_for_closures ppf by_closure_id
   | String str_infos ->
     Format.fprintf ppf "@[<hov 1>(Strings@ (%a))@]" String_info.Set.print
       str_infos
@@ -564,50 +567,108 @@ and print_head_of_kind_naked_nativeint ppf head =
 
 and print_head_of_kind_rec_info ppf head = Rec_info_expr.print ppf head
 
-and [@ocamlformat "disable"] print_row_like ~print_index ppf ~known ~other =
+and print_row_like :
+      'index 'maps_to 'known.
+      print_index:(Format.formatter -> 'index -> unit) ->
+      print_maps_to:(Format.formatter -> 'maps_to -> unit) ->
+      print_known_map:
+        ((Format.formatter -> ('index, 'maps_to) row_like_case -> unit) ->
+        Format.formatter ->
+        'known ->
+        unit) ->
+      is_empty_map_known:('known -> bool) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      Format.formatter ->
+      unit =
+ fun ~print_index ~print_maps_to ~print_known_map ~is_empty_map_known ~known
+     ~other ppf ->
   let print_index ppf = function
-    | Known index -> Format.fprintf ppf "(Known @[<2>%a@])" Index.print index
+    | Known index -> Format.fprintf ppf "(Known @[<2>%a@])" print_index index
     | At_least min_index ->
-      Format.fprintf ppf "(At_least @[<2>%a@])" Index.print min_index
+      Format.fprintf ppf "(At_least @[<2>%a@])" print_index min_index
   in
-  if is_bottom t then
+  if row_like_is_bottom ~known ~other ~is_empty_map_known
+  then
     (* CR mshinwell: factor out (and elsewhere) *)
     let colour = Flambda_colours.top_or_bottom_type () in
-    if Flambda_features.unicode () then
-      Format.fprintf ppf "@<0>%s@<1>\u{22a5}@<0>%s"
-        colour (Flambda_colours.normal ())
-    else
-      Format.fprintf ppf "%s_|_%s" colour (Flambda_colours.normal ())
+    if Flambda_features.unicode ()
+    then
+      Format.fprintf ppf "@<0>%s@<1>\u{22a5}@<0>%s" colour
+        (Flambda_colours.normal ())
+    else Format.fprintf ppf "%s_|_%s" colour (Flambda_colours.normal ())
   else
     let pp_env_extension ppf env_extension =
-      if not (Name.Map.is_empty env_extension.equations) then
-        Format.fprintf ppf "@ %a" print_env_extension env_extension
+      if not (Name.Map.is_empty env_extension.equations)
+      then Format.fprintf ppf "@ %a" print_env_extension env_extension
     in
-    let [@ocamlformat "disable"] print ppf { maps_to; index; env_extension } =
-      Format.fprintf ppf "=> %a,@ %a%a"
-        print_index index
-        print_maps_to maps_to
+    let print ppf { maps_to; index; env_extension } =
+      Format.fprintf ppf "=> %a,@ %a%a" print_index index print_maps_to maps_to
         pp_env_extension env_extension
     in
     Format.fprintf ppf
-      "@[<hov 1>(\
-         @[<hov 1>(known@ %a)@]@ \
-         @[<hov 1>(other@ %a)@]\
-         )@]"
-      (Tag.Map.print print) known
-      (Or_bottom.print print) other
+      "@[<hov 1>(@[<hov 1>(known@ %a)@]@ @[<hov 1>(other@ %a)@])@]"
+      (print_known_map print) known (Or_bottom.print print) other
 
-and [@ocamlformat "disable"] print_closures_entry ppf
-      { function_decls; closure_types; closure_var_types; } =
+and print_row_like_for_blocks ppf { known_tags; other_tags } =
+  print_row_like ~print_index:Block_size.print
+    ~print_maps_to:print_int_indexed_product ~print_known_map:Tag.Map.print
+    ~is_empty_map_known:Tag.Map.is_empty ~known:known_tags ~other:other_tags ppf
+
+and print_row_like_for_closures ppf { known_closures; other_closures } =
+  print_row_like ~print_index:Set_of_closures_contents.print
+    ~print_maps_to:print_closures_entry ~print_known_map:Closure_id.Map.print
+    ~is_empty_map_known:Closure_id.Map.is_empty ~known:known_closures
+    ~other:other_closures ppf
+
+and print_closures_entry ppf
+    { function_decls; closure_types; closure_var_types } =
   Format.fprintf ppf
-    "@[<hov 1>(\
-      @[<hov 1>(function_decls@ %a)@]@ \
-      @[<hov 1>(closure_types@ %a)@]@ \
-      @[<hov 1>(closure_var_types@ %a)@]\
-      )@]"
-    (Closure_id.Map.print print_function_type) function_decls
-    print_closure_id_indexed_product closure_types
+    "@[<hov 1>(@[<hov 1>(function_decls@ %a)@]@ @[<hov 1>(closure_types@ \
+     %a)@]@ @[<hov 1>(closure_var_types@ %a)@])@]"
+    (Closure_id.Map.print (Or_unknown_or_bottom.print print_function_type))
+    function_decls print_closure_id_indexed_product closure_types
     print_var_within_closure_indexed_product closure_var_types
+
+and print_closure_id_indexed_product ppf { closure_id_components_by_index } =
+  Format.fprintf ppf
+    "@[<hov 1>(@[<hov 1>(closure_id_components_by_index@ %a)@])@]"
+    (Closure_id.Map.print print)
+    closure_id_components_by_index
+
+and print_var_within_closure_indexed_product ppf
+    { var_within_closure_components_by_index } =
+  Format.fprintf ppf
+    "@[<hov 1>(@[<hov 1>(var_within_closure_components_by_index@ %a)@])@]"
+    (Var_within_closure.Map.print print)
+    var_within_closure_components_by_index
+
+and print_int_indexed_product ppf { fields; kind } =
+  Format.fprintf ppf "@[<hov 1>((kind %a)@ %a)@]" K.print kind
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space print)
+    (Array.to_list fields)
+
+and print_function_type ppf { code_id; rec_info } =
+  Format.fprintf ppf
+    "@[<hov 1>(function_type@ @[<hov 1>(code_id@ %a)@]@ @[<hov 1>(rec_info@ \
+     %a)@])@]"
+    Code_id.print code_id print rec_info
+
+and print_env_extension ppf { equations } =
+  let print_equations ppf equations =
+    let equations = Name.Map.bindings equations in
+    match equations with
+    | [] -> Format.pp_print_string ppf "()"
+    | _ :: _ ->
+      Format.pp_print_string ppf "(";
+      Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (fun ppf (name, t) ->
+          Format.fprintf ppf "@[<hov 1>%a@ :@ %a@]" Name.print name print t)
+        ppf equations;
+      Format.pp_print_string ppf ")"
+  in
+  Format.fprintf ppf "@[<hov 1>(equations@ @[<v 1>%a@])@]" print_equations
+    equations
 
 let rec all_ids_for_export t =
   match t with
@@ -845,8 +906,7 @@ and apply_coercion_row_like :
           Or_bottom.map (apply_coercion_env_extension env_extension coercion)
             ~f:(fun env_extension -> { maps_to; index; env_extension }))
   in
-  if is_empty_map_known known
-     && match other with Bottom -> true | Ok _ -> false
+  if row_like_is_bottom ~known ~other ~is_empty_map_known
   then Bottom
   else Ok (known, other)
 
@@ -1739,15 +1799,6 @@ let map_closure_types { function_decls; closure_types; closure_var_types }
 (* FDT *)
 
 module T0 = struct
-  let [@ocamlformat "disable"] print ppf { code_id; rec_info } =
-    Format.fprintf ppf
-      "@[<hov 1>(function_decl@ \
-        @[<hov 1>(code_id@ %a)@]@ \
-        @[<hov 1>(rec_info@ %a)@]\
-        )@]"
-      Code_id.print code_id
-      Type_grammar.print rec_info
-
   let all_ids_for_export { code_id; rec_info } =
     Ids_for_export.add_code_id
       (Type_grammar.all_ids_for_export rec_info)
@@ -1813,11 +1864,6 @@ end
 module Int_indexed = struct
   (* CR mshinwell: Add [Or_bottom]. However what should [width] return for
      [Bottom]? Maybe we can circumvent that question if removing [Row_like]. *)
-
-  let [@ocamlformat "disable"] print ppf t =
-    Format.fprintf ppf "@[<hov 1>(%a)@]"
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
-      (Array.to_list t.fields)
 
   let fields_kind t = t.kind
 
