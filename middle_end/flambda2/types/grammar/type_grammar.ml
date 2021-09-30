@@ -668,43 +668,48 @@ and all_ids_for_export_closures_entry
 let rec apply_coercion t coercion : t Or_bottom.t =
   match t with
   | Value ty ->
-    TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
-      ~apply_renaming_head:apply_renaming_head_of_kind_value
-      ~free_names_head:free_names_head_of_kind_value coercion ty
+    Or_bottom.map
+      (TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
+         ~apply_renaming_head:apply_renaming_head_of_kind_value
+         ~free_names_head:free_names_head_of_kind_value coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Value ty')
   | Naked_immediate ty ->
-    TD.apply_coercion
-      ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
-      ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
-      ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
+         ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+         ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Naked_immediate ty')
   | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ ->
     if Coercion.is_id coercion then Ok t else Bottom
   | Rec_info ty ->
-    TD.apply_coercion ~apply_coercion_head:Rec_info_expr.apply_coercion
-      ~apply_renaming_head:Rec_info_expr.apply_renaming
-      ~free_names_head:Rec_info_expr.free_names coercion ty
+    (* Currently no coercion has an effect on a depth variable and
+       [Rec_info_expr.t] does not contain any other variety of name. *)
+    if Coercion.is_id coercion then Ok t else Bottom
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
   | Closures { by_closure_id } -> begin
-    match
-      Row_like.For_closures_entry_by_set_of_closures_contents
-      .map_function_decl_types by_closure_id
-        ~f:(fun (decl : Function_declaration_type.t) : _ Or_bottom.t ->
-          Function_declaration_type.apply_coercion decl coercion)
-    with
+    match apply_coercion_row_like_for_blocks by_closure_id coercion with
     | Bottom -> Bottom
     | Ok by_closure_id -> (
-      match
-        Row_like.For_closures_entry_by_set_of_closures_contents
-        .map_closure_types by_closure_id ~f:(fun ty ->
-            Type_grammar.apply_coercion ty coercion)
-      with
+      match apply_coercion_row_like_for_closures by_closure_id coercion with
       | Bottom -> Bottom
       | Ok by_closure_id -> Ok (Closures { by_closure_id }))
   end
   | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
   | Boxed_nativeint _ | String _ | Array _ ->
-    if Coercion.is_id coercion then Ok t else Bottom
+    if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_naked_immediate head coercion : _ Or_bottom.t =
+  match head with
+  | Naked_immediates _ -> Ok head
+  | Is_int t ->
+    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
+        if t == t' then head else Is_int t')
+  | Get_tag t ->
+    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
+        if t == t' then head else Get_tag t')
 
 and apply_coercion_closures_entry
     { function_decls; closure_types; closure_var_types } coercion :
@@ -727,6 +732,47 @@ and apply_coercion_closures_entry
   else
     let t = { function_decls; closure_types; closure_var_types } in
     Ok t
+
+and apply_coercion_row_like :
+      'maps_to.
+      apply_coercion_maps_to:('maps_to -> Coercion.t -> 'maps_to Or_bottom.t) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      is_empty_map_known:('known -> bool) ->
+      filter_map_known:
+        ((('index, 'maps_to) row_like_case ->
+         ('index, 'maps_to) row_like_case option) ->
+        'known ->
+        'known) ->
+      Coercion.t ->
+      ('known * ('index, 'maps_to) row_like_case Or_bottom.t) Or_bottom.t =
+ fun ~apply_coercion_maps_to ~known ~other ~is_empty_map_known ~filter_map_known
+     coercion ->
+  let known =
+    filter_map_known
+      (fun case ->
+        match apply_coercion_maps_to case.maps_to coercion with
+        | Bottom -> None
+        | Ok maps_to -> Some { case with maps_to })
+      known
+  in
+  let other : _ Or_bottom.t =
+    match other with
+    | Bottom -> Bottom
+    | Ok case ->
+      Or_bottom.map (apply_coercion_maps_to case.maps_to coercion)
+        ~f:(fun maps_to -> { case with maps_to })
+  in
+  if is_empty_map_known known
+     && match other with Bottom -> true | Ok _ -> false
+  then Bottom
+  else Ok (known, other)
+
+and apply_coercion_row_like_for_blocks by_closure_id coercion =
+  apply_coercion_row_like ~apply_coercion_maps_to:(fun closures_entry ->
+      apply_coercion_closures_entry closures_entry coercion)
+
+and apply_coercion_row_like_for_closures by_closure_id coercion = assert false
 
 and apply_coercion_function_type
     (function_type : function_type Or_unknown_or_bottom.t)
@@ -829,25 +875,6 @@ module Row_like = struct
     match other_tags with
     | Ok _ -> Unknown
     | Bottom -> Known (Tag.Map.map (fun case -> case.index) known_tags)
-
-  let map_maps_to { known_tags; other_tags }
-      ~(f : Maps_to.t -> Maps_to.t Or_bottom.t) : _ Or_bottom.t =
-    let known_tags =
-      Tag.Map.filter_map
-        (fun _ case ->
-          match f case.maps_to with
-          | Bottom -> None
-          | Ok maps_to -> Some { case with maps_to })
-        known_tags
-    in
-    let other_tags : case Or_bottom.t =
-      match other_tags with
-      | Bottom -> Bottom
-      | Ok case ->
-        Or_bottom.map (f case.maps_to) ~f:(fun maps_to -> { case with maps_to })
-    in
-    let result = { known_tags; other_tags } in
-    if is_bottom result then Bottom else Ok result
 end
 
 module Row_like_for_blocks = struct
@@ -1018,14 +1045,6 @@ module Row_like_for_blocks = struct
 end
 
 module Row_like_for_closures = struct
-  let map_function_decl_types t ~f =
-    Row_like.map_maps_to t ~f:(fun closures_entry ->
-        Closures_entry.map_function_decl_types closures_entry ~f)
-
-  let map_closure_types t ~f =
-    Row_like.map_maps_to t ~f:(fun closures_entry ->
-        Closures_entry.map_closure_types closures_entry ~f)
-
   let create_exactly (closure_id : Closure_id.t)
       (contents : Set_of_closures_contents.t)
       (closures_entry : Closures_entry.t) : t =
@@ -1625,102 +1644,4 @@ module Int_indexed = struct
       | Ok typ -> fields.(i) <- typ
     done;
     if !found_bottom then Bottom else Ok { t with fields }
-end
-
-module type Old_row_like = sig
-  module For_blocks : sig
-    type t
-
-    val create_bottom : unit -> t
-
-    type open_or_closed =
-      | Open of Tag.t Or_unknown.t
-      | Closed of Tag.t
-
-    val create :
-      field_kind:Flambda_kind.t ->
-      field_tys:Type_grammar.t list ->
-      open_or_closed ->
-      t
-
-    val create_blocks_with_these_tags :
-      field_kind:Flambda_kind.t -> Tag.Set.t -> t
-
-    val create_exactly_multiple :
-      field_tys_by_tag:Type_grammar.t list Tag.Map.t -> t
-
-    val all_tags : t -> Tag.Set.t Or_unknown.t
-
-    val all_tags_and_sizes : t -> Targetint_31_63.Imm.t Tag.Map.t Or_unknown.t
-
-    val get_singleton : t -> (Tag_and_size.t * Product.Int_indexed.t) option
-
-    (** Get the nth field of the block if it is unambiguous.
-
-        This can be done precisely using Type_grammar.meet_shape, but this meet
-        can be expensive. This function allows to give a precise answer quickly
-        in the common case where the block type is known exactly (for example,
-        it is the result of a previous record or module allocation).
-
-        This will return Unknown if:
-
-        - There is no nth field (the read is invalid, and will produce bottom)
-
-        - The block type represents a disjunction (several possible tags)
-
-        - The tag or size is not exactly known
-
-        - The nth field exists, is unique, but has Unknown type
-
-        The handling of those cases could be improved:
-
-        - When there is no valid field, Bottom could be returned instead
-
-        - In the case of disjunctions, if all possible nth fields point to the
-        same type, this type could be returned directly.
-
-        - When the tag or size is not known but there is a unique possible
-        value, it could be returned anyway
-
-        - There could be a distinction between the first three cases (where we
-        expect that doing the actual meet could give us a better result) and the
-        last case where we already know what the result of the meet will be. *)
-    val get_field :
-      t -> Targetint_31_63.t -> Type_grammar.t Or_unknown_or_bottom.t
-
-    val get_variant_field :
-      t -> Tag.t -> Targetint_31_63.t -> Type_grammar.t Or_unknown_or_bottom.t
-
-    val is_bottom : t -> bool
-
-    (** The [Maps_to] value which [meet] returns contains the join of all
-        [Maps_to] values in the range of the row-like structure after the meet
-        operation has been completed. *)
-  end
-
-  module For_closures_entry_by_set_of_closures_contents : sig
-    type t
-
-    val create_exactly :
-      Closure_id.t -> Set_of_closures_contents.t -> Closures_entry.t -> t
-
-    val create_at_least :
-      Closure_id.t -> Set_of_closures_contents.t -> Closures_entry.t -> t
-
-    val get_singleton :
-      t ->
-      ((Closure_id.t * Set_of_closures_contents.t) * Closures_entry.t) option
-
-    (** Same as For_blocks.get_field: attempt to find the type associated to the
-        given environment variable without an expensive meet. *)
-    val get_env_var : t -> Var_within_closure.t -> Type_grammar.t Or_unknown.t
-
-    val map_function_decl_types :
-      t ->
-      f:(Function_declaration_type.t -> Function_declaration_type.t Or_bottom.t) ->
-      t Or_bottom.t
-
-    val map_closure_types :
-      t -> f:(Type_grammar.t -> Type_grammar.t Or_bottom.t) -> t Or_bottom.t
-  end
 end
