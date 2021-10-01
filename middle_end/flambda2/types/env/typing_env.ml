@@ -1255,7 +1255,7 @@ let expand_head ~force_to_kind t env kind : _ Or_unknown_or_bottom.t =
   | No_alias head -> head
   | Equals simple -> (
     let min_name_mode = Name_mode.min_in_types in
-    match TE.get_canonical_simple_exn env simple ~min_name_mode with
+    match get_canonical_simple_exn env simple ~min_name_mode with
     | exception Not_found ->
       (* This can happen when [simple] is of [Phantom] name mode. We're not
          interested in propagating types for phantom variables, so [Unknown] is
@@ -1275,7 +1275,7 @@ let expand_head ~force_to_kind t env kind : _ Or_unknown_or_bottom.t =
         force_to_head ~force_to_kind typ
       in
       let[@inline always] name name ~coercion : _ Or_unknown_or_bottom.t =
-        let t = force_to_kind (TE.find env name (Some kind)) in
+        let t = force_to_kind (find env name (Some kind)) in
         match descr t with
         | No_alias Bottom -> Bottom
         | No_alias Unknown -> Unknown
@@ -1292,15 +1292,15 @@ let expand_head ~force_to_kind t env kind : _ Or_unknown_or_bottom.t =
         | Equals _ ->
           Misc.fatal_errorf
             "Canonical alias %a should never have [Equals] type %a:@ %a"
-            Simple.print simple print t TE.print env
+            Simple.print simple print t print env
       in
       Simple.pattern_match simple ~const ~name)
 
 let expand_head' ~force_to_kind t env kind =
   match expand_head ~force_to_kind t env kind with
-  | Unknown -> unknown ()
-  | Ok head -> create_no_alias (Ok head)
-  | Bottom -> bottom ()
+  | Unknown -> TG.unknown
+  | Ok head -> TG.create head
+  | Bottom -> TG.bottom
 
 let expand_head t env : resolved_type =
   match t with
@@ -1448,28 +1448,28 @@ and eviscerate_head_of_kind_value : _ Or_unknown.t =
 let missing_kind env free_names =
   Name_occurrences.fold_variables free_names ~init:false
     ~f:(fun missing_kind var ->
-      missing_kind || TE.variable_is_from_missing_cmx_file env (Name.var var))
+      missing_kind || variable_is_from_missing_cmx_file env (Name.var var))
 
 (* CR mshinwell: There is a subtlety here: the presence of a name in
    [suitable_for] doesn't mean that we should blindly return "=name". The type
    of the name in [suitable_for] might be (much) worse than the one in the
    environment [t]. *)
 let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
-  let free_names = free_names t in
+  let free_names = TG.free_names t in
   if Name_occurrences.no_variables free_names
   then level, t
   else if missing_kind env free_names
-  then level, unknown (kind t)
+  then level, TG.unknown (TG.kind t)
   else
     let to_erase =
-      let var free_var = not (TE.mem suitable_for (Name.var free_var)) in
+      let var free_var = not (mem suitable_for (Name.var free_var)) in
       Name_occurrences.filter_names free_names ~f:(fun free_name ->
           Name.pattern_match free_name ~var ~symbol:(fun _ -> true))
     in
     if Name_occurrences.is_empty to_erase
     then level, t
     else if depth > 1
-    then level, unknown (kind t)
+    then level, TG.unknown (TG.kind t)
     else
       let level, renaming =
         (* To avoid writing an erasure operation, we define irrelevant fresh
@@ -1480,21 +1480,21 @@ let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
             Name.pattern_match to_erase_name
               ~symbol:(fun _ -> acc)
               ~var:(fun to_erase ->
-                let original_type = TE.find env to_erase_name None in
-                let kind = kind original_type in
+                let original_type = find env to_erase_name None in
+                let kind = TG.kind original_type in
                 let fresh_var = Variable.rename to_erase in
                 let level =
                   let level, ty =
                     match
-                      TE.get_canonical_simple_exn env
+                      get_canonical_simple_exn env
                         ~min_name_mode:Name_mode.in_types (Simple.var to_erase)
                     with
-                    | exception Not_found -> level, unknown kind
+                    | exception Not_found -> level, TG.unknown kind
                     | canonical_simple ->
-                      if TE.mem_simple suitable_for canonical_simple
-                      then level, alias_type_of kind canonical_simple
+                      if mem_simple suitable_for canonical_simple
+                      then level, TG.alias_type_of kind canonical_simple
                       else
-                        let t = TE.find env (Name.var to_erase) (Some kind) in
+                        let t = find env (Name.var to_erase) (Some kind) in
                         let t = expand_head' t env in
                         make_suitable_for_environment0_core t env
                           ~depth:(depth + 1) ~suitable_for level
@@ -1506,20 +1506,20 @@ let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
                 in
                 level, renaming))
       in
-      level, apply_renaming t renaming
+      level, TG.apply_renaming t renaming
 
 let make_suitable_for_environment0 t env ~suitable_for level =
   make_suitable_for_environment0_core t env ~depth:0 ~suitable_for level
 
 let make_suitable_for_environment t env ~suitable_for ~bind_to =
-  if not (TE.mem suitable_for bind_to)
+  if not (mem suitable_for bind_to)
   then
     Misc.fatal_errorf
       "[bind_to] %a is expected to be bound in the [suitable_for] \
        environment:@ %a"
-      Name.print bind_to TE.print suitable_for;
+      Name.print bind_to print suitable_for;
   let level, t =
-    make_suitable_for_environment0 t env ~suitable_for (TEEV.empty ())
+    make_suitable_for_environment0 t env ~suitable_for TEEV.empty
   in
   let level = TEEV.add_or_replace_equation level bind_to t in
   level

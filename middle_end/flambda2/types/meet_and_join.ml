@@ -139,7 +139,7 @@ let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
       if Blocks.is_bottom blocks' then Bottom else blocks
   in
   let imms =
-    meet_unknown T.meet ~contents_is_bottom:T.is_obviously_bottom env imms1
+    meet_unknown meet ~contents_is_bottom:T.is_obviously_bottom env imms1
       imms2
   in
   let imms : _ Or_bottom.t =
@@ -170,8 +170,7 @@ let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
     let env_extension =
       let env = Meet_env.env env in
       let join_env = Join_env.create env ~left_env:env ~right_env:env in
-      Typing_env_extension_meet_and_join.join join_env env_extension1
-        env_extension2
+      join_env_extension join_env env_extension1 env_extension2
     in
     Ok (blocks, immediates, env_extension)
 
@@ -193,7 +192,7 @@ and meet_closures_entry env
         | None, None -> None
         | Some func_decl, None | None, Some func_decl -> Some func_decl
         | Some func_decl1, Some func_decl2 -> (
-          match FDT.meet env func_decl1 func_decl2 with
+          match FDmeet env func_decl1 func_decl2 with
           | Bottom ->
             any_bottom := true;
             None
@@ -477,16 +476,16 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
         let is_unique = is_unique1 || is_unique2 in
         Variant (Variant.create ~is_unique ~blocks ~immediates), env_extension)
   | Boxed_float n1, Boxed_float n2 ->
-    Or_bottom.map (T.meet env n1 n2) ~f:(fun (n, env_extension) ->
+    Or_bottom.map (meet env n1 n2) ~f:(fun (n, env_extension) ->
         Boxed_float n, env_extension)
   | Boxed_int32 n1, Boxed_int32 n2 ->
-    Or_bottom.map (T.meet env n1 n2) ~f:(fun (n, env_extension) ->
+    Or_bottom.map (meet env n1 n2) ~f:(fun (n, env_extension) ->
         Boxed_int32 n, env_extension)
   | Boxed_int64 n1, Boxed_int64 n2 ->
-    Or_bottom.map (T.meet env n1 n2) ~f:(fun (n, env_extension) ->
+    Or_bottom.map (meet env n1 n2) ~f:(fun (n, env_extension) ->
         Boxed_int64 n, env_extension)
   | Boxed_nativeint n1, Boxed_nativeint n2 ->
-    Or_bottom.map (T.meet env n1 n2) ~f:(fun (n, env_extension) ->
+    Or_bottom.map (meet env n1 n2) ~f:(fun (n, env_extension) ->
         Boxed_nativeint n, env_extension)
   | ( Closures { by_closure_id = by_closure_id1 },
       Closures { by_closure_id = by_closure_id2 } ) ->
@@ -500,7 +499,7 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     then Bottom
     else Or_bottom.Ok (String strs, TEE.empty)
   | Array { length = length1 }, Array { length = length2 } ->
-    Or_bottom.map (T.meet env length1 length2)
+    Or_bottom.map (meet env length1 length2)
       ~f:(fun (length, env_extension) -> Array { length }, env_extension)
   | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
@@ -515,10 +514,10 @@ and meet_head_of_kind_naked_immediate env t1 t2 : _ Or_bottom.t =
     let is = I.Set.inter is1 is2 in
     if I.Set.is_empty is then Bottom else Ok (Naked_immediates is, TEE.empty)
   | Is_int ty1, Is_int ty2 ->
-    Or_bottom.map (T.meet env ty1 ty2) ~f:(fun (ty, env_extension) ->
+    Or_bottom.map (meet env ty1 ty2) ~f:(fun (ty, env_extension) ->
         Is_int ty, env_extension)
   | Get_tag ty1, Get_tag ty2 ->
-    Or_bottom.map (T.meet env ty1 ty2) ~f:(fun (ty, env_extension) ->
+    Or_bottom.map (meet env ty1 ty2) ~f:(fun (ty, env_extension) ->
         Get_tag ty, env_extension)
   | Is_int ty, Naked_immediates is_int | Naked_immediates is_int, Is_int ty ->
     begin
@@ -534,7 +533,7 @@ and meet_head_of_kind_naked_immediate env t1 t2 : _ Or_bottom.t =
       in
       match shape with
       | Some shape ->
-        Or_bottom.map (T.meet env ty shape) ~f:(fun (ty, env_extension) ->
+        Or_bottom.map (meet env ty shape) ~f:(fun (ty, env_extension) ->
             Is_int ty, env_extension)
       | None -> Bottom)
     | _ :: _ :: _ ->
@@ -554,7 +553,7 @@ and meet_head_of_kind_naked_immediate env t1 t2 : _ Or_bottom.t =
     in
     match T.blocks_with_these_tags tags with
     | Known shape ->
-      Or_bottom.map (T.meet env ty shape) ~f:(fun (ty, env_extension) ->
+      Or_bottom.map (meet env ty shape) ~f:(fun (ty, env_extension) ->
           Get_tag ty, env_extension)
     | Unknown -> Ok (Get_tag ty, TEE.empty))
   | (Is_int _ | Get_tag _), (Is_int _ | Get_tag _) ->
@@ -768,28 +767,28 @@ and meet_env_extension0 env t1 t2 extra_extensions =
 and meet_env_extension env t1 t2 : _ Or_bottom.t =
   try Ok (meet_env_extension0 env t1 t2 []) with Bottom_meet -> Bottom
 
-let join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
+and join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
     (or_unknown2 : _ Or_unknown.t) : _ Or_unknown.t =
   match or_unknown1, or_unknown2 with
   | _, Unknown | Unknown, _ -> Unknown
   | Known contents1, Known contents2 -> join_contents env contents1 contents2
 
-let join_head_of_kind_naked_float _env t1 t2 : _ Or_unknown.t =
+and join_head_of_kind_naked_float _env t1 t2 : _ Or_unknown.t =
   Known (Float.Set.union t1 t2)
 
-let join_head_of_kind_naked_int32 _env t1 t2 : _ Or_unknown.t =
+and join_head_of_kind_naked_int32 _env t1 t2 : _ Or_unknown.t =
   Known (Int32.Set.union t1 t2)
 
-let join_head_of_kind_naked_int64 _env t1 t2 : _ Or_unknown.t =
+and join_head_of_kind_naked_int64 _env t1 t2 : _ Or_unknown.t =
   Known (Int64.Set.union t1 t2)
 
-let join_head_of_kind_naked_nativeint _env t1 t2 : _ Or_unknown.t =
+and join_head_of_kind_naked_nativeint _env t1 t2 : _ Or_unknown.t =
   Known (Targetint_32_64.Set.union t1 t2)
 
-let join_head_of_kind_rec_info _env t1 t2 : _ Or_unknown.t =
+and join_head_of_kind_rec_info _env t1 t2 : _ Or_unknown.t =
   if Rec_info_expr.equal t1 t2 then Known t1 else Unknown
 
-let rec join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
+and join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
   let blocks_join env b1 b2 : _ Or_unknown.t = Known (join_blocks env b1 b2) in
   let blocks = join_unknown blocks_join env blocks1 blocks2 in
   let imms = join_unknown (join ?bound_name:None) env imms1 imms2 in
@@ -1087,13 +1086,13 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
         let is_unique = is_unique1 || is_unique2 in
         Variant (Variant.create ~is_unique ~blocks ~immediates))
   | Boxed_float n1, Boxed_float n2 ->
-    Or_unknown.map (T.join env n1 n2) ~f:(fun n -> Boxed_float n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_float n)
   | Boxed_int32 n1, Boxed_int32 n2 ->
-    Or_unknown.map (T.join env n1 n2) ~f:(fun n -> Boxed_int32 n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_int32 n)
   | Boxed_int64 n1, Boxed_int64 n2 ->
-    Or_unknown.map (T.join env n1 n2) ~f:(fun n -> Boxed_int64 n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_int64 n)
   | Boxed_nativeint n1, Boxed_nativeint n2 ->
-    Or_unknown.map (T.join env n1 n2) ~f:(fun n -> Boxed_nativeint n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_nativeint n)
   | ( Closures { by_closure_id = by_closure_id1 },
       Closures { by_closure_id = by_closure_id2 } ) ->
     let module C = Row_like.For_closures_entry_by_set_of_closures_contents in
@@ -1103,7 +1102,7 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
     let strs = String_info.Set.union strs1 strs2 in
     Known (String strs)
   | Array { length = length1 }, Array { length = length2 } ->
-    Or_unknown.map (T.join env length1 length2) ~f:(fun length ->
+    Or_unknown.map (join env length1 length2) ~f:(fun length ->
         Array { length })
   | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
@@ -1116,9 +1115,9 @@ and join_head_of_kind_naked_immediate env t1 t2 : _ Or_unknown.t =
     let is = I.Set.union is1 is2 in
     Known (Naked_immediates is)
   | Is_int ty1, Is_int ty2 ->
-    Or_unknown.map (T.join env ty1 ty2) ~f:(fun ty -> Is_int ty)
+    Or_unknown.map (join env ty1 ty2) ~f:(fun ty -> Is_int ty)
   | Get_tag ty1, Get_tag ty2 ->
-    Or_unknown.map (T.join env ty1 ty2) ~f:(fun ty -> Get_tag ty)
+    Or_unknown.map (join env ty1 ty2) ~f:(fun ty -> Get_tag ty)
   (* From now on: Irregular cases *)
   (* CR vlaviron: There could be improvements based on reduction (trying to
      reduce the is_int and get_tag cases to naked_immediate sets, then joining
@@ -1151,13 +1150,6 @@ and join_head_or_unknown_or_bottom (env : Join_env.t)
 
 and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
     _ Or_unknown.t =
-  (* Format.eprintf "DESCR: Joining %a and %a\n%!" print t1 print t2;
-     Format.eprintf "Left:@ %a@ Right:@ %a\n%!" Code_age_relation.print
-     (Join_env.left_join_env join_env |> TE.code_age_relation)
-     Code_age_relation.print (Join_env.right_join_env join_env |>
-     TE.code_age_relation); *)
-  (* Typing_env.print (Join_env.left_join_env join_env) Typing_env.print
-     (Join_env.right_join_env join_env); *)
   (* CR mshinwell: Rewrite this to avoid the [option] allocations from
      [get_canonical_simples_and_expand_heads] *)
   let canonical_simple1, head1, canonical_simple2, head2 =
@@ -1202,8 +1194,6 @@ and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
         ~f:(fun simple -> not (Simple.same simple (Simple.name bound_name)))
         shared_aliases
   in
-  (* Format.eprintf "Shared aliases:@ %a\n%!" Simple.Set.print
-     shared_aliases; *)
   match Aliases.Alias_set.find_best shared_aliases with
   | Some alias -> Known (to_type (TG.create_equals alias))
   | None -> (
