@@ -285,6 +285,8 @@ module Closures_entry : sig
 
   val find_function_type :
     t -> Closure_id.t -> Function_type.t Or_unknown_or_bottom.t
+
+  val closure_var_types : t -> flambda_type Var_within_closure.Map.t
 end
 
 module Row_like_for_blocks : sig

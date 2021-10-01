@@ -1169,6 +1169,9 @@ module Closures_entry = struct
     match Closure_id.Map.find closure_id t.function_types with
     | exception Not_found -> Bottom
     | func_decl -> func_decl
+
+  let closure_var_types { closure_var_types; _ } =
+    closure_var_types.var_within_closure_components_by_index
 end
 
 module Product = struct
@@ -1528,45 +1531,6 @@ module Typing_env_extension = struct
 
   let print = print_env_extension
 end
-
-(* let force_to_kind_value t = match t with | Value ty -> ty | Naked_immediate _
-   | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ |
-   Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected [Value]):@ %a"
-   print t
-
-   let force_to_kind_naked_immediate t = match t with | Naked_immediate ty -> ty
-   | Value _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
-   | Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected
-   [Naked_immediate]):@ %a" print t
-
-   let force_to_kind_naked_float t = match t with | Naked_float ty -> ty | Value
-   _ | Naked_immediate _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ |
-   Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected
-   [Naked_float]):@ %a" print t
-
-   let force_to_kind_naked_int32 t = match t with | Naked_int32 ty -> ty | Value
-   _ | Naked_immediate _ | Naked_float _ | Naked_int64 _ | Naked_nativeint _ |
-   Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected
-   [Naked_int32]):@ %a" print t
-
-   let force_to_kind_naked_int64 t = match t with | Naked_int64 ty -> ty | Value
-   _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_nativeint _ |
-   Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected [Naked_number
-   Int64]):@ %a" print t
-
-   let force_to_kind_naked_nativeint t = match t with | Naked_nativeint ty -> ty
-   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-   | Rec_info _ -> Misc.fatal_errorf "Type has wrong kind (expected
-   [Naked_number Nativeint]):@ %a" print t
-
-   let force_to_kind_rec_info t = match t with | Rec_info ty -> ty | Value _ |
-   Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ |
-   Naked_nativeint _ -> Misc.fatal_errorf "Type has wrong kind (expected
-   [Rec_info]):@ %a" print t
-
-   let force_to_head ~force_to_kind t = match TD.descr (force_to_kind t) with |
-   No_alias head -> head | Equals _ -> Misc.fatal_errorf "Expected [No_alias]:@
-   %a" T.print t *)
 
 let kind t =
   match t with
