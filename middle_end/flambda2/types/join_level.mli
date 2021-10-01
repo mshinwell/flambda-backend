@@ -16,6 +16,9 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+(** Compute the typing environment for a join point given the environments at
+    each of the corresponding continuation's uses. *)
+
 val cut_and_n_way_join :
   Typing_env.t ->
   (Typing_env.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list ->
