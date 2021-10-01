@@ -109,7 +109,7 @@ and row_like_for_closures =
   }
 
 and closures_entry =
-  { function_decls : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
+  { function_types : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
     closure_types : closure_id_indexed_product;
     closure_var_types : var_within_closure_indexed_product
   }
@@ -278,13 +278,13 @@ and apply_renaming_row_like_for_closures
   | Some (known_closures, other_closures) -> { known_closures; other_closures }
 
 and apply_renaming_closures_entry
-    { function_decls; closure_types; closure_var_types } renaming =
-  { function_decls =
+    { function_types; closure_types; closure_var_types } renaming =
+  { function_types =
       Closure_id.Map.map_sharing
         (fun function_type ->
           Or_unknown_or_bottom.map function_type ~f:(fun function_type ->
               apply_renaming_function_type function_type renaming))
-        function_decls;
+        function_types;
     closure_types =
       apply_renaming_closure_id_indexed_product closure_types renaming;
     closure_var_types =
@@ -435,15 +435,15 @@ and free_names_row_like_for_closures { known_closures; other_closures } =
     ~known:known_closures ~other:other_closures ~fold_known:Closure_id.Map.fold
 
 and free_names_closures_entry
-    { function_decls; closure_types; closure_var_types } =
-  let function_decls_free_names =
+    { function_types; closure_types; closure_var_types } =
+  let function_types_free_names =
     Closure_id.Map.fold
       (fun _closure_id function_decl free_names ->
         Name_occurrences.union free_names
           (free_names_function_type function_decl))
-      function_decls Name_occurrences.empty
+      function_types Name_occurrences.empty
   in
-  Name_occurrences.union function_decls_free_names
+  Name_occurrences.union function_types_free_names
     (Name_occurrences.union
        (free_names_closure_id_indexed_product closure_types)
        (free_names_var_within_closure_indexed_product closure_var_types))
@@ -622,12 +622,12 @@ and print_row_like_for_closures ppf { known_closures; other_closures } =
     ~other:other_closures ppf
 
 and print_closures_entry ppf
-    { function_decls; closure_types; closure_var_types } =
+    { function_types; closure_types; closure_var_types } =
   Format.fprintf ppf
-    "@[<hov 1>(@[<hov 1>(function_decls@ %a)@]@ @[<hov 1>(closure_types@ \
+    "@[<hov 1>(@[<hov 1>(function_types@ %a)@]@ @[<hov 1>(closure_types@ \
      %a)@]@ @[<hov 1>(closure_var_types@ %a)@])@]"
     (Closure_id.Map.print (Or_unknown_or_bottom.print print_function_type))
-    function_decls print_closure_id_indexed_product closure_types
+    function_types print_closure_id_indexed_product closure_types
     print_var_within_closure_indexed_product closure_var_types
 
 and print_closure_id_indexed_product ppf { closure_id_components_by_index } =
@@ -782,8 +782,8 @@ and all_ids_for_export_row_like_for_closures { known_closures; other_closures }
     ~known:known_closures ~other:other_closures ~fold_known:Closure_id.Map.fold
 
 and all_ids_for_export_closures_entry
-    { function_decls; closure_types; closure_var_types } =
-  let function_decls_ids =
+    { function_types; closure_types; closure_var_types } =
+  let function_types_ids =
     Closure_id.Map.fold
       (fun _closure_id (function_type : _ Or_unknown_or_bottom.t) ids ->
         match function_type with
@@ -791,9 +791,9 @@ and all_ids_for_export_closures_entry
         | Ok function_type ->
           Ids_for_export.union ids
             (all_ids_for_export_function_type function_type))
-      function_decls Ids_for_export.empty
+      function_types Ids_for_export.empty
   in
-  Ids_for_export.union function_decls_ids
+  Ids_for_export.union function_types_ids
     (Ids_for_export.union
        (all_ids_for_export_closure_id_indexed_product closure_types)
        (all_ids_for_export_var_within_closure_indexed_product closure_var_types))
@@ -971,10 +971,10 @@ and apply_coercion_row_like_for_closures { known_closures; other_closures }
       { known_closures = known; other_closures = other })
 
 and apply_coercion_closures_entry
-    { function_decls; closure_types; closure_var_types } coercion :
+    { function_types; closure_types; closure_var_types } coercion :
     _ Or_bottom.t =
   let bottom = ref false in
-  let function_decls =
+  let function_types =
     Closure_id.Map.map
       (fun function_type ->
         match apply_coercion_function_type function_type coercion with
@@ -983,7 +983,7 @@ and apply_coercion_closures_entry
           bottom := true;
           function_type
         (* will never be looked at *))
-      function_decls
+      function_types
   in
   if !bottom
   then Bottom
@@ -994,7 +994,7 @@ and apply_coercion_closures_entry
         Or_bottom.map
           (apply_coercion_var_within_closure_indexed_product closure_var_types
              coercion) ~f:(fun closure_var_types ->
-            { function_decls; closure_types; closure_var_types }))
+            { function_types; closure_types; closure_var_types }))
 
 and apply_coercion_closure_id_indexed_product
     ({ closure_id_components_by_index } as product) coercion : _ Or_bottom.t =
@@ -1113,8 +1113,11 @@ end
 module Closures_entry = struct
   type t = closures_entry
 
+  let create ~function_types ~closure_types ~closure_var_types =
+    { function_types; closure_types; closure_var_types }
+
   let find_function_type t closure_id : _ Or_unknown_or_bottom.t =
-    match Closure_id.Map.find closure_id t.function_decls with
+    match Closure_id.Map.find closure_id t.function_types with
     | exception Not_found -> Bottom
     | func_decl -> func_decl
 end
@@ -1459,6 +1462,22 @@ module Row_like_for_closures = struct
               index print_closures_entry maps_to
         in
         Known env_var_ty
+end
+
+module Typing_env_extension = struct
+  type t = env_extension
+
+  let empty = { equations = Name.Map.empty }
+
+  let create ~equations = { equations }
+
+  let all_ids_for_export = all_ids_for_export_env_extension
+
+  let apply_renaming = apply_renaming_env_extension
+
+  let free_names = free_names_env_extension
+
+  let print = print_env_extension
 end
 
 (* let force_to_kind_value t = match t with | Value ty -> ty | Naked_immediate _

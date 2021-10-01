@@ -17,6 +17,7 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 module K = Flambda_kind
+module MTC = More_type_creators
 module TG = Type_grammar
 module TEL = Typing_env_level
 
@@ -47,7 +48,7 @@ module One_level = struct
   let create scope level ~just_after_level = { scope; level; just_after_level }
 
   let create_empty scope =
-    { scope; level = TEL.empty (); just_after_level = Cached_level.empty }
+    { scope; level = TEL.empty; just_after_level = Cached_level.empty }
 
   let scope t = t.scope
 
@@ -173,14 +174,14 @@ type meet_type =
 module Join_env = struct
   type t =
     { central_env : Meet_env.t;
-      left_join_env : Typing_env.t;
-      right_join_env : Typing_env.t
+      left_join_env : typing_env;
+      right_join_env : typing_env
     }
 
   let [@ocamlformat "disable"] print ppf
       { central_env; left_join_env; right_join_env } =
     let join_env name ppf env =
-      Format.fprintf ppf "@ @[<hov 1>(%s@ %a)@]@" name Typing_env.print env
+      Format.fprintf ppf "@ @[<hov 1>(%s@ %a)@]@" name print env
     in
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(central_env@ %a)@]\
@@ -223,13 +224,11 @@ module Serializable : sig
 
   val merge : t -> t -> t
 
-  val defined_symbols : t -> Symbol.Set.t
-
-  val code_age_relation : t -> Code_age_relation.t
-
-  val just_after_level : t -> Cached_level.t
-
-  val next_binding_time : t -> Binding_time.t
+  val to_typing_env :
+    t ->
+    resolver:(Compilation_unit.t -> typing_env option) ->
+    get_imported_names:(unit -> Name.Set.t) ->
+    typing_env
 end = struct
   type t =
     { defined_symbols : Symbol.Set.t;
@@ -359,8 +358,7 @@ end = struct
       defined_symbols;
       code_age_relation;
       prev_levels = Scope.Map.empty;
-      current_level =
-        One_level.create Scope.initial (TEL.empty ()) ~just_after_level;
+      current_level = One_level.create Scope.initial TEL.empty ~just_after_level;
       (* Note: the field [next_binding_time] of the new env will not be used,
          but setting [min_binding_time] to the value of [next_binding_time] from
          the serialized env marks all variables as having mode In_types. *)
@@ -417,7 +415,7 @@ let increment_scope t =
   let current_scope = current_scope t in
   let prev_levels = Scope.Map.add current_scope t.current_level t.prev_levels in
   let current_level =
-    One_level.create (Scope.next current_scope) (TEL.empty ())
+    One_level.create (Scope.next current_scope) TEL.empty
       ~just_after_level:(One_level.just_after_level t.current_level)
   in
   { t with prev_levels; current_level }
@@ -430,7 +428,7 @@ let name_domain t =
     (Name.set_of_symbol_set (defined_symbols t))
 
 let initial_symbol_type =
-  lazy (TG.unknown K.value, Binding_time.symbols, Name_mode.normal)
+  lazy (MTC.unknown K.value, Binding_time.symbols, Name_mode.normal)
 
 let variable_is_from_missing_cmx_file t name =
   if Name.is_symbol name
@@ -496,7 +494,7 @@ let find_with_binding_time_and_mode' t name kind =
             match kind with
             | Some kind ->
               (* See comment below about binding times. *)
-              ( TG.unknown kind,
+              ( MTC.unknown kind,
                 Binding_time.imported_variables,
                 Name_mode.in_types )
             | None -> raise Missing_cmx_and_kind)
@@ -671,7 +669,7 @@ let add_variable_definition t var kind name_mode =
       var kind t.next_binding_time
   in
   let just_after_level =
-    Cached_level.add_or_replace_binding (cached t) name (TG.unknown kind)
+    Cached_level.add_or_replace_binding (cached t) name (MTC.unknown kind)
       t.next_binding_time name_mode
   in
   let current_level =
@@ -895,7 +893,7 @@ and add_equation t name ty ~(meet_type : meet_type) =
   in
   let ty =
     match TG.apply_coercion ty coercion_from_ty_to_bare_lhs with
-    | Bottom -> TG.bottom (TG.kind ty)
+    | Bottom -> MTC.bottom (TG.kind ty)
     | Ok ty -> ty
   in
   (* Beware: if we're about to add the equation on a name which is different
@@ -921,7 +919,7 @@ and add_equation t name ty ~(meet_type : meet_type) =
         let env = Meet_env.create t in
         let existing_ty = find t eqn_name (Some (TG.kind ty)) in
         match meet_type env ty existing_ty with
-        | Bottom -> TG.bottom (TG.kind ty), t
+        | Bottom -> MTC.bottom (TG.kind ty), t
         | Ok (meet_ty, env_extension) ->
           meet_ty, add_env_extension t env_extension ~meet_type
     in
@@ -1017,7 +1015,7 @@ let with_code_age_relation t code_age_relation = { t with code_age_relation }
 let cut t ~unknown_if_defined_at_or_later_than:min_scope =
   let current_scope = current_scope t in
   if Scope.( > ) min_scope current_scope
-  then TEL.empty ()
+  then TEL.empty
   else
     let _strictly_less, at_min_scope, strictly_greater =
       Scope.Map.split min_scope t.prev_levels
@@ -1034,7 +1032,7 @@ let cut t ~unknown_if_defined_at_or_later_than:min_scope =
     Scope.Map.fold
       (fun _scope one_level result ->
         TEL.concat result (One_level.level one_level))
-      at_or_after_cut (TEL.empty ())
+      at_or_after_cut TEL.empty
 
 let type_simple_in_term_exn t ?min_name_mode simple =
   (* If [simple] is a variable then it should not come from a missing .cmx file,
@@ -1044,7 +1042,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
      [find] below. *)
   let ty, _binding_time, name_mode_simple =
     let[@inline always] const const =
-      ( TG.type_for_const const,
+      ( MTC.type_for_const const,
         Binding_time.consts_and_discriminants,
         Name_mode.normal )
     in
@@ -1059,7 +1057,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
     then
       match (TG.apply_coercion ty (Simple.coercion simple) : _ Or_bottom.t) with
       | Ok ty -> ty
-      | Bottom -> TG.bottom (TG.kind ty)
+      | Bottom -> MTC.bottom (TG.kind ty)
     else ty
   in
   let kind = TG.kind ty in
@@ -1237,289 +1235,144 @@ let clean_for_export t ~reachable_names =
     One_level.clean_for_export t.current_level ~reachable_names
   in
   { t with current_level }
+(* type resolved_type = | Const of Reg_width_const.Descr.t | Value of
+   Type_grammar.head_of_kind_value Or_unknown_or_bottom.t | Naked_immediate of
+   Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t |
+   Naked_float of Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t |
+   Naked_int32 of Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t |
+   Naked_int64 of Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t |
+   Naked_nativeint of Type_grammar.head_of_kind_naked_nativeint
+   Or_unknown_or_bottom.t | Rec_info of Type_grammar.head_of_kind_rec_info
+   Or_unknown_or_bottom.t let expand_head ~force_to_kind t env kind : _
+   Or_unknown_or_bottom.t = match TG.descr t with | No_alias head -> head |
+   Equals simple -> ( let min_name_mode = Name_mode.min_in_types in match
+   get_canonical_simple_exn env simple ~min_name_mode with | exception Not_found
+   -> (* This can happen when [simple] is of [Phantom] name mode. We're not
+   interested in propagating types for phantom variables, so [Unknown] is fine
+   here. *) Unknown | simple -> let[@inline always] const const = let typ =
+   match Reg_width_const.descr const with | Naked_immediate i ->
+   T.this_naked_immediate_without_alias i | Tagged_immediate i ->
+   T.this_tagged_immediate_without_alias i | Naked_float f ->
+   T.this_naked_float_without_alias f | Naked_int32 i ->
+   T.this_naked_int32_without_alias i | Naked_int64 i ->
+   T.this_naked_int64_without_alias i | Naked_nativeint i ->
+   T.this_naked_nativeint_without_alias i in force_to_head ~force_to_kind typ in
+   let[@inline always] name name ~coercion : _ Or_unknown_or_bottom.t = let t =
+   force_to_kind (find env name (Some kind)) in match descr t with | No_alias
+   Bottom -> Bottom | No_alias Unknown -> Unknown | No_alias (Ok head) -> ( if
+   Coercion.is_id coercion then Ok head else (* [simple] already has [coercion]
+   applied to it (see [get_canonical_simple], above). However we also need to
+   apply it to the expanded head of the type. *) match Head.apply_coercion head
+   coercion with | Bottom -> Bottom | Ok head -> Ok head) | Equals _ ->
+   Misc.fatal_errorf "Canonical alias %a should never have [Equals] type %a:@
+   %a" Simple.print simple print t print env in Simple.pattern_match simple
+   ~const ~name)
 
-type resolved_type =
-  | Const of Reg_width_const.Descr.t
-  | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
-  | Naked_immediate of
-      Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
-  | Naked_float of Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
-  | Naked_int32 of Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
-  | Naked_int64 of Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
-  | Naked_nativeint of
-      Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
-  | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
+   let expand_head' ~force_to_kind t env kind = match expand_head ~force_to_kind
+   t env kind with | Unknown -> TG.unknown | Ok head -> TG.create head | Bottom
+   -> TG.bottom
 
-let expand_head ~force_to_kind t env kind : _ Or_unknown_or_bottom.t =
-  match TG.descr t with
-  | No_alias head -> head
-  | Equals simple -> (
-    let min_name_mode = Name_mode.min_in_types in
-    match get_canonical_simple_exn env simple ~min_name_mode with
-    | exception Not_found ->
-      (* This can happen when [simple] is of [Phantom] name mode. We're not
-         interested in propagating types for phantom variables, so [Unknown] is
-         fine here. *)
-      Unknown
-    | simple ->
-      let[@inline always] const const =
-        let typ =
-          match Reg_width_const.descr const with
-          | Naked_immediate i -> T.this_naked_immediate_without_alias i
-          | Tagged_immediate i -> T.this_tagged_immediate_without_alias i
-          | Naked_float f -> T.this_naked_float_without_alias f
-          | Naked_int32 i -> T.this_naked_int32_without_alias i
-          | Naked_int64 i -> T.this_naked_int64_without_alias i
-          | Naked_nativeint i -> T.this_naked_nativeint_without_alias i
-        in
-        force_to_head ~force_to_kind typ
-      in
-      let[@inline always] name name ~coercion : _ Or_unknown_or_bottom.t =
-        let t = force_to_kind (find env name (Some kind)) in
-        match descr t with
-        | No_alias Bottom -> Bottom
-        | No_alias Unknown -> Unknown
-        | No_alias (Ok head) -> (
-          if Coercion.is_id coercion
-          then Ok head
-          else
-            (* [simple] already has [coercion] applied to it (see
-               [get_canonical_simple], above). However we also need to apply it
-               to the expanded head of the type. *)
-            match Head.apply_coercion head coercion with
-            | Bottom -> Bottom
-            | Ok head -> Ok head)
-        | Equals _ ->
-          Misc.fatal_errorf
-            "Canonical alias %a should never have [Equals] type %a:@ %a"
-            Simple.print simple print t print env
-      in
-      Simple.pattern_match simple ~const ~name)
+   let expand_head t env : resolved_type = match t with | Value ty -> let head =
+   T_V.expand_head ~force_to_kind:force_to_kind_value ty env K.value in Value
+   head | Naked_immediate ty -> let head = T_NI.expand_head
+   ~force_to_kind:force_to_kind_naked_immediate ty env K.naked_immediate in
+   Naked_immediate head | Naked_float ty -> let head = T_Nf.expand_head
+   ~force_to_kind:force_to_kind_naked_float ty env K.naked_float in Naked_float
+   head | Naked_int32 ty -> let head = T_N32.expand_head
+   ~force_to_kind:force_to_kind_naked_int32 ty env K.naked_int32 in Naked_int32
+   head | Naked_int64 ty -> let head = T_N64.expand_head
+   ~force_to_kind:force_to_kind_naked_int64 ty env K.naked_int64 in Naked_int64
+   head | Naked_nativeint ty -> let head = T_NN.expand_head
+   ~force_to_kind:force_to_kind_naked_nativeint ty env K.naked_nativeint in
+   Naked_nativeint head | Rec_info ty -> let head = T_RI.expand_head
+   ~force_to_kind:force_to_kind_rec_info ty env K.rec_info in Rec_info head
 
-let expand_head' ~force_to_kind t env kind =
-  match expand_head ~force_to_kind t env kind with
-  | Unknown -> TG.unknown
-  | Ok head -> TG.create head
-  | Bottom -> TG.bottom
+   let expand_head' t env : t = match t with | Value ty -> Value
+   (T_V.expand_head' ~force_to_kind:force_to_kind_value ty env K.value) |
+   Naked_immediate ty -> Naked_immediate (T_NI.expand_head'
+   ~force_to_kind:force_to_kind_naked_immediate ty env K.naked_immediate) |
+   Naked_float ty -> Naked_float (T_Nf.expand_head'
+   ~force_to_kind:force_to_kind_naked_float ty env K.naked_float) | Naked_int32
+   ty -> Naked_int32 (T_N32.expand_head'
+   ~force_to_kind:force_to_kind_naked_int32 ty env K.naked_int32) | Naked_int64
+   ty -> Naked_int64 (T_N64.expand_head'
+   ~force_to_kind:force_to_kind_naked_int64 ty env K.naked_int64) |
+   Naked_nativeint ty -> Naked_nativeint (T_NN.expand_head'
+   ~force_to_kind:force_to_kind_naked_nativeint ty env K.naked_nativeint) |
+   Rec_info ty -> Rec_info (T_RI.expand_head'
+   ~force_to_kind:force_to_kind_rec_info ty env K.rec_info)
 
-let expand_head t env : resolved_type =
-  match t with
-  | Value ty ->
-    let head =
-      T_V.expand_head ~force_to_kind:force_to_kind_value ty env K.value
-    in
-    Value head
-  | Naked_immediate ty ->
-    let head =
-      T_NI.expand_head ~force_to_kind:force_to_kind_naked_immediate ty env
-        K.naked_immediate
-    in
-    Naked_immediate head
-  | Naked_float ty ->
-    let head =
-      T_Nf.expand_head ~force_to_kind:force_to_kind_naked_float ty env
-        K.naked_float
-    in
-    Naked_float head
-  | Naked_int32 ty ->
-    let head =
-      T_N32.expand_head ~force_to_kind:force_to_kind_naked_int32 ty env
-        K.naked_int32
-    in
-    Naked_int32 head
-  | Naked_int64 ty ->
-    let head =
-      T_N64.expand_head ~force_to_kind:force_to_kind_naked_int64 ty env
-        K.naked_int64
-    in
-    Naked_int64 head
-  | Naked_nativeint ty ->
-    let head =
-      T_NN.expand_head ~force_to_kind:force_to_kind_naked_nativeint ty env
-        K.naked_nativeint
-    in
-    Naked_nativeint head
-  | Rec_info ty ->
-    let head =
-      T_RI.expand_head ~force_to_kind:force_to_kind_rec_info ty env K.rec_info
-    in
-    Rec_info head
+   let eviscerate0 ~apply_renaming_head ~free_names_head ~force_to_kind ty env
+   kind = match TD.descr ~apply_renaming_head ~free_names_head ty with | Bottom
+   | Unknown -> t | Ok (No_alias head) -> ( match Head.eviscerate head with |
+   Known head -> create_no_alias (Ok head) | Unknown -> unknown ()) | Ok (Equals
+   simple) -> ( if Simple.is_symbol simple || Simple.is_const simple then t else
+   let t = expand_head' ~force_to_kind t env kind in match descr t with |
+   No_alias (Bottom | Unknown) -> t | No_alias (Ok head) -> begin match
+   Head.eviscerate head with | Known head -> create_no_alias (Ok head) | Unknown
+   -> unknown () end | Equals _ -> assert false)
 
-let expand_head' t env : t =
-  match t with
-  | Value ty ->
-    Value (T_V.expand_head' ~force_to_kind:force_to_kind_value ty env K.value)
-  | Naked_immediate ty ->
-    Naked_immediate
-      (T_NI.expand_head' ~force_to_kind:force_to_kind_naked_immediate ty env
-         K.naked_immediate)
-  | Naked_float ty ->
-    Naked_float
-      (T_Nf.expand_head' ~force_to_kind:force_to_kind_naked_float ty env
-         K.naked_float)
-  | Naked_int32 ty ->
-    Naked_int32
-      (T_N32.expand_head' ~force_to_kind:force_to_kind_naked_int32 ty env
-         K.naked_int32)
-  | Naked_int64 ty ->
-    Naked_int64
-      (T_N64.expand_head' ~force_to_kind:force_to_kind_naked_int64 ty env
-         K.naked_int64)
-  | Naked_nativeint ty ->
-    Naked_nativeint
-      (T_NN.expand_head' ~force_to_kind:force_to_kind_naked_nativeint ty env
-         K.naked_nativeint)
-  | Rec_info ty ->
-    Rec_info
-      (T_RI.expand_head' ~force_to_kind:force_to_kind_rec_info ty env K.rec_info)
+   let rec eviscerate t env = match t with | Value ty -> let ty = eviscerate0
+   ~force_to_kind:force_to_kind_value ty env K.value in Value ty |
+   Naked_immediate ty -> (* XXX it just returned Unknown for these *) let ty =
+   eviscerate0 ~force_to_kind:force_to_kind_naked_immediate ty env
+   K.naked_immediate in Naked_immediate ty | Naked_float ty -> let ty =
+   T_Nf.eviscerate ~force_to_kind:force_to_kind_naked_float ty env K.naked_float
+   in Naked_float ty | Naked_int32 ty -> let ty = T_N32.eviscerate
+   ~force_to_kind:force_to_kind_naked_int32 ty env K.naked_int32 in Naked_int32
+   ty | Naked_int64 ty -> let ty = T_N64.eviscerate
+   ~force_to_kind:force_to_kind_naked_int64 ty env K.naked_int64 in Naked_int64
+   ty | Naked_nativeint ty -> let ty = eviscerate0
+   ~force_to_kind:force_to_kind_naked_nativeint ty env K.naked_nativeint in
+   Naked_nativeint ty | Rec_info ty -> let ty = eviscerate0
+   ~force_to_kind:force_to_kind_rec_info ty env K.rec_info in Rec_info ty
 
-let eviscerate0 ~apply_renaming_head ~free_names_head ~force_to_kind ty env kind
-    =
-  match TD.descr ~apply_renaming_head ~free_names_head ty with
-  | Bottom | Unknown -> t
-  | Ok (No_alias head) -> (
-    match Head.eviscerate head with
-    | Known head -> create_no_alias (Ok head)
-    | Unknown -> unknown ())
-  | Ok (Equals simple) -> (
-    if Simple.is_symbol simple || Simple.is_const simple
-    then t
-    else
-      let t = expand_head' ~force_to_kind t env kind in
-      match descr t with
-      | No_alias (Bottom | Unknown) -> t
-      | No_alias (Ok head) -> begin
-        match Head.eviscerate head with
-        | Known head -> create_no_alias (Ok head)
-        | Unknown -> unknown ()
-      end
-      | Equals _ -> assert false)
+   and eviscerate_head_of_kind_value : _ Or_unknown.t = match head with |
+   Boxed_float _ -> Known (Boxed_float (T.any_naked_float ())) | Boxed_int32 _
+   -> Known (Boxed_int32 (T.any_naked_int32 ())) | Boxed_int64 _ -> Known
+   (Boxed_int64 (T.any_naked_int64 ())) | Boxed_nativeint _ -> Known
+   (Boxed_nativeint (T.any_naked_nativeint ())) | Closures _ | Variant _ |
+   String _ | Array _ -> Unknown
 
-let rec eviscerate t env =
-  match t with
-  | Value ty ->
-    let ty = eviscerate0 ~force_to_kind:force_to_kind_value ty env K.value in
-    Value ty
-  | Naked_immediate ty ->
-    (* XXX it just returned Unknown for these *)
-    let ty =
-      eviscerate0 ~force_to_kind:force_to_kind_naked_immediate ty env
-        K.naked_immediate
-    in
-    Naked_immediate ty
-  | Naked_float ty ->
-    let ty =
-      T_Nf.eviscerate ~force_to_kind:force_to_kind_naked_float ty env
-        K.naked_float
-    in
-    Naked_float ty
-  | Naked_int32 ty ->
-    let ty =
-      T_N32.eviscerate ~force_to_kind:force_to_kind_naked_int32 ty env
-        K.naked_int32
-    in
-    Naked_int32 ty
-  | Naked_int64 ty ->
-    let ty =
-      T_N64.eviscerate ~force_to_kind:force_to_kind_naked_int64 ty env
-        K.naked_int64
-    in
-    Naked_int64 ty
-  | Naked_nativeint ty ->
-    let ty =
-      eviscerate0 ~force_to_kind:force_to_kind_naked_nativeint ty env
-        K.naked_nativeint
-    in
-    Naked_nativeint ty
-  | Rec_info ty ->
-    let ty =
-      eviscerate0 ~force_to_kind:force_to_kind_rec_info ty env K.rec_info
-    in
-    Rec_info ty
+   let missing_kind env free_names = Name_occurrences.fold_variables free_names
+   ~init:false ~f:(fun missing_kind var -> missing_kind ||
+   variable_is_from_missing_cmx_file env (Name.var var))
 
-and eviscerate_head_of_kind_value : _ Or_unknown.t =
-  match head with
-  | Boxed_float _ -> Known (Boxed_float (T.any_naked_float ()))
-  | Boxed_int32 _ -> Known (Boxed_int32 (T.any_naked_int32 ()))
-  | Boxed_int64 _ -> Known (Boxed_int64 (T.any_naked_int64 ()))
-  | Boxed_nativeint _ -> Known (Boxed_nativeint (T.any_naked_nativeint ()))
-  | Closures _ | Variant _ | String _ | Array _ -> Unknown
-
-let missing_kind env free_names =
-  Name_occurrences.fold_variables free_names ~init:false
-    ~f:(fun missing_kind var ->
-      missing_kind || variable_is_from_missing_cmx_file env (Name.var var))
-
-(* CR mshinwell: There is a subtlety here: the presence of a name in
+   (* CR mshinwell: There is a subtlety here: the presence of a name in
    [suitable_for] doesn't mean that we should blindly return "=name". The type
    of the name in [suitable_for] might be (much) worse than the one in the
-   environment [t]. *)
-let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
-  let free_names = TG.free_names t in
-  if Name_occurrences.no_variables free_names
-  then level, t
-  else if missing_kind env free_names
-  then level, TG.unknown (TG.kind t)
-  else
-    let to_erase =
-      let var free_var = not (mem suitable_for (Name.var free_var)) in
-      Name_occurrences.filter_names free_names ~f:(fun free_name ->
-          Name.pattern_match free_name ~var ~symbol:(fun _ -> true))
-    in
-    if Name_occurrences.is_empty to_erase
-    then level, t
-    else if depth > 1
-    then level, TG.unknown (TG.kind t)
-    else
-      let level, renaming =
-        (* To avoid writing an erasure operation, we define irrelevant fresh
-           variables in the returned [TEL], and swap them with the variables
-           that we wish to erase throughout the type. *)
-        Name_occurrences.fold_names to_erase ~init:(level, Renaming.empty)
-          ~f:(fun ((level, renaming) as acc) to_erase_name ->
-            Name.pattern_match to_erase_name
-              ~symbol:(fun _ -> acc)
-              ~var:(fun to_erase ->
-                let original_type = find env to_erase_name None in
-                let kind = TG.kind original_type in
-                let fresh_var = Variable.rename to_erase in
-                let level =
-                  let level, ty =
-                    match
-                      get_canonical_simple_exn env
-                        ~min_name_mode:Name_mode.in_types (Simple.var to_erase)
-                    with
-                    | exception Not_found -> level, TG.unknown kind
-                    | canonical_simple ->
-                      if mem_simple suitable_for canonical_simple
-                      then level, TG.alias_type_of kind canonical_simple
-                      else
-                        let t = find env (Name.var to_erase) (Some kind) in
-                        let t = expand_head' t env in
-                        make_suitable_for_environment0_core t env
-                          ~depth:(depth + 1) ~suitable_for level
-                  in
-                  TEEV.add_definition level fresh_var kind ty
-                in
-                let renaming =
-                  Renaming.add_variable renaming to_erase fresh_var
-                in
-                level, renaming))
-      in
-      level, TG.apply_renaming t renaming
+   environment [t]. *) let rec make_suitable_for_environment0_core t env ~depth
+   ~suitable_for level = let free_names = TG.free_names t in if
+   Name_occurrences.no_variables free_names then level, t else if missing_kind
+   env free_names then level, TG.unknown (TG.kind t) else let to_erase = let var
+   free_var = not (mem suitable_for (Name.var free_var)) in
+   Name_occurrences.filter_names free_names ~f:(fun free_name ->
+   Name.pattern_match free_name ~var ~symbol:(fun _ -> true)) in if
+   Name_occurrences.is_empty to_erase then level, t else if depth > 1 then
+   level, TG.unknown (TG.kind t) else let level, renaming = (* To avoid writing
+   an erasure operation, we define irrelevant fresh variables in the returned
+   [TEL], and swap them with the variables that we wish to erase throughout the
+   type. *) Name_occurrences.fold_names to_erase ~init:(level, Renaming.empty)
+   ~f:(fun ((level, renaming) as acc) to_erase_name -> Name.pattern_match
+   to_erase_name ~symbol:(fun _ -> acc) ~var:(fun to_erase -> let original_type
+   = find env to_erase_name None in let kind = TG.kind original_type in let
+   fresh_var = Variable.rename to_erase in let level = let level, ty = match
+   get_canonical_simple_exn env ~min_name_mode:Name_mode.in_types (Simple.var
+   to_erase) with | exception Not_found -> level, TG.unknown kind |
+   canonical_simple -> if mem_simple suitable_for canonical_simple then level,
+   TG.alias_type_of kind canonical_simple else let t = find env (Name.var
+   to_erase) (Some kind) in let t = expand_head' t env in
+   make_suitable_for_environment0_core t env ~depth:(depth + 1) ~suitable_for
+   level in TEEV.add_definition level fresh_var kind ty in let renaming =
+   Renaming.add_variable renaming to_erase fresh_var in level, renaming)) in
+   level, TG.apply_renaming t renaming
 
-let make_suitable_for_environment0 t env ~suitable_for level =
-  make_suitable_for_environment0_core t env ~depth:0 ~suitable_for level
+   let make_suitable_for_environment0 t env ~suitable_for level =
+   make_suitable_for_environment0_core t env ~depth:0 ~suitable_for level
 
-let make_suitable_for_environment t env ~suitable_for ~bind_to =
-  if not (mem suitable_for bind_to)
-  then
-    Misc.fatal_errorf
-      "[bind_to] %a is expected to be bound in the [suitable_for] \
-       environment:@ %a"
-      Name.print bind_to print suitable_for;
-  let level, t =
-    make_suitable_for_environment0 t env ~suitable_for TEEV.empty
-  in
-  let level = TEEV.add_or_replace_equation level bind_to t in
-  level
+   let make_suitable_for_environment t env ~suitable_for ~bind_to = if not (mem
+   suitable_for bind_to) then Misc.fatal_errorf "[bind_to] %a is expected to be
+   bound in the [suitable_for] \ environment:@ %a" Name.print bind_to print
+   suitable_for; let level, t = make_suitable_for_environment0 t env
+   ~suitable_for TEEV.empty in let level = TEEV.add_or_replace_equation level
+   bind_to t in level *)

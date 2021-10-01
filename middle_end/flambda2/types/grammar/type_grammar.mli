@@ -96,7 +96,7 @@ and row_like_for_closures =
   }
 
 and closures_entry =
-  { function_decls : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
+  { function_types : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
     closure_types : closure_id_indexed_product;
     closure_var_types : var_within_closure_indexed_product
   }
@@ -277,6 +277,12 @@ end
 module Closures_entry : sig
   type t = closures_entry
 
+  val create :
+    function_types:Function_type.t Or_unknown_or_bottom.t Closure_id.Map.t ->
+    closure_types:Product.Closure_id_indexed.t ->
+    closure_var_types:Product.Var_within_closure_indexed.t ->
+    t
+
   val find_function_type :
     t -> Closure_id.t -> Function_type.t Or_unknown_or_bottom.t
 end
@@ -365,4 +371,18 @@ module Row_like_for_closures : sig
   (** Same as For_blocks.get_field: attempt to find the type associated to the
       given environment variable without an expensive meet. *)
   val get_env_var : t -> Var_within_closure.t -> flambda_type Or_unknown.t
+end
+
+module Typing_env_extension : sig
+  type t = env_extension
+
+  val empty : t
+
+  val create : equations:flambda_type Name.Map.t -> t
+
+  include Contains_ids.S with type t := t
+
+  include Contains_names.S with type t := t
+
+  val print : Format.formatter -> t -> unit
 end
