@@ -18,7 +18,6 @@
 
 module MTC = More_type_creators
 module OUB = Or_unknown_or_bottom
-module TD = Type_descr
 module TE = Typing_env
 module TG = Type_grammar
 module TEEV = Typing_env_extension.With_extra_variables
@@ -56,74 +55,67 @@ end = struct
     match TG.descr ty with
     | Value Unknown -> Value Unknown
     | Value Bottom -> Value Bottom
-    | Value (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion -> TG.apply_coercion_head_of_kind_value head coercion
-      in
-      Value (Ok head)
+    | Value (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Value (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_value head coercion with
+        | Bottom -> Value Bottom
+        | Ok head -> Value (Ok head)))
     | Naked_immediate Unknown -> Naked_immediate Unknown
     | Naked_immediate Bottom -> Naked_immediate Bottom
-    | Naked_immediate (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion ->
-          TG.apply_coercion_head_of_kind_naked_immediate head coercion
-      in
-
-      Naked_immediate (Ok head)
+    | Naked_immediate (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Naked_immediate (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_immediate head coercion with
+        | Bottom -> Naked_immediate Bottom
+        | Ok head -> Naked_immediate (Ok head)))
     | Naked_float Unknown -> Naked_float Unknown
     | Naked_float Bottom -> Naked_float Bottom
-    | Naked_float (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion ->
-          TG.apply_coercion_head_of_kind_naked_float head coercion
-      in
-      Naked_float (Ok head)
+    | Naked_float (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Naked_float (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_float head coercion with
+        | Bottom -> Naked_float Bottom
+        | Ok head -> Naked_float (Ok head)))
     | Naked_int32 Unknown -> Naked_int32 Unknown
     | Naked_int32 Bottom -> Naked_int32 Bottom
-    | Naked_int32 (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion ->
-          TG.apply_coercion_head_of_kind_naked_int32 head coercion
-      in
-      Naked_int32 (Ok head)
+    | Naked_int32 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Naked_int32 (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_int32 head coercion with
+        | Bottom -> Naked_int32 Bottom
+        | Ok head -> Naked_int32 (Ok head)))
     | Naked_int64 Unknown -> Naked_int64 Unknown
     | Naked_int64 Bottom -> Naked_int64 Bottom
-    | Naked_int64 (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion ->
-          TG.apply_coercion_head_of_kind_naked_int64 head coercion
-      in
-      Naked_int64 (Ok head)
+    | Naked_int64 (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Naked_int64 (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_int64 head coercion with
+        | Bottom -> Naked_int64 Bottom
+        | Ok head -> Naked_int64 (Ok head)))
     | Naked_nativeint Unknown -> Naked_nativeint Unknown
     | Naked_nativeint Bottom -> Naked_nativeint Bottom
-    | Naked_nativeint (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion ->
-          TG.apply_coercion_head_of_kind_naked_nativeint head coercion
-      in
-
-      Naked_nativeint (Ok head)
+    | Naked_nativeint (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Naked_nativeint (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_naked_nativeint head coercion with
+        | Bottom -> Naked_nativeint Bottom
+        | Ok head -> Naked_nativeint (Ok head)))
     | Rec_info Unknown -> Rec_info Unknown
     | Rec_info Bottom -> Rec_info Bottom
-    | Rec_info (Ok (No_alias head)) ->
-      let head =
-        match coercion with
-        | None -> head
-        | Some coercion -> TG.apply_coercion_head_of_kind_rec_info head coercion
-      in
-      Rec_info (Ok head)
+    | Rec_info (Ok (No_alias head)) -> (
+      match coercion with
+      | None -> Rec_info (Ok head)
+      | Some coercion -> (
+        match TG.apply_coercion_head_of_kind_rec_info head coercion with
+        | Bottom -> Rec_info Bottom
+        | Ok head -> Rec_info (Ok head)))
     | Value (Ok (Equals _))
     | Naked_immediate (Ok (Equals _))
     | Naked_float (Ok (Equals _))

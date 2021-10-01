@@ -20,7 +20,6 @@ module K = Flambda_kind
 module MTC = More_type_creators
 module TG = Type_grammar
 module TEL = Typing_env_level
-module TEEV = Typing_env_extension.With_extra_variables
 
 (* CR mshinwell: Add signatures to these submodules. *)
 module One_level = struct

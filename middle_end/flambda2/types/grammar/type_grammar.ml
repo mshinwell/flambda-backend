@@ -848,12 +848,41 @@ let rec apply_coercion t coercion : t Or_bottom.t =
          ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
          ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty)
       ~f:(fun ty' -> if ty == ty' then t else Naked_immediate ty')
-  | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ ->
-    if Coercion.is_id coercion then Ok t else Bottom
-  | Rec_info _ ->
-    (* Currently no coercion has an effect on a depth variable and
-       [Rec_info_expr.t] does not contain any other variety of name. *)
-    if Coercion.is_id coercion then Ok t else Bottom
+  | Naked_float ty ->
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_naked_float
+         ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+         ~free_names_head:free_names_head_of_kind_naked_float coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Naked_float ty')
+  | Naked_int32 ty ->
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32
+         ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+         ~free_names_head:free_names_head_of_kind_naked_int32 coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Naked_int32 ty')
+  | Naked_int64 ty ->
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64
+         ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+         ~free_names_head:free_names_head_of_kind_naked_int64 coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Naked_int64 ty')
+  | Naked_nativeint ty ->
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
+         ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+         ~free_names_head:free_names_head_of_kind_naked_nativeint coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Naked_nativeint ty')
+  | Rec_info ty ->
+    Or_bottom.map
+      (TD.apply_coercion
+         ~apply_coercion_head:apply_coercion_head_of_kind_rec_info
+         ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+         ~free_names_head:free_names_head_of_kind_rec_info coercion ty)
+      ~f:(fun ty' -> if ty == ty' then t else Rec_info ty')
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
@@ -912,6 +941,23 @@ and apply_coercion_head_of_kind_naked_immediate head coercion : _ Or_bottom.t =
   | Get_tag t ->
     Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
         if t == t' then head else Get_tag t')
+
+and apply_coercion_head_of_kind_naked_float head coercion : _ Or_bottom.t =
+  if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_naked_int32 head coercion : _ Or_bottom.t =
+  if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_naked_int64 head coercion : _ Or_bottom.t =
+  if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_naked_nativeint head coercion : _ Or_bottom.t =
+  if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_rec_info head coercion : _ Or_bottom.t =
+  (* Currently no coercion has an effect on a depth variable and
+     [Rec_info_expr.t] does not contain any other variety of name. *)
+  if Coercion.is_id coercion then Ok head else Bottom
 
 and apply_coercion_row_like :
       'index 'maps_to 'row_tag 'known.
