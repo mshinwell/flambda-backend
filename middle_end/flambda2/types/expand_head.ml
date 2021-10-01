@@ -265,3 +265,23 @@ let make_suitable_for_environment env t ~suitable_for ~bind_to =
   in
   let level = TEEV.add_or_replace_equation level bind_to t in
   level
+
+let is_bottom env t =
+  match expand_head env t with
+  | Value Bottom
+  | Naked_immediate Bottom
+  | Naked_float Bottom
+  | Naked_int32 Bottom
+  | Naked_int64 Bottom
+  | Naked_nativeint Bottom
+  | Rec_info Bottom ->
+    true
+  | Const _
+  | Value (Unknown | Ok _)
+  | Naked_immediate (Unknown | Ok _)
+  | Naked_float (Unknown | Ok _)
+  | Naked_int32 _
+  | Naked_int64 (Unknown | Ok _)
+  | Naked_nativeint (Unknown | Ok _)
+  | Rec_info (Unknown | Ok _) ->
+    false

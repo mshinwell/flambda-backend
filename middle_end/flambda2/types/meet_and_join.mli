@@ -18,6 +18,7 @@
 
 module Meet_env = Typing_env.Meet_env
 module Join_env = Typing_env.Join_env
+module TE = Typing_env
 module TG = Type_grammar
 module TEE = Typing_env_extension
 
@@ -26,3 +27,11 @@ val meet : Meet_env.t -> TG.t -> TG.t -> (TG.t * TEE.t) Or_bottom.t
 
 (** Least upper bound of two types. *)
 val join : ?bound_name:Name.t -> Join_env.t -> TG.t -> TG.t -> TG.t Or_unknown.t
+
+val meet_shape :
+  TE.t ->
+  TG.t ->
+  shape:TG.t ->
+  result_var:Bound_var.t ->
+  result_kind:Flambda_kind.t ->
+  TEE.t Or_bottom.t

@@ -36,7 +36,7 @@ let add_equation _env (simple : Simple.t) ty_of_simple env_extension ~to_type
       Coercion.inverse coercion_from_name_to_simple
     in
     let ty_of_name =
-      match apply_coercion ty_of_simple coercion_from_simple_to_name with
+      match TG.apply_coercion ty_of_simple coercion_from_simple_to_name with
       | Ok ty -> ty
       | Bottom -> bottom ()
     in
@@ -139,8 +139,7 @@ let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
       if Blocks.is_bottom blocks' then Bottom else blocks
   in
   let imms =
-    meet_unknown meet ~contents_is_bottom:T.is_obviously_bottom env imms1
-      imms2
+    meet_unknown meet ~contents_is_bottom:T.is_obviously_bottom env imms1 imms2
   in
   let imms : _ Or_bottom.t =
     match imms with
@@ -192,7 +191,7 @@ and meet_closures_entry env
         | None, None -> None
         | Some func_decl, None | None, Some func_decl -> Some func_decl
         | Some func_decl1, Some func_decl2 -> (
-          match FDmeet env func_decl1 func_decl2 with
+          match FDT.meet env func_decl1 func_decl2 with
           | Bottom ->
             any_bottom := true;
             None
@@ -499,8 +498,8 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     then Bottom
     else Or_bottom.Ok (String strs, TEE.empty)
   | Array { length = length1 }, Array { length = length2 } ->
-    Or_bottom.map (meet env length1 length2)
-      ~f:(fun (length, env_extension) -> Array { length }, env_extension)
+    Or_bottom.map (meet env length1 length2) ~f:(fun (length, env_extension) ->
+        Array { length }, env_extension)
   | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
       _ ) ->
@@ -1248,3 +1247,10 @@ and join ?bound_name env t1 t2 =
       _ ) ->
     Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" print t1 print
       t2
+
+let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
+  let result = Bound_name.var result_var in
+  let env = Typing_env.add_definition env result result_kind in
+  match meet (Meet_env.create env) t shape with
+  | Bottom -> Bottom
+  | Ok (_meet_ty, env_extension) -> Ok env_extension

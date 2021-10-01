@@ -44,3 +44,5 @@ val make_suitable_for_environment :
   suitable_for:Typing_env.t ->
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
+
+val is_bottom : Typing_env.t -> Type_grammar.t -> bool
