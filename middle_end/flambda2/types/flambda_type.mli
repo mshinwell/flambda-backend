@@ -256,12 +256,6 @@ val make_suitable_for_environment :
 
 val apply_coercion : flambda_type -> Coercion.t -> flambda_type Or_bottom.t
 
-(* Remove any information from the inside of the type, leaving only its outer
-   structure, and in some cases leaving only "Unknown". Alias types are only
-   preserved if they indicate equalities to constants or symbols. The resulting
-   type will be suitable for a fast join operation. *)
-val eviscerate : t -> Typing_env.t -> t
-
 (** Construct a bottom type of the given kind. *)
 val bottom : Flambda_kind.t -> t
 

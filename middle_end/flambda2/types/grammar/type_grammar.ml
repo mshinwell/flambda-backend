@@ -1764,3 +1764,61 @@ let this_rec_info (rec_info_expr : Rec_info_expr.t) =
   match rec_info_expr with
   | Var dv -> Rec_info (TD.create_equals (Simple.var dv))
   | Const _ | Succ _ | Unroll_to _ -> Rec_info (TD.create rec_info_expr)
+
+module Descr = struct
+  type t =
+    | Value of head_of_kind_value TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_immediate of
+        head_of_kind_naked_immediate TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_float of head_of_kind_naked_float TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_int32 of head_of_kind_naked_int32 TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_int64 of head_of_kind_naked_int64 TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_nativeint of
+        head_of_kind_naked_nativeint TD.Descr.t Or_unknown_or_bottom.t
+    | Rec_info of head_of_kind_rec_info TD.Descr.t Or_unknown_or_bottom.t
+end
+
+let descr t : Descr.t =
+  match t with
+  | Value ty ->
+    Value
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_value
+         ~free_names_head:free_names_head_of_kind_value ty)
+  | Naked_immediate ty ->
+    Naked_immediate
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+         ~free_names_head:free_names_head_of_kind_naked_immediate ty)
+  | Naked_float ty ->
+    Naked_float
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+         ~free_names_head:free_names_head_of_kind_naked_float ty)
+  | Naked_int32 ty ->
+    Naked_int32
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+         ~free_names_head:free_names_head_of_kind_naked_int32 ty)
+  | Naked_int64 ty ->
+    Naked_int64
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+         ~free_names_head:free_names_head_of_kind_naked_int64 ty)
+  | Naked_nativeint ty ->
+    Naked_nativeint
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+         ~free_names_head:free_names_head_of_kind_naked_nativeint ty)
+  | Rec_info ty ->
+    Rec_info
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+         ~free_names_head:free_names_head_of_kind_rec_info ty)
+
+let create_from_head_value head = Value (TD.create head)
+
+let create_from_head_naked_immediate head = Naked_immediate (TD.create head)
+
+let create_from_head_naked_float head = Naked_float (TD.create head)
+
+let create_from_head_naked_int32 head = Naked_int32 (TD.create head)
+
+let create_from_head_naked_int64 head = Naked_int64 (TD.create head)
+
+let create_from_head_naked_nativeint head = Naked_nativeint (TD.create head)
+
+let create_from_head_rec_info head = Rec_info (TD.create head)

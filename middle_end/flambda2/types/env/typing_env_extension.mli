@@ -59,7 +59,7 @@ module With_extra_variables : sig
     'a ->
     'a
 
-  val empty : unit -> t
+  val empty : t
 
   val add_definition : t -> Variable.t -> Flambda_kind.t -> TG.t -> t
 

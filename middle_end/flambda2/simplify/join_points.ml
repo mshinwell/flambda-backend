@@ -23,36 +23,7 @@ module T = Flambda_type
 module TE = Flambda_type.Typing_env
 module U = One_continuation_use
 
-let simple_join denv typing_env uses ~params =
-  (* This join is intended to be sufficient to match Closure + Cmmgen on
-     unboxing, but not really anything more. *)
-  let bottom_types =
-    ListLabels.map params ~f:(fun param ->
-        BP.kind param |> Flambda_kind.With_subkind.kind |> T.bottom)
-  in
-  let joined_types =
-    ListLabels.fold_left uses ~init:bottom_types ~f:(fun joined_types use ->
-        ListLabels.map2 joined_types (U.arg_types use)
-          ~f:(fun joined_type arg_type ->
-            let arg_type =
-              T.eviscerate arg_type (DE.typing_env (U.env_at_use use))
-            in
-            (* The only names left in [arg_type] will be symbols; they will
-               always be defined in [typing_env]. So we can use the same
-               environment throughout the join. *)
-            T.join typing_env ~left_env:typing_env ~left_ty:joined_type
-              ~right_env:typing_env ~right_ty:arg_type))
-  in
-  let handler_env =
-    ListLabels.fold_left2 params joined_types ~init:typing_env
-      ~f:(fun handler_env param joined_type ->
-        let name = BP.name param in
-        TE.add_equation handler_env name joined_type)
-  in
-  let denv = DE.with_typing_env denv handler_env in
-  denv, Continuation_extra_params_and_args.empty
-
-let normal_join denv typing_env params ~env_at_fork_plus_params
+let join denv typing_env params ~env_at_fork_plus_params
     ~consts_lifted_during_body ~use_envs_with_ids =
   let definition_scope_level =
     DE.get_continuation_scope_level env_at_fork_plus_params
@@ -203,11 +174,9 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
     in
     let typing_env = DE.typing_env denv in
     let handler_env, extra_params_and_args =
-      if not (Flambda_features.join_points ())
-      then simple_join denv typing_env uses_list ~params
-      else
-        normal_join denv typing_env params ~env_at_fork_plus_params
-          ~consts_lifted_during_body ~use_envs_with_ids
+      (* CR mshinwell: remove Flambda_features.join_points *)
+      join denv typing_env params ~env_at_fork_plus_params
+        ~consts_lifted_during_body ~use_envs_with_ids
     in
     let handler_env =
       DE.map_typing_env handler_env ~f:(fun handler_env ->

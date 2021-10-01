@@ -386,3 +386,32 @@ module Typing_env_extension : sig
 
   val print : Format.formatter -> t -> unit
 end
+
+module Descr : sig
+  type t = private
+    | Value of head_of_kind_value TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_immediate of
+        head_of_kind_naked_immediate TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_float of head_of_kind_naked_float TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_int32 of head_of_kind_naked_int32 TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_int64 of head_of_kind_naked_int64 TD.Descr.t Or_unknown_or_bottom.t
+    | Naked_nativeint of
+        head_of_kind_naked_nativeint TD.Descr.t Or_unknown_or_bottom.t
+    | Rec_info of head_of_kind_rec_info TD.Descr.t Or_unknown_or_bottom.t
+end
+
+val descr : t -> Descr.t
+
+val create_from_head_value : head_of_kind_value -> t
+
+val create_from_head_naked_immediate : head_of_kind_naked_immediate -> t
+
+val create_from_head_naked_float : head_of_kind_naked_float -> t
+
+val create_from_head_naked_int32 : head_of_kind_naked_int32 -> t
+
+val create_from_head_naked_int64 : head_of_kind_naked_int64 -> t
+
+val create_from_head_naked_nativeint : head_of_kind_naked_nativeint -> t
+
+val create_from_head_rec_info : head_of_kind_rec_info -> t

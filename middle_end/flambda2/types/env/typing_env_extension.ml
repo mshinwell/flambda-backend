@@ -83,7 +83,7 @@ module With_extra_variables = struct
     let acc = Variable.Map.fold variable t.existential_vars acc in
     Name.Map.fold equation t.equations acc
 
-  let empty () =
+  let empty =
     { existential_vars = Variable.Map.empty; equations = Name.Map.empty }
 
   let add_definition t var kind ty =
