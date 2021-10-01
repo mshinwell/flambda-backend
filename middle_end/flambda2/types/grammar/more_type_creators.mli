@@ -143,3 +143,16 @@ val kind_for_const : RWC.t -> K.t
 val is_alias_of_name : TG.t -> Name.t -> bool
 
 val check_equation : Name.t -> TG.t -> unit
+
+val arity_of_list : TG.t list -> Flambda_arity.t
+
+val unknown_with_subkind : Flambda_kind.With_subkind.t -> TG.t
+
+(** For each of the kinds in an arity, create an "unknown" type. *)
+val unknown_types_from_arity : Flambda_arity.t -> TG.t list
+
+val unknown_types_from_arity_with_subkinds :
+  Flambda_arity.With_subkinds.t -> TG.t list
+
+(** For each of the kinds in an arity, create an "bottom" type. *)
+val bottom_types_from_arity : Flambda_arity.t -> TG.t list
