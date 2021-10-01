@@ -19,11 +19,6 @@
 (** The grammar of Flambda types plus the basic creation functions upon them
     that do not require an environment. *)
 
-module TD = Type_descr
-module Float = Numeric_types.Float_by_bit_pattern
-module Int32 = Numeric_types.Int32
-module Int64 = Numeric_types.Int64
-
 module Block_size : sig
   type t
 
@@ -35,13 +30,13 @@ module Block_size : sig
 end
 
 type t = private
-  | Value of head_of_kind_value TD.t
-  | Naked_immediate of head_of_kind_naked_immediate TD.t
-  | Naked_float of head_of_kind_naked_float TD.t
-  | Naked_int32 of head_of_kind_naked_int32 TD.t
-  | Naked_int64 of head_of_kind_naked_int64 TD.t
-  | Naked_nativeint of head_of_kind_naked_nativeint TD.t
-  | Rec_info of head_of_kind_rec_info TD.t
+  | Value of head_of_kind_value Type_descr.t
+  | Naked_immediate of head_of_kind_naked_immediate Type_descr.t
+  | Naked_float of head_of_kind_naked_float Type_descr.t
+  | Naked_int32 of head_of_kind_naked_int32 Type_descr.t
+  | Naked_int64 of head_of_kind_naked_int64 Type_descr.t
+  | Naked_nativeint of head_of_kind_naked_nativeint Type_descr.t
+  | Rec_info of head_of_kind_rec_info Type_descr.t
 
 and head_of_kind_value = private
   | Variant of
@@ -62,11 +57,11 @@ and head_of_kind_naked_immediate = private
   | Is_int of t
   | Get_tag of t
 
-and head_of_kind_naked_float = Float.Set.t
+and head_of_kind_naked_float = Numeric_types.Float_by_bit_pattern.Set.t
 
-and head_of_kind_naked_int32 = Int32.Set.t
+and head_of_kind_naked_int32 = Numeric_types.Int32.Set.t
 
-and head_of_kind_naked_int64 = Int64.Set.t
+and head_of_kind_naked_int64 = Numeric_types.Int64.Set.t
 
 and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
 
@@ -175,19 +170,20 @@ val this_naked_immediate : Targetint_31_63.t -> t
 
 val this_naked_float : Numeric_types.Float_by_bit_pattern.t -> t
 
-val this_naked_int32 : Int32.t -> t
+val this_naked_int32 : Numeric_types.Int32.t -> t
 
-val this_naked_int64 : Int64.t -> t
+val this_naked_int64 : Numeric_types.Int64.t -> t
 
 val this_naked_nativeint : Targetint_32_64.t -> t
 
 val these_naked_immediates : no_alias:bool -> Targetint_31_63.Set.t -> t
 
-val these_naked_floats : no_alias:bool -> Float.Set.t -> t
+val these_naked_floats :
+  no_alias:bool -> Numeric_types.Float_by_bit_pattern.Set.t -> t
 
-val these_naked_int32s : no_alias:bool -> Int32.Set.t -> t
+val these_naked_int32s : no_alias:bool -> Numeric_types.Int32.Set.t -> t
 
-val these_naked_int64s : no_alias:bool -> Int64.Set.t -> t
+val these_naked_int64s : no_alias:bool -> Numeric_types.Int64.Set.t -> t
 
 val these_naked_nativeints : no_alias:bool -> Targetint_32_64.Set.t -> t
 
@@ -272,6 +268,8 @@ end
 
 module Function_type : sig
   type t = function_type
+
+  val create : Code_id.t -> rec_info:flambda_type -> t
 end
 
 module Closures_entry : sig
@@ -375,7 +373,7 @@ module Row_like_for_closures : sig
   val get_env_var : t -> Var_within_closure.t -> flambda_type Or_unknown.t
 end
 
-module Typing_env_extension : sig
+module Env_extension : sig
   type t = env_extension
 
   val empty : t
@@ -391,15 +389,19 @@ end
 
 module Descr : sig
   type t = private
-    | Value of head_of_kind_value TD.Descr.t Or_unknown_or_bottom.t
+    | Value of head_of_kind_value Type_descr.Descr.t Or_unknown_or_bottom.t
     | Naked_immediate of
-        head_of_kind_naked_immediate TD.Descr.t Or_unknown_or_bottom.t
-    | Naked_float of head_of_kind_naked_float TD.Descr.t Or_unknown_or_bottom.t
-    | Naked_int32 of head_of_kind_naked_int32 TD.Descr.t Or_unknown_or_bottom.t
-    | Naked_int64 of head_of_kind_naked_int64 TD.Descr.t Or_unknown_or_bottom.t
+        head_of_kind_naked_immediate Type_descr.Descr.t Or_unknown_or_bottom.t
+    | Naked_float of
+        head_of_kind_naked_float Type_descr.Descr.t Or_unknown_or_bottom.t
+    | Naked_int32 of
+        head_of_kind_naked_int32 Type_descr.Descr.t Or_unknown_or_bottom.t
+    | Naked_int64 of
+        head_of_kind_naked_int64 Type_descr.Descr.t Or_unknown_or_bottom.t
     | Naked_nativeint of
-        head_of_kind_naked_nativeint TD.Descr.t Or_unknown_or_bottom.t
-    | Rec_info of head_of_kind_rec_info TD.Descr.t Or_unknown_or_bottom.t
+        head_of_kind_naked_nativeint Type_descr.Descr.t Or_unknown_or_bottom.t
+    | Rec_info of
+        head_of_kind_rec_info Type_descr.Descr.t Or_unknown_or_bottom.t
 end
 
 val descr : t -> Descr.t

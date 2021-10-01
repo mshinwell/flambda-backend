@@ -18,7 +18,7 @@
 
 module TG = Type_grammar
 
-type t = TG.Typing_env_extension.t
+type t = TG.Env_extension.t
 
 let fold ~equation ({ equations } : t) acc =
   Name.Map.fold equation equations acc
@@ -27,12 +27,12 @@ let invariant ({ equations } : t) =
   if Flambda_features.check_invariants ()
   then Name.Map.iter More_type_creators.check_equation equations
 
-let empty = TG.Typing_env_extension.empty
+let empty = TG.Env_extension.empty
 
 let is_empty ({ equations } : t) = Name.Map.is_empty equations
 
 let from_map equations =
-  let t = TG.Typing_env_extension.create ~equations in
+  let t = TG.Env_extension.create ~equations in
   invariant t;
   t
 
@@ -40,7 +40,7 @@ let to_map ({ equations } : t) = equations
 
 let one_equation name ty =
   More_type_creators.check_equation name ty;
-  TG.Typing_env_extension.create ~equations:(Name.Map.singleton name ty)
+  TG.Env_extension.create ~equations:(Name.Map.singleton name ty)
 
 let add_or_replace_equation ({ equations } : t) name ty =
   More_type_creators.check_equation name ty;
@@ -52,19 +52,19 @@ let add_or_replace_equation ({ equations } : t) name ty =
        New equation is@ @[%a@]@." Name.print name TG.print
       (Name.Map.find name equations)
       TG.print ty;
-  TG.Typing_env_extension.create ~equations:(Name.Map.add name ty equations)
+  TG.Env_extension.create ~equations:(Name.Map.add name ty equations)
 
 let replace_equation ({ equations } : t) name ty =
-  TG.Typing_env_extension.create
+  TG.Env_extension.create
     ~equations:(Name.Map.add (* replace *) name ty equations)
 
-let all_ids_for_export = TG.Typing_env_extension.all_ids_for_export
+let all_ids_for_export = TG.Env_extension.all_ids_for_export
 
-let apply_renaming = TG.Typing_env_extension.apply_renaming
+let apply_renaming = TG.Env_extension.apply_renaming
 
-let free_names = TG.Typing_env_extension.free_names
+let free_names = TG.Env_extension.free_names
 
-let print = TG.Typing_env_extension.print
+let print = TG.Env_extension.print
 
 module With_extra_variables = struct
   type t =
@@ -76,8 +76,8 @@ module With_extra_variables = struct
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(variables@ @[<hov 1>%a@])@]@[<hov 1>%a@])@ @]"
       (Variable.Map.print Flambda_kind.print)
-      existential_vars TG.Typing_env_extension.print
-      (TG.Typing_env_extension.create ~equations)
+      existential_vars TG.Env_extension.print
+      (TG.Env_extension.create ~equations)
 
   let fold ~variable ~equation t acc =
     let acc = Variable.Map.fold variable t.existential_vars acc in

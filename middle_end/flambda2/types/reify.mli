@@ -19,13 +19,6 @@
 (** Transformation of types into structures that can be used immediately to
     build terms. *)
 
-module Float = Numeric_types.Float_by_bit_pattern
-module Int32 = Numeric_types.Int32
-module Int64 = Numeric_types.Int64
-module K = Flambda_kind
-module TE = Typing_env
-module TG = Type_grammar
-
 type var_or_symbol_or_tagged_immediate = private
   | Var of Variable.t
   | Symbol of Symbol.t
@@ -39,16 +32,16 @@ type to_lift =
         is_unique : bool;
         fields : var_or_symbol_or_tagged_immediate list
       }
-  | Boxed_float of Float.t
-  | Boxed_int32 of Int32.t
-  | Boxed_int64 of Int64.t
+  | Boxed_float of Numeric_types.Float_by_bit_pattern.t
+  | Boxed_int32 of Numeric_types.Int32.t
+  | Boxed_int64 of Numeric_types.Int64.t
   | Boxed_nativeint of Targetint_32_64.t
 
 type reification_result = private
   | Lift of to_lift (* CR mshinwell: rename? *)
   | Lift_set_of_closures of
       { closure_id : Closure_id.t;
-        function_types : TG.Function_type.t Closure_id.Map.t;
+        function_types : Type_grammar.Function_type.t Closure_id.Map.t;
         closure_vars : Simple.t Var_within_closure.Map.t
       }
   | Simple of Simple.t
@@ -62,5 +55,5 @@ val reify :
   ?allow_unique:bool ->
   Typing_env.t ->
   min_name_mode:Name_mode.t ->
-  TG.t ->
+  Type_grammar.t ->
   reification_result

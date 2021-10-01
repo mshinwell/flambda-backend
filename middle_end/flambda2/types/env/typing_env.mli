@@ -16,8 +16,6 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module K = Flambda2_kinds.Flambda_kind
-
 type typing_env
 
 type t = typing_env

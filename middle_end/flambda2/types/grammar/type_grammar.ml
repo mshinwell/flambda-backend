@@ -1157,6 +1157,8 @@ let create_closures by_closure_id =
 
 module Function_type = struct
   type t = function_type
+
+  let create code_id ~rec_info = { code_id; rec_info }
 end
 
 module Closures_entry = struct
@@ -1516,7 +1518,7 @@ module Row_like_for_closures = struct
         Known env_var_ty
 end
 
-module Typing_env_extension = struct
+module Env_extension = struct
   type t = env_extension
 
   let empty = { equations = Name.Map.empty }

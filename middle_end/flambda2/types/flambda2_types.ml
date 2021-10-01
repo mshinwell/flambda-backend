@@ -16,25 +16,33 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-(** Greatest lower bound of two types. *)
-val meet :
-  Typing_env.Meet_env.t ->
-  Type_grammar.t ->
-  Type_grammar.t ->
-  (Type_grammar.t * Typing_env_extension.t) Or_bottom.t
+module Typing_env = struct
+  include Typing_env
 
-(** Least upper bound of two types. *)
-val join :
-  ?bound_name:Name.t ->
-  Typing_env.Join_env.t ->
-  Type_grammar.t ->
-  Type_grammar.t ->
-  Type_grammar.t Or_unknown.t
+  let add_equation t name ty =
+    add_equation t name ty ~meet_type:Meet_and_join.meet
 
-val meet_shape :
-  Typing_env.t ->
-  Type_grammar.t ->
-  shape:Type_grammar.t ->
-  result_var:Bound_var.t ->
-  result_kind:Flambda_kind.t ->
-  Typing_env_extension.t Or_bottom.t
+  let add_equations_on_params t ~params ~param_types =
+    add_equations_on_params t ~params ~param_types ~meet_type:Meet_and_join.meet
+
+  let add_env_extension t extension =
+    add_env_extension t extension ~meet_type:Meet_and_join.meet
+
+  let add_env_extension_with_extra_variables t extension =
+    add_env_extension_with_extra_variables t extension
+      ~meet_type:Meet_and_join.meet
+end
+
+module Typing_env_extension = Typing_env_extension
+
+type typing_env = Typing_env.t
+
+type typing_env_extension = Typing_env_extension.t
+
+include Type_grammar
+include More_type_creators
+include Expand_head
+include Meet_and_join
+include Provers
+include Reify
+include Join_levels

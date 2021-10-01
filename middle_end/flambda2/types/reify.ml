@@ -19,7 +19,6 @@
 module Float = Numeric_types.Float_by_bit_pattern
 module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
-module K = Flambda_kind
 module TE = Typing_env
 module TG = Type_grammar
 
