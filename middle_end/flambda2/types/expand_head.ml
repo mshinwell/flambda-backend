@@ -34,7 +34,9 @@ module Expanded_type : sig
     | Naked_nativeint of TG.head_of_kind_naked_nativeint OUB.t
     | Rec_info of TG.head_of_kind_rec_info OUB.t
 
-  val of_type : TG.t -> t
+  val of_const : Reg_width_const.t -> t
+
+  val of_non_alias_type : ?coercion:Coercion.t -> TG.t -> t
 
   val to_type : t -> TG.t
 end = struct
@@ -48,27 +50,88 @@ end = struct
     | Naked_nativeint of TG.head_of_kind_naked_nativeint OUB.t
     | Rec_info of TG.head_of_kind_rec_info OUB.t
 
-  let of_type t =
+  let of_const cst = Const (Reg_width_const.descr cst)
+
+  let of_non_alias_type ?coercion ty : t =
     match TG.descr ty with
-    | Value Unknown | Value Bottom | Value (Ok (No_alias _)) -> ty
-    | Value (Ok (Equals simple)) -> (
-      match expand_head0 ~force_to_kind:force_to_kind_value simple env kind with
-      | Unknown -> TG.any_value
-      | Bottom -> TG.bottom_value
-      | Ok head -> TG.create_from_head_value head)
-    | Naked_immediate Unknown
-    | Naked_immediate Bottom
-    | Naked_float Unknown
-    | Naked_float Bottom
-    | Naked_int32 Unknown
-    | Naked_int32 Bottom
-    | Naked_int64 Unknown
-    | Naked_int64 Bottom
-    | Naked_nativeint Unknown
-    | Naked_nativeint Bottom
-    | Rec_info Unknown
-    | Rec_info Bottom ->
-      assert false
+    | Value Unknown -> Value Unknown
+    | Value Bottom -> Value Bottom
+    | Value (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion -> TG.apply_coercion_head_of_kind_value head coercion
+      in
+      Value (Ok head)
+    | Naked_immediate Unknown -> Naked_immediate Unknown
+    | Naked_immediate Bottom -> Naked_immediate Bottom
+    | Naked_immediate (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion ->
+          TG.apply_coercion_head_of_kind_naked_immediate head coercion
+      in
+
+      Naked_immediate (Ok head)
+    | Naked_float Unknown -> Naked_float Unknown
+    | Naked_float Bottom -> Naked_float Bottom
+    | Naked_float (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion ->
+          TG.apply_coercion_head_of_kind_naked_float head coercion
+      in
+      Naked_float (Ok head)
+    | Naked_int32 Unknown -> Naked_int32 Unknown
+    | Naked_int32 Bottom -> Naked_int32 Bottom
+    | Naked_int32 (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion ->
+          TG.apply_coercion_head_of_kind_naked_int32 head coercion
+      in
+      Naked_int32 (Ok head)
+    | Naked_int64 Unknown -> Naked_int64 Unknown
+    | Naked_int64 Bottom -> Naked_int64 Bottom
+    | Naked_int64 (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion ->
+          TG.apply_coercion_head_of_kind_naked_int64 head coercion
+      in
+      Naked_int64 (Ok head)
+    | Naked_nativeint Unknown -> Naked_nativeint Unknown
+    | Naked_nativeint Bottom -> Naked_nativeint Bottom
+    | Naked_nativeint (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion ->
+          TG.apply_coercion_head_of_kind_naked_nativeint head coercion
+      in
+
+      Naked_nativeint (Ok head)
+    | Rec_info Unknown -> Rec_info Unknown
+    | Rec_info Bottom -> Rec_info Bottom
+    | Rec_info (Ok (No_alias head)) ->
+      let head =
+        match coercion with
+        | None -> head
+        | Some coercion -> TG.apply_coercion_head_of_kind_rec_info head coercion
+      in
+      Rec_info (Ok head)
+    | Value (Ok (Equals _))
+    | Naked_immediate (Ok (Equals _))
+    | Naked_float (Ok (Equals _))
+    | Naked_int32 (Ok (Equals _))
+    | Naked_int64 (Ok (Equals _))
+    | Naked_nativeint (Ok (Equals _))
+    | Rec_info (Ok (Equals _)) ->
+      Misc.fatal_errorf "Type cannot be an alias type:@ %a" TG.print ty
 
   let to_type (t : t) =
     match t with
@@ -103,43 +166,33 @@ end = struct
     | Rec_info (Ok head) -> TG.create_from_head_rec_info head
 end
 
-let expand_head0 simple env kind : Expanded_type.t OUB.t =
+let expand_head0 simple env kind : Expanded_type.t =
   let min_name_mode = Name_mode.min_in_types in
   match TE.get_canonical_simple_exn env simple ~min_name_mode with
   | exception Not_found ->
     (* This can happen when [simple] is of [Phantom] name mode. We're not
        interested in propagating types for phantom variables, so [Unknown] is
        fine here. *)
-    Unknown
+    Expanded_type.of_non_alias_type (MTC.unknown kind)
   | simple ->
-    let[@inline always] const const : _ OUB.t =
-      Ok (Expanded_type.Const (Reg_width_const.descr const))
-    in
-    let[@inline always] name name ~coercion : _ OUB.t =
-      let t = TE.find env name (Some kind) in
-      match TG.descr t with
-      | No_alias Bottom -> Bottom
-      | No_alias Unknown -> Unknown
-      | No_alias (Ok head) -> (
-        if Coercion.is_id coercion
-        then Ok head
-        else
-          (* [simple] already has [coercion] applied to it (see
-             [get_canonical_simple], above). However we also need to apply it to
-             the expanded head of the type. *)
-          match Head.apply_coercion head coercion with
-          | Bottom -> Bottom
-          | Ok head -> Ok head)
-      | Equals _ ->
+    let[@inline always] name name ~coercion =
+      let ty = TE.find env name (Some kind) in
+      match TG.get_alias_exn ty with
+      | exception Not_found ->
+        let coercion =
+          if Coercion.is_id coercion then None else Some coercion
+        in
+        Expanded_type.of_non_alias_type ?coercion ty
+      | _alias ->
         Misc.fatal_errorf
           "Canonical alias %a should never have [Equals] type %a:@\n\n%a"
-          Simple.print simple print t print env
+          Simple.print simple TG.print ty TE.print env
     in
-    Simple.pattern_match simple ~const ~name
+    Simple.pattern_match simple ~const:Expanded_type.of_const ~name
 
-let expand_head env ty : Expanded_type.t OUB.t =
+let expand_head env ty =
   match TG.get_alias_exn ty with
-  | exception Not_found -> Ok (Expanded_type.of_type ty)
+  | exception Not_found -> Expanded_type.of_non_alias_type ty
   | simple -> expand_head0 simple env (TG.kind ty)
 
 let missing_kind env free_names =
@@ -192,13 +245,7 @@ let rec make_suitable_for_environment0_core env t ~depth ~suitable_for level =
                       then level, TG.alias_type_of kind canonical_simple
                       else
                         let t = TE.find env (Name.var to_erase) (Some kind) in
-                        let t =
-                          match expand_head env t with
-                          | Unknown -> MTC.unknown kind
-                          | Bottom -> MTC.bottom kind
-                          | Ok expanded_type ->
-                            Expanded_type.to_type expanded_type
-                        in
+                        let t = expand_head env t |> Expanded_type.to_type in
                         make_suitable_for_environment0_core env t
                           ~depth:(depth + 1) ~suitable_for level
                   in

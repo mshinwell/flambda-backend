@@ -415,3 +415,24 @@ val create_from_head_naked_int64 : head_of_kind_naked_int64 -> t
 val create_from_head_naked_nativeint : head_of_kind_naked_nativeint -> t
 
 val create_from_head_rec_info : head_of_kind_rec_info -> t
+
+val apply_coercion_head_of_kind_value :
+  head_of_kind_value -> Coercion.t -> head_of_kind_value
+
+val apply_coercion_head_of_kind_naked_immediate :
+  head_of_kind_naked_immediate -> Coercion.t -> head_of_kind_naked_immediate
+
+val apply_coercion_head_of_kind_naked_float :
+  head_of_kind_naked_float -> Coercion.t -> head_of_kind_naked_float
+
+val apply_coercion_head_of_kind_naked_int32 :
+  head_of_kind_naked_int32 -> Coercion.t -> head_of_kind_naked_int32
+
+val apply_coercion_head_of_kind_naked_int64 :
+  head_of_kind_naked_int64 -> Coercion.t -> head_of_kind_naked_int64
+
+val apply_coercion_head_of_kind_naked_nativeint :
+  head_of_kind_naked_nativeint -> Coercion.t -> head_of_kind_naked_nativeint
+
+val apply_coercion_head_of_kind_rec_info :
+  head_of_kind_rec_info -> Coercion.t -> head_of_kind_rec_info

@@ -143,17 +143,20 @@ let row_like_is_bottom ~known ~(other : _ Or_bottom.t) ~is_empty_map_known =
   is_empty_map_known known && match other with Bottom -> true | Ok _ -> false
 
 let apply_renaming t renaming =
-  match t with
-  | Value ty ->
-    let ty' = TD.apply_renaming ty renaming in
-    if ty == ty' then t else Value ty'
-  | Naked_immediate ty ->
-    let ty' = TD.apply_renaming ty renaming in
-    if ty == ty' then t else Naked_immediate ty'
-  | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ -> t
-  | Rec_info ty ->
-    let ty' = TD.apply_renaming ty renaming in
-    if ty == ty' then t else Rec_info ty'
+  if Renaming.is_empty renaming
+  then t
+  else
+    match t with
+    | Value ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Value ty'
+    | Naked_immediate ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Naked_immediate ty'
+    | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ -> t
+    | Rec_info ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Rec_info ty'
 
 let rec apply_renaming_head_of_kind_value head renaming =
   match head with
