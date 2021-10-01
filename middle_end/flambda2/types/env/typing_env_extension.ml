@@ -32,7 +32,7 @@ let empty = TG.Typing_env_extension.empty
 let is_empty ({ equations } : t) = Name.Map.is_empty equations
 
 let from_map equations =
-  let t = ({ equations } : t) in
+  let t = TG.Typing_env_extension.create ~equations in
   invariant t;
   t
 

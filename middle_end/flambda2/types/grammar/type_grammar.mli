@@ -34,7 +34,7 @@ module Block_size : sig
   val inter : t -> t -> t
 end
 
-type t =
+type t = private
   | Value of head_of_kind_value TD.t
   | Naked_immediate of head_of_kind_naked_immediate TD.t
   | Naked_float of head_of_kind_naked_float TD.t
@@ -43,7 +43,7 @@ type t =
   | Naked_nativeint of head_of_kind_naked_nativeint TD.t
   | Rec_info of head_of_kind_rec_info TD.t
 
-and head_of_kind_value =
+and head_of_kind_value = private
   | Variant of
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
@@ -57,7 +57,7 @@ and head_of_kind_value =
   | String of String_info.Set.t
   | Array of { length : t }
 
-and head_of_kind_naked_immediate =
+and head_of_kind_naked_immediate = private
   | Naked_immediates of Targetint_31_63.Set.t
   | Is_int of t
   | Get_tag of t
@@ -72,22 +72,22 @@ and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
 
 and head_of_kind_rec_info = Rec_info_expr.t
 
-and 'index row_like_index =
+and 'index row_like_index = private
   | Known of 'index
   | At_least of 'index
 
-and ('index, 'maps_to) row_like_case =
+and ('index, 'maps_to) row_like_case = private
   { maps_to : 'maps_to;
     index : 'index row_like_index;
     env_extension : env_extension
   }
 
-and row_like_for_blocks =
+and row_like_for_blocks = private
   { known_tags : (Block_size.t, int_indexed_product) row_like_case Tag.Map.t;
     other_tags : (Block_size.t, int_indexed_product) row_like_case Or_bottom.t
   }
 
-and row_like_for_closures =
+and row_like_for_closures = private
   { known_closures :
       (Set_of_closures_contents.t, closures_entry) row_like_case
       Closure_id.Map.t;
@@ -95,29 +95,29 @@ and row_like_for_closures =
       (Set_of_closures_contents.t, closures_entry) row_like_case Or_bottom.t
   }
 
-and closures_entry =
+and closures_entry = private
   { function_types : function_type Or_unknown_or_bottom.t Closure_id.Map.t;
     closure_types : closure_id_indexed_product;
     closure_var_types : var_within_closure_indexed_product
   }
 
-and closure_id_indexed_product =
+and closure_id_indexed_product = private
   { closure_id_components_by_index : t Closure_id.Map.t }
 
-and var_within_closure_indexed_product =
+and var_within_closure_indexed_product = private
   { var_within_closure_components_by_index : t Var_within_closure.Map.t }
 
-and int_indexed_product =
+and int_indexed_product = private
   { fields : t array;
     kind : Flambda_kind.t
   }
 
-and function_type =
+and function_type = private
   { code_id : Code_id.t;
     rec_info : t
   }
 
-and env_extension = { equations : t Name.Map.t } [@@unboxed]
+and env_extension = private { equations : t Name.Map.t } [@@unboxed]
 
 type flambda_type = t
 
