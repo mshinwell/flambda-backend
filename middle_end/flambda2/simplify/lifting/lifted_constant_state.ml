@@ -19,7 +19,7 @@
 open! Flambda.Import
 module DE = Downwards_env
 module LC = Lifted_constant
-module T = Flambda_type
+module T = Flambda2_types
 module TE = T.Typing_env
 
 type t =

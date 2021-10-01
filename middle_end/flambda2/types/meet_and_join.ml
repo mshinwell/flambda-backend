@@ -64,7 +64,7 @@ let[@inline always] get_canonical_simples_and_expand_heads ~to_type ~left_env
     | exception Not_found -> None
     | canonical_simple -> Some canonical_simple
   in
-  let head1 = TE.expand_head left_env left_ty in
+  let head1 = Expand_head.expand_head left_env left_ty in
   let canonical_simple2 =
     match
       TE.get_alias_then_canonical_simple_exn right_env (to_type right_ty)
@@ -73,7 +73,7 @@ let[@inline always] get_canonical_simples_and_expand_heads ~to_type ~left_env
     | exception Not_found -> None
     | canonical_simple -> Some canonical_simple
   in
-  let head2 = TE.expand_head right_env right_ty in
+  let head2 = Expand_head.expand_head right_env right_ty in
   canonical_simple1, head1, canonical_simple2, head2
 
 type 'head meet_or_join_head_or_unknown_or_bottom_result =
@@ -227,8 +227,10 @@ and meet_closures_entry env
                      env_extension2) ~f:(fun env_extension ->
                     Ok (closures_entry, env_extension)))))
 
-and meet_function_type (env : Meet_env.t) (t1 : t) (t2 : t) :
-    (t * TEE.t) Or_bottom.t =
+and meet_function_type (env : Meet_env.t)
+    (t1 : TG.Function_type.t Or_unknown_or_bottom.t)
+    (t2 : Function_type.t Or_unknown_or_bottom.t) :
+    (TG.Function_type.t Or_unknown_or_bottom.t * TEE.t) Or_bottom.t =
   match t1, t2 with
   | Bottom, _ | _, Bottom -> Ok (Bottom, { equations = Name.Map.empty })
   | Unknown, t | t, Unknown -> Ok (t, { equations = Name.Map.empty })
@@ -444,10 +446,7 @@ and meet_int_indexed_product env t1 t2 : _ Or_bottom.t =
         | Some ty1, Some ty2 -> begin
           match meet env ty1 ty2 with
           | Ok (ty, env_extension') -> begin
-            match
-              Typing_env_extension_meet_and_join.meet env !env_extension
-                env_extension'
-            with
+            match meet_env_extension env !env_extension env_extension' with
             | Bottom ->
               any_bottom := true;
               TG.bottom_like ty1
@@ -507,7 +506,8 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
        incompatible. This could break very hard for users of Obj. *)
     Bottom
 
-and meet_head_of_kind_naked_immediate env t1 t2 : _ Or_bottom.t =
+and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
+    (t2 : TG.head_of_kind_naked_immediate) : _ Or_bottom.t =
   match t1, t2 with
   | Naked_immediates is1, Naked_immediates is2 ->
     let is = I.Set.inter is1 is2 in
@@ -525,9 +525,9 @@ and meet_head_of_kind_naked_immediate env t1 t2 : _ Or_bottom.t =
     | [is_int] -> (
       let shape =
         if I.equal is_int I.zero
-        then Some (T.any_block ())
+        then Some T.any_block
         else if I.equal is_int I.one
-        then Some (T.any_tagged_immediate ())
+        then Some T.any_tagged_immediate
         else None
       in
       match shape with
@@ -882,8 +882,7 @@ and join_row_like (env : Join_env.t) row_like1 row_like2 =
     let index = join_index case1.index case2.index in
     let maps_to = Maps_to.join env case1.maps_to case2.maps_to in
     let env_extension =
-      Typing_env_extension_meet_and_join.join env case1.env_extension
-        case2.env_extension
+      join_env_extension env case1.env_extension case2.env_extension
     in
     { maps_to; index; env_extension }
   in
@@ -1247,10 +1246,3 @@ and join ?bound_name env t1 t2 =
       _ ) ->
     Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" print t1 print
       t2
-
-let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
-  let result = Bound_name.var result_var in
-  let env = Typing_env.add_definition env result result_kind in
-  match meet (Meet_env.create env) t shape with
-  | Bottom -> Bottom
-  | Ok (_meet_ty, env_extension) -> Ok env_extension

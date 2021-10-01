@@ -182,7 +182,7 @@ let report fmt t =
 (* CR mshinwell: This parameter needs to be configurable *)
 let max_rec_depth = 1
 
-module I = Flambda_type.Function_declaration_type.T0
+module I = Flambda2_types.Function_declaration_type.T0
 
 let speculative_inlining dacc ~apply ~function_decl ~simplify_expr ~return_arity
     =
@@ -289,7 +289,7 @@ let make_decision dacc ~simplify_expr ~function_decl ~apply ~return_arity : t =
   let function_decl_rec_info = I.rec_info function_decl in
   let function_decl_rec_info =
     match
-      Flambda_type.prove_rec_info (DA.typing_env dacc) function_decl_rec_info
+      Flambda2_types.prove_rec_info (DA.typing_env dacc) function_decl_rec_info
     with
     | Proved rec_info -> rec_info
     | Unknown -> Rec_info_expr.unknown

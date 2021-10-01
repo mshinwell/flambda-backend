@@ -19,8 +19,8 @@
 module DE = Downwards_env
 module BP = Bound_parameter
 module LCS = Lifted_constant_state
-module T = Flambda_type
-module TE = Flambda_type.Typing_env
+module T = Flambda2_types
+module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
 let join denv typing_env params ~env_at_fork_plus_params

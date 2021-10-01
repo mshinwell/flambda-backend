@@ -96,7 +96,8 @@ let this_tagged_immediate_without_alias imm =
 
 let any_tagged_bool = these_tagged_immediates Targetint_31_63.all_bools
 
-let any_naked_bool = TG.these_naked_immediates Targetint_31_63.all_bools
+let any_naked_bool =
+  TG.these_naked_immediates ~no_alias:false Targetint_31_63.all_bools
 
 let this_boxed_float f = TG.box_float (TG.this_naked_float f)
 

@@ -601,7 +601,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
       let dacc, use_id =
         DA.record_continuation_use dacc cont
           (Non_inlinable { escaping = true })
-          ~env_at_use ~arg_types:[T.any_value ()]
+          ~env_at_use ~arg_types:[T.any_value]
       in
       Call_kind.indirect_function_call_unknown_arity (), use_id, dacc
     | Indirect_known_arity { param_arity; return_arity } ->
@@ -805,7 +805,7 @@ let simplify_method_call dacc apply ~callee_ty ~kind:_ ~obj ~arg_types
   let dacc, use_id =
     DA.record_continuation_use dacc apply_cont
       (Non_inlinable { escaping = true })
-      ~env_at_use:denv ~arg_types:[T.any_value ()]
+      ~env_at_use:denv ~arg_types:[T.any_value]
   in
   let dacc, exn_cont_use_id =
     DA.record_continuation_use dacc

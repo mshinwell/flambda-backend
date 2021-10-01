@@ -60,7 +60,7 @@ val this_tagged_immediate_without_alias : Targetint_31_63.t -> Type_grammar.t
 
 val any_tagged_bool : Type_grammar.t
 
-val any_naked_bool : no_alias:bool -> Type_grammar.t
+val any_naked_bool : Type_grammar.t
 
 val this_boxed_float : Numeric_types.Float_by_bit_pattern.t -> Type_grammar.t
 

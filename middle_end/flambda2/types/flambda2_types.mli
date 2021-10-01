@@ -31,6 +31,20 @@ type typing_env
 
 type typing_env_extension
 
+module Code_age_relation : sig
+  type t
+
+  val print : Format.formatter -> t -> unit
+
+  val empty : t
+
+  val get_older_version_of : t -> Code_id.t -> Code_id.t option
+
+  val all_code_ids_for_export : t -> Code_id.Set.t
+
+  val apply_renaming : t -> Renaming.t -> t
+end
+
 module Typing_env_extension : sig
   type t = typing_env_extension
 
@@ -199,15 +213,11 @@ val cut_and_n_way_join :
 module Function_type : sig
   type t
 
-  val create : Code_id.t -> rec_info:t -> t
+  val create : Code_id.t -> rec_info:flambda_type -> t
 end
 
 module Closures_entry : sig
   type t
-
-  val closure_types : t -> flambda_type Closure_id.Map.t
-
-  val function_decl_types : t -> Function_type.t Closure_id.Map.t
 
   val closure_var_types : t -> flambda_type Var_within_closure.Map.t
 end
@@ -226,8 +236,8 @@ val free_names : t -> Name_occurrences.t
     variables are assigned types in the returned environment extension on a best
     effort basis. *)
 val make_suitable_for_environment :
-  t ->
   Typing_env.t ->
+  t ->
   suitable_for:Typing_env.t ->
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
@@ -375,7 +385,8 @@ val mutable_string : size:int -> t
 
 val exactly_this_closure :
   Closure_id.t ->
-  all_function_decls_in_set:Function_type.t Closure_id.Map.t ->
+  all_function_decls_in_set:
+    Function_type.t Or_unknown_or_bottom.t Closure_id.Map.t ->
   all_closures_in_set:t Closure_id.Map.t ->
   all_closure_vars_in_set:flambda_type Var_within_closure.Map.t ->
   flambda_type
@@ -598,7 +609,7 @@ type reification_result = private
   | Lift of to_lift (* CR mshinwell: rename? *)
   | Lift_set_of_closures of
       { closure_id : Closure_id.t;
-        function_decls : Function_type.t Closure_id.Map.t;
+        function_types : Function_type.t Closure_id.Map.t;
         closure_vars : Simple.t Var_within_closure.Map.t
       }
   | Simple of Simple.t

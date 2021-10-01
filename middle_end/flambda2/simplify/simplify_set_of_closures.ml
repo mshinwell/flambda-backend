@@ -104,7 +104,7 @@ end = struct
         let type_prior_to_sets =
           (* See comment below about [degraded_closure_vars]. *)
           if Var_within_closure.Set.mem clos_var degraded_closure_vars
-          then T.any_value ()
+          then T.any_value
           else type_prior_to_sets
         in
         let env_extension =
