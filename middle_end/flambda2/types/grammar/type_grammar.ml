@@ -1223,6 +1223,8 @@ module Product = struct
 
     let create_from_list kind tys = { kind; fields = Array.of_list tys }
 
+    let create_from_array kind fields = { kind; fields }
+
     let create_top kind = { kind; fields = [||] }
 
     let width t = Targetint_31_63.Imm.of_int (Array.length t.fields)
@@ -1536,6 +1538,8 @@ module Env_extension = struct
   let free_names = free_names_env_extension
 
   let print = print_env_extension
+
+  let to_map = t.equations
 end
 
 let kind t =
@@ -1841,3 +1845,32 @@ let create_from_head_naked_int64 head = Naked_int64 (TD.create head)
 let create_from_head_naked_nativeint head = Naked_nativeint (TD.create head)
 
 let create_from_head_rec_info head = Rec_info (TD.create head)
+
+module Head_of_kind_value = struct
+  type t = head_of_kind_value
+
+  let create_variant ~is_unique ~blocks ~immediates =
+    Variant { is_unique; blocks; immediates }
+
+  let create_boxed_float ty = Boxed_float ty
+
+  let create_boxed_int32 ty = Boxed_int32 ty
+
+  let create_boxed_int64 ty = Boxed_int64 ty
+
+  let create_boxed_nativeint ty = Boxed_nativeint ty
+
+  let create_string info = String info
+
+  let create_array ~length = Array { length }
+end
+
+module Head_of_kind_naked_immediate = struct
+  type t = head_of_kind_naked_immediate
+
+  let create_naked_immediates imms = Naked_immediates imms
+
+  let create_is_int ty = Is_int ty
+
+  let create_get_tag ty = Get_tag ty
+end

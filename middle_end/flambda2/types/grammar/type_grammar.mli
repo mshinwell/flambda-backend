@@ -258,6 +258,8 @@ module Product : sig
 
     val create_from_list : Flambda_kind.t -> flambda_type list -> t
 
+    val create_from_array : Flambda_kind.t -> flambda_type array -> t
+
     val field_kind : t -> Flambda_kind.t
 
     val width : t -> Targetint_31_63.Imm.t
@@ -389,6 +391,8 @@ module Env_extension : sig
   include Contains_names.S with type t := t
 
   val print : Format.formatter -> t -> unit
+
+  val to_map : t -> flambda_type Name.Map.t
 end
 
 module Descr : sig
@@ -448,3 +452,35 @@ val apply_coercion_head_of_kind_naked_nativeint :
 
 val apply_coercion_head_of_kind_rec_info :
   head_of_kind_rec_info -> Coercion.t -> head_of_kind_rec_info Or_bottom.t
+
+module Head_of_kind_value : sig
+  type t = head_of_kind_value
+
+  val create_variant :
+    is_unique:bool ->
+    blocks:Row_like_for_blocks.t Or_unknown.t ->
+    immediates:flambda_type Or_unknown.t ->
+    t
+
+  val create_boxed_float : flambda_type -> t
+
+  val create_boxed_int32 : flambda_type -> t
+
+  val create_boxed_int64 : flambda_type -> t
+
+  val create_boxed_nativeint : flambda_type -> t
+
+  val create_string : String_info.t -> t
+
+  val create_array : length:flambda_type -> t
+end
+
+module Head_of_kind_naked_immediate : sig
+  type t = head_of_kind_naked_immediate
+
+  val create_naked_immediates : Targetint_31_63.Set.t -> t
+
+  val create_is_int : flambda_type -> t
+
+  val create_get_tag : flambda_type -> t
+end

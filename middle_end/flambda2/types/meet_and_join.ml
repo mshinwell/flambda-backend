@@ -16,12 +16,13 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module K = Flambda_kind
 module Float = Numeric_types.Float_by_bit_pattern
 module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
 module Meet_env = Typing_env.Meet_env
 module Join_env = Typing_env.Join_env
+module K = Flambda_kind
+module MTC = More_type_creators
 module TG = Type_grammar
 module TE = Typing_env
 module TEE = Typing_env_extension
@@ -79,7 +80,7 @@ let[@inline always] get_canonical_simples_and_expand_heads ~to_type ~left_env
 type 'head meet_or_join_head_or_unknown_or_bottom_result =
   | Left_head_unchanged
   | Right_head_unchanged
-  | New_head of 'head Or_unknown_or_bottom.t * TEE.t
+  | New_head of 'head Or_unknown_or_bottom.t * TG.Env_extension.t
 
 exception Bottom_meet
 
@@ -106,7 +107,7 @@ let meet_head_of_kind_rec_info _env t1 t2 : _ Or_bottom.t =
 
 let meet_unknown meet_contents ~contents_is_bottom env
     (or_unknown1 : _ Or_unknown.t) (or_unknown2 : _ Or_unknown.t) :
-    (_ Or_unknown.t * TEE.t) Or_bottom.t =
+    (_ Or_unknown.t * TG.Env_extension.t) Or_bottom.t =
   match or_unknown1, or_unknown2 with
   | Unknown, Unknown -> Ok (Unknown, TEE.empty)
   (* CR mshinwell: Think about the next two cases more *)
@@ -126,10 +127,23 @@ let meet_unknown meet_contents ~contents_is_bottom env
       (* XXX Why isn't [meet_contents] returning bottom? *)
       if contents_is_bottom contents then Bottom else result)
 
-let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
+let join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
+    (or_unknown2 : _ Or_unknown.t) : _ Or_unknown.t =
+  match or_unknown1, or_unknown2 with
+  | _, Unknown | Unknown, _ -> Unknown
+  | Known contents1, Known contents2 -> join_contents env contents1 contents2
+
+let rec meet_variant env ~(blocks1 : TG.Row_like_for_blocks.t Or_unknown.t)
+    ~(imms1 : TG.t Or_unknown.t)
+    ~(blocks2 : TG.Row_like_for_blocks.t Or_unknown.t)
+    ~(imms2 : TG.t Or_unknown.t) :
+    (TG.Row_like_for_blocks.t Or_unknown.t
+    * TG.t Or_unknown.t
+    * TG.Env_extension.t)
+    Or_bottom.t =
   let blocks =
-    meet_unknown Blocks.meet ~contents_is_bottom:Blocks.is_bottom env blocks1
-      blocks2
+    meet_unknown meet_row_like_for_blocks
+      ~contents_is_bottom:TG.Row_like_for_blocks.is_bottom env blocks1 blocks2
   in
   let blocks : _ Or_bottom.t =
     (* XXX Clean this up *)
@@ -139,32 +153,32 @@ let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
       if Blocks.is_bottom blocks' then Bottom else blocks
   in
   let imms =
-    meet_unknown meet ~contents_is_bottom:T.is_obviously_bottom env imms1 imms2
+    meet_unknown meet ~contents_is_bottom:TG.is_obviously_bottom env imms1 imms2
   in
   let imms : _ Or_bottom.t =
     match imms with
     | Bottom | Ok (Or_unknown.Unknown, _) -> imms
     | Ok (Or_unknown.Known imms', _) ->
-      if T.is_obviously_bottom imms' then Bottom else imms
+      if TG.is_obviously_bottom imms' then Bottom else imms
   in
   match blocks, imms with
   | Bottom, Bottom -> Bottom
   | Ok (blocks, env_extension), Bottom ->
-    let immediates : _ Or_unknown.t = Known (T.bottom K.naked_immediate) in
+    let immediates : _ Or_unknown.t = Known TG.bottom_naked_immediate in
     Ok (blocks, immediates, env_extension)
   | Bottom, Ok (immediates, env_extension) ->
-    let blocks : _ Or_unknown.t = Known (Blocks.create_bottom ()) in
+    let blocks : _ Or_unknown.t = Known TG.Row_like_for_blocks.bottom in
     Ok (blocks, immediates, env_extension)
   | Ok (blocks, env_extension1), Ok (immediates, env_extension2) ->
     begin
       match (blocks : _ Or_unknown.t) with
       | Unknown -> ()
-      | Known blocks -> assert (not (Blocks.is_bottom blocks))
+      | Known blocks -> assert (not (TG.Row_like_for_locks.is_bottom blocks))
     end;
     begin
       match (immediates : _ Or_unknown.t) with
       | Unknown -> ()
-      | Known imms -> assert (not (T.is_obviously_bottom imms))
+      | Known imms -> assert (not (TG.is_obviously_bottom imms))
     end;
     let env_extension =
       let env = Meet_env.env env in
@@ -174,38 +188,37 @@ let rec meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_bottom.t =
     Ok (blocks, immediates, env_extension)
 
 and meet_closures_entry env
-    { function_decls = function_decls1;
-      closure_types = closure_types1;
-      closure_var_types = closure_var_types1
-    }
-    { function_decls = function_decls2;
-      closure_types = closure_types2;
-      closure_var_types = closure_var_types2
-    } : _ Or_bottom.t =
+    ({ function_types = function_types1;
+       closure_types = closure_types1;
+       closure_var_types = closure_var_types1
+     } :
+      TG.Closures_entry.t)
+    ({ function_types = function_types2;
+       closure_types = closure_types2;
+       closure_var_types = closure_var_types2
+     } :
+      TG.Closures_entry.t) : TG.Closures_entry.t Or_bottom.t =
   let any_bottom = ref false in
-  let env_extensions = ref (TEE.empty ()) in
-  let function_decls =
+  let env_extensions = ref TG.Env_extension.empty in
+  let function_types =
     Closure_id.Map.merge
-      (fun _closure_id func_decl1 func_decl2 ->
-        match func_decl1, func_decl2 with
+      (fun _closure_id func_type1 func_type2 ->
+        match func_type1, func_type2 with
         | None, None -> None
-        | Some func_decl, None | None, Some func_decl -> Some func_decl
-        | Some func_decl1, Some func_decl2 -> (
-          match FDT.meet env func_decl1 func_decl2 with
+        | Some func_type, None | None, Some func_type -> Some func_type
+        | Some func_type1, Some func_type2 -> (
+          match FDT.meet env func_type1 func_type2 with
           | Bottom ->
             any_bottom := true;
             None
-          | Ok (func_decl, env_extension) ->
+          | Ok (func_type, env_extension) ->
             begin
-              match
-                Typing_env_extension_meet_and_join.meet env !env_extensions
-                  env_extension
-              with
+              match meet_env_extension env !env_extensions env_extension with
               | Bottom -> any_bottom := true
               | Ok env_extension -> env_extensions := env_extension
             end;
-            Some func_decl))
-      function_decls1 function_decls2
+            Some func_type))
+      function_types1 function_types2
   in
   if !any_bottom
   then Bottom
@@ -217,21 +230,21 @@ and meet_closures_entry env
           (meet_product_var_within_closure_indexed env closure_var_types1
              closure_var_types2) ~f:(fun (closure_var_types, env_extension2) ->
             let closures_entry =
-              { function_decls; closure_types; closure_var_types }
+              TG.Closures_entry.create ~function_types ~closure_types
+                ~closure_var_types
             in
             Or_bottom.bind
-              (Typing_env_extension_meet_and_join.meet env !env_extensions
-                 env_extension1) ~f:(fun env_extension ->
-                Or_bottom.bind
-                  (Typing_env_extension_meet_and_join.meet env env_extension
-                     env_extension2) ~f:(fun env_extension ->
-                    Ok (closures_entry, env_extension)))))
+              (meet_env_extension env !env_extensions env_extension1)
+              ~f:(fun env_extension ->
+                Or_bottom.bind (meet_env_extension env_extension2)
+                  ~f:(fun env_extension -> Ok (closures_entry, env_extension)))))
 
 and meet_function_type (env : Meet_env.t)
-    (t1 : TG.Function_type.t Or_unknown_or_bottom.t)
-    (t2 : Function_type.t Or_unknown_or_bottom.t) :
-    (TG.Function_type.t Or_unknown_or_bottom.t * TEE.t) Or_bottom.t =
-  match t1, t2 with
+    (func_type1 : TG.Function_type.t Or_unknown_or_bottom.t)
+    (func_type2 : TG.Function_type.t Or_unknown_or_bottom.t) :
+    (TG.Function_type.t Or_unknown_or_bottom.t * TG.Env_extension.t) Or_bottom.t
+    =
+  match func_type1, func_type2 with
   | Bottom, _ | _, Bottom -> Ok (Bottom, { equations = Name.Map.empty })
   | Unknown, t | t, Unknown -> Ok (t, { equations = Name.Map.empty })
   | ( Ok { code_id = code_id1; rec_info = rec_info1 },
@@ -249,13 +262,14 @@ and meet_function_type (env : Meet_env.t)
          case, any attempt to inline will fail, as the code will not be found in
          the simplifier's environment -- see
          [Simplify_apply_expr.simplify_direct_function_call]. *)
-      match Type_grammar.meet env rec_info1 rec_info2 with
+      match meet env rec_info1 rec_info2 with
       | Ok (rec_info, extension) ->
-        let t = create code_id ~rec_info in
-        Ok (t, extension)
+        let func_type = TG.Function_type.create code_id ~rec_info in
+        Ok (Or_unknown_or_bottom.Ok func_type, extension)
       | Bottom -> Bottom))
 
-and meet_row_like (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
+and meet_row_like (meet_env : Meet_env.t) t1 t2 :
+    (TG.t * TG.Env_extension.t) Or_bottom.t =
   let ({ known_tags = known1; other_tags = other1 } : t) = t1 in
   let ({ known_tags = known2; other_tags = other2 } : t) = t2 in
   let env_extension = ref None in
@@ -291,8 +305,7 @@ and meet_row_like (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
     | None -> env_extension := Some ext
     | Some ext2 ->
       assert need_join;
-      env_extension
-        := Some (Typing_env_extension_meet_and_join.join join_env ext2 ext)
+      env_extension := Some (join_env_extension join_env ext2 ext)
   in
   let meet_index i1 i2 : index Or_bottom.t =
     match i1, i2 with
@@ -315,15 +328,11 @@ and meet_row_like (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
       | Bottom -> None
       | Ok (maps_to, env_extension') -> (
         match
-          Typing_env_extension_meet_and_join.meet meet_env case1.env_extension
-            case2.env_extension
+          meet_env_extension meet_env case1.env_extension case2.env_extension
         with
         | Bottom -> None
         | Ok env_extension'' -> (
-          match
-            Typing_env_extension_meet_and_join.meet meet_env env_extension'
-              env_extension''
-          with
+          match meet_env_extension meet_env env_extension' env_extension'' with
           | Bottom -> None
           | Ok env_extension ->
             join_env_extension env_extension;
@@ -372,26 +381,23 @@ and meet_row_like (meet_env : Meet_env.t) t1 t2 : (t * TEE.t) Or_bottom.t =
 and meet_generic_product env ~components_by_index1 ~components_by_index2 ~union
     : _ Or_bottom.t =
   let any_bottom = ref false in
-  let env_extension = ref (TEE.empty ()) in
+  let env_extension = ref TG.Env_extension.empty in
   let components_by_index =
     union
       (fun _index ty1 ty2 ->
         match meet env ty1 ty2 with
         | Ok (ty, env_extension') -> begin
-          match
-            Typing_env_extension_meet_and_join.meet env !env_extension
-              env_extension'
-          with
+          match meet_env_extension env !env_extension env_extension' with
           | Bottom ->
             any_bottom := true;
-            Some (TG.bottom_like ty1)
+            Some (MTC.bottom_like ty1)
           | Ok extension ->
             env_extension := extension;
             Some ty
         end
         | Bottom ->
           any_bottom := true;
-          Some (TG.bottom_like ty1))
+          Some (MTC.bottom_like ty1))
       components_by_index1 components_by_index2
   in
   if !any_bottom then Bottom else Ok (components_by_index, !env_extension)
@@ -487,15 +493,15 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
         Boxed_nativeint n, env_extension)
   | ( Closures { by_closure_id = by_closure_id1 },
       Closures { by_closure_id = by_closure_id2 } ) ->
-    let module C = Row_like.For_closures_entry_by_set_of_closures_contents in
-    Or_bottom.map (C.meet env by_closure_id1 by_closure_id2)
+    Or_bottom.map
+      (TG.Row_like_for_closures.meet env by_closure_id1 by_closure_id2)
       ~f:(fun (by_closure_id, env_extension) ->
         Closures { by_closure_id }, env_extension)
   | String strs1, String strs2 ->
     let strs = String_info.Set.inter strs1 strs2 in
     if String_info.Set.is_empty strs
     then Bottom
-    else Or_bottom.Ok (String strs, TEE.empty)
+    else Or_bottom.Ok (String strs, TG.Env_extension.empty)
   | Array { length = length1 }, Array { length = length2 } ->
     Or_bottom.map (meet env length1 length2) ~f:(fun (length, env_extension) ->
         Array { length }, env_extension)
@@ -507,7 +513,8 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     Bottom
 
 and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
-    (t2 : TG.head_of_kind_naked_immediate) : _ Or_bottom.t =
+    (t2 : TG.head_of_kind_naked_immediate) :
+    TG.head_of_kind_naked_immediate Or_bottom.t =
   match t1, t2 with
   | Naked_immediates is1, Naked_immediates is2 ->
     let is = I.Set.inter is1 is2 in
@@ -572,7 +579,7 @@ and meet_head_or_unknown_or_bottom (env : Meet_env.t)
   | Ok head1, Ok head2 -> (
     match Head.meet env head1 head2 with
     | Ok (head, env_extension) -> New_head (Ok head, env_extension)
-    | Bottom -> New_head (Bottom, TEE.empty))
+    | Bottom -> New_head (Bottom, TG.Env_extension.empty))
 
 (* CR mshinwell: I've seen one case (on tests12.ml) where it appears that an env
    extension for a join point contains an equation for a symbol which is just
@@ -691,7 +698,7 @@ and meet_type_descr ~force_to_kind ~to_type env kind ty1 ty2 t1 t2 :
       end)
 
 (* The entry point for meeting types. *)
-and meet env t1 t2 =
+and meet env (t1 : TG.t) (t2 : TG.t) : (TG.t * TG.Env_extension.t) Or_bottom.t =
   match t1, t2 with
   | Value ty1, Value ty2 ->
     meet_type_descr env K.value t1 t2 ty1 ty2 ~force_to_kind:force_to_kind_value
@@ -725,7 +732,8 @@ and meet env t1 t2 =
     Misc.fatal_errorf "Kind mismatch upon meet:@ %a@ versus@ %a" print t1 print
       t2
 
-and meet_env_extension0 env t1 t2 extra_extensions =
+and meet_env_extension0 env (ext1 : TG.Env_extension.t)
+    (ext2 : TG.Env_extension.t) extra_extensions : TG.Env_extension.t =
   (* A symmetrical meet would be hard to implement, as the inner meets can
      produce extra extensions that need to be merged with the result.
 
@@ -736,17 +744,17 @@ and meet_env_extension0 env t1 t2 extra_extensions =
       (fun name ty (eqs, extra_extensions) ->
         match Name.Map.find_opt name eqs with
         | None ->
-          TG.check_equation name ty;
+          MTC.check_equation name ty;
           Name.Map.add name ty eqs, extra_extensions
         | Some ty0 -> begin
           match meet env ty0 ty with
           | Bottom -> raise Bottom_meet
           | Ok (ty, new_ext) ->
-            TG.check_equation name ty;
+            MTC.check_equation name ty;
             Name.Map.add (*replace*) name ty eqs, new_ext :: extra_extensions
         end)
-      (TEE.to_map t2)
-      (TEE.to_map t1, extra_extensions)
+      (TG.Env_extension.to_map ext2)
+      (TG.Env_extension.to_map ext1, extra_extensions)
   in
   let ext = TEE.from_map equations in
   match extra_extensions with
@@ -766,12 +774,6 @@ and meet_env_extension0 env t1 t2 extra_extensions =
 and meet_env_extension env t1 t2 : _ Or_bottom.t =
   try Ok (meet_env_extension0 env t1 t2 []) with Bottom_meet -> Bottom
 
-and join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
-    (or_unknown2 : _ Or_unknown.t) : _ Or_unknown.t =
-  match or_unknown1, or_unknown2 with
-  | _, Unknown | Unknown, _ -> Unknown
-  | Known contents1, Known contents2 -> join_contents env contents1 contents2
-
 and join_head_of_kind_naked_float _env t1 t2 : _ Or_unknown.t =
   Known (Float.Set.union t1 t2)
 
@@ -787,7 +789,11 @@ and join_head_of_kind_naked_nativeint _env t1 t2 : _ Or_unknown.t =
 and join_head_of_kind_rec_info _env t1 t2 : _ Or_unknown.t =
   if Rec_info_expr.equal t1 t2 then Known t1 else Unknown
 
-and join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
+and join_variant env ~(blocks1 : TG.Row_like_for_blocks.t Or_unknown.t)
+    ~(imms1 : TG.t Or_unknown.t)
+    ~(blocks2 : TG.Row_like_for_blocks.t Or_unknown.t)
+    ~(imms2 : TG.t Or_unknown.t) :
+    (TG.Row_like_for_blocks.t Or_unknown.t * TG.t Or_unknown.t) Or_unknown.t =
   let blocks_join env b1 b2 : _ Or_unknown.t = Known (join_blocks env b1 b2) in
   let blocks = join_unknown blocks_join env blocks1 blocks2 in
   let imms = join_unknown (join ?bound_name:None) env imms1 imms2 in
@@ -802,29 +808,29 @@ and join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2 : _ Or_unknown.t =
    case gracefully. All join functions for structures can handle [Unknown]
    results from generic [join]s without needing to propagate them. *)
 and join_closures_entry env
-    ({ function_decls = function_decls1;
+    ({ function_types = function_types1;
        closure_types = closure_types1;
        closure_var_types = closure_var_types1
      } :
-      TG.closures_entry)
-    ({ function_decls = function_decls2;
+      TG.Closures_entry.t)
+    ({ function_types = function_types2;
        closure_types = closure_types2;
        closure_var_types = closure_var_types2
      } :
-      TG.closures_entry) : TG.closures_entry =
-  let function_decls =
+      TG.Closures_entry.t) : TG.Closures_entry.t =
+  let function_types =
     Closure_id.Map.merge
-      (fun _closure_id func_decl1 func_decl2 ->
-        match func_decl1, func_decl2 with
+      (fun _closure_id func_type1 func_type2 ->
+        match func_type1, func_type2 with
         | None, None
         (* CR mshinwell: Are these next two cases right? Don't we need to do the
            equivalent of make_suitable_for_environment? *)
         | Some _, None
         | None, Some _ ->
           None
-        | Some func_decl1, Some func_decl2 ->
-          Some (join_function_type env func_decl1 func_decl2))
-      function_decls1 function_decls2
+        | Some func_type1, Some func_type2 ->
+          Some (join_function_type env func_type1 func_type2))
+      function_types1 function_types2
   in
   let closure_types =
     join_closure_id_indexed_product env closure_types1 closure_types2
@@ -833,11 +839,14 @@ and join_closures_entry env
     join_var_within_closure_indexed_product env closure_var_types1
       closure_var_types2
   in
-  { function_decls; closure_types; closure_var_types }
+  TG.Closures_entry.create ~function_types ~closure_types ~closure_var_types
 
-and join_function_type (env : Join_env.t) (t1 : t) (t2 : t) : t =
-  match t1, t2 with
-  | Bottom, t | t, Bottom -> t
+and join_function_type (env : Join_env.t)
+    (func_type1 : TG.Function_type.t Or_unknown_or_bottom.t)
+    (func_type2 : TG.Function_type.t Or_unknown_or_bottom.t) :
+    TG.Function_type.t Or_unknown_or_bottom.t =
+  match func_type1, func_type2 with
+  | Bottom, func_type | func_type, Bottom -> func_type
   | Unknown, _ | _, Unknown -> Unknown
   | ( Ok { code_id = code_id1; rec_info = rec_info1 },
       Ok { code_id = code_id2; rec_info = rec_info2 } ) -> (
@@ -852,7 +861,7 @@ and join_function_type (env : Join_env.t) (t1 : t) (t2 : t) : t =
     with
     | Unknown -> Unknown
     | Known code_id -> (
-      match Type_grammar.join env rec_info1 rec_info2 with
+      match join env rec_info1 rec_info2 with
       | Known rec_info -> create code_id ~rec_info
       | Unknown -> Unknown))
 
@@ -967,7 +976,8 @@ and join_row_like (env : Join_env.t) row_like1 row_like2 =
   in
   { known_tags; other_tags }
 
-and join_env_extension env t1 t2 =
+and join_env_extension env (ext1 : TG.Env_extension.t)
+    (ext2 : TG.Env_extension.t) : TG.Env_extension.t =
   let equations =
     Name.Map.merge
       (fun name ty1_opt ty2_opt ->
@@ -976,7 +986,7 @@ and join_env_extension env t1 t2 =
         | Some ty1, Some ty2 -> begin
           match join env ty1 ty2 with
           | Known ty ->
-            if TG.is_alias_of_name ty name
+            if MTC.is_alias_of_name ty name
             then
               (* This is rare but not anomalous. It may mean that [ty1] and
                  [ty2] are both alias types which canonicalize to [name], for
@@ -987,12 +997,13 @@ and join_env_extension env t1 t2 =
               None
             else begin
               (* This should always pass due to the [is_alias_of_name] check. *)
-              TG.check_equation name ty;
+              MTC.check_equation name ty;
               Some ty
             end
           | Unknown -> None
         end)
-      (TEE.to_map t1) (TEE.to_map t2)
+      (TG.Env_extension.to_map ext1)
+      (TG.Env_extension.to_map ext2)
   in
   TEE.from_map equations
 
@@ -1009,31 +1020,32 @@ and join_generic_product env ~components_by_index1 ~components_by_index2 ~merge
 
 and join_closure_id_indexed_product env
     ({ closure_id_components_by_index = components_by_index1 } :
-      TG.closure_id_indexed_product)
+      TG.Product.Closure_id_indexed.t)
     ({ closure_id_components_by_index = components_by_index2 } :
-      TG.closure_id_indexed_product) : TG.closure_id_indexed_product =
+      TG.Product.Closure_id_indexed.t) : TG.Product.Closure_id_indexed.t =
   let closure_id_components_by_index =
     join_generic_product env ~components_by_index1 ~components_by_index2
       ~merge:Closure_id.Map.merge
   in
-  { closure_id_components_by_index }
+  TG.Product.Closure_id_indexed.create closure_id_components_by_index
 
 and join_var_within_closure_indexed_product env
     ({ var_within_closure_components_by_index = components_by_index1 } :
-      TG.var_within_closure_indexed_product)
+      TG.Product.Var_within_closure_indexed.t)
     ({ var_within_closure_components_by_index = components_by_index2 } :
-      TG.var_within_closure_indexed_product) :
-    TG.var_within_closure_indexed_product =
+      TG.Product.Var_within_closure_indexed.t) :
+    TG.Product.Var_within_closure_indexed.t =
   let var_within_closure_components_by_index =
     join_generic_product env ~components_by_index1 ~components_by_index2
       ~merge:Closure_id.Map.merge
   in
-  { var_within_closure_components_by_index }
+  TG.Product.Var_within_closure_indexed.create
+    var_within_closure_components_by_index
 
 and join_int_indexed_product env
-    ({ fields = fields1; kind = kind1 } : TG.int_indexed_product)
-    ({ fields = fields2; kind = kind2 } : TG.int_indexed_product) :
-    TG.int_indexed_product =
+    ({ fields = fields1; kind = kind1 } : TG.Product.Int_indexed.t)
+    ({ fields = fields2; kind = kind2 } : TG.Product.Int_indexed.t) :
+    TG.Product.Int_indexed.t =
   if not (K.equal kind1 kind2)
   then
     Misc.fatal_errorf
@@ -1066,13 +1078,13 @@ and join_int_indexed_product env
           then fields1.(index)
           else
             match join env fields1.(index) fields2.(index) with
-            | Unknown -> TG.unknown t1.kind
+            | Unknown -> MTC.unknown kind1
             | Known ty -> ty)
   in
-  { kind = t1.kind; fields }
+  TG.Product.Int_indexed.create_from_array kind1 fields
 
 and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
-    (head2 : TG.head_of_kind_value) : _ Or_unknown.t =
+    (head2 : TG.head_of_kind_value) : TG.head_of_kind_value Or_unknown.t =
   match head1, head2 with
   | ( Variant { blocks = blocks1; immediates = imms1; is_unique = is_unique1 },
       Variant { blocks = blocks2; immediates = imms2; is_unique = is_unique2 } )
@@ -1082,40 +1094,51 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
         (* Uniqueness tracks whether duplication/lifting is allowed. It must
            always be propagated, both for meet and join. *)
         let is_unique = is_unique1 || is_unique2 in
-        Variant (Variant.create ~is_unique ~blocks ~immediates))
+        TG.Head_of_kind_value.create_variant ~is_unique ~blocks ~immediates)
   | Boxed_float n1, Boxed_float n2 ->
-    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_float n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n ->
+        TG.Head_of_kind_value.create_boxed_float n)
   | Boxed_int32 n1, Boxed_int32 n2 ->
-    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_int32 n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n ->
+        TG.Head_of_kind_value.create_boxed_int32 n)
   | Boxed_int64 n1, Boxed_int64 n2 ->
-    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_int64 n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n ->
+        TG.Head_of_kind_value.create_boxed_int64 n)
   | Boxed_nativeint n1, Boxed_nativeint n2 ->
-    Or_unknown.map (join env n1 n2) ~f:(fun n -> Boxed_nativeint n)
+    Or_unknown.map (join env n1 n2) ~f:(fun n ->
+        TG.Head_of_kind_value.create_boxed_nativeint n)
   | ( Closures { by_closure_id = by_closure_id1 },
       Closures { by_closure_id = by_closure_id2 } ) ->
-    let module C = Row_like.For_closures_entry_by_set_of_closures_contents in
-    let by_closure_id = C.join env by_closure_id1 by_closure_id2 in
+    let by_closure_id =
+      join_row_like_for_closures env by_closure_id1 by_closure_id2
+    in
     Known (Closures { by_closure_id })
   | String strs1, String strs2 ->
     let strs = String_info.Set.union strs1 strs2 in
-    Known (String strs)
+    Known (TG.Head_of_kind_value.create_string strs)
   | Array { length = length1 }, Array { length = length2 } ->
     Or_unknown.map (join env length1 length2) ~f:(fun length ->
-        Array { length })
+        TG.Head_of_kind_value.create_array ~length)
   | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
       _ ) ->
     Unknown
 
-and join_head_of_kind_naked_immediate env t1 t2 : _ Or_unknown.t =
-  match t1, t2 with
+and join_head_of_kind_naked_immediate env
+    (head1 : TG.Head_of_kind_naked_immediate.t)
+    (head2 : TG.Head_of_kind_naked_immediate.t) :
+    TG.Head_of_kind_naked_immediate.t Or_unknown.t =
+  let module I = Targetint_31_63 in
+  match head1, head2 with
   | Naked_immediates is1, Naked_immediates is2 ->
     let is = I.Set.union is1 is2 in
-    Known (Naked_immediates is)
+    Known (TG.Head_of_kind_naked_immediate.create_naked_immediates is)
   | Is_int ty1, Is_int ty2 ->
-    Or_unknown.map (join env ty1 ty2) ~f:(fun ty -> Is_int ty)
+    Or_unknown.map (join env ty1 ty2) ~f:(fun ty ->
+        TG.Head_of_kind_naked_immediate.create_is_int ty)
   | Get_tag ty1, Get_tag ty2 ->
-    Or_unknown.map (join env ty1 ty2) ~f:(fun ty -> Get_tag ty)
+    Or_unknown.map (join env ty1 ty2) ~f:(fun ty ->
+        TG.Head_of_kind_naked_immediate.create_get_tag ty)
   (* From now on: Irregular cases *)
   (* CR vlaviron: There could be improvements based on reduction (trying to
      reduce the is_int and get_tag cases to naked_immediate sets, then joining
@@ -1123,12 +1146,16 @@ and join_head_of_kind_naked_immediate env t1 t2 : _ Or_unknown.t =
      expensive. *)
   | Is_int ty, Naked_immediates is_int | Naked_immediates is_int, Is_int ty ->
     if I.Set.is_empty is_int
-    then Known (Is_int ty)
+    then Known (TG.Head_of_kind_naked_immediate.create_is_int ty)
     else
       (* Slightly better than Unknown *)
-      Known (Naked_immediates (I.Set.add I.zero (I.Set.add I.one is_int)))
+      Known
+        (TG.Head_of_kind_naked_immediate.create_naked_immediates
+           (I.Set.add I.zero (I.Set.add I.one is_int)))
   | Get_tag ty, Naked_immediates tags | Naked_immediates tags, Get_tag ty ->
-    if I.Set.is_empty tags then Known (Get_tag ty) else Unknown
+    if I.Set.is_empty tags
+    then Known (TG.Head_of_kind_naked_immediate.create_get_tag ty)
+    else Unknown
   | (Is_int _ | Get_tag _), (Is_int _ | Get_tag _) -> Unknown
 
 and join_head_or_unknown_or_bottom (env : Join_env.t)
@@ -1146,18 +1173,16 @@ and join_head_or_unknown_or_bottom (env : Join_env.t)
     | Known head -> Ok head
     | Unknown -> Unknown)
 
-and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
-    _ Or_unknown.t =
+and join_descr ?bound_name ~to_type join_env _ty1 _ty2 t1 t2 : _ Or_unknown.t =
   (* CR mshinwell: Rewrite this to avoid the [option] allocations from
      [get_canonical_simples_and_expand_heads] *)
   let canonical_simple1, head1, canonical_simple2, head2 =
-    get_canonical_simples_and_expand_heads ~force_to_kind ~to_type kind
+    get_canonical_simples_and_expand_heads ~to_type
       ~left_env:(Join_env.left_join_env join_env)
       ~left_ty:t1
       ~right_env:(Join_env.right_join_env join_env)
       ~right_ty:t2
   in
-
   (* CR mshinwell: Add shortcut when the canonical simples are equal *)
   let shared_aliases =
     let shared_aliases =
@@ -1213,7 +1238,7 @@ and join ?bound_name ~force_to_kind ~to_type join_env kind _ty1 _ty2 t1 t2 :
       | Ok head -> Known (to_type (create head))))
 
 (* The entry point for joining types. *)
-and join ?bound_name env t1 t2 =
+and join ?bound_name env (t1 : TG.t) (t2 : TG.t) : TG.t Or_unknown.t =
   match t1, t2 with
   | Value ty1, Value ty2 ->
     join_type_descr ?bound_name env K.value t1 t2 ty1 ty2
