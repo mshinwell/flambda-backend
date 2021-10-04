@@ -1539,7 +1539,7 @@ module Env_extension = struct
 
   let print = print_env_extension
 
-  let to_map = t.equations
+  let to_map t = t.equations
 end
 
 let kind t =
@@ -1859,6 +1859,13 @@ module Head_of_kind_value = struct
   let create_boxed_int64 ty = Boxed_int64 ty
 
   let create_boxed_nativeint ty = Boxed_nativeint ty
+
+  let create_tagged_immediate imm : t =
+    Variant
+      { is_unique = false;
+        immediates = Known (this_naked_immediate imm);
+        blocks = Known Row_like_for_blocks.bottom
+      }
 
   let create_closures by_closure_id = Closures { by_closure_id }
 

@@ -27,17 +27,6 @@ val bottom : Flambda_kind.t -> Type_grammar.t
 
 val bottom_like : Type_grammar.t -> Type_grammar.t
 
-val this_naked_immediate_without_alias : Targetint_31_63.t -> Type_grammar.t
-
-val this_naked_float_without_alias :
-  Numeric_types.Float_by_bit_pattern.t -> Type_grammar.t
-
-val this_naked_int32_without_alias : int32 -> Type_grammar.t
-
-val this_naked_int64_without_alias : int64 -> Type_grammar.t
-
-val this_naked_nativeint_without_alias : Targetint_32_64.t -> Type_grammar.t
-
 val these_naked_immediates : Targetint_31_63.Set.t -> Type_grammar.t
 
 val these_naked_floats : Type_grammar.head_of_kind_naked_float -> Type_grammar.t
@@ -55,8 +44,6 @@ val these_tagged_immediates0 :
   no_alias:bool -> Targetint_31_63.Set.t -> Type_grammar.t
 
 val these_tagged_immediates : Targetint_31_63.Set.t -> Type_grammar.t
-
-val this_tagged_immediate_without_alias : Targetint_31_63.t -> Type_grammar.t
 
 val any_tagged_bool : Type_grammar.t
 

@@ -34,6 +34,8 @@ let ( let* ) x f = Or_bottom.bind x ~f
 
 let ( let+ ) x f = Or_bottom.map x ~f
 
+let ( let- ) x f = Or_unknown.map x ~f
+
 let add_equation (simple : Simple.t) ty_of_simple env_extension =
   match Simple.must_be_name simple with
   (* CR mshinwell: Does this need to use some kind of [meet_equation]? *)
@@ -60,7 +62,7 @@ let all_aliases_of env simple_opt ~in_env =
       ~f:(fun simple -> Typing_env.mem_simple in_env simple)
       simples
 
-type meet_or_join_head_or_unknown_or_bottom_result =
+type meet_expanded_head_result =
   | Left_head_unchanged
   | Right_head_unchanged
   | New_head of ET.t * TEE.t
@@ -564,7 +566,7 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
     Ok (t1, TEE.empty)
 
 and meet_expanded_head env (expanded1 : ET.t) (expanded2 : ET.t) :
-    meet_or_join_head_or_unknown_or_bottom_result =
+    meet_expanded_head_result =
   match ET.descr expanded1, ET.descr expanded2 with
   | _, Unknown -> Left_head_unchanged
   | Unknown, _ -> Right_head_unchanged
@@ -1166,35 +1168,72 @@ and join_head_of_kind_naked_immediate env
     else Unknown
   | (Is_int _ | Get_tag _), (Is_int _ | Get_tag _) -> Unknown
 
-and join_head_or_unknown_or_bottom (env : Join_env.t)
-    (head1 : _ Or_unknown_or_bottom.t) (head2 : _ Or_unknown_or_bottom.t) :
-    _ Or_unknown_or_bottom.t =
-  match head1, head2 with
-  | Bottom, Bottom -> Bottom
+and join_expanded_head env kind (expanded1 : ET.t) (expanded2 : ET.t) : ET.t =
+  match ET.descr expanded1, ET.descr expanded2 with
+  | Bottom, Bottom -> ET.create_bottom kind
   (* The target environment defines all the names from the left and right
      environments, so we can safely return any input as the result *)
-  | Ok head, Bottom | Bottom, Ok head -> Ok head
-  | Unknown, _ -> Unknown
-  | _, Unknown -> Unknown
-  | Ok head1, Ok head2 -> (
-    match Head.join env head1 head2 with
-    | Known head -> Ok head
-    | Unknown -> Unknown)
+  | Ok _, Bottom -> expanded1
+  | Bottom, Ok _ -> expanded2
+  | Unknown, _ | _, Unknown -> ET.create_unknown kind
+  | Ok descr1, Ok descr2 -> (
+    let expanded_or_unknown =
+      match descr1, descr2 with
+      | Value head1, Value head2 ->
+        let- head = join_head_of_kind_value env head1 head2 in
+        ET.create_value head
+      | Naked_immediate head1, Naked_immediate head2 ->
+        let- head = join_head_of_kind_naked_immediate env head1 head2 in
+        ET.create_naked_immediate head
+      | Naked_float head1, Naked_float head2 ->
+        let- head = join_head_of_kind_naked_float env head1 head2 in
+        ET.create_naked_float head
+      | Naked_int32 head1, Naked_int32 head2 ->
+        let- head = join_head_of_kind_naked_int32 env head1 head2 in
+        ET.create_naked_int32 head
+      | Naked_int64 head1, Naked_int64 head2 ->
+        let- head = join_head_of_kind_naked_int64 env head1 head2 in
+        ET.create_naked_int64 head
+      | Naked_nativeint head1, Naked_nativeint head2 ->
+        let- head = join_head_of_kind_naked_nativeint env head1 head2 in
+        ET.create_naked_nativeint head
+      | Rec_info head1, Rec_info head2 ->
+        let- head = join_head_of_kind_rec_info env head1 head2 in
+        ET.create_rec_info head
+      | ( ( Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
+          | Naked_int64 _ | Naked_nativeint _ | Rec_info _ ),
+          _ ) ->
+        assert false
+    in
+    match expanded_or_unknown with
+    | Known expanded -> expanded
+    | Unknown -> ET.unknown_like expanded1)
 
-and join_descr ?bound_name ~to_type join_env _ty1 _ty2 t1 t2 : _ Or_unknown.t =
-  (* CR mshinwell: Rewrite this to avoid the [option] allocations from
+(* CR mshinwell: Why does this never return [Unknown]? *)
+and join ?bound_name env (t1 : TG.t) (t2 : TG.t) : TG.t Or_unknown.t =
+  if not (K.equal (TG.kind t1) (TG.kind t2))
+  then
+    Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" TG.print t1
+      TG.print t2;
+  let kind = TG.kind t1 in
+  (* CR mshinwell: See if we can optimise out the [option] allocations in
      [get_canonical_simples_and_expand_heads] *)
   let canonical_simple1, expanded1, canonical_simple2, expanded2 =
     Expand_head.get_canonical_simples_and_expand_heads
-      ~left_env:(Join_env.left_join_env join_env)
+      ~left_env:(Join_env.left_join_env env)
       ~left_ty:t1
-      ~right_env:(Join_env.right_join_env join_env)
+      ~right_env:(Join_env.right_join_env env)
       ~right_ty:t2
   in
   (* CR mshinwell: Add shortcut when the canonical simples are equal *)
   let shared_aliases =
     let shared_aliases =
-      match canonical_simple1, expanded1, canonical_simple2, expanded2 with
+      match
+        ( canonical_simple1,
+          ET.descr expanded1,
+          canonical_simple2,
+          ET.descr expanded2 )
+      with
       | None, _, None, _
       | None, (Ok _ | Unknown), _, _
       | _, _, None, (Ok _ | Unknown) ->
@@ -1207,78 +1246,41 @@ and join_descr ?bound_name ~to_type join_env _ty1 _ty2 t1 t2 : _ Or_unknown.t =
         else
           Aliases.Alias_set.inter
             (all_aliases_of
-               (Join_env.left_join_env join_env)
+               (Join_env.left_join_env env)
                canonical_simple1
-               ~in_env:(Join_env.target_join_env join_env))
+               ~in_env:(Join_env.target_join_env env))
             (all_aliases_of
-               (Join_env.right_join_env join_env)
+               (Join_env.right_join_env env)
                canonical_simple2
-               ~in_env:(Join_env.target_join_env join_env))
+               ~in_env:(Join_env.target_join_env env))
     in
     match bound_name with
     | None -> shared_aliases
     | Some bound_name ->
-      (* CR vlaviron: this ensures that we're not creating an alias to a
-         different simple that is just bound_name with different coercion. Such
-         an alias is forbidden. *)
+      (* This ensures that we're not creating an alias to a different simple
+         that is just bound_name with different coercion. Such an alias is
+         forbidden. *)
       Aliases.Alias_set.filter
         ~f:(fun simple -> not (Simple.same simple (Simple.name bound_name)))
         shared_aliases
   in
   match Aliases.Alias_set.find_best shared_aliases with
-  | Some alias -> Known (to_type (TG.create_equals alias))
+  | Some alias -> Known (TG.alias_type_of kind alias)
   | None -> (
     match canonical_simple1, canonical_simple2 with
     | Some simple1, Some simple2
-      when Join_env.already_joining join_env simple1 simple2 ->
+      when Join_env.already_joining env simple1 simple2 ->
       (* CR vlaviron: Fix this to Unknown when Product can handle it *)
-      Known (to_type (unknown ()))
-    | Some _, Some _ | Some _, None | None, Some _ | None, None -> (
-      let join_env =
+      Known (MTC.unknown kind)
+    | Some _, Some _ | Some _, None | None, Some _ | None, None ->
+      let env =
         match canonical_simple1, canonical_simple2 with
-        | Some simple1, Some simple2 ->
-          Join_env.now_joining join_env simple1 simple2
-        | Some _, None | None, Some _ | None, None -> join_env
+        | Some simple1, Some simple2 -> Join_env.now_joining env simple1 simple2
+        | Some _, None | None, Some _ | None, None -> env
       in
-      match join_head_or_unknown_or_bottom join_env head1 head2 with
-      | Bottom -> Known (to_type (bottom ()))
-      | Unknown -> Known (to_type (unknown ()))
-      | Ok head -> Known (to_type (create head))))
-
-(* The entry point for joining types. *)
-and join ?bound_name env (t1 : TG.t) (t2 : TG.t) : TG.t Or_unknown.t =
-  match t1, t2 with
-  | Value ty1, Value ty2 ->
-    join_type_descr ?bound_name env K.value t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_value ~to_type:(fun ty -> Value ty)
-  | Naked_immediate ty1, Naked_immediate ty2 ->
-    join_type_descr ?bound_name env K.naked_immediate t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_naked_immediate ~to_type:(fun ty ->
-        Naked_immediate ty)
-  | Naked_float ty1, Naked_float ty2 ->
-    join_type_descr ?bound_name env K.naked_float t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_naked_float ~to_type:(fun ty ->
-        Naked_float ty)
-  | Naked_int32 ty1, Naked_int32 ty2 ->
-    join_type_descr ?bound_name env K.naked_int32 t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_naked_int32 ~to_type:(fun ty ->
-        Naked_int32 ty)
-  | Naked_int64 ty1, Naked_int64 ty2 ->
-    join_type_descr ?bound_name env K.naked_int64 t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_naked_int64 ~to_type:(fun ty ->
-        Naked_int64 ty)
-  | Naked_nativeint ty1, Naked_nativeint ty2 ->
-    join_type_descr ?bound_name env K.naked_nativeint t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_naked_nativeint ~to_type:(fun ty ->
-        Naked_nativeint ty)
-  | Rec_info ty1, Rec_info ty2 ->
-    join_type_descr ?bound_name env K.rec_info t1 t2 ty1 ty2
-      ~force_to_kind:force_to_kind_rec_info ~to_type:(fun ty -> Rec_info ty)
-  | ( ( Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
-      | Naked_int64 _ | Naked_nativeint _ | Rec_info _ ),
-      _ ) ->
-    Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" print t1 print
-      t2
+      (* CR mshinwell: this should presumably check for Unknown (in the same way
+         as the meet case checks for Bottom) *)
+      Known (ET.to_type (join_expanded_head env kind expanded1 expanded2)))
 
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   let result = Bound_name.var result_var in

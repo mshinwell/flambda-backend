@@ -26,6 +26,9 @@ module TG = Type_grammar
 
 let is_bottom = Expand_head.is_bottom
 
+let expand_head env ty =
+  Expand_head.expand_head env ty |> Expand_head.Expanded_type.descr_oub
+
 type 'a proof =
   | Proved of 'a
   | Unknown
@@ -93,8 +96,7 @@ let prove_equals_to_var_or_symbol_or_tagged_immediate env t :
                   Proved (Symbol symbol, coercion))))
 
 let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const _ -> Invalid
+  match expand_head env t with
   | Value (Ok (Closures closures)) -> begin
     match TG.Row_like_for_closures.get_singleton closures.by_closure_id with
     | None -> Unknown
@@ -134,12 +136,7 @@ let prove_naked_floats env t : _ proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Naked_float]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Naked_float f) -> Proved (Float.Set.singleton f)
-  | Const
-      ( Naked_immediate _ | Tagged_immediate _ | Naked_int32 _ | Naked_int64 _
-      | Naked_nativeint _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Naked_float (Ok fs) -> if Float.Set.is_empty fs then Invalid else Proved fs
   | Naked_float Unknown -> Unknown
   | Naked_float Bottom -> Invalid
@@ -154,12 +151,7 @@ let prove_naked_int32s env t : _ proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Naked_int32]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Naked_int32 i) -> Proved (Int32.Set.singleton i)
-  | Const
-      ( Naked_immediate _ | Tagged_immediate _ | Naked_float _ | Naked_int64 _
-      | Naked_nativeint _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Naked_int32 (Ok is) -> if Int32.Set.is_empty is then Invalid else Proved is
   | Naked_int32 Unknown -> Unknown
   | Naked_int32 Bottom -> Invalid
@@ -174,12 +166,7 @@ let prove_naked_int64s env t : _ proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Naked_int64]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Naked_int64 i) -> Proved (Int64.Set.singleton i)
-  | Const
-      ( Naked_immediate _ | Tagged_immediate _ | Naked_float _ | Naked_int32 _
-      | Naked_nativeint _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Naked_int64 (Ok is) -> if Int64.Set.is_empty is then Invalid else Proved is
   | Naked_int64 Unknown -> Unknown
   | Naked_int64 Bottom -> Invalid
@@ -194,12 +181,7 @@ let prove_naked_nativeints env t : _ proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Naked_nativeint]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Naked_nativeint i) -> Proved (Targetint_32_64.Set.singleton i)
-  | Const
-      ( Naked_immediate _ | Tagged_immediate _ | Naked_float _ | Naked_int32 _
-      | Naked_int64 _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Naked_nativeint (Ok is) ->
     if Targetint_32_64.Set.is_empty is then Invalid else Proved is
   | Naked_nativeint Unknown -> Unknown
@@ -215,9 +197,7 @@ let prove_is_int env t : bool proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate _) -> Proved true
-  | Const _ -> wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Variant blocks_imms)) -> begin
     match blocks_imms.blocks, blocks_imms.immediates with
     | Unknown, Unknown -> Unknown
@@ -252,9 +232,7 @@ let prove_tags_must_be_a_block env t : Tag.Set.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate _) -> Unknown
-  | Const _ -> wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Variant blocks_imms)) -> begin
     match blocks_imms.immediates with
     | Unknown -> Unknown
@@ -307,12 +285,7 @@ let prove_naked_immediates env t : Targetint_31_63.Set.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Naked_immediate]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Naked_immediate i) -> Proved (Targetint_31_63.Set.singleton i)
-  | Const
-      ( Tagged_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-      | Naked_nativeint _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Naked_immediate (Ok (Naked_immediates is)) ->
     (* CR mshinwell: As noted elsewhere, add abstraction to avoid the need for
        these checks *)
@@ -354,12 +327,7 @@ let prove_equals_tagged_immediates env t : Targetint_31_63.Set.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate imm) -> Proved (Targetint_31_63.Set.singleton imm)
-  | Const
-      ( Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-      | Naked_nativeint _ ) ->
-    wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Variant blocks_imms)) -> begin
     match blocks_imms.blocks, blocks_imms.immediates with
     | Unknown, Unknown | Unknown, Known _ | Known _, Unknown -> Unknown
@@ -394,9 +362,7 @@ let prove_tags_and_sizes env t : Targetint_31_63.Imm.t Tag.Map.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate _) -> Unknown
-  | Const _ -> wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Variant blocks_imms)) -> begin
     match blocks_imms.immediates with
     (* CR mshinwell: Care. Should this return [Unknown] or [Invalid] if there is
@@ -444,13 +410,7 @@ type variant_like_proof =
 
 let prove_variant_like env t : variant_like_proof proof_allowing_kind_mismatch =
   (* Format.eprintf "prove_variant:@ %a\n%!" TG.print t; *)
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate imm) ->
-    Proved
-      { const_ctors = Known (Targetint_31_63.Set.singleton imm);
-        non_const_ctors_with_sizes = Tag.Scannable.Map.empty
-      }
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value (Ok (Variant blocks_imms)) -> begin
     match blocks_imms.blocks with
     | Unknown -> Unknown
@@ -497,9 +457,7 @@ let prove_variant_like env t : variant_like_proof proof_allowing_kind_mismatch =
 
 let prove_is_a_boxed_number env t :
     Flambda_kind.Boxable_number.t proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate _) -> Proved Untagged_immediate
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value Unknown -> Unknown
   | Value (Ok (Variant { blocks; immediates; is_unique = _ })) -> begin
     match blocks, immediates with
@@ -532,32 +490,28 @@ let prove_is_a_tagged_immediate env t : _ proof_allowing_kind_mismatch =
   | Unknown -> Unknown
 
 let prove_is_a_boxed_float env t : _ proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value Unknown -> Unknown
   | Value (Ok (Boxed_float _)) -> Proved ()
   | Value _ -> Invalid
   | _ -> Wrong_kind
 
 let prove_is_a_boxed_int32 env t : _ proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value Unknown -> Unknown
   | Value (Ok (Boxed_int32 _)) -> Proved ()
   | Value _ -> Invalid
   | _ -> Wrong_kind
 
 let prove_is_a_boxed_int64 env t : _ proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value Unknown -> Unknown
   | Value (Ok (Boxed_int64 _)) -> Proved ()
   | Value _ -> Invalid
   | _ -> Wrong_kind
 
 let prove_is_a_boxed_nativeint env t : _ proof_allowing_kind_mismatch =
-  match Expand_head.expand_head env t with
-  | Const _ -> Wrong_kind
+  match expand_head env t with
   | Value Unknown -> Unknown
   | Value (Ok (Boxed_nativeint _)) -> Proved ()
   | Value _ -> Invalid
@@ -657,8 +611,7 @@ let prove_strings env t : String_info.Set.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const _ -> if K.equal (TG.kind t) K.value then Invalid else wrong_kind ()
+  match expand_head env t with
   | Value (Ok (String strs)) -> Proved strs
   | Value (Ok _) -> Invalid
   | Value Unknown -> Unknown
@@ -676,9 +629,7 @@ let prove_is_tagging_of_simple ~prove_function env ~min_name_mode t :
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const (Tagged_immediate imm) ->
-    Proved (Simple.const (Reg_width_const.naked_immediate imm))
+  match expand_head env t with
   | Value (Ok (Variant { immediates; blocks; is_unique = _ })) -> begin
     match blocks with
     | Unknown -> Unknown
@@ -715,7 +666,7 @@ let prove_is_tagging_of_simple ~prove_function env ~min_name_mode t :
   end
   | Value Unknown -> Unknown
   | Value _ -> Invalid
-  | Const _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+  | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ ->
     wrong_kind ()
 
@@ -727,7 +678,7 @@ let prove_could_be_tagging_of_simple =
 
 let[@inline always] prove_boxed_number_containing_simple
     ~contents_of_boxed_number env ~min_name_mode t : Simple.t proof =
-  match Expand_head.expand_head env t with
+  match expand_head env t with
   | Value (Ok ty_value) -> begin
     match contents_of_boxed_number ty_value with
     | None -> Invalid
@@ -740,7 +691,7 @@ let[@inline always] prove_boxed_number_containing_simple
   end
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
-  | Const _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+  | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ ->
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
 
@@ -785,8 +736,7 @@ let[@inline] prove_block_field_simple_aux env ~min_name_mode t get_field :
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const _ -> if K.equal (TG.kind t) K.value then Invalid else wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Variant { immediates; blocks; is_unique = _ })) -> begin
     match immediates with
     | Unknown -> Unknown
@@ -836,8 +786,7 @@ let prove_project_var_simple env ~min_name_mode t env_var : Simple.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
-  | Const _ -> if K.equal (TG.kind t) K.value then Invalid else wrong_kind ()
+  match expand_head env t with
   | Value (Ok (Closures { by_closure_id })) -> (
     match TG.Row_like_for_closures.get_env_var by_closure_id env_var with
     | Unknown -> Unknown
@@ -861,10 +810,10 @@ let prove_rec_info env t : Rec_info_expr.t proof =
   let wrong_kind () =
     Misc.fatal_errorf "Kind error: expected [Rec_info]:@ %a" TG.print t
   in
-  match Expand_head.expand_head env t with
+  match expand_head env t with
   | Rec_info (Ok rec_info_expr) -> Proved rec_info_expr
   | Rec_info Unknown -> Unknown
   | Rec_info Bottom -> Invalid
-  | Const _ | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
-  | Naked_int64 _ | Naked_nativeint _ ->
+  | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ ->
     wrong_kind ()

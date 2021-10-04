@@ -17,9 +17,6 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module K = Flambda_kind
-module Float = Numeric_types.Float_by_bit_pattern
-module Int32 = Numeric_types.Int32
-module Int64 = Numeric_types.Int64
 module RWC = Reg_width_const
 module TG = Type_grammar
 
@@ -49,20 +46,7 @@ let bottom (kind : K.t) =
 
 let bottom_like t = bottom (TG.kind t)
 
-let this_naked_immediate_without_alias i =
-  TG.these_naked_immediates ~no_alias:true (Targetint_31_63.Set.singleton i)
-
-let this_naked_float_without_alias f =
-  TG.these_naked_floats ~no_alias:true (Float.Set.singleton f)
-
-let this_naked_int32_without_alias i =
-  TG.these_naked_int32s ~no_alias:true (Int32.Set.singleton i)
-
-let this_naked_int64_without_alias i =
-  TG.these_naked_int64s ~no_alias:true (Int64.Set.singleton i)
-
-let this_naked_nativeint_without_alias i =
-  TG.these_naked_nativeints ~no_alias:true (Targetint_32_64.Set.singleton i)
+(* CR mshinwell: can remove [no_alias] now *)
 
 let these_naked_immediates is = TG.these_naked_immediates ~no_alias:false is
 
@@ -90,9 +74,6 @@ let these_tagged_immediates0 ~no_alias imms =
         ~blocks:(Known TG.Row_like_for_blocks.bottom)
 
 let these_tagged_immediates imms = these_tagged_immediates0 ~no_alias:false imms
-
-let this_tagged_immediate_without_alias imm =
-  these_tagged_immediates0 ~no_alias:true (Targetint_31_63.Set.singleton imm)
 
 let any_tagged_bool = these_tagged_immediates Targetint_31_63.all_bools
 

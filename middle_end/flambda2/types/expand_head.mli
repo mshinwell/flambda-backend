@@ -38,7 +38,11 @@ module Expanded_type : sig
 
   val create_bottom : Flambda_kind.t -> t
 
+  val create_unknown : Flambda_kind.t -> t
+
   val bottom_like : t -> t
+
+  val unknown_like : t -> t
 
   val is_bottom : t -> bool
 
@@ -54,13 +58,25 @@ module Expanded_type : sig
     | Rec_info of Type_grammar.head_of_kind_rec_info
 
   val descr : t -> descr Or_unknown_or_bottom.t
+
+  type descr_oub = private
+    | Value of Type_grammar.head_of_kind_value Or_unknown_or_bottom.t
+    | Naked_immediate of
+        Type_grammar.head_of_kind_naked_immediate Or_unknown_or_bottom.t
+    | Naked_float of
+        Type_grammar.head_of_kind_naked_float Or_unknown_or_bottom.t
+    | Naked_int32 of
+        Type_grammar.head_of_kind_naked_int32 Or_unknown_or_bottom.t
+    | Naked_int64 of
+        Type_grammar.head_of_kind_naked_int64 Or_unknown_or_bottom.t
+    | Naked_nativeint of
+        Type_grammar.head_of_kind_naked_nativeint Or_unknown_or_bottom.t
+    | Rec_info of Type_grammar.head_of_kind_rec_info Or_unknown_or_bottom.t
+
+  val descr_oub : t -> descr_oub
 end
 
-type expanded_type_or_const = private
-  | Const of Reg_width_const.Descr.t
-  | Expanded of Expanded_type.t
-
-val expand_head : Typing_env.t -> Type_grammar.t -> expanded_type_or_const
+val expand_head : Typing_env.t -> Type_grammar.t -> Expanded_type.t
 
 val get_canonical_simples_and_expand_heads :
   left_env:Typing_env.t ->
@@ -69,12 +85,11 @@ val get_canonical_simples_and_expand_heads :
   right_ty:Type_grammar.t ->
   Simple.t option * Expanded_type.t * Simple.t option * Expanded_type.t
 
+val is_bottom : Typing_env.t -> Type_grammar.t -> bool
+
 val make_suitable_for_environment :
   Typing_env.t ->
   Type_grammar.t ->
   suitable_for:Typing_env.t ->
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
-
-(* CR mshinwell: check if this is still needed *)
-val is_bottom : Typing_env.t -> Type_grammar.t -> bool

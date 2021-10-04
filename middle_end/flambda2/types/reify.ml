@@ -87,8 +87,9 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
       | None -> Cannot_reify
       | Some canonical_simple -> Simple canonical_simple
     in
-    match Expand_head.expand_head env t with
-    | Const const -> Simple (Simple.const_from_descr const)
+    match
+      Expand_head.expand_head env t |> Expand_head.Expanded_type.descr_oub
+    with
     | Value (Ok (Variant blocks_imms)) -> (
       if blocks_imms.is_unique && not allow_unique
       then try_canonical_simple ()

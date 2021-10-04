@@ -470,6 +470,8 @@ module Head_of_kind_value : sig
 
   val create_boxed_nativeint : flambda_type -> t
 
+  val create_tagged_immediate : Targetint_31_63.t -> t
+
   val create_closures : Row_like_for_closures.t -> t
 
   val create_string : String_info.Set.t -> t
