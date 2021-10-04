@@ -470,7 +470,9 @@ module Head_of_kind_value : sig
 
   val create_boxed_nativeint : flambda_type -> t
 
-  val create_string : String_info.t -> t
+  val create_closures : Row_like_for_closures.t -> t
+
+  val create_string : String_info.Set.t -> t
 
   val create_array : length:flambda_type -> t
 end

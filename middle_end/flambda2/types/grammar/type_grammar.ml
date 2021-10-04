@@ -1860,6 +1860,8 @@ module Head_of_kind_value = struct
 
   let create_boxed_nativeint ty = Boxed_nativeint ty
 
+  let create_closures by_closure_id = Closures { by_closure_id }
+
   let create_string info = String info
 
   let create_array ~length = Array { length }
