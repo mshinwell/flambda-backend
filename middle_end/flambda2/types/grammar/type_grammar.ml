@@ -1159,6 +1159,10 @@ module Function_type = struct
   type t = function_type
 
   let create code_id ~rec_info = { code_id; rec_info }
+
+  let code_id t = t.code_id
+
+  let rec_info t = t.rec_info
 end
 
 module Closures_entry = struct

@@ -31,6 +31,8 @@ module Typing_env = struct
   let add_env_extension_with_extra_variables t extension =
     add_env_extension_with_extra_variables t extension
       ~meet_type:Meet_and_join.meet
+
+  module Alias_set = Aliases.Alias_set
 end
 
 module Typing_env_extension = Typing_env_extension
@@ -51,13 +53,6 @@ module Code_age_relation = Code_age_relation
 let meet env t1 t2 : _ Or_bottom.t =
   let meet_env = Typing_env.Meet_env.create env in
   meet meet_env t1 t2
-
-let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
-  let result = Bound_name.var result_var in
-  let env = Typing_env.add_definition env result result_kind in
-  match meet env t shape with
-  | Bottom -> Bottom
-  | Ok (_meet_ty, env_extension) -> Ok env_extension
 
 let join ?bound_name central_env ~left_env ~left_ty ~right_env ~right_ty =
   let join_env = Typing_env.Join_env.create central_env ~left_env ~right_env in

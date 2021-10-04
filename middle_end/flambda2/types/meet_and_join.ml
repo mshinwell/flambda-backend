@@ -1246,3 +1246,10 @@ and join ?bound_name env t1 t2 =
       _ ) ->
     Misc.fatal_errorf "Kind mismatch upon join:@ %a@ versus@ %a" print t1 print
       t2
+
+let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
+  let result = Bound_name.var result_var in
+  let env = Typing_env.add_definition env result result_kind in
+  match meet env t shape with
+  | Bottom -> Bottom
+  | Ok (_meet_ty, env_extension) -> Ok env_extension

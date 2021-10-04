@@ -270,6 +270,10 @@ module Function_type : sig
   type t = function_type
 
   val create : Code_id.t -> rec_info:flambda_type -> t
+
+  val code_id : t -> Code_id.t
+
+  val rec_info : t -> flambda_type
 end
 
 module Closures_entry : sig

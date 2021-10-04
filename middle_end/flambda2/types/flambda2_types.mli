@@ -43,6 +43,15 @@ module Code_age_relation : sig
   val all_code_ids_for_export : t -> Code_id.Set.t
 
   val apply_renaming : t -> Renaming.t -> t
+
+  val union : t -> t -> t
+
+  val meet :
+    t ->
+    resolver:(Compilation_unit.t -> t option) ->
+    Code_id.t ->
+    Code_id.t ->
+    Code_id.t Or_bottom.t
 end
 
 module Typing_env_extension : sig
@@ -154,10 +163,21 @@ module Typing_env : sig
 
   val with_code_age_relation : t -> Code_age_relation.t -> t
 
+  val add_to_code_age_relation :
+    t -> new_code_id:Code_id.t -> old_code_id:Code_id.t option -> t
+
   val free_names_transitive : t -> flambda_type -> Name_occurrences.t
 
+  module Alias_set : sig
+    type t
+
+    val filter : t -> f:(Simple.t -> bool) -> t
+
+    val get_singleton : t -> Simple.t option
+  end
+
   val aliases_of_simple :
-    t -> min_name_mode:Name_mode.t -> Simple.t -> Aliases.Alias_set.t
+    t -> min_name_mode:Name_mode.t -> Simple.t -> Alias_set.t
 
   val clean_for_export : t -> reachable_names:Name_occurrences.t -> t
 
@@ -214,6 +234,10 @@ module Function_type : sig
   type t
 
   val create : Code_id.t -> rec_info:flambda_type -> t
+
+  val code_id : t -> Code_id.t
+
+  val rec_info : t -> flambda_type
 end
 
 module Closures_entry : sig
