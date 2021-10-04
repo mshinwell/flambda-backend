@@ -20,18 +20,7 @@
     of a type. *)
 
 module Expanded_type : sig
-  type descr = private
-    | Value of Type_grammar.head_of_kind_value
-    | Naked_immediate of Type_grammar.head_of_kind_naked_immediate
-    | Naked_float of Type_grammar.head_of_kind_naked_float
-    | Naked_int32 of Type_grammar.head_of_kind_naked_int32
-    | Naked_int64 of Type_grammar.head_of_kind_naked_int64
-    | Naked_nativeint of Type_grammar.head_of_kind_naked_nativeint
-    | Rec_info of Type_grammar.head_of_kind_rec_info
-
-  type t = descr Or_unknown_or_bottom.t
-
-  val to_type : t -> Type_grammar.t
+  type t
 
   val create_value : Type_grammar.head_of_kind_value -> t
 
@@ -47,14 +36,38 @@ module Expanded_type : sig
 
   val create_rec_info : Type_grammar.head_of_kind_rec_info -> t
 
+  val create_bottom : Flambda_kind.t -> t
+
+  val bottom_like : t -> t
+
   val is_bottom : t -> bool
+
+  val to_type : t -> Type_grammar.t
+
+  type descr = private
+    | Value of Type_grammar.head_of_kind_value
+    | Naked_immediate of Type_grammar.head_of_kind_naked_immediate
+    | Naked_float of Type_grammar.head_of_kind_naked_float
+    | Naked_int32 of Type_grammar.head_of_kind_naked_int32
+    | Naked_int64 of Type_grammar.head_of_kind_naked_int64
+    | Naked_nativeint of Type_grammar.head_of_kind_naked_nativeint
+    | Rec_info of Type_grammar.head_of_kind_rec_info
+
+  val descr : t -> descr Or_unknown_or_bottom.t
 end
 
 type expanded_type_or_const = private
   | Const of Reg_width_const.Descr.t
   | Expanded of Expanded_type.t
 
-val expand_head : Typing_env.t -> Type_grammar.t -> Expanded_type.t
+val expand_head : Typing_env.t -> Type_grammar.t -> expanded_type_or_const
+
+val get_canonical_simples_and_expand_heads :
+  left_env:Typing_env.t ->
+  left_ty:Type_grammar.t ->
+  right_env:Typing_env.t ->
+  right_ty:Type_grammar.t ->
+  Simple.t option * Expanded_type.t * Simple.t option * Expanded_type.t
 
 val make_suitable_for_environment :
   Typing_env.t ->
@@ -63,4 +76,5 @@ val make_suitable_for_environment :
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
 
+(* CR mshinwell: check if this is still needed *)
 val is_bottom : Typing_env.t -> Type_grammar.t -> bool

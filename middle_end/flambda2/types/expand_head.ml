@@ -285,3 +285,25 @@ let is_bottom env t =
   | Naked_nativeint (Unknown | Ok _)
   | Rec_info (Unknown | Ok _) ->
     false
+
+let[@inline always] get_canonical_simples_and_expand_heads ~left_env ~left_ty
+    ~right_env ~right_ty =
+  let canonical_simple1 =
+    match
+      TE.get_alias_then_canonical_simple_exn left_env left_ty
+        ~min_name_mode:Name_mode.in_types
+    with
+    | exception Not_found -> None
+    | canonical_simple -> Some canonical_simple
+  in
+  let head1 = Expand_head.expand_head left_env left_ty in
+  let canonical_simple2 =
+    match
+      TE.get_alias_then_canonical_simple_exn right_env right_ty
+        ~min_name_mode:Name_mode.in_types
+    with
+    | exception Not_found -> None
+    | canonical_simple -> Some canonical_simple
+  in
+  let head2 = Expand_head.expand_head right_env right_ty in
+  canonical_simple1, head1, canonical_simple2, head2
