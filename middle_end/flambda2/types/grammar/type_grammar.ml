@@ -1233,6 +1233,20 @@ module Product = struct
   end
 end
 
+module Row_like_index = struct
+  type 'index t = 'index row_like_index
+
+  let known index = Known index
+
+  let at_least index = At_least index
+end
+
+module Row_like_case = struct
+  type ('index, 'maps_to) t = ('index, 'maps_to) row_like_case
+
+  let create ~maps_to ~index ~env_extension = { maps_to; index; env_extension }
+end
+
 module Row_like_for_blocks = struct
   type t = row_like_for_blocks
 
@@ -1389,6 +1403,10 @@ module Row_like_for_blocks = struct
     in
     { known_tags; other_tags = Bottom }
 
+  let create_raw ~known_tags ~other_tags =
+    (* CR mshinwell: add invariant check? *)
+    { known_tags; other_tags }
+
   let all_tags_and_indexes { known_tags; other_tags } : _ Or_unknown.t =
     match other_tags with
     | Ok _ -> Unknown
@@ -1487,6 +1505,10 @@ module Row_like_for_closures = struct
         }
     in
     { known_closures; other_closures = Bottom }
+
+  let create_raw ~known_closures ~other_closures =
+    (* CR mshinwell: add invariant check? *)
+    { known_closures; other_closures }
 
   let get_singleton { known_closures; other_closures } =
     match other_closures with

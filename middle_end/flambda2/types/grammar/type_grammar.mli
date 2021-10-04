@@ -22,6 +22,8 @@
 module Block_size : sig
   type t
 
+  val equal : t -> t -> bool
+
   val subset : t -> t -> bool
 
   val union : t -> t -> t
@@ -293,6 +295,24 @@ module Closures_entry : sig
   val closure_var_types : t -> flambda_type Var_within_closure.Map.t
 end
 
+module Row_like_index : sig
+  type 'index t = 'index row_like_index
+
+  val known : 'index -> 'index t
+
+  val at_least : 'index -> 'index t
+end
+
+module Row_like_case : sig
+  type ('index, 'maps_to) t = ('index, 'maps_to) row_like_case
+
+  val create :
+    maps_to:'maps_to ->
+    index:'index row_like_index ->
+    env_extension:env_extension ->
+    ('index, 'maps_to) row_like_case
+end
+
 module Row_like_for_blocks : sig
   type t = row_like_for_blocks
 
@@ -313,6 +333,11 @@ module Row_like_for_blocks : sig
 
   val create_exactly_multiple :
     field_tys_by_tag:flambda_type list Tag.Map.t -> t
+
+  val create_raw :
+    known_tags:(Block_size.t, int_indexed_product) row_like_case Tag.Map.t ->
+    other_tags:(Block_size.t, int_indexed_product) row_like_case Or_bottom.t ->
+    t
 
   val all_tags : t -> Tag.Set.t Or_unknown.t
 
@@ -370,6 +395,14 @@ module Row_like_for_closures : sig
 
   val create_at_least :
     Closure_id.t -> Set_of_closures_contents.t -> Closures_entry.t -> t
+
+  val create_raw :
+    known_closures:
+      (Set_of_closures_contents.t, closures_entry) row_like_case
+      Closure_id.Map.t ->
+    other_closures:
+      (Set_of_closures_contents.t, closures_entry) row_like_case Or_bottom.t ->
+    t
 
   val get_singleton :
     t -> ((Closure_id.t * Set_of_closures_contents.t) * Closures_entry.t) option
