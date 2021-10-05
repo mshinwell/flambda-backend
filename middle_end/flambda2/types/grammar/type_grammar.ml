@@ -944,7 +944,7 @@ and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
 
 and apply_coercion_head_of_kind_naked_immediate head coercion : _ Or_bottom.t =
   match head with
-  | Naked_immediates _ -> Ok head
+  | Naked_immediates _ -> if Coercion.is_id coercion then Ok head else Bottom
   | Is_int t ->
     let<+ t' = apply_coercion t coercion in
     if t == t' then head else Is_int t'
@@ -1042,8 +1042,8 @@ and apply_coercion_closures_entry
         | Ok function_type -> function_type
         | Bottom ->
           bottom := true;
-          function_type
-        (* will never be looked at *))
+          (* This [function_type] will never be looked at: *)
+          function_type)
       function_types
   in
   if !bottom
