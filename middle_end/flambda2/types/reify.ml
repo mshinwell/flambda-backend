@@ -260,6 +260,10 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
           in
           Lift_set_of_closures { closure_id; function_types; closure_vars }
     end
+    | Naked_immediate (Ok (Naked_immediates imms)) -> (
+      match Targetint_31_63.Set.get_singleton imms with
+      | None -> try_canonical_simple ()
+      | Some i -> Simple (Simple.const (Reg_width_const.naked_immediate i)))
     (* CR mshinwell: share code with [prove_equals_tagged_immediates], above *)
     | Naked_immediate (Ok (Is_int scrutinee_ty)) -> begin
       match Provers.prove_is_int env scrutinee_ty with
@@ -338,9 +342,7 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
         | None -> try_canonical_simple ()
         | Some n -> Lift (Boxed_nativeint n))
     end
-    | Value (Ok (String _ | Array _))
     | Value Bottom
-    | Naked_immediate (Ok (Naked_immediates _))
     | Naked_immediate Bottom
     | Naked_float Bottom
     | Naked_int32 Bottom
@@ -349,6 +351,7 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
     | Rec_info Bottom ->
       Invalid
     | Value Unknown
+    | Value (Ok (String _ | Array _))
     | Naked_immediate Unknown
     | Naked_float Unknown
     | Naked_int32 Unknown
