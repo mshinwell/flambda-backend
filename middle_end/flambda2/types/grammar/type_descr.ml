@@ -16,6 +16,8 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+open Or_bottom.Let_syntax
+
 (* This module conceals the implementation of type ['head t]. Functions such as
    [T.descr] can be inlined with return values unboxed by Flambda 2. *)
 module T : sig
@@ -137,7 +139,7 @@ end = struct
     match t with Bottom -> true | Unknown | Ok _ -> false
 
   let is_obviously_unknown (t : _ t) =
-    match t with Bottom -> false | Unknown | Ok _ -> true
+    match t with Unknown -> true | Bottom | Ok _ -> false
 
   let[@inline always] get_alias_exn ~apply_renaming_head ~free_names_head
       (t : _ t) =
@@ -203,8 +205,8 @@ let[@inline always] apply_coercion ~apply_coercion_head ~apply_renaming_head
     | None -> Bottom
     | Some simple -> Ok (create_equals simple))
   | Ok (No_alias head) ->
-    Or_bottom.map (apply_coercion_head head coercion) ~f:(fun head ->
-        create head)
+    let<+ head = apply_coercion_head head coercion in
+    create head
 
 let all_ids_for_export ~apply_renaming_head ~free_names_head
     ~all_ids_for_export_head (t : _ t) =
