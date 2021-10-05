@@ -836,62 +836,65 @@ and all_ids_for_export_env_extension { equations } =
 (* CR-someday mshinwell: The [apply_coercion] functions could be generalised to
    a mapping function over types. *)
 let rec apply_coercion t coercion : t Or_bottom.t =
-  match t with
-  | Value ty ->
-    let<+ ty' =
-      TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
-        ~apply_renaming_head:apply_renaming_head_of_kind_value
-        ~free_names_head:free_names_head_of_kind_value coercion ty
-    in
-    if ty == ty' then t else Value ty'
-  | Naked_immediate ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
-        ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
-        ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty
-    in
-    if ty == ty' then t else Naked_immediate ty'
-  | Naked_float ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_naked_float
-        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
-        ~free_names_head:free_names_head_of_kind_naked_float coercion ty
-    in
-    if ty == ty' then t else Naked_float ty'
-  | Naked_int32 ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32
-        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
-        ~free_names_head:free_names_head_of_kind_naked_int32 coercion ty
-    in
-    if ty == ty' then t else Naked_int32 ty'
-  | Naked_int64 ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64
-        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
-        ~free_names_head:free_names_head_of_kind_naked_int64 coercion ty
-    in
-    if ty == ty' then t else Naked_int64 ty'
-  | Naked_nativeint ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
-        ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
-        ~free_names_head:free_names_head_of_kind_naked_nativeint coercion ty
-    in
-    if ty == ty' then t else Naked_nativeint ty'
-  | Rec_info ty ->
-    let<+ ty' =
-      TD.apply_coercion
-        ~apply_coercion_head:apply_coercion_head_of_kind_rec_info
-        ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
-        ~free_names_head:free_names_head_of_kind_rec_info coercion ty
-    in
-    if ty == ty' then t else Rec_info ty'
+  if Coercion.is_id coercion
+  then Ok t
+  else
+    match t with
+    | Value ty ->
+      let<+ ty' =
+        TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
+          ~apply_renaming_head:apply_renaming_head_of_kind_value
+          ~free_names_head:free_names_head_of_kind_value coercion ty
+      in
+      if ty == ty' then t else Value ty'
+    | Naked_immediate ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+          ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty
+      in
+      if ty == ty' then t else Naked_immediate ty'
+    | Naked_float ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_naked_float
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+          ~free_names_head:free_names_head_of_kind_naked_float coercion ty
+      in
+      if ty == ty' then t else Naked_float ty'
+    | Naked_int32 ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+          ~free_names_head:free_names_head_of_kind_naked_int32 coercion ty
+      in
+      if ty == ty' then t else Naked_int32 ty'
+    | Naked_int64 ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+          ~free_names_head:free_names_head_of_kind_naked_int64 coercion ty
+      in
+      if ty == ty' then t else Naked_int64 ty'
+    | Naked_nativeint ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+          ~free_names_head:free_names_head_of_kind_naked_nativeint coercion ty
+      in
+      if ty == ty' then t else Naked_nativeint ty'
+    | Rec_info ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_rec_info
+          ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+          ~free_names_head:free_names_head_of_kind_rec_info coercion ty
+      in
+      if ty == ty' then t else Rec_info ty'
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
@@ -903,24 +906,25 @@ and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
     then head
     else Closures { by_closure_id = by_closure_id' }
   | Variant { is_unique; blocks; immediates } ->
-    let found_bottom = ref false in
+    let found_bottom_immediates = ref false in
     let immediates' =
       let>+ immediates = immediates in
       match apply_coercion immediates coercion with
       | Bottom ->
-        found_bottom := true;
+        found_bottom_immediates := true;
         immediates
       | Ok immediates -> immediates
     in
+    let found_bottom_blocks = ref false in
     let blocks' =
       let>+ blocks = blocks in
       match apply_coercion_row_like_for_blocks blocks coercion with
       | Bottom ->
-        found_bottom := true;
+        found_bottom_blocks := true;
         blocks
       | Ok blocks -> blocks
     in
-    if !found_bottom
+    if !found_bottom_immediates && !found_bottom_blocks
     then Bottom
     else if immediates == immediates' && blocks == blocks'
     then Ok head

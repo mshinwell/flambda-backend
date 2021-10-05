@@ -61,7 +61,7 @@ type meet_expanded_head_result =
 
 exception Bottom_meet
 
-let meet_unknown meet_contents ~contents_is_bottom env
+let[@inline always] meet_unknown meet_contents ~contents_is_bottom env
     (or_unknown1 : _ Or_unknown.t) (or_unknown2 : _ Or_unknown.t) :
     (_ Or_unknown.t * TEE.t) Or_bottom.t =
   match or_unknown1, or_unknown2 with
@@ -80,8 +80,9 @@ let meet_unknown meet_contents ~contents_is_bottom env
     | Ok (Known contents, _env_extension) ->
       if contents_is_bottom contents then Bottom else result)
 
-let join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
-    (or_unknown2 : _ Or_unknown.t) : _ Or_unknown.t =
+let[@inline always] join_unknown join_contents (env : Join_env.t)
+    (or_unknown1 : _ Or_unknown.t) (or_unknown2 : _ Or_unknown.t) :
+    _ Or_unknown.t =
   match or_unknown1, or_unknown2 with
   | _, Unknown | Unknown, _ -> Unknown
   | Known contents1, Known contents2 -> join_contents env contents1 contents2
