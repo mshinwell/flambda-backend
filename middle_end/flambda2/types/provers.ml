@@ -206,8 +206,6 @@ let prove_is_int env t : bool proof =
     | Known blocks, Unknown ->
       if TG.Row_like_for_blocks.is_bottom blocks then Proved true else Unknown
     | Known blocks, Known imms ->
-      (* CR mshinwell: Should we tighten things up by causing fatal errors in
-         cases such as [blocks] and [imms] both being bottom? *)
       if TG.Row_like_for_blocks.is_bottom blocks
       then if is_bottom env imms then Invalid else Proved true
       else if is_bottom env imms
@@ -287,8 +285,6 @@ let prove_naked_immediates env t : Targetint_31_63.Set.t proof =
   in
   match expand_head env t with
   | Naked_immediate (Ok (Naked_immediates is)) ->
-    (* CR mshinwell: As noted elsewhere, add abstraction to avoid the need for
-       these checks *)
     if Targetint_31_63.Set.is_empty is then Invalid else Proved is
   | Naked_immediate (Ok (Is_int scrutinee_ty)) -> begin
     match prove_is_int env scrutinee_ty with
