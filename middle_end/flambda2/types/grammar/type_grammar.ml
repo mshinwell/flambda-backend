@@ -155,7 +155,18 @@ let apply_renaming t renaming =
     | Naked_immediate ty ->
       let ty' = TD.apply_renaming ty renaming in
       if ty == ty' then t else Naked_immediate ty'
-    | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _ -> t
+    | Naked_float ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Naked_float ty'
+    | Naked_int32 ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Naked_int32 ty'
+    | Naked_int64 ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Naked_int64 ty'
+    | Naked_nativeint ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Naked_nativeint ty'
     | Rec_info ty ->
       let ty' = TD.apply_renaming ty renaming in
       if ty == ty' then t else Rec_info ty'
