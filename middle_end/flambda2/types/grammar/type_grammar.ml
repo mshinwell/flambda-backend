@@ -1912,6 +1912,7 @@ end
 module Head_of_kind_naked_immediate = struct
   type t = head_of_kind_naked_immediate
 
+  (* CR mshinwell: maybe this should return [Or_bottom.t]? *)
   let create_naked_immediates imms = Naked_immediates imms
 
   let create_is_int ty = Is_int ty
