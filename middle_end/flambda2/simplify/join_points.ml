@@ -102,7 +102,9 @@ let meet_equations_on_params typing_env ~params ~param_types =
       let name = Bound_parameter.name param in
       let existing_type = TE.find typing_env name (Some kind) in
       match T.meet typing_env existing_type param_type with
-      | Bottom -> TE.add_equation typing_env name (T.bottom kind)
+      | Bottom ->
+        (* CR mshinwell for vlaviron: is this correct? *)
+        TE.add_equation typing_env name (T.bottom kind)
       | Ok (meet_ty, env_extension) ->
         let typing_env = TE.add_equation typing_env name meet_ty in
         TE.add_env_extension typing_env env_extension)
