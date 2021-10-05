@@ -22,6 +22,8 @@ module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
 module RWC = Reg_width_const
 module TD = Type_descr
+open Or_bottom.Let_syntax
+open Or_unknown.Let_syntax
 
 module Block_size = struct
   include Targetint_31_63.Imm
@@ -162,12 +164,12 @@ let rec apply_renaming_head_of_kind_value head renaming =
   match head with
   | Variant { blocks; immediates; is_unique } ->
     let immediates' =
-      Or_unknown.map immediates ~f:(fun immediates ->
-          apply_renaming immediates renaming)
+      let>+ immediates = immediates in
+      apply_renaming immediates renaming
     in
     let blocks' =
-      Or_unknown.map blocks ~f:(fun blocks ->
-          apply_renaming_row_like_for_blocks blocks renaming)
+      let>+ blocks = blocks in
+      apply_renaming_row_like_for_blocks blocks renaming
     in
     if immediates == immediates' && blocks == blocks'
     then head
@@ -836,79 +838,87 @@ and all_ids_for_export_env_extension { equations } =
 let rec apply_coercion t coercion : t Or_bottom.t =
   match t with
   | Value ty ->
-    Or_bottom.map
-      (TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
-         ~apply_renaming_head:apply_renaming_head_of_kind_value
-         ~free_names_head:free_names_head_of_kind_value coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Value ty')
+    let<+ ty' =
+      TD.apply_coercion ~apply_coercion_head:apply_coercion_head_of_kind_value
+        ~apply_renaming_head:apply_renaming_head_of_kind_value
+        ~free_names_head:free_names_head_of_kind_value coercion ty
+    in
+    if ty == ty' then t else Value ty'
   | Naked_immediate ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
-         ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
-         ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Naked_immediate ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_naked_immediate
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+        ~free_names_head:free_names_head_of_kind_naked_immediate coercion ty
+    in
+    if ty == ty' then t else Naked_immediate ty'
   | Naked_float ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_naked_float
-         ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
-         ~free_names_head:free_names_head_of_kind_naked_float coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Naked_float ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_naked_float
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+        ~free_names_head:free_names_head_of_kind_naked_float coercion ty
+    in
+    if ty == ty' then t else Naked_float ty'
   | Naked_int32 ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32
-         ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
-         ~free_names_head:free_names_head_of_kind_naked_int32 coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Naked_int32 ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_naked_int32
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+        ~free_names_head:free_names_head_of_kind_naked_int32 coercion ty
+    in
+    if ty == ty' then t else Naked_int32 ty'
   | Naked_int64 ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64
-         ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
-         ~free_names_head:free_names_head_of_kind_naked_int64 coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Naked_int64 ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_naked_int64
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+        ~free_names_head:free_names_head_of_kind_naked_int64 coercion ty
+    in
+    if ty == ty' then t else Naked_int64 ty'
   | Naked_nativeint ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
-         ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
-         ~free_names_head:free_names_head_of_kind_naked_nativeint coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Naked_nativeint ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_naked_nativeint
+        ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+        ~free_names_head:free_names_head_of_kind_naked_nativeint coercion ty
+    in
+    if ty == ty' then t else Naked_nativeint ty'
   | Rec_info ty ->
-    Or_bottom.map
-      (TD.apply_coercion
-         ~apply_coercion_head:apply_coercion_head_of_kind_rec_info
-         ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
-         ~free_names_head:free_names_head_of_kind_rec_info coercion ty)
-      ~f:(fun ty' -> if ty == ty' then t else Rec_info ty')
+    let<+ ty' =
+      TD.apply_coercion
+        ~apply_coercion_head:apply_coercion_head_of_kind_rec_info
+        ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
+        ~free_names_head:free_names_head_of_kind_rec_info coercion ty
+    in
+    if ty == ty' then t else Rec_info ty'
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
   | Closures { by_closure_id } ->
-    Or_bottom.map (apply_coercion_row_like_for_closures by_closure_id coercion)
-      ~f:(fun by_closure_id' ->
-        if by_closure_id == by_closure_id'
-        then head
-        else Closures { by_closure_id = by_closure_id' })
+    let<+ by_closure_id' =
+      apply_coercion_row_like_for_closures by_closure_id coercion
+    in
+    if by_closure_id == by_closure_id'
+    then head
+    else Closures { by_closure_id = by_closure_id' }
   | Variant { is_unique; blocks; immediates } ->
     let found_bottom = ref false in
     let immediates' =
-      Or_unknown.map immediates ~f:(fun immediates ->
-          match apply_coercion immediates coercion with
-          | Bottom ->
-            found_bottom := true;
-            immediates
-          | Ok immediates -> immediates)
+      let>+ immediates = immediates in
+      match apply_coercion immediates coercion with
+      | Bottom ->
+        found_bottom := true;
+        immediates
+      | Ok immediates -> immediates
     in
     let blocks' =
-      Or_unknown.map blocks ~f:(fun blocks ->
-          match apply_coercion_row_like_for_blocks blocks coercion with
-          | Bottom ->
-            found_bottom := true;
-            blocks
-          | Ok blocks -> blocks)
+      let>+ blocks = blocks in
+      match apply_coercion_row_like_for_blocks blocks coercion with
+      | Bottom ->
+        found_bottom := true;
+        blocks
+      | Ok blocks -> blocks
     in
     if !found_bottom
     then Bottom
@@ -916,31 +926,31 @@ and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
     then Ok head
     else Ok (Variant { is_unique; blocks = blocks'; immediates = immediates' })
   | Boxed_float t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Boxed_float t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Boxed_float t'
   | Boxed_int32 t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Boxed_int32 t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Boxed_int32 t'
   | Boxed_int64 t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Boxed_int64 t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Boxed_int64 t'
   | Boxed_nativeint t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Boxed_nativeint t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Boxed_nativeint t'
   | String _ -> if Coercion.is_id coercion then Ok head else Bottom
   | Array { length } ->
-    Or_bottom.map (apply_coercion length coercion) ~f:(fun length' ->
-        if length == length' then head else Array { length = length' })
+    let<+ length' = apply_coercion length coercion in
+    if length == length' then head else Array { length = length' }
 
 and apply_coercion_head_of_kind_naked_immediate head coercion : _ Or_bottom.t =
   match head with
   | Naked_immediates _ -> Ok head
   | Is_int t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Is_int t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Is_int t'
   | Get_tag t ->
-    Or_bottom.map (apply_coercion t coercion) ~f:(fun t' ->
-        if t == t' then head else Get_tag t')
+    let<+ t' = apply_coercion t coercion in
+    if t == t' then head else Get_tag t'
 
 and apply_coercion_head_of_kind_naked_float head coercion : _ Or_bottom.t =
   if Coercion.is_id coercion then Ok head else Bottom
@@ -990,10 +1000,11 @@ and apply_coercion_row_like :
     match other with
     | Bottom -> Bottom
     | Ok { maps_to; index; env_extension } ->
-      Or_bottom.bind (apply_coercion_maps_to maps_to coercion)
-        ~f:(fun maps_to ->
-          Or_bottom.map (apply_coercion_env_extension env_extension coercion)
-            ~f:(fun env_extension -> { maps_to; index; env_extension }))
+      let<* maps_to = apply_coercion_maps_to maps_to coercion in
+      let<+ env_extension =
+        apply_coercion_env_extension env_extension coercion
+      in
+      { maps_to; index; env_extension }
   in
   if row_like_is_bottom ~known ~other ~is_empty_map_known
   then Bottom
@@ -1001,23 +1012,24 @@ and apply_coercion_row_like :
 
 and apply_coercion_row_like_for_blocks { known_tags; other_tags } coercion :
     row_like_for_blocks Or_bottom.t =
-  Or_bottom.map
-    (apply_coercion_row_like
-       ~apply_coercion_maps_to:apply_coercion_int_indexed_product
-       ~known:known_tags ~other:other_tags ~is_empty_map_known:Tag.Map.is_empty
-       ~filter_map_known:Tag.Map.filter_map coercion) ~f:(fun (known, other) ->
-      { known_tags = known; other_tags = other })
+  let<+ known, other =
+    apply_coercion_row_like
+      ~apply_coercion_maps_to:apply_coercion_int_indexed_product
+      ~known:known_tags ~other:other_tags ~is_empty_map_known:Tag.Map.is_empty
+      ~filter_map_known:Tag.Map.filter_map coercion
+  in
+  { known_tags = known; other_tags = other }
 
 and apply_coercion_row_like_for_closures { known_closures; other_closures }
     coercion : row_like_for_closures Or_bottom.t =
-  Or_bottom.map
-    (apply_coercion_row_like
-       ~apply_coercion_maps_to:apply_coercion_closures_entry
-       ~known:known_closures ~other:other_closures
-       ~is_empty_map_known:Closure_id.Map.is_empty
-       ~filter_map_known:Closure_id.Map.filter_map coercion)
-    ~f:(fun (known, other) ->
-      { known_closures = known; other_closures = other })
+  let<+ known, other =
+    apply_coercion_row_like
+      ~apply_coercion_maps_to:apply_coercion_closures_entry
+      ~known:known_closures ~other:other_closures
+      ~is_empty_map_known:Closure_id.Map.is_empty
+      ~filter_map_known:Closure_id.Map.filter_map coercion
+  in
+  { known_closures = known; other_closures = other }
 
 and apply_coercion_closures_entry
     { function_types; closure_types; closure_var_types } coercion :
@@ -1037,13 +1049,14 @@ and apply_coercion_closures_entry
   if !bottom
   then Bottom
   else
-    Or_bottom.bind
-      (apply_coercion_closure_id_indexed_product closure_types coercion)
-      ~f:(fun closure_types ->
-        Or_bottom.map
-          (apply_coercion_var_within_closure_indexed_product closure_var_types
-             coercion) ~f:(fun closure_var_types ->
-            { function_types; closure_types; closure_var_types }))
+    let<* closure_types =
+      apply_coercion_closure_id_indexed_product closure_types coercion
+    in
+    let<+ closure_var_types =
+      apply_coercion_var_within_closure_indexed_product closure_var_types
+        coercion
+    in
+    { function_types; closure_types; closure_var_types }
 
 and apply_coercion_closure_id_indexed_product
     ({ closure_id_components_by_index } as product) coercion : _ Or_bottom.t =
@@ -1118,15 +1131,15 @@ and apply_coercion_function_type
       Ok (Or_unknown_or_bottom.Ok { code_id; rec_info }))
 
 and apply_coercion_env_extension { equations } coercion : _ Or_bottom.t =
-  let equations : t Name.Map.t Or_bottom.t =
+  let<+ equations =
     Name.Map.fold
-      (fun name t (result : _ Or_bottom.t) ->
-        Or_bottom.bind result ~f:(fun result ->
-            Or_bottom.map (apply_coercion t coercion) ~f:(fun t ->
-                Name.Map.add name t result)))
+      (fun name t result ->
+        let<* result = result in
+        let<+ t = apply_coercion t coercion in
+        Name.Map.add name t result)
       equations (Or_bottom.Ok Name.Map.empty)
   in
-  Or_bottom.map equations ~f:(fun equations -> { equations })
+  { equations }
 
 let kind t =
   match t with

@@ -50,8 +50,6 @@ let all_aliases_of env simple_opt ~in_env =
   | None -> Aliases.Alias_set.empty
   | Some simple ->
     let simples = TE.aliases_of_simple_allowable_in_types env simple in
-    (* Format.eprintf "Aliases of %a are: %a\n%!" Simple.print simple
-       Simple.Set.print simples; *)
     Aliases.Alias_set.filter
       ~f:(fun simple -> TE.mem_simple in_env simple)
       simples
@@ -63,33 +61,11 @@ type meet_expanded_head_result =
 
 exception Bottom_meet
 
-let meet_head_of_kind_naked_float _env t1 t2 : _ Or_bottom.t =
-  let t = Float.Set.inter t1 t2 in
-  if Float.Set.is_empty t then Bottom else Ok (t, TEE.empty)
-
-let meet_head_of_kind_naked_int32 _env t1 t2 : _ Or_bottom.t =
-  let t = Int32.Set.inter t1 t2 in
-  if Int32.Set.is_empty t then Bottom else Ok (t, TEE.empty)
-
-let meet_head_of_kind_naked_int64 _env t1 t2 : _ Or_bottom.t =
-  let t = Int64.Set.inter t1 t2 in
-  if Int64.Set.is_empty t then Bottom else Ok (t, TEE.empty)
-
-let meet_head_of_kind_naked_nativeint _env t1 t2 : _ Or_bottom.t =
-  let t = Targetint_32_64.Set.inter t1 t2 in
-  if Targetint_32_64.Set.is_empty t then Bottom else Ok (t, TEE.empty)
-
-let meet_head_of_kind_rec_info _env t1 t2 : _ Or_bottom.t =
-  (* CR-someday lmaurer: This could be doing things like discovering two depth
-     variables are equal *)
-  if Rec_info_expr.equal t1 t2 then Ok (t1, TEE.empty) else Bottom
-
 let meet_unknown meet_contents ~contents_is_bottom env
     (or_unknown1 : _ Or_unknown.t) (or_unknown2 : _ Or_unknown.t) :
     (_ Or_unknown.t * TEE.t) Or_bottom.t =
   match or_unknown1, or_unknown2 with
   | Unknown, Unknown -> Ok (Unknown, TEE.empty)
-  (* CR mshinwell: Think about the next two cases more *)
   | Known contents, _ when contents_is_bottom contents -> Bottom
   | _, Known contents when contents_is_bottom contents -> Bottom
   | _, Unknown -> Ok (or_unknown1, TEE.empty)
@@ -102,7 +78,6 @@ let meet_unknown meet_contents ~contents_is_bottom env
     match result with
     | Bottom | Ok (Unknown, _) -> result
     | Ok (Known contents, _env_extension) ->
-      (* CR mshinwell: Why isn't [meet_contents] returning bottom? *)
       if contents_is_bottom contents then Bottom else result)
 
 let join_unknown join_contents (env : Join_env.t) (or_unknown1 : _ Or_unknown.t)
@@ -195,9 +170,6 @@ and meet0 env (t1 : TG.t) (t2 : TG.t) : TG.t * TEE.t =
            way", for example "y : =x" when [y] is the canonical element. This
            doesn't matter, however, because [TE] sorts this out when adding
            equations into an environment. *)
-        (* CR mshinwell: May be able to improve efficiency by not doing [meet]
-           again (via [TE.add_env_extension]) if we tried here to emit the
-           equations the correct way around *)
         match meet_expanded_head env expanded1 expanded2 with
         | Left_head_unchanged ->
           let env_extension =
@@ -230,49 +202,42 @@ and meet_expanded_head env (expanded1 : ET.t) (expanded2 : ET.t) :
   | Bottom, _ -> Left_head_unchanged
   | _, Bottom -> Right_head_unchanged
   | Ok descr1, Ok descr2 -> (
-    let expanded_or_bottom =
-      match descr1, descr2 with
-      | Value head1, Value head2 ->
-        let<+ head, env_extension = meet_head_of_kind_value env head1 head2 in
-        ET.create_value head, env_extension
-      | Naked_immediate head1, Naked_immediate head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_naked_immediate env head1 head2
-        in
-        ET.create_naked_immediate head, env_extension
-      | Naked_float head1, Naked_float head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_naked_float env head1 head2
-        in
-        ET.create_naked_float head, env_extension
-      | Naked_int32 head1, Naked_int32 head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_naked_int32 env head1 head2
-        in
-        ET.create_naked_int32 head, env_extension
-      | Naked_int64 head1, Naked_int64 head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_naked_int64 env head1 head2
-        in
-        ET.create_naked_int64 head, env_extension
-      | Naked_nativeint head1, Naked_nativeint head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_naked_nativeint env head1 head2
-        in
-        ET.create_naked_nativeint head, env_extension
-      | Rec_info head1, Rec_info head2 ->
-        let<+ head, env_extension =
-          meet_head_of_kind_rec_info env head1 head2
-        in
-        ET.create_rec_info head, env_extension
-      | ( ( Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
-          | Naked_int64 _ | Naked_nativeint _ | Rec_info _ ),
-          _ ) ->
-        assert false
-    in
-    match expanded_or_bottom with
+    match meet_expanded_head0 env descr1 descr2 with
     | Ok (expanded, env_extension) -> New_head (expanded, env_extension)
     | Bottom -> New_head (ET.bottom_like expanded1, TEE.empty))
+
+and meet_expanded_head0 env (descr1 : ET.descr) (descr2 : ET.descr) :
+    _ Or_bottom.t =
+  match descr1, descr2 with
+  | Value head1, Value head2 ->
+    let<+ head, env_extension = meet_head_of_kind_value env head1 head2 in
+    ET.create_value head, env_extension
+  | Naked_immediate head1, Naked_immediate head2 ->
+    let<+ head, env_extension =
+      meet_head_of_kind_naked_immediate env head1 head2
+    in
+    ET.create_naked_immediate head, env_extension
+  | Naked_float head1, Naked_float head2 ->
+    let<+ head, env_extension = meet_head_of_kind_naked_float env head1 head2 in
+    ET.create_naked_float head, env_extension
+  | Naked_int32 head1, Naked_int32 head2 ->
+    let<+ head, env_extension = meet_head_of_kind_naked_int32 env head1 head2 in
+    ET.create_naked_int32 head, env_extension
+  | Naked_int64 head1, Naked_int64 head2 ->
+    let<+ head, env_extension = meet_head_of_kind_naked_int64 env head1 head2 in
+    ET.create_naked_int64 head, env_extension
+  | Naked_nativeint head1, Naked_nativeint head2 ->
+    let<+ head, env_extension =
+      meet_head_of_kind_naked_nativeint env head1 head2
+    in
+    ET.create_naked_nativeint head, env_extension
+  | Rec_info head1, Rec_info head2 ->
+    let<+ head, env_extension = meet_head_of_kind_rec_info env head1 head2 in
+    ET.create_rec_info head, env_extension
+  | ( ( Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
+      | Naked_int64 _ | Naked_nativeint _ | Rec_info _ ),
+      _ ) ->
+    assert false
 
 and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     (head2 : TG.head_of_kind_value) : _ Or_bottom.t =
@@ -317,8 +282,8 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
   | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
       _ ) ->
-    (* CR vlaviron: This assumes that all the different constructors are
-       incompatible. This could break very hard for users of Obj. *)
+    (* This assumes that all the different constructors are incompatible. This
+       could break very hard for dubious uses of Obj. *)
     Bottom
 
 and meet_variant env ~(blocks1 : TG.Row_like_for_blocks.t Or_unknown.t)
@@ -332,7 +297,6 @@ and meet_variant env ~(blocks1 : TG.Row_like_for_blocks.t Or_unknown.t)
       ~contents_is_bottom:TG.Row_like_for_blocks.is_bottom env blocks1 blocks2
   in
   let blocks : _ Or_bottom.t =
-    (* CR mshinwell: Clean this up *)
     match blocks with
     | Bottom | Ok (Or_unknown.Unknown, _) -> blocks
     | Ok (Or_unknown.Known blocks', _) ->
@@ -431,6 +395,27 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
        the actual meet with Naked_immediates, or just give up and return one of
        the arguments. *)
     Ok (t1, TEE.empty)
+
+and meet_head_of_kind_naked_float _env t1 t2 : _ Or_bottom.t =
+  let t = Float.Set.inter t1 t2 in
+  if Float.Set.is_empty t then Bottom else Ok (t, TEE.empty)
+
+and meet_head_of_kind_naked_int32 _env t1 t2 : _ Or_bottom.t =
+  let t = Int32.Set.inter t1 t2 in
+  if Int32.Set.is_empty t then Bottom else Ok (t, TEE.empty)
+
+and meet_head_of_kind_naked_int64 _env t1 t2 : _ Or_bottom.t =
+  let t = Int64.Set.inter t1 t2 in
+  if Int64.Set.is_empty t then Bottom else Ok (t, TEE.empty)
+
+and meet_head_of_kind_naked_nativeint _env t1 t2 : _ Or_bottom.t =
+  let t = Targetint_32_64.Set.inter t1 t2 in
+  if Targetint_32_64.Set.is_empty t then Bottom else Ok (t, TEE.empty)
+
+and meet_head_of_kind_rec_info _env t1 t2 : _ Or_bottom.t =
+  (* CR-someday lmaurer: This could be doing things like discovering two depth
+     variables are equal *)
+  if Rec_info_expr.equal t1 t2 then Ok (t1, TEE.empty) else Bottom
 
 and meet_row_like :
       'index 'maps_to 'row_tag 'known.
@@ -806,11 +791,11 @@ and meet_env_extension0 env (ext1 : TEE.t) (ext2 : TEE.t) extra_extensions :
   match extra_extensions with
   | [] -> ext
   | new_ext :: extra_extensions ->
-    (* CR vlaviron: It's a bad idea to drop the extensions in the general case,
-       but since we lack the property that the new extensions are stricter than
-       the existing ones we can get into an infinite loop here (see
-       flambdatest/unit_test/extension_meet.ml, function test_double_recursion
-       for an example).
+    (* CR-someday vlaviron: It's a bad idea to drop the extensions in the
+       general case, but since we lack the property that the new extensions are
+       stricter than the existing ones we can get into an infinite loop here
+       (see flambdatest/unit_test/extension_meet.ml, function
+       test_double_recursion for an example).
 
        This is very uncommon though (it needs recursive types involving at least
        three different names), so for now we still do the meet
@@ -1307,10 +1292,10 @@ and join_int_indexed_product env
   let fields =
     if all_phys_equal
     then
-      if length1 = length
+      if Int.equal length1 length
       then fields1
       else begin
-        assert (length2 = length);
+        assert (Int.equal length2 length);
         fields2
       end
     else
@@ -1380,6 +1365,5 @@ and join_env_extension env (ext1 : TEE.t) (ext2 : TEE.t) : TEE.t =
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   let result = Bound_name.var result_var in
   let env = TE.add_definition env result result_kind in
-  match meet (Meet_env.create env) t shape with
-  | Bottom -> Bottom
-  | Ok (_meet_ty, env_extension) -> Ok env_extension
+  let<+ _meet_ty, env_extension = meet (Meet_env.create env) t shape in
+  env_extension
