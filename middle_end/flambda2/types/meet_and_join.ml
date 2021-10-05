@@ -53,7 +53,7 @@ let all_aliases_of env simple_opt ~in_env =
     (* Format.eprintf "Aliases of %a are: %a\n%!" Simple.print simple
        Simple.Set.print simples; *)
     Aliases.Alias_set.filter
-      ~f:(fun simple -> Typing_env.mem_simple in_env simple)
+      ~f:(fun simple -> TE.mem_simple in_env simple)
       simples
 
 type meet_expanded_head_result =
@@ -193,8 +193,8 @@ and meet0 env (t1 : TG.t) (t2 : TG.t) : TG.t * TEE.t =
         let env = Meet_env.now_meeting env simple1 simple2 in
         (* In the following cases we may generate equations "pointing the wrong
            way", for example "y : =x" when [y] is the canonical element. This
-           doesn't matter, however, because [Typing_env] sorts this out when
-           adding equations into an environment. *)
+           doesn't matter, however, because [TE] sorts this out when adding
+           equations into an environment. *)
         (* CR mshinwell: May be able to improve efficiency by not doing [meet]
            again (via [TE.add_env_extension]) if we tried here to emit the
            equations the correct way around *)
@@ -1363,7 +1363,7 @@ and join_env_extension env (ext1 : TEE.t) (ext2 : TEE.t) : TEE.t =
                  [ty2] are both alias types which canonicalize to [name], for
                  instance. In any event, if the best type available for [name]
                  is [= name], we effectively know nothing, so we drop [name].
-                 ([name = name] would be rejected by [Typing_env.add_equation]
+                 ([name = name] would be rejected by [TE.add_equation]
                  anyway.) *)
               None
             else begin
@@ -1379,7 +1379,7 @@ and join_env_extension env (ext1 : TEE.t) (ext2 : TEE.t) : TEE.t =
 
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   let result = Bound_name.var result_var in
-  let env = Typing_env.add_definition env result result_kind in
+  let env = TE.add_definition env result result_kind in
   match meet (Meet_env.create env) t shape with
   | Bottom -> Bottom
   | Ok (_meet_ty, env_extension) -> Ok env_extension
