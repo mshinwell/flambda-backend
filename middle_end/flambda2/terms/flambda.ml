@@ -16,103 +16,105 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+module Float = Numeric_types.Float_by_bit_pattern
 module K = Flambda_kind
 module KP = Kinded_parameter
 module Apply = Apply_expr
 module Apply_cont = Apply_cont_expr
 module Switch = Switch_expr
 
-let fprintf = Format.fprintf
+type expr_descr =
+  | Let of let_expr
+  | Let_cont of let_cont_expr
+  | Apply of Apply.t
+  | Apply_cont of Apply_cont.t
+  | Switch of Switch.t
+  | Invalid of Invalid_term_semantics.t
 
-module rec Code : sig
-  (** A piece of code, comprising of the parameters and body of a function,
-      together with a field indicating whether the piece of code is a newer
-      version of one that existed previously (and may still exist), for example
-      after a round of simplification. *)
+and named =
+  | Simple of Simple.t
+  | Prim of Flambda_primitive.t * Debuginfo.t
+  | Set_of_closures of Set_of_closures.t
+  | Static_consts of static_const_group
+  | Rec_info of Rec_info_expr.t
 
-  include
-    Code_intf.S with type function_params_and_body := Function_params_and_body.t
-end = struct
-  include Code0.Make (Function_params_and_body)
-end
+and static_const =
+  | Code of function_params_and_body Code.t
+  | Set_of_closures of Set_of_closures.t
+  | Block of Tag.Scannable.t * Mutability.t * Field_of_static_block.t list
+  | Boxed_float of Float.t Or_variable.t
+  | Boxed_int32 of Int32.t Or_variable.t
+  | Boxed_int64 of Int64.t Or_variable.t
+  | Boxed_nativeint of Targetint_32_64.t Or_variable.t
+  | Immutable_float_block of Float.t Or_variable.t list
+  | Immutable_float_array of Float.t Or_variable.t list
+  | Mutable_string of { initial_value : string }
+  | Immutable_string of string
 
-and Continuation_handler : sig
-  (** The representation of the alpha-equivalence class of bindings of a list of
-      parameters, with associated relations thereon, over the code of a
-      continuation handler. *)
-  type t
+and static_const_group = static_const list
 
-  include Expr_std.S with type t := t
+and expr =
+  { mutable descr : expr_descr;
+    (* [descr] is never mutated except for application of delayed renamings. *)
+    mutable delayed_renaming : Renaming.t
+  }
 
-  include Contains_ids.S with type t := t
+and let_expr_base =
+  { num_normal_occurrences_of_bound_vars : Num_occurrences.t Variable.Map.t;
+    body : expr
+  }
 
-  val print_using_where :
-    Recursive.t ->
-    Format.formatter ->
-    Continuation.t ->
-    t ->
-    Num_occurrences.t Or_unknown.t ->
-    first:bool ->
-    unit
+and let_expr =
+  { name_abstraction : let_expr_base;
+    defining_expr : named
+  }
 
-  (** Create a value of type [t] given information about a continuation
-      handler. *)
-  val create :
-    Kinded_parameter.t list ->
-    handler:Expr.t ->
-    free_names_of_handler:Name_occurrences.t Or_unknown.t ->
-    is_exn_handler:bool ->
-    t
+and function_params_and_body_base =
+  { expr : expr;
+    free_names : Name_occurrences.t Or_unknown.t
+  }
 
-  (** Choose a member of the alpha-equivalence class to enable examination of
-      the parameters, relations thereon and the code over which they are
-      scoped. *)
-  val pattern_match' :
-    t ->
-    f:
-      (Kinded_parameter.t list ->
-      num_normal_occurrences_of_params:Num_occurrences.t Variable.Map.t ->
-      handler:Expr.t ->
-      'a) ->
-    'a
+and function_params_and_body =
+  { abst : int;
+    dbg : Debuginfo.t;
+    params_arity : Flambda_arity.t;
+    is_my_closure_used : bool Or_unknown.t
+  }
 
-  val pattern_match :
-    t -> f:(Kinded_parameter.t list -> handler:Expr.t -> 'a) -> 'a
-
-  module Pattern_match_pair_error : sig
-    type t = Parameter_lists_have_different_lengths
-
-    val to_string : t -> string
-  end
-
-  (** Choose members of two bindings' alpha-equivalence classes using the same
-      parameters. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    f:(Kinded_parameter.t list -> handler1:Expr.t -> handler2:Expr.t -> 'a) ->
-    ('a, Pattern_match_pair_error.t) Result.t
-
-  (** Whether the continuation is an exception handler.
-
-      Continuations used as exception handlers are always [Non_recursive]. To
-      enable identification of them in passes not invoked from [Simplify] (where
-      they could be identified by looking at the [Apply_cont]s that reference
-      them) they are marked explicitly.
-
-      Continuations used as exception handlers may have more than one parameter
-      (see [Exn_continuation]).
-
-      (Relevant piece of background info: the backend cannot compile
-      simultaneously-defined continuations when one or more of them is an
-      exception handler.) *)
-  val is_exn_handler : t -> bool
-end = struct
-  module T0 = struct
-    type t =
-      { num_normal_occurrences_of_params : Num_occurrences.t Variable.Map.t;
-        handler : Expr.t
+and let_cont_expr =
+  | Non_recursive of
+      { handler : non_recursive_let_cont_handler;
+        num_free_occurrences : Num_occurrences.t Or_unknown.t;
+        is_applied_with_traps : bool
       }
+  | Recursive of recursive_let_cont_handlers
+
+and continuation_and_body = int
+(* abstraction <Bound_cont>Expr *)
+
+and non_recursive_let_cont_handler =
+  { continuation_and_body : continuation_and_body;
+    handler : continuation_handler
+  }
+
+and recursive_let_cont_handlers_base =
+  { handlers : continuation_handlers;
+    body : expr
+  }
+
+and recursive_let_cont_handlers = int
+(* abst<Bound_cont>rec_l_c_h_base *)
+
+and continuation_handler =
+  { num_normal_occurrences_of_params : Num_occurrences.t Variable.Map.t;
+    handler : expr
+  }
+
+and continuation_handlers = continuation_handler Continuation.Map.t
+
+module rec Continuation_handler = struct
+  module T0 = struct
+    type t = continuation_handler
 
     let [@ocamlformat "disable"] print ppf
           { handler; num_normal_occurrences_of_params = _; } =
@@ -243,26 +245,7 @@ end = struct
     A.all_ids_for_export abst
 end
 
-and Continuation_handlers : sig
-  (** The result of pattern matching on [Recursive_let_cont_handlers] (see
-      above). *)
-  type t
-
-  (** Obtain the mapping from continuation to handler. *)
-  val to_map : t -> Continuation_handler.t Continuation.Map.t
-
-  (** The domain of [to_map t]. *)
-  val domain : t -> Continuation.Set.t
-
-  (** Whether any of the continuations are exception handlers. *)
-  val contains_exn_handler : t -> bool
-
-  include Contains_names.S with type t := t
-
-  include Contains_ids.S with type t := t
-end = struct
-  type t = Continuation_handler.t Continuation.Map.t
-
+and Continuation_handlers = struct
   let to_map t = t
 
   let free_names t =
@@ -297,55 +280,7 @@ end = struct
       t
 end
 
-and Expr : sig
-  (** The type of alpha-equivalence classes of expressions. *)
-  type t
-
-  include Expr_std.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  type descr = private
-    | Let of Let_expr.t
-        (** Bind variable(s) or symbol(s). There can be no effect on control
-            flow (save for asynchronous operations such as the invocation of
-            finalisers or signal handlers as a result of reaching a safe
-            point). *)
-    | Let_cont of Let_cont_expr.t  (** Define one or more continuations. *)
-    | Apply of Apply.t
-        (** Call an OCaml function, external function or method. *)
-    | Apply_cont of Apply_cont.t
-        (** Call a continuation, optionally adding or removing exception trap
-            frames from the stack, which thus allows for the raising of
-            exceptions. *)
-    | Switch of Switch.t  (** Conditional control flow. *)
-    | Invalid of Invalid_term_semantics.t
-        (** Code proved type-incorrect and therefore unreachable. *)
-
-  (** Extract the description of an expression. *)
-  val descr : t -> descr
-
-  val create_let : Let_expr.t -> t
-
-  val create_let_cont : Let_cont_expr.t -> t
-
-  (** Create an application expression. *)
-  val create_apply : Apply.t -> t
-
-  (** Create a continuation application (in the zero-arity case, "goto"). *)
-  val create_apply_cont : Apply_cont.t -> t
-
-  val create_switch : Switch_expr.t -> t
-
-  (** Create an expression indicating type-incorrect or unreachable code. *)
-  val create_invalid : ?semantics:Invalid_term_semantics.t -> unit -> t
-
-  val bind_parameters_to_args_no_simplification :
-    params:Kinded_parameter.t list ->
-    args:Simple.t list ->
-    body:Expr.t ->
-    Expr.t
-end = struct
+and Expr = struct
   module Descr = struct
     type t =
       | Let of Let_expr.t
@@ -384,39 +319,22 @@ end = struct
       | Invalid _ -> t
   end
 
-  (* CR mshinwell: Work out how to use [With_delayed_permutation] here. There
-     were some problems with double vision etc. last time. Although we don't
-     want to cache free names here. *)
-
-  type t =
-    { mutable descr : Descr.t;
-      mutable delayed_permutation : Renaming.t
-    }
-
-  type descr = Descr.t =
-    | Let of Let_expr.t
-    | Let_cont of Let_cont_expr.t
-    | Apply of Apply.t
-    | Apply_cont of Apply_cont.t
-    | Switch of Switch.t
-    | Invalid of Invalid_term_semantics.t
-
-  let create descr = { descr; delayed_permutation = Renaming.empty }
+  let create descr = { descr; delayed_renaming = Renaming.empty }
 
   let descr t =
-    if Renaming.is_empty t.delayed_permutation
+    if Renaming.is_empty t.delayed_renaming
     then t.descr
     else
-      let descr = Descr.apply_renaming t.descr t.delayed_permutation in
+      let descr = Descr.apply_renaming t.descr t.delayed_renaming in
       t.descr <- descr;
-      t.delayed_permutation <- Renaming.empty;
+      t.delayed_renaming <- Renaming.empty;
       descr
 
   let apply_renaming t perm =
-    let delayed_permutation =
-      Renaming.compose ~second:perm ~first:t.delayed_permutation
+    let delayed_renaming =
+      Renaming.compose ~second:perm ~first:t.delayed_renaming
     in
-    { t with delayed_permutation }
+    { t with delayed_renaming }
 
   let free_names t = Descr.free_names (descr t)
 
@@ -484,90 +402,8 @@ end = struct
         |> create_let)
 end
 
-and Function_params_and_body : sig
-  (** A name abstraction that comprises a function's parameters (together with
-      any relations between them), the code of the function, and the
-      [my_closure] variable. It also includes the return and exception
-      continuations.
-
-      From the body of the function, accesses to variables within the closure
-      need to go via a [Project_var] (from [my_closure]); accesses to any other
-      simultaneously-defined functions need to go likewise via a
-      [Select_closure]. *)
-  type t
-
-  include Expr_std.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  (** Create an abstraction that binds the given parameters, with associated
-      relations thereon, over the given body. *)
-  val create :
-    return_continuation:Continuation.t ->
-    Exn_continuation.t ->
-    Kinded_parameter.t list ->
-    dbg:Debuginfo.t ->
-    body:Expr.t ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    my_closure:Variable.t ->
-    my_depth:Variable.t ->
-    t
-
-  (** Choose a member of the alpha-equivalence class to enable examination of
-      the parameters and the body over which they are scoped. *)
-  val pattern_match :
-    t ->
-    f:
-      (return_continuation:Continuation.t
-         (** The continuation parameter of the function, i.e. to where we must
-             jump once the result of the function has been computed. If the
-             continuation takes more than one argument then the backend will
-             compile the function so that it returns multiple values. *) ->
-      Exn_continuation.t
-      (** To where we must jump if application of the function raises an
-          exception. *) ->
-      Kinded_parameter.t list ->
-      body:Expr.t ->
-      my_closure:Variable.t ->
-      is_my_closure_used:bool Or_unknown.t ->
-      my_depth:Variable.t ->
-      free_names_of_body:Name_occurrences.t Or_unknown.t ->
-      'a) ->
-    'a
-
-  (** Choose members of the alpha-equivalence classes of two definitions using
-      the same names for the return continuation, the exception continuation,
-      the closure, and all parameters. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    f:
-      (return_continuation:Continuation.t
-         (** The continuation parameter of the function, i.e. to where we must
-             jump once the result of the function has been computed. If the
-             continuation takes more than one argument then the backend will
-             compile the function so that it returns multiple values. *) ->
-      Exn_continuation.t
-      (** To where we must jump if application of the function raises an
-          exception. *) ->
-      Kinded_parameter.t list ->
-      body1:Expr.t ->
-      body2:Expr.t ->
-      my_closure:Variable.t ->
-      my_depth:Variable.t ->
-      'a) ->
-    'a
-
-  val params_arity : t -> Flambda_arity.t
-
-  val debuginfo : t -> Debuginfo.t
-end = struct
+and FPB = struct
   module Base = struct
-    type t =
-      { expr : Expr.t;
-        free_names : Name_occurrences.t Or_unknown.t
-      }
-
     let print fmt { expr; free_names = _ } =
       Format.fprintf fmt "%a" Expr.print expr
 
@@ -599,13 +435,6 @@ end = struct
      is known to be non-recursive. Maybe we should flatten all of these into one
      big [Bindable]? *)
   module A = Name_abstraction.Make (Bound_var) (T2)
-
-  type t =
-    { abst : A.t;
-      dbg : Debuginfo.t;
-      params_arity : Flambda_arity.t;
-      is_my_closure_used : bool Or_unknown.t
-    }
 
   let create ~return_continuation exn_continuation params ~dbg ~body
       ~free_names_of_body ~my_closure ~my_depth =
@@ -709,70 +538,7 @@ end = struct
     A.all_ids_for_export abst
 end
 
-and Let_cont_expr : sig
-  (** Values of type [t] represent alpha-equivalence classes of the definitions
-      * of continuations: * let_cont [name] [args] = [handler] in [body] * or
-      using an alternative notation: * [body] * where [name] [args] = [handler]
-      * * - Continuations are second-class. * - Continuations do not capture
-      variables. * - Continuations may be (mutually-)recursive. *)
-
-  (* CR mshinwell: ensure the statement about [Flambda_to_cmm] still holds. *)
-
-  (** It is an error to mark a continuation that might be recursive as
-      non-recursive. The converse is safe.
-
-      Note: any continuation used as an exception handler must be non-recursive
-      by the point it reaches [Flambda_to_cmm]. (This means that it is
-      permissible to introduce mutual recursion through stubs associated with
-      such continuations, so long as [Simplify] is run afterwards to inline them
-      out and turn the resulting single [Recursive] handler into a
-      [Non_recursive] one. *)
-  type t = private
-    | Non_recursive of
-        { handler : Non_recursive_let_cont_handler.t;
-          num_free_occurrences : Num_occurrences.t Or_unknown.t;
-              (** [num_free_occurrences] can be used, for example, to decide
-                  whether to inline out a linearly-used continuation. *)
-          is_applied_with_traps : bool
-              (** [is_applied_with_traps] is used to prevent inlining of
-                  continuations that are applied with a trap action *)
-        }
-    | Recursive of Recursive_let_cont_handlers.t
-
-  include Expr_std.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  (** Create a definition of a non-recursive continuation. If the continuation
-      does not occur free in the [body], then just the [body] is returned,
-      without any enclosing [Let_cont]. *)
-  val create_non_recursive :
-    Continuation.t ->
-    Continuation_handler.t ->
-    body:Expr.t ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    Expr.t
-
-  val create_non_recursive' :
-    cont:Continuation.t ->
-    Continuation_handler.t ->
-    body:Expr.t ->
-    num_free_occurrences_of_cont_in_body:Num_occurrences.t Or_unknown.t ->
-    is_applied_with_traps:bool ->
-    Expr.t
-
-  (** Create a definition of a set of possibly-recursive continuations. *)
-  val create_recursive :
-    Continuation_handler.t Continuation.Map.t -> body:Expr.t -> Expr.t
-end = struct
-  type t =
-    | Non_recursive of
-        { handler : Non_recursive_let_cont_handler.t;
-          num_free_occurrences : Num_occurrences.t Or_unknown.t;
-          is_applied_with_traps : bool
-        }
-    | Recursive of Recursive_let_cont_handlers.t
-
+and Let_cont_expr = struct
   let print ppf t =
     let rec gather_let_conts let_conts let_cont =
       match let_cont with
@@ -878,67 +644,8 @@ end = struct
       Recursive_let_cont_handlers.all_ids_for_export handlers
 end
 
-and Let_expr : sig
-  (** The alpha-equivalence classes of expressions that bind variables. *)
-  type t
-
-  include Expr_std.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  val create :
-    Bound_pattern.t ->
-    Named.t ->
-    body:Expr.t ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    t
-
-  (** The defining expression of the [Let]. *)
-  val defining_expr : t -> Named.t
-
-  (** Look inside the [Let] by choosing a member of the alpha-equivalence
-      class. *)
-  val pattern_match : t -> f:(Bound_pattern.t -> body:Expr.t -> 'a) -> 'a
-
-  val pattern_match' :
-    t ->
-    f:
-      (Bound_pattern.t ->
-      num_normal_occurrences_of_bound_vars:Num_occurrences.t Variable.Map.t ->
-      body:Expr.t ->
-      'a) ->
-    'a
-
-  module Pattern_match_pair_error : sig
-    type t = Mismatched_let_bindings
-
-    val to_string : t -> string
-  end
-
-  (** Look inside two [Let]s by choosing members of their alpha-equivalence
-      classes, using the same bound variables for both. If they are both dynamic
-      lets (that is, they both bind variables), this invokes [dynamic] having
-      freshened both bodies; if they are both static (that is, they both bind
-      symbols), this invokes [static] with the bodies unchanged, since no
-      renaming is necessary. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    dynamic:(Bound_pattern.t -> body1:Expr.t -> body2:Expr.t -> 'a) ->
-    static:
-      (bound_symbols1:Bound_pattern.symbols ->
-      bound_symbols2:Bound_pattern.symbols ->
-      body1:Expr.t ->
-      body2:Expr.t ->
-      'a) ->
-    ('a, Pattern_match_pair_error.t) Result.t
-end = struct
+and Let_expr = struct
   module T0 = struct
-    type t =
-      { num_normal_occurrences_of_bound_vars : Num_occurrences.t Variable.Map.t;
-        body : Expr.t
-      }
-
     let [@ocamlformat "disable"] print ppf
           { body; num_normal_occurrences_of_bound_vars = _; } =
       fprintf ppf "@[<hov 1>(\
@@ -970,11 +677,6 @@ end = struct
   end
 
   module A = Name_abstraction.Make (Bound_pattern) (T0)
-
-  type t =
-    { name_abstraction : A.t;
-      defining_expr : Named.t
-    }
 
   let pattern_match t ~f =
     A.pattern_match t.name_abstraction ~f:(fun bound_pattern t0 ->
@@ -1373,13 +1075,6 @@ and Named : sig
 
   val must_be_static_consts : t -> Static_const.Group.t
 end = struct
-  type t =
-    | Simple of Simple.t
-    | Prim of Flambda_primitive.t * Debuginfo.t
-    | Set_of_closures of Set_of_closures.t
-    | Static_consts of Static_const.Group.t
-    | Rec_info of Rec_info_expr.t
-
   let create_simple simple = Simple simple
 
   let create_prim prim dbg = Prim (prim, dbg)
@@ -1549,14 +1244,6 @@ and Non_recursive_let_cont_handler : sig
 
   val create : Continuation.t -> body:Expr.t -> Continuation_handler.t -> t
 end = struct
-  module Continuation_and_body =
-    Name_abstraction.Make (Bound_continuation) (Expr)
-
-  type t =
-    { continuation_and_body : Continuation_and_body.t;
-      handler : Continuation_handler.t
-    }
-
   let print _ppf _t = Misc.fatal_error "Not yet implemented"
 
   let create continuation ~body handler =
@@ -1626,11 +1313,6 @@ and Recursive_let_cont_handlers : sig
   val create : body:Expr.t -> Continuation_handlers.t -> t
 end = struct
   module T0 = struct
-    type t =
-      { handlers : Continuation_handlers.t;
-        body : Expr.t
-      }
-
     let print _ppf _t = Misc.fatal_error "Not yet implemented"
 
     let create ~body handlers = { handlers; body }
@@ -1677,191 +1359,8 @@ end = struct
         f ~body1 ~body2 handlers1 handlers2)
 end
 
-and Static_const : sig
-  (** Language terms that represent statically-allocated values. *)
-
-  module Field_of_block : sig
-    (** Inhabitants (of kind [Value]) of fields of statically-allocated blocks. *)
-    type t =
-      | Symbol of Symbol.t  (** The address of the given symbol. *)
-      | Tagged_immediate of Targetint_31_63.t
-          (** The given tagged immediate. *)
-      | Dynamically_computed of Variable.t
-          (** The value of the given variable. *)
-
-    include Container_types.S with type t := t
-
-    include Contains_names.S with type t := t
-  end
-
-  (** The static structure of a symbol, possibly with holes, ready to be filled
-      with values computed at runtime. *)
-  type t =
-    | Code of Code.t
-    | Set_of_closures of Set_of_closures.t
-    | Block of Tag.Scannable.t * Mutability.t * Field_of_block.t list
-    | Boxed_float of Numeric_types.Float_by_bit_pattern.t Or_variable.t
-    | Boxed_int32 of Int32.t Or_variable.t
-    | Boxed_int64 of Int64.t Or_variable.t
-    | Boxed_nativeint of Targetint_32_64.t Or_variable.t
-    | Immutable_float_block of
-        Numeric_types.Float_by_bit_pattern.t Or_variable.t list
-    | Immutable_float_array of
-        Numeric_types.Float_by_bit_pattern.t Or_variable.t list
-    | Mutable_string of { initial_value : string }
-    | Immutable_string of string
-
-  type static_const = t
-
-  include Container_types.S with type t := t
-
-  include Contains_names.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  val is_fully_static : t -> bool
-
-  val can_share : t -> bool
-
-  val must_be_set_of_closures : t -> Set_of_closures.t
-
-  val to_code : t -> Code.t option
-
-  val match_against_bound_symbols_pattern :
-    t ->
-    Bound_symbols.Pattern.t ->
-    code:(Code_id.t -> Code.t -> 'a) ->
-    set_of_closures:
-      (closure_symbols:Symbol.t Closure_id.Lmap.t -> Set_of_closures.t -> 'a) ->
-    block_like:(Symbol.t -> t -> 'a) ->
-    'a
-
-  (* CR mshinwell: This should probably move to its own file. *)
-  module Group : sig
-    type t
-
-    include Contains_names.S with type t := t
-
-    include Contains_ids.S with type t := t
-
-    val empty : t
-
-    val create : static_const list -> t
-
-    val print : Format.formatter -> t -> unit
-
-    val to_list : t -> static_const list
-
-    val concat : t -> t -> t
-
-    val map : t -> f:(static_const -> static_const) -> t
-
-    val match_against_bound_symbols :
-      t ->
-      Bound_symbols.t ->
-      init:'a ->
-      code:('a -> Code_id.t -> Code.t -> 'a) ->
-      set_of_closures:
-        ('a ->
-        closure_symbols:Symbol.t Closure_id.Lmap.t ->
-        Set_of_closures.t ->
-        'a) ->
-      block_like:('a -> Symbol.t -> static_const -> 'a) ->
-      'a
-
-    (** This function ignores [Deleted] code. *)
-    val pieces_of_code : t -> Code.t Code_id.Map.t
-
-    (** This function ignores [Deleted] code. *)
-    val pieces_of_code' : t -> Code.t list
-
-    val is_fully_static : t -> bool
-  end
-end = struct
+and Static_const = struct
   let fprintf = Format.fprintf
-
-  module Field_of_block = struct
-    type t =
-      | Symbol of Symbol.t
-      | Tagged_immediate of Targetint_31_63.t
-      | Dynamically_computed of Variable.t
-
-    include Container_types.Make (struct
-      type nonrec t = t
-
-      let compare t1 t2 =
-        match t1, t2 with
-        | Symbol s1, Symbol s2 -> Symbol.compare s1 s2
-        | Tagged_immediate t1, Tagged_immediate t2 ->
-          Targetint_31_63.compare t1 t2
-        | Dynamically_computed v1, Dynamically_computed v2 ->
-          Variable.compare v1 v2
-        | Symbol _, Tagged_immediate _ -> -1
-        | Tagged_immediate _, Symbol _ -> 1
-        | Symbol _, Dynamically_computed _ -> -1
-        | Dynamically_computed _, Symbol _ -> 1
-        | Tagged_immediate _, Dynamically_computed _ -> -1
-        | Dynamically_computed _, Tagged_immediate _ -> 1
-
-      let equal t1 t2 = compare t1 t2 = 0
-
-      let hash t =
-        match t with
-        | Symbol symbol -> Hashtbl.hash (0, Symbol.hash symbol)
-        | Tagged_immediate immediate ->
-          Hashtbl.hash (1, Targetint_31_63.hash immediate)
-        | Dynamically_computed var -> Hashtbl.hash (2, Variable.hash var)
-
-      let print ppf t =
-        match t with
-        | Symbol symbol -> Symbol.print ppf symbol
-        | Tagged_immediate immediate -> Targetint_31_63.print ppf immediate
-        | Dynamically_computed var -> Variable.print ppf var
-
-      let output chan t = print (Format.formatter_of_out_channel chan) t
-    end)
-
-    let apply_renaming t renaming =
-      match t with
-      | Tagged_immediate _ -> t
-      | Symbol symbol ->
-        let symbol' = Renaming.apply_symbol renaming symbol in
-        if symbol == symbol' then t else Symbol symbol'
-      | Dynamically_computed var ->
-        let var' = Renaming.apply_variable renaming var in
-        if var == var' then t else Dynamically_computed var'
-
-    let free_names t =
-      match t with
-      | Dynamically_computed var ->
-        Name_occurrences.singleton_variable var Name_mode.normal
-      | Symbol sym -> Name_occurrences.singleton_symbol sym Name_mode.normal
-      | Tagged_immediate _ -> Name_occurrences.empty
-
-    let all_ids_for_export t =
-      match t with
-      | Dynamically_computed var ->
-        Ids_for_export.add_variable Ids_for_export.empty var
-      | Symbol sym -> Ids_for_export.add_symbol Ids_for_export.empty sym
-      | Tagged_immediate _ -> Ids_for_export.empty
-  end
-
-  type t =
-    | Code of Code.t
-    | Set_of_closures of Set_of_closures.t
-    | Block of Tag.Scannable.t * Mutability.t * Field_of_block.t list
-    | Boxed_float of Numeric_types.Float_by_bit_pattern.t Or_variable.t
-    | Boxed_int32 of Int32.t Or_variable.t
-    | Boxed_int64 of Int64.t Or_variable.t
-    | Boxed_nativeint of Targetint_32_64.t Or_variable.t
-    | Immutable_float_block of
-        Numeric_types.Float_by_bit_pattern.t Or_variable.t list
-    | Immutable_float_array of
-        Numeric_types.Float_by_bit_pattern.t Or_variable.t list
-    | Mutable_string of { initial_value : string }
-    | Immutable_string of string
-
-  type static_const = t
 
   let [@ocamlformat "disable"] print ppf t =
     match t with
@@ -1885,7 +1384,7 @@ end = struct
         (Flambda_colours.normal ())
         Tag.Scannable.print tag
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          Field_of_block.print) fields
+          Field_of_static_block.print) fields
     | Boxed_float or_var ->
       fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s@ %a)@]"
         (Flambda_colours.static_part ())
@@ -1951,7 +1450,9 @@ end = struct
           let c = Mutability.compare mut1 mut2 in
           if c <> 0
           then c
-          else Misc.Stdlib.List.compare Field_of_block.compare fields1 fields2
+          else
+            Misc.Stdlib.List.compare Field_of_static_block.compare fields1
+              fields2
       | Boxed_float or_var1, Boxed_float or_var2 ->
         Or_variable.compare Numeric_types.Float_by_bit_pattern.compare or_var1
           or_var2
@@ -2008,7 +1509,7 @@ end = struct
     | Block (_tag, _mut, fields) ->
       List.fold_left
         (fun fvs field ->
-          Name_occurrences.union fvs (Field_of_block.free_names field))
+          Name_occurrences.union fvs (Field_of_static_block.free_names field))
         Name_occurrences.empty fields
     | Boxed_float or_var -> Or_variable.free_names or_var
     | Boxed_int32 or_var -> Or_variable.free_names or_var
@@ -2040,7 +1541,9 @@ end = struct
         let fields =
           List.map
             (fun field ->
-              let field' = Field_of_block.apply_renaming field renaming in
+              let field' =
+                Field_of_static_block.apply_renaming field renaming
+              in
               if not (field == field') then changed := true;
               field')
             fields
@@ -2097,7 +1600,8 @@ end = struct
     | Block (_tag, _mut, fields) ->
       List.fold_left
         (fun ids field ->
-          Ids_for_export.union ids (Field_of_block.all_ids_for_export field))
+          Ids_for_export.union ids
+            (Field_of_static_block.all_ids_for_export field))
         Ids_for_export.empty fields
     | Boxed_float (Var var)
     | Boxed_int32 (Var var)
@@ -2198,8 +1702,6 @@ end = struct
         Bound_symbols.Pattern.print pat print t
 
   module Group = struct
-    type nonrec t = t list
-
     let create static_consts = static_consts
 
     let to_list t = t
