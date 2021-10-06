@@ -464,19 +464,18 @@ and FPB = struct
     | [] -> assert false
   (* see [create], above. *)
 
+  let[@inline always] ( let<> ) abst f =
+    A.pattern_match abst ~f:(fun a x -> (f [@inlined hint]) (a, x))
+
   let pattern_match t ~f =
-    A.pattern_match t.abst ~f:(fun my_depth t2 ->
-        T2.pattern_match t2 ~f:(fun return_continuation t1 ->
-            T1.pattern_match t1 ~f:(fun exn_continuation t0 ->
-                T0.pattern_match t0
-                  ~f:(fun params_and_my_closure { expr; free_names } ->
-                    let params, my_closure =
-                      extract_my_closure params_and_my_closure
-                    in
-                    f ~return_continuation exn_continuation params ~body:expr
-                      ~my_closure ~is_my_closure_used:t.is_my_closure_used
-                      ~my_depth:(Bound_var.var my_depth)
-                      ~free_names_of_body:free_names))))
+    let<> my_depth, t2 = t.abst in
+    let<> return_continuation, t1 = t2 in
+    let<> exn_continuation, t0 = t1 in
+    let<> params_and_my_closure, { expr; free_names } = t0 in
+    let params, my_closure = extract_my_closure params_and_my_closure in
+    f ~return_continuation exn_continuation params ~body:expr ~my_closure
+      ~is_my_closure_used:t.is_my_closure_used
+      ~my_depth:(Bound_var.var my_depth) ~free_names_of_body:free_names
 
   let pattern_match_pair t1 t2 ~f =
     A.pattern_match_pair t1.abst t2.abst ~f:(fun my_depth t2_1 t2_2 ->
@@ -696,42 +695,38 @@ and Let_expr = struct
       | Mismatched_let_bindings -> "Mismatched let bindings"
   end
 
+  let[@inline always] ( let<> ) abst f =
+    A.pattern_match abst ~f:(fun a x -> (f [@inlined hint]) (a, x))
+
   let pattern_match_pair t1 t2 ~dynamic ~static =
-    A.pattern_match t1.name_abstraction ~f:(fun bound_pattern1 t0_1 ->
-        let body1 = t0_1.body in
-        A.pattern_match t2.name_abstraction ~f:(fun bound_pattern2 t0_2 ->
-            let body2 = t0_2.body in
-            let dynamic_case () =
-              let ans =
-                A.pattern_match_pair t1.name_abstraction t2.name_abstraction
-                  ~f:(fun bound_pattern t0_1 t0_2 ->
-                    dynamic bound_pattern ~body1:t0_1.body ~body2:t0_2.body)
-              in
-              Ok ans
-            in
-            match bound_pattern1, bound_pattern2 with
-            | Bound_pattern.Singleton _, Bound_pattern.Singleton _ ->
-              dynamic_case ()
-            | ( Set_of_closures { closure_vars = vars1; _ },
-                Set_of_closures { closure_vars = vars2; _ } ) ->
-              if List.compare_lengths vars1 vars2 = 0
-              then dynamic_case ()
-              else Error Pattern_match_pair_error.Mismatched_let_bindings
-            | Symbols bound_symbols1, Symbols bound_symbols2 ->
-              let patterns1 =
-                bound_symbols1.bound_symbols |> Bound_symbols.to_list
-              in
-              let patterns2 =
-                bound_symbols2.bound_symbols |> Bound_symbols.to_list
-              in
-              if List.compare_lengths patterns1 patterns2 = 0
-              then
-                let ans =
-                  static ~bound_symbols1 ~bound_symbols2 ~body1 ~body2
-                in
-                Ok ans
-              else Error Pattern_match_pair_error.Mismatched_let_bindings
-            | _, _ -> Error Pattern_match_pair_error.Mismatched_let_bindings))
+    let<> bound_pattern1, t0_1 = t1.name_abstraction in
+    let<> bound_pattern2, t0_2 = t2.name_abstraction in
+    let body1 = t0_1.body in
+    let body2 = t0_2.body in
+    let dynamic_case () =
+      let ans =
+        A.pattern_match_pair t1.name_abstraction t2.name_abstraction
+          ~f:(fun bound_pattern t0_1 t0_2 ->
+            dynamic bound_pattern ~body1:t0_1.body ~body2:t0_2.body)
+      in
+      Ok ans
+    in
+    match bound_pattern1, bound_pattern2 with
+    | Bound_pattern.Singleton _, Bound_pattern.Singleton _ -> dynamic_case ()
+    | ( Set_of_closures { closure_vars = vars1; _ },
+        Set_of_closures { closure_vars = vars2; _ } ) ->
+      if List.compare_lengths vars1 vars2 = 0
+      then dynamic_case ()
+      else Error Pattern_match_pair_error.Mismatched_let_bindings
+    | Symbols bound_symbols1, Symbols bound_symbols2 ->
+      let patterns1 = bound_symbols1.bound_symbols |> Bound_symbols.to_list in
+      let patterns2 = bound_symbols2.bound_symbols |> Bound_symbols.to_list in
+      if List.compare_lengths patterns1 patterns2 = 0
+      then
+        let ans = static ~bound_symbols1 ~bound_symbols2 ~body1 ~body2 in
+        Ok ans
+      else Error Pattern_match_pair_error.Mismatched_let_bindings
+    | _, _ -> Error Pattern_match_pair_error.Mismatched_let_bindings
 
   (* For printing "let symbol": *)
 
