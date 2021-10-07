@@ -16,40 +16,57 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-(* CR mshinwell: Consider caching the free names of the whole abstraction on
-   each abstraction. *)
+(** The type [('bindable, 'term) t] is the equivalent of an atom abstraction
+    construction "[bindable]term" in nominal sets. *)
+type ('bindable, 'term) t
 
-module type Term = sig
-  include Contains_names.S
+(** Creation of an abstraction (constant-time operation). *)
+val create : 'bindable -> 'term -> ('bindable, 'term) t
 
-  include Contains_ids.S with type t := t
+(** Concretion of an abstraction at a fresh bindable. *)
+val pattern_match :
+  freshen_bindable:('bindable -> 'bindable) ->
+  swap_bindable:('bindable -> guaranteed_fresh:'bindable -> Renaming.t) ->
+  apply_renaming_term:('term -> Renaming.t -> 'term) ->
+  ('bindable, 'term) t ->
+  f:('bindable -> 'term -> 'a) ->
+  'a
 
-  val print : Format.formatter -> t -> unit
-end
+(** Concretion of a pair of abstractions at the same fresh bindable. *)
+val pattern_match_pair :
+  freshen_bindable:('bindable -> 'bindable) ->
+  swap_bindable:('bindable -> guaranteed_fresh:'bindable -> Renaming.t) ->
+  apply_renaming_term:('term -> Renaming.t -> 'term) ->
+  ('bindable, 'term) t ->
+  ('bindable, 'term) t ->
+  f:('bindable -> 'term -> 'term -> 'a) ->
+  'a
 
-module Make (Bindable : Bindable.S) (Term : Term) : sig
-  (** The type [t] is the equivalent of an atom abstraction construction
-      "[--]--" in nominal sets. *)
+val print :
+  print_bindable:(Format.formatter -> 'bindable -> unit) ->
+  print_term:(Format.formatter -> 'term -> unit) ->
+  freshen_bindable:('bindable -> 'bindable) ->
+  swap_bindable:('bindable -> guaranteed_fresh:'bindable -> Renaming.t) ->
+  apply_renaming_term:('term -> Renaming.t -> 'term) ->
+  Format.formatter ->
+  ('bindable, 'term) t ->
+  unit
 
-  include Contains_names.S
+val free_names :
+  free_names_bindable:('bindable -> Name_occurrences.t) ->
+  free_names_term:('term -> Name_occurrences.t) ->
+  ('bindable, 'term) t ->
+  Name_occurrences.t
 
-  include Contains_ids.S with type t := t
+val apply_renaming :
+  apply_renaming_bindable:('bindable -> Renaming.t -> 'bindable) ->
+  apply_renaming_term:('term -> Renaming.t -> 'term) ->
+  ('bindable, 'term) t ->
+  Renaming.t ->
+  ('bindable, 'term) t
 
-  val print : Format.formatter -> t -> unit
-
-  val create : Bindable.t -> Term.t -> t
-
-  (** Concretion of an abstraction at a fresh name. *)
-  val pattern_match : t -> f:(Bindable.t -> Term.t -> 'a) -> 'a
-
-  (** Concretion of an abstraction at a fresh name followed by reconstruction of
-      the abstraction. *)
-  val pattern_match_map : t -> f:(Term.t -> Term.t) -> t
-
-  (** Like [pattern_match_map] but also provides the fresh name to [f]. *)
-  val pattern_match_mapi : t -> f:(Bindable.t -> Term.t -> Term.t) -> t
-
-  (** Concretion of a pair of abstractions at the same fresh name. *)
-  val pattern_match_pair :
-    t -> t -> f:(Bindable.t -> Term.t -> Term.t -> 'a) -> 'a
-end
+val all_ids_for_export :
+  all_ids_for_export_bindable:('bindable -> Ids_for_export.t) ->
+  all_ids_for_export_term:('term -> Ids_for_export.t) ->
+  ('bindable, 'term) t ->
+  Ids_for_export.t

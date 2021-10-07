@@ -135,10 +135,8 @@ end = struct
       Expr.all_ids_for_export handler
   end
 
-  module A = Name_abstraction.Make (Bound_parameters) (T0)
-
   type t =
-    { abst : A.t;
+    { abst : (Bound_parameters.t, T0.t) Name_abstraction.t;
       is_exn_handler : bool
     }
 
@@ -158,19 +156,23 @@ end = struct
             Variable.Map.add var num num_occurrences)
     in
     let t0 : T0.t = { num_normal_occurrences_of_params; handler } in
-    let abst = A.create (Bound_parameters.create params) t0 in
+    let abst = Name_abstraction.create (Bound_parameters.create params) t0 in
     { abst; is_exn_handler }
 
   let pattern_match' t ~f =
-    A.pattern_match t.abst
-      ~f:(fun params { handler; num_normal_occurrences_of_params } ->
+    Name_abstraction.pattern_match ~freshen_bindable:Bound_parameters.rename
+      ~swap_bindable:Bound_parameters.name_permutation
+      ~apply_renaming_term:T0.apply_renaming t.abst
+      ~f:(fun params { T0.handler; num_normal_occurrences_of_params } ->
         f
           (Bound_parameters.to_list params)
           ~num_normal_occurrences_of_params ~handler)
 
   let pattern_match t ~f =
-    A.pattern_match t.abst
-      ~f:(fun params { handler; num_normal_occurrences_of_params = _ } ->
+    Name_abstraction.pattern_match ~freshen_bindable:Bound_parameters.rename
+      ~swap_bindable:Bound_parameters.name_permutation
+      ~apply_renaming_term:T0.apply_renaming t.abst
+      ~f:(fun params { T0.handler; num_normal_occurrences_of_params = _ } ->
         f (Bound_parameters.to_list params) ~handler)
 
   module Pattern_match_pair_error = struct
@@ -188,11 +190,14 @@ end = struct
                [Name_abstraction.Make_list]? *)
             if List.compare_lengths params1 params2 = 0
             then
-              A.pattern_match_pair t1.abst t2.abst
+              Name_abstraction.pattern_match_pair
+                ~freshen_bindable:Bound_parameters.rename
+                ~swap_bindable:Bound_parameters.name_permutation
+                ~apply_renaming_term:T0.apply_renaming t1.abst t2.abst
                 ~f:(fun
                      params
-                     { handler = handler1; _ }
-                     { handler = handler2; _ }
+                     { T0.handler = handler1; _ }
+                     { T0.handler = handler2; _ }
                    ->
                   Ok (f (Bound_parameters.to_list params) ~handler1 ~handler2))
             else
@@ -226,24 +231,38 @@ end = struct
           Expr.print handler;
         fprintf ppf "@]")
 
-  let [@ocamlformat "disable"] print ppf { abst; is_exn_handler; } =
+  let[@ocamlformat "disable"] print ppf { abst; is_exn_handler; } =
     Format.fprintf ppf "@[<hov 1>\
         @[<hov 1>(params_and_handler@ %a)@]@ \
         @[<hov 1>(is_exn_handler@ %b)@]\
         @]"
-      A.print abst
+      (Name_abstraction.print
+        ~print_bindable:Bound_parameters.print
+        ~print_term:T0.print
+        ~freshen_bindable:Bound_parameters.rename
+        ~swap_bindable:Bound_parameters.name_permutation
+        ~apply_renaming_term:T0.apply_renaming)
+      abst
       is_exn_handler
 
   let is_exn_handler t = t.is_exn_handler
 
-  let free_names t = A.free_names t.abst
+  let free_names t =
+    Name_abstraction.free_names ~free_names_bindable:Bound_parameters.free_names
+      ~free_names_term:T0.free_names t.abst
 
-  let apply_renaming ({ abst; is_exn_handler } as t) perm =
-    let abst' = A.apply_renaming abst perm in
+  let apply_renaming ({ abst; is_exn_handler } as t) renaming =
+    let abst' =
+      Name_abstraction.apply_renaming
+        ~apply_renaming_bindable:Bound_parameters.apply_renaming
+        ~apply_renaming_term:T0.apply_renaming abst renaming
+    in
     if abst == abst' then t else { abst = abst'; is_exn_handler }
 
   let all_ids_for_export { abst; is_exn_handler = _ } =
-    A.all_ids_for_export abst
+    Name_abstraction.all_ids_for_export
+      ~all_ids_for_export_bindable:Bound_parameters.all_ids_for_export
+      ~all_ids_for_export_term:T0.all_ids_for_export abst
 end
 
 and Continuation_handlers : sig
@@ -568,9 +587,6 @@ end = struct
         free_names : Name_occurrences.t Or_unknown.t
       }
 
-    let print fmt { expr; free_names = _ } =
-      Format.fprintf fmt "%a" Expr.print expr
-
     let free_names { expr; free_names } =
       match free_names with
       | Known free_names -> free_names
@@ -591,10 +607,8 @@ end = struct
   (* CR mshinwell: use [Continuation] instead of [Exn_continuation] everywhere
      for function return continuations. *)
 
-  module A = Name_abstraction.Make (Bound_for_function) (Base)
-
   type t =
-    { abst : A.t;
+    { abst : (Bound_for_function.t, Base.t) Name_abstraction.t;
       dbg : Debuginfo.t;
       params_arity : Flambda_arity.t;
       is_my_closure_used : bool Or_unknown.t
@@ -611,7 +625,7 @@ end = struct
       Bound_for_function.create ~return_continuation ~exn_continuation ~params
         ~my_closure ~my_depth
     in
-    let abst = A.create bound_for_function base in
+    let abst = Name_abstraction.create bound_for_function base in
     { abst;
       dbg;
       params_arity = Bound_parameter.List.arity params;
@@ -619,7 +633,10 @@ end = struct
     }
 
   let pattern_match t ~f =
-    A.pattern_match t.abst ~f:(fun bound_for_function { expr; free_names } ->
+    Name_abstraction.pattern_match ~freshen_bindable:Bound_for_function.rename
+      ~swap_bindable:Bound_for_function.name_permutation
+      ~apply_renaming_term:Base.apply_renaming t.abst
+      ~f:(fun bound_for_function { Base.expr; free_names } ->
         f
           ~return_continuation:
             (Bound_for_function.return_continuation bound_for_function)
@@ -633,11 +650,14 @@ end = struct
           ~free_names_of_body:free_names)
 
   let pattern_match_pair t1 t2 ~f =
-    A.pattern_match_pair t1.abst t2.abst
+    Name_abstraction.pattern_match_pair
+      ~freshen_bindable:Bound_for_function.rename
+      ~swap_bindable:Bound_for_function.name_permutation
+      ~apply_renaming_term:Base.apply_renaming t1.abst t2.abst
       ~f:(fun
            bound_for_function
-           { expr = body1; free_names = _ }
-           { expr = body2; free_names = _ }
+           { Base.expr = body1; free_names = _ }
+           { Base.expr = body2; free_names = _ }
          ->
         f
           ~return_continuation:
@@ -677,19 +697,27 @@ end = struct
 
   let apply_renaming ({ abst; dbg; params_arity; is_my_closure_used } as t) perm
       =
-    let abst' = A.apply_renaming abst perm in
+    let abst' =
+      Name_abstraction.apply_renaming
+        ~apply_renaming_bindable:Bound_for_function.apply_renaming
+        ~apply_renaming_term:Base.apply_renaming abst perm
+    in
     if abst == abst'
     then t
     else { abst = abst'; dbg; params_arity; is_my_closure_used }
 
   let free_names { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
-    A.free_names abst
+    Name_abstraction.free_names abst
+      ~free_names_bindable:Bound_for_function.free_names
+      ~free_names_term:Base.free_names
 
   let debuginfo { dbg; _ } = dbg
 
   let all_ids_for_export
       { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
-    A.all_ids_for_export abst
+    Name_abstraction.all_ids_for_export abst
+      ~all_ids_for_export_bindable:Bound_for_function.all_ids_for_export
+      ~all_ids_for_export_term:Base.all_ids_for_export
 end
 
 and Let_cont_expr : sig
@@ -922,16 +950,6 @@ end = struct
         body : Expr.t
       }
 
-    let [@ocamlformat "disable"] print ppf
-          { body; num_normal_occurrences_of_bound_vars = _; } =
-      fprintf ppf "@[<hov 1>(\
-          @[<hov 1>(body@ %a)@]\
-          )@]"
-        Expr.print body
-
-    let free_names { body; num_normal_occurrences_of_bound_vars = _ } =
-      Expr.free_names body
-
     let apply_renaming ({ body; num_normal_occurrences_of_bound_vars } as t)
         perm =
       let body' = Expr.apply_renaming body perm in
@@ -952,19 +970,24 @@ end = struct
       Expr.all_ids_for_export body
   end
 
-  module A = Name_abstraction.Make (Bound_pattern) (T0)
-
   type t =
-    { name_abstraction : A.t;
+    { name_abstraction : (Bound_pattern.t, T0.t) Name_abstraction.t;
       defining_expr : Named.t
     }
 
   let pattern_match t ~f =
-    A.pattern_match t.name_abstraction ~f:(fun bound_pattern t0 ->
-        f bound_pattern ~body:t0.body)
+    Name_abstraction.pattern_match t.name_abstraction
+      ~freshen_bindable:Bound_pattern.rename
+      ~swap_bindable:Bound_pattern.name_permutation
+      ~apply_renaming_term:T0.apply_renaming
+      ~f:(fun bound_pattern (t0 : T0.t) -> f bound_pattern ~body:t0.body)
 
   let pattern_match' t ~f =
-    A.pattern_match t.name_abstraction ~f:(fun bound_pattern t0 ->
+    Name_abstraction.pattern_match t.name_abstraction
+      ~freshen_bindable:Bound_pattern.rename
+      ~swap_bindable:Bound_pattern.name_permutation
+      ~apply_renaming_term:T0.apply_renaming
+      ~f:(fun bound_pattern (t0 : T0.t) ->
         let num_normal_occurrences_of_bound_vars =
           t0.num_normal_occurrences_of_bound_vars
         in
@@ -978,14 +1001,16 @@ end = struct
   end
 
   let pattern_match_pair t1 t2 ~dynamic ~static =
-    A.pattern_match t1.name_abstraction ~f:(fun bound_pattern1 t0_1 ->
-        let body1 = t0_1.body in
-        A.pattern_match t2.name_abstraction ~f:(fun bound_pattern2 t0_2 ->
-            let body2 = t0_2.body in
+    pattern_match t1 ~f:(fun bound_pattern1 ~body:body1 ->
+        pattern_match t2 ~f:(fun bound_pattern2 ~body:body2 ->
             let dynamic_case () =
               let ans =
-                A.pattern_match_pair t1.name_abstraction t2.name_abstraction
-                  ~f:(fun bound_pattern t0_1 t0_2 ->
+                Name_abstraction.pattern_match_pair
+                  ~freshen_bindable:Bound_pattern.rename
+                  ~swap_bindable:Bound_pattern.name_permutation
+                  ~apply_renaming_term:T0.apply_renaming t1.name_abstraction
+                  t2.name_abstraction
+                  ~f:(fun bound_pattern (t0_1 : T0.t) (t0_2 : T0.t) ->
                     dynamic bound_pattern ~body1:t0_1.body ~body2:t0_2.body)
               in
               Ok ans
@@ -1258,7 +1283,9 @@ end = struct
             Variable.Map.add var num num_occurrences)
     in
     let t0 : T0.t = { num_normal_occurrences_of_bound_vars; body } in
-    { name_abstraction = A.create bound_pattern t0; defining_expr }
+    { name_abstraction = Name_abstraction.create bound_pattern t0;
+      defining_expr
+    }
 
   let defining_expr t = t.defining_expr
 
@@ -1279,7 +1306,11 @@ end = struct
           from_bindable)
 
   let apply_renaming ({ name_abstraction; defining_expr } as t) perm =
-    let name_abstraction' = A.apply_renaming name_abstraction perm in
+    let name_abstraction' =
+      Name_abstraction.apply_renaming
+        ~apply_renaming_bindable:Bound_pattern.apply_renaming
+        ~apply_renaming_term:T0.apply_renaming name_abstraction perm
+    in
     let defining_expr' = Named.apply_renaming defining_expr perm in
     if name_abstraction == name_abstraction' && defining_expr == defining_expr'
     then t
@@ -1288,7 +1319,11 @@ end = struct
 
   let all_ids_for_export { name_abstraction; defining_expr } =
     let defining_expr_ids = Named.all_ids_for_export defining_expr in
-    let name_abstraction_ids = A.all_ids_for_export name_abstraction in
+    let name_abstraction_ids =
+      Name_abstraction.all_ids_for_export
+        ~all_ids_for_export_bindable:Bound_pattern.all_ids_for_export
+        ~all_ids_for_export_term:T0.all_ids_for_export name_abstraction
+    in
     Ids_for_export.union defining_expr_ids name_abstraction_ids
 end
 
@@ -1532,28 +1567,28 @@ and Non_recursive_let_cont_handler : sig
 
   val create : Continuation.t -> body:Expr.t -> Continuation_handler.t -> t
 end = struct
-  module Continuation_and_body =
-    Name_abstraction.Make (Bound_continuation) (Expr)
-
   type t =
-    { continuation_and_body : Continuation_and_body.t;
+    { continuation_and_body : (Bound_continuation.t, Expr.t) Name_abstraction.t;
       handler : Continuation_handler.t
     }
 
   let print _ppf _t = Misc.fatal_error "Not yet implemented"
 
   let create continuation ~body handler =
-    let continuation_and_body =
-      Continuation_and_body.create continuation body
-    in
+    let continuation_and_body = Name_abstraction.create continuation body in
     { continuation_and_body; handler }
 
   let pattern_match t ~f =
-    Continuation_and_body.pattern_match t.continuation_and_body
+    Name_abstraction.pattern_match ~freshen_bindable:Bound_continuation.rename
+      ~swap_bindable:Bound_continuation.name_permutation
+      ~apply_renaming_term:Expr.apply_renaming t.continuation_and_body
       ~f:(fun continuation body -> f continuation ~body)
 
   let pattern_match_pair t1 t2 ~f =
-    Continuation_and_body.pattern_match_pair t1.continuation_and_body
+    Name_abstraction.pattern_match_pair
+      ~freshen_bindable:Bound_continuation.rename
+      ~swap_bindable:Bound_continuation.name_permutation
+      ~apply_renaming_term:Expr.apply_renaming t1.continuation_and_body
       t2.continuation_and_body ~f:(fun continuation body1 body2 ->
         f continuation ~body1 ~body2)
 
@@ -1561,12 +1596,16 @@ end = struct
 
   let free_names { continuation_and_body; handler } =
     Name_occurrences.union
-      (Continuation_and_body.free_names continuation_and_body)
+      (Name_abstraction.free_names continuation_and_body
+         ~free_names_bindable:Bound_continuation.free_names
+         ~free_names_term:Expr.free_names)
       (Continuation_handler.free_names handler)
 
   let apply_renaming { continuation_and_body; handler } perm =
     let continuation_and_body' =
-      Continuation_and_body.apply_renaming continuation_and_body perm
+      Name_abstraction.apply_renaming continuation_and_body perm
+        ~apply_renaming_bindable:Bound_continuation.apply_renaming
+        ~apply_renaming_term:Expr.apply_renaming
     in
     let handler' = Continuation_handler.apply_renaming handler perm in
     { handler = handler'; continuation_and_body = continuation_and_body' }
@@ -1574,7 +1613,9 @@ end = struct
   let all_ids_for_export { continuation_and_body; handler } =
     let handler_ids = Continuation_handler.all_ids_for_export handler in
     let continuation_and_body_ids =
-      Continuation_and_body.all_ids_for_export continuation_and_body
+      Name_abstraction.all_ids_for_export continuation_and_body
+        ~all_ids_for_export_bindable:Bound_continuation.all_ids_for_export
+        ~all_ids_for_export_term:Expr.all_ids_for_export
     in
     Ids_for_export.union handler_ids continuation_and_body_ids
 end
@@ -1638,28 +1679,55 @@ end = struct
       Ids_for_export.union body_ids handlers_ids
   end
 
-  include Name_abstraction.Make (Bound_continuations) (T0)
+  type t = (Bound_continuations.t, T0.t) Name_abstraction.t
 
   let create ~body handlers =
     let bound = Continuation_handlers.domain handlers in
     let handlers0 = T0.create ~body handlers in
-    create
+    Name_abstraction.create
       (Bound_continuations.create (Continuation.Set.elements bound))
       handlers0
 
   let pattern_match t ~f =
-    pattern_match t ~f:(fun _bound handlers0 ->
+    Name_abstraction.pattern_match ~freshen_bindable:Bound_continuations.rename
+      ~swap_bindable:Bound_continuations.name_permutation
+      ~apply_renaming_term:T0.apply_renaming t ~f:(fun _bound handlers0 ->
         let body = T0.body handlers0 in
         let handlers = T0.handlers handlers0 in
         f ~body handlers)
 
   let pattern_match_pair t1 t2 ~f =
-    pattern_match_pair t1 t2 ~f:(fun _bound handlers0_1 handlers0_2 ->
+    Name_abstraction.pattern_match_pair
+      ~freshen_bindable:Bound_continuations.rename
+      ~swap_bindable:Bound_continuations.name_permutation
+      ~apply_renaming_term:T0.apply_renaming t1 t2
+      ~f:(fun _bound handlers0_1 handlers0_2 ->
         let body1 = T0.body handlers0_1 in
         let body2 = T0.body handlers0_2 in
         let handlers1 = T0.handlers handlers0_1 in
         let handlers2 = T0.handlers handlers0_2 in
         f ~body1 ~body2 handlers1 handlers2)
+
+  let free_names t =
+    Name_abstraction.free_names
+      ~free_names_bindable:Bound_continuations.free_names
+      ~free_names_term:T0.free_names t
+
+  let apply_renaming t renaming =
+    Name_abstraction.apply_renaming
+      ~apply_renaming_bindable:Bound_continuations.apply_renaming
+      ~apply_renaming_term:T0.apply_renaming t renaming
+
+  let all_ids_for_export t =
+    Name_abstraction.all_ids_for_export
+      ~all_ids_for_export_bindable:Bound_continuations.all_ids_for_export
+      ~all_ids_for_export_term:T0.all_ids_for_export t
+
+  let print ppf t =
+    Name_abstraction.print ~print_bindable:Bound_continuations.print
+      ~print_term:T0.print ~freshen_bindable:Bound_continuations.rename
+      ~swap_bindable:Bound_continuations.name_permutation
+      ~apply_renaming_term:T0.apply_renaming ppf t
 end
 
 and Static_const_or_code : sig
