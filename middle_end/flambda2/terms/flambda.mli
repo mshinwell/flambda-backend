@@ -64,7 +64,7 @@ and let_expr_t0 = private
   }
 
 and let_expr = private
-  { name_abstraction : (Bound_pattern.t, let_expr_t0) Name_abstraction.t;
+  { let_abst : (Bound_pattern.t, let_expr_t0) Name_abstraction.t;
     defining_expr : named
   }
 

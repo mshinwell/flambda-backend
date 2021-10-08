@@ -23,8 +23,6 @@ module type Term = sig
   include Contains_names.S
 
   include Contains_ids.S with type t := t
-
-  val print : Format.formatter -> t -> unit
 end
 
 type ('bindable, 'term) t
@@ -38,8 +36,6 @@ module Make (Bindable : Bindable.S) (Term : Term) : sig
 
   include Contains_ids.S with type t := t
 
-  val print : Format.formatter -> t -> unit
-
   val create : Bindable.t -> Term.t -> t
 
   (** Concretion of an abstraction at a fresh name. *)
@@ -48,4 +44,22 @@ module Make (Bindable : Bindable.S) (Term : Term) : sig
   (** Concretion of a pair of abstractions at the same fresh name. *)
   val pattern_match_pair :
     t -> t -> f:(Bindable.t -> Term.t -> Term.t -> 'a) -> 'a
+
+  (** Same as [pattern_match]. *)
+  val ( let<> ) : t -> (Bindable.t * Term.t -> 'a) -> 'a
+end
+
+module Make_let_and_renaming
+    (Bindable : Bindable.S) (Term : sig
+      type t
+
+      val apply_renaming : t -> Renaming.t -> t
+    end) : sig
+  (* Like [Make] but only produces the let-operator and [apply_renaming]. *)
+
+  type nonrec t = (Bindable.t, Term.t) t
+
+  val apply_renaming : t -> Renaming.t -> t
+
+  val ( let<> ) : t -> (Bindable.t * Term.t -> 'a) -> 'a
 end

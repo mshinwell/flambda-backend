@@ -43,7 +43,7 @@ and let_expr_t0 =
   }
 
 and let_expr =
-  { name_abstraction : (Bound_pattern.t, let_expr_t0) Name_abstraction.t;
+  { let_abst : (Bound_pattern.t, let_expr_t0) Name_abstraction.t;
     defining_expr : named
   }
 
@@ -75,19 +75,6 @@ and recursive_let_cont_handlers_t0 =
 and recursive_let_cont_handlers =
   (Bound_continuations.t, recursive_let_cont_handlers_t0) Name_abstraction.t
 
-and function_params_and_body_base =
-  { expr : expr;
-    free_names : Name_occurrences.t Or_unknown.t
-  }
-
-and function_params_and_body =
-  { abst :
-      (Bound_for_function.t, function_params_and_body_base) Name_abstraction.t;
-    dbg : Debuginfo.t;
-    params_arity : Flambda_arity.t;
-    is_my_closure_used : bool Or_unknown.t
-  }
-
 and continuation_handler_t0 =
   { num_normal_occurrences_of_params : Num_occurrences.t Variable.Map.t;
     handler : expr
@@ -101,11 +88,747 @@ and continuation_handler =
 
 and continuation_handlers = continuation_handler Continuation.Map.t
 
+and function_params_and_body_base =
+  { expr : expr;
+    free_names : Name_occurrences.t Or_unknown.t
+  }
+
+and function_params_and_body =
+  { abst :
+      (Bound_for_function.t, function_params_and_body_base) Name_abstraction.t;
+    dbg : Debuginfo.t;
+    params_arity : Flambda_arity.t;
+    is_my_closure_used : bool Or_unknown.t
+  }
+
 and static_const_or_code =
   | Code of function_params_and_body Code0.t
   | Static_const of Static_const.t
 
 and static_const_group = static_const_or_code list
+
+type flattened_for_printing_descr =
+  | Flat_code of Code_id.t * function_params_and_body Code0.t
+  | Flat_set_of_closures of Symbol.t Closure_id.Lmap.t * Set_of_closures.t
+  | Flat_block_like of Symbol.t * Static_const.t
+
+type flattened_for_printing =
+  { second_or_later_binding_within_one_set : bool;
+    second_or_later_rec_binding : bool;
+    descr : flattened_for_printing_descr
+  }
+
+let shape_colour descr =
+  match descr with
+  | Flat_code _ -> Flambda_colours.code_id ()
+  | Flat_set_of_closures _ | Flat_block_like _ -> Flambda_colours.symbol ()
+
+let apply_renaming t perm =
+  let delayed_permutation =
+    Renaming.compose ~second:perm ~first:t.delayed_permutation
+  in
+  { t with delayed_permutation }
+
+let rec descr (expr : expr) =
+  if Renaming.is_empty expr.delayed_permutation
+  then expr.descr
+  else
+    let descr = apply_renaming_expr_descr expr.descr expr.delayed_permutation in
+    expr.descr <- descr;
+    expr.delayed_permutation <- Renaming.empty;
+    descr
+
+and named_must_be_static_consts (named : named) =
+  match named with
+  | Static_consts consts -> consts
+  | Simple _ | Prim _ | Set_of_closures _ | Rec_info _ ->
+    Misc.fatal_errorf "Must be [Static_consts], but is not: %a" print_named
+      named
+
+and match_against_bound_symbols_pattern_static_const_or_code :
+      'a.
+      static_const_or_code ->
+      Bound_symbols.Pattern.t ->
+      code:(Code_id.t -> function_params_and_body Code0.t -> 'a) ->
+      set_of_closures:
+        (closure_symbols:Symbol.t Closure_id.Lmap.t -> Set_of_closures.t -> 'a) ->
+      block_like:(Symbol.t -> Static_const.t -> 'a) ->
+      'a =
+ fun static_const_or_code (pat : Bound_symbols.Pattern.t) ~code:code_callback
+     ~set_of_closures ~block_like ->
+  match static_const_or_code, pat with
+  | Code code, Code code_id ->
+    if not (Code_id.equal (Code0.code_id code) code_id)
+    then
+      Misc.fatal_errorf "Mismatch on declared code IDs:@ %a@ =@ %a"
+        Bound_symbols.Pattern.print pat print_static_const_or_code
+        static_const_or_code;
+    code_callback code_id code
+  | Static_const const, (Set_of_closures _ | Block_like _) ->
+    Static_const.match_against_bound_symbols_pattern const pat ~set_of_closures
+      ~block_like
+  | Static_const _, Code _ | Code _, (Set_of_closures _ | Block_like _) ->
+    Misc.fatal_errorf "Mismatch on variety of [Static_const]:@ %a@ =@ %a"
+      Bound_symbols.Pattern.print pat print_static_const_or_code
+      static_const_or_code
+
+and match_against_bound_symbols_static_const_group :
+      'a.
+      static_const_group ->
+      Bound_symbols.t ->
+      init:'a ->
+      code:('a -> Code_id.t -> function_params_and_body Code0.t -> 'a) ->
+      set_of_closures:
+        ('a ->
+        closure_symbols:Symbol.t Closure_id.Lmap.t ->
+        Set_of_closures.t ->
+        'a) ->
+      block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
+      'a =
+ fun t bound_symbols ~init ~code:code_callback
+     ~set_of_closures:set_of_closures_callback ~block_like:block_like_callback ->
+  let bound_symbol_pats = Bound_symbols.to_list bound_symbols in
+  if List.compare_lengths t bound_symbol_pats <> 0
+  then
+    Misc.fatal_errorf
+      "Mismatch between length of [Bound_symbols.t] and [Static_const.t \
+       list]:@ %a@ =@ %a"
+      Bound_symbols.print bound_symbols print_static_const_group t;
+  ListLabels.fold_left2 t bound_symbol_pats ~init
+    ~f:(fun acc static_const bound_symbols_pat ->
+      match_against_bound_symbols_pattern_static_const_or_code static_const
+        bound_symbols_pat
+        ~code:(fun code_id code -> code_callback acc code_id code)
+        ~set_of_closures:(fun ~closure_symbols set_of_closures ->
+          set_of_closures_callback acc ~closure_symbols set_of_closures)
+        ~block_like:(fun symbol static_const ->
+          block_like_callback acc symbol static_const))
+
+and pattern_match_let :
+      'a. let_expr -> f:(Bound_pattern.t -> body:expr -> 'a) -> 'a =
+ fun t ~f ->
+  let open
+    Name_abstraction.Make_let_and_renaming
+      (Bound_pattern)
+      (struct
+        type t = let_expr_t0
+
+        let apply_renaming = apply_renaming_let_expr_t0
+      end) in
+  let<> bound_pattern, { body; _ } = t.let_abst in
+  f bound_pattern ~body
+
+and pattern_match_non_recursive_let_cont_handler :
+      'a.
+      non_recursive_let_cont_handler ->
+      f:(Continuation.t -> body:expr -> 'a) ->
+      'a =
+ fun t ~f ->
+  let open
+    Name_abstraction.Make_let_and_renaming
+      (Bound_continuation)
+      (struct
+        type t = expr
+
+        let apply_renaming = apply_renaming
+      end) in
+  let<> continuation, body = t.continuation_and_body in
+  f continuation ~body
+
+and pattern_match_recursive_let_cont_handlers :
+      'a.
+      recursive_let_cont_handlers ->
+      f:(body:expr -> continuation_handlers -> 'a) ->
+      'a =
+ fun t ~f ->
+  let open
+    Name_abstraction.Make_let_and_renaming
+      (Bound_continuations)
+      (struct
+        type t = recursive_let_cont_handlers_t0
+
+        let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
+      end) in
+  let<> _, { body; handlers } = t in
+  f ~body handlers
+
+and pattern_match_continuation_handler :
+      'a.
+      continuation_handler ->
+      f:(Bound_parameter.t list -> handler:expr -> 'a) ->
+      'a =
+ fun t ~f ->
+  let open
+    Name_abstraction.Make_let_and_renaming
+      (Bound_parameters)
+      (struct
+        type t = continuation_handler_t0
+
+        let apply_renaming = apply_renaming_continuation_handler_t0
+      end) in
+  let<> params, { handler; _ } = t.cont_handler_abst in
+  f (Bound_parameters.to_list params) ~handler
+
+and pattern_match_function_params_and_body :
+      'a.
+      function_params_and_body ->
+      f:
+        (return_continuation:Continuation.t ->
+        exn_continuation:Continuation.t ->
+        Bound_parameter.t list ->
+        body:expr ->
+        my_closure:Variable.t ->
+        is_my_closure_used:bool Or_unknown.t ->
+        my_depth:Variable.t ->
+        free_names_of_body:Name_occurrences.t Or_unknown.t ->
+        'a) ->
+      'a =
+ fun t ~f ->
+  let module BFF = Bound_for_function in
+  let open
+    Name_abstraction.Make_let_and_renaming
+      (BFF)
+      (struct
+        type t = function_params_and_body_base
+
+        let apply_renaming = apply_renaming_function_params_and_body_base
+      end) in
+  let<> bff, { expr; free_names } = t.abst in
+  f
+    ~return_continuation:(BFF.return_continuation bff)
+    ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
+    ~my_closure:(BFF.my_closure bff) ~is_my_closure_used:t.is_my_closure_used
+    ~my_depth:(BFF.my_depth bff) ~free_names_of_body:free_names
+
+and apply_renaming_expr_descr t renaming =
+  match t with
+  | Let let_expr ->
+    let let_expr' = apply_renaming_let_expr let_expr renaming in
+    if let_expr == let_expr' then t else Let let_expr'
+  | Let_cont let_cont ->
+    let let_cont' = apply_renaming_let_cont_expr let_cont renaming in
+    if let_cont == let_cont' then t else Let_cont let_cont'
+  | Apply apply ->
+    let apply' = Apply.apply_renaming apply renaming in
+    if apply == apply' then t else Apply apply'
+  | Apply_cont apply_cont ->
+    let apply_cont' = Apply_cont.apply_renaming apply_cont renaming in
+    if apply_cont == apply_cont' then t else Apply_cont apply_cont'
+  | Switch switch ->
+    let switch' = Switch.apply_renaming switch renaming in
+    if switch == switch' then t else Switch switch'
+  | Invalid _ -> t
+
+and apply_renaming_named (named : named) renaming : named =
+  match named with
+  | Simple simple ->
+    let simple' = Simple.apply_renaming simple renaming in
+    if simple == simple' then named else Simple simple'
+  | Prim (prim, dbg) ->
+    let prim' = Flambda_primitive.apply_renaming prim renaming in
+    if prim == prim' then named else Prim (prim', dbg)
+  | Set_of_closures set ->
+    let set' = Set_of_closures.apply_renaming set renaming in
+    if set == set' then named else Set_of_closures set'
+  | Static_consts consts ->
+    let consts' = apply_renaming_static_const_group consts renaming in
+    if consts == consts' then named else Static_consts consts'
+  | Rec_info rec_info_expr ->
+    let rec_info_expr' = Rec_info_expr.apply_renaming rec_info_expr renaming in
+    if rec_info_expr == rec_info_expr' then named else Rec_info rec_info_expr'
+
+and apply_renaming_let_expr_t0
+    ({ body; num_normal_occurrences_of_bound_vars } as t) perm =
+  let body' = apply_renaming body perm in
+  let changed = ref (body != body') in
+  let num_normal_occurrences_of_bound_vars =
+    Variable.Map.fold
+      (fun var num result ->
+        let var' = Renaming.apply_variable perm var in
+        changed := !changed || var != var';
+        Variable.Map.add var' num result)
+      num_normal_occurrences_of_bound_vars Variable.Map.empty
+  in
+  if not !changed
+  then t
+  else { body = body'; num_normal_occurrences_of_bound_vars }
+
+and apply_renaming_let_expr ({ let_abst; defining_expr } as t) renaming =
+  let module A =
+    Name_abstraction.Make_let_and_renaming
+      (Bound_pattern)
+      (struct
+        type t = let_expr_t0
+
+        let apply_renaming = apply_renaming_let_expr_t0
+      end)
+  in
+  let let_abst' = A.apply_renaming let_abst renaming in
+  let defining_expr' = apply_renaming_named defining_expr renaming in
+  if let_abst == let_abst' && defining_expr == defining_expr'
+  then t
+  else { let_abst = let_abst'; defining_expr = defining_expr' }
+
+and apply_renaming_let_cont_expr let_cont renaming =
+  match let_cont with
+  | Non_recursive { handler; num_free_occurrences; is_applied_with_traps } ->
+    let handler' =
+      apply_renaming_non_recursive_let_cont_handler handler renaming
+    in
+    if handler == handler'
+    then let_cont
+    else
+      Non_recursive
+        { handler = handler'; num_free_occurrences; is_applied_with_traps }
+  | Recursive handlers ->
+    let handlers' =
+      apply_renaming_recursive_let_cont_handlers handlers renaming
+    in
+    if handlers == handlers' then let_cont else Recursive handlers'
+
+and apply_renaming_non_recursive_let_cont_handler
+    { continuation_and_body; handler } renaming =
+  let module A =
+    Name_abstraction.Make_let_and_renaming
+      (Bound_continuation)
+      (struct
+        type t = expr
+
+        let apply_renaming = apply_renaming
+      end)
+  in
+  let continuation_and_body' =
+    A.apply_renaming continuation_and_body renaming
+  in
+  let handler' = apply_renaming_continuation_handler handler renaming in
+  { handler = handler'; continuation_and_body = continuation_and_body' }
+
+and apply_renaming_recursive_let_cont_handlers_t0 { handlers; body } renaming =
+  let handlers' = apply_renaming_continuation_handlers handlers renaming in
+  let body' = apply_renaming body renaming in
+  { handlers = handlers'; body = body' }
+
+and apply_renaming_recursive_let_cont_handlers t renaming =
+  let module A =
+    Name_abstraction.Make_let_and_renaming
+      (Bound_continuations)
+      (struct
+        type t = recursive_let_cont_handlers_t0
+
+        let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
+      end)
+  in
+  A.apply_renaming t renaming
+
+and apply_renaming_continuation_handler_t0
+    ({ handler; num_normal_occurrences_of_params } as t) perm =
+  let handler' = apply_renaming handler perm in
+  if handler == handler'
+  then t
+  else { handler = handler'; num_normal_occurrences_of_params }
+
+and apply_renaming_continuation_handler
+    ({ cont_handler_abst; is_exn_handler } as t) renaming =
+  let module A =
+    Name_abstraction.Make_let_and_renaming
+      (Bound_parameters)
+      (struct
+        type t = continuation_handler_t0
+
+        let apply_renaming = apply_renaming_continuation_handler_t0
+      end)
+  in
+  let cont_handler_abst' = A.apply_renaming cont_handler_abst renaming in
+  if cont_handler_abst == cont_handler_abst'
+  then t
+  else { cont_handler_abst = cont_handler_abst'; is_exn_handler }
+
+and apply_renaming_continuation_handlers t perm =
+  Continuation.Map.fold
+    (fun k handler result ->
+      let k = Renaming.apply_continuation perm k in
+      let handler = apply_renaming_continuation_handler handler perm in
+      Continuation.Map.add k handler result)
+    t Continuation.Map.empty
+
+and apply_renaming_function_params_and_body_base { expr; free_names } renaming =
+  let expr = apply_renaming expr renaming in
+  let free_names =
+    Or_unknown.map free_names ~f:(fun free_names ->
+        Name_occurrences.apply_renaming free_names renaming)
+  in
+  { expr; free_names }
+
+and apply_renaming_function_params_and_body
+    ({ abst; dbg; params_arity; is_my_closure_used } as t) perm =
+  let module A =
+    Name_abstraction.Make_let_and_renaming
+      (Bound_for_function)
+      (struct
+        type t = function_params_and_body_base
+
+        let apply_renaming = apply_renaming_function_params_and_body_base
+      end)
+  in
+  let abst' = A.apply_renaming abst perm in
+  if abst == abst'
+  then t
+  else { abst = abst'; dbg; params_arity; is_my_closure_used }
+
+and apply_renaming_static_const_or_code
+    (static_const_or_code : static_const_or_code) renaming :
+    static_const_or_code =
+  if Renaming.is_empty renaming
+  then static_const_or_code
+  else
+    match static_const_or_code with
+    | Code code ->
+      let code' =
+        Code0.apply_renaming ~apply_renaming_function_params_and_body code
+          renaming
+      in
+      if code == code' then static_const_or_code else Code code'
+    | Static_const const ->
+      let const' = Static_const.apply_renaming const renaming in
+      if const == const' then static_const_or_code else Static_const const'
+
+and apply_renaming_static_const_group t renaming =
+  List.map
+    (fun static_const ->
+      apply_renaming_static_const_or_code static_const renaming)
+    t
+
+and print ppf (t : expr) =
+  match descr t with
+  | Let let_expr -> print_let_expr ppf let_expr
+  | Let_cont let_cont -> print_let_cont_expr ppf let_cont
+  | Apply apply ->
+    Format.fprintf ppf "@[<hov 1>(@<0>%sapply@<0>%s@ %a)@]"
+      (Flambda_colours.expr_keyword ())
+      (Flambda_colours.normal ())
+      Apply.print apply
+  | Apply_cont apply_cont -> Apply_cont.print ppf apply_cont
+  | Switch switch -> Switch.print ppf switch
+  | Invalid semantics ->
+    fprintf ppf "@[@<0>%sInvalid %a@<0>%s@]"
+      (Flambda_colours.expr_keyword ())
+      Invalid_term_semantics.print semantics
+      (Flambda_colours.normal ())
+
+and print_continuation_handler (recursive : Recursive.t) ppf k
+    ({ cont_handler_abst = _; is_exn_handler } as t) occurrences ~first =
+  let fprintf = Format.fprintf in
+  if not first then fprintf ppf "@ ";
+  pattern_match_continuation_handler t ~f:(fun params ~handler ->
+      begin
+        match descr handler with
+        | Apply_cont _ | Invalid _ -> fprintf ppf "@[<hov 1>"
+        | _ -> fprintf ppf "@[<v 1>"
+      end;
+      fprintf ppf "@<0>%s%a@<0>%s%s@<0>%s%s@<0>%s"
+        (Flambda_colours.continuation_definition ())
+        Continuation.print k
+        (Flambda_colours.expr_keyword ())
+        (match recursive with Non_recursive -> "" | Recursive -> " (rec)")
+        (Flambda_colours.continuation_annotation ())
+        (if is_exn_handler then "[eh]" else "")
+        (Flambda_colours.normal ());
+      if List.length params > 0
+      then fprintf ppf " %a" Bound_parameter.List.print params;
+      fprintf ppf "@<0>%s #%a:@<0>%s@ %a" (Flambda_colours.elide ())
+        (Or_unknown.print Num_occurrences.print)
+        occurrences
+        (Flambda_colours.normal ())
+        print handler;
+      fprintf ppf "@]")
+
+and print_function_params_and_body ppf t =
+  pattern_match_function_params_and_body t
+    ~f:(fun
+         ~return_continuation
+         ~exn_continuation
+         params
+         ~body
+         ~my_closure
+         ~is_my_closure_used:_
+         ~my_depth
+         ~free_names_of_body:_
+       ->
+      let my_closure =
+        Bound_parameter.create my_closure
+          (K.With_subkind.create K.value Anything)
+      in
+      fprintf ppf
+        "@[<hov 1>(@<0>%s@<1>\u{03bb}@<0>%s@[<hov \
+         1>@<1>\u{3008}%a@<1>\u{3009}@<1>\u{300a}%a@<1>\u{300b}%a %a @<0>%s%a \
+         @<0>%s.@<0>%s@]@ %a))@]"
+        (Flambda_colours.lambda ())
+        (Flambda_colours.normal ())
+        Continuation.print return_continuation Continuation.print
+        exn_continuation Bound_parameter.List.print params Bound_parameter.print
+        my_closure
+        (Flambda_colours.depth_variable ())
+        Variable.print my_depth (Flambda_colours.elide ())
+        (Flambda_colours.normal ())
+        print body)
+
+and print_let_cont_expr ppf t =
+  let rec gather_let_conts let_conts let_cont =
+    match let_cont with
+    | Non_recursive { handler; num_free_occurrences; is_applied_with_traps = _ }
+      ->
+      pattern_match_non_recursive_let_cont_handler handler
+        ~f:(fun k ~(body : expr) ->
+          let let_conts, body =
+            match descr body with
+            | Let_cont let_cont -> gather_let_conts let_conts let_cont
+            | _ -> let_conts, body
+          in
+          ( (k, Recursive.Non_recursive, handler.handler, num_free_occurrences)
+            :: let_conts,
+            body ))
+    | Recursive handlers ->
+      pattern_match_recursive_let_cont_handlers handlers
+        ~f:(fun ~(body : expr) handlers ->
+          let let_conts, body =
+            match descr body with
+            | Let_cont let_cont -> gather_let_conts let_conts let_cont
+            | _ -> let_conts, body
+          in
+          let new_let_conts =
+            List.map
+              (fun (k, handler) ->
+                k, Recursive.Recursive, handler, Or_unknown.Unknown)
+              (Continuation.Map.bindings handlers)
+          in
+          new_let_conts @ let_conts, body)
+  in
+  let let_conts, body = gather_let_conts [] t in
+  fprintf ppf "@[<v 1>(%a@;" print body;
+  let first = ref true in
+  List.iter
+    (fun (cont, recursive, handler, occurrences) ->
+      print_continuation_handler recursive ppf cont handler occurrences
+        ~first:!first;
+      first := false)
+    (List.rev let_conts);
+  fprintf ppf ")@]"
+
+(* CR mshinwell: Remove [second_or_later_binding_within_one_set] if it doesn't
+   become used soon. *)
+and flatten_for_printing0 bound_symbols defining_exprs =
+  match_against_bound_symbols_static_const_group defining_exprs bound_symbols
+    ~init:([], false)
+    ~code:(fun (flattened_acc, second_or_later_rec_binding) code_id code ->
+      let flattened =
+        { second_or_later_binding_within_one_set = false;
+          second_or_later_rec_binding;
+          descr = Flat_code (code_id, code)
+        }
+      in
+      flattened_acc @ [flattened], true)
+    ~set_of_closures:
+      (fun (flattened_acc, second_or_later_rec_binding) ~closure_symbols
+           set_of_closures ->
+      let flattened =
+        if Set_of_closures.is_empty set_of_closures
+        then []
+        else
+          let second_or_later_binding_within_one_set = false in
+          [ { second_or_later_binding_within_one_set;
+              second_or_later_rec_binding;
+              descr = Flat_set_of_closures (closure_symbols, set_of_closures)
+            } ]
+      in
+      flattened_acc @ flattened, true)
+    ~block_like:
+      (fun (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
+      let flattened =
+        { second_or_later_binding_within_one_set = false;
+          second_or_later_rec_binding;
+          descr = Flat_block_like (symbol, defining_expr)
+        }
+      in
+      flattened_acc @ [flattened], true)
+
+and flatten_for_printing t =
+  pattern_match_let t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
+      match bound_pattern with
+      | Symbols { bound_symbols } ->
+        let flattened, _ =
+          flatten_for_printing0 bound_symbols
+            (named_must_be_static_consts t.defining_expr)
+        in
+        Some (flattened, body)
+      | Singleton _ | Set_of_closures _ -> None)
+
+and print_closure_binding ppf (closure_id, sym) =
+  Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]" Symbol.print sym
+    (Flambda_colours.elide ()) (Flambda_colours.elide ()) Closure_id.print
+    closure_id
+
+and print_flattened_descr_lhs ppf descr =
+  match descr with
+  | Flat_code (code_id, _) -> Code_id.print ppf code_id
+  | Flat_set_of_closures (closure_symbols, _) ->
+    Format.fprintf ppf "@[<hov 0>%a@]"
+      (Format.pp_print_list
+         ~pp_sep:(fun ppf () ->
+           Format.fprintf ppf "@<0>%s,@ @<0>%s" (Flambda_colours.elide ())
+             (Flambda_colours.normal ()))
+         print_closure_binding)
+      (Closure_id.Lmap.bindings closure_symbols)
+  | Flat_block_like (symbol, _) -> Symbol.print ppf symbol
+
+and print_flattened_descr_rhs ppf descr =
+  match descr with
+  | Flat_code (_, code) -> Code0.print ~print_function_params_and_body ppf code
+  | Flat_set_of_closures (_, set) -> Set_of_closures.print ppf set
+  | Flat_block_like (_, static_const) -> Static_const.print ppf static_const
+
+and print_flattened ppf
+    { second_or_later_binding_within_one_set = _;
+      second_or_later_rec_binding;
+      descr
+    } =
+  fprintf ppf "@[<hov 0>";
+  (* if second_or_later_rec_binding && not
+     second_or_later_binding_within_one_set then begin fprintf ppf
+     "@<0>%sand_set @<0>%s" (Flambda_colours.elide ()) (Flambda_colours.normal
+     ()) end else *)
+  (if second_or_later_rec_binding
+  then
+    fprintf ppf "@<0>%sand @<0>%s"
+      (Flambda_colours.expr_keyword ())
+      (Flambda_colours.normal ())
+  else
+    let shape = "\u{25b7}" (* unfilled triangle *) in
+    fprintf ppf "@<0>%s@<1>%s @<0>%s" (shape_colour descr) shape
+      (Flambda_colours.normal ()));
+  fprintf ppf "%a@<0>%s =@<0>%s@ %a@]" print_flattened_descr_lhs descr
+    (Flambda_colours.elide ())
+    (Flambda_colours.normal ())
+    print_flattened_descr_rhs descr
+
+and flatten_let_symbol t : _ * expr =
+  let rec flatten (expr : expr) : _ * expr =
+    match descr expr with
+    | Let t -> begin
+      match flatten_for_printing t with
+      | Some (flattened, body) ->
+        let flattened', body = flatten body in
+        flattened @ flattened', body
+      | None -> [], expr
+    end
+    | _ -> [], expr
+  in
+  match flatten_for_printing t with
+  | Some (flattened, body) ->
+    let flattened', body = flatten body in
+    flattened @ flattened', body
+  | None -> assert false
+(* see below *)
+
+(* CR mshinwell: Merge the "let symbol" and "normal let" cases to use the same
+   flattened type? *)
+and print_let_symbol ppf t =
+  let rec print_more flattened =
+    match flattened with
+    | [] -> ()
+    | flat :: flattened ->
+      fprintf ppf "@ ";
+      print_flattened ppf flat;
+      print_more flattened
+  in
+  let flattened, body = flatten_let_symbol t in
+  match flattened with
+  | [] -> assert false
+  | flat :: flattened ->
+    fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ @[<v 0>%a"
+      (Flambda_colours.expr_keyword ())
+      (Flambda_colours.normal ())
+      print_flattened flat;
+    print_more flattened;
+    fprintf ppf "@]@ %a)@]" print body
+
+(* For printing all kinds of let-expressions: *)
+and print_let_expr ppf ({ let_abst = _; defining_expr } as t) : unit =
+  let let_bound_var_colour bound_pattern defining_expr =
+    let name_mode = Bound_pattern.name_mode bound_pattern in
+    if Name_mode.is_phantom name_mode
+    then Flambda_colours.elide ()
+    else
+      match (defining_expr : named) with
+      | Rec_info _ -> Flambda_colours.depth_variable ()
+      | Simple _ | Prim _ | Set_of_closures _ | Static_consts _ ->
+        Flambda_colours.variable ()
+  in
+  let rec let_body (expr : expr) =
+    match descr expr with
+    | Let ({ let_abst = _; defining_expr } as t) ->
+      pattern_match_let t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
+          match bound_pattern with
+          | Singleton _ | Set_of_closures _ ->
+            fprintf ppf "@ @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
+              (let_bound_var_colour bound_pattern defining_expr)
+              Bound_pattern.print bound_pattern (Flambda_colours.elide ())
+              (Flambda_colours.normal ())
+              print_named defining_expr;
+            let_body body
+          | Symbols _ -> expr)
+    | _ -> expr
+  in
+  pattern_match_let t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
+      match bound_pattern with
+      | Symbols _ -> print_let_symbol ppf t
+      | Singleton _ | Set_of_closures _ ->
+        fprintf ppf
+          "@[<v 1>(@<0>%slet@<0>%s@ (@[<v 0>@[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ \
+           %a@]"
+          (Flambda_colours.expr_keyword ())
+          (Flambda_colours.normal ())
+          (let_bound_var_colour bound_pattern defining_expr)
+          Bound_pattern.print bound_pattern (Flambda_colours.elide ())
+          (Flambda_colours.normal ())
+          print_named defining_expr;
+        let expr = let_body body in
+        fprintf ppf "@])@ %a)@]" print expr)
+
+and print_named ppf (t : named) =
+  let print_or_elide_debuginfo ppf dbg =
+    if Debuginfo.is_none dbg
+    then Format.pp_print_string ppf ""
+    else begin
+      Format.pp_print_string ppf " ";
+      Debuginfo.print_compact ppf dbg
+    end
+  in
+  match t with
+  | Simple simple -> Simple.print ppf simple
+  | Prim (prim, dbg) ->
+    fprintf ppf "@[<hov 1>(%a@<0>%s%a@<0>%s)@]" Flambda_primitive.print prim
+      (Flambda_colours.debuginfo ())
+      print_or_elide_debuginfo dbg
+      (Flambda_colours.normal ())
+  | Set_of_closures set_of_closures -> Set_of_closures.print ppf set_of_closures
+  | Static_consts consts -> print_static_const_group ppf consts
+  | Rec_info rec_info_expr -> Rec_info_expr.print ppf rec_info_expr
+
+and print_static_const_group ppf static_const_group =
+  Format.fprintf ppf "@[<hov 1>(%a)@]"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+       print_static_const_or_code)
+    static_const_group
+
+and print_static_const_or_code ppf static_const_or_code =
+  match static_const_or_code with
+  | Code code ->
+    fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ %a)@]"
+      (Flambda_colours.static_part ())
+      (Flambda_colours.normal ())
+      (Code0.print ~print_function_params_and_body)
+      code
+  | Static_const const -> Static_const.print ppf const
 
 module rec Continuation_handler : sig
   (** The representation of the alpha-equivalence class of bindings of a list of
@@ -117,20 +840,13 @@ module rec Continuation_handler : sig
 
   include Contains_ids.S with type t := t
 
-  val print_using_where :
-    Recursive.t ->
-    Format.formatter ->
-    Continuation.t ->
-    t ->
-    Num_occurrences.t Or_unknown.t ->
-    first:bool ->
-    unit
+  val print : Format.formatter -> t -> unit
 
   (** Create a value of type [t] given information about a continuation
       handler. *)
   val create :
     Bound_parameter.t list ->
-    handler:Expr.t ->
+    handler:expr ->
     free_names_of_handler:Name_occurrences.t Or_unknown.t ->
     is_exn_handler:bool ->
     t
@@ -143,12 +859,12 @@ module rec Continuation_handler : sig
     f:
       (Bound_parameter.t list ->
       num_normal_occurrences_of_params:Num_occurrences.t Variable.Map.t ->
-      handler:Expr.t ->
+      handler:expr ->
       'a) ->
     'a
 
   val pattern_match :
-    t -> f:(Bound_parameter.t list -> handler:Expr.t -> 'a) -> 'a
+    t -> f:(Bound_parameter.t list -> handler:expr -> 'a) -> 'a
 
   module Pattern_match_pair_error : sig
     type t = Parameter_lists_have_different_lengths
@@ -161,7 +877,7 @@ module rec Continuation_handler : sig
   val pattern_match_pair :
     t ->
     t ->
-    f:(Bound_parameter.t list -> handler1:Expr.t -> handler2:Expr.t -> 'a) ->
+    f:(Bound_parameter.t list -> handler1:expr -> handler2:expr -> 'a) ->
     ('a, Pattern_match_pair_error.t) Result.t
 
   (** Whether the continuation is an exception handler.
@@ -182,30 +898,18 @@ end = struct
   module T0 = struct
     type t = continuation_handler_t0
 
-    let [@ocamlformat "disable"] print ppf
-          { handler; num_normal_occurrences_of_params = _; } =
-      fprintf ppf "@[<hov 1>(\
-          @[<hov 1>(handler@ %a)@]\
-          )@]"
-        Expr.print handler
-
     let free_names { handler; num_normal_occurrences_of_params = _ } =
       Expr.free_names handler
 
-    let apply_renaming ({ handler; num_normal_occurrences_of_params } as t) perm
-        =
-      let handler' = Expr.apply_renaming handler perm in
-      if handler == handler'
-      then t
-      else { handler = handler'; num_normal_occurrences_of_params }
+    let apply_renaming = apply_renaming_continuation_handler_t0
 
     let all_ids_for_export { handler; num_normal_occurrences_of_params = _ } =
       Expr.all_ids_for_export handler
   end
 
-  module A = Name_abstraction.Make (Bound_parameters) (T0)
-
   type t = continuation_handler
+
+  module A = Name_abstraction.Make (Bound_parameters) (T0)
 
   let create params ~handler ~(free_names_of_handler : _ Or_unknown.t)
       ~is_exn_handler =
@@ -226,17 +930,16 @@ end = struct
     let cont_handler_abst = A.create (Bound_parameters.create params) t0 in
     { cont_handler_abst; is_exn_handler }
 
+  let print = Misc.fatal_error "Not implemented"
+
+  let pattern_match = pattern_match_continuation_handler
+
   let pattern_match' t ~f =
     A.pattern_match t.cont_handler_abst
       ~f:(fun params { handler; num_normal_occurrences_of_params } ->
         f
           (Bound_parameters.to_list params)
           ~num_normal_occurrences_of_params ~handler)
-
-  let pattern_match t ~f =
-    A.pattern_match t.cont_handler_abst
-      ~f:(fun params { handler; num_normal_occurrences_of_params = _ } ->
-        f (Bound_parameters.to_list params) ~handler)
 
   module Pattern_match_pair_error = struct
     type t = Parameter_lists_have_different_lengths
@@ -249,65 +952,24 @@ end = struct
   let pattern_match_pair t1 t2 ~f =
     pattern_match t1 ~f:(fun params1 ~handler:_ ->
         pattern_match t2 ~f:(fun params2 ~handler:_ ->
-            (* CR lmaurer: Should this check be done by
-               [Name_abstraction.Make_list]? *)
             if List.compare_lengths params1 params2 = 0
             then
               A.pattern_match_pair t1.cont_handler_abst t2.cont_handler_abst
                 ~f:(fun
                      params
-                     { handler = handler1; _ }
-                     { handler = handler2; _ }
+                     ({ handler = handler1; _ } : T0.t)
+                     ({ handler = handler2; _ } : T0.t)
                    ->
                   Ok (f (Bound_parameters.to_list params) ~handler1 ~handler2))
             else
               Error
                 Pattern_match_pair_error.Parameter_lists_have_different_lengths))
 
-  let print_using_where (recursive : Recursive.t) ppf k
-      ({ cont_handler_abst = _; is_exn_handler } as t) occurrences ~first =
-    let fprintf = Format.fprintf in
-    if not first then fprintf ppf "@ ";
-    pattern_match t ~f:(fun params ~handler ->
-        begin
-          match Expr.descr handler with
-          | Apply_cont _ | Invalid _ -> fprintf ppf "@[<hov 1>"
-          | _ -> fprintf ppf "@[<v 1>"
-        end;
-        fprintf ppf "@<0>%s%a@<0>%s%s@<0>%s%s@<0>%s"
-          (Flambda_colours.continuation_definition ())
-          Continuation.print k
-          (Flambda_colours.expr_keyword ())
-          (match recursive with Non_recursive -> "" | Recursive -> " (rec)")
-          (Flambda_colours.continuation_annotation ())
-          (if is_exn_handler then "[eh]" else "")
-          (Flambda_colours.normal ());
-        if List.length params > 0
-        then fprintf ppf " %a" Bound_parameter.List.print params;
-        fprintf ppf "@<0>%s #%a:@<0>%s@ %a" (Flambda_colours.elide ())
-          (Or_unknown.print Num_occurrences.print)
-          occurrences
-          (Flambda_colours.normal ())
-          Expr.print handler;
-        fprintf ppf "@]")
-
-  let [@ocamlformat "disable"] print ppf { cont_handler_abst; is_exn_handler; } =
-    Format.fprintf ppf "@[<hov 1>\
-        @[<hov 1>(params_and_handler@ %a)@]@ \
-        @[<hov 1>(is_exn_handler@ %b)@]\
-        @]"
-      A.print cont_handler_abst
-      is_exn_handler
-
   let is_exn_handler t = t.is_exn_handler
 
   let free_names t = A.free_names t.cont_handler_abst
 
-  let apply_renaming ({ cont_handler_abst; is_exn_handler } as t) perm =
-    let cont_handler_abst' = A.apply_renaming cont_handler_abst perm in
-    if cont_handler_abst == cont_handler_abst'
-    then t
-    else { cont_handler_abst = cont_handler_abst'; is_exn_handler }
+  let apply_renaming = apply_renaming_continuation_handler
 
   let all_ids_for_export { cont_handler_abst; is_exn_handler = _ } =
     A.all_ids_for_export cont_handler_abst
@@ -342,13 +1004,7 @@ end = struct
           (Continuation_handler.free_names handler))
       t Name_occurrences.empty
 
-  let apply_renaming t perm =
-    Continuation.Map.fold
-      (fun k handler result ->
-        let k = Renaming.apply_continuation perm k in
-        let handler = Continuation_handler.apply_renaming handler perm in
-        Continuation.Map.add k handler result)
-      t Continuation.Map.empty
+  let apply_renaming = apply_renaming_continuation_handlers
 
   let all_ids_for_export t =
     Continuation.Map.fold
@@ -396,7 +1052,7 @@ and Expr : sig
   val create_invalid : ?semantics:Invalid_term_semantics.t -> unit -> t
 
   val bind_parameters_to_args_no_simplification :
-    params:Bound_parameter.t list -> args:Simple.t list -> body:Expr.t -> Expr.t
+    params:Bound_parameter.t list -> args:Simple.t list -> body:expr -> expr
 end = struct
   module Descr = struct
     let free_names t =
@@ -407,25 +1063,6 @@ end = struct
       | Apply_cont apply_cont -> Apply_cont.free_names apply_cont
       | Switch switch -> Switch.free_names switch
       | Invalid _ -> Name_occurrences.empty
-
-    let apply_renaming t perm =
-      match t with
-      | Let let_expr ->
-        let let_expr' = Let_expr.apply_renaming let_expr perm in
-        if let_expr == let_expr' then t else Let let_expr'
-      | Let_cont let_cont ->
-        let let_cont' = Let_cont_expr.apply_renaming let_cont perm in
-        if let_cont == let_cont' then t else Let_cont let_cont'
-      | Apply apply ->
-        let apply' = Apply.apply_renaming apply perm in
-        if apply == apply' then t else Apply apply'
-      | Apply_cont apply_cont ->
-        let apply_cont' = Apply_cont.apply_renaming apply_cont perm in
-        if apply_cont == apply_cont' then t else Apply_cont apply_cont'
-      | Switch switch ->
-        let switch' = Switch.apply_renaming switch perm in
-        if switch == switch' then t else Switch switch'
-      | Invalid _ -> t
   end
 
   (* CR mshinwell: Work out how to use [With_delayed_permutation] here. There
@@ -438,20 +1075,9 @@ end = struct
 
   let create descr = { descr; delayed_permutation = Renaming.empty }
 
-  let descr t =
-    if Renaming.is_empty t.delayed_permutation
-    then t.descr
-    else
-      let descr = Descr.apply_renaming t.descr t.delayed_permutation in
-      t.descr <- descr;
-      t.delayed_permutation <- Renaming.empty;
-      descr
+  let descr = descr
 
-  let apply_renaming t perm =
-    let delayed_permutation =
-      Renaming.compose ~second:perm ~first:t.delayed_permutation
-    in
-    { t with delayed_permutation }
+  let apply_renaming = apply_renaming
 
   let free_names t = Descr.free_names (descr t)
 
@@ -464,25 +1090,7 @@ end = struct
     | Switch switch -> Switch.all_ids_for_export switch
     | Invalid _ -> Ids_for_export.empty
 
-  (* CR mshinwell: We might want printing functions that show the delayed
-     permutation, etc. *)
-
-  let [@ocamlformat "disable"] print ppf (t : t) =
-    match descr t with
-    | Let let_expr -> Let_expr.print ppf let_expr
-    | Let_cont let_cont -> Let_cont_expr.print ppf let_cont
-    | Apply apply ->
-      Format.fprintf ppf "@[<hov 1>(@<0>%sapply@<0>%s@ %a)@]"
-        (Flambda_colours.expr_keyword ())
-        (Flambda_colours.normal ())
-        Apply.print apply
-    | Apply_cont apply_cont -> Apply_cont.print ppf apply_cont
-    | Switch switch -> Switch.print ppf switch
-    | Invalid semantics ->
-      fprintf ppf "@[@<0>%sInvalid %a@<0>%s@]"
-        (Flambda_colours.expr_keyword ())
-        Invalid_term_semantics.print semantics
-        (Flambda_colours.normal ())
+  let print = print
 
   let create_let let_expr = create (Let let_expr)
 
@@ -542,7 +1150,7 @@ and Function_params_and_body : sig
     exn_continuation:Continuation.t ->
     Bound_parameter.t list ->
     dbg:Debuginfo.t ->
-    body:Expr.t ->
+    body:expr ->
     free_names_of_body:Name_occurrences.t Or_unknown.t ->
     my_closure:Variable.t ->
     my_depth:Variable.t ->
@@ -562,7 +1170,7 @@ and Function_params_and_body : sig
         (** To where we must jump if application of the function raises an
             exception. *) ->
       Bound_parameter.t list ->
-      body:Expr.t ->
+      body:expr ->
       my_closure:Variable.t ->
       is_my_closure_used:bool Or_unknown.t ->
       my_depth:Variable.t ->
@@ -586,8 +1194,8 @@ and Function_params_and_body : sig
         (** To where we must jump if application of the function raises an
             exception. *) ->
       Bound_parameter.t list ->
-      body1:Expr.t ->
-      body2:Expr.t ->
+      body1:expr ->
+      body2:expr ->
       my_closure:Variable.t ->
       my_depth:Variable.t ->
       'a) ->
@@ -600,28 +1208,16 @@ end = struct
   module Base = struct
     type t = function_params_and_body_base
 
-    let print fmt { expr; free_names = _ } =
-      Format.fprintf fmt "%a" Expr.print expr
-
     let free_names { expr; free_names } =
       match free_names with
       | Known free_names -> free_names
       | Unknown -> Expr.free_names expr
 
-    let apply_renaming { expr; free_names } perm =
-      let expr = Expr.apply_renaming expr perm in
-      let free_names =
-        Or_unknown.map free_names ~f:(fun free_names ->
-            Name_occurrences.apply_renaming free_names perm)
-      in
-      { expr; free_names }
+    let apply_renaming = apply_renaming_function_params_and_body_base
 
     let all_ids_for_export { expr; free_names = _ } =
       Expr.all_ids_for_export expr
   end
-
-  (* CR mshinwell: use [Continuation] instead of [Exn_continuation] everywhere
-     for function return continuations. *)
 
   module A = Name_abstraction.Make (Bound_for_function) (Base)
 
@@ -645,19 +1241,9 @@ end = struct
       is_my_closure_used
     }
 
-  let pattern_match t ~f =
-    A.pattern_match t.abst ~f:(fun bound_for_function { expr; free_names } ->
-        f
-          ~return_continuation:
-            (Bound_for_function.return_continuation bound_for_function)
-          ~exn_continuation:
-            (Bound_for_function.exn_continuation bound_for_function)
-          (Bound_for_function.params bound_for_function)
-          ~body:expr
-          ~my_closure:(Bound_for_function.my_closure bound_for_function)
-          ~is_my_closure_used:t.is_my_closure_used
-          ~my_depth:(Bound_for_function.my_depth bound_for_function)
-          ~free_names_of_body:free_names)
+  let print = print_function_params_and_body
+
+  let pattern_match = pattern_match_function_params_and_body
 
   let pattern_match_pair t1 t2 ~f =
     A.pattern_match_pair t1.abst t2.abst
@@ -676,38 +1262,9 @@ end = struct
           ~my_closure:(Bound_for_function.my_closure bound_for_function)
           ~my_depth:(Bound_for_function.my_depth bound_for_function))
 
-  let [@ocamlformat "disable"] print ppf t =
-    pattern_match t
-      ~f:(fun ~return_continuation ~exn_continuation params ~body ~my_closure
-              ~is_my_closure_used:_ ~my_depth ~free_names_of_body:_ ->
-        let my_closure =
-          Bound_parameter.create my_closure
-            (K.With_subkind.create K.value Anything)
-        in
-        fprintf ppf
-          "@[<hov 1>(@<0>%s@<1>\u{03bb}@<0>%s@[<hov 1>\
-           @<1>\u{3008}%a@<1>\u{3009}@<1>\u{300a}%a@<1>\u{300b}\
-           %a %a @<0>%s%a @<0>%s.@<0>%s@]@ %a))@]"
-          (Flambda_colours.lambda ())
-          (Flambda_colours.normal ())
-          Continuation.print return_continuation
-          Continuation.print exn_continuation
-          Bound_parameter.List.print params
-          Bound_parameter.print my_closure
-          (Flambda_colours.depth_variable ())
-          Variable.print my_depth
-          (Flambda_colours.elide ())
-          (Flambda_colours.normal ())
-          Expr.print body)
-
   let params_arity t = t.params_arity
 
-  let apply_renaming ({ abst; dbg; params_arity; is_my_closure_used } as t) perm
-      =
-    let abst' = A.apply_renaming abst perm in
-    if abst == abst'
-    then t
-    else { abst = abst'; dbg; params_arity; is_my_closure_used }
+  let apply_renaming = apply_renaming_function_params_and_body
 
   let free_names { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
     A.free_names abst
@@ -749,67 +1306,25 @@ and Let_cont_expr : sig
   val create_non_recursive :
     Continuation.t ->
     Continuation_handler.t ->
-    body:Expr.t ->
+    body:expr ->
     free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    Expr.t
+    expr
 
   val create_non_recursive' :
     cont:Continuation.t ->
     Continuation_handler.t ->
-    body:Expr.t ->
+    body:expr ->
     num_free_occurrences_of_cont_in_body:Num_occurrences.t Or_unknown.t ->
     is_applied_with_traps:bool ->
-    Expr.t
+    expr
 
   (** Create a definition of a set of possibly-recursive continuations. *)
   val create_recursive :
-    Continuation_handler.t Continuation.Map.t -> body:Expr.t -> Expr.t
+    Continuation_handler.t Continuation.Map.t -> body:expr -> expr
 end = struct
   type t = let_cont_expr
 
-  let print ppf t =
-    let rec gather_let_conts let_conts let_cont =
-      match let_cont with
-      | Non_recursive
-          { handler; num_free_occurrences; is_applied_with_traps = _ } ->
-        Non_recursive_let_cont_handler.pattern_match handler
-          ~f:(fun k ~(body : Expr.t) ->
-            let let_conts, body =
-              match Expr.descr body with
-              | Let_cont let_cont -> gather_let_conts let_conts let_cont
-              | _ -> let_conts, body
-            in
-            let handler = Non_recursive_let_cont_handler.handler handler in
-            ( (k, Recursive.Non_recursive, handler, num_free_occurrences)
-              :: let_conts,
-              body ))
-      | Recursive handlers ->
-        Recursive_let_cont_handlers.pattern_match handlers
-          ~f:(fun ~(body : Expr.t) handlers ->
-            let handlers = Continuation_handlers.to_map handlers in
-            let let_conts, body =
-              match Expr.descr body with
-              | Let_cont let_cont -> gather_let_conts let_conts let_cont
-              | _ -> let_conts, body
-            in
-            let new_let_conts =
-              List.map
-                (fun (k, handler) ->
-                  k, Recursive.Recursive, handler, Or_unknown.Unknown)
-                (Continuation.Map.bindings handlers)
-            in
-            new_let_conts @ let_conts, body)
-    in
-    let let_conts, body = gather_let_conts [] t in
-    fprintf ppf "@[<v 1>(%a@;" Expr.print body;
-    let first = ref true in
-    List.iter
-      (fun (cont, recursive, handler, occurrences) ->
-        Continuation_handler.print_using_where recursive ppf cont handler
-          occurrences ~first:!first;
-        first := false)
-      (List.rev let_conts);
-    fprintf ppf ")@]"
+  let print = print_let_cont_expr
 
   let create_non_recursive' ~cont handler ~body
       ~num_free_occurrences_of_cont_in_body:num_free_occurrences
@@ -846,22 +1361,7 @@ end = struct
       Non_recursive_let_cont_handler.free_names handler
     | Recursive handlers -> Recursive_let_cont_handlers.free_names handlers
 
-  let apply_renaming t perm =
-    match t with
-    | Non_recursive { handler; num_free_occurrences; is_applied_with_traps } ->
-      let handler' =
-        Non_recursive_let_cont_handler.apply_renaming handler perm
-      in
-      if handler == handler'
-      then t
-      else
-        Non_recursive
-          { handler = handler'; num_free_occurrences; is_applied_with_traps }
-    | Recursive handlers ->
-      let handlers' =
-        Recursive_let_cont_handlers.apply_renaming handlers perm
-      in
-      if handlers == handlers' then t else Recursive handlers'
+  let apply_renaming = apply_renaming_let_cont_expr
 
   let all_ids_for_export t =
     match t with
@@ -882,24 +1382,24 @@ and Let_expr : sig
 
   val create :
     Bound_pattern.t ->
-    Named.t ->
-    body:Expr.t ->
+    named ->
+    body:expr ->
     free_names_of_body:Name_occurrences.t Or_unknown.t ->
     t
 
   (** The defining expression of the [Let]. *)
-  val defining_expr : t -> Named.t
+  val defining_expr : t -> named
 
   (** Look inside the [Let] by choosing a member of the alpha-equivalence
       class. *)
-  val pattern_match : t -> f:(Bound_pattern.t -> body:Expr.t -> 'a) -> 'a
+  val pattern_match : t -> f:(Bound_pattern.t -> body:expr -> 'a) -> 'a
 
   val pattern_match' :
     t ->
     f:
       (Bound_pattern.t ->
       num_normal_occurrences_of_bound_vars:Num_occurrences.t Variable.Map.t ->
-      body:Expr.t ->
+      body:expr ->
       'a) ->
     'a
 
@@ -918,43 +1418,22 @@ and Let_expr : sig
   val pattern_match_pair :
     t ->
     t ->
-    dynamic:(Bound_pattern.t -> body1:Expr.t -> body2:Expr.t -> 'a) ->
+    dynamic:(Bound_pattern.t -> body1:expr -> body2:expr -> 'a) ->
     static:
       (bound_symbols1:Bound_pattern.symbols ->
       bound_symbols2:Bound_pattern.symbols ->
-      body1:Expr.t ->
-      body2:Expr.t ->
+      body1:expr ->
+      body2:expr ->
       'a) ->
     ('a, Pattern_match_pair_error.t) Result.t
 end = struct
   module T0 = struct
     type t = let_expr_t0
 
-    let [@ocamlformat "disable"] print ppf
-          { body; num_normal_occurrences_of_bound_vars = _; } =
-      fprintf ppf "@[<hov 1>(\
-          @[<hov 1>(body@ %a)@]\
-          )@]"
-        Expr.print body
-
     let free_names { body; num_normal_occurrences_of_bound_vars = _ } =
       Expr.free_names body
 
-    let apply_renaming ({ body; num_normal_occurrences_of_bound_vars } as t)
-        perm =
-      let body' = Expr.apply_renaming body perm in
-      let changed = ref (body != body') in
-      let num_normal_occurrences_of_bound_vars =
-        Variable.Map.fold
-          (fun var num result ->
-            let var' = Renaming.apply_variable perm var in
-            changed := !changed || var != var';
-            Variable.Map.add var' num result)
-          num_normal_occurrences_of_bound_vars Variable.Map.empty
-      in
-      if not !changed
-      then t
-      else { body = body'; num_normal_occurrences_of_bound_vars }
+    let apply_renaming = apply_renaming_let_expr_t0
 
     let all_ids_for_export { body; num_normal_occurrences_of_bound_vars = _ } =
       Expr.all_ids_for_export body
@@ -964,12 +1443,10 @@ end = struct
 
   type t = let_expr
 
-  let pattern_match t ~f =
-    A.pattern_match t.name_abstraction ~f:(fun bound_pattern t0 ->
-        f bound_pattern ~body:t0.body)
+  let pattern_match = pattern_match_let
 
   let pattern_match' t ~f =
-    A.pattern_match t.name_abstraction ~f:(fun bound_pattern t0 ->
+    A.pattern_match t.let_abst ~f:(fun bound_pattern t0 ->
         let num_normal_occurrences_of_bound_vars =
           t0.num_normal_occurrences_of_bound_vars
         in
@@ -983,13 +1460,13 @@ end = struct
   end
 
   let pattern_match_pair t1 t2 ~dynamic ~static =
-    A.pattern_match t1.name_abstraction ~f:(fun bound_pattern1 t0_1 ->
+    A.pattern_match t1.let_abst ~f:(fun bound_pattern1 t0_1 ->
         let body1 = t0_1.body in
-        A.pattern_match t2.name_abstraction ~f:(fun bound_pattern2 t0_2 ->
+        A.pattern_match t2.let_abst ~f:(fun bound_pattern2 t0_2 ->
             let body2 = t0_2.body in
             let dynamic_case () =
               let ans =
-                A.pattern_match_pair t1.name_abstraction t2.name_abstraction
+                A.pattern_match_pair t1.let_abst t2.let_abst
                   ~f:(fun bound_pattern t0_1 t0_2 ->
                     dynamic bound_pattern ~body1:t0_1.body ~body2:t0_2.body)
               in
@@ -1019,212 +1496,9 @@ end = struct
               else Error Pattern_match_pair_error.Mismatched_let_bindings
             | _, _ -> Error Pattern_match_pair_error.Mismatched_let_bindings))
 
-  (* For printing "let symbol": *)
+  let print = print_let_expr
 
-  type flattened_for_printing_descr =
-    | Code of Function_params_and_body.t Code0.t
-    | Set_of_closures of Symbol.t Closure_id.Lmap.t * Set_of_closures.t
-    | Block_like of Symbol.t * Static_const.t
-
-  type flattened_for_printing =
-    { second_or_later_binding_within_one_set : bool;
-      second_or_later_rec_binding : bool;
-      descr : flattened_for_printing_descr
-    }
-
-  let shape_colour descr =
-    match descr with
-    | Code _ -> Flambda_colours.code_id ()
-    | Set_of_closures _ | Block_like _ -> Flambda_colours.symbol ()
-
-  (* CR mshinwell: Remove [second_or_later_binding_within_one_set] if it doesn't
-     become used soon. *)
-
-  let flatten_for_printing0 bound_symbols defining_exprs =
-    Static_const_group.match_against_bound_symbols defining_exprs bound_symbols
-      ~init:([], false)
-      ~code:(fun (flattened_acc, second_or_later_rec_binding) _code_id code ->
-        let flattened =
-          { second_or_later_binding_within_one_set = false;
-            second_or_later_rec_binding;
-            descr = Code code
-          }
-        in
-        flattened_acc @ [flattened], true)
-      ~set_of_closures:
-        (fun (flattened_acc, second_or_later_rec_binding) ~closure_symbols
-             set_of_closures ->
-        let flattened =
-          if Set_of_closures.is_empty set_of_closures
-          then []
-          else
-            let second_or_later_binding_within_one_set = false in
-            [ { second_or_later_binding_within_one_set;
-                second_or_later_rec_binding;
-                descr = Set_of_closures (closure_symbols, set_of_closures)
-              } ]
-        in
-        flattened_acc @ flattened, true)
-      ~block_like:
-        (fun (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
-        let flattened =
-          { second_or_later_binding_within_one_set = false;
-            second_or_later_rec_binding;
-            descr = Block_like (symbol, defining_expr)
-          }
-        in
-        flattened_acc @ [flattened], true)
-
-  let flatten_for_printing t =
-    pattern_match t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
-        match bound_pattern with
-        | Symbols { bound_symbols } ->
-          let flattened, _ =
-            flatten_for_printing0 bound_symbols
-              (Named.must_be_static_consts t.defining_expr)
-          in
-          Some (flattened, body)
-        | Singleton _ | Set_of_closures _ -> None)
-
-  let print_closure_binding ppf (closure_id, sym) =
-    Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]" Symbol.print sym
-      (Flambda_colours.elide ()) (Flambda_colours.elide ()) Closure_id.print
-      closure_id
-
-  let print_flattened_descr_lhs ppf descr =
-    match descr with
-    | Code code -> Code_id.print ppf (Code0.code_id code)
-    | Set_of_closures (closure_symbols, _) ->
-      Format.fprintf ppf "@[<hov 0>%a@]"
-        (Format.pp_print_list
-           ~pp_sep:(fun ppf () ->
-             Format.fprintf ppf "@<0>%s,@ @<0>%s" (Flambda_colours.elide ())
-               (Flambda_colours.normal ()))
-           print_closure_binding)
-        (Closure_id.Lmap.bindings closure_symbols)
-    | Block_like (symbol, _) -> Symbol.print ppf symbol
-
-  let print_flattened_descr_rhs ppf descr =
-    match descr with
-    | Code code ->
-      Code0.print ~print_function_params_and_body:Function_params_and_body.print
-        ppf code
-    | Set_of_closures (_, set) -> Set_of_closures.print ppf set
-    | Block_like (_, static_const) -> Static_const.print ppf static_const
-
-  let print_flattened ppf
-      { second_or_later_binding_within_one_set = _;
-        second_or_later_rec_binding;
-        descr
-      } =
-    fprintf ppf "@[<hov 0>";
-    (* if second_or_later_rec_binding && not
-       second_or_later_binding_within_one_set then begin fprintf ppf
-       "@<0>%sand_set @<0>%s" (Flambda_colours.elide ()) (Flambda_colours.normal
-       ()) end else *)
-    (if second_or_later_rec_binding
-    then
-      fprintf ppf "@<0>%sand @<0>%s"
-        (Flambda_colours.expr_keyword ())
-        (Flambda_colours.normal ())
-    else
-      let shape = "\u{25b7}" (* unfilled triangle *) in
-      fprintf ppf "@<0>%s@<1>%s @<0>%s" (shape_colour descr) shape
-        (Flambda_colours.normal ()));
-    fprintf ppf "%a@<0>%s =@<0>%s@ %a@]" print_flattened_descr_lhs descr
-      (Flambda_colours.elide ())
-      (Flambda_colours.normal ())
-      print_flattened_descr_rhs descr
-
-  let flatten_let_symbol t : _ * Expr.t =
-    let rec flatten (expr : Expr.t) : _ * Expr.t =
-      match Expr.descr expr with
-      | Let t -> begin
-        match flatten_for_printing t with
-        | Some (flattened, body) ->
-          let flattened', body = flatten body in
-          flattened @ flattened', body
-        | None -> [], expr
-      end
-      | _ -> [], expr
-    in
-    match flatten_for_printing t with
-    | Some (flattened, body) ->
-      let flattened', body = flatten body in
-      flattened @ flattened', body
-    | None -> assert false
-  (* see below *)
-
-  (* CR mshinwell: Merge the "let symbol" and "normal let" cases to use the same
-     flattened type? *)
-  let print_let_symbol ppf t =
-    let rec print_more flattened =
-      match flattened with
-      | [] -> ()
-      | flat :: flattened ->
-        fprintf ppf "@ ";
-        print_flattened ppf flat;
-        print_more flattened
-    in
-    let flattened, body = flatten_let_symbol t in
-    match flattened with
-    | [] -> assert false
-    | flat :: flattened ->
-      fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ @[<v 0>%a"
-        (Flambda_colours.expr_keyword ())
-        (Flambda_colours.normal ())
-        print_flattened flat;
-      print_more flattened;
-      fprintf ppf "@]@ %a)@]" Expr.print body
-
-  (* For printing all kinds of let-expressions: *)
-
-  let [@ocamlformat "disable"] print ppf
-        ({ name_abstraction = _; defining_expr; } as t) =
-    let let_bound_var_colour bound_pattern defining_expr =
-      let name_mode = Bound_pattern.name_mode bound_pattern in
-      if Name_mode.is_phantom name_mode then Flambda_colours.elide ()
-      else match (defining_expr : Named.t) with
-        | Rec_info _ ->
-          Flambda_colours.depth_variable ()
-        | Simple _ | Prim _ | Set_of_closures _ | Static_consts _ ->
-          Flambda_colours.variable ()
-    in
-    let rec let_body (expr : Expr.t) =
-      match Expr.descr expr with
-      | Let ({ name_abstraction = _; defining_expr; } as t) ->
-        pattern_match t
-          ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
-            match bound_pattern with
-            | Singleton _ | Set_of_closures _ ->
-              fprintf ppf
-                "@ @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
-                (let_bound_var_colour bound_pattern defining_expr)
-                Bound_pattern.print bound_pattern
-                (Flambda_colours.elide ())
-                (Flambda_colours.normal ())
-                Named.print defining_expr;
-              let_body body
-            | Symbols _ -> expr)
-      | _ -> expr
-    in
-    pattern_match t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
-      match bound_pattern with
-      | Symbols _ -> print_let_symbol ppf t
-      | Singleton _ | Set_of_closures _ ->
-        fprintf ppf "@[<v 1>(@<0>%slet@<0>%s@ (@[<v 0>\
-            @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
-          (Flambda_colours.expr_keyword ())
-          (Flambda_colours.normal ())
-          (let_bound_var_colour bound_pattern defining_expr)
-          Bound_pattern.print bound_pattern
-          (Flambda_colours.elide ())
-          (Flambda_colours.normal ())
-          Named.print defining_expr;
-        let expr = let_body body in
-        fprintf ppf "@])@ %a)@]" Expr.print expr)
-
-  let create (bound_pattern : Bound_pattern.t) (defining_expr : Named.t) ~body
+  let create (bound_pattern : Bound_pattern.t) (defining_expr : named) ~body
       ~(free_names_of_body : _ Or_unknown.t) =
     begin
       match defining_expr, bound_pattern with
@@ -1265,11 +1539,11 @@ end = struct
             Variable.Map.add var num num_occurrences)
     in
     let t0 : T0.t = { num_normal_occurrences_of_bound_vars; body } in
-    { name_abstraction = A.create bound_pattern t0; defining_expr }
+    { let_abst = A.create bound_pattern t0; defining_expr }
 
   let defining_expr t = t.defining_expr
 
-  let free_names ({ name_abstraction = _; defining_expr } as t) =
+  let free_names ({ let_abst = _; defining_expr } as t) =
     pattern_match t ~f:(fun bound_pattern ~body ->
         let from_bindable = Bound_pattern.free_names bound_pattern in
         let from_defining_expr =
@@ -1285,18 +1559,12 @@ end = struct
           (Name_occurrences.union from_defining_expr from_body)
           from_bindable)
 
-  let apply_renaming ({ name_abstraction; defining_expr } as t) perm =
-    let name_abstraction' = A.apply_renaming name_abstraction perm in
-    let defining_expr' = Named.apply_renaming defining_expr perm in
-    if name_abstraction == name_abstraction' && defining_expr == defining_expr'
-    then t
-    else
-      { name_abstraction = name_abstraction'; defining_expr = defining_expr' }
+  let apply_renaming = apply_renaming_let_expr
 
-  let all_ids_for_export { name_abstraction; defining_expr } =
+  let all_ids_for_export { let_abst; defining_expr } =
     let defining_expr_ids = Named.all_ids_for_export defining_expr in
-    let name_abstraction_ids = A.all_ids_for_export name_abstraction in
-    Ids_for_export.union defining_expr_ids name_abstraction_ids
+    let let_abst_ids = A.all_ids_for_export let_abst in
+    Ids_for_export.union defining_expr_ids let_abst_ids
 end
 
 and Named : sig
@@ -1328,12 +1596,12 @@ and Named : sig
   (** Build an expression boxing the name. The returned kind is the one of the
       unboxed version. *)
   val box_value :
-    Name.t -> Flambda_kind.t -> Debuginfo.t -> Named.t * Flambda_kind.t
+    Name.t -> Flambda_kind.t -> Debuginfo.t -> named * Flambda_kind.t
 
   (** Build an expression unboxing the name. The returned kind is the one of the
       unboxed version. *)
   val unbox_value :
-    Name.t -> Flambda_kind.t -> Debuginfo.t -> Named.t * Flambda_kind.t
+    Name.t -> Flambda_kind.t -> Debuginfo.t -> named * Flambda_kind.t
 
   (** Return a defining expression for a [Let] which is kind-correct, but not
       necessarily type-correct, at the given kind. *)
@@ -1361,30 +1629,6 @@ end = struct
 
   let create_rec_info rec_info_expr = Rec_info rec_info_expr
 
-  let print_or_elide_debuginfo ppf dbg =
-    if Debuginfo.is_none dbg
-    then Format.pp_print_string ppf ""
-    else begin
-      Format.pp_print_string ppf " ";
-      Debuginfo.print_compact ppf dbg
-    end
-
-  let [@ocamlformat "disable"] print ppf (t : t) =
-    match t with
-    | Simple simple -> Simple.print ppf simple
-    | Prim (prim, dbg) ->
-      fprintf ppf "@[<hov 1>(%a@<0>%s%a@<0>%s)@]"
-        Flambda_primitive.print prim
-        (Flambda_colours.debuginfo ())
-        print_or_elide_debuginfo dbg
-        (Flambda_colours.normal ())
-    | Set_of_closures set_of_closures ->
-      Set_of_closures.print ppf set_of_closures
-    | Static_consts consts ->
-      Static_const_group.print ppf consts
-    | Rec_info rec_info_expr ->
-      Rec_info_expr.print ppf rec_info_expr
-
   let free_names t =
     match t with
     | Simple simple -> Simple.free_names simple
@@ -1393,23 +1637,9 @@ end = struct
     | Static_consts consts -> Static_const_group.free_names consts
     | Rec_info rec_info_expr -> Rec_info_expr.free_names rec_info_expr
 
-  let apply_renaming t perm =
-    match t with
-    | Simple simple ->
-      let simple' = Simple.apply_renaming simple perm in
-      if simple == simple' then t else Simple simple'
-    | Prim (prim, dbg) ->
-      let prim' = Flambda_primitive.apply_renaming prim perm in
-      if prim == prim' then t else Prim (prim', dbg)
-    | Set_of_closures set ->
-      let set' = Set_of_closures.apply_renaming set perm in
-      if set == set' then t else Set_of_closures set'
-    | Static_consts consts ->
-      let consts' = Static_const_group.apply_renaming consts perm in
-      if consts == consts' then t else Static_consts consts'
-    | Rec_info rec_info_expr ->
-      let rec_info_expr' = Rec_info_expr.apply_renaming rec_info_expr perm in
-      if rec_info_expr == rec_info_expr' then t else Rec_info rec_info_expr'
+  let print = print_named
+
+  let apply_renaming = apply_renaming_named
 
   let all_ids_for_export t =
     match t with
@@ -1490,11 +1720,7 @@ end = struct
     | Static_consts _ -> true
     | Simple _ | Prim _ | Set_of_closures _ | Rec_info _ -> false
 
-  let must_be_static_consts t =
-    match t with
-    | Static_consts consts -> consts
-    | Simple _ | Prim _ | Set_of_closures _ | Rec_info _ ->
-      Misc.fatal_errorf "Must be [Static_consts], but is not: %a" print t
+  let must_be_static_consts = named_must_be_static_consts
 end
 
 and Non_recursive_let_cont_handler : sig
@@ -1508,17 +1734,17 @@ and Non_recursive_let_cont_handler : sig
 
   (** Deconstruct a continuation binding to get the name of the bound
       continuation and the expression over which it is scoped. *)
-  val pattern_match : t -> f:(Continuation.t -> body:Expr.t -> 'a) -> 'a
+  val pattern_match : t -> f:(Continuation.t -> body:expr -> 'a) -> 'a
 
   (** Deconstruct two continuation bindings using the same name. *)
   val pattern_match_pair :
-    t -> t -> f:(Continuation.t -> body1:Expr.t -> body2:Expr.t -> 'a) -> 'a
+    t -> t -> f:(Continuation.t -> body1:expr -> body2:expr -> 'a) -> 'a
 
   (** Obtain the continuation itself (rather than the body over which it is
       scoped). *)
   val handler : t -> Continuation_handler.t
 
-  val create : Continuation.t -> body:Expr.t -> Continuation_handler.t -> t
+  val create : Continuation.t -> body:expr -> Continuation_handler.t -> t
 end = struct
   module Continuation_and_body =
     Name_abstraction.Make (Bound_continuation) (Expr)
@@ -1533,9 +1759,7 @@ end = struct
     in
     { continuation_and_body; handler }
 
-  let pattern_match t ~f =
-    Continuation_and_body.pattern_match t.continuation_and_body
-      ~f:(fun continuation body -> f continuation ~body)
+  let pattern_match = pattern_match_non_recursive_let_cont_handler
 
   let pattern_match_pair t1 t2 ~f =
     Continuation_and_body.pattern_match_pair t1.continuation_and_body
@@ -1549,12 +1773,7 @@ end = struct
       (Continuation_and_body.free_names continuation_and_body)
       (Continuation_handler.free_names handler)
 
-  let apply_renaming { continuation_and_body; handler } perm =
-    let continuation_and_body' =
-      Continuation_and_body.apply_renaming continuation_and_body perm
-    in
-    let handler' = Continuation_handler.apply_renaming handler perm in
-    { handler = handler'; continuation_and_body = continuation_and_body' }
+  let apply_renaming = apply_renaming_non_recursive_let_cont_handler
 
   let all_ids_for_export { continuation_and_body; handler } =
     let handler_ids = Continuation_handler.all_ids_for_export handler in
@@ -1576,27 +1795,24 @@ and Recursive_let_cont_handlers : sig
 
   (** Deconstruct a continuation binding to get the bound continuations,
       together with the expressions and handlers over which they are scoped. *)
-  val pattern_match :
-    t -> f:(body:Expr.t -> Continuation_handlers.t -> 'a) -> 'a
+  val pattern_match : t -> f:(body:expr -> Continuation_handlers.t -> 'a) -> 'a
 
   (** Deconstruct two continuation bindings using the same bound continuations. *)
   val pattern_match_pair :
     t ->
     t ->
     f:
-      (body1:Expr.t ->
-      body2:Expr.t ->
+      (body1:expr ->
+      body2:expr ->
       Continuation_handlers.t ->
       Continuation_handlers.t ->
       'a) ->
     'a
 
-  val create : body:Expr.t -> Continuation_handlers.t -> t
+  val create : body:expr -> Continuation_handlers.t -> t
 end = struct
   module T0 = struct
     type t = recursive_let_cont_handlers_t0
-
-    let print _ppf _t = Misc.fatal_error "Not yet implemented"
 
     let create ~body handlers = { handlers; body }
 
@@ -1605,10 +1821,7 @@ end = struct
         (Continuation_handlers.free_names handlers)
         (Expr.free_names body)
 
-    let apply_renaming { handlers; body } perm =
-      let handlers' = Continuation_handlers.apply_renaming handlers perm in
-      let body' = Expr.apply_renaming body perm in
-      { handlers = handlers'; body = body' }
+    let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
 
     let all_ids_for_export { handlers; body } =
       let body_ids = Expr.all_ids_for_export body in
@@ -1616,27 +1829,39 @@ end = struct
       Ids_for_export.union body_ids handlers_ids
   end
 
-  include Name_abstraction.Make (Bound_continuations) (T0)
+  module A = Name_abstraction.Make (Bound_continuations) (T0)
 
   type t = recursive_let_cont_handlers
 
   let create ~body handlers =
     let bound = Continuation_handlers.domain handlers in
     let handlers0 = T0.create ~body handlers in
-    create
+    A.create
       (Bound_continuations.create (Continuation.Set.elements bound))
       handlers0
 
-  let pattern_match t ~f =
-    pattern_match t ~f:(fun _bound { handlers; body } -> f ~body handlers)
+  let pattern_match = pattern_match_recursive_let_cont_handlers
 
   let pattern_match_pair t1 t2 ~f =
-    pattern_match_pair t1 t2
+    A.pattern_match_pair t1 t2
       ~f:(fun
            _bound
-           { body = body1; handlers = handlers1 }
-           { body = body2; handlers = handlers2 }
-         -> f ~body1 ~body2 handlers1 handlers2)
+           (handlers0_1 : recursive_let_cont_handlers_t0)
+           (handlers0_2 : recursive_let_cont_handlers_t0)
+         ->
+        let body1 = handlers0_1.body in
+        let body2 = handlers0_2.body in
+        let handlers1 = handlers0_1.handlers in
+        let handlers2 = handlers0_2.handlers in
+        f ~body1 ~body2 handlers1 handlers2)
+
+  let free_names t = A.free_names t
+
+  let apply_renaming = apply_renaming_recursive_let_cont_handlers
+
+  let all_ids_for_export t = A.all_ids_for_export t
+
+  let print _ _ = Misc.fatal_error "Not implemented"
 end
 
 and Static_const_or_code : sig
@@ -1653,28 +1878,10 @@ and Static_const_or_code : sig
   val is_fully_static : t -> bool
 
   val to_code : t -> Function_params_and_body.t Code0.t option
-
-  val match_against_bound_symbols_pattern :
-    t ->
-    Bound_symbols.Pattern.t ->
-    code:(Code_id.t -> Function_params_and_body.t Code0.t -> 'a) ->
-    set_of_closures:
-      (closure_symbols:Symbol.t Closure_id.Lmap.t -> Set_of_closures.t -> 'a) ->
-    block_like:(Symbol.t -> Static_const.t -> 'a) ->
-    'a
 end = struct
   type t = static_const_or_code
 
-  let print ppf t =
-    match t with
-    | Code code ->
-      fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ %a)@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        (Code0.print
-           ~print_function_params_and_body:Function_params_and_body.print)
-        code
-    | Static_const const -> Static_const.print ppf const
+  let print = print_static_const_or_code
 
   include Container_types.Make (struct
     type nonrec t = t
@@ -1701,21 +1908,7 @@ end = struct
     | Code code -> Code0.free_names code
     | Static_const const -> Static_const.free_names const
 
-  let apply_renaming t renaming =
-    if Renaming.is_empty renaming
-    then t
-    else
-      match t with
-      | Code code ->
-        let code' =
-          Code0.apply_renaming
-            ~apply_renaming_function_params_and_body:
-              Function_params_and_body.apply_renaming code renaming
-        in
-        if code == code' then t else Code code'
-      | Static_const const ->
-        let const' = Static_const.apply_renaming const renaming in
-        if const == const' then t else Static_const const'
+  let apply_renaming = apply_renaming_static_const_or_code
 
   let all_ids_for_export t =
     match t with
@@ -1731,23 +1924,6 @@ end = struct
     | Static_const const -> Static_const.is_fully_static const
 
   let to_code t = match t with Code code -> Some code | Static_const _ -> None
-
-  let match_against_bound_symbols_pattern (t : t)
-      (pat : Bound_symbols.Pattern.t) ~code:code_callback ~set_of_closures
-      ~block_like =
-    match t, pat with
-    | Code code, Code code_id ->
-      if not (Code_id.equal (Code0.code_id code) code_id)
-      then
-        Misc.fatal_errorf "Mismatch on declared code IDs:@ %a@ =@ %a"
-          Bound_symbols.Pattern.print pat print t;
-      code_callback code_id code
-    | Static_const const, (Set_of_closures _ | Block_like _) ->
-      Static_const.match_against_bound_symbols_pattern const pat
-        ~set_of_closures ~block_like
-    | Static_const _, Code _ | Code _, (Set_of_closures _ | Block_like _) ->
-      Misc.fatal_errorf "Mismatch on variety of [Static_const]:@ %a@ =@ %a"
-        Bound_symbols.Pattern.print pat print t
 end
 
 and Static_const_group : sig
@@ -1798,42 +1974,19 @@ end = struct
 
   let empty = []
 
-  let [@ocamlformat "disable"] print ppf t =
-    Format.fprintf ppf "@[<hov 1>(%a)@]"
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space Static_const_or_code.print) t
+  let print = print_static_const_group
 
   let free_names t =
     List.map Static_const_or_code.free_names t |> Name_occurrences.union_list
 
-  let apply_renaming t renaming =
-    List.map
-      (fun static_const ->
-        Static_const_or_code.apply_renaming static_const renaming)
-      t
+  let apply_renaming = apply_renaming_static_const_group
 
   let all_ids_for_export t =
     List.map Static_const_or_code.all_ids_for_export t
     |> Ids_for_export.union_list
 
-  let match_against_bound_symbols t bound_symbols ~init ~code:code_callback
-      ~set_of_closures:set_of_closures_callback ~block_like:block_like_callback
-      =
-    let bound_symbol_pats = Bound_symbols.to_list bound_symbols in
-    if List.compare_lengths t bound_symbol_pats <> 0
-    then
-      Misc.fatal_errorf
-        "Mismatch between length of [Bound_symbols.t] and [Static_const.t \
-         list]:@ %a@ =@ %a"
-        Bound_symbols.print bound_symbols print t;
-    ListLabels.fold_left2 t bound_symbol_pats ~init
-      ~f:(fun acc static_const bound_symbols_pat ->
-        Static_const_or_code.match_against_bound_symbols_pattern static_const
-          bound_symbols_pat
-          ~code:(fun code_id code -> code_callback acc code_id code)
-          ~set_of_closures:(fun ~closure_symbols set_of_closures ->
-            set_of_closures_callback acc ~closure_symbols set_of_closures)
-          ~block_like:(fun symbol static_const ->
-            block_like_callback acc symbol static_const))
+  let match_against_bound_symbols =
+    match_against_bound_symbols_static_const_group
 
   let pieces_of_code t =
     List.filter_map Static_const_or_code.to_code t
