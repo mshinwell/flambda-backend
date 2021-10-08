@@ -149,7 +149,7 @@ module rec Expr : sig
 
   type descr = expr_descr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   val all_ids_for_export : t -> Ids_for_export.t
 
@@ -231,7 +231,7 @@ and Let_expr : sig
       equivalence). *)
   type t = let_expr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   val create :
     Bound_pattern.t ->
@@ -301,7 +301,7 @@ and Let_cont_expr : sig
       [Non_recursive] one. *)
   type t = let_cont_expr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   (** Create a definition of a non-recursive continuation. If the continuation
       does not occur free in the [body], then just the [body] is returned,
@@ -331,7 +331,7 @@ and Non_recursive_let_cont_handler : sig
       single non-recursive continuation handler over a body. *)
   type t = non_recursive_let_cont_handler
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   (** Deconstruct a continuation binding to get the name of the bound
       continuation and the expression over which it is scoped. *)
@@ -352,7 +352,7 @@ and Continuation_handler : sig
       information about such handler. *)
   type t = continuation_handler
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   (** Create the representation of a single continuation handler. *)
   val create :
@@ -412,7 +412,7 @@ and Recursive_let_cont_handlers : sig
       body and their own handler code. *)
   type t = recursive_let_cont_handlers
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   (** Deconstruct a continuation binding to get the bound continuations,
       together with the expressions and handlers over which they are scoped. *)
@@ -462,7 +462,7 @@ and Function_params_and_body : sig
       [Select_closure]. *)
   type t = function_params_and_body
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 

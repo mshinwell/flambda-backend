@@ -836,7 +836,7 @@ module rec Continuation_handler : sig
       continuation handler. *)
   type t = continuation_handler
 
-  include Expr_std.S with type t := t
+  val apply_renaming : t -> Renaming.t -> t
 
   include Contains_ids.S with type t := t
 
@@ -897,9 +897,6 @@ module rec Continuation_handler : sig
 end = struct
   module T0 = struct
     type t = continuation_handler_t0
-
-    let free_names { handler; num_normal_occurrences_of_params = _ } =
-      Expr.free_names handler
 
     let apply_renaming = apply_renaming_continuation_handler_t0
 
@@ -967,8 +964,6 @@ end = struct
 
   let is_exn_handler t = t.is_exn_handler
 
-  let free_names t = A.free_names t.cont_handler_abst
-
   let apply_renaming = apply_renaming_continuation_handler
 
   let all_ids_for_export { cont_handler_abst; is_exn_handler = _ } =
@@ -989,22 +984,11 @@ and Continuation_handlers : sig
   (** Whether any of the continuations are exception handlers. *)
   val contains_exn_handler : t -> bool
 
-  include Contains_names.S with type t := t
-
   include Contains_ids.S with type t := t
 end = struct
   type t = continuation_handlers
 
   let to_map t = t
-
-  let free_names t =
-    Continuation.Map.fold
-      (fun _k handler free_names ->
-        Name_occurrences.union free_names
-          (Continuation_handler.free_names handler))
-      t Name_occurrences.empty
-
-  let apply_renaming = apply_renaming_continuation_handlers
 
   let all_ids_for_export t =
     Continuation.Map.fold
@@ -1027,7 +1011,7 @@ and Expr : sig
   (** The type of alpha-equivalence classes of expressions. *)
   type t = expr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1054,21 +1038,6 @@ and Expr : sig
   val bind_parameters_to_args_no_simplification :
     params:Bound_parameter.t list -> args:Simple.t list -> body:expr -> expr
 end = struct
-  module Descr = struct
-    let free_names t =
-      match t with
-      | Let let_expr -> Let_expr.free_names let_expr
-      | Let_cont let_cont -> Let_cont_expr.free_names let_cont
-      | Apply apply -> Apply.free_names apply
-      | Apply_cont apply_cont -> Apply_cont.free_names apply_cont
-      | Switch switch -> Switch.free_names switch
-      | Invalid _ -> Name_occurrences.empty
-  end
-
-  (* CR mshinwell: Work out how to use [With_delayed_permutation] here. There
-     were some problems with double vision etc. last time. Although we don't
-     want to cache free names here. *)
-
   type t = expr
 
   type descr = expr_descr
@@ -1078,8 +1047,6 @@ end = struct
   let descr = descr
 
   let apply_renaming = apply_renaming
-
-  let free_names t = Descr.free_names (descr t)
 
   let all_ids_for_export t =
     match descr t with
@@ -1139,7 +1106,7 @@ and Function_params_and_body : sig
       [Select_closure]. *)
   type t = function_params_and_body
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1208,11 +1175,6 @@ end = struct
   module Base = struct
     type t = function_params_and_body_base
 
-    let free_names { expr; free_names } =
-      match free_names with
-      | Known free_names -> free_names
-      | Unknown -> Expr.free_names expr
-
     let apply_renaming = apply_renaming_function_params_and_body_base
 
     let all_ids_for_export { expr; free_names = _ } =
@@ -1266,9 +1228,6 @@ end = struct
 
   let apply_renaming = apply_renaming_function_params_and_body
 
-  let free_names { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
-    A.free_names abst
-
   let debuginfo { dbg; _ } = dbg
 
   let all_ids_for_export
@@ -1296,7 +1255,7 @@ and Let_cont_expr : sig
       [Non_recursive] one. *)
   type t = let_cont_expr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1354,13 +1313,6 @@ end = struct
     Expr.create_let_cont
       (Recursive (Recursive_let_cont_handlers.create handlers ~body))
 
-  let free_names t =
-    match t with
-    | Non_recursive
-        { handler; num_free_occurrences = _; is_applied_with_traps = _ } ->
-      Non_recursive_let_cont_handler.free_names handler
-    | Recursive handlers -> Recursive_let_cont_handlers.free_names handlers
-
   let apply_renaming = apply_renaming_let_cont_expr
 
   let all_ids_for_export t =
@@ -1376,7 +1328,7 @@ and Let_expr : sig
   (** The alpha-equivalence classes of expressions that bind variables. *)
   type t = let_expr
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1542,22 +1494,6 @@ end = struct
     { let_abst = A.create bound_pattern t0; defining_expr }
 
   let defining_expr t = t.defining_expr
-
-  let free_names ({ let_abst = _; defining_expr } as t) =
-    pattern_match t ~f:(fun bound_pattern ~body ->
-        let from_bindable = Bound_pattern.free_names bound_pattern in
-        let from_defining_expr =
-          let name_mode = Bound_pattern.name_mode bound_pattern in
-          Name_occurrences.downgrade_occurrences_at_strictly_greater_kind
-            (Named.free_names defining_expr)
-            name_mode
-        in
-        let from_body = Expr.free_names body in
-        (* CR mshinwell: See comment in expr.rec.ml *)
-        (* Care: there can be recursive bindings. *)
-        Name_occurrences.diff
-          (Name_occurrences.union from_defining_expr from_body)
-          from_bindable)
 
   let apply_renaming = apply_renaming_let_expr
 
@@ -1728,7 +1664,7 @@ and Non_recursive_let_cont_handler : sig
       single non-recursive continuation handler over a body. *)
   type t = non_recursive_let_cont_handler
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1768,11 +1704,6 @@ end = struct
 
   let handler t = t.handler
 
-  let free_names { continuation_and_body; handler } =
-    Name_occurrences.union
-      (Continuation_and_body.free_names continuation_and_body)
-      (Continuation_handler.free_names handler)
-
   let apply_renaming = apply_renaming_non_recursive_let_cont_handler
 
   let all_ids_for_export { continuation_and_body; handler } =
@@ -1789,7 +1720,7 @@ and Recursive_let_cont_handlers : sig
       body and their own handler code. *)
   type t = recursive_let_cont_handlers
 
-  include Expr_std.S with type t := t
+  include Expr_std.S_no_free_names with type t := t
 
   include Contains_ids.S with type t := t
 
@@ -1815,11 +1746,6 @@ end = struct
     type t = recursive_let_cont_handlers_t0
 
     let create ~body handlers = { handlers; body }
-
-    let free_names { handlers; body } =
-      Name_occurrences.union
-        (Continuation_handlers.free_names handlers)
-        (Expr.free_names body)
 
     let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
 
@@ -1854,8 +1780,6 @@ end = struct
         let handlers1 = handlers0_1.handlers in
         let handlers2 = handlers0_2.handlers in
         f ~body1 ~body2 handlers1 handlers2)
-
-  let free_names t = A.free_names t
 
   let apply_renaming = apply_renaming_recursive_let_cont_handlers
 

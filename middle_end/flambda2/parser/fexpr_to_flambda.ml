@@ -778,15 +778,17 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             in
             (* CR lmaurer: Add
              * [Name_occurrences.with_only_names_and_closure_vars] *)
-            let names_and_closure_vars names =
+            let _names_and_closure_vars names =
               Name_occurrences.(
                 union
                   (restrict_to_closure_vars names)
                   (with_only_names_and_code_ids names |> without_code_ids))
             in
             let free_names =
-              Flambda.Function_params_and_body.free_names params_and_body
-              |> names_and_closure_vars
+              (* CR mshinwell: This needs fixing XXX *)
+              Name_occurrences.empty
+              (* Flambda.Function_params_and_body.free_names params_and_body |>
+                 names_and_closure_vars *)
             in
             Present (params_and_body, free_names)
         in
