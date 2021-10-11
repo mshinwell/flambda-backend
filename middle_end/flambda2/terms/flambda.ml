@@ -959,71 +959,7 @@ and print_static_const_or_code ppf static_const_or_code =
       code
   | Static_const const -> Static_const.print ppf const
 
-module rec Continuation_handler : sig
-  (** The representation of the alpha-equivalence class of bindings of a list of
-      parameters, with associated relations thereon, over the code of a
-      continuation handler. *)
-  type t = continuation_handler
-
-  val apply_renaming : t -> Renaming.t -> t
-
-  include Contains_ids.S with type t := t
-
-  val print : Format.formatter -> t -> unit
-
-  (** Create a value of type [t] given information about a continuation
-      handler. *)
-  val create :
-    Bound_parameter.t list ->
-    handler:expr ->
-    free_names_of_handler:Name_occurrences.t Or_unknown.t ->
-    is_exn_handler:bool ->
-    t
-
-  (** Choose a member of the alpha-equivalence class to enable examination of
-      the parameters, relations thereon and the code over which they are
-      scoped. *)
-  val pattern_match' :
-    t ->
-    f:
-      (Bound_parameter.t list ->
-      num_normal_occurrences_of_params:Num_occurrences.t Variable.Map.t ->
-      handler:expr ->
-      'a) ->
-    'a
-
-  val pattern_match :
-    t -> f:(Bound_parameter.t list -> handler:expr -> 'a) -> 'a
-
-  module Pattern_match_pair_error : sig
-    type t = Parameter_lists_have_different_lengths
-
-    val to_string : t -> string
-  end
-
-  (** Choose members of two bindings' alpha-equivalence classes using the same
-      parameters. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    f:(Bound_parameter.t list -> handler1:expr -> handler2:expr -> 'a) ->
-    ('a, Pattern_match_pair_error.t) Result.t
-
-  (** Whether the continuation is an exception handler.
-
-      Continuations used as exception handlers are always [Non_recursive]. To
-      enable identification of them in passes not invoked from [Simplify] (where
-      they could be identified by looking at the [Apply_cont]s that reference
-      them) they are marked explicitly.
-
-      Continuations used as exception handlers may have more than one parameter
-      (see [Exn_continuation]).
-
-      (Relevant piece of background info: the backend cannot compile
-      simultaneously-defined continuations when one or more of them is an
-      exception handler.) *)
-  val is_exn_handler : t -> bool
-end = struct
+module Continuation_handler = struct
   module T0 = struct
     type t = continuation_handler_t0
 
@@ -1093,31 +1029,12 @@ end = struct
   let is_exn_handler t = t.is_exn_handler
 
   let apply_renaming = apply_renaming_continuation_handler
-
-  let all_ids_for_export = all_ids_for_export_continuation_handler
 end
 
-and Continuation_handlers : sig
-  (** The result of pattern matching on [Recursive_let_cont_handlers] (see
-      above). *)
-  type t = continuation_handlers
-
-  (** Obtain the mapping from continuation to handler. *)
-  val to_map : t -> Continuation_handler.t Continuation.Map.t
-
-  (** The domain of [to_map t]. *)
-  val domain : t -> Continuation.Set.t
-
-  (** Whether any of the continuations are exception handlers. *)
-  val contains_exn_handler : t -> bool
-
-  include Contains_ids.S with type t := t
-end = struct
+module Continuation_handlers = struct
   type t = continuation_handlers
 
   let to_map t = t
-
-  let all_ids_for_export = all_ids_for_export_continuation_handlers
 
   let domain t = Continuation.Map.keys t
 
@@ -1127,164 +1044,7 @@ end = struct
       t
 end
 
-and Expr : sig
-  (** The type of alpha-equivalence classes of expressions. *)
-  type t = expr
-
-  include Expr_std.S_no_free_names with type t := t
-
-  include Contains_ids.S with type t := t
-
-  type descr = expr_descr
-
-  (** Extract the description of an expression. *)
-  val descr : t -> descr
-
-  val create_let : Let_expr.t -> t
-
-  val create_let_cont : Let_cont_expr.t -> t
-
-  (** Create an application expression. *)
-  val create_apply : Apply.t -> t
-
-  (** Create a continuation application (in the zero-arity case, "goto"). *)
-  val create_apply_cont : Apply_cont.t -> t
-
-  val create_switch : Switch_expr.t -> t
-
-  (** Create an expression indicating type-incorrect or unreachable code. *)
-  val create_invalid : ?semantics:Invalid_term_semantics.t -> unit -> t
-
-  val bind_parameters_to_args_no_simplification :
-    params:Bound_parameter.t list -> args:Simple.t list -> body:expr -> expr
-end = struct
-  type t = expr
-
-  type descr = expr_descr
-
-  let create descr = { descr; delayed_permutation = Renaming.empty }
-
-  let descr = descr
-
-  let apply_renaming = apply_renaming
-
-  let all_ids_for_export = all_ids_for_export
-
-  let print = print
-
-  let create_let let_expr = create (Let let_expr)
-
-  let create_let_cont let_cont = create (Let_cont let_cont)
-
-  let create_apply apply = create (Apply apply)
-
-  let create_apply_cont apply_cont = create (Apply_cont apply_cont)
-
-  let create_switch switch = create (Switch switch)
-
-  let create_invalid ?semantics () =
-    let semantics : Invalid_term_semantics.t =
-      match semantics with
-      | Some semantics -> semantics
-      | None ->
-        if Flambda_features.treat_invalid_code_as_unreachable ()
-        then Treat_as_unreachable
-        else Halt_and_catch_fire
-    in
-    create (Invalid semantics)
-
-  let bind_parameters_to_args_no_simplification ~params ~args ~body =
-    if List.compare_lengths params args <> 0
-    then
-      Misc.fatal_errorf "Mismatching parameters and arguments: %a and %a"
-        BP.List.print params Simple.List.print args;
-    ListLabels.fold_left2 (List.rev params) (List.rev args) ~init:body
-      ~f:(fun expr param arg ->
-        let var = Bound_var.create (BP.var param) Name_mode.normal in
-        Let_expr.create
-          (Bound_pattern.singleton var)
-          (Named.create_simple arg) ~body:expr ~free_names_of_body:Unknown
-        |> create_let)
-end
-
-and Function_params_and_body : sig
-  (** A name abstraction that comprises a function's parameters (together with
-      any relations between them), the code of the function, and the
-      [my_closure] variable. It also includes the return and exception
-      continuations.
-
-      From the body of the function, accesses to variables within the closure
-      need to go via a [Project_var] (from [my_closure]); accesses to any other
-      simultaneously-defined functions need to go likewise via a
-      [Select_closure]. *)
-  type t = function_params_and_body
-
-  include Expr_std.S_no_free_names with type t := t
-
-  include Contains_ids.S with type t := t
-
-  (** Create an abstraction that binds the given parameters, with associated
-      relations thereon, over the given body. *)
-  val create :
-    return_continuation:Continuation.t ->
-    exn_continuation:Continuation.t ->
-    Bound_parameter.t list ->
-    dbg:Debuginfo.t ->
-    body:expr ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    my_closure:Variable.t ->
-    my_depth:Variable.t ->
-    t
-
-  (** Choose a member of the alpha-equivalence class to enable examination of
-      the parameters and the body over which they are scoped. *)
-  val pattern_match :
-    t ->
-    f:
-      (return_continuation:Continuation.t
-         (** The continuation parameter of the function, i.e. to where we must
-             jump once the result of the function has been computed. If the
-             continuation takes more than one argument then the backend will
-             compile the function so that it returns multiple values. *) ->
-      exn_continuation:Continuation.t
-        (** To where we must jump if application of the function raises an
-            exception. *) ->
-      Bound_parameter.t list ->
-      body:expr ->
-      my_closure:Variable.t ->
-      is_my_closure_used:bool Or_unknown.t ->
-      my_depth:Variable.t ->
-      free_names_of_body:Name_occurrences.t Or_unknown.t ->
-      'a) ->
-    'a
-
-  (** Choose members of the alpha-equivalence classes of two definitions using
-      the same names for the return continuation, the exception continuation,
-      the closure, and all parameters. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    f:
-      (return_continuation:Continuation.t
-         (** The continuation parameter of the function, i.e. to where we must
-             jump once the result of the function has been computed. If the
-             continuation takes more than one argument then the backend will
-             compile the function so that it returns multiple values. *) ->
-      exn_continuation:Continuation.t
-        (** To where we must jump if application of the function raises an
-            exception. *) ->
-      Bound_parameter.t list ->
-      body1:expr ->
-      body2:expr ->
-      my_closure:Variable.t ->
-      my_depth:Variable.t ->
-      'a) ->
-    'a
-
-  val params_arity : t -> Flambda_arity.t
-
-  val debuginfo : t -> Debuginfo.t
-end = struct
+module Function_params_and_body = struct
   module Base = struct
     type t = function_params_and_body_base
 
@@ -1345,144 +1105,7 @@ end = struct
   let all_ids_for_export = all_ids_for_export_function_params_and_body
 end
 
-and Let_cont_expr : sig
-  (** Values of type [t] represent alpha-equivalence classes of the definitions
-      * of continuations: * let_cont [name] [args] = [handler] in [body] * or
-      using an alternative notation: * [body] * where [name] [args] = [handler]
-      * * - Continuations are second-class. * - Continuations do not capture
-      variables. * - Continuations may be (mutually-)recursive. *)
-
-  (* CR mshinwell: ensure the statement about [Flambda_to_cmm] still holds. *)
-
-  (** It is an error to mark a continuation that might be recursive as
-      non-recursive. The converse is safe.
-
-      Note: any continuation used as an exception handler must be non-recursive
-      by the point it reaches [Flambda_to_cmm]. (This means that it is
-      permissible to introduce mutual recursion through stubs associated with
-      such continuations, so long as [Simplify] is run afterwards to inline them
-      out and turn the resulting single [Recursive] handler into a
-      [Non_recursive] one. *)
-  type t = let_cont_expr
-
-  include Expr_std.S_no_free_names with type t := t
-
-  include Contains_ids.S with type t := t
-
-  (** Create a definition of a non-recursive continuation. If the continuation
-      does not occur free in the [body], then just the [body] is returned,
-      without any enclosing [Let_cont]. *)
-  val create_non_recursive :
-    Continuation.t ->
-    Continuation_handler.t ->
-    body:expr ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    expr
-
-  val create_non_recursive' :
-    cont:Continuation.t ->
-    Continuation_handler.t ->
-    body:expr ->
-    num_free_occurrences_of_cont_in_body:Num_occurrences.t Or_unknown.t ->
-    is_applied_with_traps:bool ->
-    expr
-
-  (** Create a definition of a set of possibly-recursive continuations. *)
-  val create_recursive :
-    Continuation_handler.t Continuation.Map.t -> body:expr -> expr
-end = struct
-  type t = let_cont_expr
-
-  let print = print_let_cont_expr
-
-  let create_non_recursive' ~cont handler ~body
-      ~num_free_occurrences_of_cont_in_body:num_free_occurrences
-      ~is_applied_with_traps =
-    let handler = Non_recursive_let_cont_handler.create cont handler ~body in
-    Expr.create_let_cont
-      (Non_recursive { handler; num_free_occurrences; is_applied_with_traps })
-
-  let create_non_recursive cont handler ~body ~free_names_of_body =
-    let num_free_occurrences_of_cont_in_body, is_applied_with_traps =
-      (* Only the continuations of [free_names_of_body] are used.
-         [Closure_conversion_aux] relies on this property. *)
-      match (free_names_of_body : _ Or_unknown.t) with
-      | Unknown -> Or_unknown.Unknown, true
-      | Known free_names_of_body ->
-        ( Or_unknown.Known
-            (Name_occurrences.count_continuation free_names_of_body cont),
-          Name_occurrences.continuation_is_applied_with_traps free_names_of_body
-            cont )
-    in
-    create_non_recursive' ~cont handler ~body
-      ~num_free_occurrences_of_cont_in_body ~is_applied_with_traps
-
-  let create_recursive handlers ~body =
-    if Continuation_handlers.contains_exn_handler handlers
-    then Misc.fatal_error "Exception-handling continuations cannot be recursive";
-    Expr.create_let_cont
-      (Recursive (Recursive_let_cont_handlers.create handlers ~body))
-
-  let apply_renaming = apply_renaming_let_cont_expr
-
-  let all_ids_for_export = all_ids_for_export_let_cont_expr
-end
-
-and Let_expr : sig
-  (** The alpha-equivalence classes of expressions that bind variables. *)
-  type t = let_expr
-
-  include Expr_std.S_no_free_names with type t := t
-
-  include Contains_ids.S with type t := t
-
-  val create :
-    Bound_pattern.t ->
-    named ->
-    body:expr ->
-    free_names_of_body:Name_occurrences.t Or_unknown.t ->
-    t
-
-  (** The defining expression of the [Let]. *)
-  val defining_expr : t -> named
-
-  (** Look inside the [Let] by choosing a member of the alpha-equivalence
-      class. *)
-  val pattern_match : t -> f:(Bound_pattern.t -> body:expr -> 'a) -> 'a
-
-  val pattern_match' :
-    t ->
-    f:
-      (Bound_pattern.t ->
-      num_normal_occurrences_of_bound_vars:Num_occurrences.t Variable.Map.t ->
-      body:expr ->
-      'a) ->
-    'a
-
-  module Pattern_match_pair_error : sig
-    type t = Mismatched_let_bindings
-
-    val to_string : t -> string
-  end
-
-  (** Look inside two [Let]s by choosing members of their alpha-equivalence
-      classes, using the same bound variables for both. If they are both dynamic
-      lets (that is, they both bind variables), this invokes [dynamic] having
-      freshened both bodies; if they are both static (that is, they both bind
-      symbols), this invokes [static] with the bodies unchanged, since no
-      renaming is necessary. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    dynamic:(Bound_pattern.t -> body1:expr -> body2:expr -> 'a) ->
-    static:
-      (bound_symbols1:Bound_pattern.symbols ->
-      bound_symbols2:Bound_pattern.symbols ->
-      body1:expr ->
-      body2:expr ->
-      'a) ->
-    ('a, Pattern_match_pair_error.t) Result.t
-end = struct
+module Let_expr = struct
   module T0 = struct
     type t = let_expr_t0
 
@@ -1562,21 +1185,21 @@ end = struct
       | Set_of_closures _, Singleton _ ->
         Misc.fatal_errorf
           "Cannot bind a [Set_of_closures] to a [Singleton]:@ %a =@ %a"
-          Bound_pattern.print bound_pattern Named.print defining_expr
+          Bound_pattern.print bound_pattern print_named defining_expr
       | _, Set_of_closures _ ->
         Misc.fatal_errorf
           "Cannot bind a non-[Set_of_closures] to a [Set_of_closures]:@ %a =@ \
            %a"
-          Bound_pattern.print bound_pattern Named.print defining_expr
+          Bound_pattern.print bound_pattern print_named defining_expr
       | Static_consts _, Symbols _ -> ()
       | Static_consts _, Singleton _ ->
         Misc.fatal_errorf
           "Cannot bind a [Static_const] to a [Singleton]:@ %a =@ %a"
-          Bound_pattern.print bound_pattern Named.print defining_expr
+          Bound_pattern.print bound_pattern print_named defining_expr
       | (Simple _ | Prim _ | Set_of_closures _ | Rec_info _), Symbols _ ->
         Misc.fatal_errorf
           "Cannot bind a non-[Static_const] to [Symbols]:@ %a =@ %a"
-          Bound_pattern.print bound_pattern Named.print defining_expr
+          Bound_pattern.print bound_pattern print_named defining_expr
     end;
     let num_normal_occurrences_of_bound_vars =
       match free_names_of_body with
@@ -1596,60 +1219,165 @@ end = struct
   let defining_expr t = t.defining_expr
 
   let apply_renaming = apply_renaming_let_expr
-
-  let all_ids_for_export = all_ids_for_export_let_expr
 end
 
-and Named : sig
-  (** The defining expressions of [Let] bindings. *)
-  type t = named
+module Non_recursive_let_cont_handler = struct
+  module Continuation_and_body =
+    Name_abstraction.Make
+      (Bound_continuation)
+      (struct
+        type t = expr
 
-  include Expr_std.S with type t := t
+        let apply_renaming = apply_renaming
 
-  include Contains_ids.S with type t := t
+        let all_ids_for_export = all_ids_for_export
+      end)
 
-  (** Convert a register-width value into the defining expression of a [Let]. *)
-  val create_simple : Simple.t -> t
+  type t = non_recursive_let_cont_handler
 
-  (** Convert a primitive, with associated debugging information, into the
-      defining expression of a [Let]. *)
-  val create_prim : Flambda_primitive.t -> Debuginfo.t -> t
+  let print _ppf _t = Misc.fatal_error "Not yet implemented"
 
-  (** Convert a set of closures into the defining expression of a [Let]. *)
-  val create_set_of_closures : Set_of_closures.t -> t
+  let create continuation ~body handler =
+    let continuation_and_body =
+      Continuation_and_body.create continuation body
+    in
+    { continuation_and_body; handler }
 
-  (** Convert one or more statically-allocated constants into the defining
-      expression of a [Let]. *)
-  val create_static_consts : Static_const_group.t -> t
+  let pattern_match = pattern_match_non_recursive_let_cont_handler
 
-  (** Convert one or more expressions for recursion state into the defining
-      expression of a [Let]. *)
-  val create_rec_info : Rec_info_expr.t -> t
+  let pattern_match_pair t1 t2 ~f =
+    Continuation_and_body.pattern_match_pair t1.continuation_and_body
+      t2.continuation_and_body ~f:(fun continuation body1 body2 ->
+        f continuation ~body1 ~body2)
 
-  (** Build an expression boxing the name. The returned kind is the one of the
-      unboxed version. *)
-  val box_value :
-    Name.t -> Flambda_kind.t -> Debuginfo.t -> named * Flambda_kind.t
+  let handler t = t.handler
 
-  (** Build an expression unboxing the name. The returned kind is the one of the
-      unboxed version. *)
-  val unbox_value :
-    Name.t -> Flambda_kind.t -> Debuginfo.t -> named * Flambda_kind.t
+  let apply_renaming = apply_renaming_non_recursive_let_cont_handler
+end
 
-  (** Return a defining expression for a [Let] which is kind-correct, but not
-      necessarily type-correct, at the given kind. *)
-  val dummy_value : Flambda_kind.t -> t
+module Recursive_let_cont_handlers = struct
+  module T0 = struct
+    type t = recursive_let_cont_handlers_t0
 
-  val at_most_generative_effects : t -> bool
+    let create ~body handlers = { handlers; body }
 
-  val is_dynamically_allocated_set_of_closures : t -> bool
+    let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
 
-  (** Returns [true] iff the given expression is one or more
-      statically-allocated constants. *)
-  val is_static_consts : t -> bool
+    let all_ids_for_export = all_ids_for_export_recursive_let_cont_handlers_t0
+  end
 
-  val must_be_static_consts : t -> Static_const_group.t
-end = struct
+  module A = Name_abstraction.Make (Bound_continuations) (T0)
+
+  type t = recursive_let_cont_handlers
+
+  let create ~body handlers =
+    let bound = Continuation_handlers.domain handlers in
+    let handlers0 = T0.create ~body handlers in
+    A.create
+      (Bound_continuations.create (Continuation.Set.elements bound))
+      handlers0
+
+  let pattern_match = pattern_match_recursive_let_cont_handlers
+
+  let pattern_match_pair t1 t2 ~f =
+    A.pattern_match_pair t1 t2
+      ~f:(fun
+           _bound
+           (handlers0_1 : recursive_let_cont_handlers_t0)
+           (handlers0_2 : recursive_let_cont_handlers_t0)
+         ->
+        let body1 = handlers0_1.body in
+        let body2 = handlers0_2.body in
+        let handlers1 = handlers0_1.handlers in
+        let handlers2 = handlers0_2.handlers in
+        f ~body1 ~body2 handlers1 handlers2)
+
+  let apply_renaming = apply_renaming_recursive_let_cont_handlers
+
+  let print _ _ = Misc.fatal_error "Not implemented"
+end
+
+module Static_const_or_code = struct
+  type t = static_const_or_code
+
+  let print = print_static_const_or_code
+
+  include Container_types.Make (struct
+    type nonrec t = t
+
+    let print = print
+
+    let compare t1 t2 =
+      match t1, t2 with
+      | Code code1, Code code2 -> Code0.compare code1 code2
+      | Static_const const1, Static_const const2 ->
+        Static_const.compare const1 const2
+      | Code _, Static_const _ -> -1
+      | Static_const _, Code _ -> 1
+
+    let equal t1 t2 = compare t1 t2 = 0
+
+    let hash _t = Misc.fatal_error "Not yet implemented"
+
+    let output _ _ = Misc.fatal_error "Not yet implemented"
+  end)
+
+  let free_names t =
+    match t with
+    | Code code -> Code0.free_names code
+    | Static_const const -> Static_const.free_names const
+
+  let apply_renaming = apply_renaming_static_const_or_code
+
+  let all_ids_for_export = all_ids_for_export_static_const_or_code
+
+  let is_fully_static t =
+    match t with
+    | Code _ -> true
+    | Static_const const -> Static_const.is_fully_static const
+
+  let to_code t = match t with Code code -> Some code | Static_const _ -> None
+end
+
+module Static_const_group = struct
+  type t = static_const_group
+
+  let create static_consts = static_consts
+
+  let to_list t = t
+
+  let empty = []
+
+  let print = print_static_const_group
+
+  let free_names t =
+    List.map Static_const_or_code.free_names t |> Name_occurrences.union_list
+
+  let apply_renaming = apply_renaming_static_const_group
+
+  let all_ids_for_export = all_ids_for_export_static_const_group
+
+  let match_against_bound_symbols =
+    match_against_bound_symbols_static_const_group
+
+  let pieces_of_code t =
+    List.filter_map Static_const_or_code.to_code t
+    |> List.filter_map (fun code ->
+           if Code0.is_deleted code
+           then None
+           else Some (Code0.code_id code, code))
+    |> Code_id.Map.of_list
+
+  let pieces_of_code' t = pieces_of_code t |> Code_id.Map.data
+
+  let is_fully_static t = List.for_all Static_const_or_code.is_fully_static t
+
+  let concat t1 t2 = t1 @ t2
+
+  let map t ~f = List.map f t
+end
+
+module Named = struct
   type t = named
 
   let create_simple simple = Simple simple
@@ -1673,8 +1401,6 @@ end = struct
   let print = print_named
 
   let apply_renaming = apply_renaming_named
-
-  let all_ids_for_export = all_ids_for_export_named
 
   let box_value name (kind : Flambda_kind.t) dbg : t * Flambda_kind.t =
     let simple = Simple.name name in
@@ -1750,258 +1476,90 @@ end = struct
   let must_be_static_consts = named_must_be_static_consts
 end
 
-and Non_recursive_let_cont_handler : sig
-  (** The representation of the alpha-equivalence class of the binding of a
-      single non-recursive continuation handler over a body. *)
-  type t = non_recursive_let_cont_handler
+module Expr = struct
+  type t = expr
 
-  include Expr_std.S_no_free_names with type t := t
+  type descr = expr_descr
 
-  include Contains_ids.S with type t := t
+  let create descr = { descr; delayed_permutation = Renaming.empty }
 
-  (** Deconstruct a continuation binding to get the name of the bound
-      continuation and the expression over which it is scoped. *)
-  val pattern_match : t -> f:(Continuation.t -> body:expr -> 'a) -> 'a
+  let descr = descr
 
-  (** Deconstruct two continuation bindings using the same name. *)
-  val pattern_match_pair :
-    t -> t -> f:(Continuation.t -> body1:expr -> body2:expr -> 'a) -> 'a
+  let apply_renaming = apply_renaming
 
-  (** Obtain the continuation itself (rather than the body over which it is
-      scoped). *)
-  val handler : t -> Continuation_handler.t
+  let all_ids_for_export = all_ids_for_export
 
-  val create : Continuation.t -> body:expr -> Continuation_handler.t -> t
-end = struct
-  module Continuation_and_body =
-    Name_abstraction.Make (Bound_continuation) (Expr)
+  let print = print
 
-  type t = non_recursive_let_cont_handler
+  let create_let let_expr = create (Let let_expr)
 
-  let print _ppf _t = Misc.fatal_error "Not yet implemented"
+  let create_let_cont let_cont = create (Let_cont let_cont)
 
-  let create continuation ~body handler =
-    let continuation_and_body =
-      Continuation_and_body.create continuation body
+  let create_apply apply = create (Apply apply)
+
+  let create_apply_cont apply_cont = create (Apply_cont apply_cont)
+
+  let create_switch switch = create (Switch switch)
+
+  let create_invalid ?semantics () =
+    let semantics : Invalid_term_semantics.t =
+      match semantics with
+      | Some semantics -> semantics
+      | None ->
+        if Flambda_features.treat_invalid_code_as_unreachable ()
+        then Treat_as_unreachable
+        else Halt_and_catch_fire
     in
-    { continuation_and_body; handler }
+    create (Invalid semantics)
 
-  let pattern_match = pattern_match_non_recursive_let_cont_handler
-
-  let pattern_match_pair t1 t2 ~f =
-    Continuation_and_body.pattern_match_pair t1.continuation_and_body
-      t2.continuation_and_body ~f:(fun continuation body1 body2 ->
-        f continuation ~body1 ~body2)
-
-  let handler t = t.handler
-
-  let apply_renaming = apply_renaming_non_recursive_let_cont_handler
-
-  let all_ids_for_export = all_ids_for_export_non_recursive_let_cont_handler
+  let bind_parameters_to_args_no_simplification ~params ~args ~body =
+    if List.compare_lengths params args <> 0
+    then
+      Misc.fatal_errorf "Mismatching parameters and arguments: %a and %a"
+        BP.List.print params Simple.List.print args;
+    ListLabels.fold_left2 (List.rev params) (List.rev args) ~init:body
+      ~f:(fun expr param arg ->
+        let var = Bound_var.create (BP.var param) Name_mode.normal in
+        Let_expr.create
+          (Bound_pattern.singleton var)
+          (Named.create_simple arg) ~body:expr ~free_names_of_body:Unknown
+        |> create_let)
 end
 
-and Recursive_let_cont_handlers : sig
-  (** The representation of the alpha-equivalence class of a group of possibly
-      (mutually-) recursive continuation handlers that are bound both over a
-      body and their own handler code. *)
-  type t = recursive_let_cont_handlers
+module Let_cont_expr = struct
+  type t = let_cont_expr
 
-  include Expr_std.S_no_free_names with type t := t
+  let print = print_let_cont_expr
 
-  include Contains_ids.S with type t := t
+  let create_non_recursive' ~cont handler ~body
+      ~num_free_occurrences_of_cont_in_body:num_free_occurrences
+      ~is_applied_with_traps =
+    let handler = Non_recursive_let_cont_handler.create cont handler ~body in
+    Expr.create_let_cont
+      (Non_recursive { handler; num_free_occurrences; is_applied_with_traps })
 
-  (** Deconstruct a continuation binding to get the bound continuations,
-      together with the expressions and handlers over which they are scoped. *)
-  val pattern_match : t -> f:(body:expr -> Continuation_handlers.t -> 'a) -> 'a
+  let create_non_recursive cont handler ~body ~free_names_of_body =
+    let num_free_occurrences_of_cont_in_body, is_applied_with_traps =
+      (* Only the continuations of [free_names_of_body] are used.
+         [Closure_conversion_aux] relies on this property. *)
+      match (free_names_of_body : _ Or_unknown.t) with
+      | Unknown -> Or_unknown.Unknown, true
+      | Known free_names_of_body ->
+        ( Or_unknown.Known
+            (Name_occurrences.count_continuation free_names_of_body cont),
+          Name_occurrences.continuation_is_applied_with_traps free_names_of_body
+            cont )
+    in
+    create_non_recursive' ~cont handler ~body
+      ~num_free_occurrences_of_cont_in_body ~is_applied_with_traps
 
-  (** Deconstruct two continuation bindings using the same bound continuations. *)
-  val pattern_match_pair :
-    t ->
-    t ->
-    f:
-      (body1:expr ->
-      body2:expr ->
-      Continuation_handlers.t ->
-      Continuation_handlers.t ->
-      'a) ->
-    'a
+  let create_recursive handlers ~body =
+    if Continuation_handlers.contains_exn_handler handlers
+    then Misc.fatal_error "Exception-handling continuations cannot be recursive";
+    Expr.create_let_cont
+      (Recursive (Recursive_let_cont_handlers.create handlers ~body))
 
-  val create : body:expr -> Continuation_handlers.t -> t
-end = struct
-  module T0 = struct
-    type t = recursive_let_cont_handlers_t0
-
-    let create ~body handlers = { handlers; body }
-
-    let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
-
-    let all_ids_for_export = all_ids_for_export_recursive_let_cont_handlers_t0
-  end
-
-  module A = Name_abstraction.Make (Bound_continuations) (T0)
-
-  type t = recursive_let_cont_handlers
-
-  let create ~body handlers =
-    let bound = Continuation_handlers.domain handlers in
-    let handlers0 = T0.create ~body handlers in
-    A.create
-      (Bound_continuations.create (Continuation.Set.elements bound))
-      handlers0
-
-  let pattern_match = pattern_match_recursive_let_cont_handlers
-
-  let pattern_match_pair t1 t2 ~f =
-    A.pattern_match_pair t1 t2
-      ~f:(fun
-           _bound
-           (handlers0_1 : recursive_let_cont_handlers_t0)
-           (handlers0_2 : recursive_let_cont_handlers_t0)
-         ->
-        let body1 = handlers0_1.body in
-        let body2 = handlers0_2.body in
-        let handlers1 = handlers0_1.handlers in
-        let handlers2 = handlers0_2.handlers in
-        f ~body1 ~body2 handlers1 handlers2)
-
-  let apply_renaming = apply_renaming_recursive_let_cont_handlers
-
-  let all_ids_for_export = all_ids_for_export_recursive_let_cont_handlers
-
-  let print _ _ = Misc.fatal_error "Not implemented"
-end
-
-and Static_const_or_code : sig
-  type t = static_const_or_code
-
-  include Container_types.S with type t := t
-
-  include Contains_names.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  val print : Format.formatter -> t -> unit
-
-  val is_fully_static : t -> bool
-
-  val to_code : t -> Function_params_and_body.t Code0.t option
-end = struct
-  type t = static_const_or_code
-
-  let print = print_static_const_or_code
-
-  include Container_types.Make (struct
-    type nonrec t = t
-
-    let print = print
-
-    let compare t1 t2 =
-      match t1, t2 with
-      | Code code1, Code code2 -> Code0.compare code1 code2
-      | Static_const const1, Static_const const2 ->
-        Static_const.compare const1 const2
-      | Code _, Static_const _ -> -1
-      | Static_const _, Code _ -> 1
-
-    let equal t1 t2 = compare t1 t2 = 0
-
-    let hash _t = Misc.fatal_error "Not yet implemented"
-
-    let output _ _ = Misc.fatal_error "Not yet implemented"
-  end)
-
-  let free_names t =
-    match t with
-    | Code code -> Code0.free_names code
-    | Static_const const -> Static_const.free_names const
-
-  let apply_renaming = apply_renaming_static_const_or_code
-
-  let all_ids_for_export = all_ids_for_export_static_const_or_code
-
-  let is_fully_static t =
-    match t with
-    | Code _ -> true
-    | Static_const const -> Static_const.is_fully_static const
-
-  let to_code t = match t with Code code -> Some code | Static_const _ -> None
-end
-
-and Static_const_group : sig
-  type t = static_const_group
-
-  include Contains_names.S with type t := t
-
-  include Contains_ids.S with type t := t
-
-  val empty : t
-
-  val create : Static_const_or_code.t list -> t
-
-  val print : Format.formatter -> t -> unit
-
-  val to_list : t -> Static_const_or_code.t list
-
-  val concat : t -> t -> t
-
-  val map : t -> f:(Static_const_or_code.t -> Static_const_or_code.t) -> t
-
-  val match_against_bound_symbols :
-    t ->
-    Bound_symbols.t ->
-    init:'a ->
-    code:('a -> Code_id.t -> Function_params_and_body.t Code0.t -> 'a) ->
-    set_of_closures:
-      ('a ->
-      closure_symbols:Symbol.t Closure_id.Lmap.t ->
-      Set_of_closures.t ->
-      'a) ->
-    block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
-    'a
-
-  (** This function ignores [Deleted] code. *)
-  val pieces_of_code : t -> Function_params_and_body.t Code0.t Code_id.Map.t
-
-  (** This function ignores [Deleted] code. *)
-  val pieces_of_code' : t -> Function_params_and_body.t Code0.t list
-
-  val is_fully_static : t -> bool
-end = struct
-  type t = static_const_group
-
-  let create static_consts = static_consts
-
-  let to_list t = t
-
-  let empty = []
-
-  let print = print_static_const_group
-
-  let free_names t =
-    List.map Static_const_or_code.free_names t |> Name_occurrences.union_list
-
-  let apply_renaming = apply_renaming_static_const_group
-
-  let all_ids_for_export = all_ids_for_export_static_const_group
-
-  let match_against_bound_symbols =
-    match_against_bound_symbols_static_const_group
-
-  let pieces_of_code t =
-    List.filter_map Static_const_or_code.to_code t
-    |> List.filter_map (fun code ->
-           if Code0.is_deleted code
-           then None
-           else Some (Code0.code_id code, code))
-    |> Code_id.Map.of_list
-
-  let pieces_of_code' t = pieces_of_code t |> Code_id.Map.data
-
-  let is_fully_static t = List.for_all Static_const_or_code.is_fully_static t
-
-  let concat t1 t2 = t1 @ t2
-
-  let map t ~f = List.map f t
+  let apply_renaming = apply_renaming_let_cont_expr
 end
 
 (* CR mshinwell: Consider counting numbers of names in Name_occurrences *)
