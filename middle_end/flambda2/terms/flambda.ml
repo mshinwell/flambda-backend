@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 module K = Flambda_kind
 module BP = Bound_parameter
@@ -652,7 +652,7 @@ and print_continuation_handler (recursive : Recursive.t) ppf k
       begin
         match descr handler with
         | Apply_cont _ | Invalid _ -> fprintf ppf "@[<hov 1>"
-        | _ -> fprintf ppf "@[<v 1>"
+        | Let _ | Let_cont _ | Apply _ | Switch _ -> fprintf ppf "@[<v 1>"
       end;
       fprintf ppf "@<0>%s%a@<0>%s%s@<0>%s%s@<0>%s"
         (Flambda_colours.continuation_definition ())
@@ -711,7 +711,8 @@ and print_let_cont_expr ppf t =
           let let_conts, body =
             match descr body with
             | Let_cont let_cont -> gather_let_conts let_conts let_cont
-            | _ -> let_conts, body
+            | Let _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ ->
+              let_conts, body
           in
           ( (k, Recursive.Non_recursive, handler.handler, num_free_occurrences)
             :: let_conts,
@@ -722,7 +723,8 @@ and print_let_cont_expr ppf t =
           let let_conts, body =
             match descr body with
             | Let_cont let_cont -> gather_let_conts let_conts let_cont
-            | _ -> let_conts, body
+            | Let _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ ->
+              let_conts, body
           in
           let new_let_conts =
             List.map
@@ -849,7 +851,7 @@ and flatten_let_symbol t : _ * expr =
         flattened @ flattened', body
       | None -> [], expr
     end
-    | _ -> [], expr
+    | Let_cont _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ -> [], expr
   in
   match flatten_for_printing t with
   | Some (flattened, body) ->
@@ -905,7 +907,7 @@ and print_let_expr ppf ({ let_abst = _; defining_expr } as t) : unit =
               print_named defining_expr;
             let_body body
           | Symbols _ -> expr)
-    | _ -> expr
+    | Let_cont _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ -> expr
   in
   pattern_match_let t ~f:(fun (bound_pattern : Bound_pattern.t) ~body ->
       match bound_pattern with
@@ -1169,7 +1171,8 @@ module Let_expr = struct
                 in
                 Ok ans
               else Error Pattern_match_pair_error.Mismatched_let_bindings
-            | _, _ -> Error Pattern_match_pair_error.Mismatched_let_bindings))
+            | (Singleton _ | Set_of_closures _ | Symbols _), _ ->
+              Error Pattern_match_pair_error.Mismatched_let_bindings))
 
   let print = print_let_expr
 
