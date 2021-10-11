@@ -208,7 +208,7 @@ and pattern_match_let :
       'a. let_expr -> f:(Bound_pattern.t -> body:expr -> 'a) -> 'a =
  fun t ~f ->
   let open
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_pattern)
       (struct
         type t = let_expr_t0
@@ -225,7 +225,7 @@ and pattern_match_non_recursive_let_cont_handler :
       'a =
  fun t ~f ->
   let open
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_continuation)
       (struct
         type t = expr
@@ -242,7 +242,7 @@ and pattern_match_recursive_let_cont_handlers :
       'a =
  fun t ~f ->
   let open
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_continuations)
       (struct
         type t = recursive_let_cont_handlers_t0
@@ -259,7 +259,7 @@ and pattern_match_continuation_handler :
       'a =
  fun t ~f ->
   let open
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_parameters)
       (struct
         type t = continuation_handler_t0
@@ -286,7 +286,7 @@ and pattern_match_function_params_and_body :
  fun t ~f ->
   let module BFF = Bound_for_function in
   let open
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (BFF)
       (struct
         type t = function_params_and_body_base
@@ -355,7 +355,7 @@ and apply_renaming_let_expr_t0
 
 and apply_renaming_let_expr ({ let_abst; defining_expr } as t) renaming =
   let module A =
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_pattern)
       (struct
         type t = let_expr_t0
@@ -389,7 +389,7 @@ and apply_renaming_let_cont_expr let_cont renaming =
 and apply_renaming_non_recursive_let_cont_handler
     { continuation_and_body; handler } renaming =
   let module A =
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_continuation)
       (struct
         type t = expr
@@ -410,7 +410,7 @@ and apply_renaming_recursive_let_cont_handlers_t0 { handlers; body } renaming =
 
 and apply_renaming_recursive_let_cont_handlers t renaming =
   let module A =
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_continuations)
       (struct
         type t = recursive_let_cont_handlers_t0
@@ -430,7 +430,7 @@ and apply_renaming_continuation_handler_t0
 and apply_renaming_continuation_handler
     ({ cont_handler_abst; is_exn_handler } as t) renaming =
   let module A =
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_parameters)
       (struct
         type t = continuation_handler_t0
@@ -462,7 +462,7 @@ and apply_renaming_function_params_and_body_base { expr; free_names } renaming =
 and apply_renaming_function_params_and_body
     ({ abst; dbg; params_arity; is_my_closure_used } as t) perm =
   let module A =
-    Name_abstraction.Make_let_and_renaming
+    Name_abstraction.Make_matching_and_renaming
       (Bound_for_function)
       (struct
         type t = function_params_and_body_base
@@ -497,6 +497,135 @@ and apply_renaming_static_const_group t renaming =
     (fun static_const ->
       apply_renaming_static_const_or_code static_const renaming)
     t
+
+and all_ids_for_export_continuation_handler_t0
+    { handler; num_normal_occurrences_of_params = _ } =
+  all_ids_for_export handler
+
+and all_ids_for_export_continuation_handler
+    { cont_handler_abst; is_exn_handler = _ } =
+  let module A =
+    Name_abstraction.Make_ids_for_export
+      (Bound_parameters)
+      (struct
+        type t = continuation_handler_t0
+
+        let all_ids_for_export = all_ids_for_export_continuation_handler_t0
+      end)
+  in
+  A.all_ids_for_export cont_handler_abst
+
+and all_ids_for_export_continuation_handlers t =
+  Continuation.Map.fold
+    (fun k handler ids ->
+      Ids_for_export.union ids
+        (Ids_for_export.add_continuation
+           (all_ids_for_export_continuation_handler handler)
+           k))
+    t Ids_for_export.empty
+
+and all_ids_for_export t =
+  match descr t with
+  | Let let_expr -> all_ids_for_export_let_expr let_expr
+  | Let_cont let_cont -> all_ids_for_export_let_cont_expr let_cont
+  | Apply apply -> Apply.all_ids_for_export apply
+  | Apply_cont apply_cont -> Apply_cont.all_ids_for_export apply_cont
+  | Switch switch -> Switch.all_ids_for_export switch
+  | Invalid _ -> Ids_for_export.empty
+
+and all_ids_for_export_let_expr_t0
+    { body; num_normal_occurrences_of_bound_vars = _ } =
+  all_ids_for_export body
+
+and all_ids_for_export_let_expr { let_abst; defining_expr } =
+  let module A =
+    Name_abstraction.Make_ids_for_export
+      (Bound_pattern)
+      (struct
+        type t = let_expr_t0
+
+        let all_ids_for_export = all_ids_for_export_let_expr_t0
+      end)
+  in
+  let defining_expr_ids = all_ids_for_export_named defining_expr in
+  let let_abst_ids = A.all_ids_for_export let_abst in
+  Ids_for_export.union defining_expr_ids let_abst_ids
+
+and all_ids_for_export_named t =
+  match t with
+  | Simple simple -> Ids_for_export.from_simple simple
+  | Prim (prim, _dbg) -> Flambda_primitive.all_ids_for_export prim
+  | Set_of_closures set -> Set_of_closures.all_ids_for_export set
+  | Static_consts consts -> all_ids_for_export_static_const_group consts
+  | Rec_info rec_info_expr -> Rec_info_expr.all_ids_for_export rec_info_expr
+
+and all_ids_for_export_let_cont_expr t =
+  match t with
+  | Non_recursive
+      { handler; num_free_occurrences = _; is_applied_with_traps = _ } ->
+    all_ids_for_export_non_recursive_let_cont_handler handler
+  | Recursive handlers ->
+    all_ids_for_export_recursive_let_cont_handlers handlers
+
+and all_ids_for_export_non_recursive_let_cont_handler
+    { continuation_and_body; handler } =
+  let module A =
+    Name_abstraction.Make_ids_for_export
+      (Bound_continuation)
+      (struct
+        type t = expr
+
+        let all_ids_for_export = all_ids_for_export
+      end)
+  in
+  let handler_ids = all_ids_for_export_continuation_handler handler in
+  let continuation_and_body_ids = A.all_ids_for_export continuation_and_body in
+  Ids_for_export.union handler_ids continuation_and_body_ids
+
+and all_ids_for_export_recursive_let_cont_handlers_t0 { handlers; body } =
+  let body_ids = all_ids_for_export body in
+  let handlers_ids = all_ids_for_export_continuation_handlers handlers in
+  Ids_for_export.union body_ids handlers_ids
+
+and all_ids_for_export_recursive_let_cont_handlers t =
+  let module A =
+    Name_abstraction.Make_ids_for_export
+      (Bound_continuations)
+      (struct
+        type t = recursive_let_cont_handlers_t0
+
+        let all_ids_for_export =
+          all_ids_for_export_recursive_let_cont_handlers_t0
+      end)
+  in
+  A.all_ids_for_export t
+
+and all_ids_for_export_function_params_and_body_base { expr; free_names = _ } =
+  all_ids_for_export expr
+
+and all_ids_for_export_function_params_and_body
+    { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
+  let module A =
+    Name_abstraction.Make_ids_for_export
+      (Bound_for_function)
+      (struct
+        type t = function_params_and_body_base
+
+        let all_ids_for_export =
+          all_ids_for_export_function_params_and_body_base
+      end)
+  in
+  A.all_ids_for_export abst
+
+and all_ids_for_export_static_const_or_code t =
+  match t with
+  | Code code ->
+    Code0.all_ids_for_export ~all_ids_for_export_function_params_and_body code
+  | Static_const const -> Static_const.all_ids_for_export const
+
+and all_ids_for_export_static_const_group t =
+  List.map all_ids_for_export_static_const_or_code t
+  |> Ids_for_export.union_list
 
 and print ppf (t : expr) =
   match descr t with
@@ -898,10 +1027,9 @@ end = struct
   module T0 = struct
     type t = continuation_handler_t0
 
-    let apply_renaming = apply_renaming_continuation_handler_t0
+    let all_ids_for_export = all_ids_for_export_continuation_handler_t0
 
-    let all_ids_for_export { handler; num_normal_occurrences_of_params = _ } =
-      Expr.all_ids_for_export handler
+    let apply_renaming = apply_renaming_continuation_handler_t0
   end
 
   type t = continuation_handler
@@ -966,8 +1094,7 @@ end = struct
 
   let apply_renaming = apply_renaming_continuation_handler
 
-  let all_ids_for_export { cont_handler_abst; is_exn_handler = _ } =
-    A.all_ids_for_export cont_handler_abst
+  let all_ids_for_export = all_ids_for_export_continuation_handler
 end
 
 and Continuation_handlers : sig
@@ -990,14 +1117,7 @@ end = struct
 
   let to_map t = t
 
-  let all_ids_for_export t =
-    Continuation.Map.fold
-      (fun k handler ids ->
-        Ids_for_export.union ids
-          (Ids_for_export.add_continuation
-             (Continuation_handler.all_ids_for_export handler)
-             k))
-      t Ids_for_export.empty
+  let all_ids_for_export = all_ids_for_export_continuation_handlers
 
   let domain t = Continuation.Map.keys t
 
@@ -1048,14 +1168,7 @@ end = struct
 
   let apply_renaming = apply_renaming
 
-  let all_ids_for_export t =
-    match descr t with
-    | Let let_expr -> Let_expr.all_ids_for_export let_expr
-    | Let_cont let_cont -> Let_cont_expr.all_ids_for_export let_cont
-    | Apply apply -> Apply.all_ids_for_export apply
-    | Apply_cont apply_cont -> Apply_cont.all_ids_for_export apply_cont
-    | Switch switch -> Switch.all_ids_for_export switch
-    | Invalid _ -> Ids_for_export.empty
+  let all_ids_for_export = all_ids_for_export
 
   let print = print
 
@@ -1177,8 +1290,7 @@ end = struct
 
     let apply_renaming = apply_renaming_function_params_and_body_base
 
-    let all_ids_for_export { expr; free_names = _ } =
-      Expr.all_ids_for_export expr
+    let all_ids_for_export = all_ids_for_export_function_params_and_body_base
   end
 
   module A = Name_abstraction.Make (Bound_for_function) (Base)
@@ -1230,9 +1342,7 @@ end = struct
 
   let debuginfo { dbg; _ } = dbg
 
-  let all_ids_for_export
-      { abst; params_arity = _; dbg = _; is_my_closure_used = _ } =
-    A.all_ids_for_export abst
+  let all_ids_for_export = all_ids_for_export_function_params_and_body
 end
 
 and Let_cont_expr : sig
@@ -1315,13 +1425,7 @@ end = struct
 
   let apply_renaming = apply_renaming_let_cont_expr
 
-  let all_ids_for_export t =
-    match t with
-    | Non_recursive
-        { handler; num_free_occurrences = _; is_applied_with_traps = _ } ->
-      Non_recursive_let_cont_handler.all_ids_for_export handler
-    | Recursive handlers ->
-      Recursive_let_cont_handlers.all_ids_for_export handlers
+  let all_ids_for_export = all_ids_for_export_let_cont_expr
 end
 
 and Let_expr : sig
@@ -1382,13 +1486,9 @@ end = struct
   module T0 = struct
     type t = let_expr_t0
 
-    let free_names { body; num_normal_occurrences_of_bound_vars = _ } =
-      Expr.free_names body
-
     let apply_renaming = apply_renaming_let_expr_t0
 
-    let all_ids_for_export { body; num_normal_occurrences_of_bound_vars = _ } =
-      Expr.all_ids_for_export body
+    let all_ids_for_export = all_ids_for_export_let_expr_t0
   end
 
   module A = Name_abstraction.Make (Bound_pattern) (T0)
@@ -1497,10 +1597,7 @@ end = struct
 
   let apply_renaming = apply_renaming_let_expr
 
-  let all_ids_for_export { let_abst; defining_expr } =
-    let defining_expr_ids = Named.all_ids_for_export defining_expr in
-    let let_abst_ids = A.all_ids_for_export let_abst in
-    Ids_for_export.union defining_expr_ids let_abst_ids
+  let all_ids_for_export = all_ids_for_export_let_expr
 end
 
 and Named : sig
@@ -1577,13 +1674,7 @@ end = struct
 
   let apply_renaming = apply_renaming_named
 
-  let all_ids_for_export t =
-    match t with
-    | Simple simple -> Ids_for_export.from_simple simple
-    | Prim (prim, _dbg) -> Flambda_primitive.all_ids_for_export prim
-    | Set_of_closures set -> Set_of_closures.all_ids_for_export set
-    | Static_consts consts -> Static_const_group.all_ids_for_export consts
-    | Rec_info rec_info_expr -> Rec_info_expr.all_ids_for_export rec_info_expr
+  let all_ids_for_export = all_ids_for_export_named
 
   let box_value name (kind : Flambda_kind.t) dbg : t * Flambda_kind.t =
     let simple = Simple.name name in
@@ -1706,12 +1797,7 @@ end = struct
 
   let apply_renaming = apply_renaming_non_recursive_let_cont_handler
 
-  let all_ids_for_export { continuation_and_body; handler } =
-    let handler_ids = Continuation_handler.all_ids_for_export handler in
-    let continuation_and_body_ids =
-      Continuation_and_body.all_ids_for_export continuation_and_body
-    in
-    Ids_for_export.union handler_ids continuation_and_body_ids
+  let all_ids_for_export = all_ids_for_export_non_recursive_let_cont_handler
 end
 
 and Recursive_let_cont_handlers : sig
@@ -1749,10 +1835,7 @@ end = struct
 
     let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
 
-    let all_ids_for_export { handlers; body } =
-      let body_ids = Expr.all_ids_for_export body in
-      let handlers_ids = Continuation_handlers.all_ids_for_export handlers in
-      Ids_for_export.union body_ids handlers_ids
+    let all_ids_for_export = all_ids_for_export_recursive_let_cont_handlers_t0
   end
 
   module A = Name_abstraction.Make (Bound_continuations) (T0)
@@ -1783,7 +1866,7 @@ end = struct
 
   let apply_renaming = apply_renaming_recursive_let_cont_handlers
 
-  let all_ids_for_export t = A.all_ids_for_export t
+  let all_ids_for_export = all_ids_for_export_recursive_let_cont_handlers
 
   let print _ _ = Misc.fatal_error "Not implemented"
 end
@@ -1834,13 +1917,7 @@ end = struct
 
   let apply_renaming = apply_renaming_static_const_or_code
 
-  let all_ids_for_export t =
-    match t with
-    | Code code ->
-      Code0.all_ids_for_export
-        ~all_ids_for_export_function_params_and_body:
-          Function_params_and_body.all_ids_for_export code
-    | Static_const const -> Static_const.all_ids_for_export const
+  let all_ids_for_export = all_ids_for_export_static_const_or_code
 
   let is_fully_static t =
     match t with
@@ -1905,9 +1982,7 @@ end = struct
 
   let apply_renaming = apply_renaming_static_const_group
 
-  let all_ids_for_export t =
-    List.map Static_const_or_code.all_ids_for_export t
-    |> Ids_for_export.union_list
+  let all_ids_for_export = all_ids_for_export_static_const_group
 
   let match_against_bound_symbols =
     match_against_bound_symbols_static_const_group

@@ -17,18 +17,22 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 module type Term = sig
-  include Contains_names.S
+  type t
+
+  val apply_renaming : t -> Renaming.t -> t
 
   include Contains_ids.S with type t := t
 end
 
 type ('bindable, 'term) t = 'bindable * 'term
 
-module Make (Bindable : Bindable.S) (Term : Term) = struct
-  type nonrec t = (Bindable.t, Term.t) t
+module Make_matching_and_renaming0
+    (Bindable : Bindable.S) (Term : sig
+      type t
 
-  let create bindable term = bindable, term
-
+      val apply_renaming : t -> Renaming.t -> t
+    end) =
+struct
   let[@inline always] pattern_match (bindable, term) ~f =
     let fresh_bindable = Bindable.rename bindable in
     let perm =
@@ -36,11 +40,6 @@ module Make (Bindable : Bindable.S) (Term : Term) = struct
     in
     let fresh_term = Term.apply_renaming term perm in
     f fresh_bindable fresh_term
-
-  (* CR-someday: Use modular implicits to allow let<> to be used throughout the
-     codebase. *)
-  let[@inline always] ( let<> ) t f =
-    pattern_match t ~f:(fun bindable term -> f (bindable, term))
 
   let[@inline always] pattern_match_pair (bindable0, term0) (bindable1, term1)
       ~f =
@@ -63,11 +62,13 @@ module Make (Bindable : Bindable.S) (Term : Term) = struct
       let term' = Term.apply_renaming term perm in
       if bindable == bindable' && term == term' then t else bindable', term'
 
-  let free_names (bindable, term) =
-    let in_binding_position = Bindable.free_names bindable in
-    let free_in_term = Term.free_names term in
-    Name_occurrences.diff free_in_term in_binding_position
+  let[@inline always] ( let<> ) t f =
+    pattern_match t ~f:(fun bindable term -> f (bindable, term))
+end
+[@@inline always]
 
+module Make_ids_for_export0 (Bindable : Bindable.S) (Term : Contains_ids.S) =
+struct
   let all_ids_for_export (bindable, term) =
     Ids_for_export.union
       (Bindable.all_ids_for_export bindable)
@@ -75,7 +76,17 @@ module Make (Bindable : Bindable.S) (Term : Term) = struct
 end
 [@@inline always]
 
-module Make_let_and_renaming
+module Make (Bindable : Bindable.S) (Term : Term) = struct
+  type nonrec t = (Bindable.t, Term.t) t
+
+  let create bindable term = bindable, term
+
+  include Make_matching_and_renaming0 (Bindable) (Term)
+  include Make_ids_for_export0 (Bindable) (Term)
+end
+[@@inline always]
+
+module Make_matching_and_renaming
     (Bindable : Bindable.S) (Term : sig
       type t
 
@@ -84,22 +95,14 @@ module Make_let_and_renaming
 struct
   type nonrec t = (Bindable.t, Term.t) t
 
-  let[@inline always] pattern_match (bindable, term) ~f =
-    let fresh_bindable = Bindable.rename bindable in
-    let perm =
-      Bindable.name_permutation bindable ~guaranteed_fresh:fresh_bindable
-    in
-    let fresh_term = Term.apply_renaming term perm in
-    f fresh_bindable fresh_term
-
-  let apply_renaming ((bindable, term) as t) perm =
-    if Renaming.is_empty perm
-    then t
-    else
-      let bindable' = Bindable.apply_renaming bindable perm in
-      let term' = Term.apply_renaming term perm in
-      if bindable == bindable' && term == term' then t else bindable', term'
-
-  let[@inline always] ( let<> ) t f =
-    pattern_match t ~f:(fun bindable term -> f (bindable, term))
+  include Make_matching_and_renaming0 (Bindable) (Term)
 end
+[@@inline always]
+
+module Make_ids_for_export (Bindable : Bindable.S) (Term : Contains_ids.S) =
+struct
+  type nonrec t = (Bindable.t, Term.t) t
+
+  include Make_ids_for_export0 (Bindable) (Term)
+end
+[@@inline always]
