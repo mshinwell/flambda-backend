@@ -38,6 +38,14 @@ let[@inline always] pattern_match_pair ~freshen_bindable ~swap_bindable
 
 let print ~print_bindable ~print_term ~freshen_bindable ~swap_bindable
     ~apply_renaming_term ppf t =
+  let freshen_bindable, swap_bindable, apply_renaming_term =
+    if Flambda_features.freshen_when_printing ()
+    then freshen_bindable, swap_bindable, apply_renaming_term
+    else
+      ( (fun bindable -> bindable),
+        (fun _bindable ~guaranteed_fresh:_ -> Renaming.empty),
+        fun term _renaming -> term )
+  in
   pattern_match ~freshen_bindable ~swap_bindable ~apply_renaming_term t
     ~f:(fun bindable term ->
       Format.fprintf ppf "@[<hov 1>%s@<1>[%s%a%s@<1>%s]@ %a@]"
