@@ -411,7 +411,8 @@ and free_names_head_of_kind_naked_int64 _ = Name_occurrences.empty
 
 and free_names_head_of_kind_naked_nativeint _ = Name_occurrences.empty
 
-and free_names_head_of_kind_rec_info head = Rec_info_expr.free_names head
+and free_names_head_of_kind_rec_info head =
+  Rec_info_expr.free_names_in_types head
 
 and free_names_row_like :
       'row_tag 'index 'maps_to 'known.
@@ -856,6 +857,9 @@ and all_ids_for_export_env_extension { equations } =
    co2)] is just [(t1 @ co1, t2 @ co2)]. Any bit of type syntax should be
    liftable: a coercion on blocks has a coercion for each field, a coercion on
    variants has a coercion for each branch, etc. *)
+(* CR-soon lmaurer Return just [t] from here once we're confident that returning
+   bottom is a genuine error condition. (Currently, there's a wrapper below that
+   checks for bottom and throws a fatal error.) *)
 let rec apply_coercion t coercion : t Or_bottom.t =
   if Coercion.is_id coercion
   then Ok t
@@ -1143,6 +1147,13 @@ and apply_coercion_env_extension { equations } coercion : _ Or_bottom.t =
       equations (Or_bottom.Ok Name.Map.empty)
   in
   { equations }
+
+let apply_coercion t coercion =
+  match apply_coercion t coercion with
+  | Ok t -> t
+  | Bottom ->
+    Misc.fatal_errorf "Cannot apply coercion %a@ to type %a" Coercion.print
+      coercion print t
 
 let kind t =
   match t with
