@@ -16,6 +16,8 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+module IT = Binding_time.Non_overlapping_interval_tree_for_name_modes
+
 module K = Flambda_kind
 module MTC = More_type_creators
 module TG = Type_grammar
@@ -29,7 +31,7 @@ module One_level = struct
       just_after_level : Cached_level.t
     }
 
-  let [@ocamlformat "disable"] print ~min_binding_time ppf
+  let [@ocamlformat "disable"] print ~name_mode_restrictions ppf
         { scope = _; level; just_after_level; } =
     let restrict_to = TEL.defined_names level in
     if Name.Set.is_empty restrict_to then
@@ -42,7 +44,7 @@ module One_level = struct
           @[<hov 1>(defined_vars@ %a)@]@ \
           %a\
           @]"
-        (Cached_level.print_name_modes ~restrict_to ~min_binding_time) just_after_level
+        (Cached_level.print_name_modes ~restrict_to ~name_mode_restrictions) just_after_level
         TEL.print level
 
   let create scope level ~just_after_level = { scope; level; just_after_level }
@@ -82,7 +84,8 @@ type t =
     prev_levels : One_level.t Scope.Map.t;
     current_level : One_level.t;
     next_binding_time : Binding_time.t;
-    min_binding_time : Binding_time.t (* Earlier variables have mode In_types *)
+    name_mode_restrictions :
+      Binding_time.Non_overlapping_interval_tree_for_name_modes.t
   }
 
 type typing_env = t
@@ -100,7 +103,7 @@ let aliases t =
 let [@ocamlformat "disable"] print ppf
       ({ resolver = _; get_imported_names = _;
          prev_levels; current_level; next_binding_time = _;
-         defined_symbols; code_age_relation; min_binding_time;
+         defined_symbols; code_age_relation; name_mode_restrictions;
        } as t) =
   if is_empty t then
     Format.pp_print_string ppf "Empty"
@@ -121,7 +124,7 @@ let [@ocamlformat "disable"] print ppf
           )@]"
       Symbol.Set.print defined_symbols
       Code_age_relation.print code_age_relation
-      (Scope.Map.print (One_level.print ~min_binding_time))
+      (Scope.Map.print (One_level.print ~name_mode_restrictions))
       levels
       Aliases.print (aliases t)
 
@@ -353,6 +356,11 @@ end = struct
     let code_age_relation = code_age_relation serializable in
     let just_after_level = just_after_level serializable in
     let next_binding_time = next_binding_time serializable in
+    let earliest_binding_time = Binding_time.imported_variables in
+    let name_mode_restrictions =
+      IT.add IT.empty ~min_inclusive:earliest_binding_time
+        ~max_exclusive:next_binding_time Name_mode.in_types
+    in
     { resolver;
       get_imported_names;
       defined_symbols;
@@ -360,10 +368,10 @@ end = struct
       prev_levels = Scope.Map.empty;
       current_level = One_level.create Scope.initial TEL.empty ~just_after_level;
       (* Note: the field [next_binding_time] of the new env will not be used,
-         but setting [min_binding_time] to the value of [next_binding_time] from
-         the serialized env marks all variables as having mode In_types. *)
+         but [name_mode_restrictions] is used to mark all variables as having
+         mode In_types. *)
       next_binding_time;
-      min_binding_time = next_binding_time
+      name_mode_restrictions
     }
 end
 
@@ -398,7 +406,7 @@ let current_scope t = One_level.scope t.current_level
 let names_to_types t =
   Cached_level.names_to_types (One_level.just_after_level t.current_level)
 
-let aliases_with_min_binding_time t = aliases t, t.min_binding_time
+let aliases_with_name_mode_restrictions t = aliases t, t.name_mode_restrictions
 
 let create ~resolver ~get_imported_names =
   { resolver;
@@ -408,7 +416,7 @@ let create ~resolver ~get_imported_names =
     next_binding_time = Binding_time.earliest_var;
     defined_symbols = Symbol.Set.empty;
     code_age_relation = Code_age_relation.empty;
-    min_binding_time = Binding_time.earliest_var
+    name_mode_restrictions = IT.empty
   }
 
 let increment_scope t =
@@ -528,8 +536,8 @@ let find_with_binding_time_and_mode' t name kind =
     check_optional_kind_matches name ty kind;
     found
 
-(* This version doesn't check min_binding_time. This ensures that no allocation
-   occurs when we're not interested in the name mode. *)
+(* This version doesn't check name_mode_restrictions. This ensures that no
+   allocation occurs when we're not interested in the name mode. *)
 let find_with_binding_time_and_mode_unscoped t name kind =
   try find_with_binding_time_and_mode' t name kind
   with Missing_cmx_and_kind ->
@@ -549,9 +557,8 @@ let find_with_binding_time_and_mode t name kind =
     find_with_binding_time_and_mode_unscoped t name kind
   in
   let scoped_mode =
-    Binding_time.With_name_mode.scoped_name_mode
+    IT.scoped_name_mode t.name_mode_restrictions
       (Binding_time.With_name_mode.create binding_time mode)
-      ~min_binding_time:t.min_binding_time
   in
   if Name_mode.equal mode scoped_mode
   then found
@@ -603,9 +610,8 @@ let mem ?min_name_mode t name =
           else None
         | _ty, binding_time, name_mode ->
           let scoped_name_mode =
-            Binding_time.With_name_mode.scoped_name_mode
+            IT.scoped_name_mode t.name_mode_restrictions
               (Binding_time.With_name_mode.create binding_time name_mode)
-              ~min_binding_time:t.min_binding_time
           in
           Some scoped_name_mode
       in
@@ -1054,22 +1060,22 @@ let type_simple_in_term_exn t ?min_name_mode simple =
     else ty
   in
   let kind = TG.kind ty in
-  let aliases_for_simple, min_binding_time =
+  let aliases_for_simple, name_mode_restrictions =
     if Aliases.mem (aliases t) simple
-    then aliases_with_min_binding_time t
+    then aliases_with_name_mode_restrictions t
     else
       Simple.pattern_match simple
-        ~const:(fun _ -> aliases_with_min_binding_time t)
+        ~const:(fun _ -> aliases_with_name_mode_restrictions t)
         ~name:(fun name ->
           Name.pattern_match name
             ~var:(fun var ~coercion:_ ->
               let comp_unit = Variable.compilation_unit var in
               if Compilation_unit.equal comp_unit
                    (Compilation_unit.get_current_exn ())
-              then aliases_with_min_binding_time t
+              then aliases_with_name_mode_restrictions t
               else
                 match (resolver t) comp_unit with
-                | Some env -> aliases_with_min_binding_time env
+                | Some env -> aliases_with_name_mode_restrictions env
                 | None ->
                   Misc.fatal_errorf
                     "Error while looking up variable %a:@ No corresponding \
@@ -1078,7 +1084,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
             ~symbol:(fun _sym ~coercion:_ ->
               (* Symbols can't alias, so lookup in the current aliases is
                  fine *)
-              aliases_with_min_binding_time t))
+              aliases_with_name_mode_restrictions t))
   in
   let min_name_mode =
     match min_name_mode with
@@ -1087,7 +1093,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   in
   match
     Aliases.get_canonical_element_exn aliases_for_simple simple name_mode_simple
-      ~min_name_mode ~min_binding_time
+      ~min_name_mode ~name_mode_restrictions
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -1100,22 +1106,22 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
-  let aliases_for_simple, min_binding_time =
+  let aliases_for_simple, name_mode_restrictions =
     if Aliases.mem (aliases t) simple
-    then aliases_with_min_binding_time t
+    then aliases_with_name_mode_restrictions t
     else
       Simple.pattern_match simple
-        ~const:(fun _ -> aliases_with_min_binding_time t)
+        ~const:(fun _ -> aliases_with_name_mode_restrictions t)
         ~name:(fun name ~coercion:_ ->
           Name.pattern_match name
             ~var:(fun var ->
               let comp_unit = Variable.compilation_unit var in
               if Compilation_unit.equal comp_unit
                    (Compilation_unit.get_current_exn ())
-              then aliases_with_min_binding_time t
+              then aliases_with_name_mode_restrictions t
               else
                 match (resolver t) comp_unit with
-                | Some env -> aliases_with_min_binding_time env
+                | Some env -> aliases_with_name_mode_restrictions env
                 | None ->
                   (* Transcript of Slack conversation relating to the next line:
 
@@ -1143,11 +1149,11 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
                      had a way to learn later that the variable is actually an
                      alias, but that would only happen if for some reason we
                      later successfully load the missing cmx. *)
-                  aliases_with_min_binding_time t)
+                  aliases_with_name_mode_restrictions t)
             ~symbol:(fun _sym ->
               (* Symbols can't alias, so lookup in the current aliases is
                  fine *)
-              aliases_with_min_binding_time t))
+              aliases_with_name_mode_restrictions t))
   in
   let name_mode_simple =
     let in_types =
@@ -1171,7 +1177,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
   in
   match
     Aliases.get_canonical_element_exn aliases_for_simple simple name_mode_simple
-      ~min_name_mode ~min_binding_time
+      ~min_name_mode ~name_mode_restrictions
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -1201,7 +1207,12 @@ let aliases_of_simple t ~min_name_mode simple =
 let aliases_of_simple_allowable_in_types t simple =
   aliases_of_simple t ~min_name_mode:Name_mode.in_types simple
 
-let closure_env t = { t with min_binding_time = t.next_binding_time }
+let closure_env t =
+  let name_mode_restrictions =
+    IT.add IT.empty ~min_inclusive:Binding_time.imported_variables
+      ~max_exclusive:t.next_binding_time Name_mode.in_types
+  in
+  { t with name_mode_restrictions }
 
 let rec free_names_transitive_of_type_of_name t name ~result =
   let result = Name_occurrences.add_name result name Name_mode.in_types in

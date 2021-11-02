@@ -30,6 +30,8 @@ val earliest_var : t
 
 val succ : t -> t
 
+val prev : t -> t
+
 val strictly_earlier : t -> than:t -> bool
 
 val equal : t -> t -> bool
@@ -43,9 +45,24 @@ module With_name_mode : sig
 
   val name_mode : t -> Name_mode.t
 
-  val scoped_name_mode : t -> min_binding_time:binding_time -> Name_mode.t
-
   val print : Format.formatter -> t -> unit
 
   val equal : t -> t -> bool
+end
+
+module Non_overlapping_interval_tree_for_name_modes : sig
+  type t
+
+  val empty : t
+
+  val add :
+    t ->
+    min_inclusive:binding_time ->
+    max_exclusive:binding_time ->
+    Name_mode.t ->
+    t
+
+  val find_exn : t -> binding_time -> Name_mode.t
+
+  val scoped_name_mode : t -> With_name_mode.t -> Name_mode.t
 end

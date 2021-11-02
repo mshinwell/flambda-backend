@@ -16,24 +16,25 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+module IT = Binding_time.Non_overlapping_interval_tree_for_name_modes
+
 type t =
   { names_to_types : (Type_grammar.t * Binding_time.t * Name_mode.t) Name.Map.t;
     aliases : Aliases.t;
     symbol_projections : Symbol_projection.t Variable.Map.t
   }
 
-let print_kind_and_mode ~min_binding_time ppf (ty, binding_time, mode) =
+let print_kind_and_mode ~name_mode_restrictions ppf (ty, binding_time, mode) =
   let kind = Type_grammar.kind ty in
   let mode =
-    Binding_time.With_name_mode.scoped_name_mode
+    IT.scoped_name_mode name_mode_restrictions
       (Binding_time.With_name_mode.create binding_time mode)
-      ~min_binding_time
   in
   Format.fprintf ppf ":: %a %a" Flambda_kind.print kind Name_mode.print mode
 
-let print_name_modes ~restrict_to ~min_binding_time ppf t =
+let print_name_modes ~restrict_to ~name_mode_restrictions ppf t =
   Name.Map.print
-    (print_kind_and_mode ~min_binding_time)
+    (print_kind_and_mode ~name_mode_restrictions)
     ppf
     (Name.Map.filter
        (fun name _ -> Name.Set.mem name restrict_to)

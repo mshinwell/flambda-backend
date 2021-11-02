@@ -31,34 +31,34 @@ struct
   module Interval = struct
     type nonrec t =
       { min_inclusive : Point.t;
-        max_inclusive : Point.t
+        max_exclusive : Point.t
       }
 
-    let[@ocamlformat "disable"] print ppf { min_inclusive; max_inclusive } =
+    let[@ocamlformat "disable"] print ppf { min_inclusive; max_exclusive } =
       Format.fprintf ppf "@<hov 1>@[(\
           @[<hov 1>(min_inclusive@ %a)@]@ \
-          @[<hov 1>(max_inclusive@ %a)@]\
+          @[<hov 1>(max_exclusive@ %a)@]\
           )@]"
         Point.print min_inclusive
-        Point.print max_inclusive
+        Point.print max_exclusive
 
-    let contains { min_inclusive; max_inclusive } point =
+    let contains { min_inclusive; max_exclusive } point =
       Point.compare point min_inclusive >= 0
-      && Point.compare point max_inclusive <= 0
+      && Point.compare point max_exclusive < 0
 
-    let point_contained_in_or_after { min_inclusive; max_inclusive = _ } point =
+    let point_contained_in_or_after { min_inclusive; max_exclusive = _ } point =
       Point.compare point min_inclusive >= 0
 
     let overlaps
-        ({ min_inclusive = min_inclusive1; max_inclusive = max_inclusive1 } as
+        ({ min_inclusive = min_inclusive1; max_exclusive = max_exclusive1 } as
         t1)
-        ({ min_inclusive = min_inclusive2; max_inclusive = max_inclusive2 } as
+        ({ min_inclusive = min_inclusive2; max_exclusive = max_exclusive2 } as
         t2) =
-      contains t1 min_inclusive2 || contains t1 max_inclusive2
-      || contains t2 min_inclusive1 || contains t2 max_inclusive1
+      contains t1 min_inclusive2 || contains t1 max_exclusive2
+      || contains t2 min_inclusive1 || contains t2 max_exclusive1
 
-    let compare { min_inclusive = min_inclusive1; max_inclusive = _ }
-        { min_inclusive = min_inclusive2; max_inclusive = _ } =
+    let compare { min_inclusive = min_inclusive1; max_exclusive = _ }
+        { min_inclusive = min_inclusive2; max_exclusive = _ } =
       Point.compare min_inclusive1 min_inclusive2
 
     let equal t1 t2 = Int.equal (compare t1 t2) 0
@@ -73,8 +73,8 @@ struct
 
   let empty = Map.empty
 
-  let add t ~min_inclusive ~max_inclusive datum =
-    let interval = { Interval.min_inclusive; max_inclusive } in
+  let add t ~min_inclusive ~max_exclusive datum =
+    let interval = { Interval.min_inclusive; max_exclusive } in
     if check_invariants
     then
       Map.iter

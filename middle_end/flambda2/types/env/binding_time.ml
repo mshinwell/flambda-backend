@@ -45,6 +45,12 @@ let succ (t : t) =
   then Misc.fatal_error "Cannot increment binding time for symbols"
   else t + 1
 
+let prev (t : t) =
+  if t <= imported_variables
+  then
+    Misc.fatal_error "Cannot decrement binding time past [imported_variables]"
+  else t - 1
+
 (* CR mshinwell: enforce an upper limit on values of type [t] *)
 
 module With_name_mode = struct
@@ -68,15 +74,6 @@ module With_name_mode = struct
     | 2 -> Name_mode.phantom
     | _ -> assert false
 
-  let scoped_name_mode t ~min_binding_time =
-    (* Strictly before [min_binding_time] means out of scope, at
-       [min_binding_time] or later is in scope. *)
-    if binding_time t < earliest_var || min_binding_time <= binding_time t
-    then (* Constant, symbol, or variable in the allowed scope *)
-      name_mode t
-    else (* Variable out of the allowed scope *)
-      Name_mode.in_types
-
   let [@ocamlformat "disable"] print ppf t =
     Format.fprintf ppf "(bound at time %d %a)" (binding_time t)
       Name_mode.print (name_mode t)
@@ -84,78 +81,16 @@ module With_name_mode = struct
   let equal t1 t2 = t1 = t2
 end
 
-module Make_non_overlapping_interval_tree (Datum : sig
-  type t
+module Non_overlapping_interval_tree_for_name_modes = struct
+  include Non_overlapping_interval_tree.Make (T) (Name_mode)
 
-  val print : Format.formatter -> t -> unit
-end) =
-struct
-  let check_invariants = true
-
-  module Interval = struct
-    type nonrec t =
-      { min_inclusive : t;
-        max_inclusive : t
-      }
-
-    let[@ocamlformat "disable"] print ppf { min_inclusive; max_inclusive } =
-      Format.fprintf ppf "@<hov 1>@[(\
-          @[<hov 1>(min_inclusive@ %a)@]@ \
-          @[<hov 1>(max_inclusive@ %a)@]\
-          )@]"
-        print min_inclusive
-        print max_inclusive
-
-    let contains { min_inclusive; max_inclusive } point =
-      compare point min_inclusive >= 0 && compare point max_inclusive <= 0
-
-    let point_contained_in_or_after { min_inclusive; max_inclusive = _ } point =
-      compare point min_inclusive >= 0
-
-    let overlaps
-        ({ min_inclusive = min_inclusive1; max_inclusive = max_inclusive1 } as
-        t1)
-        ({ min_inclusive = min_inclusive2; max_inclusive = max_inclusive2 } as
-        t2) =
-      contains t1 min_inclusive2 || contains t1 max_inclusive2
-      || contains t2 min_inclusive1 || contains t2 max_inclusive1
-
-    let compare { min_inclusive = min_inclusive1; max_inclusive = _ }
-        { min_inclusive = min_inclusive2; max_inclusive = _ } =
-      compare min_inclusive1 min_inclusive2
-
-    let equal t1 t2 = compare t1 t2 = 0
-  end
-
-  module Set = Container_types.Make_set (Interval)
-  module Map = Container_types.Make_map (Interval) (Set)
-
-  type t = Datum.t Map.t
-
-  let print ppf t = Map.print Datum.print ppf t
-
-  let empty = Map.empty
-
-  let add t ~min_inclusive ~max_inclusive datum =
-    let interval = { Interval.min_inclusive; max_inclusive } in
-    if check_invariants
-    then
-      Map.iter
-        (fun existing _ ->
-          if Interval.overlaps interval existing
-          then
-            Misc.fatal_errorf
-              "Cannot add interval@ %a@ that overlaps with existing interval@ \
-               %a:@ %a"
-              Interval.print interval Interval.print existing print t)
-        t;
-    Map.add interval datum t
-
-  let find_exn t point =
-    let interval, datum =
-      Map.find_first
-        (fun interval -> Interval.point_contained_in_or_after interval point)
-        t
-    in
-    if Interval.contains interval point then datum else raise Not_found
+  let scoped_name_mode t with_name_mode =
+    let binding_time = With_name_mode.binding_time with_name_mode in
+    if compare binding_time earliest_var < 0
+    then (* Constant or symbol. *)
+      With_name_mode.name_mode with_name_mode
+    else
+      match find_exn t binding_time with
+      | exception Not_found -> With_name_mode.name_mode with_name_mode
+      | name_mode -> name_mode
 end

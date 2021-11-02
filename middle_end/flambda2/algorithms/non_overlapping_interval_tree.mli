@@ -29,7 +29,7 @@ end) : sig
 
   val empty : t
 
-  val add : t -> min_inclusive:Point.t -> max_inclusive:Point.t -> Datum.t -> t
+  val add : t -> min_inclusive:Point.t -> max_exclusive:Point.t -> Datum.t -> t
 
   val find_exn : t -> Point.t -> Datum.t
 end

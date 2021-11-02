@@ -97,7 +97,8 @@ val get_canonical_element_exn :
   Simple.t ->
   Name_mode.t ->
   min_name_mode:Name_mode.t ->
-  min_binding_time:Binding_time.t ->
+  name_mode_restrictions:
+    Binding_time.Non_overlapping_interval_tree_for_name_modes.t ->
   Simple.t
 
 module Alias_set : sig

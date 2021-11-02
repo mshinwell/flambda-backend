@@ -16,6 +16,8 @@
 
 module Const = Reg_width_things.Const
 
+module IT = Binding_time.Non_overlapping_interval_tree_for_name_modes
+
 type coercion_to_canonical = Coercion.t
 
 let compose_map_values_exn map ~then_:coercion =
@@ -432,10 +434,8 @@ let binding_time_and_name_mode t elt =
 let name_mode_unscoped t elt =
   Binding_time.With_name_mode.name_mode (binding_time_and_name_mode t elt)
 
-let name_mode t elt ~min_binding_time =
-  Binding_time.With_name_mode.scoped_name_mode
-    (binding_time_and_name_mode t elt)
-    ~min_binding_time
+let name_mode t elt ~name_mode_restrictions =
+  IT.scoped_name_mode name_mode_restrictions (binding_time_and_name_mode t elt)
 
 let invariant t =
   if Flambda_features.check_invariants ()
@@ -964,13 +964,13 @@ let mem t element =
    add_result.alias_of print t *)
 
 let get_canonical_element_exn t element elt_name_mode ~min_name_mode
-    ~min_binding_time =
+    ~name_mode_restrictions =
   let canonical_element, name_mode, coercion_from_canonical_to_element =
     match canonical t element with
     | Is_canonical ->
       Simple.without_coercion element, elt_name_mode, Simple.coercion element
     | Alias_of_canonical { canonical_element; coercion_to_canonical } ->
-      let name_mode = name_mode t canonical_element ~min_binding_time in
+      let name_mode = name_mode t canonical_element ~name_mode_restrictions in
       canonical_element, name_mode, Coercion.inverse coercion_to_canonical
   in
   assert (not (Simple.has_coercion canonical_element));
@@ -996,8 +996,7 @@ let get_canonical_element_exn t element elt_name_mode ~min_name_mode
               Name.Map.find name t.binding_times_and_modes
             in
             let scoped_name_mode =
-              Binding_time.With_name_mode.scoped_name_mode binding_time_and_mode
-                ~min_binding_time
+              IT.scoped_name_mode name_mode_restrictions binding_time_and_mode
             in
             Name_mode.equal name_mode scoped_name_mode)
           names
