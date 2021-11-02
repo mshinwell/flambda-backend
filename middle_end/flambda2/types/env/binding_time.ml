@@ -92,5 +92,7 @@ module Non_overlapping_interval_tree_for_name_modes = struct
     else
       match find_exn t binding_time with
       | exception Not_found -> With_name_mode.name_mode with_name_mode
-      | name_mode -> name_mode
+      | name_mode ->
+        assert (Name_mode.equal name_mode Name_mode.in_types);
+        name_mode
 end
