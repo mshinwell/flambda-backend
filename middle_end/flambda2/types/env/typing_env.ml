@@ -1036,6 +1036,20 @@ let cut t ~unknown_if_defined_at_or_later_than:min_scope =
         TEL.concat result (One_level.level one_level))
       at_or_after_cut TEL.empty
 
+let make_variables_in_types t ~in_scope =
+  let min_inclusive = in_scope.next_binding_time in
+  let max_exclusive = t.next_binding_time in
+  if Binding_time.compare min_inclusive max_exclusive >= 0
+  then
+    Misc.fatal_errorf
+      "Wrong binding time ordering: min_inclusive = %a, max_exclusive = %a"
+      Binding_time.print min_inclusive Binding_time.print max_exclusive;
+  let name_mode_restrictions =
+    IT.add t.name_mode_restrictions ~min_inclusive ~max_exclusive
+      Name_mode.in_types
+  in
+  { t with name_mode_restrictions }
+
 let type_simple_in_term_exn t ?min_name_mode simple =
   (* If [simple] is a variable then it should not come from a missing .cmx file,
      since this function is only used for typing variables in terms, and even

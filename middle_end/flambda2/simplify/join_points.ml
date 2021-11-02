@@ -139,45 +139,66 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
         use_env, U.id use, U.use_kind use)
       uses_list
   in
-  let arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses in
+  (* We don't need any join calculations if there is only one use of the
+     continuation and it is inlinable. In this case, the environment of the
+     unique use site becomes the environment for simplifying the continuation
+     handler.
+
+     If there is only one use of the continuation but it is not inlinable, we
+     can also avoid any join calculations, by simply switching any defined
+     variables between the fork and the join points to have mode [In_types].
+
+     In all other cases a full join calculation is performed.
+
+     We need to make sure any lifted constants generated during the
+     simplification of the body are in the returned environment for the handler.
+     Otherwise we might share a constant based on information in [DA] but then
+     find the definition of the corresponding constant isn't in [DE]. Note that
+     some of the constants may already be defined (for example because they were
+     defined on the path between the fork point and the unique use, in the
+     inlining case). *)
   match use_envs_with_ids with
   | [(use_env, _, Inlinable)] ->
-    (* There is only one use of the continuation and it is inlinable. No join
-       calculations are required.
-
-       We need to make sure any lifted constants generated during the
-       simplification of the body are in the returned environment for the
-       handler. Otherwise we might share a constant based on information in [DA]
-       but then find the definition of the corresponding constant isn't in [DE].
-       Note that some of the constants may already be defined (for example
-       because they were defined on the path between the fork point and this
-       particular use). *)
     let handler_env =
       LCS.add_to_denv ~maybe_already_defined:() use_env
         consts_lifted_during_body
     in
     Uses
       { handler_env;
-        arg_types_by_use_id;
+        arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses;
         extra_params_and_args = Continuation_extra_params_and_args.empty;
         is_single_inlinable_use = true;
         escapes = false
       }
-  | [] | [(_, _, Non_inlinable _)] | (_, _, (Inlinable | Non_inlinable _)) :: _
-    ->
-    (* This is the general case.
-
-       The lifted constants are put into the _fork_ environment now because it
+  | [(use_env, _, Non_inlinable { escaping = escapes })] ->
+    let use_typing_env =
+      TE.make_variables_in_types (DE.typing_env use_env)
+        ~in_scope:(DE.typing_env env_at_fork_plus_params)
+    in
+    let handler_env =
+      LCS.add_to_denv ~maybe_already_defined:()
+        (DE.with_typing_env use_env use_typing_env)
+        consts_lifted_during_body
+    in
+    Uses
+      { handler_env;
+        arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses;
+        extra_params_and_args = Continuation_extra_params_and_args.empty;
+        is_single_inlinable_use = false;
+        escapes
+      }
+  | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
+    let arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses in
+    (* The lifted constants are put into the _fork_ environment now because it
        overall makes things easier; the join operation can just discard any
        equation about a lifted constant (any such equation could not be
        materially more precise anyway). *)
     let denv =
       LCS.add_to_denv env_at_fork_plus_params consts_lifted_during_body
     in
-    let typing_env = DE.typing_env denv in
     let handler_env, extra_params_and_args =
       (* CR mshinwell: remove Flambda_features.join_points *)
-      join denv typing_env params ~env_at_fork_plus_params
+      join denv (DE.typing_env denv) params ~env_at_fork_plus_params
         ~consts_lifted_during_body ~use_envs_with_ids
     in
     let handler_env =
@@ -199,3 +220,6 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
         is_single_inlinable_use = false;
         escapes
       }
+  | [] ->
+    Misc.fatal_error
+      "[Join_points] should only be called when there are > 0 continuation uses"

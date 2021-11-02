@@ -168,6 +168,8 @@ val with_code_age_relation : t -> Code_age_relation.t -> t
 
 val cut : t -> unknown_if_defined_at_or_later_than:Scope.t -> Typing_env_level.t
 
+val make_variables_in_types : t -> in_scope:t -> t
+
 val free_names_transitive : t -> Type_grammar.t -> Name_occurrences.t
 
 val clean_for_export : t -> reachable_names:Name_occurrences.t -> t

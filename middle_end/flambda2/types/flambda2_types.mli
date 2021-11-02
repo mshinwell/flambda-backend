@@ -168,6 +168,8 @@ module Typing_env : sig
 
   val free_names_transitive : t -> flambda_type -> Name_occurrences.t
 
+  val make_variables_in_types : t -> in_scope:t -> t
+
   module Alias_set : sig
     type t
 
