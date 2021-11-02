@@ -26,7 +26,7 @@ end) (Datum : sig
   val print : Format.formatter -> t -> unit
 end) =
 struct
-  let _check_invariants = true
+  let check_invariants = true
 
   module Interval = struct
     type nonrec t =
@@ -49,7 +49,7 @@ struct
     let point_contained_in_or_after { min_inclusive; max_exclusive = _ } point =
       Point.compare point min_inclusive >= 0
 
-    let _overlaps
+    let overlaps
         ({ min_inclusive = min_inclusive1; max_exclusive = max_exclusive1 } as
         t1)
         ({ min_inclusive = min_inclusive2; max_exclusive = max_exclusive2 } as
@@ -90,13 +90,20 @@ struct
   let add t ~min_inclusive ~max_exclusive datum =
     let interval = { Interval.min_inclusive; max_exclusive } in
     match find_exn0 t min_inclusive with
-    | exception Not_found ->
-      (* if check_invariants then Map.iter (fun existing _ -> if
-         Interval.overlaps interval existing then Misc.fatal_errorf "Cannot add
-         interval@ %a@ that overlaps with existing interval@ \ %a:@ %a"
-         Interval.print interval Interval.print existing print t) t;*)
-      Map.add interval datum t
+    | exception Not_found -> Map.add interval datum t
     | existing, _ ->
+      if check_invariants
+      then
+        Map.iter
+          (fun existing _ ->
+            if Interval.overlaps interval existing
+               && Point.compare existing.min_inclusive min_inclusive <> 0
+            then
+              Misc.fatal_errorf
+                "Cannot add interval@ %a@ that overlaps with existing interval \
+                 except for an extension@  %a:@ %a"
+                Interval.print interval Interval.print existing print t)
+          t;
       if Point.compare max_exclusive existing.max_exclusive < 0
       then
         Misc.fatal_errorf

@@ -86,7 +86,7 @@ module Non_overlapping_interval_tree_for_name_modes = struct
 
   let scoped_name_mode t with_name_mode =
     let binding_time = With_name_mode.binding_time with_name_mode in
-    if compare binding_time earliest_var < 0
+    if compare binding_time symbols <= 0
     then (* Constant or symbol. *)
       With_name_mode.name_mode with_name_mode
     else

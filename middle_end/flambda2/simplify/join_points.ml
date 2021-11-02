@@ -24,7 +24,9 @@ module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
 let join denv typing_env params ~env_at_fork_plus_params
-    ~consts_lifted_during_body ~use_envs_with_ids =
+    ~consts_lifted_during_body
+    ~(use_envs_with_ids :
+       (DE.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list) =
   let definition_scope_level =
     DE.get_continuation_scope_level env_at_fork_plus_params
   in
@@ -58,13 +60,20 @@ let join denv typing_env params ~env_at_fork_plus_params
     | Some cse_join_result -> cse_join_result.extra_allowed_names
   in
   let env =
-    T.cut_and_n_way_join typing_env use_envs_with_ids'
-      ~params
-        (* CR-someday mshinwell: If this didn't do Scope.next then TE could
-           probably be slightly more efficient, as it wouldn't need to look at
-           the middle of the three return values from Scope.Map.Split. *)
-      ~unknown_if_defined_at_or_later_than:(Scope.next definition_scope_level)
-      ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+    match use_envs_with_ids with
+    | [(use_env, _, Non_inlinable _)] ->
+      TE.make_variables_in_types (DE.typing_env use_env)
+        ~in_scope:(DE.typing_env env_at_fork_plus_params)
+    | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
+      T.cut_and_n_way_join typing_env use_envs_with_ids'
+        ~params
+          (* CR-someday mshinwell: If this didn't do Scope.next then TE could
+             probably be slightly more efficient, as it wouldn't need to look at
+             the middle of the three return values from Scope.Map.Split. *)
+        ~unknown_if_defined_at_or_later_than:(Scope.next definition_scope_level)
+        ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+    | [] -> assert false
+    (* see below *)
   in
   let handler_env =
     env
@@ -169,23 +178,6 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
         extra_params_and_args = Continuation_extra_params_and_args.empty;
         is_single_inlinable_use = true;
         escapes = false
-      }
-  | [(use_env, _, Non_inlinable { escaping = escapes })] ->
-    let use_typing_env =
-      TE.make_variables_in_types (DE.typing_env use_env)
-        ~in_scope:(DE.typing_env env_at_fork_plus_params)
-    in
-    let handler_env =
-      LCS.add_to_denv ~maybe_already_defined:()
-        (DE.with_typing_env use_env use_typing_env)
-        consts_lifted_during_body
-    in
-    Uses
-      { handler_env;
-        arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses;
-        extra_params_and_args = Continuation_extra_params_and_args.empty;
-        is_single_inlinable_use = false;
-        escapes
       }
   | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
     let arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses in
