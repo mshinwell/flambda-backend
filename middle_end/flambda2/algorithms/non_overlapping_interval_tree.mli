@@ -31,6 +31,8 @@ end) : sig
 
   val empty : t
 
+  (** Any newly-provided interval that overlaps an existing interval will cause
+      the removal of that existing interval. *)
   val add : t -> min_inclusive:Point.t -> max_exclusive:Point.t -> Datum.t -> t
 
   val find_exn : t -> Point.t -> Datum.t

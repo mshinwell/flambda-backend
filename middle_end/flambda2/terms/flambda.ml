@@ -732,7 +732,7 @@ and print_let_cont_expr ppf t =
         print ~body handlers
   in
   let let_conts, body = gather_let_conts [] t in
-  fprintf ppf "@[<v 1>(%a@;" print body;
+  fprintf ppf "@[<v 1>(Let_cont@ %a@;" print body;
   let first = ref true in
   List.iter
     (fun (cont, recursive, handler, occurrences) ->

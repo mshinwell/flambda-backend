@@ -120,13 +120,15 @@ let [@ocamlformat "disable"] print ppf
           @[<hov 1>(defined_symbols@ %a)@]@ \
           @[<hov 1>(code_age_relation@ %a)@]@ \
           @[<hov 1>(levels@ %a)@]@ \
-          @[<hov 1>(aliases@ %a)@]\
+          @[<hov 1>(aliases@ %a)@]@ \
+          @[<hov 1>(name_mode_restrictions@ %a)@]\
           )@]"
       Symbol.Set.print defined_symbols
       Code_age_relation.print code_age_relation
       (Scope.Map.print (One_level.print ~name_mode_restrictions))
       levels
       Aliases.print (aliases t)
+      IT.print name_mode_restrictions
 
 module Meet_env = struct
   type t =

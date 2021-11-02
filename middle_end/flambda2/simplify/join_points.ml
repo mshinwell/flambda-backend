@@ -23,13 +23,11 @@ module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
-let join denv typing_env params ~env_at_fork_plus_params
-    ~consts_lifted_during_body
+let join denv params ~consts_lifted_during_body
     ~(use_envs_with_ids :
        (DE.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list) =
-  let definition_scope_level =
-    DE.get_continuation_scope_level env_at_fork_plus_params
-  in
+  let typing_env_at_fork = DE.typing_env denv in
+  let definition_scope_level = DE.get_continuation_scope_level denv in
   let extra_lifted_consts_in_use_envs =
     LCS.all_defined_symbols consts_lifted_during_body
   in
@@ -41,8 +39,9 @@ let join denv typing_env params ~env_at_fork_plus_params
   in
   let module CSE = Common_subexpression_elimination in
   let cse_join_result =
-    assert (Scope.equal definition_scope_level (TE.current_scope typing_env));
-    CSE.join ~typing_env_at_fork:typing_env ~cse_at_fork:(DE.cse denv)
+    assert (
+      Scope.equal definition_scope_level (TE.current_scope typing_env_at_fork));
+    CSE.join ~typing_env_at_fork ~cse_at_fork:(DE.cse denv)
       ~use_info:use_envs_with_ids
       ~get_typing_env:(fun (use_env, _, _) -> DE.typing_env use_env)
       ~get_rewrite_id:(fun (_, id, _) -> id)
@@ -63,9 +62,9 @@ let join denv typing_env params ~env_at_fork_plus_params
     match use_envs_with_ids with
     | [(use_env, _, Non_inlinable _)] ->
       TE.make_variables_in_types (DE.typing_env use_env)
-        ~in_scope:(DE.typing_env env_at_fork_plus_params)
+        ~in_scope:typing_env_at_fork
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
-      T.cut_and_n_way_join typing_env use_envs_with_ids'
+      T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids'
         ~params
           (* CR-someday mshinwell: If this didn't do Scope.next then TE could
              probably be slightly more efficient, as it wouldn't need to look at
@@ -190,10 +189,10 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
     in
     let handler_env, extra_params_and_args =
       (* CR mshinwell: remove Flambda_features.join_points *)
-      join denv (DE.typing_env denv) params ~env_at_fork_plus_params
-        ~consts_lifted_during_body ~use_envs_with_ids
+      join denv params ~consts_lifted_during_body ~use_envs_with_ids
     in
     let handler_env =
+      (* XXX Not sure we want to do this in the single non-inlinable case *)
       DE.map_typing_env handler_env ~f:(fun handler_env ->
           TE.with_code_age_relation handler_env code_age_relation_after_body)
     in
