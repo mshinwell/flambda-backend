@@ -26,8 +26,6 @@ end) (Datum : sig
   val print : Format.formatter -> t -> unit
 end) =
 struct
-  let check_invariants = true
-
   module Interval = struct
     type nonrec t =
       { min_inclusive : Point.t;
@@ -46,8 +44,9 @@ struct
       Point.compare point min_inclusive >= 0
       && Point.compare point max_exclusive < 0
 
-    let point_contained_in_or_after { min_inclusive; max_exclusive = _ } point =
-      Point.compare point min_inclusive >= 0
+    let point_contained_in_or_after { min_inclusive; max_exclusive } point =
+      Point.compare point min_inclusive < 0
+      || Point.compare point max_exclusive <= 0
 
     let overlaps
         ({ min_inclusive = min_inclusive1; max_exclusive = max_exclusive1 } as
@@ -64,8 +63,9 @@ struct
     let equal t1 t2 = Int.equal (compare t1 t2) 0
   end
 
-  module Set = Container_types.Make_set (Interval)
-  module Map = Container_types.Make_map (Interval) (Set)
+  module I = Interval
+  module Set = Container_types.Make_set (I)
+  module Map = Container_types.Make_map (I) (Set)
 
   type t = Datum.t Map.t
 
@@ -76,38 +76,22 @@ struct
   let[@inline always] find_exn0 t point =
     let interval, datum =
       Map.find_first
-        (fun interval -> Interval.point_contained_in_or_after interval point)
+        (fun interval -> I.point_contained_in_or_after interval point)
         t
     in
-    if Interval.contains interval point
-    then interval, datum
-    else raise Not_found
+    if I.contains interval point then interval, datum else raise Not_found
 
   let find_exn t point =
     let _interval, datum = find_exn0 t point in
     datum
 
   let add t ~min_inclusive ~max_exclusive datum =
-    let interval = { Interval.min_inclusive; max_exclusive } in
+    let interval = { I.min_inclusive; max_exclusive } in
     match find_exn0 t min_inclusive with
     | exception Not_found -> Map.add interval datum t
-    | existing, _ ->
-      if check_invariants
-      then
-        Map.iter
-          (fun existing _ ->
-            if Interval.overlaps interval existing
-               && Point.compare existing.min_inclusive min_inclusive <> 0
-            then
-              Misc.fatal_errorf
-                "Cannot add interval@ %a@ that overlaps with existing interval \
-                 except for an extension@  %a:@ %a"
-                Interval.print interval Interval.print existing print t)
-          t;
-      if Point.compare max_exclusive existing.max_exclusive < 0
-      then
-        Misc.fatal_errorf
-          "Intervals@ %a@ may only be extended:@ existing=%a:@ %a"
-          Interval.print interval Interval.print existing print t
-      else Map.add interval datum (Map.remove existing t)
+    | _, _ ->
+      (* The new interval may overlap with more than one existing interval. *)
+      t
+      |> Map.filter (fun existing _ -> not (I.overlaps interval existing))
+      |> Map.add interval datum
 end
