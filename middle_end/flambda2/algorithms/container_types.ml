@@ -156,7 +156,13 @@ module Pair (A : Thing) (B : Thing) : Thing with type t = A.t * B.t = struct
   let [@ocamlformat "disable"] print ppf (a, b) = Format.fprintf ppf " (%a, @ %a)" A.print a B.print b
 end
 
-module Make_map (T : Thing) (Set : Set with module T := T) = struct
+module Make_map (T : sig
+  include Thing_no_hash
+
+  val equal : t -> t -> bool
+end)
+(Set : Set with module T := T) =
+struct
   include Map.Make [@inlined hint] (T)
   module Set = Set
 

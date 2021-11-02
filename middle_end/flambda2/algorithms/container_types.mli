@@ -131,6 +131,13 @@ module type Map = sig
   val map_sharing : ('a -> 'a) -> 'a t -> 'a t
 end
 
+module Make_map (T : sig
+  include Thing_no_hash
+
+  val equal : t -> t -> bool
+end)
+(Set : Set with module T := T) : Map with module T := T
+
 module type Tbl = sig
   module T : sig
     type t
