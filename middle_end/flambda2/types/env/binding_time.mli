@@ -53,6 +53,8 @@ end
 module Non_overlapping_interval_tree_for_name_modes : sig
   type t
 
+  val print : Format.formatter -> t -> unit
+
   val empty : t
 
   val add :

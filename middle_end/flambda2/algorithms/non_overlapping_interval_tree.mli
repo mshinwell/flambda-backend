@@ -27,6 +27,8 @@ end) (Datum : sig
 end) : sig
   type t
 
+  val print : Format.formatter -> t -> unit
+
   val empty : t
 
   val add : t -> min_inclusive:Point.t -> max_exclusive:Point.t -> Datum.t -> t
