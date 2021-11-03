@@ -1047,8 +1047,13 @@ let make_variables_in_types t ~in_scope =
     if Binding_time.compare min_inclusive max_exclusive >= 0
     then
       Misc.fatal_errorf
-        "Wrong binding time ordering: min_inclusive = %a, max_exclusive = %a"
-        Binding_time.print min_inclusive Binding_time.print max_exclusive;
+        "Wrong binding time ordering: min_inclusive = %a, max_exclusive = %a.  \
+         min_inclusive environment (in_scope):@ \n\
+         %a\n\n\
+         max_exclusive environment (t):@ \n\
+         %a\n"
+        Binding_time.print min_inclusive Binding_time.print max_exclusive print
+        in_scope print t;
     let name_mode_restrictions =
       IT.add t.name_mode_restrictions ~min_inclusive ~max_exclusive
         Name_mode.in_types

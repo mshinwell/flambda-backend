@@ -23,7 +23,8 @@ module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
-let join denv params ~consts_lifted_during_body
+let join denv ~original_env_at_fork_plus_params params
+    ~consts_lifted_during_body
     ~(use_envs_with_ids :
        (DE.t * Apply_cont_rewrite_id.t * Continuation_use_kind.t) list) =
   let typing_env_at_fork = DE.typing_env denv in
@@ -58,15 +59,21 @@ let join denv params ~consts_lifted_during_body
     | None -> Name_occurrences.empty
     | Some cse_join_result -> cse_join_result.extra_allowed_names
   in
-  let env, single_non_inlinable_use =
+  let env, denv =
     match use_envs_with_ids with
     | [(use_env, _, Non_inlinable _)] ->
-      (* [use_env] may have a current scope level that is deeper than the
-         equivalent handler environment in the normal case, but that should be
-         ok. *)
-      ( TE.make_variables_in_types (DE.typing_env use_env)
-          ~in_scope:typing_env_at_fork,
-        true )
+      let denv =
+        LCS.add_to_denv ~maybe_already_defined:() use_env
+          consts_lifted_during_body
+      in
+      (* We use [original_env_at_fork_plus_params] as the binding time is known
+         to be <= that in the use environment. This might not be the case for
+         [denv] now: the addition of lifted constants to [env_at_fork] might
+         yield differing numbers of bindings compared to when that addition was
+         done in the use environment. *)
+      ( TE.make_variables_in_types (DE.typing_env denv)
+          ~in_scope:(DE.typing_env original_env_at_fork_plus_params),
+        denv )
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
       ( T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids'
           ~params
@@ -76,7 +83,7 @@ let join denv params ~consts_lifted_during_body
           ~unknown_if_defined_at_or_later_than:
             (Scope.next definition_scope_level)
           ~extra_lifted_consts_in_use_envs ~extra_allowed_names,
-        false )
+        denv )
     | [] -> assert false
     (* see below *)
   in
@@ -97,12 +104,6 @@ let join denv params ~consts_lifted_during_body
     match cse_join_result with
     | None -> denv
     | Some cse_join_result -> DE.with_cse denv cse_join_result.cse_at_join_point
-  in
-  let denv =
-    if single_non_inlinable_use
-    then
-      LCS.add_to_denv ~maybe_already_defined:() denv consts_lifted_during_body
-    else denv
   in
   denv, extra_params_and_args
 
@@ -143,6 +144,8 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
         BP.kind param |> Flambda_kind.With_subkind.has_useful_subkind_info)
       params
   in
+  (* CR mshinwell: check that the binding time for each use env is >= the
+     binding time for [env_at_fork_plus_params] *)
   let uses_list = Continuation_uses.get_uses uses in
   let use_envs_with_ids =
     List.map
@@ -201,7 +204,8 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
     in
     let handler_env, extra_params_and_args =
       (* CR mshinwell: remove Flambda_features.join_points *)
-      join denv params ~consts_lifted_during_body ~use_envs_with_ids
+      join denv ~original_env_at_fork_plus_params:env_at_fork_plus_params params
+        ~consts_lifted_during_body ~use_envs_with_ids
     in
     let handler_env =
       (* XXX Not sure we want to do this in the single non-inlinable case *)
