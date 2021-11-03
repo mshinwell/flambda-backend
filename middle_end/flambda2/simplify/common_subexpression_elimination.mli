@@ -47,6 +47,8 @@ module Join_result : sig
       extra_equations : T.t Name.Map.t;
       extra_allowed_names : Name_occurrences.t
     }
+
+  val print : Format.formatter -> t -> unit
 end
 
 (** [join] adds CSE equations into [cse_at_fork] at the next scope level after

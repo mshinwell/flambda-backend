@@ -174,10 +174,13 @@ let simplify_get_tag dacc ~original_term ~arg:scrutinee ~arg_ty:scrutinee_ty
 let simplify_array_length dacc ~original_term ~arg:_ ~arg_ty:array_ty
     ~result_var =
   let result = Simple.var (Bound_var.var result_var) in
-  Simplify_common.simplify_projection dacc ~original_term
-    ~deconstructing:array_ty
-    ~shape:(T.array_of_length ~length:(T.alias_type_of K.value result))
-    ~result_var ~result_kind:K.value
+  let term, env_extension, dacc =
+    Simplify_common.simplify_projection dacc ~original_term
+      ~deconstructing:array_ty
+      ~shape:(T.array_of_length ~length:(T.alias_type_of K.value result))
+      ~result_var ~result_kind:K.value
+  in
+  term, env_extension, dacc
 
 (* CR-someday mshinwell: Consider whether "string length" should be treated like
    a projection (cf. "array length"). *)

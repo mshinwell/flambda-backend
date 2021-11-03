@@ -30,7 +30,8 @@ let print_kind_and_mode ~name_mode_restrictions ppf (ty, binding_time, mode) =
     IT.scoped_name_mode name_mode_restrictions
       (Binding_time.With_name_mode.create binding_time mode)
   in
-  Format.fprintf ppf ":: %a %a" Flambda_kind.print kind Name_mode.print mode
+  Format.fprintf ppf ":: %a %a [bt=%a]" Flambda_kind.print kind Name_mode.print
+    mode Binding_time.print binding_time
 
 let print_name_modes ~restrict_to ~name_mode_restrictions ppf t =
   Name.Map.print

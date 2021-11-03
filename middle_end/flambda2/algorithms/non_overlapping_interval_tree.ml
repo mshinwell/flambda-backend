@@ -44,42 +44,41 @@ struct
       Point.compare point min_inclusive >= 0
       && Point.compare point max_exclusive < 0
 
-    let point_contained_in_or_after { min_inclusive; max_exclusive } point =
-      Point.compare point min_inclusive < 0
-      || Point.compare point max_exclusive <= 0
+    let contains_excl { min_inclusive; max_exclusive } point =
+      Point.compare point min_inclusive >= 0
+      && Point.compare point max_exclusive <= 0
 
     let overlaps
         ({ min_inclusive = min_inclusive1; max_exclusive = max_exclusive1 } as
         t1)
         ({ min_inclusive = min_inclusive2; max_exclusive = max_exclusive2 } as
         t2) =
-      contains t1 min_inclusive2 || contains t1 max_exclusive2
-      || contains t2 min_inclusive1 || contains t2 max_exclusive1
-
-    let compare { min_inclusive = min_inclusive1; max_exclusive = _ }
-        { min_inclusive = min_inclusive2; max_exclusive = _ } =
-      Point.compare min_inclusive1 min_inclusive2
-
-    let equal t1 t2 = Int.equal (compare t1 t2) 0
+      contains t1 min_inclusive2
+      || contains_excl t1 max_exclusive2
+      || contains t2 min_inclusive1
+      || contains_excl t2 max_exclusive1
   end
 
   module I = Interval
-  module Set = Container_types.Make_set (I)
-  module Map = Container_types.Make_map (I) (Set)
 
-  type t = Datum.t Map.t
+  (* CR mshinwell: Produce a more efficient implementation. *)
 
-  let print ppf t = Map.print Datum.print ppf t
+  type t = (I.t * Datum.t) list
 
-  let empty = Map.empty
+  let print ppf t =
+    Format.pp_print_list ~pp_sep:Format.pp_print_space
+      (fun ppf (interval, datum) ->
+        Format.fprintf ppf "@[<hov 1>(%a@ %a)@]" Interval.print interval
+          Datum.print datum)
+      ppf t
 
-  let[@inline always] find_exn0 t point =
-    let interval, datum =
-      Map.find_first
-        (fun interval -> I.point_contained_in_or_after interval point)
-        t
-    in
-    if I.contains interval point then interval, datum else raise Not_found
+  let empty = []
+
+  let rec find_exn0 t point =
+    match t with
+    | [] -> raise Not_found
+    | (interval, datum) :: t ->
+      if I.contains interval point then interval, datum else find_exn0 t point
 
   let find_exn t point =
     let _interval, datum = find_exn0 t point in
@@ -88,10 +87,10 @@ struct
   let add t ~min_inclusive ~max_exclusive datum =
     let interval = { I.min_inclusive; max_exclusive } in
     match find_exn0 t min_inclusive with
-    | exception Not_found -> Map.add interval datum t
+    | exception Not_found -> (interval, datum) :: t
     | _, _ ->
       (* The new interval may overlap with more than one existing interval. *)
       t
-      |> Map.filter (fun existing _ -> not (I.overlaps interval existing))
-      |> Map.add interval datum
+      |> List.filter (fun (existing, _) -> not (I.overlaps interval existing))
+      |> List.cons (interval, datum)
 end

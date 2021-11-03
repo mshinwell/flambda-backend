@@ -112,9 +112,9 @@ let create_let uacc (bound_vars : BLB.t) defining_expr
       in
       let has_uses = Name_mode.Or_absent.is_present greatest_name_mode in
       let can_phantomise =
-        (not is_depth)
-        && BLB.exists_all_bound_vars bound_vars ~f:(fun bound_var ->
-               Variable.user_visible (VB.var bound_var))
+        not is_depth
+        (* && BLB.exists_all_bound_vars bound_vars ~f:(fun bound_var ->
+           Variable.user_visible (VB.var bound_var)) *)
       in
       let will_delete_binding =
         (* CR mshinwell: This should detect whether there is any provenance info

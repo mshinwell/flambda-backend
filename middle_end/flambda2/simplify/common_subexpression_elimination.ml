@@ -273,6 +273,20 @@ module Join_result = struct
       extra_equations : T.t Name.Map.t;
       extra_allowed_names : Name_occurrences.t
     }
+
+  let[@ocamlformat "disable"] print ppf
+      { cse_at_join_point; extra_params; extra_equations;
+        extra_allowed_names } =
+    Format.fprintf ppf "@[<hov 1>(\
+        @[<hov 1>(cse_at_join_point@ %a)@]@ \
+        @[<hov 1>(extra_params@ %a)@]@ \
+        @[<hov 1>(extra_equations@ %a)@]@ \
+        @[<hov 1>(extra_allowed_names@ %a)@]\
+        )@]"
+      print cse_at_join_point
+      EPA.print extra_params
+      (Name.Map.print T.print) extra_equations
+      Name_occurrences.print extra_allowed_names
 end
 
 let join0 ~typing_env_at_fork ~cse_at_fork ~cse_at_each_use ~params

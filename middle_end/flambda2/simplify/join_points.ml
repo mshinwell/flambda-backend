@@ -61,6 +61,9 @@ let join denv params ~consts_lifted_during_body
   let env =
     match use_envs_with_ids with
     | [(use_env, _, Non_inlinable _)] ->
+      (* [use_env] may have a current scope level that is deeper than the
+         equivalent handler environment in the normal case, but that should be
+         ok. *)
       TE.make_variables_in_types (DE.typing_env use_env)
         ~in_scope:typing_env_at_fork
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
