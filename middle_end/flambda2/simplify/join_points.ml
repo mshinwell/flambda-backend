@@ -58,22 +58,25 @@ let join denv params ~consts_lifted_during_body
     | None -> Name_occurrences.empty
     | Some cse_join_result -> cse_join_result.extra_allowed_names
   in
-  let env =
+  let env, single_non_inlinable_use =
     match use_envs_with_ids with
     | [(use_env, _, Non_inlinable _)] ->
       (* [use_env] may have a current scope level that is deeper than the
          equivalent handler environment in the normal case, but that should be
          ok. *)
-      TE.make_variables_in_types (DE.typing_env use_env)
-        ~in_scope:typing_env_at_fork
+      ( TE.make_variables_in_types (DE.typing_env use_env)
+          ~in_scope:typing_env_at_fork,
+        true )
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
-      T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids'
-        ~params
-          (* CR-someday mshinwell: If this didn't do Scope.next then TE could
-             probably be slightly more efficient, as it wouldn't need to look at
-             the middle of the three return values from Scope.Map.Split. *)
-        ~unknown_if_defined_at_or_later_than:(Scope.next definition_scope_level)
-        ~extra_lifted_consts_in_use_envs ~extra_allowed_names
+      ( T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids'
+          ~params
+            (* CR-someday mshinwell: If this didn't do Scope.next then TE could
+               probably be slightly more efficient, as it wouldn't need to look
+               at the middle of the three return values from Scope.Map.Split. *)
+          ~unknown_if_defined_at_or_later_than:
+            (Scope.next definition_scope_level)
+          ~extra_lifted_consts_in_use_envs ~extra_allowed_names,
+        false )
     | [] -> assert false
     (* see below *)
   in
@@ -94,6 +97,12 @@ let join denv params ~consts_lifted_during_body
     match cse_join_result with
     | None -> denv
     | Some cse_join_result -> DE.with_cse denv cse_join_result.cse_at_join_point
+  in
+  let denv =
+    if single_non_inlinable_use
+    then
+      LCS.add_to_denv ~maybe_already_defined:() denv consts_lifted_during_body
+    else denv
   in
   denv, extra_params_and_args
 

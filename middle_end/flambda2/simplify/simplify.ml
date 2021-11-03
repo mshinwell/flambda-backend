@@ -93,8 +93,10 @@ let run ~symbol_for_global ~get_global_info ~round unit =
         ~var:(fun var ->
           Misc.fatal_errorf
             "Variable %a not expected to be free in whole-compilation-unit \
-             term:@ %a"
-            Variable.print var Expr.print body)
+             term:@ UA.name_occurrences:@ %a@ Term:@ \n\
+             %a"
+            Variable.print var Name_occurrences.print name_occurrences
+            Expr.print body)
         ~symbol:(fun _symbol -> ()));
   let final_typing_env =
     let cont_uses_env = DA.continuation_uses_env (UA.creation_dacc uacc) in
