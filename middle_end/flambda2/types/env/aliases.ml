@@ -959,6 +959,7 @@ let mem t element =
    ordering, and check in [get_canonical_element_exn] accordingly. However maybe
    we should never allow these situations to arise. *)
 
+(* CR mshinwell: This function allocates too many (> 0) closures. *)
 let find_earliest t ~canonical_element name_mode_restrictions ~min_name_mode
     ~coercion_from_canonical_to_element =
   (* There used to be a shortcut that avoided consulting the aliases in the
