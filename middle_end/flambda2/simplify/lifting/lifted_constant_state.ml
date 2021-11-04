@@ -106,57 +106,54 @@ let all_defined_symbols t =
       LC.all_defined_symbols const |> Symbol.Set.union symbols)
 
 let add_to_denv ?maybe_already_defined denv lifted =
-  Profile.record_call ~accumulate:true "LCS.add_to_denv" (fun () ->
-      let maybe_already_defined =
-        match maybe_already_defined with None -> false | Some () -> true
+  let maybe_already_defined =
+    match maybe_already_defined with None -> false | Some () -> true
+  in
+  let denv =
+    fold lifted ~init:denv ~f:(fun denv lifted_constant ->
+        let types_of_symbols = LC.types_of_symbols lifted_constant in
+        Symbol.Map.fold
+          (fun sym (_denv, typ) denv ->
+            if maybe_already_defined && DE.mem_symbol denv sym
+            then denv
+            else DE.define_symbol denv sym (T.kind typ))
+          types_of_symbols denv)
+  in
+  let typing_env =
+    let typing_env = DE.typing_env denv in
+    fold lifted ~init:typing_env ~f:(fun typing_env lifted_constant ->
+        let types_of_symbols = LC.types_of_symbols lifted_constant in
+        Symbol.Map.fold
+          (fun sym (denv_at_definition, typ) typing_env ->
+            if maybe_already_defined && DE.mem_symbol denv sym
+            then typing_env
+            else
+              let sym = Name.symbol sym in
+              let env_extension =
+                (* CR mshinwell: Sometimes we might already have the types "made
+                   suitable" in the [closure_env] field of the typing
+                   environment, perhaps? For example when lifted constants'
+                   types are coming out of a closure into the enclosing
+                   scope. *)
+                T.make_suitable_for_environment
+                  (DE.typing_env denv_at_definition)
+                  typ ~suitable_for:typing_env ~bind_to:sym
+              in
+              TE.add_env_extension_with_extra_variables typing_env env_extension)
+          types_of_symbols typing_env)
+  in
+  fold lifted ~init:(DE.with_typing_env denv typing_env)
+    ~f:(fun denv lifted_constant ->
+      let pieces_of_code =
+        LC.defining_exprs lifted_constant
+        |> Rebuilt_static_const.Group.pieces_of_code_including_those_not_rebuilt
       in
-      let denv =
-        fold lifted ~init:denv ~f:(fun denv lifted_constant ->
-            let types_of_symbols = LC.types_of_symbols lifted_constant in
-            Symbol.Map.fold
-              (fun sym (_denv, typ) denv ->
-                if maybe_already_defined && DE.mem_symbol denv sym
-                then denv
-                else DE.define_symbol denv sym (T.kind typ))
-              types_of_symbols denv)
-      in
-      let typing_env =
-        let typing_env = DE.typing_env denv in
-        fold lifted ~init:typing_env ~f:(fun typing_env lifted_constant ->
-            let types_of_symbols = LC.types_of_symbols lifted_constant in
-            Symbol.Map.fold
-              (fun sym (denv_at_definition, typ) typing_env ->
-                if maybe_already_defined && DE.mem_symbol denv sym
-                then typing_env
-                else
-                  let sym = Name.symbol sym in
-                  let env_extension =
-                    (* CR mshinwell: Sometimes we might already have the types
-                       "made suitable" in the [closure_env] field of the typing
-                       environment, perhaps? For example when lifted constants'
-                       types are coming out of a closure into the enclosing
-                       scope. *)
-                    T.make_suitable_for_environment
-                      (DE.typing_env denv_at_definition)
-                      typ ~suitable_for:typing_env ~bind_to:sym
-                  in
-                  TE.add_env_extension_with_extra_variables typing_env
-                    env_extension)
-              types_of_symbols typing_env)
-      in
-      fold lifted ~init:(DE.with_typing_env denv typing_env)
-        ~f:(fun denv lifted_constant ->
-          let pieces_of_code =
-            LC.defining_exprs lifted_constant
-            |> Rebuilt_static_const.Group
-               .pieces_of_code_including_those_not_rebuilt
-          in
-          Code_id.Map.fold
-            (fun code_id code denv ->
-              if maybe_already_defined && DE.mem_code denv code_id
-              then denv
-              else DE.define_code denv ~code_id ~code)
-            pieces_of_code denv))
+      Code_id.Map.fold
+        (fun code_id code denv ->
+          if maybe_already_defined && DE.mem_code denv code_id
+          then denv
+          else DE.define_code denv ~code_id ~code)
+        pieces_of_code denv)
 
 let add_singleton_to_denv t const = add_to_denv t (singleton const)
 

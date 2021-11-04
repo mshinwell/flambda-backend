@@ -44,13 +44,12 @@ let join denv ~original_env_at_fork_plus_params params
   let cse_join_result =
     assert (
       Scope.equal definition_scope_level (TE.current_scope typing_env_at_fork));
-    Profile.record_call ~accumulate:true "CSE join" (fun () ->
-        CSE.join ~typing_env_at_fork ~cse_at_fork:(DE.cse denv)
-          ~use_info:use_envs_with_ids
-          ~get_typing_env:(fun (use_env, _, _) -> DE.typing_env use_env)
-          ~get_rewrite_id:(fun (_, id, _) -> id)
-          ~get_cse:(fun (use_env, _, _) -> DE.cse use_env)
-          ~params)
+    CSE.join ~typing_env_at_fork ~cse_at_fork:(DE.cse denv)
+      ~use_info:use_envs_with_ids
+      ~get_typing_env:(fun (use_env, _, _) -> DE.typing_env use_env)
+      ~get_rewrite_id:(fun (_, id, _) -> id)
+      ~get_cse:(fun (use_env, _, _) -> DE.cse use_env)
+      ~params
   in
   let extra_params_and_args =
     match cse_join_result with
@@ -74,10 +73,9 @@ let join denv ~original_env_at_fork_plus_params params
          [denv] now: the addition of lifted constants to [env_at_fork] might
          yield differing numbers of bindings compared to when that addition was
          done in the use environment. *)
-      Profile.record_call ~accumulate:true "make_variables_in_types" (fun () ->
-          ( TE.make_variables_in_types (DE.typing_env denv)
-              ~in_scope:(DE.typing_env original_env_at_fork_plus_params),
-            denv ))
+      ( TE.make_variables_in_types (DE.typing_env denv)
+          ~in_scope:(DE.typing_env original_env_at_fork_plus_params),
+        denv )
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
       typing_env_at_fork, denv
       (* ( T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids' ~params (*
@@ -136,107 +134,100 @@ let meet_equations_on_params typing_env ~params ~param_types =
 
 let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
     ~params ~code_age_relation_after_body : Continuation_env_and_param_types.t =
-  Profile.record_call ~accumulate:true "join_points"
-    (fun () : Continuation_env_and_param_types.t ->
-      (* Augment the environment at each use with the necessary equations about
-         the parameters (whose variables will already be defined in the
-         environment). *)
-      let need_to_meet_param_types =
-        (* If there is information available from the subkinds of the
-           parameters, we will need to meet the existing parameter types (e.g.
-           "unknown boxed float") with the argument types at each use. *)
-        List.exists
-          (fun param ->
-            BP.kind param |> Flambda_kind.With_subkind.has_useful_subkind_info)
-          params
-      in
-      (* CR mshinwell: check that the binding time for each use env is >= the
-         binding time for [env_at_fork_plus_params] *)
-      let uses_list = Continuation_uses.get_uses uses in
-      let use_envs_with_ids =
-        List.map
-          (fun use ->
-            let add_or_meet_param_type typing_env =
-              let param_types = U.arg_types use in
-              if need_to_meet_param_types
-              then meet_equations_on_params typing_env ~params ~param_types
-              else TE.add_equations_on_params typing_env ~params ~param_types
-            in
-            let use_env =
-              DE.map_typing_env (U.env_at_use use) ~f:add_or_meet_param_type
-            in
-            use_env, U.id use, U.use_kind use)
-          uses_list
-      in
-      (* We don't need any join calculations if there is only one use of the
-         continuation and it is inlinable. In this case, the environment of the
-         unique use site becomes the environment for simplifying the
-         continuation handler.
+  (* Augment the environment at each use with the necessary equations about the
+     parameters (whose variables will already be defined in the environment). *)
+  let need_to_meet_param_types =
+    (* If there is information available from the subkinds of the parameters, we
+       will need to meet the existing parameter types (e.g. "unknown boxed
+       float") with the argument types at each use. *)
+    List.exists
+      (fun param ->
+        BP.kind param |> Flambda_kind.With_subkind.has_useful_subkind_info)
+      params
+  in
+  (* CR mshinwell: check that the binding time for each use env is >= the
+     binding time for [env_at_fork_plus_params] *)
+  let uses_list = Continuation_uses.get_uses uses in
+  let use_envs_with_ids =
+    List.map
+      (fun use ->
+        let add_or_meet_param_type typing_env =
+          let param_types = U.arg_types use in
+          if need_to_meet_param_types
+          then meet_equations_on_params typing_env ~params ~param_types
+          else TE.add_equations_on_params typing_env ~params ~param_types
+        in
+        let use_env =
+          DE.map_typing_env (U.env_at_use use) ~f:add_or_meet_param_type
+        in
+        use_env, U.id use, U.use_kind use)
+      uses_list
+  in
+  (* We don't need any join calculations if there is only one use of the
+     continuation and it is inlinable. In this case, the environment of the
+     unique use site becomes the environment for simplifying the continuation
+     handler.
 
-         If there is only one use of the continuation but it is not inlinable,
-         we can also avoid any join calculations, by simply switching any
-         defined variables between the fork and the join points to have mode
-         [In_types].
+     If there is only one use of the continuation but it is not inlinable, we
+     can also avoid any join calculations, by simply switching any defined
+     variables between the fork and the join points to have mode [In_types].
 
-         In all other cases a full join calculation is performed.
+     In all other cases a full join calculation is performed.
 
-         We need to make sure any lifted constants generated during the
-         simplification of the body are in the returned environment for the
-         handler. Otherwise we might share a constant based on information in
-         [DA] but then find the definition of the corresponding constant isn't
-         in [DE]. Note that some of the constants may already be defined (for
-         example because they were defined on the path between the fork point
-         and the unique use, in the inlining case). *)
-      match use_envs_with_ids with
-      | [(use_env, _, Inlinable)] ->
-        let handler_env =
-          LCS.add_to_denv ~maybe_already_defined:() use_env
-            consts_lifted_during_body
-        in
-        Uses
-          { handler_env;
-            arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses;
-            extra_params_and_args = Continuation_extra_params_and_args.empty;
-            is_single_inlinable_use = true;
-            escapes = false
-          }
-      | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
-        let arg_types_by_use_id =
-          Continuation_uses.get_arg_types_by_use_id uses
-        in
-        (* The lifted constants are put into the _fork_ environment now because
-           it overall makes things easier; the join operation can just discard
-           any equation about a lifted constant (any such equation could not be
-           materially more precise anyway). *)
-        let denv =
-          LCS.add_to_denv env_at_fork_plus_params consts_lifted_during_body
-        in
-        let handler_env, extra_params_and_args =
-          (* CR mshinwell: remove Flambda_features.join_points *)
-          join denv ~original_env_at_fork_plus_params:env_at_fork_plus_params
-            params ~consts_lifted_during_body ~use_envs_with_ids
-        in
-        let handler_env =
-          (* XXX Not sure we want to do this in the single non-inlinable case *)
-          DE.map_typing_env handler_env ~f:(fun handler_env ->
-              TE.with_code_age_relation handler_env code_age_relation_after_body)
-        in
-        let escapes =
-          List.exists
-            (fun (_, _, (cont_use_kind : Continuation_use_kind.t)) ->
-              match cont_use_kind with
-              | Inlinable | Non_inlinable { escaping = false } -> false
-              | Non_inlinable { escaping = true } -> true)
-            use_envs_with_ids
-        in
-        Uses
-          { handler_env;
-            arg_types_by_use_id;
-            extra_params_and_args;
-            is_single_inlinable_use = false;
-            escapes
-          }
-      | [] ->
-        Misc.fatal_error
-          "[Join_points] should only be called when there are > 0 continuation \
-           uses")
+     We need to make sure any lifted constants generated during the
+     simplification of the body are in the returned environment for the handler.
+     Otherwise we might share a constant based on information in [DA] but then
+     find the definition of the corresponding constant isn't in [DE]. Note that
+     some of the constants may already be defined (for example because they were
+     defined on the path between the fork point and the unique use, in the
+     inlining case). *)
+  match use_envs_with_ids with
+  | [(use_env, _, Inlinable)] ->
+    let handler_env =
+      LCS.add_to_denv ~maybe_already_defined:() use_env
+        consts_lifted_during_body
+    in
+    Uses
+      { handler_env;
+        arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses;
+        extra_params_and_args = Continuation_extra_params_and_args.empty;
+        is_single_inlinable_use = true;
+        escapes = false
+      }
+  | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
+    let arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses in
+    (* The lifted constants are put into the _fork_ environment now because it
+       overall makes things easier; the join operation can just discard any
+       equation about a lifted constant (any such equation could not be
+       materially more precise anyway). *)
+    let denv =
+      LCS.add_to_denv env_at_fork_plus_params consts_lifted_during_body
+    in
+    let handler_env, extra_params_and_args =
+      (* CR mshinwell: remove Flambda_features.join_points *)
+      join denv ~original_env_at_fork_plus_params:env_at_fork_plus_params params
+        ~consts_lifted_during_body ~use_envs_with_ids
+    in
+    let handler_env =
+      (* XXX Not sure we want to do this in the single non-inlinable case *)
+      DE.map_typing_env handler_env ~f:(fun handler_env ->
+          TE.with_code_age_relation handler_env code_age_relation_after_body)
+    in
+    let escapes =
+      List.exists
+        (fun (_, _, (cont_use_kind : Continuation_use_kind.t)) ->
+          match cont_use_kind with
+          | Inlinable | Non_inlinable { escaping = false } -> false
+          | Non_inlinable { escaping = true } -> true)
+        use_envs_with_ids
+    in
+    Uses
+      { handler_env;
+        arg_types_by_use_id;
+        extra_params_and_args;
+        is_single_inlinable_use = false;
+        escapes
+      }
+  | [] ->
+    Misc.fatal_error
+      "[Join_points] should only be called when there are > 0 continuation uses"
