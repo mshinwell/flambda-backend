@@ -65,7 +65,7 @@ module With_name_mode = struct
     in
     (binding_time lsl 2) lor name_mode
 
-  let binding_time t = t lsr 2
+  let[@inline always] binding_time t = t lsr 2
 
   let[@inline always] name_mode t =
     match t land 3 with
@@ -78,7 +78,7 @@ module With_name_mode = struct
     Format.fprintf ppf "(bound at time %d %a)" (binding_time t)
       Name_mode.print (name_mode t)
 
-  let equal t1 t2 = t1 = t2
+  let[@inline always] equal (t1 : t) t2 = t1 = t2
 end
 
 module Name_mode_restrictions = struct
@@ -90,12 +90,10 @@ module Name_mode_restrictions = struct
 
   let add = Interval_set.add
 
-  let scoped_name_mode t with_name_mode =
-    let binding_time = With_name_mode.binding_time with_name_mode in
+  let[@inline always] scoped_name_mode t binding_time name_mode =
     if compare binding_time symbols <= 0
-    then (* Constant or symbol. *)
-      With_name_mode.name_mode with_name_mode
+    then name_mode (* Constant or symbol. *)
     else if Interval_set.mem t binding_time
     then Name_mode.in_types
-    else With_name_mode.name_mode with_name_mode
+    else name_mode
 end

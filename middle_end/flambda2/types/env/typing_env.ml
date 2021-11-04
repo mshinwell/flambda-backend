@@ -264,7 +264,7 @@ end = struct
           )@]"
       Symbol.Set.print defined_symbols
       Code_age_relation.print code_age_relation
-      (Name.Map.print (fun ppf (ty, _bt, _mode) -> TG.print ppf ty))
+      (Name.Map.print (fun ppf (ty, _bt_and_mode) -> TG.print ppf ty))
       (Cached_level.names_to_types just_after_level)
       Aliases.print (Cached_level.aliases just_after_level)
 
@@ -283,7 +283,7 @@ end = struct
     let ids = Ids_for_export.create ~symbols ~code_ids () in
     let ids =
       Name.Map.fold
-        (fun name (typ, _binding_time, _name_mode) ids ->
+        (fun name (typ, _binding_time_and_mode) ids ->
           Ids_for_export.add_name
             (Ids_for_export.union ids (TG.all_ids_for_export typ))
             name)
@@ -436,7 +436,10 @@ let name_domain t =
     (Name.set_of_symbol_set (defined_symbols t))
 
 let initial_symbol_type =
-  lazy (MTC.unknown K.value, Binding_time.symbols, Name_mode.normal)
+  lazy
+    ( MTC.unknown K.value,
+      Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal
+    )
 
 let variable_is_from_missing_cmx_file t name =
   if Name.is_symbol name
@@ -465,12 +468,13 @@ let check_optional_kind_matches name ty kind_opt =
 exception Missing_cmx_and_kind
 
 (* CR mshinwell: [kind] could also take a [subkind] *)
-let find_with_binding_time_and_mode' t name kind =
+let find_with_binding_time_and_mode' t comp_unit name kind =
+  (* [comp_unit] must be equal to [Name.compilation_unit name], but is passed in
+     to avoid recomputation in callers. *)
   Profile.record_call ~accumulate:true "TE.find_with_binding_time_and_mode'"
     (fun () ->
       match Name.Map.find name (names_to_types t) with
       | exception Not_found -> (
-        let comp_unit = Name.compilation_unit name in
         if Compilation_unit.equal comp_unit
              (Compilation_unit.get_current_exn ())
         then
@@ -482,7 +486,7 @@ let find_with_binding_time_and_mode' t name kind =
             if Symbol.Set.mem sym t.defined_symbols
             then (
               let result = Lazy.force initial_symbol_type in
-              check_optional_kind_matches name (Misc.fst3 result) kind;
+              check_optional_kind_matches name (fst result) kind;
               result)
             else
               Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
@@ -499,15 +503,15 @@ let find_with_binding_time_and_mode' t name kind =
               ~symbol:(fun _ ->
                 (* .cmx file missing *)
                 let result = Lazy.force initial_symbol_type in
-                check_optional_kind_matches name (Misc.fst3 result) kind;
+                check_optional_kind_matches name (fst result) kind;
                 result)
               ~var:(fun _ ->
                 match kind with
                 | Some kind ->
                   (* See comment below about binding times. *)
                   ( MTC.unknown kind,
-                    Binding_time.imported_variables,
-                    Name_mode.in_types )
+                    Binding_time.With_name_mode.create
+                      Binding_time.imported_variables Name_mode.in_types )
                 | None -> raise Missing_cmx_and_kind)
           | Some t -> (
             match Name.Map.find name (names_to_types t) with
@@ -518,33 +522,38 @@ let find_with_binding_time_and_mode' t name kind =
                      occur with predefined exceptions and maybe regular symbols
                      too *)
                   let result = Lazy.force initial_symbol_type in
-                  check_optional_kind_matches name (Misc.fst3 result) kind;
+                  check_optional_kind_matches name (fst result) kind;
                   result)
                 ~var:(fun var ->
                   Misc.fatal_errorf
                     "Variable %a not bound in imported typing environment \
                      (maybe the wrong .cmx file is present?):@ %a"
                     Variable.print var print t)
-            | ty, _binding_time, _name_mode ->
+            | ty, _binding_time_and_mode ->
               check_optional_kind_matches name ty kind;
               Name.pattern_match name
-                ~symbol:(fun _ -> ty, Binding_time.symbols, Name_mode.normal)
+                ~symbol:(fun _ ->
+                  ( ty,
+                    Binding_time.With_name_mode.create Binding_time.symbols
+                      Name_mode.normal ))
                 ~var:(fun _ ->
                   (* Binding times for imported variables are meaningless
                      outside their original environment. Variables from foreign
                      compilation units are always out of scope, so their mode
                      must be In_types (we cannot rely on the scoping by binding
                      time). *)
-                  ty, Binding_time.imported_variables, Name_mode.in_types)))
+                  ( ty,
+                    Binding_time.With_name_mode.create
+                      Binding_time.imported_variables Name_mode.in_types ))))
       | found ->
-        let ty, _, _ = found in
+        let ty, _ = found in
         check_optional_kind_matches name ty kind;
         found)
 
 (* This version doesn't check name_mode_restrictions. This ensures that no
    allocation occurs when we're not interested in the name mode. *)
-let find_with_binding_time_and_mode_unscoped t name kind =
-  try find_with_binding_time_and_mode' t name kind
+let find_with_binding_time_and_mode_unscoped t comp_unit name kind =
+  try find_with_binding_time_and_mode' t comp_unit name kind
   with Missing_cmx_and_kind ->
     Misc.fatal_errorf
       "Don't know kind of variable %a from another unit whose .cmx file is \
@@ -552,26 +561,38 @@ let find_with_binding_time_and_mode_unscoped t name kind =
       Name.print name
 
 let find t name kind =
-  let ty, _binding_time, _name_mode =
-    find_with_binding_time_and_mode_unscoped t name kind
+  let ty, _binding_time_and_mode =
+    find_with_binding_time_and_mode_unscoped t
+      (Name.compilation_unit name)
+      name kind
   in
   ty
 
 let find_with_binding_time_and_mode t name kind =
-  let ((ty, binding_time, mode) as found) =
-    find_with_binding_time_and_mode_unscoped t name kind
+  let ((ty, binding_time_and_mode) as found) =
+    find_with_binding_time_and_mode_unscoped t
+      (Name.compilation_unit name)
+      name kind
   in
-  let scoped_mode =
-    NMR.scoped_name_mode t.name_mode_restrictions
-      (Binding_time.With_name_mode.create binding_time mode)
-  in
-  if Name_mode.equal mode scoped_mode
+  if Name.is_symbol name
   then found
-  else ty, binding_time, scoped_mode
+  else
+    let binding_time =
+      Binding_time.With_name_mode.binding_time binding_time_and_mode
+    in
+    let mode = Binding_time.With_name_mode.name_mode binding_time_and_mode in
+    let scoped_mode =
+      NMR.scoped_name_mode t.name_mode_restrictions binding_time mode
+    in
+    if Name_mode.equal mode scoped_mode
+    then found
+    else ty, Binding_time.With_name_mode.create binding_time scoped_mode
 
 let find_or_missing t name =
-  match find_with_binding_time_and_mode' t name None with
-  | ty, _, _ -> Some ty
+  match
+    find_with_binding_time_and_mode' t (Name.compilation_unit name) name None
+  with
+  | ty, _ -> Some ty
   | exception Missing_cmx_and_kind -> None
 
 let find_params t params =
@@ -582,6 +603,9 @@ let find_params t params =
       find t name (Some kind))
     params
 
+let binding_time_and_mode_for_symbols =
+  Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal
+
 let binding_time_and_mode t name =
   if variable_is_from_missing_cmx_file t name
   then
@@ -590,12 +614,11 @@ let binding_time_and_mode t name =
   else
     Name.pattern_match name
       ~var:(fun _var ->
-        let _typ, binding_time, name_mode =
+        let _typ, binding_time_and_mode =
           find_with_binding_time_and_mode t name None
         in
-        Binding_time.With_name_mode.create binding_time name_mode)
-      ~symbol:(fun _sym ->
-        Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
+        binding_time_and_mode)
+      ~symbol:(fun _sym -> binding_time_and_mode_for_symbols)
 
 let binding_time_and_mode_of_simple t simple =
   Simple.pattern_match simple
@@ -613,10 +636,11 @@ let mem ?min_name_mode t name =
           if Name.Set.mem name (t.get_imported_names ())
           then Some Name_mode.in_types
           else None
-        | _ty, binding_time, name_mode ->
+        | _ty, binding_time_and_mode ->
           let scoped_name_mode =
             NMR.scoped_name_mode t.name_mode_restrictions
-              (Binding_time.With_name_mode.create binding_time name_mode)
+              (Binding_time.With_name_mode.binding_time binding_time_and_mode)
+              (Binding_time.With_name_mode.name_mode binding_time_and_mode)
           in
           Some scoped_name_mode
       in
@@ -1077,56 +1101,45 @@ let type_simple_in_term_exn t ?min_name_mode simple =
          we pass [None] to [find] below. *)
       Simple.pattern_match simple
         ~const:(fun const -> MTC.type_for_const const)
-        ~name:(fun name ~coercion:_ ->
-          (* Applying coercion below *)
-          let ty, _binding_time, name_mode_simple =
-            find_with_binding_time_and_mode t name None
+        ~name:(fun name ~coercion ->
+          let comp_unit = Name.compilation_unit name in
+          let ty, binding_time_and_mode =
+            (* We don't need to apply name mode restrictions here because
+               [Aliases] will do it for us. *)
+            find_with_binding_time_and_mode_unscoped t comp_unit name None
+          in
+          let binding_time =
+            Binding_time.With_name_mode.binding_time binding_time_and_mode
+          in
+          let name_mode =
+            Binding_time.With_name_mode.name_mode binding_time_and_mode
+          in
+          let is_imported_variable =
+            Binding_time.equal binding_time Binding_time.imported_variables
           in
           let ty =
             if Simple.has_coercion simple
-            then
-              Profile.record_call ~accumulate:true "apply-coercion" (fun () ->
-                  TG.apply_coercion ty (Simple.coercion simple))
+            then TG.apply_coercion ty coercion
             else ty
           in
-          let kind = TG.kind ty in
-          let aliases_for_simple, name_mode_restrictions =
-            Simple.pattern_match simple
-              ~const:(fun _ -> assert false)
-              ~name:(fun name ->
-                Name.pattern_match name
-                  ~var:(fun var ~coercion:_ ->
-                    let this_unit, comp_unit =
-                      Profile.record_call ~accumulate:true
-                        "compilation-unit-check" (fun () ->
-                          let comp_unit = Variable.compilation_unit var in
-                          ( Compilation_unit.equal comp_unit
-                              (Compilation_unit.get_current_exn ()),
-                            comp_unit ))
-                    in
-                    if this_unit
-                    then aliases_with_name_mode_restrictions t
-                    else
-                      match (resolver t) comp_unit with
-                      | Some env -> aliases_with_name_mode_restrictions env
-                      | None ->
-                        Misc.fatal_errorf
-                          "Error while looking up variable %a:@ No \
-                           corresponding .cmx file was found"
-                          Variable.print var)
-                  ~symbol:(fun _sym ~coercion:_ ->
-                    (* Symbols can't alias, so lookup in the current aliases is
-                       fine *)
-                    aliases_with_name_mode_restrictions t))
+          let env_for_aliases =
+            if not is_imported_variable
+            then None
+            else
+              match resolver t comp_unit with
+              | Some _ as env_for_aliases -> env_for_aliases
+              | None ->
+                (* This should have been caught by
+                   [find_with_binding_time_and_mode_unscoped]. *)
+                assert false
           in
-          let min_name_mode =
-            match min_name_mode with
-            | None -> name_mode_simple
-            | Some name_mode -> name_mode
-          in
+          let env_for_aliases = Option.value env_for_aliases ~default:t in
+          let aliases_for_simple = aliases env_for_aliases in
+          let name_mode_restrictions = env_for_aliases.name_mode_restrictions in
+          let min_name_mode = Option.value min_name_mode ~default:name_mode in
           match
             Aliases.get_canonical_element_exn aliases_for_simple simple
-              name_mode_simple ~min_name_mode ~name_mode_restrictions
+              name_mode ~min_name_mode ~name_mode_restrictions
           with
           | exception Misc.Fatal_error ->
             let bt = Printexc.get_raw_backtrace () in
@@ -1135,7 +1148,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
               (Flambda_colours.normal ())
               print t;
             Printexc.raise_with_backtrace Misc.Fatal_error bt
-          | alias -> TG.alias_type_of kind alias))
+          | alias -> TG.alias_type_of (TG.kind ty) alias))
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =

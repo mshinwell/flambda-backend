@@ -434,7 +434,10 @@ let name_mode_unscoped t elt =
   Binding_time.With_name_mode.name_mode (binding_time_and_name_mode t elt)
 
 let name_mode t elt ~name_mode_restrictions =
-  NMR.scoped_name_mode name_mode_restrictions (binding_time_and_name_mode t elt)
+  let with_name_mode = binding_time_and_name_mode t elt in
+  NMR.scoped_name_mode name_mode_restrictions
+    (Binding_time.With_name_mode.binding_time with_name_mode)
+    (Binding_time.With_name_mode.name_mode with_name_mode)
 
 let invariant t =
   if Flambda_features.check_invariants ()
@@ -1005,7 +1008,9 @@ let get_canonical_element_exn t element elt_name_mode ~min_name_mode
                 in
                 let scoped_name_mode =
                   NMR.scoped_name_mode name_mode_restrictions
-                    binding_time_and_mode
+                    (Binding_time.With_name_mode.binding_time
+                       binding_time_and_mode)
+                    (Binding_time.With_name_mode.name_mode binding_time_and_mode)
                 in
                 Name_mode.equal name_mode scoped_name_mode)
               names
