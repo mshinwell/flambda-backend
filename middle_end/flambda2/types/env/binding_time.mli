@@ -57,11 +57,7 @@ module Name_mode_restrictions : sig
 
   val create : unit -> t
 
-  val add :
-    t ->
-    min_inclusive:binding_time ->
-    max_exclusive:binding_time ->
-    t
+  val add : t -> min_inclusive:binding_time -> max_exclusive:binding_time -> t
 
   val scoped_name_mode : t -> With_name_mode.t -> Name_mode.t
 end

@@ -186,73 +186,80 @@ let max_rec_depth = 1
 module FT = Flambda2_types.Function_type
 
 let speculative_inlining dacc ~apply ~function_type ~simplify_expr ~return_arity
-  =
-   Profile.record_call ~accumulate:true "speculative_inlining" (fun () ->
-  let dacc = DA.set_do_not_rebuild_terms_and_disable_inlining dacc in
-  (* CR-someday poechsel: [Inlining_transforms.inline] is preparing the body for
-     inlining. Right know it may be called twice (once there and once in
-     [simplify_apply_expr]) on the same apply expr. It should be possible to
-     only call it once and remove some allocations. *)
-  let dacc, expr =
-    (* The only way for [unroll_to] not to be None is when an explicit Unroll
-       annotation is provided by the user. If this is the case then inliner will
-       always inline the function and will not call [speculative_inlining]. Thus
-       inside of [speculative_inlining] we will always have [unroll_to] = None.
-       We are not disabling unrolling when speculating, it just happens that no
-       unrolling can happen while speculating right now. *)
-    Inlining_transforms.inline dacc ~apply ~unroll_to:None function_type
-  in
-  let scope = DE.get_continuation_scope_level (DA.denv dacc) in
-  let dummy_toplevel_cont =
-    Continuation.create ~name:"dummy_toplevel_continuation" ()
-  in
-  let dacc =
-    DA.map_data_flow dacc ~f:(fun _ ->
-        Data_flow.init_toplevel dummy_toplevel_cont [] Data_flow.empty)
-  in
-  let _, uacc =
-    simplify_expr dacc expr ~down_to_up:(fun dacc ~rebuild ->
-        let exn_continuation = Apply.exn_continuation apply in
-        let dacc =
-          DA.map_data_flow dacc
-            ~f:(Data_flow.exit_continuation dummy_toplevel_cont)
-        in
-        let data_flow = DA.data_flow dacc in
-        (* The dataflow analysis *)
-        let function_return_cont =
-          match Apply.continuation apply with
-          | Never_returns -> Continuation.create ()
-          | Return cont -> cont
-        in
-        (* When doing the speculative analysis, in order to not blow up, the
-           data_flow analysis is only done on the speculatively inlined body;
-           however the reachable code_ids part of the data flow analysis is only
-           correct at toplevel when all information about the code_age relation
-           and used_closure vars is available (for the whole compilation unit).
-           Thus we here provide empty/dummy values for the used_closure_vars and
-           code_age_relation, and ignore the reachable_code_id part of the
-           data_flow analysis. *)
-        let ({ required_names; reachable_code_ids = _ } : Data_flow.result) =
-          Data_flow.analyze data_flow ~code_age_relation:Code_age_relation.empty
-            ~used_closure_vars:Unknown ~return_continuation:function_return_cont
-            ~exn_continuation:(Exn_continuation.exn_handler exn_continuation)
-        in
-        (* CR mshinwell: These functions for adding continuations could do with
-           a bit more thought regarding non-exn/exn versions *)
-        let uenv = UE.add_exn_continuation UE.empty exn_continuation scope in
-        let uenv =
-          match Apply.continuation apply with
-          | Never_returns -> uenv
-          | Return return_continuation ->
-            UE.add_function_return_or_exn_continuation uenv return_continuation
-              scope return_arity
-        in
-        let uacc =
-          UA.create ~required_names ~reachable_code_ids:Unknown uenv dacc
-        in
-        rebuild uacc ~after_rebuild:(fun expr uacc -> expr, uacc))
-  in
-  UA.cost_metrics uacc)
+    =
+  Profile.record_call ~accumulate:true "speculative_inlining" (fun () ->
+      let dacc = DA.set_do_not_rebuild_terms_and_disable_inlining dacc in
+      (* CR-someday poechsel: [Inlining_transforms.inline] is preparing the body
+         for inlining. Right know it may be called twice (once there and once in
+         [simplify_apply_expr]) on the same apply expr. It should be possible to
+         only call it once and remove some allocations. *)
+      let dacc, expr =
+        (* The only way for [unroll_to] not to be None is when an explicit
+           Unroll annotation is provided by the user. If this is the case then
+           inliner will always inline the function and will not call
+           [speculative_inlining]. Thus inside of [speculative_inlining] we will
+           always have [unroll_to] = None. We are not disabling unrolling when
+           speculating, it just happens that no unrolling can happen while
+           speculating right now. *)
+        Inlining_transforms.inline dacc ~apply ~unroll_to:None function_type
+      in
+      let scope = DE.get_continuation_scope_level (DA.denv dacc) in
+      let dummy_toplevel_cont =
+        Continuation.create ~name:"dummy_toplevel_continuation" ()
+      in
+      let dacc =
+        DA.map_data_flow dacc ~f:(fun _ ->
+            Data_flow.init_toplevel dummy_toplevel_cont [] Data_flow.empty)
+      in
+      let _, uacc =
+        simplify_expr dacc expr ~down_to_up:(fun dacc ~rebuild ->
+            let exn_continuation = Apply.exn_continuation apply in
+            let dacc =
+              DA.map_data_flow dacc
+                ~f:(Data_flow.exit_continuation dummy_toplevel_cont)
+            in
+            let data_flow = DA.data_flow dacc in
+            (* The dataflow analysis *)
+            let function_return_cont =
+              match Apply.continuation apply with
+              | Never_returns -> Continuation.create ()
+              | Return cont -> cont
+            in
+            (* When doing the speculative analysis, in order to not blow up, the
+               data_flow analysis is only done on the speculatively inlined
+               body; however the reachable code_ids part of the data flow
+               analysis is only correct at toplevel when all information about
+               the code_age relation and used_closure vars is available (for the
+               whole compilation unit). Thus we here provide empty/dummy values
+               for the used_closure_vars and code_age_relation, and ignore the
+               reachable_code_id part of the data_flow analysis. *)
+            let ({ required_names; reachable_code_ids = _ } : Data_flow.result)
+                =
+              Data_flow.analyze data_flow
+                ~code_age_relation:Code_age_relation.empty
+                ~used_closure_vars:Unknown
+                ~return_continuation:function_return_cont
+                ~exn_continuation:
+                  (Exn_continuation.exn_handler exn_continuation)
+            in
+            (* CR mshinwell: These functions for adding continuations could do
+               with a bit more thought regarding non-exn/exn versions *)
+            let uenv =
+              UE.add_exn_continuation UE.empty exn_continuation scope
+            in
+            let uenv =
+              match Apply.continuation apply with
+              | Never_returns -> uenv
+              | Return return_continuation ->
+                UE.add_function_return_or_exn_continuation uenv
+                  return_continuation scope return_arity
+            in
+            let uacc =
+              UA.create ~required_names ~reachable_code_ids:Unknown uenv dacc
+            in
+            rebuild uacc ~after_rebuild:(fun expr uacc -> expr, uacc))
+      in
+      UA.cost_metrics uacc)
 
 let argument_types_useful dacc apply =
   if not

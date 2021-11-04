@@ -1358,12 +1358,11 @@ and join_env_extension env (ext1 : TEE.t) (ext2 : TEE.t) : TEE.t =
   TEE.from_map equations
 
 let meet env (t1 : TG.t) (t2 : TG.t) : (TG.t * TEE.t) Or_bottom.t =
-   Profile.record_call ~accumulate:true "meet" (fun () -> meet env t1 t2)
+  Profile.record_call ~accumulate:true "meet" (fun () -> meet env t1 t2)
 
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   Profile.record_call ~accumulate:true "meet_shape" (fun () ->
-  let result = Bound_name.var result_var in
-  let env = TE.add_definition env result result_kind in
-  let<+ _meet_ty, env_extension = meet (Meet_env.create env) t shape in
-  env_extension)
-
+      let result = Bound_name.var result_var in
+      let env = TE.add_definition env result result_kind in
+      let<+ _meet_ty, env_extension = meet (Meet_env.create env) t shape in
+      env_extension)

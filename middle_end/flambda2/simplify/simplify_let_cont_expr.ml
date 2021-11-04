@@ -416,17 +416,17 @@ let simplify_non_recursive_let_cont_handler ~simplify_expr ~denv_before_body
              unboxing will induce a rewrite (or wrapper) on the application
              sites of the continuation. *)
           let param_types = TE.find_params (DE.typing_env handler_env) params in
-           Profile.record_call ~accumulate:true "unboxing" (fun () ->
-          let handler_env, decisions =
-            Unbox_continuation_params.make_decisions handler_env
-              ~continuation_is_recursive:false ~arg_types_by_use_id params
-              param_types
-          in
-          let epa =
-            Unbox_continuation_params.compute_extra_params_and_args
-              ~arg_types_by_use_id decisions extra_params_and_args
-          in
-          handler_env, epa, false, dacc)
+          Profile.record_call ~accumulate:true "unboxing" (fun () ->
+              let handler_env, decisions =
+                Unbox_continuation_params.make_decisions handler_env
+                  ~continuation_is_recursive:false ~arg_types_by_use_id params
+                  param_types
+              in
+              let epa =
+                Unbox_continuation_params.compute_extra_params_and_args
+                  ~arg_types_by_use_id decisions extra_params_and_args
+              in
+              handler_env, epa, false, dacc)
       | Return | Toplevel_return ->
         if is_exn_handler
         then
@@ -802,9 +802,9 @@ let after_downwards_traversal_of_one_recursive_let_cont_handler cont
       Continuation_uses.get_arg_types_by_use_id continuation_uses
   in
   let extra_params_and_args =
-           Profile.record_call ~accumulate:true "unboxing" (fun () ->
-    Unbox_continuation_params.compute_extra_params_and_args unboxing_decisions
-      ~arg_types_by_use_id EPA.empty)
+    Profile.record_call ~accumulate:true "unboxing" (fun () ->
+        Unbox_continuation_params.compute_extra_params_and_args
+          unboxing_decisions ~arg_types_by_use_id EPA.empty)
   in
   let dacc =
     DA.map_data_flow dacc ~f:(fun data_flow ->
@@ -857,11 +857,10 @@ let simplify_recursive_let_cont_handlers ~simplify_expr ~denv_before_body
         Flambda2_types.unknown_with_subkind (BP.kind param))
   in
   let denv, unboxing_decisions =
-
-           Profile.record_call ~accumulate:true "unboxing" (fun () ->
-    Unbox_continuation_params.make_decisions ~continuation_is_recursive:true
-      ~arg_types_by_use_id:arg_types_by_use_id_outside_of_handler (DA.denv dacc)
-      params param_types)
+    Profile.record_call ~accumulate:true "unboxing" (fun () ->
+        Unbox_continuation_params.make_decisions ~continuation_is_recursive:true
+          ~arg_types_by_use_id:arg_types_by_use_id_outside_of_handler
+          (DA.denv dacc) params param_types)
   in
   let dacc = DA.with_denv dacc denv in
   (* CR gbury: {simplify_one_continuation_handler} requires an
