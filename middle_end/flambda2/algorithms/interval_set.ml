@@ -32,9 +32,12 @@ let print ppf t =
   let bool_array =
     Array.map word_to_bool_array t |> Array.to_list |> Array.concat
   in
-  Format.fprintf ppf "@[(hov 1>(";
+  Format.fprintf ppf "@[<hov 1>(";
   let min_inclusive = ref None in
+  let have_printed = ref false in
   let interval_ending ~min_inclusive:min_inclusive' ~max_exclusive =
+    if !have_printed then Format.fprintf ppf "@ ";
+    have_printed := true;
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(min_inclusive@ %d)@]@ @[<hov 1>(max_exclusive@ \
        %d)@])@]"
@@ -95,10 +98,15 @@ let add (t : t) ~min_inclusive ~max_exclusive =
       then Sys.int_size - 1
       else max_inclusive mod Sys.int_size
     in
-    let mask =
-      (min_int asr (Sys.int_size - first_bit_to_set_within_index - 1))
-      lxor (min_int asr (Sys.int_size - last_bit_to_set_within_index - 1))
+    let mask_from_first_bit_upwards =
+      min_int asr (Sys.int_size - first_bit_to_set_within_index - 1)
     in
+    let mask_strictly_after_last_bit =
+      if last_bit_to_set_within_index >= Sys.int_size - 1
+      then 0
+      else min_int asr (Sys.int_size - last_bit_to_set_within_index - 2)
+    in
+    let mask = mask_from_first_bit_upwards lxor mask_strictly_after_last_bit in
     let word = Array.unsafe_get t !current_index in
     Array.unsafe_set t !current_index (word lor mask);
     first_bit_of_current_index := !first_bit_of_current_index + Sys.int_size;
