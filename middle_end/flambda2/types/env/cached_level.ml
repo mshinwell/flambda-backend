@@ -16,7 +16,7 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module IT = Binding_time.Non_overlapping_interval_tree_for_name_modes
+module NMR = Binding_time.Name_mode_restrictions
 
 type t =
   { names_to_types : (Type_grammar.t * Binding_time.t * Name_mode.t) Name.Map.t;
@@ -27,7 +27,7 @@ type t =
 let print_kind_and_mode ~name_mode_restrictions ppf (ty, binding_time, mode) =
   let kind = Type_grammar.kind ty in
   let mode =
-    IT.scoped_name_mode name_mode_restrictions
+    NMR.scoped_name_mode name_mode_restrictions
       (Binding_time.With_name_mode.create binding_time mode)
   in
   Format.fprintf ppf ":: %a %a [bt=%a]" Flambda_kind.print kind Name_mode.print

@@ -20,8 +20,7 @@ type t
 
 val print_name_modes :
   restrict_to:Name.Set.t ->
-  name_mode_restrictions:
-    Binding_time.Non_overlapping_interval_tree_for_name_modes.t ->
+  name_mode_restrictions:Binding_time.Name_mode_restrictions.t ->
   Format.formatter ->
   t ->
   unit

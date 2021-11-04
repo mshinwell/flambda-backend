@@ -16,10 +16,9 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-module IT = Binding_time.Non_overlapping_interval_tree_for_name_modes
-
 module K = Flambda_kind
 module MTC = More_type_creators
+module NMR = Binding_time.Name_mode_restrictions
 module TG = Type_grammar
 module TEL = Typing_env_level
 
@@ -84,8 +83,7 @@ type t =
     prev_levels : One_level.t Scope.Map.t;
     current_level : One_level.t;
     next_binding_time : Binding_time.t;
-    name_mode_restrictions :
-      Binding_time.Non_overlapping_interval_tree_for_name_modes.t
+    name_mode_restrictions : NMR.t
   }
 
 type typing_env = t
@@ -128,7 +126,7 @@ let [@ocamlformat "disable"] print ppf
       (Scope.Map.print (One_level.print ~name_mode_restrictions))
       levels
       Aliases.print (aliases t)
-      IT.print name_mode_restrictions
+      NMR.print name_mode_restrictions
 
 module Meet_env = struct
   type t =
@@ -360,8 +358,8 @@ end = struct
     let next_binding_time = next_binding_time serializable in
     let earliest_binding_time = Binding_time.imported_variables in
     let name_mode_restrictions =
-      IT.add IT.empty ~min_inclusive:earliest_binding_time
-        ~max_exclusive:next_binding_time Name_mode.in_types
+      NMR.add (NMR.create ()) ~min_inclusive:earliest_binding_time
+        ~max_exclusive:next_binding_time
     in
     { resolver;
       get_imported_names;
@@ -418,7 +416,7 @@ let create ~resolver ~get_imported_names =
     next_binding_time = Binding_time.earliest_var;
     defined_symbols = Symbol.Set.empty;
     code_age_relation = Code_age_relation.empty;
-    name_mode_restrictions = IT.empty
+    name_mode_restrictions = NMR.create ()
   }
 
 let increment_scope t =
@@ -560,7 +558,7 @@ let find_with_binding_time_and_mode t name kind =
     find_with_binding_time_and_mode_unscoped t name kind
   in
   let scoped_mode =
-    IT.scoped_name_mode t.name_mode_restrictions
+    NMR.scoped_name_mode t.name_mode_restrictions
       (Binding_time.With_name_mode.create binding_time mode)
   in
   if Name_mode.equal mode scoped_mode
@@ -613,7 +611,7 @@ let mem ?min_name_mode t name =
           else None
         | _ty, binding_time, name_mode ->
           let scoped_name_mode =
-            IT.scoped_name_mode t.name_mode_restrictions
+            NMR.scoped_name_mode t.name_mode_restrictions
               (Binding_time.With_name_mode.create binding_time name_mode)
           in
           Some scoped_name_mode
@@ -1057,8 +1055,7 @@ let make_variables_in_types t ~in_scope =
         Binding_time.print min_inclusive Binding_time.print max_exclusive print
         in_scope print t;
     let name_mode_restrictions =
-      IT.add t.name_mode_restrictions ~min_inclusive ~max_exclusive
-        Name_mode.in_types
+      NMR.add t.name_mode_restrictions ~min_inclusive ~max_exclusive
     in
     { t with name_mode_restrictions })
 
@@ -1232,8 +1229,8 @@ let aliases_of_simple_allowable_in_types t simple =
 
 let closure_env t =
   let name_mode_restrictions =
-    IT.add IT.empty ~min_inclusive:Binding_time.imported_variables
-      ~max_exclusive:t.next_binding_time Name_mode.in_types
+    NMR.add (NMR.create ()) ~min_inclusive:Binding_time.imported_variables
+      ~max_exclusive:t.next_binding_time
   in
   { t with name_mode_restrictions }
 
