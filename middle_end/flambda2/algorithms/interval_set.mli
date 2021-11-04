@@ -21,6 +21,8 @@ type t
 
 val create : unit -> t
 
+val print : Format.formatter -> t -> unit
+
 (** Requirements on the bounds of a new interval:
 
     min_inclusive >= 0

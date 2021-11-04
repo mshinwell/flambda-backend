@@ -20,6 +20,44 @@ type t = int array
    without resizing seems reasonable. *)
 let create () = [| 0; 0; 0 |]
 
+let print ppf t =
+  let word_to_bool_array word =
+    let result = Array.make Sys.int_size false in
+    for bit = 0 to Sys.int_size - 1 do
+      let is_bit_set = word land (1 lsl bit) <> 0 in
+      if is_bit_set then result.(bit) <- true
+    done;
+    result
+  in
+  let bool_array =
+    Array.map word_to_bool_array t |> Array.to_list |> Array.concat
+  in
+  Format.fprintf ppf "@[(hov 1>(";
+  let min_inclusive = ref None in
+  let interval_ending ~min_inclusive:min_inclusive' ~max_exclusive =
+    Format.fprintf ppf
+      "@[<hov 1>(@[<hov 1>(min_inclusive@ %d)@]@ @[<hov 1>(max_exclusive@ \
+       %d)@])@]"
+      min_inclusive' max_exclusive;
+    min_inclusive := None
+  in
+  for bit = 0 to Array.length bool_array - 1 do
+    if bool_array.(bit)
+    then
+      match !min_inclusive with
+      | None -> min_inclusive := Some bit
+      | Some _ -> ()
+    else
+      match !min_inclusive with
+      | None -> ()
+      | Some min_inclusive -> interval_ending ~min_inclusive ~max_exclusive:bit
+  done;
+  (match !min_inclusive with
+  | None -> ()
+  | Some min_inclusive ->
+    interval_ending ~min_inclusive ~max_exclusive:(Array.length bool_array));
+  Format.fprintf ppf ")@]"
+
 let add (t : t) ~min_inclusive ~max_exclusive =
   if min_inclusive < 0 || max_exclusive <= min_inclusive
   then

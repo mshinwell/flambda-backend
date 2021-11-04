@@ -81,18 +81,21 @@ module With_name_mode = struct
   let equal t1 t2 = t1 = t2
 end
 
-module Non_overlapping_interval_tree_for_name_modes = struct
-  include Non_overlapping_interval_tree.Make (T) (Name_mode)
+module Name_mode_restrictions = struct
+  type t = Interval_set.t
+
+  let create = Interval_set.create
+
+  let print = Interval_set.print
+
+  let add = Interval_set.add
 
   let scoped_name_mode t with_name_mode =
     let binding_time = With_name_mode.binding_time with_name_mode in
     if compare binding_time symbols <= 0
     then (* Constant or symbol. *)
       With_name_mode.name_mode with_name_mode
-    else
-      match find_exn t binding_time with
-      | exception Not_found -> With_name_mode.name_mode with_name_mode
-      | name_mode ->
-        assert (Name_mode.equal name_mode Name_mode.in_types);
-        name_mode
+    else if Interval_set.mem t binding_time
+    then Name_mode.in_types
+    else With_name_mode.name_mode with_name_mode
 end
