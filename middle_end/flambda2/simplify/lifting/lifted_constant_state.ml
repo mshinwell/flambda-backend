@@ -106,6 +106,7 @@ let all_defined_symbols t =
       LC.all_defined_symbols const |> Symbol.Set.union symbols)
 
 let add_to_denv ?maybe_already_defined denv lifted =
+   Profile.record_call ~accumulate:true "LCS.add_to_denv" (fun () ->
   let maybe_already_defined =
     match maybe_already_defined with None -> false | Some () -> true
   in
@@ -153,7 +154,7 @@ let add_to_denv ?maybe_already_defined denv lifted =
           if maybe_already_defined && DE.mem_code denv code_id
           then denv
           else DE.define_code denv ~code_id ~code)
-        pieces_of_code denv)
+        pieces_of_code denv))
 
 let add_singleton_to_denv t const = add_to_denv t (singleton const)
 

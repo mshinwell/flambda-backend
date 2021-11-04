@@ -15,6 +15,7 @@
 (**************************************************************************)
 
 [@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "-26"]
 
 module DE = Downwards_env
 module BP = Bound_parameter
@@ -42,12 +43,13 @@ let join denv ~original_env_at_fork_plus_params params
   let cse_join_result =
     assert (
       Scope.equal definition_scope_level (TE.current_scope typing_env_at_fork));
+     Profile.record_call ~accumulate:true "CSE join" (fun () ->
     CSE.join ~typing_env_at_fork ~cse_at_fork:(DE.cse denv)
       ~use_info:use_envs_with_ids
       ~get_typing_env:(fun (use_env, _, _) -> DE.typing_env use_env)
       ~get_rewrite_id:(fun (_, id, _) -> id)
       ~get_cse:(fun (use_env, _, _) -> DE.cse use_env)
-      ~params
+      ~params)
   in
   let extra_params_and_args =
     match cse_join_result with
@@ -71,10 +73,13 @@ let join denv ~original_env_at_fork_plus_params params
          [denv] now: the addition of lifted constants to [env_at_fork] might
          yield differing numbers of bindings compared to when that addition was
          done in the use environment. *)
+       Profile.record_call ~accumulate:true "make_variables_in_types" (fun () ->
       ( TE.make_variables_in_types (DE.typing_env denv)
           ~in_scope:(DE.typing_env original_env_at_fork_plus_params),
-        denv )
+        denv ))
     | (_, _, (Inlinable | Non_inlinable _)) :: _ ->
+      typing_env_at_fork, denv
+      (*
       ( T.cut_and_n_way_join typing_env_at_fork use_envs_with_ids'
           ~params
             (* CR-someday mshinwell: If this didn't do Scope.next then TE could
@@ -83,7 +88,8 @@ let join denv ~original_env_at_fork_plus_params params
           ~unknown_if_defined_at_or_later_than:
             (Scope.next definition_scope_level)
           ~extra_lifted_consts_in_use_envs ~extra_allowed_names,
-        denv )
+         denv )
+         *)
     | [] -> assert false
     (* see below *)
   in
@@ -132,7 +138,8 @@ let meet_equations_on_params typing_env ~params ~param_types =
     typing_env params param_types
 
 let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
-    ~params ~code_age_relation_after_body : Continuation_env_and_param_types.t =
+      ~params ~code_age_relation_after_body : Continuation_env_and_param_types.t =
+   Profile.record_call ~accumulate:true "join_points" (fun () : Continuation_env_and_param_types.t ->
   (* Augment the environment at each use with the necessary equations about the
      parameters (whose variables will already be defined in the environment). *)
   let need_to_meet_param_types =
@@ -229,4 +236,4 @@ let compute_handler_env uses ~env_at_fork_plus_params ~consts_lifted_during_body
       }
   | [] ->
     Misc.fatal_error
-      "[Join_points] should only be called when there are > 0 continuation uses"
+      "[Join_points] should only be called when there are > 0 continuation uses")

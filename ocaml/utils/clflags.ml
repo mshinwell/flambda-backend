@@ -624,7 +624,7 @@ module Flambda2 = struct
     }
 
     let o3_arguments = {
-      max_depth = Some 3;
+      max_depth = Some 15;
       call_cost = Some (3.0 *. Default.call_cost);
       alloc_cost = Some (3.0 *. Default.alloc_cost);
       prim_cost = Some (3.0 *. Default.prim_cost);

@@ -468,6 +468,7 @@ exception Missing_cmx_and_kind
 
 (* CR mshinwell: [kind] could also take a [subkind] *)
 let find_with_binding_time_and_mode' t name kind =
+   Profile.record_call ~accumulate:true "TE.find_with_binding_time_and_mode'" (fun () ->
   match Name.Map.find name (names_to_types t) with
   | exception Not_found -> (
     let comp_unit = Name.compilation_unit name in
@@ -536,7 +537,7 @@ let find_with_binding_time_and_mode' t name kind =
   | found ->
     let ty, _, _ = found in
     check_optional_kind_matches name ty kind;
-    found
+    found)
 
 (* This version doesn't check name_mode_restrictions. This ensures that no
    allocation occurs when we're not interested in the name mode. *)
@@ -826,6 +827,7 @@ let rec add_equation0 (t : t) name ty =
   res
 
 and add_equation t name ty ~(meet_type : meet_type) =
+   Profile.record_call ~accumulate:true "add_equation" (fun () ->
   (if Flambda_features.check_invariants ()
   then
     let existing_ty = find t name None in
@@ -934,7 +936,7 @@ and add_equation t name ty ~(meet_type : meet_type) =
     (* true by definition *)
     add_equation0 t name ty
   in
-  Simple.pattern_match bare_lhs ~name ~const:(fun _ -> t)
+  Simple.pattern_match bare_lhs ~name ~const:(fun _ -> t))
 
 and add_env_extension t (env_extension : Typing_env_extension.t) ~meet_type =
   Typing_env_extension.fold
@@ -1061,41 +1063,37 @@ let make_variables_in_types t ~in_scope =
     { t with name_mode_restrictions })
 
 let type_simple_in_term_exn t ?min_name_mode simple =
+   Profile.record_call ~accumulate:true "type_simple_in_term_exn" (fun () ->
   (* If [simple] is a variable then it should not come from a missing .cmx file,
      since this function is only used for typing variables in terms, and even
      imported code is closed with respect to variables. This also means that the
      kind of such variables should always be inferrable, so we pass [None] to
      [find] below. *)
-  let ty, _binding_time, name_mode_simple =
-    let[@inline always] const const =
-      ( MTC.type_for_const const,
-        Binding_time.consts_and_discriminants,
-        Name_mode.normal )
-    in
-    let[@inline always] name name ~coercion:_ =
-      (* Applying coercion below *)
+    Simple.pattern_match simple ~const:(fun const -> MTC.type_for_const const)
+      ~name:(fun name ~coercion:_ ->
+        (* Applying coercion below *)
+        let ty, _binding_time, name_mode_simple =
       find_with_binding_time_and_mode t name None
     in
-    Simple.pattern_match simple ~const ~name
-  in
   let ty =
     if Simple.has_coercion simple
-    then TG.apply_coercion ty (Simple.coercion simple)
+         then
+              Profile.record_call ~accumulate:true "apply-coercion" (fun () ->
+           TG.apply_coercion ty (Simple.coercion simple))
     else ty
   in
   let kind = TG.kind ty in
   let aliases_for_simple, name_mode_restrictions =
-    if Aliases.mem (aliases t) simple
-    then aliases_with_name_mode_restrictions t
-    else
       Simple.pattern_match simple
-        ~const:(fun _ -> aliases_with_name_mode_restrictions t)
+        ~const:(fun _ -> assert false)
         ~name:(fun name ->
           Name.pattern_match name
             ~var:(fun var ~coercion:_ ->
+                let this_unit, comp_unit =
+              Profile.record_call ~accumulate:true "compilation-unit-check" (fun () ->
               let comp_unit = Variable.compilation_unit var in
-              if Compilation_unit.equal comp_unit
-                   (Compilation_unit.get_current_exn ())
+              ( Compilation_unit.equal comp_unit
+                   (Compilation_unit.get_current_exn ())), comp_unit) in if this_unit
               then aliases_with_name_mode_restrictions t
               else
                 match (resolver t) comp_unit with
@@ -1126,10 +1124,11 @@ let type_simple_in_term_exn t ?min_name_mode simple =
       (Flambda_colours.normal ())
       print t;
     Printexc.raise_with_backtrace Misc.Fatal_error bt
-  | alias -> TG.alias_type_of kind alias
+  | alias -> TG.alias_type_of kind alias))
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
-    simple =
+      simple =
+   Profile.record_call ~accumulate:true "get_canonical_simple_exn" (fun () ->
   let aliases_for_simple, name_mode_restrictions =
     if Aliases.mem (aliases t) simple
     then aliases_with_name_mode_restrictions t
@@ -1210,7 +1209,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
       (Flambda_colours.normal ())
       print t;
     Printexc.raise_with_backtrace Misc.Fatal_error bt
-  | alias -> alias
+  | alias -> alias)
 
 let get_alias_then_canonical_simple_exn t ?min_name_mode
     ?name_mode_of_existing_simple typ =

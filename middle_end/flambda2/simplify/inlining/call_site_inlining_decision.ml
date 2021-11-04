@@ -186,7 +186,8 @@ let max_rec_depth = 1
 module FT = Flambda2_types.Function_type
 
 let speculative_inlining dacc ~apply ~function_type ~simplify_expr ~return_arity
-    =
+  =
+   Profile.record_call ~accumulate:true "speculative_inlining" (fun () ->
   let dacc = DA.set_do_not_rebuild_terms_and_disable_inlining dacc in
   (* CR-someday poechsel: [Inlining_transforms.inline] is preparing the body for
      inlining. Right know it may be called twice (once there and once in
@@ -251,7 +252,7 @@ let speculative_inlining dacc ~apply ~function_type ~simplify_expr ~return_arity
         in
         rebuild uacc ~after_rebuild:(fun expr uacc -> expr, uacc))
   in
-  UA.cost_metrics uacc
+  UA.cost_metrics uacc)
 
 let argument_types_useful dacc apply =
   if not

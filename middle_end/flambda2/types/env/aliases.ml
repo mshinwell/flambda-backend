@@ -896,7 +896,8 @@ let add_alias t ~element1 ~coercion_from_element2_to_element1 ~element2 =
       ~coercion_from_canonical_element2_to_canonical_element1
 
 let add t ~element1:element1_with_coercion ~binding_time_and_mode1
-    ~element2:element2_with_coercion ~binding_time_and_mode2 =
+      ~element2:element2_with_coercion ~binding_time_and_mode2 =
+   Profile.record_call ~accumulate:true "Aliases.add" (fun () ->
   let original_t = t in
   (* element1_with_coercion <--[c1]-- element1
    * +
@@ -945,7 +946,7 @@ let add t ~element1:element1_with_coercion ~binding_time_and_mode1
   in
   if Flambda_features.check_invariants ()
   then invariant_add_result ~original_t add_result;
-  add_result
+  add_result)
 
 let mem t element =
   Simple.pattern_match element
@@ -964,7 +965,8 @@ let mem t element =
    add_result.alias_of print t *)
 
 let get_canonical_element_exn t element elt_name_mode ~min_name_mode
-    ~name_mode_restrictions =
+      ~name_mode_restrictions =
+   Profile.record_call ~accumulate:true "Aliases.get_canonical_element_exn" (fun () ->
   let canonical_element, name_mode, coercion_from_canonical_to_element =
     match canonical t element with
     | Is_canonical ->
@@ -1032,9 +1034,10 @@ let get_canonical_element_exn t element elt_name_mode ~min_name_mode
     if c >= 0
     then
       Simple.with_coercion canonical_element coercion_from_canonical_to_element
-    else find_earliest ()
+    else find_earliest ())
 
 let get_aliases t element =
+   Profile.record_call ~accumulate:true "Aliases.get_aliases" (fun () ->
   match canonical t element with
   | Is_canonical ->
     let canonical_element = Simple.without_coercion element in
@@ -1088,7 +1091,7 @@ let get_aliases t element =
             Simple.equal element_coerced_to_canonical name_coerced_to_canonical)
           alias_names_with_coercions_to_canonical));
     Alias_set.create_aliases_of_element ~element ~canonical_element
-      ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element
+      ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element)
 
 let all_ids_for_export
     { canonical_elements;
