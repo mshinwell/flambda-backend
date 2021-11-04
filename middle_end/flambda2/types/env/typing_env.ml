@@ -471,84 +471,79 @@ exception Missing_cmx_and_kind
 let find_with_binding_time_and_mode' t comp_unit name kind =
   (* [comp_unit] must be equal to [Name.compilation_unit name], but is passed in
      to avoid recomputation in callers. *)
-  Profile.record_call ~accumulate:true "TE.find_with_binding_time_and_mode'"
-    (fun () ->
-      match Name.Map.find name (names_to_types t) with
-      | exception Not_found -> (
-        if Compilation_unit.equal comp_unit
-             (Compilation_unit.get_current_exn ())
-        then
-          let[@inline always] var var =
-            Misc.fatal_errorf "Variable %a not bound in typing environment:@ %a"
-              Variable.print var print t
-          in
-          let[@inline always] symbol sym =
-            if Symbol.Set.mem sym t.defined_symbols
-            then (
+  match Name.Map.find name (names_to_types t) with
+  | exception Not_found -> (
+    if Compilation_unit.equal comp_unit (Compilation_unit.get_current_exn ())
+    then
+      let[@inline always] var var =
+        Misc.fatal_errorf "Variable %a not bound in typing environment:@ %a"
+          Variable.print var print t
+      in
+      let[@inline always] symbol sym =
+        if Symbol.Set.mem sym t.defined_symbols
+        then (
+          let result = Lazy.force initial_symbol_type in
+          check_optional_kind_matches name (fst result) kind;
+          result)
+        else
+          Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
+            Symbol.print sym print t
+      in
+      Name.pattern_match name ~var ~symbol
+    else
+      match (resolver t) comp_unit with
+      | exception _ ->
+        Misc.fatal_errorf "Exception in resolver@ Backtrace is: %s"
+          (Printexc.raw_backtrace_to_string (Printexc.get_raw_backtrace ()))
+      | None ->
+        Name.pattern_match name
+          ~symbol:(fun _ ->
+            (* .cmx file missing *)
+            let result = Lazy.force initial_symbol_type in
+            check_optional_kind_matches name (fst result) kind;
+            result)
+          ~var:(fun _ ->
+            match kind with
+            | Some kind ->
+              (* See comment below about binding times. *)
+              ( MTC.unknown kind,
+                Binding_time.With_name_mode.create
+                  Binding_time.imported_variables Name_mode.in_types )
+            | None -> raise Missing_cmx_and_kind)
+      | Some t -> (
+        match Name.Map.find name (names_to_types t) with
+        | exception Not_found ->
+          Name.pattern_match name
+            ~symbol:(fun _ ->
+              (* CR vlaviron: This could be an error, but it can actually occur
+                 with predefined exceptions and maybe regular symbols too *)
               let result = Lazy.force initial_symbol_type in
               check_optional_kind_matches name (fst result) kind;
               result)
-            else
-              Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
-                Symbol.print sym print t
-          in
-          Name.pattern_match name ~var ~symbol
-        else
-          match (resolver t) comp_unit with
-          | exception _ ->
-            Misc.fatal_errorf "Exception in resolver@ Backtrace is: %s"
-              (Printexc.raw_backtrace_to_string (Printexc.get_raw_backtrace ()))
-          | None ->
-            Name.pattern_match name
-              ~symbol:(fun _ ->
-                (* .cmx file missing *)
-                let result = Lazy.force initial_symbol_type in
-                check_optional_kind_matches name (fst result) kind;
-                result)
-              ~var:(fun _ ->
-                match kind with
-                | Some kind ->
-                  (* See comment below about binding times. *)
-                  ( MTC.unknown kind,
-                    Binding_time.With_name_mode.create
-                      Binding_time.imported_variables Name_mode.in_types )
-                | None -> raise Missing_cmx_and_kind)
-          | Some t -> (
-            match Name.Map.find name (names_to_types t) with
-            | exception Not_found ->
-              Name.pattern_match name
-                ~symbol:(fun _ ->
-                  (* CR vlaviron: This could be an error, but it can actually
-                     occur with predefined exceptions and maybe regular symbols
-                     too *)
-                  let result = Lazy.force initial_symbol_type in
-                  check_optional_kind_matches name (fst result) kind;
-                  result)
-                ~var:(fun var ->
-                  Misc.fatal_errorf
-                    "Variable %a not bound in imported typing environment \
-                     (maybe the wrong .cmx file is present?):@ %a"
-                    Variable.print var print t)
-            | ty, _binding_time_and_mode ->
-              check_optional_kind_matches name ty kind;
-              Name.pattern_match name
-                ~symbol:(fun _ ->
-                  ( ty,
-                    Binding_time.With_name_mode.create Binding_time.symbols
-                      Name_mode.normal ))
-                ~var:(fun _ ->
-                  (* Binding times for imported variables are meaningless
-                     outside their original environment. Variables from foreign
-                     compilation units are always out of scope, so their mode
-                     must be In_types (we cannot rely on the scoping by binding
-                     time). *)
-                  ( ty,
-                    Binding_time.With_name_mode.create
-                      Binding_time.imported_variables Name_mode.in_types ))))
-      | found ->
-        let ty, _ = found in
-        check_optional_kind_matches name ty kind;
-        found)
+            ~var:(fun var ->
+              Misc.fatal_errorf
+                "Variable %a not bound in imported typing environment (maybe \
+                 the wrong .cmx file is present?):@ %a"
+                Variable.print var print t)
+        | ty, _binding_time_and_mode ->
+          check_optional_kind_matches name ty kind;
+          Name.pattern_match name
+            ~symbol:(fun _ ->
+              ( ty,
+                Binding_time.With_name_mode.create Binding_time.symbols
+                  Name_mode.normal ))
+            ~var:(fun _ ->
+              (* Binding times for imported variables are meaningless outside
+                 their original environment. Variables from foreign compilation
+                 units are always out of scope, so their mode must be In_types
+                 (we cannot rely on the scoping by binding time). *)
+              ( ty,
+                Binding_time.With_name_mode.create
+                  Binding_time.imported_variables Name_mode.in_types ))))
+  | found ->
+    let ty, _ = found in
+    check_optional_kind_matches name ty kind;
+    found
 
 (* This version doesn't check name_mode_restrictions. This ensures that no
    allocation occurs when we're not interested in the name mode. *)
@@ -853,121 +848,115 @@ let rec add_equation0 (t : t) name ty =
   res
 
 and add_equation t name ty ~(meet_type : meet_type) =
-  Profile.record_call ~accumulate:true "add_equation" (fun () ->
-      (if Flambda_features.check_invariants ()
-      then
-        let existing_ty = find t name None in
-        if not (K.equal (TG.kind existing_ty) (TG.kind ty))
-        then
-          Misc.fatal_errorf
-            "Cannot add equation %a = %a@ given existing binding %a = %a@ \
-             whose type is of a different kind:@ %a"
-            Name.print name TG.print ty Name.print name TG.print existing_ty
-            print t
-        (* XXX Needs to be guarded let free_names = Type_free_names.free_names
-           ty in if not (Name_occurrences.subset_domain free_names (domain t))
-           then begin let unbound_names = Name_occurrences.diff free_names
-           (domain t) in Misc.fatal_errorf "Cannot add equation, involving
-           unbound names@ (%a),@ on \ name@ %a =@ %a@ (free names %a) in
-           environment with domain %a:@ %a" Name_occurrences.print unbound_names
-           Name.print name TG.print ty Name_occurrences.print free_names
-           Name_occurrences.print (domain t) print t end; *));
-      (if Flambda_features.check_invariants ()
-      then
-        match TG.get_alias_exn ty with
-        | exception Not_found -> ()
-        | simple ->
-          Simple.pattern_match simple
-            ~name:(fun name' ~coercion:_ ->
-              if Name.equal name name'
-              then
-                Misc.fatal_errorf
-                  "Directly recursive equation@ %a = %a@ disallowed:@ %a"
-                  Name.print name TG.print ty print t)
-            ~const:(fun _ -> ()));
-      let simple, t, ty =
-        let aliases = aliases t in
-        match TG.get_alias_exn ty with
-        | exception Not_found ->
-          (* Equations giving concrete types may only be added to the canonical
-             element as known by the alias tracker (the actual canonical,
-             ignoring any name modes). *)
-          let canonical =
-            Aliases.get_canonical_ignoring_name_mode aliases name
-          in
-          canonical, t, ty
-        | alias_of ->
-          (* Forget where [name] and [alias_of] came from---our job is now to
-             record that they're equal. In general, they have canonical
-             expressions [c_n] and [c_a], respectively, so what we ultimately
-             need to record is that [c_n] = [c_a]. Clearly, only one of them can
-             remain canonical, so we pick whichever was bound earlier. If [c_a]
-             was bound earlier, then we demote [c_n] and give [name] the type "=
-             c_a" (which will always be valid since [c_a] was bound earlier).
-             Otherwise, we demote [c_a] and give [alias_of] the type "= c_n". *)
-          let alias = Simple.name name in
-          let kind = TG.kind ty in
-          let binding_time_and_mode_alias = binding_time_and_mode t name in
-          let binding_time_and_mode_alias_of =
-            binding_time_and_mode_of_simple t alias_of
-          in
-          let ({ canonical_element; alias_of_demoted_element; t = aliases }
-                : Aliases.add_result) =
-            Aliases.add aliases ~element1:alias
-              ~binding_time_and_mode1:binding_time_and_mode_alias
-              ~element2:alias_of
-              ~binding_time_and_mode2:binding_time_and_mode_alias_of
-          in
-          let t = with_aliases t ~aliases in
-          (* We need to change the demoted alias's type to point to the new
-             canonical element. *)
-          let ty = TG.alias_type_of kind canonical_element in
-          alias_of_demoted_element, t, ty
+  (if Flambda_features.check_invariants ()
+  then
+    let existing_ty = find t name None in
+    if not (K.equal (TG.kind existing_ty) (TG.kind ty))
+    then
+      Misc.fatal_errorf
+        "Cannot add equation %a = %a@ given existing binding %a = %a@ whose \
+         type is of a different kind:@ %a"
+        Name.print name TG.print ty Name.print name TG.print existing_ty print t
+    (* XXX Needs to be guarded let free_names = Type_free_names.free_names ty in
+       if not (Name_occurrences.subset_domain free_names (domain t)) then begin
+       let unbound_names = Name_occurrences.diff free_names (domain t) in
+       Misc.fatal_errorf "Cannot add equation, involving unbound names@ (%a),@
+       on \ name@ %a =@ %a@ (free names %a) in environment with domain %a:@ %a"
+       Name_occurrences.print unbound_names Name.print name TG.print ty
+       Name_occurrences.print free_names Name_occurrences.print (domain t) print
+       t end; *));
+  (if Flambda_features.check_invariants ()
+  then
+    match TG.get_alias_exn ty with
+    | exception Not_found -> ()
+    | simple ->
+      Simple.pattern_match simple
+        ~name:(fun name' ~coercion:_ ->
+          if Name.equal name name'
+          then
+            Misc.fatal_errorf
+              "Directly recursive equation@ %a = %a@ disallowed:@ %a" Name.print
+              name TG.print ty print t)
+        ~const:(fun _ -> ()));
+  let simple, t, ty =
+    let aliases = aliases t in
+    match TG.get_alias_exn ty with
+    | exception Not_found ->
+      (* Equations giving concrete types may only be added to the canonical
+         element as known by the alias tracker (the actual canonical, ignoring
+         any name modes). *)
+      let canonical = Aliases.get_canonical_ignoring_name_mode aliases name in
+      canonical, t, ty
+    | alias_of ->
+      (* Forget where [name] and [alias_of] came from---our job is now to record
+         that they're equal. In general, they have canonical expressions [c_n]
+         and [c_a], respectively, so what we ultimately need to record is that
+         [c_n] = [c_a]. Clearly, only one of them can remain canonical, so we
+         pick whichever was bound earlier. If [c_a] was bound earlier, then we
+         demote [c_n] and give [name] the type "= c_a" (which will always be
+         valid since [c_a] was bound earlier). Otherwise, we demote [c_a] and
+         give [alias_of] the type "= c_n". *)
+      let alias = Simple.name name in
+      let kind = TG.kind ty in
+      let binding_time_and_mode_alias = binding_time_and_mode t name in
+      let binding_time_and_mode_alias_of =
+        binding_time_and_mode_of_simple t alias_of
       in
-      (* We have [(coerce <bare_lhs> <coercion>) : <ty>]. Thus [<bare_lhs> :
-         (coerce <ty> <coercion>^-1)]. *)
-      let bare_lhs = Simple.without_coercion simple in
-      let coercion_from_bare_lhs_to_ty = Simple.coercion simple in
-      let coercion_from_ty_to_bare_lhs =
-        Coercion.inverse coercion_from_bare_lhs_to_ty
+      let ({ canonical_element; alias_of_demoted_element; t = aliases }
+            : Aliases.add_result) =
+        Aliases.add aliases ~element1:alias
+          ~binding_time_and_mode1:binding_time_and_mode_alias ~element2:alias_of
+          ~binding_time_and_mode2:binding_time_and_mode_alias_of
       in
-      let ty = TG.apply_coercion ty coercion_from_ty_to_bare_lhs in
-      (* Beware: if we're about to add the equation on a name which is different
-         from the one that the caller passed in, then we need to make sure that
-         the type we assign to that name is the most precise available. This
-         necessitates calling [meet].
+      let t = with_aliases t ~aliases in
+      (* We need to change the demoted alias's type to point to the new
+         canonical element. *)
+      let ty = TG.alias_type_of kind canonical_element in
+      alias_of_demoted_element, t, ty
+  in
+  (* We have [(coerce <bare_lhs> <coercion>) : <ty>]. Thus [<bare_lhs> : (coerce
+     <ty> <coercion>^-1)]. *)
+  let bare_lhs = Simple.without_coercion simple in
+  let coercion_from_bare_lhs_to_ty = Simple.coercion simple in
+  let coercion_from_ty_to_bare_lhs =
+    Coercion.inverse coercion_from_bare_lhs_to_ty
+  in
+  let ty = TG.apply_coercion ty coercion_from_ty_to_bare_lhs in
+  (* Beware: if we're about to add the equation on a name which is different
+     from the one that the caller passed in, then we need to make sure that the
+     type we assign to that name is the most precise available. This
+     necessitates calling [meet].
 
-         For example, suppose [p] is defined earlier than [x], with [p] of type
-         [Unknown] and [x] of type [ty]. If the caller says that the best type
-         of [p] is now to be "= x", then this function will add an equation on
-         [x] rather than [p], due to the definition ordering. However we should
-         not just say that [x] has type "= p", as that would forget any existing
-         information about [x]. Instead we should say that [x] has type "(= p)
-         meet ty".
+     For example, suppose [p] is defined earlier than [x], with [p] of type
+     [Unknown] and [x] of type [ty]. If the caller says that the best type of
+     [p] is now to be "= x", then this function will add an equation on [x]
+     rather than [p], due to the definition ordering. However we should not just
+     say that [x] has type "= p", as that would forget any existing information
+     about [x]. Instead we should say that [x] has type "(= p) meet ty".
 
-         Note also that [p] and [x] may have different name modes! *)
-      let ty, t =
-        let[@inline always] name eqn_name ~coercion =
-          assert (Coercion.is_id coercion);
-          (* true by definition *)
-          if Name.equal name eqn_name
-          then ty, t
-          else
-            let env = Meet_env.create t in
-            let existing_ty = find t eqn_name (Some (TG.kind ty)) in
-            match meet_type env ty existing_ty with
-            | Bottom -> MTC.bottom (TG.kind ty), t
-            | Ok (meet_ty, env_extension) ->
-              meet_ty, add_env_extension t env_extension ~meet_type
-        in
-        Simple.pattern_match bare_lhs ~name ~const:(fun _ -> ty, t)
-      in
-      let[@inline always] name name ~coercion =
-        assert (Coercion.is_id coercion);
-        (* true by definition *)
-        add_equation0 t name ty
-      in
-      Simple.pattern_match bare_lhs ~name ~const:(fun _ -> t))
+     Note also that [p] and [x] may have different name modes! *)
+  let ty, t =
+    let[@inline always] name eqn_name ~coercion =
+      assert (Coercion.is_id coercion);
+      (* true by definition *)
+      if Name.equal name eqn_name
+      then ty, t
+      else
+        let env = Meet_env.create t in
+        let existing_ty = find t eqn_name (Some (TG.kind ty)) in
+        match meet_type env ty existing_ty with
+        | Bottom -> MTC.bottom (TG.kind ty), t
+        | Ok (meet_ty, env_extension) ->
+          meet_ty, add_env_extension t env_extension ~meet_type
+    in
+    Simple.pattern_match bare_lhs ~name ~const:(fun _ -> ty, t)
+  in
+  let[@inline always] name name ~coercion =
+    assert (Coercion.is_id coercion);
+    (* true by definition *)
+    add_equation0 t name ty
+  in
+  Simple.pattern_match bare_lhs ~name ~const:(fun _ -> t)
 
 and add_env_extension t (env_extension : Typing_env_extension.t) ~meet_type =
   Typing_env_extension.fold
@@ -1093,141 +1082,49 @@ let make_variables_in_types t ~in_scope =
     { t with name_mode_restrictions })
 
 let type_simple_in_term_exn t ~min_name_mode simple =
-  Profile.record_call ~accumulate:true "type_simple_in_term_exn" (fun () ->
-      (* If [simple] is a variable then it should not come from a missing .cmx
-         file, since this function is only used for typing variables in terms,
-         and even imported code is closed with respect to variables. This also
-         means that the kind of such variables should always be inferrable, so
-         we pass [None] to [find] below. *)
-      Simple.pattern_match simple
-        ~const:(fun const -> MTC.type_for_const const)
-        ~name:(fun name ~coercion ->
-          let comp_unit = Name.compilation_unit name in
-          let ty, binding_time_and_mode =
-            (* We don't need to apply name mode restrictions here because
-               [Aliases] will do it for us. *)
-            find_with_binding_time_and_mode_unscoped t comp_unit name None
-          in
-          let binding_time =
-            Binding_time.With_name_mode.binding_time binding_time_and_mode
-          in
-          let name_mode =
-            Binding_time.With_name_mode.name_mode binding_time_and_mode
-          in
-          let is_imported_variable =
-            Binding_time.equal binding_time Binding_time.imported_variables
-          in
-          let ty =
-            if Simple.has_coercion simple
-            then TG.apply_coercion ty coercion
-            else ty
-          in
-          let env_for_aliases =
-            if not is_imported_variable
-            then None
-            else
-              match resolver t comp_unit with
-              | Some _ as env_for_aliases -> env_for_aliases
-              | None ->
-                (* This should have been caught by
-                   [find_with_binding_time_and_mode_unscoped]. *)
-                assert false
-          in
-          let env_for_aliases = Option.value env_for_aliases ~default:t in
-          let aliases_for_simple = aliases env_for_aliases in
-          let name_mode_restrictions = env_for_aliases.name_mode_restrictions in
-          match
-            Aliases.get_canonical_element_exn aliases_for_simple simple
-              name_mode ~min_name_mode ~name_mode_restrictions
-          with
-          | exception Misc.Fatal_error ->
-            let bt = Printexc.get_raw_backtrace () in
-            Format.eprintf "\n%sContext is:%s typing environment@ %a\n"
-              (Flambda_colours.error ())
-              (Flambda_colours.normal ())
-              print t;
-            Printexc.raise_with_backtrace Misc.Fatal_error bt
-          | alias -> TG.alias_type_of (TG.kind ty) alias))
-
-let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
-    simple =
-  Profile.record_call ~accumulate:true "get_canonical_simple_exn" (fun () ->
-      let aliases_for_simple, name_mode_restrictions =
-        if Aliases.mem (aliases t) simple
-        then aliases_with_name_mode_restrictions t
-        else
-          Simple.pattern_match simple
-            ~const:(fun _ -> aliases_with_name_mode_restrictions t)
-            ~name:(fun name ~coercion:_ ->
-              Name.pattern_match name
-                ~var:(fun var ->
-                  let comp_unit = Variable.compilation_unit var in
-                  if Compilation_unit.equal comp_unit
-                       (Compilation_unit.get_current_exn ())
-                  then aliases_with_name_mode_restrictions t
-                  else
-                    match (resolver t) comp_unit with
-                    | Some env -> aliases_with_name_mode_restrictions env
-                    | None ->
-                      (* Transcript of Slack conversation relating to the next
-                         line:
-
-                         mshinwell: @vlaviron Should it say "aliases t" perhaps?
-                         There could be some weird cases here, e.g. if we are
-                         building c.cmx and b.cmx is unavailable, but if b.cmx
-                         were available it would tell us that this var is an
-                         alias to something in a.cmx, which is available I'm
-                         concerned that this could lead to not propagating a
-                         constraint, e.g. if the var in c.cmx is found to be
-                         bottom, it should make the one in a.cmx bottom too, but
-                         it won't as the chain is broken. That could be
-                         observable if something else in c.cmx directly points
-                         at a.cmx. Maybe this won't matter in practice because
-                         the new type should always be more precise, but I'm
-                         unsure. And what happens if it's not?
-
-                         vlaviron: That's actually fine, I think: if you hide
-                         b.cmx, then c.cmx does not know that the two variables
-                         are aliased, so it will be less precise, but that's all
-                         Since we've fixed Get_tag, I don't think loss of
-                         precision is a soundness issue anymore And the new type
-                         should always be the result of a meet with the previous
-                         type, I think, so it should never be less precise For
-                         the aliases issue, I think using aliases t is fine. It
-                         would only be a problem if we had a way to learn later
-                         that the variable is actually an alias, but that would
-                         only happen if for some reason we later successfully
-                         load the missing cmx. *)
-                      aliases_with_name_mode_restrictions t)
-                ~symbol:(fun _sym ->
-                  (* Symbols can't alias, so lookup in the current aliases is
-                     fine *)
-                  aliases_with_name_mode_restrictions t))
+  (* If [simple] is a variable then it should not come from a missing .cmx file,
+     since this function is only used for typing variables in terms, and even
+     imported code is closed with respect to variables. This also means that the
+     kind of such variables should always be inferrable, so we pass [None] to
+     [find] below. *)
+  Simple.pattern_match simple
+    ~const:(fun const -> MTC.type_for_const const)
+    ~name:(fun name ~coercion ->
+      let comp_unit = Name.compilation_unit name in
+      let ty, binding_time_and_mode =
+        (* We don't need to apply name mode restrictions here because [Aliases]
+           will do it for us. *)
+        find_with_binding_time_and_mode_unscoped t comp_unit name None
       in
-      let name_mode_simple =
-        let in_types =
-          Simple.pattern_match simple
-            ~const:(fun _ -> false)
-            ~name:(fun name ~coercion:_ ->
-              variable_is_from_missing_cmx_file t name)
-        in
-        if in_types
-        then Name_mode.in_types
+      let binding_time =
+        Binding_time.With_name_mode.binding_time binding_time_and_mode
+      in
+      let name_mode =
+        Binding_time.With_name_mode.name_mode binding_time_and_mode
+      in
+      let is_imported_variable =
+        Binding_time.equal binding_time Binding_time.imported_variables
+      in
+      let ty =
+        if Simple.has_coercion simple then TG.apply_coercion ty coercion else ty
+      in
+      let env_for_aliases =
+        if not is_imported_variable
+        then None
         else
-          match name_mode_of_existing_simple with
-          | Some name_mode -> name_mode
+          match resolver t comp_unit with
+          | Some _ as env_for_aliases -> env_for_aliases
           | None ->
-            Binding_time.With_name_mode.name_mode
-              (binding_time_and_mode_of_simple t simple)
+            (* This should have been caught by
+               [find_with_binding_time_and_mode_unscoped]. *)
+            assert false
       in
-      let min_name_mode =
-        match min_name_mode with
-        | None -> name_mode_simple
-        | Some name_mode -> name_mode
-      in
+      let env_for_aliases = Option.value env_for_aliases ~default:t in
+      let aliases_for_simple = aliases env_for_aliases in
+      let name_mode_restrictions = env_for_aliases.name_mode_restrictions in
       match
-        Aliases.get_canonical_element_exn aliases_for_simple simple
-          name_mode_simple ~min_name_mode ~name_mode_restrictions
+        Aliases.get_canonical_element_exn aliases_for_simple simple name_mode
+          ~min_name_mode ~name_mode_restrictions
       with
       | exception Misc.Fatal_error ->
         let bt = Printexc.get_raw_backtrace () in
@@ -1236,7 +1133,91 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
           (Flambda_colours.normal ())
           print t;
         Printexc.raise_with_backtrace Misc.Fatal_error bt
-      | alias -> alias)
+      | alias -> TG.alias_type_of (TG.kind ty) alias)
+
+let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
+    simple =
+  let aliases_for_simple, name_mode_restrictions =
+    if Aliases.mem (aliases t) simple
+    then aliases_with_name_mode_restrictions t
+    else
+      Simple.pattern_match simple
+        ~const:(fun _ -> aliases_with_name_mode_restrictions t)
+        ~name:(fun name ~coercion:_ ->
+          Name.pattern_match name
+            ~var:(fun var ->
+              let comp_unit = Variable.compilation_unit var in
+              if Compilation_unit.equal comp_unit
+                   (Compilation_unit.get_current_exn ())
+              then aliases_with_name_mode_restrictions t
+              else
+                match (resolver t) comp_unit with
+                | Some env -> aliases_with_name_mode_restrictions env
+                | None ->
+                  (* Transcript of Slack conversation relating to the next line:
+
+                     mshinwell: @vlaviron Should it say "aliases t" perhaps?
+                     There could be some weird cases here, e.g. if we are
+                     building c.cmx and b.cmx is unavailable, but if b.cmx were
+                     available it would tell us that this var is an alias to
+                     something in a.cmx, which is available I'm concerned that
+                     this could lead to not propagating a constraint, e.g. if
+                     the var in c.cmx is found to be bottom, it should make the
+                     one in a.cmx bottom too, but it won't as the chain is
+                     broken. That could be observable if something else in c.cmx
+                     directly points at a.cmx. Maybe this won't matter in
+                     practice because the new type should always be more
+                     precise, but I'm unsure. And what happens if it's not?
+
+                     vlaviron: That's actually fine, I think: if you hide b.cmx,
+                     then c.cmx does not know that the two variables are
+                     aliased, so it will be less precise, but that's all Since
+                     we've fixed Get_tag, I don't think loss of precision is a
+                     soundness issue anymore And the new type should always be
+                     the result of a meet with the previous type, I think, so it
+                     should never be less precise For the aliases issue, I think
+                     using aliases t is fine. It would only be a problem if we
+                     had a way to learn later that the variable is actually an
+                     alias, but that would only happen if for some reason we
+                     later successfully load the missing cmx. *)
+                  aliases_with_name_mode_restrictions t)
+            ~symbol:(fun _sym ->
+              (* Symbols can't alias, so lookup in the current aliases is
+                 fine *)
+              aliases_with_name_mode_restrictions t))
+  in
+  let name_mode_simple =
+    let in_types =
+      Simple.pattern_match simple
+        ~const:(fun _ -> false)
+        ~name:(fun name ~coercion:_ -> variable_is_from_missing_cmx_file t name)
+    in
+    if in_types
+    then Name_mode.in_types
+    else
+      match name_mode_of_existing_simple with
+      | Some name_mode -> name_mode
+      | None ->
+        Binding_time.With_name_mode.name_mode
+          (binding_time_and_mode_of_simple t simple)
+  in
+  let min_name_mode =
+    match min_name_mode with
+    | None -> name_mode_simple
+    | Some name_mode -> name_mode
+  in
+  match
+    Aliases.get_canonical_element_exn aliases_for_simple simple name_mode_simple
+      ~min_name_mode ~name_mode_restrictions
+  with
+  | exception Misc.Fatal_error ->
+    let bt = Printexc.get_raw_backtrace () in
+    Format.eprintf "\n%sContext is:%s typing environment@ %a\n"
+      (Flambda_colours.error ())
+      (Flambda_colours.normal ())
+      print t;
+    Printexc.raise_with_backtrace Misc.Fatal_error bt
+  | alias -> alias
 
 let get_alias_then_canonical_simple_exn t ?min_name_mode
     ?name_mode_of_existing_simple typ =
