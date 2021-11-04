@@ -899,57 +899,55 @@ let add_alias t ~element1 ~coercion_from_element2_to_element1 ~element2 =
 
 let add t ~element1:element1_with_coercion ~binding_time_and_mode1
     ~element2:element2_with_coercion ~binding_time_and_mode2 =
-  Profile.record_call ~accumulate:true "Aliases.add" (fun () ->
-      let original_t = t in
-      (* element1_with_coercion <--[c1]-- element1
-       * +
-       * element2_with_coercion <--[c2]-- element2
-       * ~
-       * element1 <--[c1^-1]-- element1_with_coercion
-       * ~
-       * element1 <--[c1^-1 << c2]-- element2
-       *)
-      let element1 = element1_with_coercion |> Simple.without_coercion in
-      let element2 = element2_with_coercion |> Simple.without_coercion in
-      let coercion_from_element2_to_element1 =
-        Coercion.compose_exn
-          (Simple.coercion element2_with_coercion)
-          ~then_:(Coercion.inverse (Simple.coercion element1_with_coercion))
-      in
-      if Flambda_features.check_invariants ()
-      then begin
-        if Simple.equal element1 element2
-        then
-          Misc.fatal_errorf "Cannot alias an element to itself: %a" Simple.print
-            element1;
-        Simple.pattern_match element1
+  let original_t = t in
+  (* element1_with_coercion <--[c1]-- element1
+   * +
+   * element2_with_coercion <--[c2]-- element2
+   * ~
+   * element1 <--[c1^-1]-- element1_with_coercion
+   * ~
+   * element1 <--[c1^-1 << c2]-- element2
+   *)
+  let element1 = element1_with_coercion |> Simple.without_coercion in
+  let element2 = element2_with_coercion |> Simple.without_coercion in
+  let coercion_from_element2_to_element1 =
+    Coercion.compose_exn
+      (Simple.coercion element2_with_coercion)
+      ~then_:(Coercion.inverse (Simple.coercion element1_with_coercion))
+  in
+  if Flambda_features.check_invariants ()
+  then begin
+    if Simple.equal element1 element2
+    then
+      Misc.fatal_errorf "Cannot alias an element to itself: %a" Simple.print
+        element1;
+    Simple.pattern_match element1
+      ~name:(fun _ ~coercion:_ -> ())
+      ~const:(fun const1 ->
+        Simple.pattern_match element2
           ~name:(fun _ ~coercion:_ -> ())
-          ~const:(fun const1 ->
-            Simple.pattern_match element2
-              ~name:(fun _ ~coercion:_ -> ())
-              ~const:(fun const2 ->
-                Misc.fatal_errorf "Cannot add alias between two consts: %a, %a"
-                  Const.print const1 Const.print const2))
-      end;
-      let add_if_name simple data map =
-        Simple.pattern_match simple
-          ~const:(fun _ -> map)
-          ~name:(fun name ~coercion:_ -> Name.Map.add name data map)
-      in
-      let t =
-        { t with
-          binding_times_and_modes =
-            add_if_name element1 binding_time_and_mode1
-              (add_if_name element2 binding_time_and_mode2
-                 t.binding_times_and_modes)
-        }
-      in
-      let add_result =
-        add_alias t ~element1 ~coercion_from_element2_to_element1 ~element2
-      in
-      if Flambda_features.check_invariants ()
-      then invariant_add_result ~original_t add_result;
-      add_result)
+          ~const:(fun const2 ->
+            Misc.fatal_errorf "Cannot add alias between two consts: %a, %a"
+              Const.print const1 Const.print const2))
+  end;
+  let add_if_name simple data map =
+    Simple.pattern_match simple
+      ~const:(fun _ -> map)
+      ~name:(fun name ~coercion:_ -> Name.Map.add name data map)
+  in
+  let t =
+    { t with
+      binding_times_and_modes =
+        add_if_name element1 binding_time_and_mode1
+          (add_if_name element2 binding_time_and_mode2 t.binding_times_and_modes)
+    }
+  in
+  let add_result =
+    add_alias t ~element1 ~coercion_from_element2_to_element1 ~element2
+  in
+  if Flambda_features.check_invariants ()
+  then invariant_add_result ~original_t add_result;
+  add_result
 
 let mem t element =
   Simple.pattern_match element
@@ -960,154 +958,137 @@ let mem t element =
    between canonical elements that are actually incomparable under the name mode
    ordering, and check in [get_canonical_element_exn] accordingly. However maybe
    we should never allow these situations to arise. *)
-(* let canonical_mode = name_mode t add_result.canonical_element in let
-   alias_of_mode = name_mode t add_result.alias_of in match
-   Name_mode.compare_partial_order canonical_mode alias_of_mode with | Some _ ->
-   add_result | None -> Misc.fatal_errorf "Canonical %a has mode incomparable
-   with %a in:@ %a" Simple.print add_result.canonical_element Simple.print
-   add_result.alias_of print t *)
+
+let find_earliest t ~canonical_element name_mode_restrictions ~min_name_mode
+    ~coercion_from_canonical_to_element =
+  (* There used to be a shortcut that avoided consulting the aliases in the
+     common case that [element] is itself canonical and has no aliases, since
+     then it does not appear in [canonical_elements]. However, this shortcut was
+     broken: a canonical element *with* known aliases may still not appear in
+     [canonical_elements]. See tests/flambda2-aliases for a test that gave
+     incorrect output (saying x/39 had no aliases). It may be worth restoring
+     the shortcut, perhaps by returning more information from [canonical]. *)
+  let aliases = get_aliases_of_canonical_element t ~canonical_element in
+  let filter_by_scope name_mode names =
+    if Name_mode.equal name_mode Name_mode.in_types
+    then names
+    else
+      Name.Map.filter
+        (fun name _coercion ->
+          let binding_time_and_mode =
+            Name.Map.find name t.binding_times_and_modes
+          in
+          let scoped_name_mode =
+            NMR.scoped_name_mode name_mode_restrictions
+              (Binding_time.With_name_mode.binding_time binding_time_and_mode)
+              (Binding_time.With_name_mode.name_mode binding_time_and_mode)
+          in
+          Name_mode.equal name_mode scoped_name_mode)
+        names
+  in
+  match
+    Aliases_of_canonical_element.find_earliest_candidates aliases
+      ~filter_by_scope ~min_name_mode
+  with
+  | Some at_earliest_mode ->
+    (* Aliases_of_canonical_element.find_earliest_candidates only returns
+       non-empty sets *)
+    assert (not (Name.Map.is_empty at_earliest_mode));
+    let earliest, coercion_from_earliest_to_canonical =
+      Name.Map.fold
+        (fun elt coercion ((min_elt, _min_coercion) as min_binding) ->
+          if name_defined_earlier t elt ~than:min_elt
+          then elt, coercion
+          else min_binding)
+        at_earliest_mode
+        (Name.Map.min_binding at_earliest_mode)
+    in
+    let coercion_from_earliest_to_element =
+      Coercion.compose_exn coercion_from_earliest_to_canonical
+        ~then_:coercion_from_canonical_to_element
+    in
+    Simple.with_coercion (Simple.name earliest)
+      coercion_from_earliest_to_element
+  | None -> raise Not_found
 
 let get_canonical_element_exn t element elt_name_mode ~min_name_mode
     ~name_mode_restrictions =
-  Profile.record_call ~accumulate:true "Aliases.get_canonical_element_exn"
-    (fun () ->
-      let canonical_element, name_mode, coercion_from_canonical_to_element =
-        match canonical t element with
-        | Is_canonical ->
-          ( Simple.without_coercion element,
-            elt_name_mode,
-            Simple.coercion element )
-        | Alias_of_canonical { canonical_element; coercion_to_canonical } ->
-          let name_mode =
-            name_mode t canonical_element ~name_mode_restrictions
-          in
-          canonical_element, name_mode, Coercion.inverse coercion_to_canonical
-      in
-      assert (not (Simple.has_coercion canonical_element));
-      (* Format.eprintf "looking for canonical for %a, candidate canonical %a,
-         min order %a\n%!" Simple.print element Simple.print canonical_element
-         Name_mode.print min_name_mode; *)
-      let find_earliest () =
-        (* There used to be a shortcut that avoided consulting the aliases in
-           the common case that [element] is itself canonical and has no
-           aliases, since then it does not appear in [canonical_elements].
-           However, this shortcut was broken: a canonical element *with* known
-           aliases may still not appear in [canonical_elements]. See
-           tests/flambda2-aliases for a test that gave incorrect output (saying
-           x/39 had no aliases). It may be worth restoring the shortcut, perhaps
-           by returning more information from [canonical]. *)
-        let aliases = get_aliases_of_canonical_element t ~canonical_element in
-        let filter_by_scope name_mode names =
-          if Name_mode.equal name_mode Name_mode.in_types
-          then names
-          else
-            Name.Map.filter
-              (fun name _coercion ->
-                let binding_time_and_mode =
-                  Name.Map.find name t.binding_times_and_modes
-                in
-                let scoped_name_mode =
-                  NMR.scoped_name_mode name_mode_restrictions
-                    (Binding_time.With_name_mode.binding_time
-                       binding_time_and_mode)
-                    (Binding_time.With_name_mode.name_mode binding_time_and_mode)
-                in
-                Name_mode.equal name_mode scoped_name_mode)
-              names
-        in
-        match
-          Aliases_of_canonical_element.find_earliest_candidates aliases
-            ~filter_by_scope ~min_name_mode
-        with
-        | Some at_earliest_mode ->
-          (* Aliases_of_canonical_element.find_earliest_candidates only returns
-             non-empty sets *)
-          assert (not (Name.Map.is_empty at_earliest_mode));
-          let earliest, coercion_from_earliest_to_canonical =
-            Name.Map.fold
-              (fun elt coercion ((min_elt, _min_coercion) as min_binding) ->
-                if name_defined_earlier t elt ~than:min_elt
-                then elt, coercion
-                else min_binding)
-              at_earliest_mode
-              (Name.Map.min_binding at_earliest_mode)
-          in
-          let coercion_from_earliest_to_element =
-            Coercion.compose_exn coercion_from_earliest_to_canonical
-              ~then_:coercion_from_canonical_to_element
-          in
-          Simple.with_coercion (Simple.name earliest)
-            coercion_from_earliest_to_element
-        | None -> raise Not_found
-      in
-      match Name_mode.compare_partial_order name_mode min_name_mode with
-      | None -> find_earliest ()
-      | Some c ->
-        if c >= 0
-        then
-          Simple.with_coercion canonical_element
-            coercion_from_canonical_to_element
-        else find_earliest ())
+  let canonical_element, name_mode, coercion_from_canonical_to_element =
+    match canonical t element with
+    | Is_canonical ->
+      Simple.without_coercion element, elt_name_mode, Simple.coercion element
+    | Alias_of_canonical { canonical_element; coercion_to_canonical } ->
+      let name_mode = name_mode t canonical_element ~name_mode_restrictions in
+      canonical_element, name_mode, Coercion.inverse coercion_to_canonical
+  in
+  assert (not (Simple.has_coercion canonical_element));
+  match Name_mode.compare_partial_order name_mode min_name_mode with
+  | None ->
+    find_earliest t ~canonical_element name_mode_restrictions ~min_name_mode
+      ~coercion_from_canonical_to_element
+  | Some c ->
+    if c >= 0
+    then
+      Simple.with_coercion canonical_element coercion_from_canonical_to_element
+    else
+      find_earliest t ~canonical_element name_mode_restrictions ~min_name_mode
+        ~coercion_from_canonical_to_element
 
 let get_aliases t element =
-  Profile.record_call ~accumulate:true "Aliases.get_aliases" (fun () ->
-      match canonical t element with
-      | Is_canonical ->
-        let canonical_element = Simple.without_coercion element in
-        assert (not (Simple.has_coercion canonical_element));
-        let alias_names_with_coercions_to_canonical =
-          Aliases_of_canonical_element.all
-            (get_aliases_of_canonical_element t ~canonical_element)
-        in
-        let coercion_from_canonical_to_element = Simple.coercion element in
-        let alias_names_with_coercions_to_element =
-          compose_map_values_exn alias_names_with_coercions_to_canonical
-            ~then_:coercion_from_canonical_to_element
-        in
-        Alias_set.create_aliases_of_element ~element ~canonical_element
-          ~coercion_from_canonical_to_element
-          ~alias_names_with_coercions_to_element
-      | Alias_of_canonical
-          { canonical_element;
-            coercion_to_canonical = coercion_from_element_to_canonical
-          } ->
-        assert (not (Simple.has_coercion canonical_element));
-        assert (
-          not (Simple.equal (Simple.without_coercion element) canonical_element));
-        let alias_names_with_coercions_to_canonical =
-          Aliases_of_canonical_element.all
-            (get_aliases_of_canonical_element t ~canonical_element)
-        in
-        let coercion_from_canonical_to_element =
-          Coercion.inverse coercion_from_element_to_canonical
-        in
-        (* If any composition fails, then our coercions are inconsistent
-           somehow, which should only happen when meeting *)
-        let alias_names_with_coercions_to_element =
-          compose_map_values_exn alias_names_with_coercions_to_canonical
-            ~then_:coercion_from_canonical_to_element
-        in
-        (if Flambda_features.check_invariants ()
-        then
-          let element_coerced_to_canonical =
-            Simple.apply_coercion_exn element coercion_from_element_to_canonical
-          in
-          (* These aliases are all equivalent to the canonical element, and so
-             is our original [element] if we coerce it first, so the coerced
-             form of [element] should be among the aliases. *)
-          assert (
-            Name.Map.exists
-              (fun name coercion_from_name_to_canonical ->
-                let name_coerced_to_canonical =
-                  Simple.apply_coercion_exn (Simple.name name)
-                    coercion_from_name_to_canonical
-                in
-                Simple.equal element_coerced_to_canonical
-                  name_coerced_to_canonical)
-              alias_names_with_coercions_to_canonical));
-        Alias_set.create_aliases_of_element ~element ~canonical_element
-          ~coercion_from_canonical_to_element
-          ~alias_names_with_coercions_to_element)
+  match canonical t element with
+  | Is_canonical ->
+    let canonical_element = Simple.without_coercion element in
+    assert (not (Simple.has_coercion canonical_element));
+    let alias_names_with_coercions_to_canonical =
+      Aliases_of_canonical_element.all
+        (get_aliases_of_canonical_element t ~canonical_element)
+    in
+    let coercion_from_canonical_to_element = Simple.coercion element in
+    let alias_names_with_coercions_to_element =
+      compose_map_values_exn alias_names_with_coercions_to_canonical
+        ~then_:coercion_from_canonical_to_element
+    in
+    Alias_set.create_aliases_of_element ~element ~canonical_element
+      ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element
+  | Alias_of_canonical
+      { canonical_element;
+        coercion_to_canonical = coercion_from_element_to_canonical
+      } ->
+    assert (not (Simple.has_coercion canonical_element));
+    assert (
+      not (Simple.equal (Simple.without_coercion element) canonical_element));
+    let alias_names_with_coercions_to_canonical =
+      Aliases_of_canonical_element.all
+        (get_aliases_of_canonical_element t ~canonical_element)
+    in
+    let coercion_from_canonical_to_element =
+      Coercion.inverse coercion_from_element_to_canonical
+    in
+    (* If any composition fails, then our coercions are inconsistent somehow,
+       which should only happen when meeting *)
+    let alias_names_with_coercions_to_element =
+      compose_map_values_exn alias_names_with_coercions_to_canonical
+        ~then_:coercion_from_canonical_to_element
+    in
+    (if Flambda_features.check_invariants ()
+    then
+      let element_coerced_to_canonical =
+        Simple.apply_coercion_exn element coercion_from_element_to_canonical
+      in
+      (* These aliases are all equivalent to the canonical element, and so is
+         our original [element] if we coerce it first, so the coerced form of
+         [element] should be among the aliases. *)
+      assert (
+        Name.Map.exists
+          (fun name coercion_from_name_to_canonical ->
+            let name_coerced_to_canonical =
+              Simple.apply_coercion_exn (Simple.name name)
+                coercion_from_name_to_canonical
+            in
+            Simple.equal element_coerced_to_canonical name_coerced_to_canonical)
+          alias_names_with_coercions_to_canonical));
+    Alias_set.create_aliases_of_element ~element ~canonical_element
+      ~coercion_from_canonical_to_element ~alias_names_with_coercions_to_element
 
 let all_ids_for_export
     { canonical_elements;

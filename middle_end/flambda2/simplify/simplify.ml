@@ -54,9 +54,8 @@ let run ~symbol_for_global ~get_global_info ~round unit =
   let imported_code = ref Exported_code.empty in
   let imported_units = ref Compilation_unit.Map.empty in
   let resolver comp_unit =
-    Profile.record_call ~accumulate:true "cmx-resolver" (fun () ->
-        Flambda_cmx.load_cmx_file_contents ~get_global_info comp_unit
-          ~imported_names ~imported_code ~imported_units)
+    Flambda_cmx.load_cmx_file_contents ~get_global_info comp_unit
+      ~imported_names ~imported_code ~imported_units
   in
   let get_imported_names () = !imported_names in
   let get_imported_code () = !imported_code in

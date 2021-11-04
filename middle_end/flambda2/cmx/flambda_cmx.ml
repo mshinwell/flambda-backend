@@ -113,9 +113,7 @@ let prepare_cmx_file_contents ~final_typing_env ~module_symbol
     (* CR mshinwell: We should remove typing information about names that do not
        occur (transitively) in the type of the module block. *)
     let reachable_names =
-      Profile.record_call ~accumulate:true "cmx_reachability" (fun () ->
-          compute_reachable_names_and_code ~module_symbol final_typing_env
-            all_code)
+      compute_reachable_names_and_code ~module_symbol final_typing_env all_code
     in
     let all_code = Exported_code.remove_unreachable all_code ~reachable_names in
     let final_typing_env =

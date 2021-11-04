@@ -149,7 +149,7 @@ module Typing_env : sig
 
   (** Raises [Not_found] if no canonical [Simple] was found. *)
   val type_simple_in_term_exn :
-    t -> ?min_name_mode:Name_mode.t -> Simple.t -> flambda_type
+    t -> min_name_mode:Name_mode.t -> Simple.t -> flambda_type
 
   (** Raises [Not_found] if no canonical [Simple] was found. *)
   val get_alias_then_canonical_simple_exn :

@@ -1092,7 +1092,7 @@ let make_variables_in_types t ~in_scope =
     in
     { t with name_mode_restrictions })
 
-let type_simple_in_term_exn t ?min_name_mode simple =
+let type_simple_in_term_exn t ~min_name_mode simple =
   Profile.record_call ~accumulate:true "type_simple_in_term_exn" (fun () ->
       (* If [simple] is a variable then it should not come from a missing .cmx
          file, since this function is only used for typing variables in terms,
@@ -1136,7 +1136,6 @@ let type_simple_in_term_exn t ?min_name_mode simple =
           let env_for_aliases = Option.value env_for_aliases ~default:t in
           let aliases_for_simple = aliases env_for_aliases in
           let name_mode_restrictions = env_for_aliases.name_mode_restrictions in
-          let min_name_mode = Option.value min_name_mode ~default:name_mode in
           match
             Aliases.get_canonical_element_exn aliases_for_simple simple
               name_mode ~min_name_mode ~name_mode_restrictions
