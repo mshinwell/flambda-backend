@@ -186,7 +186,7 @@ let report fmt t =
    lwhite. *)
 
 (* CR mshinwell: This parameter needs to be configurable *)
-let max_rec_depth = 1
+let max_rec_depth = 0
 
 module FT = Flambda2_types.Function_type
 
@@ -363,7 +363,7 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity : t =
         | Never_inlined -> assert false
         | Default_inlined ->
           if Simplify_rec_info_expr.depth_may_be_at_least dacc rec_info
-               (max_rec_depth + 1)
+               max_rec_depth
           then Recursion_depth_exceeded
           else
             might_inline dacc ~apply ~function_type ~simplify_expr ~return_arity
@@ -375,4 +375,8 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity : t =
                handled. *)
             Attribute_unroll unroll_to
           else Unrolling_depth_exceeded
-        | Always_inlined | Hint_inlined -> Attribute_always))
+        | Always_inlined | Hint_inlined ->
+          if Simplify_rec_info_expr.depth_may_be_at_least dacc rec_info
+               max_rec_depth
+          then Recursion_depth_exceeded
+          else Attribute_always))

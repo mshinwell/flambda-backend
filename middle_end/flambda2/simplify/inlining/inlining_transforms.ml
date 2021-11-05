@@ -191,6 +191,8 @@ let inline dacc ~apply ~unroll_to function_decl =
       Misc.fatal_errorf "Cannot inline using only code metadata:@ %a"
         Code_metadata.print code_metadata
   in
+  (* Format.eprintf "Inlining: %a (callee %a)\n%!" Code_id.print (Code.code_id
+     code) Simple.print callee; *)
   let rec_info =
     match T.prove_rec_info (DE.typing_env denv) (FT.rec_info function_decl) with
     | Proved rec_info -> rec_info
