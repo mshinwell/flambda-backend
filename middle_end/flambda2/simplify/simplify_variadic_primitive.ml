@@ -112,19 +112,127 @@ let simplify_make_block_of_floats dacc _prim dbg
     let env_extension = TEE.one_equation (Name.var result_var) ty in
     Simplified_named.reachable term, env_extension, args, dacc
 
-let simplify_make_array dacc prim dbg array_kind ~mutable_or_immutable
-    args_with_tys ~result_var =
-  let args, _tys = List.split args_with_tys in
-  let named = Named.create_prim (Variadic (prim, args)) dbg in
-  let length =
-    match Targetint_31_63.Imm.of_int_option (List.length args) with
-    | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
-    | None -> T.unknown K.value
-  in
-  let element_kind = P.Array_kind.element_kind array_kind in
-  let ty = T.array_of_length ~element_kind ~length in
-  let env_extension = TEE.one_equation (Name.var result_var) ty in
-  Simplified_named.reachable named, env_extension, args, dacc
+let simplify_make_array dacc prim dbg (array_kind : P.Array_kind.t)
+    ~mutable_or_immutable args_with_tys ~result_var =
+  match args_with_tys with
+  | [] ->
+    (* Empty arrays are immutable (and always have tag zero). *)
+    let named =
+      [Flambda.Static_const_or_code.create_static_const Empty_array]
+      |> Flambda.Static_const_group.create |> Named.create_static_consts
+    in
+    let ty =
+      T.array_of_length ~element_kind:Unknown
+        ~length:(T.this_tagged_immediate Targetint_31_63.zero)
+    in
+    let env_extension = TEE.one_equation (Name.var result_var) ty in
+    Simplified_named.reachable named, env_extension, [], dacc
+  | _ :: _ -> (
+    let args, tys = List.split args_with_tys in
+    let invalid () =
+      let ty = T.bottom K.value in
+      let env_extension = TEE.one_equation (Name.var result_var) ty in
+      Simplified_named.invalid (), env_extension, args, dacc
+    in
+    let length =
+      match Targetint_31_63.Imm.of_int_option (List.length args) with
+      | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
+      | None -> T.unknown K.value
+    in
+    let initial_element_type : _ Or_unknown.t =
+      match P.Array_kind.element_kind array_kind with
+      | Unknown -> Unknown
+      | Known kind -> Known (T.unknown (Flambda_kind.With_subkind.kind kind))
+    in
+    let typing_env = DA.typing_env dacc in
+    let found_bottom = ref false in
+    let element_type, env_extension =
+      List.fold_left
+        (fun ((resulting_element_type : _ Or_unknown.t), resulting_env_extension)
+             element_type : (_ Or_unknown.t * _) ->
+          match resulting_element_type with
+          | Unknown -> Known element_type, resulting_env_extension
+          | Known resulting_element_type -> (
+            match T.meet typing_env resulting_element_type element_type with
+            | Bottom ->
+              found_bottom := true;
+              Known resulting_element_type, resulting_env_extension
+            | Ok (resulting_element_type, env_extension) -> (
+              match
+                TEE.meet typing_env resulting_env_extension env_extension
+              with
+              | Bottom ->
+                found_bottom := true;
+                Known resulting_element_type, resulting_env_extension
+              | Ok env_extension -> Known resulting_element_type, env_extension)
+            ))
+        (initial_element_type, TEE.empty)
+        tys
+    in
+    if !found_bottom
+    then invalid ()
+    else
+      let array_and_element_kind : _ Or_bottom.t =
+        (* Ditch element_kind. Use Array_kind in the typing.
+
+           Move Array_kind to its own file.
+
+           Make the Float_array_opt_dynamic constructor have: - not specialised
+           - specialised to Immediates - specialised to Values - specialised to
+           Naked_floats *)
+        match array_kind with
+        | Immediates -> Ok (array_kind, K.With_subkind.tagged_immediate)
+        | Naked_floats -> Ok (array_kind, K.With_subkind.naked_float)
+        | Values -> (
+          match element_type with
+          | Unknown -> Ok (array_kind, K.With_subkind.any_value)
+          | Known element_type -> (
+            match T.prove_is_a_tagged_immediate typing_env element_type with
+            | Proved () ->
+              Ok (P.Array_kind.Immediates, K.With_subkind.tagged_immediate)
+            | Unknown -> Ok (array_kind, K.With_subkind.any_value)
+            | Invalid | Wrong_kind -> (
+              (* Boxed floats are not allowed in arrays of array-kind [Values]
+                 if the float array optimisation is enabled. *)
+              match T.prove_is_a_boxed_float typing_env element_type with
+              | Proved () ->
+                if Flambda_features.flat_float_array ()
+                then Bottom
+                else Ok (array_kind, K.With_subkind.any_value)
+              | Unknown -> Ok (array_kind, K.With_subkind.any_value)
+              | Invalid | Wrong_kind -> Bottom)))
+        | Float_array_opt_dynamic -> (
+          (* We should never be able to get here if the float array optimisation
+             is enabled (see [Lambda_conversions] and recall that the float
+             array optimisation is a configure-time setting). *)
+          assert (not (Flambda_features.flat_float_array ()));
+          match element_type with
+          | Unknown -> Ok (array_kind, K.With_subkind.any_value)
+          | Known element_type -> (
+            (* Attempt to specialise the array to immediates or naked floats. *)
+            match T.prove_is_a_tagged_immediate typing_env element_type with
+            | Proved () ->
+              Ok (P.Array_kind.Immediates, K.With_subkind.tagged_immediate)
+            | Unknown -> Ok (array_kind, K.With_subkind.any_value)
+            | Invalid | Wrong_kind -> (
+              match T.prove_is_a_boxed_float typing_env element_type with
+              | Proved () ->
+                (* XXX - needs wrapper *)
+                Ok (P.Array_kind.Naked_floats, K.With_subkind.naked_float)
+              | Unknown -> Ok (array_kind, Or_unknown.Unknown)
+              | Invalid | Wrong_kind -> Bottom)))
+      in
+      match array_and_element_kind with
+      | Bottom -> invalid ()
+      | Ok (array_kind, element_kind) ->
+        let ty = T.array_of_length ~element_kind ~length in
+        let env_extension = TEE.one_equation (Name.var result_var) ty in
+        let named =
+          Named.create_prim
+            (Variadic (Make_array (array_kind, mutable_or_immutable), args))
+            dbg
+        in
+        Simplified_named.reachable named, env_extension, args, dacc)
 
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
