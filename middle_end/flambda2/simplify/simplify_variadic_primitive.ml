@@ -179,7 +179,22 @@ let simplify_make_array dacc prim dbg (array_kind : P.Array_kind.t)
 
            Make the Float_array_opt_dynamic constructor have: - not specialised
            - specialised to Immediates - specialised to Values - specialised to
-           Naked_floats *)
+           Naked_floats
+
+           For e.g. array get:
+
+           - change Float_array_opt_dynamic (Specialised NF) -> NF
+
+           - make a fresh var
+
+           - read using array kind NF into there
+
+           - then box the fresh var into the result var, which will get type
+           Boxed_float(=fresh_var)
+
+           - need to return these 2 primitives instead of one
+
+           - then the subsequent unboxing will collapse to fresh_var. *)
         match array_kind with
         | Immediates -> Ok (array_kind, K.With_subkind.tagged_immediate)
         | Naked_floats -> Ok (array_kind, K.With_subkind.naked_float)
