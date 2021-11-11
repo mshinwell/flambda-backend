@@ -700,6 +700,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         | Immutable_float_array elements ->
           static_const
             (Immutable_float_array (List.map (or_variable float env) elements))
+        | Empty_array -> static_const Empty_array
         | Mutable_string { initial_value = s } ->
           static_const (Mutable_string { initial_value = s })
         | Immutable_string s -> static_const (Immutable_string s)

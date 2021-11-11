@@ -116,6 +116,13 @@ module Array_kind = struct
     | Values -> Paddrarray
     | Naked_floats -> Pfloatarray
     | Float_array_opt_dynamic -> Pgenarray
+
+  let element_kind t : _ Or_unknown.t =
+    match t with
+    | Immediates -> Known Flambda_kind.With_subkind.tagged_immediate
+    | Values -> Known Flambda_kind.With_subkind.any_value
+    | Naked_floats -> Known Flambda_kind.With_subkind.naked_float
+    | Float_array_opt_dynamic -> Unknown
 end
 
 module Duplicate_block_kind = struct

@@ -89,6 +89,7 @@ type static_data =
   | Boxed_nativeint of targetint or_variable
   | Immutable_float_block of float or_variable list
   | Immutable_float_array of float or_variable list
+  | Empty_array
   | Mutable_string of { initial_value : string }
   | Immutable_string of string
 

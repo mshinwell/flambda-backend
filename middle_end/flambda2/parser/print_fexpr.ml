@@ -296,6 +296,7 @@ let static_data ppf : static_data -> unit = function
     Format.fprintf ppf "Float_array [|%a|]"
       (pp_semi_list float_or_variable)
       elements
+  | Empty_array -> Format.fprintf ppf "Empty_array"
   | Mutable_string { initial_value = s } ->
     Format.fprintf ppf "mutable \"%s\"" (s |> String.escaped)
   | Immutable_string s -> Format.fprintf ppf "\"%s\"" (s |> String.escaped)

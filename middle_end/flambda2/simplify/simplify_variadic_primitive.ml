@@ -112,6 +112,20 @@ let simplify_make_block_of_floats dacc _prim dbg
     let env_extension = TEE.one_equation (Name.var result_var) ty in
     Simplified_named.reachable term, env_extension, args, dacc
 
+let simplify_make_array dacc prim dbg array_kind ~mutable_or_immutable
+    args_with_tys ~result_var =
+  let args, _tys = List.split args_with_tys in
+  let named = Named.create_prim (Variadic (prim, args)) dbg in
+  let length =
+    match Targetint_31_63.Imm.of_int_option (List.length args) with
+    | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
+    | None -> T.unknown K.value
+  in
+  let element_kind = P.Array_kind.element_kind array_kind in
+  let ty = T.array_of_length ~element_kind ~length in
+  let env_extension = TEE.one_equation (Name.var result_var) ty in
+  Simplified_named.reachable named, env_extension, args, dacc
+
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
   let result_var' = Bound_var.var result_var in
@@ -122,15 +136,6 @@ let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
   | Make_block (Naked_floats, mutable_or_immutable) ->
     simplify_make_block_of_floats dacc prim dbg ~mutable_or_immutable
       args_with_tys ~result_var:result_var'
-  | Make_array _ ->
-    (* CR mshinwell: The typing here needs to be improved *)
-    let args, _tys = List.split args_with_tys in
-    let named = Named.create_prim (Variadic (prim, args)) dbg in
-    let length =
-      match Targetint_31_63.Imm.of_int_option (List.length args) with
-      | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
-      | None -> T.unknown K.value
-    in
-    let ty = T.array_of_length ~length in
-    let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.reachable named, env_extension, args, dacc
+  | Make_array (array_kind, mutable_or_immutable) ->
+    simplify_make_array dacc prim dbg array_kind ~mutable_or_immutable
+      args_with_tys ~result_var:result_var'

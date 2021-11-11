@@ -70,6 +70,8 @@ module Array_kind : sig
   val compare : t -> t -> int
 
   val to_lambda : t -> Lambda.array_kind
+
+  val element_kind : t -> Flambda_kind.With_subkind.t Or_unknown.t
 end
 
 module Duplicate_block_kind : sig

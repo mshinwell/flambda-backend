@@ -429,7 +429,10 @@ val closure_with_at_least_these_closure_vars :
   Variable.t Var_within_closure.Map.t ->
   flambda_type
 
-val array_of_length : length:flambda_type -> flambda_type
+val array_of_length :
+  element_kind:Flambda_kind.With_subkind.t Or_unknown.t ->
+  length:flambda_type ->
+  flambda_type
 
 (** Construct a type equal to the type of the given name. (The name must be
     present in the given environment when calling e.g. [join].) *)
