@@ -302,31 +302,27 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
       Bound_parameter.create result_var Flambda_kind.With_subkind.any_value
     in
     bind_rec acc exn_cont ~register_const_string cond dbg @@ fun acc cond ->
-    bind_rec acc exn_cont ~register_const_string ifso dbg @@ fun acc ifso ->
-    bind_rec acc exn_cont ~register_const_string ifnot dbg @@ fun acc ifnot ->
-    let acc, switch =
-      Expr_with_acc.create_switch acc
-        (Switch.create ~scrutinee:(Simple.var cond_result)
-           ~arms:
-             (Targetint_31_63.Map.of_list
-                [ Targetint_31_63.bool_true, Apply_cont.goto ifso_cont;
-                  Targetint_31_63.bool_false, Apply_cont.goto ifnot_cont ]))
-    in
     let compute_cond_and_switch acc =
+      let acc, ifso_cont = Apply_cont_with_acc.goto acc ifso_cont in
+      let acc, ifnot_cont = Apply_cont_with_acc.goto acc ifnot_cont in
+      let acc, switch =
+        Expr_with_acc.create_switch acc
+          (Switch.create ~scrutinee:(Simple.var cond_result)
+             ~arms:
+               (Targetint_31_63.Map.of_list
+                  [ Targetint_31_63.bool_true, ifso_cont;
+                    Targetint_31_63.bool_false, ifnot_cont ]))
+      in
       Let_with_acc.create acc
         (Bound_pattern.singleton cond_result_pat)
         cond ~body:switch
       |> Expr_with_acc.create_let
     in
-    let join_point_expr acc =
-      let join_handler_expr acc =
-        cont acc (Named.create_simple (Simple.var result_var))
-      in
-      Let_cont_with_acc.build_non_recursive acc join_point_cont
-        ~handler_params:[result_param] ~handler:join_handler_expr
-        ~body:compute_cond_and_switch ~is_exn_handler:false
+    let join_handler_expr acc =
+      cont acc (Named.create_simple (Simple.var result_var))
     in
     let ifso_handler_expr acc =
+      bind_rec acc exn_cont ~register_const_string ifso dbg @@ fun acc ifso ->
       let acc, body =
         Apply_cont.create join_point_cont ~args:[Simple.var ifso_result] ~dbg
         |> Expr_with_acc.create_apply_cont acc
@@ -337,6 +333,7 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
       |> Expr_with_acc.create_let
     in
     let ifnot_handler_expr acc =
+      bind_rec acc exn_cont ~register_const_string ifnot dbg @@ fun acc ifnot ->
       let acc, body =
         Apply_cont.create join_point_cont ~args:[Simple.var ifnot_result] ~dbg
         |> Expr_with_acc.create_apply_cont acc
@@ -348,10 +345,16 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
     in
     let body acc =
       Let_cont_with_acc.build_non_recursive acc ifnot_cont ~handler_params:[]
-        ~handler:ifnot_handler_expr ~body:join_point_expr ~is_exn_handler:false
+        ~handler:ifnot_handler_expr ~body:compute_cond_and_switch
+        ~is_exn_handler:false
     in
-    Let_cont_with_acc.build_non_recursive acc ifso_cont ~handler_params:[]
-      ~handler:ifso_handler_expr ~body ~is_exn_handler:false
+    let body acc =
+      Let_cont_with_acc.build_non_recursive acc ifso_cont ~handler_params:[]
+        ~handler:ifso_handler_expr ~body ~is_exn_handler:false
+    in
+    Let_cont_with_acc.build_non_recursive acc join_point_cont
+      ~handler_params:[result_param] ~handler:join_handler_expr ~body
+      ~is_exn_handler:false
 
 and bind_rec_primitive acc exn_cont ~register_const_string
     (prim : simple_or_prim) (dbg : Debuginfo.t)
