@@ -159,6 +159,10 @@ let simplify_caml_make_vect dacc ~len_ty ~init_value_ty : t =
   match element_kind, length with
   | Bottom, Bottom | Ok _, Bottom | Bottom, Ok _ -> Invalid
   | Ok element_kind, Ok length ->
+    (* CR-someday mshinwell: We should really adjust the kind of the parameter
+       of the return continuation, e.g. to go from "any value" to "float array"
+       -- but that will need some more infrastructure, since the actual
+       continuation definition needs to be changed on the upwards traversal. *)
     let type_of_returned_array = T.array_of_length ~element_kind ~length in
     Unchanged { return_types = Some [type_of_returned_array] }
 
