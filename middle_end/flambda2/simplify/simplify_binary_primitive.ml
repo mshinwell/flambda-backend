@@ -1113,6 +1113,7 @@ let simplify_array_load (array_kind : P.Array_kind.t) mutability dacc
       | Proved false | Unknown -> Ok array_kind
       | Invalid -> Bottom)
   in
+  (* CR mshinwell: should do a meet on the new value too *)
   match array_kind with
   | Bottom ->
     let ty = T.bottom result_kind in
