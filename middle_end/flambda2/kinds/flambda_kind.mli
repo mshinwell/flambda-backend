@@ -190,6 +190,7 @@ module With_subkind : sig
           }
       | Float_block of { num_fields : int }
       | Float_array
+      | Immediate_array
 
     include Container_types.S with type t := t
   end
@@ -232,6 +233,8 @@ module With_subkind : sig
 
   val float_array : t
 
+  val immediate_array : t
+
   val block : Tag.t -> t list -> t
 
   val float_block : num_fields:int -> t
@@ -253,6 +256,7 @@ module With_subkind : sig
         }
     | Float_block of { num_fields : int }
     | Float_array
+    | Immediate_array
 
   val descr : t -> descr
 

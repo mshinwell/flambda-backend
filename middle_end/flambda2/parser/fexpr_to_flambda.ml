@@ -262,6 +262,7 @@ let rec value_kind_with_subkind (k : Fexpr.kind_with_subkind) :
   | Tagged_immediate -> KWS.tagged_immediate
   | Rec_info -> KWS.rec_info
   | Float_array -> KWS.float_array
+  | Immediate_array -> KWS.immediate_array
 
 let value_kind : Fexpr.kind -> Flambda_kind.t = function
   | Value -> Flambda_kind.value

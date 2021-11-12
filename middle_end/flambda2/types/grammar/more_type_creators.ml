@@ -313,6 +313,10 @@ let rec unknown_with_descr (descr : Flambda_kind.With_subkind.descr) =
     TG.array_of_length
       ~element_kind:(Known Flambda_kind.With_subkind.naked_float)
       ~length:any_tagged_immediate
+  | Immediate_array ->
+    TG.array_of_length
+      ~element_kind:(Known Flambda_kind.With_subkind.tagged_immediate)
+      ~length:any_tagged_immediate
 
 let unknown_with_subkind kind =
   unknown_with_descr (Flambda_kind.With_subkind.descr kind)
