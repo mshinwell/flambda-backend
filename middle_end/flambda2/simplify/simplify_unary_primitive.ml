@@ -171,12 +171,14 @@ let simplify_get_tag dacc ~original_term ~arg:scrutinee ~arg_ty:scrutinee_ty
   simplify_is_int_or_get_tag dacc ~original_term ~scrutinee ~scrutinee_ty
     ~result_var ~make_shape:(fun block -> T.get_tag_for_block ~block)
 
-let simplify_array_length dacc ~original_term ~arg:_ ~arg_ty:array_ty
+let simplify_array_length array_kind dacc ~original_term ~arg:_ ~arg_ty:array_ty
     ~result_var =
   let result = Simple.var (Bound_var.var result_var) in
+  let element_kind = P.Array_kind.element_kind array_kind in
   Simplify_common.simplify_projection dacc ~original_term
     ~deconstructing:array_ty
-    ~shape:(T.array_of_length ~length:(T.alias_type_of K.value result))
+    ~shape:
+      (T.array_of_length ~element_kind ~length:(T.alias_type_of K.value result))
     ~result_var ~result_kind:K.value
 
 (* CR-someday mshinwell: Consider whether "string length" should be treated like
@@ -467,7 +469,7 @@ let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
     | Box_number boxable_number_kind -> simplify_box_number boxable_number_kind
     | Is_int -> simplify_is_int
     | Get_tag -> simplify_get_tag
-    | Array_length _ -> simplify_array_length
+    | Array_length array_kind -> simplify_array_length array_kind
     | String_length _ -> simplify_string_length
     | Int_arith (kind, op) -> begin
       match kind with
