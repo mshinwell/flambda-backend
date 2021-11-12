@@ -137,7 +137,7 @@ let simplify_caml_make_vect dacc ~len_ty ~init_value_ty : t =
   let element_kind : _ Or_unknown.t Or_bottom.t =
     (* We can't deduce subkind information, e.g. an array is all-immediates
        rather than arbitrary values, but we can deduce kind information. *)
-    if Flambda_features.flat_float_array ()
+    if not (Flambda_features.flat_float_array ())
     then
       Ok
         (Known

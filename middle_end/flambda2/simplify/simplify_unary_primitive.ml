@@ -453,7 +453,7 @@ let simplify_float_arith_op (op : P.unary_float_arith_op) dacc ~original_term
   | Invalid -> result_invalid ()
 
 let simplify_is_boxed_float dacc ~original_term ~arg:_ ~arg_ty ~result_var =
-  assert (not (Flambda_features.flat_float_array ()));
+  assert (Flambda_features.flat_float_array ());
   let result = Name.var (Bound_var.var result_var) in
   match T.prove_is_or_is_not_a_boxed_float (DA.typing_env dacc) arg_ty with
   | Proved is_a_boxed_float ->
@@ -476,7 +476,7 @@ let simplify_is_boxed_float dacc ~original_term ~arg:_ ~arg_ty ~result_var =
 
 let simplify_is_flat_float_array dacc ~original_term ~arg:_ ~arg_ty ~result_var
     =
-  assert (not (Flambda_features.flat_float_array ()));
+  assert (Flambda_features.flat_float_array ());
   let result = Name.var (Bound_var.var result_var) in
   match
     T.prove_is_array_with_element_kind (DA.typing_env dacc) arg_ty
