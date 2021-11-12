@@ -114,80 +114,63 @@ let simplify_make_block_of_floats dacc _prim dbg
 
 let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
     ~mutable_or_immutable args_with_tys ~result_var =
+  let args, tys = List.split args_with_tys in
+  let invalid () =
+    let ty = T.bottom K.value in
+    let env_extension = TEE.one_equation (Name.var result_var) ty in
+    Simplified_named.invalid (), env_extension, args, dacc
+  in
+  let length =
+    match Targetint_31_63.Imm.of_int_option (List.length args) with
+    | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
+    | None -> T.unknown K.value
+  in
   let element_kind =
     (* Remember that the element kind cannot in general be deduced from the
        types of the array members, it must be obtained from the array kind
        annotations that came via [Lambda]. *)
     P.Array_kind.element_kind array_kind
   in
-  match args_with_tys with
-  | [] ->
-    (* Empty arrays are immutable (and always have tag zero). *)
-    let named =
-      [Flambda.Static_const_or_code.create_static_const Empty_array]
-      |> Flambda.Static_const_group.create |> Named.create_static_consts
-    in
-    let ty =
-      T.array_of_length ~element_kind
-        ~length:(T.this_tagged_immediate Targetint_31_63.zero)
-    in
-    let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.reachable named, env_extension, [], dacc
-  | _ :: _ ->
-    let args, tys = List.split args_with_tys in
-    let invalid () =
-      let ty = T.bottom K.value in
-      let env_extension = TEE.one_equation (Name.var result_var) ty in
-      Simplified_named.invalid (), env_extension, args, dacc
-    in
-    let length =
-      match Targetint_31_63.Imm.of_int_option (List.length args) with
-      | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)
-      | None -> T.unknown K.value
-    in
-    let initial_element_type : _ Or_unknown.t =
-      match element_kind with
-      | Unknown -> Unknown
-      | Known kind -> Known (T.unknown (Flambda_kind.With_subkind.kind kind))
-    in
-    let typing_env = DA.typing_env dacc in
-    let found_bottom = ref false in
-    let _element_type, env_extension =
-      List.fold_left
-        (fun ((resulting_element_type : _ Or_unknown.t), resulting_env_extension)
-             element_type : (_ Or_unknown.t * _) ->
-          match resulting_element_type with
-          | Unknown -> Known element_type, resulting_env_extension
-          | Known resulting_element_type -> (
-            match T.meet typing_env resulting_element_type element_type with
+  let initial_element_type : _ Or_unknown.t =
+    match element_kind with
+    | Unknown -> Unknown
+    | Known kind -> Known (T.unknown (Flambda_kind.With_subkind.kind kind))
+  in
+  let typing_env = DA.typing_env dacc in
+  let found_bottom = ref false in
+  let _element_type, env_extension =
+    List.fold_left
+      (fun ((resulting_element_type : _ Or_unknown.t), resulting_env_extension)
+           element_type : (_ Or_unknown.t * _) ->
+        match resulting_element_type with
+        | Unknown -> Known element_type, resulting_env_extension
+        | Known resulting_element_type -> (
+          match T.meet typing_env resulting_element_type element_type with
+          | Bottom ->
+            found_bottom := true;
+            Known resulting_element_type, resulting_env_extension
+          | Ok (resulting_element_type, env_extension) -> (
+            match TEE.meet typing_env resulting_env_extension env_extension with
             | Bottom ->
               found_bottom := true;
               Known resulting_element_type, resulting_env_extension
-            | Ok (resulting_element_type, env_extension) -> (
-              match
-                TEE.meet typing_env resulting_env_extension env_extension
-              with
-              | Bottom ->
-                found_bottom := true;
-                Known resulting_element_type, resulting_env_extension
-              | Ok env_extension -> Known resulting_element_type, env_extension)
-            ))
-        (initial_element_type, TEE.empty)
-        tys
+            | Ok env_extension -> Known resulting_element_type, env_extension)))
+      (initial_element_type, TEE.empty)
+      tys
+  in
+  if !found_bottom
+  then invalid ()
+  else
+    let ty = T.array_of_length ~element_kind ~length in
+    let env_extension =
+      TEE.add_or_replace_equation env_extension (Name.var result_var) ty
     in
-    if !found_bottom
-    then invalid ()
-    else
-      let ty = T.array_of_length ~element_kind ~length in
-      let env_extension =
-        TEE.add_or_replace_equation env_extension (Name.var result_var) ty
-      in
-      let named =
-        Named.create_prim
-          (Variadic (Make_array (array_kind, mutable_or_immutable), args))
-          dbg
-      in
-      Simplified_named.reachable named, env_extension, args, dacc
+    let named =
+      Named.create_prim
+        (Variadic (Make_array (array_kind, mutable_or_immutable), args))
+        dbg
+    in
+    Simplified_named.reachable named, env_extension, args, dacc
 
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
