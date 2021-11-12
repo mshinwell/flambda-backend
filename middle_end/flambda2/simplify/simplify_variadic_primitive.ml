@@ -126,40 +126,62 @@ let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
     | None -> T.unknown K.value
   in
   let element_kind =
-    (* Remember that the element kind cannot in general be deduced from the
+    (* Remember that the element subkinds cannot in general be deduced from the
        types of the array members, it must be obtained from the array kind
        annotations that came via [Lambda]. *)
     P.Array_kind.element_kind array_kind
   in
   let initial_element_type : _ Or_unknown.t =
     match element_kind with
-    | Unknown -> Unknown
-    | Known kind -> Known (T.unknown (Flambda_kind.With_subkind.kind kind))
+    | Known kind -> (
+      match K.With_subkind.descr kind with
+      | Tagged_immediate -> Known T.any_tagged_immediate
+      | Block _ | Float_block _ -> Known T.any_block
+      | Any_value -> Known T.any_value
+      | Naked_number _ ->
+        Known (T.unknown (Flambda_kind.With_subkind.kind kind))
+      | Boxed_float -> Known T.any_boxed_float
+      | Boxed_int32 -> Known T.any_boxed_int32
+      | Boxed_int64 -> Known T.any_boxed_int64
+      | Boxed_nativeint -> Known T.any_boxed_nativeint
+      | Rec_info ->
+        Misc.fatal_error "Array elements cannot have kind [Rec_info]")
+    | Unknown -> (
+      (* If there was no array kind annotation but there is at least one array
+         member, we can use the kind of such member, but not the subkind. *)
+      match tys with [] -> Unknown | ty :: _ -> Known (T.unknown_like ty))
   in
   let typing_env = DA.typing_env dacc in
   let found_bottom = ref false in
-  let _element_type, env_extension =
-    List.fold_left
-      (fun ((resulting_element_type : _ Or_unknown.t), resulting_env_extension)
-           element_type : (_ Or_unknown.t * _) ->
-        match resulting_element_type with
-        | Unknown -> Known element_type, resulting_env_extension
-        | Known resulting_element_type -> (
-          match T.meet typing_env resulting_element_type element_type with
+  let env_extension =
+    match initial_element_type with
+    | Unknown -> TEE.empty
+    | Known initial_element_type ->
+      List.fold_left
+        (fun resulting_env_extension element_type ->
+          match T.meet typing_env initial_element_type element_type with
           | Bottom ->
             found_bottom := true;
-            Known resulting_element_type, resulting_env_extension
-          | Ok (resulting_element_type, env_extension) -> (
+            resulting_env_extension
+          | Ok (_, env_extension) -> (
             match TEE.meet typing_env resulting_env_extension env_extension with
             | Bottom ->
               found_bottom := true;
-              Known resulting_element_type, resulting_env_extension
-            | Ok env_extension -> Known resulting_element_type, env_extension)))
-      (initial_element_type, TEE.empty)
-      tys
+              resulting_env_extension
+            | Ok env_extension -> env_extension))
+        TEE.empty tys
   in
   if !found_bottom
-  then invalid ()
+  then (
+    Format.eprintf
+      "FOUND BOTTOM: Make_array %a, element kind %a, init element type %a, \
+       args %a\n\
+       %!"
+      P.Array_kind.print array_kind
+      (Or_unknown.print K.With_subkind.print)
+      element_kind (Or_unknown.print T.print) initial_element_type
+      Simple.List.print args;
+    invalid ())
   else
     let ty = T.array_of_length ~element_kind ~length in
     let env_extension =
