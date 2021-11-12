@@ -624,13 +624,13 @@ let prove_strings env t : String_info.Set.t proof =
   | Naked_nativeint _ | Rec_info _ ->
     wrong_kind ()
 
-let prove_is_flat_float_array env t : _ proof =
+let prove_is_array_with_element_kind env t ~element_kind : _ proof =
   match expand_head env t with
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Value (Ok (Array { kind = Unknown; _ })) -> Unknown
   | Value (Ok (Array { kind = Known kind; _ })) ->
-    Proved (K.With_subkind.equal kind K.With_subkind.naked_float)
+    Proved (K.With_subkind.equal kind element_kind)
   | Value (Ok _)
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ ->

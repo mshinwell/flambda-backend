@@ -586,6 +586,7 @@ module With_subkind = struct
     | Boxed_nativeint, Boxed_nativeint
     | Tagged_immediate, Tagged_immediate
     | Float_array, Float_array
+    | Immediate_array, Immediate_array
     | Rec_info, Rec_info ->
       true
     | Block { tag = t1; fields = fields1 }, Block { tag = t2; fields = fields2 }

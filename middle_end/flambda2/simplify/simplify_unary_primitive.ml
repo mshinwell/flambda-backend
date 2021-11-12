@@ -476,7 +476,10 @@ let simplify_is_boxed_float dacc ~original_term ~arg:_ ~arg_ty ~result_var =
 let simplify_is_flat_float_array dacc ~original_term ~arg:_ ~arg_ty ~result_var
     =
   let result = Name.var (Bound_var.var result_var) in
-  match T.prove_is_flat_float_array (DA.typing_env dacc) arg_ty with
+  match
+    T.prove_is_array_with_element_kind (DA.typing_env dacc) arg_ty
+      ~element_kind:K.With_subkind.float_array
+  with
   | Proved is_flat_float_array ->
     let imm = Targetint_31_63.bool is_flat_float_array in
     let ty = T.this_naked_immediate imm in
