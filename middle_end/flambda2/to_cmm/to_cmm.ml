@@ -412,7 +412,7 @@ let unary_primitive env dbg f arg =
         "caml_obj_dup" typ_val [arg] )
   | Is_int -> None, C.and_int arg (C.int ~dbg 1) dbg
   | Get_tag -> None, C.get_tag arg dbg
-  | Array_length array_kind -> None, C.array_length ~dbg array_kind arg
+  | Array_length -> None, C.array_length ~dbg arg
   | Bigarray_length { dimension } ->
     ( None,
       C.load ~dbg Cmm.Word_int Asttypes.Mutable

@@ -3,12 +3,12 @@
 ; meaning the generated source is annotated with the bare filename.
 
 ; These rules are disabled by default because you need precisely the correct
-; version of Menhir installed. Comment out (mode fallback) and uncomment (mode
+; version of Menhir installed. Comment out (mode promote) and uncomment (mode
 ; promote) in each stanza if you make changes to the Flambda
 ; parser.
 
 (rule
- (mode fallback)
+ (mode promote)
  ;(mode    promote)
  (target flambda_lex.ml)
  (deps flambda_lex.mll)
@@ -16,7 +16,7 @@
   (run ocamllex -q %{deps})))
 
 (rule
- (mode fallback)
+ (mode promote)
  ;(mode   promote)
  (target flambda_parser.ml)
  (deps flambda_parser_in.ml)
@@ -28,7 +28,7 @@
     (run sed "s/MenhirLib/CamlinternalMenhirLib/g")))))
 
 (rule
- (mode fallback)
+ (mode promote)
  ;(mode   promote)
  (target flambda_parser.mli)
  (deps flambda_parser_in.mli)

@@ -132,24 +132,17 @@ let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
     P.Array_kind.element_kind array_kind
   in
   let initial_element_type : _ Or_unknown.t =
-    match element_kind with
-    | Known kind -> (
-      match K.With_subkind.descr kind with
-      | Tagged_immediate -> Known T.any_tagged_immediate
-      | Block _ | Float_block _ -> Known T.any_block
-      | Any_value -> Known T.any_value
-      | Naked_number _ ->
-        Known (T.unknown (Flambda_kind.With_subkind.kind kind))
-      | Boxed_float -> Known T.any_boxed_float
-      | Boxed_int32 -> Known T.any_boxed_int32
-      | Boxed_int64 -> Known T.any_boxed_int64
-      | Boxed_nativeint -> Known T.any_boxed_nativeint
-      | Rec_info ->
-        Misc.fatal_error "Array elements cannot have kind [Rec_info]")
-    | Unknown -> (
-      (* If there was no array kind annotation but there is at least one array
-         member, we can use the kind of such member, but not the subkind. *)
-      match tys with [] -> Unknown | ty :: _ -> Known (T.unknown_like ty))
+    match K.With_subkind.descr element_kind with
+    | Tagged_immediate -> Known T.any_tagged_immediate
+    | Block _ | Float_block _ -> Known T.any_block
+    | Any_value -> Known T.any_value
+    | Naked_number _ ->
+      Known (T.unknown (Flambda_kind.With_subkind.kind element_kind))
+    | Boxed_float -> Known T.any_boxed_float
+    | Boxed_int32 -> Known T.any_boxed_int32
+    | Boxed_int64 -> Known T.any_boxed_int64
+    | Boxed_nativeint -> Known T.any_boxed_nativeint
+    | Rec_info -> Misc.fatal_error "Array elements cannot have kind [Rec_info]"
   in
   let typing_env = DA.typing_env dacc in
   let found_bottom = ref false in
@@ -174,7 +167,7 @@ let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
   if !found_bottom
   then invalid ()
   else
-    let ty = T.array_of_length ~element_kind ~length in
+    let ty = T.array_of_length ~element_kind:(Known element_kind) ~length in
     let env_extension =
       TEE.add_or_replace_equation env_extension (Name.var result_var) ty
     in

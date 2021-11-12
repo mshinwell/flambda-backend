@@ -259,7 +259,6 @@ let array_kind ~space ppf (ak : array_kind) =
     | Immediates -> None
     | Values -> Some "val"
     | Naked_floats -> Some "float"
-    | Float_array_opt_dynamic -> Some "dynamic"
   in
   pp_option ~space Format.pp_print_string ppf str
 
@@ -417,8 +416,7 @@ let unop ppf u =
     | Untagged_immediate -> print verb_imm "imm"
   in
   match u with
-  | Array_length ak ->
-    Format.fprintf ppf "@[<2>%%array_length%a@]" (array_kind ~space:Before) ak
+  | Array_length -> str "%array_length"
   | Box_number bk -> box_or_unbox "Box" "Tag" bk
   | Get_tag -> str "%get_tag"
   | Is_int -> str "%is_int"

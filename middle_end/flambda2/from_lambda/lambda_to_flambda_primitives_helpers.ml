@@ -54,6 +54,7 @@ type expr_primitive =
         (* Predefined exception *)
         dbg : Debuginfo.t
       }
+  | If_then_else of expr_primitive * expr_primitive * expr_primitive
 
 and simple_or_prim =
   | Simple of Simple.t
@@ -70,6 +71,11 @@ let rec print_expr_primitive ppf expr_primitive =
   | Variadic (prim, _) -> W.print ppf (Variadic prim)
   | Checked { primitive; _ } ->
     Format.fprintf ppf "@[<hov 1>(Checked@ %a)@]" print_expr_primitive primitive
+  | If_then_else (cond, ifso, ifnot) ->
+    Format.fprintf ppf
+      "@[<hov 1>(If_then_else@ (cond@ %a)@ (ifso@ %a)@ (ifnot@ %a))@]"
+      print_expr_primitive cond print_expr_primitive ifso print_expr_primitive
+      ifnot
 
 let print_simple_or_prim ppf (simple_or_prim : simple_or_prim) =
   match simple_or_prim with
@@ -281,6 +287,7 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
     in
     Let_cont_with_acc.build_non_recursive acc primitive_cont ~handler_params:[]
       ~handler:primitive_handler_expr ~body ~is_exn_handler:false
+  | If_then_else (cond, ifso, ifnot) -> ()
 
 and bind_rec_primitive acc exn_cont ~register_const_string
     (prim : simple_or_prim) (dbg : Debuginfo.t)

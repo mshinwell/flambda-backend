@@ -351,7 +351,7 @@ let or_variable f env (ov : _ Fexpr.or_variable) : _ Or_variable.t =
 
 let unop env (unop : Fexpr.unop) : Flambda_primitive.unary_primitive =
   match unop with
-  | Array_length ak -> Array_length ak
+  | Array_length -> Array_length
   | Box_number bk -> Box_number bk
   | Unbox_number bk -> Unbox_number bk
   | Get_tag -> Get_tag

@@ -441,7 +441,7 @@ let recursive_flag (r : Recursive.t) : Fexpr.is_recursive =
 
 let unop env (op : Flambda_primitive.unary_primitive) : Fexpr.unop =
   match op with
-  | Array_length ak -> Array_length ak
+  | Array_length -> Array_length
   | Box_number bk -> Box_number bk
   | Get_tag -> Get_tag
   | Is_int -> Is_int

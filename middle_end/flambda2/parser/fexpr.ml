@@ -178,7 +178,6 @@ type array_kind = Flambda_primitive.Array_kind.t =
   | Immediates
   | Values
   | Naked_floats
-  | Float_array_opt_dynamic
 
 type box_kind = Flambda_kind.Boxable_number.t =
   | Naked_float
@@ -251,7 +250,7 @@ type signed_or_unsigned = Flambda_primitive.signed_or_unsigned =
   | Unsigned
 
 type unop =
-  | Array_length of array_kind
+  | Array_length
   | Box_number of box_kind
   | Get_tag
   | Is_int
