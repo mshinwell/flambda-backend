@@ -293,7 +293,9 @@ type unary_primitive =
       (** Read a value from the environment of a closure. Also specifies the id
           of the closure pointed at in the set of closures given as argument. *)
   | Is_boxed_float
+      (** Only valid when the float array optimisation is enabled. *)
   | Is_flat_float_array
+      (** Only valid when the float array optimisation is enabled. *)
 
 (** Whether a comparison is to yield a boolean result, as given by a particular
     comparison operator, or whether it is to behave in the manner of "compare"
