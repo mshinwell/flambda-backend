@@ -452,6 +452,49 @@ let simplify_float_arith_op (op : P.unary_float_arith_op) dacc ~original_term
   | Proved _ | Unknown -> result_unknown ()
   | Invalid -> result_invalid ()
 
+let simplify_is_boxed_float dacc ~original_term ~arg:_ ~arg_ty ~result_var =
+  let result = Name.var (Bound_var.var result_var) in
+  match T.prove_is_or_is_not_a_boxed_float (DA.typing_env dacc) arg_ty with
+  | Proved is_a_boxed_float ->
+    let imm = Targetint_31_63.bool is_a_boxed_float in
+    let ty = T.this_naked_immediate imm in
+    let env_extension = TEE.one_equation result ty in
+    ( Simplified_named.reachable
+        (Named.create_simple
+           (Simple.const (Reg_width_const.naked_immediate imm))),
+      env_extension,
+      dacc )
+  | Unknown ->
+    let ty = T.unknown K.naked_immediate in
+    let env_extension = TEE.one_equation result ty in
+    Simplified_named.reachable original_term, env_extension, dacc
+  | Invalid | Wrong_kind ->
+    let ty = T.bottom K.naked_immediate in
+    let env_extension = TEE.one_equation result ty in
+    Simplified_named.invalid (), env_extension, dacc
+
+let simplify_is_flat_float_array dacc ~original_term ~arg:_ ~arg_ty ~result_var
+    =
+  let result = Name.var (Bound_var.var result_var) in
+  match T.prove_is_flat_float_array (DA.typing_env dacc) arg_ty with
+  | Proved is_flat_float_array ->
+    let imm = Targetint_31_63.bool is_flat_float_array in
+    let ty = T.this_naked_immediate imm in
+    let env_extension = TEE.one_equation result ty in
+    ( Simplified_named.reachable
+        (Named.create_simple
+           (Simple.const (Reg_width_const.naked_immediate imm))),
+      env_extension,
+      dacc )
+  | Unknown ->
+    let ty = T.unknown K.naked_immediate in
+    let env_extension = TEE.one_equation result ty in
+    Simplified_named.reachable original_term, env_extension, dacc
+  | Invalid ->
+    let ty = T.bottom K.naked_immediate in
+    let env_extension = TEE.one_equation result ty in
+    Simplified_named.invalid (), env_extension, dacc
+
 let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
     ~result_var =
   let min_name_mode = Bound_var.name_mode result_var in
@@ -491,8 +534,10 @@ let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
     end
     | Boolean_not -> simplify_boolean_not
     | Reinterpret_int64_as_float -> simplify_reinterpret_int64_as_float
+    | Is_boxed_float -> simplify_is_boxed_float
+    | Is_flat_float_array -> simplify_is_flat_float_array
     | Int_as_pointer | Bigarray_length _ | Duplicate_array _ | Duplicate_block _
-    | Opaque_identity | Is_boxed_float | Is_flat_float_array ->
+    | Opaque_identity ->
       (* CR mshinwell: In these cases, the type of the argument should still be
          checked. Same for binary/ternary/etc. *)
       fun dacc ~original_term:_ ~arg ~arg_ty:_ ~result_var:_ ->
