@@ -323,10 +323,11 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
     in
     let ifso_handler_expr acc =
       bind_rec acc exn_cont ~register_const_string ifso dbg @@ fun acc ifso ->
-      let acc, body =
-        Apply_cont.create join_point_cont ~args:[Simple.var ifso_result] ~dbg
-        |> Expr_with_acc.create_apply_cont acc
+      let acc, apply_cont =
+        Apply_cont_with_acc.create acc join_point_cont
+          ~args:[Simple.var ifso_result] ~dbg
       in
+      let acc, body = Expr_with_acc.create_apply_cont acc apply_cont in
       Let_with_acc.create acc
         (Bound_pattern.singleton ifso_result_pat)
         ifso ~body
@@ -334,10 +335,11 @@ let rec bind_rec acc exn_cont ~register_const_string (prim : expr_primitive)
     in
     let ifnot_handler_expr acc =
       bind_rec acc exn_cont ~register_const_string ifnot dbg @@ fun acc ifnot ->
-      let acc, body =
-        Apply_cont.create join_point_cont ~args:[Simple.var ifnot_result] ~dbg
-        |> Expr_with_acc.create_apply_cont acc
+      let acc, apply_cont =
+        Apply_cont_with_acc.create acc join_point_cont
+          ~args:[Simple.var ifnot_result] ~dbg
       in
+      let acc, body = Expr_with_acc.create_apply_cont acc apply_cont in
       Let_with_acc.create acc
         (Bound_pattern.singleton ifnot_result_pat)
         ifnot ~body
