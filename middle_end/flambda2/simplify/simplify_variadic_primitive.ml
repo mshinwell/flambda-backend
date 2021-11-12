@@ -172,16 +172,7 @@ let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
         TEE.empty tys
   in
   if !found_bottom
-  then (
-    Format.eprintf
-      "FOUND BOTTOM: Make_array %a, element kind %a, init element type %a, \
-       args %a\n\
-       %!"
-      P.Array_kind.print array_kind
-      (Or_unknown.print K.With_subkind.print)
-      element_kind (Or_unknown.print T.print) initial_element_type
-      Simple.List.print args;
-    invalid ())
+  then invalid ()
   else
     let ty = T.array_of_length ~element_kind ~length in
     let env_extension =
