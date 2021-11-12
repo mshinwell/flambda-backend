@@ -492,7 +492,7 @@ let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
     | Boolean_not -> simplify_boolean_not
     | Reinterpret_int64_as_float -> simplify_reinterpret_int64_as_float
     | Int_as_pointer | Bigarray_length _ | Duplicate_array _ | Duplicate_block _
-    | Opaque_identity ->
+    | Opaque_identity | Is_boxed_float | Is_flat_float_array ->
       (* CR mshinwell: In these cases, the type of the argument should still be
          checked. Same for binary/ternary/etc. *)
       fun dacc ~original_term:_ ~arg ~arg_ty:_ ~result_var:_ ->

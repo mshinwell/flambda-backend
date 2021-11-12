@@ -454,6 +454,13 @@ let unary_primitive env dbg f arg =
          environment, then [Env.closure_offset] might return [None], even though
          the set of closures has been seen by [To_cmm_closure]. *)
       None, C.unreachable)
+  | Is_boxed_float ->
+    ( None,
+      Cmm.Cop
+        (Ccmpi Ceq, [C.get_tag arg dbg; Cconst_int (Obj.double_tag, dbg)], dbg)
+    )
+  | Is_flat_float_array ->
+    None, Cmm.Cop (Ccmpi Ceq, [C.get_tag arg dbg; C.floatarray_tag dbg], dbg)
 
 let binary_primitive env dbg f x y =
   match (f : Flambda_primitive.binary_primitive) with

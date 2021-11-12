@@ -346,8 +346,10 @@ let unary_prim_size prim =
   | Unbox_number k -> unbox_number k
   | Box_number k -> box_number k
   | Select_closure _ -> 1 (* caddv *)
-  | Project_var _ -> 1
-(* load *)
+  | Project_var _ -> 1 (* load *)
+  | Is_boxed_float -> 4 (* tag load + comparison *)
+  | Is_flat_float_array -> 4
+(* tag load + comparison *)
 
 let binary_prim_size prim =
   match (prim : Flambda_primitive.binary_primitive) with

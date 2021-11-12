@@ -653,6 +653,8 @@ type unary_primitive =
       { project_from : Closure_id.t;
         var : Var_within_closure.t
       }
+  | Is_boxed_float
+  | Is_flat_float_array
 
 (* Here and below, operations that are genuine projections shouldn't be eligible
    for CSE, since we deal with projections through types. *)
@@ -686,6 +688,7 @@ let unary_primitive_eligible_for_cse p ~arg =
        them. *)
     Simple.is_var arg
   | Select_closure _ | Project_var _ -> false
+  | Is_boxed_float | Is_flat_float_array -> true
 
 let compare_unary_primitive p1 p2 =
   let unary_primitive_numbering p =
@@ -708,6 +711,8 @@ let compare_unary_primitive p1 p2 =
     | Box_number _ -> 15
     | Select_closure _ -> 16
     | Project_var _ -> 17
+    | Is_boxed_float -> 18
+    | Is_flat_float_array -> 19
   in
   match p1, p2 with
   | ( Duplicate_array
@@ -777,7 +782,8 @@ let compare_unary_primitive p1 p2 =
       | String_length _ | Int_as_pointer | Opaque_identity | Int_arith _
       | Num_conv _ | Boolean_not | Reinterpret_int64_as_float | Float_arith _
       | Array_length _ | Bigarray_length _ | Unbox_number _ | Box_number _
-      | Select_closure _ | Project_var _ ),
+      | Select_closure _ | Project_var _ | Is_boxed_float | Is_flat_float_array
+        ),
       _ ) ->
     Stdlib.compare (unary_primitive_numbering p1) (unary_primitive_numbering p2)
 
@@ -825,6 +831,8 @@ let print_unary_primitive ppf p =
     Format.fprintf ppf "@[(Project_var@ (%a@ %a@<0>%s))@]" Closure_id.print
       project_from Var_within_closure.print var_within_closure
       (Flambda_colours.prim_destructive ())
+  | Is_boxed_float -> fprintf ppf "Is_boxed_float"
+  | Is_flat_float_array -> fprintf ppf "Is_flat_float_array"
 
 let arg_kind_of_unary_primitive p =
   match p with
@@ -842,7 +850,8 @@ let arg_kind_of_unary_primitive p =
   | Array_length _ | Bigarray_length _ -> K.value
   | Unbox_number _ -> K.value
   | Box_number kind -> K.Boxable_number.to_kind kind
-  | Select_closure _ | Project_var _ -> K.value
+  | Select_closure _ | Project_var _ | Is_boxed_float | Is_flat_float_array ->
+    K.value
 
 let result_kind_of_unary_primitive p : result_kind =
   match p with
@@ -862,8 +871,8 @@ let result_kind_of_unary_primitive p : result_kind =
   | Array_length _ -> Singleton K.value
   | Bigarray_length _ -> Singleton K.naked_immediate
   | Unbox_number kind -> Singleton (K.Boxable_number.to_kind kind)
-  | Box_number _ | Select_closure _ -> Singleton K.value
-  | Project_var _ -> Singleton K.value
+  | Box_number _ | Select_closure _ | Project_var _ -> Singleton K.value
+  | Is_boxed_float | Is_flat_float_array -> Singleton K.naked_immediate
 
 let effects_and_coeffects_of_unary_primitive p =
   match p with
@@ -915,6 +924,9 @@ let effects_and_coeffects_of_unary_primitive p =
     Effects.Only_generative_effects Immutable, Coeffects.No_coeffects
   | Select_closure _ | Project_var _ ->
     Effects.No_effects, Coeffects.No_coeffects
+  | Is_boxed_float | Is_flat_float_array ->
+    (* Tags on heap blocks are immutable. *)
+    Effects.No_effects, Coeffects.No_coeffects
 
 let unary_classify_for_printing p =
   match p with
@@ -926,6 +938,7 @@ let unary_classify_for_printing p =
   | Array_length _ | Bigarray_length _ | Unbox_number _ -> Destructive
   | Box_number _ -> Constructive
   | Select_closure _ | Project_var _ -> Destructive
+  | Is_boxed_float | Is_flat_float_array -> Neither
 
 type binary_int_arith_op =
   | Add

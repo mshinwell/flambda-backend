@@ -96,7 +96,8 @@ let record_any_symbol_projection dacc (defining_expr : Simplified_named.t)
           | Array_length _ | Bigarray_length _ | String_length _
           | Int_as_pointer | Opaque_identity | Int_arith _ | Float_arith _
           | Num_conv _ | Boolean_not | Reinterpret_int64_as_float
-          | Unbox_number _ | Box_number _ | Select_closure _ | Project_var _ ),
+          | Unbox_number _ | Box_number _ | Select_closure _ | Project_var _
+          | Is_boxed_float | Is_flat_float_array ),
           _ )
     | Binary
         ( ( Block_load _ | Array_load _ | String_or_bigstring_load _
