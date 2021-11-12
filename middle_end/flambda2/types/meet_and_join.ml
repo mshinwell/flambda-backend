@@ -277,8 +277,10 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
       | Unknown, Unknown -> Ok Or_unknown.Unknown
       | Unknown, Known kind | Known kind, Unknown -> Ok (Or_unknown.Known kind)
       | Known kind1, Known kind2 ->
-        if Flambda_kind.With_subkind.equal kind1 kind2
+        if Flambda_kind.With_subkind.compatible kind1 ~when_used_at:kind2
         then Ok (Or_unknown.Known kind1)
+        else if Flambda_kind.With_subkind.compatible kind2 ~when_used_at:kind1
+        then Ok (Or_unknown.Known kind2)
         else Bottom
     in
     let<+ length, env_extension = meet env length1 length2 in
@@ -964,7 +966,9 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
       match kind1, kind2 with
       | Unknown, Unknown | Unknown, Known _ | Known _, Unknown -> Unknown
       | Known kind1, Known kind2 ->
-        if Flambda_kind.With_subkind.equal kind1 kind2
+        if Flambda_kind.With_subkind.compatible kind1 ~when_used_at:kind2
+        then Known kind2
+        else if Flambda_kind.With_subkind.compatible kind2 ~when_used_at:kind1
         then Known kind1
         else Unknown
     in
