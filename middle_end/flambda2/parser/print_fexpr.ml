@@ -148,6 +148,7 @@ let kind_with_subkind ppf (k : kind_with_subkind) =
   | Boxed_nativeint -> str "nativeint boxed"
   | Tagged_immediate -> str "imm tagged"
   | Rec_info -> str "rec_info"
+  | Float_array -> str "float_array"
 
 let arity ppf (a : arity) =
   match a with

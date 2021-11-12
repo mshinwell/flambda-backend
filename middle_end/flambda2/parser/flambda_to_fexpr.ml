@@ -417,6 +417,7 @@ let kind_with_subkind (k : Flambda_kind.With_subkind.t) =
     | Boxed_nativeint -> Boxed_nativeint
     | Tagged_immediate -> Tagged_immediate
     | Rec_info -> Rec_info
+    | Float_array -> Float_array
   in
   convert (Flambda_kind.With_subkind.descr k)
 

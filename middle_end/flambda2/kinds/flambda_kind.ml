@@ -383,6 +383,7 @@ module With_subkind = struct
             fields : t list
           }
       | Float_block of { num_fields : int }
+      | Float_array
 
     include Container_types.Make (struct
       type nonrec t = t
@@ -419,6 +420,10 @@ module With_subkind = struct
             colour
             num_fields
             (Flambda_colours.normal ())
+        | Float_array ->
+          Format.fprintf ppf "@<0>%s=Float_array@<0>%s"
+            colour
+            (Flambda_colours.normal ())
 
       let compare = Stdlib.compare
 
@@ -443,7 +448,7 @@ module With_subkind = struct
         match subkind with
         | Anything -> ()
         | Boxed_float | Boxed_int32 | Boxed_int64 | Boxed_nativeint
-        | Tagged_immediate | Block _ | Float_block _ ->
+        | Tagged_immediate | Block _ | Float_block _ | Float_array ->
           Misc.fatal_errorf "Only subkind %a is valid for kind %a" Subkind.print
             subkind print kind)
     end;
@@ -477,6 +482,8 @@ module With_subkind = struct
 
   let rec_info = create rec_info Anything
 
+  let float_array = create value Float_array
+
   let block tag fields =
     if List.exists (fun t -> not (equal t.kind Value)) fields
     then
@@ -508,7 +515,7 @@ module With_subkind = struct
           Subkind.print subkind
       | (Naked_number _ | Fabricated | Rec_info),
         (Boxed_float | Boxed_int32 | Boxed_int64 | Boxed_nativeint
-          | Tagged_immediate | Block _ | Float_block _) ->
+          | Tagged_immediate | Block _ | Float_block _ | Float_array) ->
         assert false
     (* see [create] *)
 
@@ -536,6 +543,7 @@ module With_subkind = struct
           fields : descr list
         }
     | Float_block of { num_fields : int }
+    | Float_array
 
   let rec subkind_descr (t : Subkind.t) : descr =
     match t with
@@ -548,6 +556,7 @@ module With_subkind = struct
     | Block { tag; fields } ->
       Block { tag; fields = List.map subkind_descr fields }
     | Float_block { num_fields } -> Float_block { num_fields }
+    | Float_array -> Float_array
 
   let descr t : descr =
     match t.kind with
@@ -566,6 +575,7 @@ module With_subkind = struct
     | Boxed_int64, Boxed_int64
     | Boxed_nativeint, Boxed_nativeint
     | Tagged_immediate, Tagged_immediate
+    | Float_array, Float_array
     | Rec_info, Rec_info ->
       true
     | Block { tag = t1; fields = fields1 }, Block { tag = t2; fields = fields2 }
@@ -581,6 +591,7 @@ module With_subkind = struct
     (* Subkinds of [Value] may always be used at [Value], but not the
        converse: *)
     | (Block _ | Float_block _), Any_value
+    | Float_array, Any_value
     | Boxed_float, Any_value
     | Boxed_int32, Any_value
     | Boxed_int64, Any_value
@@ -590,7 +601,7 @@ module With_subkind = struct
     (* All other combinations are incompatible. *)
     | ( ( Any_value | Naked_number _ | Boxed_float | Boxed_int32 | Boxed_int64
         | Boxed_nativeint | Tagged_immediate | Block _ | Float_block _
-        | Rec_info ),
+        | Float_array | Rec_info ),
         _ ) ->
       false
 
@@ -601,6 +612,6 @@ module With_subkind = struct
     match t.subkind with
     | Anything -> false
     | Boxed_float | Boxed_int32 | Boxed_int64 | Boxed_nativeint
-    | Tagged_immediate | Block _ | Float_block _ ->
+    | Tagged_immediate | Block _ | Float_block _ | Float_array ->
       true
 end

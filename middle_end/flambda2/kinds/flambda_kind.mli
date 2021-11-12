@@ -189,6 +189,7 @@ module With_subkind : sig
             fields : t list
           }
       | Float_block of { num_fields : int }
+      | Float_array
 
     include Container_types.S with type t := t
   end
@@ -229,6 +230,8 @@ module With_subkind : sig
 
   val rec_info : t
 
+  val float_array : t
+
   val block : Tag.t -> t list -> t
 
   val float_block : num_fields:int -> t
@@ -249,6 +252,7 @@ module With_subkind : sig
           fields : descr list
         }
     | Float_block of { num_fields : int }
+    | Float_array
 
   val descr : t -> descr
 

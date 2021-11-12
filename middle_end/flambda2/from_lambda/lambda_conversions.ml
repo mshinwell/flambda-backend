@@ -42,6 +42,9 @@ let rec value_kind (vk : L.value_kind) =
     if tag = Obj.double_array_tag
     then KS.float_block ~num_fields:(List.length fields)
     else KS.block (Tag.create_exn tag) (List.map value_kind fields)
+  | Parrayval Pfloatarray -> KS.float_array
+  (* CR mshinwell: add the other kinds *)
+  | Parrayval (Pintarray | Paddrarray | Pgenarray) -> KS.any_value
 
 let inline_attribute (attr : L.inline_attribute) : Inline_attribute.t =
   match attr with
@@ -86,7 +89,7 @@ let convert_block_of_values_field (value_kind : L.value_kind) :
   | Pboxedintval Pint64 -> Boxed_int64
   | Pboxedintval Pnativeint -> Boxed_nativeint
   | Pintval -> Immediate
-  | Pblock _ -> Any_value
+  | Pblock _ | Parrayval _ -> Any_value
 
 let convert_block_shape (shape : L.block_shape) ~num_fields =
   match shape with

@@ -122,6 +122,7 @@ type kind_with_subkind =
   | Boxed_nativeint
   | Tagged_immediate
   | Rec_info
+  | Float_array
 
 type static_data_binding =
   { symbol : symbol;
