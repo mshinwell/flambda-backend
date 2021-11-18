@@ -22,10 +22,18 @@ module T = Flambda2_types
 module Definition = struct
   type descr =
     | Code of Code_id.t
+    | Const_set_of_closures of
+        { closure_symbols : Symbol.t Closure_id.Lmap.t;
+          symbol_projections : Symbol_projection.t Variable.Map.t
+        }
     | Set_of_closures of
         { denv : Downwards_env.t;
           closure_symbols_with_types :
             (Symbol.t * Flambda2_types.t) Closure_id.Lmap.t;
+          symbol_projections : Symbol_projection.t Variable.Map.t
+        }
+    | Const_block_like of
+        { symbol : Symbol.t;
           symbol_projections : Symbol_projection.t Variable.Map.t
         }
     | Block_like of
@@ -43,16 +51,23 @@ module Definition = struct
   let binds_symbol t sym =
     match t.descr with
     | Code _ -> false
+    | Const_set_of_closures { closure_symbols; _ } ->
+      Closure_id.Lmap.exists
+        (fun _ sym' -> Symbol.equal sym sym')
+        closure_symbols
     | Set_of_closures { closure_symbols_with_types; _ } ->
       Closure_id.Lmap.exists
         (fun _ (sym', _) -> Symbol.equal sym sym')
         closure_symbols_with_types
-    | Block_like { symbol; _ } -> Symbol.equal sym symbol
+    | Const_block_like { symbol; _ } | Block_like { symbol; _ } ->
+      Symbol.equal sym symbol
 
   let free_names t =
     match t.descr with
     | Code _ -> Rebuilt_static_const.free_names t.defining_expr
+    | Const_set_of_closures { symbol_projections; _ }
     | Set_of_closures { symbol_projections; _ }
+    | Const_block_like { symbol_projections; _ }
     | Block_like { symbol_projections; _ } ->
       (* The symbols mentioned in any symbol projections must be counted as free
          names, so that the definition doesn't get placed too high in the
@@ -68,6 +83,11 @@ module Definition = struct
   let print_descr ppf descr =
     match descr with
     | Code code_id -> Code_id.print ppf code_id
+    | Const_set_of_closures { closure_symbols; _ } ->
+      let symbols = Closure_id.Lmap.data closure_symbols in
+      Format.fprintf ppf "@[<hov 1>(%a)@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space Symbol.print)
+        symbols
     | Set_of_closures { closure_symbols_with_types; _ } ->
       let symbols =
         Closure_id.Lmap.data closure_symbols_with_types |> List.map fst
@@ -75,6 +95,7 @@ module Definition = struct
       Format.fprintf ppf "@[<hov 1>(%a)@]"
         (Format.pp_print_list ~pp_sep:Format.pp_print_space Symbol.print)
         symbols
+    | Const_block_like { symbol; _ } -> Symbol.print ppf symbol
     | Block_like { symbol; _ } -> Symbol.print ppf symbol
 
   let [@ocamlformat "disable"] print ppf { descr; defining_expr; } =
@@ -92,11 +113,18 @@ module Definition = struct
   let symbol_projections t =
     match t.descr with
     | Code _ -> Variable.Map.empty
+    | Const_set_of_closures { symbol_projections; _ }
     | Set_of_closures { symbol_projections; _ }
+    | Const_block_like { symbol_projections; _ }
     | Block_like { symbol_projections; _ } ->
       symbol_projections
 
   let code code_id defining_expr = { descr = Code code_id; defining_expr }
+
+  let const_set_of_closures ~closure_symbols ~symbol_projections defining_expr =
+    { descr = Const_set_of_closures { closure_symbols; symbol_projections };
+      defining_expr
+    }
 
   let set_of_closures denv ~closure_symbols_with_types ~symbol_projections
       defining_expr =
@@ -105,6 +133,9 @@ module Definition = struct
       defining_expr
     }
 
+  let const_block_like symbol ~symbol_projections defining_expr =
+    { descr = Const_block_like { symbol; symbol_projections }; defining_expr }
+
   let block_like denv symbol ty ~symbol_projections defining_expr =
     { descr = Block_like { symbol; denv; ty; symbol_projections };
       defining_expr
@@ -112,22 +143,25 @@ module Definition = struct
 
   let denv t =
     match t.descr with
-    | Code _ -> None
+    | Code _ | Const_set_of_closures _ | Const_block_like _ -> None
     | Set_of_closures { denv; _ } | Block_like { denv; _ } -> Some denv
 
   let bound_symbols_pattern t =
     let module P = Bound_symbols.Pattern in
     match t.descr with
     | Code code_id -> P.code code_id
+    | Const_set_of_closures { closure_symbols; _ } ->
+      P.set_of_closures closure_symbols
     | Set_of_closures { closure_symbols_with_types; _ } ->
       P.set_of_closures (Closure_id.Lmap.map fst closure_symbols_with_types)
-    | Block_like { symbol; _ } -> P.block_like symbol
+    | Const_block_like { symbol; _ } | Block_like { symbol; _ } ->
+      P.block_like symbol
 
   let bound_symbols t = Bound_symbols.create [bound_symbols_pattern t]
 
   let types_of_symbols t =
     match t.descr with
-    | Code _ -> Symbol.Map.empty
+    | Code _ | Const_set_of_closures _ | Const_block_like _ -> Symbol.Map.empty
     | Set_of_closures { denv; closure_symbols_with_types; _ } ->
       Closure_id.Lmap.fold
         (fun _closure_id (symbol, ty) types_of_symbols ->
@@ -172,28 +206,38 @@ let compute_defining_exprs definitions =
 let create_block_like symbol ~symbol_projections defining_expr denv ty =
   (* CR mshinwell: check that [defining_expr] is not a set of closures or
      code *)
+  let is_fully_static = Rebuilt_static_const.is_fully_static defining_expr in
   let definition =
-    Definition.block_like denv symbol ty ~symbol_projections defining_expr
+    if is_fully_static
+    then Definition.const_block_like symbol ~symbol_projections defining_expr
+    else Definition.block_like denv symbol ty ~symbol_projections defining_expr
   in
   let definitions = [definition] in
   { definitions;
     bound_symbols = compute_bound_symbols definitions;
     defining_exprs = compute_defining_exprs definitions;
-    is_fully_static = Rebuilt_static_const.is_fully_static defining_expr;
+    is_fully_static;
     symbol_projections = Definition.symbol_projections definition
   }
 
 let create_set_of_closures denv ~closure_symbols_with_types ~symbol_projections
     defining_expr =
+  let is_fully_static = Rebuilt_static_const.is_fully_static defining_expr in
   let definition =
-    Definition.set_of_closures denv ~closure_symbols_with_types
-      ~symbol_projections defining_expr
+    if is_fully_static
+    then
+      Definition.const_set_of_closures
+        ~closure_symbols:(Closure_id.Lmap.map fst closure_symbols_with_types)
+        ~symbol_projections defining_expr
+    else
+      Definition.set_of_closures denv ~closure_symbols_with_types
+        ~symbol_projections defining_expr
   in
   let definitions = [definition] in
   { definitions;
     bound_symbols = compute_bound_symbols definitions;
     defining_exprs = compute_defining_exprs definitions;
-    is_fully_static = Rebuilt_static_const.is_fully_static defining_expr;
+    is_fully_static;
     symbol_projections = Definition.symbol_projections definition
   }
 

@@ -24,10 +24,18 @@
 module Definition : sig
   type descr = private
     | Code of Code_id.t
+    | Const_set_of_closures of
+        { closure_symbols : Symbol.t Closure_id.Lmap.t;
+          symbol_projections : Symbol_projection.t Variable.Map.t
+        }
     | Set_of_closures of
         { denv : Downwards_env.t;
           closure_symbols_with_types :
             (Symbol.t * Flambda2_types.t) Closure_id.Lmap.t;
+          symbol_projections : Symbol_projection.t Variable.Map.t
+        }
+    | Const_block_like of
+        { symbol : Symbol.t;
           symbol_projections : Symbol_projection.t Variable.Map.t
         }
     | Block_like of

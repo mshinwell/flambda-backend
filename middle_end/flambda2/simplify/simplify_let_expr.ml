@@ -105,11 +105,36 @@ let record_one_closure_element_binding_for_data_flow symbol closure_var simple
     (Simple.free_names simple) data_flow
 
 let record_one_closure_binding_for_data_flow ~free_names ~closure_elements _
-    (symbol, _) data_flow =
+    symbol data_flow =
   let data_flow = DF.record_symbol_binding symbol free_names data_flow in
   Var_within_closure.Map.fold
     (record_one_closure_element_binding_for_data_flow symbol)
     closure_elements data_flow
+
+let record_set_of_closures_binding_for_data_flow definition ~being_defined
+    ~closure_symbols data_flow =
+  let module D = LC.Definition in
+  let expr = D.defining_expr definition in
+  match Rebuilt_static_const.to_const expr with
+  | Some (Static_const const) ->
+    let set_of_closures = Static_const.must_be_set_of_closures const in
+    let free_names =
+      Name_occurrences.union being_defined
+        (Function_declarations.free_names
+           (Set_of_closures.function_decls set_of_closures))
+    in
+    let closure_elements = Set_of_closures.closure_elements set_of_closures in
+    Closure_id.Lmap.fold
+      (record_one_closure_binding_for_data_flow ~free_names ~closure_elements)
+      closure_symbols data_flow
+  | None | Some (Code _ | Deleted_code) ->
+    let free_names =
+      Name_occurrences.union being_defined (D.free_names definition)
+    in
+    Closure_id.Lmap.fold
+      (fun _ symbol data_flow ->
+        DF.record_symbol_binding symbol free_names data_flow)
+      closure_symbols data_flow
 
 let record_lifted_constant_definition_for_data_flow ~being_defined data_flow
     definition =
@@ -119,33 +144,18 @@ let record_lifted_constant_definition_for_data_flow ~being_defined data_flow
     DF.record_code_id_binding code_id
       (Name_occurrences.union being_defined (D.free_names definition))
       data_flow
-  | Block_like { symbol; _ } ->
+  | Const_block_like { symbol; _ } | Block_like { symbol; _ } ->
     let free_names =
       Name_occurrences.union being_defined (D.free_names definition)
     in
     DF.record_symbol_binding symbol free_names data_flow
-  | Set_of_closures { closure_symbols_with_types; _ } -> (
-    let expr = D.defining_expr definition in
-    match Rebuilt_static_const.to_const expr with
-    | Some (Static_const const) ->
-      let set_of_closures = Static_const.must_be_set_of_closures const in
-      let free_names =
-        Name_occurrences.union being_defined
-          (Function_declarations.free_names
-             (Set_of_closures.function_decls set_of_closures))
-      in
-      let closure_elements = Set_of_closures.closure_elements set_of_closures in
-      Closure_id.Lmap.fold
-        (record_one_closure_binding_for_data_flow ~free_names ~closure_elements)
-        closure_symbols_with_types data_flow
-    | None | Some (Code _ | Deleted_code) ->
-      let free_names =
-        Name_occurrences.union being_defined (D.free_names definition)
-      in
-      Closure_id.Lmap.fold
-        (fun _ (symbol, _) data_flow ->
-          DF.record_symbol_binding symbol free_names data_flow)
-        closure_symbols_with_types data_flow)
+  | Const_set_of_closures { closure_symbols; _ } ->
+    record_set_of_closures_binding_for_data_flow definition ~being_defined
+      ~closure_symbols data_flow
+  | Set_of_closures { closure_symbols_with_types; _ } ->
+    let closure_symbols = Closure_id.Lmap.map fst closure_symbols_with_types in
+    record_set_of_closures_binding_for_data_flow definition ~being_defined
+      ~closure_symbols data_flow
 
 let record_lifted_constant_for_data_flow data_flow lifted_constant =
   let data_flow =
