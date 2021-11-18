@@ -527,9 +527,7 @@ let prove_boxed_floats env t : _ proof =
   | Bottom -> Invalid
   | Ok env_extension ->
     let env =
-      TE.add_definition env
-        (Bound_name.create (Name.var result_var) Name_mode.normal)
-        result_kind
+      TE.add_variable_definition env result_var result_kind Name_mode.normal
     in
     let env =
       TE.add_env_extension env env_extension ~meet_type:Meet_and_join.meet
@@ -549,9 +547,7 @@ let prove_boxed_int32s env t : _ proof =
   | Bottom -> Invalid
   | Ok env_extension ->
     let env =
-      TE.add_definition env
-        (Bound_name.create (Name.var result_var) Name_mode.normal)
-        result_kind
+      TE.add_variable_definition env result_var result_kind Name_mode.normal
     in
     let env =
       TE.add_env_extension env env_extension ~meet_type:Meet_and_join.meet
@@ -571,9 +567,7 @@ let prove_boxed_int64s env t : _ proof =
   | Bottom -> Invalid
   | Ok env_extension ->
     let env =
-      TE.add_definition env
-        (Bound_name.create (Name.var result_var) Name_mode.normal)
-        result_kind
+      TE.add_variable_definition env result_var result_kind Name_mode.normal
     in
     let env =
       TE.add_env_extension env env_extension ~meet_type:Meet_and_join.meet
@@ -593,9 +587,7 @@ let prove_boxed_nativeints env t : _ proof =
   | Bottom -> Invalid
   | Ok env_extension ->
     let env =
-      TE.add_definition env
-        (Bound_name.create (Name.var result_var) Name_mode.normal)
-        result_kind
+      TE.add_variable_definition env result_var result_kind Name_mode.normal
     in
     let env =
       TE.add_env_extension env env_extension ~meet_type:Meet_and_join.meet

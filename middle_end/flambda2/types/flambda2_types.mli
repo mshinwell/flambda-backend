@@ -105,13 +105,12 @@ module Typing_env : sig
 
   val increment_scope : t -> t
 
-  val add_definition : t -> Bound_name.t -> Flambda_kind.t -> t
-
   val add_definitions_of_params : t -> params:Bound_parameter.t list -> t
 
-  val add_symbol_definition : t -> Symbol.t -> t
+  val add_variable_definition :
+    t -> Variable.t -> Flambda_kind.t -> Name_mode.t -> t
 
-  val add_symbol_definitions : t -> Symbol.Set.t -> t
+  val add_symbol_definition : t -> Symbol.t -> flambda_type option -> t
 
   val add_symbol_projection : t -> Variable.t -> Symbol_projection.t -> t
 

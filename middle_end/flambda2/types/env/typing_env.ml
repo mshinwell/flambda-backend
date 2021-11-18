@@ -78,7 +78,7 @@ type t =
   { resolver : Compilation_unit.t -> t option;
     binding_time_resolver : Name.t -> Binding_time.t;
     get_imported_names : unit -> Name.Set.t;
-    defined_symbols : Symbol.Set.t;
+    defined_symbols : TG.t Symbol.Map.t;
     code_age_relation : Code_age_relation.t;
     prev_levels : One_level.t Scope.Map.t;
     current_level : One_level.t;
@@ -91,7 +91,7 @@ type typing_env = t
 let is_empty t =
   One_level.is_empty t.current_level
   && Scope.Map.is_empty t.prev_levels
-  && Symbol.Set.is_empty t.defined_symbols
+  && Symbol.Map.is_empty t.defined_symbols
 
 let aliases t =
   Cached_level.aliases (One_level.just_after_level t.current_level)
@@ -120,7 +120,7 @@ let [@ocamlformat "disable"] print ppf
           @[<hov 1>(levels@ %a)@]@ \
           @[<hov 1>(aliases@ %a)@]\
           )@]"
-      Symbol.Set.print defined_symbols
+      (Symbol.Map.print TG.print) defined_symbols
       Code_age_relation.print code_age_relation
       (Scope.Map.print (One_level.print ~min_binding_time))
       levels
@@ -251,7 +251,7 @@ module Serializable : sig
     typing_env
 end = struct
   type t =
-    { defined_symbols : Symbol.Set.t;
+    { defined_symbols : TG.t Symbol.Map.t;
       code_age_relation : Code_age_relation.t;
       just_after_level : Cached_level.t;
       next_binding_time : Binding_time.t
@@ -279,7 +279,7 @@ end = struct
           @[<hov 1>(type_equations@ %a)@]@ \
           @[<hov 1>(aliases@ %a)@]\
           )@]"
-      Symbol.Set.print defined_symbols
+      (Symbol.Map.print TG.print) defined_symbols
       Code_age_relation.print code_age_relation
       (Name.Map.print (fun ppf (ty, _bt, _mode) -> TG.print ppf ty))
       (Cached_level.names_to_types just_after_level)
@@ -293,7 +293,7 @@ end = struct
         just_after_level;
         next_binding_time = _
       } =
-    let symbols = defined_symbols in
+    let symbols = Symbol.Map.keys defined_symbols in
     let code_ids =
       Code_age_relation.all_code_ids_for_export code_age_relation
     in
@@ -330,10 +330,13 @@ end = struct
         next_binding_time
       } renaming =
     let defined_symbols =
-      Symbol.Set.fold
-        (fun sym symbols ->
-          Symbol.Set.add (Renaming.apply_symbol renaming sym) symbols)
-        defined_symbols Symbol.Set.empty
+      Symbol.Map.fold
+        (fun sym ty symbols ->
+          Symbol.Map.add
+            (Renaming.apply_symbol renaming sym)
+            (TG.apply_renaming ty renaming)
+            symbols)
+        defined_symbols Symbol.Map.empty
     in
     let code_age_relation =
       Code_age_relation.apply_renaming code_age_relation renaming
@@ -345,7 +348,9 @@ end = struct
 
   let merge t1 t2 =
     let defined_symbols =
-      Symbol.Set.union t1.defined_symbols t2.defined_symbols
+      Symbol.Map.union
+        (fun _symbol ty1 _ty2 -> Some ty1)
+        t1.defined_symbols t2.defined_symbols
     in
     let code_age_relation =
       Code_age_relation.union t1.code_age_relation t2.code_age_relation
@@ -425,7 +430,7 @@ let create ~resolver ~get_imported_names =
     prev_levels = Scope.Map.empty;
     current_level = One_level.create_empty Scope.initial;
     next_binding_time = Binding_time.earliest_var;
-    defined_symbols = Symbol.Set.empty;
+    defined_symbols = Symbol.Map.empty;
     code_age_relation = Code_age_relation.empty;
     min_binding_time = Binding_time.earliest_var
   }
@@ -439,12 +444,10 @@ let increment_scope t =
   in
   { t with prev_levels; current_level }
 
-let defined_symbols t = t.defined_symbols
-
 let name_domain t =
   Name.Set.union
     (Name.Map.keys (names_to_types t))
-    (Name.set_of_symbol_set (defined_symbols t))
+    (Name.set_of_symbol_set (Symbol.Map.keys t.defined_symbols))
 
 let initial_symbol_type =
   lazy (MTC.unknown K.value, Binding_time.symbols, Name_mode.normal)
@@ -487,12 +490,11 @@ let find_with_binding_time_and_mode' t name kind =
           Variable.print var print t
       in
       let[@inline always] symbol sym =
-        if Symbol.Set.mem sym t.defined_symbols
-        then (
-          let result = Lazy.force initial_symbol_type in
-          check_optional_kind_matches name (Misc.fst3 result) kind;
-          result)
-        else
+        match Symbol.Map.find sym t.defined_symbols with
+        | ty ->
+          check_optional_kind_matches name ty kind;
+          ty, Binding_time.symbols, Name_mode.normal
+        | exception Not_found ->
           Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
             Symbol.print sym print t
       in
@@ -639,7 +641,7 @@ let mem ?min_name_mode t name =
     ~symbol:(fun sym ->
       (* CR mshinwell: This might not take account of symbols in missing .cmx
          files *)
-      Symbol.Set.mem sym t.defined_symbols
+      Symbol.Map.mem sym t.defined_symbols
       || Name.Set.mem name (t.get_imported_names ()))
 
 let mem_simple ?min_name_mode t simple =
@@ -697,7 +699,7 @@ let add_variable_definition t var kind name_mode =
   with_current_level_and_next_binding_time t ~current_level
     (Binding_time.succ t.next_binding_time)
 
-let add_symbol_definition t sym =
+let add_symbol_definition t sym ty =
   (* CR mshinwell: check for redefinition when invariants enabled? *)
   let comp_unit = Symbol.compilation_unit sym in
   let this_comp_unit = Compilation_unit.get_current_exn () in
@@ -710,10 +712,8 @@ let add_symbol_definition t sym =
       this_comp_unit
       (Compilation_unit.equal comp_unit this_comp_unit)
       print t;
-  { t with defined_symbols = Symbol.Set.add sym t.defined_symbols }
-
-let add_symbol_definitions t syms =
-  { t with defined_symbols = Symbol.Set.union syms t.defined_symbols }
+  let ty = match ty with Some ty -> ty | None -> MTC.unknown K.value in
+  { t with defined_symbols = Symbol.Map.add sym ty t.defined_symbols }
 
 let add_symbol_projection t var proj =
   let level =
@@ -727,18 +727,6 @@ let add_symbol_projection t var proj =
 
 let find_symbol_projection t var =
   Cached_level.find_symbol_projection (cached t) var
-
-let add_definition t (name : Bound_name.t) kind =
-  let name_mode = Bound_name.name_mode name in
-  Name.pattern_match (Bound_name.name name)
-    ~var:(fun var -> add_variable_definition t var kind name_mode)
-    ~symbol:(fun sym ->
-      if not (Name_mode.equal name_mode Name_mode.normal)
-      then
-        Misc.fatal_errorf
-          "Cannot define symbol %a with name mode that is not `normal'"
-          Bound_name.print name;
-      add_symbol_definition t sym)
 
 let invariant_for_alias (t : t) name ty =
   (* Check that no canonical element gets an [Equals] type *)
@@ -999,11 +987,10 @@ let add_env_extension_from_level t level ~meet_type : t =
 let add_definitions_of_params t ~params =
   List.fold_left
     (fun t param ->
-      let name =
-        Bound_name.create (Bound_parameter.name param) Name_mode.normal
-      in
-      add_definition t name
-        (Flambda_kind.With_subkind.kind (Bound_parameter.kind param)))
+      add_variable_definition t
+        (Bound_parameter.var param)
+        (Bound_parameter.kind param |> K.With_subkind.kind)
+        Name_mode.normal)
     t params
 
 let check_params_and_types ~params ~param_types =

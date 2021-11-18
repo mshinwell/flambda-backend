@@ -217,8 +217,8 @@ let enter_set_of_closures
 
 let define_variable t var kind =
   let typing_env =
-    let var = Bound_name.var var in
-    TE.add_definition t.typing_env var kind
+    TE.add_variable_definition t.typing_env (Bound_var.var var) kind
+      (Bound_var.name_mode var)
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
@@ -227,27 +227,11 @@ let define_variable t var kind =
   in
   { t with typing_env; variables_defined_at_toplevel }
 
-let add_name t name ty =
-  let typing_env =
-    TE.add_equation
-      (TE.add_definition t.typing_env name (T.kind ty))
-      (Bound_name.name name) ty
-  in
-  let variables_defined_at_toplevel =
-    Name.pattern_match (Bound_name.name name)
-      ~var:(fun var ->
-        if t.at_unit_toplevel
-        then Variable.Set.add var t.variables_defined_at_toplevel
-        else t.variables_defined_at_toplevel)
-      ~symbol:(fun _ -> t.variables_defined_at_toplevel)
-  in
-  { t with typing_env; variables_defined_at_toplevel }
-
 let add_variable0 t var ty ~at_unit_toplevel =
   let typing_env =
-    let var' = Bound_name.var var in
     TE.add_equation
-      (TE.add_definition t.typing_env var' (T.kind ty))
+      (TE.add_variable_definition t.typing_env (Bound_var.var var) (T.kind ty)
+         (Bound_var.name_mode var))
       (Name.var (Bound_var.var var))
       ty
   in
@@ -269,23 +253,32 @@ let mem_name t name = TE.mem t.typing_env name
 
 let mem_variable t var = TE.mem t.typing_env (Name.var var)
 
-let define_symbol t sym kind =
-  let typing_env =
-    let sym = Bound_name.create (Name.symbol sym) Name_mode.normal in
-    TE.add_definition t.typing_env sym kind
-  in
+let define_symbol t sym ty =
+  (match ty with
+  | None -> ()
+  | Some ty ->
+    if not (Name_occurrences.no_variables (T.free_names ty))
+    then
+      Misc.fatal_errorf
+        "Symbol definition types cannot contain variables:@ symbol@ %a@ type:@ \
+         %a"
+        Symbol.print sym T.print ty);
+  let typing_env = TE.add_symbol_definition t.typing_env sym ty in
   { t with typing_env }
 
 let define_symbol_if_undefined t sym kind =
   if TE.mem t.typing_env (Name.symbol sym) then t else define_symbol t sym kind
 
 let add_symbol t sym ty =
-  let typing_env =
-    let sym = Name.symbol sym in
-    let sym' = Bound_name.create sym Name_mode.normal in
-    TE.add_equation (TE.add_definition t.typing_env sym' (T.kind ty)) sym ty
-  in
-  { t with typing_env }
+  if Name_occurrences.no_variables (T.free_names ty)
+  then define_symbol t sym (Some ty)
+  else
+    let typing_env =
+      TE.add_equation
+        (TE.add_symbol_definition t.typing_env sym None)
+        (Name.symbol sym) ty
+    in
+    { t with typing_env }
 
 let add_equation_on_symbol t sym ty =
   let typing_env =
@@ -302,23 +295,6 @@ let add_symbol_projection t var proj =
   { t with typing_env = TE.add_symbol_projection t.typing_env var proj }
 
 let find_symbol_projection t var = TE.find_symbol_projection t.typing_env var
-
-let define_name t name kind =
-  let typing_env = TE.add_definition t.typing_env name kind in
-  let variables_defined_at_toplevel =
-    Name.pattern_match (Bound_name.name name)
-      ~var:(fun var ->
-        if t.at_unit_toplevel
-        then Variable.Set.add var t.variables_defined_at_toplevel
-        else t.variables_defined_at_toplevel)
-      ~symbol:(fun _ -> t.variables_defined_at_toplevel)
-  in
-  { t with typing_env; variables_defined_at_toplevel }
-
-let define_name_if_undefined t name kind =
-  if TE.mem t.typing_env (Bound_name.to_name name)
-  then t
-  else define_name t name kind
 
 let add_equation_on_name t name ty =
   let typing_env = TE.add_equation t.typing_env name ty in

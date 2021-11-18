@@ -46,9 +46,8 @@ let join_types ~env_at_fork envs_with_levels =
                   then base_env
                   else
                     let kind = TEL.find_kind level var in
-                    TE.add_definition base_env
-                      (Bound_name.var (Bound_var.create var Name_mode.in_types))
-                      kind)
+                    TE.add_variable_definition base_env var kind
+                      Name_mode.in_types)
                 vars base_env)
             (TEL.variables_by_binding_time level)
             base_env

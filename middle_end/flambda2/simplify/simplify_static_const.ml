@@ -59,9 +59,7 @@ let simplify_or_variable dacc type_for_const (or_variable : _ Or_variable.t)
 let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
     ~result_sym : Rebuilt_static_const.t * DA.t =
   let bind_result_sym typ =
-    DA.map_denv dacc ~f:(fun denv ->
-        let denv = DE.define_symbol denv result_sym K.value in
-        DE.add_equation_on_symbol denv result_sym typ)
+    DA.map_denv dacc ~f:(fun denv -> DE.add_symbol denv result_sym typ)
   in
   match static_const with
   | Block (tag, is_mutable, fields) ->

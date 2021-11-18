@@ -122,25 +122,29 @@ let add_to_denv ?maybe_already_defined denv lifted =
   let typing_env =
     let typing_env = DE.typing_env denv in
     fold lifted ~init:typing_env ~f:(fun typing_env lifted_constant ->
-        let types_of_symbols = LC.types_of_symbols lifted_constant in
-        Symbol.Map.fold
-          (fun sym (denv_at_definition, typ) typing_env ->
-            if maybe_already_defined && DE.mem_symbol denv sym
-            then typing_env
-            else
-              let sym = Name.symbol sym in
-              let env_extension =
-                (* CR mshinwell: Sometimes we might already have the types "made
-                   suitable" in the [closure_env] field of the typing
-                   environment, perhaps? For example when lifted constants'
-                   types are coming out of a closure into the enclosing
-                   scope. *)
-                T.make_suitable_for_environment
-                  (DE.typing_env denv_at_definition)
-                  typ ~suitable_for:typing_env ~bind_to:sym
-              in
-              TE.add_env_extension_with_extra_variables typing_env env_extension)
-          types_of_symbols typing_env)
+        if LC.is_fully_static lifted_constant
+        then typing_env
+        else
+          let types_of_symbols = LC.types_of_symbols lifted_constant in
+          Symbol.Map.fold
+            (fun sym (denv_at_definition, typ) typing_env ->
+              if maybe_already_defined && DE.mem_symbol denv sym
+              then typing_env
+              else
+                let sym = Name.symbol sym in
+                let env_extension =
+                  (* CR mshinwell: Sometimes we might already have the types
+                     "made suitable" in the [closure_env] field of the typing
+                     environment, perhaps? For example when lifted constants'
+                     types are coming out of a closure into the enclosing
+                     scope. *)
+                  T.make_suitable_for_environment
+                    (DE.typing_env denv_at_definition)
+                    typ ~suitable_for:typing_env ~bind_to:sym
+                in
+                TE.add_env_extension_with_extra_variables typing_env
+                  env_extension)
+            types_of_symbols typing_env)
   in
   fold lifted ~init:(DE.with_typing_env denv typing_env)
     ~f:(fun denv lifted_constant ->

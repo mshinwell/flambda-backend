@@ -81,8 +81,6 @@ val typing_env : t -> Flambda2_types.Typing_env.t
 
 val define_variable : t -> Bound_var.t -> Flambda_kind.t -> t
 
-val add_name : t -> Bound_name.t -> Flambda2_types.t -> t
-
 val add_variable : t -> Bound_var.t -> Flambda2_types.t -> t
 
 val add_equation_on_variable : t -> Variable.t -> Flambda2_types.t -> t
@@ -91,8 +89,6 @@ val mem_variable : t -> Variable.t -> bool
 
 val add_symbol : t -> Symbol.t -> Flambda2_types.t -> t
 
-val define_symbol : t -> Symbol.t -> Flambda_kind.t -> t
-
 val define_symbol_if_undefined : t -> Symbol.t -> Flambda_kind.t -> t
 
 val mem_symbol : t -> Symbol.t -> bool
@@ -100,8 +96,6 @@ val mem_symbol : t -> Symbol.t -> bool
 val find_symbol : t -> Symbol.t -> Flambda2_types.t
 
 val add_equation_on_symbol : t -> Symbol.t -> Flambda2_types.t -> t
-
-val define_name : t -> Bound_name.t -> Flambda_kind.t -> t
 
 val define_name_if_undefined : t -> Bound_name.t -> Flambda_kind.t -> t
 
