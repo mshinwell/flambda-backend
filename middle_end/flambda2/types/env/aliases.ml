@@ -455,7 +455,7 @@ let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
           name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
             alias ~than))
 
-let binding_time_and_name_mode ~binding_time_resolver ~binding_times_and_modes
+let binding_time_and_name_mode ~binding_time_resolver:_ ~binding_times_and_modes
     elt =
   Simple.pattern_match' elt
     ~const:(fun _ ->
@@ -466,7 +466,15 @@ let binding_time_and_name_mode ~binding_time_resolver ~binding_times_and_modes
       match Name.Map.find name binding_times_and_modes with
       | _, binding_time, name_mode ->
         Binding_time.With_name_mode.create binding_time name_mode
-      | exception Not_found -> binding_time_resolver name)
+      | exception Not_found ->
+        (* This variable must be in another compilation unit. *)
+        Binding_time.With_name_mode.create Binding_time.imported_variables
+          Name_mode.in_types
+      (* (* CR mshinwell: maybe change resolver's type back again *) let
+         binding_time = binding_time_resolver name |>
+         Binding_time.With_name_mode.binding_time in (* This variable must be in
+         another compilation unit. *) Binding_time.With_name_mode.create
+         binding_time Name_mode.in_types *))
     ~symbol:(fun _ ~coercion:_ ->
       Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 

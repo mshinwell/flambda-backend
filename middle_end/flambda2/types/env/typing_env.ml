@@ -417,7 +417,7 @@ let code_age_relation_resolver t comp_unit =
 
 let current_scope t = One_level.scope t.current_level
 
-let aliases_with_min_binding_time t = aliases t, t.min_binding_time
+let aliases_with_min_binding_time t = t, aliases t, t.min_binding_time
 
 let create ~resolver ~get_imported_names =
   { resolver;
@@ -1080,7 +1080,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
     else ty
   in
   let kind = TG.kind ty in
-  let aliases_for_simple, min_binding_time =
+  let env_for_aliases, aliases_for_simple, min_binding_time =
     Simple.pattern_match simple
       ~const:(fun _ -> aliases_with_min_binding_time t)
       ~name:(fun name ->
@@ -1110,8 +1110,8 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple
-      ~binding_times_and_modes:(names_to_types t) simple name_mode_simple
-      ~min_name_mode ~min_binding_time
+      ~binding_times_and_modes:(names_to_types env_for_aliases)
+      simple name_mode_simple ~min_name_mode ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -1125,7 +1125,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
-  let aliases_for_simple, min_binding_time =
+  let env_for_aliases, aliases_for_simple, min_binding_time =
     Simple.pattern_match simple
       ~const:(fun _ -> aliases_with_min_binding_time t)
       ~name:(fun name ~coercion:_ ->
@@ -1193,8 +1193,8 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple simple
-      ~binding_times_and_modes:(names_to_types t) name_mode_simple
-      ~min_name_mode ~min_binding_time
+      ~binding_times_and_modes:(names_to_types env_for_aliases)
+      name_mode_simple ~min_name_mode ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
