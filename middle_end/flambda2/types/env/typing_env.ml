@@ -76,7 +76,7 @@ end
 
 type t =
   { resolver : Compilation_unit.t -> t option;
-    binding_time_resolver : Name.t -> Binding_time.t;
+    binding_time_resolver : Name.t -> Binding_time.With_name_mode.t;
     get_imported_names : unit -> Name.Set.t;
     defined_symbols : TG.t Symbol.Map.t;
     code_age_relation : Code_age_relation.t;
@@ -229,7 +229,8 @@ let binding_time_resolver resolver name =
     | exception Not_found ->
       Misc.fatal_errorf "Binding time resolver cannot find name %a in:@ %a"
         Name.print name print t
-    | _, binding_time, _ -> binding_time)
+    | _, binding_time, name_mode ->
+      Binding_time.With_name_mode.create binding_time name_mode)
 
 module Serializable : sig
   type t
