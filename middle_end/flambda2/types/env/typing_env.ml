@@ -422,8 +422,6 @@ let code_age_relation_resolver t comp_unit =
 
 let current_scope t = One_level.scope t.current_level
 
-let aliases_with_min_binding_time t = t, aliases t, t.min_binding_time
-
 let create ~resolver ~get_imported_names =
   { resolver;
     binding_time_resolver = binding_time_resolver resolver;
@@ -1067,19 +1065,19 @@ let type_simple_in_term_exn t ?min_name_mode simple =
     else ty
   in
   let kind = TG.kind ty in
-  let env_for_aliases, aliases_for_simple, min_binding_time =
+  let binding_times_and_modes, aliases_for_simple, min_binding_time =
     Simple.pattern_match simple
-      ~const:(fun _ -> aliases_with_min_binding_time t)
+      ~const:(fun _ -> names_to_types t, aliases t, t.min_binding_time)
       ~name:(fun name ->
         Name.pattern_match name
           ~var:(fun var ~coercion:_ ->
             let comp_unit = Variable.compilation_unit var in
             if Compilation_unit.equal comp_unit
                  (Compilation_unit.get_current_exn ())
-            then aliases_with_min_binding_time t
+            then names_to_types t, aliases t, t.min_binding_time
             else
               match (resolver t) comp_unit with
-              | Some env -> aliases_with_min_binding_time env
+              | Some env -> Name.Map.empty, aliases env, env.min_binding_time
               | None ->
                 Misc.fatal_errorf
                   "Error while looking up variable %a:@ No corresponding .cmx \
@@ -1087,7 +1085,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
                   Variable.print var)
           ~symbol:(fun _sym ~coercion:_ ->
             (* Symbols can't alias, so lookup in the current aliases is fine *)
-            aliases_with_min_binding_time t))
+            names_to_types t, aliases t, t.min_binding_time))
   in
   let min_name_mode =
     match min_name_mode with
@@ -1097,8 +1095,8 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple
-      ~binding_times_and_modes:(names_to_types env_for_aliases)
-      simple name_mode_simple ~min_name_mode ~min_binding_time
+      ~binding_times_and_modes simple name_mode_simple ~min_name_mode
+      ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -1112,19 +1110,19 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
-  let env_for_aliases, aliases_for_simple, min_binding_time =
+  let binding_times_and_modes, aliases_for_simple, min_binding_time =
     Simple.pattern_match simple
-      ~const:(fun _ -> aliases_with_min_binding_time t)
+      ~const:(fun _ -> names_to_types t, aliases t, t.min_binding_time)
       ~name:(fun name ~coercion:_ ->
         Name.pattern_match name
           ~var:(fun var ->
             let comp_unit = Variable.compilation_unit var in
             if Compilation_unit.equal comp_unit
                  (Compilation_unit.get_current_exn ())
-            then aliases_with_min_binding_time t
+            then names_to_types t, aliases t, t.min_binding_time
             else
               match (resolver t) comp_unit with
-              | Some env -> aliases_with_min_binding_time env
+              | Some env -> Name.Map.empty, aliases env, env.min_binding_time
               | None ->
                 (* Transcript of Slack conversation relating to the next line:
 
@@ -1152,10 +1150,10 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
                    later that the variable is actually an alias, but that would
                    only happen if for some reason we later successfully load the
                    missing cmx. *)
-                aliases_with_min_binding_time t)
+                names_to_types t, aliases t, t.min_binding_time)
           ~symbol:(fun _sym ->
             (* Symbols can't alias, so lookup in the current aliases is fine *)
-            aliases_with_min_binding_time t))
+            names_to_types t, aliases t, t.min_binding_time))
   in
   let name_mode_simple =
     let in_types =
@@ -1180,8 +1178,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple simple
-      ~binding_times_and_modes:(names_to_types env_for_aliases)
-      name_mode_simple ~min_name_mode ~min_binding_time
+      ~binding_times_and_modes name_mode_simple ~min_name_mode ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
