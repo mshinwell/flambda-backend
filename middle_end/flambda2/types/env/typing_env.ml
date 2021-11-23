@@ -1080,30 +1080,26 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   in
   let kind = TG.kind ty in
   let aliases_for_simple, min_binding_time =
-    if mem_simple t simple
-    then aliases_with_min_binding_time t
-    else
-      Simple.pattern_match simple
-        ~const:(fun _ -> aliases_with_min_binding_time t)
-        ~name:(fun name ->
-          Name.pattern_match name
-            ~var:(fun var ~coercion:_ ->
-              let comp_unit = Variable.compilation_unit var in
-              if Compilation_unit.equal comp_unit
-                   (Compilation_unit.get_current_exn ())
-              then aliases_with_min_binding_time t
-              else
-                match (resolver t) comp_unit with
-                | Some env -> aliases_with_min_binding_time env
-                | None ->
-                  Misc.fatal_errorf
-                    "Error while looking up variable %a:@ No corresponding \
-                     .cmx file was found"
-                    Variable.print var)
-            ~symbol:(fun _sym ~coercion:_ ->
-              (* Symbols can't alias, so lookup in the current aliases is
-                 fine *)
-              aliases_with_min_binding_time t))
+    Simple.pattern_match simple
+      ~const:(fun _ -> aliases_with_min_binding_time t)
+      ~name:(fun name ->
+        Name.pattern_match name
+          ~var:(fun var ~coercion:_ ->
+            let comp_unit = Variable.compilation_unit var in
+            if Compilation_unit.equal comp_unit
+                 (Compilation_unit.get_current_exn ())
+            then aliases_with_min_binding_time t
+            else
+              match (resolver t) comp_unit with
+              | Some env -> aliases_with_min_binding_time env
+              | None ->
+                Misc.fatal_errorf
+                  "Error while looking up variable %a:@ No corresponding .cmx \
+                   file was found"
+                  Variable.print var)
+          ~symbol:(fun _sym ~coercion:_ ->
+            (* Symbols can't alias, so lookup in the current aliases is fine *)
+            aliases_with_min_binding_time t))
   in
   let min_name_mode =
     match min_name_mode with
@@ -1129,53 +1125,49 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
   let aliases_for_simple, min_binding_time =
-    if mem_simple t simple
-    then aliases_with_min_binding_time t
-    else
-      Simple.pattern_match simple
-        ~const:(fun _ -> aliases_with_min_binding_time t)
-        ~name:(fun name ~coercion:_ ->
-          Name.pattern_match name
-            ~var:(fun var ->
-              let comp_unit = Variable.compilation_unit var in
-              if Compilation_unit.equal comp_unit
-                   (Compilation_unit.get_current_exn ())
-              then aliases_with_min_binding_time t
-              else
-                match (resolver t) comp_unit with
-                | Some env -> aliases_with_min_binding_time env
-                | None ->
-                  (* Transcript of Slack conversation relating to the next line:
+    Simple.pattern_match simple
+      ~const:(fun _ -> aliases_with_min_binding_time t)
+      ~name:(fun name ~coercion:_ ->
+        Name.pattern_match name
+          ~var:(fun var ->
+            let comp_unit = Variable.compilation_unit var in
+            if Compilation_unit.equal comp_unit
+                 (Compilation_unit.get_current_exn ())
+            then aliases_with_min_binding_time t
+            else
+              match (resolver t) comp_unit with
+              | Some env -> aliases_with_min_binding_time env
+              | None ->
+                (* Transcript of Slack conversation relating to the next line:
 
-                     mshinwell: @vlaviron Should it say "aliases t" perhaps?
-                     There could be some weird cases here, e.g. if we are
-                     building c.cmx and b.cmx is unavailable, but if b.cmx were
-                     available it would tell us that this var is an alias to
-                     something in a.cmx, which is available I'm concerned that
-                     this could lead to not propagating a constraint, e.g. if
-                     the var in c.cmx is found to be bottom, it should make the
-                     one in a.cmx bottom too, but it won't as the chain is
-                     broken. That could be observable if something else in c.cmx
-                     directly points at a.cmx. Maybe this won't matter in
-                     practice because the new type should always be more
-                     precise, but I'm unsure. And what happens if it's not?
+                   mshinwell: @vlaviron Should it say "aliases t" perhaps? There
+                   could be some weird cases here, e.g. if we are building c.cmx
+                   and b.cmx is unavailable, but if b.cmx were available it
+                   would tell us that this var is an alias to something in
+                   a.cmx, which is available I'm concerned that this could lead
+                   to not propagating a constraint, e.g. if the var in c.cmx is
+                   found to be bottom, it should make the one in a.cmx bottom
+                   too, but it won't as the chain is broken. That could be
+                   observable if something else in c.cmx directly points at
+                   a.cmx. Maybe this won't matter in practice because the new
+                   type should always be more precise, but I'm unsure. And what
+                   happens if it's not?
 
-                     vlaviron: That's actually fine, I think: if you hide b.cmx,
-                     then c.cmx does not know that the two variables are
-                     aliased, so it will be less precise, but that's all Since
-                     we've fixed Get_tag, I don't think loss of precision is a
-                     soundness issue anymore And the new type should always be
-                     the result of a meet with the previous type, I think, so it
-                     should never be less precise For the aliases issue, I think
-                     using aliases t is fine. It would only be a problem if we
-                     had a way to learn later that the variable is actually an
-                     alias, but that would only happen if for some reason we
-                     later successfully load the missing cmx. *)
-                  aliases_with_min_binding_time t)
-            ~symbol:(fun _sym ->
-              (* Symbols can't alias, so lookup in the current aliases is
-                 fine *)
-              aliases_with_min_binding_time t))
+                   vlaviron: That's actually fine, I think: if you hide b.cmx,
+                   then c.cmx does not know that the two variables are aliased,
+                   so it will be less precise, but that's all Since we've fixed
+                   Get_tag, I don't think loss of precision is a soundness issue
+                   anymore And the new type should always be the result of a
+                   meet with the previous type, I think, so it should never be
+                   less precise For the aliases issue, I think using aliases t
+                   is fine. It would only be a problem if we had a way to learn
+                   later that the variable is actually an alias, but that would
+                   only happen if for some reason we later successfully load the
+                   missing cmx. *)
+                aliases_with_min_binding_time t)
+          ~symbol:(fun _sym ->
+            (* Symbols can't alias, so lookup in the current aliases is fine *)
+            aliases_with_min_binding_time t))
   in
   let name_mode_simple =
     let in_types =
