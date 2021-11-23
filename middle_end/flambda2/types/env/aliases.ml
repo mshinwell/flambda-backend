@@ -400,20 +400,19 @@ let [@ocamlformat "disable"] print ppf
     (Const.Map.print Aliases_of_canonical_element.print)
     aliases_of_consts
 
+let find_binding_time_fast_path ~binding_times_and_modes name =
+  Name.pattern_match name
+    ~var:(fun _ ->
+      let _, binding_time, _ = Name.Map.find name binding_times_and_modes in
+      binding_time)
+    ~symbol:(fun _ -> Binding_time.symbols)
+
 let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
     ~than =
   if Name.equal alias than
   then false
   else
-    let _, alias_binding_time, _ =
-      Name.Map.find alias binding_times_and_modes
-    in
-    let _, than_binding_time, _ = Name.Map.find than binding_times_and_modes in
-    if Binding_time.strictly_earlier alias_binding_time ~than:than_binding_time
-    then true
-    else if not (Binding_time.equal alias_binding_time than_binding_time)
-    then false
-    else
+    let[@inline always] slow_path () =
       let alias_comp_unit = Name.compilation_unit alias in
       let than_comp_unit = Name.compilation_unit than in
       (* The compilation unit ordering is arbitrary, but total. *)
@@ -423,9 +422,27 @@ let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
       else if c > 0
       then false
       else
-        let alias_binding_time = binding_time_resolver alias in
-        let than_binding_time = binding_time_resolver than in
+        let alias_binding_time =
+          binding_time_resolver alias
+          |> Binding_time.With_name_mode.binding_time
+        in
+        let than_binding_time =
+          binding_time_resolver than |> Binding_time.With_name_mode.binding_time
+        in
         Binding_time.strictly_earlier alias_binding_time ~than:than_binding_time
+    in
+    match find_binding_time_fast_path ~binding_times_and_modes alias with
+    | exception Not_found -> slow_path ()
+    | alias_binding_time -> (
+      match find_binding_time_fast_path ~binding_times_and_modes than with
+      | exception Not_found -> slow_path ()
+      | than_binding_time ->
+        if Binding_time.strictly_earlier alias_binding_time
+             ~than:than_binding_time
+        then true
+        else if not (Binding_time.equal alias_binding_time than_binding_time)
+        then false
+        else slow_path ())
 
 let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
     =
@@ -438,24 +455,31 @@ let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
           name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
             alias ~than))
 
-let binding_time_and_name_mode ~binding_times_and_modes elt =
-  Simple.pattern_match elt
+let binding_time_and_name_mode ~binding_time_resolver ~binding_times_and_modes
+    elt =
+  Simple.pattern_match' elt
     ~const:(fun _ ->
       Binding_time.With_name_mode.create Binding_time.consts_and_discriminants
         Name_mode.normal)
-    ~name:(fun elt ~coercion:_ ->
-      let _, binding_time, name_mode =
-        Name.Map.find elt binding_times_and_modes
-      in
-      Binding_time.With_name_mode.create binding_time name_mode)
+    ~var:(fun var ~coercion:_ ->
+      let name = Name.var var in
+      match Name.Map.find name binding_times_and_modes with
+      | _, binding_time, name_mode ->
+        Binding_time.With_name_mode.create binding_time name_mode
+      | exception Not_found -> binding_time_resolver name)
+    ~symbol:(fun _ ~coercion:_ ->
+      Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 
-let name_mode_unscoped ~binding_times_and_modes elt =
+let name_mode_unscoped ~binding_time_resolver ~binding_times_and_modes elt =
   Binding_time.With_name_mode.name_mode
-    (binding_time_and_name_mode ~binding_times_and_modes elt)
+    (binding_time_and_name_mode ~binding_time_resolver ~binding_times_and_modes
+       elt)
 
-let name_mode ~binding_times_and_modes elt ~min_binding_time =
+let name_mode ~binding_time_resolver ~binding_times_and_modes elt
+    ~min_binding_time =
   Binding_time.With_name_mode.scoped_name_mode
-    (binding_time_and_name_mode ~binding_times_and_modes elt)
+    (binding_time_and_name_mode ~binding_time_resolver ~binding_times_and_modes
+       elt)
     ~min_binding_time
 
 let invariant ~binding_time_resolver ~binding_times_and_modes t =
@@ -658,7 +682,8 @@ let add_alias_between_canonical_elements ~binding_time_resolver
               ~then_:coercion_to_canonical)
            aliases_of_canonical_element)
         name_to_be_demoted ~coercion_to_canonical
-        (name_mode_unscoped ~binding_times_and_modes to_be_demoted)
+        (name_mode_unscoped ~binding_time_resolver ~binding_times_and_modes
+           to_be_demoted)
     in
     let aliases_of_canonical_names =
       Name.Map.remove name_to_be_demoted t.aliases_of_canonical_names
@@ -980,7 +1005,8 @@ let get_canonical_element_exn ~binding_time_resolver ~binding_times_and_modes t
       Simple.without_coercion element, elt_name_mode, Simple.coercion element
     | Alias_of_canonical { canonical_element; coercion_to_canonical } ->
       let name_mode =
-        name_mode ~binding_times_and_modes canonical_element ~min_binding_time
+        name_mode ~binding_time_resolver ~binding_times_and_modes
+          canonical_element ~min_binding_time
       in
       canonical_element, name_mode, Coercion.inverse coercion_to_canonical
   in
