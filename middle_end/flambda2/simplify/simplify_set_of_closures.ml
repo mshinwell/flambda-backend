@@ -818,12 +818,10 @@ let simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
         |> Closure_id.Map.fold
              (fun _closure_id bound_name denv ->
                let name = Bound_name.name bound_name in
-               let irrelevant = not (Bound_name.is_symbol bound_name) in
-               let name_mode = if irrelevant then NM.in_types else NM.normal in
                Name.pattern_match name
                  ~var:(fun var ->
                    DE.define_variable denv
-                     (Bound_var.create var name_mode)
+                     (Bound_var.create var (Bound_name.name_mode bound_name))
                      K.value)
                  ~symbol:(fun symbol ->
                    let closure_type =
