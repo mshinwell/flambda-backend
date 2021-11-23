@@ -1363,7 +1363,7 @@ and join_env_extension env (ext1 : TEE.t) (ext2 : TEE.t) : TEE.t =
 let meet_shape env t ~shape ~result_var ~result_kind : _ Or_bottom.t =
   let env =
     TE.add_variable_definition env (Bound_var.var result_var) result_kind
-      Name_mode.normal
+      (Bound_var.name_mode result_var)
   in
   let<+ _meet_ty, env_extension = meet (Meet_env.create env) t shape in
   env_extension
