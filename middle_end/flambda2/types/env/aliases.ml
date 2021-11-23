@@ -500,8 +500,8 @@ let compute_name_mode_unscoped ~binding_times_and_modes elt =
     Binding_time.With_name_mode.name_mode
       (binding_time_and_name_mode ~binding_times_and_modes elt)
   in
-  Format.eprintf "compute_unscoped_name_mode %a = %a\n%!" Simple.print elt
-    Name_mode.print name_mode;
+  (* Format.eprintf "compute_unscoped_name_mode %a = %a\n%!" Simple.print elt
+     Name_mode.print name_mode; *)
   name_mode
 
 let compute_name_mode ~binding_times_and_modes elt ~min_binding_time =
@@ -510,8 +510,8 @@ let compute_name_mode ~binding_times_and_modes elt ~min_binding_time =
       (binding_time_and_name_mode ~binding_times_and_modes elt)
       ~min_binding_time
   in
-  Format.eprintf "compute_name_mode %a = %a\n%!" Simple.print elt
-    Name_mode.print name_mode;
+  (* Format.eprintf "compute_name_mode %a = %a\n%!" Simple.print elt
+     Name_mode.print name_mode; *)
   name_mode
 
 let invariant ~binding_time_resolver ~binding_times_and_modes t =
