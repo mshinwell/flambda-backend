@@ -190,7 +190,7 @@ let simplify_static_consts dacc (bound_symbols : Bound_symbols.t) static_consts
         Closure_id.Lmap.fold
           (fun _ closure_symbol dacc ->
             DA.with_denv dacc
-              (DE.define_symbol (DA.denv dacc) closure_symbol K.value))
+              (DE.add_symbol (DA.denv dacc) closure_symbol T.any_value))
           closure_symbols dacc)
       ~code:(fun dacc _ _ -> dacc)
       ~block_like:(fun dacc _ _ -> dacc)

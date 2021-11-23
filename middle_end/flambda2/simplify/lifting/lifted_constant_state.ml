@@ -116,7 +116,7 @@ let add_to_denv ?maybe_already_defined denv lifted =
           (fun sym (_denv, typ) denv ->
             if maybe_already_defined && DE.mem_symbol denv sym
             then denv
-            else DE.define_symbol denv sym (T.kind typ))
+            else DE.add_symbol denv sym typ)
           types_of_symbols denv)
   in
   let typing_env =

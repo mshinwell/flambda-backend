@@ -355,9 +355,9 @@ let mark_parameters_as_toplevel t params =
 let add_variable_and_extend_typing_environment t var ty env_extension =
   (* This is a combined operation to reduce allocation. *)
   let typing_env =
-    let var' = Bound_name.var var in
     TE.add_equation
-      (TE.add_definition t.typing_env var' (T.kind ty))
+      (TE.add_variable_definition t.typing_env (Bound_var.var var) (T.kind ty)
+         (Bound_var.name_mode var))
       (Name.var (Bound_var.var var))
       ty
   in

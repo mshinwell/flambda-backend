@@ -91,8 +91,7 @@ end = struct
            (env_inside_function, types_inside_function) ->
         let var = Variable.create "clos_var" in
         let env_inside_function =
-          let var = Bound_var.create var NM.in_types in
-          TE.add_definition env_inside_function (Bound_name.var var) K.value
+          TE.add_variable_definition env_inside_function var K.value NM.in_types
         in
         let type_prior_to_sets =
           (* See comment below about [degraded_closure_vars]. *)
@@ -198,11 +197,13 @@ end = struct
             (fun _closure_id bound_name denv ->
               let name = Bound_name.name bound_name in
               let irrelevant = not (Bound_name.is_symbol bound_name) in
-              let bound_name =
-                Bound_name.create name
-                  (if irrelevant then NM.in_types else NM.normal)
-              in
-              DE.define_name denv bound_name K.value)
+              let name_mode = if irrelevant then NM.in_types else NM.normal in
+              Name.pattern_match name
+                ~var:(fun var ->
+                  DE.define_variable denv
+                    (Bound_var.create var name_mode)
+                    K.value)
+                ~symbol:(fun symbol -> DE.add_symbol denv symbol T.any_value))
             closure_bound_names_inside denv)
         denv_inside_functions closure_bound_names_inside_functions_all_sets
     in
@@ -771,7 +772,16 @@ let simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
                TE.with_code_age_relation typing_env code_age_relation)
         |> Closure_id.Map.fold
              (fun _closure_id bound_name denv ->
-               DE.define_name_if_undefined denv bound_name K.value)
+               let name = Bound_name.name bound_name in
+               let irrelevant = not (Bound_name.is_symbol bound_name) in
+               let name_mode = if irrelevant then NM.in_types else NM.normal in
+               Name.pattern_match name
+                 ~var:(fun var ->
+                   DE.define_variable denv
+                     (Bound_var.create var name_mode)
+                     K.value)
+                 ~symbol:(fun symbol ->
+                   DE.define_symbol_if_undefined denv symbol (Some T.any_value)))
              closure_bound_names
         |> fun denv ->
         LCS.add_to_denv denv lifted_consts
@@ -1079,7 +1089,7 @@ let simplify_lifted_set_of_closures0 context ~closure_symbols
         (* XXX This will already have been done now *)
         Closure_id.Lmap.fold
           (fun _closure_id symbol denv ->
-            DE.define_symbol_if_undefined denv symbol K.value)
+            DE.define_symbol_if_undefined denv symbol (Some T.any_value))
           closure_symbols denv)
   in
   let { set_of_closures; code; dacc } =

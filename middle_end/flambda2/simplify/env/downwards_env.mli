@@ -89,15 +89,13 @@ val mem_variable : t -> Variable.t -> bool
 
 val add_symbol : t -> Symbol.t -> Flambda2_types.t -> t
 
-val define_symbol_if_undefined : t -> Symbol.t -> Flambda_kind.t -> t
+val define_symbol_if_undefined : t -> Symbol.t -> Flambda2_types.t option -> t
 
 val mem_symbol : t -> Symbol.t -> bool
 
 val find_symbol : t -> Symbol.t -> Flambda2_types.t
 
 val add_equation_on_symbol : t -> Symbol.t -> Flambda2_types.t -> t
-
-val define_name_if_undefined : t -> Bound_name.t -> Flambda_kind.t -> t
 
 val add_equation_on_name : t -> Name.t -> Flambda2_types.t -> t
 

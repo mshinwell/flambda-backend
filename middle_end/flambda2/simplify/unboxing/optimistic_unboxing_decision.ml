@@ -125,8 +125,7 @@ and make_optimistic_fields ~add_tag_to_name ~depth tenv param_type (tag : Tag.t)
   let tenv =
     List.fold_left
       (fun acc { Extra_param_and_args.param = var; args = _ } ->
-        let name = Bound_name.create (Name.var var) Name_mode.normal in
-        TE.add_definition acc name field_kind)
+        TE.add_variable_definition acc var field_kind Name_mode.normal)
       tenv field_vars
   in
   let shape =
