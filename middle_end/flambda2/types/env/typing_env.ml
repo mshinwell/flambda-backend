@@ -875,17 +875,12 @@ and add_equation1 t name ty ~(meet_type : meet_type) =
          give [alias_of] the type "= c_n". *)
       let alias = Simple.name name in
       let kind = TG.kind ty in
-      let binding_time_and_mode_alias = binding_time_and_mode t name in
-      let binding_time_and_mode_alias_of =
-        binding_time_and_mode_of_simple t alias_of
-      in
       let ({ canonical_element; alias_of_demoted_element; t = aliases }
             : Aliases.add_result) =
         (* This may raise [Binding_time_resolver_failure]. *)
         Aliases.add ~binding_time_resolver:t.binding_time_resolver aliases
-          ~element1:alias ~binding_time_and_mode1:binding_time_and_mode_alias
+          ~binding_times_and_modes:(names_to_types t) ~element1:alias
           ~element2:alias_of
-          ~binding_time_and_mode2:binding_time_and_mode_alias_of
       in
       let t = with_aliases t ~aliases in
       (* We need to change the demoted alias's type to point to the new
@@ -1072,7 +1067,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   in
   let kind = TG.kind ty in
   let aliases_for_simple, min_binding_time =
-    if Aliases.mem (aliases t) simple
+    if mem_simple t simple
     then aliases_with_min_binding_time t
     else
       Simple.pattern_match simple
@@ -1104,8 +1099,9 @@ let type_simple_in_term_exn t ?min_name_mode simple =
   in
   match
     Aliases.get_canonical_element_exn
-      ~binding_time_resolver:t.binding_time_resolver aliases_for_simple simple
-      name_mode_simple ~min_name_mode ~min_binding_time
+      ~binding_time_resolver:t.binding_time_resolver aliases_for_simple
+      ~binding_times_and_modes:(names_to_types t) simple name_mode_simple
+      ~min_name_mode ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -1120,7 +1116,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
   let aliases_for_simple, min_binding_time =
-    if Aliases.mem (aliases t) simple
+    if mem_simple t simple
     then aliases_with_min_binding_time t
     else
       Simple.pattern_match simple
@@ -1191,7 +1187,8 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple simple
-      name_mode_simple ~min_name_mode ~min_binding_time
+      ~binding_times_and_modes:(names_to_types t) name_mode_simple
+      ~min_name_mode ~min_binding_time
   with
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
