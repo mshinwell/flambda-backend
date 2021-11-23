@@ -190,6 +190,35 @@ end = struct
   let bind_closure_types_inside_functions denv_inside_functions
       ~closure_bound_names_inside_functions_all_sets
       ~closure_types_inside_functions_all_sets =
+    let symbols_with_types_not_involving_variables =
+      List.fold_left2
+        (fun types_of_symbols closure_bound_names_inside_functions_one_set
+             closure_types_inside_functions_one_set ->
+          Closure_id.Map.fold
+            (fun closure_id closure_type types_of_symbols ->
+              match
+                Closure_id.Map.find closure_id
+                  closure_bound_names_inside_functions_one_set
+              with
+              | exception Not_found ->
+                Misc.fatal_errorf
+                  "No closure name for closure ID %a.@ \
+                   closure_bound_names_inside_functions_one_set = %a."
+                  Closure_id.print closure_id
+                  (Closure_id.Map.print Bound_name.print)
+                  closure_bound_names_inside_functions_one_set
+              | bound_name ->
+                Name.pattern_match
+                  (Bound_name.name bound_name)
+                  ~var:(fun _ -> types_of_symbols)
+                  ~symbol:(fun symbol ->
+                    if Name_occurrences.no_variables (T.free_names closure_type)
+                    then Symbol.Map.add symbol closure_type types_of_symbols
+                    else types_of_symbols))
+            closure_types_inside_functions_one_set types_of_symbols)
+        Symbol.Map.empty closure_bound_names_inside_functions_all_sets
+        closure_types_inside_functions_all_sets
+    in
     let denv_inside_functions =
       List.fold_left
         (fun denv closure_bound_names_inside ->
@@ -203,7 +232,16 @@ end = struct
                   DE.define_variable denv
                     (Bound_var.create var name_mode)
                     K.value)
-                ~symbol:(fun symbol -> DE.add_symbol denv symbol T.any_value))
+                ~symbol:(fun symbol ->
+                  let ty =
+                    match
+                      Symbol.Map.find symbol
+                        symbols_with_types_not_involving_variables
+                    with
+                    | exception Not_found -> T.any_value
+                    | ty -> ty
+                  in
+                  DE.add_symbol denv symbol ty))
             closure_bound_names_inside denv)
         denv_inside_functions closure_bound_names_inside_functions_all_sets
     in
@@ -224,9 +262,16 @@ end = struct
                 (Closure_id.Map.print Bound_name.print)
                 closure_bound_names_inside_functions_one_set
             | bound_name ->
-              DE.add_equation_on_name denv
-                (Bound_name.name bound_name)
-                closure_type)
+              let bound_name = Bound_name.name bound_name in
+              let already_added =
+                Name.pattern_match bound_name
+                  ~var:(fun _ -> false)
+                  ~symbol:(fun _ ->
+                    Name_occurrences.no_variables (T.free_names closure_type))
+              in
+              if already_added
+              then denv
+              else DE.add_equation_on_name denv bound_name closure_type)
           closure_types_inside_functions_one_set denv)
       denv_inside_functions closure_bound_names_inside_functions_all_sets
       closure_types_inside_functions_all_sets
@@ -781,14 +826,31 @@ let simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
                      (Bound_var.create var name_mode)
                      K.value)
                  ~symbol:(fun symbol ->
-                   DE.define_symbol_if_undefined denv symbol (Some T.any_value)))
+                   let closure_type =
+                     Bound_name.Map.find bound_name closure_types_by_bound_name
+                   in
+                   let ty =
+                     if Name_occurrences.no_variables
+                          (T.free_names closure_type)
+                     then closure_type
+                     else T.any_value
+                   in
+                   DE.define_symbol_if_undefined denv symbol (Some ty)))
              closure_bound_names
         |> fun denv ->
         LCS.add_to_denv denv lifted_consts
         |> Bound_name.Map.fold
              (fun bound_name closure_type denv ->
                let bound_name = Bound_name.to_name bound_name in
-               DE.add_equation_on_name denv bound_name closure_type)
+               let already_added =
+                 Name.pattern_match bound_name
+                   ~var:(fun _ -> false)
+                   ~symbol:(fun _ ->
+                     Name_occurrences.no_variables (T.free_names closure_type))
+               in
+               if already_added
+               then denv
+               else DE.add_equation_on_name denv bound_name closure_type)
              closure_types_by_bound_name)
   in
   let set_of_closures =

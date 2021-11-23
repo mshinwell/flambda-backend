@@ -345,6 +345,8 @@ type t =
        never includes [elt]. *)
     (* CR mshinwell: check this always holds *)
     aliases_of_consts : Aliases_of_canonical_element.t Const.Map.t;
+    (* CR mshinwell: [binding_times_and_modes] is redundant with the information
+       in the typing environment itself. *)
     binding_times_and_modes : Binding_time.With_name_mode.t Name.Map.t
         (* Binding times and name modes define an order on the elements. The
            canonical element for a set of aliases is always the minimal element
