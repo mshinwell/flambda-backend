@@ -404,40 +404,47 @@ let find_binding_time_fast_path ~binding_times_and_modes name =
   Name.pattern_match name
     ~var:(fun _ ->
       let _, binding_time, _ = Name.Map.find name binding_times_and_modes in
-      Format.eprintf "...name %a has binding time %a in names_to_types\n%!"
-        Name.print name Binding_time.print binding_time;
+      (* Format.eprintf "...name %a has binding time %a in names_to_types\n%!"
+         Name.print name Binding_time.print binding_time; *)
       binding_time)
     ~symbol:(fun _ -> Binding_time.symbols)
 
 let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
     ~than =
-  Format.eprintf "Is alias %a defined earlier than %a? " Name.print alias
-    Name.print than;
+  (* Format.eprintf "Is alias %a defined earlier than %a? " Name.print alias
+     Name.print than; *)
   let res =
     if Name.equal alias than
     then false
     else
       let[@inline always] slow_path () =
-        Format.eprintf "...taking slow path\n%!";
         let alias_comp_unit = Name.compilation_unit alias in
         let than_comp_unit = Name.compilation_unit than in
-        (* The compilation unit ordering is arbitrary, but total. *)
-        let c = Compilation_unit.compare alias_comp_unit than_comp_unit in
-        if c < 0
-        then true
-        else if c > 0
+        let current_unit = Compilation_unit.get_current_exn () in
+        if Compilation_unit.equal alias_comp_unit current_unit
+           && not (Compilation_unit.equal than_comp_unit current_unit)
         then false
+        else if Compilation_unit.equal than_comp_unit current_unit
+                && not (Compilation_unit.equal alias_comp_unit current_unit)
+        then true
         else
-          let alias_binding_time =
-            binding_time_resolver alias
-            |> Binding_time.With_name_mode.binding_time
-          in
-          let than_binding_time =
-            binding_time_resolver than
-            |> Binding_time.With_name_mode.binding_time
-          in
-          Binding_time.strictly_earlier alias_binding_time
-            ~than:than_binding_time
+          (* The compilation unit ordering is arbitrary, but total. *)
+          let c = Compilation_unit.compare alias_comp_unit than_comp_unit in
+          if c < 0
+          then true
+          else if c > 0
+          then false
+          else
+            let alias_binding_time =
+              binding_time_resolver alias
+              |> Binding_time.With_name_mode.binding_time
+            in
+            let than_binding_time =
+              binding_time_resolver than
+              |> Binding_time.With_name_mode.binding_time
+            in
+            Binding_time.strictly_earlier alias_binding_time
+              ~than:than_binding_time
       in
       match find_binding_time_fast_path ~binding_times_and_modes alias with
       | exception Not_found -> slow_path ()
@@ -452,7 +459,7 @@ let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
           then false
           else slow_path ())
   in
-  Format.eprintf "%b\n%!" res;
+  (* Format.eprintf "%b\n%!" res; *)
   res
 
 let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
