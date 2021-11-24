@@ -836,6 +836,7 @@ let rec add_equation0 (t : t) name ty =
   res
 
 and add_equation1 t name ty ~(meet_type : meet_type) =
+  Format.eprintf "add_equation1 %a : %a\n%!" Name.print name TG.print ty;
   (if Flambda_features.check_invariants ()
   then
     let existing_ty = find t name None in
@@ -870,12 +871,14 @@ and add_equation1 t name ty ~(meet_type : meet_type) =
     let aliases = aliases t in
     match TG.get_alias_exn ty with
     | exception Not_found ->
+      Format.eprintf "...get_alias_exn returned Not_found\n%!";
       (* Equations giving concrete types may only be added to the canonical
          element as known by the alias tracker (the actual canonical, ignoring
          any name modes). *)
       let canonical = Aliases.get_canonical_ignoring_name_mode aliases name in
       canonical, t, ty
     | alias_of ->
+      Format.eprintf "...get_alias_exn returned =%a\n%!" Simple.print alias_of;
       (* Forget where [name] and [alias_of] came from---our job is now to record
          that they're equal. In general, they have canonical expressions [c_n]
          and [c_a], respectively, so what we ultimately need to record is that
@@ -893,6 +896,8 @@ and add_equation1 t name ty ~(meet_type : meet_type) =
           ~binding_times_and_modes:(names_to_types t) ~element1:alias
           ~element2:alias_of
       in
+      Format.eprintf "Aliases.add returned: CE %a, alias of demoted elt %a\n%!"
+        Simple.print canonical_element Simple.print alias_of_demoted_element;
       let t = with_aliases t ~aliases in
       (* We need to change the demoted alias's type to point to the new
          canonical element. *)

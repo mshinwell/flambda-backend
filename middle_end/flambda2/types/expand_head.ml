@@ -270,6 +270,7 @@ end
 module ET = Expanded_type
 
 let expand_head0 simple env kind =
+  Format.eprintf "expand_head0 of %a\n%!" Simple.print simple;
   let min_name_mode = Name_mode.min_in_types in
   match TE.get_canonical_simple_exn env simple ~min_name_mode with
   | exception Not_found ->
@@ -278,6 +279,8 @@ let expand_head0 simple env kind =
        fine here. *)
     ET.of_non_alias_type (MTC.unknown kind)
   | simple ->
+    Format.eprintf "...get_canonical_simple_exn returns %a\n%!" Simple.print
+      simple;
     let[@inline always] name name ~coercion =
       let ty = TE.find env name (Some kind) in
       match TG.get_alias_exn ty with
