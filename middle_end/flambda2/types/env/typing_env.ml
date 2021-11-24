@@ -1095,7 +1095,8 @@ let type_simple_in_term_exn t ?min_name_mode simple =
             then names_to_types t, aliases t, t.min_binding_time
             else
               match (resolver t) comp_unit with
-              | Some env -> Name.Map.empty, aliases env, env.min_binding_time
+              | Some env ->
+                names_to_types env, aliases env, env.min_binding_time
               | None ->
                 Misc.fatal_errorf
                   "Error while looking up variable %a:@ No corresponding .cmx \
@@ -1140,7 +1141,8 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
             then names_to_types t, aliases t, t.min_binding_time
             else
               match (resolver t) comp_unit with
-              | Some env -> Name.Map.empty, aliases env, env.min_binding_time
+              | Some env ->
+                names_to_types env, aliases env, env.min_binding_time
               | None ->
                 (* Transcript of Slack conversation relating to the next line:
 
@@ -1193,6 +1195,11 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     | None -> name_mode_simple
     | Some name_mode -> name_mode
   in
+  Format.eprintf
+    "TE.get_canonical_simple_exn calling Aliases.get_canonical_element_exn \
+     with %a\n\
+     %!"
+    Simple.print simple;
   match
     Aliases.get_canonical_element_exn
       ~binding_time_resolver:t.binding_time_resolver aliases_for_simple simple
@@ -1205,8 +1212,12 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
       (Flambda_colours.normal ())
       print t;
     Printexc.raise_with_backtrace Misc.Fatal_error bt
-  | exception Binding_time_resolver_failure -> simple
-  | alias -> alias
+  | exception Binding_time_resolver_failure ->
+    Format.eprintf "...resolver failure, returning %a\n%!" Simple.print simple;
+    simple
+  | alias ->
+    Format.eprintf "...success, returning %a\n%!" Simple.print alias;
+    alias
 
 let get_alias_then_canonical_simple_exn t ?min_name_mode
     ?name_mode_of_existing_simple typ =
