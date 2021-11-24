@@ -448,20 +448,14 @@ let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
 
 let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
     =
-  Format.eprintf "Is alias %a defined earlier than %a? " Simple.print alias
-    Simple.print than;
-  let res =
-    Simple.pattern_match than
-      ~const:(fun _ -> false)
-      ~name:(fun than ~coercion:_ ->
-        Simple.pattern_match alias
-          ~const:(fun _ -> true)
-          ~name:(fun alias ~coercion:_ ->
-            name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
-              alias ~than))
-  in
-  Format.eprintf "%b\n%!" res;
-  res
+  Simple.pattern_match than
+    ~const:(fun _ -> false)
+    ~name:(fun than ~coercion:_ ->
+      Simple.pattern_match alias
+        ~const:(fun _ -> true)
+        ~name:(fun alias ~coercion:_ ->
+          name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
+            alias ~than))
 
 let binding_time_and_name_mode ~binding_times_and_modes elt =
   Simple.pattern_match' elt
@@ -482,23 +476,13 @@ let binding_time_and_name_mode ~binding_times_and_modes elt =
       Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 
 let compute_name_mode_unscoped ~binding_times_and_modes elt =
-  let name_mode =
-    Binding_time.With_name_mode.name_mode
-      (binding_time_and_name_mode ~binding_times_and_modes elt)
-  in
-  (* Format.eprintf "compute_unscoped_name_mode %a = %a\n%!" Simple.print elt
-     Name_mode.print name_mode; *)
-  name_mode
+  Binding_time.With_name_mode.name_mode
+    (binding_time_and_name_mode ~binding_times_and_modes elt)
 
 let compute_name_mode ~binding_times_and_modes elt ~min_binding_time =
-  let name_mode =
-    Binding_time.With_name_mode.scoped_name_mode
-      (binding_time_and_name_mode ~binding_times_and_modes elt)
-      ~min_binding_time
-  in
-  (* Format.eprintf "compute_name_mode %a = %a\n%!" Simple.print elt
-     Name_mode.print name_mode; *)
-  name_mode
+  Binding_time.With_name_mode.scoped_name_mode
+    (binding_time_and_name_mode ~binding_times_and_modes elt)
+    ~min_binding_time
 
 let invariant ~binding_time_resolver ~binding_times_and_modes t =
   if Flambda_features.check_invariants ()
