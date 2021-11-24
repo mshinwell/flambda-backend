@@ -400,78 +400,68 @@ let [@ocamlformat "disable"] print ppf
     (Const.Map.print Aliases_of_canonical_element.print)
     aliases_of_consts
 
-let find_binding_time_fast_path ~binding_times_and_modes name =
-  Name.pattern_match name
-    ~var:(fun _ ->
-      let _, binding_time, _ = Name.Map.find name binding_times_and_modes in
-      (* Format.eprintf "...name %a has binding time %a in names_to_types\n%!"
-         Name.print name Binding_time.print binding_time; *)
-      binding_time)
-    ~symbol:(fun _ -> Binding_time.symbols)
-
 let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
     ~than =
-  (* Format.eprintf "Is alias %a defined earlier than %a? " Name.print alias
-     Name.print than; *)
-  let res =
-    if Name.equal alias than
+  if Name.equal alias than || (Name.is_symbol alias && Name.is_symbol than)
+  then false
+  else if Name.is_symbol alias && not (Name.is_symbol than)
+  then true
+  else if Name.is_symbol than && not (Name.is_symbol alias)
+  then false
+  else
+    (* Names from imported units may be mapped by [binding_times_and_modes].
+       However if this situation occurs they should have binding time
+       [Binding_time.imported_variables] (see [Typing_env.add_equation0]). *)
+    let alias_binding_time =
+      match Name.Map.find alias binding_times_and_modes with
+      | exception Not_found -> Binding_time.imported_variables
+      | _, binding_time, _ -> binding_time
+    in
+    let than_binding_time =
+      match Name.Map.find than binding_times_and_modes with
+      | exception Not_found -> Binding_time.imported_variables
+      | _, binding_time, _ -> binding_time
+    in
+    if Binding_time.strictly_earlier alias_binding_time ~than:than_binding_time
+    then true
+    else if not (Binding_time.equal alias_binding_time than_binding_time)
     then false
     else
-      let[@inline always] slow_path () =
-        let alias_comp_unit = Name.compilation_unit alias in
-        let than_comp_unit = Name.compilation_unit than in
-        let current_unit = Compilation_unit.get_current_exn () in
-        if Compilation_unit.equal alias_comp_unit current_unit
-           && not (Compilation_unit.equal than_comp_unit current_unit)
-        then false
-        else if Compilation_unit.equal than_comp_unit current_unit
-                && not (Compilation_unit.equal alias_comp_unit current_unit)
-        then true
-        else
-          (* The compilation unit ordering is arbitrary, but total. *)
-          let c = Compilation_unit.compare alias_comp_unit than_comp_unit in
-          if c < 0
-          then true
-          else if c > 0
-          then false
-          else
-            let alias_binding_time =
-              binding_time_resolver alias
-              |> Binding_time.With_name_mode.binding_time
-            in
-            let than_binding_time =
-              binding_time_resolver than
-              |> Binding_time.With_name_mode.binding_time
-            in
-            Binding_time.strictly_earlier alias_binding_time
-              ~than:than_binding_time
-      in
-      match find_binding_time_fast_path ~binding_times_and_modes alias with
-      | exception Not_found -> slow_path ()
-      | alias_binding_time -> (
-        match find_binding_time_fast_path ~binding_times_and_modes than with
-        | exception Not_found -> slow_path ()
-        | than_binding_time ->
-          if Binding_time.strictly_earlier alias_binding_time
-               ~than:than_binding_time
-          then true
-          else if not (Binding_time.equal alias_binding_time than_binding_time)
-          then false
-          else slow_path ())
-  in
-  (* Format.eprintf "%b\n%!" res; *)
-  res
+      let alias_comp_unit = Name.compilation_unit alias in
+      let than_comp_unit = Name.compilation_unit than in
+      let _current_comp_unit = Compilation_unit.get_current_exn () in
+      (* The compilation unit ordering is arbitrary, but total. *)
+      let c = Compilation_unit.compare alias_comp_unit than_comp_unit in
+      if c < 0
+      then true
+      else if c > 0
+      then false
+      else
+        let alias_binding_time =
+          binding_time_resolver alias
+          |> Binding_time.With_name_mode.binding_time
+        in
+        let than_binding_time =
+          binding_time_resolver than |> Binding_time.With_name_mode.binding_time
+        in
+        Binding_time.strictly_earlier alias_binding_time ~than:than_binding_time
 
 let defined_earlier ~binding_time_resolver ~binding_times_and_modes alias ~than
     =
-  Simple.pattern_match than
-    ~const:(fun _ -> false)
-    ~name:(fun than ~coercion:_ ->
-      Simple.pattern_match alias
-        ~const:(fun _ -> true)
-        ~name:(fun alias ~coercion:_ ->
-          name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
-            alias ~than))
+  Format.eprintf "Is alias %a defined earlier than %a? " Simple.print alias
+    Simple.print than;
+  let res =
+    Simple.pattern_match than
+      ~const:(fun _ -> false)
+      ~name:(fun than ~coercion:_ ->
+        Simple.pattern_match alias
+          ~const:(fun _ -> true)
+          ~name:(fun alias ~coercion:_ ->
+            name_defined_earlier ~binding_time_resolver ~binding_times_and_modes
+              alias ~than))
+  in
+  Format.eprintf "%b\n%!" res;
+  res
 
 let binding_time_and_name_mode ~binding_times_and_modes elt =
   Simple.pattern_match' elt
@@ -487,11 +477,7 @@ let binding_time_and_name_mode ~binding_times_and_modes elt =
         (* This variable must be in another compilation unit. *)
         Binding_time.With_name_mode.create Binding_time.imported_variables
           Name_mode.in_types
-      (* (* CR mshinwell: maybe change resolver's type back again *) let
-         binding_time = binding_time_resolver name |>
-         Binding_time.With_name_mode.binding_time in (* This variable must be in
-         another compilation unit. *) Binding_time.With_name_mode.create
-         binding_time Name_mode.in_types *))
+      (* CR mshinwell: maybe change resolver's type back again *))
     ~symbol:(fun _ ~coercion:_ ->
       Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 
