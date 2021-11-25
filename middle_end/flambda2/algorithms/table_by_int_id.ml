@@ -55,8 +55,7 @@ struct
   module HT = Hashtbl.Make (struct
     type t = int
 
-    (* CR mshinwell: maybe this should be a proper hash function *)
-    let hash (t : t) = Hashtbl.hash t
+    let hash t = t lsr Id.num_empty_bottom_bits
 
     let equal t1 t2 = t1 == t2
   end)
