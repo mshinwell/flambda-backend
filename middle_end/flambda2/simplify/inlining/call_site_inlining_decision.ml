@@ -151,8 +151,9 @@ let might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
   then Argument_types_not_useful
   else
     let cost_metrics =
-      speculative_inlining ~apply dacc ~simplify_expr ~return_arity
-        ~function_type
+      Flambda_features.disable_join_points_around (fun () ->
+          speculative_inlining ~apply dacc ~simplify_expr ~return_arity
+            ~function_type)
     in
     let inlining_args =
       Apply.inlining_arguments apply
