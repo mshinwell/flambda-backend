@@ -350,12 +350,13 @@ module Const = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
     Patricia_tree.Make_map
+      [@inlined hint]
       (struct
         let print = print
       end)
@@ -439,12 +440,12 @@ module Variable = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
-    Patricia_tree.Make_map
+    Patricia_tree.Make_map [@inlined hint]
       (struct
         let print = print
       end)
@@ -523,12 +524,12 @@ module Symbol = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
-    Patricia_tree.Make_map
+    Patricia_tree.Make_map [@inlined hint]
       (struct
         let print = print
       end)
@@ -582,12 +583,12 @@ module Name = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
-    Patricia_tree.Make_map
+    Patricia_tree.Make_map [@inlined hint]
       (struct
         let print = print
       end)
@@ -735,12 +736,12 @@ module Simple = struct
          [Coercion]"
         print t
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
-    Patricia_tree.Make_map
+    Patricia_tree.Make_map [@inlined hint]
       (struct
         let print = print
       end)
@@ -834,12 +835,12 @@ module Code_id = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
-    Patricia_tree.Make_map
+    Patricia_tree.Make_map [@inlined hint]
       (struct
         let print = print
       end)
@@ -900,12 +901,13 @@ module Code_id_or_symbol = struct
     include T0
   end
 
-  module Set = Patricia_tree.Make_set (struct
+  module Set = Patricia_tree.Make_set [@inlined hint] (struct
     let print = print
   end)
 
   module Map =
     Patricia_tree.Make_map
+      [@inlined hint]
       (struct
         let print = print
       end)
