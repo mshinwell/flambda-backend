@@ -861,6 +861,71 @@ module Code_id = struct
     { data with compilation_unit = f data.compilation_unit }
 end
 
+module Code_id_or_symbol = struct
+  type t = Table_by_int_id.Id.t
+
+  let create_code_id code_id = code_id
+
+  let create_symbol symbol = symbol
+
+  let pattern_match t ~code_id ~symbol =
+    if Table_by_int_id.Id.flags t = Code_id_data.flags
+    then code_id t
+    else symbol t
+
+  let compilation_unit t =
+    pattern_match t ~code_id:Code_id.get_compilation_unit
+      ~symbol:Symbol.compilation_unit
+
+  module T0 = struct
+    let compare = Id.compare
+
+    let equal = Id.equal
+
+    let hash = Id.hash
+
+    let print ppf t =
+      pattern_match t
+        ~code_id:(fun code_id ->
+          Format.fprintf ppf "@[<hov 1>(code_id@ %a)@]" Code_id.print code_id)
+        ~symbol:(fun symbol ->
+          Format.fprintf ppf "@[<hov 1>(symbol@ %a)@]" Symbol.print symbol)
+  end
+
+  include T0
+
+  module T = struct
+    type nonrec t = t
+
+    include T0
+  end
+
+  module Set = Patricia_tree.Make_set (struct
+    let print = print
+  end)
+
+  module Map =
+    Patricia_tree.Make_map
+      (struct
+        let print = print
+      end)
+      (Set)
+
+  module Tbl = Container_types.Make_tbl (Numeric_types.Int) (Map)
+  module Lmap = Lmap.Make (T)
+
+  let set_of_code_id_set code_ids =
+    Code_id.Set.fold
+      (fun code_id free_code_ids ->
+        Set.add (create_code_id code_id) free_code_ids)
+      code_ids Set.empty
+
+  let set_of_symbol_set symbols =
+    Symbol.Set.fold
+      (fun sym free_syms -> Set.add (create_symbol sym) free_syms)
+      symbols Set.empty
+end
+
 let initialise () =
   Const.initialise ();
   Variable.initialise ();
