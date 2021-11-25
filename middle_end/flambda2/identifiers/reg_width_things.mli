@@ -235,6 +235,27 @@ module Code_id : sig
     (Compilation_unit.t -> Compilation_unit.t) -> exported -> exported
 end
 
+module Code_id_or_symbol : sig
+  type t = private Table_by_int_id.Id.t
+
+  include Container_types.S with type t := t
+
+  module Lmap : Lmap.S with type key = t
+
+  val create_code_id : Code_id.t -> t
+
+  val create_symbol : Symbol.t -> t
+
+  val compilation_unit : t -> Compilation_unit.t
+
+  val set_of_code_id_set : Code_id.Set.t -> Set.t
+
+  val set_of_symbol_set : Symbol.Set.t -> Set.t
+
+  val pattern_match :
+    t -> code_id:(Code_id.t -> 'a) -> symbol:(Symbol.t -> 'a) -> 'a
+end
+
 val initialise : unit -> unit
 
 val hash2 : int -> int -> int
