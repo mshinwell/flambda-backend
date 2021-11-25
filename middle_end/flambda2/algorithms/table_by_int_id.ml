@@ -111,3 +111,4 @@ struct
     assert (Id.flags id = E.flags);
     HT.find t id
 end
+[@@inline always]
