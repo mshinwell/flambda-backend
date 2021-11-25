@@ -229,8 +229,7 @@ let binding_time_resolver resolver name =
     | exception Not_found ->
       Misc.fatal_errorf "Binding time resolver cannot find name %a in:@ %a"
         Name.print name print t
-    | _, binding_time, name_mode ->
-      Binding_time.With_name_mode.create binding_time name_mode)
+    | _, binding_time_and_mode -> binding_time_and_mode)
 
 module Serializable : sig
   type t
@@ -282,7 +281,7 @@ end = struct
           )@]"
       (Symbol.Map.print TG.print) defined_symbols
       Code_age_relation.print code_age_relation
-      (Name.Map.print (fun ppf (ty, _bt, _mode) -> TG.print ppf ty))
+      (Name.Map.print (fun ppf (ty, _bt_and_mode) -> TG.print ppf ty))
       (Cached_level.names_to_types just_after_level)
       Aliases.print (Cached_level.aliases just_after_level)
 
@@ -301,7 +300,7 @@ end = struct
     let ids = Ids_for_export.create ~symbols ~code_ids () in
     let ids =
       Name.Map.fold
-        (fun name (typ, _binding_time, _name_mode) ids ->
+        (fun name (typ, _binding_time_and_mode) ids ->
           Ids_for_export.add_name
             (Ids_for_export.union ids (TG.all_ids_for_export typ))
             name)
@@ -449,7 +448,10 @@ let name_domain t =
     (Name.set_of_symbol_set (Symbol.Map.keys t.defined_symbols))
 
 let initial_symbol_type =
-  lazy (MTC.unknown K.value, Binding_time.symbols, Name_mode.normal)
+  lazy
+    ( MTC.unknown K.value,
+      Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal
+    )
 
 let variable_is_from_missing_cmx_file t name =
   if Name.is_symbol name
@@ -492,7 +494,9 @@ let find_with_binding_time_and_mode' t name kind =
         match Symbol.Map.find sym t.defined_symbols with
         | ty ->
           check_optional_kind_matches name ty kind;
-          ty, Binding_time.symbols, Name_mode.normal
+          ( ty,
+            Binding_time.With_name_mode.create Binding_time.symbols
+              Name_mode.normal )
         | exception Not_found ->
           Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
             Symbol.print sym print t
@@ -508,15 +512,15 @@ let find_with_binding_time_and_mode' t name kind =
           ~symbol:(fun _ ->
             (* .cmx file missing *)
             let result = Lazy.force initial_symbol_type in
-            check_optional_kind_matches name (Misc.fst3 result) kind;
+            check_optional_kind_matches name (fst result) kind;
             result)
           ~var:(fun _ ->
             match kind with
             | Some kind ->
               (* See comment below about binding times. *)
               ( MTC.unknown kind,
-                Binding_time.imported_variables,
-                Name_mode.in_types )
+                Binding_time.With_name_mode.create
+                  Binding_time.imported_variables Name_mode.in_types )
             | None -> raise Missing_cmx_and_kind)
       | Some t -> (
         match Name.Map.find name (names_to_types t) with
@@ -526,25 +530,30 @@ let find_with_binding_time_and_mode' t name kind =
               (* CR vlaviron: This could be an error, but it can actually occur
                  with predefined exceptions and maybe regular symbols too *)
               let result = Lazy.force initial_symbol_type in
-              check_optional_kind_matches name (Misc.fst3 result) kind;
+              check_optional_kind_matches name (fst result) kind;
               result)
             ~var:(fun var ->
               Misc.fatal_errorf
                 "Variable %a not bound in imported typing environment (maybe \
                  the wrong .cmx file is present?):@ %a"
                 Variable.print var print t)
-        | ty, _binding_time, _name_mode ->
+        | ty, _binding_time_and_mode ->
           check_optional_kind_matches name ty kind;
           Name.pattern_match name
-            ~symbol:(fun _ -> ty, Binding_time.symbols, Name_mode.normal)
+            ~symbol:(fun _ ->
+              ( ty,
+                Binding_time.With_name_mode.create Binding_time.symbols
+                  Name_mode.normal ))
             ~var:(fun _ ->
               (* Binding times for imported variables are meaningless outside
                  their original environment. Variables from foreign compilation
                  units are always out of scope, so their mode must be In_types
                  (we cannot rely on the scoping by binding time). *)
-              ty, Binding_time.imported_variables, Name_mode.in_types)))
+              ( ty,
+                Binding_time.With_name_mode.create
+                  Binding_time.imported_variables Name_mode.in_types ))))
   | found ->
-    let ty, _, _ = found in
+    let ty, _ = found in
     check_optional_kind_matches name ty kind;
     found
 
@@ -559,27 +568,32 @@ let find_with_binding_time_and_mode_unscoped t name kind =
       Name.print name
 
 let find t name kind =
-  let ty, _binding_time, _name_mode =
+  let ty, _binding_time_and_mode =
     find_with_binding_time_and_mode_unscoped t name kind
   in
   ty
 
 let find_with_binding_time_and_mode t name kind =
-  let ((ty, binding_time, mode) as found) =
+  let ((ty, binding_time_and_mode) as found) =
     find_with_binding_time_and_mode_unscoped t name kind
   in
   let scoped_mode =
-    Binding_time.With_name_mode.scoped_name_mode
-      (Binding_time.With_name_mode.create binding_time mode)
+    Binding_time.With_name_mode.scoped_name_mode binding_time_and_mode
       ~min_binding_time:t.min_binding_time
   in
-  if Name_mode.equal mode scoped_mode
+  if Name_mode.equal
+       (Binding_time.With_name_mode.name_mode binding_time_and_mode)
+       scoped_mode
   then found
-  else ty, binding_time, scoped_mode
+  else
+    ( ty,
+      Binding_time.With_name_mode.create
+        (Binding_time.With_name_mode.binding_time binding_time_and_mode)
+        scoped_mode )
 
 let find_or_missing t name =
   match find_with_binding_time_and_mode' t name None with
-  | ty, _, _ -> Some ty
+  | ty, _ -> Some ty
   | exception Missing_cmx_and_kind -> None
 
 let find_params t params =
@@ -598,10 +612,10 @@ let binding_time_and_mode t name =
   else
     Name.pattern_match name
       ~var:(fun _var ->
-        let _typ, binding_time, name_mode =
+        let _typ, binding_time_and_mode =
           find_with_binding_time_and_mode t name None
         in
-        Binding_time.With_name_mode.create binding_time name_mode)
+        binding_time_and_mode)
       ~symbol:(fun _sym ->
         Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 
@@ -621,10 +635,9 @@ let mem ?min_name_mode t name =
           if Name.Set.mem name (t.get_imported_names ())
           then Some Name_mode.in_types
           else None
-        | _ty, binding_time, name_mode ->
+        | _ty, binding_time_and_mode ->
           let scoped_name_mode =
-            Binding_time.With_name_mode.scoped_name_mode
-              (Binding_time.With_name_mode.create binding_time name_mode)
+            Binding_time.With_name_mode.scoped_name_mode binding_time_and_mode
               ~min_binding_time:t.min_binding_time
           in
           Some scoped_name_mode
@@ -1047,17 +1060,20 @@ let type_simple_in_term_exn t ?min_name_mode simple =
      imported code is closed with respect to variables. This also means that the
      kind of such variables should always be inferrable, so we pass [None] to
      [find] below. *)
-  let ty, _binding_time, name_mode_simple =
+  let ty, binding_time_and_name_mode_simple =
     let[@inline always] const const =
       ( MTC.type_for_const const,
-        Binding_time.consts_and_discriminants,
-        Name_mode.normal )
+        Binding_time.With_name_mode.create Binding_time.consts_and_discriminants
+          Name_mode.normal )
     in
     let[@inline always] name name ~coercion:_ =
       (* Applying coercion below *)
       find_with_binding_time_and_mode t name None
     in
     Simple.pattern_match simple ~const ~name
+  in
+  let name_mode_simple =
+    Binding_time.With_name_mode.name_mode binding_time_and_name_mode_simple
   in
   let ty =
     if Simple.has_coercion simple

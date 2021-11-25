@@ -53,7 +53,7 @@ val print : Format.formatter -> t -> unit
 
 val invariant :
   binding_time_resolver:(Name.t -> Binding_time.With_name_mode.t) ->
-  binding_times_and_modes:(_ * Binding_time.t * Name_mode.t) Name.Map.t ->
+  binding_times_and_modes:(_ * Binding_time.With_name_mode.t) Name.Map.t ->
   t ->
   unit
 
@@ -89,7 +89,7 @@ type add_result = private
     canonical. *)
 val add :
   binding_time_resolver:(Name.t -> Binding_time.With_name_mode.t) ->
-  binding_times_and_modes:(_ * Binding_time.t * Name_mode.t) Name.Map.t ->
+  binding_times_and_modes:(_ * Binding_time.With_name_mode.t) Name.Map.t ->
   t ->
   element1:Simple.t ->
   element2:Simple.t ->
@@ -99,7 +99,7 @@ val add :
     [min_order_within_equiv_class] cannot be satisfied. *)
 val get_canonical_element_exn :
   binding_time_resolver:(Name.t -> Binding_time.With_name_mode.t) ->
-  binding_times_and_modes:(_ * Binding_time.t * Name_mode.t) Name.Map.t ->
+  binding_times_and_modes:(_ * Binding_time.With_name_mode.t) Name.Map.t ->
   t ->
   Simple.t ->
   Name_mode.t ->

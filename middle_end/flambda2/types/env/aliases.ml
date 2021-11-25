@@ -415,12 +415,14 @@ let name_defined_earlier ~binding_time_resolver ~binding_times_and_modes alias
     let alias_binding_time =
       match Name.Map.find alias binding_times_and_modes with
       | exception Not_found -> Binding_time.imported_variables
-      | _, binding_time, _ -> binding_time
+      | _, binding_time_and_mode ->
+        Binding_time.With_name_mode.binding_time binding_time_and_mode
     in
     let than_binding_time =
       match Name.Map.find than binding_times_and_modes with
       | exception Not_found -> Binding_time.imported_variables
-      | _, binding_time, _ -> binding_time
+      | _, binding_time_and_mode ->
+        Binding_time.With_name_mode.binding_time binding_time_and_mode
     in
     if Binding_time.strictly_earlier alias_binding_time ~than:than_binding_time
     then true
@@ -465,8 +467,7 @@ let binding_time_and_name_mode ~binding_times_and_modes elt =
     ~var:(fun var ~coercion:_ ->
       let name = Name.var var in
       match Name.Map.find name binding_times_and_modes with
-      | _, binding_time, name_mode ->
-        Binding_time.With_name_mode.create binding_time name_mode
+      | _, binding_time_and_mode -> binding_time_and_mode
       | exception Not_found ->
         (* This variable must be in another compilation unit. *)
         Binding_time.With_name_mode.create Binding_time.imported_variables
