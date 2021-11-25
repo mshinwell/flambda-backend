@@ -27,8 +27,8 @@ val empty : t
 val is_empty : t -> bool
 
 val create :
-  defined_vars:Flambda_kind.t Variable.Map.t ->
-  binding_times:Variable.Set.t Binding_time.Map.t ->
+  defined_vars_from_these_levels:t list ->
+  restrict_defined_vars_to:Name_occurrences.t ->
   equations:Type_grammar.t Name.Map.t ->
   symbol_projections:Symbol_projection.t Variable.Map.t ->
   t
@@ -46,8 +46,6 @@ val add_or_replace_equation : t -> Name.t -> Type_grammar.t -> t
 val concat : t -> t -> t
 
 val all_ids_for_export : t -> Ids_for_export.t
-
-val find_kind : t -> Variable.t -> Flambda_kind.t
 
 val fold_on_defined_vars :
   (Variable.t -> Binding_time.t -> Flambda_kind.t -> 'a -> 'a) -> t -> 'a -> 'a
