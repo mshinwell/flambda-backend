@@ -26,17 +26,11 @@ type t =
     symbol_projections : Symbol_projection.t Variable.Map.t
   }
 
-let defined_variables t = Variable.Map.keys t.defined_vars
-
 let defined_variables_with_kinds t = t.defined_vars
-
-let defined_names t = Name.set_of_var_set (Variable.Map.keys t.defined_vars)
 
 let variables_by_binding_time t = t.binding_times
 
 let find_kind t var = Variable.Map.find var t.defined_vars
-
-let variable_is_defined t var = Variable.Map.mem var t.defined_vars
 
 (* CR mshinwell: print symbol projections along with tidying up this function *)
 let print_equations ppf equations =

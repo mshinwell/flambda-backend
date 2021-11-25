@@ -31,7 +31,11 @@ module One_level = struct
 
   let [@ocamlformat "disable"] print ~min_binding_time ppf
         { scope = _; level; just_after_level; } =
-    let restrict_to = TEL.defined_names level in
+    let restrict_to =
+      Variable.Map.fold (fun  var _kind restrict_to ->
+          Name.Set.add (Name.var var) restrict_to)
+        (TEL.defined_variables_with_kinds level) Name.Set.empty
+    in
     if Name.Set.is_empty restrict_to then
       Format.fprintf ppf "@[<hov 0>\
           %a\
