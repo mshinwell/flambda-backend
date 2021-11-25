@@ -83,15 +83,12 @@ module Data = struct
 
   let hash
       { compilation_unit;
-        previous_compilation_units;
+        previous_compilation_units = _;
         name = _;
         name_stamp;
         sort = _
       } =
-    Hashtbl.hash
-      ( List.map Compilation_unit.hash
-          (compilation_unit :: previous_compilation_units),
-        name_stamp )
+    Reg_width_things.hash2 (Compilation_unit.hash compilation_unit) name_stamp
 
   let equal t1 t2 =
     if t1 == t2
