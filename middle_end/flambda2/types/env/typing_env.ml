@@ -491,78 +491,80 @@ let check_optional_kind_matches name ty kind_opt =
 exception Missing_cmx_and_kind
 
 (* CR mshinwell: [kind] could also take a [subkind] *)
-let find_with_binding_time_and_mode' t name kind =
-  match Name.Map.find name (names_to_types t) with
-  | exception Not_found -> (
-    let comp_unit = Name.compilation_unit name in
-    if Compilation_unit.equal comp_unit (Compilation_unit.get_current_exn ())
-    then
-      let[@inline always] var var =
-        Misc.fatal_errorf "Variable %a not bound in typing environment:@ %a"
-          Variable.print var print t
-      in
-      let[@inline always] symbol sym =
-        match Symbol.Map.find sym t.defined_symbols with
-        | ty ->
-          check_optional_kind_matches name ty kind;
-          ( ty,
-            Binding_time.With_name_mode.create Binding_time.symbols
-              Name_mode.normal )
-        | exception Not_found ->
-          Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
-            Symbol.print sym print t
-      in
-      Name.pattern_match name ~var ~symbol
-    else
-      match (resolver t) comp_unit with
-      | exception _ ->
-        Misc.fatal_errorf "Exception in resolver@ Backtrace is: %s"
-          (Printexc.raw_backtrace_to_string (Printexc.get_raw_backtrace ()))
-      | None ->
+let find_with_binding_time_and_mode0 t name kind =
+  let comp_unit = Name.compilation_unit name in
+  if Compilation_unit.equal comp_unit (Compilation_unit.get_current_exn ())
+  then
+    let[@inline always] var var =
+      Misc.fatal_errorf "Variable %a not bound in typing environment:@ %a"
+        Variable.print var print t
+    in
+    let[@inline always] symbol sym =
+      match Symbol.Map.find sym t.defined_symbols with
+      | ty ->
+        check_optional_kind_matches name ty kind;
+        ( ty,
+          Binding_time.With_name_mode.create Binding_time.symbols
+            Name_mode.normal )
+      | exception Not_found ->
+        Misc.fatal_errorf "Symbol %a not bound in typing environment:@ %a"
+          Symbol.print sym print t
+    in
+    Name.pattern_match name ~var ~symbol
+  else
+    match (resolver t) comp_unit with
+    | exception _ ->
+      Misc.fatal_errorf "Exception in resolver@ Backtrace is: %s"
+        (Printexc.raw_backtrace_to_string (Printexc.get_raw_backtrace ()))
+    | None ->
+      Name.pattern_match name
+        ~symbol:(fun _ ->
+          (* .cmx file missing *)
+          let result = Lazy.force initial_symbol_type in
+          check_optional_kind_matches name (fst result) kind;
+          result)
+        ~var:(fun _ ->
+          match kind with
+          | Some kind ->
+            (* See comment below about binding times. *)
+            ( MTC.unknown kind,
+              Binding_time.With_name_mode.create Binding_time.imported_variables
+                Name_mode.in_types )
+          | None -> raise Missing_cmx_and_kind)
+    | Some t -> (
+      match Name.Map.find name (names_to_types t) with
+      | exception Not_found ->
         Name.pattern_match name
           ~symbol:(fun _ ->
-            (* .cmx file missing *)
+            (* CR vlaviron: This could be an error, but it can actually occur
+               with predefined exceptions and maybe regular symbols too *)
             let result = Lazy.force initial_symbol_type in
             check_optional_kind_matches name (fst result) kind;
             result)
+          ~var:(fun var ->
+            Misc.fatal_errorf
+              "Variable %a not bound in imported typing environment (maybe the \
+               wrong .cmx file is present?):@ %a"
+              Variable.print var print t)
+      | ty, _binding_time_and_mode ->
+        check_optional_kind_matches name ty kind;
+        Name.pattern_match name
+          ~symbol:(fun _ ->
+            ( ty,
+              Binding_time.With_name_mode.create Binding_time.symbols
+                Name_mode.normal ))
           ~var:(fun _ ->
-            match kind with
-            | Some kind ->
-              (* See comment below about binding times. *)
-              ( MTC.unknown kind,
-                Binding_time.With_name_mode.create
-                  Binding_time.imported_variables Name_mode.in_types )
-            | None -> raise Missing_cmx_and_kind)
-      | Some t -> (
-        match Name.Map.find name (names_to_types t) with
-        | exception Not_found ->
-          Name.pattern_match name
-            ~symbol:(fun _ ->
-              (* CR vlaviron: This could be an error, but it can actually occur
-                 with predefined exceptions and maybe regular symbols too *)
-              let result = Lazy.force initial_symbol_type in
-              check_optional_kind_matches name (fst result) kind;
-              result)
-            ~var:(fun var ->
-              Misc.fatal_errorf
-                "Variable %a not bound in imported typing environment (maybe \
-                 the wrong .cmx file is present?):@ %a"
-                Variable.print var print t)
-        | ty, _binding_time_and_mode ->
-          check_optional_kind_matches name ty kind;
-          Name.pattern_match name
-            ~symbol:(fun _ ->
-              ( ty,
-                Binding_time.With_name_mode.create Binding_time.symbols
-                  Name_mode.normal ))
-            ~var:(fun _ ->
-              (* Binding times for imported variables are meaningless outside
-                 their original environment. Variables from foreign compilation
-                 units are always out of scope, so their mode must be In_types
-                 (we cannot rely on the scoping by binding time). *)
-              ( ty,
-                Binding_time.With_name_mode.create
-                  Binding_time.imported_variables Name_mode.in_types ))))
+            (* Binding times for imported variables are meaningless outside
+               their original environment. Variables from foreign compilation
+               units are always out of scope, so their mode must be In_types (we
+               cannot rely on the scoping by binding time). *)
+            ( ty,
+              Binding_time.With_name_mode.create Binding_time.imported_variables
+                Name_mode.in_types )))
+
+let find_with_binding_time_and_mode1 t name kind =
+  match Name.Map.find name (names_to_types t) with
+  | exception Not_found -> find_with_binding_time_and_mode0 t name kind
   | found ->
     let ty, _ = found in
     check_optional_kind_matches name ty kind;
@@ -571,7 +573,7 @@ let find_with_binding_time_and_mode' t name kind =
 (* This version doesn't check min_binding_time. This ensures that no allocation
    occurs when we're not interested in the name mode. *)
 let find_with_binding_time_and_mode_unscoped t name kind =
-  try find_with_binding_time_and_mode' t name kind
+  try find_with_binding_time_and_mode1 t name kind
   with Missing_cmx_and_kind ->
     Misc.fatal_errorf
       "Don't know kind of variable %a from another unit whose .cmx file is \
@@ -603,7 +605,7 @@ let find_with_binding_time_and_mode t name kind =
         scoped_mode )
 
 let find_or_missing t name =
-  match find_with_binding_time_and_mode' t name None with
+  match find_with_binding_time_and_mode1 t name None with
   | ty, _ -> Some ty
   | exception Missing_cmx_and_kind -> None
 
@@ -1074,15 +1076,43 @@ let type_simple_in_term_exn t ?min_name_mode simple =
      imported code is closed with respect to variables. This also means that the
      kind of such variables should always be inferrable, so we pass [None] to
      [find] below. *)
+  let name_occurs_in_names_to_types_map_in_this_env = ref false in
   let ty, binding_time_and_name_mode_simple =
     let[@inline always] const const =
       ( MTC.type_for_const const,
         Binding_time.With_name_mode.create Binding_time.consts_and_discriminants
           Name_mode.normal )
     in
-    let[@inline always] name name ~coercion:_ =
-      (* Applying coercion below *)
-      find_with_binding_time_and_mode t name None
+    let[@inline always] name name ~coercion:_ (* coercion applied below *) =
+      (* Inlined version of [find_with_binding_time_and_mode] so we can record
+         whether [names_to_types t] knows about [name] (see below). *)
+      let ((ty, binding_time_and_mode) as found) =
+        match Name.Map.find name (names_to_types t) with
+        | exception Not_found -> find_with_binding_time_and_mode0 t name None
+        | found ->
+          name_occurs_in_names_to_types_map_in_this_env := true;
+          let ty, _ = found in
+          (try check_optional_kind_matches name ty None
+           with Missing_cmx_and_kind ->
+             Misc.fatal_errorf
+               "Don't know kind of variable %a from another unit whose .cmx \
+                file is unavailable"
+               Name.print name);
+          found
+      in
+      let scoped_mode =
+        Binding_time.With_name_mode.scoped_name_mode binding_time_and_mode
+          ~min_binding_time:t.min_binding_time
+      in
+      if Name_mode.equal
+           (Binding_time.With_name_mode.name_mode binding_time_and_mode)
+           scoped_mode
+      then found
+      else
+        ( ty,
+          Binding_time.With_name_mode.create
+            (Binding_time.With_name_mode.binding_time binding_time_and_mode)
+            scoped_mode )
     in
     Simple.pattern_match simple ~const ~name
   in
@@ -1109,8 +1139,9 @@ let type_simple_in_term_exn t ?min_name_mode simple =
                impossible to add an equation on an imported variable that is not
                canonical (the equation should have been added to its canonical
                element instead). To avoid these potential problems we use
-               [names_to_types]. *)
-            if Name.Map.mem name (names_to_types t)
+               [names_to_types] (via the reference to avoid a second map
+               lookup). *)
+            if !name_occurs_in_names_to_types_map_in_this_env
             then names_to_types t, aliases t, t.min_binding_time
             else
               let comp_unit = Variable.compilation_unit var in
@@ -1216,6 +1247,8 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
       match name_mode_of_existing_simple with
       | Some name_mode -> name_mode
       | None ->
+        (* CR mshinwell: potential duplicate map lookup here in (names_to_types
+           t) with above *)
         Binding_time.With_name_mode.name_mode
           (binding_time_and_mode_of_simple t simple
              ~assume_not_from_missing_cmx_file:true)
