@@ -52,4 +52,4 @@ val find_kind : t -> Variable.t -> Flambda_kind.t
 val variables_by_binding_time : t -> Variable.Set.t Binding_time.Map.t
 
 val fold_on_defined_vars :
-  (Variable.t -> Flambda_kind.t -> 'a -> 'a) -> t -> 'a -> 'a
+  (Variable.t -> Binding_time.t -> Flambda_kind.t -> 'a -> 'a) -> t -> 'a -> 'a

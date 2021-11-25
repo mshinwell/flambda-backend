@@ -39,7 +39,7 @@ let join_types ~env_at_fork envs_with_levels =
       (fun base_env (env_at_use, _, _, level) ->
         let base_env =
           TEL.fold_on_defined_vars
-            (fun var _kind base_env ->
+            (fun var _bt _kind base_env ->
               if TE.mem base_env (Name.var var)
               then base_env
               else
@@ -157,7 +157,7 @@ let construct_joined_level envs_with_levels ~env_at_fork ~allowed ~joined_types
       (fun (defined_vars, binding_times) (_env_at_use, _id, _use_kind, t) ->
         let defined_vars_this_level =
           TEL.fold_on_defined_vars
-            (fun var kind defined_vars_this_level ->
+            (fun var _bt kind defined_vars_this_level ->
               if Name_occurrences.mem_var allowed var
               then Variable.Map.add var kind defined_vars_this_level
               else defined_vars_this_level)
