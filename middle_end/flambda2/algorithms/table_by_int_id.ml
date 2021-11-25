@@ -52,7 +52,7 @@ module Make (E : sig
   val equal : t -> t -> bool
 end) =
 struct
-  module HT = Hashtbl.Make (struct
+  module HT = Hashtbl.Make [@inlined hint] (struct
     type t = int
 
     let hash t = t lsr Id.num_empty_bottom_bits
