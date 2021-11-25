@@ -20,6 +20,13 @@ let classic_mode () = !Flambda_backend_flags.Flambda2.classic_mode
 
 let join_points () = !Flambda_backend_flags.Flambda2.join_points
 
+let[@inline always] disable_join_points_around f =
+  let join_points = !Flambda_backend_flags.Flambda2.join_points in
+  Flambda_backend_flags.Flambda2.join_points := false;
+  let result = (f [@inlined hint]) () in
+  Flambda_backend_flags.Flambda2.join_points := join_points;
+  result
+
 let unbox_along_intra_function_control_flow () =
   !Flambda_backend_flags.Flambda2.unbox_along_intra_function_control_flow
 
