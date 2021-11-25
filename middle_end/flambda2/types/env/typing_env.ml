@@ -615,8 +615,9 @@ let find_params t params =
       find t name (Some kind))
     params
 
-let binding_time_and_mode t name =
-  if variable_is_from_missing_cmx_file t name
+let binding_time_and_mode t name ~assume_not_from_missing_cmx_file =
+  if (not assume_not_from_missing_cmx_file)
+     && variable_is_from_missing_cmx_file t name
   then
     Binding_time.With_name_mode.create Binding_time.imported_variables
       Name_mode.in_types
@@ -630,12 +631,13 @@ let binding_time_and_mode t name =
       ~symbol:(fun _sym ->
         Binding_time.With_name_mode.create Binding_time.symbols Name_mode.normal)
 
-let binding_time_and_mode_of_simple t simple =
+let binding_time_and_mode_of_simple t simple ~assume_not_from_missing_cmx_file =
   Simple.pattern_match simple
     ~const:(fun _ ->
       Binding_time.With_name_mode.create Binding_time.consts_and_discriminants
         Name_mode.normal)
-    ~name:(fun name ~coercion:_ -> binding_time_and_mode t name)
+    ~name:(fun name ~coercion:_ ->
+      binding_time_and_mode t name ~assume_not_from_missing_cmx_file)
 
 let mem ?min_name_mode t name =
   Name.pattern_match name
@@ -1215,7 +1217,8 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
       | Some name_mode -> name_mode
       | None ->
         Binding_time.With_name_mode.name_mode
-          (binding_time_and_mode_of_simple t simple)
+          (binding_time_and_mode_of_simple t simple
+             ~assume_not_from_missing_cmx_file:true)
   in
   let min_name_mode =
     match min_name_mode with
@@ -1247,7 +1250,8 @@ let aliases_of_simple t ~min_name_mode simple =
   |> Aliases.Alias_set.filter ~f:(fun alias ->
          let name_mode =
            Binding_time.With_name_mode.name_mode
-             (binding_time_and_mode_of_simple t alias)
+             (binding_time_and_mode_of_simple t alias
+                ~assume_not_from_missing_cmx_file:false)
          in
          match Name_mode.compare_partial_order name_mode min_name_mode with
          | None -> false
