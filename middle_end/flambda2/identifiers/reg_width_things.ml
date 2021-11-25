@@ -865,4 +865,5 @@ let initialise () =
   Const.initialise ();
   Variable.initialise ();
   Symbol.initialise ();
-  Simple.initialise ()
+  Simple.initialise ();
+  Code_id.initialise ()
