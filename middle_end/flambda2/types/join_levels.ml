@@ -176,15 +176,23 @@ let construct_joined_level envs_with_levels ~env_at_fork ~allowed ~joined_types
             defined_vars defined_vars_this_level
         in
         let binding_times_this_level =
-          Binding_time.Map.filter_map
-            (fun _ vars ->
-              let vars =
-                Variable.Set.filter
-                  (fun var -> Name_occurrences.mem_var allowed var)
-                  vars
-              in
-              if Variable.Set.is_empty vars then None else Some vars)
-            (TEL.variables_by_binding_time t)
+          TEL.fold_on_defined_vars
+            (fun var binding_time _kind binding_times_this_level ->
+              if not (Name_occurrences.mem_var allowed var)
+              then binding_times_this_level
+              else
+                match
+                  Binding_time.Map.find binding_time binding_times_this_level
+                with
+                | exception Not_found ->
+                  Binding_time.Map.add binding_time
+                    (Variable.Set.singleton var)
+                    binding_times_this_level
+                | vars ->
+                  Binding_time.Map.add (* replace *) binding_time
+                    (Variable.Set.add var vars)
+                    binding_times_this_level)
+            t Binding_time.Map.empty
         in
         let binding_times =
           Binding_time.Map.union
