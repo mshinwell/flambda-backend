@@ -351,7 +351,7 @@ module MakeSeeded(H: SeededHashedType): (SeededS with type key = H.t) =
     let copy = copy
 
     let key_index h key =
-      (H.hash h.seed key) land (Array.length h.data - 1)
+      ((H.hash [@inlined hint]) h.seed key) land (Array.length h.data - 1)
 
     let add h key data =
       let i = key_index h key in
