@@ -143,9 +143,15 @@ let output_flexpect ~ml_filename ~raw_flambda:old_unit new_unit =
         Print_fexpr.expect_test_spec ppf test;
         Format.pp_print_flush ppf ())
 
+let minor_heap_size_in_megabytes = 200
+
+let minor_heap_size_in_words =
+  minor_heap_size_in_megabytes * 1024 * 1024 / (Sys.word_size / 8)
+
 let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     ~module_block_size_in_words ~module_initializer =
   Misc.Color.setup (Flambda_features.colour ());
+  Gc.set { (Gc.get ()) with minor_heap_size = minor_heap_size_in_words };
   let run () =
     let raw_flambda, code =
       Profile.record_call "lambda_to_flambda" (fun () ->
