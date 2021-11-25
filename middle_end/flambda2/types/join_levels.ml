@@ -159,9 +159,12 @@ let construct_joined_level envs_with_levels ~env_at_fork ~allowed ~joined_types
     List.fold_left
       (fun (defined_vars, binding_times) (_env_at_use, _id, _use_kind, t) ->
         let defined_vars_this_level =
-          Variable.Map.filter
-            (fun var _ -> Name_occurrences.mem_var allowed var)
-            (TEL.defined_variables_with_kinds t)
+          TEL.fold_on_defined_vars
+            (fun var kind defined_vars_this_level ->
+              if Name_occurrences.mem_var allowed var
+              then Variable.Map.add var kind defined_vars_this_level
+              else defined_vars_this_level)
+            t Variable.Map.empty
         in
         let defined_vars =
           Variable.Map.union
