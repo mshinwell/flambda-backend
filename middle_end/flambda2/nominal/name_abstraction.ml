@@ -39,7 +39,7 @@ struct
       Bindable.name_permutation bindable ~guaranteed_fresh:fresh_bindable
     in
     let fresh_term = Term.apply_renaming term perm in
-    f fresh_bindable fresh_term
+    (f [@inlined hint]) fresh_bindable fresh_term
 
   let[@inline always] pattern_match_pair (bindable0, term0) (bindable1, term1)
       ~f =
@@ -63,7 +63,8 @@ struct
       if bindable == bindable' && term == term' then t else bindable', term'
 
   let[@inline always] ( let<> ) t f =
-    pattern_match t ~f:(fun bindable term -> f (bindable, term))
+    pattern_match t ~f:(fun bindable term ->
+        (f [@inlined hint]) (bindable, term))
 end
 [@@inline always]
 
