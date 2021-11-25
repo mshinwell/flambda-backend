@@ -26,8 +26,6 @@ type t =
     symbol_projections : Symbol_projection.t Variable.Map.t
   }
 
-let variables_by_binding_time t = t.binding_times
-
 let find_kind t var = Variable.Map.find var t.defined_vars
 
 (* CR mshinwell: print symbol projections along with tidying up this function *)
