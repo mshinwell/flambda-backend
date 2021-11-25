@@ -65,11 +65,11 @@ let [@ocamlformat "disable"] print ppf
 
 let fold_on_defined_vars f t init =
   Binding_time.Map.fold
-    (fun _bt vars acc ->
+    (fun bt vars acc ->
       Variable.Set.fold
         (fun var acc ->
           let kind = Variable.Map.find var t.defined_vars in
-          f var kind acc)
+          f var bt kind acc)
         vars acc)
     t.binding_times init
 
