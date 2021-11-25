@@ -297,11 +297,10 @@ end = struct
         just_after_level;
         next_binding_time = _
       } =
-    let symbols = defined_symbols in
     let code_ids =
       Code_age_relation.all_code_ids_for_export code_age_relation
     in
-    let ids = Ids_for_export.create ~symbols ~code_ids () in
+    let ids = Ids_for_export.create ~code_ids ~symbols:defined_symbols () in
     let ids =
       Name.Map.fold
         (fun name (typ, _binding_time_and_mode) ids ->
@@ -1160,7 +1159,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
       ~const:(fun _ -> names_to_types t, aliases t, t.min_binding_time)
       ~name:(fun name ~coercion:_ ->
         Name.pattern_match name
-          ~var:(fun var ->
+          ~var:(fun [@inline available] var ->
             (* See comment in [type_simple_in_term_exn] above relating to this
                lookup in [names_to_types t]. *)
             if Name.Map.mem name (names_to_types t)
