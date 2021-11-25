@@ -1154,6 +1154,7 @@ let type_simple_in_term_exn t ?min_name_mode simple =
 
 let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
     simple =
+  let variable_is_from_missing_cmx_file = ref false in
   let binding_times_and_modes, aliases_for_simple, min_binding_time =
     Simple.pattern_match simple
       ~const:(fun _ -> names_to_types t, aliases t, t.min_binding_time)
@@ -1200,6 +1201,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
                      had a way to learn later that the variable is actually an
                      alias, but that would only happen if for some reason we
                      later successfully load the missing cmx. *)
+                  variable_is_from_missing_cmx_file := true;
                   names_to_types t, aliases t, t.min_binding_time)
           ~symbol:(fun _sym ->
             (* Symbols can't alias, so lookup in the current aliases is fine *)
@@ -1207,9 +1209,7 @@ let get_canonical_simple_exn t ?min_name_mode ?name_mode_of_existing_simple
   in
   let name_mode_simple =
     let in_types =
-      Simple.pattern_match simple
-        ~const:(fun _ -> false)
-        ~name:(fun name ~coercion:_ -> variable_is_from_missing_cmx_file t name)
+      if Simple.is_var simple then !variable_is_from_missing_cmx_file else false
     in
     if in_types
     then Name_mode.in_types
