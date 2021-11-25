@@ -198,3 +198,5 @@ module Simple : sig
 end
 
 val initialise : unit -> unit
+
+val hash2 : int -> int -> int
