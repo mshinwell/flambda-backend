@@ -17,6 +17,7 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module Int = Numbers.Int
+module Hashtbl = Vendored_hashtbl
 
 module Id = struct
   include Int
