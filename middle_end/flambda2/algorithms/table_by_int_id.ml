@@ -64,7 +64,7 @@ struct
 
   type t = E.t HT.t
 
-  let create () = HT.create 20_000
+  let create () = HT.create 2_000_000
 
   exception Can_add of int
 
