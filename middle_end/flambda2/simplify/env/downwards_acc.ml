@@ -65,9 +65,10 @@ let denv t = t.denv
 
 let data_flow t = t.data_flow
 
-let[@inline always] map_data_flow t ~f = { t with data_flow = f t.data_flow }
+let[@inline always] map_data_flow t ~f =
+  { t with data_flow = (f [@inlined hint]) t.data_flow }
 
-let[@inline always] map_denv t ~f = { t with denv = f t.denv }
+let[@inline always] map_denv t ~f = { t with denv = (f [@inlined hint]) t.denv }
 
 let[@inline always] with_denv t denv = { t with denv }
 
