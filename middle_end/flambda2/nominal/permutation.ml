@@ -99,3 +99,4 @@ module Make (N : Container_types.S) = struct
     invariant t;
     t
 end
+[@@inline always]
