@@ -38,19 +38,14 @@ let join_types ~env_at_fork envs_with_levels =
     List.fold_left
       (fun base_env (env_at_use, _, _, level) ->
         let base_env =
-          Binding_time.Map.fold
-            (fun _ vars base_env ->
-              Variable.Set.fold
-                (fun var base_env ->
-                  if TE.mem base_env (Name.var var)
-                  then base_env
-                  else
-                    let kind = TEL.find_kind level var in
-                    TE.add_variable_definition base_env var kind
-                      Name_mode.in_types)
-                vars base_env)
-            (TEL.variables_by_binding_time level)
-            base_env
+          TEL.fold_on_defined_vars
+            (fun var _kind base_env ->
+              if TE.mem base_env (Name.var var)
+              then base_env
+              else
+                let kind = TEL.find_kind level var in
+                TE.add_variable_definition base_env var kind Name_mode.in_types)
+            level base_env
         in
         let code_age_relation =
           Code_age_relation.union
