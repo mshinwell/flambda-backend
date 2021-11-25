@@ -33,8 +33,6 @@ val create :
   symbol_projections:Symbol_projection.t Variable.Map.t ->
   t
 
-val defined_variables_with_kinds : t -> Flambda_kind.t Variable.Map.t
-
 val equations : t -> Type_grammar.t Name.Map.t
 
 val symbol_projections : t -> Symbol_projection.t Variable.Map.t
