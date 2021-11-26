@@ -157,8 +157,13 @@ module Pair (A : Thing) (B : Thing) : Thing with type t = A.t * B.t = struct
 end
 
 module Make_map (T : Thing) (Set : Set with module T := T) = struct
+  (* CR mshinwell: this isn't producing direct calls despite [@@inline
+     available] in stdlib/map.ml *)
   include Map.Make [@inlined hint] (T)
   module Set = Set
+
+  (* Direct calls to this are important for [Renaming.is_empty]. *)
+  let is_empty = is_empty
 
   let of_list l = List.fold_left (fun map (id, v) -> add id v map) empty l
 
