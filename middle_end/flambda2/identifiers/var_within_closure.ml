@@ -23,7 +23,7 @@ type t =
         (** [name_stamp]s are unique within any given compilation unit. *)
   }
 
-module Self = Container_types.Make (struct
+module T0 = struct
   type nonrec t = t
 
   let compare t1 t2 =
@@ -52,9 +52,9 @@ module Self = Container_types.Make (struct
         t.name t.name_stamp
     end;
     Format.fprintf ppf "@<0>%s" (Flambda_colours.normal ())
-end)
+end
 
-include Self
+include Container_types.Make (T0)
 
 let equal = equal
 
