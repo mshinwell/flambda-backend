@@ -340,7 +340,7 @@ module type SeededS =
     val of_seq : (key * 'a) Seq.t -> 'a t
   end
 
-module MakeSeeded(H: SeededHashedType): (SeededS with type key = H.t) =
+module MakeSeeded  (H: SeededHashedType): (SeededS with type key = H.t) =
   struct
     type key = H.t
     type 'a hashtbl = (key, 'a) t
@@ -475,10 +475,10 @@ module MakeSeeded(H: SeededHashedType): (SeededS with type key = H.t) =
 
 module Make(H: HashedType): (S with type key = H.t) =
   struct
-    include MakeSeeded(struct
+    include (MakeSeeded[@inlined always])(struct
         type t = H.t
         let equal = H.equal
-        let hash (_seed: int) x = H.hash x
+        let[@inline always] hash (_seed: int) x = H.hash x
       end)
     let create sz = create ~random:false sz
     let of_seq i =
