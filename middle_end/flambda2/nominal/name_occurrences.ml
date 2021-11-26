@@ -732,7 +732,65 @@ let create_closure_vars clos_vars =
   in
   { empty with closure_vars }
 
-let binary_conjunction ~for_names ~for_continuations ~for_closure_vars
+let[@inline always] binary_conjunction ~for_names ~for_continuations
+    ~for_closure_vars ~for_code_ids
+    { names = names1;
+      continuations = continuations1;
+      continuations_with_traps = continuations_with_traps1;
+      continuations_in_trap_actions = continuations_in_trap_actions1;
+      closure_vars = closure_vars1;
+      code_ids = code_ids1;
+      newer_version_of_code_ids = newer_version_of_code_ids1
+    }
+    { names = names2;
+      continuations = continuations2;
+      continuations_with_traps = continuations_with_traps2;
+      continuations_in_trap_actions = continuations_in_trap_actions2;
+      closure_vars = closure_vars2;
+      code_ids = code_ids2;
+      newer_version_of_code_ids = newer_version_of_code_ids2
+    } =
+  (for_names [@inlined hint]) names1 names2
+  && (for_continuations [@inlined hint]) continuations1 continuations2
+  && (for_continuations [@inlined hint]) continuations_with_traps1
+       continuations_with_traps2
+  && (for_continuations [@inlined hint]) continuations_in_trap_actions1
+       continuations_in_trap_actions2
+  && (for_closure_vars [@inlined hint]) closure_vars1 closure_vars2
+  && (for_code_ids [@inlined hint]) code_ids1 code_ids2
+  && (for_code_ids [@inlined hint]) newer_version_of_code_ids1
+       newer_version_of_code_ids2
+
+let[@inline always] binary_disjunction ~for_names ~for_continuations
+    ~for_closure_vars ~for_code_ids
+    { names = names1;
+      continuations = continuations1;
+      continuations_with_traps = continuations_with_traps1;
+      continuations_in_trap_actions = continuations_in_trap_actions1;
+      closure_vars = closure_vars1;
+      code_ids = code_ids1;
+      newer_version_of_code_ids = newer_version_of_code_ids1
+    }
+    { names = names2;
+      continuations = continuations2;
+      continuations_with_traps = continuations_with_traps2;
+      continuations_in_trap_actions = continuations_in_trap_actions2;
+      closure_vars = closure_vars2;
+      code_ids = code_ids2;
+      newer_version_of_code_ids = newer_version_of_code_ids2
+    } =
+  (for_names [@inlined hint]) names1 names2
+  || (for_continuations [@inlined hint]) continuations1 continuations2
+  || (for_continuations [@inlined hint]) continuations_with_traps1
+       continuations_with_traps2
+  || (for_continuations [@inlined hint]) continuations_in_trap_actions1
+       continuations_in_trap_actions2
+  || (for_closure_vars [@inlined hint]) closure_vars1 closure_vars2
+  || (for_code_ids [@inlined hint]) code_ids1 code_ids2
+  || (for_code_ids [@inlined hint]) newer_version_of_code_ids1
+       newer_version_of_code_ids2
+
+let[@inline always] binary_op ~for_names ~for_continuations ~for_closure_vars
     ~for_code_ids
     { names = names1;
       continuations = continuations1;
@@ -750,72 +808,25 @@ let binary_conjunction ~for_names ~for_continuations ~for_closure_vars
       code_ids = code_ids2;
       newer_version_of_code_ids = newer_version_of_code_ids2
     } =
-  for_names names1 names2
-  && for_continuations continuations1 continuations2
-  && for_continuations continuations_with_traps1 continuations_with_traps2
-  && for_continuations continuations_in_trap_actions1
-       continuations_in_trap_actions2
-  && for_closure_vars closure_vars1 closure_vars2
-  && for_code_ids code_ids1 code_ids2
-  && for_code_ids newer_version_of_code_ids1 newer_version_of_code_ids2
-
-let binary_disjunction ~for_names ~for_continuations ~for_closure_vars
-    ~for_code_ids
-    { names = names1;
-      continuations = continuations1;
-      continuations_with_traps = continuations_with_traps1;
-      continuations_in_trap_actions = continuations_in_trap_actions1;
-      closure_vars = closure_vars1;
-      code_ids = code_ids1;
-      newer_version_of_code_ids = newer_version_of_code_ids1
-    }
-    { names = names2;
-      continuations = continuations2;
-      continuations_with_traps = continuations_with_traps2;
-      continuations_in_trap_actions = continuations_in_trap_actions2;
-      closure_vars = closure_vars2;
-      code_ids = code_ids2;
-      newer_version_of_code_ids = newer_version_of_code_ids2
-    } =
-  for_names names1 names2
-  || for_continuations continuations1 continuations2
-  || for_continuations continuations_with_traps1 continuations_with_traps2
-  || for_continuations continuations_in_trap_actions1
-       continuations_in_trap_actions2
-  || for_closure_vars closure_vars1 closure_vars2
-  || for_code_ids code_ids1 code_ids2
-  || for_code_ids newer_version_of_code_ids1 newer_version_of_code_ids2
-
-let binary_op ~for_names ~for_continuations ~for_closure_vars ~for_code_ids
-    { names = names1;
-      continuations = continuations1;
-      continuations_with_traps = continuations_with_traps1;
-      continuations_in_trap_actions = continuations_in_trap_actions1;
-      closure_vars = closure_vars1;
-      code_ids = code_ids1;
-      newer_version_of_code_ids = newer_version_of_code_ids1
-    }
-    { names = names2;
-      continuations = continuations2;
-      continuations_with_traps = continuations_with_traps2;
-      continuations_in_trap_actions = continuations_in_trap_actions2;
-      closure_vars = closure_vars2;
-      code_ids = code_ids2;
-      newer_version_of_code_ids = newer_version_of_code_ids2
-    } =
-  let names = for_names names1 names2 in
-  let continuations = for_continuations continuations1 continuations2 in
+  let names = (for_names [@inlined hint]) names1 names2 in
+  let continuations =
+    (for_continuations [@inlined hint]) continuations1 continuations2
+  in
   let continuations_with_traps =
-    for_continuations continuations_with_traps1 continuations_with_traps2
+    (for_continuations [@inlined hint]) continuations_with_traps1
+      continuations_with_traps2
   in
   let continuations_in_trap_actions =
-    for_continuations continuations_in_trap_actions1
+    (for_continuations [@inlined hint]) continuations_in_trap_actions1
       continuations_in_trap_actions2
   in
-  let closure_vars = for_closure_vars closure_vars1 closure_vars2 in
-  let code_ids = for_code_ids code_ids1 code_ids2 in
+  let closure_vars =
+    (for_closure_vars [@inlined hint]) closure_vars1 closure_vars2
+  in
+  let code_ids = (for_code_ids [@inlined hint]) code_ids1 code_ids2 in
   let newer_version_of_code_ids =
-    for_code_ids newer_version_of_code_ids1 newer_version_of_code_ids2
+    (for_code_ids [@inlined hint]) newer_version_of_code_ids1
+      newer_version_of_code_ids2
   in
   { names;
     continuations;
