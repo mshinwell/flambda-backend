@@ -475,7 +475,7 @@ module MakeSeeded  (H: SeededHashedType): (SeededS with type key = H.t) =
 
 module Make(H: HashedType): (S with type key = H.t) =
   struct
-    include (MakeSeeded[@inlined always])(struct
+    include (MakeSeeded[@inlined hint])(struct
         type t = H.t
         let equal = H.equal
         let[@inline always] hash (_seed: int) x = H.hash x
