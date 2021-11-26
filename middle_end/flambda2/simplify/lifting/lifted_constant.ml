@@ -219,27 +219,29 @@ let create_definition definition =
 
 let concat ts =
   let definitions =
-    List.fold_left (fun definitions t -> t.definitions @ definitions) [] ts
+    (List.fold_left [@unrolled 5])
+      (fun definitions t -> t.definitions @ definitions)
+      [] ts
   in
   let bound_symbols =
-    List.fold_left
+    (List.fold_left [@unrolled 5])
       (fun bound_symbols t ->
         Bound_symbols.concat t.bound_symbols bound_symbols)
       Bound_symbols.empty ts
   in
   let defining_exprs =
-    List.fold_left
+    (List.fold_left [@unrolled 5])
       (fun defining_exprs t ->
         Rebuilt_static_const.Group.concat t.defining_exprs defining_exprs)
       Rebuilt_static_const.Group.empty ts
   in
   let is_fully_static =
-    List.fold_left
+    (List.fold_left [@unrolled 5])
       (fun is_fully_static t -> t.is_fully_static && is_fully_static)
       true ts
   in
   let symbol_projections =
-    List.fold_left
+    (List.fold_left [@unrolled 5])
       (fun symbol_projections t ->
         Variable.Map.disjoint_union ~eq:Symbol_projection.equal
           t.symbol_projections symbol_projections)
