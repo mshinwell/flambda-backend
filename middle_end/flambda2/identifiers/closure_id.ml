@@ -56,6 +56,9 @@ end)
 
 include Self
 
+(* CR mshinwell: Work out why this is needed to avoid an indirect call *)
+let equal = equal
+
 module Lmap = Lmap.Make (struct
   type nonrec t = t
 

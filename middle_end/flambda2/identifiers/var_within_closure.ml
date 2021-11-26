@@ -56,6 +56,8 @@ end)
 
 include Self
 
+let equal = equal
+
 let next_stamp = ref 0
 
 let get_next_stamp () =
