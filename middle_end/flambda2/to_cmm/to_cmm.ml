@@ -1321,7 +1321,12 @@ and make_switch ~tag_discriminant env res e arms =
   (* General case *)
   | arms ->
     let n = List.length arms in
-    let max_d = List.rev arms |> List.hd |> fst in
+    let max_d =
+      List.sort
+        (fun (discr1, _) (discr2, _) -> Targetint_31_63.compare discr2 discr1)
+        arms
+      |> List.hd |> fst
+    in
     (* The transl_switch_clambda expects an index array such that index.(d) is
        the index in [cases] of the expression to execute when [e] matches
        [d]. *)
