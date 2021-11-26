@@ -622,4 +622,4 @@ module Make(Ord: OrderedType) =
             end
       in
       seq_of_enum_ (aux low s End)
-  end
+  end [@@inline available]

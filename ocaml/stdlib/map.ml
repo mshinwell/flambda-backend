@@ -538,4 +538,4 @@ module Make(Ord: OrderedType) = struct
             end
       in
       seq_of_enum_ (aux low m End)
-end
+end [@@inline available]
