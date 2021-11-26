@@ -319,7 +319,7 @@ let rebuild_non_recursive_let_cont_handler cont
      longer in scope. *)
   let uacc =
     let name_occurrences =
-      ListLabels.fold_left
+      (ListLabels.fold_left [@unrolled 20])
         (params @ EPA.extra_params extra_params_and_args)
         ~init:(UA.name_occurrences uacc)
         ~f:(fun name_occurrences param ->
