@@ -22,6 +22,8 @@ module Hashtbl = Vendored_hashtbl
 module Id = struct
   include Int
 
+  let equal (t1 : int) t2 = t1 = t2
+
   let num_empty_bottom_bits = 3
 
   let mask_selecting_top_bits = -1 lsl num_empty_bottom_bits
