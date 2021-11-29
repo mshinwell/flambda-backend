@@ -123,7 +123,7 @@ module Make(Ord: OrderedType) = struct
 
     let is_empty = function Empty -> true | _ -> false
 
-    let rec add x data = function
+    let[@inline available] rec add x data = function
         Empty ->
           Node{l=Empty; v=x; d=data; r=Empty; h=1}
       | Node {l; v; d; r; h} as m ->
@@ -137,7 +137,7 @@ module Make(Ord: OrderedType) = struct
             let rr = add x data r in
             if r == rr then m else bal l v d rr
 
-    let rec find x = function
+    let[@inline available] rec find x = function
         Empty ->
           raise Not_found
       | Node {l; v; d; r} ->
@@ -145,7 +145,7 @@ module Make(Ord: OrderedType) = struct
           if c = 0 then d
           else find x (if c < 0 then l else r)
 
-    let rec find_first_aux v0 d0 f = function
+    let[@inline available] rec find_first_aux v0 d0 f = function
         Empty ->
           (v0, d0)
       | Node {l; v; d; r} ->
@@ -154,7 +154,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_first_aux v0 d0 f r
 
-    let rec find_first f = function
+    let[@inline available] rec find_first f = function
         Empty ->
           raise Not_found
       | Node {l; v; d; r} ->
@@ -163,7 +163,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_first f r
 
-    let rec find_first_opt_aux v0 d0 f = function
+    let[@inline available] rec find_first_opt_aux v0 d0 f = function
         Empty ->
           Some (v0, d0)
       | Node {l; v; d; r} ->
@@ -172,7 +172,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_first_opt_aux v0 d0 f r
 
-    let rec find_first_opt f = function
+    let[@inline available] rec find_first_opt f = function
         Empty ->
           None
       | Node {l; v; d; r} ->
@@ -181,7 +181,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_first_opt f r
 
-    let rec find_last_aux v0 d0 f = function
+    let[@inline available] rec find_last_aux v0 d0 f = function
         Empty ->
           (v0, d0)
       | Node {l; v; d; r} ->
@@ -190,7 +190,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_last_aux v0 d0 f l
 
-    let rec find_last f = function
+    let[@inline available] rec find_last f = function
         Empty ->
           raise Not_found
       | Node {l; v; d; r} ->
@@ -199,7 +199,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_last f l
 
-    let rec find_last_opt_aux v0 d0 f = function
+    let[@inline available] rec find_last_opt_aux v0 d0 f = function
         Empty ->
           Some (v0, d0)
       | Node {l; v; d; r} ->
@@ -208,7 +208,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_last_opt_aux v0 d0 f l
 
-    let rec find_last_opt f = function
+    let[@inline available] rec find_last_opt f = function
         Empty ->
           None
       | Node {l; v; d; r} ->
@@ -217,7 +217,7 @@ module Make(Ord: OrderedType) = struct
           else
             find_last_opt f l
 
-    let rec find_opt x = function
+    let[@inline available] rec find_opt x = function
         Empty ->
           None
       | Node {l; v; d; r} ->
@@ -225,34 +225,34 @@ module Make(Ord: OrderedType) = struct
           if c = 0 then Some d
           else find_opt x (if c < 0 then l else r)
 
-    let rec mem x = function
+    let[@inline available] rec mem x = function
         Empty ->
           false
       | Node {l; v; r} ->
           let c = Ord.compare x v in
           c = 0 || mem x (if c < 0 then l else r)
 
-    let rec min_binding = function
+    let[@inline available] rec min_binding = function
         Empty -> raise Not_found
       | Node {l=Empty; v; d} -> (v, d)
       | Node {l} -> min_binding l
 
-    let rec min_binding_opt = function
+    let[@inline available] rec min_binding_opt = function
         Empty -> None
       | Node {l=Empty; v; d} -> Some (v, d)
       | Node {l}-> min_binding_opt l
 
-    let rec max_binding = function
+    let[@inline available] rec max_binding = function
         Empty -> raise Not_found
       | Node {v; d; r=Empty} -> (v, d)
       | Node {r} -> max_binding r
 
-    let rec max_binding_opt = function
+    let[@inline available] rec max_binding_opt = function
         Empty -> None
       | Node {v; d; r=Empty} -> Some (v, d)
       | Node {r} -> max_binding_opt r
 
-    let rec remove_min_binding = function
+    let[@inline available] rec remove_min_binding = function
         Empty -> invalid_arg "Map.remove_min_elt"
       | Node {l=Empty; r} -> r
       | Node {l; v; d; r} -> bal (remove_min_binding l) v d r
@@ -265,7 +265,7 @@ module Make(Ord: OrderedType) = struct
           let (x, d) = min_binding t2 in
           bal t1 x d (remove_min_binding t2)
 
-    let rec remove x = function
+    let[@inline available] rec remove x = function
         Empty ->
           Empty
       | (Node {l; v; d; r} as m) ->
@@ -276,7 +276,7 @@ module Make(Ord: OrderedType) = struct
           else
             let rr = remove x r in if r == rr then m else bal l v d rr
 
-    let rec update x f = function
+    let[@inline available] rec update x f = function
         Empty ->
           begin match f None with
           | None -> Empty
@@ -296,12 +296,12 @@ module Make(Ord: OrderedType) = struct
             let rr = update x f r in
             if r == rr then m else bal l v d rr
 
-    let rec iter f = function
+    let[@inline available] rec iter f = function
         Empty -> ()
       | Node {l; v; d; r} ->
           iter f l; f v d; iter f r
 
-    let rec map f = function
+    let[@inline available] rec map f = function
         Empty ->
           Empty
       | Node {l; v; d; r; h} ->
@@ -310,7 +310,7 @@ module Make(Ord: OrderedType) = struct
           let r' = map f r in
           Node{l=l'; v; d=d'; r=r'; h}
 
-    let rec mapi f = function
+    let[@inline available] rec mapi f = function
         Empty ->
           Empty
       | Node {l; v; d; r; h} ->
@@ -319,17 +319,17 @@ module Make(Ord: OrderedType) = struct
           let r' = mapi f r in
           Node{l=l'; v; d=d'; r=r'; h}
 
-    let rec fold f m accu =
+    let[@inline available] rec fold f m accu =
       match m with
         Empty -> accu
       | Node {l; v; d; r} ->
           fold f r (f v d (fold f l accu))
 
-    let rec for_all p = function
+    let[@inline available] rec for_all p = function
         Empty -> true
       | Node {l; v; d; r} -> p v d && for_all p l && for_all p r
 
-    let rec exists p = function
+    let[@inline available] rec exists p = function
         Empty -> false
       | Node {l; v; d; r} -> p v d || exists p l || exists p r
 
@@ -341,12 +341,12 @@ module Make(Ord: OrderedType) = struct
        respects this precondition.
     *)
 
-    let rec add_min_binding k x = function
+    let[@inline available] rec add_min_binding k x = function
       | Empty -> singleton k x
       | Node {l; v; d; r} ->
         bal (add_min_binding k x l) v d r
 
-    let rec add_max_binding k x = function
+    let[@inline available] rec add_max_binding k x = function
       | Empty -> singleton k x
       | Node {l; v; d; r} ->
         bal l v d (add_max_binding k x r)
@@ -354,7 +354,7 @@ module Make(Ord: OrderedType) = struct
     (* Same as create and bal, but no assumptions are made on the
        relative heights of l and r. *)
 
-    let rec join l v d r =
+    let[@inline available] rec join l v d r =
       match (l, r) with
         (Empty, _) -> add_min_binding v d r
       | (_, Empty) -> add_max_binding v d l
@@ -381,7 +381,7 @@ module Make(Ord: OrderedType) = struct
       | Some d -> join t1 v d t2
       | None -> concat t1 t2
 
-    let rec split x = function
+    let[@inline available] rec split x = function
         Empty ->
           (Empty, None, Empty)
       | Node {l; v; d; r} ->
@@ -392,7 +392,7 @@ module Make(Ord: OrderedType) = struct
           else
             let (lr, pres, rr) = split x r in (join l v d lr, pres, rr)
 
-    let rec merge f s1 s2 =
+    let[@inline available] rec merge f s1 s2 =
       match (s1, s2) with
         (Empty, Empty) -> Empty
       | (Node {l=l1; v=v1; d=d1; r=r1; h=h1}, _) when h1 >= height s2 ->
@@ -404,7 +404,7 @@ module Make(Ord: OrderedType) = struct
       | _ ->
           assert false
 
-    let rec union f s1 s2 =
+    let[@inline available] rec union f s1 s2 =
       match (s1, s2) with
       | (Empty, s) | (s, Empty) -> s
       | (Node {l=l1; v=v1; d=d1; r=r1; h=h1},
@@ -422,7 +422,7 @@ module Make(Ord: OrderedType) = struct
             | None -> join l v2 d2 r
             | Some d1 -> concat_or_join l v2 (f v2 d1 d2) r
 
-    let rec filter p = function
+    let[@inline available] rec filter p = function
         Empty -> Empty
       | Node {l; v; d; r} as m ->
           (* call [p] in the expected left-to-right order *)
@@ -432,7 +432,7 @@ module Make(Ord: OrderedType) = struct
           if pvd then if l==l' && r==r' then m else join l' v d r'
           else concat l' r'
 
-    let rec filter_map f = function
+    let[@inline available] rec filter_map f = function
         Empty -> Empty
       | Node {l; v; d; r} ->
           (* call [f] in the expected left-to-right order *)
@@ -444,7 +444,7 @@ module Make(Ord: OrderedType) = struct
             | None -> concat l' r'
           end
 
-    let rec partition p = function
+    let[@inline available] rec partition p = function
         Empty -> (Empty, Empty)
       | Node {l; v; d; r} ->
           (* call [p] in the expected left-to-right order *)
@@ -457,13 +457,13 @@ module Make(Ord: OrderedType) = struct
 
     type 'a enumeration = End | More of key * 'a * 'a t * 'a enumeration
 
-    let rec cons_enum m e =
+    let[@inline available] rec cons_enum m e =
       match m with
         Empty -> e
       | Node {l; v; d; r} -> cons_enum l (More(v, d, r, e))
 
     let compare cmp m1 m2 =
-      let rec compare_aux e1 e2 =
+      let[@inline available] rec compare_aux e1 e2 =
           match (e1, e2) with
           (End, End) -> 0
         | (End, _)  -> -1
@@ -477,7 +477,7 @@ module Make(Ord: OrderedType) = struct
       in compare_aux (cons_enum m1 End) (cons_enum m2 End)
 
     let equal cmp m1 m2 =
-      let rec equal_aux e1 e2 =
+      let[@inline available] rec equal_aux e1 e2 =
           match (e1, e2) with
           (End, End) -> true
         | (End, _)  -> false
@@ -487,11 +487,11 @@ module Make(Ord: OrderedType) = struct
             equal_aux (cons_enum r1 e1) (cons_enum r2 e2)
       in equal_aux (cons_enum m1 End) (cons_enum m2 End)
 
-    let rec cardinal = function
+    let[@inline available] rec cardinal = function
         Empty -> 0
       | Node {l; r} -> cardinal l + 1 + cardinal r
 
-    let rec bindings_aux accu = function
+    let[@inline available] rec bindings_aux accu = function
         Empty -> accu
       | Node {l; v; d; r} -> bindings_aux ((v, d) :: bindings_aux accu r) l
 
@@ -507,19 +507,19 @@ module Make(Ord: OrderedType) = struct
 
     let of_seq i = add_seq i empty
 
-    let rec seq_of_enum_ c () = match c with
+    let[@inline available] rec seq_of_enum_ c () = match c with
       | End -> Seq.Nil
       | More (k,v,t,rest) -> Seq.Cons ((k,v), seq_of_enum_ (cons_enum t rest))
 
     let to_seq m =
       seq_of_enum_ (cons_enum m End)
 
-    let rec snoc_enum s e =
+    let[@inline available] rec snoc_enum s e =
       match s with
         Empty -> e
       | Node{l; v; d; r} -> snoc_enum r (More(v, d, l, e))
 
-    let rec rev_seq_of_enum_ c () = match c with
+    let[@inline available] rec rev_seq_of_enum_ c () = match c with
       | End -> Seq.Nil
       | More (k,v,t,rest) ->
           Seq.Cons ((k,v), rev_seq_of_enum_ (snoc_enum t rest))
@@ -528,7 +528,7 @@ module Make(Ord: OrderedType) = struct
       rev_seq_of_enum_ (snoc_enum c End)
 
     let to_seq_from low m =
-      let rec aux low m c = match m with
+      let[@inline available] rec aux low m c = match m with
         | Empty -> c
         | Node {l; v; d; r; _} ->
             begin match Ord.compare v low with

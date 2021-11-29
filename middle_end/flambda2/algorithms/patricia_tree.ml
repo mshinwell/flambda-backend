@@ -70,7 +70,7 @@ struct
 
   let singleton i = Leaf i
 
-  let rec mem i = function
+  let[@inline available] rec mem i = function
     | Empty -> false
     | Leaf j -> j = i
     | Branch (prefix, bit, t0, t1) ->
@@ -93,7 +93,7 @@ struct
     else Branch (mask prefix0 bit, bit, t1, t0)
 
   (* CR mshinwell: This is now [add_or_replace] *)
-  let rec add i = function
+  let[@inline available] rec add i = function
     | Empty -> Leaf i
     | Leaf j as t -> if i = j then Leaf i else join i (Leaf i) j t
     | Branch (prefix, bit, t0, t1) as t ->
@@ -104,7 +104,7 @@ struct
         else Branch (prefix, bit, t0, add i t1)
       else join i (Leaf i) prefix t
 
-  let rec remove i = function
+  let[@inline available] rec remove i = function
     | Empty -> Empty
     | Leaf j as t -> if i = j then Empty else t
     | Branch (prefix, bit, t0, t1) as t ->
@@ -115,7 +115,7 @@ struct
         else branch prefix bit t0 (remove i t1)
       else t
 
-  let rec union t0 t1 =
+  let[@inline available] rec union t0 t1 =
     match t0, t1 with
     | Empty, _ -> t1
     | _, Empty -> t0
@@ -150,7 +150,7 @@ struct
         else branch prefix1 bit1 t10 (union t0 t11)
       else join prefix0 t0 prefix1 t1
 
-  let rec subset t0 t1 =
+  let[@inline available] rec subset t0 t1 =
     match t0, t1 with
     | Empty, _ -> true
     | _, Empty -> false
@@ -163,7 +163,7 @@ struct
       then if zero_bit prefix0 bit1 then subset t0 t10 else subset t0 t11
       else false
 
-  let rec intersection_is_empty t0 t1 =
+  let[@inline available] rec intersection_is_empty t0 t1 =
     match t0, t1 with
     | Empty, _ -> true
     | _, Empty -> true
@@ -184,7 +184,7 @@ struct
         else intersection_is_empty t0 t11
       else true
 
-  let rec inter t0 t1 =
+  let[@inline available] rec inter t0 t1 =
     match t0, t1 with
     | Empty, _ -> Empty
     | _, Empty -> Empty
@@ -199,7 +199,7 @@ struct
       then if zero_bit prefix0 bit1 then inter t0 t10 else inter t0 t11
       else Empty
 
-  let rec diff t0 t1 =
+  let[@inline available] rec diff t0 t1 =
     match t0, t1 with
     | Empty, _ -> Empty
     | _, Empty -> t0
@@ -217,36 +217,36 @@ struct
       then if zero_bit prefix0 bit1 then diff t0 t10 else diff t0 t11
       else t0
 
-  let rec cardinal = function
+  let[@inline available] rec cardinal = function
     | Empty -> 0
     | Leaf _ -> 1
     | Branch (_, _, t0, t1) -> cardinal t0 + cardinal t1
 
-  let rec iter f = function
+  let[@inline available] rec iter f = function
     | Empty -> ()
     | Leaf elt -> f elt
     | Branch (_, _, t0, t1) ->
       iter f t0;
       iter f t1
 
-  let rec fold f t acc =
+  let[@inline available] rec fold f t acc =
     match t with
     | Empty -> acc
     | Leaf elt -> f elt acc
     | Branch (_, _, t0, t1) -> fold f t0 (fold f t1 acc)
 
-  let rec for_all p = function
+  let[@inline available] rec for_all p = function
     | Empty -> true
     | Leaf elt -> p elt
     | Branch (_, _, t0, t1) -> for_all p t0 && for_all p t1
 
-  let rec exists p = function
+  let[@inline available] rec exists p = function
     | Empty -> false
     | Leaf elt -> p elt
     | Branch (_, _, t0, t1) -> exists p t0 || exists p t1
 
   let filter p t =
-    let rec loop p acc = function
+    let[@inline available] rec loop p acc = function
       | Empty -> acc
       | Leaf i -> if p i then add i acc else acc
       | Branch (_, _, t0, t1) -> loop p (loop p acc t0) t1
@@ -254,7 +254,7 @@ struct
     loop p Empty t
 
   let filter_map f t =
-    let rec loop f acc = function
+    let[@inline available] rec loop f acc = function
       | Empty -> acc
       | Leaf i -> begin match f i with None -> acc | Some j -> add j acc end
       | Branch (_, _, t0, t1) -> loop f (loop f acc t0) t1
@@ -262,14 +262,14 @@ struct
     loop f Empty t
 
   let partition p t =
-    let rec loop ((true_, false_) as acc) = function
+    let[@inline available] rec loop ((true_, false_) as acc) = function
       | Empty -> acc
       | Leaf i -> if p i then add i true_, false_ else true_, add i false_
       | Branch (_, _, t0, t1) -> loop (loop acc t0) t1
     in
     loop (Empty, Empty) t
 
-  let rec choose = function
+  let[@inline available] rec choose = function
     | Empty -> raise Not_found
     | Leaf key -> key
     | Branch (_, _, t0, _) -> choose t0
@@ -278,7 +278,7 @@ struct
     match choose t with exception Not_found -> None | choice -> Some choice
 
   let elements t =
-    let rec loop acc = function
+    let[@inline available] rec loop acc = function
       | Empty -> acc
       | Leaf i -> i :: acc
       | Branch (_, _, t0, t1) -> loop (loop acc t0) t1
@@ -286,7 +286,7 @@ struct
     loop [] t
 
   let min_elt t =
-    let rec loop = function
+    let[@inline available] rec loop = function
       | Empty -> raise Not_found
       | Leaf i -> i
       | Branch (_, _, t0, t1) ->
@@ -300,7 +300,7 @@ struct
     match min_elt t with exception Not_found -> None | min -> Some min
 
   let max_elt t =
-    let rec loop = function
+    let[@inline available] rec loop = function
       | Empty -> raise Not_found
       | Leaf i -> i
       | Branch (_, _, t0, t1) ->
@@ -313,7 +313,7 @@ struct
   let max_elt_opt t =
     match max_elt t with exception Not_found -> None | max -> Some max
 
-  let rec equal t0 t1 =
+  let[@inline available] rec equal t0 t1 =
     if t0 == t1
     then true
     else
@@ -326,7 +326,7 @@ struct
         else false
       | _, _ -> false
 
-  let rec compare t0 t1 =
+  let[@inline available] rec compare t0 t1 =
     match t0, t1 with
     | Empty, Empty -> 0
     | Leaf i, Leaf j -> if i = j then 0 else if i < j then -1 else 1
@@ -345,7 +345,7 @@ struct
     | Branch _, Leaf _ -> -1
 
   let split i t =
-    let rec loop ((lt, present, gt) as acc) = function
+    let[@inline available] rec loop ((lt, present, gt) as acc) = function
       | Empty -> acc
       | Leaf j ->
         if i = j
@@ -371,7 +371,7 @@ struct
     match t with Empty | Branch _ -> None | Leaf elt -> Some elt
 
   let to_seq t =
-    let rec aux acc () =
+    let[@inline available] rec aux acc () =
       match acc with
       | [] -> Seq.Nil
       | t0 :: r -> begin
@@ -411,7 +411,7 @@ struct
 
   let map f t = fold (fun elt acc -> add (f elt) acc) t empty
 
-  let rec union_list ts =
+  let[@inline available] rec union_list ts =
     match ts with [] -> empty | t :: ts -> union t (union_list ts)
 
   let disjoint _ _ = Misc.fatal_error "disjoint not yet implemented"
@@ -467,7 +467,7 @@ struct
     match t with Empty -> true | Leaf _ -> false | Branch _ -> false
 
   let print_debug print_datum ppf t =
-    let rec pp ppf t =
+    let[@inline available] rec pp ppf t =
       match t with
       | Empty -> Format.pp_print_string ppf "()"
       | Leaf (k, v) -> Format.fprintf ppf "@[<hv 1>(%x@ %a)@]" k print_datum v
@@ -497,7 +497,7 @@ struct
     let c = compare bit0 bit1 in
     if c = 0 then compare prefix0 prefix1 else c
 
-  let rec mem i = function
+  let[@inline available] rec mem i = function
     | Empty -> false
     | Leaf (j, _) -> j = i
     | Branch (prefix, bit, t0, t1) ->
@@ -514,7 +514,7 @@ struct
     else branch (mask prefix0 bit) bit t1 t0
 
   (* CR mshinwell: This is now [add_or_replace], like [Map] *)
-  let rec add i d = function
+  let[@inline available] rec add i d = function
     | Empty -> leaf i d
     | Leaf (j, _) as t -> if i = j then leaf i d else join i (leaf i d) j t
     | Branch (prefix, bit, t0, t1) as t ->
@@ -525,7 +525,7 @@ struct
         else branch_non_empty prefix bit t0 (add i d t1)
       else join i (leaf i d) prefix t
 
-  let rec replace key f = function
+  let[@inline available] rec replace key f = function
     | Empty -> empty
     | Leaf (key', datum) as t ->
       if key = key'
@@ -541,7 +541,7 @@ struct
         else branch_non_empty prefix bit t0 (replace key f t1)
       else t
 
-  let rec update key f = function
+  let[@inline available] rec update key f = function
     | Empty -> begin
       match f None with None -> empty | Some datum -> leaf key datum
     end
@@ -564,7 +564,7 @@ struct
         | None -> t
         | Some datum -> join key (leaf key datum) prefix t)
 
-  let rec remove i = function
+  let[@inline available] rec remove i = function
     | Empty -> empty
     | Leaf (j, _) as t -> if i = j then empty else t
     | Branch (prefix, bit, t0, t1) as t ->
@@ -578,7 +578,7 @@ struct
   (* CR mshinwell: Provide a [union] where [f] doesn't return an [option]. *)
   (* CR pchambart: union x x is expensive, while it could be O(1). This would
      require that we demand f x x = x *)
-  let rec union f t0 t1 =
+  let[@inline available] rec union f t0 t1 =
     match t0, t1 with
     | Empty, _ -> t1
     | _, Empty -> t0
@@ -622,7 +622,7 @@ struct
 
   (* CR mshinwell: rename to subset_domain and inter_domain? *)
 
-  let rec subset t0 t1 =
+  let[@inline available] rec subset t0 t1 =
     match t0, t1 with
     | Empty, _ -> true
     | _, Empty -> false
@@ -635,7 +635,7 @@ struct
       then if zero_bit prefix0 bit1 then subset t0 t10 else subset t0 t11
       else false
 
-  let rec inter_domains t0 t1 =
+  let[@inline available] rec inter_domains t0 t1 =
     match t0, t1 with
     | Empty, _ -> empty
     | _, Empty -> empty
@@ -656,7 +656,7 @@ struct
         else inter_domains t0 t11
       else empty
 
-  let rec find i = function
+  let[@inline available] rec find i = function
     | Empty -> raise Not_found
     | Leaf (j, d) -> if j = i then d else raise Not_found
     | Branch (prefix, bit, t0, t1) ->
@@ -666,7 +666,7 @@ struct
       then find i t0
       else find i t1
 
-  let rec inter f t0 t1 =
+  let[@inline available] rec inter f t0 t1 =
     match t0, t1 with
     | Empty, _ -> empty
     | _, Empty -> empty
@@ -689,7 +689,7 @@ struct
       then if zero_bit prefix0 bit1 then inter f t0 t10 else inter f t0 t11
       else empty
 
-  let rec inter_domain_is_non_empty t0 t1 =
+  let[@inline available] rec inter_domain_is_non_empty t0 t1 =
     match t0, t1 with
     | Empty, _ | _, Empty -> false
     | Leaf (i, _), _ -> mem i t1
@@ -710,7 +710,7 @@ struct
         else inter_domain_is_non_empty t0 t11
       else false
 
-  let rec diff t0 t1 =
+  let[@inline available] rec diff t0 t1 =
     match t0, t1 with
     | Empty, _ -> empty
     | _, Empty -> t0
@@ -728,36 +728,36 @@ struct
       then if zero_bit prefix0 bit1 then diff t0 t10 else diff t0 t11
       else t0
 
-  let rec cardinal = function
+  let[@inline available] rec cardinal = function
     | Empty -> 0
     | Leaf _ -> 1
     | Branch (_, _, t0, t1) -> cardinal t0 + cardinal t1
 
-  let rec iter f = function
+  let[@inline available] rec iter f = function
     | Empty -> ()
     | Leaf (key, d) -> f key d
     | Branch (_, _, t0, t1) ->
       iter f t0;
       iter f t1
 
-  let rec fold f t acc =
+  let[@inline available] rec fold f t acc =
     match t with
     | Empty -> acc
     | Leaf (key, d) -> f key d acc
     | Branch (_, _, t0, t1) -> fold f t0 (fold f t1 acc)
 
-  let rec for_all p = function
+  let[@inline available] rec for_all p = function
     | Empty -> true
     | Leaf (key, d) -> p key d
     | Branch (_, _, t0, t1) -> for_all p t0 && for_all p t1
 
-  let rec exists p = function
+  let[@inline available] rec exists p = function
     | Empty -> false
     | Leaf (key, d) -> p key d
     | Branch (_, _, t0, t1) -> exists p t0 || exists p t1
 
   let filter p t =
-    let rec loop acc = function
+    let[@inline available] rec loop acc = function
       | Empty -> acc
       | Leaf (i, d) -> if p i d then add i d acc else acc
       | Branch (_, _, t0, t1) -> loop (loop acc t0) t1
@@ -765,7 +765,7 @@ struct
     loop empty t
 
   let partition p t =
-    let rec loop ((true_, false_) as acc) = function
+    let[@inline available] rec loop ((true_, false_) as acc) = function
       | Empty -> acc
       | Leaf (i, d) ->
         if p i d then add i d true_, false_ else true_, add i d false_
@@ -773,7 +773,7 @@ struct
     in
     loop (empty, empty) t
 
-  let rec choose = function
+  let[@inline available] rec choose = function
     | Empty -> raise Not_found
     | Leaf (key, d) -> key, d
     | Branch (_, _, t0, _) -> choose t0
@@ -782,7 +782,7 @@ struct
     match choose t with exception Not_found -> None | choice -> Some choice
 
   let elements t =
-    let rec loop acc = function
+    let[@inline available] rec loop acc = function
       | Empty -> acc
       | Leaf (_, d) -> d :: acc
       | Branch (_, _, t0, t1) -> loop (loop acc t0) t1
@@ -790,7 +790,7 @@ struct
     loop [] t
 
   let min_binding t =
-    let rec loop = function
+    let[@inline available] rec loop = function
       | Empty -> raise Not_found
       | Leaf (i, d) -> i, d
       | Branch (_, _, t0, t1) ->
@@ -804,7 +804,7 @@ struct
     match min_binding t with exception Not_found -> None | min -> Some min
 
   let max_binding t =
-    let rec loop = function
+    let[@inline available] rec loop = function
       | Empty -> raise Not_found
       | Leaf (i, d) -> i, d
       | Branch (_, _, t0, t1) ->
@@ -817,7 +817,7 @@ struct
   let max_binding_opt t =
     match max_binding t with exception Not_found -> None | max -> Some max
 
-  let rec equal f t0 t1 =
+  let[@inline available] rec equal f t0 t1 =
     if t0 == t1
     then true
     else
@@ -830,7 +830,7 @@ struct
         else false
       | _, _ -> false
 
-  let rec compare f t0 t1 =
+  let[@inline available] rec compare f t0 t1 =
     match t0, t1 with
     | Empty, Empty -> 0
     | Leaf (i, d0), Leaf (j, d1) ->
@@ -851,7 +851,7 @@ struct
     | Branch _, Leaf _ -> -1
 
   let split i t =
-    let rec loop ((lt, mem, gt) as acc) = function
+    let[@inline available] rec loop ((lt, mem, gt) as acc) = function
       | Empty -> acc
       | Leaf (j, d) ->
         if i = j
@@ -863,7 +863,7 @@ struct
     in
     loop (empty, None, empty) t
 
-  let rec bindings_aux acc t =
+  let[@inline available] rec bindings_aux acc t =
     match t with
     | Empty -> acc
     | Leaf (key, d) -> (key, d) :: acc
@@ -872,7 +872,7 @@ struct
   let bindings s =
     List.sort (fun (id1, _) (id2, _) -> Int.compare id1 id2) (bindings_aux [] s)
 
-  let rec merge' :
+  let[@inline available] rec merge' :
       type a b c. (key -> a option -> b option -> c option) -> a t -> b t -> c t
       =
    fun f t0 t1 ->
@@ -958,13 +958,13 @@ struct
   let get_singleton_exn _ =
     Misc.fatal_error "get_singleton_exn not yet implemented"
 
-  let rec map f t =
+  let[@inline available] rec map f t =
     match t with
     | Empty -> empty
     | Leaf (k, datum) -> leaf k (f datum)
     | Branch (prefix, bit, t0, t1) -> branch prefix bit (map f t0) (map f t1)
 
-  let rec map_sharing f t =
+  let[@inline available] rec map_sharing f t =
     match t with
     | Empty -> t
     | Leaf (k, v) ->
@@ -975,14 +975,14 @@ struct
       let t1' = map_sharing f t1 in
       if t0' == t0 && t1' == t1 then t else branch prefix bit t0' t1'
 
-  let rec mapi f t =
+  let[@inline available] rec mapi f t =
     match t with
     | Empty -> empty
     | Leaf (key, datum) -> leaf key (f key datum)
     | Branch (prefix, bit, t0, t1) -> branch prefix bit (mapi f t0) (mapi f t1)
 
   let to_seq t =
-    let rec aux acc () =
+    let[@inline available] rec aux acc () =
       match acc with
       | [] -> Seq.Nil
       | t0 :: r -> begin
