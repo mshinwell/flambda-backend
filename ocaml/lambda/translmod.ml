@@ -114,6 +114,9 @@ and apply_coercion_result loc strict funct params args cc_res =
     apply_coercion_result loc strict funct
       ((param, Pgenval) :: params) (arg :: args) cc_res
   | _ ->
+      let ap_inlined =
+        if Config.flambda2 then Always_inlined else Default_inlined
+      in
       name_lambda strict funct
         (fun id ->
            Lfunction
@@ -132,7 +135,7 @@ and apply_coercion_result loc strict funct params args cc_res =
                       ap_func=Lvar id;
                       ap_args=List.rev args;
                       ap_tailcall=Default_tailcall;
-                      ap_inlined=Default_inlined;
+                      ap_inlined;
                       ap_specialised=Default_specialise;
                       ap_probe=None;
                     })})
