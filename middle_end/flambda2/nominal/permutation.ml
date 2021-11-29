@@ -80,14 +80,17 @@ module Make (N : Container_types.S) = struct
   let pre_swap t n1 n2 = flip (post_swap (flip t) n1 n2)
 
   let[@inline available] rec compose ~second ~first =
-    match N.Map.choose second.forwards with
-    | exception Not_found ->
-      invariant first;
-      first
-    | n1, n2 ->
-      let first = post_swap first n1 n2 in
-      let second = pre_swap second n1 n2 in
-      compose ~second ~first
+    if N.Map.is_empty first.forwards
+    then second
+    else
+      match N.Map.choose second.forwards with
+      | exception Not_found ->
+        invariant first;
+        first
+      | n1, n2 ->
+        let first = post_swap first n1 n2 in
+        let second = pre_swap second n1 n2 in
+        compose ~second ~first
 
   let compose_one ~first n1 n2 = post_swap first n1 n2
 
