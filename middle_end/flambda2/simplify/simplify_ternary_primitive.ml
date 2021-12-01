@@ -27,4 +27,4 @@ let simplify_ternary_primitive dacc (prim : P.ternary_primitive) ~arg1
     let named = Named.create_prim prim dbg in
     let ty = T.unknown (P.result_kind' prim) in
     let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.reachable named, env_extension, [arg1; arg2; arg3], dacc
+    Simplified_named.reachable named, env_extension, dacc

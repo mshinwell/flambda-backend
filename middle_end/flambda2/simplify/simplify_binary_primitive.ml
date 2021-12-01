@@ -920,9 +920,57 @@ module Binary_int_eq_comp_int64 =
 module Binary_int_eq_comp_nativeint =
   Binary_arith_like (Int_ops_for_binary_eq_comp_nativeint)
 
-let simplify_immutable_block_load (access_kind : P.Block_access_kind.t)
-    ~min_name_mode dacc ~original_term _dbg ~arg1:_ ~arg1_ty:block_ty ~arg2:_
-    ~arg2_ty:index_ty ~result_var =
+(* General notes about symbol projections (also applicable to [Project_var]):
+
+   Projections from symbols bound to variables are important to remember, since
+   if such a variable occurs in a set of closures environment or other value
+   that can potentially be lifted, the knowledge that the variable is equal to a
+   symbol projection can make the difference between being able to lift and not
+   being able to lift. We try to avoid recording symbol projections whose answer
+   is known (in particular the answer is a symbol or a constant), since such
+   symbol projection knowledge doesn't affect lifting decisions.
+
+   We only need to record a projection if the defining expression remains as a
+   [Prim]. In particular if the defining expression simplified to a variable
+   (via the [Simple] constructor), then in the event that the variable is itself
+   a symbol projection, the environment will already know this fact.
+
+   We don't need to record a projection if we are currently at toplevel, since
+   any variable involved in a constant to be lifted from that position will also
+   be at toplevel. *)
+let record_any_symbol_projection_for_block_load dacc ~result_var ~block ~index =
+  let module SP = Symbol_projection in
+  if DE.at_unit_toplevel (DA.denv dacc)
+  then dacc
+  else
+    (* The [args] being queried here are the post-simplification arguments of
+       the primitive, so we can directly read off whether they are symbols or
+       constants, as needed. *)
+    Simple.pattern_match index
+      ~const:(fun const ->
+        match Reg_width_const.descr const with
+        | Tagged_immediate imm ->
+          Simple.pattern_match' block
+            ~const:(fun _ -> dacc)
+            ~symbol:(fun symbol_projected_from ~coercion:_ ->
+              let index = Targetint_31_63.to_targetint imm in
+              let proj =
+                SP.create symbol_projected_from
+                  (SP.Projection.block_load ~index)
+              in
+              let var = Bound_var.var result_var in
+              DA.map_denv dacc ~f:(fun denv ->
+                  DE.add_symbol_projection denv var proj))
+            ~var:(fun _ ~coercion:_ -> dacc)
+        | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+        | Naked_nativeint _ ->
+          Misc.fatal_errorf "Kind error for [Block_load] of %a at index %a"
+            Simple.print block Simple.print index)
+      ~name:(fun _ ~coercion:_ -> dacc)
+
+let[@inline always] simplify_immutable_block_load0
+    (access_kind : P.Block_access_kind.t) ~min_name_mode dacc ~original_term
+    _dbg ~arg1:_ ~arg1_ty:block_ty ~arg2:_ ~arg2_ty:index_ty ~result_var =
   let result_kind =
     match access_kind with
     | Values _ -> K.value
@@ -1000,6 +1048,18 @@ let simplify_immutable_block_load (access_kind : P.Block_access_kind.t)
           (T.immutable_block_with_size_at_least ~tag ~n ~field_kind:result_kind
              ~field_n_minus_one:result_var')
         ~result_var ~result_kind)
+
+let simplify_immutable_block_load access_kind ~min_name_mode dacc ~original_term
+    dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
+  let reachable, env_extension, dacc =
+    simplify_immutable_block_load0 access_kind ~min_name_mode dacc
+      ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
+  in
+  let dacc =
+    record_any_symbol_projection_for_block_load dacc ~result_var ~block:arg1
+      ~index:arg2
+  in
+  reachable, env_extension, dacc
 
 let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
     ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
@@ -1125,8 +1185,19 @@ let simplify_binary_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg1_ty
     | Float_arith op -> Binary_float_arith.simplify op
     | Float_comp op -> Binary_float_comp.simplify op
     | Phys_equal (kind, op) -> simplify_phys_equal op kind
-    | Block_load _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
-      ->
+    | Block_load _ ->
+      fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
+          ~result_var:_ ->
+        let prim : P.t = Binary (prim, arg1, arg2) in
+        let named = Named.create_prim prim dbg in
+        let ty = T.unknown (P.result_kind' prim) in
+        let env_extension = TEE.one_equation (Name.var result_var') ty in
+        let dacc =
+          record_any_symbol_projection_for_block_load dacc ~result_var
+            ~block:arg1 ~index:arg2
+        in
+        Simplified_named.reachable named, env_extension, dacc
+    | Array_load _ | String_or_bigstring_load _ | Bigarray_load _ ->
       fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
           ~result_var:_ ->
         let prim : P.t = Binary (prim, arg1, arg2) in
@@ -1138,4 +1209,4 @@ let simplify_binary_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg1_ty
   let reachable, env_extension, dacc =
     simplifier dacc ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
   in
-  reachable, env_extension, [arg1; arg2], dacc
+  reachable, env_extension, dacc

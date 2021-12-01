@@ -18,106 +18,6 @@
 
 open! Simplify_import
 
-let record_any_symbol_projection dacc (defining_expr : Simplified_named.t)
-    (prim : P.t) args bound_pattern ~bound_var named =
-  (* Projections from symbols bound to variables are important to remember,
-     since if such a variable occurs in a set of closures environment or other
-     value that can potentially be lifted, the knowledge that the variable is
-     equal to a symbol projection can make the difference between being able to
-     lift and not being able to lift. We try to avoid recording symbol
-     projections whose answer is known (in particular the answer is a symbol or
-     a constant), since such symbol projection knowledge doesn't affect lifting
-     decisions. *)
-  let can_record_proj =
-    (* We only need to record a projection if the defining expression remains as
-       a [Prim]. In particular if the defining expression simplified to a
-       variable (via the [Simple] constructor), then in the event that the
-       variable is itself a symbol projection, the environment will already know
-       this fact.
-
-       We don't need to record a projection if we are currently at toplevel,
-       since any variable involved in a constant to be lifted from that position
-       will also be at toplevel. *)
-    (not (DE.at_unit_toplevel (DA.denv dacc)))
-    &&
-    match defining_expr with
-    | Reachable { named = Prim _; _ } -> true
-    | Reachable { named = Simple _ | Set_of_closures _ | Rec_info _; _ }
-    | Invalid _ ->
-      false
-  in
-  let proj =
-    let module SP = Symbol_projection in
-    (* The [args] being queried here are the post-simplification arguments of
-       the primitive, so we can directly read off whether they are symbols or
-       constants, as needed. *)
-    match prim with
-    | Nullary (Optimised_out _) | Nullary (Probe_is_enabled _) -> None
-    | Unary (Project_var { project_from; var }, _) when can_record_proj -> begin
-      match args with
-      | [closure] ->
-        Simple.pattern_match' closure
-          ~const:(fun _ -> None)
-          ~symbol:(fun symbol_projected_from ~coercion:_ ->
-            Some
-              (SP.create symbol_projected_from
-                 (SP.Projection.project_var project_from var)))
-          ~var:(fun _ ~coercion:_ -> None)
-      | [] | _ :: _ ->
-        Misc.fatal_errorf "Expected one argument:@ %a@ =@ %a"
-          Bound_pattern.print bound_pattern Named.print named
-    end
-    | Binary (Block_load _, _, _) when can_record_proj -> begin
-      match args with
-      | [block; index] ->
-        Simple.pattern_match index
-          ~const:(fun const ->
-            match Reg_width_const.descr const with
-            | Tagged_immediate imm ->
-              Simple.pattern_match' block
-                ~const:(fun _ -> None)
-                ~symbol:(fun symbol_projected_from ~coercion:_ ->
-                  let index = Targetint_31_63.to_targetint imm in
-                  Some
-                    (SP.create symbol_projected_from
-                       (SP.Projection.block_load ~index)))
-                ~var:(fun _ ~coercion:_ -> None)
-            | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-            | Naked_nativeint _ ->
-              Misc.fatal_errorf "Kind error for [Block_load] index:@ %a@ =@ %a"
-                Bound_pattern.print bound_pattern Named.print named)
-          ~name:(fun _ ~coercion:_ -> None)
-      | [] | _ :: _ ->
-        Misc.fatal_errorf "Expected two arguments:@ %a@ =@ %a"
-          Bound_pattern.print bound_pattern Named.print named
-    end
-    | Unary
-        ( ( Duplicate_block _ | Duplicate_array _ | Is_int | Get_tag
-          | Array_length _ | Bigarray_length _ | String_length _
-          | Int_as_pointer | Opaque_identity | Int_arith _ | Float_arith _
-          | Num_conv _ | Boolean_not | Reinterpret_int64_as_float
-          | Unbox_number _ | Box_number _ | Select_closure _ | Project_var _ ),
-          _ )
-    | Binary
-        ( ( Block_load _ | Array_load _ | String_or_bigstring_load _
-          | Bigarray_load _ | Phys_equal _ | Int_arith _ | Int_shift _
-          | Int_comp _ | Float_arith _ | Float_comp _ ),
-          _,
-          _ )
-    | Ternary
-        ( (Block_set _ | Array_set _ | Bytes_or_bigstring_set _ | Bigarray_set _),
-          _,
-          _,
-          _ )
-    | Variadic ((Make_block _ | Make_array _), _) ->
-      None
-  in
-  match proj with
-  | None -> dacc
-  | Some proj ->
-    let var = Bound_var.var bound_var in
-    DA.map_denv dacc ~f:(fun denv -> DE.add_symbol_projection denv var proj)
-
 let create_lifted_constant (dacc, lifted_constants)
     (pat : Bound_symbols.Pattern.t) static_const =
   match pat with
@@ -189,7 +89,7 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       defining_expr ~original_defining_expr:named
   | Prim (prim, dbg) ->
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
-    let term, env_extension, simplified_args, dacc =
+    let term, env_extension, dacc =
       (* [simplified_args] has to be returned from [simplify_primitive] because
          in at least one case (for [Project_var]), the simplifier may return
          something other than a [Prim] as the [term]. However we need the
@@ -229,10 +129,6 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       if T.is_bottom (DA.typing_env dacc) ty
       then Simplified_named.invalid ()
       else defining_expr
-    in
-    let dacc =
-      record_any_symbol_projection dacc defining_expr prim simplified_args
-        bound_pattern ~bound_var named
     in
     Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
       defining_expr ~original_defining_expr:named

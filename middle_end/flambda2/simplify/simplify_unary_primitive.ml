@@ -68,7 +68,7 @@ let simplify_select_closure ~move_from ~move_to dacc ~original_term ~arg:closure
     ~result_var ~result_kind:K.value
 
 let simplify_project_var closure_id closure_element ~min_name_mode dacc
-    ~original_term ~arg:_closure ~arg_ty:closure_ty ~result_var =
+    ~original_term ~arg:closure ~arg_ty:closure_ty ~result_var =
   let result_var' = Bound_var.var result_var in
   let typing_env = DA.typing_env dacc in
   match
@@ -106,6 +106,22 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
           (T.closure_with_at_least_this_closure_var ~this_closure:closure_id
              closure_element ~closure_element_var:(Bound_var.var result_var))
         ~result_var ~result_kind:K.value
+    in
+    let dacc =
+      (* See comments on the [Block_load] cases in [Simplify_binary_primitive]
+         that explain what is going on with symbol projections. *)
+      let module SP = Symbol_projection in
+      Simple.pattern_match' closure
+        ~const:(fun _ -> dacc)
+        ~symbol:(fun symbol_projected_from ~coercion:_ ->
+          let proj =
+            SP.create symbol_projected_from
+              (SP.Projection.project_var closure_id closure_element)
+          in
+          let var = Bound_var.var result_var in
+          DA.map_denv dacc ~f:(fun denv ->
+              DE.add_symbol_projection denv var proj))
+        ~var:(fun _ ~coercion:_ -> dacc)
     in
     reachable, env_extension, DA.add_use_of_closure_var dacc closure_element
 
@@ -503,4 +519,4 @@ let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
   let reachable, env_extension, dacc =
     simplifier dacc ~original_term ~arg ~arg_ty ~result_var
   in
-  reachable, env_extension, [arg], dacc
+  reachable, env_extension, dacc
