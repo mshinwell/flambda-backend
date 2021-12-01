@@ -56,27 +56,27 @@ let simplify_select_closure ~move_from ~move_to ~min_name_mode dacc
   (* Format.eprintf "Select_closure %a -> %a, closure type:@ %a@ dacc:@ %a\n%!"
      Closure_id.print move_from Closure_id.print move_to T.print closure_ty
      DA.print dacc; *)
-  let result_var' = Bound_var.var result_var in
   let typing_env = DA.typing_env dacc in
   match
     T.prove_select_closure_simple typing_env ~min_name_mode closure_ty move_to
   with
   | Invalid ->
     let ty = T.bottom K.value in
-    let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.invalid (), env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.invalid (), dacc
   | Proved simple ->
-    let reachable = Simplified_named.reachable (Named.create_simple simple) in
-    let env_extension =
-      TEE.one_equation (Name.var result_var') (T.alias_type_of K.value simple)
+    let reachable =
+      Simplified_named.reachable (Named.create_simple simple) ~try_reify:false
     in
-    reachable, env_extension, dacc
+    let dacc =
+      DA.add_variable dacc result_var (T.alias_type_of K.value simple)
+    in
+    reachable, dacc
   | Unknown ->
-    let result = Simple.var (Bound_var.var result_var) in
     let closures =
       Closure_id.Map.empty
       |> Closure_id.Map.add move_from closure
-      |> Closure_id.Map.add move_to result
+      |> Closure_id.Map.add move_to (Simple.var (Bound_var.var result_var))
     in
     Simplify_common.simplify_projection dacc ~original_term
       ~deconstructing:closure_ty
