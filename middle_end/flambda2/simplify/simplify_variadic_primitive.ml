@@ -24,8 +24,8 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
   let args, _arg_tys = List.split args_with_tys in
   let invalid () =
     let ty = T.bottom K.value in
-    let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.invalid (), env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.invalid (), dacc
   in
   if List.compare_lengths shape args <> 0
   then
@@ -65,8 +65,8 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
         T.immutable_block ~is_unique:true tag ~field_kind:K.value ~fields
       | Mutable -> T.any_value
     in
-    let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.reachable term, env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable term, dacc
   end
 
 let simplify_make_block_of_floats dacc _prim dbg
@@ -75,8 +75,8 @@ let simplify_make_block_of_floats dacc _prim dbg
   let args = List.map fst args_with_tys in
   let invalid () =
     let ty = T.bottom K.value in
-    let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.invalid (), env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.invalid (), dacc
   in
   (* CR mshinwell: This could probably be done more neatly. *)
   let found_bottom = ref false in
@@ -109,19 +109,18 @@ let simplify_make_block_of_floats dacc _prim dbg
         T.immutable_block ~is_unique:true tag ~field_kind:K.naked_float ~fields
       | Mutable -> T.any_value
     in
-    let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.reachable term, env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable term, dacc
 
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
-  let result_var' = Bound_var.var result_var in
   match prim with
   | Make_block (Values (tag, shape), mutable_or_immutable) ->
     simplify_make_block_of_values dacc prim dbg tag ~shape ~mutable_or_immutable
-      args_with_tys ~result_var:result_var'
+      args_with_tys ~result_var
   | Make_block (Naked_floats, mutable_or_immutable) ->
     simplify_make_block_of_floats dacc prim dbg ~mutable_or_immutable
-      args_with_tys ~result_var:result_var'
+      args_with_tys ~result_var
   | Make_array _ ->
     (* CR mshinwell: The typing here needs to be improved *)
     let args, _tys = List.split args_with_tys in
@@ -132,5 +131,5 @@ let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
       | None -> T.unknown K.value
     in
     let ty = T.array_of_length ~length in
-    let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.reachable named, env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable named, dacc

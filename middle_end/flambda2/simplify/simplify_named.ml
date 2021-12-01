@@ -89,18 +89,15 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       defining_expr ~original_defining_expr:named
   | Prim (prim, dbg) ->
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
-    let term, env_extension, dacc =
+    let term, dacc =
       Simplify_primitive.simplify_primitive dacc prim dbg ~result_var:bound_var
     in
     let kind = P.result_kind' prim in
-    let dacc =
-      (* CR mshinwell: It's a bit weird that the env_extension is added to the
-         typing env here; couldn't it just have been returned already added to
-         [dacc]? *)
-      DA.map_denv dacc ~f:(fun denv ->
-          DE.add_variable_and_extend_typing_environment denv bound_var
-            (T.unknown kind) env_extension)
-    in
+    (* let dacc = (* CR mshinwell: It's a bit weird that the env_extension is
+       added to the typing env here; couldn't it just have been returned already
+       added to [dacc]? *) DA.map_denv dacc ~f:(fun denv ->
+       DE.add_variable_and_extend_typing_environment denv bound_var (T.unknown
+       kind) env_extension) in *)
     (* CR mshinwell: Add check along the lines of: types are unknown whenever
        [not (P.With_fixed_value.eligible prim)] holds. *)
     (* Primitives with generative effects correspond to allocations. Without

@@ -19,7 +19,7 @@
 open! Simplify_import
 
 type cse_result =
-  | Applied of (Simplified_named.t * TEE.t * DA.t)
+  | Applied of (Simplified_named.t * DA.t)
   | Not_applied of DA.t
 
 let apply_cse dacc ~original_prim =
@@ -44,12 +44,12 @@ let[@inline always] try_cse dacc ~original_prim ~min_name_mode ~result_var :
   if not (Name_mode.equal min_name_mode Name_mode.normal)
   then Not_applied dacc
   else
-    let result_var = VB.var result_var in
+    let result_var' = VB.var result_var in
     match apply_cse dacc ~original_prim with
     | Some replace_with ->
       let named = Named.create_simple replace_with in
       let ty = T.alias_type_of (P.result_kind' original_prim) replace_with in
-      let env_extension = TEE.one_equation (Name.var result_var) ty in
+      let dacc = DA.add_variable dacc result_var ty in
       let simplified_named =
         let cost_metrics =
           Cost_metrics.notify_removed
@@ -59,13 +59,13 @@ let[@inline always] try_cse dacc ~original_prim ~min_name_mode ~result_var :
         Simplified_named.reachable named
         |> Simplified_named.update_cost_metrics cost_metrics
       in
-      Applied (simplified_named, env_extension, dacc)
+      Applied (simplified_named, dacc)
     | None ->
       let dacc =
         match P.Eligible_for_cse.create original_prim with
         | None -> dacc
         | Some eligible_prim ->
-          let bound_to = Simple.var result_var in
+          let bound_to = Simple.var result_var' in
           DA.map_denv dacc ~f:(fun denv ->
               DE.add_cse denv eligible_prim ~bound_to)
       in
