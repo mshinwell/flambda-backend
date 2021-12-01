@@ -90,11 +90,6 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
   | Prim (prim, dbg) ->
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
     let term, env_extension, dacc =
-      (* [simplified_args] has to be returned from [simplify_primitive] because
-         in at least one case (for [Project_var]), the simplifier may return
-         something other than a [Prim] as the [term]. However we need the
-         simplified arguments of the actual primitive for the symbol projection
-         check below. *)
       Simplify_primitive.simplify_primitive dacc prim dbg ~result_var:bound_var
     in
     let kind = P.result_kind' prim in
