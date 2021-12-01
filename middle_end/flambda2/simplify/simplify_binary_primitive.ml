@@ -78,7 +78,7 @@ module Binary_arith_like (N : Binary_arith_like_sig) : sig
     arg2:Simple.t ->
     arg2_ty:Flambda2_types.t ->
     result_var:Bound_var.t ->
-    Simplified_named.t * TEE.t * DA.t
+    Simplified_named.t * DA.t
 end = struct
   module Possible_result = struct
     type t =
@@ -127,19 +127,18 @@ end = struct
   let simplify op dacc ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty
       ~result_var =
     let module PR = Possible_result in
-    let result = Name.var (Bound_var.var result_var) in
     let denv = DA.denv dacc in
     let typing_env = DE.typing_env denv in
     let proof1 = N.prover_lhs typing_env arg1_ty in
     let proof2 = N.prover_rhs typing_env arg2_ty in
     let kind = N.result_kind in
     let result_unknown () =
-      let env_extension = TEE.one_equation result (N.unknown op) in
-      Simplified_named.reachable original_term, env_extension, dacc
+      let dacc = DA.add_variable dacc result_var (N.unknown op) in
+      Simplified_named.reachable original_term, dacc
     in
     let result_invalid () =
-      let env_extension = TEE.one_equation result (T.bottom kind) in
-      Simplified_named.invalid (), env_extension, dacc
+      let dacc = DA.add_variable dacc result_var (T.bottom kind) in
+      Simplified_named.invalid (), dacc
     in
     let check_possible_results ~possible_results =
       if PR.Set.is_empty possible_results
@@ -168,8 +167,8 @@ end = struct
             | Some (Simple simple) -> T.alias_type_of kind simple
             | Some (Exactly _) | Some (Prim _) | None -> N.unknown op
         in
-        let env_extension = TEE.one_equation result ty in
-        Simplified_named.reachable named, env_extension, dacc
+        let dacc = DA.add_variable dacc result_var ty in
+        Simplified_named.reachable named, dacc
     in
     let only_one_side_known op nums ~folder ~other_side =
       let possible_results =
@@ -979,20 +978,19 @@ let[@inline always] simplify_immutable_block_load0
   let result_var' = Bound_var.var result_var in
   let unchanged () =
     let ty = T.unknown result_kind in
-    let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.reachable original_term, env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable original_term, dacc
   in
   let invalid () =
     let ty = T.bottom result_kind in
-    let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.invalid (), env_extension, dacc
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.invalid (), dacc
   in
   let exactly simple =
-    let env_extension =
-      TEE.one_equation (Name.var result_var')
-        (T.alias_type_of result_kind simple)
+    let dacc =
+      DA.add_variable dacc result_var (T.alias_type_of result_kind simple)
     in
-    Simplified_named.reachable original_term, env_extension, dacc
+    Simplified_named.reachable original_term, dacc
   in
   let typing_env = DA.typing_env dacc in
   match T.prove_equals_single_tagged_immediate typing_env index_ty with
@@ -1051,26 +1049,24 @@ let[@inline always] simplify_immutable_block_load0
 
 let simplify_immutable_block_load access_kind ~min_name_mode dacc ~original_term
     dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
-  let reachable, env_extension, dacc =
+  let ((reachable, dacc) as reachable_and_dacc) =
     simplify_immutable_block_load0 access_kind ~min_name_mode dacc
       ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
   in
-  let dacc =
+  let dacc' =
     record_any_symbol_projection_for_block_load dacc ~result_var ~block:arg1
       ~index:arg2
   in
-  reachable, env_extension, dacc
+  if dacc == dacc' then reachable_and_dacc else reachable, dacc'
 
 let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
     ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
-  let result = Name.var (Bound_var.var result_var) in
   let const bool =
-    let env_extension =
-      TEE.one_equation result
+    let dacc =
+      DA.add_variable dacc result_var
         (T.this_naked_immediate (Targetint_31_63.bool bool))
     in
     ( Simplified_named.reachable (Named.create_simple (Simple.const_bool bool)),
-      env_extension,
       dacc )
   in
   if Simple.equal arg1 arg2
@@ -1102,11 +1098,11 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
         (* | Eq, true, _ -> const true | Neq, true, _ -> const false | Eq, _,
            true -> const false | Neq, _, true -> const true *)
         | _, _, _ ->
-          let env_extension =
-            TEE.one_equation result
+          let dacc =
+            DA.add_variable dacc result_var
               (T.these_naked_immediates Targetint_31_63.all_bools)
           in
-          Simplified_named.reachable original_term, env_extension, dacc))
+          Simplified_named.reachable original_term, dacc))
     | Naked_number Naked_immediate -> (
       let typing_env = DA.typing_env dacc in
       let proof1 = T.prove_naked_immediates typing_env arg1_ty in
@@ -1116,11 +1112,11 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
         Binary_int_eq_comp_naked_immediate.simplify op dacc ~original_term dbg
           ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
       | _, _ ->
-        let env_extension =
-          TEE.one_equation result
+        let dacc =
+          DA.add_variable dacc result_var
             (T.these_naked_immediates Targetint_31_63.all_bools)
         in
-        Simplified_named.reachable original_term, env_extension, dacc)
+        Simplified_named.reachable original_term, dacc)
     | Naked_number Naked_float ->
       (* CR mshinwell: Should this case be statically disallowed in the type, to
          force people to use [Float_comp]? *)
@@ -1141,7 +1137,6 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
 
 let simplify_binary_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg1_ty
     ~arg2 ~arg2_ty dbg ~result_var =
-  let result_var' = Bound_var.var result_var in
   let min_name_mode = Bound_var.name_mode result_var in
   let original_prim : P.t = Binary (prim, arg1, arg2) in
   let original_term = Named.create_prim original_prim dbg in
@@ -1187,26 +1182,26 @@ let simplify_binary_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg1_ty
     | Phys_equal (kind, op) -> simplify_phys_equal op kind
     | Block_load _ ->
       fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
-          ~result_var:_ ->
+          ~result_var ->
         let prim : P.t = Binary (prim, arg1, arg2) in
         let named = Named.create_prim prim dbg in
         let ty = T.unknown (P.result_kind' prim) in
-        let env_extension = TEE.one_equation (Name.var result_var') ty in
+        let dacc = DA.add_variable dacc result_var ty in
         let dacc =
           record_any_symbol_projection_for_block_load dacc ~result_var
             ~block:arg1 ~index:arg2
         in
-        Simplified_named.reachable named, env_extension, dacc
+        Simplified_named.reachable named, dacc
     | Array_load _ | String_or_bigstring_load _ | Bigarray_load _ ->
       fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
-          ~result_var:_ ->
+          ~result_var ->
         let prim : P.t = Binary (prim, arg1, arg2) in
         let named = Named.create_prim prim dbg in
         let ty = T.unknown (P.result_kind' prim) in
-        let env_extension = TEE.one_equation (Name.var result_var') ty in
-        Simplified_named.reachable named, env_extension, dacc
+        let dacc = DA.add_variable dacc result_var ty in
+        Simplified_named.reachable named, dacc
   in
-  let reachable, env_extension, dacc =
+  let reachable, dacc =
     simplifier dacc ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
   in
-  reachable, env_extension, dacc
+  reachable, dacc
