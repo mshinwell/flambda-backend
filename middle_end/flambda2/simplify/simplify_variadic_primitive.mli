@@ -20,6 +20,7 @@
 
 val simplify_variadic_primitive :
   Downwards_acc.t ->
+  Flambda_primitive.t ->
   Flambda_primitive.variadic_primitive ->
   args_with_tys:(Simple.t * Flambda2_types.t) list ->
   Debuginfo.t ->

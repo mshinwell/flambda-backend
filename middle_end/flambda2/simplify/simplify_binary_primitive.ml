@@ -1143,10 +1143,9 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
     | Fabricated -> Misc.fatal_error "Fabricated kind not expected here"
     | Rec_info -> Misc.fatal_error "Rec_info kind not expected here"
 
-let simplify_binary_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg1_ty
-    ~arg2 ~arg2_ty dbg ~result_var =
+let simplify_binary_primitive dacc original_prim (prim : P.binary_primitive)
+    ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var =
   let min_name_mode = Bound_var.name_mode result_var in
-  let original_prim : P.t = Binary (prim, arg1, arg2) in
   let original_term = Named.create_prim original_prim dbg in
   let simplifier =
     match prim with

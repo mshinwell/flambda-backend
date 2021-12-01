@@ -73,46 +73,53 @@ let[@inline always] try_cse dacc ~original_prim ~min_name_mode ~result_var :
 
 let[@inline always] simplify_primitive dacc (prim : P.t) dbg ~result_var =
   let min_name_mode = Bound_var.name_mode result_var in
-  let args_rev =
-    ListLabels.fold_left (P.args prim) ~init:[] ~f:(fun args_rev arg ->
-        let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
-        let arg = T.get_alias_exn arg_ty in
-        (arg, arg_ty) :: args_rev)
-  in
-  let args = List.rev args_rev in
-  let prim : P.t =
-    match prim, args with
-    | Nullary _, [] -> prim
-    | Unary (prim, _), [(arg, _)] -> Unary (prim, arg)
-    | Binary (prim, _, _), [(arg1, _); (arg2, _)] -> Binary (prim, arg1, arg2)
-    | Ternary (prim, _, _, _), [(arg1, _); (arg2, _); (arg3, _)] ->
-      Ternary (prim, arg1, arg2, arg3)
-    | Variadic (prim, _), args_with_tys ->
-      Variadic (prim, List.map fst args_with_tys)
-    | (Nullary _ | Unary _ | Binary _ | Ternary _), ([] | _ :: _) ->
-      Misc.fatal_errorf "Mismatch between primitive %a and args %a" P.print prim
-        Simple.List.print (List.map fst args)
-  in
-  match try_cse dacc ~original_prim:prim ~min_name_mode ~result_var with
-  | Applied result -> result
-  | Not_applied dacc -> (
-    match prim, args with
-    | Nullary prim, [] ->
-      (Simplify_nullary_primitive.simplify_nullary_primitive [@inlined hint])
-        dacc prim dbg ~result_var
-    | Unary (prim, _), [(arg, arg_ty)] ->
-      (Simplify_unary_primitive.simplify_unary_primitive [@inlined hint]) dacc
-        prim ~arg ~arg_ty dbg ~result_var
-    | Binary (prim, _, _), [(arg1, arg1_ty); (arg2, arg2_ty)] ->
-      (Simplify_binary_primitive.simplify_binary_primitive [@inlined hint]) dacc
-        prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var
-    | ( Ternary (prim, _, _, _),
-        [(arg1, arg1_ty); (arg2, arg2_ty); (arg3, arg3_ty)] ) ->
-      (Simplify_ternary_primitive.simplify_ternary_primitive [@inlined hint])
-        dacc prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg ~result_var
-    | Variadic (variadic_prim, _), args_with_tys ->
-      (Simplify_variadic_primitive.simplify_variadic_primitive [@inlined hint])
-        dacc variadic_prim ~args_with_tys dbg ~result_var
-    | (Nullary _ | Unary _ | Binary _ | Ternary _), ([] | _ :: _) ->
-      Misc.fatal_errorf "Mismatch between primitive %a and args %a" P.print prim
-        Simple.List.print (List.map fst args))
+  match prim with
+  | Nullary prim' ->
+    Simplify_nullary_primitive.simplify_nullary_primitive dacc prim prim' dbg
+      ~result_var
+  | Unary (prim, arg) -> (
+    let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
+    let arg = T.get_alias_exn arg_ty in
+    let original_prim : P.t = Unary (prim, arg) in
+    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
+    | Applied result -> result
+    | Not_applied dacc ->
+      Simplify_unary_primitive.simplify_unary_primitive dacc original_prim prim
+        ~arg ~arg_ty dbg ~result_var)
+  | Binary (prim, arg1, arg2) -> (
+    let arg1_ty = S.simplify_simple dacc arg1 ~min_name_mode in
+    let arg1 = T.get_alias_exn arg1_ty in
+    let arg2_ty = S.simplify_simple dacc arg2 ~min_name_mode in
+    let arg2 = T.get_alias_exn arg2_ty in
+    let original_prim : P.t = Binary (prim, arg1, arg2) in
+    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
+    | Applied result -> result
+    | Not_applied dacc ->
+      Simplify_binary_primitive.simplify_binary_primitive dacc original_prim
+        prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var)
+  | Ternary (prim, arg1, arg2, arg3) -> (
+    let arg1_ty = S.simplify_simple dacc arg1 ~min_name_mode in
+    let arg1 = T.get_alias_exn arg1_ty in
+    let arg2_ty = S.simplify_simple dacc arg2 ~min_name_mode in
+    let arg2 = T.get_alias_exn arg2_ty in
+    let arg3_ty = S.simplify_simple dacc arg3 ~min_name_mode in
+    let arg3 = T.get_alias_exn arg3_ty in
+    let original_prim : P.t = Ternary (prim, arg1, arg2, arg3) in
+    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
+    | Applied result -> result
+    | Not_applied dacc ->
+      Simplify_ternary_primitive.simplify_ternary_primitive dacc original_prim
+        prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg ~result_var)
+  | Variadic (prim, args) -> (
+    let args_with_tys =
+      ListLabels.fold_right args ~init:[] ~f:(fun arg args_rev ->
+          let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
+          let arg = T.get_alias_exn arg_ty in
+          (arg, arg_ty) :: args_rev)
+    in
+    let original_prim : P.t = Variadic (prim, List.map fst args_with_tys) in
+    match try_cse dacc ~original_prim ~min_name_mode ~result_var with
+    | Applied result -> result
+    | Not_applied dacc ->
+      Simplify_variadic_primitive.simplify_variadic_primitive dacc original_prim
+        prim ~args_with_tys dbg ~result_var)

@@ -20,6 +20,7 @@
 
 val simplify_unary_primitive :
   Downwards_acc.t ->
+  Flambda_primitive.t ->
   Flambda_primitive.unary_primitive ->
   arg:Simple.t ->
   arg_ty:Flambda2_types.t ->
