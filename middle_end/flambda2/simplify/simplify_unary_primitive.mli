@@ -25,7 +25,4 @@ val simplify_unary_primitive :
   arg_ty:Flambda2_types.t ->
   Debuginfo.t ->
   result_var:Bound_var.t ->
-  Simplified_named.t
-  * Flambda2_types.Typing_env_extension.t
-  * Simple.t list
-  * Downwards_acc.t
+  Simplified_named.t * Flambda2_types.Typing_env_extension.t * Downwards_acc.t

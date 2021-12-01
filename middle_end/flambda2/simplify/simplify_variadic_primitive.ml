@@ -25,7 +25,7 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
   let invalid () =
     let ty = T.bottom K.value in
     let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.invalid (), env_extension, args, dacc
+    Simplified_named.invalid (), env_extension, dacc
   in
   if List.compare_lengths shape args <> 0
   then
@@ -66,7 +66,7 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
       | Mutable -> T.any_value
     in
     let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.reachable term, env_extension, args, dacc
+    Simplified_named.reachable term, env_extension, dacc
   end
 
 let simplify_make_block_of_floats dacc _prim dbg
@@ -76,7 +76,7 @@ let simplify_make_block_of_floats dacc _prim dbg
   let invalid () =
     let ty = T.bottom K.value in
     let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.invalid (), env_extension, args, dacc
+    Simplified_named.invalid (), env_extension, dacc
   in
   (* CR mshinwell: This could probably be done more neatly. *)
   let found_bottom = ref false in
@@ -110,7 +110,7 @@ let simplify_make_block_of_floats dacc _prim dbg
       | Mutable -> T.any_value
     in
     let env_extension = TEE.one_equation (Name.var result_var) ty in
-    Simplified_named.reachable term, env_extension, args, dacc
+    Simplified_named.reachable term, env_extension, dacc
 
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
@@ -133,4 +133,4 @@ let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     in
     let ty = T.array_of_length ~length in
     let env_extension = TEE.one_equation (Name.var result_var') ty in
-    Simplified_named.reachable named, env_extension, args, dacc
+    Simplified_named.reachable named, env_extension, dacc

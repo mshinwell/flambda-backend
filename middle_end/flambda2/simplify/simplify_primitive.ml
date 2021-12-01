@@ -19,7 +19,7 @@
 open! Simplify_import
 
 type cse_result =
-  | Applied of (Simplified_named.t * TEE.t * Simple.t list * DA.t)
+  | Applied of (Simplified_named.t * TEE.t * DA.t)
   | Not_applied of DA.t
 
 let apply_cse dacc ~original_prim =
@@ -35,8 +35,8 @@ let apply_cse dacc ~original_prim =
       in
       match canonical with exception Not_found -> None | simple -> Some simple))
 
-let[@inline always] try_cse dacc ~original_prim ~simplified_args_with_tys
-    ~min_name_mode ~result_var : cse_result =
+let[@inline always] try_cse dacc ~original_prim ~min_name_mode ~result_var :
+    cse_result =
   (* CR-someday mshinwell: Use [meet] and [reify] for CSE? (discuss with
      lwhite) *)
   (* CR-someday mshinwell: Find example that suggested we needed to allow
@@ -50,7 +50,6 @@ let[@inline always] try_cse dacc ~original_prim ~simplified_args_with_tys
       let named = Named.create_simple replace_with in
       let ty = T.alias_type_of (P.result_kind' original_prim) replace_with in
       let env_extension = TEE.one_equation (Name.var result_var) ty in
-      let args = List.map fst simplified_args_with_tys in
       let simplified_named =
         let cost_metrics =
           Cost_metrics.notify_removed
@@ -60,7 +59,7 @@ let[@inline always] try_cse dacc ~original_prim ~simplified_args_with_tys
         Simplified_named.reachable named
         |> Simplified_named.update_cost_metrics cost_metrics
       in
-      Applied (simplified_named, env_extension, args, dacc)
+      Applied (simplified_named, env_extension, dacc)
     | None ->
       let dacc =
         match P.Eligible_for_cse.create original_prim with
@@ -81,10 +80,20 @@ let[@inline always] simplify_primitive dacc (prim : P.t) dbg ~result_var =
         (arg, arg_ty) :: args_rev)
   in
   let args = List.rev args_rev in
-  match
-    try_cse dacc ~original_prim:prim ~simplified_args_with_tys:args
-      ~min_name_mode ~result_var
-  with
+  let prim : P.t =
+    match prim, args with
+    | Nullary _, [] -> prim
+    | Unary (prim, _), [(arg, _)] -> Unary (prim, arg)
+    | Binary (prim, _, _), [(arg1, _); (arg2, _)] -> Binary (prim, arg1, arg2)
+    | Ternary (prim, _, _, _), [(arg1, _); (arg2, _); (arg3, _)] ->
+      Ternary (prim, arg1, arg2, arg3)
+    | Variadic (prim, _), args_with_tys ->
+      Variadic (prim, List.map fst args_with_tys)
+    | (Nullary _ | Unary _ | Binary _ | Ternary _), ([] | _ :: _) ->
+      Misc.fatal_errorf "Mismatch between primitive %a and args %a" P.print prim
+        Simple.List.print (List.map fst args)
+  in
+  match try_cse dacc ~original_prim:prim ~min_name_mode ~result_var with
   | Applied result -> result
   | Not_applied dacc -> (
     match prim, args with
