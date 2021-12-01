@@ -94,7 +94,7 @@ let simplify_projection dacc ~original_term ~deconstructing ~shape ~result_var
           DE.define_variable_and_extend_typing_environment denv result_var
             result_kind env_extension)
     in
-    Simplified_named.reachable original_term, dacc
+    Simplified_named.reachable original_term ~try_reify:true, dacc
 
 let update_exn_continuation_extra_args uacc ~exn_cont_use_id apply =
   let exn_cont_rewrite =
