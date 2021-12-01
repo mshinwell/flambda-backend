@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 open! Simplify_import
 
@@ -82,48 +82,44 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
     let dacc = DA.add_variable dacc bound_var ty in
     let defining_expr =
       if simple == new_simple
-      then Simplified_named.reachable named
-      else Simplified_named.reachable (Named.create_simple simple)
+      then Simplified_named.reachable named ~try_reify:false
+      else
+        Simplified_named.reachable (Named.create_simple simple) ~try_reify:false
     in
     Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
       defining_expr ~original_defining_expr:named
-  | Prim (prim, dbg) ->
+  | Prim (prim, dbg) -> (
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
-    let term, dacc =
+    let simplified_named, dacc =
       Simplify_primitive.simplify_primitive dacc prim dbg ~result_var:bound_var
     in
-    let kind = P.result_kind' prim in
-    (* let dacc = (* CR mshinwell: It's a bit weird that the env_extension is
-       added to the typing env here; couldn't it just have been returned already
-       added to [dacc]? *) DA.map_denv dacc ~f:(fun denv ->
-       DE.add_variable_and_extend_typing_environment denv bound_var (T.unknown
-       kind) env_extension) in *)
-    (* CR mshinwell: Add check along the lines of: types are unknown whenever
-       [not (P.With_fixed_value.eligible prim)] holds. *)
-    (* Primitives with generative effects correspond to allocations. Without
-       this check, we could end up lifting definitions that have a type that
-       looks like an allocation but that are instead a projection from a bigger
-       structure. *)
-    let allow_lifting =
-      (* CR mshinwell: We probably shouldn't lift if the let binding is going to
-         be deleted, as lifting may cause [Dominator]-scoped bindings to be
-         inserted, that cannot be deleted. However this situation probably
-         doesn't arise that much, and won't be an issue once we can lift
-         [Dominator]-scoped bindings. *)
-      P.only_generative_effects prim
-      && Name_mode.is_normal (Bound_var.name_mode bound_var)
-    in
-    let defining_expr, dacc, ty =
-      Reification.try_to_reify dacc term ~bound_to:bound_var
-        ~kind_of_bound_to:kind ~allow_lifting
-    in
-    let defining_expr =
-      if T.is_bottom (DA.typing_env dacc) ty
-      then Simplified_named.invalid ()
-      else defining_expr
-    in
-    Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
-      defining_expr ~original_defining_expr:named
+    match simplified_named with
+    | Reachable_try_reify _ ->
+      let kind = P.result_kind' prim in
+      (* CR mshinwell: Add check along the lines of: types are unknown whenever
+         [not (P.With_fixed_value.eligible prim)] holds. *)
+      (* Primitives with generative effects correspond to allocations. Without
+         this check, we could end up lifting definitions that have a type that
+         looks like an allocation but that are instead a projection from a
+         bigger structure. *)
+      let allow_lifting =
+        (* CR mshinwell: We probably shouldn't lift if the let binding is going
+           to be deleted, as lifting may cause [Dominator]-scoped bindings to be
+           inserted, that cannot be deleted. However this situation probably
+           doesn't arise that much, and won't be an issue once we can lift
+           [Dominator]-scoped bindings. *)
+        P.only_generative_effects prim
+        && Name_mode.is_normal (Bound_var.name_mode bound_var)
+      in
+      let defining_expr, dacc =
+        Reification.try_to_reify dacc simplified_named ~bound_to:bound_var
+          ~kind_of_bound_to:kind ~allow_lifting
+      in
+      Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
+        defining_expr ~original_defining_expr:named
+    | Reachable _ | Invalid _ ->
+      Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
+        simplified_named ~original_defining_expr:named)
   | Set_of_closures set_of_closures ->
     Simplify_set_of_closures.simplify_non_lifted_set_of_closures dacc
       bound_pattern set_of_closures ~simplify_toplevel
@@ -184,8 +180,11 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
     let dacc = DA.add_variable dacc bound_var ty in
     let defining_expr =
       if rec_info_expr == new_rec_info_expr
-      then Simplified_named.reachable named
-      else Simplified_named.reachable (Named.create_rec_info new_rec_info_expr)
+      then Simplified_named.reachable named ~try_reify:false
+      else
+        Simplified_named.reachable
+          (Named.create_rec_info new_rec_info_expr)
+          ~try_reify:false
     in
     Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
       defining_expr ~original_defining_expr:named
@@ -199,14 +198,18 @@ let removed_operations (named : Named.t) result =
     | Multiple_bindings_to_symbols _ -> Removed_operations.alloc
     | Single_term { simplified_defining_expr; _ } -> begin
       match simplified_defining_expr with
-      | Reachable { named = Set_of_closures _; _ } ->
+      | Reachable { named = Set_of_closures _; _ }
+      | Reachable_try_reify { named = Set_of_closures _; _ } ->
         (* Nothing was deleted, there is no need to adjust the negative
            benefit *)
         zero
       | Invalid _
       | Reachable { named = Prim _; _ }
       | Reachable { named = Simple _; _ }
-      | Reachable { named = Rec_info _; _ } ->
+      | Reachable { named = Rec_info _; _ }
+      | Reachable_try_reify { named = Prim _; _ }
+      | Reachable_try_reify { named = Simple _; _ }
+      | Reachable_try_reify { named = Rec_info _; _ } ->
         assert false
     end
     | Zero_terms -> assert false
@@ -220,13 +223,17 @@ let removed_operations (named : Named.t) result =
     match descr with
     | Single_term { simplified_defining_expr; _ } -> begin
       match simplified_defining_expr with
-      | Reachable { named = Simple _; _ } ->
-        (* A simple has 0 benefit.*)
+      | Reachable { named = Simple _; _ }
+      | Reachable_try_reify { named = Simple _; _ } ->
+        (* A simple has 0 benefit. *)
         zero
       | Invalid _
       | Reachable { named = Set_of_closures _; _ }
       | Reachable { named = Prim _; _ }
-      | Reachable { named = Rec_info _; _ } ->
+      | Reachable { named = Rec_info _; _ }
+      | Reachable_try_reify { named = Set_of_closures _; _ }
+      | Reachable_try_reify { named = Prim _; _ }
+      | Reachable_try_reify { named = Rec_info _; _ } ->
         assert false
     end
     | Zero_terms | Multiple_bindings_to_symbols _ -> assert false
@@ -235,15 +242,20 @@ let removed_operations (named : Named.t) result =
     match descr with
     | Single_term { simplified_defining_expr; _ } -> begin
       match simplified_defining_expr with
-      | Reachable { named = Prim (rewritten_prim, _); _ } ->
+      | Reachable { named = Prim (rewritten_prim, _); _ }
+      | Reachable_try_reify { named = Prim (rewritten_prim, _); _ } ->
         if Flambda_primitive.equal original_prim rewritten_prim
         then zero
         else Removed_operations.prim original_prim
       | Reachable { named = Simple _; _ }
       | Reachable { named = Set_of_closures _; _ }
+      | Reachable_try_reify { named = Simple _; _ }
+      | Reachable_try_reify { named = Set_of_closures _; _ }
       | Invalid _ ->
         Removed_operations.prim original_prim
-      | Reachable { named = Rec_info _; _ } -> assert false
+      | Reachable { named = Rec_info _; _ }
+      | Reachable_try_reify { named = Rec_info _; _ } ->
+        assert false
     end
     | Zero_terms | Multiple_bindings_to_symbols _ -> assert false
   end

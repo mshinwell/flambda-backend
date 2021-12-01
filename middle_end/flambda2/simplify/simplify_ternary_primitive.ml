@@ -26,4 +26,4 @@ let simplify_ternary_primitive dacc (prim : P.ternary_primitive) ~arg1
     let named = Named.create_prim prim dbg in
     let ty = T.unknown (P.result_kind' prim) in
     let dacc = DA.add_variable dacc result_var ty in
-    Simplified_named.reachable named, dacc
+    Simplified_named.reachable named ~try_reify:false, dacc

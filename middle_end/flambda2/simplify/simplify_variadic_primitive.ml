@@ -22,7 +22,7 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
     ~(mutable_or_immutable : Mutability.t) args_with_tys ~result_var =
   let denv = DA.denv dacc in
   let args, _arg_tys = List.split args_with_tys in
-  let invalid () =
+  let[@inline always] invalid () =
     let ty = T.bottom K.value in
     let dacc = DA.add_variable dacc result_var ty in
     Simplified_named.invalid (), dacc
@@ -66,14 +66,14 @@ let simplify_make_block_of_values dacc _prim dbg tag ~shape
       | Mutable -> T.any_value
     in
     let dacc = DA.add_variable dacc result_var ty in
-    Simplified_named.reachable term, dacc
+    Simplified_named.reachable term ~try_reify:true, dacc
   end
 
 let simplify_make_block_of_floats dacc _prim dbg
     ~(mutable_or_immutable : Mutability.t) args_with_tys ~result_var =
   let denv = DA.denv dacc in
   let args = List.map fst args_with_tys in
-  let invalid () =
+  let[@inline always] invalid () =
     let ty = T.bottom K.value in
     let dacc = DA.add_variable dacc result_var ty in
     Simplified_named.invalid (), dacc
@@ -110,7 +110,7 @@ let simplify_make_block_of_floats dacc _prim dbg
       | Mutable -> T.any_value
     in
     let dacc = DA.add_variable dacc result_var ty in
-    Simplified_named.reachable term, dacc
+    Simplified_named.reachable term ~try_reify:true, dacc
 
 let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
@@ -132,4 +132,4 @@ let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
     in
     let ty = T.array_of_length ~length in
     let dacc = DA.add_variable dacc result_var ty in
-    Simplified_named.reachable named, dacc
+    Simplified_named.reachable named ~try_reify:true, dacc
