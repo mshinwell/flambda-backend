@@ -112,7 +112,7 @@ let simplify_make_block_of_floats dacc _prim dbg
     let dacc = DA.add_variable dacc result_var ty in
     Simplified_named.reachable term ~try_reify:true, dacc
 
-let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
+let simplify_variadic_primitive dacc original_prim (prim : P.variadic_primitive)
     ~args_with_tys dbg ~result_var =
   match prim with
   | Make_block (Values (tag, shape), mutable_or_immutable) ->
@@ -124,7 +124,7 @@ let simplify_variadic_primitive dacc (prim : P.variadic_primitive)
   | Make_array _ ->
     (* CR mshinwell: The typing here needs to be improved *)
     let args, _tys = List.split args_with_tys in
-    let named = Named.create_prim (Variadic (prim, args)) dbg in
+    let named = Named.create_prim original_prim dbg in
     let length =
       match Targetint_31_63.Imm.of_int_option (List.length args) with
       | Some ti -> T.this_tagged_immediate (Targetint_31_63.int ti)

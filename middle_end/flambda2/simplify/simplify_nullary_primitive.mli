@@ -19,6 +19,7 @@
 
 val simplify_nullary_primitive :
   Downwards_acc.t ->
+  Flambda_primitive.t ->
   Flambda_primitive.nullary_primitive ->
   Debuginfo.t ->
   result_var:Bound_var.t ->

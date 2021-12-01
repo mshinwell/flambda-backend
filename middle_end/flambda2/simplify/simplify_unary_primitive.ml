@@ -535,10 +535,9 @@ let simplify_float_arith_op (op : P.unary_float_arith_op) dacc ~original_term
   | Proved _ | Unknown -> result_unknown ()
   | Invalid -> result_invalid ()
 
-let simplify_unary_primitive dacc (prim : P.unary_primitive) ~arg ~arg_ty dbg
-    ~result_var =
+let simplify_unary_primitive dacc original_prim (prim : P.unary_primitive) ~arg
+    ~arg_ty dbg ~result_var =
   let min_name_mode = Bound_var.name_mode result_var in
-  let original_prim : P.t = Unary (prim, arg) in
   let original_term = Named.create_prim original_prim dbg in
   let simplifier =
     match prim with
