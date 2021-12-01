@@ -77,49 +77,62 @@ let[@inline always] simplify_primitive dacc (prim : P.t) dbg ~result_var =
   | Nullary prim' ->
     Simplify_nullary_primitive.simplify_nullary_primitive dacc prim prim' dbg
       ~result_var
-  | Unary (prim, arg) -> (
-    let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
+  | Unary (unary_prim, orig_arg) -> (
+    let arg_ty = S.simplify_simple dacc orig_arg ~min_name_mode in
     let arg = T.get_alias_exn arg_ty in
-    let original_prim : P.t = Unary (prim, arg) in
+    let original_prim : P.t =
+      if orig_arg == arg then prim else Unary (unary_prim, arg)
+    in
     match try_cse dacc ~original_prim ~min_name_mode ~result_var with
     | Applied result -> result
     | Not_applied dacc ->
-      Simplify_unary_primitive.simplify_unary_primitive dacc original_prim prim
-        ~arg ~arg_ty dbg ~result_var)
-  | Binary (prim, arg1, arg2) -> (
-    let arg1_ty = S.simplify_simple dacc arg1 ~min_name_mode in
+      Simplify_unary_primitive.simplify_unary_primitive dacc original_prim
+        unary_prim ~arg ~arg_ty dbg ~result_var)
+  | Binary (binary_prim, orig_arg1, orig_arg2) -> (
+    let arg1_ty = S.simplify_simple dacc orig_arg1 ~min_name_mode in
     let arg1 = T.get_alias_exn arg1_ty in
-    let arg2_ty = S.simplify_simple dacc arg2 ~min_name_mode in
+    let arg2_ty = S.simplify_simple dacc orig_arg2 ~min_name_mode in
     let arg2 = T.get_alias_exn arg2_ty in
-    let original_prim : P.t = Binary (prim, arg1, arg2) in
+    let original_prim : P.t =
+      if orig_arg1 == arg1 && orig_arg2 == arg2
+      then prim
+      else Binary (binary_prim, arg1, arg2)
+    in
     match try_cse dacc ~original_prim ~min_name_mode ~result_var with
     | Applied result -> result
     | Not_applied dacc ->
       Simplify_binary_primitive.simplify_binary_primitive dacc original_prim
-        prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var)
-  | Ternary (prim, arg1, arg2, arg3) -> (
-    let arg1_ty = S.simplify_simple dacc arg1 ~min_name_mode in
+        binary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var)
+  | Ternary (ternary_prim, orig_arg1, orig_arg2, orig_arg3) -> (
+    let arg1_ty = S.simplify_simple dacc orig_arg1 ~min_name_mode in
     let arg1 = T.get_alias_exn arg1_ty in
-    let arg2_ty = S.simplify_simple dacc arg2 ~min_name_mode in
+    let arg2_ty = S.simplify_simple dacc orig_arg2 ~min_name_mode in
     let arg2 = T.get_alias_exn arg2_ty in
-    let arg3_ty = S.simplify_simple dacc arg3 ~min_name_mode in
+    let arg3_ty = S.simplify_simple dacc orig_arg3 ~min_name_mode in
     let arg3 = T.get_alias_exn arg3_ty in
-    let original_prim : P.t = Ternary (prim, arg1, arg2, arg3) in
+    let original_prim : P.t =
+      if orig_arg1 == arg1 && orig_arg2 == arg2 && orig_arg3 = arg3
+      then prim
+      else Ternary (ternary_prim, arg1, arg2, arg3)
+    in
     match try_cse dacc ~original_prim ~min_name_mode ~result_var with
     | Applied result -> result
     | Not_applied dacc ->
       Simplify_ternary_primitive.simplify_ternary_primitive dacc original_prim
-        prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg ~result_var)
-  | Variadic (prim, args) -> (
+        ternary_prim ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~arg3 ~arg3_ty dbg
+        ~result_var)
+  | Variadic (variadic_prim, orig_args) -> (
     let args_with_tys =
-      ListLabels.fold_right args ~init:[] ~f:(fun arg args_rev ->
+      ListLabels.fold_right orig_args ~init:[] ~f:(fun arg args_rev ->
           let arg_ty = S.simplify_simple dacc arg ~min_name_mode in
           let arg = T.get_alias_exn arg_ty in
           (arg, arg_ty) :: args_rev)
     in
-    let original_prim : P.t = Variadic (prim, List.map fst args_with_tys) in
+    let original_prim : P.t =
+      Variadic (variadic_prim, List.map fst args_with_tys)
+    in
     match try_cse dacc ~original_prim ~min_name_mode ~result_var with
     | Applied result -> result
     | Not_applied dacc ->
       Simplify_variadic_primitive.simplify_variadic_primitive dacc original_prim
-        prim ~args_with_tys dbg ~result_var)
+        variadic_prim ~args_with_tys dbg ~result_var)
