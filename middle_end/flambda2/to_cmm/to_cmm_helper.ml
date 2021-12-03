@@ -310,7 +310,7 @@ let unreachable = load Cmm.Word_int Asttypes.Mutable (int 0)
    for that, but with an assertion, which do not produce helpful error
    messages. *)
 let check_alloc_fields = function
-  | [] ->
+  | [] when not (Flambda_features.classic_mode ()) ->
     Misc.fatal_error
       "Blocks dynamically allocated cannot have size 0 (empty arrays have to \
        be lifted so they can be statically allocated)"
