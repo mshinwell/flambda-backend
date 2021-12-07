@@ -90,6 +90,15 @@ stage2: ocaml-stage2-config.status stage1
 	  ARCH=$(arch) \
 	  $(dune) build --root=. --profile=release --build-dir=_build2 @install
 
+# rebuild-after-install is for building the (optimised) Flambda 2 compiler
+# with the optimised Flambda 2 compiler produced in stage 2.
+# This is used for benchmarking.
+.PHONY: rebuild-after-install
+rebuild-after-install:
+	PATH=$(prefix)/bin:$$PATH \
+	  ARCH=$(arch) \
+	  $(dune) build --root=. --profile=release --build-dir=_build3 @install
+
 # This target is like a polling version of upstream "make ocamlopt" (based
 # on the stage1 target, above).
 # It is likely to be what's most often wanted for day-to-day development of
