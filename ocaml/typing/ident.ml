@@ -227,25 +227,24 @@ let find_same id ({ by_stamp; by_name = _ } as tbl) =
     Int.Map.find stamp by_stamp
 
 let find_all name_to_find tbl =
-  let entries =
-    (* This might raise [Not_found] which is intended to escape. *)
-    Int.Map.find (Hashtbl.hash name_to_find) tbl.by_name
-  in
-  let rec loop entries name_to_find results =
-    match entries with
-    | [] -> results
-    | ((id, _data) as entry)::entries ->
-      let results =
-        if String.equal (name id) name_to_find then entry :: results
-        else results
-      in
-      loop entries name_to_find results
-  in
-  loop entries name_to_find []
+  match Int.Map.find (Hashtbl.hash name_to_find) tbl.by_name with
+  | exception Not_found -> []
+  | entries ->
+    let rec loop entries name_to_find results =
+      match entries with
+      | [] -> results
+      | ((id, _data) as entry)::entries ->
+        let results =
+          if String.equal (name id) name_to_find then entry :: results
+          else results
+        in
+        loop entries name_to_find results
+    in
+    loop entries name_to_find []
 
 let add_keys_to_list { by_stamp = _; by_name } acc =
   Int.Map.fold (fun _name_hash entries acc ->
-      List.fold_left (fun acc (id, _data) -> id :: acc) acc entries)
+      List.fold_right (fun (id, _data) acc -> id :: acc) entries acc)
     by_name acc
 
 let fold_name f { by_stamp = _; by_name } acc =
