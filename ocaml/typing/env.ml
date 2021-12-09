@@ -195,7 +195,7 @@ module TycompTbl =
           acc
 
     let rec local_keys tbl acc =
-      let acc = Ident.fold_all (fun k _ accu -> k::accu) tbl.current acc in
+      let acc = Ident.add_keys_to_list tbl.current acc in
       match tbl.opened with
       | Some o -> local_keys o.next acc
       | None -> acc
@@ -356,14 +356,15 @@ module IdTbl =
                next
 
     let rec local_keys tbl acc =
-      let acc = Ident.fold_all (fun k _ accu -> k::accu) tbl.current acc in
+      let acc = Ident.add_keys_to_list tbl.current acc in
       match tbl.layer with
       | Open {next; _ } | Map {next; _} -> local_keys next acc
       | Nothing -> acc
 
 
     let rec iter wrap f tbl =
-      Ident.iter (fun id desc -> f id (Pident id, desc)) tbl.current;
+      Ident.fold_name (fun id desc () -> f id (Pident id, desc))
+        tbl.current ();
       match tbl.layer with
       | Open {root; using = _; next; components} ->
           NameMap.iter

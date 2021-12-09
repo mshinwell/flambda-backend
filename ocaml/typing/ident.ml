@@ -152,163 +152,117 @@ let print_with_scope ppf id = print ~with_scope:true ppf id
 
 let print ppf id = print ~with_scope:false ppf id
 
-type 'a tbl =
-    Empty
-  | Node of 'a tbl * 'a data * 'a tbl * int
+module Int = struct
+  include Int
+  module Map = Numbers.Int.Map
+end
 
-and 'a data =
-  { ident: t;
-    data: 'a;
-    previous: 'a data option }
+module String = Misc.Stdlib.String
 
-let empty = Empty
+type 'a tbl = {
+  by_stamp : 'a Int.Map.t;
+  by_name : (t * 'a) list Int.Map.t;
+}
 
-(* Inline expansion of height for better speed
- * let height = function
- *     Empty -> 0
- *   | Node(_,_,_,h) -> h
- *)
+let empty = {
+  by_stamp = Int.Map.empty;
+  by_name = Int.Map.empty;
+}
 
-let mknode l d r =
-  let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h
-  and hr = match r with Empty -> 0 | Node(_,_,_,h) -> h in
-  Node(l, d, r, (if hl >= hr then hl + 1 else hr + 1))
+let add_to_by_name by_name id name data =
+  let name_hash = Hashtbl.hash name in
+  match Int.Map.find name_hash by_name with
+  | exception Not_found ->
+    Int.Map.add name_hash [id, data] by_name
+  | entries ->
+    Int.Map.add (* replace *) name_hash ((id, data) :: entries) by_name
 
-let balance l d r =
-  let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h
-  and hr = match r with Empty -> 0 | Node(_,_,_,h) -> h in
-  if hl > hr + 1 then
-    match l with
-    | Node (ll, ld, lr, _)
-      when (match ll with Empty -> 0 | Node(_,_,_,h) -> h) >=
-           (match lr with Empty -> 0 | Node(_,_,_,h) -> h) ->
-        mknode ll ld (mknode lr d r)
-    | Node (ll, ld, Node(lrl, lrd, lrr, _), _) ->
-        mknode (mknode ll ld lrl) lrd (mknode lrr d r)
-    | _ -> assert false
-  else if hr > hl + 1 then
-    match r with
-    | Node (rl, rd, rr, _)
-      when (match rr with Empty -> 0 | Node(_,_,_,h) -> h) >=
-           (match rl with Empty -> 0 | Node(_,_,_,h) -> h) ->
-        mknode (mknode l d rl) rd rr
-    | Node (Node (rll, rld, rlr, _), rd, rr, _) ->
-        mknode (mknode l d rll) rld (mknode rlr rd rr)
-    | _ -> assert false
-  else
-    mknode l d r
+let add id data { by_stamp; by_name } =
+  match id with
+  | Global name ->
+    let by_name = add_to_by_name by_name id name data in
+    { by_stamp; by_name }
+  | Local { name; stamp } | Scoped { name; stamp } | Predef { name; stamp } ->
+    let by_stamp = Int.Map.add stamp data by_stamp in
+    let by_name = add_to_by_name by_name id name data in
+    { by_stamp; by_name }
 
-let rec add id data = function
-    Empty ->
-      Node(Empty, {ident = id; data = data; previous = None}, Empty, 1)
-  | Node(l, k, r, h) ->
-      let c = String.compare (name id) (name k.ident) in
-      if c = 0 then
-        Node(l, {ident = id; data = data; previous = Some k}, r, h)
-      else if c < 0 then
-        balance (add id data l) k r
-      else
-        balance l k (add id data r)
+let remove id ({ by_stamp; by_name } as tbl) =
+  match id with
+  | Global name -> (
+    let name_hash = Hashtbl.hash name in
+    match Int.Map.find name_hash by_name with
+    | exception Not_found -> tbl
+    | entries ->
+      let entries =
+        List.filter (fun (id', _data) -> not (same id id')) entries
+      in
+      let by_name =
+        match entries with
+        | [] -> Int.Map.remove name_hash by_name
+        | _::_ -> Int.Map.add (* replace *) name_hash entries by_name
+      in
+      { by_stamp; by_name })
+  | Local _ | Scoped _ | Predef _ ->
+    Misc.fatal_error "Can only remove [Global] identifiers"
 
-let rec min_binding = function
-    Empty -> raise Not_found
-  | Node (Empty, d, _, _) -> d
-  | Node (l, _, _, _) -> min_binding l
+let find_name name_to_find tbl =
+  let entries =
+    (* This might raise [Not_found] which is intended to escape. *)
+    Int.Map.find (Hashtbl.hash name_to_find) tbl.by_name
+  in
+  let rec loop entries name_to_find =
+    match entries with
+    | [] -> raise Not_found
+    | ((id, _data) as entry)::entries ->
+      if String.equal (name id) name_to_find then entry
+      else loop entries name_to_find
+  in
+  loop entries name_to_find
 
-let rec remove_min_binding = function
-    Empty -> invalid_arg "Map.remove_min_elt"
-  | Node (Empty, _, r, _) -> r
-  | Node (l, d, r, _) -> balance (remove_min_binding l) d r
+let find_same id ({ by_stamp; by_name = _ } as tbl) =
+  match id with
+  | Global name -> snd (find_name name tbl)
+  | Local { stamp } | Scoped { stamp } | Predef { stamp } ->
+    Int.Map.find stamp by_stamp
 
-let merge t1 t2 =
-  match (t1, t2) with
-    (Empty, t) -> t
-  | (t, Empty) -> t
-  | (_, _) ->
-      let d = min_binding t2 in
-      balance t1 d (remove_min_binding t2)
+let find_all name_to_find tbl =
+  let entries =
+    (* This might raise [Not_found] which is intended to escape. *)
+    Int.Map.find (Hashtbl.hash name_to_find) tbl.by_name
+  in
+  let rec loop entries name_to_find results =
+    match entries with
+    | [] -> results
+    | ((id, _data) as entry)::entries ->
+      let results =
+        if String.equal (name id) name_to_find then entry :: results
+        else results
+      in
+      loop entries name_to_find results
+  in
+  loop entries name_to_find []
 
-let rec remove id = function
-    Empty ->
-      Empty
-  | (Node (l, k, r, h) as m) ->
-      let c = String.compare (name id) (name k.ident) in
-      if c = 0 then
-        match k.previous with
-        | None -> merge l r
-        | Some k -> Node (l, k, r, h)
-      else if c < 0 then
-        let ll = remove id l in if l == ll then m else balance ll k r
-      else
-        let rr = remove id r in if r == rr then m else balance l k rr
+let add_keys_to_list { by_stamp = _; by_name } acc =
+  Int.Map.fold (fun _name_hash entries acc ->
+      List.fold_left (fun acc (id, _data) -> id :: acc) acc entries)
+    by_name acc
 
-let rec find_previous id = function
-    None ->
-      raise Not_found
-  | Some k ->
-      if same id k.ident then k.data else find_previous id k.previous
-
-let rec find_same id = function
-    Empty ->
-      raise Not_found
-  | Node(l, k, r, _) ->
-      let c = String.compare (name id) (name k.ident) in
-      if c = 0 then
-        if same id k.ident
-        then k.data
-        else find_previous id k.previous
-      else
-        find_same id (if c < 0 then l else r)
-
-let rec find_name n = function
-    Empty ->
-      raise Not_found
-  | Node(l, k, r, _) ->
-      let c = String.compare n (name k.ident) in
-      if c = 0 then
-        k.ident, k.data
-      else
-        find_name n (if c < 0 then l else r)
-
-let rec get_all = function
-  | None -> []
-  | Some k -> (k.ident, k.data) :: get_all k.previous
-
-let rec find_all n = function
-    Empty ->
-      []
-  | Node(l, k, r, _) ->
-      let c = String.compare n (name k.ident) in
-      if c = 0 then
-        (k.ident, k.data) :: get_all k.previous
-      else
-        find_all n (if c < 0 then l else r)
-
-let rec fold_aux f stack accu = function
-    Empty ->
-      begin match stack with
-        [] -> accu
-      | a :: l -> fold_aux f l accu a
-      end
-  | Node(l, k, r, _) ->
-      fold_aux f (l :: stack) (f k accu) r
-
-let fold_name f tbl accu = fold_aux (fun k -> f k.ident k.data) [] accu tbl
-
-let rec fold_data f d accu =
-  match d with
-    None -> accu
-  | Some k -> f k.ident k.data (fold_data f k.previous accu)
-
-let fold_all f tbl accu =
-  fold_aux (fun k -> fold_data f (Some k)) [] accu tbl
-
-(* let keys tbl = fold_name (fun k _ accu -> k::accu) tbl [] *)
-
-let rec iter f = function
-    Empty -> ()
-  | Node(l, k, r, _) ->
-      iter f l; f k.ident k.data; iter f r
+let fold_name f { by_stamp = _; by_name } acc =
+  Int.Map.fold (fun _name_hash entries acc ->
+      let _names_seen, acc =
+        List.fold_left (fun (names_seen, acc) (id, data) ->
+            (* Only the most recent occurrence counts here. *)
+            let name = name id in
+            if String.Set.mem name names_seen then names_seen, acc
+            else
+              let names_seen = String.Set.add name names_seen in
+              let acc = f id data acc in
+              names_seen, acc)
+          (String.Set.empty, acc) entries
+      in
+      acc)
+    by_name acc
 
 (* Idents for sharing keys *)
 
