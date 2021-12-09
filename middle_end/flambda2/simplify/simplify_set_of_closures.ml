@@ -387,7 +387,7 @@ end
 
 module C = Context_for_multiple_sets_of_closures
 
-let dacc_inside_function context ~used_closure_vars ~shareable_constants ~params
+let dacc_inside_function context ~used_closure_vars ~shareable_constants ~closure_offsets ~params
     ~my_closure ~my_depth closure_id ~closure_bound_names_inside_function
     ~inlining_arguments =
   let dacc =
@@ -420,6 +420,7 @@ let dacc_inside_function context ~used_closure_vars ~shareable_constants ~params
   dacc
   |> DA.with_shareable_constants ~shareable_constants
   |> DA.with_used_closure_vars ~used_closure_vars
+  |> DA.with_closure_offsets ~closure_offsets
 
 type simplify_function_result =
   { new_code_id : Code_id.t;
@@ -428,7 +429,7 @@ type simplify_function_result =
     uacc_after_upwards_traversal : UA.t option
   }
 
-let simplify_function0 context ~used_closure_vars ~shareable_constants
+let simplify_function0 context ~used_closure_vars ~shareable_constants ~closure_offsets
     closure_id code_id code ~closure_bound_names_inside_function
     code_age_relation ~lifted_consts_prev_functions =
   let inlining_arguments_from_denv =
@@ -461,7 +462,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
            ~free_names_of_body:_
          ->
         let dacc =
-          dacc_inside_function context ~used_closure_vars ~shareable_constants
+          dacc_inside_function context ~used_closure_vars ~shareable_constants ~closure_offsets
             ~params ~my_closure ~my_depth closure_id
             ~closure_bound_names_inside_function ~inlining_arguments
         in
@@ -596,12 +597,12 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
     uacc_after_upwards_traversal = Some uacc_after_upwards_traversal
   }
 
-let simplify_function context ~used_closure_vars ~shareable_constants closure_id
+let simplify_function context ~used_closure_vars ~shareable_constants ~closure_offsets closure_id
     code_id ~closure_bound_names_inside_function code_age_relation
     ~lifted_consts_prev_functions =
   match DE.find_code_exn (DA.denv (C.dacc_prior_to_sets context)) code_id with
   | Code_present code ->
-    simplify_function0 context ~used_closure_vars ~shareable_constants
+    simplify_function0 context ~used_closure_vars ~shareable_constants ~closure_offsets
       closure_id code_id code ~closure_bound_names_inside_function
       code_age_relation ~lifted_consts_prev_functions
   | Metadata_only _ ->
@@ -636,6 +637,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
         code_age_relation,
         used_closure_vars,
         shareable_constants,
+        closure_offsets,
         lifted_consts,
         code_ids_to_remember ) =
     Closure_id.Lmap.fold
@@ -646,6 +648,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
              code_age_relation,
              used_closure_vars,
              shareable_constants,
+             closure_offsets,
              lifted_consts_prev_functions,
              code_ids_to_remember ) ->
         let { new_code_id;
@@ -653,7 +656,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
               dacc_after_body;
               uacc_after_upwards_traversal
             } =
-          simplify_function context ~used_closure_vars ~shareable_constants
+          simplify_function context ~used_closure_vars ~shareable_constants ~closure_offsets
             closure_id old_code_id
             ~closure_bound_names_inside_function:closure_bound_names_inside
             code_age_relation ~lifted_consts_prev_functions
@@ -717,12 +720,19 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
           | Some uacc_after_upwards_traversal ->
             UA.shareable_constants uacc_after_upwards_traversal
         in
+        let closure_offsets =
+          match uacc_after_upwards_traversal with
+          | None -> closure_offsets
+          | Some uacc_after_upwards_traversal ->
+            UA.closure_offsets uacc_after_upwards_traversal
+        in
         ( result_function_decls_in_set,
           code,
           fun_types,
           code_age_relation,
           used_closure_vars,
           shareable_constants,
+          closure_offsets,
           lifted_consts_prev_functions,
           code_ids_to_remember ))
       all_function_decls_in_set
@@ -732,6 +742,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
         TE.code_age_relation (DA.typing_env dacc),
         DA.used_closure_vars dacc,
         DA.shareable_constants dacc,
+        DA.closure_offsets dacc,
         LCS.empty,
         DA.code_ids_to_remember dacc )
   in
@@ -739,6 +750,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
     DA.add_to_lifted_constant_accumulator dacc lifted_consts
     |> DA.with_used_closure_vars ~used_closure_vars
     |> DA.with_shareable_constants ~shareable_constants
+    |> DA.with_closure_offsets ~closure_offsets
     |> DA.with_code_ids_to_remember ~code_ids_to_remember
   in
   let code_ids_to_remember_this_set =

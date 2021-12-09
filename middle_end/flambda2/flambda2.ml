@@ -169,9 +169,11 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     then
       let output_prefix = prefixname ^ ".cps_conv" in
       Inlining_report.output_then_forget_decisions ~output_prefix);
-    let flambda, cmx, all_code =
+    let flambda, offsets, cmx, all_code =
       if Flambda_features.classic_mode ()
-      then raw_flambda, None, code
+      then
+        let offsets = assert false (* TODO: fixme *) in
+        raw_flambda, offsets, None, code
       else
         let raw_flambda =
           if Flambda_features.Debug.permute_every_name ()
@@ -179,7 +181,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
           else raw_flambda
         in
         let round = 0 in
-        let { Simplify.unit = flambda; cmx; all_code } =
+        let { Simplify.unit = flambda; exported_offsets; cmx; all_code } =
           Profile.record_call ~accumulate:true "simplify" (fun () ->
               Simplify.run ~symbol_for_global ~get_global_info ~round
                 raw_flambda)
@@ -191,7 +193,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
         Compiler_hooks.execute Flambda2 flambda;
         print_flambda "simplify" ppf flambda;
         output_flexpect ~ml_filename:filename ~raw_flambda flambda;
-        flambda, cmx, all_code
+        flambda, exported_offsets, cmx, all_code
     in
     begin
       match Sys.getenv "PRINT_SIZES" with
@@ -203,9 +205,15 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
               Flambda2_identifiers.Code_id.print (Code.code_id code)
               Cost_metrics.print size)
     end;
+    begin
+      match cmx with
+      | None -> ()
+        (* Either opaque was passed, or there is no need to export offsets *)
+      | Some cmx -> Compilenv.flambda2_set_export_info cmx
+    end;
     let cmm =
-      Flambda2_to_cmm.To_cmm.unit ~make_symbol:Compilenv.make_symbol flambda cmx
-        ~all_code
+      Flambda2_to_cmm.To_cmm.unit ~make_symbol:Compilenv.make_symbol flambda
+        ~all_code ~offsets
     in
     if not keep_symbol_tables
     then begin

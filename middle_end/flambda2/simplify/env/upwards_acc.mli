@@ -24,6 +24,7 @@ val print : Format.formatter -> t -> unit
 val create :
   required_names:Name.Set.t ->
   reachable_code_ids:Data_flow.Reachable_code_ids.t Or_unknown.t ->
+  closure_offsets:Closure_offsets.t Or_unknown.t ->
   Upwards_env.t ->
   Downwards_acc.t ->
   t
@@ -95,3 +96,8 @@ val generate_phantom_lets : t -> bool
 val are_rebuilding_terms : t -> Are_rebuilding_terms.t
 
 val is_demoted_exn_handler : t -> Continuation.t -> bool
+
+val closure_offsets : t -> Closure_offsets.t Or_unknown.t
+
+val with_closure_offsets : t -> Closure_offsets.t Or_unknown.t -> t
+
