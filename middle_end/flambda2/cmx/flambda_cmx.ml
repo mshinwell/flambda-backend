@@ -124,7 +124,7 @@ let compute_reachable_names_and_code ~module_symbol typing_env code =
   fixpoint init_names Name_occurrences.empty
 
 let prepare_cmx_file_contents ~final_typing_env ~module_symbol
-    ~used_closure_vars all_code =
+    ~used_closure_vars ~exported_offsets all_code =
   match final_typing_env with
   | None -> None
   | Some _ when Flambda_features.opaque () -> None
@@ -138,11 +138,6 @@ let prepare_cmx_file_contents ~final_typing_env ~module_symbol
     let all_code = Exported_code.remove_unreachable all_code ~reachable_names in
     let final_typing_env =
       TE.Serializable.create final_typing_env ~reachable_names
-    in
-    let exported_offsets =
-      (* The offsets computations for newly defined elements will be added after
-         To_cmm_closure *)
-      Exported_offsets.imported_offsets ()
     in
     Some
       (Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets
