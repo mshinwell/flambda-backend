@@ -72,7 +72,7 @@ val find_name: string -> 'a tbl -> t * 'a
 val find_all: string -> 'a tbl -> (t * 'a) list
 val fold_name: (t -> 'a -> 'b -> 'b) -> 'a tbl -> 'b -> 'b
 val add_keys_to_list: 'a tbl -> t list -> t list
-val remove: t -> 'a tbl -> 'a tbl
+val remove_name: string -> 'a tbl -> 'a tbl
 
 (* Idents for sharing keys *)
 

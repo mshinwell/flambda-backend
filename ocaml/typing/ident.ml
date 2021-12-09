@@ -169,8 +169,8 @@ let empty = {
   by_name = Int.Map.empty;
 }
 
-let add_to_by_name by_name id name data =
-  let name_hash = Hashtbl.hash name in
+let add_to_by_name by_name id data =
+  let name_hash = Hashtbl.hash (name id) in
   match Int.Map.find name_hash by_name with
   | exception Not_found ->
     Int.Map.add name_hash [id, data] by_name
@@ -178,33 +178,44 @@ let add_to_by_name by_name id name data =
     Int.Map.add (* replace *) name_hash ((id, data) :: entries) by_name
 
 let add id data { by_stamp; by_name } =
+  let by_name = add_to_by_name by_name id data in
   match id with
-  | Global name ->
-    let by_name = add_to_by_name by_name id name data in
-    { by_stamp; by_name }
-  | Local { name; stamp } | Scoped { name; stamp } | Predef { name; stamp } ->
+  | Global _ -> { by_stamp; by_name }
+  | Local { stamp; _ } | Scoped { stamp; _ } ->
     let by_stamp = Int.Map.add stamp data by_stamp in
-    let by_name = add_to_by_name by_name id name data in
+    { by_stamp; by_name }
+  | Predef { stamp; _ } ->
+    (* [Predef] stamps overlap with the other ones, so we negate them. *)
+    let by_stamp = Int.Map.add (- stamp) data by_stamp in
     { by_stamp; by_name }
 
-let remove id ({ by_stamp; by_name } as tbl) =
-  match id with
-  | Global name -> (
-    let name_hash = Hashtbl.hash name in
-    match Int.Map.find name_hash by_name with
-    | exception Not_found -> tbl
-    | entries ->
-      let entries =
-        List.filter (fun (id', _data) -> not (same id id')) entries
-      in
-      let by_name =
-        match entries with
-        | [] -> Int.Map.remove name_hash by_name
-        | _::_ -> Int.Map.add (* replace *) name_hash entries by_name
-      in
-      { by_stamp; by_name })
-  | Local _ | Scoped _ | Predef _ ->
-    Misc.fatal_error "Can only remove [Global] identifiers"
+let remove_name name_to_remove ({ by_stamp; by_name } as tbl) =
+  let name_hash = Hashtbl.hash name_to_remove in
+  match Int.Map.find name_hash by_name with
+  | exception Not_found -> tbl
+  | entries ->
+    let to_remove, entries =
+      List.partition (fun (id, _data) ->
+          String.equal name_to_remove (name id))
+        entries
+    in
+    let by_stamp =
+      List.fold_left (fun by_stamp (id, _data) ->
+          match id with
+          | Global _ -> by_stamp
+          | Local { stamp; _ } | Scoped { stamp; _ } ->
+            Int.Map.remove stamp by_stamp
+          | Predef { stamp; _ } ->
+            Int.Map.remove (- stamp) by_stamp)
+        by_stamp
+        to_remove
+    in
+    let by_name =
+      match entries with
+      | [] -> Int.Map.remove name_hash by_name
+      | _::_ -> Int.Map.add (* replace *) name_hash entries by_name
+    in
+    { by_stamp; by_name }
 
 let find_name name_to_find tbl =
   let entries =
@@ -223,8 +234,8 @@ let find_name name_to_find tbl =
 let find_same id ({ by_stamp; by_name = _ } as tbl) =
   match id with
   | Global name -> snd (find_name name tbl)
-  | Local { stamp } | Scoped { stamp } | Predef { stamp } ->
-    Int.Map.find stamp by_stamp
+  | Local { stamp } | Scoped { stamp } -> Int.Map.find stamp by_stamp
+  | Predef { stamp } -> Int.Map.find (- stamp) by_stamp
 
 let find_all name_to_find tbl =
   match Int.Map.find (Hashtbl.hash name_to_find) tbl.by_name with

@@ -259,8 +259,8 @@ module IdTbl =
     let add id x tbl =
       {tbl with current = Ident.add id x tbl.current}
 
-    let remove id tbl =
-      {tbl with current = Ident.remove id tbl.current}
+    let remove name tbl =
+      {tbl with current = Ident.remove_name name tbl.current}
 
     let add_open slot wrap root components next =
       let using =
@@ -2981,7 +2981,7 @@ let filter_non_loaded_persistent f env =
   in
   let remove_ids tbl ids =
     String.Set.fold
-      (fun name tbl -> IdTbl.remove (Ident.create_persistent name) tbl)
+      (fun name tbl -> IdTbl.remove name tbl)
       ids
       tbl
   in
