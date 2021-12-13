@@ -114,6 +114,17 @@ let rebuild_arm uacc arm (action, use_id, arity)
     let arms = Targetint_31_63.Map.add arm action arms in
     new_let_conts, arms, identity_arms, not_arms
 
+let rebuild_let_expr_for_tagged_scrutinee uacc rewrite dest _dacc ~rebuild =
+  rebuild uacc ~after_rebuild:(fun expr uacc ->
+      let uacc =
+        match rewrite with
+        | None -> uacc
+        | Some rewrite ->
+          UA.map_uenv uacc ~f:(fun uenv ->
+              UE.add_apply_cont_rewrite uenv dest rewrite)
+      in
+      expr, uacc)
+
 let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
     ~after_rebuild =
   let new_let_conts, arms, identity_arms, not_arms =
@@ -174,16 +185,8 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
         (Bound_pattern.singleton bound_to)
         defining_expr ~body ~free_names_of_body:Unknown
     in
-    simplify_let dacc let_expr ~down_to_up:(fun _dacc ~rebuild ->
-        rebuild uacc ~after_rebuild:(fun expr uacc ->
-            let uacc =
-              match rewrite with
-              | None -> uacc
-              | Some rewrite ->
-                UA.map_uenv uacc ~f:(fun uenv ->
-                    UE.add_apply_cont_rewrite uenv dest rewrite)
-            in
-            expr, uacc))
+    simplify_let dacc let_expr
+      ~down_to_up:(rebuild_let_expr_for_tagged_scrutinee uacc rewrite dest)
   in
   let body, uacc =
     if Targetint_31_63.Map.cardinal arms < 1

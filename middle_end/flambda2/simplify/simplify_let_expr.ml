@@ -218,6 +218,19 @@ let update_data_flow dacc closure_info ~lifted_constants_from_defining_expr
     ~init:data_flow
     ~f:(record_new_defining_expression_binding_for_data_flow dacc)
 
+let rebuild_body_then_let simplify_named_result removed_operations
+    ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
+    ~down_to_up dacc ~rebuild:rebuild_body =
+  let rebuild uacc ~after_rebuild =
+    let after_rebuild body uacc =
+      rebuild_let simplify_named_result removed_operations
+        ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
+        ~body uacc ~after_rebuild
+    in
+    rebuild_body uacc ~after_rebuild
+  in
+  down_to_up dacc ~rebuild
+
 let simplify_let0 ~simplify_expr ~simplify_toplevel dacc let_expr ~down_to_up
     bound_pattern ~body =
   let module L = Flambda.Let in
@@ -267,18 +280,11 @@ let simplify_let0 ~simplify_expr ~simplify_toplevel dacc let_expr ~down_to_up
   (* Simplify the body of the let-expression and make the new [Let] bindings
      around the simplified body. [Simplify_named] will already have prepared
      [dacc] with the necessary bindings for the simplification of the body. *)
-  let down_to_up dacc ~rebuild:rebuild_body =
-    let rebuild uacc ~after_rebuild =
-      let after_rebuild body uacc =
-        rebuild_let simplify_named_result removed_operations
-          ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
-          ~body uacc ~after_rebuild
-      in
-      rebuild_body uacc ~after_rebuild
-    in
-    down_to_up dacc ~rebuild
-  in
-  simplify_expr dacc body ~down_to_up
+  simplify_expr dacc body
+    ~down_to_up:
+      (rebuild_body_then_let simplify_named_result removed_operations
+         ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
+         ~down_to_up)
 
 let simplify_let ~simplify_expr ~simplify_toplevel dacc let_expr ~down_to_up =
   let module L = Flambda.Let in

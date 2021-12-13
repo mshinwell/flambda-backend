@@ -190,6 +190,23 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
         (rebuild_non_inlined_direct_full_application apply ~use_id
            ~exn_cont_use_id ~result_arity ~coming_from_indirect)
 
+let rebuild_direct_partial_application ~coming_from_indirect ~down_to_up dacc
+    ~rebuild =
+  down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
+      let uacc =
+        if coming_from_indirect
+        then
+          UA.notify_removed
+            ~operation:Removed_operations.direct_call_of_indirect uacc
+        else uacc
+      in
+      (* Increase the counter of calls as the original apply node was removed.
+         [simplify] is called over the two apply nodes that were created to
+         replace the original one so they will be taken into account in the cost
+         metrics, mainly by increasing the code size. *)
+      let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
+      rebuild uacc ~after_rebuild)
+
 let simplify_direct_partial_application ~simplify_expr dacc apply
     ~callee's_code_id ~callee's_closure_id ~param_arity ~result_arity ~recursive
     ~down_to_up ~coming_from_indirect =
@@ -428,49 +445,38 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       ~body ~free_names_of_body:Unknown
     |> Expr.create_let
   in
-  let down_to_up dacc ~rebuild =
-    down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
-        let uacc =
-          if coming_from_indirect
-          then
-            UA.notify_removed
-              ~operation:Removed_operations.direct_call_of_indirect uacc
-          else uacc
-        in
-        (* Increase the counter of calls as the original apply node was removed.
-           [simplify] is called over the two apply nodes that were created to
-           replace the original one so they will be taken into account in the
-           cost metrics, mainly by increasing the code size. *)
-        let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
-        rebuild uacc ~after_rebuild)
-  in
-  simplify_expr dacc expr ~down_to_up
+  simplify_expr dacc expr
+    ~down_to_up:
+      (rebuild_direct_partial_application ~coming_from_indirect ~down_to_up)
 
 (* CR mshinwell: Should it be an error to encounter a non-direct application of
    a symbol after [Simplify]? This shouldn't usually happen, but I'm not 100%
    sure it cannot in every case. *)
 
+let rebuild_direct_partial_application ~down_to_up ~coming_from_indirect dacc
+    ~rebuild =
+  let rebuild uacc ~after_rebuild =
+    (* Remove one function call as this apply was removed and replaced by two
+       new ones. *)
+    let uacc =
+      if coming_from_indirect
+      then
+        UA.notify_removed ~operation:Removed_operations.direct_call_of_indirect
+          uacc
+      else uacc
+    in
+    let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
+    rebuild uacc ~after_rebuild
+  in
+  down_to_up dacc ~rebuild
+
 let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
     ~result_arity:_ ~down_to_up ~coming_from_indirect =
   fail_if_probe apply;
   let expr = Simplify_common.split_direct_over_application apply ~param_arity in
-  let down_to_up dacc ~rebuild =
-    let rebuild uacc ~after_rebuild =
-      (* Remove one function call as this apply was removed and replaced by two
-         new ones. *)
-      let uacc =
-        if coming_from_indirect
-        then
-          UA.notify_removed
-            ~operation:Removed_operations.direct_call_of_indirect uacc
-        else uacc
-      in
-      let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
-      rebuild uacc ~after_rebuild
-    in
-    down_to_up dacc ~rebuild
-  in
-  simplify_expr dacc expr ~down_to_up
+  simplify_expr dacc expr
+    ~down_to_up:
+      (rebuild_direct_partial_application ~down_to_up ~coming_from_indirect)
 
 let simplify_direct_function_call ~simplify_expr dacc apply
     ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
