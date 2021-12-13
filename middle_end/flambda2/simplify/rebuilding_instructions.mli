@@ -20,5 +20,7 @@ type t =
         removed_operations : Removed_operations.t;
         lifted_constants_from_defining_expr : Lifted_constant_state.t;
         at_unit_toplevel : bool;
-        closure_info : Closure_info.t
+        closure_info : Closure_info.t;
+        body : t;
+        uacc : Upwards_acc.t
       }

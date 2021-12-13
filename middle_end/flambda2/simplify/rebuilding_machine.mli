@@ -13,14 +13,3 @@
 (**************************************************************************)
 
 [@@@ocaml.warning "+a-30-40-41-42"]
-
-type t =
-  | Let_body_then_let of
-      { simplify_named_result : Simplify_named_result.t;
-        removed_operations : Removed_operations.t;
-        lifted_constants_from_defining_expr : Lifted_constant_state.t;
-        at_unit_toplevel : bool;
-        closure_info : Closure_info.t;
-        body : t;
-        uacc : Upwards_acc.t
-      }

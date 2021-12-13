@@ -14,13 +14,15 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-type t =
-  | Let_body_then_let of
-      { simplify_named_result : Simplify_named_result.t;
-        removed_operations : Removed_operations.t;
-        lifted_constants_from_defining_expr : Lifted_constant_state.t;
-        at_unit_toplevel : bool;
-        closure_info : Closure_info.t;
-        body : t;
-        uacc : Upwards_acc.t
-      }
+let rec eval (r : Rebuilding_instructions.t) k =
+  match r with
+  | Let_body
+      { let_metadata;
+        body;
+        uacc
+      } ->
+    eval body (fun body ->
+        Simplify_let_expr.rebuild_let simplify_named_result removed_operations
+          ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
+          ~body uacc k)
+  | Whole_let ->
