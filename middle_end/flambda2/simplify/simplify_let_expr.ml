@@ -221,6 +221,16 @@ let update_data_flow dacc closure_info ~lifted_constants_from_defining_expr
 let rebuild_body_then_let simplify_named_result removed_operations
     ~lifted_constants_from_defining_expr ~at_unit_toplevel ~closure_info
     ~down_to_up dacc ~rebuild:rebuild_body =
+  let body_r = rebuild_body uacc in
+  let r : R.t =
+    Let_body_then_let
+      { simplify_named_result;
+        removed_operations;
+        lifted_constants_from_defining_expr;
+        at_unit_toplevel;
+        closure_info
+      }
+  in
   let rebuild uacc ~after_rebuild =
     let after_rebuild body uacc =
       rebuild_let simplify_named_result removed_operations
