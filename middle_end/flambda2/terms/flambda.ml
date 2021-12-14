@@ -1087,18 +1087,30 @@ module Continuation_handler = struct
             in
             Variable.Map.add var num num_occurrences)
     in
-    let t0 : T0.t = { num_normal_occurrences_of_params; handler } in
+    let t0 : T0.t =
+      { num_normal_occurrences_of_params;
+        handler = With_delayed_renaming.create handler
+      }
+    in
     let cont_handler_abst = A.create (Bound_parameters.create params) t0 in
     { cont_handler_abst; is_exn_handler }
 
   let pattern_match t ~f =
     let open A in
     let<> params, { handler; _ } = t.cont_handler_abst in
+    let handler =
+      With_delayed_renaming.descr handler
+        ~apply_renaming_descr:apply_renaming_expr
+    in
     f (Bound_parameters.to_list params) ~handler
 
   let pattern_match' t ~f =
     A.pattern_match t.cont_handler_abst
       ~f:(fun params { handler; num_normal_occurrences_of_params } ->
+        let handler =
+          With_delayed_renaming.descr handler
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         f
           (Bound_parameters.to_list params)
           ~num_normal_occurrences_of_params ~handler)
@@ -1122,6 +1134,14 @@ module Continuation_handler = struct
                      ({ handler = handler1; _ } : T0.t)
                      ({ handler = handler2; _ } : T0.t)
                    ->
+                  let handler1 =
+                    With_delayed_renaming.descr handler1
+                      ~apply_renaming_descr:apply_renaming_expr
+                  in
+                  let handler2 =
+                    With_delayed_renaming.descr handler2
+                      ~apply_renaming_descr:apply_renaming_expr
+                  in
                   Ok (f (Bound_parameters.to_list params) ~handler1 ~handler2))
             else
               Error
@@ -1165,7 +1185,11 @@ module Function_params_and_body = struct
       Or_unknown.map free_names_of_body ~f:(fun free_names_of_body ->
           Name_occurrences.mem_var free_names_of_body my_closure)
     in
-    let base : Base.t = { expr = body; free_names = free_names_of_body } in
+    let base : Base.t =
+      { expr = With_delayed_renaming.create body;
+        free_names = free_names_of_body
+      }
+    in
     let bound_for_function =
       Bound_for_function.create ~return_continuation ~exn_continuation ~params
         ~my_closure ~my_depth
@@ -1178,10 +1202,13 @@ module Function_params_and_body = struct
   let pattern_match t ~f =
     let module BFF = Bound_for_function in
     let open A in
-    let<> bff, { expr; free_names } = t.abst in
+    let<> bff, { expr = body; free_names } = t.abst in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     f
       ~return_continuation:(BFF.return_continuation bff)
-      ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
+      ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body
       ~my_closure:(BFF.my_closure bff) ~is_my_closure_used:t.is_my_closure_used
       ~my_depth:(BFF.my_depth bff) ~free_names_of_body:free_names
 
@@ -1192,6 +1219,14 @@ module Function_params_and_body = struct
            { expr = body1; free_names = _ }
            { expr = body2; free_names = _ }
          ->
+        let body1 =
+          With_delayed_renaming.descr body1
+            ~apply_renaming_descr:apply_renaming_expr
+        in
+        let body2 =
+          With_delayed_renaming.descr body2
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         f
           ~return_continuation:
             (Bound_for_function.return_continuation bound_for_function)
@@ -1228,6 +1263,9 @@ module Let_expr = struct
   let pattern_match t ~f =
     let open A in
     let<> bound_pattern, { body; _ } = t.let_abst in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     f bound_pattern ~body
 
   let pattern_match' t ~f =
@@ -1235,7 +1273,11 @@ module Let_expr = struct
         let num_normal_occurrences_of_bound_vars =
           t0.num_normal_occurrences_of_bound_vars
         in
-        f bound_pattern ~num_normal_occurrences_of_bound_vars ~body:t0.body)
+        let body =
+          With_delayed_renaming.descr t0.body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
+        f bound_pattern ~num_normal_occurrences_of_bound_vars ~body)
 
   module Pattern_match_pair_error = struct
     type t = Mismatched_let_bindings
@@ -1246,14 +1288,28 @@ module Let_expr = struct
 
   let pattern_match_pair t1 t2 ~dynamic ~static =
     A.pattern_match t1.let_abst ~f:(fun bound_pattern1 t0_1 ->
-        let body1 = t0_1.body in
+        let body1 =
+          With_delayed_renaming.descr t0_1.body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         A.pattern_match t2.let_abst ~f:(fun bound_pattern2 t0_2 ->
-            let body2 = t0_2.body in
+            let body2 =
+              With_delayed_renaming.descr t0_2.body
+                ~apply_renaming_descr:apply_renaming_expr
+            in
             let dynamic_case () =
               let ans =
                 A.pattern_match_pair t1.let_abst t2.let_abst
                   ~f:(fun bound_pattern t0_1 t0_2 ->
-                    dynamic bound_pattern ~body1:t0_1.body ~body2:t0_2.body)
+                    let body1 =
+                      With_delayed_renaming.descr t0_1.body
+                        ~apply_renaming_descr:apply_renaming_expr
+                    in
+                    let body2 =
+                      With_delayed_renaming.descr t0_2.body
+                        ~apply_renaming_descr:apply_renaming_expr
+                    in
+                    dynamic bound_pattern ~body1 ~body2)
               in
               Ok ans
             in
@@ -1324,7 +1380,11 @@ module Let_expr = struct
             in
             Variable.Map.add var num num_occurrences)
     in
-    let t0 : T0.t = { num_normal_occurrences_of_bound_vars; body } in
+    let t0 : T0.t =
+      { num_normal_occurrences_of_bound_vars;
+        body = With_delayed_renaming.create body
+      }
+    in
     { let_abst = A.create bound_pattern t0; defining_expr }
 
   let defining_expr t = t.defining_expr
@@ -1351,7 +1411,8 @@ module Non_recursive_let_cont_handler = struct
 
   let create continuation ~body handler =
     let continuation_and_body =
-      Continuation_and_body.create continuation body
+      Continuation_and_body.create continuation
+        (With_delayed_renaming.create body)
     in
     { continuation_and_body; handler }
 
@@ -1365,11 +1426,22 @@ module Non_recursive_let_cont_handler = struct
           let apply_renaming = With_delayed_renaming.apply_renaming
         end) in
     let<> continuation, body = t.continuation_and_body in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     f continuation ~body
 
   let pattern_match_pair t1 t2 ~f =
     Continuation_and_body.pattern_match_pair t1.continuation_and_body
       t2.continuation_and_body ~f:(fun continuation body1 body2 ->
+        let body1 =
+          With_delayed_renaming.descr body1
+            ~apply_renaming_descr:apply_renaming_expr
+        in
+        let body2 =
+          With_delayed_renaming.descr body2
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         f continuation ~body1 ~body2)
 
   let handler t = t.handler
@@ -1381,7 +1453,8 @@ module Recursive_let_cont_handlers = struct
   module T0 = struct
     type t = recursive_let_cont_handlers_t0
 
-    let create ~body handlers = { handlers; body }
+    let create ~body handlers =
+      { handlers; body = With_delayed_renaming.create body }
 
     let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
 
@@ -1402,6 +1475,9 @@ module Recursive_let_cont_handlers = struct
   let pattern_match t ~f =
     let open A in
     let<> _, { body; handlers } = t in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     f ~body handlers
 
   let pattern_match_pair t1 t2 ~f =
@@ -1413,6 +1489,14 @@ module Recursive_let_cont_handlers = struct
          ->
         let body1 = handlers0_1.body in
         let body2 = handlers0_2.body in
+        let body1 =
+          With_delayed_renaming.descr body1
+            ~apply_renaming_descr:apply_renaming_expr
+        in
+        let body2 =
+          With_delayed_renaming.descr body2
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         let handlers1 = handlers0_1.handlers in
         let handlers2 = handlers0_2.handlers in
         f ~body1 ~body2 handlers1 handlers2)
