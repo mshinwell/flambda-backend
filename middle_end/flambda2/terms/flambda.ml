@@ -59,9 +59,7 @@ end = struct
       descr
 end
 
-type expr = expr_descr With_delayed_renaming.t
-
-and expr_descr =
+type expr =
   | Let of let_expr
   | Let_cont of let_cont_expr
   | Apply of Apply.t
@@ -71,7 +69,7 @@ and expr_descr =
 
 and let_expr_t0 =
   { num_normal_occurrences_of_bound_vars : Num_occurrences.t Variable.Map.t;
-    body : expr
+    body : expr With_delayed_renaming.t
   }
 
 and let_expr =
@@ -95,13 +93,14 @@ and let_cont_expr =
   | Recursive of recursive_let_cont_handlers
 
 and non_recursive_let_cont_handler =
-  { continuation_and_body : (Bound_continuation.t, expr) Name_abstraction.t;
+  { continuation_and_body :
+      (Bound_continuation.t, expr With_delayed_renaming.t) Name_abstraction.t;
     handler : continuation_handler
   }
 
 and recursive_let_cont_handlers_t0 =
   { handlers : continuation_handlers;
-    body : expr
+    body : expr With_delayed_renaming.t
   }
 
 and recursive_let_cont_handlers =
@@ -109,7 +108,7 @@ and recursive_let_cont_handlers =
 
 and continuation_handler_t0 =
   { num_normal_occurrences_of_params : Num_occurrences.t Variable.Map.t;
-    handler : expr
+    handler : expr With_delayed_renaming.t
   }
 
 and continuation_handler =
@@ -121,7 +120,7 @@ and continuation_handler =
 and continuation_handlers = continuation_handler Continuation.Map.t
 
 and function_params_and_body_base =
-  { expr : expr;
+  { expr : expr With_delayed_renaming.t;
     free_names : Name_occurrences.t Or_unknown.t
   }
 
@@ -138,13 +137,7 @@ and static_const_or_code =
 
 and static_const_group = static_const_or_code list
 
-let rec descr expr =
-  With_delayed_renaming.descr expr
-    ~apply_renaming_descr:apply_renaming_expr_descr
-
-and apply_renaming = With_delayed_renaming.apply_renaming
-
-and apply_renaming_expr_descr t renaming =
+let rec apply_renaming_expr t renaming =
   match t with
   | Let let_expr ->
     let let_expr' = apply_renaming_let_expr let_expr renaming in
@@ -183,7 +176,7 @@ and apply_renaming_named (named : named) renaming : named =
 
 and apply_renaming_let_expr_t0
     ({ body; num_normal_occurrences_of_bound_vars } as t) renaming =
-  let body' = apply_renaming body renaming in
+  let body' = With_delayed_renaming.apply_renaming body renaming in
   let changed = ref (body != body') in
   let num_normal_occurrences_of_bound_vars =
     Variable.Map.fold
@@ -236,9 +229,9 @@ and apply_renaming_non_recursive_let_cont_handler
     Name_abstraction.Make_matching_and_renaming
       (Bound_continuation)
       (struct
-        type t = expr
+        type t = expr With_delayed_renaming.t
 
-        let apply_renaming = apply_renaming
+        let apply_renaming = With_delayed_renaming.apply_renaming
       end)
   in
   let continuation_and_body' =
@@ -249,7 +242,7 @@ and apply_renaming_non_recursive_let_cont_handler
 
 and apply_renaming_recursive_let_cont_handlers_t0 { handlers; body } renaming =
   let handlers' = apply_renaming_continuation_handlers handlers renaming in
-  let body' = apply_renaming body renaming in
+  let body' = With_delayed_renaming.apply_renaming body renaming in
   { handlers = handlers'; body = body' }
 
 and apply_renaming_recursive_let_cont_handlers t renaming =
@@ -266,7 +259,7 @@ and apply_renaming_recursive_let_cont_handlers t renaming =
 
 and apply_renaming_continuation_handler_t0
     ({ handler; num_normal_occurrences_of_params } as t) renaming =
-  let handler' = apply_renaming handler renaming in
+  let handler' = With_delayed_renaming.apply_renaming handler renaming in
   if handler == handler'
   then t
   else { handler = handler'; num_normal_occurrences_of_params }
@@ -296,7 +289,7 @@ and apply_renaming_continuation_handlers t renaming =
     t Continuation.Map.empty
 
 and apply_renaming_function_params_and_body_base { expr; free_names } renaming =
-  let expr = apply_renaming expr renaming in
+  let expr = With_delayed_renaming.apply_renaming expr renaming in
   let free_names =
     Or_unknown.map free_names ~f:(fun free_names ->
         Name_occurrences.apply_renaming free_names renaming)
@@ -343,7 +336,9 @@ and apply_renaming_static_const_group t renaming =
 
 let rec all_ids_for_export_continuation_handler_t0
     { handler; num_normal_occurrences_of_params = _ } =
-  all_ids_for_export handler
+  all_ids_for_export
+    (With_delayed_renaming.descr ~apply_renaming_descr:apply_renaming_expr
+       handler)
 
 and all_ids_for_export_continuation_handler
     { cont_handler_abst; is_exn_handler = _ } =
@@ -368,7 +363,7 @@ and all_ids_for_export_continuation_handlers t =
     t Ids_for_export.empty
 
 and all_ids_for_export t =
-  match descr t with
+  match t with
   | Let let_expr -> all_ids_for_export_let_expr let_expr
   | Let_cont let_cont -> all_ids_for_export_let_cont_expr let_cont
   | Apply apply -> Apply.all_ids_for_export apply
@@ -378,7 +373,8 @@ and all_ids_for_export t =
 
 and all_ids_for_export_let_expr_t0
     { body; num_normal_occurrences_of_bound_vars = _ } =
-  all_ids_for_export body
+  all_ids_for_export
+    (With_delayed_renaming.descr ~apply_renaming_descr:apply_renaming_expr body)
 
 and all_ids_for_export_let_expr { let_abst; defining_expr } =
   let module A =
@@ -416,9 +412,12 @@ and all_ids_for_export_non_recursive_let_cont_handler
     Name_abstraction.Make_ids_for_export
       (Bound_continuation)
       (struct
-        type t = expr
+        type t = expr With_delayed_renaming.t
 
-        let all_ids_for_export = all_ids_for_export
+        let all_ids_for_export t =
+          all_ids_for_export
+            (With_delayed_renaming.descr
+               ~apply_renaming_descr:apply_renaming_expr t)
       end)
   in
   let handler_ids = all_ids_for_export_continuation_handler handler in
@@ -426,7 +425,11 @@ and all_ids_for_export_non_recursive_let_cont_handler
   Ids_for_export.union handler_ids continuation_and_body_ids
 
 and all_ids_for_export_recursive_let_cont_handlers_t0 { handlers; body } =
-  let body_ids = all_ids_for_export body in
+  let body_ids =
+    all_ids_for_export
+      (With_delayed_renaming.descr ~apply_renaming_descr:apply_renaming_expr
+         body)
+  in
   let handlers_ids = all_ids_for_export_continuation_handlers handlers in
   Ids_for_export.union body_ids handlers_ids
 
@@ -444,7 +447,8 @@ and all_ids_for_export_recursive_let_cont_handlers t =
   A.all_ids_for_export t
 
 and all_ids_for_export_function_params_and_body_base { expr; free_names = _ } =
-  all_ids_for_export expr
+  all_ids_for_export
+    (With_delayed_renaming.descr ~apply_renaming_descr:apply_renaming_expr expr)
 
 and all_ids_for_export_function_params_and_body { abst; is_my_closure_used = _ }
     =
@@ -561,7 +565,7 @@ and match_against_bound_symbols_static_const_group :
           block_like_callback acc symbol static_const))
 
 and print ppf (t : expr) =
-  match descr t with
+  match t with
   | Let let_expr -> print_let_expr ppf let_expr
   | Let_cont let_cont -> print_let_cont_expr ppf let_cont
   | Apply apply ->
@@ -582,8 +586,12 @@ and print_continuation_handler (recursive : Recursive.t) ppf k
   let fprintf = Format.fprintf in
   if not first then fprintf ppf "@ ";
   let print params ~handler =
+    let handler =
+      With_delayed_renaming.descr handler
+        ~apply_renaming_descr:apply_renaming_expr
+    in
     begin
-      match descr handler with
+      match handler with
       | Apply_cont _ | Invalid _ -> fprintf ppf "@[<hov 0>"
       | Let _ | Let_cont _ | Apply _ | Switch _ -> fprintf ppf "@[<v 0>"
     end;
@@ -653,6 +661,9 @@ and print_function_params_and_body ppf t =
           let apply_renaming = apply_renaming_function_params_and_body_base
         end) in
     let<> bff, { expr; free_names } = t.abst in
+    let expr =
+      With_delayed_renaming.descr expr ~apply_renaming_descr:apply_renaming_expr
+    in
     print
       ~return_continuation:(BFF.return_continuation bff)
       ~exn_continuation:(BFF.exn_continuation bff) (BFF.params bff) ~body:expr
@@ -660,6 +671,9 @@ and print_function_params_and_body ppf t =
       ~my_depth:(BFF.my_depth bff) ~free_names_of_body:free_names
   else
     let bff, { expr = body; _ } = Name_abstraction.peek_for_printing t.abst in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     let module BFF = Bound_for_function in
     print
       ~return_continuation:(BFF.return_continuation bff)
@@ -674,7 +688,7 @@ and print_let_cont_expr ppf t =
       ->
       let print k ~body =
         let let_conts, body =
-          match descr body with
+          match body with
           | Let_cont let_cont -> gather_let_conts let_conts let_cont
           | Let _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ ->
             let_conts, body
@@ -689,21 +703,29 @@ and print_let_cont_expr ppf t =
           Name_abstraction.Make_matching_and_renaming
             (Bound_continuation)
             (struct
-              type t = expr
+              type t = expr With_delayed_renaming.t
 
-              let apply_renaming = apply_renaming
+              let apply_renaming = With_delayed_renaming.apply_renaming
             end) in
         let<> k, body = handler.continuation_and_body in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         print k ~body
       else
         let k, body =
           Name_abstraction.peek_for_printing handler.continuation_and_body
         in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         print k ~body
     | Recursive handlers ->
       let print ~body handlers =
         let let_conts, body =
-          match descr body with
+          match body with
           | Let_cont let_cont -> gather_let_conts let_conts let_cont
           | Let _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ ->
             let_conts, body
@@ -727,10 +749,18 @@ and print_let_cont_expr ppf t =
               let apply_renaming = apply_renaming_recursive_let_cont_handlers_t0
             end) in
         let<> _, { body; handlers } = handlers in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         print ~body handlers
       else
         let _, { body; handlers } =
           Name_abstraction.peek_for_printing handlers
+        in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
         in
         print ~body handlers
   in
@@ -866,10 +896,14 @@ and print_flattened ppf
 
 and flatten_let_symbol t : _ * expr =
   let rec flatten (expr : expr) : _ * expr =
-    match descr expr with
+    match expr with
     | Let t -> begin
       match flatten_for_printing t with
       | Some (flattened, body) ->
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         let flattened', body = flatten body in
         flattened @ flattened', body
       | None -> [], expr
@@ -878,6 +912,9 @@ and flatten_let_symbol t : _ * expr =
   in
   match flatten_for_printing t with
   | Some (flattened, body) ->
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     let flattened', body = flatten body in
     flattened @ flattened', body
   | None -> assert false
@@ -924,7 +961,7 @@ and print_let_expr ppf ({ let_abst = _; defining_expr } as t) : unit =
         let apply_renaming = apply_renaming_let_expr_t0
       end) in
   let rec let_body (expr : expr) =
-    match descr expr with
+    match expr with
     | Let ({ let_abst = _; defining_expr } as t) ->
       let print (bound_pattern : Bound_pattern.t) ~body =
         match bound_pattern with
@@ -940,10 +977,18 @@ and print_let_expr ppf ({ let_abst = _; defining_expr } as t) : unit =
       if Flambda_features.freshen_when_printing ()
       then
         let<> bound_pattern, { body; _ } = t.let_abst in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
+        in
         print bound_pattern ~body
       else
         let bound_pattern, { body; _ } =
           Name_abstraction.peek_for_printing t.let_abst
+        in
+        let body =
+          With_delayed_renaming.descr body
+            ~apply_renaming_descr:apply_renaming_expr
         in
         print bound_pattern ~body
     | Let_cont _ | Apply _ | Apply_cont _ | Switch _ | Invalid _ -> expr
@@ -963,10 +1008,16 @@ and print_let_expr ppf ({ let_abst = _; defining_expr } as t) : unit =
   if Flambda_features.freshen_when_printing ()
   then
     let<> bound_pattern, { body; _ } = t.let_abst in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
+    in
     print bound_pattern ~body
   else
     let bound_pattern, { body; _ } =
       Name_abstraction.peek_for_printing t.let_abst
+    in
+    let body =
+      With_delayed_renaming.descr body ~apply_renaming_descr:apply_renaming_expr
     in
     print bound_pattern ~body
 
@@ -1286,11 +1337,14 @@ module Non_recursive_let_cont_handler = struct
     Name_abstraction.Make
       (Bound_continuation)
       (struct
-        type t = expr
+        type t = expr With_delayed_renaming.t
 
-        let apply_renaming = apply_renaming
+        let apply_renaming = With_delayed_renaming.apply_renaming
 
-        let all_ids_for_export = all_ids_for_export
+        let all_ids_for_export t =
+          all_ids_for_export
+            (With_delayed_renaming.descr t
+               ~apply_renaming_descr:apply_renaming_expr)
       end)
 
   type t = non_recursive_let_cont_handler
@@ -1306,9 +1360,9 @@ module Non_recursive_let_cont_handler = struct
       Name_abstraction.Make_matching_and_renaming
         (Bound_continuation)
         (struct
-          type t = expr
+          type t = expr With_delayed_renaming.t
 
-          let apply_renaming = apply_renaming
+          let apply_renaming = With_delayed_renaming.apply_renaming
         end) in
     let<> continuation, body = t.continuation_and_body in
     f continuation ~body
@@ -1572,13 +1626,9 @@ end
 module Expr = struct
   type t = expr
 
-  type descr = expr_descr
+  let create t = t
 
-  let create = With_delayed_renaming.create
-
-  let descr = descr
-
-  let apply_renaming = apply_renaming
+  let apply_renaming = apply_renaming_expr
 
   let all_ids_for_export = all_ids_for_export
 

@@ -37,9 +37,7 @@ module Switch = Switch_expr
 (** Modules may be found further down the file giving operations on the abstract
     types that follow. *)
 
-type expr
-
-and expr_descr = private
+type expr = private
   | Let of let_expr
       (** Bind variable(s) or symbol(s). There can be no effect on control flow
           (save for asynchronous operations such as the invocation of finalisers
@@ -104,14 +102,9 @@ module Expr : sig
       bound [Variable]s and [Continuation]s. *)
   type t = expr
 
-  type descr = expr_descr
-
   include Expr_std.S_no_free_names with type t := t
 
   val all_ids_for_export : t -> Ids_for_export.t
-
-  (** Extract the description of an expression. *)
-  val descr : t -> expr_descr
 
   val create_let : let_expr -> t
 
