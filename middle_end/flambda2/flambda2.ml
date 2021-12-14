@@ -207,8 +207,8 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     end;
     begin
       match cmx with
-      | None -> ()
-        (* Either opaque was passed, or there is no need to export offsets *)
+      | None ->
+        () (* Either opaque was passed, or there is no need to export offsets *)
       | Some cmx -> Compilenv.flambda2_set_export_info cmx
     end;
     let cmm =

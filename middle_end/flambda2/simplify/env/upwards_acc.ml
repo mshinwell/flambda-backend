@@ -38,7 +38,7 @@ type t =
     required_names : Name.Set.t;
     reachable_code_ids : Data_flow.Reachable_code_ids.t Or_unknown.t;
     demoted_exn_handlers : Continuation.Set.t;
-    closure_offsets : Closure_offsets.t Or_unknown.t;
+    closure_offsets : Closure_offsets.t Or_unknown.t
   }
 
 let [@ocamlformat "disable"] print ppf
@@ -97,7 +97,7 @@ let create ~required_names ~reachable_code_ids ~closure_offsets uenv dacc =
     required_names;
     reachable_code_ids;
     demoted_exn_handlers = DA.demoted_exn_handlers dacc;
-    closure_offsets;
+    closure_offsets
   }
 
 let creation_dacc t = t.creation_dacc
@@ -189,5 +189,4 @@ let is_demoted_exn_handler t cont =
 
 let closure_offsets t = t.closure_offsets
 
-let with_closure_offsets t closure_offsets = { t with closure_offsets; }
-
+let with_closure_offsets t closure_offsets = { t with closure_offsets }

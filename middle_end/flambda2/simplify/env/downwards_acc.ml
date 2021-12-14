@@ -30,7 +30,7 @@ type t =
     data_flow : Data_flow.t;
     demoted_exn_handlers : Continuation.Set.t;
     code_ids_to_remember : Code_id.Set.t;
-    closure_offsets : Closure_offsets.t Or_unknown.t;
+    closure_offsets : Closure_offsets.t Or_unknown.t
   }
 
 let [@ocamlformat "disable"] print ppf
@@ -199,5 +199,4 @@ let demoted_exn_handlers t = t.demoted_exn_handlers
 
 let closure_offsets t = t.closure_offsets
 
-let with_closure_offsets t ~closure_offsets = { t with closure_offsets; }
-
+let with_closure_offsets t ~closure_offsets = { t with closure_offsets }

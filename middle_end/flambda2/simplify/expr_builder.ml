@@ -53,8 +53,8 @@ let add_set_of_closures_offsets ~is_phantom named uacc =
       let dacc = UA.creation_dacc uacc in
       let all_code = DE.all_code (DA.denv dacc) in
       let closure_offsets =
-        Closure_offsets.add_set_of_closures closure_offsets
-          ~is_phantom ~all_code set_of_closures
+        Closure_offsets.add_set_of_closures closure_offsets ~is_phantom
+          ~all_code set_of_closures
       in
       UA.with_closure_offsets uacc (Known closure_offsets)
   in
@@ -63,18 +63,18 @@ let add_set_of_closures_offsets ~is_phantom named uacc =
   | Rec_info _ | Simple _ | Prim _ -> uacc
   | Static_consts group ->
     Static_const_group.to_list group
-    |> List.fold_left (fun acc static_const_or_code ->
-        match (static_const_or_code : Static_const_or_code.t) with
-        | Static_const (Set_of_closures s) -> aux acc s
-        | Code _ | Deleted_code
-        | Static_const ( Block _ | Boxed_float _ |
-                               Boxed_int32 _ | Boxed_int64 _ |
-                               Boxed_nativeint _ | Immutable_float_block _
-                               | Immutable_float_array _ | Mutable_string _
-                               | Immutable_string _)
-        -> acc
-      ) uacc
-
+    |> List.fold_left
+         (fun acc static_const_or_code ->
+           match (static_const_or_code : Static_const_or_code.t) with
+           | Static_const (Set_of_closures s) -> aux acc s
+           | Code _ | Deleted_code
+           | Static_const
+               ( Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+               | Boxed_nativeint _ | Immutable_float_block _
+               | Immutable_float_array _ | Mutable_string _ | Immutable_string _
+                 ) ->
+             acc)
+         uacc
 
 let create_let uacc (bound_vars : BLB.t) defining_expr
     ~free_names_of_defining_expr ~body ~cost_metrics_of_defining_expr =
@@ -212,7 +212,7 @@ let create_let uacc (bound_vars : BLB.t) defining_expr
     in
     let uacc =
       if Are_rebuilding_terms.do_not_rebuild_terms
-          (UA.are_rebuilding_terms uacc)
+           (UA.are_rebuilding_terms uacc)
       then uacc
       else add_set_of_closures_offsets ~is_phantom defining_expr uacc
     in
@@ -369,7 +369,9 @@ let create_raw_let_symbol uacc bound_symbols static_consts ~body =
   then RE.term_not_rebuilt (), uacc
   else
     let defining_expr = Rebuilt_static_const.Group.to_named static_consts in
-    let uacc = add_set_of_closures_offsets ~is_phantom:false defining_expr uacc in
+    let uacc =
+      add_set_of_closures_offsets ~is_phantom:false defining_expr uacc
+    in
     ( RE.create_let
         (UA.are_rebuilding_terms uacc)
         bindable defining_expr ~body ~free_names_of_body,

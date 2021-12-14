@@ -14,8 +14,6 @@
 
 (* Compute offsets for elements in sets of closures *)
 
-
-
 (** {2 Computing offsets} *)
 
 (** The type of state used to accumulate constraints on offsets *)
@@ -32,13 +30,14 @@ val add_set_of_closures :
   t ->
   is_phantom:bool ->
   all_code:Code.t Code_id.Map.t ->
-  Set_of_closures.t -> t
+  Set_of_closures.t ->
+  t
 
 (** *)
 val finalize_offsets :
   used_closure_vars:Var_within_closure.Set.t Or_unknown.t ->
-  t -> Exported_offsets.t
-
+  t ->
+  Exported_offsets.t
 
 (** {2 Helper functions} *)
 
@@ -57,7 +56,6 @@ val filter_closure_vars :
   Flambda.Set_of_closures.t ->
   used_closure_vars:Var_within_closure.Set.t Or_unknown.t ->
   Simple.t Var_within_closure.Map.t
-
 
 (** {2 Offsets & Layouts} *)
 

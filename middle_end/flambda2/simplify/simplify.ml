@@ -22,7 +22,7 @@ type simplify_result =
   { cmx : Flambda_cmx_format.t option;
     unit : Flambda_unit.t;
     all_code : Exported_code.t;
-    exported_offsets : Exported_offsets.t;
+    exported_offsets : Exported_offsets.t
   }
 
 let all_predefined_exception_symbols ~symbol_for_global =
@@ -77,12 +77,12 @@ let run ~symbol_for_global ~get_global_info ~round unit =
       ~unit_toplevel_return_continuation:return_continuation
       ~unit_toplevel_exn_continuation:exn_continuation
   in
-  let return_cont_scope = DE.get_continuation_scope denv in
-  let denv = DE.increment_continuation_scope denv in
-  let exn_cont_scope = DE.get_continuation_scope denv in
-  let denv = DE.increment_continuation_scope denv in
-  (* CR gbury: only create the closure offsets state
-               if this is the last round. (same remark for the cmx contents) *)
+  let return_cont_scope = DE.get_continuation_scope_level denv in
+  let denv = DE.increment_continuation_scope_level denv in
+  let exn_cont_scope = DE.get_continuation_scope_level denv in
+  let denv = DE.increment_continuation_scope_level denv in
+  (* CR gbury: only create the closure offsets state if this is the last round.
+     (same remark for the cmx contents) *)
   let closure_offsets = Closure_offsets.create () in
   let dacc =
     DA.create denv Continuation_uses_env.empty
@@ -131,5 +131,4 @@ let run ~symbol_for_global ~get_global_info ~round unit =
     FU.create ~return_continuation ~exn_continuation ~module_symbol ~body
       ~used_closure_vars:(Known used_closure_vars)
   in
-  { cmx; unit; all_code; exported_offsets; }
-
+  { cmx; unit; all_code; exported_offsets }
