@@ -291,7 +291,7 @@ let subst_call_kind env (call_kind : Call_kind.t) : Call_kind.t =
   | _ -> call_kind
 
 let rec subst_expr env e =
-  match Expr.descr e with
+  match e with
   | Let let_expr -> subst_let_expr env let_expr
   | Let_cont let_cont -> subst_let_cont env let_cont
   | Apply apply -> subst_apply env apply
@@ -1039,7 +1039,7 @@ let switch_exprs env switch1 switch2 : Expr.t Comparison.t =
 
 let rec exprs env e1 e2 : Expr.t Comparison.t =
   log Expr.print e1 e2 (fun () ->
-      match Expr.descr e1, Expr.descr e2 with
+      match e1, e2 with
       | Let let_expr1, Let let_expr2 -> let_exprs env let_expr1 let_expr2
       | Let_cont let_cont1, Let_cont let_cont2 ->
         let_cont_exprs env let_cont1 let_cont2

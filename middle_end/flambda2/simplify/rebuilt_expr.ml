@@ -34,7 +34,7 @@ let to_expr t are_rebuilding =
   else t
 
 let to_apply_cont t =
-  match Expr.descr t with
+  match t with
   | Apply_cont apply_cont -> Some apply_cont
   | Let _ | Let_cont _ | Apply _ | Switch _ | Invalid _ -> None
 
@@ -42,7 +42,7 @@ let is_unreachable t are_rebuilding =
   if ART.do_not_rebuild_terms are_rebuilding
   then false
   else
-    match Expr.descr t with
+    match t with
     | Invalid Treat_as_unreachable -> true
     | Let _ | Let_cont _ | Apply _ | Apply_cont _ | Switch _
     | Invalid Halt_and_catch_fire ->

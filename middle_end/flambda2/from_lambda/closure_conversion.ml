@@ -396,7 +396,7 @@ let close_c_call acc ~let_bound_var
     | Untagged_int -> Some (P.Box_number Untagged_immediate)
   in
   let return_continuation, needs_wrapper =
-    match Expr.descr body with
+    match body with
     | Apply_cont apply_cont
       when Simple.List.equal
              (Apply_cont_expr.args apply_cont)

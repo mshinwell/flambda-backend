@@ -125,7 +125,7 @@ let permute_everything t =
 (* CR mshinwell: These functions should be pushed directly into [Flambda] *)
 module Iter = struct
   let rec expr f_c f_s e =
-    match (Expr.descr e : Expr.descr) with
+    match (e : Expr.descr) with
     | Let e' -> let_expr f_c f_s e'
     | Let_cont e' -> let_cont f_c f_s e'
     | Apply e' -> apply_expr f_c f_s e'

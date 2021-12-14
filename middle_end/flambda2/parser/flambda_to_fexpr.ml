@@ -600,7 +600,7 @@ let inlining_state (is : Inlining_state.t) : Fexpr.inlining_state option =
     Some { depth }
 
 let rec expr env e =
-  match Flambda.Expr.descr e with
+  match Flambda.e with
   | Let l -> let_expr env l
   | Let_cont lc -> let_cont_expr env lc
   | Apply app -> apply_expr env app

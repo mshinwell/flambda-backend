@@ -22,7 +22,7 @@ open! Simplify_import
 (* CR-someday mshinwell: Consider defunctionalising to remove the [k]. *)
 
 let rec simplify_expr dacc expr ~down_to_up =
-  match Expr.descr expr with
+  match expr with
   | Let let_expr -> simplify_let dacc let_expr ~down_to_up
   | Let_cont let_cont ->
     Simplify_let_cont_expr.simplify_let_cont ~simplify_expr dacc let_cont
