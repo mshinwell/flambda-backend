@@ -37,26 +37,24 @@ module With_delayed_renaming : sig
     'descr t -> apply_renaming_descr:('descr -> Renaming.t -> 'descr) -> 'descr
 end = struct
   type 'descr t =
-    { mutable descr : 'descr;
-      mutable delayed_renaming : Renaming.t
-    }
+    | No_renaming of 'descr
+    | With_renaming of 'descr * Renaming.t
 
-  let create descr = { descr; delayed_renaming = Renaming.empty }
+  let create descr = No_renaming descr
 
   let apply_renaming t renaming =
-    let delayed_renaming =
-      Renaming.compose ~second:renaming ~first:t.delayed_renaming
-    in
-    { t with delayed_renaming }
+    match t with
+    | No_renaming descr -> With_renaming (descr, renaming)
+    | With_renaming (descr, existing_renaming) ->
+      let renaming =
+        Renaming.compose ~second:renaming ~first:existing_renaming
+      in
+      With_renaming (descr, renaming)
 
   let[@inline always] descr t ~apply_renaming_descr =
-    if Renaming.is_empty t.delayed_renaming
-    then t.descr
-    else
-      let descr = apply_renaming_descr t.descr t.delayed_renaming in
-      t.descr <- descr;
-      t.delayed_renaming <- Renaming.empty;
-      descr
+    match t with
+    | No_renaming descr -> descr
+    | With_renaming (descr, renaming) -> apply_renaming_descr descr renaming
 end
 
 type expr =
