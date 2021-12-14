@@ -121,6 +121,7 @@ let run ~symbol_for_global ~get_global_info ~round unit =
       Misc.fatal_errorf "Closure offsets must be computed and cannot be unknown"
     | Known closure_offsets ->
       Closure_offsets.finalize_offsets closure_offsets
+        ~used_closure_vars:(Known used_closure_vars)
   in
   let cmx =
     Flambda_cmx.prepare_cmx_file_contents ~final_typing_env ~module_symbol

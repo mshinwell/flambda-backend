@@ -32,11 +32,12 @@ val add_set_of_closures :
   t ->
   is_phantom:bool ->
   all_code:Code.t Code_id.Map.t ->
-  used_closure_vars:Var_within_closure.Set.t Or_unknown.t ->
   Set_of_closures.t -> t
 
 (** *)
-val finalize_offsets : t -> Exported_offsets.t
+val finalize_offsets :
+  used_closure_vars:Var_within_closure.Set.t Or_unknown.t ->
+  t -> Exported_offsets.t
 
 
 (** {2 Helper functions} *)
