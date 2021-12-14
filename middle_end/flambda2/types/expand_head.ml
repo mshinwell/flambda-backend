@@ -269,15 +269,14 @@ end
 
 module ET = Expanded_type
 
-let expand_head0 simple env kind =
-  let min_name_mode = Name_mode.min_in_types in
-  match TE.get_canonical_simple_exn env simple ~min_name_mode with
-  | exception Not_found ->
+let expand_head0 ~canonical_simple env kind =
+  match canonical_simple with
+  | None ->
     (* This can happen when [simple] is of [Phantom] name mode. We're not
        interested in propagating types for phantom variables, so [Unknown] is
        fine here. *)
     ET.of_non_alias_type (MTC.unknown kind)
-  | simple ->
+  | Some canonical_simple ->
     let[@inline always] name name ~coercion =
       let ty = TE.find env name (Some kind) in
       match TG.get_alias_exn ty with
@@ -289,9 +288,9 @@ let expand_head0 simple env kind =
       | _alias ->
         Misc.fatal_errorf
           "Canonical alias %a should never have [Equals] type %a:@\n\n%a"
-          Simple.print simple TG.print ty TE.print env
+          Simple.print canonical_simple TG.print ty TE.print env
     in
-    Simple.pattern_match simple
+    Simple.pattern_match canonical_simple
       ~const:(fun const ->
         match Reg_width_const.descr const with
         | Naked_immediate i ->
@@ -307,10 +306,39 @@ let expand_head0 simple env kind =
           ET.create_naked_nativeint (Targetint_32_64.Set.singleton i))
       ~name
 
+module Prep = struct
+  type t =
+    { env : TE.t;
+      ty : TG.t;
+      has_alias_type : bool;
+      canonical_simple : Simple.t option
+    }
+
+  let canonical_simple (t : t) = t.canonical_simple
+
+  let really_expand_head ({ env; ty; has_alias_type; canonical_simple } : t) =
+    if has_alias_type
+    then (expand_head0 [@inlined hint]) ~canonical_simple env (TG.kind ty)
+    else ET.of_non_alias_type ty
+end
+
+let prepare_to_expand_head env ty ~min_name_mode : Prep.t =
+  let has_alias_type, canonical_simple =
+    match TG.get_alias_exn ty with
+    | exception Not_found -> false, None
+    | alias -> (
+      match TE.get_canonical_simple_exn env alias ~min_name_mode with
+      | exception Not_found -> true, None
+      | canonical_simple -> true, Some canonical_simple)
+  in
+  { env; has_alias_type; canonical_simple; ty }
+
 let expand_head env ty =
-  match TG.get_alias_exn ty with
-  | exception Not_found -> ET.of_non_alias_type ty
-  | simple -> expand_head0 simple env (TG.kind ty)
+  let prep =
+    (prepare_to_expand_head [@inlined hint]) env ty
+      ~min_name_mode:Name_mode.in_types
+  in
+  (Prep.really_expand_head [@inlined hint]) prep
 
 let[@inline always] get_canonical_simples_and_expand_heads ~left_env ~left_ty
     ~right_env ~right_ty : Simple.t option * ET.t * Simple.t option * ET.t =

@@ -71,11 +71,10 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
       | Some disallowed_free_vars ->
         not (Variable.Set.mem var disallowed_free_vars))
   in
-  let canonical_simple =
-    match TE.get_alias_then_canonical_simple_exn env ~min_name_mode t with
-    | exception Not_found -> None
-    | canonical_simple -> Some canonical_simple
+  let expand_head_prep =
+    Expand_head.prepare_to_expand_head env t ~min_name_mode
   in
+  let canonical_simple = Expand_head.Prep.canonical_simple expand_head_prep in
   match canonical_simple with
   | Some canonical_simple when Simple.is_symbol canonical_simple ->
     (* Don't lift things that are already bound to symbols. Apart from anything
@@ -89,7 +88,8 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
       | Some canonical_simple -> Simple canonical_simple
     in
     match
-      Expand_head.expand_head env t |> Expand_head.Expanded_type.descr_oub
+      Expand_head.Prep.really_expand_head expand_head_prep
+      |> Expand_head.Expanded_type.descr_oub
     with
     | Value (Ok (Variant blocks_imms)) -> (
       if blocks_imms.is_unique && not allow_unique

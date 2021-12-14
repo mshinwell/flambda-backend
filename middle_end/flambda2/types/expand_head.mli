@@ -80,6 +80,19 @@ end
 
 val expand_head : Typing_env.t -> Type_grammar.t -> Expanded_type.t
 
+(** The following can be used when the canonical simple must be checked prior to
+    expanding the head, to avoid finding the canonical simple twice. *)
+module Prep : sig
+  type t
+
+  val canonical_simple : t -> Simple.t option
+
+  val really_expand_head : t -> Expanded_type.t
+end
+
+val prepare_to_expand_head :
+  Typing_env.t -> Type_grammar.t -> min_name_mode:Name_mode.t -> Prep.t
+
 val get_canonical_simples_and_expand_heads :
   left_env:Typing_env.t ->
   left_ty:Type_grammar.t ->
