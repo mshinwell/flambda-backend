@@ -697,7 +697,7 @@ let function_flags () =
 (* Expressions *)
 
 let rec expr env res e =
-  match (e : Expr.descr) with
+  match (e : Expr.t) with
   | Let e' -> let_expr env res e'
   | Let_cont e' -> let_cont env res e'
   | Apply e' -> apply_expr env res e'

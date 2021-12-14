@@ -599,8 +599,8 @@ let inlining_state (is : Inlining_state.t) : Fexpr.inlining_state option =
     (* TODO: inlining arguments *)
     Some { depth }
 
-let rec expr env e =
-  match Flambda.e with
+let rec expr env (e : Flambda.expr) =
+  match e with
   | Let l -> let_expr env l
   | Let_cont lc -> let_cont_expr env lc
   | Apply app -> apply_expr env app

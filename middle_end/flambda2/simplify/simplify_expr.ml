@@ -21,7 +21,7 @@ open! Simplify_import
 (* CR-someday mshinwell: Need to simplify each [dbg] we come across. *)
 (* CR-someday mshinwell: Consider defunctionalising to remove the [k]. *)
 
-let rec simplify_expr dacc expr ~down_to_up =
+let rec simplify_expr dacc (expr : Expr.t) ~down_to_up =
   match expr with
   | Let let_expr -> simplify_let dacc let_expr ~down_to_up
   | Let_cont let_cont ->

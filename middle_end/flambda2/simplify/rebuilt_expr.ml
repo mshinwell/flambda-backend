@@ -33,12 +33,12 @@ let to_expr t are_rebuilding =
        [UA.do_not_rebuild_terms] is set"
   else t
 
-let to_apply_cont t =
+let to_apply_cont (t : Expr.t) =
   match t with
   | Apply_cont apply_cont -> Some apply_cont
   | Let _ | Let_cont _ | Apply _ | Switch _ | Invalid _ -> None
 
-let is_unreachable t are_rebuilding =
+let is_unreachable (t : Expr.t) are_rebuilding =
   if ART.do_not_rebuild_terms are_rebuilding
   then false
   else
