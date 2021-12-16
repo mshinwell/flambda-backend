@@ -1311,8 +1311,12 @@ let close_functions acc external_env function_declarations =
         Var_within_closure.Map.add var_within_closure external_simple map)
       var_within_closures_from_idents Var_within_closure.Map.empty
   in
-  let set_of_closures = Set_of_closures.create function_decls ~closure_elements in
-  let acc = Acc.add_set_of_closures_offsets ~is_phantom:false acc set_of_closures in
+  let set_of_closures =
+    Set_of_closures.create function_decls ~closure_elements
+  in
+  let acc =
+    Acc.add_set_of_closures_offsets ~is_phantom:false acc set_of_closures
+  in
   acc, set_of_closures, approximations
 
 let close_let_rec acc env ~function_declarations
@@ -1517,11 +1521,9 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
   in
   let exported_offsets =
     Or_unknown.map (Acc.closure_offsets acc) ~f:(fun offsets ->
-        (* CR gbury: would it be possible to use the free_names from the acc
-           to compute the used closure vars ? *)
-        Closure_offsets.finalize_offsets offsets
-          ~used_closure_vars:Unknown
-      )
+        (* CR gbury: would it be possible to use the free_names from the acc to
+           compute the used closure vars ? *)
+        Closure_offsets.finalize_offsets offsets ~used_closure_vars:Unknown)
   in
   ( Flambda_unit.create ~return_continuation:return_cont ~exn_continuation ~body
       ~module_symbol ~used_closure_vars:Unknown,

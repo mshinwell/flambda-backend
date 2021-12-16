@@ -148,7 +148,8 @@ module Acc : sig
 
   val create :
     symbol_for_global:(Ident.t -> Symbol.t) ->
-    closure_offsets:Closure_offsets.t Or_unknown.t -> t
+    closure_offsets:Closure_offsets.t Or_unknown.t ->
+    t
 
   val declared_symbols : t -> (Symbol.t * Static_const.t) list
 
@@ -202,7 +203,8 @@ module Acc : sig
 
   val closure_offsets : t -> Closure_offsets.t Or_unknown.t
 
-  val add_set_of_closures_offsets : is_phantom:bool -> t -> Set_of_closures.t -> t
+  val add_set_of_closures_offsets :
+    is_phantom:bool -> t -> Set_of_closures.t -> t
 end
 
 (** Used to represent information about a set of function declarations during

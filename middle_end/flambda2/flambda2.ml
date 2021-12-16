@@ -176,10 +176,9 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
           match (offsets : _ Or_unknown.t) with
           | Unknown ->
             Misc.fatal_errorf
-              "Classic mode requires lambda_to_flambda to compute
-               the offsets for closure elements"
-          | Known closure_offsets ->
-            closure_offsets
+              "Classic mode requires lambda_to_flambda to compute\n\
+              \               the offsets for closure elements"
+          | Known closure_offsets -> closure_offsets
         in
         raw_flambda, exported_offsets, None, code
       else

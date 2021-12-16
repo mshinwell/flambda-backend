@@ -269,7 +269,7 @@ module Acc = struct
       cost_metrics : Cost_metrics.t;
       seen_a_function : bool;
       symbol_for_global : Ident.t -> Symbol.t;
-      closure_offsets : Closure_offsets.t Or_unknown.t;
+      closure_offsets : Closure_offsets.t Or_unknown.t
     }
 
   let cost_metrics t = t.cost_metrics
@@ -292,7 +292,7 @@ module Acc = struct
       cost_metrics = Cost_metrics.zero;
       seen_a_function = false;
       symbol_for_global;
-      closure_offsets;
+      closure_offsets
     }
 
   let declared_symbols t = t.declared_symbols
@@ -393,11 +393,10 @@ module Acc = struct
     | Unknown -> t
     | Known closure_offsets ->
       let closure_offsets =
-        Closure_offsets.add_set_of_closures closure_offsets
-          ~is_phantom ~all_code:t.code set_of_closures
+        Closure_offsets.add_set_of_closures closure_offsets ~is_phantom
+          ~all_code:t.code set_of_closures
       in
-      { t with closure_offsets = Known closure_offsets; }
-
+      { t with closure_offsets = Known closure_offsets }
 end
 
 module Function_decls = struct

@@ -399,7 +399,7 @@ module Greedy = struct
 
   let use_closure_info state c info =
     let used_offsets = EO.add_closure_offset state.used_offsets c info in
-    { state with used_offsets; }
+    { state with used_offsets }
 
   let add_closure_slot state closure slot =
     let closures = Closure_id.Map.add closure slot state.closures in
@@ -407,7 +407,7 @@ module Greedy = struct
 
   let use_env_var_info state var info =
     let used_offsets = EO.add_env_var_offset state.used_offsets var info in
-    { state with used_offsets; }
+    { state with used_offsets }
 
   let add_env_var_slot state var slot =
     { state with env_vars = Var_within_closure.Map.add var slot state.env_vars }
@@ -684,8 +684,7 @@ let add_set_of_closures state ~is_phantom ~all_code set_of_closures =
 
 let finalize_offsets ~used_closure_vars state =
   Misc.try_finally
-    (fun () ->
-      Greedy.finalize ~used_closure_vars state)
+    (fun () -> Greedy.finalize ~used_closure_vars state)
     ~always:(fun () ->
       if Flambda_features.dump_closure_offsets ()
       then Format.eprintf "%a@." Greedy.print state)
