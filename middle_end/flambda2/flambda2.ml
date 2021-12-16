@@ -157,7 +157,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
       "Cannot compile on targets where floats are not word-width when the \
        float array optimisation is enabled";
   let run () =
-    let raw_flambda, code =
+    let raw_flambda, code, offsets =
       Profile.record_call "lambda_to_flambda" (fun () ->
           Lambda_to_flambda.lambda_to_flambda ~symbol_for_global
             ~big_endian:Arch.big_endian ~module_ident
@@ -172,8 +172,16 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     let flambda, offsets, cmx, all_code =
       if Flambda_features.classic_mode ()
       then
-        let offsets = assert false (* TODO: fixme *) in
-        raw_flambda, offsets, None, code
+        let exported_offsets =
+          match (offsets : _ Or_unknown.t) with
+          | Unknown ->
+            Misc.fatal_errorf
+              "Classic mode requires lambda_to_flambda to compute
+               the offsets for closure elements"
+          | Known closure_offsets ->
+            closure_offsets
+        in
+        raw_flambda, exported_offsets, None, code
       else
         let raw_flambda =
           if Flambda_features.Debug.permute_every_name ()
