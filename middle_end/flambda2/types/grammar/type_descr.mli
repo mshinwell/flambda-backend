@@ -31,7 +31,6 @@ type 'head t
 val print :
   print_head:(Format.formatter -> 'head -> unit) ->
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  free_names_head:('head -> Name_occurrences.t) ->
   Format.formatter ->
   'head t ->
   unit
@@ -49,15 +48,11 @@ val is_obviously_bottom : _ t -> bool
 val is_obviously_unknown : _ t -> bool
 
 val get_alias_exn :
-  apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  free_names_head:('head -> Name_occurrences.t) ->
-  'head t ->
-  Simple.t
+  apply_renaming_head:('head -> Renaming.t -> 'head) -> 'head t -> Simple.t
 
 val apply_coercion :
   apply_coercion_head:('head -> Coercion.t -> 'head Or_bottom.t) ->
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  free_names_head:('head -> Name_occurrences.t) ->
   Coercion.t ->
   'head t ->
   'head t Or_bottom.t
@@ -72,7 +67,6 @@ val free_names :
 
 val all_ids_for_export :
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  free_names_head:('head -> Name_occurrences.t) ->
   all_ids_for_export_head:('head -> Ids_for_export.t) ->
   'head t ->
   Ids_for_export.t
@@ -102,6 +96,5 @@ end
 
 val descr :
   apply_renaming_head:('head -> Renaming.t -> 'head) ->
-  free_names_head:('head -> Name_occurrences.t) ->
   'head t ->
   'head Descr.t Or_unknown_or_bottom.t

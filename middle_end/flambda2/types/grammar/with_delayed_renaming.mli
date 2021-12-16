@@ -18,19 +18,12 @@
 
 (** Management of delayed permutations and cached free names. *)
 
-type 'descr t =
-  { mutable descr : 'descr;
-    mutable delayed_permutation : Renaming.t;
-    mutable free_names : Name_occurrences.t option
-  }
+type 'descr t
 
 val create : 'descr -> 'descr t
 
 val descr :
-  apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
-  free_names_descr:('descr -> Name_occurrences.t) ->
-  'descr t ->
-  'descr
+  apply_renaming_descr:('descr -> Renaming.t -> 'descr) -> 'descr t -> 'descr
 
 (** [peek_descr] allows access to the underlying description without the current
     permutation being applied. This should only be used when it is certain and
@@ -42,7 +35,6 @@ val peek_descr : 'descr t -> 'descr
 val print :
   print_descr:(Format.formatter -> 'descr -> unit) ->
   apply_renaming_descr:('descr -> Renaming.t -> 'descr) ->
-  free_names_descr:('descr -> Name_occurrences.t) ->
   Format.formatter ->
   'descr t ->
   unit

@@ -56,7 +56,6 @@ module T : sig
 
   val descr :
     apply_renaming_head:('head -> Renaming.t -> 'head) ->
-    free_names_head:('head -> Name_occurrences.t) ->
     'head t ->
     'head Descr.t Or_unknown_or_bottom.t
 
@@ -65,10 +64,7 @@ module T : sig
   val is_obviously_unknown : _ t -> bool
 
   val get_alias_exn :
-    apply_renaming_head:('head -> Renaming.t -> 'head) ->
-    free_names_head:('head -> Name_occurrences.t) ->
-    'head t ->
-    Simple.t
+    apply_renaming_head:('head -> Renaming.t -> 'head) -> 'head t -> Simple.t
 
   val apply_renaming : 'head t -> Renaming.t -> 'head t
 
@@ -115,7 +111,7 @@ end = struct
 
   type 'head t = 'head Descr.t WDR.t Or_unknown_or_bottom.t
 
-  let[@inline always] descr ~apply_renaming_head ~free_names_head (t : _ t) :
+  let[@inline always] descr ~apply_renaming_head (t : _ t) :
       _ Descr.t Or_unknown_or_bottom.t =
     match t with
     | Unknown -> Unknown
@@ -124,7 +120,6 @@ end = struct
       Ok
         (WDR.descr
            ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-           ~free_names_descr:(Descr.free_names ~free_names_head)
            wdp)
 
   let create head : _ t = Ok (WDR.create (Descr.No_alias head))
@@ -141,8 +136,7 @@ end = struct
   let is_obviously_unknown (t : _ t) =
     match t with Unknown -> true | Bottom | Ok _ -> false
 
-  let[@inline always] get_alias_exn ~apply_renaming_head ~free_names_head
-      (t : _ t) =
+  let[@inline always] get_alias_exn ~apply_renaming_head (t : _ t) =
     match t with
     | Unknown | Bottom -> raise Not_found
     | Ok wdp -> (
@@ -154,7 +148,6 @@ end = struct
         match
           WDR.descr
             ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
-            ~free_names_descr:(Descr.free_names ~free_names_head)
             wdp
         with
         | Equals alias -> alias
@@ -179,9 +172,9 @@ end
 
 include T
 
-let print ~print_head ~apply_renaming_head ~free_names_head ppf t =
+let print ~print_head ~apply_renaming_head ppf t =
   let colour = Flambda_colours.top_or_bottom_type () in
-  match descr ~apply_renaming_head ~free_names_head t with
+  match descr ~apply_renaming_head t with
   | Unknown ->
     if Flambda_features.unicode ()
     then
@@ -197,8 +190,8 @@ let print ~print_head ~apply_renaming_head ~free_names_head ppf t =
   | Ok descr -> Descr.print ~print_head ppf descr
 
 let[@inline always] apply_coercion ~apply_coercion_head ~apply_renaming_head
-    ~free_names_head coercion t : _ t Or_bottom.t =
-  match descr ~apply_renaming_head ~free_names_head t with
+    coercion t : _ t Or_bottom.t =
+  match descr ~apply_renaming_head t with
   | Unknown | Bottom -> Ok t
   | Ok (Equals simple) -> (
     match Simple.apply_coercion simple coercion with
@@ -208,9 +201,8 @@ let[@inline always] apply_coercion ~apply_coercion_head ~apply_renaming_head
     let<+ head = apply_coercion_head head coercion in
     create head
 
-let all_ids_for_export ~apply_renaming_head ~free_names_head
-    ~all_ids_for_export_head (t : _ t) =
-  match descr ~apply_renaming_head ~free_names_head t with
+let all_ids_for_export ~apply_renaming_head ~all_ids_for_export_head (t : _ t) =
+  match descr ~apply_renaming_head t with
   | Unknown | Bottom -> Ids_for_export.empty
   | Ok (No_alias head) -> all_ids_for_export_head head
   | Ok (Equals simple) -> Ids_for_export.from_simple simple
