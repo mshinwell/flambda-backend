@@ -77,10 +77,10 @@ let run ~symbol_for_global ~get_global_info ~round unit =
       ~unit_toplevel_return_continuation:return_continuation
       ~unit_toplevel_exn_continuation:exn_continuation
   in
-  let return_cont_scope = DE.get_continuation_scope_level denv in
-  let denv = DE.increment_continuation_scope_level denv in
-  let exn_cont_scope = DE.get_continuation_scope_level denv in
-  let denv = DE.increment_continuation_scope_level denv in
+  let return_cont_scope = DE.get_continuation_scope denv in
+  let denv = DE.increment_continuation_scope denv in
+  let exn_cont_scope = DE.get_continuation_scope denv in
+  let denv = DE.increment_continuation_scope denv in
   (* CR gbury: only create the closure offsets state if this is the last round.
      (same remark for the cmx contents) *)
   let closure_offsets = Closure_offsets.create () in
