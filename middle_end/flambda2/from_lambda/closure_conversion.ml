@@ -1523,7 +1523,9 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
     Or_unknown.map (Acc.closure_offsets acc) ~f:(fun offsets ->
         (* CR gbury: would it be possible to use the free_names from the acc to
            compute the used closure vars ? *)
-        Closure_offsets.finalize_offsets offsets ~used_closure_vars:Unknown)
+        Closure_offsets.finalize_offsets offsets
+          ~used_closure_vars:Unknown ~used_closure_ids:Unknown
+      )
   in
   ( Flambda_unit.create ~return_continuation:return_cont ~exn_continuation ~body
       ~module_symbol ~used_closure_vars:Unknown,

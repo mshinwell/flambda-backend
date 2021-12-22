@@ -112,6 +112,7 @@ let run ~symbol_for_global ~get_global_info ~round unit =
     Exported_code.merge (UA.all_code uacc)
       (Exported_code.mark_as_imported !imported_code)
   in
+  let used_closure_ids = UA.used_closure_ids uacc in
   let used_closure_vars =
     UA.name_occurrences uacc |> Name_occurrences.closure_vars
   in
@@ -122,6 +123,7 @@ let run ~symbol_for_global ~get_global_info ~round unit =
     | Known closure_offsets ->
       Closure_offsets.finalize_offsets closure_offsets
         ~used_closure_vars:(Known used_closure_vars)
+        ~used_closure_ids:(Known used_closure_ids)
   in
   let cmx =
     Flambda_cmx.prepare_cmx_file_contents ~final_typing_env ~module_symbol

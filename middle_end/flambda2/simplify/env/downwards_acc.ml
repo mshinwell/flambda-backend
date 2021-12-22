@@ -25,6 +25,7 @@ type t =
   { denv : DE.t;
     continuation_uses_env : CUE.t;
     shareable_constants : Symbol.t Static_const.Map.t;
+    used_closure_ids : Closure_id.Set.t;
     used_closure_vars : Name_occurrences.t;
     lifted_constants : LCS.t;
     data_flow : Data_flow.t;
@@ -34,12 +35,13 @@ type t =
   }
 
 let [@ocamlformat "disable"] print ppf
-      { denv; continuation_uses_env; shareable_constants; used_closure_vars;
+    { denv; continuation_uses_env; shareable_constants; used_closure_ids; used_closure_vars;
   lifted_constants; data_flow; demoted_exn_handlers; code_ids_to_remember; closure_offsets; } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(denv@ %a)@]@ \
       @[<hov 1>(continuation_uses_env@ %a)@]@ \
       @[<hov 1>(shareable_constants@ %a)@]@ \
+      @[<hov 1>(used_closure_ids@ %a)@]@ \
       @[<hov 1>(used_closure_vars@ %a)@]@ \
       @[<hov 1>(lifted_constant_state@ %a)@]@ \
       @[<hov 1>(data_flow@ %a)@]@ \
@@ -50,6 +52,7 @@ let [@ocamlformat "disable"] print ppf
     DE.print denv
     CUE.print continuation_uses_env
     (Static_const.Map.print Symbol.print) shareable_constants
+    Closure_id.Set.print used_closure_ids
     Name_occurrences.print used_closure_vars
     LCS.print lifted_constants
     Data_flow.print data_flow
@@ -62,6 +65,7 @@ let create denv continuation_uses_env closure_offsets =
     continuation_uses_env;
     closure_offsets;
     shareable_constants = Static_const.Map.empty;
+    used_closure_ids = Closure_id.Set.empty;
     used_closure_vars = Name_occurrences.empty;
     lifted_constants = LCS.empty;
     data_flow = Data_flow.empty;
@@ -155,12 +159,22 @@ let with_shareable_constants t ~shareable_constants =
 
 let shareable_constants t = t.shareable_constants
 
+let add_use_of_closure_id t closure_id =
+  { t with
+    used_closure_ids =
+      Closure_id.Set.add closure_id t.used_closure_ids
+  }
+
+let used_closure_ids t = t.used_closure_ids
+
 let add_use_of_closure_var t closure_var =
   { t with
     used_closure_vars =
       Name_occurrences.add_closure_var t.used_closure_vars closure_var
         Name_mode.normal
   }
+
+let with_used_closure_ids t ~used_closure_ids = { t with used_closure_ids }
 
 let used_closure_vars t = t.used_closure_vars
 

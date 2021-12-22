@@ -62,6 +62,8 @@ let simplify_select_closure ~move_from ~move_to dacc ~original_term ~arg:closure
     |> Closure_id.Map.add move_from closure
     |> Closure_id.Map.add move_to result
   in
+  let dacc = DA.add_use_of_closure_id dacc move_from in
+  let dacc = DA.add_use_of_closure_id dacc move_to in
   Simplify_common.simplify_projection dacc ~original_term
     ~deconstructing:closure_ty
     ~shape:(T.at_least_the_closures_with_ids ~this_closure:move_from closures)
@@ -124,7 +126,7 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
               DE.add_symbol_projection denv var proj))
         ~var:(fun _ ~coercion:_ -> dacc)
     in
-    reachable, DA.add_use_of_closure_var dacc closure_element
+    reachable, DA.add_use_of_closure_var (DA.add_use_of_closure_id dacc closure_id) closure_element
 
 let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
     ~original_term ~arg ~arg_ty:boxed_number_ty ~result_var =

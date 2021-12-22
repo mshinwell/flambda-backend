@@ -30,6 +30,7 @@ type t =
     lifted_constants : LCS.t;
     all_code : Exported_code.t;
     name_occurrences : Name_occurrences.t;
+    used_closure_ids : Closure_id.Set.t;
     used_closure_vars : Name_occurrences.t;
     shareable_constants : Symbol.t Static_const.Map.t;
     cost_metrics : Cost_metrics.t;
@@ -43,7 +44,7 @@ type t =
 
 let [@ocamlformat "disable"] print ppf
       { uenv; creation_dacc = _; code_age_relation; lifted_constants;
-        name_occurrences; used_closure_vars; all_code = _;
+        name_occurrences; used_closure_ids; used_closure_vars; all_code = _;
         shareable_constants; cost_metrics; are_rebuilding_terms;
         generate_phantom_lets; required_names; reachable_code_ids;
         demoted_exn_handlers; closure_offsets; } =
@@ -52,6 +53,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>(code_age_relation@ %a)@]@ \
       @[<hov 1>(lifted_constants@ %a)@]@ \
       @[<hov 1>(name_occurrences@ %a)@]@ \
+      @[<hov 1>(used_closure_ids@ %a)@]@ \
       @[<hov 1>(used_closure_vars@ %a)@]@ \
       @[<hov 1>(shareable_constants@ %a)@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
@@ -66,6 +68,7 @@ let [@ocamlformat "disable"] print ppf
     Code_age_relation.print code_age_relation
     LCS.print lifted_constants
     Name_occurrences.print name_occurrences
+    Closure_id.Set.print used_closure_ids
     Name_occurrences.print used_closure_vars
     (Static_const.Map.print Symbol.print) shareable_constants
     Cost_metrics.print cost_metrics
@@ -89,6 +92,11 @@ let create ~required_names ~reachable_code_ids ~closure_offsets uenv dacc =
        tracking in [name_occurrences], since it is always accumulated, and never
        saved and restored (like free name information is when dealing with a
        [Let_cont]). *)
+    (* CR gbury: since [used_closure_vars] (and also [used_closure_ids] probably),
+       are actually never modified in the uacc, and initialised using the dacc,
+       why not access them through the dacc ? that would reduce the number of words
+       allocated for each uacc (at the cost of an extra lookup) *)
+    used_closure_ids = DA.used_closure_ids dacc;
     used_closure_vars = DA.used_closure_vars dacc;
     shareable_constants = DA.shareable_constants dacc;
     cost_metrics = Cost_metrics.zero;
@@ -152,6 +160,8 @@ let clear_name_occurrences t =
 let add_free_names t free_names =
   let name_occurrences = Name_occurrences.union t.name_occurrences free_names in
   { t with name_occurrences }
+
+let used_closure_ids t = t.used_closure_ids
 
 let used_closure_vars t = t.used_closure_vars
 

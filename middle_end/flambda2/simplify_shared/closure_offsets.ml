@@ -660,13 +660,77 @@ module Greedy = struct
     fold_on_unallocated_env_var_slots ~used_closure_vars assign_slot_offset env
       state
 
+  (* Ensure closure ids/env vars that are used in projections in the
+     current compilation unit are present in the offsets returned by finalize *)
+  let collect_used_closure_ids ~used_closure_ids offsets =
+    let imported_offsets = EO.imported_offsets () in
+    Closure_id.Set.fold (fun closure_id offsets ->
+        if Compilation_unit.is_current (Closure_id.get_compilation_unit closure_id)
+        then offsets
+        else match EO.closure_offset imported_offsets closure_id with
+          | None ->
+            Misc.fatal_errorf
+              "Closure id %a is used in the current compilaiton unit, but not \
+               present in the imported offsets." Closure_id.print closure_id
+          | Some info ->
+            EO.add_closure_offset offsets closure_id info
+      ) used_closure_ids offsets
+
+  let collect_used_closure_vars ~used_closure_vars offsets =
+    let imported_offsets = EO.imported_offsets () in
+    Var_within_closure.Set.fold (fun env_var offsets ->
+        if Compilation_unit.is_current (Var_within_closure.get_compilation_unit env_var)
+        then offsets
+        else match EO.env_var_offset imported_offsets env_var with
+          | None ->
+            Misc.fatal_errorf
+              "Env var %a is used in the current compilaiton unit, but not \
+               present in the imported offsets." Var_within_closure.print env_var
+          | Some info ->
+            EO.add_env_var_offset offsets env_var info
+      ) used_closure_vars offsets
+
+  let imported_and_used_offsets ~used_closure_ids ~used_closure_vars state =
+    match (used_closure_ids, used_closure_vars : _ Or_unknown.t * _ Or_unknown.t) with
+    | Known used_closure_ids, Known used_closure_vars ->
+      state.used_offsets
+      |> collect_used_closure_ids ~used_closure_ids
+      |> collect_used_closure_vars ~used_closure_vars
+    | Unknown, Known _ | Known _, Unknown | Unknown, Unknown ->
+      EO.imported_offsets ()
+
+  let check_used_offsets ~used_closure_ids ~used_closure_vars offsets =
+    match (used_closure_ids, used_closure_vars : _ Or_unknown.t * _ Or_unknown.t) with
+    | Known used_closure_ids, Known used_closure_vars ->
+      Closure_id.Set.iter (fun closure_id ->
+          match EO.closure_offset offsets closure_id with
+          | None ->
+            Misc.fatal_errorf "missing closure id %a in offsets to export"
+              Closure_id.print closure_id
+          | Some _ -> ()
+        ) used_closure_ids;
+      Var_within_closure.Set.iter (fun env_var ->
+          match EO.env_var_offset offsets env_var with
+          | None ->
+            Misc.fatal_errorf "missing env var %a in offsets to export"
+              Var_within_closure.print env_var
+          | Some _ -> ()
+        ) used_closure_vars;
+      ()
+    | Unknown, Known _ | Known _, Unknown | Unknown, Unknown ->
+      ()
+
   (* Tansform an internal accumulator state for slots into an actual mapping
      that assigns offsets.*)
-  let finalize ~used_closure_vars state =
-    let offsets = state.used_offsets in
-    let offsets = assign_closure_offsets state offsets in
-    let offsets = assign_env_var_offsets ~used_closure_vars state offsets in
+  let finalize ~used_closure_vars ~used_closure_ids state =
+    let offsets =
+      imported_and_used_offsets ~used_closure_vars ~used_closure_ids state
+      |> assign_closure_offsets state
+      |> assign_env_var_offsets ~used_closure_vars state
+    in
+    check_used_offsets ~used_closure_vars ~used_closure_ids offsets;
     offsets
+
 end
 
 type t = Greedy.state
@@ -682,9 +746,9 @@ let add_set_of_closures state ~is_phantom ~all_code set_of_closures =
   then state
   else Greedy.create_slots_for_set state all_code set_of_closures
 
-let finalize_offsets ~used_closure_vars state =
+let finalize_offsets ~used_closure_vars ~used_closure_ids state =
   Misc.try_finally
-    (fun () -> Greedy.finalize ~used_closure_vars state)
+    (fun () -> Greedy.finalize ~used_closure_vars ~used_closure_ids state)
     ~always:(fun () ->
       if Flambda_features.dump_closure_offsets ()
       then Format.eprintf "%a@." Greedy.print state)

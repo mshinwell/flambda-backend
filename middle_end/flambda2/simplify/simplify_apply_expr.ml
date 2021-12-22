@@ -121,7 +121,7 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
   after_rebuild expr uacc
 
 let simplify_direct_full_application ~simplify_expr dacc apply function_type
-    ~callee's_code_id ~result_arity ~down_to_up ~coming_from_indirect =
+    ~callee's_code_id ~callee's_closure_id ~result_arity ~down_to_up ~coming_from_indirect =
   let inlined =
     (* CR mshinwell for poechsel: Make sure no other warnings or inlining report
        decisions get emitted when not rebuilding terms. *)
@@ -163,6 +163,7 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
   match inlined with
   | Some (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
   | None ->
+    let dacc = DA.add_use_of_closure_id dacc callee's_closure_id in
     let dacc = record_free_names_of_apply_as_used dacc apply in
     let dacc, use_id =
       match Apply.continuation apply with
@@ -545,22 +546,24 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       if provided_num_args = num_params
       then
         simplify_direct_full_application ~simplify_expr dacc apply function_decl
-          ~callee's_code_id ~result_arity ~down_to_up ~coming_from_indirect
-      else if provided_num_args > num_params
-      then
-        simplify_direct_over_application ~simplify_expr dacc apply
-          ~param_arity:params_arity ~result_arity ~down_to_up
-          ~coming_from_indirect
-      else if provided_num_args > 0 && provided_num_args < num_params
-      then
-        simplify_direct_partial_application ~simplify_expr dacc apply
-          ~callee's_code_id ~callee's_closure_id ~param_arity:params_arity
-          ~result_arity ~recursive ~down_to_up ~coming_from_indirect
+          ~callee's_code_id ~callee's_closure_id ~result_arity ~down_to_up ~coming_from_indirect
       else
-        Misc.fatal_errorf
-          "Function with %d params when simplifying direct OCaml function call \
-           with %d arguments: %a"
-          num_params provided_num_args Apply.print apply
+        let dacc = DA.add_use_of_closure_id dacc callee's_closure_id in
+        if provided_num_args > num_params
+        then
+          simplify_direct_over_application ~simplify_expr dacc apply
+            ~param_arity:params_arity ~result_arity ~down_to_up
+            ~coming_from_indirect
+        else if provided_num_args > 0 && provided_num_args < num_params
+        then
+          simplify_direct_partial_application ~simplify_expr dacc apply
+            ~callee's_code_id ~callee's_closure_id ~param_arity:params_arity
+            ~result_arity ~recursive ~down_to_up ~coming_from_indirect
+        else
+          Misc.fatal_errorf
+            "Function with %d params when simplifying direct OCaml function call \
+             with %d arguments: %a"
+            num_params provided_num_args Apply.print apply
 
 let rebuild_function_call_where_callee's_type_unavailable apply call_kind
     ~use_id ~exn_cont_use_id uacc ~after_rebuild =

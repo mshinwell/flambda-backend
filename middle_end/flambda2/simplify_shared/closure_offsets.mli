@@ -36,6 +36,7 @@ val add_set_of_closures :
 (** *)
 val finalize_offsets :
   used_closure_vars:Var_within_closure.Set.t Or_unknown.t ->
+  used_closure_ids:Closure_id.Set.t Or_unknown.t ->
   t ->
   Exported_offsets.t
 

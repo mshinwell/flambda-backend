@@ -73,6 +73,8 @@ val clear_name_occurrences : t -> t
 
 val add_free_names : t -> Name_occurrences.t -> t
 
+val used_closure_ids : t -> Closure_id.Set.t
+
 val used_closure_vars : t -> Name_occurrences.t
 
 val remove_all_occurrences_of_free_names : t -> Name_occurrences.t -> t
