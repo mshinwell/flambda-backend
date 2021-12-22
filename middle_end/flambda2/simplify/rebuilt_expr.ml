@@ -56,19 +56,44 @@ let [@ocamlformat "disable"] print are_rebuilding ppf t =
 
 let term_not_rebuilt () = Lazy.force invalid
 
-let create_let are_rebuilding bound_vars defining_expr ~body ~free_names_of_body
-    =
+let create_let are_rebuilding bound_vars (defining_expr : Named.t) ~body
+    ~free_names_of_body ~record_use_of_closure_id acc =
   if ART.do_not_rebuild_terms are_rebuilding
-  then Lazy.force invalid
+  then Lazy.force invalid, acc
   else
-    Let.create bound_vars defining_expr ~body
-      ~free_names_of_body:(Known free_names_of_body)
-    |> Expr.create_let
+    let expr =
+      Let.create bound_vars defining_expr ~body
+        ~free_names_of_body:(Known free_names_of_body)
+      |> Expr.create_let
+    in
+    (* CR mshinwell: record closure IDs and closure vars from sets of closures
+       (+ closure vars from Project_var) here too? *)
+    let acc =
+      match defining_expr with
+      | Simple _ | Set_of_closures _ | Static_consts _ | Rec_info _ -> acc
+      | Prim (prim, _) -> (
+        match Flambda_primitive.contained_closure_id_uses prim with
+        | [] -> acc
+        | closure_ids ->
+          List.fold_left
+            (fun acc closure_id -> record_use_of_closure_id acc closure_id)
+            acc closure_ids)
+    in
+    expr, acc
 
-let create_apply are_rebuilding apply =
+let create_apply are_rebuilding apply ~record_use_of_closure_id acc =
   if ART.do_not_rebuild_terms are_rebuilding
-  then Lazy.force invalid
-  else Expr.create_apply apply
+  then Lazy.force invalid, acc
+  else
+    let acc =
+      match Apply.call_kind apply with
+      | Function (Direct { closure_id; _ }) ->
+        record_use_of_closure_id acc closure_id
+      | Function (Indirect_unknown_arity | Indirect_known_arity _)
+      | Method _ | C_call _ ->
+        acc
+    in
+    Expr.create_apply apply, acc
 
 let create_apply_cont apply_cont = Expr.create_apply_cont apply_cont
 
@@ -137,17 +162,18 @@ let create_switch are_rebuilding switch =
 let create_invalid () = Lazy.force invalid
 
 let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
-    ~free_names_of_body =
+    ~free_names_of_body ~record_use_of_closure_id acc =
   ListLabels.fold_left (List.rev bindings)
-    ~init:(body, cost_metrics_of_body, free_names_of_body)
+    ~init:(body, cost_metrics_of_body, free_names_of_body, acc)
     ~f:(fun
-         (expr, cost_metrics, free_names)
+         (expr, cost_metrics, free_names, acc)
          (var, size_of_defining_expr, defining_expr)
        ->
-      let expr =
+      let expr, acc =
         create_let are_rebuilding
           (Bound_pattern.singleton var)
           defining_expr ~body:expr ~free_names_of_body:free_names
+          ~record_use_of_closure_id acc
       in
       let free_names =
         Name_occurrences.union
@@ -163,4 +189,4 @@ let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
           (Cost_metrics.increase_due_to_let_expr ~is_phantom
              ~cost_metrics_of_defining_expr)
       in
-      expr, cost_metrics, free_names)
+      expr, cost_metrics, free_names, acc)

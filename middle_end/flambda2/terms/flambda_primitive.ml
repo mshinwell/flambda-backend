@@ -1524,6 +1524,12 @@ let only_generative_effects t =
   | Only_generative_effects _, _ -> true
   | _, _ -> false
 
+let contained_closure_id_uses t =
+  match t with
+  | Unary (Select_closure { move_from; move_to }, _) -> [move_from; move_to]
+  | Unary (Project_var { project_from; var = _ }, _) -> [project_from]
+  | _ -> []
+
 module Eligible_for_cse = struct
   type t = primitive_application
 

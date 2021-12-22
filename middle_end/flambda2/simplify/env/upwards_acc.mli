@@ -102,3 +102,5 @@ val is_demoted_exn_handler : t -> Continuation.t -> bool
 val closure_offsets : t -> Closure_offsets.t Or_unknown.t
 
 val with_closure_offsets : t -> Closure_offsets.t Or_unknown.t -> t
+
+val record_use_of_closure_id : t -> Closure_id.t -> t

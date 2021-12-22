@@ -85,7 +85,7 @@ let rebuild_apply_cont apply_cont ~args ~rewrite_id uacc ~after_rebuild =
       match rewrite with
       | None -> EB.no_rewrite apply_cont
       | Some rewrite ->
-        EB.rewrite_use uacc rewrite ~ctx:Apply_cont rewrite_id apply_cont
+        EB.rewrite_use rewrite ~ctx:Apply_cont rewrite_id apply_cont
     in
     match rewrite_use_result with
     | Apply_cont apply_cont ->
@@ -95,7 +95,9 @@ let rebuild_apply_cont apply_cont ~args ~rewrite_id uacc ~after_rebuild =
       in
       after_rebuild expr uacc
     | Expr build_expr ->
-      let expr, cost_metrics, free_names = build_expr ~apply_cont_to_expr in
+      let expr, cost_metrics, free_names, uacc =
+        build_expr uacc ~apply_cont_to_expr
+      in
       let uacc =
         UA.add_free_names uacc free_names |> UA.add_cost_metrics cost_metrics
       in

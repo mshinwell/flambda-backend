@@ -491,3 +491,5 @@ val equal_binary_primitive : binary_primitive -> binary_primitive -> bool
 val equal_ternary_primitive : ternary_primitive -> ternary_primitive -> bool
 
 val equal_variadic_primitive : variadic_primitive -> variadic_primitive -> bool
+
+val contained_closure_id_uses : t -> Closure_id.t list

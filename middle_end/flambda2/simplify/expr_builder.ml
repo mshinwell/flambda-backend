@@ -216,11 +216,13 @@ let create_let uacc (bound_vars : BLB.t) defining_expr
       then uacc
       else add_set_of_closures_offsets ~is_phantom defining_expr uacc
     in
-    ( RE.create_let
+    let expr, uacc =
+      RE.create_let
         (UA.are_rebuilding_terms uacc)
-        bound_vars defining_expr ~body ~free_names_of_body,
-      uacc,
-      let_creation_result )
+        bound_vars defining_expr ~body ~free_names_of_body
+        ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+    in
+    expr, uacc, let_creation_result
 
 let create_coerced_singleton_let uacc var defining_expr
     ~coercion_from_defining_expr_to_var ~free_names_of_defining_expr ~body
@@ -372,10 +374,10 @@ let create_raw_let_symbol uacc bound_symbols static_consts ~body =
     let uacc =
       add_set_of_closures_offsets ~is_phantom:false defining_expr uacc
     in
-    ( RE.create_let
-        (UA.are_rebuilding_terms uacc)
-        bindable defining_expr ~body ~free_names_of_body,
-      uacc )
+    RE.create_let
+      (UA.are_rebuilding_terms uacc)
+      bindable defining_expr ~body ~free_names_of_body
+      ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
 
 let create_let_symbol0 uacc (bound_symbols : Bound_symbols.t)
     (static_consts : Rebuilt_static_const.Group.t) ~body =
@@ -598,13 +600,14 @@ type rewrite_use_ctx =
 type rewrite_use_result =
   | Apply_cont of Apply_cont.t
   | Expr of
-      (apply_cont_to_expr:
-         (Apply_cont.t -> RE.t * Cost_metrics.t * Name_occurrences.t) ->
-      RE.t * Cost_metrics.t * Name_occurrences.t)
+      (UA.t ->
+      apply_cont_to_expr:
+        (Apply_cont.t -> RE.t * Cost_metrics.t * Name_occurrences.t) ->
+      RE.t * Cost_metrics.t * Name_occurrences.t * UA.t)
 
 let no_rewrite apply_cont = Apply_cont apply_cont
 
-let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
+let rewrite_use rewrite ~ctx id apply_cont : rewrite_use_result =
   let args = Apply_cont.args apply_cont in
   let original_params = Apply_cont_rewrite.original_params rewrite in
   if List.compare_lengths args original_params <> 0
@@ -681,13 +684,14 @@ let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
   match extra_lets with
   | [] -> Apply_cont apply_cont
   | _ :: _ ->
-    let build_expr ~apply_cont_to_expr =
+    let build_expr uacc ~apply_cont_to_expr =
       let body, cost_metrics_of_body, free_names_of_body =
         apply_cont_to_expr apply_cont
       in
       RE.bind_no_simplification
         (UA.are_rebuilding_terms uacc)
         ~bindings:extra_lets ~body ~cost_metrics_of_body ~free_names_of_body
+        ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
     in
     Expr build_expr
 
@@ -760,7 +764,7 @@ type cont_or_apply_cont =
   | Apply_cont of Apply_cont.t
 
 let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
-    arity : add_wrapper_for_fixed_arity_continuation0_result =
+    arity : add_wrapper_for_fixed_arity_continuation0_result * UA.t =
   let uenv = UA.uenv uacc in
   let cont =
     match cont_or_apply_cont with
@@ -770,7 +774,7 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
   let original_cont = cont in
   let cont = UE.resolve_continuation_aliases uenv cont in
   match UE.find_apply_cont_rewrite uenv original_cont with
-  | None -> This_continuation cont
+  | None -> This_continuation cont, uacc
   | Some rewrite when Apply_cont_rewrite.does_nothing rewrite ->
     let arity = Flambda_arity.With_subkinds.to_arity arity in
     let arity_in_rewrite =
@@ -784,9 +788,9 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
          match arity %a in rewrite:@ %a"
         Flambda_arity.print arity Flambda_arity.print arity_in_rewrite
         Apply_cont_rewrite.print rewrite;
-    This_continuation cont
+    This_continuation cont, uacc
   | Some rewrite -> (
-    let new_wrapper params expr ~free_names ~cost_metrics =
+    let new_wrapper uacc params expr ~free_names ~cost_metrics =
       let new_cont = Continuation.create () in
       let new_handler =
         RE.Continuation_handler.create
@@ -798,7 +802,7 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
         ListLabels.fold_left params ~init:free_names ~f:(fun free_names param ->
             Name_occurrences.remove_var free_names (Bound_parameter.var param))
       in
-      New_wrapper (new_cont, new_handler, free_names, cost_metrics)
+      New_wrapper (new_cont, new_handler, free_names, cost_metrics), uacc
     in
     match cont_or_apply_cont with
     | Continuation cont -> (
@@ -809,35 +813,35 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
       let args = List.map BP.simple params in
       let apply_cont = Apply_cont.create cont ~args ~dbg:Debuginfo.none in
       let ctx = Apply_expr args in
-      match rewrite_use uacc rewrite use_id ~ctx apply_cont with
+      match rewrite_use rewrite use_id ~ctx apply_cont with
       | Apply_cont apply_cont ->
         let cost_metrics =
           Cost_metrics.from_size (Code_size.apply_cont apply_cont)
         in
-        new_wrapper params
+        new_wrapper uacc params
           (RE.create_apply_cont apply_cont)
           ~free_names:(Apply_cont.free_names apply_cont)
           ~cost_metrics
       | Expr build_expr ->
-        let expr, cost_metrics, free_names =
-          build_expr ~apply_cont_to_expr:(fun apply_cont ->
+        let expr, cost_metrics, free_names, uacc =
+          build_expr uacc ~apply_cont_to_expr:(fun apply_cont ->
               ( RE.create_apply_cont apply_cont,
                 Cost_metrics.from_size (Code_size.apply_cont apply_cont),
                 Apply_cont.free_names apply_cont ))
         in
-        new_wrapper params expr ~free_names ~cost_metrics)
+        new_wrapper uacc params expr ~free_names ~cost_metrics)
     | Apply_cont apply_cont -> (
       let apply_cont = Apply_cont.update_continuation apply_cont cont in
-      match rewrite_use uacc rewrite ~ctx:Apply_cont use_id apply_cont with
-      | Apply_cont apply_cont -> Apply_cont apply_cont
+      match rewrite_use rewrite ~ctx:Apply_cont use_id apply_cont with
+      | Apply_cont apply_cont -> Apply_cont apply_cont, uacc
       | Expr build_expr ->
-        let expr, cost_metrics, free_names =
-          build_expr ~apply_cont_to_expr:(fun apply_cont ->
+        let expr, cost_metrics, free_names, uacc =
+          build_expr uacc ~apply_cont_to_expr:(fun apply_cont ->
               ( RE.create_apply_cont apply_cont,
                 Cost_metrics.from_size (Code_size.apply_cont apply_cont),
                 Apply_cont.free_names apply_cont ))
         in
-        new_wrapper [] expr ~free_names ~cost_metrics))
+        new_wrapper uacc [] expr ~free_names ~cost_metrics))
 
 type add_wrapper_for_switch_arm_result =
   | Apply_cont of Apply_cont.t
@@ -848,26 +852,27 @@ type add_wrapper_for_switch_arm_result =
       * Cost_metrics.t
 
 let add_wrapper_for_switch_arm uacc apply_cont ~use_id arity :
-    add_wrapper_for_switch_arm_result =
+    add_wrapper_for_switch_arm_result * UA.t =
   match
     add_wrapper_for_fixed_arity_continuation0 uacc (Apply_cont apply_cont)
       ~use_id arity
   with
-  | This_continuation cont ->
-    Apply_cont (Apply_cont.update_continuation apply_cont cont)
-  | Apply_cont apply_cont -> Apply_cont apply_cont
-  | New_wrapper (cont, wrapper, free_names_of_handler, cost_metrics) ->
-    New_wrapper (cont, wrapper, free_names_of_handler, cost_metrics)
+  | This_continuation cont, uacc ->
+    Apply_cont (Apply_cont.update_continuation apply_cont cont), uacc
+  | Apply_cont apply_cont, uacc -> Apply_cont apply_cont, uacc
+  | New_wrapper (cont, wrapper, free_names_of_handler, cost_metrics), uacc ->
+    New_wrapper (cont, wrapper, free_names_of_handler, cost_metrics), uacc
 
 let add_wrapper_for_fixed_arity_continuation uacc cont ~use_id arity ~around =
   match
     add_wrapper_for_fixed_arity_continuation0 uacc (Continuation cont) ~use_id
       arity
   with
-  | This_continuation cont -> around uacc cont
-  | Apply_cont _ -> assert false
-  | New_wrapper
-      (new_cont, new_handler, free_names_of_handler, cost_metrics_of_handler) ->
+  | This_continuation cont, uacc -> around uacc cont
+  | Apply_cont _, _ -> assert false
+  | ( New_wrapper
+        (new_cont, new_handler, free_names_of_handler, cost_metrics_of_handler),
+      uacc ) ->
     let body, uacc = around uacc new_cont in
     let free_names_of_body = UA.name_occurrences uacc in
     let expr =
@@ -896,7 +901,9 @@ let add_wrapper_for_fixed_arity_apply uacc ~use_id arity apply =
       UA.add_free_names uacc (Apply.free_names apply)
       |> UA.notify_added ~code_size:(Code_size.apply apply)
     in
-    RE.create_apply (UA.are_rebuilding_terms uacc) apply, uacc
+    RE.create_apply
+      (UA.are_rebuilding_terms uacc)
+      apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
   | Return cont ->
     add_wrapper_for_fixed_arity_continuation uacc cont ~use_id arity
       ~around:(fun uacc return_cont ->
@@ -911,4 +918,6 @@ let add_wrapper_for_fixed_arity_apply uacc ~use_id arity apply =
           UA.add_free_names uacc (Apply.free_names apply)
           |> UA.notify_added ~code_size:(Code_size.apply apply)
         in
-        RE.create_apply (UA.are_rebuilding_terms uacc) apply, uacc)
+        RE.create_apply
+          (UA.are_rebuilding_terms uacc)
+          apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc)

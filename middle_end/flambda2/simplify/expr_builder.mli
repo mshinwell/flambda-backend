@@ -99,7 +99,7 @@ val add_wrapper_for_switch_arm :
   Apply_cont.t ->
   use_id:Apply_cont_rewrite_id.t ->
   Flambda_arity.With_subkinds.t ->
-  add_wrapper_for_switch_arm_result
+  add_wrapper_for_switch_arm_result * Upwards_acc.t
 
 val add_wrapper_for_fixed_arity_apply :
   Upwards_acc.t ->
@@ -115,14 +115,14 @@ type rewrite_use_ctx =
 type rewrite_use_result = private
   | Apply_cont of Apply_cont.t
   | Expr of
-      (apply_cont_to_expr:
-         (Apply_cont.t -> Rebuilt_expr.t * Cost_metrics.t * Name_occurrences.t) ->
-      Rebuilt_expr.t * Cost_metrics.t * Name_occurrences.t)
+      (Upwards_acc.t ->
+      apply_cont_to_expr:
+        (Apply_cont.t -> Rebuilt_expr.t * Cost_metrics.t * Name_occurrences.t) ->
+      Rebuilt_expr.t * Cost_metrics.t * Name_occurrences.t * Upwards_acc.t)
 
 val no_rewrite : Apply_cont.t -> rewrite_use_result
 
 val rewrite_use :
-  Upwards_acc.t ->
   Apply_cont_rewrite.t ->
   ctx:rewrite_use_ctx ->
   Apply_cont_rewrite_id.t ->

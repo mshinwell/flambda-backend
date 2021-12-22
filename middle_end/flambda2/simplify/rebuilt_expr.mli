@@ -46,9 +46,16 @@ val create_let :
   Named.t ->
   body:t ->
   free_names_of_body:Name_occurrences.t ->
-  t
+  record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  'acc ->
+  t * 'acc
 
-val create_apply : Are_rebuilding_terms.t -> Apply.t -> t
+val create_apply :
+  Are_rebuilding_terms.t ->
+  Apply.t ->
+  record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  'acc ->
+  t * 'acc
 
 (** [Apply_cont] expressions are always rebuilt to allow optimisations in
     [Simplify_switch_expr] and [Simplify_let_cont_expr]. *)
@@ -119,4 +126,6 @@ val bind_no_simplification :
   body:t ->
   cost_metrics_of_body:Cost_metrics.t ->
   free_names_of_body:Name_occurrences.t ->
-  t * Cost_metrics.t * Name_occurrences.t
+  record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  'acc ->
+  t * Cost_metrics.t * Name_occurrences.t * 'acc

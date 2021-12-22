@@ -85,13 +85,7 @@ val with_shareable_constants :
 
 val shareable_constants : t -> Symbol.t Static_const.Map.t
 
-val add_use_of_closure_id : t -> Closure_id.t -> t
-
-val used_closure_ids : t -> Closure_id.Set.t
-
 val add_use_of_closure_var : t -> Var_within_closure.t -> t
-
-val with_used_closure_ids : t -> used_closure_ids:Closure_id.Set.t -> t
 
 val used_closure_vars : t -> Name_occurrences.t
 

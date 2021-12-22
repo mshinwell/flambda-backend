@@ -92,11 +92,12 @@ let create ~required_names ~reachable_code_ids ~closure_offsets uenv dacc =
        tracking in [name_occurrences], since it is always accumulated, and never
        saved and restored (like free name information is when dealing with a
        [Let_cont]). *)
-    (* CR gbury: since [used_closure_vars] (and also [used_closure_ids] probably),
-       are actually never modified in the uacc, and initialised using the dacc,
-       why not access them through the dacc ? that would reduce the number of words
-       allocated for each uacc (at the cost of an extra lookup) *)
-    used_closure_ids = DA.used_closure_ids dacc;
+    (* CR gbury: since [used_closure_vars] (and also [used_closure_ids]
+       probably), are actually never modified in the uacc, and initialised using
+       the dacc, why not access them through the dacc ? that would reduce the
+       number of words allocated for each uacc (at the cost of an extra
+       lookup) *)
+    used_closure_ids = Closure_id.Set.empty;
     used_closure_vars = DA.used_closure_vars dacc;
     shareable_constants = DA.shareable_constants dacc;
     cost_metrics = Cost_metrics.zero;
@@ -200,3 +201,6 @@ let is_demoted_exn_handler t cont =
 let closure_offsets t = t.closure_offsets
 
 let with_closure_offsets t closure_offsets = { t with closure_offsets }
+
+let record_use_of_closure_id t closure_id =
+  { t with used_closure_ids = Closure_id.Set.add closure_id t.used_closure_ids }

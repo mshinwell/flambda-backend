@@ -18,8 +18,8 @@
 
 open! Simplify_import
 
-let rebuild_arm uacc arm (action, use_id, arity)
-    (new_let_conts, arms, identity_arms, not_arms) =
+let rebuild_arm arm (action, use_id, arity)
+    (new_let_conts, arms, identity_arms, not_arms, uacc) =
   let action =
     Simplify_common.clear_demoted_trap_action_and_patch_unused_exn_bucket uacc
       action
@@ -28,7 +28,7 @@ let rebuild_arm uacc arm (action, use_id, arity)
     EB.add_wrapper_for_switch_arm uacc action ~use_id
       (Flambda_arity.With_subkinds.of_arity arity)
   with
-  | Apply_cont action -> (
+  | Apply_cont action, uacc -> (
     let action =
       (* First try to absorb any [Apply_cont] expression that forms the entirety
          of the arm's action (via an intermediate zero-arity continuation
@@ -65,11 +65,11 @@ let rebuild_arm uacc arm (action, use_id, arity)
     match action with
     | None ->
       (* The destination is unreachable; delete the [Switch] arm. *)
-      new_let_conts, arms, identity_arms, not_arms
+      new_let_conts, arms, identity_arms, not_arms, uacc
     | Some action -> (
       let normal_case ~identity_arms ~not_arms =
         let arms = Targetint_31_63.Map.add arm action arms in
-        new_let_conts, arms, identity_arms, not_arms
+        new_let_conts, arms, identity_arms, not_arms, uacc
       in
       (* Now check to see if the arm is of a form that might mean the whole
          [Switch] is either the identity or a boolean NOT. *)
@@ -104,24 +104,26 @@ let rebuild_arm uacc arm (action, use_id, arity)
         in
         Simple.pattern_match arg ~const ~name:(fun _ ~coercion:_ ->
             normal_case ~identity_arms ~not_arms)))
-  | New_wrapper
-      (new_cont, new_handler, free_names_of_handler, cost_metrics_handler) ->
+  | ( New_wrapper
+        (new_cont, new_handler, free_names_of_handler, cost_metrics_handler),
+      uacc ) ->
     let new_let_cont =
       new_cont, new_handler, free_names_of_handler, cost_metrics_handler
     in
     let new_let_conts = new_let_cont :: new_let_conts in
     let action = Apply_cont.goto new_cont in
     let arms = Targetint_31_63.Map.add arm action arms in
-    new_let_conts, arms, identity_arms, not_arms
+    new_let_conts, arms, identity_arms, not_arms, uacc
 
 let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
     ~after_rebuild =
-  let new_let_conts, arms, identity_arms, not_arms =
-    Targetint_31_63.Map.fold (rebuild_arm uacc) arms
+  let new_let_conts, arms, identity_arms, not_arms, uacc =
+    Targetint_31_63.Map.fold rebuild_arm arms
       ( [],
         Targetint_31_63.Map.empty,
         Targetint_31_63.Map.empty,
-        Targetint_31_63.Map.empty )
+        Targetint_31_63.Map.empty,
+        uacc )
   in
   let switch_is_identity =
     let arm_discrs = Targetint_31_63.Map.keys arms in
