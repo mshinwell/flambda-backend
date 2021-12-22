@@ -65,12 +65,13 @@ let simplify_select_closure ~move_from ~move_to ~min_name_mode dacc
     let dacc = DA.add_variable dacc result_var ty in
     Simplified_named.invalid (), dacc
   | Proved simple ->
+    let ty = T.alias_type_of K.value simple in
     let reachable =
-      Simplified_named.reachable (Named.create_simple simple) ~try_reify:true
+      Simplified_named.reachable
+        (Named.create_simple simple)
+        ~try_reify:(Some ty)
     in
-    let dacc =
-      DA.add_variable dacc result_var (T.alias_type_of K.value simple)
-    in
+    let dacc = DA.add_variable dacc result_var ty in
     reachable, dacc
   | Unknown ->
     let result = Simple.var (Bound_var.var result_var) in
