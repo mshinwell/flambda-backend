@@ -145,5 +145,4 @@ let prepare_cmx_file_contents ~final_typing_env ~module_symbol
       Exported_offsets.imported_offsets ()
     in
     Some
-      (Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets
-         ~used_closure_vars)
+      (Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets)

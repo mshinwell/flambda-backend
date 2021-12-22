@@ -34,13 +34,12 @@ type t0 =
     final_typing_env : Flambda2_types.Typing_env.Serializable.t;
     all_code : Exported_code.t;
     exported_offsets : Exported_offsets.t;
-    used_closure_vars : Var_within_closure.Set.t;
     table_data : table_data
   }
 
 type t = t0 list
 
-let create ~final_typing_env ~all_code ~exported_offsets ~used_closure_vars =
+let create ~final_typing_env ~all_code ~exported_offsets =
   let typing_env_exported_ids =
     Flambda2_types.Typing_env.Serializable.all_ids_for_export final_typing_env
   in
@@ -87,7 +86,6 @@ let create ~final_typing_env ~all_code ~exported_offsets ~used_closure_vars =
       final_typing_env;
       all_code;
       exported_offsets;
-      used_closure_vars;
       table_data
     } ]
 
@@ -145,11 +143,13 @@ let import_typing_env_and_code0 t =
   let consts = Const_importer.import t.table_data.consts in
   let code_ids = Code_id_importer.import t.table_data.code_ids in
   let continuations = Continuation_importer.import t.table_data.continuations in
-  let used_closure_vars = t.used_closure_vars in
   let original_compilation_unit = t.original_compilation_unit in
   let renaming =
+    (* CR mshinwell: remove [used_closure_vars] from [Renaming] and update
+       function in [Exported_code] which can now produce an error *)
     Renaming.create_import_map ~symbols ~variables ~simples ~consts ~code_ids
-      ~continuations ~used_closure_vars ~original_compilation_unit
+      ~continuations ~used_closure_vars:Var_within_closure.Set.empty
+      ~original_compilation_unit
   in
   let typing_env =
     Flambda2_types.Typing_env.Serializable.apply_renaming t.final_typing_env
