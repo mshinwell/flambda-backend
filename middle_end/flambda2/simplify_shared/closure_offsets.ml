@@ -257,7 +257,8 @@ module Greedy = struct
   (** Intermediate state to store slots for closures and environment variables
       before computing the actual offsets of these elements within a block. *)
   type state =
-    { closures : slot Closure_id.Map.t;
+    { used_offsets : EO.t;
+      closures : slot Closure_id.Map.t;
       env_vars : slot Var_within_closure.Map.t;
       sets_of_closures : set_of_closures list
     }
@@ -280,7 +281,8 @@ module Greedy = struct
       }
 
   let create_initial_state () =
-    { closures = Closure_id.Map.empty;
+    { used_offsets = EO.empty;
+      closures = Closure_id.Map.empty;
       env_vars = Var_within_closure.Map.empty;
       sets_of_closures = []
     }
@@ -395,9 +397,17 @@ module Greedy = struct
 
   (* Accumulator state *)
 
+  let use_closure_info state c info =
+    let used_offsets = EO.add_closure_offset state.used_offsets c info in
+    { state with used_offsets }
+
   let add_closure_slot state closure slot =
     let closures = Closure_id.Map.add closure slot state.closures in
     { state with closures }
+
+  let use_env_var_info state var info =
+    let used_offsets = EO.add_env_var_offset state.used_offsets var info in
+    { state with used_offsets }
 
   let add_env_var_slot state var slot =
     { state with env_vars = Var_within_closure.Map.add var slot state.env_vars }
@@ -444,11 +454,11 @@ module Greedy = struct
                 "Could not find the offset for closure id %a from another \
                  compilation unit (because of -opaque, or missing cmx)."
                 Closure_id.print c
-            | Some { offset; size } ->
+            | Some ({ offset; size } as info) ->
               let s =
                 { desc = Closure c; size; pos = Assigned offset; sets = [] }
               in
-              s, add_closure_slot state c s)
+              s, add_closure_slot (use_closure_info state c info) c s)
       in
       let () = add_unallocated_slot_to_set s set in
       create_closure_slots set state all_code r
@@ -475,11 +485,11 @@ module Greedy = struct
                 "Could not find the offset for env var %a from another \
                  compilation unit (because of -opaque, or missing cmx)."
                 Var_within_closure.print v
-            | Some { offset } ->
+            | Some ({ offset } as info) ->
               let s =
                 { desc = Env_var v; size = 1; pos = Assigned offset; sets = [] }
               in
-              s, add_env_var_slot state v s)
+              s, add_env_var_slot (use_env_var_info state v info) v s)
       in
       let () = add_unallocated_slot_to_set s set in
       create_env_var_slots set state r
@@ -653,7 +663,7 @@ module Greedy = struct
   (* Tansform an internal accumulator state for slots into an actual mapping
      that assigns offsets.*)
   let finalize ~used_closure_vars state =
-    let offsets = EO.imported_offsets () in
+    let offsets = state.used_offsets in
     let offsets = assign_closure_offsets state offsets in
     let offsets = assign_env_var_offsets ~used_closure_vars state offsets in
     offsets
