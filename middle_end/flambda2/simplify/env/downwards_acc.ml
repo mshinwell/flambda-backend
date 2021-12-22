@@ -155,13 +155,6 @@ let with_shareable_constants t ~shareable_constants =
 
 let shareable_constants t = t.shareable_constants
 
-let add_use_of_closure_var t closure_var =
-  { t with
-    used_closure_vars =
-      Name_occurrences.add_closure_var t.used_closure_vars closure_var
-        Name_mode.normal
-  }
-
 let used_closure_vars t = t.used_closure_vars
 
 let all_continuations_used t =
