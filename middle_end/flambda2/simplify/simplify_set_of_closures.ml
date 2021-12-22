@@ -637,7 +637,9 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
         code,
         fun_types,
         code_age_relation,
+        used_closure_ids,
         used_closure_vars,
+        used_or_defined_closure_vars,
         shareable_constants,
         closure_offsets,
         lifted_consts,
@@ -648,7 +650,9 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
              code,
              fun_types,
              code_age_relation,
+             used_closure_ids,
              used_closure_vars,
+             used_or_defined_closure_vars,
              shareable_constants,
              closure_offsets,
              lifted_consts_prev_functions,
@@ -710,11 +714,23 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
             Code_id.Set.union code_ids_to_remember
               (DA.code_ids_to_remember dacc_after_body)
         in
+        let used_closure_ids =
+          match uacc_after_upwards_traversal with
+          | None -> used_closure_ids
+          | Some uacc_after_upwards_traversal ->
+            UA.used_closure_ids uacc_after_upwards_traversal
+        in
         let used_closure_vars =
           match uacc_after_upwards_traversal with
           | None -> used_closure_vars
           | Some uacc_after_upwards_traversal ->
             UA.used_closure_vars uacc_after_upwards_traversal
+        in
+        let used_or_defined_closure_vars =
+          match uacc_after_upwards_traversal with
+          | None -> used_or_defined_closure_vars
+          | Some uacc_after_upwards_traversal ->
+            UA.used_or_defined_closure_vars uacc_after_upwards_traversal
         in
         let shareable_constants =
           match uacc_after_upwards_traversal with
@@ -732,7 +748,9 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
           code,
           fun_types,
           code_age_relation,
+          used_closure_ids,
           used_closure_vars,
+          used_or_defined_closure_vars,
           shareable_constants,
           closure_offsets,
           lifted_consts_prev_functions,
@@ -742,7 +760,9 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
         [],
         Closure_id.Map.empty,
         TE.code_age_relation (DA.typing_env dacc),
+        DA.used_closure_ids dacc,
         DA.used_closure_vars dacc,
+        DA.used_or_defined_closure_vars dacc,
         DA.shareable_constants dacc,
         DA.closure_offsets dacc,
         LCS.empty,
@@ -750,7 +770,9 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
   in
   let dacc =
     DA.add_to_lifted_constant_accumulator dacc lifted_consts
+    |> DA.with_used_closure_ids ~used_closure_ids
     |> DA.with_used_closure_vars ~used_closure_vars
+    |> DA.with_used_or_defined_closure_vars ~used_or_defined_closure_vars
     |> DA.with_shareable_constants ~shareable_constants
     |> DA.with_closure_offsets ~closure_offsets
     |> DA.with_code_ids_to_remember ~code_ids_to_remember

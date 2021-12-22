@@ -116,7 +116,8 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
       in
       RE.create_apply
         (UA.are_rebuilding_terms uacc)
-        apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+        apply ~record_use_of_closure_id:UA.record_use_of_closure_id
+        ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
     | Some use_id ->
       EB.add_wrapper_for_fixed_arity_apply uacc ~use_id result_arity apply
   in
@@ -845,7 +846,8 @@ let rebuild_c_call apply ~use_id ~exn_cont_use_id ~return_arity uacc
       in
       RE.create_apply
         (UA.are_rebuilding_terms uacc)
-        apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+        apply ~record_use_of_closure_id:UA.record_use_of_closure_id
+        ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
   in
   after_rebuild expr uacc
 

@@ -57,7 +57,8 @@ let [@ocamlformat "disable"] print are_rebuilding ppf t =
 let term_not_rebuilt () = Lazy.force invalid
 
 let create_let are_rebuilding bound_vars (defining_expr : Named.t) ~body
-    ~free_names_of_body ~record_use_of_closure_id acc =
+    ~free_names_of_body ~record_use_of_closure_id ~record_use_of_closure_var acc
+    =
   if ART.do_not_rebuild_terms are_rebuilding
   then Lazy.force invalid, acc
   else
@@ -72,12 +73,17 @@ let create_let are_rebuilding bound_vars (defining_expr : Named.t) ~body
       match defining_expr with
       | Simple _ | Set_of_closures _ | Static_consts _ | Rec_info _ -> acc
       | Prim (prim, _) -> (
-        match Flambda_primitive.contained_closure_id_uses prim with
-        | [] -> acc
-        | closure_ids ->
-          List.fold_left
-            (fun acc closure_id -> record_use_of_closure_id acc closure_id)
-            acc closure_ids)
+        let acc =
+          match Flambda_primitive.contained_closure_id_uses prim with
+          | [] -> acc
+          | closure_ids ->
+            List.fold_left
+              (fun acc closure_id -> record_use_of_closure_id acc closure_id)
+              acc closure_ids
+        in
+        match Flambda_primitive.contained_closure_var_use prim with
+        | None -> acc
+        | Some closure_var -> record_use_of_closure_var acc closure_var)
     in
     expr, acc
 
@@ -162,7 +168,8 @@ let create_switch are_rebuilding switch =
 let create_invalid () = Lazy.force invalid
 
 let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
-    ~free_names_of_body ~record_use_of_closure_id acc =
+    ~free_names_of_body ~record_use_of_closure_id ~record_use_of_closure_var acc
+    =
   ListLabels.fold_left (List.rev bindings)
     ~init:(body, cost_metrics_of_body, free_names_of_body, acc)
     ~f:(fun
@@ -173,7 +180,7 @@ let bind_no_simplification are_rebuilding ~bindings ~body ~cost_metrics_of_body
         create_let are_rebuilding
           (Bound_pattern.singleton var)
           defining_expr ~body:expr ~free_names_of_body:free_names
-          ~record_use_of_closure_id acc
+          ~record_use_of_closure_id ~record_use_of_closure_var acc
       in
       let free_names =
         Name_occurrences.union

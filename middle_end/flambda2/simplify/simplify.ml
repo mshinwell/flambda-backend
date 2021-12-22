@@ -112,10 +112,10 @@ let run ~symbol_for_global ~get_global_info ~round unit =
     Exported_code.merge (UA.all_code uacc)
       (Exported_code.mark_as_imported !imported_code)
   in
+  (* CR mshinwell: Should closure ID and closure variable uses in fact be
+     tracked through [UA.name_occurrences uacc]? *)
   let used_closure_ids = UA.used_closure_ids uacc in
-  let used_closure_vars =
-    UA.name_occurrences uacc |> Name_occurrences.closure_vars
-  in
+  let used_closure_vars = UA.used_or_defined_closure_vars uacc in
   let exported_offsets =
     match UA.closure_offsets uacc with
     | Unknown ->

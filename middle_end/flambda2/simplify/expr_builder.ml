@@ -220,7 +220,8 @@ let create_let uacc (bound_vars : BLB.t) defining_expr
       RE.create_let
         (UA.are_rebuilding_terms uacc)
         bound_vars defining_expr ~body ~free_names_of_body
-        ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+        ~record_use_of_closure_id:UA.record_use_of_closure_id
+        ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
     in
     expr, uacc, let_creation_result
 
@@ -377,7 +378,8 @@ let create_raw_let_symbol uacc bound_symbols static_consts ~body =
     RE.create_let
       (UA.are_rebuilding_terms uacc)
       bindable defining_expr ~body ~free_names_of_body
-      ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+      ~record_use_of_closure_id:UA.record_use_of_closure_id
+      ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
 
 let create_let_symbol0 uacc (bound_symbols : Bound_symbols.t)
     (static_consts : Rebuilt_static_const.Group.t) ~body =
@@ -691,7 +693,8 @@ let rewrite_use rewrite ~ctx id apply_cont : rewrite_use_result =
       RE.bind_no_simplification
         (UA.are_rebuilding_terms uacc)
         ~bindings:extra_lets ~body ~cost_metrics_of_body ~free_names_of_body
-        ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+        ~record_use_of_closure_id:UA.record_use_of_closure_id
+        ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
     in
     Expr build_expr
 
@@ -903,7 +906,8 @@ let add_wrapper_for_fixed_arity_apply uacc ~use_id arity apply =
     in
     RE.create_apply
       (UA.are_rebuilding_terms uacc)
-      apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc
+      apply ~record_use_of_closure_id:UA.record_use_of_closure_id
+      ~record_use_of_closure_var:UA.record_use_of_closure_var uacc
   | Return cont ->
     add_wrapper_for_fixed_arity_continuation uacc cont ~use_id arity
       ~around:(fun uacc return_cont ->
@@ -920,4 +924,5 @@ let add_wrapper_for_fixed_arity_apply uacc ~use_id arity apply =
         in
         RE.create_apply
           (UA.are_rebuilding_terms uacc)
-          apply ~record_use_of_closure_id:UA.record_use_of_closure_id uacc)
+          apply ~record_use_of_closure_id:UA.record_use_of_closure_id
+          ~record_use_of_closure_var:UA.record_use_of_closure_var uacc)

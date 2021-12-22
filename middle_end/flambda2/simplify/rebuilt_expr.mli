@@ -47,6 +47,7 @@ val create_let :
   body:t ->
   free_names_of_body:Name_occurrences.t ->
   record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  record_use_of_closure_var:('acc -> Var_within_closure.t -> 'acc) ->
   'acc ->
   t * 'acc
 
@@ -54,6 +55,7 @@ val create_apply :
   Are_rebuilding_terms.t ->
   Apply.t ->
   record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  record_use_of_closure_var:('acc -> Var_within_closure.t -> 'acc) ->
   'acc ->
   t * 'acc
 
@@ -127,5 +129,6 @@ val bind_no_simplification :
   cost_metrics_of_body:Cost_metrics.t ->
   free_names_of_body:Name_occurrences.t ->
   record_use_of_closure_id:('acc -> Closure_id.t -> 'acc) ->
+  record_use_of_closure_var:('acc -> Var_within_closure.t -> 'acc) ->
   'acc ->
   t * Cost_metrics.t * Name_occurrences.t * 'acc

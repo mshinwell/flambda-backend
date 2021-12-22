@@ -1530,6 +1530,11 @@ let contained_closure_id_uses t =
   | Unary (Project_var { project_from; var = _ }, _) -> [project_from]
   | _ -> []
 
+let contained_closure_var_use t =
+  match t with
+  | Unary (Project_var { project_from = _; var }, _) -> Some var
+  | _ -> None
+
 module Eligible_for_cse = struct
   type t = primitive_application
 

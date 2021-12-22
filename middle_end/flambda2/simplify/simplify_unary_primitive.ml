@@ -124,7 +124,7 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
               DE.add_symbol_projection denv var proj))
         ~var:(fun _ ~coercion:_ -> dacc)
     in
-    reachable, dacc
+    reachable, DA.add_use_of_closure_var dacc closure_element
 
 let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
     ~original_term ~arg ~arg_ty:boxed_number_ty ~result_var =
