@@ -222,13 +222,6 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
       Flambda2_to_cmm.To_cmm.unit ~make_symbol:Compilenv.make_symbol flambda
         ~all_code ~offsets
     in
-    if not keep_symbol_tables
-    then begin
-      Compilenv.reset_info_tables ();
-      Flambda2_identifiers.Code_id.reset ();
-      Flambda2_identifiers.Continuation.reset ();
-      Flambda2_identifiers.Reg_width_things.reset ()
-    end;
     cmm
   in
   Profile.record_call "flambda2" run
