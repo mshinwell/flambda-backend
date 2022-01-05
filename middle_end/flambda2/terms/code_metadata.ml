@@ -21,6 +21,7 @@ type t =
     newer_version_of : Code_id.t option;
     params_arity : Flambda_arity.With_subkinds.t;
     result_arity : Flambda_arity.With_subkinds.t;
+    result_types : Flambda2_types.t list;
     stub : bool;
     inline : Inline_attribute.t;
     is_a_functor : bool;
@@ -40,6 +41,8 @@ let newer_version_of { newer_version_of; _ } = newer_version_of
 let params_arity { params_arity; _ } = params_arity
 
 let result_arity { result_arity; _ } = result_arity
+
+let result_types { result_types; _ } = result_types
 
 let stub { stub; _ } = stub
 
@@ -61,8 +64,8 @@ let is_my_closure_used { is_my_closure_used; _ } = is_my_closure_used
 
 let inlining_decision { inlining_decision; _ } = inlining_decision
 
-let create code_id ~newer_version_of ~params_arity ~result_arity ~stub
-    ~(inline : Inline_attribute.t) ~is_a_functor ~recursive ~cost_metrics
+let create code_id ~newer_version_of ~params_arity ~result_arity ~result_types
+    ~stub ~(inline : Inline_attribute.t) ~is_a_functor ~recursive ~cost_metrics
     ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used ~inlining_decision =
   begin
     match stub, inline with
@@ -75,10 +78,21 @@ let create code_id ~newer_version_of ~params_arity ~result_arity ~stub
       Misc.fatal_error
         "Stubs may not be annotated as [Always_inline] or [Unroll]"
   end;
+  if List.compare_lengths result_arity result_types <> 0
+  then
+    Misc.fatal_errorf
+      "Attempt to create code metadata for code ID %a with mismatching result \
+       arity (%a) and result types (%a)"
+      Code_id.print code_id Flambda_arity.With_subkinds.print result_arity
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Flambda2_types.print)
+      result_types;
   { code_id;
     newer_version_of;
     params_arity;
     result_arity;
+    (* CR-someday mshinwell: [result_types] really needs to be an env
+       extension *)
+    result_types;
     stub;
     inline;
     is_a_functor;
@@ -108,7 +122,7 @@ end
 
 let [@ocamlformat "disable"] print ppf
       { code_id = _; newer_version_of; stub; inline; is_a_functor;
-        params_arity; result_arity; recursive; cost_metrics; inlining_arguments;
+        params_arity; result_arity;result_types; recursive; cost_metrics; inlining_arguments;
         dbg; is_tupled; is_my_closure_used; inlining_decision; } =
   let module C = Flambda_colours in
   Format.fprintf ppf "@[<hov 1>(\
@@ -118,6 +132,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>@<0>%s(is_a_functor@ %b)@<0>%s@]@ \
       @[<hov 1>@<0>%s(params_arity@ @<0>%s%a@<0>%s)@<0>%s@]@ \
       @[<hov 1>@<0>%s(result_arity@ @<0>%s%a@<0>%s)@<0>%s@]@ \
+      @[<hov 1>(result_types@ @[<hov 1>(%a)@])@]@ \
       @[<hov 1>@<0>%s(recursive@ %a)@<0>%s@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
       @[<hov 1>(inlining_arguments@ %a)@]@ \
@@ -159,6 +174,7 @@ let [@ocamlformat "disable"] print ppf
     then Flambda_colours.elide ()
     else Flambda_colours.normal ())
     (Flambda_colours.normal ())
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space Flambda2_types.print) result_types
     (match recursive with
     | Non_recursive -> Flambda_colours.elide ()
     | Recursive -> Flambda_colours.normal ())
@@ -182,6 +198,7 @@ let free_names
       newer_version_of;
       params_arity = _;
       result_arity = _;
+      result_types;
       stub = _;
       inline = _;
       is_a_functor = _;
@@ -195,17 +212,23 @@ let free_names
     } =
   (* [code_id] is only in [t.code_metadata] for the use of [compare]; it doesn't
      count as a free name. *)
-  match newer_version_of with
-  | None -> Name_occurrences.empty
-  | Some older ->
-    Name_occurrences.add_newer_version_of_code_id Name_occurrences.empty older
-      Name_mode.normal
+  let free_names =
+    match newer_version_of with
+    | None -> Name_occurrences.empty
+    | Some older ->
+      Name_occurrences.add_newer_version_of_code_id Name_occurrences.empty older
+        Name_mode.normal
+  in
+  ListLabels.fold_left result_types ~init:free_names
+    ~f:(fun free_names result_type ->
+      Name_occurrences.union free_names (Flambda2_types.free_names result_type))
 
 let apply_renaming
     ({ code_id;
        newer_version_of;
        params_arity = _;
        result_arity = _;
+       result_types;
        stub = _;
        inline = _;
        is_a_functor = _;
@@ -226,15 +249,32 @@ let apply_renaming
       if code_id == code_id' then newer_version_of else Some code_id'
   in
   let code_id' = Renaming.apply_code_id perm code_id in
-  if code_id == code_id' && newer_version_of == newer_version_of'
+  let result_types_changed = ref false in
+  let result_types =
+    List.map
+      (fun result_type ->
+        let result_type' = Flambda2_types.apply_renaming result_type perm in
+        if result_type' != result_type then result_types_changed := true;
+        result_type')
+      result_types
+  in
+  if code_id == code_id'
+     && newer_version_of == newer_version_of'
+     && not !result_types_changed
   then t
-  else { t with code_id = code_id'; newer_version_of = newer_version_of' }
+  else
+    { t with
+      code_id = code_id';
+      newer_version_of = newer_version_of';
+      result_types
+    }
 
 let all_ids_for_export
     { code_id;
       newer_version_of;
       params_arity = _;
       result_arity = _;
+      result_types;
       stub = _;
       inline = _;
       is_a_functor = _;
@@ -246,18 +286,23 @@ let all_ids_for_export
       is_my_closure_used = _;
       inlining_decision = _
     } =
-  let newer_version_of_ids =
-    match newer_version_of with
-    | None -> Ids_for_export.empty
-    | Some older -> Ids_for_export.add_code_id Ids_for_export.empty older
+  let ids =
+    let newer_version_of_ids =
+      match newer_version_of with
+      | None -> Ids_for_export.empty
+      | Some older -> Ids_for_export.add_code_id Ids_for_export.empty older
+    in
+    Ids_for_export.add_code_id newer_version_of_ids code_id
   in
-  Ids_for_export.add_code_id newer_version_of_ids code_id
+  ListLabels.fold_left result_types ~init:ids ~f:(fun ids result_type ->
+      Ids_for_export.union ids (Flambda2_types.all_ids_for_export result_type))
 
-let equal
+let approx_equal
     { code_id = code_id1;
       newer_version_of = newer_version_of1;
       params_arity = params_arity1;
       result_arity = result_arity1;
+      result_types = _;
       stub = stub1;
       inline = inline1;
       is_a_functor = is_a_functor1;
@@ -273,6 +318,7 @@ let equal
       newer_version_of = newer_version_of2;
       params_arity = params_arity2;
       result_arity = result_arity2;
+      result_types = _;
       stub = stub2;
       inline = inline2;
       is_a_functor = is_a_functor2;

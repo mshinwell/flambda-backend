@@ -33,7 +33,7 @@ let create code = Code_present code
 let merge code_id t1 t2 =
   match t1, t2 with
   | Metadata_only cm1, Metadata_only cm2 ->
-    if Code_metadata.equal cm1 cm2
+    if Code_metadata.approx_equal cm1 cm2
     then Some t1
     else
       Misc.fatal_errorf
@@ -45,7 +45,7 @@ let merge code_id t1 t2 =
   | Metadata_only cm_imported, (Code_present code_present as t)
   | (Code_present code_present as t), Metadata_only cm_imported ->
     let cm_present = Code.code_metadata code_present in
-    if Code_metadata.equal cm_present cm_imported
+    if Code_metadata.approx_equal cm_present cm_imported
     then Some t
     else
       Misc.fatal_errorf

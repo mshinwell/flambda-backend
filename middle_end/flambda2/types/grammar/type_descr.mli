@@ -86,6 +86,13 @@ val all_ids_for_export :
   'head t ->
   Ids_for_export.t
 
+val erase_variables :
+  apply_renaming_head:('head -> Renaming.t -> 'head) ->
+  free_names_head:('head -> Name_occurrences.t) ->
+  erase_variables_head:('head -> 'head) ->
+  'head t ->
+  'head t
+
 module Descr : sig
   type 'head t = private
     | No_alias of 'head

@@ -34,6 +34,8 @@ val params_arity : t -> Flambda_arity.With_subkinds.t
 
 val result_arity : t -> Flambda_arity.With_subkinds.t
 
+val result_types : t -> Flambda2_types.t list
+
 val stub : t -> bool
 
 val inline : t -> Inline_attribute.t
@@ -61,6 +63,7 @@ val create :
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
   result_arity:Flambda_arity.With_subkinds.t ->
+  result_types:Flambda2_types.t list ->
   stub:bool ->
   inline:Inline_attribute.t ->
   is_a_functor:bool ->

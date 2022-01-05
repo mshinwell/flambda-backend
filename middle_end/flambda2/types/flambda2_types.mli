@@ -27,7 +27,14 @@ val print : Format.formatter -> t -> unit
 
 val arity_of_list : t list -> Flambda_arity.t
 
+val apply_renaming : t -> Renaming.t -> t
+
+include Contains_ids.S with type t := t
+
 type typing_env
+
+val expand_head_then_erase_variables :
+  typing_env -> flambda_type -> flambda_type
 
 type typing_env_extension
 

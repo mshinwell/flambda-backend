@@ -130,6 +130,10 @@ include Contains_ids.S with type t := t
 val remove_unused_closure_vars :
   t -> used_closure_vars:Var_within_closure.Set.t -> t
 
+(** [expand_head] must never return an alias type and must protect against
+    recursion via aliases. *)
+val erase_variables : t -> expand_head:(t -> t) -> t
+
 val kind : t -> Flambda_kind.t
 
 val alias_type_of : Flambda_kind.t -> Simple.t -> t

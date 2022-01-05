@@ -26,6 +26,8 @@ val params_arity : t -> Flambda_arity.With_subkinds.t
 
 val result_arity : t -> Flambda_arity.With_subkinds.t
 
+val result_types : t -> Flambda2_types.t list
+
 val stub : t -> bool
 
 val inline : t -> Inline_attribute.t
@@ -51,6 +53,7 @@ val create :
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
   result_arity:Flambda_arity.With_subkinds.t ->
+  result_types:Flambda2_types.t list ->
   stub:bool ->
   inline:Inline_attribute.t ->
   is_a_functor:bool ->
@@ -75,4 +78,4 @@ include Contains_names.S with type t := t
 
 val all_ids_for_export : t -> Ids_for_export.t
 
-val equal : t -> t -> bool
+val approx_equal : t -> t -> bool

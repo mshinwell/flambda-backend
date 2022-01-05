@@ -86,6 +86,13 @@ module T : sig
     'head t ->
     used_closure_vars:Var_within_closure.Set.t ->
     'head t
+
+  val erase_variables :
+    apply_renaming_head:('head -> Renaming.t -> 'head) ->
+    free_names_head:('head -> Name_occurrences.t) ->
+    erase_variables_head:('head -> 'head) ->
+    'head t ->
+    'head t
 end = struct
   module Descr = struct
     type 'head t =
@@ -207,6 +214,25 @@ end = struct
           wdr ~used_closure_vars
       in
       if wdr == wdr' then t else Ok wdr'
+
+  let erase_variables ~apply_renaming_head ~free_names_head
+      ~erase_variables_head (t : _ t) =
+    match t with
+    | Unknown | Bottom -> t
+    | Ok wdr -> (
+      let descr =
+        WDR.descr
+          ~apply_renaming_descr:(Descr.apply_renaming ~apply_renaming_head)
+          ~free_names_descr:(Descr.free_names ~free_names_head)
+          wdr
+      in
+      match descr with
+      | Equals alias ->
+        Simple.pattern_match' alias
+          ~const:(fun _ -> t)
+          ~symbol:(fun _ ~coercion:_ -> t)
+          ~var:(fun _var ~coercion:_ : _ t -> Unknown)
+      | No_alias head -> create (erase_variables_head head))
 end
 
 include T

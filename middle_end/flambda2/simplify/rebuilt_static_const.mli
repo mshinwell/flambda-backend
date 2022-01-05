@@ -36,6 +36,7 @@ val create_code :
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
   result_arity:Flambda_arity.With_subkinds.t ->
+  result_types:Flambda2_types.t list ->
   stub:bool ->
   inline:Inline_attribute.t ->
   is_a_functor:bool ->

@@ -96,3 +96,6 @@ val make_suitable_for_environment :
   suitable_for:Typing_env.t ->
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t
+
+val expand_head_then_erase_variables :
+  Typing_env.t -> Type_grammar.t -> Type_grammar.t

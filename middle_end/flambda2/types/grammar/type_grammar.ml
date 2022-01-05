@@ -1949,6 +1949,276 @@ let get_alias_exn t =
       ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
       ~free_names_head:free_names_head_of_kind_rec_info
 
+let rec erase_variables t ~expand_head : t =
+  match get_alias_exn t with
+  | alias ->
+    Simple.pattern_match' alias
+      ~const:(fun _ -> t)
+      ~symbol:(fun _ ~coercion:_ -> t)
+      ~var:(fun _ ~coercion:_ ->
+        let t' = expand_head t in
+        match get_alias_exn t' with
+        | exception Not_found -> erase_variables t' ~expand_head
+        | _alias ->
+          Misc.fatal_errorf
+            "expand_head during erase_variables did not expand an alias:@ %a"
+            print t)
+  | exception Not_found -> (
+    match t with
+    | Value ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_value
+          ~free_names_head:free_names_head_of_kind_value
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_value ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Value ty'
+    | Naked_immediate ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_immediate
+          ~free_names_head:free_names_head_of_kind_naked_immediate
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_naked_immediate ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Naked_immediate ty'
+    | Naked_float ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_float
+          ~free_names_head:free_names_head_of_kind_naked_float
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_naked_float ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Naked_float ty'
+    | Naked_int32 ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int32
+          ~free_names_head:free_names_head_of_kind_naked_int32
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_naked_int32 ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Naked_int32 ty'
+    | Naked_int64 ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_int64
+          ~free_names_head:free_names_head_of_kind_naked_int64
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_naked_int64 ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Naked_int64 ty'
+    | Naked_nativeint ty ->
+      let ty' =
+        TD.erase_variables
+          ~apply_renaming_head:apply_renaming_head_of_kind_naked_nativeint
+          ~free_names_head:free_names_head_of_kind_naked_nativeint
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_naked_nativeint ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Naked_nativeint ty'
+    | Rec_info ty ->
+      let ty' =
+        TD.erase_variables ~apply_renaming_head:Rec_info_expr.apply_renaming
+          ~free_names_head:free_names_head_of_kind_rec_info
+          ~erase_variables_head:
+            (erase_variables_head_of_kind_rec_info ~expand_head)
+          ty
+      in
+      if ty == ty' then t else Rec_info ty')
+
+and erase_variables_head_of_kind_value head ~expand_head =
+  match head with
+  | Variant { blocks; immediates; is_unique } ->
+    let immediates' =
+      let>+ immediates = immediates in
+      erase_variables immediates ~expand_head
+    in
+    let blocks' =
+      let>+ blocks = blocks in
+      erase_variables_row_like_for_blocks blocks ~expand_head
+    in
+    if immediates == immediates' && blocks == blocks'
+    then head
+    else Variant { is_unique; blocks = blocks'; immediates = immediates' }
+  | Boxed_float ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Boxed_float ty'
+  | Boxed_int32 ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Boxed_int32 ty'
+  | Boxed_int64 ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Boxed_int64 ty'
+  | Boxed_nativeint ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Boxed_nativeint ty'
+  | Closures { by_closure_id } ->
+    let by_closure_id' =
+      erase_variables_row_like_for_closures by_closure_id ~expand_head
+    in
+    if by_closure_id == by_closure_id'
+    then head
+    else Closures { by_closure_id = by_closure_id' }
+  | String _ -> head
+  | Array { element_kind; length } ->
+    let length' = erase_variables length ~expand_head in
+    if length == length' then head else Array { element_kind; length = length' }
+
+and erase_variables_head_of_kind_naked_immediate head ~expand_head =
+  match head with
+  | Naked_immediates _ -> head
+  | Is_int ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Is_int ty'
+  | Get_tag ty ->
+    let ty' = erase_variables ty ~expand_head in
+    if ty == ty' then head else Get_tag ty'
+
+and erase_variables_head_of_kind_naked_float head ~expand_head:_ = head
+
+and erase_variables_head_of_kind_naked_int32 head ~expand_head:_ = head
+
+and erase_variables_head_of_kind_naked_int64 head ~expand_head:_ = head
+
+and erase_variables_head_of_kind_naked_nativeint head ~expand_head:_ = head
+
+and erase_variables_head_of_kind_rec_info head ~expand_head:_ =
+  Rec_info_expr.erase_variables head
+
+and erase_variables_row_like :
+      'index 'maps_to 'known.
+      erase_variables_maps_to:('maps_to -> expand_head:(t -> t) -> 'maps_to) ->
+      known:'known ->
+      other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      map_known:
+        ((('index, 'maps_to) row_like_case -> ('index, 'maps_to) row_like_case) ->
+        'known ->
+        'known) ->
+      expand_head:(t -> t) ->
+      ('known * ('index, 'maps_to) row_like_case Or_bottom.t) option =
+ fun ~erase_variables_maps_to ~known ~other ~map_known ~expand_head ->
+  let known' =
+    map_known
+      (fun { index; maps_to; env_extension } ->
+        { index;
+          env_extension =
+            erase_variables_env_extension env_extension ~expand_head;
+          maps_to = erase_variables_maps_to maps_to ~expand_head
+        })
+      known
+  in
+  let other' : _ Or_bottom.t =
+    match other with
+    | Bottom -> Bottom
+    | Ok { index; maps_to; env_extension } ->
+      Ok
+        { index;
+          env_extension =
+            erase_variables_env_extension env_extension ~expand_head;
+          maps_to = erase_variables_maps_to maps_to ~expand_head
+        }
+  in
+  if known == known' && other == other' then None else Some (known', other')
+
+and erase_variables_row_like_for_blocks
+    ({ known_tags; other_tags } as row_like_for_tags) ~expand_head =
+  match
+    erase_variables_row_like
+      ~erase_variables_maps_to:erase_variables_int_indexed_product
+      ~known:known_tags ~other:other_tags ~map_known:Tag.Map.map_sharing
+      ~expand_head
+  with
+  | None -> row_like_for_tags
+  | Some (known_tags, other_tags) -> { known_tags; other_tags }
+
+and erase_variables_row_like_for_closures
+    ({ known_closures; other_closures } as row_like_for_closures) ~expand_head =
+  match
+    erase_variables_row_like
+      ~erase_variables_maps_to:erase_variables_closures_entry
+      ~known:known_closures ~other:other_closures
+      ~map_known:Closure_id.Map.map_sharing ~expand_head
+  with
+  | None -> row_like_for_closures
+  | Some (known_closures, other_closures) -> { known_closures; other_closures }
+
+and erase_variables_closures_entry
+    { function_types; closure_types; closure_var_types } ~expand_head =
+  { function_types =
+      Closure_id.Map.map_sharing
+        (fun function_type ->
+          Or_unknown_or_bottom.map function_type ~f:(fun function_type ->
+              erase_variables_function_type function_type ~expand_head))
+        function_types;
+    closure_types =
+      erase_variables_closure_id_indexed_product closure_types ~expand_head;
+    closure_var_types =
+      erase_variables_var_within_closure_indexed_product closure_var_types
+        ~expand_head
+  }
+
+and erase_variables_closure_id_indexed_product
+    { closure_id_components_by_index } ~expand_head =
+  let closure_id_components_by_index =
+    Closure_id.Map.map_sharing
+      (fun ty -> erase_variables ty ~expand_head)
+      closure_id_components_by_index
+  in
+  { closure_id_components_by_index }
+
+and erase_variables_var_within_closure_indexed_product
+    { var_within_closure_components_by_index } ~expand_head =
+  let var_within_closure_components_by_index =
+    Var_within_closure.Map.map_sharing
+      (erase_variables ~expand_head)
+      var_within_closure_components_by_index
+  in
+  { var_within_closure_components_by_index }
+
+and erase_variables_int_indexed_product { fields; kind } ~expand_head =
+  let fields = Array.copy fields in
+  for i = 0 to Array.length fields - 1 do
+    fields.(i) <- erase_variables fields.(i) ~expand_head
+  done;
+  { fields; kind }
+
+and erase_variables_function_type ({ code_id; rec_info } as function_type)
+    ~expand_head =
+  let rec_info' = erase_variables rec_info ~expand_head in
+  if rec_info == rec_info'
+  then function_type
+  else { code_id; rec_info = rec_info' }
+
+and erase_variables_env_extension ({ equations } as env_extension) ~expand_head
+    =
+  let changed = ref false in
+  let equations' =
+    Name.Map.fold
+      (fun name ty acc ->
+        Name.pattern_match name
+          ~var:(fun _ -> acc)
+          ~symbol:(fun _ ->
+            let ty' = erase_variables ty ~expand_head in
+            if not (ty == ty') then changed := true;
+            Name.Map.add name ty' acc))
+      equations Name.Map.empty
+  in
+  if !changed then { equations = equations' } else env_extension
+
+let erase_variables t ~expand_head =
+  if Name_occurrences.no_variables (free_names t)
+  then t
+  else erase_variables t ~expand_head
+
 let is_obviously_bottom t =
   match t with
   | Value ty -> TD.is_obviously_bottom ty

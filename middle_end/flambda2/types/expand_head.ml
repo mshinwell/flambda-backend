@@ -409,3 +409,17 @@ let make_suitable_for_environment env t ~suitable_for ~bind_to =
   in
   let level = TEEV.add_or_replace_equation level bind_to t in
   level
+
+let expand_head_then_erase_variables env t =
+  let simples_seen = ref Simple.Set.empty in
+  let expand_head t =
+    match TG.get_alias_exn t with
+    | exception Not_found -> t
+    | alias ->
+      if Simple.is_var alias && Simple.Set.mem alias !simples_seen
+      then MTC.unknown_like t
+      else (
+        simples_seen := Simple.Set.add alias !simples_seen;
+        expand_head env t |> ET.to_type)
+  in
+  TG.erase_variables ~expand_head t
