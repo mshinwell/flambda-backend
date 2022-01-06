@@ -1445,8 +1445,14 @@ and remove_unused_closure_vars_env_extension ({ equations } as env_extension)
     ~used_closure_vars =
   let changed = ref false in
   let equations' =
-    Name.Map.map_sharing
-      (fun ty -> remove_unused_closure_vars ty ~used_closure_vars)
+    Name.Map.mapi
+      (fun name ty ->
+        Name.pattern_match name
+          ~symbol:(fun _ -> ty)
+          ~var:(fun _ ->
+            let ty' = remove_unused_closure_vars ty ~used_closure_vars in
+            if ty' != ty then changed := true;
+            ty'))
       equations
   in
   if !changed then { equations = equations' } else env_extension
