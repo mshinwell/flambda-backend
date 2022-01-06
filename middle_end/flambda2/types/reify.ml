@@ -16,6 +16,9 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+(* CR mshinwell: temporary *)
+[@@@ocaml.warning "-37"]
+
 module Float = Numeric_types.Float_by_bit_pattern
 module Int32 = Numeric_types.Int32
 module Int64 = Numeric_types.Int64
@@ -176,105 +179,57 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
           else try_canonical_simple ()
         | Known _, Unknown | Unknown, Known _ | Unknown, Unknown ->
           try_canonical_simple ())
-    | Value (Ok (Closures closures)) -> begin
-      (* CR mshinwell: Here and above, move to separate function. *)
-      match TG.Row_like_for_closures.get_singleton closures.by_closure_id with
-      | None -> try_canonical_simple ()
-      | Some ((closure_id, contents), closures_entry) ->
-        (* CR mshinwell: What about if there were multiple entries in the
-           row-like structure for the same closure ID? This is ruled out by
-           [get_singleton] at the moment. We should probably choose the best
-           entry from the [Row_like] structure. *)
-        let closure_ids = Set_of_closures_contents.closures contents in
-        (* CR mshinwell: Should probably check
-           [Set_of_closures_contents.closure_vars contents]? *)
-        if not (Closure_id.Set.mem closure_id closure_ids)
-        then
-          Misc.fatal_errorf
-            "Closure ID %a expected in set-of-closures-contents in closure \
-             type@ %a"
-            Closure_id.print closure_id TG.print t;
-        let function_types_with_closure_vars =
-          Closure_id.Set.fold
-            (fun closure_id function_types_with_closure_vars ->
-              match
-                TG.Closures_entry.find_function_type closures_entry closure_id
-              with
-              | Bottom | Unknown -> function_types_with_closure_vars
-              | Ok function_type ->
-                (* CR mshinwell: We're ignoring [coercion] *)
-                let closure_var_types =
-                  TG.Closures_entry.closure_var_types closures_entry
-                in
-                let closure_var_simples =
-                  Var_within_closure.Map.filter_map
-                    (fun _closure_var closure_var_type ->
-                      match
-                        Provers
-                        .prove_equals_to_var_or_symbol_or_tagged_immediate env
-                          closure_var_type
-                      with
-                      | Proved (Var var, coercion) ->
-                        if var_allowed var
-                        then
-                          Some (Simple.with_coercion (Simple.var var) coercion)
-                        else None
-                      | Proved (Symbol sym, coercion) ->
-                        Some (Simple.with_coercion (Simple.symbol sym) coercion)
-                      | Proved (Tagged_immediate imm, coercion) ->
-                        Some
-                          (Simple.with_coercion
-                             (Simple.const
-                                (Reg_width_const.tagged_immediate imm))
-                             coercion)
-                      | Unknown | Invalid -> None)
-                    closure_var_types
-                in
-                if Var_within_closure.Map.cardinal closure_var_types
-                   <> Var_within_closure.Map.cardinal closure_var_simples
-                then function_types_with_closure_vars
-                else
-                  Closure_id.Map.add closure_id
-                    (function_type, closure_var_simples)
-                    function_types_with_closure_vars)
-            closure_ids Closure_id.Map.empty
-        in
-        if Closure_id.Set.cardinal closure_ids
-           <> Closure_id.Map.cardinal function_types_with_closure_vars
-        then try_canonical_simple ()
-        else
-          let function_types =
-            Closure_id.Map.map
-              (fun (function_decl, _) -> function_decl)
-              function_types_with_closure_vars
-          in
-          let closure_vars =
-            Closure_id.Map.fold
-              (fun _closure_id (_function_decl, closure_var_simples)
-                   all_closure_vars ->
-                Var_within_closure.Map.fold
-                  (fun closure_var simple all_closure_vars ->
-                    begin
-                      match
-                        Var_within_closure.Map.find closure_var all_closure_vars
-                      with
-                      | exception Not_found -> ()
-                      | existing_simple ->
-                        if not (Simple.equal simple existing_simple)
-                        then
-                          Misc.fatal_errorf
-                            "Disagreement on %a and %a (closure var %a)@ \
-                             whilst reifying set-of-closures from:@ %a"
-                            Simple.print simple Simple.print existing_simple
-                            Var_within_closure.print closure_var TG.print t
-                    end;
-                    Var_within_closure.Map.add closure_var simple
-                      all_closure_vars)
-                  closure_var_simples all_closure_vars)
-              function_types_with_closure_vars Var_within_closure.Map.empty
-          in
-          Lift_set_of_closures { closure_id; function_types; closure_vars }
-    end
+    | Value (Ok (Closures _closures)) ->
+      try_canonical_simple ()
+      (* begin (* CR mshinwell: Here and above, move to separate function. *)
+         match TG.Row_like_for_closures.get_singleton closures.by_closure_id
+         with | None -> try_canonical_simple () | Some ((closure_id, contents),
+         closures_entry) -> (* CR mshinwell: What about if there were multiple
+         entries in the row-like structure for the same closure ID? This is
+         ruled out by [get_singleton] at the moment. We should probably choose
+         the best entry from the [Row_like] structure. *) let closure_ids =
+         Set_of_closures_contents.closures contents in (* CR mshinwell: Should
+         probably check [Set_of_closures_contents.closure_vars contents]? *) if
+         not (Closure_id.Set.mem closure_id closure_ids) then Misc.fatal_errorf
+         "Closure ID %a expected in set-of-closures-contents in closure \ type@
+         %a" Closure_id.print closure_id TG.print t; let
+         function_types_with_closure_vars = Closure_id.Set.fold (fun closure_id
+         function_types_with_closure_vars -> match
+         TG.Closures_entry.find_function_type closures_entry closure_id with |
+         Bottom | Unknown -> function_types_with_closure_vars | Ok function_type
+         -> (* CR mshinwell: We're ignoring [coercion] *) let closure_var_types
+         = TG.Closures_entry.closure_var_types closures_entry in let
+         closure_var_simples = Var_within_closure.Map.filter_map (fun
+         _closure_var closure_var_type -> match Provers
+         .prove_equals_to_var_or_symbol_or_tagged_immediate env closure_var_type
+         with | Proved (Var var, coercion) -> if var_allowed var then Some
+         (Simple.with_coercion (Simple.var var) coercion) else None | Proved
+         (Symbol sym, coercion) -> Some (Simple.with_coercion (Simple.symbol
+         sym) coercion) | Proved (Tagged_immediate imm, coercion) -> Some
+         (Simple.with_coercion (Simple.const (Reg_width_const.tagged_immediate
+         imm)) coercion) | Unknown | Invalid -> None) closure_var_types in if
+         Var_within_closure.Map.cardinal closure_var_types <>
+         Var_within_closure.Map.cardinal closure_var_simples then
+         function_types_with_closure_vars else Closure_id.Map.add closure_id
+         (function_type, closure_var_simples) function_types_with_closure_vars)
+         closure_ids Closure_id.Map.empty in if Closure_id.Set.cardinal
+         closure_ids <> Closure_id.Map.cardinal function_types_with_closure_vars
+         then try_canonical_simple () else let function_types =
+         Closure_id.Map.map (fun (function_decl, _) -> function_decl)
+         function_types_with_closure_vars in let closure_vars =
+         Closure_id.Map.fold (fun _closure_id (_function_decl,
+         closure_var_simples) all_closure_vars -> Var_within_closure.Map.fold
+         (fun closure_var simple all_closure_vars -> begin match
+         Var_within_closure.Map.find closure_var all_closure_vars with |
+         exception Not_found -> () | existing_simple -> if not (Simple.equal
+         simple existing_simple) then Misc.fatal_errorf "Disagreement on %a and
+         %a (closure var %a)@ \ whilst reifying set-of-closures from:@ %a"
+         Simple.print simple Simple.print existing_simple
+         Var_within_closure.print closure_var TG.print t end;
+         Var_within_closure.Map.add closure_var simple all_closure_vars)
+         closure_var_simples all_closure_vars) function_types_with_closure_vars
+         Var_within_closure.Map.empty in Lift_set_of_closures { closure_id;
+         function_types; closure_vars } end *)
     | Naked_immediate (Ok (Naked_immediates imms)) -> (
       match Targetint_31_63.Set.get_singleton imms with
       | None -> try_canonical_simple ()

@@ -709,7 +709,7 @@ module Greedy = struct
     | Unknown, Known _ | Known _, Unknown | Unknown, Unknown ->
       EO.imported_offsets ()
 
-  let check_used_offsets ~used_closure_ids ~used_closure_vars offsets =
+  let _check_used_offsets ~used_closure_ids ~used_closure_vars offsets =
     match
       (used_closure_ids, used_closure_vars : _ Or_unknown.t * _ Or_unknown.t)
     with
@@ -747,7 +747,7 @@ module Greedy = struct
       |> assign_closure_offsets state
       |> assign_env_var_offsets ~used_closure_vars state
     in
-    check_used_offsets ~used_closure_vars ~used_closure_ids offsets;
+    (* check_used_offsets ~used_closure_vars ~used_closure_ids offsets; *)
     offsets
 end
 
