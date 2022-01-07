@@ -137,6 +137,9 @@ module With_extra_variables = struct
         Ids_for_export.union ids (TG.all_ids_for_export ty))
       equations ids
 
+  let existential_vars { existential_vars; _ } =
+    Variable.Map.keys existential_vars
+
   let map_types { existential_vars; equations } ~f =
     let equations = Name.Map.map f equations in
     { existential_vars; equations }

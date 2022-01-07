@@ -92,6 +92,8 @@ module Typing_env_extension : sig
 
     val map_types : t -> f:(flambda_type -> flambda_type) -> t
 
+    val existential_vars : t -> Variable.Set.t
+
     include Contains_ids.S with type t := t
 
     include Contains_names.S with type t := t
