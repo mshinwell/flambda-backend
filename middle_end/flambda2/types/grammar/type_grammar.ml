@@ -2211,7 +2211,9 @@ and erase_variables_env_extension ({ equations } as env_extension) ~expand_head
     Name.Map.fold
       (fun name ty acc ->
         Name.pattern_match name
-          ~var:(fun _ -> acc)
+          ~var:(fun _ ->
+            changed := true;
+            acc)
           ~symbol:(fun _ ->
             let ty' = erase_variables ty ~expand_head in
             if not (ty == ty') then changed := true;
