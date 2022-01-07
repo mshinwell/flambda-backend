@@ -279,7 +279,7 @@ end
 val free_names : t -> Name_occurrences.t
 
 type to_erase =
-  | Everything_not_in_suitable_for
+  | Everything_not_in of Typing_env.t
   | All_variables_except of Variable.Set.t
 
 (* CR mshinwell: update comment *)
@@ -296,7 +296,6 @@ type to_erase =
 val make_suitable_for_environment :
   Typing_env.t ->
   flambda_type ->
-  suitable_for:Typing_env.t ->
   to_erase ->
   bind_to:Name.t ->
   Typing_env_extension.With_extra_variables.t

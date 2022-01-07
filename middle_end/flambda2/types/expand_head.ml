@@ -337,18 +337,18 @@ let missing_kind env free_names =
       missing_kind || TE.variable_is_from_missing_cmx_file env (Name.var var))
 
 type to_erase =
-  | Everything_not_in_suitable_for
+  | Everything_not_in of Typing_env.t
   | All_variables_except of Variable.Set.t
 
 (* CR mshinwell: There is a subtlety here: the presence of a name in
    [suitable_for] doesn't mean that we should blindly return "=name". The type
    of the name in [suitable_for] might be (much) worse than the one in the
    environment [t]. *)
-let rec make_suitable_for_environment0_core env t ~depth ~suitable_for
-    (to_erase : to_erase) level =
+let rec make_suitable_for_environment0_core env t ~depth (to_erase : to_erase)
+    level =
   let[@inline always] should_erase simple =
     match to_erase with
-    | Everything_not_in_suitable_for -> not (TE.mem_simple suitable_for simple)
+    | Everything_not_in suitable_for -> not (TE.mem_simple suitable_for simple)
     | All_variables_except to_keep ->
       Simple.pattern_match' simple
         ~var:(fun var ~coercion:_ -> not (Variable.Set.mem var to_keep))
@@ -400,7 +400,7 @@ let rec make_suitable_for_environment0_core env t ~depth ~suitable_for
                         in
                         let t = expand_head env t |> ET.to_type in
                         make_suitable_for_environment0_core env t
-                          ~depth:(depth + 1) ~suitable_for to_erase level
+                          ~depth:(depth + 1) to_erase level
                   in
                   TEEV.add_definition level fresh_var kind ty
                 in
@@ -411,14 +411,12 @@ let rec make_suitable_for_environment0_core env t ~depth ~suitable_for
       in
       level, TG.apply_renaming t renaming
 
-let make_suitable_for_environment0 env t ~suitable_for to_erase level =
-  make_suitable_for_environment0_core env t ~depth:0 ~suitable_for to_erase
-    level
+let make_suitable_for_environment0 env t to_erase level =
+  make_suitable_for_environment0_core env t ~depth:0 to_erase level
 
-let make_suitable_for_environment env t ~suitable_for (to_erase : to_erase)
-    ~bind_to =
+let make_suitable_for_environment env t (to_erase : to_erase) ~bind_to =
   (match to_erase with
-  | Everything_not_in_suitable_for ->
+  | Everything_not_in suitable_for ->
     if not (TE.mem suitable_for bind_to)
     then
       Misc.fatal_errorf
@@ -426,9 +424,7 @@ let make_suitable_for_environment env t ~suitable_for (to_erase : to_erase)
         \   bound in the [suitable_for] environment:@ %a" Name.print bind_to
         TE.print suitable_for
   | All_variables_except _ -> ());
-  let level, t =
-    make_suitable_for_environment0 env t ~suitable_for to_erase TEEV.empty
-  in
+  let level, t = make_suitable_for_environment0 env t to_erase TEEV.empty in
   let level = TEEV.add_or_replace_equation level bind_to t in
   level
 

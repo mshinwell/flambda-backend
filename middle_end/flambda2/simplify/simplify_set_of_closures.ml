@@ -111,7 +111,7 @@ end = struct
         in
         let env_extension =
           T.make_suitable_for_environment env_prior_to_sets type_prior_to_sets
-            ~suitable_for:env_inside_function ~bind_to:(Name.var var)
+            (Everything_not_in env_inside_function) ~bind_to:(Name.var var)
         in
         let env_inside_function =
           TE.add_env_extension_with_extra_variables env_inside_function
@@ -457,7 +457,8 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
           kind_with_subkind)
       result_arity
   in
-  let ( params_and_body,
+  let ( params,
+        params_and_body,
         dacc_after_body,
         free_names_of_code,
         return_cont_uses,
@@ -559,7 +560,8 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
               Variable.print my_depth
               (RE.print (UA.are_rebuilding_terms uacc))
               body;
-          ( params_and_body,
+          ( params,
+            params_and_body,
             dacc_after_body,
             free_names_of_code,
             return_cont_uses,
@@ -643,13 +645,26 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
         match join with
         | No_uses -> default_result_types
         | Uses { handler_env; _ } ->
-          List.map
-            (fun param ->
-              let typing_env = DE.typing_env handler_env in
-              TE.find typing_env (BP.name param)
-                (Some (K.With_subkind.kind (BP.kind param)))
-              |> T.expand_head_then_erase_variables typing_env)
-            return_cont_params)
+          let params_and_results =
+            BP.List.var_set (params @ return_cont_params)
+          in
+          let results =
+            List.map
+              (fun result ->
+                let typing_env = DE.typing_env handler_env in
+                let ty =
+                  TE.find typing_env (BP.name result)
+                    (Some (K.With_subkind.kind (BP.kind result)))
+                in
+                let env_extension =
+                  T.make_suitable_for_environment typing_env ty
+                    (All_variables_except params_and_results)
+                    ~bind_to:(BP.name result)
+                in
+                result, env_extension)
+              return_cont_params
+          in
+          Result_types.create ~params ~results)
   in
   let code =
     Rebuilt_static_const.create_code
