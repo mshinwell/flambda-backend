@@ -137,6 +137,8 @@ let prepare_cmx_file_contents ~final_typing_env ~module_symbol
       compute_reachable_names_and_code ~module_symbol final_typing_env all_code
     in
     let all_code =
+      (* CR mshinwell: do we need to remove unused closure ID bindings from the
+         result types too? *)
       all_code
       |> EC.remove_unused_closure_vars_from_result_types ~used_closure_vars
       |> EC.remove_unreachable ~reachable_names
