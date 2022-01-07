@@ -87,5 +87,11 @@ let code_metadata t =
 let iter_code t ~f =
   match t with Code_present code -> f code | Metadata_only _ -> ()
 
+let map_result_types t ~f =
+  match t with
+  | Code_present code -> Code_present (Code.map_result_types code ~f)
+  | Metadata_only code_metadata ->
+    Metadata_only (Code_metadata.map_result_types code_metadata ~f)
+
 let code_present t =
   match t with Code_present _ -> true | Metadata_only _ -> false

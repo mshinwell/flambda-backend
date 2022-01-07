@@ -31,6 +31,9 @@ val apply_renaming : t -> Renaming.t -> t
 
 include Contains_ids.S with type t := t
 
+val remove_unused_closure_vars :
+  t -> used_closure_vars:Var_within_closure.Set.t -> t
+
 type typing_env
 
 val expand_head_then_erase_variables :

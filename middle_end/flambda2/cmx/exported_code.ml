@@ -73,10 +73,17 @@ let find t code_id =
     None
   | code_or_metadata -> Some code_or_metadata
 
-let remove_unreachable t ~reachable_names =
+let remove_unreachable ~reachable_names t =
   Code_id.Map.filter
     (fun code_id _code_or_metadata ->
       Name_occurrences.mem_code_id reachable_names code_id)
+    t
+
+let remove_unused_closure_vars_from_result_types ~used_closure_vars t =
+  Code_id.Map.map
+    (fun code_or_metadata ->
+      Code_or_metadata.map_result_types code_or_metadata ~f:(fun result_ty ->
+          Flambda2_types.remove_unused_closure_vars result_ty ~used_closure_vars))
     t
 
 let all_ids_for_export t =

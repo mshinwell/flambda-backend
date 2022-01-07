@@ -150,3 +150,6 @@ let all_ids_for_export ~all_ids_for_export_function_params_and_body
   Ids_for_export.union
     (Code_metadata.all_ids_for_export code_metadata)
     params_and_body_ids
+
+let map_result_types ({ code_metadata; _ } as t) ~f =
+  { t with code_metadata = Code_metadata.map_result_types code_metadata ~f }

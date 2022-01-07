@@ -113,3 +113,8 @@ val all_ids_for_export :
   Ids_for_export.t
 
 val compare : 'function_params_and_body t -> 'function_params_and_body t -> int
+
+val map_result_types :
+  'function_params_and_body t ->
+  f:(Flambda2_types.t -> Flambda2_types.t) ->
+  'function_params_and_body t

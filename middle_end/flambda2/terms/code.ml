@@ -86,3 +86,5 @@ let all_ids_for_export =
   Code0.all_ids_for_export
     ~all_ids_for_export_function_params_and_body:
       Flambda.Function_params_and_body.all_ids_for_export
+
+let map_result_types = Code0.map_result_types

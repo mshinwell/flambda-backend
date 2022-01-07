@@ -29,6 +29,8 @@ val remember_only_metadata : t -> t
 
 val iter_code : t -> f:(Code.t -> unit) -> unit
 
+val map_result_types : t -> f:(Flambda2_types.t -> Flambda2_types.t) -> t
+
 val code_metadata : t -> Code_metadata.t
 
 val code_present : t -> bool

@@ -74,8 +74,12 @@ val with_cost_metrics : Cost_metrics.t -> t -> t
 
 val print : Format.formatter -> t -> unit
 
+(** [free_names] does not return occurrences of closure vars inside the
+    [result_types]. *)
 include Contains_names.S with type t := t
 
 val all_ids_for_export : t -> Ids_for_export.t
 
 val approx_equal : t -> t -> bool
+
+val map_result_types : t -> f:(Flambda2_types.t -> Flambda2_types.t) -> t

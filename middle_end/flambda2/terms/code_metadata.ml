@@ -221,7 +221,9 @@ let free_names
   in
   ListLabels.fold_left result_types ~init:free_names
     ~f:(fun free_names result_type ->
-      Name_occurrences.union free_names (Flambda2_types.free_names result_type))
+      Name_occurrences.union free_names
+        (Flambda2_types.free_names result_type
+        |> Name_occurrences.without_closure_vars))
 
 let apply_renaming
     ({ code_id;
@@ -345,3 +347,6 @@ let approx_equal
   && Bool.equal is_my_closure_used1 is_my_closure_used2
   && Function_decl_inlining_decision_type.equal inlining_decision1
        inlining_decision2
+
+let map_result_types ({ result_types; _ } as t) ~f =
+  { t with result_types = List.map f result_types }
