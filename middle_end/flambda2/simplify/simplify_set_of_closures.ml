@@ -453,7 +453,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
     List.mapi
       (fun i kind_with_subkind ->
         BP.create
-          (Variable.create ("return_cont_param" ^ string_of_int i))
+          (Variable.create ("result" ^ string_of_int i))
           kind_with_subkind)
       result_arity
   in

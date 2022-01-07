@@ -74,7 +74,7 @@ module With_extra_variables = struct
 
   let print ppf { existential_vars; equations } =
     Format.fprintf ppf
-      "@[<hov 1>(@[<hov 1>(variables@ @[<hov 1>%a@])@]@[<hov 1>%a@])@ @]"
+      "@[<hov 1>(@[<hov 1>(variables@ @[<hov 1>%a@])@]@ @[<hov 1>%a@])@ @]"
       (Variable.Map.print Flambda_kind.print)
       existential_vars TG.Env_extension.print
       (TG.Env_extension.create ~equations)

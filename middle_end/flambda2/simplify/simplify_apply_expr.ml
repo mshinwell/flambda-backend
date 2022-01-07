@@ -190,6 +190,15 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
                 denv params
             in
             let denv =
+              let args = Apply.args apply in
+              assert (List.compare_lengths params args = 0);
+              List.fold_left2
+                (fun denv param arg ->
+                  DE.add_equation_on_variable denv (BP.var param)
+                    (T.alias_type_of (K.With_subkind.kind (BP.kind param)) arg))
+                denv params args
+            in
+            let denv =
               List.fold_left2
                 (fun denv kind (result, env_extension) ->
                   DE.add_variable_and_extend_typing_environment denv
