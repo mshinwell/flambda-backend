@@ -47,11 +47,7 @@ let merge t1 t2 = Code_id.Map.union Code_or_metadata.merge t1 t2
 
 let mem code_id t = Code_id.Map.mem code_id t
 
-let find_exn t code_id =
-  match Code_id.Map.find code_id t with
-  | exception Not_found ->
-    Misc.fatal_errorf "Code ID %a not bound" Code_id.print code_id
-  | code_or_metadata -> code_or_metadata
+let find_exn t code_id = Code_id.Map.find code_id t
 
 let find t code_id =
   match Code_id.Map.find code_id t with
