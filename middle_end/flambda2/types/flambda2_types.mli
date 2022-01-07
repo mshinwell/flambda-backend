@@ -89,6 +89,12 @@ module Typing_env_extension : sig
     val add_definition : t -> Variable.t -> Flambda_kind.t -> flambda_type -> t
 
     val add_or_replace_equation : t -> Name.t -> flambda_type -> t
+
+    val map_types : t -> f:(flambda_type -> flambda_type) -> t
+
+    include Contains_ids.S with type t := t
+
+    include Contains_names.S with type t := t
   end
 end
 
