@@ -140,7 +140,8 @@ let add_to_denv ?maybe_already_defined denv lifted =
                    enclosing scope. *)
                 T.make_suitable_for_environment
                   (DE.typing_env denv_at_definition)
-                  typ ~suitable_for:typing_env ~bind_to:sym
+                  typ ~suitable_for:typing_env Everything_not_in_suitable_for
+                  ~bind_to:sym
               in
               TE.add_env_extension_with_extra_variables typing_env env_extension)
           types_of_symbols typing_env)

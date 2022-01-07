@@ -121,7 +121,7 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
   after_rebuild expr uacc
 
 let simplify_direct_full_application ~simplify_expr dacc apply function_type
-    ~callee's_code_id ~result_arity ~result_types ~down_to_up
+    ~callee's_code_id ~params_arity ~result_arity ~result_types ~down_to_up
     ~coming_from_indirect =
   let inlined =
     (* CR mshinwell for poechsel: Make sure no other warnings or inlining report
@@ -169,13 +169,49 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       match Apply.continuation apply with
       | Never_returns -> dacc, None
       | Return apply_return_continuation ->
-        assert (List.compare_lengths result_arity result_types = 0);
-        let dacc, use_id =
-          DA.record_continuation_use dacc apply_return_continuation
-            (Non_inlinable { escaping = true })
-            ~env_at_use:(DA.denv dacc) ~arg_types:result_types
-        in
-        dacc, Some use_id
+        Result_types.pattern_match result_types ~f:(fun ~params ~results ->
+            if List.compare_lengths params_arity params <> 0
+            then
+              Misc.fatal_errorf
+                "Params arity %a does not match up with params in the result \
+                 types structure:@ %a@ for application:@ %a"
+                Flambda_arity.With_subkinds.print params_arity
+                Result_types.print result_types Apply.print apply;
+            if List.compare_lengths result_arity results <> 0
+            then
+              Misc.fatal_errorf
+                "Result arity %a does not match up with the result types \
+                 structure:@ %a@ for application:@ %a"
+                Flambda_arity.With_subkinds.print params_arity
+                Result_types.print result_types Apply.print apply;
+            let denv = DA.denv dacc in
+            let denv =
+              DE.add_parameters_with_unknown_types ~name_mode:Name_mode.in_types
+                denv params
+            in
+            let denv =
+              List.fold_left2
+                (fun denv kind (result, env_extension) ->
+                  DE.add_variable_and_extend_typing_environment denv
+                    (VB.create (BP.var result) NM.in_types)
+                    (T.unknown_with_subkind kind)
+                    (With_extra_variables env_extension))
+                denv result_arity results
+            in
+            let arg_types =
+              List.map2
+                (fun kind (result_var, _env_extension) ->
+                  T.alias_type_of (K.With_subkind.kind kind)
+                    (BP.simple result_var))
+                result_arity results
+            in
+            let dacc = DA.with_denv dacc denv in
+            let dacc, use_id =
+              DA.record_continuation_use dacc apply_return_continuation
+                (Non_inlinable { escaping = true })
+                ~env_at_use:(DA.denv dacc) ~arg_types
+            in
+            dacc, Some use_id)
     in
     let dacc, exn_cont_use_id =
       DA.record_continuation_use dacc
@@ -541,8 +577,8 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       if provided_num_args = num_params
       then
         simplify_direct_full_application ~simplify_expr dacc apply function_decl
-          ~callee's_code_id ~result_arity ~result_types ~down_to_up
-          ~coming_from_indirect
+          ~callee's_code_id ~params_arity ~result_arity ~result_types
+          ~down_to_up ~coming_from_indirect
       else if provided_num_args > num_params
       then
         simplify_direct_over_application ~simplify_expr dacc apply

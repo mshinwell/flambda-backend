@@ -610,9 +610,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
        [DA]. *)
     UA.lifted_constants uacc_after_upwards_traversal
   in
-  let default_result_types =
-    T.unknown_types_from_arity_with_subkinds result_arity
-  in
+  let default_result_types = Result_types.create_default ~result_arity in
   let is_a_functor = Code.is_a_functor code in
   let result_types =
     if not is_a_functor
