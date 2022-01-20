@@ -201,13 +201,17 @@ val these_naked_int64s : no_alias:bool -> Numeric_types.Int64.Set.t -> t
 
 val these_naked_nativeints : no_alias:bool -> Targetint_32_64.Set.t -> t
 
-val boxed_float_alias_to : naked_float:Variable.t -> t
+val boxed_float_alias_to :
+  naked_float:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_int32_alias_to : naked_int32:Variable.t -> t
+val boxed_int32_alias_to :
+  naked_int32:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_int64_alias_to : naked_int64:Variable.t -> t
+val boxed_int64_alias_to :
+  naked_int64:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_nativeint_alias_to : naked_nativeint:Variable.t -> t
+val boxed_nativeint_alias_to :
+  naked_nativeint:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
 val box_float : t -> Alloc_mode.t Or_unknown.t -> t
 
@@ -227,9 +231,9 @@ val get_tag_for_block : block:Simple.t -> t
 
 val create_variant :
   is_unique:bool ->
-  Alloc_mode.t Or_unknown.t ->
   immediates:t Or_unknown.t ->
   blocks:row_like_for_blocks Or_unknown.t ->
+  Alloc_mode.t Or_unknown.t ->
   t
 
 val create_closures : Alloc_mode.t Or_unknown.t -> row_like_for_closures -> t
@@ -510,20 +514,21 @@ module Head_of_kind_value : sig
     is_unique:bool ->
     blocks:Row_like_for_blocks.t Or_unknown.t ->
     immediates:flambda_type Or_unknown.t ->
-    Alloc_mode.t option ->
+    Alloc_mode.t Or_unknown.t ->
     t
 
-  val create_boxed_float : flambda_type -> Alloc_mode.t option -> t
+  val create_boxed_float : flambda_type -> Alloc_mode.t Or_unknown.t -> t
 
-  val create_boxed_int32 : flambda_type -> Alloc_mode.t option -> t
+  val create_boxed_int32 : flambda_type -> Alloc_mode.t Or_unknown.t -> t
 
-  val create_boxed_int64 : flambda_type -> Alloc_mode.t option -> t
+  val create_boxed_int64 : flambda_type -> Alloc_mode.t Or_unknown.t -> t
 
-  val create_boxed_nativeint : flambda_type -> Alloc_mode.t option -> t
+  val create_boxed_nativeint : flambda_type -> Alloc_mode.t Or_unknown.t -> t
 
   val create_tagged_immediate : Targetint_31_63.t -> t
 
-  val create_closures : Row_like_for_closures.t -> Alloc_mode.t option -> t
+  val create_closures :
+    Row_like_for_closures.t -> Alloc_mode.t Or_unknown.t -> t
 
   val create_string : String_info.Set.t -> t
 

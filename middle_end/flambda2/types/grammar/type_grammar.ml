@@ -1487,7 +1487,7 @@ let kind t =
   | Naked_nativeint _ -> K.naked_nativeint
   | Rec_info _ -> K.rec_info
 
-let create_variant ~is_unique alloc_mode ~(immediates : _ Or_unknown.t) ~blocks
+let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks alloc_mode
     =
   begin
     match immediates with
@@ -2260,7 +2260,8 @@ module Head_of_kind_value = struct
     Variant
       { is_unique = false;
         immediates = Known (this_naked_immediate imm);
-        blocks = Known Row_like_for_blocks.bottom;alloc_mode=Known Heap
+        blocks = Known Row_like_for_blocks.bottom;
+        alloc_mode = Known Heap
       }
 
   let create_closures by_closure_id alloc_mode =

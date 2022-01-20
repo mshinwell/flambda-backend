@@ -17,3 +17,5 @@ type t =
   | Local  (** Allocation on the local allocation stack. *)
 
 val print : Format.formatter -> t -> unit
+
+val compare : t -> t -> int

@@ -58,6 +58,30 @@ type meet_expanded_head_result =
 
 exception Bottom_meet
 
+let meet_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
+    (alloc_mode2 : Alloc_mode.t Or_unknown.t) : Alloc_mode.t Or_unknown.t =
+  match alloc_mode1, alloc_mode2 with
+  | Unknown, Unknown -> Unknown
+  | Known Heap, Known Heap -> Known Heap
+  | Known Local, Known Local -> Known Local
+  | Known Heap, Known Local
+  | Known Local, Known Heap
+  | Unknown, Known _
+  | Known _, Unknown ->
+    Unknown
+
+let join_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
+    (alloc_mode2 : Alloc_mode.t Or_unknown.t) : Alloc_mode.t Or_unknown.t =
+  match alloc_mode1, alloc_mode2 with
+  | Unknown, Unknown -> Unknown
+  | Known Heap, Known Heap -> Known Heap
+  | Known Local, Known Local -> Known Local
+  | Known Heap, Known Local
+  | Known Local, Known Heap
+  | Unknown, Known _
+  | Known _, Unknown ->
+    Unknown
+
 let[@inline always] meet_unknown meet_contents ~contents_is_bottom env
     (or_unknown1 : _ Or_unknown.t) (or_unknown2 : _ Or_unknown.t) :
     (_ Or_unknown.t * TEE.t) Or_bottom.t =
@@ -271,35 +295,52 @@ and meet_expanded_head0 env (descr1 : ET.descr) (descr2 : ET.descr) :
 and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     (head2 : TG.head_of_kind_value) : _ Or_bottom.t =
   match head1, head2 with
-  | ( Variant { blocks = blocks1; immediates = imms1; is_unique = is_unique1 },
-      Variant { blocks = blocks2; immediates = imms2; is_unique = is_unique2 } )
-    ->
+  | ( Variant
+        { blocks = blocks1;
+          immediates = imms1;
+          is_unique = is_unique1;
+          alloc_mode = alloc_mode1
+        },
+      Variant
+        { blocks = blocks2;
+          immediates = imms2;
+          is_unique = is_unique2;
+          alloc_mode = alloc_mode2
+        } ) ->
     let<+ blocks, immediates, env_extension =
       meet_variant env ~blocks1 ~imms1 ~blocks2 ~imms2
     in
     (* Uniqueness tracks whether duplication/lifting is allowed. It must always
        be propagated, both for meet and join. *)
     let is_unique = is_unique1 || is_unique2 in
-    ( TG.Head_of_kind_value.create_variant ~is_unique ~blocks ~immediates,
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    ( TG.Head_of_kind_value.create_variant ~is_unique alloc_mode ~blocks
+        ~immediates,
       env_extension )
-  | Boxed_float n1, Boxed_float n2 ->
+  | Boxed_float (n1, alloc_mode1), Boxed_float (n2, alloc_mode2) ->
     let<+ n, env_extension = meet env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_float n, env_extension
-  | Boxed_int32 n1, Boxed_int32 n2 ->
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_float n alloc_mode, env_extension
+  | Boxed_int32 (n1, alloc_mode1), Boxed_int32 (n2, alloc_mode2) ->
     let<+ n, env_extension = meet env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_int32 n, env_extension
-  | Boxed_int64 n1, Boxed_int64 n2 ->
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_int32 n alloc_mode, env_extension
+  | Boxed_int64 (n1, alloc_mode1), Boxed_int64 (n2, alloc_mode2) ->
     let<+ n, env_extension = meet env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_int64 n, env_extension
-  | Boxed_nativeint n1, Boxed_nativeint n2 ->
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_int64 n alloc_mode, env_extension
+  | Boxed_nativeint (n1, alloc_mode1), Boxed_nativeint (n2, alloc_mode2) ->
     let<+ n, env_extension = meet env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_nativeint n, env_extension
-  | ( Closures { by_closure_id = by_closure_id1 },
-      Closures { by_closure_id = by_closure_id2 } ) ->
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_nativeint n alloc_mode, env_extension
+  | ( Closures { by_closure_id = by_closure_id1; alloc_mode = alloc_mode1 },
+      Closures { by_closure_id = by_closure_id2; alloc_mode = alloc_mode2 } ) ->
+    let alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
     let<+ by_closure_id, env_extension =
       meet_row_like_for_closures env by_closure_id1 by_closure_id2
     in
-    TG.Head_of_kind_value.create_closures by_closure_id, env_extension
+    ( TG.Head_of_kind_value.create_closures by_closure_id alloc_mode,
+      env_extension )
   | String strs1, String strs2 ->
     let strs = String_info.Set.inter strs1 strs2 in
     if String_info.Set.is_empty strs
@@ -987,34 +1028,50 @@ and join_expanded_head env kind (expanded1 : ET.t) (expanded2 : ET.t) : ET.t =
 and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
     (head2 : TG.head_of_kind_value) : TG.head_of_kind_value Or_unknown.t =
   match head1, head2 with
-  | ( Variant { blocks = blocks1; immediates = imms1; is_unique = is_unique1 },
-      Variant { blocks = blocks2; immediates = imms2; is_unique = is_unique2 } )
-    ->
+  | ( Variant
+        { blocks = blocks1;
+          immediates = imms1;
+          is_unique = is_unique1;
+          alloc_mode = alloc_mode1
+        },
+      Variant
+        { blocks = blocks2;
+          immediates = imms2;
+          is_unique = is_unique2;
+          alloc_mode = alloc_mode2
+        } ) ->
     let>+ blocks, immediates =
       join_variant env ~blocks1 ~imms1 ~blocks2 ~imms2
     in
     (* Uniqueness tracks whether duplication/lifting is allowed. It must always
        be propagated, both for meet and join. *)
     let is_unique = is_unique1 || is_unique2 in
-    TG.Head_of_kind_value.create_variant ~is_unique ~blocks ~immediates
-  | Boxed_float n1, Boxed_float n2 ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_variant ~is_unique alloc_mode ~blocks
+      ~immediates
+  | Boxed_float (n1, alloc_mode1), Boxed_float (n2, alloc_mode2) ->
     let>+ n = join env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_float n
-  | Boxed_int32 n1, Boxed_int32 n2 ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_float n alloc_mode
+  | Boxed_int32 (n1, alloc_mode1), Boxed_int32 (n2, alloc_mode2) ->
     let>+ n = join env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_int32 n
-  | Boxed_int64 n1, Boxed_int64 n2 ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_int32 n alloc_mode
+  | Boxed_int64 (n1, alloc_mode1), Boxed_int64 (n2, alloc_mode2) ->
     let>+ n = join env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_int64 n
-  | Boxed_nativeint n1, Boxed_nativeint n2 ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_int64 n alloc_mode
+  | Boxed_nativeint (n1, alloc_mode1), Boxed_nativeint (n2, alloc_mode2) ->
     let>+ n = join env n1 n2 in
-    TG.Head_of_kind_value.create_boxed_nativeint n
-  | ( Closures { by_closure_id = by_closure_id1 },
-      Closures { by_closure_id = by_closure_id2 } ) ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_boxed_nativeint n alloc_mode
+  | ( Closures { by_closure_id = by_closure_id1; alloc_mode = alloc_mode1 },
+      Closures { by_closure_id = by_closure_id2; alloc_mode = alloc_mode2 } ) ->
     let by_closure_id =
       join_row_like_for_closures env by_closure_id1 by_closure_id2
     in
-    Known (TG.Head_of_kind_value.create_closures by_closure_id)
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    Known (TG.Head_of_kind_value.create_closures by_closure_id alloc_mode)
   | String strs1, String strs2 ->
     let strs = String_info.Set.union strs1 strs2 in
     Known (TG.Head_of_kind_value.create_string strs)
