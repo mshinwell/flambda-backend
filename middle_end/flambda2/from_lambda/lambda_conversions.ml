@@ -28,11 +28,8 @@ let check_float_array_optimisation_enabled () =
       "[Pgenarray] is not expected when the float array optimisation is \
        disabled"
 
-let local_unsupported () =
-  Misc.fatal_errorf "Local allocations are not yet supported in Flambda2"
-
-let alloc_mode (mode : L.alloc_mode) =
-  match mode with Alloc_heap -> () | Alloc_local -> local_unsupported ()
+let alloc_mode (mode : L.alloc_mode) : P.Alloc_mode.t =
+  match mode with Alloc_heap -> Heap | Alloc_local -> Heap
 
 let rec value_kind (vk : L.value_kind) =
   match vk with

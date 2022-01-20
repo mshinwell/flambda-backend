@@ -289,6 +289,8 @@ type unary_primitive =
      [Flambda_kind.Of_naked_number.t] arguments (one input, one output). *)
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
+  (* CR mshinwell: we should split out the "tag int" case since the allocation
+     mode isn't used there *)
   | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.t
   | Select_closure of
       { move_from : Closure_id.t;
