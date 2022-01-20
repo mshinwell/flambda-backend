@@ -117,6 +117,14 @@ module Block_access_kind : sig
   val compare : t -> t -> int
 end
 
+module Alloc_mode : sig
+  type t =
+    | Heap  (** Normal allocation on the OCaml heap. *)
+    | Local  (** Allocation on the local allocation stack. *)
+
+  val print : Format.formatter -> t -> unit
+end
+
 (* CR-someday mshinwell: We should have unboxed arrays of int32, int64 and
    nativeint. *)
 
@@ -214,6 +222,8 @@ type nullary_primitive =
           let-binding. *)
   | Probe_is_enabled of { name : string }
       (** Returns a boolean saying whether the given tracing probe is enabled. *)
+  | Begin_region  (** Starting delimiter of local allocation region. *)
+  | End_region  (** Ending delimiter of local allocation region. *)
 
 (** Untagged binary integer arithmetic operations.
 
@@ -279,7 +289,7 @@ type unary_primitive =
      [Flambda_kind.Of_naked_number.t] arguments (one input, one output). *)
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  | Box_number of Flambda_kind.Boxable_number.t
+  | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.t
   | Select_closure of
       { move_from : Closure_id.t;
         move_to : Closure_id.t
@@ -353,8 +363,8 @@ type ternary_primitive =
 
 (** Primitives taking zero or more arguments. *)
 type variadic_primitive =
-  | Make_block of Block_kind.t * Mutability.t
-  | Make_array of Array_kind.t * Mutability.t
+  | Make_block of Block_kind.t * Mutability.t * Alloc_mode.t
+  | Make_array of Array_kind.t * Mutability.t * Alloc_mode.t
 (* CR mshinwell: Invariant checks -- e.g. that the number of arguments matches
    [num_dimensions] *)
 

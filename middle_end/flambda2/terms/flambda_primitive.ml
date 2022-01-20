@@ -246,6 +246,23 @@ module Block_access_kind = struct
     | Naked_floats _, Values _ -> 1
 end
 
+module Alloc_mode = struct
+  type t =
+    | Heap
+    | Local
+
+  let print ppf t =
+    match t with
+    | Heap -> Format.pp_print_string ppf "Heap"
+    | Local -> Format.pp_print_string ppf "Local"
+
+  let compare t1 t2 =
+    match t1, t2 with
+    | Heap, Heap | Local, Local -> 0
+    | Heap, Local -> -1
+    | Local, Heap -> 1
+end
+
 type string_or_bytes =
   | String
   | Bytes
@@ -556,17 +573,24 @@ type result_kind =
 type nullary_primitive =
   | Optimised_out of K.t
   | Probe_is_enabled of { name : string }
+  | Begin_region
+  | End_region
 
 let nullary_primitive_eligible_for_cse = function
-  | Optimised_out _ | Probe_is_enabled _ -> false
+  | Optimised_out _ | Probe_is_enabled _ | Begin_region | End_region -> false
 
 let compare_nullary_primitive p1 p2 =
   match p1, p2 with
   | Optimised_out k1, Optimised_out k2 -> K.compare k1 k2
   | Probe_is_enabled { name = name1 }, Probe_is_enabled { name = name2 } ->
     String.compare name1 name2
-  | Optimised_out _, Probe_is_enabled _ -> -1
+  | Begin_region, Begin_region | End_region, End_region -> 0
+  | Optimised_out _, (Probe_is_enabled _ | Begin_region | End_region) -> -1
+  | Probe_is_enabled _, (Begin_region | End_region) -> -1
+  | Begin_region, End_region -> -1
   | Probe_is_enabled _, Optimised_out _ -> 1
+  | Begin_region, (Optimised_out _ | Probe_is_enabled _) -> 1
+  | End_region, (Optimised_out _ | Probe_is_enabled _ | Begin_region) -> 1
 
 let equal_nullary_primitive p1 p2 = compare_nullary_primitive p1 p2 = 0
 
@@ -577,11 +601,14 @@ let print_nullary_primitive ppf p =
       (Flambda_colours.normal ())
   | Probe_is_enabled { name } ->
     Format.fprintf ppf "@[<hov 1>(Probe_is_enabled@ %s)@]" name
+  | Begin_region -> Format.pp_print_string ppf "Begin_region"
+  | End_region -> Format.pp_print_string ppf "End_region"
 
 let result_kind_of_nullary_primitive p : result_kind =
   match p with
   | Optimised_out k -> Singleton k
   | Probe_is_enabled _ -> Singleton K.naked_immediate
+  | Begin_region | End_region -> Singleton K.value
 
 let effects_and_coeffects_of_nullary_primitive p =
   match p with
@@ -590,9 +617,13 @@ let effects_and_coeffects_of_nullary_primitive p =
     (* This doesn't really have effects, but we want to make sure it never gets
        moved around. *)
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
+  | Begin_region | End_region ->
+    (* Ensure these don't get moved either. *)
+    Effects.Arbitrary_effects, Coeffects.Has_coeffects
 
 let nullary_classify_for_printing p =
-  match p with Optimised_out _ | Probe_is_enabled _ -> Neither
+  match p with
+  | Optimised_out _ | Probe_is_enabled _ | Begin_region | End_region -> Neither
 
 type unary_primitive =
   | Duplicate_block of
@@ -621,7 +652,7 @@ type unary_primitive =
   | Boolean_not
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  | Box_number of Flambda_kind.Boxable_number.t
+  | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.t
   | Select_closure of
       { move_from : Closure_id.t;
         move_to : Closure_id.t
@@ -744,7 +775,9 @@ let compare_unary_primitive p1 p2 =
     Stdlib.compare dim1 dim2
   | Unbox_number kind1, Unbox_number kind2 ->
     K.Boxable_number.compare kind1 kind2
-  | Box_number kind1, Box_number kind2 -> K.Boxable_number.compare kind1 kind2
+  | Box_number (kind1, alloc_mode1), Box_number (kind2, alloc_mode2) ->
+    let c = K.Boxable_number.compare kind1 kind2 in
+    if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
   | ( Select_closure { move_from = move_from1; move_to = move_to1 },
       Select_closure { move_from = move_from2; move_to = move_to2 } ) ->
     let c = Closure_id.compare move_from1 move_from2 in
@@ -796,9 +829,11 @@ let print_unary_primitive ppf p =
   | Unbox_number Untagged_immediate -> fprintf ppf "Untag_imm"
   | Unbox_number k ->
     fprintf ppf "Unbox_%a" K.Boxable_number.print_lowercase_short k
-  | Box_number Untagged_immediate -> fprintf ppf "Tag_imm"
-  | Box_number k ->
+  | Box_number (Untagged_immediate, _) -> fprintf ppf "Tag_imm"
+  | Box_number (k, Heap) ->
     fprintf ppf "Box_%a" K.Boxable_number.print_lowercase_short k
+  | Box_number (k, Local) ->
+    fprintf ppf "Box_%a[local]" K.Boxable_number.print_lowercase_short k
   | Select_closure { move_from; move_to } ->
     Format.fprintf ppf "@[(Select_closure@ (%a \u{2192} %a@<0>%s))@]"
       Closure_id.print move_from Closure_id.print move_to
@@ -825,7 +860,7 @@ let arg_kind_of_unary_primitive p =
   | Float_arith _ -> K.naked_float
   | Array_length | Bigarray_length _ -> K.value
   | Unbox_number _ -> K.value
-  | Box_number kind -> K.Boxable_number.to_kind kind
+  | Box_number (kind, _) -> K.Boxable_number.to_kind kind
   | Select_closure _ | Project_var _ | Is_boxed_float | Is_flat_float_array ->
     K.value
 
@@ -895,7 +930,8 @@ let effects_and_coeffects_of_unary_primitive p =
        Block_load). *)
     reading_from_a_block Mutable
   | Unbox_number _ -> Effects.No_effects, Coeffects.No_coeffects
-  | Box_number Untagged_immediate -> Effects.No_effects, Coeffects.No_coeffects
+  | Box_number (Untagged_immediate, _) ->
+    Effects.No_effects, Coeffects.No_coeffects
   | Box_number _ ->
     Effects.Only_generative_effects Immutable, Coeffects.No_coeffects
   | Select_closure _ | Project_var _ ->
@@ -1247,26 +1283,37 @@ let ternary_classify_for_printing p =
     Neither
 
 type variadic_primitive =
-  | Make_block of Block_kind.t * Mutability.t
-  | Make_array of Array_kind.t * Mutability.t
+  | Make_block of Block_kind.t * Mutability.t * Alloc_mode.t
+  | Make_array of Array_kind.t * Mutability.t * Alloc_mode.t
 
 let variadic_primitive_eligible_for_cse p ~args =
   match p with
-  | Make_block (_, Immutable) | Make_array (_, Immutable) ->
+  | Make_block (_, Immutable, _) | Make_array (_, Immutable, _) ->
     (* See comment in [unary_primitive_eligible_for_cse], above, on [Box_number]
        case. *)
     List.exists (fun arg -> Simple.is_var arg) args
-  | Make_block (_, Immutable_unique) | Make_array (_, Immutable_unique) -> false
-  | Make_block (_, Mutable) | Make_array (_, Mutable) -> false
+  | Make_block (_, Immutable_unique, _) | Make_array (_, Immutable_unique, _) ->
+    false
+  | Make_block (_, Mutable, _) | Make_array (_, Mutable, _) -> false
 
 let compare_variadic_primitive p1 p2 =
   match p1, p2 with
-  | Make_block (kind1, mut1), Make_block (kind2, mut2) ->
+  | Make_block (kind1, mut1, alloc_mode1), Make_block (kind2, mut2, alloc_mode2)
+    ->
     let c = Block_kind.compare kind1 kind2 in
-    if c <> 0 then c else Stdlib.compare mut1 mut2
-  | Make_array (kind1, mut1), Make_array (kind2, mut2) ->
+    if c <> 0
+    then c
+    else
+      let c = Stdlib.compare mut1 mut2 in
+      if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
+  | Make_array (kind1, mut1, alloc_mode1), Make_array (kind2, mut2, alloc_mode2)
+    ->
     let c = Array_kind.compare kind1 kind2 in
-    if c <> 0 then c else Stdlib.compare mut1 mut2
+    if c <> 0
+    then c
+    else
+      let c = Stdlib.compare mut1 mut2 in
+      if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
   | Make_block _, Make_array _ -> -1
   | Make_array _, Make_block _ -> 1
 
@@ -1275,17 +1322,18 @@ let equal_variadic_primitive p1 p2 = compare_variadic_primitive p1 p2 = 0
 let print_variadic_primitive ppf p =
   let fprintf = Format.fprintf in
   match p with
-  | Make_block (kind, mut) ->
-    fprintf ppf "@[<hov 1>(Make_block@ %a@ %a)@]" Block_kind.print kind
-      Mutability.print mut
-  | Make_array (kind, mut) ->
-    fprintf ppf "@[<hov 1>(Make_array@ %a@ %a)@]" Array_kind.print kind
-      Mutability.print mut
+  | Make_block (kind, mut, alloc_mode) ->
+    fprintf ppf "@[<hov 1>(Make_block@ %a@ %a@ %a)@]" Block_kind.print kind
+      Mutability.print mut Alloc_mode.print alloc_mode
+  | Make_array (kind, mut, alloc_mode) ->
+    fprintf ppf "@[<hov 1>(Make_array@ %a@ %a@ %a)@]" Array_kind.print kind
+      Mutability.print mut Alloc_mode.print alloc_mode
 
 let args_kind_of_variadic_primitive p : arg_kinds =
   match p with
-  | Make_block (kind, _) -> Variadic_all_of_kind (Block_kind.element_kind kind)
-  | Make_array (kind, _) ->
+  | Make_block (kind, _, _) ->
+    Variadic_all_of_kind (Block_kind.element_kind kind)
+  | Make_array (kind, _, _) ->
     Variadic_all_of_kind (Array_kind.element_kind_for_creation kind)
 
 let result_kind_of_variadic_primitive p : result_kind =
@@ -1293,7 +1341,7 @@ let result_kind_of_variadic_primitive p : result_kind =
 
 let effects_and_coeffects_of_variadic_primitive p ~args =
   match p with
-  | Make_block (_, mut) | Make_array (_, mut) ->
+  | Make_block (_, mut, _) | Make_array (_, mut, _) ->
     if List.length args >= 1
     then Effects.Only_generative_effects mut, Coeffects.No_coeffects
     else
