@@ -356,7 +356,7 @@ let or_variable f env (ov : _ Fexpr.or_variable) : _ Or_variable.t =
 let unop env (unop : Fexpr.unop) : Flambda_primitive.unary_primitive =
   match unop with
   | Array_length -> Array_length
-  | Box_number bk -> Box_number bk
+  | Box_number bk -> Box_number (bk, Heap)
   | Unbox_number bk -> Unbox_number bk
   | Get_tag -> Get_tag
   | Is_int -> Is_int
@@ -429,7 +429,7 @@ let varop (varop : Fexpr.varop) n : Flambda_primitive.variadic_primitive =
     let kind : Flambda_primitive.Block_kind.t =
       Values (Tag.Scannable.create_exn tag, shape)
     in
-    Make_block (kind, mutability)
+    Make_block (kind, mutability, Heap)
 
 let prim env (p : Fexpr.prim) : Flambda_primitive.t =
   match p with

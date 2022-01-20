@@ -92,7 +92,8 @@ module Env = struct
   type value_approximation =
     | Value_unknown
     | Closure_approximation of Code_id.t * Code.t option
-    | Block_approximation of value_approximation array
+    | Block_approximation of
+        value_approximation array * Flambda_primitive.Alloc_mode.t
 
   type t =
     { variables : Variable.t Ident.Map.t;
@@ -237,10 +238,11 @@ module Env = struct
   let add_closure_approximation t name (code_id, approx) =
     add_value_approximation t name (Closure_approximation (code_id, approx))
 
-  let add_block_approximation t name approxs =
+  let add_block_approximation t name approxs alloc_mode =
     if Array.for_all (( = ) Value_unknown) approxs
     then t
-    else add_value_approximation t name (Block_approximation approxs)
+    else
+      add_value_approximation t name (Block_approximation (approxs, alloc_mode))
 
   let find_value_approximation t simple =
     Simple.pattern_match simple

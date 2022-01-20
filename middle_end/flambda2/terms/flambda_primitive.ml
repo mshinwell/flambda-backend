@@ -573,24 +573,17 @@ type result_kind =
 type nullary_primitive =
   | Optimised_out of K.t
   | Probe_is_enabled of { name : string }
-  | Begin_region
-  | End_region
 
 let nullary_primitive_eligible_for_cse = function
-  | Optimised_out _ | Probe_is_enabled _ | Begin_region | End_region -> false
+  | Optimised_out _ | Probe_is_enabled _ -> false
 
 let compare_nullary_primitive p1 p2 =
   match p1, p2 with
   | Optimised_out k1, Optimised_out k2 -> K.compare k1 k2
   | Probe_is_enabled { name = name1 }, Probe_is_enabled { name = name2 } ->
     String.compare name1 name2
-  | Begin_region, Begin_region | End_region, End_region -> 0
-  | Optimised_out _, (Probe_is_enabled _ | Begin_region | End_region) -> -1
-  | Probe_is_enabled _, (Begin_region | End_region) -> -1
-  | Begin_region, End_region -> -1
+  | Optimised_out _, Probe_is_enabled _ -> -1
   | Probe_is_enabled _, Optimised_out _ -> 1
-  | Begin_region, (Optimised_out _ | Probe_is_enabled _) -> 1
-  | End_region, (Optimised_out _ | Probe_is_enabled _ | Begin_region) -> 1
 
 let equal_nullary_primitive p1 p2 = compare_nullary_primitive p1 p2 = 0
 
@@ -601,14 +594,11 @@ let print_nullary_primitive ppf p =
       (Flambda_colours.normal ())
   | Probe_is_enabled { name } ->
     Format.fprintf ppf "@[<hov 1>(Probe_is_enabled@ %s)@]" name
-  | Begin_region -> Format.pp_print_string ppf "Begin_region"
-  | End_region -> Format.pp_print_string ppf "End_region"
 
 let result_kind_of_nullary_primitive p : result_kind =
   match p with
   | Optimised_out k -> Singleton k
   | Probe_is_enabled _ -> Singleton K.naked_immediate
-  | Begin_region | End_region -> Singleton K.value
 
 let effects_and_coeffects_of_nullary_primitive p =
   match p with
@@ -617,13 +607,9 @@ let effects_and_coeffects_of_nullary_primitive p =
     (* This doesn't really have effects, but we want to make sure it never gets
        moved around. *)
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
-  | Begin_region | End_region ->
-    (* Ensure these don't get moved either. *)
-    Effects.Arbitrary_effects, Coeffects.Has_coeffects
 
 let nullary_classify_for_printing p =
-  match p with
-  | Optimised_out _ | Probe_is_enabled _ | Begin_region | End_region -> Neither
+  match p with Optimised_out _ | Probe_is_enabled _ -> Neither
 
 type unary_primitive =
   | Duplicate_block of

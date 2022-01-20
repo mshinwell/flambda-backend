@@ -191,6 +191,10 @@ let apply_cont_use_kind ~context apply_cont : Continuation_use_kind.t =
         then Non_inlinable { escaping = true }
         else Non_inlinable { escaping = false }
       | Some No_trace -> Non_inlinable { escaping = false })
+    | Some (Begin_region | End_region) ->
+      (* These are treated as escaping to ensure the trap actions are
+         preserved. *)
+      Non_inlinable { escaping = true }
   end
   | Return | Toplevel_return -> Non_inlinable { escaping = false }
   | Define_root_symbol ->
@@ -199,7 +203,7 @@ let apply_cont_use_kind ~context apply_cont : Continuation_use_kind.t =
 
 let clear_demoted_trap_action uacc apply_cont : AC.t =
   match AC.trap_action apply_cont with
-  | None -> apply_cont
+  | None | Some (Begin_region | End_region) -> apply_cont
   | Some (Push { exn_handler } | Pop { exn_handler; _ }) ->
     if UE.mem_continuation (UA.uenv uacc) exn_handler
        && not (UA.is_demoted_exn_handler uacc exn_handler)

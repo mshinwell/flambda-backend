@@ -389,11 +389,12 @@ let close_c_call acc ~let_bound_var
   let box_return_value =
     match prim_native_repr_res with
     | _, Same_as_ocaml_repr -> None
-    | _, Unboxed_float -> Some (P.Box_number Naked_float)
-    | _, Unboxed_integer Pnativeint -> Some (P.Box_number Naked_nativeint)
-    | _, Unboxed_integer Pint32 -> Some (P.Box_number Naked_int32)
-    | _, Unboxed_integer Pint64 -> Some (P.Box_number Naked_int64)
-    | _, Untagged_int -> Some (P.Box_number Untagged_immediate)
+    | _, Unboxed_float -> Some (P.Box_number (Naked_float, Heap))
+    | _, Unboxed_integer Pnativeint ->
+      Some (P.Box_number (Naked_nativeint, Heap))
+    | _, Unboxed_integer Pint32 -> Some (P.Box_number (Naked_int32, Heap))
+    | _, Unboxed_integer Pint64 -> Some (P.Box_number (Naked_int64, Heap))
+    | _, Untagged_int -> Some (P.Box_number (Untagged_immediate, Heap))
   in
   let return_continuation, needs_wrapper =
     match Expr.descr body with
@@ -624,8 +625,7 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
     (* Special case for liftable empty block or array *)
     let acc, sym =
       match prim with
-      | Pmakeblock (tag, _, _, mode) ->
-        LC.alloc_mode mode;
+      | Pmakeblock (tag, _, _, _mode) ->
         if tag <> 0
         then
           (* There should not be any way to reach this from Ocaml code. *)
@@ -637,8 +637,7 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
             "empty_block"
       | Pmakefloatblock _ ->
         Misc.fatal_error "Unexpected empty float block in [Closure_conversion]"
-      | Pmakearray (_, _, mode) ->
-        LC.alloc_mode mode;
+      | Pmakearray (_, _, _mode) ->
         register_const0 acc Static_const.Empty_array "empty_array"
       | Pidentity | Pbytes_to_string | Pbytes_of_string | Pignore | Prevapply _
       | Pdirapply _ | Pgetglobal _ | Psetglobal _ | Pfield _ | Pfield_computed _
@@ -698,7 +697,9 @@ let close_named acc env ~let_bound_var (named : IR.named)
   | Get_tag var ->
     let named = find_simple_from_id env var in
     let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
-      Unary (Box_number Untagged_immediate, Prim (Unary (Get_tag, Simple named)))
+      Unary
+        ( Box_number (Untagged_immediate, Heap),
+          Prim (Unary (Get_tag, Simple named)) )
     in
     Lambda_to_flambda_primitives_helpers.bind_rec acc None
       ~register_const_string:(fun acc -> register_const_string acc)
@@ -722,12 +723,14 @@ let close_let acc env id user_visible defining_expr
       (* CR pchambart: Not tail ! *)
       let body_env =
         match defining_expr with
-        | Prim (Variadic (Make_block (_, Immutable), fields), _) ->
+        | Prim (Variadic (Make_block (_, Immutable, alloc_mode), fields), _) ->
           let approxs =
             List.map (Env.find_value_approximation body_env) fields
             |> Array.of_list
           in
-          Some (Env.add_block_approximation body_env (Name.var var) approxs)
+          Some
+            (Env.add_block_approximation body_env (Name.var var) approxs
+               alloc_mode)
         | Prim (Binary (Block_load _, block, field), _) -> begin
           match Env.find_value_approximation body_env block with
           | Value_unknown -> Some body_env

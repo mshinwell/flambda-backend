@@ -334,7 +334,7 @@ let unary_prim_size prim =
   | Boolean_not -> 1
   | Reinterpret_int64_as_float -> 0
   | Unbox_number k -> unbox_number k
-  | Box_number k -> box_number k
+  | Box_number (k, _alloc_mode) -> box_number k
   | Select_closure _ -> 1 (* caddv *)
   | Project_var _ -> 1 (* load *)
   | Is_boxed_float -> 4 (* tag load + comparison *)
@@ -373,10 +373,10 @@ let ternary_prim_size prim =
 
 let variadic_prim_size prim args =
   match (prim : Flambda_primitive.variadic_primitive) with
-  | Make_block (_, _mut)
+  | Make_block (_, _mut, _alloc_mode)
   (* CR mshinwell: I think Make_array for a generic array ("Anything") is more
      expensive than the other cases *)
-  | Make_array (_, _mut) ->
+  | Make_array (_, _mut, _alloc_mode) ->
     alloc_size + List.length args
 
 let prim (prim : Flambda_primitive.t) =
@@ -406,8 +406,12 @@ let apply apply =
 let apply_cont apply_cont =
   let size =
     match Apply_cont_expr.trap_action apply_cont with
+    (* Current rough estimates are from amd64/emit.mlp *)
     | None -> 0
-    | Some (Push _ | Pop _) -> 0 + 4
+    | Some (Push _) -> 4
+    | Some (Pop _) -> 2
+    | Some Begin_region -> 1
+    | Some End_region -> 5
   in
   size + 1
 

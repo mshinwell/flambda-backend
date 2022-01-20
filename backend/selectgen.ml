@@ -184,6 +184,7 @@ let oper_result_type = function
   | Cprobe _ -> typ_void
   | Cprobe_is_enabled _ -> typ_int
   | Copaque -> typ_val
+  | Cbeginregion | Cendregion -> typ_void
 
 (* Infer the size in bytes of the result of an expression whose evaluation
    may be deferred (cf. [emit_parts]). *)
@@ -440,7 +441,7 @@ method is_simple_expr = function
       | Capply _ | Cextcall _ | Calloc _ | Cstore _
       | Craise _ | Ccheckbound
       | Cprobe _ | Cprobe_is_enabled _ | Copaque -> false
-      | Cprefetch _ -> false (* avoid reordering *)
+      | Cprefetch _ | Cbeginregion | Cendregion -> false (* avoid reordering *)
         (* The remaining operations are simple if their args are *)
       | Cload _ | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi | Cand | Cor
       | Cxor | Clsl | Clsr | Casr | Ccmpi _ | Caddv | Cadda | Ccmpa _ | Cnegf
@@ -482,7 +483,8 @@ method effects_of exp =
       match op with
       | Cextcall { effects = e; coeffects = ce; } ->
         EC.create (select_effects e) (select_coeffects ce)
-      | Capply _ | Cprobe _ | Copaque -> EC.arbitrary
+      | Capply _ | Cprobe _ | Copaque
+      | Cbeginregion | Cendregion -> EC.arbitrary
       | Calloc _ -> EC.none
       | Cstore _ -> EC.effect_only Effect.Arbitrary
       | Cprefetch _ -> EC.arbitrary
@@ -619,6 +621,8 @@ method select_operation op args _dbg =
   | (Cprobe { name; handler_code_sym; }, _) ->
     Iprobe { name; handler_code_sym; }, args
   | (Cprobe_is_enabled {name}, _) -> Iprobe_is_enabled {name}, []
+  | (Cbeginregion, _) -> Ibeginregion, []
+  | (Cendregion, _) -> Iendregion, []
   | _ -> Misc.fatal_error "Selection.select_oper"
 
 method private select_arith_comm op = function

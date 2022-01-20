@@ -658,7 +658,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
         ap_specialised;
         ap_probe
       } ->
-    LC.alloc_mode ap_mode;
+    let mode = LC.alloc_mode ap_mode in
     cps_non_tail_list acc env ccenv ap_args
       (fun acc env ccenv args ->
         cps_non_tail acc env ccenv ap_func
@@ -838,7 +838,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
           ~params ~recursive ~body ~handler)
       ~handler:(fun acc env ccenv -> k acc env ccenv result_var)
   | Lsend (meth_kind, meth, obj, args, _pos, mode, loc) ->
-    LC.alloc_mode mode;
+    let mode = LC.alloc_mode mode in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
         cps_non_tail acc env ccenv meth
@@ -939,7 +939,23 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
        by completely removing it (replacing by unit). *)
     Misc.fatal_error
       "[Lifused] should have been removed by [Simplif.simplify_lets]"
-  | Lregion _ -> LC.local_unsupported ()
+  | Lregion body ->
+    let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
+      ~params:[]
+      ~body:(fun acc env ccenv k ->
+        let var = VB.create var Name_mode.normal in
+        Let_with_acc.create acc
+          (Bound_pattern.singleton var)
+          defining_expr ~body
+        |> Expr_with_acc.create_let (* begin region *) cps_tail acc env ccenv
+             defining_expr after_defining_expr k_exn)
+      ~handler:(fun acc env ccenv ->
+        let env, new_id = Env.register_mutable_variable env id value_kind in
+        let body acc ccenv = cps_non_tail acc env ccenv body k k_exn in
+        CC.close_let acc ccenv new_id User_visible (Simple (Var temp_id)) ~body)
+(* cps_non_tail acc env ccenv body (fun acc env ccenv body_result ->
+
+   k acc env ccenv body_result ) k_exn *)
 
 and cps_non_tail_simple acc env ccenv (lam : L.lambda)
     (k : Acc.t -> Env.t -> CCenv.t -> IR.simple -> Acc.t * Expr_with_acc.t)
@@ -1151,7 +1167,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
     CC.close_let_cont acc ccenv ~name:continuation ~is_exn_handler:false ~params
       ~recursive ~body ~handler
   | Lsend (meth_kind, meth, obj, args, _pos, mode, loc) ->
-    LC.alloc_mode mode;
+    let mode = LC.alloc_mode mode in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
         cps_non_tail acc env ccenv meth
@@ -1370,7 +1386,7 @@ and cps_function_bindings env (bindings : (Ident.t * L.lambda) list) =
 and cps_function env ~fid ~stub ~(recursive : Recursive.t) ?free_idents
     ({ kind; params; return; body; attr; loc; mode; region = _ } : L.lfunction)
     : Function_decl.t =
-  LC.alloc_mode mode;
+  let mode = LC.alloc_mode mode in
   let body_cont = Continuation.create ~sort:Return () in
   let body_exn_cont = Continuation.create () in
   let free_idents_of_body =

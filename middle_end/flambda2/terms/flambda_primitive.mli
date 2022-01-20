@@ -222,8 +222,6 @@ type nullary_primitive =
           let-binding. *)
   | Probe_is_enabled of { name : string }
       (** Returns a boolean saying whether the given tracing probe is enabled. *)
-  | Begin_region  (** Starting delimiter of local allocation region. *)
-  | End_region  (** Ending delimiter of local allocation region. *)
 
 (** Untagged binary integer arithmetic operations.
 
