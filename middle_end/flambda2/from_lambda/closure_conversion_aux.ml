@@ -92,8 +92,7 @@ module Env = struct
   type value_approximation =
     | Value_unknown
     | Closure_approximation of Code_id.t * Code.t option
-    | Block_approximation of
-        value_approximation array * Flambda_primitive.Alloc_mode.t
+    | Block_approximation of value_approximation array * Alloc_mode.t
 
   type t =
     { variables : Variable.t Ident.Map.t;

@@ -84,7 +84,7 @@ val nativeint : ?dbg:Debuginfo.t -> Nativeint.t -> Cmm.expression
 val make_array :
   ?dbg:Debuginfo.t ->
   Flambda_primitive.Array_kind.t ->
-  Flambda_primitive.Alloc_mode.t ->
+  Alloc_mode.t ->
   Cmm.expression list ->
   Cmm.expression
 
@@ -92,16 +92,13 @@ val make_array :
 val make_block :
   ?dbg:Debuginfo.t ->
   Flambda_primitive.Block_kind.t ->
-  Flambda_primitive.Alloc_mode.t ->
+  Alloc_mode.t ->
   Cmm.expression list ->
   Cmm.expression
 
 (** Create a closure block. *)
 val make_closure_block :
-  ?dbg:Debuginfo.t ->
-  Flambda_primitive.Alloc_mode.t ->
-  Cmm.expression list ->
-  Cmm.expression
+  ?dbg:Debuginfo.t -> Alloc_mode.t -> Cmm.expression list -> Cmm.expression
 
 (** {2 Boxed numbers} *)
 
@@ -109,16 +106,13 @@ val make_closure_block :
 val box_number :
   ?dbg:Debuginfo.t ->
   Flambda_kind.Boxable_number.t ->
-  Flambda_primitive.Alloc_mode.t ->
+  Alloc_mode.t ->
   Cmm.expression ->
   Cmm.expression
 
 (** Shortcut for [box_number Flambda_kind.Boxable_number.Naked_int64] *)
 val box_int64 :
-  ?dbg:Debuginfo.t ->
-  Flambda_primitive.Alloc_mode.t ->
-  Cmm.expression ->
-  Cmm.expression
+  ?dbg:Debuginfo.t -> Alloc_mode.t -> Cmm.expression -> Cmm.expression
 
 (** Unbox a boxed number. *)
 val unbox_number :

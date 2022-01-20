@@ -109,8 +109,7 @@ let sequence x y =
 
 (* Allocation modes *)
 
-let convert_alloc_mode (alloc_mode : Flambda_primitive.Alloc_mode.t) :
-    Lambda.alloc_mode =
+let convert_alloc_mode (alloc_mode : Alloc_mode.t) : Lambda.alloc_mode =
   match alloc_mode with Heap -> Alloc_heap | Local -> Alloc_local
 
 (* Boxing/unboxing *)

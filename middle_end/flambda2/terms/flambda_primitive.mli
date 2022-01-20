@@ -117,14 +117,6 @@ module Block_access_kind : sig
   val compare : t -> t -> int
 end
 
-module Alloc_mode : sig
-  type t =
-    | Heap  (** Normal allocation on the OCaml heap. *)
-    | Local  (** Allocation on the local allocation stack. *)
-
-  val print : Format.formatter -> t -> unit
-end
-
 (* CR-someday mshinwell: We should have unboxed arrays of int32, int64 and
    nativeint. *)
 

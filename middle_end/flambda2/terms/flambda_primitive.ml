@@ -246,23 +246,6 @@ module Block_access_kind = struct
     | Naked_floats _, Values _ -> 1
 end
 
-module Alloc_mode = struct
-  type t =
-    | Heap
-    | Local
-
-  let print ppf t =
-    match t with
-    | Heap -> Format.pp_print_string ppf "Heap"
-    | Local -> Format.pp_print_string ppf "Local"
-
-  let compare t1 t2 =
-    match t1, t2 with
-    | Heap, Heap | Local, Local -> 0
-    | Heap, Local -> -1
-    | Local, Heap -> 1
-end
-
 type string_or_bytes =
   | String
   | Bytes

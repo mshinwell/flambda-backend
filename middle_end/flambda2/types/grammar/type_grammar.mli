@@ -44,13 +44,17 @@ and head_of_kind_value = private
   | Variant of
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
-        is_unique : bool
+        is_unique : bool;
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
-  | Boxed_float of t
-  | Boxed_int32 of t
-  | Boxed_int64 of t
-  | Boxed_nativeint of t
-  | Closures of { by_closure_id : row_like_for_closures }
+  | Boxed_float of t * Alloc_mode.t Or_unknown.t
+  | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
+  | Boxed_int64 of t * Alloc_mode.t Or_unknown.t
+  | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
+  | Closures of
+      { by_closure_id : row_like_for_closures;
+        alloc_mode : Alloc_mode.t Or_unknown.t
+      }
   | String of String_info.Set.t
   | Array of
       { element_kind : Flambda_kind.With_subkind.t Or_unknown.t;
@@ -205,13 +209,13 @@ val boxed_int64_alias_to : naked_int64:Variable.t -> t
 
 val boxed_nativeint_alias_to : naked_nativeint:Variable.t -> t
 
-val box_float : t -> t
+val box_float : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_int32 : t -> t
+val box_int32 : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_int64 : t -> t
+val box_int64 : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_nativeint : t -> t
+val box_nativeint : t -> Alloc_mode.t Or_unknown.t -> t
 
 val tagged_immediate_alias_to : naked_immediate:Variable.t -> t
 
@@ -223,11 +227,12 @@ val get_tag_for_block : block:Simple.t -> t
 
 val create_variant :
   is_unique:bool ->
+  Alloc_mode.t Or_unknown.t ->
   immediates:t Or_unknown.t ->
   blocks:row_like_for_blocks Or_unknown.t ->
   t
 
-val create_closures : row_like_for_closures -> t
+val create_closures : Alloc_mode.t Or_unknown.t -> row_like_for_closures -> t
 
 val this_immutable_string : string -> t
 
@@ -505,19 +510,20 @@ module Head_of_kind_value : sig
     is_unique:bool ->
     blocks:Row_like_for_blocks.t Or_unknown.t ->
     immediates:flambda_type Or_unknown.t ->
+    Alloc_mode.t option ->
     t
 
-  val create_boxed_float : flambda_type -> t
+  val create_boxed_float : flambda_type -> Alloc_mode.t option -> t
 
-  val create_boxed_int32 : flambda_type -> t
+  val create_boxed_int32 : flambda_type -> Alloc_mode.t option -> t
 
-  val create_boxed_int64 : flambda_type -> t
+  val create_boxed_int64 : flambda_type -> Alloc_mode.t option -> t
 
-  val create_boxed_nativeint : flambda_type -> t
+  val create_boxed_nativeint : flambda_type -> Alloc_mode.t option -> t
 
   val create_tagged_immediate : Targetint_31_63.t -> t
 
-  val create_closures : Row_like_for_closures.t -> t
+  val create_closures : Row_like_for_closures.t -> Alloc_mode.t option -> t
 
   val create_string : String_info.Set.t -> t
 

@@ -52,13 +52,17 @@ and head_of_kind_value =
   | Variant of
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
-        is_unique : bool
+        is_unique : bool;
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
-  | Boxed_float of t
-  | Boxed_int32 of t
-  | Boxed_int64 of t
-  | Boxed_nativeint of t
-  | Closures of { by_closure_id : row_like_for_closures }
+  | Boxed_float of t * Alloc_mode.t Or_unknown.t
+  | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
+  | Boxed_int64 of t * Alloc_mode.t Or_unknown.t
+  | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
+  | Closures of
+      { by_closure_id : row_like_for_closures;
+        alloc_mode : Alloc_mode.t Or_unknown.t
+      }
   | String of String_info.Set.t
   | Array of
       { element_kind : Flambda_kind.With_subkind.t Or_unknown.t;
@@ -176,7 +180,7 @@ let apply_renaming t renaming =
 
 let rec apply_renaming_head_of_kind_value head renaming =
   match head with
-  | Variant { blocks; immediates; is_unique } ->
+  | Variant { blocks; immediates; is_unique; alloc_mode } ->
     let immediates' =
       let>+$ immediates = immediates in
       apply_renaming immediates renaming
@@ -187,26 +191,28 @@ let rec apply_renaming_head_of_kind_value head renaming =
     in
     if immediates == immediates' && blocks == blocks'
     then head
-    else Variant { is_unique; blocks = blocks'; immediates = immediates' }
-  | Boxed_float ty ->
+    else
+      Variant
+        { is_unique; blocks = blocks'; immediates = immediates'; alloc_mode }
+  | Boxed_float (ty, alloc_mode) ->
     let ty' = apply_renaming ty renaming in
-    if ty == ty' then head else Boxed_float ty'
-  | Boxed_int32 ty ->
+    if ty == ty' then head else Boxed_float (ty', alloc_mode)
+  | Boxed_int32 (ty, alloc_mode) ->
     let ty' = apply_renaming ty renaming in
-    if ty == ty' then head else Boxed_int32 ty'
-  | Boxed_int64 ty ->
+    if ty == ty' then head else Boxed_int32 (ty', alloc_mode)
+  | Boxed_int64 (ty, alloc_mode) ->
     let ty' = apply_renaming ty renaming in
-    if ty == ty' then head else Boxed_int64 ty'
-  | Boxed_nativeint ty ->
+    if ty == ty' then head else Boxed_int64 (ty', alloc_mode)
+  | Boxed_nativeint (ty, alloc_mode) ->
     let ty' = apply_renaming ty renaming in
-    if ty == ty' then head else Boxed_nativeint ty'
-  | Closures { by_closure_id } ->
+    if ty == ty' then head else Boxed_nativeint (ty', alloc_mode)
+  | Closures { by_closure_id; alloc_mode } ->
     let by_closure_id' =
       apply_renaming_row_like_for_closures by_closure_id renaming
     in
     if by_closure_id == by_closure_id'
     then head
-    else Closures { by_closure_id = by_closure_id' }
+    else Closures { by_closure_id = by_closure_id'; alloc_mode }
   | String _ -> head
   | Array { element_kind; length } ->
     let length' = apply_renaming length renaming in
@@ -389,15 +395,16 @@ let rec free_names t =
 
 and free_names_head_of_kind_value head =
   match head with
-  | Variant { blocks; immediates; is_unique = _ } ->
+  | Variant { blocks; immediates; is_unique = _; alloc_mode = _ } ->
     Name_occurrences.union
       (Or_unknown.free_names free_names_row_like_for_blocks blocks)
       (Or_unknown.free_names free_names immediates)
-  | Boxed_float ty -> free_names ty
-  | Boxed_int32 ty -> free_names ty
-  | Boxed_int64 ty -> free_names ty
-  | Boxed_nativeint ty -> free_names ty
-  | Closures { by_closure_id } -> free_names_row_like_for_closures by_closure_id
+  | Boxed_float (ty, _alloc_mode) -> free_names ty
+  | Boxed_int32 (ty, _alloc_mode) -> free_names ty
+  | Boxed_int64 (ty, _alloc_mode) -> free_names ty
+  | Boxed_nativeint (ty, _alloc_mode) -> free_names ty
+  | Closures { by_closure_id; alloc_mode = _ } ->
+    free_names_row_like_for_closures by_closure_id
   | String _ -> Name_occurrences.empty
   | Array { element_kind = _; length } -> free_names length
 
@@ -555,21 +562,33 @@ let rec print ppf t =
 
 and print_head_of_kind_value ppf head =
   match head with
-  | Variant { blocks; immediates; is_unique } ->
+  | Variant { blocks; immediates; is_unique; alloc_mode } ->
     (* CR mshinwell: Improve so that we elide blocks and/or immediates when
        they're empty. *)
     Format.fprintf ppf
       "@[<hov 1>(Variant%s@ @[<hov 1>(blocks@ %a)@]@ @[<hov 1>(tagged_imms@ \
        %a)@])@]"
       (if is_unique then " unique" else "")
-      (Or_unknown.print print_row_like_for_blocks)
+      (Or_unknown.print (print_row_like_for_blocks alloc_mode))
       blocks (Or_unknown.print print) immediates
-  | Boxed_float ty -> Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a)@]" print ty
-  | Boxed_int32 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int32@ %a)@]" print ty
-  | Boxed_int64 ty -> Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a)@]" print ty
-  | Boxed_nativeint ty ->
-    Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a)@]" print ty
-  | Closures { by_closure_id } -> print_row_like_for_closures ppf by_closure_id
+  | Boxed_float (ty, alloc_mode) ->
+    Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a@ %a)@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode print ty
+  | Boxed_int32 (ty, alloc_mode) ->
+    Format.fprintf ppf "@[<hov 1>(Boxed_int32@ %a@ %a)@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode print ty
+  | Boxed_int64 (ty, alloc_mode) ->
+    Format.fprintf ppf "@[<hov 1>(Boxed_int64@ %a@ %a)@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode print ty
+  | Boxed_nativeint (ty, alloc_mode) ->
+    Format.fprintf ppf "@[<hov 1>(Boxed_nativeint@ %a@ %a)@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode print ty
+  | Closures { by_closure_id; alloc_mode } ->
+    print_row_like_for_closures alloc_mode ppf by_closure_id
   | String str_infos ->
     Format.fprintf ppf "@[<hov 1>(Strings@ (%a))@]" String_info.Set.print
       str_infos
@@ -612,10 +631,11 @@ and print_row_like :
       is_empty_map_known:('known -> bool) ->
       known:'known ->
       other:('index, 'maps_to) row_like_case Or_bottom.t ->
+      Alloc_mode.t Or_unknown.t ->
       Format.formatter ->
       unit =
  fun ~print_index ~print_maps_to ~print_known_map ~is_empty_map_known ~known
-     ~other ppf ->
+     ~other alloc_mode ppf ->
   let print_index ppf = function
     | Known index -> Format.fprintf ppf "(Known @[<2>%a@])" print_index index
     | At_least min_index ->
@@ -640,19 +660,23 @@ and print_row_like :
         pp_env_extension env_extension
     in
     Format.fprintf ppf
-      "@[<hov 1>(@[<hov 1>(known@ %a)@]@ @[<hov 1>(other@ %a)@])@]"
-      (print_known_map print) known (Or_bottom.print print) other
+      "@[<hov 1>(@[<hov 1>(alloc_mode@ %a)@ (known@ %a)@]@ @[<hov 1>(other@ \
+       %a)@])@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode (print_known_map print) known (Or_bottom.print print) other
 
-and print_row_like_for_blocks ppf { known_tags; other_tags } =
+and print_row_like_for_blocks alloc_mode ppf { known_tags; other_tags } =
   print_row_like ~print_index:Block_size.print
     ~print_maps_to:print_int_indexed_product ~print_known_map:Tag.Map.print
-    ~is_empty_map_known:Tag.Map.is_empty ~known:known_tags ~other:other_tags ppf
+    ~is_empty_map_known:Tag.Map.is_empty ~known:known_tags ~other:other_tags
+    alloc_mode ppf
 
-and print_row_like_for_closures ppf { known_closures; other_closures } =
+and print_row_like_for_closures alloc_mode ppf
+    { known_closures; other_closures } =
   print_row_like ~print_index:Set_of_closures_contents.print
     ~print_maps_to:print_closures_entry ~print_known_map:Closure_id.Map.print
     ~is_empty_map_known:Closure_id.Map.is_empty ~known:known_closures
-    ~other:other_closures ppf
+    ~other:other_closures alloc_mode ppf
 
 and print_closures_entry ppf
     { function_types; closure_types; closure_var_types } =
@@ -744,16 +768,16 @@ let rec all_ids_for_export t =
 
 and all_ids_for_export_head_of_kind_value head =
   match head with
-  | Variant { blocks; immediates; is_unique = _ } ->
+  | Variant { blocks; immediates; is_unique = _; alloc_mode = _ } ->
     Ids_for_export.union
       (Or_unknown.all_ids_for_export all_ids_for_export_row_like_for_blocks
          blocks)
       (Or_unknown.all_ids_for_export all_ids_for_export immediates)
-  | Boxed_float t -> all_ids_for_export t
-  | Boxed_int32 t -> all_ids_for_export t
-  | Boxed_int64 t -> all_ids_for_export t
-  | Boxed_nativeint t -> all_ids_for_export t
-  | Closures { by_closure_id } ->
+  | Boxed_float (t, _alloc_mode) -> all_ids_for_export t
+  | Boxed_int32 (t, _alloc_mode) -> all_ids_for_export t
+  | Boxed_int64 (t, _alloc_mode) -> all_ids_for_export t
+  | Boxed_nativeint (t, _alloc_mode) -> all_ids_for_export t
+  | Closures { by_closure_id; alloc_mode = _ } ->
     all_ids_for_export_row_like_for_closures by_closure_id
   | String _ -> Ids_for_export.empty
   | Array { element_kind = _; length } -> all_ids_for_export length
@@ -939,13 +963,13 @@ let rec apply_coercion t coercion : t Or_bottom.t =
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
-  | Closures { by_closure_id } ->
+  | Closures { by_closure_id; alloc_mode } ->
     let<+ by_closure_id' =
       apply_coercion_row_like_for_closures by_closure_id coercion
     in
     if by_closure_id == by_closure_id'
     then head
-    else Closures { by_closure_id = by_closure_id' }
+    else Closures { by_closure_id = by_closure_id'; alloc_mode }
   | Variant _ ->
     (* See the comment on [apply_coercion]. The situation for variants (sums) is
        similar to that for tuples (products): we would want a coercion for each
@@ -1239,7 +1263,7 @@ let rec remove_unused_closure_vars t ~used_closure_vars =
 
 and remove_unused_closure_vars_head_of_kind_value head ~used_closure_vars =
   match head with
-  | Variant { blocks; immediates; is_unique } ->
+  | Variant { blocks; immediates; is_unique; alloc_mode } ->
     let immediates' =
       let>+$ immediates = immediates in
       remove_unused_closure_vars immediates ~used_closure_vars
@@ -1250,27 +1274,29 @@ and remove_unused_closure_vars_head_of_kind_value head ~used_closure_vars =
     in
     if immediates == immediates' && blocks == blocks'
     then head
-    else Variant { is_unique; blocks = blocks'; immediates = immediates' }
-  | Boxed_float ty ->
+    else
+      Variant
+        { is_unique; blocks = blocks'; immediates = immediates'; alloc_mode }
+  | Boxed_float (ty, alloc_mode) ->
     let ty' = remove_unused_closure_vars ty ~used_closure_vars in
-    if ty == ty' then head else Boxed_float ty'
-  | Boxed_int32 ty ->
+    if ty == ty' then head else Boxed_float (ty', alloc_mode)
+  | Boxed_int32 (ty, alloc_mode) ->
     let ty' = remove_unused_closure_vars ty ~used_closure_vars in
-    if ty == ty' then head else Boxed_int32 ty'
-  | Boxed_int64 ty ->
+    if ty == ty' then head else Boxed_int32 (ty', alloc_mode)
+  | Boxed_int64 (ty, alloc_mode) ->
     let ty' = remove_unused_closure_vars ty ~used_closure_vars in
-    if ty == ty' then head else Boxed_int64 ty'
-  | Boxed_nativeint ty ->
+    if ty == ty' then head else Boxed_int64 (ty', alloc_mode)
+  | Boxed_nativeint (ty, alloc_mode) ->
     let ty' = remove_unused_closure_vars ty ~used_closure_vars in
-    if ty == ty' then head else Boxed_nativeint ty'
-  | Closures { by_closure_id } ->
+    if ty == ty' then head else Boxed_nativeint (ty', alloc_mode)
+  | Closures { by_closure_id; alloc_mode } ->
     let by_closure_id' =
       remove_unused_closure_vars_row_like_for_closures by_closure_id
         ~used_closure_vars
     in
     if by_closure_id == by_closure_id'
     then head
-    else Closures { by_closure_id = by_closure_id' }
+    else Closures { by_closure_id = by_closure_id'; alloc_mode }
   | String _ -> head
   | Array { element_kind; length } ->
     let length' = remove_unused_closure_vars length ~used_closure_vars in
@@ -1461,7 +1487,8 @@ let kind t =
   | Naked_nativeint _ -> K.naked_nativeint
   | Rec_info _ -> K.rec_info
 
-let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks =
+let create_variant ~is_unique alloc_mode ~(immediates : _ Or_unknown.t) ~blocks
+    =
   begin
     match immediates with
     | Unknown -> ()
@@ -1473,10 +1500,10 @@ let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks =
            [Naked_immediate]:@ %a"
           print immediates
   end;
-  Value (TD.create (Variant { immediates; blocks; is_unique }))
+  Value (TD.create (Variant { immediates; blocks; is_unique; alloc_mode }))
 
-let create_closures by_closure_id =
-  Value (TD.create (Closures { by_closure_id }))
+let create_closures alloc_mode by_closure_id =
+  Value (TD.create (Closures { by_closure_id; alloc_mode }))
 
 module Function_type = struct
   type t = function_type
@@ -2063,30 +2090,30 @@ let these_naked_nativeints ~no_alias is =
     then bottom_naked_nativeint
     else Naked_nativeint (TD.create is)
 
-let box_float (t : t) : t =
+let box_float (t : t) alloc_mode : t =
   match t with
-  | Naked_float _ -> Value (TD.create (Boxed_float t))
+  | Naked_float _ -> Value (TD.create (Boxed_float (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_float]: %a" print t
 
-let box_int32 (t : t) : t =
+let box_int32 (t : t) alloc_mode : t =
   match t with
-  | Naked_int32 _ -> Value (TD.create (Boxed_int32 t))
+  | Naked_int32 _ -> Value (TD.create (Boxed_int32 (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_int32]: %a" print t
 
-let box_int64 (t : t) : t =
+let box_int64 (t : t) alloc_mode : t =
   match t with
-  | Naked_int64 _ -> Value (TD.create (Boxed_int64 t))
+  | Naked_int64 _ -> Value (TD.create (Boxed_int64 (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
   | Naked_nativeint _ | Rec_info _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_int64]: %a" print t
 
-let box_nativeint (t : t) : t =
+let box_nativeint (t : t) alloc_mode : t =
   match t with
-  | Naked_nativeint _ -> Value (TD.create (Boxed_nativeint t))
+  | Naked_nativeint _ -> Value (TD.create (Boxed_nativeint (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Rec_info _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_nativeint]: %a" print t
@@ -2102,7 +2129,8 @@ let tag_immediate t : t =
          (Variant
             { is_unique = false;
               immediates = Known t;
-              blocks = Known Row_like_for_blocks.bottom
+              blocks = Known Row_like_for_blocks.bottom;
+              alloc_mode = Known Heap
             }))
   | Value _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
   | Rec_info _ ->
@@ -2217,25 +2245,26 @@ let create_from_head_rec_info head = Rec_info (TD.create head)
 module Head_of_kind_value = struct
   type t = head_of_kind_value
 
-  let create_variant ~is_unique ~blocks ~immediates =
-    Variant { is_unique; blocks; immediates }
+  let create_variant ~is_unique ~blocks ~immediates alloc_mode =
+    Variant { is_unique; blocks; immediates; alloc_mode }
 
-  let create_boxed_float ty = Boxed_float ty
+  let create_boxed_float ty alloc_mode = Boxed_float (ty, alloc_mode)
 
-  let create_boxed_int32 ty = Boxed_int32 ty
+  let create_boxed_int32 ty alloc_mode = Boxed_int32 (ty, alloc_mode)
 
-  let create_boxed_int64 ty = Boxed_int64 ty
+  let create_boxed_int64 ty alloc_mode = Boxed_int64 (ty, alloc_mode)
 
-  let create_boxed_nativeint ty = Boxed_nativeint ty
+  let create_boxed_nativeint ty alloc_mode = Boxed_nativeint (ty, alloc_mode)
 
   let create_tagged_immediate imm : t =
     Variant
       { is_unique = false;
         immediates = Known (this_naked_immediate imm);
-        blocks = Known Row_like_for_blocks.bottom
+        blocks = Known Row_like_for_blocks.bottom;alloc_mode=Known Heap
       }
 
-  let create_closures by_closure_id = Closures { by_closure_id }
+  let create_closures by_closure_id alloc_mode =
+    Closures { by_closure_id; alloc_mode }
 
   let create_string info = String info
 

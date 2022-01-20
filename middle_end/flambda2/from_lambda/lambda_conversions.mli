@@ -89,4 +89,4 @@ val convert_lambda_block_size : int -> Targetint_31_63.Imm.t Or_unknown.t
 
 val local_unsupported : unit -> 'a
 
-val alloc_mode : Lambda.alloc_mode -> Flambda_primitive.Alloc_mode.t
+val alloc_mode : Lambda.alloc_mode -> Alloc_mode.t

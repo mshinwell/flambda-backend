@@ -390,13 +390,13 @@ val boxed_int64_alias_to : naked_int64:Variable.t -> t
 
 val boxed_nativeint_alias_to : naked_nativeint:Variable.t -> t
 
-val box_float : t -> t
+val box_float : t -> Alloc_mode.t -> t
 
-val box_int32 : t -> t
+val box_int32 : t -> Alloc_mode.t -> t
 
-val box_int64 : t -> t
+val box_int64 : t -> Alloc_mode.t -> t
 
-val box_nativeint : t -> t
+val box_nativeint : t -> Alloc_mode.t -> t
 
 val tagged_immediate_alias_to : naked_immediate:Variable.t -> t
 
@@ -424,10 +424,15 @@ val immutable_block_with_size_at_least :
   tag:Tag.t Or_unknown.t ->
   n:Targetint_31_63.Imm.t ->
   field_kind:Flambda_kind.t ->
+  Alloc_mode.t ->
   field_n_minus_one:Variable.t ->
   t
 
-val variant : const_ctors:t -> non_const_ctors:t list Tag.Scannable.Map.t -> t
+val variant :
+  const_ctors:t ->
+  non_const_ctors:t list Tag.Scannable.Map.t ->
+  Alloc_mode.t ->
+  t
 
 val open_variant_from_const_ctors_type : const_ctors:t -> t
 
@@ -444,6 +449,7 @@ val exactly_this_closure :
     Function_type.t Or_unknown_or_bottom.t Closure_id.Map.t ->
   all_closures_in_set:t Closure_id.Map.t ->
   all_closure_vars_in_set:flambda_type Var_within_closure.Map.t ->
+  Alloc_mode.t ->
   flambda_type
 
 val at_least_the_closures_with_ids :

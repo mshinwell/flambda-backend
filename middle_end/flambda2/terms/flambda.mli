@@ -160,7 +160,7 @@ module Named : sig
     Name.t ->
     Flambda_kind.t ->
     Debuginfo.t ->
-    Flambda_primitive.Alloc_mode.t ->
+    Alloc_mode.t ->
     named * Flambda_kind.t
 
   (** Build an expression unboxing the name. The returned kind is the one of the
