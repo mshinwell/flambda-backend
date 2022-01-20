@@ -173,7 +173,7 @@ let variant ~const_ctors ~non_const_ctors alloc_mode =
 
 let open_variant_from_const_ctors_type ~const_ctors =
   TG.create_variant ~is_unique:false ~immediates:(Known const_ctors)
-    ~blocks:Unknown
+    ~blocks:Unknown Unknown
 
 let open_variant_from_non_const_ctor_with_size_at_least ~n ~field_n_minus_one =
   let n = Targetint_31_63.Imm.to_int n in
@@ -188,6 +188,7 @@ let open_variant_from_non_const_ctor_with_size_at_least ~n ~field_n_minus_one =
       (Known
          (TG.Row_like_for_blocks.create ~field_kind:K.value ~field_tys
             (Open Unknown)))
+    Unknown
 
 let exactly_this_closure closure_id ~all_function_decls_in_set:function_types
     ~all_closures_in_set:closure_types
@@ -208,7 +209,7 @@ let exactly_this_closure closure_id ~all_function_decls_in_set:function_types
     TG.Row_like_for_closures.create_exactly closure_id set_of_closures_contents
       closures_entry
   in
-  TG.create_closures (Known alloc_mode) by_closure_id
+  TG.create_closures alloc_mode by_closure_id
 
 let at_least_the_closures_with_ids ~this_closure closure_ids_and_bindings =
   let closure_id_components_by_index =

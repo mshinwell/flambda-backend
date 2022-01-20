@@ -147,6 +147,8 @@ type trap_action =
       { exn_handler : continuation;
         raise_kind : raise_kind option
       }
+  | Begin_region
+  | End_region
 
 type rec_info =
   | Depth of int
@@ -230,6 +232,7 @@ type string_or_bytes = Flambda_primitive.string_or_bytes =
 type init_or_assign = Flambda_primitive.Init_or_assign.t =
   | Initialization
   | Assignment
+  | Local_assignment
 
 type comparison = Flambda_primitive.comparison =
   | Eq

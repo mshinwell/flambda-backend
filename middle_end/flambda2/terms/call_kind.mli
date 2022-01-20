@@ -32,10 +32,11 @@ module Function_call : sig
                   up with the arity of [continuation] in the enclosing [Apply.t]
                   record. *)
         }
-    | Indirect_unknown_arity
+    | Indirect_unknown_arity of { alloc_mode : Alloc_mode.t }
     | Indirect_known_arity of
         { param_arity : Flambda_arity.With_subkinds.t;
-          return_arity : Flambda_arity.With_subkinds.t
+          return_arity : Flambda_arity.With_subkinds.t;
+          alloc_mode : Alloc_mode.t
         }
 end
 
@@ -66,11 +67,12 @@ include Contains_ids.S with type t := t
 val direct_function_call :
   Code_id.t -> Closure_id.t -> return_arity:Flambda_arity.With_subkinds.t -> t
 
-val indirect_function_call_unknown_arity : unit -> t
+val indirect_function_call_unknown_arity : Alloc_mode.t -> t
 
 val indirect_function_call_known_arity :
   param_arity:Flambda_arity.With_subkinds.t ->
   return_arity:Flambda_arity.With_subkinds.t ->
+  Alloc_mode.t ->
   t
 
 val method_call : method_kind -> obj:Simple.t -> t

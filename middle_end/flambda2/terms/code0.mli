@@ -28,6 +28,10 @@ val newer_version_of : 'function_params_and_body t -> Code_id.t option
 
 val params_arity : 'function_params_and_body t -> Flambda_arity.With_subkinds.t
 
+val num_leading_heap_params : _ t -> int
+
+val num_trailing_local_params : _ t -> int
+
 val result_arity : 'function_params_and_body t -> Flambda_arity.With_subkinds.t
 
 val result_types : 'function_params_and_body t -> Result_types.t
@@ -61,6 +65,7 @@ val create :
   free_names_of_params_and_body:Name_occurrences.t ->
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
+  num_trailing_local_params:int ->
   result_arity:Flambda_arity.With_subkinds.t ->
   result_types:Result_types.t ->
   stub:bool ->

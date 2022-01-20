@@ -745,7 +745,7 @@ let close_let acc env id user_visible defining_expr
                  expected in [Closure_conversion]: %a"
                 Named.print defining_expr
             else None
-          | Block_approximation approx ->
+          | Block_approximation (approx, _alloc_mode) ->
             let approx : Env.value_approximation =
               Simple.pattern_match field
                 ~const:(fun const ->

@@ -464,7 +464,8 @@ let recursive_flag (r : Recursive.t) : Fexpr.is_recursive =
 let unop env (op : Flambda_primitive.unary_primitive) : Fexpr.unop =
   match op with
   | Array_length -> Array_length
-  | Box_number bk -> Box_number bk
+  (* CR mshinwell: support local allocs in fexpr *)
+  | Box_number (bk, _alloc_mode) -> Box_number bk
   | Get_tag -> Get_tag
   | Is_int -> Is_int
   | Num_conv { src; dst } -> Num_conv { src; dst }
@@ -537,9 +538,9 @@ let ternop (op : Flambda_primitive.ternary_primitive) : Fexpr.ternop =
 
 let varop (op : Flambda_primitive.variadic_primitive) : Fexpr.varop =
   match op with
-  | Make_block (Values (tag, _), mutability) ->
+  | Make_block (Values (tag, _), mutability, _alloc_mode) ->
     Make_block (tag |> Tag.Scannable.to_int, mutability)
-  | Make_block (Naked_floats, _) | Make_array _ ->
+  | Make_block (Naked_floats, _, _) | Make_array _ ->
     Misc.fatal_errorf "TODO: Variadic primitive: %a"
       Flambda_primitive.Without_args.print
       (Flambda_primitive.Without_args.Variadic op)
@@ -963,7 +964,9 @@ and apply_cont env app_cont : Fexpr.apply_cont =
              Push { exn_handler }
            | Pop { exn_handler; raise_kind } ->
              let exn_handler = Env.find_continuation_exn env exn_handler in
-             Pop { exn_handler; raise_kind })
+             Pop { exn_handler; raise_kind }
+           | Begin_region -> Begin_region
+           | End_region -> End_region)
   in
   let args = List.map (simple env) (Apply_cont_expr.args app_cont) in
   { cont; trap_action; args }

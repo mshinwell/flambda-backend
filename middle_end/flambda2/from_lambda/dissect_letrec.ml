@@ -518,7 +518,9 @@ let rec prepare_letrec (recursive_set : Ident.Set.t)
       | None -> fun ~tail : Lambda.lambda -> Lsequence (lam, letrec.pre ~tail)
     in
     { letrec with pre }
-  | Lregion _ -> Lambda_conversions.local_unsupported ()
+  | Lregion body ->
+    (* XXX mshinwell: no idea what to do here *)
+    prepare_letrec recursive_set current_let body letrec
 
 let dissect_letrec ~bindings ~body =
   let letbound = Ident.Set.of_list (List.map fst bindings) in

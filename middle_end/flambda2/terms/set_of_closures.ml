@@ -79,6 +79,8 @@ let function_decls t = t.function_decls
 
 let closure_elements t = t.closure_elements
 
+let alloc_mode t = t.alloc_mode
+
 let has_empty_environment t = Var_within_closure.Map.is_empty t.closure_elements
 
 let environment_doesn't_mention_variables t =

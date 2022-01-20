@@ -442,7 +442,10 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         applied_values
       |> Var_within_closure.Map.of_list
     in
-    Set_of_closures.create function_decls ~closure_elements, dacc, code_id, code
+    ( Set_of_closures.create ~closure_elements Heap (* XXXXX *) function_decls,
+      dacc,
+      code_id,
+      code )
   in
   let apply_cont =
     Apply_cont.create apply_continuation ~args:[Simple.var wrapper_var] ~dbg

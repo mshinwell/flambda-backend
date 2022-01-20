@@ -218,3 +218,6 @@ val prove_select_closure_simple :
   Simple.t proof
 
 val prove_rec_info : Typing_env.t -> Type_grammar.t -> Rec_info_expr.t proof
+
+val prove_alloc_mode_of_boxed_number :
+  Typing_env.t -> Type_grammar.t -> Alloc_mode.t Or_unknown.t

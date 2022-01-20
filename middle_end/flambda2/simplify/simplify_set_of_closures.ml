@@ -191,7 +191,7 @@ end = struct
               T.exactly_this_closure closure_id ~all_function_decls_in_set
                 ~all_closures_in_set:closure_types_via_aliases
                 ~all_closure_vars_in_set:closure_element_types_inside_function
-                (Set_of_closures.alloc_mode set_of_closures))
+                (Known (Set_of_closures.alloc_mode set_of_closures)))
             all_function_decls_in_set)
         all_sets_of_closures
         (List.combine closure_types_via_aliases_all_sets
@@ -864,7 +864,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
               ~all_function_decls_in_set:fun_types
               ~all_closures_in_set:closure_types_via_aliases
               ~all_closure_vars_in_set:closure_element_types
-              (Set_of_closures.alloc_mode set_of_closures)
+              (Known (Set_of_closures.alloc_mode set_of_closures))
           in
           Bound_name.Map.add bound_name closure_type closure_types)
       fun_types Bound_name.Map.empty

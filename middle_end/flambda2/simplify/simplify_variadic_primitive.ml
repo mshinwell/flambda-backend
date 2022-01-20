@@ -51,12 +51,17 @@ let simplify_make_block_of_values dacc prim dbg tag ~shape
   let ty =
     match mutable_or_immutable with
     | Immutable ->
-      T.immutable_block ~is_unique:false tag ~field_kind:K.value ~fields
+      T.immutable_block ~is_unique:false tag ~field_kind:K.value
+        (Known alloc_mode) ~fields
     | Immutable_unique ->
-      T.immutable_block ~is_unique:true tag ~field_kind:K.value ~fields
+      T.immutable_block ~is_unique:true tag ~field_kind:K.value
+        (Known alloc_mode) ~fields
     | Mutable -> T.any_value
   in
   let dacc = DA.add_variable dacc result_var ty in
+  (* CR mshinwell: here and in the next function, should we be adding CSE
+     equations, like we do for unboxing boxed numbers? (see
+     Simplify_unary_primitive) *)
   Simplified_named.reachable term ~try_reify:true, dacc
 
 let simplify_make_block_of_floats dacc _prim dbg
@@ -82,10 +87,10 @@ let simplify_make_block_of_floats dacc _prim dbg
     match mutable_or_immutable with
     | Immutable ->
       T.immutable_block ~is_unique:false tag ~field_kind:K.naked_float
-        alloc_mode ~fields
+        (Known alloc_mode) ~fields
     | Immutable_unique ->
-      T.immutable_block ~is_unique:true tag ~field_kind:K.naked_float alloc_mode
-        ~fields
+      T.immutable_block ~is_unique:true tag ~field_kind:K.naked_float
+        (Known alloc_mode) ~fields
     | Mutable -> T.any_value
   in
   let dacc = DA.add_variable dacc result_var ty in
@@ -181,9 +186,9 @@ let simplify_make_array dacc dbg (array_kind : P.Array_kind.t)
 let simplify_variadic_primitive dacc _original_prim
     (prim : P.variadic_primitive) ~args_with_tys dbg ~result_var =
   match prim with
-  | Make_block (Values (tag, shape), mutable_or_immutable) ->
+  | Make_block (Values (tag, shape), mutable_or_immutable, alloc_mode) ->
     simplify_make_block_of_values dacc prim dbg tag ~shape ~mutable_or_immutable
-      args_with_tys ~result_var
+      alloc_mode args_with_tys ~result_var
   | Make_block (Naked_floats, mutable_or_immutable, alloc_mode) ->
     simplify_make_block_of_floats dacc prim dbg ~mutable_or_immutable alloc_mode
       args_with_tys ~result_var

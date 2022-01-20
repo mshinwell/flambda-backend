@@ -24,6 +24,10 @@ val newer_version_of : t -> Code_id.t option
 
 val params_arity : t -> Flambda_arity.With_subkinds.t
 
+val num_leading_heap_params : t -> int
+
+val num_trailing_local_params : t -> int
+
 val result_arity : t -> Flambda_arity.With_subkinds.t
 
 val result_types : t -> Result_types.t
@@ -52,6 +56,7 @@ val create :
   Code_id.t ->
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
+  num_trailing_local_params:int ->
   result_arity:Flambda_arity.With_subkinds.t ->
   result_types:Result_types.t ->
   stub:bool ->

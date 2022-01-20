@@ -144,6 +144,7 @@ and make_optimistic_fields ~add_tag_to_name ~depth tenv param_type (tag : Tag.t)
   in
   let shape =
     T.immutable_block ~is_unique:false tag ~field_kind ~fields:field_types
+      Unknown
   in
   let env_extension =
     match T.meet tenv param_type shape with

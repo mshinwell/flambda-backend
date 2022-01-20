@@ -476,7 +476,7 @@ let set_of_closures env fun_decls closure_elements =
     in
     List.map convert closure_elements |> Var_within_closure.Map.of_list
   in
-  Set_of_closures.create fun_decls ~closure_elements
+  Set_of_closures.create ~closure_elements Heap fun_decls
 
 let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =
@@ -488,7 +488,9 @@ let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
              Push { exn_handler }
            | Pop { exn_handler; raise_kind } ->
              let exn_handler, _ = find_cont env exn_handler in
-             Pop { exn_handler; raise_kind })
+             Pop { exn_handler; raise_kind }
+           | Begin_region -> Begin_region
+           | End_region -> End_region)
   in
   let c, arity = find_cont env cont in
   (if List.length args <> arity

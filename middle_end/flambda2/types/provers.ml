@@ -880,3 +880,16 @@ let prove_rec_info env t : Rec_info_expr.t proof =
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ ->
     wrong_kind ()
+
+let prove_alloc_mode_of_boxed_number env t : Alloc_mode.t Or_unknown.t =
+  match expand_head env t with
+  | Value (Ok (Boxed_float (_, alloc_mode)))
+  | Value (Ok (Boxed_int32 (_, alloc_mode)))
+  | Value (Ok (Boxed_int64 (_, alloc_mode)))
+  | Value (Ok (Boxed_nativeint (_, alloc_mode))) ->
+    alloc_mode
+  | Value (Ok (Variant _ | String _ | Array _ | Closures _))
+  | Value (Unknown | Bottom)
+  | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Rec_info _ ->
+    Unknown

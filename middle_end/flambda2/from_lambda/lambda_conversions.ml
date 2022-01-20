@@ -28,7 +28,7 @@ let check_float_array_optimisation_enabled () =
       "[Pgenarray] is not expected when the float array optimisation is \
        disabled"
 
-let alloc_mode (mode : L.alloc_mode) : P.Alloc_mode.t =
+let alloc_mode (mode : L.alloc_mode) : Alloc_mode.t =
   match mode with Alloc_heap -> Heap | Alloc_local -> Heap
 
 let rec value_kind (vk : L.value_kind) =

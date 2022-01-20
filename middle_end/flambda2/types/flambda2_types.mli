@@ -340,23 +340,28 @@ val any_rec_info : t
     constants. *)
 val this_tagged_immediate : Targetint_31_63.t -> t
 
-val this_boxed_float : Numeric_types.Float_by_bit_pattern.t -> t
+val this_boxed_float :
+  Numeric_types.Float_by_bit_pattern.t -> Alloc_mode.t Or_unknown.t -> t
 
-val this_boxed_int32 : Numeric_types.Int32.t -> t
+val this_boxed_int32 : Numeric_types.Int32.t -> Alloc_mode.t Or_unknown.t -> t
 
-val this_boxed_int64 : Numeric_types.Int64.t -> t
+val this_boxed_int64 : Numeric_types.Int64.t -> Alloc_mode.t Or_unknown.t -> t
 
-val this_boxed_nativeint : Targetint_32_64.t -> t
+val this_boxed_nativeint : Targetint_32_64.t -> Alloc_mode.t Or_unknown.t -> t
 
 val these_tagged_immediates : Targetint_31_63.Set.t -> t
 
-val these_boxed_floats : Numeric_types.Float_by_bit_pattern.Set.t -> t
+val these_boxed_floats :
+  Numeric_types.Float_by_bit_pattern.Set.t -> Alloc_mode.t Or_unknown.t -> t
 
-val these_boxed_int32s : Numeric_types.Int32.Set.t -> t
+val these_boxed_int32s :
+  Numeric_types.Int32.Set.t -> Alloc_mode.t Or_unknown.t -> t
 
-val these_boxed_int64s : Numeric_types.Int64.Set.t -> t
+val these_boxed_int64s :
+  Numeric_types.Int64.Set.t -> Alloc_mode.t Or_unknown.t -> t
 
-val these_boxed_nativeints : Targetint_32_64.Set.t -> t
+val these_boxed_nativeints :
+  Targetint_32_64.Set.t -> Alloc_mode.t Or_unknown.t -> t
 
 (** Building of types representing untagged / unboxed values from specified
     constants. *)
@@ -382,21 +387,25 @@ val these_naked_int64s : Numeric_types.Int64.Set.t -> t
 
 val these_naked_nativeints : Targetint_32_64.Set.t -> t
 
-val boxed_float_alias_to : naked_float:Variable.t -> t
+val boxed_float_alias_to :
+  naked_float:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_int32_alias_to : naked_int32:Variable.t -> t
+val boxed_int32_alias_to :
+  naked_int32:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_int64_alias_to : naked_int64:Variable.t -> t
+val boxed_int64_alias_to :
+  naked_int64:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val boxed_nativeint_alias_to : naked_nativeint:Variable.t -> t
+val boxed_nativeint_alias_to :
+  naked_nativeint:Variable.t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_float : t -> Alloc_mode.t -> t
+val box_float : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_int32 : t -> Alloc_mode.t -> t
+val box_int32 : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_int64 : t -> Alloc_mode.t -> t
+val box_int64 : t -> Alloc_mode.t Or_unknown.t -> t
 
-val box_nativeint : t -> Alloc_mode.t -> t
+val box_nativeint : t -> Alloc_mode.t Or_unknown.t -> t
 
 val tagged_immediate_alias_to : naked_immediate:Variable.t -> t
 
@@ -413,7 +422,7 @@ val immutable_block :
   is_unique:bool ->
   Tag.t ->
   field_kind:Flambda_kind.t ->
-  Alloc_mode.t ->
+  Alloc_mode.t Or_unknown.t ->
   fields:t list ->
   t
 
@@ -424,14 +433,13 @@ val immutable_block_with_size_at_least :
   tag:Tag.t Or_unknown.t ->
   n:Targetint_31_63.Imm.t ->
   field_kind:Flambda_kind.t ->
-  Alloc_mode.t ->
   field_n_minus_one:Variable.t ->
   t
 
 val variant :
   const_ctors:t ->
   non_const_ctors:t list Tag.Scannable.Map.t ->
-  Alloc_mode.t ->
+  Alloc_mode.t Or_unknown.t ->
   t
 
 val open_variant_from_const_ctors_type : const_ctors:t -> t
@@ -449,7 +457,7 @@ val exactly_this_closure :
     Function_type.t Or_unknown_or_bottom.t Closure_id.Map.t ->
   all_closures_in_set:t Closure_id.Map.t ->
   all_closure_vars_in_set:flambda_type Var_within_closure.Map.t ->
-  Alloc_mode.t ->
+  Alloc_mode.t Or_unknown.t ->
   flambda_type
 
 val at_least_the_closures_with_ids :
@@ -672,6 +680,9 @@ val prove_select_closure_simple :
   Simple.t proof
 
 val prove_rec_info : Typing_env.t -> t -> Rec_info_expr.t proof
+
+val prove_alloc_mode_of_boxed_number :
+  Typing_env.t -> t -> Alloc_mode.t Or_unknown.t
 
 type var_or_symbol_or_tagged_immediate = private
   | Var of Variable.t

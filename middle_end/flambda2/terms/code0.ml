@@ -32,6 +32,12 @@ let newer_version_of t = Code_metadata.newer_version_of t.code_metadata
 
 let params_arity t = Code_metadata.params_arity t.code_metadata
 
+let num_leading_heap_params t =
+  Code_metadata.num_leading_heap_params t.code_metadata
+
+let num_trailing_local_params t =
+  Code_metadata.num_trailing_local_params t.code_metadata
+
 let result_arity t = Code_metadata.result_arity t.code_metadata
 
 let result_types t = Code_metadata.result_types t.code_metadata
@@ -68,10 +74,10 @@ let check_free_names_of_params_and_body ~print_function_params_and_body code_id
       print_function_params_and_body params_and_body
 
 let create ~print_function_params_and_body code_id ~params_and_body
-    ~free_names_of_params_and_body ~newer_version_of ~params_arity ~result_arity
-    ~result_types ~stub ~(inline : Inline_attribute.t) ~is_a_functor ~recursive
-    ~cost_metrics ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used
-    ~inlining_decision =
+    ~free_names_of_params_and_body ~newer_version_of ~params_arity
+    ~num_trailing_local_params ~result_arity ~result_types ~stub
+    ~(inline : Inline_attribute.t) ~is_a_functor ~recursive ~cost_metrics
+    ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used ~inlining_decision =
   begin
     match stub, inline with
     | true, (Available_inline | Never_inline | Default_inline)
@@ -86,9 +92,10 @@ let create ~print_function_params_and_body code_id ~params_and_body
   check_free_names_of_params_and_body ~print_function_params_and_body code_id
     ~params_and_body ~free_names_of_params_and_body;
   let code_metadata =
-    Code_metadata.create code_id ~newer_version_of ~params_arity ~result_arity
-      ~result_types ~stub ~inline ~is_a_functor ~recursive ~cost_metrics
-      ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used ~inlining_decision
+    Code_metadata.create code_id ~newer_version_of ~params_arity
+      ~num_trailing_local_params ~result_arity ~result_types ~stub ~inline
+      ~is_a_functor ~recursive ~cost_metrics ~inlining_arguments ~dbg ~is_tupled
+      ~is_my_closure_used ~inlining_decision
   in
   { params_and_body; free_names_of_params_and_body; code_metadata }
 

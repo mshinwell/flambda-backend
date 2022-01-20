@@ -51,10 +51,7 @@ and head_of_kind_value = private
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
   | Boxed_int64 of t * Alloc_mode.t Or_unknown.t
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
-  | Closures of
-      { by_closure_id : row_like_for_closures;
-        alloc_mode : Alloc_mode.t Or_unknown.t
-      }
+  | Closures of { by_closure_id : row_like_for_closures }
   | String of String_info.Set.t
   | Array of
       { element_kind : Flambda_kind.With_subkind.t Or_unknown.t;
@@ -118,7 +115,9 @@ and int_indexed_product = private
 
 and function_type = private
   { code_id : Code_id.t;
-    rec_info : t
+    rec_info : t;
+    closure_alloc_mode : Alloc_mode.t Or_unknown.t;
+    can_allocate_in_caller's_region : bool Or_unknown.t
   }
 
 and env_extension = private { equations : t Name.Map.t } [@@unboxed]
