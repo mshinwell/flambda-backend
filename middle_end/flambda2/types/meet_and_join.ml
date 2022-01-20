@@ -64,11 +64,10 @@ let meet_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
   | Unknown, Unknown -> Unknown
   | Known Heap, Known Heap -> Known Heap
   | Known Local, Known Local -> Known Local
-  | Known Heap, Known Local
-  | Known Local, Known Heap
-  | Unknown, Known _
-  | Known _, Unknown ->
-    Unknown
+  (* XXX not sure this is correct really *)
+  | Known Heap, Known Local | Known Local, Known Heap -> Unknown
+  | Unknown, Known _ -> alloc_mode2
+  | Known _, Unknown -> alloc_mode1
 
 let join_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
     (alloc_mode2 : Alloc_mode.t Or_unknown.t) : Alloc_mode.t Or_unknown.t =

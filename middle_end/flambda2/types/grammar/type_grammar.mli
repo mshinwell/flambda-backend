@@ -517,6 +517,7 @@ module Head_of_kind_value : sig
     Alloc_mode.t Or_unknown.t ->
     t
 
+  (* XXX these alloc mode params should probably be labelled *)
   val create_boxed_float : flambda_type -> Alloc_mode.t Or_unknown.t -> t
 
   val create_boxed_int32 : flambda_type -> Alloc_mode.t Or_unknown.t -> t

@@ -455,7 +455,8 @@ let prove_is_a_boxed_number env t :
     Flambda_kind.Boxable_number.t proof_allowing_kind_mismatch =
   match expand_head env t with
   | Value Unknown -> Unknown
-  | Value (Ok (Variant { blocks; immediates; is_unique = _ })) -> begin
+  | Value (Ok (Variant { blocks; immediates; is_unique = _; alloc_mode = _ }))
+    -> begin
     match blocks, immediates with
     | Unknown, Unknown -> Unknown
     | Unknown, Known imms -> if is_bottom env imms then Invalid else Unknown
@@ -528,7 +529,9 @@ let prove_boxed_floats env t : _ proof =
   let result_var' = Bound_var.create result_var Name_mode.normal in
   let result_simple = Simple.var result_var in
   let result_kind = K.naked_float in
-  let shape = TG.box_float (TG.alias_type_of result_kind result_simple) in
+  let shape =
+    TG.box_float (TG.alias_type_of result_kind result_simple) Unknown
+  in
   match
     Meet_and_join.meet_shape env t ~shape ~result_var:result_var' ~result_kind
   with
@@ -550,7 +553,9 @@ let prove_boxed_int32s env t : _ proof =
   let result_var' = Bound_var.create result_var Name_mode.normal in
   let result_simple = Simple.var result_var in
   let result_kind = K.naked_int32 in
-  let shape = TG.box_int32 (TG.alias_type_of result_kind result_simple) in
+  let shape =
+    TG.box_int32 (TG.alias_type_of result_kind result_simple) Unknown
+  in
   match
     Meet_and_join.meet_shape env t ~shape ~result_var:result_var' ~result_kind
   with
@@ -572,7 +577,9 @@ let prove_boxed_int64s env t : _ proof =
   let result_var' = Bound_var.create result_var Name_mode.normal in
   let result_simple = Simple.var result_var in
   let result_kind = K.naked_int64 in
-  let shape = TG.box_int64 (TG.alias_type_of result_kind result_simple) in
+  let shape =
+    TG.box_int64 (TG.alias_type_of result_kind result_simple) Unknown
+  in
   match
     Meet_and_join.meet_shape env t ~shape ~result_var:result_var' ~result_kind
   with
@@ -594,7 +601,9 @@ let prove_boxed_nativeints env t : _ proof =
   let result_var' = Bound_var.create result_var Name_mode.normal in
   let result_simple = Simple.var result_var in
   let result_kind = K.naked_nativeint in
-  let shape = TG.box_nativeint (TG.alias_type_of result_kind result_simple) in
+  let shape =
+    TG.box_nativeint (TG.alias_type_of result_kind result_simple) Unknown
+  in
   match
     Meet_and_join.meet_shape env t ~shape ~result_var:result_var' ~result_kind
   with
@@ -657,7 +666,8 @@ let prove_is_tagging_of_simple ~prove_function env ~min_name_mode t :
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
   match expand_head env t with
-  | Value (Ok (Variant { immediates; blocks; is_unique = _ })) -> begin
+  | Value (Ok (Variant { immediates; blocks; is_unique = _; alloc_mode = _ }))
+    -> begin
     match blocks with
     | Unknown -> Unknown
     | Known blocks -> (
@@ -726,7 +736,7 @@ let prove_boxed_float_containing_simple =
   prove_boxed_number_containing_simple
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
-      | Boxed_float ty -> Some ty
+      | Boxed_float (ty, _) -> Some ty
       | Variant _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
       | Closures _ | String _ | Array _ ->
         None)
@@ -735,7 +745,7 @@ let prove_boxed_int32_containing_simple =
   prove_boxed_number_containing_simple
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
-      | Boxed_int32 ty -> Some ty
+      | Boxed_int32 (ty, _) -> Some ty
       | Variant _ | Boxed_float _ | Boxed_int64 _ | Boxed_nativeint _
       | Closures _ | String _ | Array _ ->
         None)
@@ -744,7 +754,7 @@ let prove_boxed_int64_containing_simple =
   prove_boxed_number_containing_simple
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
-      | Boxed_int64 ty -> Some ty
+      | Boxed_int64 (ty, _) -> Some ty
       | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_nativeint _
       | Closures _ | String _ | Array _ ->
         None)
@@ -753,7 +763,7 @@ let prove_boxed_nativeint_containing_simple =
   prove_boxed_number_containing_simple
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
-      | Boxed_nativeint ty -> Some ty
+      | Boxed_nativeint (ty, _) -> Some ty
       | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Closures _
       | String _ | Array _ ->
         None)
@@ -764,7 +774,8 @@ let[@inline] prove_block_field_simple_aux env ~min_name_mode t get_field :
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
   match expand_head env t with
-  | Value (Ok (Variant { immediates; blocks; is_unique = _ })) -> begin
+  | Value (Ok (Variant { immediates; blocks; is_unique = _; alloc_mode = _ }))
+    -> begin
     match immediates with
     | Unknown -> Unknown
     | Known imms -> begin
@@ -815,7 +826,7 @@ let prove_select_closure_simple env ~min_name_mode t closure_id : Simple.t proof
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
   match expand_head env t with
-  | Value (Ok (Closures { by_closure_id })) -> (
+  | Value (Ok (Closures { by_closure_id; alloc_mode = _ })) -> (
     match TG.Row_like_for_closures.get_closure by_closure_id closure_id with
     | Unknown -> Unknown
     | Known ty -> begin
@@ -839,7 +850,7 @@ let prove_project_var_simple env ~min_name_mode t env_var : Simple.t proof =
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
   in
   match expand_head env t with
-  | Value (Ok (Closures { by_closure_id })) -> (
+  | Value (Ok (Closures { by_closure_id; alloc_mode = _ })) -> (
     match TG.Row_like_for_closures.get_env_var by_closure_id env_var with
     | Unknown -> Unknown
     | Known ty -> begin

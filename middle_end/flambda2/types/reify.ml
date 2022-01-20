@@ -55,7 +55,7 @@ type reification_result =
 let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
     ?disallowed_free_vars ?(allow_unique = false) env ~min_name_mode t :
     reification_result =
-  let var_allowed (alloc_mode : Alloc_mode.t) var =
+  let var_allowed (alloc_mode : Alloc_mode.t Or_unknown.t) var =
     (* XXX revise and expand this fairly important comment *)
     (* For the moment we don't lift if the allocation mode is [Local] and any
        variables would be involved in the definition of the statically-allocated
@@ -72,8 +72,8 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
        propagates the allocation modes (and if it loses information there, we
        won't lift). *)
     match alloc_mode with
-    | Local -> false
-    | Heap -> (
+    | Unknown | Known Local -> false
+    | Known Heap -> (
       match allowed_if_free_vars_defined_in with
       | None -> false
       | Some allowed_if_free_vars_defined_in -> (
@@ -147,7 +147,9 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
                            fields have coercions. *)
                         None
                       | Proved (Var var, _) ->
-                        if var_allowed var then Some (Var var) else None
+                        if var_allowed alloc_mode var
+                        then Some (Var var)
+                        else None
                       | Proved (Symbol sym, _) -> Some (Symbol sym)
                       | Proved (Tagged_immediate imm, _) ->
                         Some (Tagged_immediate imm)
@@ -162,7 +164,7 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
                   Lift
                     (Immutable_block
                        { tag;
-                         is_unique = blocks_imms.is_unique;
+                         is_unique;
                          fields = vars_or_symbols_or_tagged_immediates
                        })
                 else try_canonical_simple ())
@@ -219,7 +221,7 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
                           closure_var_type
                       with
                       | Proved (Var var, coercion) ->
-                        if var_allowed var
+                        if var_allowed alloc_mode var
                         then
                           Some (Simple.with_coercion (Simple.var var) coercion)
                         else None
