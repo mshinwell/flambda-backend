@@ -146,6 +146,7 @@ module Init_or_assign : sig
   type t =
     | Initialization
     | Assignment
+    | Local_assignment
 
   val to_lambda : t -> Lambda.initialization_or_assignment
 end

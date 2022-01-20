@@ -438,7 +438,7 @@ let unary_primitive env dbg f arg =
       match kind with Untagged_immediate -> Some (Env.Untag arg) | _ -> None
     in
     extra, C.unbox_number ~dbg kind arg
-  | Box_number kind -> None, C.box_number ~dbg kind arg
+  | Box_number (kind, alloc_mode) -> None, C.box_number ~dbg kind alloc_mode arg
   | Select_closure { move_from = c1; move_to = c2 } -> begin
     match Env.closure_offset env c1, Env.closure_offset env c2 with
     | Some { offset = c1_offset; _ }, Some { offset = c2_offset; _ } ->
@@ -501,8 +501,10 @@ let ternary_primitive _env dbg f x y z =
 
 let variadic_primitive _env dbg f args =
   match (f : Flambda_primitive.variadic_primitive) with
-  | Make_block (kind, _mut) -> C.make_block ~dbg kind args
-  | Make_array (kind, _mut) -> C.make_array ~dbg kind args
+  | Make_block (kind, _mut, alloc_mode) ->
+    C.make_block ~dbg kind alloc_mode args
+  | Make_array (kind, _mut, alloc_mode) ->
+    C.make_array ~dbg kind alloc_mode args
 
 let arg_list env l =
   let aux (list, env, effs) x =
@@ -1192,11 +1194,19 @@ and apply_cont_ret env res e k = function
     let wrap, _ = Env.flush_delayed_lets env in
     match Apply_cont_expr.trap_action e with
     | None -> wrap ret, res
-    | Some (Pop _) -> wrap (C.trap_return ret [Cmm.Pop]), res
-    | Some (Push _) ->
+    | Some (Pop _) ->
+      (* A [Pop] trap action always implies an [End_region] trap action. *)
+      ( wrap
+          (C.sequence
+             (Cmm.Cop (Cendregion, [], Apply_cont_expr.debuginfo e))
+             (C.trap_return ret [Cmm.Pop])),
+        res )
+    | Some End_region ->
+      wrap (Cmm.Cop (Cendregion, [], Apply_cont_expr.debuginfo e)), res
+    | Some (Push _ | Begin_region) ->
       Misc.fatal_errorf
-        "Continuation %a (return cont) should not be applied with a push trap \
-         action"
+        "Continuation %a (return cont) should not be applied with a [Push] or \
+         [Begin_region] trap action"
         Continuation.print k)
   | _ ->
     (* TODO: add support using unboxed tuples *)
@@ -1439,7 +1449,7 @@ and let_dynamic_set_of_closures env res body closure_vars
   let l, env, effs =
     fill_layout decl_map layout.startenv elts env effs [] 0 layout.slots
   in
-  let csoc = C.make_closure_block l in
+  let csoc = C.make_closure_block Heap l in
   (* Create a variable to hold the set of closure *)
   let soc_var = Variable.create "*set_of_closures*" in
   let env = Env.bind_variable env soc_var effs false csoc in

@@ -903,6 +903,7 @@ let make_alloc_generic ~mode set_fn dbg tag wordsize args =
          fill_fields 1 args)
   end
 
+(* CR mshinwell: This optional argument is fragile *)
 let make_alloc ?(mode=Lambda.Alloc_heap) dbg tag args =
   let addr_array_init arr ofs newval dbg =
     Cop(Cextcall { func = "caml_initialize"; ty = typ_void; alloc = false;

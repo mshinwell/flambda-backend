@@ -107,6 +107,12 @@ let sequence x y =
   | _, Cmm.Ctuple [] -> x
   | _, _ -> Cmm.Csequence (x, y)
 
+(* Allocation modes *)
+
+let convert_alloc_mode (alloc_mode : Flambda_primitive.Alloc_mode.t) :
+    Lambda.alloc_mode =
+  match alloc_mode with Heap -> Alloc_heap | Local -> Alloc_local
+
 (* Boxing/unboxing *)
 
 let primitive_boxed_int_of_standard_int b =
@@ -132,16 +138,16 @@ let unbox_number ?(dbg = Debuginfo.none) kind arg =
     let primitive_kind = primitive_boxed_int_of_boxable_number kind in
     unbox_int dbg primitive_kind arg
 
-let box_number ?(dbg = Debuginfo.none) kind arg =
+let box_number ?(dbg = Debuginfo.none) kind alloc_mode arg =
   match (kind : Flambda_kind.Boxable_number.t) with
   | Naked_float -> box_float dbg Alloc_heap arg
   | Untagged_immediate -> tag_int arg dbg
   | _ ->
     let primitive_kind = primitive_boxed_int_of_boxable_number kind in
-    box_int_gen dbg primitive_kind Alloc_heap arg
+    box_int_gen dbg primitive_kind (convert_alloc_mode alloc_mode) arg
 
-let box_int64 ?dbg arg =
-  box_number ?dbg Flambda_kind.Boxable_number.Naked_int64 arg
+let box_int64 ?dbg alloc_mode arg =
+  box_number ?dbg Flambda_kind.Boxable_number.Naked_int64 alloc_mode arg
 
 (* Constructors for operations *)
 
@@ -316,22 +322,36 @@ let check_alloc_fields = function
        be lifted so they can be statically allocated)"
   | _ -> ()
 
-let make_array ?(dbg = Debuginfo.none) kind args =
+let make_array ?(dbg = Debuginfo.none) kind alloc_mode args =
   check_alloc_fields args;
   match (kind : Flambda_primitive.Array_kind.t) with
-  | Immediates | Values -> make_alloc dbg 0 args
-  | Naked_floats -> make_float_alloc dbg (Tag.to_int Tag.double_array_tag) args
+  | Immediates | Values ->
+    make_alloc ~mode:(convert_alloc_mode alloc_mode) dbg 0 args
+  | Naked_floats ->
+    make_float_alloc
+      ~mode:(convert_alloc_mode alloc_mode)
+      dbg
+      (Tag.to_int Tag.double_array_tag)
+      args
 
-let make_block ?(dbg = Debuginfo.none) kind args =
+let make_block ?(dbg = Debuginfo.none) kind alloc_mode args =
   check_alloc_fields args;
   match (kind : Flambda_primitive.Block_kind.t) with
-  | Values (tag, _) -> make_alloc dbg (Tag.Scannable.to_int tag) args
-  | Naked_floats -> make_float_alloc dbg (Tag.to_int Tag.double_array_tag) args
+  | Values (tag, _) ->
+    make_alloc
+      ~mode:(convert_alloc_mode alloc_mode)
+      dbg (Tag.Scannable.to_int tag) args
+  | Naked_floats ->
+    make_float_alloc
+      ~mode:(convert_alloc_mode alloc_mode)
+      dbg
+      (Tag.to_int Tag.double_array_tag)
+      args
 
-let make_closure_block ?(dbg = Debuginfo.none) l =
+let make_closure_block ?(dbg = Debuginfo.none) alloc_mode l =
   assert (List.compare_length_with l 0 > 0);
   let tag = Tag.(to_int closure_tag) in
-  make_alloc dbg tag l
+  make_alloc ~mode:(convert_alloc_mode alloc_mode) dbg tag l
 
 (* Block access *)
 
@@ -379,6 +399,9 @@ let addr_array_store init arr index value dbg =
   match (init : P.Init_or_assign.t) with
   | Assignment -> addr_array_set arr index value dbg
   | Initialization -> addr_array_initialize arr index value dbg
+  | Local_assignment ->
+    (* XXX what should happen here? *)
+    addr_array_set arr index value dbg
 
 let array_set ?(dbg = Debuginfo.none) (kind : P.Array_kind.t)
     (init : P.Init_or_assign.t) arr index value =

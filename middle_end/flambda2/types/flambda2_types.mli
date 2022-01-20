@@ -410,7 +410,12 @@ val any_block : t
 
 (** The type of an immutable block with a known tag, size and field types. *)
 val immutable_block :
-  is_unique:bool -> Tag.t -> field_kind:Flambda_kind.t -> fields:t list -> t
+  is_unique:bool ->
+  Tag.t ->
+  field_kind:Flambda_kind.t ->
+  Alloc_mode.t ->
+  fields:t list ->
+  t
 
 (** The type of an immutable block with at least [n] fields and an unknown tag.
     The type of the [n - 1]th field is taken to be an [Equals] to the given

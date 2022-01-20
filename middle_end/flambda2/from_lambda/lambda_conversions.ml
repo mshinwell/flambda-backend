@@ -192,7 +192,7 @@ let convert_init_or_assign (i_or_a : L.initialization_or_assignment) :
   | Heap_initialization -> Initialization
   | Root_initialization ->
     Misc.fatal_error "[Root_initialization] should not appear in Flambda input"
-  | Local_assignment -> local_unsupported ()
+  | Local_assignment -> Local_assignment
 
 type converted_array_kind =
   | Array_kind of P.Array_kind.t

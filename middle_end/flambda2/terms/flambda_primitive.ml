@@ -271,12 +271,14 @@ module Init_or_assign = struct
   type t =
     | Initialization
     | Assignment
+    | Local_assignment
 
   let [@ocamlformat "disable"] print ppf t =
     let fprintf = Format.fprintf in
     match t with
     | Initialization -> fprintf ppf "Init"
     | Assignment -> fprintf ppf "Assign"
+    | Local_assignment -> fprintf ppf "Local_assign"
 
   let compare = Stdlib.compare
 
@@ -284,6 +286,7 @@ module Init_or_assign = struct
     match t with
     | Initialization -> Heap_initialization
     | Assignment -> Assignment
+    | Local_assignment -> Local_assignment
 end
 
 type array_like_operation =
