@@ -342,6 +342,7 @@ and lfunction =
     mode : alloc_mode;     (* alloc mode of the closure itself *)
     region : bool;         (* false if this function may locally
                               allocate in the caller's region *)
+    (* CR mshinwell: improve comment for [region] *)
   }
 
 and lambda_apply =
