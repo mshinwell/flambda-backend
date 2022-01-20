@@ -793,6 +793,15 @@ let addr_array_set arr ofs newval dbg =
                  ty_args = []},
       [array_indexing log2_size_addr arr ofs dbg; newval], dbg)
 
+let addr_array_set_local arr ofs newval dbg =
+  Cop(Cextcall { func = "caml_modify_local"; ty = typ_void; alloc = false;
+                 builtin = false;
+                 returns = true;
+                 effects = Arbitrary_effects;
+                 coeffects = Has_coeffects;
+                 ty_args = []},
+      [arr; untag_int ofs dbg; newval], dbg)
+
 let addr_array_initialize arr ofs newval dbg =
   Cop(Cextcall { func = "caml_initialize";
                  builtin = false;
@@ -903,6 +912,7 @@ let make_alloc_generic ~mode set_fn dbg tag wordsize args =
          fill_fields 1 args)
   end
 
+(* CR mshinwell: This optional argument is fragile *)
 let make_alloc ?(mode=Lambda.Alloc_heap) dbg tag args =
   let addr_array_init arr ofs newval dbg =
     Cop(Cextcall { func = "caml_initialize"; ty = typ_void; alloc = false;
@@ -2265,8 +2275,7 @@ let curry_function = function
   | Lambda.Tupled, n ->
      assert (n > 0); [tuplify_function n]
   | Lambda.Curried {nlocal}, n ->
-     assert (n > 0);
-     intermediate_curry_functions ~nlocal ~arity:n 0
+     assert (n > 0); intermediate_curry_functions ~nlocal ~arity:n 0
 
 module ApplyFnSet =
   Set.Make (struct type t = int * Lambda.alloc_mode let compare = compare end)
@@ -2289,7 +2298,8 @@ let generic_functions shared units =
   let apply = if shared then apply else ApplyFnSet.union apply default_apply in
   let accu = ApplyFnSet.fold (fun nr accu -> apply_function nr :: accu) apply [] in
   let accu = ApplyFnSet.fold (fun nr accu -> send_function nr :: accu) send accu in
-  AritySet.fold (fun arity accu -> curry_function arity @ accu) curry accu
+  AritySet.fold (fun arity accu ->
+    curry_function arity @ accu) curry accu
 
 (* Primitives *)
 
@@ -2650,9 +2660,7 @@ let setfield_computed ptr init arg1 arg2 arg3 dbg =
   | Caml_modify ->
       return_unit dbg (addr_array_set arg1 arg2 arg3 dbg)
   | Caml_modify_local ->
-      (* TODO: support this, if there are any uses.
-         (Currently, setfield_computed is only used by classes) *)
-      Misc.fatal_error "setfield_computed: local"
+      return_unit dbg (addr_array_set_local arg1 arg2 arg3 dbg)
   | Simple ->
       return_unit dbg (int_array_set arg1 arg2 arg3 dbg)
 
