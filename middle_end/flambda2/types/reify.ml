@@ -379,7 +379,8 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
     | Naked_int32 Bottom
     | Naked_int64 Bottom
     | Naked_nativeint Bottom
-    | Rec_info Bottom ->
+    | Rec_info Bottom
+    | Region Bottom ->
       Invalid
     | Value Unknown
     | Value (Ok (String _))
@@ -389,5 +390,6 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
     | Naked_int64 Unknown
     | Naked_nativeint Unknown
     | Rec_info Unknown
+    | Region (Unknown | Ok _)
     | Rec_info (Ok _) ->
       try_canonical_simple ())

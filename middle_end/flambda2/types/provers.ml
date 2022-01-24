@@ -97,23 +97,31 @@ let prove_equals_to_var_or_symbol_or_tagged_immediate env t :
 
 let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
   match expand_head env t with
-  | Value (Ok (Closures { by_closure_id; alloc_mode })) -> begin
-    match TG.Row_like_for_closures.get_singleton by_closure_id with
-    | None -> Unknown
-    | Some ((closure_id, set_of_closures_contents), closures_entry) -> (
-      let closure_ids =
-        Set_of_closures_contents.closures set_of_closures_contents
-      in
-      assert (Closure_id.Set.mem closure_id closure_ids);
-      let function_type =
-        TG.Closures_entry.find_function_type closures_entry closure_id
-      in
-      match function_type with
-      | Bottom -> Invalid
-      | Unknown -> Unknown
-      | Ok function_type ->
-        Proved (closure_id, alloc_mode, closures_entry, function_type))
-  end
+  | Value (Ok (Closures { by_closure_id; alloc_mode })) -> (
+    let alloc_mode : _ Or_bottom.t =
+      match alloc_mode with
+      | Bottom -> Bottom
+      | Unknown -> Ok Or_unknown.Unknown
+      | Ok alloc_mode -> Ok (Or_unknown.Known alloc_mode)
+    in
+    match alloc_mode with
+    | Bottom -> Invalid
+    | Ok alloc_mode -> (
+      match TG.Row_like_for_closures.get_singleton by_closure_id with
+      | None -> Unknown
+      | Some ((closure_id, set_of_closures_contents), closures_entry) -> (
+        let closure_ids =
+          Set_of_closures_contents.closures set_of_closures_contents
+        in
+        assert (Closure_id.Set.mem closure_id closure_ids);
+        let function_type =
+          TG.Closures_entry.find_function_type closures_entry closure_id
+        in
+        match function_type with
+        | Bottom -> Invalid
+        | Unknown -> Unknown
+        | Ok function_type ->
+          Proved (closure_id, alloc_mode, closures_entry, function_type))))
   | Value (Ok _) -> Invalid
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
@@ -123,6 +131,7 @@ let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
   | Naked_int64 _ -> Wrong_kind
   | Naked_nativeint _ -> Wrong_kind
   | Rec_info _ -> Wrong_kind
+  | Region _ -> Wrong_kind
 
 let prove_single_closures_entry env t : _ proof =
   match prove_single_closures_entry' env t with
@@ -147,6 +156,7 @@ let prove_naked_floats env t : _ proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_naked_int32s env t : _ proof =
   let wrong_kind () =
@@ -162,6 +172,7 @@ let prove_naked_int32s env t : _ proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_naked_int64s env t : _ proof =
   let wrong_kind () =
@@ -177,6 +188,7 @@ let prove_naked_int64s env t : _ proof =
   | Naked_int32 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_naked_nativeints env t : _ proof =
   let wrong_kind () =
@@ -193,6 +205,7 @@ let prove_naked_nativeints env t : _ proof =
   | Naked_int32 _ -> wrong_kind ()
   | Naked_int64 _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_is_int env t : bool proof =
   let wrong_kind () =
@@ -226,6 +239,7 @@ let prove_is_int env t : bool proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_tags_must_be_a_block env t : Tag.Set.t proof =
   let wrong_kind () =
@@ -279,6 +293,7 @@ let prove_tags_must_be_a_block env t : Tag.Set.t proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_naked_immediates env t : Targetint_31_63.Set.t proof =
   let wrong_kind () =
@@ -319,6 +334,7 @@ let prove_naked_immediates env t : Targetint_31_63.Set.t proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_equals_tagged_immediates env t : Targetint_31_63.Set.t proof =
   let wrong_kind () =
@@ -344,6 +360,7 @@ let prove_equals_tagged_immediates env t : Targetint_31_63.Set.t proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_equals_single_tagged_immediate env t : _ proof =
   match prove_equals_tagged_immediates env t with
@@ -386,6 +403,7 @@ let prove_tags_and_sizes env t : Targetint_31_63.Imm.t Tag.Map.t proof =
   | Naked_int64 _ -> wrong_kind ()
   | Naked_nativeint _ -> wrong_kind ()
   | Rec_info _ -> wrong_kind ()
+  | Region _ -> wrong_kind ()
 
 let prove_unique_tag_and_size env t :
     (Tag.t * Targetint_31_63.Imm.t) proof_allowing_kind_mismatch =
@@ -451,6 +469,7 @@ let prove_variant_like env t : variant_like_proof proof_allowing_kind_mismatch =
   | Naked_int64 _ -> Wrong_kind
   | Naked_nativeint _ -> Wrong_kind
   | Rec_info _ -> Wrong_kind
+  | Region _ -> Wrong_kind
 
 let prove_is_a_boxed_number env t :
     Flambda_kind.Boxable_number.t proof_allowing_kind_mismatch =
@@ -631,7 +650,7 @@ let prove_strings env t : String_info.Set.t proof =
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     wrong_kind ()
 
 type array_kind_compatibility =
@@ -654,7 +673,7 @@ let prove_is_array_with_element_kind env t ~element_kind : _ proof =
     else Proved Incompatible
   | Value (Ok _)
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Invalid
 
 type prove_tagging_function =
@@ -705,7 +724,7 @@ let prove_is_tagging_of_simple ~prove_function env ~min_name_mode t :
   | Value Unknown -> Unknown
   | Value _ -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     wrong_kind ()
 
 let prove_is_always_tagging_of_simple =
@@ -730,7 +749,7 @@ let[@inline always] prove_boxed_number_containing_simple
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Kind error: expected [Value]:@ %a" TG.print t
 
 let prove_boxed_float_containing_simple =
@@ -806,7 +825,7 @@ let[@inline] prove_block_field_simple_aux env ~min_name_mode t get_field :
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     wrong_kind ()
 
 let prove_block_field_simple env ~min_name_mode t field_index =
@@ -843,7 +862,7 @@ let prove_select_closure_simple env ~min_name_mode t closure_id : Simple.t proof
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     wrong_kind ()
 
 let prove_project_var_simple env ~min_name_mode t env_var : Simple.t proof =
@@ -867,7 +886,7 @@ let prove_project_var_simple env ~min_name_mode t env_var : Simple.t proof =
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     wrong_kind ()
 
 let prove_rec_info env t : Rec_info_expr.t proof =
@@ -879,7 +898,7 @@ let prove_rec_info env t : Rec_info_expr.t proof =
   | Rec_info Unknown -> Unknown
   | Rec_info Bottom -> Invalid
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ ->
+  | Naked_nativeint _ | Region _ ->
     wrong_kind ()
 
 let prove_alloc_mode_of_boxed_number env t : Alloc_mode.t Or_unknown.t =
@@ -887,10 +906,13 @@ let prove_alloc_mode_of_boxed_number env t : Alloc_mode.t Or_unknown.t =
   | Value (Ok (Boxed_float (_, alloc_mode)))
   | Value (Ok (Boxed_int32 (_, alloc_mode)))
   | Value (Ok (Boxed_int64 (_, alloc_mode)))
-  | Value (Ok (Boxed_nativeint (_, alloc_mode))) ->
-    alloc_mode
+  | Value (Ok (Boxed_nativeint (_, alloc_mode))) -> (
+    (* CR mshinwell: this function should probably have a Bottom return too *)
+    match alloc_mode with
+    | Ok alloc_mode -> Known alloc_mode
+    | Bottom | Unknown -> Unknown)
   | Value (Ok (Variant _ | String _ | Array _ | Closures _))
   | Value (Unknown | Bottom)
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Unknown

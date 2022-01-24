@@ -54,7 +54,7 @@ and head_of_kind_value =
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
         is_unique : bool;
-        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
@@ -62,7 +62,7 @@ and head_of_kind_value =
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
   | Closures of
       { by_closure_id : row_like_for_closures;
-        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
   | String of String_info.Set.t
   | Array of
@@ -654,7 +654,7 @@ and print_row_like :
       is_empty_map_known:('known -> bool) ->
       known:'known ->
       other:('index, 'maps_to) row_like_case Or_bottom.t ->
-      Alloc_mode.t Or_unknown_or_bottom.t ->
+      Alloc_mode.t Or_unknown.t ->
       Format.formatter ->
       unit =
  fun ~print_index ~print_maps_to ~print_known_map ~is_empty_map_known ~known
@@ -685,7 +685,7 @@ and print_row_like :
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(alloc_mode@ %a)@ (known@ %a)@]@ @[<hov 1>(other@ \
        %a)@])@]"
-      (Or_unknown_or_bottom.print Alloc_mode.print)
+      (Or_unknown.print Alloc_mode.print)
       alloc_mode (print_known_map print) known (Or_bottom.print print) other
 
 and print_row_like_for_blocks alloc_mode ppf { known_tags; other_tags } =
@@ -2179,7 +2179,7 @@ let tag_immediate t : t =
             { is_unique = false;
               immediates = Known t;
               blocks = Known Row_like_for_blocks.bottom;
-              alloc_mode = Ok Heap
+              alloc_mode = Known Heap
             }))
   | Value _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
   | Rec_info _ | Region _ ->
@@ -2296,6 +2296,8 @@ let create_from_head_naked_nativeint head = Naked_nativeint (TD.create head)
 
 let create_from_head_rec_info head = Rec_info (TD.create head)
 
+let create_from_head_region head = Region (TD.create head)
+
 module Head_of_kind_value = struct
   type t = head_of_kind_value
 
@@ -2315,7 +2317,7 @@ module Head_of_kind_value = struct
       { is_unique = false;
         immediates = Known (this_naked_immediate imm);
         blocks = Known Row_like_for_blocks.bottom;
-        alloc_mode = Ok Heap
+        alloc_mode = Known Heap
       }
 
   let create_closures by_closure_id alloc_mode =

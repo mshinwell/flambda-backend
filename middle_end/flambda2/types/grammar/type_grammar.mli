@@ -46,7 +46,7 @@ and head_of_kind_value = private
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
         is_unique : bool;
-        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
@@ -54,7 +54,7 @@ and head_of_kind_value = private
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
   | Closures of
       { by_closure_id : row_like_for_closures;
-        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
   | String of String_info.Set.t
   | Array of
@@ -121,7 +121,7 @@ and int_indexed_product = private
 
 and function_type = private
   { code_id : Code_id.t;
-    rec_info : t (* can_allocate_in_caller's_region : bool Or_unknown.t *)
+    rec_info : t
   }
 
 and env_extension = private { equations : t Name.Map.t } [@@unboxed]
