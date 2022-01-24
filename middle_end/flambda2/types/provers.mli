@@ -149,13 +149,19 @@ val prove_is_array_with_element_kind :
 val prove_single_closures_entry :
   Typing_env.t ->
   Type_grammar.t ->
-  (Closure_id.t * Type_grammar.Closures_entry.t * Type_grammar.Function_type.t)
+  (Closure_id.t
+  * Alloc_mode.t Or_unknown.t
+  * Type_grammar.Closures_entry.t
+  * Type_grammar.Function_type.t)
   proof
 
 val prove_single_closures_entry' :
   Typing_env.t ->
   Type_grammar.t ->
-  (Closure_id.t * Type_grammar.Closures_entry.t * Type_grammar.Function_type.t)
+  (Closure_id.t
+  * Alloc_mode.t Or_unknown.t
+  * Type_grammar.Closures_entry.t
+  * Type_grammar.Function_type.t)
   proof_allowing_kind_mismatch
 
 val prove_strings : Typing_env.t -> Type_grammar.t -> String_info.Set.t proof

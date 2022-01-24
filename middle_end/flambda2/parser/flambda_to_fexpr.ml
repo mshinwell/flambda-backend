@@ -900,14 +900,15 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
         else Some closure_id
       in
       Function (Direct { code_id; closure_id })
-    | Function (Indirect_unknown_arity | Indirect_known_arity _) ->
+    | Function (Indirect_unknown_arity _ | Indirect_known_arity _) ->
       Function Indirect
     | C_call { alloc; _ } -> C_call { alloc }
     | Method _ -> Misc.fatal_error "TODO: Method call kind"
   in
   let arities : Fexpr.function_arities option =
     match Apply_expr.call_kind app with
-    | Function (Indirect_known_arity { param_arity; return_arity }) ->
+    | Function
+        (Indirect_known_arity { param_arity; return_arity; alloc_mode = _ }) ->
       let params_arity = Some (arity param_arity) in
       let ret_arity = arity return_arity in
       Some { params_arity; ret_arity }
@@ -929,7 +930,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
         arity (return_arity |> Flambda_arity.With_subkinds.of_arity)
       in
       Some { params_arity; ret_arity }
-    | Function Indirect_unknown_arity | Method _ -> None
+    | Function (Indirect_unknown_arity _) | Method _ -> None
   in
   let inlined =
     if Flambda2_terms.Inlined_attribute.is_default (Apply_expr.inlined app)

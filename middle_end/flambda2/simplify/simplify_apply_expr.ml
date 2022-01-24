@@ -240,7 +240,8 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
 let simplify_direct_partial_application ~simplify_expr dacc apply
     ~callee's_code_id ~callee's_closure_id ~param_arity ~result_arity
     ~result_types ~recursive ~down_to_up ~coming_from_indirect
-    ~(closure_alloc_mode : Alloc_mode.t) ~num_trailing_local_params =
+    ~(closure_alloc_mode : Alloc_mode.t Or_unknown.t) ~num_trailing_local_params
+    =
   (* For simplicity, we disallow [@inline] attributes on partial applications.
      The user may always write an explicit wrapper instead with such an
      attribute. *)
@@ -301,8 +302,9 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       Alloc_mode.Local, num_trailing_local_params - num_supplied_local_args
   in
   (match closure_alloc_mode with
-  | Heap -> ()
-  | Local -> (
+  | Unknown -> ()
+  | Known Heap -> ()
+  | Known Local -> (
     match new_closure_alloc_mode with
     | Local -> ()
     | Heap ->
@@ -521,8 +523,9 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
    sure it cannot in every case. *)
 
 let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
-    ~result_arity:_ ~down_to_up ~coming_from_indirect ~closure_alloc_mode
-    ~num_trailing_local_params =
+    ~result_arity:_ ~down_to_up ~coming_from_indirect ~closure_alloc_mode:_
+    ~num_trailing_local_params:_ =
+  (* XXXX *)
   fail_if_probe apply;
   let expr = Simplify_common.split_direct_over_application apply ~param_arity in
   let down_to_up dacc ~rebuild =
@@ -546,7 +549,7 @@ let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
 let simplify_direct_function_call ~simplify_expr dacc apply
     ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
     ~callee's_closure_id ~result_arity ~result_types ~recursive ~arg_types:_
-    ~must_be_detupled function_decl ~down_to_up =
+    ~must_be_detupled ~closure_alloc_mode function_decl ~down_to_up =
   begin
     match Apply.probe_name apply, Apply.inlined apply with
     | None, _ | Some _, Never_inlined -> ()
@@ -622,17 +625,17 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       then
         simplify_direct_over_application ~simplify_expr dacc apply
           ~param_arity:params_arity ~result_arity ~down_to_up
-          ~coming_from_indirect ~closure_alloc_mode:42 (* XXX *)
+          ~coming_from_indirect ~closure_alloc_mode
           ~num_trailing_local_params:
-            (Code_metadata.num_trailing_local_params code_metadata)
+            (Code_metadata.num_trailing_local_params callee's_code_metadata)
       else if provided_num_args > 0 && provided_num_args < num_params
       then
         simplify_direct_partial_application ~simplify_expr dacc apply
           ~callee's_code_id ~callee's_closure_id ~param_arity:params_arity
           ~result_arity ~result_types ~recursive ~down_to_up
-          ~coming_from_indirect ~closure_alloc_mode:42 (* XXX *)
+          ~coming_from_indirect ~closure_alloc_mode
           ~num_trailing_local_params:
-            (Code_metadata.num_trailing_local_params code_metadata)
+            (Code_metadata.num_trailing_local_params callee's_code_metadata)
       else
         Misc.fatal_errorf
           "Function with %d params when simplifying direct OCaml function call \
@@ -689,13 +692,13 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
   in
   let call_kind, use_id, dacc =
     match call with
-    | Indirect_unknown_arity ->
+    | Indirect_unknown_arity { alloc_mode } ->
       let dacc, use_id =
         DA.record_continuation_use dacc cont
           (Non_inlinable { escaping = true })
           ~env_at_use ~arg_types:[T.any_value]
       in
-      Call_kind.indirect_function_call_unknown_arity (), use_id, dacc
+      Call_kind.indirect_function_call_unknown_arity alloc_mode, use_id, dacc
     | Indirect_known_arity { param_arity; return_arity } ->
       let args_arity =
         T.arity_of_list arg_types
@@ -763,7 +766,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       (* In the indirect case, the calling convention used currently is the
          generic one. Thus we need to detuple the call iff the function
          declaration is tupled. *)
-    | Indirect_unknown_arity -> is_function_decl_tupled
+    | Indirect_unknown_arity _ -> is_function_decl_tupled
   in
   let type_unavailable () =
     if not (DA.do_not_rebuild_terms dacc)
@@ -778,7 +781,9 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
      primitives? *)
   let denv = DA.denv dacc in
   match T.prove_single_closures_entry (DE.typing_env denv) callee_ty with
-  | Proved (callee's_closure_id, _closures_entry, func_decl_type) ->
+  | Proved
+      (callee's_closure_id, closure_alloc_mode, _closures_entry, func_decl_type)
+    ->
     let module (* CR mshinwell: We should check that the [set_of_closures] in
                   the [closures_entry] structure in the type does indeed contain
                   the closure in question. *)
@@ -796,7 +801,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
             Closure_id.print closure_id Closure_id.print callee's_closure_id
             Apply.print apply;
         Some code_id
-      | Indirect_unknown_arity | Indirect_known_arity _ -> None
+      | Indirect_unknown_arity _ | Indirect_known_arity _ -> None
     in
     let callee's_code_id_from_type = FT.code_id func_decl_type in
     let callee's_code_or_metadata =
@@ -814,7 +819,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       ~result_arity:(Code_metadata.result_arity callee's_code_metadata)
       ~result_types:(Code_metadata.result_types callee's_code_metadata)
       ~recursive:(Code_metadata.recursive callee's_code_metadata)
-      ~must_be_detupled func_decl_type ~down_to_up
+      ~must_be_detupled ~closure_alloc_mode func_decl_type ~down_to_up
   | Unknown -> type_unavailable ()
   | Invalid ->
     let rebuild uacc ~after_rebuild =

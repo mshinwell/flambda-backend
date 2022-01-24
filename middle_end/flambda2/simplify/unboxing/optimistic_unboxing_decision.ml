@@ -107,8 +107,8 @@ let rec make_optimistic_decision ~depth tenv ~param_type : U.decision =
             Unbox (Variant { tag; const_ctors; fields_by_tag })
           | Proved _ | Wrong_kind | Invalid | Unknown -> begin
             match T.prove_single_closures_entry' tenv param_type with
-            | Proved (closure_id, closures_entry, _fun_decl) when unbox_closures
-              ->
+            | Proved (closure_id, _, closures_entry, _fun_decl)
+              when unbox_closures ->
               let vars_within_closure =
                 make_optimistic_vars_within_closure ~depth tenv closures_entry
               in

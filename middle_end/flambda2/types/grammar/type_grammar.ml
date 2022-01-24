@@ -61,7 +61,7 @@ and head_of_kind_value =
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
   | Closures of
       { by_closure_id : row_like_for_closures;
-        closure_alloc_mode : Alloc_mode.t Or_unknown.t
+        alloc_mode : Alloc_mode.t Or_unknown.t
       }
   | String of String_info.Set.t
   | Array of

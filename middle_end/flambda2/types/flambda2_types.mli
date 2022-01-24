@@ -612,12 +612,21 @@ val prove_is_array_with_element_kind :
     exactly one set of closures. The function declaration type corresponding to
     such closure is returned together with its closure ID, if it is known. *)
 val prove_single_closures_entry :
-  Typing_env.t -> t -> (Closure_id.t * Closures_entry.t * Function_type.t) proof
+  Typing_env.t ->
+  t ->
+  (Closure_id.t
+  * Alloc_mode.t Or_unknown.t
+  * Closures_entry.t
+  * Function_type.t)
+  proof
 
 val prove_single_closures_entry' :
   Typing_env.t ->
   t ->
-  (Closure_id.t * Closures_entry.t * Function_type.t)
+  (Closure_id.t
+  * Alloc_mode.t Or_unknown.t
+  * Closures_entry.t
+  * Function_type.t)
   proof_allowing_kind_mismatch
 
 val prove_strings : Typing_env.t -> t -> String_info.Set.t proof

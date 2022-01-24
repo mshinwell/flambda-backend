@@ -1029,11 +1029,13 @@ and apply_call env e =
     | Some name ->
       Cmm.Cop (Cprobe { name; handler_code_sym = f_code }, args, dbg), env, effs
     )
-  | Call_kind.Function Call_kind.Function_call.Indirect_unknown_arity ->
+  | Call_kind.Function (Indirect_unknown_arity { alloc_mode }) ->
     fail_if_probe e;
     let f, env, _ = simple env f in
     let args, env, _ = arg_list env args in
-    C.indirect_call ~dbg typ_val f args, env, effs
+    ( C.indirect_call ~dbg typ_val (C.convert_alloc_mode alloc_mode) f args,
+      env,
+      effs )
   | Call_kind.Function
       (Call_kind.Function_call.Indirect_known_arity
         { return_arity; param_arity }) ->

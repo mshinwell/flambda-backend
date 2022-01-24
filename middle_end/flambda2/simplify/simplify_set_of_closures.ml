@@ -675,11 +675,12 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
       new_code_id ~params_and_body
       ~free_names_of_params_and_body:free_names_of_code
       ~newer_version_of:(Some old_code_id)
-      ~params_arity:(Code.params_arity code) ~result_arity ~result_types
-      ~stub:(Code.stub code) ~inline:(Code.inline code)
-      ~is_a_functor:(Code.is_a_functor code) ~recursive:(Code.recursive code)
-      ~cost_metrics ~inlining_arguments ~dbg:(Code.dbg code)
-      ~is_tupled:(Code.is_tupled code)
+      ~params_arity:(Code.params_arity code)
+      ~num_trailing_local_params:(Code.num_trailing_local_params code)
+      ~result_arity ~result_types ~stub:(Code.stub code)
+      ~inline:(Code.inline code) ~is_a_functor:(Code.is_a_functor code)
+      ~recursive:(Code.recursive code) ~cost_metrics ~inlining_arguments
+      ~dbg:(Code.dbg code) ~is_tupled:(Code.is_tupled code)
       ~is_my_closure_used:(Code.is_my_closure_used code)
       ~inlining_decision
   in

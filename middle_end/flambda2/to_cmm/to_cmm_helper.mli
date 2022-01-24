@@ -78,6 +78,10 @@ val targetint : ?dbg:Debuginfo.t -> Targetint_32_64.t -> Cmm.expression
 (** Create a constant int expression from a nativeint. *)
 val nativeint : ?dbg:Debuginfo.t -> Nativeint.t -> Cmm.expression
 
+(** {2 Allocation modes} *)
+
+val convert_alloc_mode : Alloc_mode.t -> Lambda.alloc_mode
+
 (** {2 Block creation} *)
 
 (** Create an array using the given fields. *)
@@ -444,6 +448,7 @@ val direct_call :
 val indirect_call :
   ?dbg:Debuginfo.t ->
   Cmm.machtype ->
+  Lambda.alloc_mode ->
   Cmm.expression ->
   Cmm.expression list ->
   Cmm.expression

@@ -561,24 +561,27 @@ let ccatch ~rec_flag ~handlers ~body =
 let direct_call ?(dbg = Debuginfo.none) ty f_code_sym args =
   Cmm.Cop (Cmm.Capply (ty, Apply_nontail), f_code_sym :: args, dbg)
 
+let indirect_call_single_arg dbg ty f arg =
+  (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
+  let v = Backend_var.create_local "*closure*" in
+  let v' = Backend_var.With_provenance.create v in
+  letin v' f
+  @@ Cmm.Cop
+       ( Cmm.Capply (ty, Apply_nontail),
+         [load Cmm.Word_int Asttypes.Mutable (var v); arg; var v],
+         dbg )
+
 let indirect_call ?(dbg = Debuginfo.none) ty f = function
-  | [arg] ->
-    (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
-    let v = Backend_var.create_local "*closure*" in
-    let v' = Backend_var.With_provenance.create v in
-    letin v' f
-    @@ Cmm.Cop
-         ( Cmm.Capply (ty, Apply_nontail),
-           [load Cmm.Word_int Asttypes.Mutable (var v); arg; var v],
-           dbg )
+  | [arg] -> indirect_call_single_arg dbg ty f arg
   | args ->
     let arity = List.length args in
     let l = (symbol (apply_function_sym arity Alloc_heap) :: args) @ [f] in
     Cmm.Cop (Cmm.Capply (ty, Apply_nontail), l, dbg)
 
 let indirect_full_call ?(dbg = Debuginfo.none) ty f = function
-  (* the single-argument case is already optimized by indirect_call *)
-  | [_] as args -> indirect_call ~dbg ty f args
+  (* the single-argument case is already optimized by
+     indirect_call_single_arg *)
+  | [arg] -> indirect_call_single_arg dbg ty f arg
   | args ->
     (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
     let v = Backend_var.create_local "*closure*" in

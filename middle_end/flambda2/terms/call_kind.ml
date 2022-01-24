@@ -35,8 +35,7 @@ module Function_call = struct
     | Indirect_unknown_arity of { alloc_mode : Alloc_mode.t }
     | Indirect_known_arity of
         { param_arity : Flambda_arity.With_subkinds.t;
-          return_arity : Flambda_arity.With_subkinds.t;
-          alloc_mode : Alloc_mode.t
+          return_arity : Flambda_arity.With_subkinds.t
         }
 
   let [@ocamlformat "disable"] print ppf call =
@@ -54,12 +53,10 @@ module Function_call = struct
       fprintf ppf "@[<hov 1>(Indirect_unknown_arity@ \
           @[<hov 1>(alloc_mode@ %a)@])@]"
         Alloc_mode.print alloc_mode
-    | Indirect_known_arity { param_arity; return_arity; alloc_mode } ->
-      fprintf ppf "@[(Indirect_known_arity %a \u{2192} %a@ \
-          @[<hov 1>(alloc_mode@ %a)@])@]"
+    | Indirect_known_arity { param_arity; return_arity; } ->
+      fprintf ppf "@[<hov 1>(Indirect_known_arity %a \u{2192} %a)@]"
         Flambda_arity.With_subkinds.print param_arity
         Flambda_arity.With_subkinds.print return_arity
-        Alloc_mode.print alloc_mode
 
   let return_arity call =
     match call with
@@ -116,9 +113,9 @@ let direct_function_call code_id closure_id ~return_arity =
 let indirect_function_call_unknown_arity alloc_mode =
   Function (Indirect_unknown_arity { alloc_mode })
 
-let indirect_function_call_known_arity ~param_arity ~return_arity alloc_mode =
+let indirect_function_call_known_arity ~param_arity ~return_arity =
   check_arity return_arity;
-  Function (Indirect_known_arity { param_arity; return_arity; alloc_mode })
+  Function (Indirect_known_arity { param_arity; return_arity })
 
 let method_call kind ~obj = Method { kind; obj }
 
@@ -146,9 +143,7 @@ let free_names t =
   | Function (Direct { code_id; closure_id = _; return_arity = _ }) ->
     Name_occurrences.add_code_id Name_occurrences.empty code_id Name_mode.normal
   | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function
-      (Indirect_known_arity
-        { param_arity = _; return_arity = _; alloc_mode = _ })
+  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
   | Method { kind = _; obj } ->
@@ -165,9 +160,7 @@ let apply_renaming t perm =
     then t
     else Function (Direct { code_id = code_id'; closure_id; return_arity })
   | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function
-      (Indirect_known_arity
-        { param_arity = _; return_arity = _; alloc_mode = _ })
+  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
   | Method { kind; obj } ->
@@ -179,9 +172,7 @@ let all_ids_for_export t =
   | Function (Direct { code_id; closure_id = _; return_arity = _ }) ->
     Ids_for_export.add_code_id Ids_for_export.empty code_id
   | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function
-      (Indirect_known_arity
-        { param_arity = _; return_arity = _; alloc_mode = _ })
+  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
   | Method { kind = _; obj } -> Ids_for_export.from_simple obj

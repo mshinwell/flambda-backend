@@ -35,6 +35,7 @@ val create_code :
   free_names_of_params_and_body:Name_occurrences.t ->
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.With_subkinds.t ->
+  num_trailing_local_params:int ->
   result_arity:Flambda_arity.With_subkinds.t ->
   result_types:Result_types.t ->
   stub:bool ->

@@ -97,8 +97,8 @@ let prove_equals_to_var_or_symbol_or_tagged_immediate env t :
 
 let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
   match expand_head env t with
-  | Value (Ok (Closures closures)) -> begin
-    match TG.Row_like_for_closures.get_singleton closures.by_closure_id with
+  | Value (Ok (Closures { by_closure_id; alloc_mode })) -> begin
+    match TG.Row_like_for_closures.get_singleton by_closure_id with
     | None -> Unknown
     | Some ((closure_id, set_of_closures_contents), closures_entry) -> (
       let closure_ids =
@@ -111,7 +111,8 @@ let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
       match function_type with
       | Bottom -> Invalid
       | Unknown -> Unknown
-      | Ok function_type -> Proved (closure_id, closures_entry, function_type))
+      | Ok function_type ->
+        Proved (closure_id, alloc_mode, closures_entry, function_type))
   end
   | Value (Ok _) -> Invalid
   | Value Unknown -> Unknown

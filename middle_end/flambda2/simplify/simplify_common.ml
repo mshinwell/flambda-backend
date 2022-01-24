@@ -80,7 +80,7 @@ let is_self_tail_call dacc apply =
     | Function (Direct { code_id = apply_code_id; _ }) ->
       Code_id.equal fun_code_id apply_code_id
     | Method _ | C_call _
-    | Function (Indirect_known_arity _ | Indirect_unknown_arity) ->
+    | Function (Indirect_known_arity _ | Indirect_unknown_arity _) ->
       false)
 
 let simplify_projection dacc ~original_term ~deconstructing ~shape ~result_var
@@ -136,7 +136,7 @@ let split_direct_over_application apply ~param_arity =
       ~continuation:(Apply.continuation apply)
       (Apply.exn_continuation apply)
       ~args:remaining_args
-      ~call_kind:(Call_kind.indirect_function_call_unknown_arity ())
+      ~call_kind:(Call_kind.indirect_function_call_unknown_arity ()) (* XXX *)
       (Apply.dbg apply) ~inlined:(Apply.inlined apply)
       ~inlining_state:(Apply.inlining_state apply)
       ~probe_name:(Apply.probe_name apply)

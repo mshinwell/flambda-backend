@@ -35,8 +35,7 @@ module Function_call : sig
     | Indirect_unknown_arity of { alloc_mode : Alloc_mode.t }
     | Indirect_known_arity of
         { param_arity : Flambda_arity.With_subkinds.t;
-          return_arity : Flambda_arity.With_subkinds.t;
-          alloc_mode : Alloc_mode.t
+          return_arity : Flambda_arity.With_subkinds.t
         }
 end
 
@@ -72,7 +71,6 @@ val indirect_function_call_unknown_arity : Alloc_mode.t -> t
 val indirect_function_call_known_arity :
   param_arity:Flambda_arity.With_subkinds.t ->
   return_arity:Flambda_arity.With_subkinds.t ->
-  Alloc_mode.t ->
   t
 
 val method_call : method_kind -> obj:Simple.t -> t
