@@ -482,7 +482,7 @@ let unop env (op : Flambda_primitive.unary_primitive) : Fexpr.unop =
   | String_length string_or_bytes -> String_length string_or_bytes
   | Int_as_pointer | Boolean_not | Duplicate_block _ | Duplicate_array _
   | Bigarray_length _ | Int_arith _ | Float_arith _ | Reinterpret_int64_as_float
-  | Is_boxed_float | Is_flat_float_array ->
+  | Is_boxed_float | Is_flat_float_array | End_region ->
     Misc.fatal_errorf "TODO: Unary primitive: %a"
       Flambda_primitive.Without_args.print
       (Flambda_primitive.Without_args.Unary op)
@@ -964,9 +964,7 @@ and apply_cont env app_cont : Fexpr.apply_cont =
              Push { exn_handler }
            | Pop { exn_handler; raise_kind } ->
              let exn_handler = Env.find_continuation_exn env exn_handler in
-             Pop { exn_handler; raise_kind }
-           | Begin_region -> Begin_region
-           | End_region -> End_region)
+             Pop { exn_handler; raise_kind })
   in
   let args = List.map (simple env) (Apply_cont_expr.args app_cont) in
   { cont; trap_action; args }

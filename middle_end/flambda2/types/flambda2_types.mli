@@ -334,6 +334,8 @@ val any_naked_int64 : t
 
 val any_naked_nativeint : t
 
+val any_region : t
+
 val any_rec_info : t
 
 (** Building of types representing tagged / boxed values from specified

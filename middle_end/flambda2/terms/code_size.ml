@@ -319,6 +319,7 @@ let nullary_prim_size prim =
   match (prim : Flambda_primitive.nullary_primitive) with
   | Optimised_out _ -> 0
   | Probe_is_enabled { name = _ } -> 4
+  | Begin_region -> 5
 
 let unary_prim_size prim =
   match (prim : Flambda_primitive.unary_primitive) with
@@ -340,8 +341,8 @@ let unary_prim_size prim =
   | Select_closure _ -> 1 (* caddv *)
   | Project_var _ -> 1 (* load *)
   | Is_boxed_float -> 4 (* tag load + comparison *)
-  | Is_flat_float_array -> 4
-(* tag load + comparison *)
+  | Is_flat_float_array -> 4 (* tag load + comparison *)
+  | End_region -> 1
 
 let binary_prim_size prim =
   match (prim : Flambda_primitive.binary_primitive) with
@@ -412,8 +413,6 @@ let apply_cont apply_cont =
     | None -> 0
     | Some (Push _) -> 4
     | Some (Pop _) -> 2
-    | Some Begin_region -> 1
-    | Some End_region -> 5
   in
   size + 1
 

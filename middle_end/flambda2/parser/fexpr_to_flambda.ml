@@ -488,9 +488,7 @@ let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
              Push { exn_handler }
            | Pop { exn_handler; raise_kind } ->
              let exn_handler, _ = find_cont env exn_handler in
-             Pop { exn_handler; raise_kind }
-           | Begin_region -> Begin_region
-           | End_region -> End_region)
+             Pop { exn_handler; raise_kind })
   in
   let c, arity = find_cont env cont in
   (if List.length args <> arity

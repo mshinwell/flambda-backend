@@ -39,13 +39,14 @@ type t = private
   | Naked_int64 of head_of_kind_naked_int64 Type_descr.t
   | Naked_nativeint of head_of_kind_naked_nativeint Type_descr.t
   | Rec_info of head_of_kind_rec_info Type_descr.t
+  | Region of head_of_kind_region Type_descr.t
 
 and head_of_kind_value = private
   | Variant of
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
         is_unique : bool;
-        alloc_mode : Alloc_mode.t Or_unknown.t
+        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
       }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
@@ -53,7 +54,7 @@ and head_of_kind_value = private
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
   | Closures of
       { by_closure_id : row_like_for_closures;
-        alloc_mode : Alloc_mode.t Or_unknown.t
+        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
       }
   | String of String_info.Set.t
   | Array of
@@ -75,6 +76,8 @@ and head_of_kind_naked_int64 = Numeric_types.Int64.Set.t
 and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
 
 and head_of_kind_rec_info = Rec_info_expr.t
+
+and head_of_kind_region = unit
 
 and 'index row_like_index = private
   | Known of 'index
@@ -173,6 +176,8 @@ val any_naked_int32 : t
 val any_naked_int64 : t
 
 val any_naked_nativeint : t
+
+val any_region : t
 
 val any_rec_info : t
 
@@ -464,6 +469,7 @@ module Descr : sig
         head_of_kind_naked_nativeint Type_descr.Descr.t Or_unknown_or_bottom.t
     | Rec_info of
         head_of_kind_rec_info Type_descr.Descr.t Or_unknown_or_bottom.t
+    | Region of head_of_kind_region Type_descr.Descr.t Or_unknown_or_bottom.t
 end
 
 val descr : t -> Descr.t
@@ -481,6 +487,8 @@ val create_from_head_naked_int64 : head_of_kind_naked_int64 -> t
 val create_from_head_naked_nativeint : head_of_kind_naked_nativeint -> t
 
 val create_from_head_rec_info : head_of_kind_rec_info -> t
+
+val create_from_head_region : head_of_kind_region -> t
 
 val apply_coercion_head_of_kind_value :
   head_of_kind_value -> Coercion.t -> head_of_kind_value Or_bottom.t
@@ -506,6 +514,9 @@ val apply_coercion_head_of_kind_naked_nativeint :
 
 val apply_coercion_head_of_kind_rec_info :
   head_of_kind_rec_info -> Coercion.t -> head_of_kind_rec_info Or_bottom.t
+
+val apply_coercion_head_of_kind_region :
+  head_of_kind_region -> Coercion.t -> head_of_kind_region Or_bottom.t
 
 module Head_of_kind_value : sig
   type t = head_of_kind_value

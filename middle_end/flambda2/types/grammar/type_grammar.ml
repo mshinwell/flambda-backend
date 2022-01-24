@@ -47,13 +47,14 @@ type t =
   | Naked_int64 of head_of_kind_naked_int64 TD.t
   | Naked_nativeint of head_of_kind_naked_nativeint TD.t
   | Rec_info of head_of_kind_rec_info TD.t
+  | Region of head_of_kind_region TD.t
 
 and head_of_kind_value =
   | Variant of
       { immediates : t Or_unknown.t;
         blocks : row_like_for_blocks Or_unknown.t;
         is_unique : bool;
-        alloc_mode : Alloc_mode.t Or_unknown.t
+        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
       }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
@@ -61,7 +62,7 @@ and head_of_kind_value =
   | Boxed_nativeint of t * Alloc_mode.t Or_unknown.t
   | Closures of
       { by_closure_id : row_like_for_closures;
-        alloc_mode : Alloc_mode.t Or_unknown.t
+        alloc_mode : Alloc_mode.t Or_unknown_or_bottom.t
       }
   | String of String_info.Set.t
   | Array of
@@ -83,6 +84,8 @@ and head_of_kind_naked_int64 = Int64.Set.t
 and head_of_kind_naked_nativeint = Targetint_32_64.Set.t
 
 and head_of_kind_rec_info = Rec_info_expr.t
+
+and head_of_kind_region = unit
 
 (* For row-like, ['index] must not contain any names. *)
 
@@ -179,6 +182,9 @@ let apply_renaming t renaming =
     | Rec_info ty ->
       let ty' = TD.apply_renaming ty renaming in
       if ty == ty' then t else Rec_info ty'
+    | Region ty ->
+      let ty' = TD.apply_renaming ty renaming in
+      if ty == ty' then t else Region ty'
 
 let rec apply_renaming_head_of_kind_value head renaming =
   match head with
@@ -240,6 +246,8 @@ and apply_renaming_head_of_kind_naked_nativeint head _ = head
 
 and apply_renaming_head_of_kind_rec_info head renaming =
   Rec_info_expr.apply_renaming head renaming
+
+and apply_renaming_head_of_kind_region () _renaming = ()
 
 and apply_renaming_row_like :
       'index 'maps_to 'known.
@@ -394,6 +402,9 @@ let rec free_names t =
   | Rec_info ty ->
     TD.free_names ~apply_renaming_head:Rec_info_expr.apply_renaming
       ~free_names_head:free_names_head_of_kind_rec_info ty
+  | Region ty ->
+    TD.free_names ~apply_renaming_head:apply_renaming_head_of_kind_region
+      ~free_names_head:free_names_head_of_kind_region ty
 
 and free_names_head_of_kind_value head =
   match head with
@@ -425,6 +436,8 @@ and free_names_head_of_kind_naked_nativeint _ = Name_occurrences.empty
 
 and free_names_head_of_kind_rec_info head =
   Rec_info_expr.free_names_in_types head
+
+and free_names_head_of_kind_region () = Name_occurrences.empty
 
 and free_names_row_like :
       'row_tag 'index 'maps_to 'known.
@@ -561,6 +574,12 @@ let rec print ppf t =
          ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
          ~free_names_head:free_names_head_of_kind_rec_info)
       ty
+  | Region ty ->
+    Format.fprintf ppf "@[<hov 1>(Region@ %a)@]"
+      (TD.print ~print_head:print_head_of_kind_region
+         ~apply_renaming_head:apply_renaming_head_of_kind_region
+         ~free_names_head:free_names_head_of_kind_region)
+      ty
 
 and print_head_of_kind_value ppf head =
   match head with
@@ -621,6 +640,8 @@ and print_head_of_kind_naked_nativeint ppf head =
 
 and print_head_of_kind_rec_info ppf head = Rec_info_expr.print ppf head
 
+and print_head_of_kind_region ppf () = Format.pp_print_string ppf "Region"
+
 and print_row_like :
       'index 'maps_to 'known.
       print_index:(Format.formatter -> 'index -> unit) ->
@@ -633,7 +654,7 @@ and print_row_like :
       is_empty_map_known:('known -> bool) ->
       known:'known ->
       other:('index, 'maps_to) row_like_case Or_bottom.t ->
-      Alloc_mode.t Or_unknown.t ->
+      Alloc_mode.t Or_unknown_or_bottom.t ->
       Format.formatter ->
       unit =
  fun ~print_index ~print_maps_to ~print_known_map ~is_empty_map_known ~known
@@ -664,7 +685,7 @@ and print_row_like :
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(alloc_mode@ %a)@ (known@ %a)@]@ @[<hov 1>(other@ \
        %a)@])@]"
-      (Or_unknown.print Alloc_mode.print)
+      (Or_unknown_or_bottom.print Alloc_mode.print)
       alloc_mode (print_known_map print) known (Or_bottom.print print) other
 
 and print_row_like_for_blocks alloc_mode ppf { known_tags; other_tags } =
@@ -767,6 +788,11 @@ let rec all_ids_for_export t =
       ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
       ~free_names_head:free_names_head_of_kind_rec_info
       ~all_ids_for_export_head:all_ids_for_export_head_of_kind_rec_info ty
+  | Region ty ->
+    TD.all_ids_for_export
+      ~apply_renaming_head:apply_renaming_head_of_kind_region
+      ~free_names_head:free_names_head_of_kind_region
+      ~all_ids_for_export_head:all_ids_for_export_head_of_kind_region ty
 
 and all_ids_for_export_head_of_kind_value head =
   match head with
@@ -799,6 +825,8 @@ and all_ids_for_export_head_of_kind_naked_nativeint _ = Ids_for_export.empty
 
 and all_ids_for_export_head_of_kind_rec_info head =
   Rec_info_expr.all_ids_for_export head
+
+and all_ids_for_export_head_of_kind_region () = Ids_for_export.empty
 
 and all_ids_for_export_row_like :
       'row_tag 'index 'maps_to 'known.
@@ -962,6 +990,14 @@ let rec apply_coercion t coercion : t Or_bottom.t =
           ~free_names_head:free_names_head_of_kind_rec_info coercion ty
       in
       if ty == ty' then t else Rec_info ty'
+    | Region ty ->
+      let<+ ty' =
+        TD.apply_coercion
+          ~apply_coercion_head:apply_coercion_head_of_kind_region
+          ~apply_renaming_head:apply_renaming_head_of_kind_region
+          ~free_names_head:free_names_head_of_kind_region coercion ty
+      in
+      if ty == ty' then t else Region ty'
 
 and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
   match head with
@@ -1009,6 +1045,8 @@ and apply_coercion_head_of_kind_rec_info head coercion : _ Or_bottom.t =
   (* Currently no coercion has an effect on a depth variable and
      [Rec_info_expr.t] does not contain any other variety of name. *)
   if Coercion.is_id coercion then Ok head else Bottom
+
+and apply_coercion_head_of_kind_region () _coercion : _ Or_bottom.t = Ok ()
 
 and apply_coercion_row_like :
       'index 'maps_to 'row_tag 'known.
@@ -1262,6 +1300,15 @@ let rec remove_unused_closure_vars t ~used_closure_vars =
         ~free_names_head:free_names_head_of_kind_rec_info
     in
     if ty == ty' then t else Rec_info ty'
+  | Region ty ->
+    let ty' =
+      TD.remove_unused_closure_vars ty ~used_closure_vars
+        ~remove_unused_closure_vars_head:
+          remove_unused_closure_vars_head_of_kind_region
+        ~apply_renaming_head:apply_renaming_head_of_kind_region
+        ~free_names_head:free_names_head_of_kind_region
+    in
+    if ty == ty' then t else Region ty'
 
 and remove_unused_closure_vars_head_of_kind_value head ~used_closure_vars =
   match head with
@@ -1333,6 +1380,8 @@ and remove_unused_closure_vars_head_of_kind_naked_nativeint head
 
 and remove_unused_closure_vars_head_of_kind_rec_info head ~used_closure_vars:_ =
   head
+
+and remove_unused_closure_vars_head_of_kind_region () ~used_closure_vars:_ = ()
 
 and remove_unused_closure_vars_row_like :
       'index 'maps_to 'known.
@@ -1488,6 +1537,7 @@ let kind t =
   | Naked_int64 _ -> K.naked_int64
   | Naked_nativeint _ -> K.naked_nativeint
   | Rec_info _ -> K.rec_info
+  | Region _ -> K.region
 
 let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks alloc_mode
     =
@@ -1938,16 +1988,6 @@ module Env_extension = struct
   let to_map t = t.equations
 end
 
-let kind t =
-  match t with
-  | Value _ -> K.value
-  | Naked_immediate _ -> K.naked_immediate
-  | Naked_float _ -> K.naked_float
-  | Naked_int32 _ -> K.naked_int32
-  | Naked_int64 _ -> K.naked_int64
-  | Naked_nativeint _ -> K.naked_nativeint
-  | Rec_info _ -> K.rec_info
-
 let get_alias_exn t =
   match t with
   | Value ty ->
@@ -1977,6 +2017,9 @@ let get_alias_exn t =
     TD.get_alias_exn ty
       ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
       ~free_names_head:free_names_head_of_kind_rec_info
+  | Region ty ->
+    TD.get_alias_exn ty ~apply_renaming_head:apply_renaming_head_of_kind_region
+      ~free_names_head:free_names_head_of_kind_region
 
 let is_obviously_bottom t =
   match t with
@@ -1987,6 +2030,7 @@ let is_obviously_bottom t =
   | Naked_int64 ty -> TD.is_obviously_bottom ty
   | Naked_nativeint ty -> TD.is_obviously_bottom ty
   | Rec_info ty -> TD.is_obviously_bottom ty
+  | Region ty -> TD.is_obviously_bottom ty
 
 let is_obviously_unknown t =
   match t with
@@ -1997,6 +2041,7 @@ let is_obviously_unknown t =
   | Naked_int64 ty -> TD.is_obviously_unknown ty
   | Naked_nativeint ty -> TD.is_obviously_unknown ty
   | Rec_info ty -> TD.is_obviously_unknown ty
+  | Region ty -> TD.is_obviously_unknown ty
 
 let alias_type_of (kind : K.t) name : t =
   match kind with
@@ -2034,6 +2079,8 @@ let any_naked_int32 = Naked_int32 TD.unknown
 let any_naked_int64 = Naked_int64 TD.unknown
 
 let any_naked_nativeint = Naked_nativeint TD.unknown
+
+let any_region = Region TD.unknown
 
 let any_rec_info = Rec_info TD.unknown
 
@@ -2096,28 +2143,28 @@ let box_float (t : t) alloc_mode : t =
   match t with
   | Naked_float _ -> Value (TD.create (Boxed_float (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_int32 _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_float]: %a" print t
 
 let box_int32 (t : t) alloc_mode : t =
   match t with
   | Naked_int32 _ -> Value (TD.create (Boxed_int32 (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int64 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_int32]: %a" print t
 
 let box_int64 (t : t) alloc_mode : t =
   match t with
   | Naked_int64 _ -> Value (TD.create (Boxed_int64 (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _
-  | Naked_nativeint _ | Rec_info _ ->
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_int64]: %a" print t
 
 let box_nativeint (t : t) alloc_mode : t =
   match t with
   | Naked_nativeint _ -> Value (TD.create (Boxed_nativeint (t, alloc_mode)))
   | Value _ | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
-  | Rec_info _ ->
+  | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_nativeint]: %a" print t
 
 let this_tagged_immediate imm : t =
@@ -2132,10 +2179,10 @@ let tag_immediate t : t =
             { is_unique = false;
               immediates = Known t;
               blocks = Known Row_like_for_blocks.bottom;
-              alloc_mode = Known Heap
+              alloc_mode = Ok Heap
             }))
   | Value _ | Naked_float _ | Naked_int32 _ | Naked_int64 _ | Naked_nativeint _
-  | Rec_info _ ->
+  | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [tag_immediate]: %a" print t
 
 let tagged_immediate_alias_to ~naked_immediate : t =
@@ -2197,6 +2244,7 @@ module Descr = struct
     | Naked_nativeint of
         head_of_kind_naked_nativeint TD.Descr.t Or_unknown_or_bottom.t
     | Rec_info of head_of_kind_rec_info TD.Descr.t Or_unknown_or_bottom.t
+    | Region of head_of_kind_region TD.Descr.t Or_unknown_or_bottom.t
 end
 
 let descr t : Descr.t =
@@ -2229,6 +2277,10 @@ let descr t : Descr.t =
     Rec_info
       (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_rec_info
          ~free_names_head:free_names_head_of_kind_rec_info ty)
+  | Region ty ->
+    Region
+      (TD.descr ~apply_renaming_head:apply_renaming_head_of_kind_region
+         ~free_names_head:free_names_head_of_kind_region ty)
 
 let create_from_head_value head = Value (TD.create head)
 
@@ -2263,7 +2315,7 @@ module Head_of_kind_value = struct
       { is_unique = false;
         immediates = Known (this_naked_immediate imm);
         blocks = Known Row_like_for_blocks.bottom;
-        alloc_mode = Known Heap
+        alloc_mode = Ok Heap
       }
 
   let create_closures by_closure_id alloc_mode =

@@ -147,8 +147,6 @@ type trap_action =
       { exn_handler : continuation;
         raise_kind : raise_kind option
       }
-  | Begin_region
-  | End_region
 
 type rec_info =
   | Depth of int
