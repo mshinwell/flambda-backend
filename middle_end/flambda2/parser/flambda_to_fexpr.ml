@@ -907,8 +907,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
   in
   let arities : Fexpr.function_arities option =
     match Apply_expr.call_kind app with
-    | Function
-        (Indirect_known_arity { param_arity; return_arity; alloc_mode = _ }) ->
+    | Function (Indirect_known_arity { param_arity; return_arity }) ->
       let params_arity = Some (arity param_arity) in
       let ret_arity = arity return_arity in
       Some { params_arity; ret_arity }

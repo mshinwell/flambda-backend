@@ -571,11 +571,11 @@ let indirect_call_single_arg dbg ty f arg =
          [load Cmm.Word_int Asttypes.Mutable (var v); arg; var v],
          dbg )
 
-let indirect_call ?(dbg = Debuginfo.none) ty f = function
+let indirect_call ?(dbg = Debuginfo.none) ty alloc_mode f = function
   | [arg] -> indirect_call_single_arg dbg ty f arg
   | args ->
     let arity = List.length args in
-    let l = (symbol (apply_function_sym arity Alloc_heap) :: args) @ [f] in
+    let l = (symbol (apply_function_sym arity alloc_mode) :: args) @ [f] in
     Cmm.Cop (Cmm.Capply (ty, Apply_nontail), l, dbg)
 
 let indirect_full_call ?(dbg = Debuginfo.none) ty f = function

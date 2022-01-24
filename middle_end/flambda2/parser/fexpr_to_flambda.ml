@@ -867,7 +867,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           let param_arity = arity params_arity in
           let return_arity = arity ret_arity in
           Call_kind.indirect_function_call_known_arity ~param_arity
-            ~return_arity Heap
+            ~return_arity
         | None | Some { params_arity = None; ret_arity = _ } ->
           Call_kind.indirect_function_call_unknown_arity Heap
       end

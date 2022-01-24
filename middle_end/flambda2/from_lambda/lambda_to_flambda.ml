@@ -943,7 +943,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
       ~params:[]
       ~body:(fun acc env ccenv k ->
-        let var = VB.create var Name_mode.normal in
+        let var = Bound_var.create var Name_mode.normal in
         Let_with_acc.create acc
           (Bound_pattern.singleton var)
           defining_expr ~body
