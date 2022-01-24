@@ -397,10 +397,12 @@ let static_consts _ = 0
 
 let apply apply =
   match Apply_expr.call_kind apply with
-  | Function (Direct _) -> direct_call_size
+  | Function { function_call = Direct _; _ } -> direct_call_size
   (* CR mshinwell: Check / fix these numbers *)
-  | Function (Indirect_unknown_arity _) -> indirect_call_size
-  | Function (Indirect_known_arity _) -> indirect_call_size
+  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ } ->
+    indirect_call_size
+  | Function { function_call = Indirect_known_arity _; alloc_mode = _ } ->
+    indirect_call_size
   | C_call { alloc = true; _ } -> alloc_extcall_size
   | C_call { alloc = false; _ } -> nonalloc_extcall_size
   | Method _ -> 8

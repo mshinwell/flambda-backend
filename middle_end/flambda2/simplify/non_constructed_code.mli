@@ -55,6 +55,8 @@ val is_my_closure_used : t -> bool
 
 val inlining_decision : t -> Function_decl_inlining_decision_type.t
 
+val may_contain_escaping_local_allocs : t -> bool
+
 val create :
   Code_id.t ->
   free_names_of_params_and_body:Name_occurrences.t ->

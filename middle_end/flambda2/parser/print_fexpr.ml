@@ -483,8 +483,6 @@ let trap_action ppf = function
     Format.fprintf ppf "@[<h>pop(%a%a)@]"
       (pp_option ~space:After raise_kind)
       rk continuation exn_handler
-  | Begin_region -> Format.pp_print_string ppf "begin_region"
-  | End_region -> Format.pp_print_string ppf "end_region"
 
 let apply_cont ppf (ac : Fexpr.apply_cont) =
   match ac with
