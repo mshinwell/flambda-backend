@@ -68,7 +68,12 @@ val project_tuple :
 (** Split a direct over-application into a full application followed by the
     application of the leftover arguments. *)
 val split_direct_over_application :
-  Apply_expr.t -> param_arity:Flambda_arity.With_subkinds.t -> Expr.t
+  Apply_expr.t ->
+  param_arity:Flambda_arity.With_subkinds.t ->
+  closure_alloc_mode:Alloc_mode.t Or_unknown.t ->
+  apply_alloc_mode:Alloc_mode.t ->
+  num_trailing_local_params:int ->
+  Expr.t
 
 type apply_cont_context =
   | Apply_cont_expr
