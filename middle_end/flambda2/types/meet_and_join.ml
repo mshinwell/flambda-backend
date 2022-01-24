@@ -67,7 +67,11 @@ let meet_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
   | Known _, Unknown -> Ok alloc_mode1
   | Known Heap, Known Heap -> Ok (Known Heap)
   | Known Local, Known Local -> Ok (Known Local)
-  | Known Heap, Known Local | Known Local, Known Heap -> Bottom
+  | Known Heap, Known Local | Known Local, Known Heap ->
+    (* It is not safe to pick either [Heap] or [Local] and moreover we should
+       never be in this situation by virtue of the OCaml type checker; it is
+       bottom. *)
+    Bottom
 
 let join_alloc_mode (alloc_mode1 : Alloc_mode.t Or_unknown.t)
     (alloc_mode2 : Alloc_mode.t Or_unknown.t) : Alloc_mode.t Or_unknown.t =

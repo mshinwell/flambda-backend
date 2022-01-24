@@ -98,30 +98,21 @@ let prove_equals_to_var_or_symbol_or_tagged_immediate env t :
 let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
   match expand_head env t with
   | Value (Ok (Closures { by_closure_id; alloc_mode })) -> (
-    let alloc_mode : _ Or_bottom.t =
-      match alloc_mode with
-      | Bottom -> Bottom
-      | Unknown -> Ok Or_unknown.Unknown
-      | Ok alloc_mode -> Ok (Or_unknown.Known alloc_mode)
-    in
-    match alloc_mode with
-    | Bottom -> Invalid
-    | Ok alloc_mode -> (
-      match TG.Row_like_for_closures.get_singleton by_closure_id with
-      | None -> Unknown
-      | Some ((closure_id, set_of_closures_contents), closures_entry) -> (
-        let closure_ids =
-          Set_of_closures_contents.closures set_of_closures_contents
-        in
-        assert (Closure_id.Set.mem closure_id closure_ids);
-        let function_type =
-          TG.Closures_entry.find_function_type closures_entry closure_id
-        in
-        match function_type with
-        | Bottom -> Invalid
-        | Unknown -> Unknown
-        | Ok function_type ->
-          Proved (closure_id, alloc_mode, closures_entry, function_type))))
+    match TG.Row_like_for_closures.get_singleton by_closure_id with
+    | None -> Unknown
+    | Some ((closure_id, set_of_closures_contents), closures_entry) -> (
+      let closure_ids =
+        Set_of_closures_contents.closures set_of_closures_contents
+      in
+      assert (Closure_id.Set.mem closure_id closure_ids);
+      let function_type =
+        TG.Closures_entry.find_function_type closures_entry closure_id
+      in
+      match function_type with
+      | Bottom -> Invalid
+      | Unknown -> Unknown
+      | Ok function_type ->
+        Proved (closure_id, alloc_mode, closures_entry, function_type)))
   | Value (Ok _) -> Invalid
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
@@ -906,11 +897,8 @@ let prove_alloc_mode_of_boxed_number env t : Alloc_mode.t Or_unknown.t =
   | Value (Ok (Boxed_float (_, alloc_mode)))
   | Value (Ok (Boxed_int32 (_, alloc_mode)))
   | Value (Ok (Boxed_int64 (_, alloc_mode)))
-  | Value (Ok (Boxed_nativeint (_, alloc_mode))) -> (
-    (* CR mshinwell: this function should probably have a Bottom return too *)
-    match alloc_mode with
-    | Ok alloc_mode -> Known alloc_mode
-    | Bottom | Unknown -> Unknown)
+  | Value (Ok (Boxed_nativeint (_, alloc_mode))) ->
+    alloc_mode
   | Value (Ok (Variant _ | String _ | Array _ | Closures _))
   | Value (Unknown | Bottom)
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
