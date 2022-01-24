@@ -969,9 +969,10 @@ and apply_call env e =
   match Apply_expr.call_kind e with
   (* Effects from arguments are ignored since a function call will always be
      given arbitrary effects and coeffects. *)
-  | Call_kind.Function
-      (Call_kind.Function_call.Direct { code_id; closure_id = _; return_arity })
-    -> (
+  | Function
+      { function_call = Direct { code_id; closure_id = _; return_arity };
+        alloc_mode = _
+      } -> (
     let env =
       Env.check_scope ~allow_deleted:false env
         (Code_id_or_symbol.create_code_id code_id)
@@ -998,16 +999,17 @@ and apply_call env e =
     | Some name ->
       Cmm.Cop (Cprobe { name; handler_code_sym = f_code }, args, dbg), env, effs
     )
-  | Call_kind.Function (Indirect_unknown_arity { alloc_mode }) ->
+  | Function { function_call = Indirect_unknown_arity; alloc_mode } ->
     fail_if_probe e;
     let f, env, _ = simple env f in
     let args, env, _ = arg_list env args in
-    ( C.indirect_call ~dbg typ_val (C.convert_alloc_mode alloc_mode) f args,
+    ( C.indirect_call ~dbg typ_val alloc_mode f args,
       env,
       effs )
-  | Call_kind.Function
-      (Call_kind.Function_call.Indirect_known_arity
-        { return_arity; param_arity; alloc_mode }) ->
+  | Function
+      { function_call = Indirect_known_arity { return_arity; param_arity };
+        alloc_mode
+      } ->
     fail_if_probe e;
     if not (check_arity param_arity args)
     then

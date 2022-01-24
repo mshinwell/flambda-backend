@@ -38,7 +38,7 @@ val create_code :
   num_trailing_local_params:int ->
   result_arity:Flambda_arity.With_subkinds.t ->
   result_types:Result_types.t ->
-  may_contain_escaping_local_allocs:bool ->
+  contains_no_escaping_local_allocs:bool ->
   stub:bool ->
   inline:Inline_attribute.t ->
   is_a_functor:bool ->

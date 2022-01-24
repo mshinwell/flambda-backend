@@ -837,7 +837,6 @@ let direct_apply env fundesc ufunct uargs pos mode ~probe ~loc ~attribute =
   | _, Never_inlined
   | None, _ ->
      let dbg = Debuginfo.from_location loc in
-     (* CR mshinwell: isn't [mode] redundant? *)
      let kind = (pos, mode) in
      warning_if_forced_inlined ~loc ~attribute
        "Function information unavailable";

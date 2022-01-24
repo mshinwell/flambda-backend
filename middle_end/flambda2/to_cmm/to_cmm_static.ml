@@ -213,10 +213,15 @@ and fill_static_slot s symbs decls startenv elts env acc offset updates slot =
     let code_symbol = Code_id.code_symbol code_id in
     let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
     let acc = List.rev (C.define_symbol ~global:true external_name) @ acc in
-    let arity = Env.get_func_decl_params_arity env code_id in
+    let nlocal =
+      Env.get_function_info env code_id
+      |> Code_metadata.num_trailing_local_params
+    in
+    let num_params = Env.get_func_decl_params_arity env code_id in
+    let arity = Lambda.Curried { nlocal }, num_params in
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
-    if arity = 1 || arity = 0
+    if num_params = 1 || num_params = 0
     then
       let acc = C.cint closure_info :: C.symbol_address code_name :: acc in
       env, acc, offset + 2, updates

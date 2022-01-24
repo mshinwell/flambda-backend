@@ -62,8 +62,8 @@ let is_my_closure_used t = Code_metadata.is_my_closure_used t.code_metadata
 
 let inlining_decision t = Code_metadata.inlining_decision t.code_metadata
 
-let may_contain_escaping_local_allocs t =
-  Code_metadata.may_contain_escaping_local_allocs t.code_metadata
+let contains_no_escaping_local_allocs t =
+  Code_metadata.contains_no_escaping_local_allocs t.code_metadata
 
 let check_free_names_of_params_and_body ~print_function_params_and_body code_id
     ~params_and_body ~free_names_of_params_and_body =
@@ -79,7 +79,7 @@ let check_free_names_of_params_and_body ~print_function_params_and_body code_id
 let create ~print_function_params_and_body code_id ~params_and_body
     ~free_names_of_params_and_body ~newer_version_of ~params_arity
     ~num_trailing_local_params ~result_arity ~result_types
-    ~may_contain_escaping_local_allocs ~stub ~(inline : Inline_attribute.t)
+    ~contains_no_escaping_local_allocs ~stub ~(inline : Inline_attribute.t)
     ~is_a_functor ~recursive ~cost_metrics ~inlining_arguments ~dbg ~is_tupled
     ~is_my_closure_used ~inlining_decision =
   begin
@@ -98,7 +98,7 @@ let create ~print_function_params_and_body code_id ~params_and_body
   let code_metadata =
     Code_metadata.create code_id ~newer_version_of ~params_arity
       ~num_trailing_local_params ~result_arity ~result_types
-      ~may_contain_escaping_local_allocs ~stub ~inline ~is_a_functor ~recursive
+      ~contains_no_escaping_local_allocs ~stub ~inline ~is_a_functor ~recursive
       ~cost_metrics ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used
       ~inlining_decision
   in

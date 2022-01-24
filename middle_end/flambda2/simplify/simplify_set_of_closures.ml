@@ -677,8 +677,8 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
       ~params_arity:(Code.params_arity code)
       ~num_trailing_local_params:(Code.num_trailing_local_params code)
       ~result_arity ~result_types
-      ~may_contain_escaping_local_allocs:
-        (Code.may_contain_escaping_local_allocs code)
+      ~contains_no_escaping_local_allocs:
+        (Code.contains_no_escaping_local_allocs code)
       ~stub:(Code.stub code) ~inline:(Code.inline code)
       ~is_a_functor:(Code.is_a_functor code) ~recursive:(Code.recursive code)
       ~cost_metrics ~inlining_arguments ~dbg:(Code.dbg code)

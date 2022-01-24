@@ -77,10 +77,16 @@ let is_self_tail_call dacc apply =
     &&
     (* 3rd check: check this is a self-call. *)
     match Apply.call_kind apply with
-    | Function (Direct { code_id = apply_code_id; _ }) ->
+    | Function
+        { function_call = Direct { code_id = apply_code_id; _ };
+          alloc_mode = _
+        } ->
       Code_id.equal fun_code_id apply_code_id
     | Method _ | C_call _
-    | Function (Indirect_known_arity _ | Indirect_unknown_arity _) ->
+    | Function
+        { function_call = Indirect_known_arity _ | Indirect_unknown_arity;
+          alloc_mode = _
+        } ->
       false)
 
 let simplify_projection dacc ~original_term ~deconstructing ~shape ~result_var
@@ -191,10 +197,6 @@ let apply_cont_use_kind ~context apply_cont : Continuation_use_kind.t =
         then Non_inlinable { escaping = true }
         else Non_inlinable { escaping = false }
       | Some No_trace -> Non_inlinable { escaping = false })
-    | Some (Begin_region | End_region) ->
-      (* These are treated as escaping to ensure the trap actions are
-         preserved. *)
-      Non_inlinable { escaping = true }
   end
   | Return | Toplevel_return -> Non_inlinable { escaping = false }
   | Define_root_symbol ->
@@ -203,7 +205,7 @@ let apply_cont_use_kind ~context apply_cont : Continuation_use_kind.t =
 
 let clear_demoted_trap_action uacc apply_cont : AC.t =
   match AC.trap_action apply_cont with
-  | None | Some (Begin_region | End_region) -> apply_cont
+  | None -> apply_cont
   | Some (Push { exn_handler } | Pop { exn_handler; _ }) ->
     if UE.mem_continuation (UA.uenv uacc) exn_handler
        && not (UA.is_demoted_exn_handler uacc exn_handler)

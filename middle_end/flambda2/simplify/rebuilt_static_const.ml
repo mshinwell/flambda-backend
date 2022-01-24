@@ -57,7 +57,7 @@ let create_normal_non_code const =
 let create_code are_rebuilding code_id ~params_and_body
     ~free_names_of_params_and_body ~newer_version_of ~params_arity
     ~num_trailing_local_params ~result_arity ~result_types
-    ~may_contain_escaping_local_allocs ~stub ~inline ~is_a_functor ~recursive
+    ~contains_no_escaping_local_allocs ~stub ~inline ~is_a_functor ~recursive
     ~cost_metrics ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used
     ~inlining_decision =
   if ART.do_not_rebuild_terms are_rebuilding
@@ -65,7 +65,7 @@ let create_code are_rebuilding code_id ~params_and_body
     let non_constructed_code =
       Non_constructed_code.create code_id ~free_names_of_params_and_body
         ~newer_version_of ~params_arity ~num_trailing_local_params ~result_arity
-        ~result_types ~may_contain_escaping_local_allocs ~stub ~inline
+        ~result_types ~contains_no_escaping_local_allocs ~stub ~inline
         ~is_a_functor ~recursive ~cost_metrics ~inlining_arguments ~dbg
         ~is_tupled ~is_my_closure_used ~inlining_decision
     in
@@ -78,7 +78,7 @@ let create_code are_rebuilding code_id ~params_and_body
     let code =
       Code.create code_id ~params_and_body ~free_names_of_params_and_body
         ~newer_version_of ~params_arity ~num_trailing_local_params ~result_arity
-        ~result_types ~may_contain_escaping_local_allocs ~stub ~inline
+        ~result_types ~contains_no_escaping_local_allocs ~stub ~inline
         ~is_a_functor ~recursive ~cost_metrics ~inlining_arguments ~dbg
         ~is_tupled ~is_my_closure_used ~inlining_decision
     in
@@ -332,8 +332,8 @@ module Group = struct
                ~num_trailing_local_params:(NCC.num_trailing_local_params code)
                ~result_arity:(NCC.result_arity code)
                ~result_types:(NCC.result_types code)
-               ~may_contain_escaping_local_allocs:
-                 (NCC.may_contain_escaping_local_allocs code)
+               ~contains_no_escaping_local_allocs:
+                 (NCC.contains_no_escaping_local_allocs code)
                ~stub:(NCC.stub code) ~inline:(NCC.inline code)
                ~is_a_functor:(NCC.is_a_functor code)
                ~recursive:(NCC.recursive code)

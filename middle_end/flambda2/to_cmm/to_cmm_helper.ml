@@ -575,12 +575,13 @@ let indirect_call ?(dbg = Debuginfo.none) ty alloc_mode f = function
            dbg )
   | args ->
     let arity = List.length args in
+    let alloc_mode = convert_alloc_mode alloc_mode in
     let l = (symbol (apply_function_sym arity alloc_mode) :: args) @ [f] in
     Cmm.Cop (Cmm.Capply (ty, Apply_nontail), l, dbg)
 
-let indirect_full_call ?(dbg = Debuginfo.none) ty mode f = function
+let indirect_full_call ?(dbg = Debuginfo.none) ty alloc_mode f = function
   (* the single-argument case is already optimized by indirect_call *)
-  | [_] as args -> indirect_call ~dbg ty mode f args
+  | [_] as args -> indirect_call ~dbg ty alloc_mode f args
   | args ->
     (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
     let v = Backend_var.create_local "*closure*" in

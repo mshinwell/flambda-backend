@@ -23,7 +23,7 @@ type t =
     num_trailing_local_params : int;
     result_arity : Flambda_arity.With_subkinds.t;
     result_types : Result_types.t;
-    may_contain_escaping_local_allocs : bool;
+    contains_no_escaping_local_allocs : bool;
     stub : bool;
     inline : Inline_attribute.t;
     is_a_functor : bool;
@@ -75,11 +75,11 @@ let is_my_closure_used { is_my_closure_used; _ } = is_my_closure_used
 
 let inlining_decision { inlining_decision; _ } = inlining_decision
 
-let may_contain_escaping_local_allocs { may_contain_escaping_local_allocs; _ } =
-  may_contain_escaping_local_allocs
+let contains_no_escaping_local_allocs { contains_no_escaping_local_allocs; _ } =
+  contains_no_escaping_local_allocs
 
 let create code_id ~newer_version_of ~params_arity ~num_trailing_local_params
-    ~result_arity ~result_types ~may_contain_escaping_local_allocs ~stub
+    ~result_arity ~result_types ~contains_no_escaping_local_allocs ~stub
     ~(inline : Inline_attribute.t) ~is_a_functor ~recursive ~cost_metrics
     ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used ~inlining_decision =
   begin
@@ -105,7 +105,7 @@ let create code_id ~newer_version_of ~params_arity ~num_trailing_local_params
     num_trailing_local_params;
     result_arity;
     result_types;
-    may_contain_escaping_local_allocs;
+    contains_no_escaping_local_allocs;
     stub;
     inline;
     is_a_functor;
@@ -136,7 +136,7 @@ end
 let [@ocamlformat "disable"] print ppf
       { code_id = _; newer_version_of; stub; inline; is_a_functor;
         params_arity; num_trailing_local_params; result_arity;
-        result_types; may_contain_escaping_local_allocs;
+        result_types; contains_no_escaping_local_allocs;
         recursive; cost_metrics; inlining_arguments;
         dbg; is_tupled; is_my_closure_used; inlining_decision; } =
   let module C = Flambda_colours in
@@ -149,7 +149,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>(num_trailing_local_params@ %d)@]@ \
       @[<hov 1>@<0>%s(result_arity@ @<0>%s%a@<0>%s)@<0>%s@]@ \
       @[<hov 1>(result_types@ @[<hov 1>(%a)@])@]@ \
-      @[<hov 1>(may_contain_escaping_local_allocs@ %b)@]@ \
+      @[<hov 1>(contains_no_escaping_local_allocs@ %b)@]@ \
       @[<hov 1>@<0>%s(recursive@ %a)@<0>%s@]@ \
       @[<hov 1>(cost_metrics@ %a)@]@ \
       @[<hov 1>(inlining_arguments@ %a)@]@ \
@@ -193,7 +193,7 @@ let [@ocamlformat "disable"] print ppf
     else Flambda_colours.normal ())
     (Flambda_colours.normal ())
     Result_types.print result_types
-    may_contain_escaping_local_allocs
+    contains_no_escaping_local_allocs
     (match recursive with
     | Non_recursive -> Flambda_colours.elide ()
     | Recursive -> Flambda_colours.normal ())
@@ -219,7 +219,7 @@ let free_names
       num_trailing_local_params = _;
       result_arity = _;
       result_types;
-      may_contain_escaping_local_allocs = _;
+      contains_no_escaping_local_allocs = _;
       stub = _;
       inline = _;
       is_a_functor = _;
@@ -251,7 +251,7 @@ let apply_renaming
        num_trailing_local_params = _;
        result_arity = _;
        result_types;
-       may_contain_escaping_local_allocs = _;
+       contains_no_escaping_local_allocs = _;
        stub = _;
        inline = _;
        is_a_functor = _;
@@ -291,7 +291,7 @@ let all_ids_for_export
       num_trailing_local_params = _;
       result_arity = _;
       result_types;
-      may_contain_escaping_local_allocs = _;
+      contains_no_escaping_local_allocs = _;
       stub = _;
       inline = _;
       is_a_functor = _;
@@ -320,7 +320,7 @@ let approx_equal
       num_trailing_local_params = num_trailing_local_params1;
       result_arity = result_arity1;
       result_types = _;
-      may_contain_escaping_local_allocs = may_contain_escaping_local_allocs1;
+      contains_no_escaping_local_allocs = contains_no_escaping_local_allocs1;
       stub = stub1;
       inline = inline1;
       is_a_functor = is_a_functor1;
@@ -338,7 +338,7 @@ let approx_equal
       num_trailing_local_params = num_trailing_local_params2;
       result_arity = result_arity2;
       result_types = _;
-      may_contain_escaping_local_allocs = may_contain_escaping_local_allocs2;
+      contains_no_escaping_local_allocs = contains_no_escaping_local_allocs2;
       stub = stub2;
       inline = inline2;
       is_a_functor = is_a_functor2;
@@ -355,8 +355,8 @@ let approx_equal
   && Flambda_arity.With_subkinds.equal params_arity1 params_arity2
   && Int.equal num_trailing_local_params1 num_trailing_local_params2
   && Flambda_arity.With_subkinds.equal result_arity1 result_arity2
-  && Bool.equal may_contain_escaping_local_allocs1
-       may_contain_escaping_local_allocs2
+  && Bool.equal contains_no_escaping_local_allocs1
+       contains_no_escaping_local_allocs2
   && Bool.equal stub1 stub2
   && Inline_attribute.equal inline1 inline2
   && Bool.equal is_a_functor1 is_a_functor2

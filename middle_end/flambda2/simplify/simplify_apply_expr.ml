@@ -238,8 +238,8 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
            ~exn_cont_use_id ~result_arity ~coming_from_indirect)
 
 let simplify_direct_partial_application ~simplify_expr dacc apply
-    ~callee's_code_id ~callee's_closure_id ~param_arity ~result_arity
-    ~result_types ~recursive ~down_to_up ~coming_from_indirect
+    ~callee's_code_id ~callee's_code_metadata ~callee's_closure_id ~param_arity
+    ~result_arity ~result_types ~recursive ~down_to_up ~coming_from_indirect
     ~(closure_alloc_mode : Alloc_mode.t Or_unknown.t) ~num_trailing_local_params
     =
   (* For simplicity, we disallow [@inline] attributes on partial applications.
@@ -312,6 +312,12 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         "New closure alloc mode cannot be [Heap] when existing closure alloc \
          mode is [Local]: direct partial application:@ %a"
         Apply.print apply));
+  let contains_no_escaping_local_allocs =
+    Code_metadata.contains_no_escaping_local_allocs callee's_code_metadata
+  in
+  let apply_alloc_mode : Alloc_mode.t =
+    if contains_no_escaping_local_allocs then Heap else Local
+  in
   let wrapper_taking_remaining_args, dacc, code_id, code =
     let return_continuation = Continuation.create () in
     let remaining_params =
@@ -323,7 +329,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     in
     let call_kind =
       Call_kind.direct_function_call callee's_code_id callee's_closure_id
-        ~return_arity:result_arity
+        ~return_arity:result_arity apply_alloc_mode
     in
     let open struct
       (* An argument or the callee, with information about its entry in the
@@ -443,9 +449,9 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         Code.create code_id ~params_and_body
           ~free_names_of_params_and_body:free_names ~newer_version_of:None
           ~params_arity:(BP.List.arity_with_subkinds remaining_params)
-          ~num_trailing_local_params ~result_arity ~result_types ~stub:true
-          ~inline:Default_inline ~is_a_functor:false ~recursive
-          ~cost_metrics:cost_metrics_of_body
+          ~num_trailing_local_params ~result_arity ~result_types
+          ~contains_no_escaping_local_allocs ~stub:true ~inline:Default_inline
+          ~is_a_functor:false ~recursive ~cost_metrics:cost_metrics_of_body
           ~inlining_arguments:(DE.inlining_arguments (DA.denv dacc))
           ~dbg ~is_tupled:false
           ~is_my_closure_used:
@@ -549,7 +555,8 @@ let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
 let simplify_direct_function_call ~simplify_expr dacc apply
     ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
     ~callee's_closure_id ~result_arity ~result_types ~recursive ~arg_types:_
-    ~must_be_detupled ~closure_alloc_mode function_decl ~down_to_up =
+    ~must_be_detupled ~closure_alloc_mode ~apply_alloc_mode function_decl
+    ~down_to_up =
   begin
     match Apply.probe_name apply, Apply.inlined apply with
     | None, _ | Some _, Never_inlined -> ()
@@ -590,7 +597,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
   | Ok callee's_code_id ->
     let call_kind =
       Call_kind.direct_function_call callee's_code_id callee's_closure_id
-        ~return_arity:result_arity
+        ~return_arity:result_arity apply_alloc_mode
     in
     let apply = Apply.with_call_kind apply call_kind in
     let callee's_code_or_metadata =
@@ -631,9 +638,9 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       else if provided_num_args > 0 && provided_num_args < num_params
       then
         simplify_direct_partial_application ~simplify_expr dacc apply
-          ~callee's_code_id ~callee's_closure_id ~param_arity:params_arity
-          ~result_arity ~result_types ~recursive ~down_to_up
-          ~coming_from_indirect ~closure_alloc_mode
+          ~callee's_code_id ~callee's_code_metadata ~callee's_closure_id
+          ~param_arity:params_arity ~result_arity ~result_types ~recursive
+          ~down_to_up ~coming_from_indirect ~closure_alloc_mode
           ~num_trailing_local_params:
             (Code_metadata.num_trailing_local_params callee's_code_metadata)
       else
@@ -656,7 +663,8 @@ let rebuild_function_call_where_callee's_type_unavailable apply call_kind
   after_rebuild expr uacc
 
 let simplify_function_call_where_callee's_type_unavailable dacc apply
-    (call : Call_kind.Function_call.t) ~args:_ ~arg_types ~down_to_up =
+    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~args:_ ~arg_types
+    ~down_to_up =
   fail_if_probe apply;
   let cont =
     match Apply.continuation apply with
@@ -692,13 +700,15 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
   in
   let call_kind, use_id, dacc =
     match call with
-    | Indirect_unknown_arity { alloc_mode } ->
+    | Indirect_unknown_arity ->
       let dacc, use_id =
         DA.record_continuation_use dacc cont
           (Non_inlinable { escaping = true })
           ~env_at_use ~arg_types:[T.any_value]
       in
-      Call_kind.indirect_function_call_unknown_arity alloc_mode, use_id, dacc
+      ( Call_kind.indirect_function_call_unknown_arity apply_alloc_mode,
+        use_id,
+        dacc )
     | Indirect_known_arity { param_arity; return_arity } ->
       let args_arity =
         T.arity_of_list arg_types
@@ -718,6 +728,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
       in
       let call_kind =
         Call_kind.indirect_function_call_known_arity ~param_arity ~return_arity
+          apply_alloc_mode
       in
       call_kind, use_id, dacc
     | Direct { return_arity; _ } ->
@@ -733,6 +744,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
       in
       let call_kind =
         Call_kind.indirect_function_call_known_arity ~param_arity ~return_arity
+          apply_alloc_mode
       in
       call_kind, use_id, dacc
   in
@@ -742,7 +754,8 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
          ~use_id ~exn_cont_use_id)
 
 let simplify_function_call ~simplify_expr dacc apply ~callee_ty
-    (call : Call_kind.Function_call.t) ~arg_types ~down_to_up =
+    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~arg_types ~down_to_up
+    =
   let args = Apply.args apply in
   (* Function declarations and params and body might not have the same calling
      convention. Currently the only case when it happens is for tupled
@@ -766,7 +779,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       (* In the indirect case, the calling convention used currently is the
          generic one. Thus we need to detuple the call iff the function
          declaration is tupled. *)
-    | Indirect_unknown_arity _ -> is_function_decl_tupled
+    | Indirect_unknown_arity -> is_function_decl_tupled
   in
   let type_unavailable () =
     if not (DA.do_not_rebuild_terms dacc)
@@ -774,8 +787,8 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       warn_not_inlined_if_needed apply
         "[@inlined] attribute was not used on this function application (the \
          optimizer did not know what function was being applied)";
-    simplify_function_call_where_callee's_type_unavailable dacc apply call ~args
-      ~arg_types ~down_to_up
+    simplify_function_call_where_callee's_type_unavailable dacc apply call
+      ~apply_alloc_mode ~args ~arg_types ~down_to_up
   in
   (* CR-someday mshinwell: Should this be using [meet_shape], like for
      primitives? *)
@@ -801,7 +814,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
             Closure_id.print closure_id Closure_id.print callee's_closure_id
             Apply.print apply;
         Some code_id
-      | Indirect_unknown_arity _ | Indirect_known_arity _ -> None
+      | Indirect_unknown_arity | Indirect_known_arity _ -> None
     in
     let callee's_code_id_from_type = FT.code_id func_decl_type in
     let callee's_code_or_metadata =
@@ -819,7 +832,8 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       ~result_arity:(Code_metadata.result_arity callee's_code_metadata)
       ~result_types:(Code_metadata.result_types callee's_code_metadata)
       ~recursive:(Code_metadata.recursive callee's_code_metadata)
-      ~must_be_detupled ~closure_alloc_mode func_decl_type ~down_to_up
+      ~must_be_detupled ~closure_alloc_mode ~apply_alloc_mode func_decl_type
+      ~down_to_up
   | Unknown -> type_unavailable ()
   | Invalid ->
     let rebuild uacc ~after_rebuild =
@@ -1003,9 +1017,9 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~param_arity
 let simplify_apply ~simplify_expr dacc apply ~down_to_up =
   let dacc, callee_ty, apply, arg_types = simplify_apply_shared dacc apply in
   match Apply.call_kind apply with
-  | Function call ->
-    simplify_function_call ~simplify_expr dacc apply ~callee_ty call ~arg_types
-      ~down_to_up
+  | Function { function_call; alloc_mode = apply_alloc_mode } ->
+    simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
+      ~apply_alloc_mode ~arg_types ~down_to_up
   | Method { kind; obj } ->
     simplify_method_call dacc apply ~callee_ty ~kind ~obj ~arg_types ~down_to_up
   | C_call { alloc = _; param_arity; return_arity; is_c_builtin = _ } ->
