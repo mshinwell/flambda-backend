@@ -32,7 +32,7 @@ module Function_call = struct
           closure_id : Closure_id.t;
           return_arity : Flambda_arity.With_subkinds.t
         }
-    | Indirect_unknown_arity of { alloc_mode : Alloc_mode.t }
+    | Indirect_unknown_arity
     | Indirect_known_arity of
         { param_arity : Flambda_arity.With_subkinds.t;
           return_arity : Flambda_arity.With_subkinds.t
@@ -49,10 +49,8 @@ module Function_call = struct
         Code_id.print code_id
         Closure_id.print closure_id
         Flambda_arity.With_subkinds.print return_arity
-    | Indirect_unknown_arity { alloc_mode } ->
-      fprintf ppf "@[<hov 1>(Indirect_unknown_arity@ \
-          @[<hov 1>(alloc_mode@ %a)@])@]"
-        Alloc_mode.print alloc_mode
+    | Indirect_unknown_arity ->
+      fprintf ppf "Indirect_unknown_arity"
     | Indirect_known_arity { param_arity; return_arity; } ->
       fprintf ppf "@[<hov 1>(Indirect_known_arity %a \u{2192} %a)@]"
         Flambda_arity.With_subkinds.print param_arity
@@ -62,7 +60,7 @@ module Function_call = struct
     match call with
     | Direct { return_arity; _ } | Indirect_known_arity { return_arity; _ } ->
       return_arity
-    | Indirect_unknown_arity _ -> [Flambda_kind.With_subkind.any_value]
+    | Indirect_unknown_arity -> [Flambda_kind.With_subkind.any_value]
 end
 
 type method_kind =
@@ -77,7 +75,10 @@ let print_method_kind ppf kind =
   | Cached -> fprintf ppf "Cached"
 
 type t =
-  | Function of Function_call.t
+  | Function of
+      { function_call : Function_call.t;
+        alloc_mode : Alloc_mode.t
+      }
   | Method of
       { kind : method_kind;
         obj : Simple.t
@@ -91,7 +92,13 @@ type t =
 
 let [@ocamlformat "disable"] print ppf t =
   match t with
-  | Function call -> Function_call.print ppf call
+  | Function { function_call; alloc_mode } ->
+    fprintf ppf "@[<hov 1>(Function@ \
+        @[<hov 1>(function_call@ %a)@]@ \
+        @[<hov 1>(alloc_mode@ %a)@]\
+        )@]"
+      Function_call.print function_call
+      Alloc_mode.print alloc_mode
   | Method { kind; obj; } ->
     fprintf ppf "@[(Method %a : %a)@]"
       Simple.print obj
@@ -106,16 +113,20 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_arity.print param_arity
       Flambda_arity.print return_arity
 
-let direct_function_call code_id closure_id ~return_arity =
+let direct_function_call code_id closure_id ~return_arity alloc_mode =
   check_arity return_arity;
-  Function (Direct { code_id; closure_id; return_arity })
+  Function
+    { function_call = Direct { code_id; closure_id; return_arity }; alloc_mode }
 
 let indirect_function_call_unknown_arity alloc_mode =
-  Function (Indirect_unknown_arity { alloc_mode })
+  Function { function_call = Indirect_unknown_arity; alloc_mode }
 
-let indirect_function_call_known_arity ~param_arity ~return_arity =
+let indirect_function_call_known_arity ~param_arity ~return_arity alloc_mode =
   check_arity return_arity;
-  Function (Indirect_known_arity { param_arity; return_arity })
+  Function
+    { function_call = Indirect_known_arity { param_arity; return_arity };
+      alloc_mode
+    }
 
 let method_call kind ~obj = Method { kind; obj }
 
@@ -131,7 +142,7 @@ let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
 
 let return_arity t =
   match t with
-  | Function call -> Function_call.return_arity call
+  | Function { function_call; _ } -> Function_call.return_arity function_call
   | Method _ -> [Flambda_kind.With_subkind.any_value]
   | C_call { return_arity; _ } ->
     List.map
@@ -140,10 +151,17 @@ let return_arity t =
 
 let free_names t =
   match t with
-  | Function (Direct { code_id; closure_id = _; return_arity = _ }) ->
+  | Function
+      { function_call = Direct { code_id; closure_id = _; return_arity = _ };
+        alloc_mode = _
+      } ->
     Name_occurrences.add_code_id Name_occurrences.empty code_id Name_mode.normal
-  | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
+  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
+  | Function
+      { function_call =
+          Indirect_known_arity { param_arity = _; return_arity = _ };
+        alloc_mode = _
+      }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
   | Method { kind = _; obj } ->
@@ -154,13 +172,25 @@ let free_names t =
 
 let apply_renaming t perm =
   match t with
-  | Function (Direct { code_id; closure_id; return_arity }) ->
+  | Function
+      { function_call = Direct { code_id; closure_id; return_arity };
+        alloc_mode
+      } ->
     let code_id' = Renaming.apply_code_id perm code_id in
     if code_id == code_id'
     then t
-    else Function (Direct { code_id = code_id'; closure_id; return_arity })
-  | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
+    else
+      Function
+        { function_call =
+            Direct { code_id = code_id'; closure_id; return_arity };
+          alloc_mode
+        }
+  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
+  | Function
+      { function_call =
+          Indirect_known_arity { param_arity = _; return_arity = _ };
+        alloc_mode = _
+      }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
   | Method { kind; obj } ->
@@ -169,10 +199,17 @@ let apply_renaming t perm =
 
 let all_ids_for_export t =
   match t with
-  | Function (Direct { code_id; closure_id = _; return_arity = _ }) ->
+  | Function
+      { function_call = Direct { code_id; closure_id = _; return_arity = _ };
+        alloc_mode = _
+      } ->
     Ids_for_export.add_code_id Ids_for_export.empty code_id
-  | Function (Indirect_unknown_arity { alloc_mode = _ })
-  | Function (Indirect_known_arity { param_arity = _; return_arity = _ })
+  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
+  | Function
+      { function_call =
+          Indirect_known_arity { param_arity = _; return_arity = _ };
+        alloc_mode = _
+      }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
   | Method { kind = _; obj } -> Ids_for_export.from_simple obj

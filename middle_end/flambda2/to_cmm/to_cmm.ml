@@ -400,6 +400,7 @@ let nullary_primitive _env dbg prim : _ * Cmm.expression =
   match (prim : Flambda_primitive.nullary_primitive) with
   | Optimised_out _ -> Misc.fatal_errorf "TODO: phantom let-bindings in to_cmm"
   | Probe_is_enabled { name } -> None, Cop (Cprobe_is_enabled { name }, [], dbg)
+  | Begin_region -> None, Cop (Cbeginregion, [], dbg)
 
 let unary_primitive env dbg f arg =
   match (f : Flambda_primitive.unary_primitive) with
@@ -468,6 +469,7 @@ let unary_primitive env dbg f arg =
         ~else_dbg:dbg )
   | Is_flat_float_array ->
     None, Cmm.Cop (Ccmpi Ceq, [C.get_tag arg dbg; C.floatarray_tag dbg], dbg)
+  | End_region -> None, Cmm.Cop (Cendregion, [arg], dbg)
 
 let binary_primitive env dbg f x y =
   match (f : Flambda_primitive.binary_primitive) with
@@ -1005,7 +1007,7 @@ and apply_call env e =
       effs )
   | Call_kind.Function
       (Call_kind.Function_call.Indirect_known_arity
-        { return_arity; param_arity }) ->
+        { return_arity; param_arity; alloc_mode }) ->
     fail_if_probe e;
     if not (check_arity param_arity args)
     then
@@ -1019,7 +1021,7 @@ and apply_call env e =
         return_arity |> Flambda_arity.With_subkinds.to_arity
         |> machtype_of_return_arity
       in
-      C.indirect_full_call ~dbg ty f args, env, effs
+      C.indirect_full_call ~dbg ty alloc_mode f args, env, effs
   | Call_kind.C_call { alloc; return_arity; param_arity; is_c_builtin } ->
     fail_if_probe e;
     let f = function_name f in

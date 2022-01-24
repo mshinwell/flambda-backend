@@ -184,7 +184,8 @@ let oper_result_type = function
   | Cprobe _ -> typ_void
   | Cprobe_is_enabled _ -> typ_int
   | Copaque -> typ_val
-  | Cbeginregion | Cendregion -> typ_void
+  | Cbeginregion -> typ_val
+  | Cendregion -> typ_void
 
 (* Infer the size in bytes of the result of an expression whose evaluation
    may be deferred (cf. [emit_parts]). *)
@@ -485,7 +486,8 @@ method effects_of exp =
         EC.create (select_effects e) (select_coeffects ce)
       | Capply _ | Cprobe _ | Copaque
       | Cbeginregion | Cendregion -> EC.arbitrary
-      | Calloc _ -> EC.none
+      | Calloc Alloc_heap -> EC.none
+      | Calloc Alloc_local -> EC.coeffect_only Coeffect.Arbitrary
       | Cstore _ -> EC.effect_only Effect.Arbitrary
       | Cprefetch _ -> EC.arbitrary
       | Craise _ | Ccheckbound -> EC.effect_only Effect.Raise
