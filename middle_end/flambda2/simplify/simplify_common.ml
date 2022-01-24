@@ -156,6 +156,11 @@ let split_direct_over_application apply ~param_arity ~result_arity
       if contains_no_escaping_local_allocs then Heap else Local
     in
     let continuation =
+      (* If there is no need for a new region, then the second (over)
+         application jumps directly to the return continuation of the original
+         [Apply]. Otherwise it will need to go through [cont], which we define
+         below, so that the [End_region] marker for the new region can be
+         inserted. *)
       match needs_region with
       | None -> Apply.continuation apply
       | Some (_, cont) -> Apply.Result_continuation.Return cont
