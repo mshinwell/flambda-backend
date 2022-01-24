@@ -891,7 +891,10 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
   let args = List.map (simple env) (Apply_expr.args app) in
   let call_kind : Fexpr.call_kind =
     match Apply_expr.call_kind app with
-    | Function (Direct { code_id; closure_id; return_arity = _ }) ->
+    | Function
+        { function_call = Direct { code_id; closure_id; return_arity = _ };
+          alloc_mode = _
+        } ->
       let code_id = Env.find_code_id_exn env code_id in
       let closure_id = Env.translate_closure_id env closure_id in
       let closure_id =
@@ -900,18 +903,24 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
         else Some closure_id
       in
       Function (Direct { code_id; closure_id })
-    | Function (Indirect_unknown_arity _ | Indirect_known_arity _) ->
+    | Function
+        { function_call = Indirect_unknown_arity | Indirect_known_arity _;
+          alloc_mode = _
+        } ->
       Function Indirect
     | C_call { alloc; _ } -> C_call { alloc }
     | Method _ -> Misc.fatal_error "TODO: Method call kind"
   in
   let arities : Fexpr.function_arities option =
     match Apply_expr.call_kind app with
-    | Function (Indirect_known_arity { param_arity; return_arity }) ->
+    | Function
+        { function_call = Indirect_known_arity { param_arity; return_arity };
+          alloc_mode = _
+        } ->
       let params_arity = Some (arity param_arity) in
       let ret_arity = arity return_arity in
       Some { params_arity; ret_arity }
-    | Function (Direct { return_arity; _ }) ->
+    | Function { function_call = Direct { return_arity; _ }; alloc_mode = _ } ->
       if is_default_arity return_arity
       then None
       else
@@ -929,7 +938,9 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
         arity (return_arity |> Flambda_arity.With_subkinds.of_arity)
       in
       Some { params_arity; ret_arity }
-    | Function (Indirect_unknown_arity _) | Method _ -> None
+    | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
+    | Method _ ->
+      None
   in
   let inlined =
     if Flambda2_terms.Inlined_attribute.is_default (Apply_expr.inlined app)

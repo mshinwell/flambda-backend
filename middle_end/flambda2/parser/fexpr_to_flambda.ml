@@ -819,7 +819,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             ~newer_version_of ~params_arity ~num_trailing_local_params:0
             ~result_arity
             ~result_types:(Result_types.create_unknown ~params ~result_arity)
-            ~stub:false ~inline ~is_a_functor:false ~recursive
+            ~may_contain_escaping_local_allocs:false ~stub:false ~inline
+            ~is_a_functor:false ~recursive
             ~cost_metrics (* CR poechsel: grab inlining arguments from fexpr. *)
             ~inlining_arguments:(Inlining_arguments.create ~round:0)
             ~dbg:Debuginfo.none ~is_tupled ~is_my_closure_used
@@ -858,14 +859,14 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           | None -> [Flambda_kind.With_subkind.any_value]
           | Some { ret_arity; _ } -> arity ret_arity
         in
-        Call_kind.direct_function_call code_id closure_id ~return_arity
+        Call_kind.direct_function_call code_id closure_id ~return_arity Heap
       | Function Indirect -> begin
         match arities with
         | Some { params_arity = Some params_arity; ret_arity } ->
           let param_arity = arity params_arity in
           let return_arity = arity ret_arity in
           Call_kind.indirect_function_call_known_arity ~param_arity
-            ~return_arity
+            ~return_arity Heap
         | None | Some { params_arity = None; ret_arity = _ } ->
           Call_kind.indirect_function_call_unknown_arity Heap
       end

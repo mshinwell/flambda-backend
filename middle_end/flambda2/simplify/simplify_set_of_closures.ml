@@ -308,8 +308,7 @@ end = struct
                   | Some ty -> (
                     match T.kind ty with
                     | Rec_info -> Variable.Set.add var free_depth_variables
-                    | Value | Naked_number _ | Region ->
-                      free_depth_variables)))
+                    | Value | Naked_number _ | Region -> free_depth_variables)))
             closure_element_types
           |> Var_within_closure.Map.data)
         closure_element_types_all_sets
@@ -677,10 +676,13 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
       ~newer_version_of:(Some old_code_id)
       ~params_arity:(Code.params_arity code)
       ~num_trailing_local_params:(Code.num_trailing_local_params code)
-      ~result_arity ~result_types ~stub:(Code.stub code)
-      ~inline:(Code.inline code) ~is_a_functor:(Code.is_a_functor code)
-      ~recursive:(Code.recursive code) ~cost_metrics ~inlining_arguments
-      ~dbg:(Code.dbg code) ~is_tupled:(Code.is_tupled code)
+      ~result_arity ~result_types
+      ~may_contain_escaping_local_allocs:
+        (Code.may_contain_escaping_local_allocs code)
+      ~stub:(Code.stub code) ~inline:(Code.inline code)
+      ~is_a_functor:(Code.is_a_functor code) ~recursive:(Code.recursive code)
+      ~cost_metrics ~inlining_arguments ~dbg:(Code.dbg code)
+      ~is_tupled:(Code.is_tupled code)
       ~is_my_closure_used:(Code.is_my_closure_used code)
       ~inlining_decision
   in
