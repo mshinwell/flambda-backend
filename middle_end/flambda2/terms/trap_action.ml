@@ -32,8 +32,6 @@ type t =
       { exn_handler : Continuation.t;
         raise_kind : raise_kind option
       }
-  | Begin_region
-  | End_region
 
 let compare t1 t2 =
   match t1, t2 with
@@ -45,13 +43,8 @@ let compare t1 t2 =
     if c <> 0
     then c
     else Option.compare compare_raise_kind raise_kind1 raise_kind2
-  | Begin_region, Begin_region | End_region, End_region -> 0
-  | Push _, (Pop _ | Begin_region | End_region) -> -1
-  | Pop _, (Begin_region | End_region) -> -1
-  | Begin_region, End_region -> -1
-  | (Pop _ | Begin_region | End_region), Push _ -> 1
-  | (Begin_region | End_region), Pop _ -> 1
-  | End_region, Begin_region -> 1
+  | Push _, Pop _ -> -1
+  | Pop _, Push _ -> 1
 
 let raise_kind_option_to_string = function
   | None -> ""
@@ -77,14 +70,6 @@ let [@ocamlformat "disable"] print ppf t =
       Continuation.print exn_handler
       (Flambda_colours.expr_keyword ())
       (Flambda_colours.normal ())
-  | Begin_region ->
-    fprintf ppf "%sbegin_region then%s "
-      (Flambda_colours.expr_keyword ())
-      (Flambda_colours.normal ())
-  | End_region ->
-     fprintf ppf "%send_region then%s "
-      (Flambda_colours.expr_keyword ())
-      (Flambda_colours.normal ())
 
 (* Continuations used in trap actions are tracked separately, since sometimes,
    we don't want to count them as uses. However they must be tracked for lifting
@@ -92,7 +77,6 @@ let [@ocamlformat "disable"] print ppf t =
 let free_names = function
   | Push { exn_handler } | Pop { exn_handler; raise_kind = _ } ->
     Name_occurrences.singleton_continuation_in_trap_action exn_handler
-  | Begin_region | End_region -> Name_occurrences.empty
 
 let apply_renaming t perm =
   match t with
@@ -106,13 +90,12 @@ let apply_renaming t perm =
     if exn_handler == exn_handler'
     then t
     else Pop { exn_handler = exn_handler'; raise_kind }
-  | Begin_region | End_region -> t
+
+let exn_handler t =
+  match t with Push { exn_handler } | Pop { exn_handler; _ } -> exn_handler
 
 let all_ids_for_export t =
-  match t with
-  | Push { exn_handler } | Pop { exn_handler; _ } ->
-    Ids_for_export.add_continuation Ids_for_export.empty exn_handler
-  | Begin_region | End_region -> Ids_for_export.empty
+  Ids_for_export.add_continuation Ids_for_export.empty (exn_handler t)
 
 module Option = struct
   type nonrec t = t option

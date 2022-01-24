@@ -14,10 +14,9 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Actions affecting exception traps on the normal stack and local allocation
-    regions on the local allocation stack. These are always associated with an
-    [Apply_cont] node; the trap action is executed before the application of the
-    continuation.
+(** Actions affecting exception traps on the stack. These are always associated
+    with an [Apply_cont] node; the trap action is executed before the
+    application of the continuation.
 
     Beware: continuations cannot be used both as an exception handler and as a
     normal continuation (since continuations used as exception handlers use a
@@ -32,7 +31,6 @@ type raise_kind =
 
 type t =
   | Push of { exn_handler : Continuation.t }
-      (** [Push] also implies [Begin_region] *)
   | Pop of
       { exn_handler : Continuation.t;
             (** Note that even for [Pop], [exn_handler] might not match the
@@ -40,9 +38,7 @@ type t =
                 example is when a value is being returned from the end of the
                 non-exceptional block of a try...with. *)
         raise_kind : raise_kind option
-      }  (** [Pop] also implies [End_region] *)
-  | Begin_region
-  | End_region
+      }
 
 include Expr_std.S with type t := t
 

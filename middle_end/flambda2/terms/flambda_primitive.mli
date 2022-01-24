@@ -138,6 +138,7 @@ module Init_or_assign : sig
   type t =
     | Initialization
     | Assignment
+    | Local_assignment
 
   val to_lambda : t -> Lambda.initialization_or_assignment
 end
@@ -206,7 +207,7 @@ type signed_or_unsigned =
   | Signed
   | Unsigned
 
-(** Primitive taking exactly zero arguments *)
+(** Primitives taking exactly zero arguments. *)
 type nullary_primitive =
   | Optimised_out of Flambda_kind.t
       (** Used for phantom bindings for which there is not enough information
