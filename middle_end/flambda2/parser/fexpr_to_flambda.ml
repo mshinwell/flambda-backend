@@ -276,7 +276,7 @@ let value_kind : Fexpr.kind -> Flambda_kind.t = function
     | Naked_int64 -> Flambda_kind.naked_int64
     | Naked_nativeint -> Flambda_kind.naked_nativeint
   end
-  | Fabricated -> Misc.fatal_error "Fabricated should not be used"
+  | Region -> Misc.fatal_error "Region should not be used"
   | Rec_info -> Flambda_kind.rec_info
 
 let value_kind_with_subkind_opt :

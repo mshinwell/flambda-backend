@@ -1681,7 +1681,7 @@ module Row_like_for_blocks = struct
         | Naked_number Naked_int32
         | Naked_number Naked_int64
         | Naked_number Naked_nativeint
-        | Fabricated | Rec_info ->
+        | Region | Rec_info ->
           Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
             field_kind
       end
@@ -1704,7 +1704,7 @@ module Row_like_for_blocks = struct
         | Naked_number Naked_int32
         | Naked_number Naked_int64
         | Naked_number Naked_nativeint
-        | Fabricated | Rec_info ->
+        | Region | Rec_info ->
           Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
             field_kind
       end
@@ -2007,7 +2007,7 @@ let alias_type_of (kind : K.t) name : t =
   | Naked_number Naked_int64 -> Naked_int64 (TD.create_equals name)
   | Naked_number Naked_nativeint -> Naked_nativeint (TD.create_equals name)
   | Rec_info -> Rec_info (TD.create_equals name)
-  | Fabricated -> Misc.fatal_error "Unused kind, to be removed"
+  | Region -> Misc.fatal_error "Unused kind, to be removed"
 
 let bottom_value = Value TD.bottom
 

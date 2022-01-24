@@ -247,7 +247,7 @@ end = struct
       | Naked_number Naked_int64 -> Naked_int64 Unknown
       | Naked_number Naked_nativeint -> Naked_nativeint Unknown
       | Rec_info -> Rec_info Unknown
-      | Fabricated -> Misc.fatal_error "Unused kind, to be removed")
+      | Region -> Misc.fatal_error "Unused kind, to be removed")
     | Bottom -> (
       match t.kind with
       | Value -> Value Bottom
@@ -257,7 +257,7 @@ end = struct
       | Naked_number Naked_int64 -> Naked_int64 Bottom
       | Naked_number Naked_nativeint -> Naked_nativeint Bottom
       | Rec_info -> Rec_info Bottom
-      | Fabricated -> Misc.fatal_error "Unused kind, to be removed")
+      | Region -> Misc.fatal_error "Unused kind, to be removed")
     | Ok (Value head) -> Value (Ok head)
     | Ok (Naked_immediate head) -> Naked_immediate (Ok head)
     | Ok (Naked_float head) -> Naked_float (Ok head)

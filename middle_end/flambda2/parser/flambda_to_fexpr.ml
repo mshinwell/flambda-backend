@@ -401,7 +401,7 @@ let simple env s =
 let kind (k : Flambda_kind.t) : Fexpr.kind =
   match k with
   | Value -> Value
-  | Fabricated -> Fabricated
+  | Region -> Region
   | Naked_number nnk -> Naked_number nnk
   | Rec_info -> Rec_info
 

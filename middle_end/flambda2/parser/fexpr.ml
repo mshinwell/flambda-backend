@@ -104,7 +104,7 @@ type kind =
   (* can't alias because Flambda_kind.t is private *)
   | Value
   | Naked_number of naked_number_kind
-  | Fabricated
+  | Region
   | Rec_info
 
 type kind_with_subkind =

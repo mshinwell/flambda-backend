@@ -198,7 +198,7 @@ let bigarray_box_raw_value_read kind alloc_mode =
   | Naked_number k ->
     let bi = K.Boxable_number.of_naked_number_kind k in
     fun arg -> H.Unary (Box_number (bi, alloc_mode), Prim arg)
-  | Fabricated -> error "a fabricated expression"
+  | Region -> error "a region expression"
   | Rec_info -> error "recursion info"
 
 let bigarray_unbox_value_to_store kind =
@@ -211,7 +211,7 @@ let bigarray_unbox_value_to_store kind =
   | Naked_number k ->
     let bi = K.Boxable_number.of_naked_number_kind k in
     fun arg -> H.Prim (Unary (Unbox_number bi, arg))
-  | Fabricated -> error "a fabricated expression"
+  | Region -> error "a region expression"
   | Rec_info -> error "recursion info"
 
 let bigarray_dim_bound b dimension =

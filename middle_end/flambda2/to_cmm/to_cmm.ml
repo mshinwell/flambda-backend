@@ -94,7 +94,7 @@ let default_of_kind (k : Flambda_kind.t) =
   | Naked_number Naked_int64 when C.arch32 -> C.unsupported_32_bits ()
   | Naked_number Naked_int64 -> C.int 0
   | Naked_number Naked_nativeint -> C.int 0
-  | Fabricated -> Misc.fatal_error "Fabricated_kind have no default value"
+  | Region -> Misc.fatal_error "Region_kind have no default value"
   | Rec_info -> Misc.fatal_error "Rec_info has no default value"
 
 (* Function symbol *)
@@ -553,7 +553,7 @@ let machtype_of_kind k =
   | Naked_number Naked_float -> typ_float
   | Naked_number Naked_int64 -> typ_int64
   | Naked_number (Naked_immediate | Naked_int32 | Naked_nativeint) -> typ_int
-  | Fabricated | Rec_info -> assert false
+  | Region | Rec_info -> assert false
 
 let machtype_of_kinded_parameter p =
   Bound_parameter.kind p |> Flambda_kind.With_subkind.kind |> machtype_of_kind

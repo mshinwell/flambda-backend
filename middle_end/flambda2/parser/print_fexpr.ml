@@ -132,7 +132,7 @@ let kind ppf (k : kind) =
   match k with
   | Value -> Format.pp_print_string ppf "val"
   | Naked_number nnk -> naked_number_kind ppf nnk
-  | Fabricated -> Format.pp_print_string ppf "fabricated"
+  | Region -> Format.pp_print_string ppf "region"
   | Rec_info -> Format.pp_print_string ppf "rec_info"
 
 let kind_with_subkind ppf (k : kind_with_subkind) =

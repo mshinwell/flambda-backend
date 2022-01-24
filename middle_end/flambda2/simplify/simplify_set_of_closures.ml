@@ -308,7 +308,7 @@ end = struct
                   | Some ty -> (
                     match T.kind ty with
                     | Rec_info -> Variable.Set.add var free_depth_variables
-                    | Value | Naked_number _ | Fabricated ->
+                    | Value | Naked_number _ | Region ->
                       free_depth_variables)))
             closure_element_types
           |> Var_within_closure.Map.data)
