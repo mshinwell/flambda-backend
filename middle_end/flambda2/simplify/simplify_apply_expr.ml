@@ -50,8 +50,8 @@ let record_free_names_of_apply_as_used dacc apply =
   DA.map_data_flow dacc ~f:(record_free_names_of_apply_as_used0 apply)
 
 let simplify_direct_tuple_application ~simplify_expr dacc apply
-    ~params_arity:param_arity ~closure_alloc_mode ~apply_alloc_mode
-    ~num_trailing_local_params ~down_to_up =
+    ~params_arity:param_arity ~result_arity ~apply_alloc_mode
+    ~contains_no_escaping_local_allocs ~down_to_up =
   let dbg = Apply.dbg apply in
   let n = List.length param_arity in
   (* Split the tuple argument from other potential over application arguments *)
@@ -80,7 +80,7 @@ let simplify_direct_tuple_application ~simplify_expr dacc apply
     | [] -> Expr.create_apply apply
     | _ ->
       Simplify_common.split_direct_over_application apply ~param_arity
-        ~closure_alloc_mode ~apply_alloc_mode ~num_trailing_local_params
+        ~result_arity ~apply_alloc_mode ~contains_no_escaping_local_allocs
   in
   (* Insert the projections and simplify the new expression, to allow field
      projections to be simplified, and over-application/full_application
@@ -532,12 +532,12 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
    sure it cannot in every case. *)
 
 let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
-    ~result_arity:_ ~down_to_up ~coming_from_indirect ~closure_alloc_mode
-    ~apply_alloc_mode ~num_trailing_local_params =
+    ~result_arity ~down_to_up ~coming_from_indirect ~apply_alloc_mode
+    ~contains_no_escaping_local_allocs =
   fail_if_probe apply;
   let expr =
     Simplify_common.split_direct_over_application apply ~param_arity
-      ~closure_alloc_mode ~apply_alloc_mode ~num_trailing_local_params
+      ~result_arity ~apply_alloc_mode ~contains_no_escaping_local_allocs
   in
   let down_to_up dacc ~rebuild =
     let rebuild uacc ~after_rebuild =
@@ -615,9 +615,10 @@ let simplify_direct_function_call ~simplify_expr dacc apply
     if must_be_detupled
     then
       simplify_direct_tuple_application ~simplify_expr dacc apply ~params_arity
-        ~closure_alloc_mode ~apply_alloc_mode
-        ~num_trailing_local_params:
-          (Code_metadata.num_trailing_local_params callee's_code_metadata)
+        ~result_arity ~apply_alloc_mode
+        ~contains_no_escaping_local_allocs:
+          (Code_metadata.contains_no_escaping_local_allocs
+             callee's_code_metadata)
         ~down_to_up
     else
       let args = Apply.args apply in
@@ -640,9 +641,10 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       then
         simplify_direct_over_application ~simplify_expr dacc apply
           ~param_arity:params_arity ~result_arity ~down_to_up
-          ~coming_from_indirect ~closure_alloc_mode ~apply_alloc_mode
-          ~num_trailing_local_params:
-            (Code_metadata.num_trailing_local_params callee's_code_metadata)
+          ~coming_from_indirect ~apply_alloc_mode
+          ~contains_no_escaping_local_allocs:
+            (Code_metadata.contains_no_escaping_local_allocs
+               callee's_code_metadata)
       else if provided_num_args > 0 && provided_num_args < num_params
       then
         simplify_direct_partial_application ~simplify_expr dacc apply

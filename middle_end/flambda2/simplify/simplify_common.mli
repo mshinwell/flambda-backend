@@ -70,9 +70,9 @@ val project_tuple :
 val split_direct_over_application :
   Apply_expr.t ->
   param_arity:Flambda_arity.With_subkinds.t ->
-  closure_alloc_mode:Alloc_mode.t Or_unknown.t ->
+  result_arity:Flambda_arity.With_subkinds.t ->
   apply_alloc_mode:Alloc_mode.t ->
-  num_trailing_local_params:int ->
+  contains_no_escaping_local_allocs:bool ->
   Expr.t
 
 type apply_cont_context =
