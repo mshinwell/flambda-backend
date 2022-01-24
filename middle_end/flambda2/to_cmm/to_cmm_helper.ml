@@ -561,27 +561,26 @@ let ccatch ~rec_flag ~handlers ~body =
 let direct_call ?(dbg = Debuginfo.none) ty f_code_sym args =
   Cmm.Cop (Cmm.Capply (ty, Apply_nontail), f_code_sym :: args, dbg)
 
-let indirect_call_single_arg dbg ty f arg =
-  (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
-  let v = Backend_var.create_local "*closure*" in
-  let v' = Backend_var.With_provenance.create v in
-  letin v' f
-  @@ Cmm.Cop
-       ( Cmm.Capply (ty, Apply_nontail),
-         [load Cmm.Word_int Asttypes.Mutable (var v); arg; var v],
-         dbg )
-
 let indirect_call ?(dbg = Debuginfo.none) ty alloc_mode f = function
-  | [arg] -> indirect_call_single_arg dbg ty f arg
+  | [arg] ->
+    (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
+    let v = Backend_var.create_local "*closure*" in
+    let v' = Backend_var.With_provenance.create v in
+    (* We always use [Apply_nontail] since the [Lambda_to_flambda] pass has
+       already taken care of the placement of region begin/end primitives. *)
+    letin v' f
+    @@ Cmm.Cop
+         ( Cmm.Capply (ty, Apply_nontail),
+           [load Cmm.Word_int Asttypes.Mutable (var v); arg; var v],
+           dbg )
   | args ->
     let arity = List.length args in
     let l = (symbol (apply_function_sym arity alloc_mode) :: args) @ [f] in
     Cmm.Cop (Cmm.Capply (ty, Apply_nontail), l, dbg)
 
-let indirect_full_call ?(dbg = Debuginfo.none) ty f = function
-  (* the single-argument case is already optimized by
-     indirect_call_single_arg *)
-  | [arg] -> indirect_call_single_arg dbg ty f arg
+let indirect_full_call ?(dbg = Debuginfo.none) ty mode f = function
+  (* the single-argument case is already optimized by indirect_call *)
+  | [_] as args -> indirect_call ~dbg ty mode f args
   | args ->
     (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
     let v = Backend_var.create_local "*closure*" in

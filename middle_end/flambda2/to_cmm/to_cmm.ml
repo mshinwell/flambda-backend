@@ -697,39 +697,6 @@ let function_args vars my_closure ~(is_my_closure_used : _ Or_unknown.t) =
 let function_flags () =
   if Flambda_features.optimize_for_speed () then [] else [Cmm.Reduce_code_size]
 
-(* Trap and region actions *)
-
-let cexit env cont args (trap_action : Trap_action.t option) dbg =
-  let open struct
-    type region_action =
-      | Begin_region
-      | End_region
-  end in
-  let region_actions, trap_actions =
-    (* Trap actions are handled using the delayed handlers mechanism. Region
-       actions are handled by insertion of begin/end region Cmm operations. A
-       push trap implies a begin region operation and a pop trap implies an end
-       region operation. *)
-    match trap_action with
-    | None -> [], []
-    | Some (Push { exn_handler }) ->
-      let cont = Env.get_jump_id env exn_handler in
-      [Begin_region], [Cmm.Push cont]
-    | Some (Pop _) -> [End_region], [Cmm.Pop]
-    | Some Begin_region -> [Begin_region], []
-    | Some End_region -> [End_region], []
-  in
-  let exit_expr = C.cexit cont args trap_actions in
-  List.fold_left
-    (fun expr region_action ->
-      let region_action : Cmm.expression =
-        match region_action with
-        | Begin_region -> Cop (Cbeginregion, [], dbg)
-        | End_region -> Cop (Cendregion, [], dbg)
-      in
-      C.sequence region_action expr)
-    exit_expr region_actions
-
 (* Expressions *)
 
 let rec expr env res e =
@@ -1112,10 +1079,10 @@ and wrap_cont env res effs call e =
     match Env.get_k env k with
     | Jump { types = []; cont } ->
       let wrap, _ = Env.flush_delayed_lets env in
-      wrap (C.sequence call (cexit env cont [] None (Apply_expr.dbg e))), res
+      wrap (C.sequence call (C.cexit cont [] [])), res
     | Jump { types = [_]; cont } ->
       let wrap, _ = Env.flush_delayed_lets env in
-      wrap (cexit env cont [call] None (Apply_expr.dbg e)), res
+      wrap (C.cexit cont [call] []), res
     | Inline
         { handler_params = [];
           handler_body = body;
@@ -1196,19 +1163,11 @@ and apply_cont_ret env res e k = function
     let wrap, _ = Env.flush_delayed_lets env in
     match Apply_cont_expr.trap_action e with
     | None -> wrap ret, res
-    | Some (Pop _) ->
-      (* A [Pop] trap action always implies an [End_region] trap action. *)
-      ( wrap
-          (C.sequence
-             (Cmm.Cop (Cendregion, [], Apply_cont_expr.debuginfo e))
-             (C.trap_return ret [Cmm.Pop])),
-        res )
-    | Some End_region ->
-      wrap (Cmm.Cop (Cendregion, [], Apply_cont_expr.debuginfo e)), res
-    | Some (Push _ | Begin_region) ->
+    | Some (Pop _) -> wrap (C.trap_return ret [Cmm.Pop]), res
+    | Some (Push _) ->
       Misc.fatal_errorf
-        "Continuation %a (return cont) should not be applied with a [Push] or \
-         [Begin_region] trap action"
+        "Continuation %a (return cont) should not be applied with a push trap \
+         action"
         Continuation.print k)
   | _ ->
     (* TODO: add support using unboxed tuples *)
@@ -1258,17 +1217,22 @@ and apply_cont_inline env res e k args handler_body handler_params
 and apply_cont_jump env res e types cont args =
   if List.compare_lengths types args = 0
   then
+    let trap_actions = apply_cont_trap_actions env e in
     let args, env, _ = arg_list env args in
     let wrap, _ = Env.flush_delayed_lets env in
-    ( wrap
-        (cexit env cont args
-           (Apply_cont_expr.trap_action e)
-           (Apply_cont_expr.debuginfo e)),
-      res )
+    wrap (C.cexit cont args trap_actions), res
   else
     Misc.fatal_errorf "Types (%a) do not match arguments of@ %a"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space Printcmm.machtype)
       types Apply_cont_expr.print e
+
+and apply_cont_trap_actions env e =
+  match Apply_cont_expr.trap_action e with
+  | None -> []
+  | Some (Pop _) -> [Cmm.Pop]
+  | Some (Push { exn_handler }) ->
+    let cont = Env.get_jump_id env exn_handler in
+    [Cmm.Push cont]
 
 and switch env res s =
   let scrutinee = Switch.scrutinee s in
