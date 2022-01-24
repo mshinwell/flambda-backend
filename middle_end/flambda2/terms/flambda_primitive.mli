@@ -138,7 +138,6 @@ module Init_or_assign : sig
   type t =
     | Initialization
     | Assignment
-    | Local_assignment
 
   val to_lambda : t -> Lambda.initialization_or_assignment
 end
@@ -215,6 +214,9 @@ type nullary_primitive =
           let-binding. *)
   | Probe_is_enabled of { name : string }
       (** Returns a boolean saying whether the given tracing probe is enabled. *)
+  | Begin_region
+      (** Starting delimiter of local allocation region, returning a region
+          name. *)
 
 (** Untagged binary integer arithmetic operations.
 
@@ -280,8 +282,6 @@ type unary_primitive =
      [Flambda_kind.Of_naked_number.t] arguments (one input, one output). *)
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  (* CR mshinwell: we should split out the "tag int" case since the allocation
-     mode isn't used there *)
   | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.t
   | Select_closure of
       { move_from : Closure_id.t;
@@ -299,6 +299,8 @@ type unary_primitive =
       (** Only valid when the float array optimisation is enabled. *)
   | Is_flat_float_array
       (** Only valid when the float array optimisation is enabled. *)
+  | End_region
+      (** Ending delimiter of local allocation region, accepting a region name. *)
 
 (** Whether a comparison is to yield a boolean result, as given by a particular
     comparison operator, or whether it is to behave in the manner of "compare"
