@@ -987,6 +987,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
   | Ltrywith (body, id, handler) ->
     let body_result = Ident.create_local "body_result" in
     let result_var = Ident.create_local "try_with_result" in
+    let region = Ident.create_local "try_region" in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
       ~params:[result_var, Not_user_visible, Pgenval]
       ~body:(fun acc env ccenv after_continuation ->
@@ -1005,14 +1006,18 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                       (Some (IR.Push { exn_handler = handler_continuation }))
                       [])
                   ~handler:(fun acc env ccenv ->
-                    cps_tail acc env ccenv body poptrap_continuation
-                      handler_continuation))
+                    CC.close_let acc ccenv region Not_user_visible Begin_region
+                      ~body:(fun acc ccenv ->
+                        cps_tail acc env ccenv body poptrap_continuation
+                          handler_continuation)))
               ~handler:(fun acc env ccenv ->
                 apply_cont_with_extra_args acc env ccenv after_continuation
                   (Some (IR.Pop { exn_handler = handler_continuation }))
                   [IR.Var body_result]))
           ~handler:(fun acc env ccenv ->
-            cps_tail acc env ccenv handler after_continuation k_exn))
+            CC.close_let acc ccenv (Ident.create_local "unit")
+              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                cps_tail acc env ccenv handler after_continuation k_exn)))
       ~handler:(fun acc env ccenv -> k acc env ccenv result_var)
   | Lifthenelse (cond, ifso, ifnot) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot in
@@ -1363,6 +1368,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
       k_exn
   | Ltrywith (body, id, handler) ->
     let body_result = Ident.create_local "body_result" in
+    let region = Ident.create_local "try_region" in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:true
       ~params:[id, User_visible, Pgenval]
       ~body:(fun acc env ccenv handler_continuation ->
@@ -1377,13 +1383,18 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
                   (Some (IR.Push { exn_handler = handler_continuation }))
                   [])
               ~handler:(fun acc env ccenv ->
-                cps_tail acc env ccenv body poptrap_continuation
-                  handler_continuation))
+                CC.close_let acc ccenv region Not_user_visible Begin_region
+                  ~body:(fun acc ccenv ->
+                    cps_tail acc env ccenv body poptrap_continuation
+                      handler_continuation)))
           ~handler:(fun acc env ccenv ->
             apply_cont_with_extra_args acc env ccenv k
               (Some (IR.Pop { exn_handler = handler_continuation }))
               [IR.Var body_result]))
-      ~handler:(fun acc env ccenv -> cps_tail acc env ccenv handler k k_exn)
+      ~handler:(fun acc env ccenv ->
+        CC.close_let acc ccenv (Ident.create_local "unit")
+          Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+            cps_tail acc env ccenv handler k k_exn))
   | Lifthenelse (cond, ifso, ifnot) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot in
     cps_tail acc env ccenv lam k k_exn
