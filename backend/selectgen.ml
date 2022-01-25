@@ -624,7 +624,7 @@ method select_operation op args _dbg =
     Iprobe { name; handler_code_sym; }, args
   | (Cprobe_is_enabled {name}, _) -> Iprobe_is_enabled {name}, []
   | (Cbeginregion, _) -> Ibeginregion, []
-  | (Cendregion, _) -> Iendregion, []
+  | (Cendregion, _) -> Iendregion, args
   | _ -> Misc.fatal_error "Selection.select_oper"
 
 method private select_arith_comm op = function

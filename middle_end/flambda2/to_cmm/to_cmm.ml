@@ -469,7 +469,7 @@ let unary_primitive env dbg f arg =
         ~else_dbg:dbg )
   | Is_flat_float_array ->
     None, Cmm.Cop (Ccmpi Ceq, [C.get_tag arg dbg; C.floatarray_tag dbg], dbg)
-  | End_region -> None, Cmm.Cop (Cendregion, [arg], dbg)
+  | End_region -> None, C.return_unit dbg (Cmm.Cop (Cendregion, [arg], dbg))
 
 let binary_primitive env dbg f x y =
   match (f : Flambda_primitive.binary_primitive) with
