@@ -972,6 +972,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let body_result = Ident.create_local "body_result" in
     let result_var = Ident.create_local "try_with_result" in
     let region = Ident.create_local "try_region" in
+    let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
       ~params:[result_var, Not_user_visible, Pgenval]
       ~body:(fun acc env ccenv after_continuation ->
@@ -1000,10 +1001,6 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                        [End_region] at the end of the "try" body.) *)
                     CC.close_let acc ccenv region Not_user_visible Begin_region
                       ~body:(fun acc ccenv ->
-                        let ccenv =
-                          CCenv.add_var ccenv region
-                            (Variable.create "try_region")
-                        in
                         cps_tail acc env ccenv body poptrap_continuation
                           handler_continuation)))
               ~handler:(fun acc env ccenv ->
@@ -1356,6 +1353,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
   | Ltrywith (body, id, handler) ->
     let body_result = Ident.create_local "body_result" in
     let region = Ident.create_local "try_region" in
+    let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:true
       ~params:[id, User_visible, Pgenval]
       ~body:(fun acc env ccenv handler_continuation ->
@@ -1372,9 +1370,6 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
               ~handler:(fun acc env ccenv ->
                 CC.close_let acc ccenv region Not_user_visible Begin_region
                   ~body:(fun acc ccenv ->
-                    let ccenv =
-                      CCenv.add_var ccenv region (Variable.create "try_region")
-                    in
                     cps_tail acc env ccenv body poptrap_continuation
                       handler_continuation)))
           ~handler:(fun acc env ccenv ->
