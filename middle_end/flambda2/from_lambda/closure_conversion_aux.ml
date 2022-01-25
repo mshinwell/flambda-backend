@@ -37,6 +37,8 @@ module IR = struct
   type named =
     | Simple of simple
     | Get_tag of Ident.t
+    | Begin_region
+    | End_region of Ident.t
     | Prim of
         { prim : Lambda.primitive;
           args : simple list;
@@ -61,7 +63,8 @@ module IR = struct
       tailcall : Lambda.tailcall_attribute;
       inlined : Lambda.inlined_attribute;
       specialised : Lambda.specialise_attribute;
-      probe : Lambda.probe
+      probe : Lambda.probe;
+      mode : Lambda.alloc_mode
     }
 
   type switch =
@@ -82,6 +85,8 @@ module IR = struct
     | Simple (Var id) -> Ident.print ppf id
     | Simple (Const cst) -> Printlambda.structured_constant ppf cst
     | Get_tag id -> fprintf ppf "@[<2>(Gettag %a)@]" Ident.print id
+    | Begin_region -> fprintf ppf "Begin_region"
+    | End_region id -> fprintf ppf "@[<2>(End_region@ %a)@]" Ident.print id
     | Prim { prim; args; _ } ->
       fprintf ppf "@[<2>(%a %a)@]" Printlambda.primitive prim
         (Format.pp_print_list ~pp_sep:Format.pp_print_space print_simple)
@@ -419,12 +424,16 @@ module Function_decls = struct
         attr : Lambda.function_attribute;
         loc : Lambda.scoped_location;
         stub : bool;
-        recursive : Recursive.t
+        recursive : Recursive.t;
+        closure_alloc_mode : Lambda.alloc_mode;
+        num_trailing_local_params : int;
+        contains_no_escaping_local_allocs : bool
       }
 
     let create ~let_rec_ident ~closure_id ~kind ~params ~return
         ~return_continuation ~exn_continuation ~body ~attr ~loc
-        ~free_idents_of_body ~stub recursive =
+        ~free_idents_of_body ~stub recursive ~closure_alloc_mode
+        ~num_trailing_local_params ~contains_no_escaping_local_allocs =
       let let_rec_ident =
         match let_rec_ident with
         | None -> Ident.create_local "unnamed_function"
@@ -442,7 +451,10 @@ module Function_decls = struct
         attr;
         loc;
         stub;
-        recursive
+        recursive;
+        closure_alloc_mode;
+        num_trailing_local_params;
+        contains_no_escaping_local_allocs
       }
 
     let let_rec_ident t = t.let_rec_ident
@@ -474,12 +486,22 @@ module Function_decls = struct
     let loc t = t.loc
 
     let recursive t = t.recursive
+
+    let closure_alloc_mode t = t.closure_alloc_mode
+
+    let num_trailing_local_params t = t.num_trailing_local_params
+
+    let contains_no_escaping_local_allocs t =
+      t.contains_no_escaping_local_allocs
   end
 
   type t =
     { function_decls : Function_decl.t list;
-      all_free_idents : Ident.Set.t
+      all_free_idents : Ident.Set.t;
+      alloc_mode : Lambda.alloc_mode
     }
+
+  let alloc_mode t = t.alloc_mode
 
   (* All identifiers free in the bodies of the given function declarations,
      indexed by the identifiers corresponding to the functions themselves. *)
@@ -518,8 +540,11 @@ module Function_decls = struct
          (List.map fst (all_params function_decls)))
       (let_rec_idents function_decls)
 
-  let create function_decls =
-    { function_decls; all_free_idents = all_free_idents function_decls }
+  let create function_decls alloc_mode =
+    { function_decls;
+      all_free_idents = all_free_idents function_decls;
+      alloc_mode
+    }
 
   let to_list t = t.function_decls
 

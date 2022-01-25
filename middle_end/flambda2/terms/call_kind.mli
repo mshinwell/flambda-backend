@@ -53,7 +53,8 @@ type t = private
       }
   | Method of
       { kind : method_kind;
-        obj : Simple.t
+        obj : Simple.t;
+        alloc_mode : Alloc_mode.t
       }
   | C_call of
       { alloc : bool;
@@ -81,7 +82,7 @@ val indirect_function_call_known_arity :
   Alloc_mode.t ->
   t
 
-val method_call : method_kind -> obj:Simple.t -> t
+val method_call : method_kind -> obj:Simple.t -> Alloc_mode.t -> t
 
 val c_call :
   alloc:bool ->

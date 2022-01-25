@@ -39,6 +39,10 @@ module IR : sig
   type named =
     | Simple of simple
     | Get_tag of Ident.t (* Intermediary primitive for block switch *)
+    | Begin_region
+    | End_region of Ident.t
+        (** [Begin_region] and [End_region] are needed because these primitives
+            don't exist in Lambda *)
     | Prim of
         { prim : Lambda.primitive;
           args : simple list;
@@ -63,7 +67,8 @@ module IR : sig
       tailcall : Lambda.tailcall_attribute;
       inlined : Lambda.inlined_attribute;
       specialised : Lambda.specialise_attribute;
-      probe : Lambda.probe
+      probe : Lambda.probe;
+      mode : Lambda.alloc_mode
     }
 
   type switch =
@@ -229,6 +234,9 @@ module Function_decls : sig
       free_idents_of_body:Ident.Set.t ->
       stub:bool ->
       Recursive.t ->
+      closure_alloc_mode:Lambda.alloc_mode ->
+      num_trailing_local_params:int ->
+      contains_no_escaping_local_allocs:bool ->
       t
 
     val let_rec_ident : t -> Ident.t
@@ -259,13 +267,21 @@ module Function_decls : sig
 
     val recursive : t -> Recursive.t
 
+    val closure_alloc_mode : t -> Lambda.alloc_mode
+
+    val num_trailing_local_params : t -> int
+
+    val contains_no_escaping_local_allocs : t -> bool
+
     (* Like [all_free_idents], but for just one function. *)
     val free_idents : t -> Ident.Set.t
   end
 
   type t
 
-  val create : Function_decl.t list -> t
+  val create : Function_decl.t list -> Lambda.alloc_mode -> t
+
+  val alloc_mode : t -> Lambda.alloc_mode
 
   val to_list : t -> Function_decl.t list
 

@@ -123,6 +123,8 @@ val unbox_number :
 
 (** {2 Block access} *)
 
+val convert_alloc_mode : Alloc_mode.t -> Lambda.alloc_mode
+
 (** [infix_field_address ptr n dbg] returns an expression for the address of the
     [n]-th field of the set of closures block pointed to by [ptr]. This function
     assumes that the [n-1]-th field of the block is an infix header, so that the

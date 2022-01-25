@@ -347,6 +347,7 @@ module Inlining = struct
           let wrapper_cont = Continuation.create () in
           let continuation = Apply.Result_continuation.Return wrapper_cont in
           let returned_func = Variable.create "func" in
+          (* XXX overapplication logic for local allocs needed here *)
           let call_kind = Call_kind.indirect_function_call_unknown_arity () in
           let handler acc =
             let over_apply =
@@ -705,6 +706,23 @@ let close_named acc env ~let_bound_var (named : IR.named)
       ~register_const_string:(fun acc -> register_const_string acc)
       prim Debuginfo.none
       (fun acc named -> k acc (Some named))
+  | Begin_region ->
+    let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
+      Nullary Begin_region
+    in
+    Lambda_to_flambda_primitives_helpers.bind_rec acc None
+      ~register_const_string:(fun acc -> register_const_string acc)
+      prim Debuginfo.none
+      (fun acc named -> k acc (Some named))
+  | End_region id ->
+    let named = find_simple_from_id env id in
+    let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
+      Unary (End_region, Simple named)
+    in
+    Lambda_to_flambda_primitives_helpers.bind_rec acc None
+      ~register_const_string:(fun acc -> register_const_string acc)
+      prim Debuginfo.none
+      (fun acc named -> k acc (Some named))
   | Prim { prim; args; loc; exn_continuation } ->
     close_primitive acc env ~let_bound_var named prim ~args loc exn_continuation
       k
@@ -837,15 +855,17 @@ let close_apply acc env
        tailcall = _;
        inlined;
        specialised = _;
-       probe
+       probe;
+       mode
      } :
       IR.apply) : Acc.t * Expr_with_acc.t =
+  let mode = LC.alloc_mode mode in
   let acc, call_kind =
     match kind with
-    | Function -> acc, Call_kind.indirect_function_call_unknown_arity ()
+    | Function -> acc, Call_kind.indirect_function_call_unknown_arity mode
     | Method { kind; obj } ->
       let acc, obj = find_simple acc env obj in
-      acc, Call_kind.method_call (LC.method_kind kind) ~obj
+      acc, Call_kind.method_call (LC.method_kind kind) ~obj mode
   in
   let acc, apply_exn_continuation =
     close_exn_continuation acc env exn_continuation
@@ -1213,9 +1233,12 @@ let close_one_function acc ~external_env ~by_closure_id decl
   let code =
     Code.create code_id ~params_and_body
       ~free_names_of_params_and_body:(Acc.free_names acc) ~params_arity
+      ~num_trailing_local_params:(Function_decl.num_trailing_local_params decl)
       ~result_arity:[LC.value_kind return]
       ~result_types:
         (Result_types.create_unknown ~params ~result_arity:[LC.value_kind return])
+      ~contains_no_escaping_local_allocs:
+        (Function_decl.contains_no_escaping_local_allocs decl)
       ~stub ~inline
       ~is_a_functor:(Function_decl.is_a_functor decl)
       ~recursive ~newer_version_of:None ~cost_metrics
@@ -1321,7 +1344,9 @@ let close_functions acc external_env function_declarations =
       var_within_closures_from_idents Var_within_closure.Map.empty
   in
   let set_of_closures =
-    Set_of_closures.create function_decls ~closure_elements
+    Set_of_closures.create ~closure_elements
+      (LC.alloc_mode (Function_decls.alloc_mode function_declarations))
+      function_decls
   in
   let acc =
     Acc.add_set_of_closures_offsets ~is_phantom:false acc set_of_closures
@@ -1350,8 +1375,32 @@ let close_let_rec acc env ~function_declarations
         Closure_id.Map.add closure_id closure_var closure_vars)
       Closure_id.Map.empty function_declarations
   in
+  let alloc_mode =
+    (* The closure allocation mode must be the same for all closures in the set
+       of closures. *)
+    List.fold_left
+      (fun (alloc_mode : Lambda.alloc_mode option) function_decl ->
+        match alloc_mode, Function_decl.closure_alloc_mode function_decl with
+        | None, alloc_mode -> Some alloc_mode
+        | Some Alloc_heap, Alloc_heap | Some Alloc_local, Alloc_local ->
+          alloc_mode
+        | Some Alloc_heap, Alloc_local | Some Alloc_local, Alloc_heap ->
+          Misc.fatal_errorf
+            "let-rec group of [lfunction] declarations have inconsistent alloc \
+             modes:@ %a"
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space Closure_id.print)
+            (List.map Function_decl.closure_id function_declarations))
+      None function_declarations
+  in
+  let alloc_mode =
+    match alloc_mode with
+    | Some alloc_mode -> alloc_mode
+    | None ->
+      Misc.fatal_error "let-rec group of [lfunction] declarations is empty"
+  in
   let acc, set_of_closures, approximations =
-    close_functions acc env (Function_decls.create function_declarations)
+    close_functions acc env
+      (Function_decls.create function_declarations alloc_mode)
   in
   (* CR mshinwell: We should maybe have something more elegant here *)
   let generated_closures =

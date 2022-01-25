@@ -81,7 +81,8 @@ type t =
       }
   | Method of
       { kind : method_kind;
-        obj : Simple.t
+        obj : Simple.t;
+        alloc_mode : Alloc_mode.t
       }
   | C_call of
       { alloc : bool;
@@ -99,10 +100,15 @@ let [@ocamlformat "disable"] print ppf t =
         )@]"
       Function_call.print function_call
       Alloc_mode.print alloc_mode
-  | Method { kind; obj; } ->
-    fprintf ppf "@[(Method %a : %a)@]"
+  | Method { kind; obj; alloc_mode } ->
+    fprintf ppf "@[<hov 1>(Method@ \
+        @[<hov 1>(obj@ %a)@]@ \
+        @[<hov 1>(kind@ %a)@]@ \
+        @[<hov 1>(alloc_mode@ %a)@]\
+        )@]"
       Simple.print obj
       print_method_kind kind
+      Alloc_mode.print alloc_mode
   | C_call { alloc; param_arity; return_arity; is_c_builtin; } ->
     fprintf ppf "@[(C@ @[(alloc %b)@]@ @[(is_c_builtin %b)@]@ \
         @<0>%s@<1>\u{2237}@<0>%s %a @<1>\u{2192} %a)@]"
@@ -128,7 +134,7 @@ let indirect_function_call_known_arity ~param_arity ~return_arity alloc_mode =
       alloc_mode
     }
 
-let method_call kind ~obj = Method { kind; obj }
+let method_call kind ~obj alloc_mode = Method { kind; obj; alloc_mode }
 
 let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
   begin
@@ -164,7 +170,7 @@ let free_names t =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
-  | Method { kind = _; obj } ->
+  | Method { kind = _; obj; alloc_mode = _ } ->
     Simple.pattern_match obj
       ~name:(fun obj ~coercion:_ ->
         Name_occurrences.singleton_name obj Name_mode.normal)
@@ -193,9 +199,9 @@ let apply_renaming t perm =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
-  | Method { kind; obj } ->
+  | Method { kind; obj; alloc_mode } ->
     let obj' = Simple.apply_renaming obj perm in
-    if obj == obj' then t else Method { kind; obj = obj' }
+    if obj == obj' then t else Method { kind; obj = obj'; alloc_mode }
 
 let all_ids_for_export t =
   match t with
@@ -212,4 +218,4 @@ let all_ids_for_export t =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
-  | Method { kind = _; obj } -> Ids_for_export.from_simple obj
+  | Method { kind = _; obj; alloc_mode = _ } -> Ids_for_export.from_simple obj

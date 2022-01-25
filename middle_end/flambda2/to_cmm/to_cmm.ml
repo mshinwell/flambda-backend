@@ -1003,9 +1003,7 @@ and apply_call env e =
     fail_if_probe e;
     let f, env, _ = simple env f in
     let args, env, _ = arg_list env args in
-    ( C.indirect_call ~dbg typ_val alloc_mode f args,
-      env,
-      effs )
+    C.indirect_call ~dbg typ_val alloc_mode f args, env, effs
   | Function
       { function_call = Indirect_known_arity { return_arity; param_arity };
         alloc_mode
@@ -1040,13 +1038,14 @@ and apply_call env e =
     ( wrap dbg (C.extcall ~dbg ~alloc ~is_c_builtin ~returns ~ty_args f ty args),
       env,
       effs )
-  | Call_kind.Method { kind; obj } ->
+  | Call_kind.Method { kind; obj; alloc_mode } ->
     fail_if_probe e;
     let obj, env, _ = simple env obj in
     let meth, env, _ = simple env f in
     let kind = meth_kind kind in
     let args, env, _ = arg_list env args in
-    C.send kind meth obj args (Apply_nontail, Alloc_heap) dbg, env, effs
+    let alloc_mode = C.convert_alloc_mode alloc_mode in
+    C.send kind meth obj args (Apply_nontail, alloc_mode) dbg, env, effs
 
 (* function calls that have an exn continuation with extra arguments must be
    wrapped with assignments for the mutable variables used to pass the extra

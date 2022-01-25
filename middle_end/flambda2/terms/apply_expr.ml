@@ -100,7 +100,7 @@ let invariant
     ({ callee;
        continuation;
        exn_continuation = _;
-       args = _;
+       args;
        call_kind;
        dbg = _;
        inlined = _;
@@ -121,7 +121,7 @@ let invariant
            a [Symbol]:@ %a"
           print t
   end;
-  match continuation with
+  (match continuation with
   | Never_returns -> begin
     match Call_kind.return_arity call_kind with
     | [] -> ()
@@ -131,7 +131,13 @@ let invariant
          call kind arity of %a:@ %a"
         Flambda_arity.With_subkinds.print a print t
   end
-  | Return _ -> ()
+  | Return _ -> ());
+  (* Not only would [args < 1] be silly but it might be wrong for some of the
+     local allocation transformations. *)
+  if List.length args < 1
+  then
+    Misc.fatal_errorf "[Apply] terms with zero arguments are forbidden:@ %a"
+      print t
 
 let create ~callee ~continuation exn_continuation ~args ~call_kind dbg ~inlined
     ~inlining_state ~probe_name =
