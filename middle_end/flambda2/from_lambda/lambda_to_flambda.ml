@@ -86,6 +86,11 @@ module Env : sig
   val entering_region : t -> Ident.t -> t
 
   val pop_innermost_region : t -> Ident.t * t
+
+  (** The innermost (newest) region is first in the list. *)
+  val region_stack : t -> Ident.t list
+
+  val region_stack_at_handler : t -> Continuation.t -> Ident.t list
 end = struct
   type t =
     { current_unit_id : Ident.t;
@@ -267,6 +272,8 @@ end = struct
     | region :: region_stack -> region, { t with region_stack }
     | [] ->
       Misc.fatal_error "Cannot get innermost region as no regions are open"
+
+  let region_stack t = t.region_stack
 end
 
 module CCenv = Closure_conversion_aux.Env
@@ -306,7 +313,8 @@ let _print_stack ppf stack =
     stack
 
 (* Uses of [Lstaticfail] that jump out of try-with handlers need special care:
-   the correct number of pop trap operations must be inserted. *)
+   the correct number of pop trap operations must be inserted. A similar thing
+   is also necessary for closing local allocation regions. *)
 let compile_staticfail acc env ccenv ~(continuation : Continuation.t) ~args :
     Acc.t * Expr_with_acc.t =
   let try_stack_at_handler = Env.get_try_stack_at_handler env continuation in
@@ -345,11 +353,46 @@ let compile_staticfail acc env ccenv ~(continuation : Continuation.t) ~args :
     | [], _ :: _ -> assert false
     (* see above *)
   in
-  let after_pop acc ccenv =
-    CC.close_apply_cont acc ccenv continuation None args
+  let region_stack_at_handler = Env.region_stack_at_handler env continuation in
+  let region_stack_now = Env.region_stack env in
+  if List.length region_stack_at_handler > List.length region_stack_now
+  then
+    Misc.fatal_errorf
+      "Cannot jump to continuation %a: it would involve jumping into a local \
+       allocation region"
+      Continuation.print continuation;
+  assert (
+    Ident.Set.subset
+      (Ident.Set.of_list region_stack_at_handler)
+      (Ident.Set.of_list region_stack_now));
+  let rec add_end_regions acc ~region_stack_now =
+    let add_end_region region ~region_stack_now after_everything =
+      let add_remaining_end_regions acc =
+        add_end_regions acc ~region_stack_now
+      in
+      let body = add_remaining_end_regions acc after_everything in
+      fun acc _env ->
+        CC.close_let acc ccenv
+          (Ident.create_local "unit")
+          Not_user_visible (End_region region) ~body
+    in
+    let no_end_region after_everything = after_everything in
+    match region_stack_now, region_stack_at_handler with
+    | [], [] -> no_end_region
+    | region1 :: region_stack_now, region2 :: _ ->
+      if Ident.same region1 region2
+      then no_end_region
+      else add_end_region region1 ~region_stack_now
+    | region :: region_stack_now, [] -> add_end_region region ~region_stack_now
+    | [], _ :: _ -> assert false
+    (* see above *)
   in
-  let mk_poptraps = add_pop_traps acc ~try_stack_now after_pop in
-  mk_poptraps acc ccenv
+  add_pop_traps acc ~try_stack_now
+    (fun acc ccenv ->
+      add_end_regions acc ~region_stack_now
+        (fun acc ccenv -> CC.close_apply_cont acc ccenv continuation None args)
+        acc ccenv)
+    acc ccenv
 
 let switch_for_if_then_else ~cond ~ifso ~ifnot =
   (* CR mshinwell: We need to make sure that [cond] is {0, 1}-valued. The
