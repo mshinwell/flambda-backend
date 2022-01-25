@@ -990,6 +990,11 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
           (fun acc env ccenv result ->
             CC.close_let acc ccenv (Ident.create_local "unit")
               Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                  let region', env = Env.pop_innermost_region env in
+                  if not (Ident.same region region')
+                  then
+                    Misc.fatal_errorf "Region stack mismatch:@ %a"
+                      Printlambda.lambda body;
                 k acc env ccenv result))
           k_exn)
 
@@ -1344,6 +1349,11 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
             (fun acc env ccenv result ->
               CC.close_let acc ccenv (Ident.create_local "unit")
                 Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                  let region', env = Env.pop_innermost_region env in
+                  if not (Ident.same region region')
+                  then
+                    Misc.fatal_errorf "Region stack mismatch:@ %a"
+                      Printlambda.lambda body;
                   cps_tail acc env ccenv (L.Lvar result) k k_exn))
             k_exn)
 
