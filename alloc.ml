@@ -1,5 +1,16 @@
 (* TEST *)
 
+type 'a ref = { mutable contents : 'a }
+external ref : 'a -> ('a ref[@local_opt]) = "%makemutable"
+external ( ! ) : ('a ref[@local_opt]) -> 'a = "%field0"
+external ( := ) : ('a ref[@local_opt]) -> 'a -> unit = "%setfield0"
+external incr : (int ref[@local_opt]) -> unit = "%incr"
+external decr : (int ref[@local_opt]) -> unit = "%decr"
+
+module Gc = struct
+  external minor : unit -> unit = "caml_gc_minor"
+end
+
 type t = int
 
 type smallrecord = {  a : t; b : t; c : t }
@@ -158,12 +169,21 @@ let makeextension n =
   ignore_local (Foo (n, n, n));
   ()
 
+module Int32 = struct
+  external add : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_add"
+end
+
 external add32_local : local_ int32 -> local_ int32 -> local_ int32 =
   "%int32_add"
 let arithint32 n =
   ignore_local (Int32.add n 1l);
   ignore_local (add32_local n 1l);
   ()
+
+external ( + ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%addint"
+external ( +. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%addfloat"
+external float_of_int : (int[@local_opt]) -> (float[@local_opt]) = "%floatofint"
+external int_of_float : (float[@local_opt]) -> int = "%intoffloat"
 
 let arithfloat n =
   ignore_local (n +. float_of_int (int_of_float n + 42));
@@ -173,6 +193,12 @@ let closure n =
   let f x = x + n in
   ignore_local f;
   ()
+
+module Sys = struct
+  external opaque_identity : 'a -> 'a = "%opaque"
+end
+
+external ( = ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%equal"
 
 let local_arg_fn ~a:(local_ a) ~b:(local_ b) =
   ignore_local (a, b); ()
@@ -291,6 +317,7 @@ external bytes_fill :
 external bytes_blit_string :
   local_ string -> int -> local_ bytes -> int -> int -> unit =
   "caml_blit_string"
+(*
 let hello = Bytes.of_string "hello"
 let makebytes () =
   let b = bytes_create 5 in
@@ -450,3 +477,4 @@ let () =
 
 (* In debug mode, Gc.minor () checks for minor heap->local pointers *)
 let () = Gc.minor ()
+*)

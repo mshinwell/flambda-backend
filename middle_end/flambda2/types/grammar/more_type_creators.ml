@@ -29,7 +29,7 @@ let unknown (kind : K.t) =
   | Naked_number Naked_int64 -> TG.any_naked_int64
   | Naked_number Naked_nativeint -> TG.any_naked_nativeint
   | Rec_info -> TG.any_rec_info
-  | Region -> Misc.fatal_error "Unused kind to be removed"
+  | Region -> TG.any_region
 
 let unknown_like t = unknown (TG.kind t)
 
@@ -42,7 +42,7 @@ let bottom (kind : K.t) =
   | Naked_number Naked_int64 -> TG.bottom_naked_int64
   | Naked_number Naked_nativeint -> TG.bottom_naked_nativeint
   | Rec_info -> TG.bottom_rec_info
-  | Region -> Misc.fatal_error "Unused kind to be removed"
+  | Region -> TG.bottom_region
 
 let bottom_like t = bottom (TG.kind t)
 

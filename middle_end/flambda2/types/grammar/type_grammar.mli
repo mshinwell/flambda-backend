@@ -165,6 +165,8 @@ val bottom_naked_nativeint : t
 
 val bottom_rec_info : t
 
+val bottom_region : t
+
 val any_value : t
 
 val any_naked_immediate : t

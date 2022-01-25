@@ -2052,7 +2052,7 @@ let alias_type_of (kind : K.t) name : t =
   | Naked_number Naked_int64 -> Naked_int64 (TD.create_equals name)
   | Naked_number Naked_nativeint -> Naked_nativeint (TD.create_equals name)
   | Rec_info -> Rec_info (TD.create_equals name)
-  | Region -> Misc.fatal_error "Unused kind, to be removed"
+  | Region -> Region (TD.create_equals name)
 
 let bottom_value = Value TD.bottom
 
@@ -2067,6 +2067,8 @@ let bottom_naked_int64 = Naked_int64 TD.bottom
 let bottom_naked_nativeint = Naked_nativeint TD.bottom
 
 let bottom_rec_info = Rec_info TD.bottom
+
+let bottom_region = Region TD.bottom
 
 let any_value = Value TD.unknown
 
