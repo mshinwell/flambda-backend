@@ -102,6 +102,7 @@ end = struct
       static_exn_continuation : Continuation.t Numeric_types.Int.Map.t;
       recursive_static_catches : Numeric_types.Int.Set.t;
       region_stack : Ident.t list;
+      region_stack_at_handler : Ident.t list Continuation.Map.t;
       region_open_in_tail_position : bool
     }
 
@@ -118,6 +119,7 @@ end = struct
       static_exn_continuation = Numeric_types.Int.Map.empty;
       recursive_static_catches = Numeric_types.Int.Set.empty;
       region_stack = [];
+      region_stack_at_handler = Continuation.Map.empty;
       region_open_in_tail_position = true
     }
 
@@ -157,6 +159,9 @@ end = struct
 
   let add_continuation t cont ~push_to_try_stack (recursive : Asttypes.rec_flag)
       =
+    let new_region_stack_at_handler =
+      Continuation.Map.add cont t.region_stack t.region_stack_at_handler
+    in
     let body_env =
       let mutables_needed_by_continuations =
         Continuation.Map.add cont (mutables_in_scope t)
@@ -165,7 +170,16 @@ end = struct
       let try_stack =
         if push_to_try_stack then cont :: t.try_stack else t.try_stack
       in
-      { t with mutables_needed_by_continuations; try_stack }
+      let region_stack_at_handler =
+        match recursive with
+        | Nonrecursive -> t.region_stack_at_handler
+        | Recursive -> new_region_stack_at_handler
+      in
+      { t with
+        mutables_needed_by_continuations;
+        try_stack;
+        region_stack_at_handler
+      }
     in
     let current_values_of_mutables_in_scope =
       Ident.Map.mapi
@@ -181,7 +195,10 @@ end = struct
           then Misc.fatal_error "Try continuations should not be recursive";
           body_env
       in
-      { handler_env with current_values_of_mutables_in_scope }
+      { handler_env with
+        current_values_of_mutables_in_scope;
+        region_stack_at_handler = new_region_stack_at_handler
+      }
     in
     let extra_params =
       Ident.Map.data handler_env.current_values_of_mutables_in_scope
@@ -194,7 +211,9 @@ end = struct
         try_stack_at_handler =
           Continuation.Map.add cont t.try_stack t.try_stack_at_handler;
         static_exn_continuation =
-          Numeric_types.Int.Map.add static_exn cont t.static_exn_continuation
+          Numeric_types.Int.Map.add static_exn cont t.static_exn_continuation;
+        region_stack_at_handler =
+          Continuation.Map.add cont t.region_stack t.region_stack_at_handler
       }
     in
     let recursive : Asttypes.rec_flag =
@@ -274,6 +293,13 @@ end = struct
       Misc.fatal_error "Cannot get innermost region as no regions are open"
 
   let region_stack t = t.region_stack
+
+  let region_stack_at_handler t continuation =
+    match Continuation.Map.find continuation t.region_stack_at_handler with
+    | exception Not_found ->
+      Misc.fatal_errorf "No region stack recorded for handler %a"
+        Continuation.print continuation
+    | stack -> stack
 end
 
 module CCenv = Closure_conversion_aux.Env
