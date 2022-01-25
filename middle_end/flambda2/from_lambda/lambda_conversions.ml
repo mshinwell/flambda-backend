@@ -29,7 +29,7 @@ let check_float_array_optimisation_enabled () =
        disabled"
 
 let alloc_mode (mode : L.alloc_mode) : Alloc_mode.t =
-  match mode with Alloc_heap -> Heap | Alloc_local -> Heap
+  match mode with Alloc_heap -> Heap | Alloc_local -> Local
 
 let rec value_kind (vk : L.value_kind) =
   match vk with

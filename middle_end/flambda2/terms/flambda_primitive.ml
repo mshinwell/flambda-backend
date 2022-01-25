@@ -672,6 +672,10 @@ let unary_primitive_eligible_for_cse p ~arg =
   | Float_arith _ -> Flambda_features.float_const_prop ()
   | Num_conv _ | Boolean_not | Reinterpret_int64_as_float -> true
   | Unbox_number _ -> false
+  | Box_number (_, Local) ->
+    (* For the moment we don't CSE any local allocations. *)
+    (* CR mshinwell: relax this in the future? *)
+    false
   | Box_number _ ->
     (* Boxing of constants will yield values that can be lifted and if needs be
        deduplicated -- so there's no point in adding CSE variables to hold
@@ -1284,6 +1288,7 @@ type variadic_primitive =
 
 let variadic_primitive_eligible_for_cse p ~args =
   match p with
+  | Make_block (_, _, Local) | Make_array (_, Immutable, Local) -> false
   | Make_block (_, Immutable, _) | Make_array (_, Immutable, _) ->
     (* See comment in [unary_primitive_eligible_for_cse], above, on [Box_number]
        case. *)

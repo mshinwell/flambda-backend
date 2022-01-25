@@ -169,13 +169,14 @@ let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
   in
   let dacc =
     (* We can only add the inverse CSE equation if we know the alloc mode for
-       certain. *)
+       certain and it is [Heap]. (As per [Flambda_primitive] we don't currently
+       CSE local allocations.) *)
     match alloc_mode with
-    | Unknown -> dacc
-    | Known alloc_mode ->
+    | Unknown | Known Local -> dacc
+    | Known Heap ->
       let box_prim : P.t =
         Unary
-          ( Box_number (boxable_number_kind, alloc_mode),
+          ( Box_number (boxable_number_kind, Heap),
             Simple.var (Bound_var.var result_var) )
       in
       DA.map_denv dacc ~f:(fun denv ->
