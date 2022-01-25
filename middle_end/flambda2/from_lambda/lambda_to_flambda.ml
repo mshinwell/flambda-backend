@@ -874,6 +874,12 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
           ~params ~recursive ~body ~handler)
       ~handler:(fun acc env ccenv -> k acc env ccenv result_var)
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
+    (match pos with
+    | Apply_nontail -> ()
+    | Apply_tail ->
+      Misc.fatal_errorf
+        "[Lsend] marked as [Apply_tail] but not in tail position:@ %a"
+        Printlambda.lambda lam);
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
         cps_non_tail acc env ccenv meth
@@ -1225,8 +1231,13 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
     in
     CC.close_let_cont acc ccenv ~name:continuation ~is_exn_handler:false ~params
       ~recursive ~body ~handler
-  | Lsend (meth_kind, meth, obj, args, _pos, mode, loc) ->
-    let mode = LC.alloc_mode mode in
+  | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
+    (* See comments in the [Lapply] case above. *)
+    let need_end_region =
+      match pos with
+      | Apply_nontail -> false
+      | Apply_tail -> Env.region_open_in_tail_position env
+    in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
         cps_non_tail acc env ccenv meth
@@ -1248,10 +1259,17 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
                     tailcall = Default_tailcall;
                     inlined = Default_inlined;
                     specialised = Default_specialise;
-                    probe = None
+                    probe = None;
+                    mode
                   }
                 in
-                wrap_return_continuation acc env ccenv apply)
+                if not need_end_region
+                then wrap_return_continuation acc env ccenv apply
+                else
+                  let region, env = Env.pop_innermost_region env in
+                  CC.close_let acc ccenv (Ident.create_local "unit")
+                    Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                      wrap_return_continuation acc env ccenv apply))
               k_exn)
           k_exn)
       k_exn
