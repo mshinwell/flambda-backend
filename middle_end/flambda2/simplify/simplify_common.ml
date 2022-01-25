@@ -148,7 +148,8 @@ let split_direct_over_application apply ~param_arity ~result_arity
        value is still live (and with the caller expecting such value to have
        been allocated in their region). *)
     match apply_alloc_mode, contains_no_escaping_local_allocs with
-    | Heap, false -> Some (Variable.create "region", Continuation.create ())
+    | Heap, false ->
+      Some (Variable.create "over_app_region", Continuation.create ())
     | Heap, true | Local, _ -> None
   in
   let perform_over_application =
@@ -185,7 +186,7 @@ let split_direct_over_application apply ~param_arity ~result_arity
          exception, but that doesn't need any special handling, since we're not
          actually introducing any more local allocations here. (Missing the
          [End_region] on the exceptional return path is fine, c.f. the usual
-         compilation of [try ... with].) *)
+         compilation of [try ... with] -- see [Closure_conversion].) *)
       let over_application_results =
         List.mapi
           (fun i kind ->

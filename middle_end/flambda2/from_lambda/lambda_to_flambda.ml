@@ -77,12 +77,6 @@ module Env : sig
 
   val get_mutable_variable : t -> Ident.t -> Ident.t
 
-  val region_open_in_tail_position : t -> bool
-
-  val set_region_open_in_tail_position : t -> t
-
-  val set_not_region_open_in_tail_position : t -> t
-
   val entering_region : t -> Ident.t -> t
 
   val pop_innermost_region : t -> Ident.t * t
@@ -102,8 +96,7 @@ end = struct
       static_exn_continuation : Continuation.t Numeric_types.Int.Map.t;
       recursive_static_catches : Numeric_types.Int.Set.t;
       region_stack : Ident.t list;
-      region_stack_at_handler : Ident.t list Continuation.Map.t;
-      region_open_in_tail_position : bool
+      region_stack_at_handler : Ident.t list Continuation.Map.t
     }
 
   let create ~current_unit_id ~return_continuation ~exn_continuation =
@@ -119,8 +112,7 @@ end = struct
       static_exn_continuation = Numeric_types.Int.Map.empty;
       recursive_static_catches = Numeric_types.Int.Set.empty;
       region_stack = [];
-      region_stack_at_handler = Continuation.Map.empty;
-      region_open_in_tail_position = true
+      region_stack_at_handler = Continuation.Map.empty
     }
 
   let current_unit_id t = t.current_unit_id
@@ -275,14 +267,6 @@ end = struct
     | exception Not_found ->
       Misc.fatal_errorf "Mutable variable %a not bound in env" Ident.print id
     | id, _kind -> id
-
-  let region_open_in_tail_position t = t.region_open_in_tail_position
-
-  let set_region_open_in_tail_position t =
-    { t with region_open_in_tail_position = true }
-
-  let set_not_region_open_in_tail_position t =
-    { t with region_open_in_tail_position = false }
 
   let entering_region t id = { t with region_stack = id :: t.region_stack }
 
@@ -1006,6 +990,14 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                       (Some (IR.Push { exn_handler = handler_continuation }))
                       [])
                   ~handler:(fun acc env ccenv ->
+                    (* As for all other constructs, the OCaml type checker and
+                       the Lambda generation pass ensures that there will be an
+                       enclosing region around the whole [Ltrywith] (possibly
+                       not immediately enclosing, but maybe further out). The
+                       only reason we need a [Begin_region] here is to be able
+                       to unwind the local allocation stack if the exception
+                       handler is invoked. (This also explains why there is no
+                       [End_region] at the end of the "try" body.) *)
                     CC.close_let acc ccenv region Not_user_visible Begin_region
                       ~body:(fun acc ccenv ->
                         cps_tail acc env ccenv body poptrap_continuation
@@ -1110,17 +1102,10 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
         ap_specialised;
         ap_probe
       } ->
-    (* Note that the notion of "tail" distinguishing [cps_non_tail] and
-       [cps_tail] doesn't coincide with the usual notion of tail position (for
-       example the body of a "try" is converted via [cps_tail] even though it is
-       not in tail position). This is why we need [ap_position].
-
-       It is important that any necessary [End_region] marker (from a
+    (* It is important that any necessary [End_region] marker (from a
        surrounding [Lregion]) is inserted before the tail call! *)
     let need_end_region =
-      match ap_position with
-      | Apply_nontail -> false
-      | Apply_tail -> Env.region_open_in_tail_position env
+      match ap_position with Apply_nontail -> false | Apply_tail -> true
     in
     cps_non_tail_list acc env ccenv ap_args
       (fun acc env ccenv args ->
@@ -1313,9 +1298,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
     (* See comments in the [Lapply] case above. *)
     let need_end_region =
-      match pos with
-      | Apply_nontail -> false
-      | Apply_tail -> Env.region_open_in_tail_position env
+      match pos with Apply_nontail -> false | Apply_tail -> true
     in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
@@ -1416,26 +1399,21 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
     Misc.fatal_error
       "[Lifused] should have been removed by [Simplif.simplify_lets]"
   | Lregion body ->
-    (* If there's already a suitable region, there is no need to open
-       another. *)
-    if Env.region_open_in_tail_position env
-    then cps_tail acc env ccenv body k k_exn
-    else
-      let region = Ident.create_local "region" in
-      CC.close_let acc ccenv region Not_user_visible Begin_region
-        ~body:(fun acc ccenv ->
-          let env = Env.entering_region env region in
-          cps_non_tail acc env ccenv body
-            (fun acc env ccenv result ->
-              CC.close_let acc ccenv (Ident.create_local "unit")
-                Not_user_visible (End_region region) ~body:(fun acc ccenv ->
-                  let region', env = Env.pop_innermost_region env in
-                  if not (Ident.same region region')
-                  then
-                    Misc.fatal_errorf "Region stack mismatch:@ %a"
-                      Printlambda.lambda body;
-                  cps_tail acc env ccenv (L.Lvar result) k k_exn))
-            k_exn)
+    let region = Ident.create_local "region" in
+    CC.close_let acc ccenv region Not_user_visible Begin_region
+      ~body:(fun acc ccenv ->
+        let env = Env.entering_region env region in
+        cps_non_tail acc env ccenv body
+          (fun acc env ccenv result ->
+            CC.close_let acc ccenv (Ident.create_local "unit")
+              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                let region', env = Env.pop_innermost_region env in
+                if not (Ident.same region region')
+                then
+                  Misc.fatal_errorf "Region stack mismatch:@ %a"
+                    Printlambda.lambda body;
+                cps_tail acc env ccenv (L.Lvar result) k k_exn))
+          k_exn)
 
 and name_then_cps_non_tail acc env ccenv name defining_expr k _k_exn :
     Acc.t * Expr_with_acc.t =

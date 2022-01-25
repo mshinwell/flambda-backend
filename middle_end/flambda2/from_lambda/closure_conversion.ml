@@ -18,6 +18,7 @@
 
 open! Int_replace_polymorphic_compare
 open! Flambda
+module BP = Bound_parameter
 module IR = Closure_conversion_aux.IR
 module Acc = Closure_conversion_aux.Acc
 module Env = Closure_conversion_aux.Env
@@ -235,7 +236,7 @@ module Inlining = struct
   let make_inlined_body acc ~callee ~params ~args ~my_closure ~my_depth ~body
       ~free_names_of_body ~exn_continuation ~return_continuation
       ~apply_exn_continuation ~apply_return_continuation ~apply_depth =
-    let params = List.map Bound_parameter.var params in
+    let params = List.map BP.var params in
     let rec_info =
       match apply_depth with
       | None -> Rec_info_expr.initial
@@ -288,7 +289,8 @@ module Inlining = struct
       ~apply_exn_continuation ~apply_return_continuation ~result_arity
       ~make_inlined_body ~apply_cont_create ~let_cont_create
 
-  let inline acc ~apply ~apply_depth ~func_desc:code =
+  let inline acc ~apply ~apply_depth ~(apply_alloc_mode : Alloc_mode.t)
+      ~func_desc:code =
     let callee = Apply.callee apply in
     let args = Apply.args apply in
     let apply_return_continuation = Apply.continuation apply in
@@ -347,24 +349,94 @@ module Inlining = struct
           let wrapper_cont = Continuation.create () in
           let continuation = Apply.Result_continuation.Return wrapper_cont in
           let returned_func = Variable.create "func" in
-          (* XXX overapplication logic for local allocs needed here *)
-          let call_kind = Call_kind.indirect_function_call_unknown_arity () in
-          let handler acc =
-            let over_apply =
-              Apply.create ~callee:(Simple.var returned_func)
-                ~continuation:apply_return_continuation apply_exn_continuation
-                ~args ~call_kind (Apply.dbg apply)
-                ~inlined:(Apply.inlined apply)
-                ~inlining_state:(Inlining_state.default ~round:0)
-                ~probe_name:(Apply.probe_name apply)
+          (* See comments in [Simplify_common.split_direct_over_application]
+             about this code for handling local allocations. *)
+          let contains_no_escaping_local_allocs =
+            Code.contains_no_escaping_local_allocs code
+          in
+          let needs_region =
+            match apply_alloc_mode, contains_no_escaping_local_allocs with
+            | Heap, false ->
+              Some (Variable.create "over_app_region", Continuation.create ())
+            | Heap, true | Local, _ -> None
+          in
+          let perform_over_application =
+            let alloc_mode : Alloc_mode.t =
+              if contains_no_escaping_local_allocs then Heap else Local
             in
-            Expr_with_acc.create_apply acc over_apply
+            let call_kind =
+              Call_kind.indirect_function_call_unknown_arity alloc_mode
+            in
+            let continuation =
+              match needs_region with
+              | None -> apply_return_continuation
+              | Some (_, cont) -> Apply.Result_continuation.Return cont
+            in
+            Apply.create ~callee:(Simple.var returned_func) ~continuation
+              apply_exn_continuation ~args ~call_kind (Apply.dbg apply)
+              ~inlined:(Apply.inlined apply)
+              ~inlining_state:(Inlining_state.default ~round:0)
+              ~probe_name:(Apply.probe_name apply)
+          in
+          let perform_over_application acc =
+            match needs_region with
+            | None -> Expr_with_acc.create_apply acc perform_over_application
+            | Some (region, after_over_application) ->
+              let over_application_results =
+                List.mapi
+                  (fun i kind ->
+                    BP.create
+                      (Variable.create ("result" ^ string_of_int i))
+                      kind)
+                  (Code.result_arity code)
+              in
+              let call_return_continuation, call_return_continuation_free_names
+                  =
+                match Apply.continuation apply with
+                | Return return_cont ->
+                  let apply_cont =
+                    Apply_cont.create return_cont
+                      ~args:(List.map BP.simple over_application_results)
+                      ~dbg:(Apply.dbg apply)
+                  in
+                  ( Expr.create_apply_cont apply_cont,
+                    Apply_cont.free_names apply_cont )
+                | Never_returns ->
+                  Expr.create_invalid (), Name_occurrences.empty
+              in
+              let handler acc =
+                let let_expr =
+                  Let.create
+                    (Bound_pattern.singleton
+                       (Bound_var.create (Variable.create "unit")
+                          Name_mode.normal))
+                    (Named.create_prim
+                       (Unary (End_region, Simple.var region))
+                       (Apply.dbg apply))
+                    ~body:call_return_continuation
+                    ~free_names_of_body:
+                      (Known call_return_continuation_free_names)
+                in
+                Expr_with_acc.create_let (acc, let_expr)
+              in
+              let acc, perform_over_application_then_end_region =
+                Let_cont_with_acc.build_non_recursive acc after_over_application
+                  ~handler_params:over_application_results ~handler
+                  ~body:(fun acc ->
+                    Expr_with_acc.create_apply acc perform_over_application)
+                  ~is_exn_handler:false
+              in
+              Let_with_acc.create acc
+                (Bound_pattern.singleton
+                   (Bound_var.create region Name_mode.normal))
+                (Named.create_prim (Nullary Begin_region) (Apply.dbg apply))
+                ~body:perform_over_application_then_end_region
+              |> Expr_with_acc.create_let
           in
           let body = body continuation in
           Let_cont_with_acc.build_non_recursive acc wrapper_cont
-            ~handler_params:
-              [Bound_parameter.create returned_func K.With_subkind.any_value]
-            ~handler ~body ~is_exn_handler:false)
+            ~handler_params:[BP.create returned_func K.With_subkind.any_value]
+            ~handler:perform_over_application ~body ~is_exn_handler:false)
 end
 
 let close_c_call acc ~let_bound_var
@@ -506,7 +578,7 @@ let close_c_call acc ~let_bound_var
   in
   let wrap_c_call acc ~handler_param ~code_after_call c_call =
     let return_kind = Flambda_kind.With_subkind.create return_kind Anything in
-    let params = [Bound_parameter.create handler_param return_kind] in
+    let params = [BP.create handler_param return_kind] in
     Let_cont_with_acc.build_non_recursive acc return_continuation
       ~handler_params:params ~handler:code_after_call ~body:c_call
       ~is_exn_handler:false
@@ -818,8 +890,7 @@ let close_let_cont acc env ~name ~is_exn_handler ~params
   in
   let handler_params =
     List.map2
-      (fun param (_, _, kind) ->
-        Bound_parameter.create param (LC.value_kind kind))
+      (fun param (_, _, kind) -> BP.create param (LC.value_kind kind))
       params params_with_kinds
   in
   let handler acc =
@@ -889,7 +960,8 @@ let close_apply acc env
     match Inlining.inlinable env apply with
     | Not_inlinable -> Expr_with_acc.create_apply acc apply
     | Inlinable func_desc ->
-      Inlining.inline acc ~apply ~apply_depth:(Env.current_depth env) ~func_desc
+      Inlining.inline acc ~apply ~apply_depth:(Env.current_depth env)
+        ~apply_alloc_mode:mode ~func_desc
   else Expr_with_acc.create_apply acc apply
 
 let close_apply_cont acc env cont trap_action args : Acc.t * Expr_with_acc.t =
@@ -1101,9 +1173,7 @@ let close_one_function acc ~external_env ~by_closure_id decl
     List.map (fun (id, kind) -> Env.find_var closure_env id, kind) params
   in
   let params =
-    List.map
-      (fun (var, kind) -> Bound_parameter.create var (LC.value_kind kind))
-      param_vars
+    List.map (fun (var, kind) -> BP.create var (LC.value_kind kind)) param_vars
   in
   let acc = Acc.with_seen_a_function acc false in
   let acc, body =
@@ -1195,8 +1265,7 @@ let close_one_function acc ~external_env ~by_closure_id decl
   in
   let acc =
     List.fold_left
-      (fun acc param ->
-        Acc.remove_var_from_free_names (Bound_parameter.var param) acc)
+      (fun acc param -> Acc.remove_var_from_free_names (BP.var param) acc)
       acc params
     |> Acc.remove_var_from_free_names my_closure
     |> Acc.remove_var_from_free_names my_depth
@@ -1204,7 +1273,7 @@ let close_one_function acc ~external_env ~by_closure_id decl
     |> Acc.remove_continuation_from_free_names
          (Exn_continuation.exn_handler exn_continuation)
   in
-  let params_arity = Bound_parameter.List.arity_with_subkinds params in
+  let params_arity = BP.List.arity_with_subkinds params in
   let is_tupled =
     match Function_decl.kind decl with Curried _ -> false | Tupled -> true
   in
@@ -1516,7 +1585,7 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
       (acc, body) (List.rev field_vars)
   in
   let load_fields_handler_param =
-    [Bound_parameter.create module_block_var K.With_subkind.any_value]
+    [BP.create module_block_var K.With_subkind.any_value]
   in
   let acc, body =
     (* This binds the return continuation that is free (or, at least, not bound)
