@@ -1000,6 +1000,10 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                        [End_region] at the end of the "try" body.) *)
                     CC.close_let acc ccenv region Not_user_visible Begin_region
                       ~body:(fun acc ccenv ->
+                        let ccenv =
+                          CCenv.add_var ccenv region
+                            (Variable.create "try_region")
+                        in
                         cps_tail acc env ccenv body poptrap_continuation
                           handler_continuation)))
               ~handler:(fun acc env ccenv ->
@@ -1368,6 +1372,9 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
               ~handler:(fun acc env ccenv ->
                 CC.close_let acc ccenv region Not_user_visible Begin_region
                   ~body:(fun acc ccenv ->
+                    let ccenv =
+                      CCenv.add_var ccenv region (Variable.create "try_region")
+                    in
                     cps_tail acc env ccenv body poptrap_continuation
                       handler_continuation)))
           ~handler:(fun acc env ccenv ->

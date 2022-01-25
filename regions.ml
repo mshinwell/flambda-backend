@@ -1,11 +1,51 @@
 (* TEST
    * native *)
 
+type 'a ref = { mutable contents : 'a }
+external ref : 'a -> ('a ref[@local_opt]) = "%makemutable"
+external ( ! ) : ('a ref[@local_opt]) -> 'a = "%field0"
+external ( := ) : ('a ref[@local_opt]) -> 'a -> unit = "%setfield0"
+external incr : (int ref[@local_opt]) -> unit = "%incr"
+external decr : (int ref[@local_opt]) -> unit = "%decr"
 external local_stack_offset : unit -> int = "caml_local_stack_offset"
 external opaque_identity : ('a[@local_opt]) -> ('a[@local_opt]) = "%opaque"
+module Gc = struct
+  external minor : unit -> unit = "caml_gc_minor"
+external compact : unit -> unit = "caml_gc_compaction"
+end
+external raise : exn -> 'a = "%reraise"
+exception Exit
+external ( + ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%addint"
+external ( +. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%addfloat"
+external float_of_int : (int[@local_opt]) -> (float[@local_opt]) = "%floatofint"
+external int_of_float : (float[@local_opt]) -> int = "%intoffloat"
+
+external string_length : string -> int = "%string_length"
+external bytes_length : bytes -> int = "%bytes_length"
+external bytes_create : int -> bytes = "caml_create_bytes"
+external string_blit : string -> int -> bytes -> int -> int -> unit
+                     = "caml_blit_string" [@@noalloc]
+external bytes_blit : bytes -> int -> bytes -> int -> int -> unit
+                        = "caml_blit_bytes" [@@noalloc]
+external bytes_unsafe_to_string : bytes -> string = "%bytes_to_string"
+
+external format_int : string -> int -> string = "caml_format_int"
+external ( = ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%equal"
+
+let string_of_int n =
+  format_int "%d" n
+
+let ( ^ ) s1 s2 =
+  let l1 = string_length s1 and l2 = string_length s2 in
+  let s = bytes_create (l1 + l2) in
+  string_blit s1 0 s 0 l1;
+  string_blit s2 0 s l1 l2;
+  bytes_unsafe_to_string s
+
 let last_offset = ref 0
 
-let check_empty name =
+let check_empty name = ()
+(*
   let offs = local_stack_offset () in
   if offs <> !last_offset then begin
     Printf.printf "%25s: %d bytes leaked\n%!" name (offs - !last_offset)
@@ -13,6 +53,7 @@ let check_empty name =
     Printf.printf "%25s: OK\n%!" name
   end;
   last_offset := offs
+*)
 
 let () = check_empty "startup"
 
@@ -113,7 +154,7 @@ let _ =
           ((module struct let x = !r + 1 end) : (module T)))) in
   M.x
 let () = check_empty "first class mod"
-
+(*
 class d x =
   let z =
     let r = local_ ref 1000 in
@@ -168,7 +209,7 @@ let o2 = new d 42
 let o3 = new e
 let () = check_empty "class instantiation"
 
-
+*)
 let glob = ref 0
 let[@inline never] local_fn_ret () s = local_
   incr glob;
@@ -177,11 +218,13 @@ let[@inline never] local_fn_ret () s = local_
 let globstr = ref ""
 let unknown_fn = ref local_fn_ret
 let gpart_fn = ref (local_fn_ret ())
+(*
 let obj = ref (object
   method local_ret s = local_
     incr glob;
     fun x -> Gc.minor (); string_of_int x ^ s
   end)
+*)
 let () =
   let check s =
     globstr := s; assert (s = "5!")
@@ -195,9 +238,11 @@ let () =
   check_empty "static/partial overapply";
   gpart_fn := local_fn_ret ();
   check (!gpart_fn "!" 5);
-  check_empty "dynamic/partial overapply";
+  check_empty "dynamic/partial overapply"
+(*
   check (!obj#local_ret "!" 5);
   check_empty "method overapply"
+*)
 
 
 let () = Gc.compact ()
