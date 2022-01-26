@@ -240,6 +240,9 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
         (rebuild_non_inlined_direct_full_application apply ~use_id
            ~exn_cont_use_id ~result_arity ~coming_from_indirect)
 
+(* CR mshinwell: need to work out what to do for local alloc transformations
+   when there are zero args. *)
+
 let simplify_direct_partial_application ~simplify_expr dacc apply
     ~callee's_code_id ~callee's_code_metadata ~callee's_closure_id ~param_arity
     ~result_arity ~result_types ~recursive ~down_to_up ~coming_from_indirect
