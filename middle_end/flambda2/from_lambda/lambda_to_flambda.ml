@@ -716,6 +716,9 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Pprobe_is_enabled _ ->
     false
 
+(* CR mshinwell: Make sure that [Apply] terms in tail position jump directly to
+   the return continuation rather than relying on a wrapper to be removed. *)
+
 let rec cps_non_tail acc env ccenv (lam : L.lambda)
     (k : Acc.t -> Env.t -> CCenv.t -> Ident.t -> Acc.t * Expr_with_acc.t)
     (k_exn : Continuation.t) : Acc.t * Expr_with_acc.t =
