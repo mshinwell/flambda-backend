@@ -741,12 +741,11 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
         ap_specialised;
         ap_probe
       } ->
-    (match ap_position with
-    | Apply_nontail -> ()
-    | Apply_tail ->
-      Misc.fatal_errorf
-        "[Lapply] marked as [Apply_tail] but not in tail position:@ %a"
-        Printlambda.lambda lam);
+    (* It is important that any necessary [End_region] marker (from a
+       surrounding [Lregion]) is inserted before the tail call! *)
+    let need_end_region =
+      match ap_position with Apply_nontail -> false | Apply_tail -> true
+    in
     cps_non_tail_list acc env ccenv ap_args
       (fun acc env ccenv args ->
         cps_non_tail acc env ccenv ap_func
@@ -775,7 +774,13 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                     mode = ap_mode
                   }
                 in
-                wrap_return_continuation acc env ccenv apply)
+                if not need_end_region
+                then wrap_return_continuation acc env ccenv apply
+                else
+                  let region, env = Env.pop_innermost_region env in
+                  CC.close_let acc ccenv (Ident.create_local "unit")
+                    Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                      wrap_return_continuation acc env ccenv apply))
               ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
           k_exn)
       k_exn
@@ -927,12 +932,10 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
           ~params ~recursive ~body ~handler)
       ~handler:(fun acc env ccenv -> k acc env ccenv result_var)
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
-    (match pos with
-    | Apply_nontail -> ()
-    | Apply_tail ->
-      Misc.fatal_errorf
-        "[Lsend] marked as [Apply_tail] but not in tail position:@ %a"
-        Printlambda.lambda lam);
+    (* See comments in the [Lapply] case above. *)
+    let need_end_region =
+      match pos with Apply_nontail -> false | Apply_tail -> true
+    in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
         cps_non_tail acc env ccenv meth
@@ -963,7 +966,14 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                         mode
                       }
                     in
-                    wrap_return_continuation acc env ccenv apply)
+                    if not need_end_region
+                    then wrap_return_continuation acc env ccenv apply
+                    else
+                      let region, env = Env.pop_innermost_region env in
+                      CC.close_let acc ccenv (Ident.create_local "unit")
+                        Not_user_visible (End_region region)
+                        ~body:(fun acc ccenv ->
+                          wrap_return_continuation acc env ccenv apply))
                   ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
               k_exn)
           k_exn)
@@ -973,45 +983,46 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let result_var = Ident.create_local "try_with_result" in
     let region = Ident.create_local "try_region" in
     let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
-    let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[result_var, Not_user_visible, Pgenval]
-      ~body:(fun acc env ccenv after_continuation ->
+    (* As for all other constructs, the OCaml type checker and the Lambda
+       generation pass ensures that there will be an enclosing region around the
+       whole [Ltrywith] (possibly not immediately enclosing, but maybe further
+       out). The only reason we need a [Begin_region] here is to be able to
+       unwind the local allocation stack if the exception handler is invoked.
+       (This also explains why there is no [End_region] at the end of the "try"
+       body.) *)
+    CC.close_let acc ccenv region Not_user_visible Begin_region
+      ~body:(fun acc ccenv ->
         let_cont_nonrecursive_with_extra_params acc env ccenv
-          ~is_exn_handler:true
-          ~params:[id, User_visible, Pgenval]
-          ~body:(fun acc env ccenv handler_continuation ->
+          ~is_exn_handler:false
+          ~params:[result_var, Not_user_visible, Pgenval]
+          ~body:(fun acc env ccenv after_continuation ->
             let_cont_nonrecursive_with_extra_params acc env ccenv
-              ~is_exn_handler:false
-              ~params:[body_result, Not_user_visible, Pgenval]
-              ~body:(fun acc env ccenv poptrap_continuation ->
+              ~is_exn_handler:true
+              ~params:[id, User_visible, Pgenval]
+              ~body:(fun acc env ccenv handler_continuation ->
                 let_cont_nonrecursive_with_extra_params acc env ccenv
-                  ~is_exn_handler:false ~params:[]
-                  ~body:(fun acc env ccenv body_continuation ->
-                    apply_cont_with_extra_args acc env ccenv body_continuation
-                      (Some (IR.Push { exn_handler = handler_continuation }))
-                      [])
-                  ~handler:(fun acc env ccenv ->
-                    (* As for all other constructs, the OCaml type checker and
-                       the Lambda generation pass ensures that there will be an
-                       enclosing region around the whole [Ltrywith] (possibly
-                       not immediately enclosing, but maybe further out). The
-                       only reason we need a [Begin_region] here is to be able
-                       to unwind the local allocation stack if the exception
-                       handler is invoked. (This also explains why there is no
-                       [End_region] at the end of the "try" body.) *)
-                    CC.close_let acc ccenv region Not_user_visible Begin_region
-                      ~body:(fun acc ccenv ->
+                  ~is_exn_handler:false
+                  ~params:[body_result, Not_user_visible, Pgenval]
+                  ~body:(fun acc env ccenv poptrap_continuation ->
+                    let_cont_nonrecursive_with_extra_params acc env ccenv
+                      ~is_exn_handler:false ~params:[]
+                      ~body:(fun acc env ccenv body_continuation ->
+                        apply_cont_with_extra_args acc env ccenv
+                          body_continuation
+                          (Some (IR.Push { exn_handler = handler_continuation }))
+                          [])
+                      ~handler:(fun acc env ccenv ->
                         cps_tail acc env ccenv body poptrap_continuation
-                          handler_continuation)))
+                          handler_continuation))
+                  ~handler:(fun acc env ccenv ->
+                    apply_cont_with_extra_args acc env ccenv after_continuation
+                      (Some (IR.Pop { exn_handler = handler_continuation }))
+                      [IR.Var body_result]))
               ~handler:(fun acc env ccenv ->
-                apply_cont_with_extra_args acc env ccenv after_continuation
-                  (Some (IR.Pop { exn_handler = handler_continuation }))
-                  [IR.Var body_result]))
-          ~handler:(fun acc env ccenv ->
-            CC.close_let acc ccenv (Ident.create_local "unit")
-              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
-                cps_tail acc env ccenv handler after_continuation k_exn)))
-      ~handler:(fun acc env ccenv -> k acc env ccenv result_var)
+                CC.close_let acc ccenv (Ident.create_local "unit")
+                  Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                    cps_tail acc env ccenv handler after_continuation k_exn)))
+          ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
   | Lifthenelse (cond, ifso, ifnot) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot in
     cps_non_tail acc env ccenv lam k k_exn
@@ -1103,8 +1114,6 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
         ap_specialised;
         ap_probe
       } ->
-    (* It is important that any necessary [End_region] marker (from a
-       surrounding [Lregion]) is inserted before the tail call! *)
     let need_end_region =
       match ap_position with Apply_nontail -> false | Apply_tail -> true
     in
@@ -1297,7 +1306,6 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
     CC.close_let_cont acc ccenv ~name:continuation ~is_exn_handler:false ~params
       ~recursive ~body ~handler
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
-    (* See comments in the [Lapply] case above. *)
     let need_end_region =
       match pos with Apply_nontail -> false | Apply_tail -> true
     in
@@ -1354,32 +1362,33 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
     let body_result = Ident.create_local "body_result" in
     let region = Ident.create_local "try_region" in
     let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
-    let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:true
-      ~params:[id, User_visible, Pgenval]
-      ~body:(fun acc env ccenv handler_continuation ->
+    CC.close_let acc ccenv region Not_user_visible Begin_region
+      ~body:(fun acc ccenv ->
         let_cont_nonrecursive_with_extra_params acc env ccenv
-          ~is_exn_handler:false
-          ~params:[body_result, Not_user_visible, Pgenval]
-          ~body:(fun acc env ccenv poptrap_continuation ->
+          ~is_exn_handler:true
+          ~params:[id, User_visible, Pgenval]
+          ~body:(fun acc env ccenv handler_continuation ->
             let_cont_nonrecursive_with_extra_params acc env ccenv
-              ~is_exn_handler:false ~params:[]
-              ~body:(fun acc env ccenv body_continuation ->
-                apply_cont_with_extra_args acc env ccenv body_continuation
-                  (Some (IR.Push { exn_handler = handler_continuation }))
-                  [])
-              ~handler:(fun acc env ccenv ->
-                CC.close_let acc ccenv region Not_user_visible Begin_region
-                  ~body:(fun acc ccenv ->
+              ~is_exn_handler:false
+              ~params:[body_result, Not_user_visible, Pgenval]
+              ~body:(fun acc env ccenv poptrap_continuation ->
+                let_cont_nonrecursive_with_extra_params acc env ccenv
+                  ~is_exn_handler:false ~params:[]
+                  ~body:(fun acc env ccenv body_continuation ->
+                    apply_cont_with_extra_args acc env ccenv body_continuation
+                      (Some (IR.Push { exn_handler = handler_continuation }))
+                      [])
+                  ~handler:(fun acc env ccenv ->
                     cps_tail acc env ccenv body poptrap_continuation
-                      handler_continuation)))
+                      handler_continuation))
+              ~handler:(fun acc env ccenv ->
+                apply_cont_with_extra_args acc env ccenv k
+                  (Some (IR.Pop { exn_handler = handler_continuation }))
+                  [IR.Var body_result]))
           ~handler:(fun acc env ccenv ->
-            apply_cont_with_extra_args acc env ccenv k
-              (Some (IR.Pop { exn_handler = handler_continuation }))
-              [IR.Var body_result]))
-      ~handler:(fun acc env ccenv ->
-        CC.close_let acc ccenv (Ident.create_local "unit")
-          Not_user_visible (End_region region) ~body:(fun acc ccenv ->
-            cps_tail acc env ccenv handler k k_exn))
+            CC.close_let acc ccenv (Ident.create_local "unit")
+              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                cps_tail acc env ccenv handler k k_exn)))
   | Lifthenelse (cond, ifso, ifnot) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot in
     cps_tail acc env ccenv lam k k_exn
