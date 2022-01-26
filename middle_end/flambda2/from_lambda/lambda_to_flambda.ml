@@ -79,7 +79,7 @@ module Env : sig
 
   val entering_region : t -> Ident.t -> t
 
-  val pop_innermost_region : t -> Ident.t * t
+  val innermost_region : t -> Ident.t
 
   (** The innermost (newest) region is first in the list. *)
   val region_stack : t -> Ident.t list
@@ -270,9 +270,9 @@ end = struct
 
   let entering_region t id = { t with region_stack = id :: t.region_stack }
 
-  let pop_innermost_region t =
+  let innermost_region t =
     match t.region_stack with
-    | region :: region_stack -> region, { t with region_stack }
+    | region :: _ -> region
     | [] ->
       Misc.fatal_error "Cannot get innermost region as no regions are open"
 
@@ -777,9 +777,10 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                 if not need_end_region
                 then wrap_return_continuation acc env ccenv apply
                 else
-                  let region, env = Env.pop_innermost_region env in
+                  let region = Env.innermost_region env in
                   CC.close_let acc ccenv (Ident.create_local "unit")
                     Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                      let acc = Acc.add_region_closed_early acc region in
                       wrap_return_continuation acc env ccenv apply))
               ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
           k_exn)
@@ -969,10 +970,11 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                     if not need_end_region
                     then wrap_return_continuation acc env ccenv apply
                     else
-                      let region, env = Env.pop_innermost_region env in
+                      let region = Env.innermost_region env in
                       CC.close_let acc ccenv (Ident.create_local "unit")
                         Not_user_visible (End_region region)
                         ~body:(fun acc ccenv ->
+                          let acc = Acc.add_region_closed_early acc region in
                           wrap_return_continuation acc env ccenv apply))
                   ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
               k_exn)
@@ -1066,14 +1068,12 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
         let env = Env.entering_region env region in
         cps_non_tail acc env ccenv body
           (fun acc env ccenv result ->
-            CC.close_let acc ccenv (Ident.create_local "unit")
-              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
-                let region', env = Env.pop_innermost_region env in
-                if not (Ident.same region region')
-                then
-                  Misc.fatal_errorf "Region stack mismatch:@ %a"
-                    Printlambda.lambda body;
-                k acc env ccenv result))
+            if Acc.region_closed_early acc region
+            then k acc env ccenv result
+            else
+              CC.close_let acc ccenv (Ident.create_local "unit")
+                Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                  k acc env ccenv result))
           k_exn)
 
 and cps_non_tail_simple acc env ccenv (lam : L.lambda)
@@ -1143,9 +1143,10 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
             if not need_end_region
             then wrap_return_continuation acc env ccenv apply
             else
-              let region, env = Env.pop_innermost_region env in
+              let region = Env.innermost_region env in
               CC.close_let acc ccenv (Ident.create_local "unit")
                 Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                  let acc = Acc.add_region_closed_early acc region in
                   wrap_return_continuation acc env ccenv apply))
           k_exn)
       k_exn
@@ -1337,9 +1338,10 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
                 if not need_end_region
                 then wrap_return_continuation acc env ccenv apply
                 else
-                  let region, env = Env.pop_innermost_region env in
+                  let region = Env.innermost_region env in
                   CC.close_let acc ccenv (Ident.create_local "unit")
                     Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                      let acc = Acc.add_region_closed_early acc region in
                       wrap_return_continuation acc env ccenv apply))
               k_exn)
           k_exn)
@@ -1416,14 +1418,12 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
         let env = Env.entering_region env region in
         cps_non_tail acc env ccenv body
           (fun acc env ccenv result ->
-            CC.close_let acc ccenv (Ident.create_local "unit")
-              Not_user_visible (End_region region) ~body:(fun acc ccenv ->
-                let region', env = Env.pop_innermost_region env in
-                if not (Ident.same region region')
-                then
-                  Misc.fatal_errorf "Region stack mismatch:@ %a"
-                    Printlambda.lambda body;
-                cps_tail acc env ccenv (L.Lvar result) k k_exn))
+            if Acc.region_closed_early acc region
+            then cps_tail acc env ccenv (L.Lvar result) k k_exn
+            else
+              CC.close_let acc ccenv (Ident.create_local "unit")
+                Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                  cps_tail acc env ccenv (L.Lvar result) k k_exn))
           k_exn)
 
 and name_then_cps_non_tail acc env ccenv name defining_expr k _k_exn :
