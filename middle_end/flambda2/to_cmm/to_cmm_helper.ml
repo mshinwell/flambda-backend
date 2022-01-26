@@ -138,12 +138,13 @@ let unbox_number ?(dbg = Debuginfo.none) kind arg =
     unbox_int dbg primitive_kind arg
 
 let box_number ?(dbg = Debuginfo.none) kind alloc_mode arg =
+  let alloc_mode = convert_alloc_mode alloc_mode in
   match (kind : Flambda_kind.Boxable_number.t) with
-  | Naked_float -> box_float dbg Alloc_heap arg
+  | Naked_float -> box_float dbg alloc_mode arg
   | Untagged_immediate -> tag_int arg dbg
   | _ ->
     let primitive_kind = primitive_boxed_int_of_boxable_number kind in
-    box_int_gen dbg primitive_kind (convert_alloc_mode alloc_mode) arg
+    box_int_gen dbg primitive_kind alloc_mode arg
 
 let box_int64 ?dbg alloc_mode arg =
   box_number ?dbg Flambda_kind.Boxable_number.Naked_int64 alloc_mode arg

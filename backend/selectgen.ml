@@ -184,7 +184,7 @@ let oper_result_type = function
   | Cprobe _ -> typ_void
   | Cprobe_is_enabled _ -> typ_int
   | Copaque -> typ_val
-  | Cbeginregion -> typ_val
+  | Cbeginregion -> typ_int
   | Cendregion -> typ_void
 
 (* Infer the size in bytes of the result of an expression whose evaluation

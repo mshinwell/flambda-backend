@@ -44,7 +44,7 @@ let ( ^ ) s1 s2 =
 
 let last_offset = ref 0
 
-let check_empty name = ()
+let check_empty name = Gc.minor ()
 (*
   let offs = local_stack_offset () in
   if offs <> !last_offset then begin
