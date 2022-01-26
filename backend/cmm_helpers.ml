@@ -2275,11 +2275,7 @@ let curry_function = function
   | Lambda.Tupled, n ->
      assert (n > 0); [tuplify_function n]
   | Lambda.Curried {nlocal}, n ->
-    (* CR mshinwell: unsure about this *)
-    (* CR mshinwell: also, why are we generating "caml_curry-N" functions? *)
-    (*  assert (n > 0); *)
-    if n = 0 then [] else
-      intermediate_curry_functions ~nlocal ~arity:n 0
+     assert (n > 0); intermediate_curry_functions ~nlocal ~arity:n 0
 
 module ApplyFnSet =
   Set.Make (struct type t = int * Lambda.alloc_mode let compare = compare end)

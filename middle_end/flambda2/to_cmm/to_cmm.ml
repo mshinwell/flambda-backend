@@ -1467,15 +1467,16 @@ and fill_slot decls startenv elts env acc offset slot =
     let code_id = Closure_id.Map.find c decls in
     (* CR-someday mshinwell: We should probably use the code's [dbg], but it
        would be tricky to get hold of, and this is very unlikely to make any
-       difference in practice. *)
+       difference in practice. mshinwell: this can now be got from
+       Code_metadata. *)
     let dbg = Debuginfo.none in
     let code_symbol = Code_id.code_symbol code_id in
     let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
-    let fnarity = Env.get_func_decl_params_arity env code_id in
-    let arity = Lambda.Curried { nlocal = 0 }, fnarity in
+    let arity = Env.get_func_decl_params_arity env code_id in
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
-    if fnarity = 1 || fnarity = 0
+    let num_params = snd arity in
+    if num_params = 1 || num_params = 0
     then
       let acc =
         C.nativeint ~dbg closure_info :: C.symbol ~dbg code_name :: acc
