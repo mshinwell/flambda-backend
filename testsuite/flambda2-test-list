@@ -153,6 +153,7 @@
   tests/typing-immediate
   tests/typing-implicit_unpack
   tests/typing-labels
+  tests/typing-local
   tests/typing-misc
   tests/typing-misc-bugs
   tests/typing-missing-cmi
