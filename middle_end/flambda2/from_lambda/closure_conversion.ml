@@ -345,7 +345,7 @@ module Inlining = struct
         in
         match remain_args with
         | [] -> body apply_return_continuation acc
-        | args ->
+        | args -> (
           let wrapper_cont = Continuation.create () in
           let continuation = Apply.Result_continuation.Return wrapper_cont in
           let returned_func = Variable.create "func" in
@@ -419,24 +419,27 @@ module Inlining = struct
                 in
                 Expr_with_acc.create_let (acc, let_expr)
               in
-              let acc, perform_over_application_then_end_region =
-                Let_cont_with_acc.build_non_recursive acc after_over_application
-                  ~handler_params:over_application_results ~handler
-                  ~body:(fun acc ->
-                    Expr_with_acc.create_apply acc perform_over_application)
-                  ~is_exn_handler:false
-              in
-              Let_with_acc.create acc
-                (Bound_pattern.singleton
-                   (Bound_var.create region Name_mode.normal))
-                (Named.create_prim (Nullary Begin_region) (Apply.dbg apply))
-                ~body:perform_over_application_then_end_region
-              |> Expr_with_acc.create_let
+              Let_cont_with_acc.build_non_recursive acc after_over_application
+                ~handler_params:over_application_results ~handler
+                ~body:(fun acc ->
+                  Expr_with_acc.create_apply acc perform_over_application)
+                ~is_exn_handler:false
           in
           let body = body continuation in
-          Let_cont_with_acc.build_non_recursive acc wrapper_cont
-            ~handler_params:[BP.create returned_func K.With_subkind.any_value]
-            ~handler:perform_over_application ~body ~is_exn_handler:false)
+          let acc, both_applications =
+            Let_cont_with_acc.build_non_recursive acc wrapper_cont
+              ~handler_params:[BP.create returned_func K.With_subkind.any_value]
+              ~handler:perform_over_application ~body ~is_exn_handler:false
+          in
+          match needs_region with
+          | None -> acc, both_applications
+          | Some (region, _) ->
+            Let_with_acc.create acc
+              (Bound_pattern.singleton
+                 (Bound_var.create region Name_mode.normal))
+              (Named.create_prim (Nullary Begin_region) (Apply.dbg apply))
+              ~body:both_applications
+            |> Expr_with_acc.create_let))
 end
 
 let close_c_call acc ~let_bound_var
