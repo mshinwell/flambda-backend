@@ -228,22 +228,9 @@ let split_direct_over_application apply ~param_arity ~result_arity
           ~free_names_of_handler:(Known handler_expr_free_names)
           ~is_exn_handler:false
       in
-      let perform_over_application_then_end_region =
-        Let_cont.create_non_recursive after_over_application handler
-          ~body:(Expr.create_apply perform_over_application)
-          ~free_names_of_body:(Known perform_over_application_free_names)
-      in
-      Let.create
-        (Bound_pattern.singleton (Bound_var.create region Name_mode.normal))
-        (Named.create_prim (Nullary Begin_region) (Apply.dbg apply))
-        ~body:perform_over_application_then_end_region
-        ~free_names_of_body:
-          (Known
-             (Name_occurrences.remove_continuation
-                (Name_occurrences.union perform_over_application_free_names
-                   handler_expr_free_names)
-                after_over_application))
-      |> Expr.create_let
+      Let_cont.create_non_recursive after_over_application handler
+        ~body:(Expr.create_apply perform_over_application)
+        ~free_names_of_body:(Known perform_over_application_free_names)
   in
   let after_full_application = Continuation.create () in
   let after_full_application_handler =
@@ -257,10 +244,25 @@ let split_direct_over_application apply ~param_arity ~result_arity
       (Return after_full_application) ~callee:(Apply.callee apply)
       ~args:first_args
   in
-  Let_cont.create_non_recursive after_full_application
-    after_full_application_handler
-    ~body:(Expr.create_apply full_apply)
-    ~free_names_of_body:(Known (Apply.free_names full_apply))
+  let both_applications =
+    Let_cont.create_non_recursive after_full_application
+      after_full_application_handler
+      ~body:(Expr.create_apply full_apply)
+      ~free_names_of_body:(Known (Apply.free_names full_apply))
+  in
+  match needs_region with
+  | None -> both_applications
+  | Some (region, _) ->
+    Let.create
+      (Bound_pattern.singleton (Bound_var.create region Name_mode.normal))
+      (Named.create_prim (Nullary Begin_region) (Apply.dbg apply))
+      ~body:both_applications
+      ~free_names_of_body:
+        (Known
+           (Name_occurrences.union
+              (Apply.free_names full_apply)
+              perform_over_application_free_names))
+    |> Expr.create_let
 
 type apply_cont_context =
   | Apply_cont_expr
