@@ -85,8 +85,6 @@ module Env : sig
   val region_stack : t -> Ident.t list
 
   val region_stack_at_handler : t -> Continuation.t -> Ident.t list
-
-  (* val return_continuation : t -> Continuation.t *)
 end = struct
   type t =
     { current_unit_id : Ident.t;
@@ -98,8 +96,7 @@ end = struct
       static_exn_continuation : Continuation.t Numeric_types.Int.Map.t;
       recursive_static_catches : Numeric_types.Int.Set.t;
       region_stack : Ident.t list;
-      region_stack_at_handler : Ident.t list Continuation.Map.t;
-      return_continuation : Continuation.t
+      region_stack_at_handler : Ident.t list Continuation.Map.t
     }
 
   let create ~current_unit_id ~return_continuation ~exn_continuation =
@@ -115,13 +112,10 @@ end = struct
       static_exn_continuation = Numeric_types.Int.Map.empty;
       recursive_static_catches = Numeric_types.Int.Set.empty;
       region_stack = [];
-      region_stack_at_handler = Continuation.Map.empty;
-      return_continuation
+      region_stack_at_handler = Continuation.Map.empty
     }
 
   let current_unit_id t = t.current_unit_id
-
-  (* let return_continuation t = t.return_continuation*)
 
   let is_mutable t id = Ident.Map.mem id t.current_values_of_mutables_in_scope
 
@@ -639,16 +633,6 @@ let apply_cont_with_extra_args acc env ccenv cont traps args =
 
 let wrap_return_continuation acc env ccenv (apply : IR.apply)
     (_pos : Lambda.apply_position) =
-  (* If [pos] specifies a tail call and there are open regions then we must be
-     certain to generate a tail call, to not break local allocations (and indeed
-     not to break tail calls). In these cases we can just point the application
-     directly back at the return continuation, to avoid any spurious wrappers
-     arising from mutable variable conversion. *)
-  (* match pos with | Apply_tail -> (match Env.region_stack env with | _ :: _ ->
-     () | [] -> Misc.fatal_errorf "Application of %a is marked as [Apply_tail]
-     but there are no open \ regions" Ident.print apply.func); let apply = {
-     apply with continuation = Env.return_continuation env } in CC.close_apply
-     acc ccenv apply | Apply_nontail -> ( *)
   let extra_args = Env.extra_args_for_continuation env apply.continuation in
   match extra_args with
   | [] -> CC.close_apply acc ccenv apply
