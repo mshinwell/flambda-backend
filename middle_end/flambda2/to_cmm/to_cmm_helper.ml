@@ -258,7 +258,14 @@ let int_of_float = unary Cmm.Cintoffloat
 
 let float_of_int = unary Cmm.Cfloatofint
 
-let letin v e body = Cmm.Clet (v, e, body)
+let letin v e (body : Cmm.expression) =
+  match body with
+  | Cvar v' when Backend_var.same (Backend_var.With_provenance.var v) v' -> e
+  | Cvar _ | Cconst_int _ | Cconst_natint _ | Cconst_float _ | Cconst_symbol _
+  | Clet _ | Clet_mut _ | Cphantom_let _ | Cassign _ | Ctuple _ | Cop _
+  | Csequence _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _
+  | Cregion _ | Ctail _ ->
+    Cmm.Clet (v, e, body)
 
 let letin_mut v ty e body = Cmm.Clet_mut (v, ty, e, body)
 
