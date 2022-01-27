@@ -86,7 +86,7 @@ module Env : sig
 
   val region_stack_at_handler : t -> Continuation.t -> Ident.t list
 
-  val return_continuation : t -> Continuation.t
+  (* val return_continuation : t -> Continuation.t *)
 end = struct
   type t =
     { current_unit_id : Ident.t;
@@ -121,7 +121,7 @@ end = struct
 
   let current_unit_id t = t.current_unit_id
 
-  let return_continuation t = t.return_continuation
+  (* let return_continuation t = t.return_continuation*)
 
   let is_mutable t id = Ident.Map.mem id t.current_values_of_mutables_in_scope
 
@@ -638,42 +638,35 @@ let apply_cont_with_extra_args acc env ccenv cont traps args =
   CC.close_apply_cont acc ccenv cont traps (args @ extra_args)
 
 let wrap_return_continuation acc env ccenv (apply : IR.apply)
-    (pos : Lambda.apply_position) =
+    (_pos : Lambda.apply_position) =
   (* If [pos] specifies a tail call and there are open regions then we must be
      certain to generate a tail call, to not break local allocations (and indeed
      not to break tail calls). In these cases we can just point the application
      directly back at the return continuation, to avoid any spurious wrappers
      arising from mutable variable conversion. *)
-  match pos with
-  | Rc_region_close ->
-    (match Env.region_stack env with
-    | _ :: _ -> ()
-    | [] ->
-      Misc.fatal_errorf
-        "Application of %a is marked as [Rc_region_close] but there are no \
-         open regions"
-        Ident.print apply.func);
-    let apply = { apply with continuation = Env.return_continuation env } in
-    CC.close_apply acc ccenv apply
-  | Rc_normal -> (
-    let extra_args = Env.extra_args_for_continuation env apply.continuation in
-    match extra_args with
-    | [] -> CC.close_apply acc ccenv apply
-    | _ :: _ ->
-      let wrapper_cont = Continuation.create () in
-      let return_value = Ident.create_local "return_val" in
-      let args =
-        List.map (fun var : IR.simple -> Var var) (return_value :: extra_args)
-      in
-      let handler acc ccenv =
-        CC.close_apply_cont acc ccenv apply.continuation None args
-      in
-      let body acc ccenv =
-        CC.close_apply acc ccenv { apply with continuation = wrapper_cont }
-      in
-      CC.close_let_cont acc ccenv ~name:wrapper_cont ~is_exn_handler:false
-        ~params:[return_value, Not_user_visible, Pgenval]
-        ~recursive:Nonrecursive ~body ~handler)
+  (* match pos with | Apply_tail -> (match Env.region_stack env with | _ :: _ ->
+     () | [] -> Misc.fatal_errorf "Application of %a is marked as [Apply_tail]
+     but there are no open \ regions" Ident.print apply.func); let apply = {
+     apply with continuation = Env.return_continuation env } in CC.close_apply
+     acc ccenv apply | Apply_nontail -> ( *)
+  let extra_args = Env.extra_args_for_continuation env apply.continuation in
+  match extra_args with
+  | [] -> CC.close_apply acc ccenv apply
+  | _ :: _ ->
+    let wrapper_cont = Continuation.create () in
+    let return_value = Ident.create_local "return_val" in
+    let args =
+      List.map (fun var : IR.simple -> Var var) (return_value :: extra_args)
+    in
+    let handler acc ccenv =
+      CC.close_apply_cont acc ccenv apply.continuation None args
+    in
+    let body acc ccenv =
+      CC.close_apply acc ccenv { apply with continuation = wrapper_cont }
+    in
+    CC.close_let_cont acc ccenv ~name:wrapper_cont ~is_exn_handler:false
+      ~params:[return_value, Not_user_visible, Pgenval]
+      ~recursive:Nonrecursive ~body ~handler
 
 let primitive_can_raise (prim : Lambda.primitive) =
   match prim with
