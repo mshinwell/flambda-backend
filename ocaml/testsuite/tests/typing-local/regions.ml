@@ -192,10 +192,16 @@ let obj = ref (object
     incr glob;
     fun x -> Gc.minor (); string_of_int x ^ s
   end)
+
+(* With Flambda 2 and the frontend set to mark as many allocations local
+   as possible, this function becomes local when under the "let () = "
+   below, and then cannot be statically allocated (since Flambda 2
+   doesn't know whether [globstr] is local, which in fact it is not).
+   In turn that disturbs the local stack, causing a test failure. *)
+let check s =
+  globstr := s; assert (s = "5!")
+
 let () =
-  let check s =
-    globstr := s; assert (s = "5!")
-  in
   check (local_fn_ret () "!" 5);
   check_empty "static overapply";
   check (!unknown_fn () "!" 5);
