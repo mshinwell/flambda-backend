@@ -601,7 +601,10 @@ Error: This value escapes its region
 
 let _ = local_ {contents=42}
 [%%expect{|
-- : int ref = {contents = 42}
+Line 1, characters 4-5:
+1 | let _ = local_ {contents=42}
+        ^
+Error: This value escapes its region
 |}]
 
 
@@ -1771,18 +1774,18 @@ val foo : local_ 'a option -> 'a option -> local_ 'a = <fun>
 let (Some z, _, _) | (None, Some z, _)
     | (None, None, z) = (Some (ref 0), (local_ (Some (ref 0))), (ref 0))
 [%%expect{|
-Line 1, characters 33-34:
-1 | let (Some z, _, _) | (None, Some z, _)
-                                     ^
+Lines 1-2, characters 4-21:
+1 | ....(Some z, _, _) | (None, Some z, _)
+2 |     | (None, None, z)...................................................
 Error: This value escapes its region
 |}]
 
 let (Some z, _, _) | (None, Some z, _)
     | (None, None, z) = ((local_ Some (ref 0)), (Some (ref 0)), (ref 0))
 [%%expect{|
-Line 1, characters 10-11:
-1 | let (Some z, _, _) | (None, Some z, _)
-              ^
+Lines 1-2, characters 4-21:
+1 | ....(Some z, _, _) | (None, Some z, _)
+2 |     | (None, None, z)...................................................
 Error: This value escapes its region
 |}]
 
