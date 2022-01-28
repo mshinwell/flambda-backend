@@ -15,6 +15,10 @@
 
 (* Introduction of closures, uncurrying, recognition of direct calls *)
 
+(* CR mshinwell: confirm that toplevel declarations substituted for
+   loads from the module block by the [transl_store*] functions in
+   [Translmod] are always mode [Heap] *)
+
 open Misc
 open Asttypes
 open Primitive
@@ -232,6 +236,7 @@ let lambda_smaller lam threshold =
         lambda_size met; lambda_size obj; lambda_list_size args
     | Uunreachable -> ()
     | Uregion e ->
+        (* CR mshinwell: this seems too small *)
         incr size;
         lambda_size e
     | Utail e ->
@@ -1034,10 +1039,13 @@ let rec close ({ backend; fenv; cenv ; mutable_vars } as env) lam =
         in
         let funct_var = V.create_local "funct" in
         let fenv = V.Map.add funct_var fapprox fenv in
+        (* CR mshinwell: zero-argument applications? *)
         let new_clos_mode, kind =
           (* If the closure has a local suffix, and we've supplied
              enough args to hit it, then the closure must be local
              (because the args or closure might be). *)
+          (* CR mshinwell: maybe some assertions around here to ensure no
+             negative numbers are appearing? *)
           let heap_params = nparams - nlocal in
           if nargs <= heap_params then
             Alloc_heap, Curried {nlocal}
@@ -1413,6 +1421,8 @@ and close_functions { backend; fenv; cenv; mutable_vars } fun_defs =
       (fun (_id, _params, _return, _body, _mode, fundesc, _dbg) ->
         let pos = !env_pos + 1 in
         env_pos := !env_pos + 1 +
+          (* CR mshinwell: this doesn't seem to match Cmmgen in the
+             (Curried, 0) case *)
           (match fundesc.fun_arity with (Curried _, 1) -> 2 | _ -> 3);
         pos)
       uncurried_defs in

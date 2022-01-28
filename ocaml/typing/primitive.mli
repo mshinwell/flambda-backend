@@ -29,6 +29,7 @@ type native_repr =
 type effects = No_effects | Only_generative_effects | Arbitrary_effects
 type coeffects = No_coeffects | Has_coeffects
 
+(* CR mshinwell: please add comments explaining these *)
 type mode =
   | Prim_local
   | Prim_global

@@ -426,17 +426,18 @@ let check_lfunction fn =
      A curried function with no local parameters or returns has kind
      [Curried {nlocal=0}]. *)
   let nparams = List.length fn.params in
-  begin match fn.mode, fn.kind with
+  match fn.mode, fn.kind with
   | Alloc_heap, Tupled -> ()
   | Alloc_local, Tupled ->
      (* Tupled optimisation does not apply to local functions *)
      assert false
-  | mode, Curried {nlocal} ->
+  | mode, Curried {nlocal} -> (
      assert (0 <= nlocal);
      assert (nlocal <= nparams);
      if not fn.region then assert (nlocal >= 1);
-     if mode = Alloc_local then assert (nlocal = nparams)
-  end
+     match mode with
+     | Alloc_local -> assert (nlocal = nparams)
+     | Alloc_heap -> ())
 
 let default_function_attribute = {
   inline = Default_inline;

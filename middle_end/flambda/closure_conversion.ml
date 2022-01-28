@@ -621,7 +621,11 @@ and close_functions t external_env function_declarations : Flambda.named =
       match Function_decl.mode decl, Function_decl.kind decl with
       | _, Curried {nlocal} -> List.length params - nlocal
       | Alloc_heap, Tupled -> List.length params
-      | Alloc_local, Tupled -> 0
+      | Alloc_local, Tupled ->
+        (* CR mshinwell: There is a comment above saying that Tupled
+           functions are always Alloc_heap, yet this case seems to admit
+           the possibility that they might not be... *)
+        0
     in
     let params = List.mapi (fun i v ->
       let alloc_mode : Lambda.alloc_mode =

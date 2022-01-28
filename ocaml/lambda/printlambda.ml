@@ -581,6 +581,7 @@ let apply_kind name pos mode =
   let name =
     match pos with
     | Rc_normal -> name
+    (* CR mshinwell: rename "tail" *)
     | Rc_close_at_apply -> name ^ "tail"
   in
   name ^ alloc_kind mode

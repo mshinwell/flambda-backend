@@ -217,6 +217,7 @@ and fill_static_slot s symbs decls startenv elts env acc offset updates slot =
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
     match arity with
+    (* CR mshinwell: need flambda2 PR fixes here I think *)
     | Curried _, (1 | 0) ->
       let acc = C.cint closure_info :: C.symbol_address code_name :: acc in
       env, acc, offset + 2, updates

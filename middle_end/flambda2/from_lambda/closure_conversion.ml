@@ -440,6 +440,8 @@ let close_c_call acc ~let_bound_var
       then Misc.fatal_errorf "Expected arity one for %s" prim_native_name
       else
         match prim_native_repr_args, prim_native_repr_res with
+        (* CR mshinwell: check the main flambda2 PR doesn't need to do anything
+           with this new field *)
         | [(_, Unboxed_integer Pint64)], (_, Unboxed_float) -> begin
           match args with
           | [arg] ->
