@@ -1469,7 +1469,7 @@ and fill_slot decls startenv elts env acc offset slot =
   | Env_var v ->
     let field, env, eff = simple env (Var_within_closure.Map.find v elts) in
     field :: acc, offset + 1, env, eff
-  | Closure (c : Closure_id.t) ->
+  | Closure (c : Closure_id.t) -> (
     let code_id = Closure_id.Map.find c decls in
     (* CR-someday mshinwell: We should probably use the code's [dbg], but it
        would be tricky to get hold of, and this is very unlikely to make any
@@ -1478,24 +1478,25 @@ and fill_slot decls startenv elts env acc offset slot =
     let dbg = Debuginfo.none in
     let code_symbol = Code_id.code_symbol code_id in
     let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
-    let arity = Env.get_func_decl_params_arity env code_id in
+    let arity, closure_code_pointers =
+      Env.get_func_decl_params_arity env code_id
+    in
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
-    let num_params = snd arity in
-    if num_params = 1 || num_params = 0
-    then
+    match closure_code_pointers with
+    | Full_application_only ->
       let acc =
         C.nativeint ~dbg closure_info :: C.symbol ~dbg code_name :: acc
       in
       acc, offset + 2, env, Ece.pure
-    else
+    | Full_and_partial_application ->
       let acc =
         C.symbol ~dbg code_name
         :: C.nativeint ~dbg closure_info
         :: C.symbol ~dbg (C.curry_function_sym arity)
         :: acc
       in
-      acc, offset + 3, env, Ece.pure
+      acc, offset + 3, env, Ece.pure)
 
 and fill_up_to j acc i =
   if i > j then Misc.fatal_errorf "Problem while filling up a closure in to_cmm";

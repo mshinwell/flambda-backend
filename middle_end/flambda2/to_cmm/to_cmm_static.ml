@@ -206,28 +206,29 @@ and fill_static_slot s symbs decls startenv elts env acc offset updates slot =
         env, [C.cint 1n], updates
     in
     env, List.rev fields @ acc, offset + 1, updates
-  | Closure c ->
+  | Closure c -> (
     let code_id = Closure_id.Map.find c decls in
     let symb = Closure_id.Map.find c symbs in
     let external_name = symbol symb in
     let code_symbol = Code_id.code_symbol code_id in
     let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
     let acc = List.rev (C.define_symbol ~global:true external_name) @ acc in
-    let arity = Env.get_func_decl_params_arity env code_id in
+    let arity, closure_code_pointers =
+      Env.get_func_decl_params_arity env code_id
+    in
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
-    let num_params = snd arity in
-    if num_params = 1 || num_params = 0
-    then
+    match closure_code_pointers with
+    | Full_application_only ->
       let acc = C.cint closure_info :: C.symbol_address code_name :: acc in
       env, acc, offset + 2, updates
-    else
+    | Full_and_partial_application ->
       let acc =
         C.symbol_address code_name :: C.cint closure_info
         :: C.symbol_address (C.curry_function_sym arity)
         :: acc
       in
-      env, acc, offset + 3, updates
+      env, acc, offset + 3, updates)
 
 and fill_static_up_to j acc i =
   if i = j then acc else fill_static_up_to j (C.cint 1n :: acc) (i + 1)
