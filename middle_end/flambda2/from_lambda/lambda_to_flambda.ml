@@ -381,7 +381,7 @@ let compile_staticfail acc env ccenv ~(continuation : Continuation.t) ~args :
         add_end_regions acc ~region_stack_now
       in
       let body = add_remaining_end_regions acc after_everything in
-      fun acc _env ->
+      fun acc ccenv ->
         CC.close_let acc ccenv
           (Ident.create_local "unit")
           Not_user_visible (End_region region) ~body
@@ -631,8 +631,7 @@ let apply_cont_with_extra_args acc env ccenv cont traps args =
   in
   CC.close_apply_cont acc ccenv cont traps (args @ extra_args)
 
-let wrap_return_continuation acc env ccenv (apply : IR.apply)
-    (_pos : Lambda.apply_position) =
+let wrap_return_continuation acc env ccenv (apply : IR.apply) =
   let extra_args = Env.extra_args_for_continuation env apply.continuation in
   match extra_args with
   | [] -> CC.close_apply acc ccenv apply
@@ -779,15 +778,15 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                   }
                 in
                 if not need_end_region
-                then
-                  wrap_return_continuation acc env ccenv apply ap_region_close
+                then wrap_return_continuation acc env ccenv apply
                 else
+                  (* CR vlaviron: Need to close all regions, or equivalently the
+                     outermost one *)
                   let region = Env.innermost_region env in
                   CC.close_let acc ccenv (Ident.create_local "unit")
                     Not_user_visible (End_region region) ~body:(fun acc ccenv ->
                       let acc = Acc.add_region_closed_early acc region in
-                      wrap_return_continuation acc env ccenv apply
-                        ap_region_close))
+                      wrap_return_continuation acc env ccenv apply))
               ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
           k_exn)
       k_exn
@@ -974,14 +973,16 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
                       }
                     in
                     if not need_end_region
-                    then wrap_return_continuation acc env ccenv apply pos
+                    then wrap_return_continuation acc env ccenv apply
                     else
+                      (* CR vlaviron: Need to close all regions, or equivalently
+                         the outermost one *)
                       let region = Env.innermost_region env in
                       CC.close_let acc ccenv (Ident.create_local "unit")
                         Not_user_visible (End_region region)
                         ~body:(fun acc ccenv ->
                           let acc = Acc.add_region_closed_early acc region in
-                          wrap_return_continuation acc env ccenv apply pos))
+                          wrap_return_continuation acc env ccenv apply))
                   ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
               k_exn)
           k_exn)
@@ -990,7 +991,6 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let body_result = Ident.create_local "body_result" in
     let result_var = Ident.create_local "try_with_result" in
     let region = Ident.create_local "try_region" in
-    let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
     (* As for all other constructs, the OCaml type checker and the Lambda
        generation pass ensures that there will be an enclosing region around the
        whole [Ltrywith] (possibly not immediately enclosing, but maybe further
@@ -1147,13 +1147,15 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
               }
             in
             if not need_end_region
-            then wrap_return_continuation acc env ccenv apply ap_region_close
+            then wrap_return_continuation acc env ccenv apply
             else
+              (* CR vlaviron: Need to close all regions, or equivalently the
+                 outermost one *)
               let region = Env.innermost_region env in
               CC.close_let acc ccenv (Ident.create_local "unit")
                 Not_user_visible (End_region region) ~body:(fun acc ccenv ->
                   let acc = Acc.add_region_closed_early acc region in
-                  wrap_return_continuation acc env ccenv apply ap_region_close))
+                  wrap_return_continuation acc env ccenv apply))
           k_exn)
       k_exn
   | Lfunction func ->
@@ -1342,13 +1344,15 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
                   }
                 in
                 if not need_end_region
-                then wrap_return_continuation acc env ccenv apply pos
+                then wrap_return_continuation acc env ccenv apply
                 else
+                  (* CR vlaviron: Need to close all regions, or equivalently the
+                     outermost one *)
                   let region = Env.innermost_region env in
                   CC.close_let acc ccenv (Ident.create_local "unit")
                     Not_user_visible (End_region region) ~body:(fun acc ccenv ->
                       let acc = Acc.add_region_closed_early acc region in
-                      wrap_return_continuation acc env ccenv apply pos))
+                      wrap_return_continuation acc env ccenv apply))
               k_exn)
           k_exn)
       k_exn
@@ -1369,7 +1373,6 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
   | Ltrywith (body, id, handler) ->
     let body_result = Ident.create_local "body_result" in
     let region = Ident.create_local "try_region" in
-    let ccenv = CCenv.add_var ccenv region (Variable.create "try_region") in
     CC.close_let acc ccenv region Not_user_visible Begin_region
       ~body:(fun acc ccenv ->
         let_cont_nonrecursive_with_extra_params acc env ccenv
