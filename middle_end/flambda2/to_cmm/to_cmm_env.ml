@@ -194,6 +194,10 @@ let get_function_info env code_id =
     Misc.fatal_errorf "To_cmm_env.get_function_info: code ID %a not bound"
       Code_id.print code_id
 
+type closure_code_pointers =
+  | Full_application_only
+  | Full_and_partial_application
+
 let get_func_decl_params_arity t code_id =
   let info = get_function_info t code_id in
   let num_params = List.length (Code_metadata.params_arity info) in
@@ -203,7 +207,12 @@ let get_func_decl_params_arity t code_id =
     else
       Lambda.Curried { nlocal = Code_metadata.num_trailing_local_params info }
   in
-  kind, num_params
+  let closure_code_pointers =
+    match kind, num_params with
+    | Curried _, (0 | 1) -> Full_application_only
+    | (Curried _ | Tupled), _ -> Full_and_partial_application
+  in
+  (kind, num_params), closure_code_pointers
 
 (* Variables *)
 

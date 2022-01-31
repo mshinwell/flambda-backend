@@ -1478,16 +1478,18 @@ and fill_slot decls startenv elts env acc offset slot =
     let dbg = Debuginfo.none in
     let code_symbol = Code_id.code_symbol code_id in
     let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
-    let arity = Env.get_func_decl_params_arity env code_id in
+    let arity, closure_code_pointers =
+      Env.get_func_decl_params_arity env code_id
+    in
     let closure_info = C.closure_info ~arity ~startenv:(startenv - offset) in
     (* We build here the **reverse** list of fields for the closure *)
-    match arity with
-    | Curried _, (1 | 0) ->
+    match closure_code_pointers with
+    | Full_application_only ->
       let acc =
         C.nativeint ~dbg closure_info :: C.symbol ~dbg code_name :: acc
       in
       acc, offset + 2, env, Ece.pure
-    | arity ->
+    | Full_and_partial_application ->
       let acc =
         C.symbol ~dbg code_name
         :: C.nativeint ~dbg closure_info
