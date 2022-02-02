@@ -211,7 +211,11 @@ let rec apply_renaming t renaming =
       in
       if ty == ty' then t else Rec_info ty'
     | Region ty ->
-      let ty' = TD.apply_renaming ty renaming in
+      let ty' =
+        TD.apply_renaming
+          ~apply_renaming_head:apply_renaming_head_of_kind_region
+          ~free_names_head:free_names_head_of_kind_region ty renaming
+      in
       if ty == ty' then t else Region ty'
 
 and apply_renaming_head_of_kind_value head renaming =
@@ -584,9 +588,7 @@ let rec print ppf t =
       ty
   | Region ty ->
     Format.fprintf ppf "@[<hov 1>(Region@ %a)@]"
-      (TD.print ~print_head:print_head_of_kind_region
-         ~apply_renaming_head:apply_renaming_head_of_kind_region
-         ~free_names_head:free_names_head_of_kind_region)
+      (TD.print ~print_head:print_head_of_kind_region)
       ty
 
 and print_head_of_kind_value ppf head =
@@ -789,8 +791,6 @@ let rec all_ids_for_export t =
       ~all_ids_for_export_head:all_ids_for_export_head_of_kind_rec_info ty
   | Region ty ->
     TD.all_ids_for_export
-      ~apply_renaming_head:apply_renaming_head_of_kind_region
-      ~free_names_head:free_names_head_of_kind_region
       ~all_ids_for_export_head:all_ids_for_export_head_of_kind_region ty
 
 and all_ids_for_export_head_of_kind_value head =
@@ -985,9 +985,7 @@ let rec apply_coercion t coercion : t Or_bottom.t =
     | Region ty ->
       let<+ ty' =
         TD.apply_coercion
-          ~apply_coercion_head:apply_coercion_head_of_kind_region
-          ~apply_renaming_head:apply_renaming_head_of_kind_region
-          ~free_names_head:free_names_head_of_kind_region coercion ty
+          ~apply_coercion_head:apply_coercion_head_of_kind_region coercion ty
       in
       if ty == ty' then t else Region ty'
 
@@ -1289,11 +1287,10 @@ let rec remove_unused_closure_vars_and_shortcut_aliases t ~used_closure_vars
     if ty == ty' then t else Rec_info ty'
   | Region ty ->
     let ty' =
-      TD.remove_unused_closure_vars ty ~used_closure_vars
-        ~remove_unused_closure_vars_head:
-          remove_unused_closure_vars_head_of_kind_region
-        ~apply_renaming_head:apply_renaming_head_of_kind_region
-        ~free_names_head:free_names_head_of_kind_region
+      TD.remove_unused_closure_vars_and_shortcut_aliases ty ~used_closure_vars
+        ~canonicalise
+        ~remove_unused_closure_vars_and_shortcut_aliases_head:
+          remove_unused_closure_vars_and_shortcut_aliases_head_of_kind_region
     in
     if ty == ty' then t else Region ty'
 

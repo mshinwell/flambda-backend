@@ -736,7 +736,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
   | Lapply
       { ap_func;
         ap_args;
-        ap_region_close = _;
+        ap_region_close;
         ap_mode;
         ap_loc;
         ap_tailcall;
@@ -747,7 +747,9 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     (* It is important that any necessary [End_region] marker (from a
        surrounding [Lregion]) is inserted before the tail call! *)
     let need_end_region =
-      match ap_region_close with Rc_normal -> false | Rc_region_close -> true
+      match ap_region_close with
+      | Rc_normal -> false
+      | Rc_close_at_apply -> true
     in
     cps_non_tail_list acc env ccenv ap_args
       (fun acc env ccenv args ->
@@ -940,7 +942,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
     (* See comments in the [Lapply] case above. *)
     let need_end_region =
-      match pos with Rc_normal -> false | Rc_region_close -> true
+      match pos with Rc_normal -> false | Rc_close_at_apply -> true
     in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
@@ -1121,7 +1123,9 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
         ap_probe
       } ->
     let need_end_region =
-      match ap_region_close with Rc_normal -> false | Rc_region_close -> true
+      match ap_region_close with
+      | Rc_normal -> false
+      | Rc_close_at_apply -> true
     in
     cps_non_tail_list acc env ccenv ap_args
       (fun acc env ccenv args ->
@@ -1316,7 +1320,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
       ~recursive ~body ~handler
   | Lsend (meth_kind, meth, obj, args, pos, mode, loc) ->
     let need_end_region =
-      match pos with Rc_normal -> false | Rc_region_close -> true
+      match pos with Rc_normal -> false | Rc_close_at_apply -> true
     in
     cps_non_tail_simple acc env ccenv obj
       (fun acc env ccenv obj ->
