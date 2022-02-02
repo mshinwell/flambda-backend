@@ -48,6 +48,7 @@ and head_of_kind_value = private
         is_unique : bool;
         alloc_mode : Alloc_mode.t Or_unknown.t
       }
+  | Mutable_block of { alloc_mode : Alloc_mode.t Or_unknown.t }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
   | Boxed_int64 of t * Alloc_mode.t Or_unknown.t
@@ -242,6 +243,8 @@ val create_variant :
   blocks:row_like_for_blocks Or_unknown.t ->
   Alloc_mode.t Or_unknown.t ->
   t
+
+val mutable_block : Alloc_mode.t Or_unknown.t -> t
 
 val create_closures : Alloc_mode.t Or_unknown.t -> row_like_for_closures -> t
 
@@ -529,6 +532,8 @@ module Head_of_kind_value : sig
     immediates:flambda_type Or_unknown.t ->
     Alloc_mode.t Or_unknown.t ->
     t
+
+  val create_mutable_block : Alloc_mode.t Or_unknown.t -> t
 
   (* XXX these alloc mode params should probably be labelled *)
   val create_boxed_float : flambda_type -> Alloc_mode.t Or_unknown.t -> t

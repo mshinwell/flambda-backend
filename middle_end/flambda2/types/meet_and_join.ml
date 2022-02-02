@@ -319,6 +319,10 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     ( TG.Head_of_kind_value.create_variant ~is_unique alloc_mode ~blocks
         ~immediates,
       env_extension )
+  | ( Mutable_block { alloc_mode = alloc_mode1 },
+      Mutable_block { alloc_mode = alloc_mode2 } ) ->
+    let<+ alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
+    TG.Head_of_kind_value.create_mutable_block alloc_mode, TEE.empty
   | Boxed_float (n1, alloc_mode1), Boxed_float (n2, alloc_mode2) ->
     let<* n, env_extension = meet env n1 n2 in
     let<+ alloc_mode = meet_alloc_mode alloc_mode1 alloc_mode2 in
@@ -365,8 +369,8 @@ and meet_head_of_kind_value env (head1 : TG.head_of_kind_value)
     in
     let<+ length, env_extension = meet env length1 length2 in
     TG.Head_of_kind_value.create_array ~element_kind ~length, env_extension
-  | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-      | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
+  | ( ( Variant _ | Mutable_block _ | Boxed_float _ | Boxed_int32 _
+      | Boxed_int64 _ | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
       _ ) ->
     (* This assumes that all the different constructors are incompatible. This
        could break very hard for dubious uses of Obj. *)
@@ -1056,6 +1060,10 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
     let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
     TG.Head_of_kind_value.create_variant ~is_unique alloc_mode ~blocks
       ~immediates
+  | ( Mutable_block { alloc_mode = alloc_mode1 },
+      Mutable_block { alloc_mode = alloc_mode2 } ) ->
+    let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
+    Known (TG.Head_of_kind_value.create_mutable_block alloc_mode)
   | Boxed_float (n1, alloc_mode1), Boxed_float (n2, alloc_mode2) ->
     let>+ n = join env n1 n2 in
     let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
@@ -1098,8 +1106,8 @@ and join_head_of_kind_value env (head1 : TG.head_of_kind_value)
     in
     let>+ length = join env length1 length2 in
     TG.Head_of_kind_value.create_array ~element_kind ~length
-  | ( ( Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-      | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
+  | ( ( Variant _ | Mutable_block _ | Boxed_float _ | Boxed_int32 _
+      | Boxed_int64 _ | Boxed_nativeint _ | Closures _ | String _ | Array _ ),
       _ ) ->
     Unknown
 

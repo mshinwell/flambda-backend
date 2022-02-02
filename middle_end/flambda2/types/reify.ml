@@ -56,24 +56,18 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
     ?disallowed_free_vars ?(allow_unique = false) env ~min_name_mode t :
     reification_result =
   let var_allowed (alloc_mode : Alloc_mode.t Or_unknown.t) var =
-    (* XXX revise and expand this fairly important comment *)
-    (* For the moment we don't lift if the allocation mode is [Local] and any
-       variables would be involved in the definition of the statically-allocated
-       value. It is only safe to lift a [Local] allocation if it can be
-       guaranteed that no locally-allocated value is reachable from it. This
-       means that, transitively, the whole of such an allocation has to be
-       lifted. An easy way to ensure that is to only lift the constant [Local]
-       allocations. Conversely, [Heap] allocations can be lifted even if
-       inconstant, because the OCaml type system will have validated the
-       correctness of the original non-lifted terms; any places in the compiler
-       where new [Local] blocks are created (e.g. during partial application
-       wrapper expansion) will have been checked to ensure they do not break the
-       invariants; and finally because the Flambda 2 type system accurately
-       propagates the allocation modes (and if it loses information there, we
-       won't lift). *)
-    match alloc_mode with
-    | Unknown | Known Local -> false
-    | Known Heap -> (
+    (* It is only safe to lift a [Local] allocation if it can be guaranteed that
+       no locally-allocated value is reachable from it: therefore, any variables
+       involved in the definition of an (inconstant) value to be lifted have
+       their types checked to ensure they cannot hold locally-allocated values.
+       Conversely, [Heap] allocations can be lifted even if inconstant, because
+       the OCaml type system will have validated the correctness of the original
+       non-lifted terms; any places in the compiler where new [Local] blocks are
+       created (e.g. during partial application wrapper expansion) will have
+       been checked to ensure they do not break the invariants; and finally
+       because the Flambda 2 type system accurately propagates the allocation
+       modes (and if it loses information there, we won't lift). *)
+    let allowed =
       match allowed_if_free_vars_defined_in with
       | None -> false
       | Some allowed_if_free_vars_defined_in -> (
@@ -87,7 +81,14 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
         match disallowed_free_vars with
         | None -> true
         | Some disallowed_free_vars ->
-          not (Variable.Set.mem var disallowed_free_vars)))
+          not (Variable.Set.mem var disallowed_free_vars))
+    in
+    allowed
+    &&
+    match alloc_mode with
+    | Known Heap -> true
+    | Unknown | Known Local ->
+      Provers.never_holds_locally_allocated_values env var Flambda_kind.value
   in
   let canonical_simple =
     match TE.get_alias_then_canonical_simple_exn env ~min_name_mode t with
@@ -182,6 +183,7 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
           else try_canonical_simple ()
         | Known _, Unknown | Unknown, Known _ | Unknown, Unknown ->
           try_canonical_simple ())
+    | Value (Ok (Mutable_block _)) -> try_canonical_simple ()
     | Value (Ok (Closures { by_closure_id; alloc_mode })) -> begin
       (* CR mshinwell: Here and above, move to separate function. *)
       match TG.Row_like_for_closures.get_singleton by_closure_id with

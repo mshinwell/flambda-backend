@@ -1120,25 +1120,26 @@ let type_closure_elements_and_make_lifting_decision_for_one_set dacc
                      ones bound to symbol projections (since such projections
                      might be from inconstant symbols that were lifted [Local]
                      allocations), in the definition of the set of closures will
-                     currently prevent lifting if the allocation mode is
-                     [Local]. This is because we do not know that such variables
-                     never hold locally-allocated blocks, pointers to which from
-                     statically-allocated blocks are forbidden. Also see comment
-                     in types/reify.ml. *)
+                     currently prevent lifting if the allocation mode is [Local]
+                     and we cannot show that such variables never hold
+                     locally-allocated blocks (pointers to which from
+                     statically-allocated blocks are forbidden). Also see
+                     comment in types/reify.ml. *)
                   Variable.Map.mem var closure_bound_vars_inverse
                   (* the closure bound vars will be replaced by symbols upon
                      lifting *)
-                  ||
-                  match Set_of_closures.alloc_mode set_of_closures with
-                  | Local -> false
-                  | Heap ->
-                    DE.is_defined_at_toplevel (DA.denv dacc) var
-                    (* If [var] is known to be a symbol projection, it doesn't
-                       matter if it isn't in scope at the place where we will
-                       eventually insert the "let symbol", as the binding to the
-                       projection from the relevant symbol can always be
-                       rematerialised. *)
-                    || Variable.Map.mem var symbol_projections))
+                  || (match Set_of_closures.alloc_mode set_of_closures with
+                     | Local ->
+                       T.never_holds_locally_allocated_values
+                         (DA.typing_env dacc) var K.value
+                     | Heap -> true)
+                     && (DE.is_defined_at_toplevel (DA.denv dacc) var
+                        (* If [var] is known to be a symbol projection, it
+                           doesn't matter if it isn't in scope at the place
+                           where we will eventually insert the "let symbol", as
+                           the binding to the projection from the relevant
+                           symbol can always be rematerialised. *)
+                        || Variable.Map.mem var symbol_projections)))
          closure_elements
   in
   { can_lift; closure_elements; closure_element_types; symbol_projections }

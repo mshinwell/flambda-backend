@@ -219,8 +219,8 @@ let prove_is_int env t : bool proof =
   end
   | Value
       (Ok
-        ( Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
-        | Closures _ | String _ | Array _ )) ->
+        ( Mutable_block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+        | Boxed_nativeint _ | Closures _ | String _ | Array _ )) ->
     Proved false
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
@@ -270,6 +270,7 @@ let prove_tags_must_be_a_block env t : Tag.Set.t proof =
       (Ok (Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _))
     ->
     Proved (Tag.Set.singleton Tag.custom_tag)
+  | Value (Ok (Mutable_block _)) -> Unknown
   | Value (Ok (Closures _)) ->
     Proved (Tag.Set.of_list [Tag.closure_tag; Tag.infix_tag])
   | Value (Ok (String _)) -> Proved (Tag.Set.singleton Tag.string_tag)
@@ -748,8 +749,8 @@ let prove_boxed_float_containing_simple =
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
       | Boxed_float (ty, _) -> Some ty
-      | Variant _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
-      | Closures _ | String _ | Array _ ->
+      | Variant _ | Mutable_block _ | Boxed_int32 _ | Boxed_int64 _
+      | Boxed_nativeint _ | Closures _ | String _ | Array _ ->
         None)
 
 let prove_boxed_int32_containing_simple =
@@ -757,8 +758,8 @@ let prove_boxed_int32_containing_simple =
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
       | Boxed_int32 (ty, _) -> Some ty
-      | Variant _ | Boxed_float _ | Boxed_int64 _ | Boxed_nativeint _
-      | Closures _ | String _ | Array _ ->
+      | Variant _ | Mutable_block _ | Boxed_float _ | Boxed_int64 _
+      | Boxed_nativeint _ | Closures _ | String _ | Array _ ->
         None)
 
 let prove_boxed_int64_containing_simple =
@@ -766,8 +767,8 @@ let prove_boxed_int64_containing_simple =
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
       | Boxed_int64 (ty, _) -> Some ty
-      | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_nativeint _
-      | Closures _ | String _ | Array _ ->
+      | Variant _ | Mutable_block _ | Boxed_float _ | Boxed_int32 _
+      | Boxed_nativeint _ | Closures _ | String _ | Array _ ->
         None)
 
 let prove_boxed_nativeint_containing_simple =
@@ -775,8 +776,8 @@ let prove_boxed_nativeint_containing_simple =
     ~contents_of_boxed_number:(fun (ty_value : TG.head_of_kind_value) ->
       match ty_value with
       | Boxed_nativeint (ty, _) -> Some ty
-      | Variant _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Closures _
-      | String _ | Array _ ->
+      | Variant _ | Mutable_block _ | Boxed_float _ | Boxed_int32 _
+      | Boxed_int64 _ | Closures _ | String _ | Array _ ->
         None)
 
 let[@inline] prove_block_field_simple_aux env ~min_name_mode t get_field :
@@ -899,8 +900,30 @@ let prove_alloc_mode_of_boxed_number env t : Alloc_mode.t Or_unknown.t =
   | Value (Ok (Boxed_int64 (_, alloc_mode)))
   | Value (Ok (Boxed_nativeint (_, alloc_mode))) ->
     alloc_mode
-  | Value (Ok (Variant _ | String _ | Array _ | Closures _))
+  | Value (Ok (Variant _ | Mutable_block _ | String _ | Array _ | Closures _))
   | Value (Unknown | Bottom)
   | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
   | Naked_nativeint _ | Rec_info _ | Region _ ->
     Unknown
+
+let never_holds_locally_allocated_values env var kind =
+  let t = TE.find env (Name.var var) (Some kind) in
+  match expand_head env t with
+  | Value (Ok (Boxed_float (_, alloc_mode)))
+  | Value (Ok (Boxed_int32 (_, alloc_mode)))
+  | Value (Ok (Boxed_int64 (_, alloc_mode)))
+  | Value (Ok (Boxed_nativeint (_, alloc_mode)))
+  | Value (Ok (Variant { alloc_mode; _ }))
+  | Value (Ok (Mutable_block { alloc_mode }))
+  | Value (Ok (Closures { alloc_mode; _ })) -> (
+    match alloc_mode with Known Heap -> true | Known Local | Unknown -> false)
+  | Value (Ok (Array _)) ->
+    (* CR mshinwell: For this function it would now be useful to track the alloc
+       mode on arrays. *)
+    false
+  | Value (Ok (String _)) -> true
+  | Value Unknown -> false
+  | Value Bottom -> true
+  | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
+  | Naked_nativeint _ | Rec_info _ | Region _ ->
+    true

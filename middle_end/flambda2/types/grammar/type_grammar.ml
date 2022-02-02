@@ -56,6 +56,7 @@ and head_of_kind_value =
         is_unique : bool;
         alloc_mode : Alloc_mode.t Or_unknown.t
       }
+  | Mutable_block of { alloc_mode : Alloc_mode.t Or_unknown.t }
   | Boxed_float of t * Alloc_mode.t Or_unknown.t
   | Boxed_int32 of t * Alloc_mode.t Or_unknown.t
   | Boxed_int64 of t * Alloc_mode.t Or_unknown.t
@@ -202,6 +203,7 @@ let rec apply_renaming_head_of_kind_value head renaming =
     else
       Variant
         { is_unique; blocks = blocks'; immediates = immediates'; alloc_mode }
+  | Mutable_block { alloc_mode = _ } -> head
   | Boxed_float (ty, alloc_mode) ->
     let ty' = apply_renaming ty renaming in
     if ty == ty' then head else Boxed_float (ty', alloc_mode)
@@ -412,6 +414,7 @@ and free_names_head_of_kind_value head =
     Name_occurrences.union
       (Or_unknown.free_names free_names_row_like_for_blocks blocks)
       (Or_unknown.free_names free_names immediates)
+  | Mutable_block { alloc_mode = _ } -> Name_occurrences.empty
   | Boxed_float (ty, _alloc_mode) -> free_names ty
   | Boxed_int32 (ty, _alloc_mode) -> free_names ty
   | Boxed_int64 (ty, _alloc_mode) -> free_names ty
@@ -592,6 +595,10 @@ and print_head_of_kind_value ppf head =
       (if is_unique then " unique" else "")
       (Or_unknown.print (print_row_like_for_blocks alloc_mode))
       blocks (Or_unknown.print print) immediates
+  | Mutable_block { alloc_mode } ->
+    Format.fprintf ppf "@[<hov 1>(Mutable_block@ %a)@]"
+      (Or_unknown.print Alloc_mode.print)
+      alloc_mode
   | Boxed_float (ty, alloc_mode) ->
     Format.fprintf ppf "@[<hov 1>(Boxed_float@ %a@ %a)@]"
       (Or_unknown.print Alloc_mode.print)
@@ -801,6 +808,7 @@ and all_ids_for_export_head_of_kind_value head =
       (Or_unknown.all_ids_for_export all_ids_for_export_row_like_for_blocks
          blocks)
       (Or_unknown.all_ids_for_export all_ids_for_export immediates)
+  | Mutable_block { alloc_mode = _ } -> Ids_for_export.empty
   | Boxed_float (t, _alloc_mode) -> all_ids_for_export t
   | Boxed_int32 (t, _alloc_mode) -> all_ids_for_export t
   | Boxed_int64 (t, _alloc_mode) -> all_ids_for_export t
@@ -1013,6 +1021,7 @@ and apply_coercion_head_of_kind_value head coercion : _ Or_bottom.t =
        similar to that for tuples (products): we would want a coercion for each
        branch. *)
     if Coercion.is_id coercion then Ok head else Bottom
+  | Mutable_block { alloc_mode = _ } -> Ok head
   | Boxed_float _ ->
     (* Even if we had coercions that would act on float constants, we would want
        to have a [Boxed_float] wrapper that would lift a float coercion to a
@@ -1326,6 +1335,7 @@ and remove_unused_closure_vars_head_of_kind_value head ~used_closure_vars =
     else
       Variant
         { is_unique; blocks = blocks'; immediates = immediates'; alloc_mode }
+  | Mutable_block { alloc_mode = _ } -> head
   | Boxed_float (ty, alloc_mode) ->
     let ty' = remove_unused_closure_vars ty ~used_closure_vars in
     if ty == ty' then head else Boxed_float (ty', alloc_mode)
@@ -1553,6 +1563,8 @@ let create_variant ~is_unique ~(immediates : _ Or_unknown.t) ~blocks alloc_mode
           print immediates
   end;
   Value (TD.create (Variant { immediates; blocks; is_unique; alloc_mode }))
+
+let mutable_block alloc_mode = Value (TD.create (Mutable_block { alloc_mode }))
 
 let create_closures alloc_mode by_closure_id =
   Value (TD.create (Closures { by_closure_id; alloc_mode }))
@@ -2305,6 +2317,8 @@ module Head_of_kind_value = struct
 
   let create_variant ~is_unique ~blocks ~immediates alloc_mode =
     Variant { is_unique; blocks; immediates; alloc_mode }
+
+  let create_mutable_block alloc_mode = Mutable_block { alloc_mode }
 
   let create_boxed_float ty alloc_mode = Boxed_float (ty, alloc_mode)
 

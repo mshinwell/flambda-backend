@@ -438,6 +438,8 @@ val immutable_block_with_size_at_least :
   field_n_minus_one:Variable.t ->
   t
 
+val mutable_block : Alloc_mode.t Or_unknown.t -> t
+
 val variant :
   const_ctors:t ->
   non_const_ctors:t list Tag.Scannable.Map.t ->
@@ -734,3 +736,6 @@ val reify :
   min_name_mode:Name_mode.t ->
   t ->
   reification_result
+
+val never_holds_locally_allocated_values :
+  Typing_env.t -> Variable.t -> Flambda_kind.t -> bool

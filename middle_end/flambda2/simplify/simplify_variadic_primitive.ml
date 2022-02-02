@@ -56,7 +56,7 @@ let simplify_make_block_of_values dacc prim dbg tag ~shape
     | Immutable_unique ->
       T.immutable_block ~is_unique:true tag ~field_kind:K.value
         (Known alloc_mode) ~fields
-    | Mutable -> T.any_value
+    | Mutable -> T.mutable_block (Known alloc_mode)
   in
   let dacc = DA.add_variable dacc result_var ty in
   (* CR mshinwell: here and in the next function, should we be adding CSE
