@@ -227,3 +227,6 @@ val prove_rec_info : Typing_env.t -> Type_grammar.t -> Rec_info_expr.t proof
 
 val prove_alloc_mode_of_boxed_number :
   Typing_env.t -> Type_grammar.t -> Alloc_mode.t Or_unknown.t
+
+val never_holds_locally_allocated_values :
+  Typing_env.t -> Variable.t -> Flambda_kind.t -> bool
