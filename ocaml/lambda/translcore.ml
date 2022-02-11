@@ -942,7 +942,7 @@ and transl_apply ~scopes
         let lam =
           if args = [] then lam else lapply lam (List.rev args) loc pos ap_mode
         in
-        let handle = protect "func" lam in
+        let handle = protect "*func*" lam in
         let l =
           List.map
             (fun arg ->
@@ -968,9 +968,73 @@ and transl_apply ~scopes
             | Alloc_local -> false
             | Alloc_heap -> true
           in
-          Lfunction{kind = Curried {nlocal}; params = [id_arg, Pgenval];
-                    return = Pgenval; body; mode; region;
-                    attr = default_stub_attribute; loc = loc}
+          let squash_lambda =
+            if nlocal <> 0 then None
+            else
+              match body with
+              | Llet (Strict, Pgenval, id,
+                  Lapply {
+                    ap_func = being_applied;
+                    ap_args = first_args;
+                    ap_region_close = Rc_normal;
+                    ap_mode = Alloc_heap;
+                    ap_loc =_;
+                    ap_tailcall = Default_tailcall;
+                    ap_inlined = Default_inlined;
+                    ap_specialised = Default_specialise;
+                    ap_probe = None;
+                  },
+                  Lfunction {
+                      kind = Curried { nlocal = 0; };
+                      params;
+                      return = Pgenval;
+                      body = Lapply {
+                        ap_func = Lvar ap_func;
+                        ap_args = second_args;
+                        ap_region_close = Rc_normal;
+                        ap_mode = Alloc_heap;
+                        ap_loc = _;
+                        ap_tailcall = Default_tailcall;
+                        ap_inlined = Default_inlined;
+                        ap_specialised = Default_specialise;
+                        ap_probe = None;
+                      };
+                      mode = Alloc_heap;
+                      region = true;
+                      attr;
+                      loc = _;
+                    })
+                when String.equal (Ident.name id) "*func*"
+                  && attr = default_stub_attribute
+                  && Ident.same ap_func id ->
+                let args = first_args @ second_args in
+                Some (being_applied, params, args)
+              | _ -> None
+          in
+          let param = id_arg, Pgenval in
+          match squash_lambda with
+          | None ->
+            Lfunction { kind = Curried {nlocal}; params = [param];
+                        return = Pgenval; body; mode; region;
+                        attr = default_stub_attribute; loc }
+          | Some (being_applied, params, args) ->
+            let params = param :: params in
+            let body =
+              Lapply {
+                ap_func = being_applied;
+                ap_args = args;
+                ap_region_close = Rc_normal;
+                ap_mode = Alloc_heap;
+                ap_loc = loc;
+                ap_tailcall = Default_tailcall;
+                ap_inlined = Default_inlined;
+                ap_specialised = Default_specialise;
+                ap_probe = None;
+              }
+            in
+            Lfunction { kind = Curried {nlocal}; params;
+                        return = Pgenval; body; mode; region;
+                        attr = default_stub_attribute; loc }
         in
         List.fold_right
           (fun (id, lam) body -> Llet(Strict, Pgenval, id, lam, body))
