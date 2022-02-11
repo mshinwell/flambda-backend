@@ -131,6 +131,20 @@ let invalid _env res ~message =
   in
   call_expr, res
 
+let dead_closure_elts_msg dbg closure_ids closure_vars =
+  let aux s pp fmt = function
+    | [] -> ()
+    | _ :: _ as l ->
+      let pp_sep fmt () = Format.fprintf fmt ",@ " in
+      Format.fprintf fmt "@[<h>%s: %a@]@ " s (Format.pp_print_list ~pp_sep pp) l
+  in
+  Format.asprintf "@[<hv>[%a]@ Unreachable code because of@ %a%a@]"
+    Debuginfo.print_compact dbg
+    (aux "dead closure ids" Closure_id.print)
+    closure_ids
+    (aux "dead closure vars" Var_within_closure.print)
+    closure_vars
+
 (* 'Simple' expression *)
 
 let simple env s =
@@ -480,18 +494,15 @@ let unary_primitive env res dbg f arg =
     (* one of the ids has been marked as dead, the code should be
        unreachable. *)
     | Dead_id, Id_slot _ ->
-      let message = Format.asprintf "dead closure id: %a" Closure_id.print c1 in
+      let message = dead_closure_elts_msg dbg [c1] [] in
       let expr, res = invalid env res ~message in
       None, res, expr
     | Id_slot _, Dead_id ->
-      let message = Format.asprintf "dead closure id: %a" Closure_id.print c2 in
+      let message = dead_closure_elts_msg dbg [c2] [] in
       let expr, res = invalid env res ~message in
       None, res, expr
     | Dead_id, Dead_id ->
-      let message =
-        Format.asprintf "dead closure ids: %a, %a" Closure_id.print c1
-          Closure_id.print c2
-      in
+      let message = dead_closure_elts_msg dbg [c1; c2] [] in
       let expr, res = invalid env res ~message in
       None, res, expr
   end
@@ -503,22 +514,15 @@ let unary_primitive env res dbg f arg =
     (* the closure var and/or id has been explicitly removed, the code is
        unreachable *)
     | Dead_var, Id_slot _ ->
-      let message =
-        Format.asprintf "dead closure var: %a" Var_within_closure.print var
-      in
+      let message = dead_closure_elts_msg dbg [] [var] in
       let expr, res = invalid env res ~message in
       None, res, expr
     | Var_slot _, Dead_id ->
-      let message =
-        Format.asprintf "dead closure id: %a" Closure_id.print project_from
-      in
+      let message = dead_closure_elts_msg dbg [project_from] [] in
       let expr, res = invalid env res ~message in
       None, res, expr
     | Dead_var, Dead_id ->
-      let message =
-        Format.asprintf "dead closure id: %a, dead closure var: %a"
-          Closure_id.print project_from Var_within_closure.print var
-      in
+      let message = dead_closure_elts_msg dbg [project_from] [var] in
       let expr, res = invalid env res ~message in
       None, res, expr
   end
