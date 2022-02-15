@@ -135,7 +135,7 @@ let argument_types_useful dacc apply =
       (Apply.args apply)
 
 let might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
-    ~return_arity : Call_site_inlining_decision_type.t =
+    ~return_arity ~is_depth_exceeded : Call_site_inlining_decision_type.t =
   let denv = DA.denv dacc in
   let env_prohibits_inlining = not (DE.can_inline denv) in
   let decision =
@@ -150,6 +150,8 @@ let might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
   then Environment_says_never_inline
   else if not (argument_types_useful dacc apply)
   then Argument_types_not_useful
+  else if is_depth_exceeded
+  then Max_inlining_depth_exceeded
   else
     let cost_metrics =
       speculative_inlining ~apply dacc ~simplify_expr ~return_arity
@@ -207,7 +209,7 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity :
       | Some 0 -> Unrolling_depth_exceeded
       | Some _ ->
         might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
-          ~return_arity
+          ~return_arity ~is_depth_exceeded:false
       | None -> (
         (* lmaurer: This seems semantically dodgy: If we really think of a free
            depth variable as [Unknown], then we shouldn't be considering
@@ -223,28 +225,26 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity :
            ramifications of treating unknown-ness as an observable property this
            way. Are we relying on monotonicity somewhere? *)
         let apply_inlining_state = Apply.inlining_state apply in
-        if Inlining_state.is_depth_exceeded apply_inlining_state
-        then Max_inlining_depth_exceeded
-        else
-          match inlined with
-          | Never_inlined -> assert false
-          | Default_inlined ->
-            let max_rec_depth =
-              Flambda_features.Inlining.max_rec_depth
-                (Round (DE.round (DA.denv dacc)))
-            in
-            if Simplify_rec_info_expr.depth_may_be_at_least dacc rec_info
-                 max_rec_depth
-            then Recursion_depth_exceeded
-            else
-              might_inline dacc ~apply ~code_or_metadata ~function_type
-                ~simplify_expr ~return_arity
-          | Unroll unroll_to ->
-            if Simplify_rec_info_expr.can_unroll dacc rec_info
-            then
-              (* This sets off step 1 in the comment above; see
-                 [Inlining_transforms] for how [unroll_to] is ultimately
-                 handled. *)
-              Attribute_unroll unroll_to
-            else Unrolling_depth_exceeded
-          | Always_inlined | Hint_inlined -> Attribute_always))
+        let is_depth_exceeded = Inlining_state.is_depth_exceeded apply_inlining_state in
+        match inlined with
+        | Never_inlined -> assert false
+        | Default_inlined ->
+          let max_rec_depth =
+            Flambda_features.Inlining.max_rec_depth
+              (Round (DE.round (DA.denv dacc)))
+          in
+          if Simplify_rec_info_expr.depth_may_be_at_least dacc rec_info
+              max_rec_depth
+          then Recursion_depth_exceeded
+          else
+            might_inline dacc ~apply ~code_or_metadata ~function_type
+              ~simplify_expr ~return_arity ~is_depth_exceeded
+        | Unroll unroll_to ->
+          if Simplify_rec_info_expr.can_unroll dacc rec_info
+          then
+            (* This sets off step 1 in the comment above; see
+               [Inlining_transforms] for how [unroll_to] is ultimately
+               handled. *)
+            Attribute_unroll unroll_to
+          else Unrolling_depth_exceeded
+        | Always_inlined | Hint_inlined -> Attribute_always))
