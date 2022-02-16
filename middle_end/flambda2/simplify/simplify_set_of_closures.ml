@@ -1380,7 +1380,7 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
       UA.closure_offsets uacc_after_upwards_traversal
   in
   let dacc =
-    DA.add_to_lifted_constant_accumulator dacc lifted_consts_this_function
+    DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc lifted_consts_this_function
     |> DA.with_used_closure_vars ~used_closure_vars
     |> DA.with_shareable_constants ~shareable_constants
     |> DA.with_closure_offsets ~closure_offsets
