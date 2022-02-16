@@ -1621,21 +1621,33 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
       ~handler_params:load_fields_handler_param ~handler:load_fields_body ~body
       ~is_exn_handler:false
   in
+  let all_code =
+    Code_id.Map.mapi (fun code_id code_or_metadata ->
+        match (code_or_metadata : Code_or_metadata.t) with
+        | Code_present code -> code
+        | Metadata_only _ -> Misc.fatal_errorf "Metadata only for code ID %a" Code_id.print code_id)
+      (Acc.code acc)
+  in
   let acc, body =
-    Code_id.Map.fold
-      (fun code_id code (acc, body) ->
-        let bound_symbols =
-          Bound_symbols.singleton (Bound_symbols.Pattern.code code_id)
-        in
-        let static_const = Static_const_or_code.create_code code in
-        let defining_expr =
-          Static_const_group.create [static_const] |> Named.create_static_consts
-        in
-        Let_with_acc.create acc
-          (Bound_pattern.symbols bound_symbols)
-          defining_expr ~body
-        |> Expr_with_acc.create_let)
-      (Acc.code acc) (acc, body)
+    let bound_symbols, static_consts =
+      Code_id.Map.fold
+        (fun code_id code (bound_symbols, static_consts) ->
+           let bound_symbols =
+             (Bound_symbols.Pattern.code code_id) :: bound_symbols
+           in
+           let static_consts =
+             (Static_const_or_code.create_code code) :: static_consts
+           in
+           (bound_symbols, static_consts))
+        all_code ([], [])
+    in
+    let defining_expr =
+      Static_const_group.create static_consts |> Named.create_static_consts
+    in
+    Let_with_acc.create acc
+      (Bound_pattern.symbols (Bound_symbols.create bound_symbols))
+      defining_expr ~body
+    |> Expr_with_acc.create_let
   in
   (* We must make sure there is always an outer [Let_symbol] binding so that
      lifted constants not in the scope of any other [Let_symbol] binding get put
@@ -1685,5 +1697,5 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
       ~module_symbol ~used_closure_vars:Unknown,
     Exported_code.add_code
       ~keep_code:(fun _ -> false)
-      (Acc.code acc) Exported_code.empty,
+      all_code Exported_code.empty,
     exported_offsets )

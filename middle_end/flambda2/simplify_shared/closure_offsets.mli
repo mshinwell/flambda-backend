@@ -43,7 +43,7 @@ val create : unit -> t
 val add_set_of_closures :
   t ->
   is_phantom:bool ->
-  all_code:Code.t Code_id.Map.t ->
+  all_code:Code_or_metadata.t Code_id.Map.t ->
   Set_of_closures.t ->
   t
 

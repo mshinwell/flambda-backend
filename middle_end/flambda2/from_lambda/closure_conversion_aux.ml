@@ -294,7 +294,7 @@ module Acc = struct
   type t =
     { declared_symbols : (Symbol.t * Static_const.t) list;
       shareable_constants : Symbol.t Static_const.Map.t;
-      code : Code.t Code_id.Map.t;
+      code : Code_or_metadata.t Code_id.Map.t;
       free_names : Name_occurrences.t;
       continuation_applications : continuation_application Continuation.Map.t;
       cost_metrics : Cost_metrics.t;
@@ -349,7 +349,7 @@ module Acc = struct
     { t with shareable_constants }
 
   let add_code ~code_id ~code t =
-    { t with code = Code_id.Map.add code_id code t.code }
+    { t with code = Code_id.Map.add code_id (Code_or_metadata.create code) t.code }
 
   let add_free_names free_names t =
     { t with free_names = Name_occurrences.union free_names t.free_names }
@@ -653,8 +653,9 @@ module Let_with_acc = struct
         Cost_metrics.set_of_closures
           ~find_code_characteristics:(fun code_id ->
             let code = Code_id.Map.find code_id code_mapping in
-            { cost_metrics = Code.cost_metrics code;
-              params_arity = List.length (Code.params_arity code)
+            let code_metadata = Code_or_metadata.code_metadata code in
+            { cost_metrics = Code_metadata.cost_metrics code_metadata;
+              params_arity = List.length (Code_metadata.params_arity code_metadata)
             })
           set_of_closures
       | Rec_info _ -> Cost_metrics.zero

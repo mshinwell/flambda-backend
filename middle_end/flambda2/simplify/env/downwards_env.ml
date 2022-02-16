@@ -91,7 +91,7 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
     CSE.print cse
     do_not_rebuild_terms
     Closure_info.print closure_info
-    (Code_id.Map.print Code.print) all_code
+    (Code_id.Map.print Code_or_metadata.print) all_code
 
 let create ~round ~(resolver : resolver)
     ~(get_imported_names : get_imported_names)
@@ -407,7 +407,7 @@ let mem_code t id =
 
 let find_code_exn t id =
   match Code_id.Map.find id t.all_code with
-  | code -> Code_or_metadata.create code
+  | code_or_metadata -> code_or_metadata
   | exception Not_found -> (
     (* This [find_exn] call doesn't load any .cmx files, but in the majority of
        cases will succeed. *)
@@ -436,8 +436,17 @@ let define_code t ~code_id ~code =
     TE.add_to_code_age_relation t.typing_env ~new_code_id:code_id
       ~old_code_id:(Code.newer_version_of code)
   in
-  let all_code = Code_id.Map.add code_id code t.all_code in
+  let all_code = Code_id.Map.add code_id (Code_or_metadata.create code) t.all_code in
   { t with typing_env; all_code }
+
+let define_code_metadata_only t ~code_id ~code =
+  let code_or_metadata =
+    Code_or_metadata.remember_only_metadata (Code_or_metadata.create code)
+  in
+  let all_code =
+    Code_id.Map.add code_id code_or_metadata t.all_code
+  in
+  { t with all_code }
 
 let set_inlined_debuginfo t dbg = { t with inlined_debuginfo = dbg }
 

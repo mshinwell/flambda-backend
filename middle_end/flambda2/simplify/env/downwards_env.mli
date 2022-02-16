@@ -41,7 +41,7 @@ val create :
   unit_toplevel_return_continuation:Continuation.t ->
   t
 
-val all_code : t -> Code.t Code_id.Map.t
+val all_code : t -> Code_or_metadata.t Code_id.Map.t
 
 val resolver : t -> Compilation_unit.t -> Flambda2_types.Typing_env.t option
 
@@ -152,6 +152,8 @@ val map_typing_env :
 val check_simple_is_bound : t -> Simple.t -> unit
 
 val define_code : t -> code_id:Code_id.t -> code:Code.t -> t
+
+val define_code_metadata_only : t -> code_id:Code_id.t -> code:Code.t -> t
 
 val mem_code : t -> Code_id.t -> bool
 
