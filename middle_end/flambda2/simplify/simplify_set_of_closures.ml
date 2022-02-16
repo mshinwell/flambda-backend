@@ -87,7 +87,7 @@ end = struct
             (fun code_id code denv ->
               DE.define_code_metadata_only denv ~code_id ~code)
             all_code
-            (DE.set_not_at_unit_toplevel denv))
+            (DE.enter_set_of_closures denv))
     in
     { dacc_prior_to_sets = dacc;
       simplify_toplevel;
