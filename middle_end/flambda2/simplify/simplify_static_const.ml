@@ -235,9 +235,16 @@ let simplify_static_consts dacc (bound_symbols : Bound_symbols.t) static_consts
         let code, static_const, dacc =
           if Code.stub code
           then
+            let dacc, prior_lifted_constants =
+              DA.get_and_clear_lifted_constants dacc
+            in
             let static_const, dacc_after_function =
               Simplify_set_of_closures.simplify_stub_function dacc code
                 ~all_code ~simplify_toplevel
+            in
+            let dacc_after_function =
+              DA.add_to_lifted_constant_accumulator dacc_after_function
+                prior_lifted_constants
             in
             match Rebuilt_static_const.to_const static_const with
             | None ->
