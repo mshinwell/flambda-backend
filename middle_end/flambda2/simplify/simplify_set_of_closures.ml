@@ -631,12 +631,12 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
   in
   let cost_metrics = UA.cost_metrics uacc_after_upwards_traversal in
   let old_code_id = code_id in
-  let code_id =
+  let code_id, newer_version_of =
     match
       Code_id.Map.find old_code_id (C.old_to_new_code_ids_all_sets context)
     with
-    | new_code_id -> new_code_id
-    | exception Not_found -> old_code_id
+    | new_code_id -> new_code_id, Some old_code_id
+    | exception Not_found -> old_code_id, None
   in
   let inlining_decision =
     let decision =
@@ -720,7 +720,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
     Rebuilt_static_const.create_code
       (DA.are_rebuilding_terms dacc_after_body)
       code_id ~params_and_body ~free_names_of_params_and_body:free_names_of_code
-      ~newer_version_of:(Some old_code_id)
+      ~newer_version_of
       ~params_arity:(Code.params_arity code)
       ~num_trailing_local_params:(Code.num_trailing_local_params code)
       ~result_arity ~result_types
