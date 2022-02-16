@@ -1321,7 +1321,8 @@ let close_one_function acc ~external_env ~by_closure_id decl
         else
           Function_decl_inlining_decision_type.Function_body_too_large
             (Code_size.of_int inline_threshold)
-    else if stub then Function_decl_inlining_decision_type.Stub
+    else if stub
+    then Function_decl_inlining_decision_type.Stub
     else Function_decl_inlining_decision_type.Not_yet_decided
   in
   let code =
@@ -1622,23 +1623,25 @@ let close_program ~symbol_for_global ~big_endian ~module_ident
       ~is_exn_handler:false
   in
   let all_code =
-    Code_id.Map.mapi (fun code_id code_or_metadata ->
+    Code_id.Map.mapi
+      (fun code_id code_or_metadata ->
         match (code_or_metadata : Code_or_metadata.t) with
         | Code_present code -> code
-        | Metadata_only _ -> Misc.fatal_errorf "Metadata only for code ID %a" Code_id.print code_id)
+        | Metadata_only _ ->
+          Misc.fatal_errorf "Metadata only for code ID %a" Code_id.print code_id)
       (Acc.code acc)
   in
   let acc, body =
     let bound_symbols, static_consts =
       Code_id.Map.fold
         (fun code_id code (bound_symbols, static_consts) ->
-           let bound_symbols =
-             (Bound_symbols.Pattern.code code_id) :: bound_symbols
-           in
-           let static_consts =
-             (Static_const_or_code.create_code code) :: static_consts
-           in
-           (bound_symbols, static_consts))
+          let bound_symbols =
+            Bound_symbols.Pattern.code code_id :: bound_symbols
+          in
+          let static_consts =
+            Static_const_or_code.create_code code :: static_consts
+          in
+          bound_symbols, static_consts)
         all_code ([], [])
     in
     let defining_expr =

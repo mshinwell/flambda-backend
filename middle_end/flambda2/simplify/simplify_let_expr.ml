@@ -114,18 +114,13 @@ let record_one_closure_binding_for_data_flow ~free_names ~closure_elements _
     (record_one_closure_element_binding_for_data_flow symbol)
     closure_elements data_flow
 
-let record_lifted_constant_definition_for_data_flow data_flow
-    definition =
+let record_lifted_constant_definition_for_data_flow data_flow definition =
   let module D = LC.Definition in
   match D.descr definition with
   | Code code_id ->
-    DF.record_code_id_binding code_id
-      (D.free_names definition)
-      data_flow
+    DF.record_code_id_binding code_id (D.free_names definition) data_flow
   | Block_like { symbol; _ } ->
-    let free_names =
-      D.free_names definition
-    in
+    let free_names = D.free_names definition in
     DF.record_symbol_binding symbol free_names data_flow
   | Set_of_closures { closure_symbols_with_types; _ } -> (
     let expr = D.defining_expr definition in
@@ -141,9 +136,7 @@ let record_lifted_constant_definition_for_data_flow data_flow
         (record_one_closure_binding_for_data_flow ~free_names ~closure_elements)
         closure_symbols_with_types data_flow
     | None | Some (Code _ | Deleted_code) ->
-      let free_names =
-        D.free_names definition
-      in
+      let free_names = D.free_names definition in
       Closure_id.Lmap.fold
         (fun _ (symbol, _) data_flow ->
           DF.record_symbol_binding symbol free_names data_flow)
@@ -162,8 +155,7 @@ let record_lifted_constant_for_data_flow data_flow lifted_constant =
   in
   ListLabels.fold_left
     (LC.definitions lifted_constant)
-    ~init:data_flow
-    ~f:(record_lifted_constant_definition_for_data_flow)
+    ~init:data_flow ~f:record_lifted_constant_definition_for_data_flow
 
 let record_new_defining_expression_binding_for_data_flow dacc data_flow
     (binding : Simplify_named_result.binding_to_place) =

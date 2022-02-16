@@ -436,16 +436,16 @@ let define_code t ~code_id ~code =
     TE.add_to_code_age_relation t.typing_env ~new_code_id:code_id
       ~old_code_id:(Code.newer_version_of code)
   in
-  let all_code = Code_id.Map.add code_id (Code_or_metadata.create code) t.all_code in
+  let all_code =
+    Code_id.Map.add code_id (Code_or_metadata.create code) t.all_code
+  in
   { t with typing_env; all_code }
 
 let define_code_metadata_only t ~code_id ~code =
   let code_or_metadata =
     Code_or_metadata.remember_only_metadata (Code_or_metadata.create code)
   in
-  let all_code =
-    Code_id.Map.add code_id code_or_metadata t.all_code
-  in
+  let all_code = Code_id.Map.add code_id code_or_metadata t.all_code in
   { t with all_code }
 
 let set_inlined_debuginfo t dbg = { t with inlined_debuginfo = dbg }

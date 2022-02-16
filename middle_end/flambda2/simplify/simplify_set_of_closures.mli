@@ -40,7 +40,8 @@ val simplify_lifted_sets_of_closures :
   Bound_symbols.t * Rebuilt_static_const.Group.t * Downwards_acc.t
 
 val simplify_stub_function :
-  Downwards_acc.t -> Code.t ->
+  Downwards_acc.t ->
+  Code.t ->
   all_code:Code.t Code_id.Map.t ->
   simplify_toplevel:Simplify_common.simplify_toplevel ->
   Rebuilt_static_const.t * Downwards_acc.t

@@ -82,19 +82,19 @@ end = struct
 
   let create_for_code dacc ~all_code ~simplify_toplevel =
     let dacc_inside_functions =
-      DA.map_denv dacc
-        ~f:(fun denv ->
-            Code_id.Map.fold (fun code_id code denv ->
-                DE.define_code_metadata_only denv ~code_id ~code)
-              all_code
-              (DE.set_not_at_unit_toplevel denv))
+      DA.map_denv dacc ~f:(fun denv ->
+          Code_id.Map.fold
+            (fun code_id code denv ->
+              DE.define_code_metadata_only denv ~code_id ~code)
+            all_code
+            (DE.set_not_at_unit_toplevel denv))
     in
     { dacc_prior_to_sets = dacc;
       simplify_toplevel;
       dacc_inside_functions;
       closure_bound_names_inside_functions_all_sets = [];
       old_to_new_code_ids_all_sets = Code_id.Map.empty;
-      previously_free_depth_variables = Variable.Set.empty;
+      previously_free_depth_variables = Variable.Set.empty
     }
 
   let simplify_toplevel t = t.simplify_toplevel
@@ -277,7 +277,8 @@ end = struct
               let new_code_id = Code_id.rename old_code_id in
               Code_id.Map.add old_code_id new_code_id old_to_new_code_ids
             | Code_present _ | Metadata_only _ -> old_to_new_code_ids
-            | exception Not_found -> Misc.fatal_errorf "Missing code for %a" Code_id.print old_code_id)
+            | exception Not_found ->
+              Misc.fatal_errorf "Missing code for %a" Code_id.print old_code_id)
           (Function_declarations.funs function_decls)
           old_to_new_code_ids_all_sets)
       Code_id.Map.empty all_sets_of_closures
@@ -432,8 +433,8 @@ let dacc_inside_function context ~used_closure_vars ~shareable_constants
             DE.add_variable denv
               (Bound_var.create my_closure NM.normal)
               (T.unknown K.value)
-          | Some closure_id ->
-            begin match
+          | Some closure_id -> begin
+            match
               Closure_id.Map.find closure_id closure_bound_names_inside_function
             with
             | exception Not_found ->
@@ -448,7 +449,7 @@ let dacc_inside_function context ~used_closure_vars ~shareable_constants
               DE.add_variable denv
                 (Bound_var.create my_closure NM.normal)
                 (T.alias_type_of K.value (Simple.name name))
-            end
+          end
         in
         let denv =
           let my_depth = Bound_var.create my_depth Name_mode.normal in
@@ -622,11 +623,10 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
              %a,@ body:@ %a@ with downwards accumulator:@ %a\n"
             (Flambda_colours.error ())
             (Flambda_colours.normal ())
-            (Format.pp_print_option Closure_id.print) closure_id_opt
-            Bound_parameter.List.print params
-            Continuation.print return_continuation Continuation.print
-            exn_continuation Variable.print my_closure Expr.print body DA.print
-            dacc;
+            (Format.pp_print_option Closure_id.print)
+            closure_id_opt Bound_parameter.List.print params Continuation.print
+            return_continuation Continuation.print exn_continuation
+            Variable.print my_closure Expr.print body DA.print dacc;
           Printexc.raise_with_backtrace Misc.Fatal_error bt)
   in
   let cost_metrics = UA.cost_metrics uacc_after_upwards_traversal in
@@ -719,8 +719,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
   let code =
     Rebuilt_static_const.create_code
       (DA.are_rebuilding_terms dacc_after_body)
-      code_id ~params_and_body
-      ~free_names_of_params_and_body:free_names_of_code
+      code_id ~params_and_body ~free_names_of_params_and_body:free_names_of_code
       ~newer_version_of:(Some old_code_id)
       ~params_arity:(Code.params_arity code)
       ~num_trailing_local_params:(Code.num_trailing_local_params code)
@@ -1348,17 +1347,14 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
         code;
         dacc_after_body;
         uacc_after_upwards_traversal;
-        lifted_consts_this_function } =
+        lifted_consts_this_function
+      } =
     simplify_function0 context ~used_closure_vars ~shareable_constants
       ~closure_offsets None (Code.code_id code) code
       ~closure_bound_names_inside_function code_age_relation
       ~lifted_consts_prev_functions
   in
-  let code =
-    match code with
-    | None -> assert false
-    | Some code -> code
-  in
+  let code = match code with None -> assert false | Some code -> code in
   let code_age_relation =
     match dacc_after_body with
     | None -> code_age_relation
@@ -1389,8 +1385,8 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
     |> DA.with_shareable_constants ~shareable_constants
     |> DA.with_closure_offsets ~closure_offsets
     |> DA.map_denv
-      ~f:(DE.map_typing_env
-            ~f:(fun typing_env ->
+         ~f:
+           (DE.map_typing_env ~f:(fun typing_env ->
                 TE.with_code_age_relation typing_env code_age_relation))
   in
   code, dacc

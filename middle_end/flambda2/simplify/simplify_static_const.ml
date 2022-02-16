@@ -226,7 +226,8 @@ let simplify_static_consts dacc (bound_symbols : Bound_symbols.t) static_consts
   in
   let all_code = Static_const_group.pieces_of_code static_consts in
   (* Next we simplify all the constants that are not closures. The ordering of
-     the bindings is respected. This step also adds code into the environment. *)
+     the bindings is respected. This step also adds code into the
+     environment. *)
   let bound_symbols', static_consts', dacc =
     Static_const_group.match_against_bound_symbols static_consts bound_symbols
       ~init:([], [], dacc)
@@ -235,16 +236,18 @@ let simplify_static_consts dacc (bound_symbols : Bound_symbols.t) static_consts
           if Code.stub code
           then
             let static_const, dacc_after_function =
-              Simplify_set_of_closures.simplify_stub_function dacc code ~all_code ~simplify_toplevel
+              Simplify_set_of_closures.simplify_stub_function dacc code
+                ~all_code ~simplify_toplevel
             in
             match Rebuilt_static_const.to_const static_const with
-            | None -> (* Not rebuilding terms: return the original code *)
+            | None ->
+              (* Not rebuilding terms: return the original code *)
               code, Rebuilt_static_const.create_code' code, dacc
-            | Some static_const_or_code ->
-              begin match Static_const_or_code.to_code static_const_or_code with
+            | Some static_const_or_code -> begin
+              match Static_const_or_code.to_code static_const_or_code with
               | None -> assert false
               | Some code -> code, static_const, dacc_after_function
-              end
+            end
           else code, Rebuilt_static_const.create_code' code, dacc
         in
         let dacc =

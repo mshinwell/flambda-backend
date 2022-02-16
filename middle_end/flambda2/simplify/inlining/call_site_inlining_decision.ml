@@ -225,7 +225,9 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity :
            ramifications of treating unknown-ness as an observable property this
            way. Are we relying on monotonicity somewhere? *)
         let apply_inlining_state = Apply.inlining_state apply in
-        let is_depth_exceeded = Inlining_state.is_depth_exceeded apply_inlining_state in
+        let is_depth_exceeded =
+          Inlining_state.is_depth_exceeded apply_inlining_state
+        in
         match inlined with
         | Never_inlined -> assert false
         | Default_inlined ->
@@ -234,7 +236,7 @@ let make_decision dacc ~simplify_expr ~function_type ~apply ~return_arity :
               (Round (DE.round (DA.denv dacc)))
           in
           if Simplify_rec_info_expr.depth_may_be_at_least dacc rec_info
-              max_rec_depth
+               max_rec_depth
           then Recursion_depth_exceeded
           else
             might_inline dacc ~apply ~code_or_metadata ~function_type
