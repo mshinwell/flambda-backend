@@ -720,8 +720,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
     Rebuilt_static_const.create_code
       (DA.are_rebuilding_terms dacc_after_body)
       code_id ~params_and_body ~free_names_of_params_and_body:free_names_of_code
-      ~newer_version_of
-      ~params_arity:(Code.params_arity code)
+      ~newer_version_of ~params_arity:(Code.params_arity code)
       ~num_trailing_local_params:(Code.num_trailing_local_params code)
       ~result_arity ~result_types
       ~contains_no_escaping_local_allocs:
@@ -1380,7 +1379,8 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
       UA.closure_offsets uacc_after_upwards_traversal
   in
   let dacc =
-    DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc lifted_consts_this_function
+    DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc
+      lifted_consts_this_function
     |> DA.with_used_closure_vars ~used_closure_vars
     |> DA.with_shareable_constants ~shareable_constants
     |> DA.with_closure_offsets ~closure_offsets
