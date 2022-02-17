@@ -499,17 +499,24 @@ let enter_inlined_apply ~called_code ~apply t =
     |> Inlining_arguments.meet (Code.inlining_arguments called_code)
     |> Inlining_arguments.meet (Apply.inlining_arguments apply)
   in
+  let inlining_state =
+    if Code.stub called_code
+    then Inlining_state.with_arguments arguments t.inlining_state
+    else
+      t.inlining_state |> Inlining_state.increment_depth
+      |> Inlining_state.with_arguments arguments
+  in
+  let inlining_history_tracker =
+    Inlining_history.Tracker.enter_inlined_apply
+      ~callee:(Code.absolute_history called_code)
+      ~dbg:(Apply.dbg apply)
+      ~apply_relative_history:(Apply.relative_history apply)
+      t.inlining_history_tracker
+  in
   { t with
     inlined_debuginfo = Apply.dbg apply;
-    inlining_state =
-      t.inlining_state |> Inlining_state.increment_depth
-      |> Inlining_state.with_arguments arguments;
-    inlining_history_tracker =
-      Inlining_history.Tracker.enter_inlined_apply
-        ~callee:(Code.absolute_history called_code)
-        ~dbg:(Apply.dbg apply)
-        ~apply_relative_history:(Apply.relative_history apply)
-        t.inlining_history_tracker
+    inlining_state;
+    inlining_history_tracker
   }
 
 let generate_phantom_lets t =
