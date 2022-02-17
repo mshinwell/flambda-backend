@@ -46,7 +46,7 @@ module Context_for_multiple_sets_of_closures : sig
     closure_element_types_all_sets:T.t Var_within_closure.Map.t list ->
     t
 
-  val create_for_code :
+  val create_for_stub :
     DA.t ->
     all_code:Code.t Code_id.Map.t ->
     simplify_toplevel:Simplify_common.simplify_toplevel ->
@@ -80,14 +80,14 @@ end = struct
       previously_free_depth_variables : Variable.Set.t
     }
 
-  let create_for_code dacc ~all_code ~simplify_toplevel =
+  let create_for_stub dacc ~all_code ~simplify_toplevel =
     let dacc_inside_functions =
       DA.map_denv dacc ~f:(fun denv ->
           Code_id.Map.fold
             (fun code_id code denv ->
               DE.define_code_metadata_only denv ~code_id ~code)
             all_code
-            (DE.enter_set_of_closures denv))
+            (DE.enter_set_of_closures (DE.disable_inlining denv)))
     in
     { dacc_prior_to_sets = dacc;
       simplify_toplevel;
@@ -1332,7 +1332,7 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
     closure_elements_and_types_all_sets
 
 let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
-  let context = C.create_for_code dacc ~all_code ~simplify_toplevel in
+  let context = C.create_for_stub dacc ~all_code ~simplify_toplevel in
   let used_closure_vars = DA.used_closure_vars dacc in
   let shareable_constants = DA.shareable_constants dacc in
   let closure_offsets = DA.closure_offsets dacc in
