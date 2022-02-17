@@ -468,7 +468,9 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
            ~function_relative_history:Inlining_history.Relative.empty ~dbg ~name
     in
     let code_id = Code_id.create ~name (Compilation_unit.get_current_exn ()) in
-    let result_types = Result_types.create_unknown ~params:remaining_params ~result_arity in
+    let result_types =
+      Result_types.create_unknown ~params:remaining_params ~result_arity
+    in
     let code : Static_const_or_code.t =
       let code =
         Code.create code_id ~params_and_body

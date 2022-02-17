@@ -146,7 +146,8 @@ let might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
   then Definition_says_not_to_inline
   else if env_prohibits_inlining
   then Environment_says_never_inline
-  else if Function_decl_inlining_decision_type.equal decision Function_decl_inlining_decision_type.Stub
+  else if Function_decl_inlining_decision_type.equal decision
+            Function_decl_inlining_decision_type.Stub
   then Definition_says_inline
   else if is_depth_exceeded
   then Max_inlining_depth_exceeded
