@@ -142,16 +142,18 @@ let might_inline dacc ~apply ~code_or_metadata ~function_type ~simplify_expr
     Code_or_metadata.code_metadata code_or_metadata
     |> Code_metadata.inlining_decision
   in
-  if Function_decl_inlining_decision_type.must_be_inlined decision
-  then Definition_says_inline
-  else if Function_decl_inlining_decision_type.cannot_be_inlined decision
+  if Function_decl_inlining_decision_type.cannot_be_inlined decision
   then Definition_says_not_to_inline
   else if env_prohibits_inlining
   then Environment_says_never_inline
-  else if not (argument_types_useful dacc apply)
-  then Argument_types_not_useful
+  else if Function_decl_inlining_decision_type.equal decision Function_decl_inlining_decision_type.Stub
+  then Definition_says_inline
   else if is_depth_exceeded
   then Max_inlining_depth_exceeded
+  else if Function_decl_inlining_decision_type.must_be_inlined decision
+  then Definition_says_inline
+  else if not (argument_types_useful dacc apply)
+  then Argument_types_not_useful
   else
     let cost_metrics =
       speculative_inlining ~apply dacc ~simplify_expr ~return_arity
