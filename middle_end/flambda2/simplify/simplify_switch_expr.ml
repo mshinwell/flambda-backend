@@ -19,7 +19,7 @@
 open! Simplify_import
 
 let rebuild_arm uacc arm (action, use_id, arity)
-    (new_let_conts, arms, identity_arms, not_arms) =
+    (new_let_conts, arms, identity_arms, not_arms, returning_one_name_arms) =
   let action =
     Simplify_common.clear_demoted_trap_action_and_patch_unused_exn_bucket uacc
       action
@@ -65,16 +65,16 @@ let rebuild_arm uacc arm (action, use_id, arity)
     match action with
     | None ->
       (* The destination is unreachable; delete the [Switch] arm. *)
-      new_let_conts, arms, identity_arms, not_arms
+      new_let_conts, arms, identity_arms, not_arms, returning_one_name_arms
     | Some action -> (
-      let normal_case ~identity_arms ~not_arms =
+      let normal_case ~identity_arms ~not_arms ~returning_one_name_arms =
         let arms = Targetint_31_63.Map.add arm action arms in
-        new_let_conts, arms, identity_arms, not_arms
+        new_let_conts, arms, identity_arms, not_arms, returning_one_name_arms
       in
       (* Now check to see if the arm is of a form that might mean the whole
          [Switch] is either the identity or a boolean NOT. *)
       match Apply_cont.to_one_arg_without_trap_action action with
-      | None -> normal_case ~identity_arms ~not_arms
+      | None -> normal_case ~identity_arms ~not_arms ~returning_one_name_arms
       | Some arg ->
         (* CR-someday mshinwell: Maybe this check should be generalised
          * e.g. to detect
@@ -89,21 +89,28 @@ let rebuild_arm uacc arm (action, use_id, arity)
               let identity_arms =
                 Targetint_31_63.Map.add arm action identity_arms
               in
-              normal_case ~identity_arms ~not_arms
+              normal_case ~identity_arms ~not_arms ~returning_one_name_arms
             else if Targetint_31_63.equal arm Targetint_31_63.bool_true
                     && Targetint_31_63.equal arg Targetint_31_63.bool_false
                     || Targetint_31_63.equal arm Targetint_31_63.bool_false
                        && Targetint_31_63.equal arg Targetint_31_63.bool_true
             then
               let not_arms = Targetint_31_63.Map.add arm action not_arms in
-              normal_case ~identity_arms ~not_arms
-            else normal_case ~identity_arms ~not_arms
+              normal_case ~identity_arms ~not_arms ~returning_one_name_arms
+            else normal_case ~identity_arms ~not_arms ~returning_one_name_arms
           | Naked_immediate _ | Naked_float _ | Naked_int32 _ | Naked_int64 _
           | Naked_nativeint _ ->
-            normal_case ~identity_arms ~not_arms
+            normal_case ~identity_arms ~not_arms ~returning_one_name_arms
         in
-        Simple.pattern_match arg ~const ~name:(fun _ ~coercion:_ ->
-            normal_case ~identity_arms ~not_arms)))
+        Simple.pattern_match arg ~const ~name:(fun name ~coercion ->
+            if Coercion.is_id coercion
+            then
+              let returning_one_name_arms =
+                Targetint_31_63.Map.add arm name returning_one_name_arms
+              in
+              normal_case ~identity_arms ~not_arms ~returning_one_name_arms
+            else normal_case ~identity_arms ~not_arms ~returning_one_name_arms))
+    )
   | New_wrapper
       (new_cont, new_handler, free_names_of_handler, cost_metrics_handler) ->
     let new_let_cont =
@@ -112,13 +119,14 @@ let rebuild_arm uacc arm (action, use_id, arity)
     let new_let_conts = new_let_cont :: new_let_conts in
     let action = Apply_cont.goto new_cont in
     let arms = Targetint_31_63.Map.add arm action arms in
-    new_let_conts, arms, identity_arms, not_arms
+    new_let_conts, arms, identity_arms, not_arms, returning_one_name_arms
 
 let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
     ~after_rebuild =
-  let new_let_conts, arms, identity_arms, not_arms =
+  let new_let_conts, arms, identity_arms, not_arms, returning_one_name_arms =
     Targetint_31_63.Map.fold (rebuild_arm uacc) arms
       ( [],
+        Targetint_31_63.Map.empty,
         Targetint_31_63.Map.empty,
         Targetint_31_63.Map.empty,
         Targetint_31_63.Map.empty )
@@ -143,6 +151,30 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
       Targetint_31_63.Map.data not_arms
       |> List.map Apply_cont.continuation
       |> Continuation.Set.of_list |> Continuation.Set.get_singleton
+  in
+  let switch_is_logical_or =
+    let arm_discrs = Targetint_31_63.Map.keys arms in
+    if not (Targetint_31_63.Set.equal arm_discrs Targetint_31_63.all_bools)
+    then None
+    else
+      match
+        Targetint_31_63.Map.find Targetint_31_63.bool_false
+          returning_one_name_arms
+      with
+      | exception Not_found -> None
+      | name -> (
+        match
+          Targetint_31_63.Map.find Targetint_31_63.bool_true identity_arms
+        with
+        | exception Not_found -> None
+        | _action -> (
+          match
+            Targetint_31_63.Map.data arms
+            |> List.map Apply_cont.continuation
+            |> Continuation.Set.of_list |> Continuation.Set.get_singleton
+          with
+          | None -> None
+          | Some dest -> Some (name, dest)))
   in
   let create_tagged_scrutinee uacc dest ~make_body =
     (* A problem with using [simplify_let] below is that the continuation [dest]
@@ -214,7 +246,7 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
           let make_body ~tagged_scrutinee =
             let not_scrutinee = Variable.create "not_scrutinee" in
             let not_scrutinee' = Simple.var not_scrutinee in
-            let do_tagging =
+            let do_lognot =
               Named.create_prim
                 (P.Unary (Boolean_not, tagged_scrutinee))
                 Debuginfo.none
@@ -226,26 +258,55 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
               Apply_cont.create dest ~args:[not_scrutinee'] ~dbg
               |> Expr.create_apply_cont
             in
-            Let.create bound do_tagging ~body ~free_names_of_body:Unknown
+            Let.create bound do_lognot ~body ~free_names_of_body:Unknown
             |> Expr.create_let
           in
           create_tagged_scrutinee uacc dest ~make_body
-        | None ->
-          (* In that case, even though some branches were removed by simplify we
-             should not count them in the number of removed operations: these
-             branches wouldn't have been taken during execution anyway. *)
-          let expr, uacc = EB.create_switch uacc ~scrutinee ~arms in
-          if Flambda_features.check_invariants ()
-             && Simple.is_const scrutinee
-             && Targetint_31_63.Map.cardinal arms > 1
-          then
-            Misc.fatal_errorf
-              "[Switch] with constant scrutinee (type: %a) should have been \
-               simplified away:@ %a"
-              T.print scrutinee_ty
-              (RE.print (UA.are_rebuilding_terms uacc))
-              expr;
-          expr, uacc)
+        | None -> (
+          match switch_is_logical_or with
+          | Some (name, dest) ->
+            let uacc =
+              UA.notify_removed ~operation:Removed_operations.branch uacc
+            in
+            let make_body ~tagged_scrutinee =
+              let logor_scrutinee = Variable.create "logor_scrutinee" in
+              let logor_scrutinee' = Simple.var logor_scrutinee in
+              let do_logor =
+                Named.create_prim
+                  (P.Binary
+                     ( Int_arith (Tagged_immediate, Or),
+                       tagged_scrutinee,
+                       Simple.name name ))
+                  Debuginfo.none
+              in
+              let bound =
+                VB.create logor_scrutinee NM.normal |> Bound_pattern.singleton
+              in
+              let body =
+                Apply_cont.create dest ~args:[logor_scrutinee'] ~dbg
+                |> Expr.create_apply_cont
+              in
+              Let.create bound do_logor ~body ~free_names_of_body:Unknown
+              |> Expr.create_let
+            in
+            create_tagged_scrutinee uacc dest ~make_body
+          | None ->
+            (* In that case, even though some branches were removed by simplify
+               we should not count them in the number of removed operations:
+               these branches wouldn't have been taken during execution
+               anyway. *)
+            let expr, uacc = EB.create_switch uacc ~scrutinee ~arms in
+            if Flambda_features.check_invariants ()
+               && Simple.is_const scrutinee
+               && Targetint_31_63.Map.cardinal arms > 1
+            then
+              Misc.fatal_errorf
+                "[Switch] with constant scrutinee (type: %a) should have been \
+                 simplified away:@ %a"
+                T.print scrutinee_ty
+                (RE.print (UA.are_rebuilding_terms uacc))
+                expr;
+            expr, uacc))
   in
   let bind_let_cont (uacc, body)
       (new_cont, new_handler, free_names_of_handler, cost_metrics_of_handler) =
