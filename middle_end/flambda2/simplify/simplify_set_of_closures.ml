@@ -854,8 +854,13 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
         let closure_offsets =
           match uacc_after_upwards_traversal with
           | None -> closure_offsets
-          | Some uacc_after_upwards_traversal ->
-            UA.closure_offsets uacc_after_upwards_traversal
+          | Some uacc_after_upwards_traversal -> (
+            let closure_offsets =
+              DA.closure_offsets (UA.creation_dacc uacc_after_upwards_traversal)
+            in
+            match UA.closure_offsets uacc_after_upwards_traversal with
+            | Unknown -> closure_offsets
+            | Known offsets -> Code_id.Map.add code_id offsets closure_offsets)
         in
         ( result_function_decls_in_set,
           code,
@@ -1342,7 +1347,7 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
   in
   let code_age_relation = DA.code_age_relation dacc in
   let lifted_consts_prev_functions = LCS.empty in
-  let { code_id = _;
+  let { code_id;
         code;
         dacc_after_body;
         uacc_after_upwards_traversal;
@@ -1375,8 +1380,13 @@ let simplify_stub_function dacc code ~all_code ~simplify_toplevel =
   let closure_offsets =
     match uacc_after_upwards_traversal with
     | None -> closure_offsets
-    | Some uacc_after_upwards_traversal ->
-      UA.closure_offsets uacc_after_upwards_traversal
+    | Some uacc_after_upwards_traversal -> (
+      let closure_offsets =
+        DA.closure_offsets (UA.creation_dacc uacc_after_upwards_traversal)
+      in
+      match UA.closure_offsets uacc_after_upwards_traversal with
+      | Unknown -> closure_offsets
+      | Known offsets -> Code_id.Map.add code_id offsets closure_offsets)
   in
   let dacc =
     DA.add_to_lifted_constant_accumulator ~also_add_to_env:() dacc
