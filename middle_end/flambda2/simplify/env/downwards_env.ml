@@ -441,13 +441,6 @@ let define_code t ~code_id ~code =
   in
   { t with typing_env; all_code }
 
-let define_code_metadata_only t ~code_id ~code =
-  let code_or_metadata =
-    Code_or_metadata.remember_only_metadata (Code_or_metadata.create code)
-  in
-  let all_code = Code_id.Map.add code_id code_or_metadata t.all_code in
-  { t with all_code }
-
 let set_inlined_debuginfo t dbg = { t with inlined_debuginfo = dbg }
 
 let get_inlined_debuginfo t = t.inlined_debuginfo

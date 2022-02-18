@@ -85,7 +85,7 @@ end = struct
       DA.map_denv dacc ~f:(fun denv ->
           Code_id.Map.fold
             (fun code_id code denv ->
-              DE.define_code_metadata_only denv ~code_id ~code)
+              DE.define_code denv ~code_id ~code)
             all_code
             (DE.enter_set_of_closures (DE.disable_inlining denv)))
     in

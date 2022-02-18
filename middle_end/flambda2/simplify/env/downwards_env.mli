@@ -153,8 +153,6 @@ val check_simple_is_bound : t -> Simple.t -> unit
 
 val define_code : t -> code_id:Code_id.t -> code:Code.t -> t
 
-val define_code_metadata_only : t -> code_id:Code_id.t -> code:Code.t -> t
-
 val mem_code : t -> Code_id.t -> bool
 
 (** This function raises if the code ID is unbound. *)
