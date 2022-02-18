@@ -217,6 +217,24 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
             in
             expr, uacc))
   in
+  (* CR mshinwell: use this function in the one above *)
+  let simplify_intermediate_let_expr uacc dest let_expr =
+    let rewrite = UE.find_apply_cont_rewrite (UA.uenv uacc) dest in
+    let uacc =
+      UA.map_uenv uacc ~f:(fun uenv -> UE.delete_apply_cont_rewrite uenv dest)
+    in
+    let dacc = DA.delete_continuation_uses dacc dest in
+    simplify_let dacc let_expr ~down_to_up:(fun _dacc ~rebuild ->
+        rebuild uacc ~after_rebuild:(fun expr uacc ->
+            let uacc =
+              match rewrite with
+              | None -> uacc
+              | Some rewrite ->
+                UA.map_uenv uacc ~f:(fun uenv ->
+                    UE.add_apply_cont_rewrite uenv dest rewrite)
+            in
+            expr, uacc))
+  in
   let body, uacc =
     if Targetint_31_63.Map.cardinal arms < 1
     then
@@ -268,28 +286,51 @@ let rebuild_switch ~simplify_let dacc ~arms ~scrutinee ~scrutinee_ty uacc
             let uacc =
               UA.notify_removed ~operation:Removed_operations.branch uacc
             in
-            let make_body ~tagged_scrutinee =
-              let logor_scrutinee = Variable.create "logor_scrutinee" in
-              let logor_scrutinee' = Simple.var logor_scrutinee in
+            let let_expr =
+              let untagged_name = Variable.create "untagged_name" in
+              let untagged_name' = Simple.var untagged_name in
+              let tagged_logor_result = Variable.create "tagged_logor_result" in
+              let tagged_logor_result' = Simple.var tagged_logor_result in
+              let logor_result = Variable.create "logor_result" in
+              let logor_result' = Simple.var logor_result in
+              let do_untagging =
+                Named.create_prim
+                  (P.Unary (Unbox_number Untagged_immediate, Simple.name name))
+                  Debuginfo.none
+              in
               let do_logor =
                 Named.create_prim
                   (P.Binary
-                     ( Int_arith (Tagged_immediate, Or),
-                       tagged_scrutinee,
-                       Simple.name name ))
+                     (Int_arith (Naked_immediate, Or), scrutinee, untagged_name'))
                   Debuginfo.none
               in
-              let bound =
-                VB.create logor_scrutinee NM.normal |> Bound_pattern.singleton
+              let do_tagging =
+                Named.create_prim
+                  (P.Unary (Box_number (Untagged_immediate, Heap), logor_result'))
+                  Debuginfo.none
               in
               let body =
-                Apply_cont.create dest ~args:[logor_scrutinee'] ~dbg
+                Apply_cont.create dest ~args:[tagged_logor_result'] ~dbg
                 |> Expr.create_apply_cont
               in
-              Let.create bound do_logor ~body ~free_names_of_body:Unknown
-              |> Expr.create_let
+              let body =
+                Let.create
+                  (VB.create tagged_logor_result NM.normal
+                  |> Bound_pattern.singleton)
+                  do_tagging ~body ~free_names_of_body:Unknown
+                |> Expr.create_let
+              in
+              let body =
+                Let.create
+                  (VB.create logor_result NM.normal |> Bound_pattern.singleton)
+                  do_logor ~body ~free_names_of_body:Unknown
+                |> Expr.create_let
+              in
+              Let.create
+                (VB.create untagged_name NM.normal |> Bound_pattern.singleton)
+                do_untagging ~body ~free_names_of_body:Unknown
             in
-            create_tagged_scrutinee uacc dest ~make_body
+            simplify_intermediate_let_expr uacc dest let_expr
           | None ->
             (* In that case, even though some branches were removed by simplify
                we should not count them in the number of removed operations:
@@ -348,7 +389,7 @@ let find_cse_simple dacc prim =
       | exception Not_found -> None
       | simple -> Some simple))
 
-let check_cse_environment dacc ~scrutinee =
+let check_cse_environment dacc ~scrutinee ~arms =
   (* When the switch is an identity or a NOT, the expression is rewritten to
      remove the switch during the upwards pass. The switch is replaced by either
      a tagging or a boolean NOT and a tagging. The result of the tagging can be
@@ -386,26 +427,48 @@ let check_cse_environment dacc ~scrutinee =
 
      We solve this by always looking for a tagged version of the scrutinee in
      the CSE environment and registering it as a required variable like the
-     scrutinee. If it is not available, no problem can occur. *)
-  match
-    find_cse_simple dacc
-      (Unary (Box_number (Untagged_immediate, Heap), scrutinee))
-  with
-  | None -> dacc
-  | Some tagged_scrutinee -> (
-    let dacc =
-      DA.map_data_flow dacc
-        ~f:
-          (Data_flow.add_used_in_current_handler
-             (Simple.free_names tagged_scrutinee))
-    in
-    match find_cse_simple dacc (Unary (Boolean_not, tagged_scrutinee)) with
+     scrutinee. If it is not available, no problem can occur.
+
+     A similar situation arises for simplification to logical OR and AND, where
+     untagging of the free variables of the switch arm actions may be
+     necessary. *)
+  let dacc =
+    match
+      find_cse_simple dacc
+        (Unary (Box_number (Untagged_immediate, Heap), scrutinee))
+    with
     | None -> dacc
-    | Some not_scrutinee ->
-      DA.map_data_flow dacc
-        ~f:
-          (Data_flow.add_used_in_current_handler
-             (Simple.free_names not_scrutinee)))
+    | Some tagged_scrutinee -> (
+      let dacc =
+        DA.map_data_flow dacc
+          ~f:
+            (Data_flow.add_used_in_current_handler
+               (Simple.free_names tagged_scrutinee))
+      in
+      match find_cse_simple dacc (Unary (Boolean_not, tagged_scrutinee)) with
+      | None -> dacc
+      | Some not_scrutinee ->
+        DA.map_data_flow dacc
+          ~f:
+            (Data_flow.add_used_in_current_handler
+               (Simple.free_names not_scrutinee)))
+  in
+  Targetint_31_63.Map.fold
+    (fun _discr (action, _rewrite_id, _kind) dacc ->
+      Name_occurrences.fold_names (Apply_cont.free_names action) ~init:dacc
+        ~f:(fun dacc name ->
+          let ty = TE.find (DA.typing_env dacc) name None in
+          match
+            T.prove_is_always_tagging_of_simple (DA.typing_env dacc)
+              ~min_name_mode:NM.normal ty
+          with
+          | Unknown | Invalid -> dacc
+          | Proved untagged_name ->
+            DA.map_data_flow dacc
+              ~f:
+                (Data_flow.add_used_in_current_handler
+                   (Simple.free_names untagged_name))))
+    arms dacc
 
 let simplify_arm ~typing_env_at_use ~scrutinee_ty arm action (arms, dacc) =
   let shape =
@@ -471,7 +534,7 @@ let simplify_switch ~simplify_let dacc switch ~down_to_up =
       (Switch.arms switch)
       (Targetint_31_63.Map.empty, dacc)
   in
-  let dacc = check_cse_environment dacc ~scrutinee in
+  let dacc = check_cse_environment dacc ~scrutinee ~arms in
   let dacc =
     if Targetint_31_63.Map.cardinal arms <= 1
     then dacc
