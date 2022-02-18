@@ -458,6 +458,7 @@ let check_cse_environment dacc ~scrutinee ~arms =
       Name_occurrences.fold_names (Apply_cont.free_names action) ~init:dacc
         ~f:(fun dacc name ->
           let ty = TE.find (DA.typing_env dacc) name None in
+          if not (K.equal K.value (T.kind ty)) then dacc else
           match
             T.prove_is_always_tagging_of_simple (DA.typing_env dacc)
               ~min_name_mode:NM.normal ty
