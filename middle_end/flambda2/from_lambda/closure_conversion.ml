@@ -1536,22 +1536,26 @@ module SCC = Strongly_connected_components_flambda2.Make (Code_id)
 
 let bind_code all_code acc body =
   let graph =
-    Code_id.Map.map (fun code ->
-        Code_id.Set.filter (fun sym ->
-            Code_id.in_compilation_unit sym (Compilation_unit.get_current_exn ()))
-          (Name_occurrences.code_ids
-             (Code.free_names code)))
+    Code_id.Map.map
+      (fun code ->
+        Code_id.Set.filter
+          (fun sym ->
+            Code_id.in_compilation_unit sym
+              (Compilation_unit.get_current_exn ()))
+          (Name_occurrences.code_ids (Code.free_names code)))
       all_code
   in
   let components = SCC.connected_components_sorted_from_roots_to_leaf graph in
-  Array.fold_left (fun (acc, body) (component : SCC.component) ->
+  Array.fold_left
+    (fun (acc, body) (component : SCC.component) ->
       let code_ids =
         match component with
         | No_loop code_id -> [code_id]
         | Has_loop code_ids -> code_ids
       in
       let bound_symbols, static_consts =
-        List.fold_left (fun (bound_symbols, static_consts) code_id ->
+        List.fold_left
+          (fun (bound_symbols, static_consts) code_id ->
             let bound_symbols =
               Bound_symbols.Pattern.code code_id :: bound_symbols
             in
