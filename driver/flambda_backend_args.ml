@@ -346,6 +346,24 @@ let mk_no_flambda2_speculative_inlining_only_if_arguments_useful f =
       (format_not_default
         Flambda2.Inlining.Default.speculative_inlining_only_if_arguments_useful)
 
+let mk_flambda2_inline_always_overrides_max_depth f =
+  "-flambda2-inline-always-overrides-max-depth", Arg.Unit f,
+    Printf.sprintf " Allow\n\
+        \    inlining deeper than the max inlining depth when\n\
+        \    inline-always attributes are used%s\n\
+        \    (Flambda 2 only)"
+      (format_default
+        Flambda2.Inlining.Default.inline_always_overrides_max_depth)
+
+let mk_no_flambda2_inline_always_overrides_max_depth f =
+  "-no-flambda2-inline-always-overrides-max-depth", Arg.Unit f,
+    Printf.sprintf " Forbid\n\
+        \    inlining deeper than the max inlining depth when\n\
+        \    inline-always attributes are used%s\n\
+        \    (Flambda 2 only)"
+      (format_not_default
+        Flambda2.Inlining.Default.inline_always_overrides_max_depth)
+
 let mk_flambda2_inlining_report_bin f =
   "-flambda2-inlining-report-bin", Arg.Unit f, " Write inlining report\n\
     \     in binary format (Flambda 2 only)"
@@ -429,6 +447,8 @@ module type Flambda_backend_options = sig
   val flambda2_inline_threshold : string -> unit
   val flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
   val no_flambda2_speculative_inlining_only_if_arguments_useful : unit -> unit
+  val flambda2_inline_always_overrides_max_depth : unit -> unit
+  val no_flambda2_inline_always_overrides_max_depth : unit -> unit
 
   val flambda2_inlining_report_bin : unit -> unit
 
@@ -519,6 +539,10 @@ struct
       F.flambda2_speculative_inlining_only_if_arguments_useful;
     mk_no_flambda2_speculative_inlining_only_if_arguments_useful
       F.no_flambda2_speculative_inlining_only_if_arguments_useful;
+    mk_flambda2_inline_always_overrides_max_depth
+      F.flambda2_inline_always_overrides_max_depth;
+    mk_no_flambda2_inline_always_overrides_max_depth
+      F.no_flambda2_inline_always_overrides_max_depth;
 
     mk_flambda2_inlining_report_bin F.flambda2_inlining_report_bin;
 
@@ -660,6 +684,12 @@ module Flambda_backend_options_impl = struct
   let no_flambda2_speculative_inlining_only_if_arguments_useful =
     clear Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
 
+  let flambda2_inline_always_overrides_max_depth =
+    set Flambda2.Inlining.inline_always_overrides_max_depth
+
+  let no_flambda2_inline_always_overrides_max_depth =
+    clear Flambda2.Inlining.inline_always_overrides_max_depth
+
   let flambda2_inlining_report_bin = set Flambda2.Inlining.report_bin
 
   let flambda2_unicode = set Flambda2.unicode
@@ -775,6 +805,8 @@ module Extra_params = struct
          Flambda2.Inlining.threshold; true
     | "flambda2-speculative-inlining-only-if-arguments-useful" ->
        set Flambda2.Inlining.speculative_inlining_only_if_arguments_useful
+    | "flambda2-inline-always-overrides-max-depth" ->
+       set Flambda2.Inlining.inline_always_overrides_max_depth
     | "flambda2-inlining-report-bin" ->
        set Flambda2.Inlining.report_bin
     | "flambda2-expert-code-id-and-symbol-scoping-checks" ->

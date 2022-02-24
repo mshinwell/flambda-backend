@@ -110,6 +110,7 @@ module Flambda2 = struct
       let threshold = 10.
 
       let speculative_inlining_only_if_arguments_useful = true
+      let inline_always_overrides_max_depth = false
     end
 
     let max_depth = ref (I.default Default.max_depth)
@@ -129,6 +130,8 @@ module Flambda2 = struct
 
     let speculative_inlining_only_if_arguments_useful =
       ref Default.speculative_inlining_only_if_arguments_useful
+    let inline_always_overrides_max_depth =
+      ref Default.inline_always_overrides_max_depth
 
     let report_bin = ref false
 
