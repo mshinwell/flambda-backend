@@ -141,6 +141,9 @@ module Inlining = struct
   let speculative_inlining_only_if_arguments_useful () =
     !Flambda_backend_flags.Flambda2.Inlining
      .speculative_inlining_only_if_arguments_useful
+
+  let inline_always_overrides_max_depth () =
+    !Flambda_backend_flags.Flambda2.Inlining.inline_always_overrides_max_depth
 end
 
 module Debug = struct

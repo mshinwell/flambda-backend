@@ -104,6 +104,7 @@ module Flambda2 : sig
       val threshold : float
 
       val speculative_inlining_only_if_arguments_useful : bool
+      val inline_always_overrides_max_depth : bool
     end
 
     val max_depth : Clflags.Int_arg_helper.parsed ref
@@ -122,6 +123,7 @@ module Flambda2 : sig
     val threshold : Clflags.Float_arg_helper.parsed ref
 
     val speculative_inlining_only_if_arguments_useful : bool ref
+    val inline_always_overrides_max_depth : bool ref
 
     val report_bin : bool ref
   end
