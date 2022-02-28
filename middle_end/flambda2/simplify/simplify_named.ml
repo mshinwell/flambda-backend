@@ -119,12 +119,12 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       in
       let add_snapshot_var =
         match defining_expr with
-        | Reachable { named = Prim (prim, _dbg); _ }
-        | Reachable_try_reify { named = Prim (prim, _dbg); _ } -> (
+        | Reachable { named = Prim (prim, dbg); _ }
+        | Reachable_try_reify { named = Prim (prim, dbg); _ } -> (
           match prim with
           | Variadic
               (Make_block (Values (_, [Boxed_float]), Mutable, Heap), [arg]) ->
-            Some arg
+            Some (arg, dbg)
           | Variadic
               ( Make_block
                   ( (Values _ | Naked_floats),
@@ -140,14 +140,32 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
         | Invalid ->
           None
       in
-      let dacc =
+      let dacc, defining_expr =
         match add_snapshot_var with
-        | None -> dacc
-        | Some initial_value ->
+        | None -> dacc, defining_expr
+        | Some (initial_value, dbg) ->
           let snapshot_unboxed = Variable.rename (Bound_var.var bound_var) in
-          DA.map_denv dacc ~f:(fun denv ->
-              DE.add_snapshot_var denv ~mutable_boxed:(Bound_var.var bound_var)
-                ~snapshot_unboxed ~initial_value:(Some initial_value))
+          let dacc =
+            DA.map_denv dacc ~f:(fun denv ->
+                DE.add_snapshot_var denv
+                  ~mutable_boxed:(Bound_var.var bound_var) ~snapshot_unboxed
+                  ~initial_value:(Some initial_value))
+          in
+          let defining_expr =
+            (* The initial value won't be used, so clear it out, to avoid any
+               potential boxing. *)
+            Simplified_named.reachable
+              (Named.create_prim
+                 (Variadic
+                    ( Make_block
+                        ( Values (Tag.Scannable.zero, [Boxed_float]),
+                          Mutable,
+                          Heap ),
+                      [Simple.const_int Targetint_31_63.Imm.zero] ))
+                 dbg)
+              ~try_reify:false
+          in
+          dacc, defining_expr
       in
       Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
         defining_expr ~original_defining_expr:named
