@@ -213,3 +213,10 @@ val set_inlining_history_tracker : Inlining_history.Tracker.t -> t -> t
 val relative_history : t -> Inlining_history.Relative.t
 
 val inlining_depth : t -> int
+
+val add_snapshot_var :
+  t -> mutable_boxed:Variable.t -> snapshot_unboxed:Variable.t -> t
+
+val snapshot_vars : t -> Variable.t Variable.Map.t
+
+val snapshotted_mutables : t -> Variable.Set.t

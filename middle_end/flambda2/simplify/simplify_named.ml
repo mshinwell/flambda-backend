@@ -117,6 +117,36 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
         Reification.try_to_reify dacc simplified_named ~bound_to:bound_var
           ~kind_of_bound_to:kind ~allow_lifting
       in
+      let add_snapshot_var =
+        match defining_expr with
+        | Reachable { named = Prim (prim, _dbg); _ }
+        | Reachable_try_reify { named = Prim (prim, _dbg); _ } -> (
+          match prim with
+          | Variadic (Make_block (Naked_floats, Mutable, Heap), [_arg]) -> true
+          | Variadic
+              ( Make_block
+                  ( (Values _ | Naked_floats),
+                    (Mutable | Immutable | Immutable_unique),
+                    (Heap | Local) ),
+                _ )
+          | Variadic (Make_array _, _)
+          | Nullary _ | Unary _ | Binary _ | Ternary _ ->
+            false)
+        | Reachable { named = Simple _ | Set_of_closures _ | Rec_info _; _ }
+        | Reachable_try_reify
+            { named = Simple _ | Set_of_closures _ | Rec_info _; _ }
+        | Invalid ->
+          false
+      in
+      let dacc =
+        if not add_snapshot_var
+        then dacc
+        else
+          let snapshot_unboxed = Variable.create "snapshot_unboxed" in
+          DA.map_denv dacc ~f:(fun denv ->
+              DE.add_snapshot_var denv ~mutable_boxed:(Bound_var.var bound_var)
+                ~snapshot_unboxed)
+      in
       Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
         defining_expr ~original_defining_expr:named
     | Reachable _ | Invalid ->
