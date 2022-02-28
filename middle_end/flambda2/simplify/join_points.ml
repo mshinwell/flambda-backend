@@ -26,10 +26,18 @@ module U = One_continuation_use
 let join_snapshot_extra_params_and_args denv use_envs_with_ids
     extra_params_and_args =
   let snapshotted_mutables =
-    List.map
-      (fun (use_env, _, _) -> DE.snapshotted_mutables use_env)
-      use_envs_with_ids
-    |> Variable.Set.union_list
+    let snapshotted_mutables =
+      List.fold_left
+        (fun snapshotted_mutables_opt (use_env, _, _) ->
+          let muts = DE.snapshotted_mutables use_env in
+          match snapshotted_mutables_opt with
+          | None -> Some muts
+          | Some muts' -> Some (Variable.Set.inter muts muts'))
+        None use_envs_with_ids
+    in
+    match snapshotted_mutables with
+    | None -> Variable.Set.empty
+    | Some snapshotted_mutables -> snapshotted_mutables
   in
   let new_snapshot_vars =
     Variable.Set.fold
@@ -39,10 +47,38 @@ let join_snapshot_extra_params_and_args denv use_envs_with_ids
           new_snapshot_vars)
       snapshotted_mutables Variable.Map.empty
   in
+  (* XXX what about the mutables that aren't on all paths? *)
+  let initial_values =
+    Variable.Map.fold
+      (fun snapshotted_mutable _ initial_values ->
+        let initial_value =
+          List.fold_left
+            (fun (initial_value : _ Or_unknown_or_bottom.t) (use_env, _, _) ->
+              let in_this_env =
+                Variable.Map.find snapshotted_mutable (DE.snapshot_vars use_env)
+              in
+              match initial_value with
+              | Bottom -> Or_unknown_or_bottom.Bottom
+              | Unknown -> Or_unknown_or_bottom.Ok in_this_env
+              | Ok in_prev_envs ->
+                if Variable.equal in_this_env in_prev_envs
+                then initial_value
+                else Or_unknown_or_bottom.Bottom)
+            Or_unknown_or_bottom.Unknown use_envs_with_ids
+        in
+        let initial_value =
+          match initial_value with
+          | Bottom | Unknown -> None
+          | Ok initial_value -> Some (Simple.var initial_value)
+        in
+        Variable.Map.add snapshotted_mutable initial_value initial_values)
+      new_snapshot_vars Variable.Map.empty
+  in
   let denv =
     Variable.Map.fold
       (fun mutable_boxed snapshot_unboxed denv ->
-        DE.add_snapshot_var denv ~mutable_boxed ~snapshot_unboxed)
+        let initial_value = Variable.Map.find mutable_boxed initial_values in
+        DE.add_snapshot_var denv ~mutable_boxed ~snapshot_unboxed ~initial_value)
       new_snapshot_vars denv
   in
   let extra_params_and_args =
@@ -51,7 +87,7 @@ let join_snapshot_extra_params_and_args denv use_envs_with_ids
         let extra_param =
           Bound_parameter.create
             (Variable.Map.find snapshotted_mutable new_snapshot_vars)
-            Flambda_kind.With_subkind.naked_float
+            Flambda_kind.With_subkind.boxed_float
         in
         let extra_args =
           List.fold_left

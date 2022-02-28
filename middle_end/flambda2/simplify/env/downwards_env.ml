@@ -521,16 +521,19 @@ let generate_phantom_lets t =
      terms, since they have no effect on cost metrics. *)
   && Are_rebuilding_terms.are_rebuilding (are_rebuilding_terms t)
 
-let add_snapshot_var t ~mutable_boxed ~snapshot_unboxed =
+let add_snapshot_var t ~mutable_boxed ~snapshot_unboxed ~initial_value =
   let t =
     { t with
       snapshot_vars =
         Variable.Map.add mutable_boxed snapshot_unboxed t.snapshot_vars
     }
   in
-  define_variable t
-    (Bound_var.create snapshot_unboxed Name_mode.normal)
-    Flambda_kind.naked_float
+  let ty =
+    match initial_value with
+    | None -> T.any_boxed_float
+    | Some initial_value -> T.alias_type_of K.value initial_value
+  in
+  add_name t (Bound_name.create (Name.var snapshot_unboxed) Name_mode.normal) ty
 
 let snapshot_vars t = t.snapshot_vars
 

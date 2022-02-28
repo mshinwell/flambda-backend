@@ -123,8 +123,8 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
         | Reachable_try_reify { named = Prim (prim, _dbg); _ } -> (
           match prim with
           | Variadic
-              (Make_block (Values (_, [Boxed_float]), Mutable, Heap), [_arg]) ->
-            true
+              (Make_block (Values (_, [Boxed_float]), Mutable, Heap), [arg]) ->
+            Some arg
           | Variadic
               ( Make_block
                   ( (Values _ | Naked_floats),
@@ -133,21 +133,21 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
                 _ )
           | Variadic (Make_array _, _)
           | Nullary _ | Unary _ | Binary _ | Ternary _ ->
-            false)
+            None)
         | Reachable { named = Simple _ | Set_of_closures _ | Rec_info _; _ }
         | Reachable_try_reify
             { named = Simple _ | Set_of_closures _ | Rec_info _; _ }
         | Invalid ->
-          false
+          None
       in
       let dacc =
-        if not add_snapshot_var
-        then dacc
-        else
+        match add_snapshot_var with
+        | None -> dacc
+        | Some initial_value ->
           let snapshot_unboxed = Variable.create "snapshot_unboxed" in
           DA.map_denv dacc ~f:(fun denv ->
               DE.add_snapshot_var denv ~mutable_boxed:(Bound_var.var bound_var)
-                ~snapshot_unboxed)
+                ~snapshot_unboxed ~initial_value:(Some initial_value))
       in
       Simplify_named_result.have_simplified_to_single_term dacc bound_pattern
         defining_expr ~original_defining_expr:named

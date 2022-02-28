@@ -215,7 +215,11 @@ val relative_history : t -> Inlining_history.Relative.t
 val inlining_depth : t -> int
 
 val add_snapshot_var :
-  t -> mutable_boxed:Variable.t -> snapshot_unboxed:Variable.t -> t
+  t ->
+  mutable_boxed:Variable.t ->
+  snapshot_unboxed:Variable.t ->
+  initial_value:Simple.t option ->
+  t
 
 val snapshot_vars : t -> Variable.t Variable.Map.t
 
