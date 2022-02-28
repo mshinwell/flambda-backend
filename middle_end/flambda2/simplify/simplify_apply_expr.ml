@@ -893,6 +893,18 @@ let simplify_apply_shared dacc apply =
   let { S.simples = args; simple_tys = arg_types } =
     S.simplify_simples dacc (Apply.args apply)
   in
+  let escaping_mutables =
+    let snapshot_vars = DE.snapshot_vars (DA.denv dacc) in
+    List.filter_map
+      (fun arg ->
+        match Simple.must_be_var arg with
+        | None -> None
+        | Some (escaping_mutable, _coercion) -> (
+          match Variable.Map.find escaping_mutable snapshot_vars with
+          | exception Not_found -> None
+          | snapshot_var -> Some (escaping_mutable, snapshot_var)))
+      args
+  in
   let inlining_state =
     Inlining_state.meet
       (DE.get_inlining_state (DA.denv dacc))
@@ -914,7 +926,7 @@ let simplify_apply_shared dacc apply =
            ~earlier:(DE.relative_history (DA.denv dacc))
            ~later:(Apply.relative_history apply))
   in
-  dacc, callee_ty, apply, arg_types
+  dacc, callee_ty, apply, arg_types, escaping_mutables
 
 let rebuild_method_call apply ~use_id ~exn_cont_use_id uacc ~after_rebuild =
   let apply =
@@ -1062,7 +1074,39 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~param_arity
     down_to_up dacc ~rebuild
 
 let simplify_apply ~simplify_expr dacc apply ~down_to_up =
-  let dacc, callee_ty, apply, arg_types = simplify_apply_shared dacc apply in
+  let dacc, callee_ty, apply, arg_types, escaping_mutables =
+    simplify_apply_shared dacc apply
+  in
+  let down_to_up dacc ~rebuild =
+    down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
+        rebuild uacc ~after_rebuild:(fun expr uacc ->
+            let expr =
+              List.fold_left
+                (fun expr (escaping_mutable, snapshot_var) ->
+                  let unit_var = Variable.create "unit" in
+                  RE.create_let
+                    (UA.are_rebuilding_terms uacc)
+                    (Bound_pattern.singleton
+                       (Bound_var.create unit_var NM.normal))
+                    (Named.create_prim
+                       (Ternary
+                          ( Block_set
+                              ( Values
+                                  { tag = Unknown;
+                                    (* XXX *)
+                                    size = Unknown;
+                                    field_kind = Any_value
+                                  },
+                                Assignment ),
+                            Simple.var escaping_mutable,
+                            Simple.const_int Targetint_31_63.Imm.zero,
+                            Simple.var snapshot_var ))
+                       (Apply.dbg apply))
+                    ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
+                expr escaping_mutables
+            in
+            after_rebuild expr uacc))
+  in
   match Apply.call_kind apply with
   | Function { function_call; alloc_mode = apply_alloc_mode } ->
     simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
