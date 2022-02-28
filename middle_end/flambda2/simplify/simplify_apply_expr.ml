@@ -138,15 +138,15 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
     | Some use_id ->
       EB.add_wrapper_for_fixed_arity_apply uacc ~use_id result_arity apply
   in
-  let expr =
+  let expr, uacc =
     (* XXX the exception continuation needs wrapping as well (unless it's the
        one for the current function, presumably) *)
     match escaping_mutables with
-    | [] -> expr
+    | [] -> expr, uacc
     | _ :: _ -> (
       let expr =
         List.fold_left
-          (fun expr (escaping_mutable, snapshot_var) ->
+          (fun expr (escaping_mutable, snapshot_var, _snapshot_var_post_apply) ->
             let unit_var = Variable.create "unit" in
             RE.create_let
               (UA.are_rebuilding_terms uacc)
@@ -169,7 +169,7 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
           expr escaping_mutables
       in
       match requires_return_wrapping_for_escaping_mutables with
-      | None -> expr
+      | None -> expr, uacc
       | Some (old_return_cont, new_return_cont) ->
         let arity = Call_kind.return_arity (Apply.call_kind apply) in
         let params =
@@ -187,25 +187,30 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
         in
         let handler =
           List.fold_left
-            (fun expr (escaping_mutable, _snapshot_var) ->
-              let unit_var = Variable.create "unit" in
-              RE.create_let
-                (UA.are_rebuilding_terms uacc)
-                (Bound_pattern.singleton (Bound_var.create unit_var NM.normal))
-                (Named.create_prim
-                   (Binary
-                      ( Block_load
-                          ( Values
-                              { tag = Unknown;
-                                (* XXX *)
-                                size = Unknown;
-                                field_kind = Any_value
-                              },
-                            Mutable ),
-                        Simple.var escaping_mutable,
-                        Simple.const_int Targetint_31_63.Imm.zero ))
-                   (Apply.dbg apply))
-                ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
+            (fun expr (escaping_mutable, _snapshot_var, snapshot_var_post_apply) ->
+              if not
+                   (Name_occurrences.mem_var (UA.name_occurrences uacc)
+                      snapshot_var_post_apply)
+              then expr
+              else
+                RE.create_let
+                  (UA.are_rebuilding_terms uacc)
+                  (Bound_pattern.singleton
+                     (Bound_var.create snapshot_var_post_apply NM.normal))
+                  (Named.create_prim
+                     (Binary
+                        ( Block_load
+                            ( Values
+                                { tag = Unknown;
+                                  (* XXX *)
+                                  size = Unknown;
+                                  field_kind = Any_value
+                                },
+                              Mutable ),
+                          Simple.var escaping_mutable,
+                          Simple.const_int Targetint_31_63.Imm.zero ))
+                     (Apply.dbg apply))
+                  ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
             (RE.create_apply_cont call_return_cont)
             escaping_mutables
         in
@@ -216,10 +221,21 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
             ~free_names_of_handler:(Apply_cont.free_names call_return_cont)
             ~is_exn_handler:false
         in
-        RE.create_non_recursive_let_cont
-          (UA.are_rebuilding_terms uacc)
-          new_return_cont cont_handler ~body:expr
-          ~free_names_of_body:(UA.name_occurrences uacc))
+        let expr =
+          RE.create_non_recursive_let_cont
+            (UA.are_rebuilding_terms uacc)
+            new_return_cont cont_handler ~body:expr
+            ~free_names_of_body:(UA.name_occurrences uacc)
+        in
+        let uacc =
+          UA.with_name_occurrences uacc
+            ~name_occurrences:
+              (Name_occurrences.add_continuation
+                 (Name_occurrences.remove_continuation
+                    (UA.name_occurrences uacc) new_return_cont)
+                 old_return_cont ~has_traps:false)
+        in
+        expr, uacc)
   in
   after_rebuild expr uacc
 
@@ -340,6 +356,17 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
         ~arg_types:
           (T.unknown_types_from_arity_with_subkinds
              (Exn_continuation.arity (Apply.exn_continuation apply)))
+    in
+    let dacc =
+      match escaping_mutables with
+      | [] -> dacc
+      | _ :: _ ->
+        List.fold_left
+          (fun dacc (escaping_mutable, _snapshot_var, snapshot_var_post_apply) ->
+            DA.map_denv dacc ~f:(fun denv ->
+                DE.add_snapshot_var denv ~mutable_boxed:escaping_mutable
+                  ~snapshot_unboxed:snapshot_var_post_apply ~initial_value:None))
+          dacc escaping_mutables
     in
     down_to_up dacc
       ~rebuild:
@@ -1000,7 +1027,9 @@ let simplify_apply_shared dacc apply =
         | Some (escaping_mutable, _coercion) -> (
           match Variable.Map.find escaping_mutable snapshot_vars with
           | exception Not_found -> None
-          | snapshot_var -> Some (escaping_mutable, snapshot_var)))
+          | snapshot_var ->
+            let snapshot_var_post_apply = Variable.rename snapshot_var in
+            Some (escaping_mutable, snapshot_var, snapshot_var_post_apply)))
       args
   in
   let inlining_state =
