@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42-4"]
 
 open! Simplify_import
 
@@ -122,7 +122,9 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
         | Reachable { named = Prim (prim, _dbg); _ }
         | Reachable_try_reify { named = Prim (prim, _dbg); _ } -> (
           match prim with
-          | Variadic (Make_block (Naked_floats, Mutable, Heap), [_arg]) -> true
+          | Variadic
+              (Make_block (Values (_, [Boxed_float]), Mutable, Heap), [_arg]) ->
+            true
           | Variadic
               ( Make_block
                   ( (Values _ | Naked_floats),

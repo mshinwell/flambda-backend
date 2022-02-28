@@ -23,8 +23,8 @@ module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
-let join_snapshot_extra_params_and_args use_envs_with_ids extra_params_and_args
-    =
+let join_snapshot_extra_params_and_args denv use_envs_with_ids
+    extra_params_and_args =
   let snapshotted_mutables =
     List.map
       (fun (use_env, _, _) -> DE.snapshotted_mutables use_env)
@@ -39,28 +39,37 @@ let join_snapshot_extra_params_and_args use_envs_with_ids extra_params_and_args
           new_snapshot_vars)
       snapshotted_mutables Variable.Map.empty
   in
-  Variable.Set.fold
-    (fun snapshotted_mutable extra_params_and_args ->
-      let extra_param =
-        Bound_parameter.create
-          (Variable.Map.find snapshotted_mutable new_snapshot_vars)
-          Flambda_kind.With_subkind.naked_float
-      in
-      let extra_args =
-        List.fold_left
-          (fun extra_args (use_env, id, _) ->
-            let snapshot_in_use_env =
-              Variable.Map.find snapshotted_mutable (DE.snapshot_vars use_env)
-            in
-            Apply_cont_rewrite_id.Map.add id
-              (Continuation_extra_params_and_args.Extra_arg.Already_in_scope
-                 (Simple.var snapshot_in_use_env))
-              extra_args)
-          Apply_cont_rewrite_id.Map.empty use_envs_with_ids
-      in
-      Continuation_extra_params_and_args.add extra_params_and_args ~extra_param
-        ~extra_args)
-    snapshotted_mutables extra_params_and_args
+  let denv =
+    Variable.Map.fold
+      (fun mutable_boxed snapshot_unboxed denv ->
+        DE.add_snapshot_var denv ~mutable_boxed ~snapshot_unboxed)
+      new_snapshot_vars denv
+  in
+  let extra_params_and_args =
+    Variable.Set.fold
+      (fun snapshotted_mutable extra_params_and_args ->
+        let extra_param =
+          Bound_parameter.create
+            (Variable.Map.find snapshotted_mutable new_snapshot_vars)
+            Flambda_kind.With_subkind.naked_float
+        in
+        let extra_args =
+          List.fold_left
+            (fun extra_args (use_env, id, _) ->
+              let snapshot_in_use_env =
+                Variable.Map.find snapshotted_mutable (DE.snapshot_vars use_env)
+              in
+              Apply_cont_rewrite_id.Map.add id
+                (Continuation_extra_params_and_args.Extra_arg.Already_in_scope
+                   (Simple.var snapshot_in_use_env))
+                extra_args)
+            Apply_cont_rewrite_id.Map.empty use_envs_with_ids
+        in
+        Continuation_extra_params_and_args.add extra_params_and_args
+          ~extra_param ~extra_args)
+      snapshotted_mutables extra_params_and_args
+  in
+  denv, extra_params_and_args
 
 let join ?unknown_if_defined_at_or_later_than denv typing_env params
     ~env_at_fork_plus_params ~consts_lifted_during_body ~use_envs_with_ids =
@@ -94,9 +103,6 @@ let join ?unknown_if_defined_at_or_later_than denv typing_env params
     | None -> Name_occurrences.empty
     | Some cse_join_result -> cse_join_result.extra_allowed_names
   in
-  let extra_params_and_args =
-    join_snapshot_extra_params_and_args use_envs_with_ids extra_params_and_args
-  in
   (* CR-someday mshinwell: If this didn't do Scope.next then TE could probably
      be slightly more efficient, as it wouldn't need to look at the middle of
      the three return values from Scope.Map.Split. *)
@@ -126,6 +132,10 @@ let join ?unknown_if_defined_at_or_later_than denv typing_env params
     match cse_join_result with
     | None -> denv
     | Some cse_join_result -> DE.with_cse denv cse_join_result.cse_at_join_point
+  in
+  let denv, extra_params_and_args =
+    join_snapshot_extra_params_and_args denv use_envs_with_ids
+      extra_params_and_args
   in
   denv, extra_params_and_args
 
