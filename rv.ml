@@ -9,11 +9,11 @@ external ( +. ) : (float[@local_opt]) -> (float[@local_opt]) -> float = "%addflo
 let[@inline] f r c1 c2 =
   (c1 [@inlined never]) !r;
   r := !r +. 1.;
-  (c2 [@inlined never]) !r;
-  r := !r +. 1.;
+  (c2 [@inlined never]) r;
+  r := !r +. 2.;
   !r
 
 let g x =
-  let r = ref x in
+  let r = ref (x +. x) in
   let y = f r (fun _ -> ()) (fun _ -> ()) in
-  y +. 1.
+  y +. 3.

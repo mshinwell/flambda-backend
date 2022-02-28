@@ -40,13 +40,46 @@ let simplify_array_set original_prim (array_kind : P.Array_kind.t) dacc dbg
     let dacc = DA.add_variable dacc result_var ty in
     Simplified_named.reachable named ~try_reify:false, dacc
 
+let simplify_block_set original_prim dacc dbg ~block ~index ~new_value
+    ~result_var =
+  let snapshot_vars = DE.snapshot_vars (DA.denv dacc) in
+  let block_var_and_existing_snapshot =
+    Simple.pattern_match' block
+      ~const:(fun _ -> None)
+      ~symbol:(fun _ ~coercion:_ -> None)
+      ~var:(fun block ~coercion:_ ->
+        match Variable.Map.find block snapshot_vars with
+        | exception Not_found -> None
+        | existing_snapshot -> Some (block, existing_snapshot))
+  in
+  match block_var_and_existing_snapshot with
+  | None ->
+    let prim : P.t = Ternary (original_prim, block, index, new_value) in
+    let named = Named.create_prim prim dbg in
+    let ty = T.unknown (P.result_kind' prim) in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable named ~try_reify:false, dacc
+  | Some (block_var, existing_snapshot) ->
+    (* XXX need to check the index (arg2) *)
+    let snapshot_unboxed = Variable.rename existing_snapshot in
+    let dacc =
+      DA.map_denv dacc ~f:(fun denv ->
+          DE.add_snapshot_var denv ~mutable_boxed:block_var ~snapshot_unboxed
+            ~initial_value:(Some new_value))
+    in
+    let named = Named.create_simple (Simple.var snapshot_unboxed) in
+    Simplified_named.reachable named ~try_reify:false, dacc
+
 let simplify_ternary_primitive dacc original_prim (prim : P.ternary_primitive)
     ~arg1 ~arg1_ty ~arg2 ~arg2_ty:_ ~arg3 ~arg3_ty:_ dbg ~result_var =
   match prim with
   | Array_set (array_kind, _init_or_assign) ->
     simplify_array_set original_prim array_kind dacc dbg ~array_ty:arg1_ty
       ~result_var
-  | Block_set _ | Bytes_or_bigstring_set _ | Bigarray_set _ ->
+  | Block_set _ ->
+    simplify_block_set prim dacc dbg ~block:arg1 ~index:arg2 ~new_value:arg3
+      ~result_var
+  | Bytes_or_bigstring_set _ | Bigarray_set _ ->
     let prim : P.t = Ternary (prim, arg1, arg2, arg3) in
     let named = Named.create_prim prim dbg in
     let ty = T.unknown (P.result_kind' prim) in

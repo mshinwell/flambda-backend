@@ -144,7 +144,7 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
         match add_snapshot_var with
         | None -> dacc
         | Some initial_value ->
-          let snapshot_unboxed = Variable.create "snapshot_unboxed" in
+          let snapshot_unboxed = Variable.rename (Bound_var.var bound_var) in
           DA.map_denv dacc ~f:(fun denv ->
               DE.add_snapshot_var denv ~mutable_boxed:(Bound_var.var bound_var)
                 ~snapshot_unboxed ~initial_value:(Some initial_value))
