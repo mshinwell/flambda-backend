@@ -101,7 +101,7 @@ let simplify_direct_tuple_application ~simplify_expr dacc apply
   simplify_expr dacc expr ~down_to_up
 
 let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
-    ~result_arity ~coming_from_indirect uacc ~after_rebuild =
+    ~result_arity ~coming_from_indirect ~escaping_mutables uacc ~after_rebuild =
   let uacc =
     if coming_from_indirect
     then
@@ -124,11 +124,35 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
     | Some use_id ->
       EB.add_wrapper_for_fixed_arity_apply uacc ~use_id result_arity apply
   in
+  let expr =
+    List.fold_left
+      (fun expr (escaping_mutable, snapshot_var) ->
+        let unit_var = Variable.create "unit" in
+        RE.create_let
+          (UA.are_rebuilding_terms uacc)
+          (Bound_pattern.singleton (Bound_var.create unit_var NM.normal))
+          (Named.create_prim
+             (Ternary
+                ( Block_set
+                    ( Values
+                        { tag = Unknown;
+                          (* XXX *)
+                          size = Unknown;
+                          field_kind = Any_value
+                        },
+                      Assignment ),
+                  Simple.var escaping_mutable,
+                  Simple.const_int Targetint_31_63.Imm.zero,
+                  Simple.var snapshot_var ))
+             (Apply.dbg apply))
+          ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
+      expr escaping_mutables
+  in
   after_rebuild expr uacc
 
 let simplify_direct_full_application ~simplify_expr dacc apply function_type
     ~params_arity ~result_arity ~result_types ~down_to_up ~coming_from_indirect
-    ~callee's_code_metadata =
+    ~callee's_code_metadata ~escaping_mutables =
   let inlined =
     (* CR mshinwell for poechsel: Make sure no other warnings or inlining report
        decisions get emitted when not rebuilding terms. *)
@@ -247,7 +271,8 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
     down_to_up dacc
       ~rebuild:
         (rebuild_non_inlined_direct_full_application apply ~use_id
-           ~exn_cont_use_id ~result_arity ~coming_from_indirect)
+           ~exn_cont_use_id ~result_arity ~coming_from_indirect
+           ~escaping_mutables)
 
 (* CR mshinwell: need to work out what to do for local alloc transformations
    when there are zero args. *)
@@ -590,7 +615,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
     ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
     ~callee's_closure_id ~result_arity ~result_types ~recursive ~arg_types:_
     ~must_be_detupled ~closure_alloc_mode ~apply_alloc_mode function_decl
-    ~down_to_up =
+    ~escaping_mutables ~down_to_up =
   begin
     match Apply.probe_name apply, Apply.inlined apply with
     | None, _ | Some _, Never_inlined -> ()
@@ -665,7 +690,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       then
         simplify_direct_full_application ~simplify_expr dacc apply function_decl
           ~params_arity ~result_arity ~result_types ~down_to_up
-          ~coming_from_indirect ~callee's_code_metadata
+          ~coming_from_indirect ~callee's_code_metadata ~escaping_mutables
       else if provided_num_args > num_params
       then
         simplify_direct_over_application ~simplify_expr dacc apply
@@ -797,8 +822,8 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
          ~use_id ~exn_cont_use_id)
 
 let simplify_function_call ~simplify_expr dacc apply ~callee_ty
-    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~arg_types ~down_to_up
-    =
+    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~arg_types
+    ~escaping_mutables ~down_to_up =
   let args = Apply.args apply in
   (* Function declarations and params and body might not have the same calling
      convention. Currently the only case when it happens is for tupled
@@ -876,7 +901,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       ~result_types:(Code_metadata.result_types callee's_code_metadata)
       ~recursive:(Code_metadata.recursive callee's_code_metadata)
       ~must_be_detupled ~closure_alloc_mode ~apply_alloc_mode func_decl_type
-      ~down_to_up
+      ~escaping_mutables ~down_to_up
   | Unknown -> type_unavailable ()
   | Invalid ->
     let rebuild uacc ~after_rebuild =
@@ -1077,40 +1102,10 @@ let simplify_apply ~simplify_expr dacc apply ~down_to_up =
   let dacc, callee_ty, apply, arg_types, escaping_mutables =
     simplify_apply_shared dacc apply
   in
-  let down_to_up dacc ~rebuild =
-    down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
-        rebuild uacc ~after_rebuild:(fun expr uacc ->
-            let expr =
-              List.fold_left
-                (fun expr (escaping_mutable, snapshot_var) ->
-                  let unit_var = Variable.create "unit" in
-                  RE.create_let
-                    (UA.are_rebuilding_terms uacc)
-                    (Bound_pattern.singleton
-                       (Bound_var.create unit_var NM.normal))
-                    (Named.create_prim
-                       (Ternary
-                          ( Block_set
-                              ( Values
-                                  { tag = Unknown;
-                                    (* XXX *)
-                                    size = Unknown;
-                                    field_kind = Any_value
-                                  },
-                                Assignment ),
-                            Simple.var escaping_mutable,
-                            Simple.const_int Targetint_31_63.Imm.zero,
-                            Simple.var snapshot_var ))
-                       (Apply.dbg apply))
-                    ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
-                expr escaping_mutables
-            in
-            after_rebuild expr uacc))
-  in
   match Apply.call_kind apply with
   | Function { function_call; alloc_mode = apply_alloc_mode } ->
     simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
-      ~apply_alloc_mode ~arg_types ~down_to_up
+      ~apply_alloc_mode ~arg_types ~escaping_mutables ~down_to_up
   | Method { kind; obj; alloc_mode = _ } ->
     simplify_method_call dacc apply ~callee_ty ~kind ~obj ~arg_types ~down_to_up
   | C_call { alloc = _; param_arity; return_arity; is_c_builtin = _ } ->
