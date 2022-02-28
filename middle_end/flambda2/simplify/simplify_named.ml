@@ -161,7 +161,9 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
                         ( Values (Tag.Scannable.zero, [Boxed_float]),
                           Mutable,
                           Heap ),
-                      [Simple.const_int Targetint_31_63.Imm.zero] ))
+                      [ Simple.const
+                          (Const.naked_float
+                             Numeric_types.Float_by_bit_pattern.zero) ] ))
                  dbg)
               ~try_reify:false
           in
