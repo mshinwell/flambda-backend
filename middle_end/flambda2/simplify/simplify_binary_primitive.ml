@@ -1065,6 +1065,51 @@ let simplify_immutable_block_load access_kind ~min_name_mode dacc ~original_term
   in
   if dacc == dacc' then reachable_and_dacc else reachable, dacc'
 
+let simplify_mutable_block_load (access_kind : P.Block_access_kind.t)
+    ~min_name_mode:_ dacc ~original_term _dbg ~arg1 ~arg1_ty:_ ~arg2:_
+    ~arg2_ty:index_ty ~result_var =
+  let result_kind =
+    match access_kind with
+    | Values _ -> K.value
+    | Naked_floats _ -> K.naked_float
+  in
+  let[@inline always] unchanged () =
+    let ty = T.unknown result_kind in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.reachable original_term ~try_reify:false, dacc
+  in
+  let[@inline always] invalid () =
+    let ty = T.bottom result_kind in
+    let dacc = DA.add_variable dacc result_var ty in
+    Simplified_named.invalid (), dacc
+  in
+  let exactly simple =
+    let dacc =
+      DA.add_variable dacc result_var (T.alias_type_of result_kind simple)
+    in
+    let named = Named.create_simple simple in
+    Simplified_named.reachable named ~try_reify:false, dacc
+  in
+  let typing_env = DA.typing_env dacc in
+  match T.prove_equals_single_tagged_immediate typing_env index_ty with
+  | Invalid -> invalid ()
+  | Unknown -> unchanged ()
+  | Proved index -> (
+    let simple =
+      if not (Targetint_31_63.equal index Targetint_31_63.zero)
+      then None
+      else
+        Simple.pattern_match' arg1
+          ~const:(fun _ -> None)
+          ~symbol:(fun _ ~coercion:_ -> None)
+          ~var:(fun block_var ~coercion:_ ->
+            let snapshot_vars = DE.snapshot_vars (DA.denv dacc) in
+            match Variable.Map.find block_var snapshot_vars with
+            | exception Not_found -> None
+            | snapshot_var -> Some (Simple.var snapshot_var))
+    in
+    match simple with Some simple -> exactly simple | None -> unchanged ())
+
 let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
     ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
   let const bool =
@@ -1176,6 +1221,8 @@ let simplify_binary_primitive dacc original_prim (prim : P.binary_primitive)
     match prim with
     | Block_load (access_kind, Immutable) ->
       simplify_immutable_block_load access_kind ~min_name_mode
+    | Block_load (access_kind, Mutable) ->
+      simplify_mutable_block_load access_kind ~min_name_mode
     | Array_load (array_kind, mutability) ->
       simplify_array_load array_kind mutability
     | Int_arith (kind, op) -> begin
@@ -1214,14 +1261,7 @@ let simplify_binary_primitive dacc original_prim (prim : P.binary_primitive)
     | Float_arith op -> Binary_float_arith.simplify op
     | Float_comp op -> Binary_float_comp.simplify op
     | Phys_equal (kind, op) -> simplify_phys_equal op kind
-    | Block_load _ ->
-      fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
-          ~result_var ->
-        let prim : P.t = Binary (prim, arg1, arg2) in
-        let named = Named.create_prim prim dbg in
-        let ty = T.unknown (P.result_kind' prim) in
-        let dacc = DA.add_variable dacc result_var ty in
-        Simplified_named.reachable named ~try_reify:false, dacc
+    | Block_load (_, Immutable_unique)
     | String_or_bigstring_load _ | Bigarray_load _ ->
       fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_
           ~result_var ->
