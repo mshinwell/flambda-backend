@@ -188,29 +188,26 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
         let handler =
           List.fold_left
             (fun expr (escaping_mutable, _snapshot_var, snapshot_var_post_apply) ->
-              if not
-                   (Name_occurrences.mem_var (UA.name_occurrences uacc)
-                      snapshot_var_post_apply)
-              then expr
-              else
-                RE.create_let
-                  (UA.are_rebuilding_terms uacc)
-                  (Bound_pattern.singleton
-                     (Bound_var.create snapshot_var_post_apply NM.normal))
-                  (Named.create_prim
-                     (Binary
-                        ( Block_load
-                            ( Values
-                                { tag = Unknown;
-                                  (* XXX *)
-                                  size = Unknown;
-                                  field_kind = Any_value
-                                },
-                              Mutable ),
-                          Simple.var escaping_mutable,
-                          Simple.const_int Targetint_31_63.Imm.zero ))
-                     (Apply.dbg apply))
-                  ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
+              (* if not (Name_occurrences.mem_var (UA.name_occurrences uacc)
+                 snapshot_var_post_apply) then expr else *)
+              RE.create_let
+                (UA.are_rebuilding_terms uacc)
+                (Bound_pattern.singleton
+                   (Bound_var.create snapshot_var_post_apply NM.normal))
+                (Named.create_prim
+                   (Binary
+                      ( Block_load
+                          ( Values
+                              { tag = Unknown;
+                                (* XXX *)
+                                size = Unknown;
+                                field_kind = Any_value
+                              },
+                            Mutable ),
+                        Simple.var escaping_mutable,
+                        Simple.const_int Targetint_31_63.Imm.zero ))
+                   (Apply.dbg apply))
+                ~body:expr ~free_names_of_body:(UA.name_occurrences uacc))
             (RE.create_apply_cont call_return_cont)
             escaping_mutables
         in
@@ -290,9 +287,25 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
   | Some (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
   | None ->
     let dacc = record_free_names_of_apply_as_used dacc apply in
+    let orig_dacc = dacc in
+    let dacc =
+      match escaping_mutables with
+      | [] -> dacc
+      | _ :: _ ->
+        List.fold_left
+          (fun dacc (escaping_mutable, _snapshot_var, snapshot_var_post_apply) ->
+            DA.map_denv dacc ~f:(fun denv ->
+                Format.eprintf
+                  "after Apply, mutable %a has post-apply snapshot %a\n%!"
+                  Variable.print escaping_mutable Variable.print
+                  snapshot_var_post_apply;
+                DE.add_snapshot_var denv ~mutable_boxed:escaping_mutable
+                  ~snapshot_unboxed:snapshot_var_post_apply ~initial_value:None))
+          dacc escaping_mutables
+    in
     let dacc, use_id =
       match Apply.continuation apply with
-      | Never_returns -> dacc, None
+      | Never_returns -> orig_dacc, None
       | Return apply_return_continuation ->
         Result_types.pattern_match result_types
           ~f:(fun ~params ~results env_extension ->
@@ -340,6 +353,7 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
                     (BP.simple result_var))
                 result_arity results
             in
+            Format.eprintf "Apply use env is:@ %a\n%!" DE.print denv;
             let dacc = DA.with_denv dacc denv in
             let dacc, use_id =
               DA.record_continuation_use dacc apply_return_continuation
@@ -356,17 +370,6 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
         ~arg_types:
           (T.unknown_types_from_arity_with_subkinds
              (Exn_continuation.arity (Apply.exn_continuation apply)))
-    in
-    let dacc =
-      match escaping_mutables with
-      | [] -> dacc
-      | _ :: _ ->
-        List.fold_left
-          (fun dacc (escaping_mutable, _snapshot_var, snapshot_var_post_apply) ->
-            DA.map_denv dacc ~f:(fun denv ->
-                DE.add_snapshot_var denv ~mutable_boxed:escaping_mutable
-                  ~snapshot_unboxed:snapshot_var_post_apply ~initial_value:None))
-          dacc escaping_mutables
     in
     down_to_up dacc
       ~rebuild:

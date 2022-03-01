@@ -23,7 +23,7 @@ module T = Flambda2_types
 module TE = Flambda2_types.Typing_env
 module U = One_continuation_use
 
-let join_snapshot_extra_params_and_args denv use_envs_with_ids
+let join_snapshot_vars denv ~env_at_fork_plus_params use_envs_with_ids
     extra_params_and_args =
   let snapshotted_mutables =
     let snapshotted_mutables =
@@ -69,7 +69,10 @@ let join_snapshot_extra_params_and_args denv use_envs_with_ids
         let initial_value =
           match initial_value with
           | Bottom | Unknown -> None
-          | Ok initial_value -> Some (Simple.var initial_value)
+          | Ok initial_value ->
+            if DE.mem_variable env_at_fork_plus_params initial_value
+            then Some (Simple.var initial_value)
+            else None
         in
         Variable.Map.add snapshotted_mutable initial_value initial_values)
       new_snapshot_vars Variable.Map.empty
@@ -170,9 +173,11 @@ let join ?unknown_if_defined_at_or_later_than denv typing_env params
     | Some cse_join_result -> DE.with_cse denv cse_join_result.cse_at_join_point
   in
   let denv, extra_params_and_args =
-    join_snapshot_extra_params_and_args denv use_envs_with_ids
+    join_snapshot_vars denv ~env_at_fork_plus_params use_envs_with_ids
       extra_params_and_args
   in
+  Format.eprintf "JOIN: EPA=%a, denv:@ %a\n%!"
+    Continuation_extra_params_and_args.print extra_params_and_args DE.print denv;
   denv, extra_params_and_args
 
 let meet_equations_on_params typing_env ~params ~param_types =
