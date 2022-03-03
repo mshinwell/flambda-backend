@@ -17,3 +17,20 @@ let g x =
   let r = ref (x +. x) in
   let y = f r (fun f -> f +. 5.) (fun _ -> ()) in
   y +. 3.
+
+(*
+
+let stock = ref (ref 0)
+
+let g r = stock := r
+let h () = !stock := 0
+
+let f () =
+  let r = ref 1 in
+  incr r;
+  g r;
+  incr r;
+  h ();
+  !r
+
+*)

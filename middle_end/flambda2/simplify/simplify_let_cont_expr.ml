@@ -36,8 +36,9 @@ let compute_used_extra_params uacc (extra_params_and_args : EPA.t)
   else
     let used_or_not extra_param =
       let used =
-        Name_occurrences.greatest_name_mode_var free_names (BP.var extra_param)
-        |> Name_mode.Or_absent.is_present_as_normal
+        true
+        (* Name_occurrences.greatest_name_mode_var free_names (BP.var
+           extra_param) |> Name_mode.Or_absent.is_present_as_normal *)
       in
       (* The free_names computation is the reference here, because it records
          precisely what is actually used in the term being rebuilt. The required
