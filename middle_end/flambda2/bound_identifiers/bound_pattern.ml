@@ -108,7 +108,7 @@ let rename t =
     Set_of_closures { name_mode; closure_vars }
   | Symbols _ -> t
 
-let add_to_name_permutation t1 ~guaranteed_fresh:t2 perm =
+let add_to_renaming t1 ~guaranteed_fresh:t2 perm =
   match t1, t2 with
   | Singleton var1, Singleton var2 ->
     Renaming.add_fresh_variable perm (Bound_var.var var1)
@@ -129,8 +129,8 @@ let add_to_name_permutation t1 ~guaranteed_fresh:t2 perm =
   | (Singleton _ | Set_of_closures _ | Symbols _), _ ->
     Misc.fatal_errorf "Kind mismatch:@ %a@ and@ %a" print t1 print t2
 
-let name_permutation t ~guaranteed_fresh =
-  add_to_name_permutation t ~guaranteed_fresh Renaming.empty
+let renaming t ~guaranteed_fresh =
+  add_to_renaming t ~guaranteed_fresh Renaming.empty
 
 let singleton var = Singleton var
 

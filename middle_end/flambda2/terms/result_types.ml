@@ -67,7 +67,7 @@ module Bound = struct
       (Format.pp_print_list ~pp_sep:Format.pp_print_space Variable.print)
       other_vars
 
-  let name_permutation { params; results; other_vars }
+  let renaming { params; results; other_vars }
       ~guaranteed_fresh:
         { params = fresh_params;
           results = fresh_results;

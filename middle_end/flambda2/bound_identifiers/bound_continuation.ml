@@ -24,8 +24,8 @@ let apply_renaming t renaming = Renaming.apply_continuation renaming t
 
 let all_ids_for_export t = Ids_for_export.singleton_continuation t
 
-let add_to_name_permutation t ~guaranteed_fresh renaming =
+let add_to_renaming t ~guaranteed_fresh renaming =
   Renaming.add_fresh_continuation renaming t ~guaranteed_fresh
 
-let name_permutation t ~guaranteed_fresh =
-  add_to_name_permutation t ~guaranteed_fresh Renaming.empty
+let renaming t ~guaranteed_fresh =
+  add_to_renaming t ~guaranteed_fresh Renaming.empty

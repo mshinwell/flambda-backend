@@ -30,7 +30,7 @@ let create params =
 
 let to_list t = t
 
-let name_permutation t1 ~guaranteed_fresh:t2 =
+let renaming t1 ~guaranteed_fresh:t2 =
   try
     List.fold_left2
       (fun renaming param1 param2 ->

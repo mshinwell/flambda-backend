@@ -64,9 +64,9 @@ include Container_types.Make (struct
   let hash _ = Misc.fatal_error "Not yet implemented"
 end)
 
-let add_to_name_permutation { var; name_mode = _ } ~guaranteed_fresh perm =
+let add_to_renaming { var; name_mode = _ } ~guaranteed_fresh perm =
   let { var = guaranteed_fresh; name_mode = _ } = guaranteed_fresh in
   Renaming.add_fresh_variable perm var ~guaranteed_fresh
 
-let name_permutation t ~guaranteed_fresh =
-  add_to_name_permutation t ~guaranteed_fresh Renaming.empty
+let renaming t ~guaranteed_fresh =
+  add_to_renaming t ~guaranteed_fresh Renaming.empty

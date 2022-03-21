@@ -44,4 +44,4 @@ val my_depth : t -> Variable.t
 
 val rename : t -> t
 
-val name_permutation : t -> guaranteed_fresh:t -> Renaming.t
+val renaming : t -> guaranteed_fresh:t -> Renaming.t

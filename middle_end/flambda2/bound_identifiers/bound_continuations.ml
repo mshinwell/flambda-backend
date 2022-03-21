@@ -47,7 +47,7 @@ let all_ids_for_export t =
 
 let rename t = List.map Continuation.rename t
 
-let name_permutation t1 ~guaranteed_fresh:t2 =
+let renaming t1 ~guaranteed_fresh:t2 =
   try List.fold_left2 Renaming.add_continuation Renaming.empty t1 t2
   with Invalid_argument _ ->
     assert (List.compare_lengths t1 t2 <> 0);

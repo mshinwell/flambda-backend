@@ -117,7 +117,7 @@ let rename
     my_depth = Variable.rename my_depth
   }
 
-let name_permutation
+let renaming
     ({ return_continuation = return_continuation1;
        exn_continuation = exn_continuation1;
        params = params1;
