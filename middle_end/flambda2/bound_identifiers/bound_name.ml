@@ -21,7 +21,20 @@ type t =
     name_mode : Name_mode.t
   }
 
-let create name name_mode = { name; name_mode }
+let [@ocamlformat "disable"] print ppf { name; name_mode; } =
+  Format.fprintf ppf "@[<hov 1>)\
+      @[<hov 1>(name@ %a)@]@ \
+      @[<hov 1>(name_mode@ %a)@]\
+      )@]"
+    Name.print name
+    Name_mode.print name_mode
+
+let create name name_mode =
+  if not (Name_mode.can_be_in_terms name_mode)
+  then
+    Misc.fatal_errorf "Name mode %a (for name %a) not allowed in terms"
+      Name_mode.print name_mode Name.print name;
+  { name; name_mode }
 
 let name t = t.name
 
@@ -38,27 +51,6 @@ let to_var t =
     ~symbol:(fun _sym -> None)
 
 let to_name t = t.name
-
-include Container_types.Make (struct
-  type nonrec t = t
-
-  let [@ocamlformat "disable"] print ppf { name; name_mode; } =
-    Format.fprintf ppf "@[<hov 1>)\
-        @[<hov 1>(name@ %a)@]@ \
-        @[<hov 1>(name_mode@ %a)@]\
-        )@]"
-      Name.print name
-      Name_mode.print name_mode
-
-  let compare { name = name1; name_mode = name_mode1 }
-      { name = name2; name_mode = name_mode2 } =
-    let c = Name.compare name1 name2 in
-    if c <> 0 then c else Name_mode.compare_total_order name_mode1 name_mode2
-
-  let equal t1 t2 = compare t1 t2 = 0
-
-  let hash _ = Misc.fatal_error "Not yet implemented"
-end)
 
 let is_symbol t = Name.is_symbol t.name
 

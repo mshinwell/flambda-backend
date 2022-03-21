@@ -116,7 +116,7 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
             | Absent, Present _ -> greatest_name_mode
             | Present _, Absent -> name_mode
             | Present name_mode, Present greatest_name_mode ->
-              Name_mode.max_in_terms name_mode greatest_name_mode
+              Name_mode.join_in_terms name_mode greatest_name_mode
               |> Name_mode.Or_absent.present)
       | Symbols _ -> assert false
       (* see below *)

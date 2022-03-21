@@ -42,5 +42,3 @@ val to_name : t -> Name.t
 val rename : t -> t
 
 val is_symbol : t -> bool
-
-include Container_types.S with type t := t

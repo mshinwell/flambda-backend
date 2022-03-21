@@ -108,29 +108,26 @@ let rename t =
     Set_of_closures { name_mode; closure_vars }
   | Symbols _ -> t
 
-let add_to_renaming t1 ~guaranteed_fresh:t2 perm =
+let renaming t1 ~guaranteed_fresh:t2 =
   match t1, t2 with
   | Singleton var1, Singleton var2 ->
-    Renaming.add_fresh_variable perm (Bound_var.var var1)
+    Renaming.add_fresh_variable Renaming.empty (Bound_var.var var1)
       ~guaranteed_fresh:(Bound_var.var var2)
   | ( Set_of_closures { name_mode = _; closure_vars = closure_vars1 },
       Set_of_closures { name_mode = _; closure_vars = closure_vars2 } ) ->
     if List.compare_lengths closure_vars1 closure_vars2 = 0
     then
       List.fold_left2
-        (fun perm var1 var2 ->
-          Renaming.add_fresh_variable perm (Bound_var.var var1)
+        (fun renaming var1 var2 ->
+          Renaming.add_fresh_variable renaming (Bound_var.var var1)
             ~guaranteed_fresh:(Bound_var.var var2))
-        perm closure_vars1 closure_vars2
+        Renaming.empty closure_vars1 closure_vars2
     else
       Misc.fatal_errorf "Mismatching closure vars:@ %a@ and@ %a" print t1 print
         t2
-  | Symbols _, Symbols _ -> perm
+  | Symbols _, Symbols _ -> Renaming.empty
   | (Singleton _ | Set_of_closures _ | Symbols _), _ ->
     Misc.fatal_errorf "Kind mismatch:@ %a@ and@ %a" print t1 print t2
-
-let renaming t ~guaranteed_fresh =
-  add_to_renaming t ~guaranteed_fresh Renaming.empty
 
 let singleton var = Singleton var
 
@@ -194,31 +191,12 @@ let may_be_symbols t =
   | Symbols symbols -> Some symbols
   | Singleton _ | Set_of_closures _ -> None
 
-let exists_all_bound_vars t ~f =
-  match t with
-  | Singleton var -> f var
-  | Set_of_closures { closure_vars; _ } -> ListLabels.exists closure_vars ~f
-  | Symbols _ -> false
-
 let fold_all_bound_vars t ~init ~f =
   match t with
   | Singleton var -> f init var
   | Set_of_closures { closure_vars; _ } ->
     ListLabels.fold_left closure_vars ~init ~f
   | Symbols _ -> init
-
-let all_bound_vars t =
-  match t with
-  | Singleton var -> Bound_var.Set.singleton var
-  | Set_of_closures { closure_vars; _ } -> Bound_var.Set.of_list closure_vars
-  | Symbols _ -> Bound_var.Set.empty
-
-let all_bound_vars' t =
-  match t with
-  | Singleton var -> Variable.Set.singleton (Bound_var.var var)
-  | Set_of_closures { closure_vars; _ } ->
-    Variable.Set.of_list (List.map Bound_var.var closure_vars)
-  | Symbols _ -> Variable.Set.empty
 
 let fold_all_bound_names t ~init ~var ~symbol ~code_id =
   match t with

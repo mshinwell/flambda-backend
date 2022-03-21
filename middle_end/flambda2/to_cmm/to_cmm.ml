@@ -788,10 +788,10 @@ and let_expr env res t =
   Let.pattern_match' t
     ~f:(fun bound_pattern ~num_normal_occurrences_of_bound_vars ~body ->
       let mode = Bound_pattern.name_mode bound_pattern in
-      match Name_mode.descr mode with
+      match mode with
       | In_types ->
         Misc.fatal_errorf
-          "Binding in terms a variable of mode In_types is forbidden"
+          "Binding a variable of mode In_types in terms is forbidden"
       | Phantom -> expr env res body
       | Normal -> (
         let e = Let.defining_expr t in

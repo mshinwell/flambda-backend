@@ -919,8 +919,8 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
               ~all_closure_vars_in_set:closure_element_types
               (Known (Set_of_closures.alloc_mode set_of_closures))
           in
-          Bound_name.Map.add bound_name closure_type closure_types)
-      fun_types Bound_name.Map.empty
+          Name.Map.add (Bound_name.name bound_name) closure_type closure_types)
+      fun_types Name.Map.empty
   in
   let dacc =
     DA.map_denv dacc ~f:(fun denv ->
@@ -933,9 +933,8 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
              closure_bound_names
         |> fun denv ->
         LCS.add_to_denv denv lifted_consts
-        |> Bound_name.Map.fold
+        |> Name.Map.fold
              (fun bound_name closure_type denv ->
-               let bound_name = Bound_name.to_name bound_name in
                DE.add_equation_on_name denv bound_name closure_type)
              closure_types_by_bound_name)
   in
@@ -1048,10 +1047,10 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
             let typ = T.alias_type_of K.value simple in
             DE.add_variable denv bound_var typ
           in
-          let bindings = Bound_var.Map.add bound_var closure_symbol bindings in
+          let bindings = (bound_var, closure_symbol) :: bindings in
           denv, bindings)
       closure_bound_vars
-      (DA.denv dacc, Bound_var.Map.empty)
+      (DA.denv dacc, [])
   in
   Simplify_named_result.have_lifted_set_of_closures (DA.with_denv dacc denv)
     bindings

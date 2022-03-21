@@ -26,8 +26,6 @@ val name_mode : t -> Name_mode.t
 
 val with_name_mode : t -> Name_mode.t -> t
 
-include Container_types.S with type t := t
-
 include Contains_names.S with type t := t
 
 include Bindable.S with type t := t
