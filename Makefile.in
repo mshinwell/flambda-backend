@@ -65,13 +65,15 @@ compiler: runtime-stdlib
 runtest: compiler
 	$(dune) runtest $(ws_main)
 
-
+export dune_boot_context
+export dune_runtime_stdlib_context
+export dune_main_context
 
 _build/_bootinstall: ocaml/Makefile.config
 # duneconf
-	$(file >duneconf/boot.ws,$(dune_boot_context))
-	$(file >duneconf/runtime_stdlib.ws,$(dune_runtime_stdlib_context))
-	$(file >duneconf/main.ws,$(dune_main_context))
+	echo "$$dune_boot_context" > duneconf/boot.ws
+	echo "$$dune_runtime_stdlib_context" > duneconf/runtime_stdlib.ws
+	echo "$$dune_main_context" > duneconf/main.ws
 
 # natdynlinkops2:
 # We need to augment dune's substitutions so this part isn't so
