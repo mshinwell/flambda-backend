@@ -48,7 +48,7 @@ val non_closure_symbols_being_defined : t -> Symbol.Set.t
 
 val closure_symbols_being_defined : t -> Symbol.Set.t
 
-val everything_being_defined : t -> rymbol.Set.t
+val everything_being_defined : t -> Symbol.Set.t
 
 val concat : t -> t -> t
 

@@ -19,7 +19,7 @@
 type symbols = private { bound_symbols : Bound_symbols.t }
 
 type t = private
-  | Singleton of Bound_var.t
+  | Variable of Bound_var.t
       (** The binding of a single variable, which is statically scoped. *)
   | Set_of_closures of
       { name_mode : Name_mode.t;
@@ -27,24 +27,25 @@ type t = private
       }
       (** The binding of one or more variables to the individual closures in a
           set of closures. The variables are statically scoped. *)
-  | Symbols of symbols
+  | Symbols of Bound_symbols.t
       (** The binding of one or more symbols to statically-allocated
           constant(s). The scoping of the symbols may either be syntactic, or
           follow the dominator tree. *)
+  | Code of Code_id.t
 
 include Bindable.S with type t := t
 
 include Contains_ids.S with type t := t
 
-val singleton : Bound_var.t -> t
+val variable : Bound_var.t -> t
 
-val set_of_closures : closure_vars:Bound_var.t list -> t
+val set_of_closures : Bound_var.t list -> t
 
 val symbols : Bound_symbols.t -> t
 
-val must_be_singleton : t -> Bound_var.t
+val must_be_variable : t -> Bound_var.t
 
-val must_be_singleton_opt : t -> Bound_var.t option
+val must_be_variable_opt : t -> Bound_var.t option
 
 val must_be_set_of_closures : t -> Bound_var.t list
 

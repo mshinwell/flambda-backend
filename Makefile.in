@@ -103,11 +103,10 @@ _build/_bootinstall: ocaml/Makefile.config
 	fi
 
 # flags.sexp
-	$(file >ocamlopt_flags.sexp,\
-	  (:standard $(if $(filter true,$(FUNCTION_SECTIONS)),-function-sections,)))
-	$(file >oc_cflags.sexp,( $(OC_CFLAGS) ))
-	$(file >oc_cppflags.sexp,( $(OC_CPPFLAGS) ))
-	$(file >sharedlib_cflags.sexp,( $(SHAREDLIB_CFLAGS) ))
+	echo "(:standard $(if $(filter true,$(FUNCTION_SECTIONS)),-function-sections,))" \
+	  >ocamlopt_flags.sexp
+	echo "( $(OC_CFLAGS) )" >oc_cflags.sexp
+	echo "( $(SHAREDLIB_CFLAGS) )" >sharedlib_cflags.sexp
 
 # _build/_bootinstall: a minimal install directory for the boot compiler,
 # which is placed on PATH for subsequent builds

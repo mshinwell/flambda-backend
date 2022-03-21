@@ -14,26 +14,21 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-type symbols = { bound_symbols : Bound_symbols.t }
-
 type t =
-  | Singleton of Bound_var.t
-  | Set_of_closures of
-      { name_mode : Name_mode.t;
-        closure_vars : Bound_var.t list
-      }
+  | Variable of Bound_var.t
+  | Set_of_closures of Bound_var.t list
   | Symbols of Bound_symbols.t
   | Code of Code_id.t
 
 let [@ocamlformat "disable"] print ppf t =
   match t with
-  | Singleton var -> Bound_var.print ppf var
+  | Variable var -> Bound_var.print ppf var
   | Set_of_closures { name_mode = _; closure_vars; } ->
     Format.fprintf ppf "@[<hov 1>(%a)@]"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space
         Bound_var.print)
       closure_vars
-  | Symbols { bound_symbols } ->
+  | Symbols bound_symbols ->
     Format.fprintf ppf "@[<hov 1>\
         @[(bound_symbols@ %a)@]\
         )@]"
@@ -41,9 +36,9 @@ let [@ocamlformat "disable"] print ppf t =
 
 let free_names t =
   match t with
-  | Singleton var ->
+  | Variable var ->
     let var = Bound_var.create_var var in
-    Name_occurrences.singleton_variable var Name_mode.normal
+    Name_occurrences.variable_variable var Name_mode.normal
   | Set_of_closures { name_mode = _; closure_vars } ->
     List.fold_left
       (fun free_names var ->
@@ -62,9 +57,9 @@ let rec map_sharing f l0 =
 
 let apply_renaming t perm =
   match t with
-  | Singleton var ->
+  | Variable var ->
     let var' = Bound_var.apply_renaming var perm in
-    if var == var' then t else Singleton var'
+    if var == var' then t else Variable var'
   | Set_of_closures { name_mode; closure_vars } ->
     let closure_vars' =
       map_sharing (fun var -> Bound_var.apply_renaming var perm) closure_vars
@@ -80,7 +75,7 @@ let apply_renaming t perm =
 
 let all_ids_for_export t =
   match t with
-  | Singleton var ->
+  | Variable var ->
     Ids_for_export.add_variable Ids_for_export.empty (Bound_var.create_var var)
   | Set_of_closures { name_mode = _; closure_vars } ->
     List.fold_left
@@ -91,7 +86,7 @@ let all_ids_for_export t =
 
 let rename t =
   match t with
-  | Singleton var -> Singleton (Bound_var.rename var)
+  | Variable var -> Variable (Bound_var.rename var)
   | Set_of_closures { name_mode; closure_vars } ->
     let closure_vars =
       List.map (fun var -> Bound_var.rename var) closure_vars
@@ -101,7 +96,7 @@ let rename t =
 
 let renaming t1 ~guaranteed_fresh:t2 =
   match t1, t2 with
-  | Singleton var1, Singleton var2 ->
+  | Variable var1, Variable var2 ->
     Renaming.add_fresh_variable Renaming.empty
       (Bound_var.create_var var1)
       ~guaranteed_fresh:(Bound_var.create_var var2)
@@ -119,81 +114,86 @@ let renaming t1 ~guaranteed_fresh:t2 =
       Misc.fatal_errorf "Mismatching closure vars:@ %a@ and@ %a" print t1 print
         t2
   | Symbols _, Symbols _ -> Renaming.empty
-  | (Singleton _ | Set_of_closures _ | Symbols _), _ ->
+  | (Variable _ | Set_of_closures _ | Symbols _), _ ->
     Misc.fatal_errorf "Kind mismatch:@ %a@ and@ %a" print t1 print t2
 
-let singleton var = Singleton var
+let variable bound_var = Variable bound_var
 
-let set_of_closures ~closure_vars =
-  let name_modes =
+let set_of_closures bound_vars =
+  let name_mode =
     List.fold_left
-      (fun name_modes var ->
-        Name_mode.Set.add (Bound_var.name_mode var) name_modes)
-      Name_mode.Set.empty closure_vars
+      (fun name_mode var ->
+        let next_name_mode = Bound_var.name_mode in
+        match name_mode with
+        | None -> Some next_name_mode
+        | Some name_mode ->
+          if not (Name_mode.equal name_mode next_name_mode)
+          then
+            Misc.fatal_errorf "Mismatching name modes:@ %a"
+              (Format.pp_print_list ~pp_print_sep:Format.pp_print_space
+                 Bound_var.print)
+              closure_vars
+          else Some name_mode)
+      None closure_vars
   in
-  match Name_mode.Set.elements name_modes with
-  | [] -> Misc.fatal_error "No closure IDs provided"
-  | [name_mode] ->
-    (* CR mshinwell: Check there are no duplicates in [closure_vars] *)
-    Set_of_closures { name_mode; closure_vars }
-  | _ ->
-    Misc.fatal_errorf "Inconsistent name occurrence kinds:@ %a"
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space Bound_var.print)
-      closure_vars
+  match name_mode with
+  | None -> Misc.fatal_error "No bound variables provided for closures"
+  | Some _name_mode -> Set_of_closures bound_vars
 
 let symbols bound_symbols = Symbols { bound_symbols }
 
 let name_mode t =
   match t with
-  | Singleton var -> Bound_var.name_mode var
-  | Set_of_closures { name_mode; _ } -> name_mode
+  | Variable var | Set_of_closures (var :: _) -> Bound_var.name_mode var
+  | Set_of_closures [] -> assert false (* see [set_of_closures] above *)
   | Symbols _ -> Name_mode.normal
 
 let with_name_mode t name_mode =
   match t with
-  | Singleton var -> Singleton (Bound_var.with_name_mode var name_mode)
-  | Set_of_closures { name_mode = _; closure_vars } ->
-    Set_of_closures { name_mode; closure_vars }
+  | Variable var -> Variable (Bound_var.with_name_mode var name_mode)
+  | Set_of_closures vars ->
+    Set_of_closures
+      (List.map (fun var -> Bound_var.with_name_mode var name_mode) vars)
   | Symbols _ -> t
 
-let must_be_singleton t =
+let must_be_variable t =
   match t with
-  | Singleton var -> var
+  | Variable var -> var
   | Set_of_closures _ | Symbols _ ->
-    Misc.fatal_errorf "Bound name is not a [Singleton]:@ %a" print t
+    Misc.fatal_errorf "Bound name is not a [Variable]:@ %a" print t
 
-let must_be_singleton_opt t =
+let must_be_variable_opt t =
   match t with
-  | Singleton var -> Some var
+  | Variable var -> Some var
   | Set_of_closures _ | Symbols _ -> None
 
 let must_be_set_of_closures t =
   match t with
   | Set_of_closures { closure_vars; _ } -> closure_vars
-  | Singleton _ | Symbols _ ->
+  | Variable _ | Symbols _ ->
     Misc.fatal_errorf "Bound name is not a [Set_of_closures]:@ %a" print t
 
 let must_be_symbols t =
   match t with
   | Symbols symbols -> symbols
-  | Singleton _ | Set_of_closures _ ->
+  | Variable _ | Set_of_closures _ ->
     Misc.fatal_errorf "Bound name is not a [Symbols]:@ %a" print t
 
 let may_be_symbols t =
   match t with
   | Symbols symbols -> Some symbols
-  | Singleton _ | Set_of_closures _ -> None
+  | Variable _ | Set_of_closures _ -> None
 
 let fold_all_bound_vars t ~init ~f =
   match t with
-  | Singleton var -> f init var
+  | Variable var -> f init var
   | Set_of_closures { closure_vars; _ } ->
     ListLabels.fold_left closure_vars ~init ~f
   | Symbols _ -> init
 
 let fold_all_bound_names t ~init ~var ~symbol ~code_id =
   match t with
-  | Singleton v -> var init v
+  | Variable v -> var init v
   | Set_of_closures { closure_vars; _ } ->
     ListLabels.fold_left closure_vars ~init ~f:var
   | Symbols symbols ->
