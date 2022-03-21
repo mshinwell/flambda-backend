@@ -271,7 +271,7 @@ end = struct
     let v, variables = Variable_name_map.bind t.variables v in
     v, { t with variables }
 
-  let bind_bound_var t v = bind_var t (v |> Bound_var.var)
+  let bind_bound_var t v = bind_var t (v |> Bound_var.create_var)
 
   let bind_symbol t s =
     let is_local =

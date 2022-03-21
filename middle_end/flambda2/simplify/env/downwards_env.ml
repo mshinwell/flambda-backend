@@ -204,7 +204,9 @@ let define_variable t var kind =
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
+    then
+      Variable.Set.add (Bound_var.create_var var)
+        t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   { t with typing_env; variables_defined_at_toplevel }
@@ -230,12 +232,14 @@ let add_variable0 t var ty ~at_unit_toplevel =
     let var' = Bound_name.var var in
     TE.add_equation
       (TE.add_definition t.typing_env var' (T.kind ty))
-      (Name.var (Bound_var.var var))
+      (Name.var (Bound_var.create_var var))
       ty
   in
   let variables_defined_at_toplevel =
     if at_unit_toplevel
-    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
+    then
+      Variable.Set.add (Bound_var.create_var var)
+        t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   { t with typing_env; variables_defined_at_toplevel }
@@ -298,7 +302,7 @@ let define_name t name kind =
   { t with typing_env; variables_defined_at_toplevel }
 
 let define_name_if_undefined t name kind =
-  if TE.mem t.typing_env (Bound_name.to_name name)
+  if TE.mem t.typing_env (Bound_name.name name)
   then t
   else define_name t name kind
 
@@ -355,7 +359,9 @@ let define_variable_and_extend_typing_environment t var kind env_extension =
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
+    then
+      Variable.Set.add (Bound_var.create_var var)
+        t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   let typing_env = TE.add_env_extension typing_env env_extension in
@@ -367,12 +373,14 @@ let add_variable_and_extend_typing_environment t var ty env_extension =
     let var' = Bound_name.var var in
     TE.add_equation
       (TE.add_definition t.typing_env var' (T.kind ty))
-      (Name.var (Bound_var.var var))
+      (Name.var (Bound_var.create_var var))
       ty
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
+    then
+      Variable.Set.add (Bound_var.create_var var)
+        t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   let typing_env = TE.add_env_extension typing_env env_extension in

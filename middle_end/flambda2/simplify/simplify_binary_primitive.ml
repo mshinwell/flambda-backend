@@ -962,7 +962,7 @@ let record_any_symbol_projection_for_block_load dacc ~result_var ~block ~index =
                 SP.create symbol_projected_from
                   (SP.Projection.block_load ~index)
               in
-              let var = Bound_var.var result_var in
+              let var = Bound_var.create_var result_var in
               DA.map_denv dacc ~f:(fun denv ->
                   DE.add_symbol_projection denv var proj))
             ~var:(fun _ ~coercion:_ -> dacc)
@@ -980,7 +980,7 @@ let[@inline always] simplify_immutable_block_load0
     | Values _ -> K.value
     | Naked_floats _ -> K.naked_float
   in
-  let result_var' = Bound_var.var result_var in
+  let result_var' = Bound_var.create_var result_var in
   let[@inline always] unchanged () =
     let ty = T.unknown result_kind in
     let dacc = DA.add_variable dacc result_var ty in

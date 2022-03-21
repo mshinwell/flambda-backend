@@ -91,7 +91,7 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       Simplify_primitive.simplify_primitive dacc prim dbg ~result_var:bound_var
     in
     if Flambda_features.check_invariants ()
-       && not (TE.mem (DA.typing_env dacc) (Name.var (Bound_var.var bound_var)))
+       && not (TE.mem (DA.typing_env dacc) (Name.var (Bound_var.create_var bound_var)))
     then
       Misc.fatal_errorf "Primitive %a = %a did not yield a result var"
         Bound_var.print bound_var P.print prim;

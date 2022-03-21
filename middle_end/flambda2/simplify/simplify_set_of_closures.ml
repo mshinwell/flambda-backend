@@ -167,7 +167,7 @@ end = struct
         (fun closure_bound_names_inside ->
           Closure_id.Map.map
             (fun name ->
-              T.alias_type_of K.value (Simple.name (Bound_name.to_name name)))
+              T.alias_type_of K.value (Simple.name (Bound_name.name name)))
             closure_bound_names_inside)
         closure_bound_names_all_sets_inside
     in
@@ -1210,7 +1210,7 @@ let simplify_non_lifted_set_of_closures dacc (bound_vars : Bound_pattern.t)
     List.fold_left2
       (fun (closure_bound_vars, closure_bound_vars_inverse) closure_id var ->
         ( Closure_id.Map.add closure_id var closure_bound_vars,
-          Variable.Map.add (Bound_var.var var) closure_id
+          Variable.Map.add (Bound_var.create_var var) closure_id
             closure_bound_vars_inverse ))
       (Closure_id.Map.empty, Variable.Map.empty)
       (Set_of_closures.function_decls set_of_closures

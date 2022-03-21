@@ -73,7 +73,7 @@ let simplify_select_closure ~move_from ~move_to ~min_name_mode dacc
     in
     reachable, dacc
   | Unknown ->
-    let result = Simple.var (Bound_var.var result_var) in
+    let result = Simple.var (Bound_var.create_var result_var) in
     let closures =
       Closure_id.Map.empty
       |> Closure_id.Map.add move_from closure
@@ -122,7 +122,7 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
         ~deconstructing:closure_ty
         ~shape:
           (T.closure_with_at_least_this_closure_var ~this_closure:closure_id
-             closure_element ~closure_element_var:(Bound_var.var result_var))
+             closure_element ~closure_element_var:(Bound_var.create_var result_var))
         ~result_var ~result_kind:K.value
     in
     let dacc =
@@ -136,7 +136,7 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
             SP.create symbol_projected_from
               (SP.Projection.project_var closure_id closure_element)
           in
-          let var = Bound_var.var result_var in
+          let var = Bound_var.create_var result_var in
           DA.map_denv dacc ~f:(fun denv ->
               DE.add_symbol_projection denv var proj))
         ~var:(fun _ ~coercion:_ -> dacc)
@@ -146,7 +146,7 @@ let simplify_project_var closure_id closure_element ~min_name_mode dacc
 let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
     ~original_term ~arg ~arg_ty:boxed_number_ty ~result_var =
   let shape, result_kind =
-    let result_var = Bound_var.var result_var in
+    let result_var = Bound_var.create_var result_var in
     match boxable_number_kind with
     | Naked_float ->
       T.boxed_float_alias_to ~naked_float:result_var Unknown, K.naked_float
@@ -177,7 +177,7 @@ let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
       let box_prim : P.t =
         Unary
           ( Box_number (boxable_number_kind, Heap),
-            Simple.var (Bound_var.var result_var) )
+            Simple.var (Bound_var.create_var result_var) )
       in
       DA.map_denv dacc ~f:(fun denv ->
           DE.add_cse denv (P.Eligible_for_cse.create_exn box_prim) ~bound_to:arg)
@@ -217,7 +217,7 @@ let simplify_get_tag dacc ~original_term ~arg:scrutinee ~arg_ty:scrutinee_ty
 
 let simplify_array_length dacc ~original_term ~arg:_ ~arg_ty:array_ty
     ~result_var =
-  let result = Simple.var (Bound_var.var result_var) in
+  let result = Simple.var (Bound_var.create_var result_var) in
   Simplify_common.simplify_projection dacc ~original_term
     ~deconstructing:array_ty
     ~shape:

@@ -18,11 +18,8 @@
 
 module Pattern : sig
   type t = private
-    | Code of Code_id.t
     | Set_of_closures of Symbol.t Closure_id.Lmap.t
     | Block_like of Symbol.t
-
-  val code : Code_id.t -> t
 
   val set_of_closures : Symbol.t Closure_id.Lmap.t -> t
 
@@ -43,8 +40,6 @@ val to_list : t -> Pattern.t list
 
 val being_defined : t -> Symbol.Set.t
 
-val code_being_defined : t -> Code_id.Set.t
-
 val binds_code : t -> bool
 
 val binds_symbols : t -> bool
@@ -53,10 +48,7 @@ val non_closure_symbols_being_defined : t -> Symbol.Set.t
 
 val closure_symbols_being_defined : t -> Symbol.Set.t
 
-val everything_being_defined : t -> Code_id_or_symbol.Set.t
-
-val for_all_everything_being_defined :
-  t -> f:(Code_id_or_symbol.t -> bool) -> bool
+val everything_being_defined : t -> rymbol.Set.t
 
 val concat : t -> t -> t
 

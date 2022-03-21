@@ -22,42 +22,32 @@ type t =
       { name_mode : Name_mode.t;
         closure_vars : Bound_var.t list
       }
-  | Symbols of symbols
-(* CR mshinwell: Add a case here for let-code and move it out of Symbols *)
+  | Symbols of Bound_symbols.t
+  | Code of Code_id.t
 
-include Container_types.Make (struct
-  type nonrec t = t
-
-  let [@ocamlformat "disable"] print ppf t =
-    match t with
-    | Singleton var -> Bound_var.print ppf var
-    | Set_of_closures { name_mode = _; closure_vars; } ->
-      Format.fprintf ppf "@[<hov 1>(%a)@]"
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          Bound_var.print)
-        closure_vars
-    | Symbols { bound_symbols } ->
-      Format.fprintf ppf "@[<hov 1>\
-          @[(bound_symbols@ %a)@]\
-          )@]"
-        Bound_symbols.print bound_symbols
-
-  let compare _ _ = Misc.fatal_error "Bound_pattern.compare not yet implemented"
-
-  let equal _ _ = Misc.fatal_error "Bound_pattern.equal not yet implemented"
-
-  let hash _ = Misc.fatal_error "Bound_pattern.hash not yet implemented"
-end)
+let [@ocamlformat "disable"] print ppf t =
+  match t with
+  | Singleton var -> Bound_var.print ppf var
+  | Set_of_closures { name_mode = _; closure_vars; } ->
+    Format.fprintf ppf "@[<hov 1>(%a)@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        Bound_var.print)
+      closure_vars
+  | Symbols { bound_symbols } ->
+    Format.fprintf ppf "@[<hov 1>\
+        @[(bound_symbols@ %a)@]\
+        )@]"
+      Bound_symbols.print bound_symbols
 
 let free_names t =
   match t with
   | Singleton var ->
-    let var = Bound_var.var var in
+    let var = Bound_var.create_var var in
     Name_occurrences.singleton_variable var Name_mode.normal
   | Set_of_closures { name_mode = _; closure_vars } ->
     List.fold_left
       (fun free_names var ->
-        let var = Bound_var.var var in
+        let var = Bound_var.create_var var in
         Name_occurrences.add_variable free_names var Name_mode.normal)
       Name_occurrences.empty closure_vars
   | Symbols { bound_symbols } -> Bound_symbols.free_names bound_symbols
@@ -91,10 +81,11 @@ let apply_renaming t perm =
 let all_ids_for_export t =
   match t with
   | Singleton var ->
-    Ids_for_export.add_variable Ids_for_export.empty (Bound_var.var var)
+    Ids_for_export.add_variable Ids_for_export.empty (Bound_var.create_var var)
   | Set_of_closures { name_mode = _; closure_vars } ->
     List.fold_left
-      (fun ids var -> Ids_for_export.add_variable ids (Bound_var.var var))
+      (fun ids var ->
+        Ids_for_export.add_variable ids (Bound_var.create_var var))
       Ids_for_export.empty closure_vars
   | Symbols { bound_symbols } -> Bound_symbols.all_ids_for_export bound_symbols
 
@@ -111,16 +102,18 @@ let rename t =
 let renaming t1 ~guaranteed_fresh:t2 =
   match t1, t2 with
   | Singleton var1, Singleton var2 ->
-    Renaming.add_fresh_variable Renaming.empty (Bound_var.var var1)
-      ~guaranteed_fresh:(Bound_var.var var2)
+    Renaming.add_fresh_variable Renaming.empty
+      (Bound_var.create_var var1)
+      ~guaranteed_fresh:(Bound_var.create_var var2)
   | ( Set_of_closures { name_mode = _; closure_vars = closure_vars1 },
       Set_of_closures { name_mode = _; closure_vars = closure_vars2 } ) ->
     if List.compare_lengths closure_vars1 closure_vars2 = 0
     then
       List.fold_left2
         (fun renaming var1 var2 ->
-          Renaming.add_fresh_variable renaming (Bound_var.var var1)
-            ~guaranteed_fresh:(Bound_var.var var2))
+          Renaming.add_fresh_variable renaming
+            (Bound_var.create_var var1)
+            ~guaranteed_fresh:(Bound_var.create_var var2))
         Renaming.empty closure_vars1 closure_vars2
     else
       Misc.fatal_errorf "Mismatching closure vars:@ %a@ and@ %a" print t1 print

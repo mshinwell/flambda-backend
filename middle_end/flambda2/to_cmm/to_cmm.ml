@@ -864,14 +864,14 @@ and bind_simple (env, res) v ~num_normal_occurrences_of_bound_vars s =
   let_expr_bind env v ~num_normal_occurrences_of_bound_vars cmm_expr effs, res
 
 and let_expr_simple body env res v ~num_normal_occurrences_of_bound_vars s =
-  let v = Bound_var.var v in
+  let v = Bound_var.create_var v in
   let env, res =
     bind_simple (env, res) v ~num_normal_occurrences_of_bound_vars s
   in
   expr env res body
 
 and let_expr_prim body env res v ~num_normal_occurrences_of_bound_vars p dbg =
-  let v = Bound_var.var v in
+  let v = Bound_var.create_var v in
   let cmm_expr, extra, env, res, effs = prim env res dbg p in
   let effs = Ece.join effs (Flambda_primitive.effects_and_coeffects p) in
   let env =
@@ -1440,7 +1440,7 @@ and let_static_set_of_closures env res body closure_vars s layout =
   let closure_symbols =
     List.map2
       (fun cid v ->
-        let v = Bound_var.var v in
+        let v = Bound_var.create_var v in
         (* rename v just to have a different name for the symbol and the
            variable *)
         let name = Variable.unique_name (Variable.rename v) in
@@ -1468,7 +1468,7 @@ and let_static_set_of_closures env res body closure_vars s layout =
   let env =
     List.fold_left2
       (fun acc cid v ->
-        let v = Bound_var.var v in
+        let v = Bound_var.create_var v in
         let sym = symbol (Closure_id.Map.find cid closure_symbols) in
         let sym_cmm = C.symbol sym in
         Env.bind_variable acc v Ece.pure false sym_cmm)
@@ -1512,7 +1512,7 @@ and let_dynamic_set_of_closures env res body closure_vars s
         match get_closure_by_offset env soc_cmm_var cid with
         | None -> acc
         | Some (e, effs) ->
-          let v = Bound_var.var v in
+          let v = Bound_var.create_var v in
           let_expr_bind acc v ~num_normal_occurrences_of_bound_vars e effs)
       env
       (Closure_id.Lmap.keys decls)
