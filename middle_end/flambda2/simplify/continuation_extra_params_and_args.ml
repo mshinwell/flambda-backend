@@ -55,7 +55,7 @@ let [@ocamlformat "disable"] print ppf { extra_params; extra_args; } =
       @[<hov 1>(extra_params@ %a)@]@ \
       @[<hov 1>(extra_args@ %a)@]\
       )@]"
-    Bound_parameter.List.print extra_params
+    Bound_parameters.print extra_params
     (Apply_cont_rewrite_id.Map.print Extra_arg.List.print) extra_args
 
 let empty = { extra_params = []; extra_args = Apply_cont_rewrite_id.Map.empty }

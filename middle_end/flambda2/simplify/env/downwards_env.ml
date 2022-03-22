@@ -319,7 +319,7 @@ let add_parameters ?(name_mode = Name_mode.normal) ?at_unit_toplevel t params
   then
     Misc.fatal_errorf
       "Mismatch between number of [params] and [param_types]:@ (%a)@ and@ %a"
-      Bound_parameter.List.print params
+      Bound_parameters.print params
       (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
       param_types;
   let at_unit_toplevel =
@@ -343,7 +343,8 @@ let add_parameters_with_unknown_types ?name_mode ?at_unit_toplevel t params =
 
 let mark_parameters_as_toplevel t params =
   let variables_defined_at_toplevel =
-    Variable.Set.union t.variables_defined_at_toplevel (BP.List.var_set params)
+    Variable.Set.union t.variables_defined_at_toplevel
+      (Bound_parameters.var_set params)
   in
   { t with variables_defined_at_toplevel }
 

@@ -86,7 +86,7 @@ let add_non_inlinable_continuation t cont scope ~params ~handler =
   match params with
   | [] -> add_continuation0 t cont scope (Non_inlinable_zero_arity { handler })
   | _ :: _ ->
-    let arity = Bound_parameter.List.arity_with_subkinds params in
+    let arity = Bound_parameters.arity_with_subkinds params in
     add_continuation0 t cont scope (Non_inlinable_non_zero_arity { arity })
 
 let add_unreachable_continuation t cont scope arity =

@@ -480,7 +480,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       let code =
         Code.create code_id ~params_and_body
           ~free_names_of_params_and_body:free_names ~newer_version_of:None
-          ~params_arity:(BP.List.arity_with_subkinds remaining_params)
+          ~params_arity:(Bound_parameters.arity_with_subkinds remaining_params)
           ~num_trailing_local_params ~result_arity ~result_types
           ~contains_no_escaping_local_allocs ~stub:true ~inline:Default_inline
           ~is_a_functor:false ~recursive ~cost_metrics:cost_metrics_of_body

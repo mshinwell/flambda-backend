@@ -915,7 +915,7 @@ let check_params_and_types ~params ~param_types =
   then
     Misc.fatal_errorf
       "Mismatch between number of [params] and [param_types]:@ (%a)@ and@ %a"
-      Bound_parameter.List.print params
+      Bound_parameters.print params
       (Format.pp_print_list ~pp_sep:Format.pp_print_space TG.print)
       param_types
 

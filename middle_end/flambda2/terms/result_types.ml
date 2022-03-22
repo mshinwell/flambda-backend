@@ -19,16 +19,16 @@ module TEEV = T.Typing_env_extension.With_extra_variables
 
 module Bound = struct
   type t =
-    { params : Bound_parameter.List.t;
-      results : Bound_parameter.List.t;
+    { params : Bound_parameters.t;
+      results : Bound_parameters.t;
       other_vars : Variable.t list
     }
 
   let free_names { params; results; other_vars } =
     let free_names =
       Name_occurrences.union
-        (Bound_parameter.List.free_names params)
-        (Bound_parameter.List.free_names results)
+        (Bound_parameters.free_names params)
+        (Bound_parameters.free_names results)
     in
     List.fold_left
       (fun free_names var ->
@@ -36,8 +36,8 @@ module Bound = struct
       free_names other_vars
 
   let apply_renaming { params; results; other_vars } renaming =
-    let params = Bound_parameter.List.apply_renaming params renaming in
-    let results = Bound_parameter.List.apply_renaming results renaming in
+    let params = Bound_parameters.apply_renaming params renaming in
+    let results = Bound_parameters.apply_renaming results renaming in
     let other_vars =
       List.map (fun var -> Renaming.apply_variable renaming var) other_vars
     in
@@ -46,16 +46,16 @@ module Bound = struct
   let all_ids_for_export { params; results; other_vars } =
     let ids =
       Ids_for_export.union
-        (Bound_parameter.List.all_ids_for_export params)
-        (Bound_parameter.List.all_ids_for_export results)
+        (Bound_parameters.all_ids_for_export params)
+        (Bound_parameters.all_ids_for_export results)
     in
     List.fold_left
       (fun ids var -> Ids_for_export.add_variable ids var)
       ids other_vars
 
   let rename { params; results; other_vars } =
-    let params = Bound_parameter.List.rename params in
-    let results = Bound_parameter.List.rename results in
+    let params = Bound_parameters.rename params in
+    let results = Bound_parameters.rename results in
     let other_vars = List.map (fun var -> Variable.rename var) other_vars in
     { params; results; other_vars }
 
@@ -63,7 +63,7 @@ module Bound = struct
     Format.fprintf ppf
       "@[<hov 1>(@[<hov 1>(params@ (%a))@]@ @[<hov 1>(results@ (%a))@]@ @[<hov \
        1>(other_vars@ (%a))@])@]"
-      Bound_parameter.List.print params Bound_parameter.List.print results
+      Bound_parameters.print params Bound_parameters.print results
       (Format.pp_print_list ~pp_sep:Format.pp_print_space Variable.print)
       other_vars
 
@@ -112,7 +112,7 @@ let print ppf t =
   Format.fprintf ppf
     "@[<hov 1>(@[<hov 1>(params@ (%a))@]@ @[<hov 1>(results@ %a)@]@ @[<hov \
      1>(other_vars@ (%a))@]@ @[<hov 1>(env_extension@ (%a))@])@]"
-    Bound_parameter.List.print params Bound_parameter.List.print results
+    Bound_parameters.print params Bound_parameters.print results
     (Format.pp_print_list ~pp_sep:Format.pp_print_space Variable.print)
     other_vars TEEV.print env_extension
 

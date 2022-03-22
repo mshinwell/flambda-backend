@@ -588,7 +588,8 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
             Name_occurrences.remove_var free_names_of_code my_depth
           in
           let free_names_of_code =
-            Name_occurrences.diff free_names_of_code (BP.List.free_names params)
+            Name_occurrences.diff free_names_of_code
+              (Bound_parameters.free_names params)
           in
           let free_names_of_code =
             Name_occurrences.diff free_names_of_code
@@ -605,7 +606,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
                %a@ \n\
                Simplified version:@ fun %a %a %a ->@ \n\
               \  %a" Name_occurrences.print free_names_of_code Code_id.print
-              code_id BP.List.print params Variable.print my_closure
+              code_id Bound_parameters.print params Variable.print my_closure
               Variable.print my_depth
               (RE.print (UA.are_rebuilding_terms uacc))
               body;
@@ -625,7 +626,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
             (Flambda_colours.error ())
             (Flambda_colours.normal ())
             (Format.pp_print_option Closure_id.print)
-            closure_id_opt Bound_parameter.List.print params Continuation.print
+            closure_id_opt Bound_parameters.print params Continuation.print
             return_continuation Continuation.print exn_continuation
             Variable.print my_closure Expr.print body DA.print dacc;
           Printexc.raise_with_backtrace Misc.Fatal_error bt)
@@ -698,7 +699,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
         | No_uses -> assert false (* should have been caught above *)
         | Uses { handler_env; _ } ->
           let params_and_results =
-            BP.List.var_set (params @ return_cont_params)
+            Bound_parameters.var_set (params @ return_cont_params)
           in
           let typing_env = DE.typing_env handler_env in
           let results_and_types =

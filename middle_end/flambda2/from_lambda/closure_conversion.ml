@@ -1218,7 +1218,7 @@ let close_one_function acc ~external_env ~by_closure_id decl ~has_lifted_closure
     |> Acc.remove_continuation_from_free_names
          (Exn_continuation.exn_handler exn_continuation)
   in
-  let params_arity = BP.List.arity_with_subkinds params in
+  let params_arity = Bound_parameters.arity_with_subkinds params in
   let is_tupled =
     match Function_decl.kind decl with Curried _ -> false | Tupled -> true
   in

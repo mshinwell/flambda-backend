@@ -110,7 +110,7 @@ end
 
 let cse_with_eligible_lhs ~typing_env_at_fork ~cse_at_each_use ~params prev_cse
     (extra_bindings : EPA.t) extra_equations =
-  let params = BP.List.name_set params in
+  let params = Bound_parameters.name_set params in
   let is_param simple =
     Simple.pattern_match simple
       ~name:(fun name ~coercion:_ -> Name.Set.mem name params)

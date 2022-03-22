@@ -825,8 +825,7 @@ let named_exprs env named1 named2 : Named.t Comparison.t =
 (* Compares the two patterns for compatibility *and* adds the
  * correspondences to the environment. *)
 let patterns env (pattern1 : Bound_static.Pattern.t)
-    (pattern2 : Bound_static.Pattern.t) : Bound_static.Pattern.t Comparison.t
-    =
+    (pattern2 : Bound_static.Pattern.t) : Bound_static.Pattern.t Comparison.t =
   match pattern1, pattern2 with
   | Code code_id1, Code code_id2 ->
     Env.add_code_id env code_id1 code_id2;
@@ -859,8 +858,7 @@ let patterns env (pattern1 : Bound_static.Pattern.t)
 
 (* Compares the two sets of bound symbols for compatibility *and* adds the
  * correspondences to the environment. *)
-let bound_static env bound_static1 bound_static2 :
-    Bound_static.t Comparison.t =
+let bound_static env bound_static1 bound_static2 : Bound_static.t Comparison.t =
   lists ~f:patterns ~subst:subst_pattern ~subst_snd:false env
     (bound_static1 |> Bound_static.to_list)
     (bound_static2 |> Bound_static.to_list)

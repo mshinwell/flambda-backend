@@ -98,7 +98,7 @@ let wrap_inlined_body_for_exn_support acc ~extra_args ~apply_exn_continuation
           ~dbg:Debuginfo.none
       in
       let_cont_create acc pop_wrapper_cont
-        ~handler_params:(Bound_parameter.List.create kinded_params)
+        ~handler_params:(Bound_parameters.create kinded_params)
         ~handler ~body ~is_exn_handler:false
   in
   let param = Variable.create "exn" in

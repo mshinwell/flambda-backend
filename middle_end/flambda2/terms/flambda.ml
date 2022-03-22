@@ -596,7 +596,7 @@ and print_continuation_handler (recursive : Recursive.t) ppf k
       (if is_exn_handler then "[eh]" else "")
       (Flambda_colours.normal ());
     if List.length params > 0
-    then fprintf ppf " %a" Bound_parameter.List.print params;
+    then fprintf ppf " %a" Bound_parameters.print params;
     fprintf ppf "@<0>%s #%a:@<0>%s@]@ @[<hov 0>%a@]" (Flambda_colours.elide ())
       (Or_unknown.print Num_occurrences.print)
       occurrences
@@ -635,7 +635,7 @@ and print_function_params_and_body ppf t =
       (Flambda_colours.lambda ())
       (Flambda_colours.normal ())
       Continuation.print return_continuation Continuation.print exn_continuation
-      Bound_parameter.List.print params Bound_parameter.print my_closure
+      Bound_parameters.print params Bound_parameter.print my_closure
       (Flambda_colours.depth_variable ())
       Variable.print my_depth (Flambda_colours.elide ())
       (Flambda_colours.normal ())
@@ -1022,7 +1022,7 @@ module Continuation_handler = struct
 
   let create params ~handler ~(free_names_of_handler : _ Or_unknown.t)
       ~is_exn_handler =
-    BP.List.check_no_duplicates params;
+    Bound_parameters.check_no_duplicates params;
     let num_normal_occurrences_of_params =
       match free_names_of_handler with
       | Unknown -> Variable.Map.empty
@@ -1109,7 +1109,7 @@ module Function_params_and_body = struct
 
   let create ~return_continuation ~exn_continuation params ~body
       ~free_names_of_body ~my_closure ~my_depth =
-    BP.List.check_no_duplicates params;
+    Bound_parameters.check_no_duplicates params;
     let is_my_closure_used =
       Or_unknown.map free_names_of_body ~f:(fun free_names_of_body ->
           Name_occurrences.mem_var free_names_of_body my_closure)
@@ -1641,7 +1641,7 @@ module Expr = struct
     if List.compare_lengths params args <> 0
     then
       Misc.fatal_errorf "Mismatching parameters and arguments: %a and %a"
-        BP.List.print params Simple.List.print args;
+        Bound_parameters.print params Simple.List.print args;
     ListLabels.fold_left2 (List.rev params) (List.rev args) ~init:body
       ~f:(fun expr param arg ->
         let var = Bound_var.create (BP.var param) Name_mode.normal in

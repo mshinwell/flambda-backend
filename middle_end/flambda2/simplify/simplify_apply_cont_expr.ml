@@ -37,7 +37,8 @@ let inline_linearly_used_continuation uacc ~create_apply_cont ~params ~handler
       Misc.fatal_errorf
         "Parameter list@ [%a]@ does not match argument list@ [%a]@ when \
          inlining at [Apply_cont]:@ %a@ Handler to inline:@ %a"
-        BP.List.print params Simple.List.print args Apply_cont.print apply_cont
+        Bound_parameters.print params Simple.List.print args Apply_cont.print
+        apply_cont
         (RE.print (UA.are_rebuilding_terms uacc))
         handler;
     let bindings_outermost_first =

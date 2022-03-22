@@ -17,7 +17,7 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module BP = Bound_parameter
-include BP.List
+include Bound_parameters
 
 let create params =
   let params_set = BP.Set.of_list params in
@@ -25,7 +25,7 @@ let create params =
   then
     Misc.fatal_errorf
       "Names provided to [Bound_parameters.create] must be disjoint:@ %a"
-      BP.List.print params;
+      Bound_parameters.print params;
   params
 
 let to_list t = t

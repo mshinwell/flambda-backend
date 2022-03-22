@@ -308,10 +308,10 @@ let rebuild_non_recursive_let_cont_handler cont
         in
         match behaviour with
         | Unreachable ->
-          let arity = BP.List.arity_with_subkinds params in
+          let arity = Bound_parameters.arity_with_subkinds params in
           UE.add_unreachable_continuation uenv cont scope arity
         | Alias_for alias_for ->
-          let arity = BP.List.arity_with_subkinds params in
+          let arity = Bound_parameters.arity_with_subkinds params in
           UE.add_continuation_alias uenv cont arity ~alias_for
         | Unknown ->
           UE.add_non_inlinable_continuation uenv cont scope ~params
@@ -653,7 +653,7 @@ let after_downwards_traversal_of_non_recursive_let_cont_body ~simplify_expr
     dacc_after_body ~rebuild:rebuild_body =
   let dacc_after_body =
     DA.map_data_flow dacc_after_body
-      ~f:(Data_flow.enter_continuation cont (Bound_parameter.List.vars params))
+      ~f:(Data_flow.enter_continuation cont (Bound_parameters.vars params))
   in
   (* Before the upwards traversal of the body, we do the downwards traversal of
      the handler. *)
@@ -829,7 +829,7 @@ let simplify_recursive_let_cont_handlers ~simplify_expr ~denv_before_body
     ~original_cont_scope ~down_to_up =
   let dacc_after_body =
     DA.map_data_flow dacc_after_body
-      ~f:(Data_flow.enter_continuation cont (Bound_parameter.List.vars params))
+      ~f:(Data_flow.enter_continuation cont (Bound_parameters.vars params))
   in
   let denv, _arg_types =
     (* XXX These don't have the same scope level as the non-recursive case *)

@@ -635,7 +635,7 @@ let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
     Misc.fatal_errorf
       "Arguments to this [Apply_cont]@ (%a)@ do not match@ [original_params] \
        (%a):@ %a"
-      Apply_cont.print apply_cont BP.List.print original_params
+      Apply_cont.print apply_cont Bound_parameters.print original_params
       Simple.List.print args;
   let original_params_with_args = List.combine original_params args in
   let args =
@@ -718,14 +718,16 @@ let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
 let rewrite_exn_continuation rewrite id exn_cont =
   let exn_cont_arity = Exn_continuation.arity exn_cont in
   let original_params = Apply_cont_rewrite.original_params rewrite in
-  let original_params_arity = BP.List.arity_with_subkinds original_params in
+  let original_params_arity =
+    Bound_parameters.arity_with_subkinds original_params
+  in
   if not
        (Flambda_arity.With_subkinds.equal exn_cont_arity original_params_arity)
   then
     Misc.fatal_errorf
       "Arity of exception continuation %a does not match@ [original_params] \
        (%a)"
-      Exn_continuation.print exn_cont BP.List.print original_params;
+      Exn_continuation.print exn_cont Bound_parameters.print original_params;
   assert (List.length exn_cont_arity >= 1);
   let pre_existing_extra_params_with_args =
     List.combine (List.tl original_params)

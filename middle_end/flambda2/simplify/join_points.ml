@@ -94,7 +94,7 @@ let meet_equations_on_params typing_env ~params ~param_types =
     Misc.fatal_errorf
       "Mismatch between number of continuation parameters and arguments at a \
        use site:@ (%a)@ and@ %a"
-      Bound_parameter.List.print params
+      Bound_parameters.print params
       (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
       param_types;
   List.fold_left2

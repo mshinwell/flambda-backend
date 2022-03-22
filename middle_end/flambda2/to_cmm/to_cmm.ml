@@ -1005,7 +1005,7 @@ and continuation_arg_tys h =
 
 and continuation_handler env res h =
   let args, _, handler = continuation_handler_split h in
-  let arity = Bound_parameter.List.arity args in
+  let arity = Bound_parameters.arity args in
   let env, vars = var_list env args in
   let e, res = expr env res handler in
   vars, arity, e, res

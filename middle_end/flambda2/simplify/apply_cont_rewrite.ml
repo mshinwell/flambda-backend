@@ -50,9 +50,9 @@ let [@ocamlformat "disable"] print ppf { original_params; used_params; used_extr
       @[<hov 1>(used_extra_params@ (%a))@]@ \
       @[<hov 1>(extra_args@ %a)@]\
       )@]"
-    BP.List.print original_params
+    Bound_parameters.print original_params
     BP.Set.print used_params
-    BP.List.print used_extra_params
+    Bound_parameters.print used_extra_params
     (Id.Map.print print_ea_used) extra_args
 
 let does_nothing t =
@@ -61,19 +61,19 @@ let does_nothing t =
 
 let create ~original_params ~used_params ~extra_params ~extra_args
     ~used_extra_params =
-  BP.List.check_no_duplicates original_params;
-  BP.List.check_no_duplicates extra_params;
+  Bound_parameters.check_no_duplicates original_params;
+  Bound_parameters.check_no_duplicates extra_params;
   if List.length original_params < BP.Set.cardinal used_params
   then
     Misc.fatal_errorf
       "Must have at least as many [original_params] (%a)@ as [used_params] (%a)"
-      BP.List.print original_params BP.Set.print used_params;
+      Bound_parameters.print original_params BP.Set.print used_params;
   if List.length extra_params < BP.Set.cardinal used_extra_params
   then
     Misc.fatal_errorf
       "Must have at least as many [extra_params] (%a)@ as [used_extra_params] \
        (%a)"
-      BP.List.print extra_params BP.Set.print used_extra_params;
+      Bound_parameters.print extra_params BP.Set.print used_extra_params;
   let extra_args =
     Id.Map.map
       (fun extra_args ->
@@ -82,7 +82,7 @@ let create ~original_params ~used_params ~extra_params ~extra_args
           Misc.fatal_errorf
             "Lengths of [extra_params] (%a)@ and all [extra_args] (e.g. %a) \
              should be equal"
-            BP.List.print extra_params
+            Bound_parameters.print extra_params
             Continuation_extra_params_and_args.Extra_arg.List.print extra_args;
         let extra_params_and_args = List.combine extra_params extra_args in
         List.map
@@ -123,4 +123,5 @@ let extra_args t id =
     []
   | extra_args -> extra_args
 
-let original_params_arity t = BP.List.arity_with_subkinds t.original_params
+let original_params_arity t =
+  Bound_parameters.arity_with_subkinds t.original_params
