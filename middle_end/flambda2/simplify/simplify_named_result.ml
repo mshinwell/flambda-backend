@@ -76,7 +76,7 @@ let bindings_to_place_in_any_order t =
   | Multiple_bindings_to_symbols
       { bound_vars_to_symbols; original_defining_expr } ->
     ListLabels.fold_left bound_vars_to_symbols ~init:[]
-      ~f:(fun bound_var symbol bindings ->
+      ~f:(fun bindings (bound_var, symbol) ->
         let let_bound = Bound_pattern.singleton bound_var in
         let simplified_defining_expr =
           Simple.symbol symbol |> Flambda.Named.create_simple

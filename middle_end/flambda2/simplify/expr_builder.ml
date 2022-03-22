@@ -17,7 +17,6 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 open! Flambda.Import
-module BLB = Bound_pattern
 module BP = Bound_parameter
 module LC = Lifted_constant
 module LCS = Lifted_constant_state
@@ -91,7 +90,7 @@ let add_set_of_closures_offsets ~is_phantom named uacc =
              acc)
          uacc
 
-let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
+let create_let uacc (bound_vars : Bound_pattern.t) (defining_expr : Named.t)
     ~free_names_of_defining_expr ~body ~cost_metrics_of_defining_expr =
   (* The name occurrences component of [uacc] is expected to be in the state
      described in the comment at the top of [Simplify_let.rebuild_let]. *)
@@ -105,7 +104,8 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
         Name_occurrences.greatest_name_mode_var free_names_of_body
           (VB.var bound_var)
       | Set_of_closures _ ->
-        BLB.fold_all_bound_vars bound_vars ~init:Name_mode.Or_absent.absent
+        Bound_pattern.fold_all_bound_vars bound_vars
+          ~init:Name_mode.Or_absent.absent
           ~f:(fun (greatest_name_mode : Name_mode.Or_absent.t) bound_var ->
             let name_mode =
               Name_occurrences.greatest_name_mode_var free_names_of_body
@@ -118,10 +118,10 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
             | Present name_mode, Present greatest_name_mode ->
               Name_mode.join_in_terms name_mode greatest_name_mode
               |> Name_mode.Or_absent.present)
-      | Symbols _ -> assert false
+      | Static _ -> assert false
       (* see below *)
     in
-    let declared_name_mode = BLB.name_mode bound_vars in
+    let declared_name_mode = Bound_pattern.name_mode bound_vars in
     begin
       match
         Name_mode.Or_absent.compare_partial_order greatest_name_mode
@@ -136,9 +136,9 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
             "[Let]-binding declares variable(s) %a (mode %a) to be bound to@ \
              %a,@ but there exist occurrences for such variable(s) at a higher \
              mode@ (>= %a)@ in the body (free names %a):@ %a"
-            BLB.print bound_vars Name_mode.print declared_name_mode Named.print
-            defining_expr Name_mode.Or_absent.print greatest_name_mode
-            Name_occurrences.print free_names_of_body
+            Bound_pattern.print bound_vars Name_mode.print declared_name_mode
+            Named.print defining_expr Name_mode.Or_absent.print
+            greatest_name_mode Name_occurrences.print free_names_of_body
             (RE.print (UA.are_rebuilding_terms uacc))
             body
     end;
@@ -149,7 +149,7 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
         Misc.fatal_errorf
           "Cannot [Let]-bind non-normal variable(s) to a [Named] that has more \
            than generative effects:@ %a@ =@ %a"
-          BLB.print bound_vars Named.print defining_expr;
+          Bound_pattern.print bound_vars Named.print defining_expr;
       bound_vars, Some Name_mode.normal, Nothing_deleted_at_runtime
     end
     else
@@ -161,7 +161,7 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
       let has_uses = Name_mode.Or_absent.is_present greatest_name_mode in
       let can_phantomise =
         (not is_depth)
-        && BLB.exists_all_bound_vars bound_vars ~f:(fun bound_var ->
+        && Bound_pattern.exists_all_bound_vars bound_vars ~f:(fun bound_var ->
                Variable.user_visible (VB.var bound_var))
       in
       let will_delete_binding =
@@ -180,7 +180,7 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
           | Present name_mode -> name_mode
         in
         assert (Name_mode.can_be_in_terms name_mode);
-        let bound_vars = BLB.with_name_mode bound_vars name_mode in
+        let bound_vars = Bound_pattern.with_name_mode bound_vars name_mode in
         if Name_mode.is_normal name_mode
         then bound_vars, Some name_mode, Nothing_deleted_at_runtime
         else
@@ -208,12 +208,12 @@ let create_let uacc (bound_vars : BLB.t) (defining_expr : Named.t)
       if not is_phantom
       then free_names_of_defining_expr
       else
-        Name_occurrences.downgrade_occurrences_at_strictly_greater_kind
+        Name_occurrences.downgrade_occurrences_at_strictly_greater_name_mode
           free_names_of_defining_expr name_mode
     in
     let free_names_of_let =
       let without_bound_vars =
-        BLB.fold_all_bound_vars bound_vars ~init:free_names_of_body
+        Bound_pattern.fold_all_bound_vars bound_vars ~init:free_names_of_body
           ~f:(fun free_names bound_var ->
             Name_occurrences.remove_var free_names (VB.var bound_var))
       in
@@ -242,8 +242,10 @@ let create_coerced_singleton_let uacc var defining_expr
     ~cost_metrics_of_defining_expr =
   if Coercion.is_id coercion_from_defining_expr_to_var
   then
-    create_let uacc (BLB.singleton var) defining_expr
-      ~free_names_of_defining_expr ~body ~cost_metrics_of_defining_expr
+    create_let uacc
+      (Bound_pattern.singleton var)
+      defining_expr ~free_names_of_defining_expr ~body
+      ~cost_metrics_of_defining_expr
   else
     match (defining_expr : Named.t) with
     | Simple simple ->
@@ -251,8 +253,10 @@ let create_coerced_singleton_let uacc var defining_expr
         Simple.apply_coercion_exn simple coercion_from_defining_expr_to_var
         |> Named.create_simple
       in
-      create_let uacc (BLB.singleton var) defining_expr
-        ~free_names_of_defining_expr ~body ~cost_metrics_of_defining_expr
+      create_let uacc
+        (Bound_pattern.singleton var)
+        defining_expr ~free_names_of_defining_expr ~body
+        ~cost_metrics_of_defining_expr
     | Prim _ | Set_of_closures _ | Static_consts _ | Rec_info _ -> (
       let uncoerced_var =
         let name = "uncoerced_" ^ Variable.raw_name (VB.var var) in
@@ -269,13 +273,17 @@ let create_coerced_singleton_let uacc var defining_expr
         let cost_metrics_of_defining_expr =
           Code_size.simple defining_simple |> Cost_metrics.from_size
         in
-        create_let uacc (BLB.singleton var) defining_expr
-          ~free_names_of_defining_expr ~body ~cost_metrics_of_defining_expr
+        create_let uacc
+          (Bound_pattern.singleton var)
+          defining_expr ~free_names_of_defining_expr ~body
+          ~cost_metrics_of_defining_expr
       in
       let generate_outer_binding name_mode =
         (* Generate [let uncoerced_var = <defining_expr>] *)
         let ((_body, _uacc, outer_result) as outer) =
-          let bound = BLB.singleton (VB.create uncoerced_var name_mode) in
+          let bound =
+            Bound_pattern.singleton (VB.create uncoerced_var name_mode)
+          in
           create_let uacc bound defining_expr ~free_names_of_defining_expr ~body
             ~cost_metrics_of_defining_expr
         in
@@ -327,7 +335,7 @@ let make_new_let_bindings uacc
           | Singleton _ | Set_of_closures _ ->
             create_let uacc let_bound defining_expr ~free_names_of_defining_expr
               ~body:expr ~cost_metrics_of_defining_expr
-          | Symbols _ ->
+          | Static _ ->
             (* Since [Simplified_named] doesn't permit the [Static_consts] case,
                this must be a malformed binding. *)
             Misc.fatal_errorf
@@ -353,7 +361,7 @@ let make_new_let_bindings uacc
 let create_raw_let_symbol uacc bound_static static_consts ~body =
   (* Upon entry to this function, [UA.name_occurrences uacc] must precisely
      indicate the free names of [body]. *)
-  let bindable = Bound_pattern.symbols bound_static in
+  let bindable = Bound_pattern.static bound_static in
   let free_names_of_static_consts =
     Rebuilt_static_const.Group.free_names static_consts
   in

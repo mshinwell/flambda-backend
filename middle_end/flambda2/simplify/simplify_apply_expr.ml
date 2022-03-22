@@ -517,8 +517,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
   in
   let expr =
     let wrapper_var = VB.create wrapper_var Name_mode.normal in
-    let closure_vars = [wrapper_var] in
-    let bound = Bound_pattern.set_of_closures ~closure_vars in
+    let bound_vars = [wrapper_var] in
+    let bound = Bound_pattern.set_of_closures bound_vars in
     let body =
       Let.create bound
         (Named.create_set_of_closures wrapper_taking_remaining_args)
@@ -533,7 +533,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     (* Since we are only generating a "let code" binding and not a "let symbol",
        it doesn't matter if we are not at toplevel. *)
     Let.create
-      (Bound_pattern.symbols bound_static)
+      (Bound_pattern.static bound_static)
       (Named.create_static_consts static_consts)
       ~body ~free_names_of_body:Unknown
     |> Expr.create_let

@@ -182,6 +182,12 @@ let may_be_static t =
   | Static bound_static -> Some bound_static
   | Singleton _ | Set_of_closures _ -> None
 
+let exists_all_bound_vars t ~f =
+  match t with
+  | Singleton var -> f var
+  | Set_of_closures bound_vars -> ListLabels.exists bound_vars ~f
+  | Static _ -> false
+
 let fold_all_bound_vars t ~init ~f =
   match t with
   | Singleton bound_var -> f init bound_var

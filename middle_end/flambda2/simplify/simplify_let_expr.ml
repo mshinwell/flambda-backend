@@ -32,7 +32,7 @@ let keep_lifted_constant_only_if_used uacc acc lifted_constant =
   let symbols_live =
     not
       (Name.Set.intersection_is_empty
-         (Name.set_of_symbol_set (Bound_static.being_defined bound))
+         (Name.set_of_symbol_set (Bound_static.symbols_being_defined bound))
          (UA.required_names uacc))
   in
   if symbols_live || code_ids_live then LCS.add acc lifted_constant else acc
@@ -167,7 +167,7 @@ let record_lifted_constant_for_data_flow data_flow lifted_constant =
        make the code bindings deleted individually. In particular, code IDs that
        are only used in the newer_version_of field of another binding will be
        deleted as expected. *)
-    let symbols = Bound_static.being_defined bound_static in
+    let symbols = Bound_static.symbols_being_defined bound_static in
     Name_occurrences.empty
     |> Symbol.Set.fold
          (fun symbol acc ->
