@@ -31,3 +31,27 @@ val to_list : t -> Bound_parameter.t list
 val rename : t -> t
 
 val renaming : t -> guaranteed_fresh:t -> Renaming.t
+
+val arity : t -> Flambda_arity.t
+
+val arity_with_subkinds : t -> Flambda_arity.With_subkinds.t
+
+(* (** As for [Variable.List.vars]. *) val vars : t -> Variable.t list
+
+   (** As for [vars] but returns a list of [Simple.t] values describing the
+   variables. *) val simples : t -> Simple.t list
+
+   (** As for [vars] but returns a set. *) val var_set : t -> Variable.Set.t
+
+   (** As for [var_set] but returns a set of [Name]s. *) val name_set : t ->
+   Name.Set.t
+
+   val equal_vars : t -> Variable.t list -> bool
+
+   val rename : t -> t
+
+   val print : Format.formatter -> t -> unit
+
+   val equal : t -> t -> bool
+
+   val check_no_duplicates : t -> unit *)
