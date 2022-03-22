@@ -28,10 +28,6 @@ type t = private
           and pieces of code. The scoping of the symbols and code IDs follows
           the dominator tree, not syntactic scope. *)
 
-include Bindable.S with type t := t
-
-include Contains_ids.S with type t := t
-
 val singleton : Bound_var.t -> t
 
 val set_of_closures : Bound_var.t list -> t
@@ -63,3 +59,5 @@ val fold_all_bound_names :
   symbol:('a -> Symbol.t -> 'a) ->
   code_id:('a -> Code_id.t -> 'a) ->
   'a
+
+include Bindable.S with type t := t

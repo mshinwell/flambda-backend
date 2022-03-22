@@ -21,12 +21,6 @@
 
 type t
 
-include Contains_names.S with type t := t
-
-include Contains_ids.S with type t := t
-
-val print : Format.formatter -> t -> unit
-
 val create :
   return_continuation:Continuation.t ->
   exn_continuation:Continuation.t ->
@@ -45,6 +39,4 @@ val my_closure : t -> Variable.t
 
 val my_depth : t -> Variable.t
 
-val rename : t -> t
-
-val renaming : t -> guaranteed_fresh:t -> Renaming.t
+include Bindable.S with type t := t

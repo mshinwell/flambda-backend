@@ -107,7 +107,9 @@ let renaming t1 ~guaranteed_fresh:t2 =
       Misc.fatal_errorf
         "Mismatching bound vars for sets of closures:@ %a@ and@ %a" print t1
         print t2
-  | Static _, Static _ -> Renaming.empty
+  | Static _, Static _ ->
+    (* We never permute symbols or code IDs. *)
+    Renaming.empty
   | (Singleton _ | Set_of_closures _ | Static _), _ ->
     Misc.fatal_errorf "Pattern mismatch:@ %a@ and@ %a" print t1 print t2
 

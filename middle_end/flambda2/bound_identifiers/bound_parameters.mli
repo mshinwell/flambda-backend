@@ -18,10 +18,6 @@
 
 type t
 
-include Bindable.S with type t := t
-
-val print : Format.formatter -> t -> unit
-
 val empty : t
 
 val create : Bound_parameter.t list -> t
@@ -55,3 +51,5 @@ val var_set : t -> Variable.Set.t
 val filter : (Bound_parameter.t -> bool) -> t -> t
 
 val exists : (Bound_parameter.t -> bool) -> t -> bool
+
+include Bindable.S with type t := t

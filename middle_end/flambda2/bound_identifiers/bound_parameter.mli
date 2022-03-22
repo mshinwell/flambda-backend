@@ -16,8 +16,6 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Simple := Reg_width_things.Simple
-
 (** A parameter (to a function, continuation, etc.) together with its kind. *)
 type t
 
@@ -30,15 +28,13 @@ val var : t -> Variable.t
 val name : t -> Name.t
 
 (** As for [var], but returns a [Simple.t] describing the variable. *)
-val simple : t -> Simple.t
+val simple : t -> Reg_width_things.Simple.t
 
 (** The kind of the given parameter. *)
 val kind : t -> Flambda_kind.With_subkind.t
 
 (** Replace the kind of the given parameter. *)
 val with_kind : t -> Flambda_kind.With_subkind.t -> t
-
-(* CR mshinwell: We should use [Name.t] underneath *)
 
 (** Returns [true] iff the provided kinded parameters have the same kind and
     subkind. *)

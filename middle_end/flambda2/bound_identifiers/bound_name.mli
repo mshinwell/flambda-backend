@@ -14,10 +14,10 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-(** A [Name] equipped with extra information that arises from the name occurring
-    in binding position. *)
+(** A [Name] equipped with the extra information required to have it in binding
+    position. *)
 
 type t
 
