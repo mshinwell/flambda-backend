@@ -16,6 +16,9 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+(** The identifiers (implicit and explicit function parameters, together with
+    return and exception continuations) bound at a lambda in the term language. *)
+
 type t
 
 include Contains_names.S with type t := t
@@ -27,7 +30,7 @@ val print : Format.formatter -> t -> unit
 val create :
   return_continuation:Continuation.t ->
   exn_continuation:Continuation.t ->
-  params:Bound_parameter.t list ->
+  params:Bound_parameters.t ->
   my_closure:Variable.t ->
   my_depth:Variable.t ->
   t
@@ -36,7 +39,7 @@ val return_continuation : t -> Continuation.t
 
 val exn_continuation : t -> Continuation.t
 
-val params : t -> Bound_parameter.t list
+val params : t -> Bound_parameters.t
 
 val my_closure : t -> Variable.t
 

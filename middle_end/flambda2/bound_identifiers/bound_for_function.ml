@@ -21,7 +21,7 @@ module BP = Bound_parameter
 type t =
   { return_continuation : Continuation.t;
     exn_continuation : Continuation.t;
-    params : BP.t list;
+    params : Bound_parameters.t;
     my_closure : Variable.t;
     my_depth : Variable.t
   }
@@ -142,6 +142,8 @@ let renaming
       ~guaranteed_fresh:exn_continuation2
   in
   let renaming =
+    let params1 = Bound_parameters.to_list params1 in
+    let params2 = Bound_parameters.to_list params2 in
     try
       List.fold_left2
         (fun renaming param1 param2 ->

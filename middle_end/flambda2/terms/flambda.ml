@@ -595,7 +595,7 @@ and print_continuation_handler (recursive : Recursive.t) ppf k
       (Flambda_colours.continuation_annotation ())
       (if is_exn_handler then "[eh]" else "")
       (Flambda_colours.normal ());
-    if List.length params > 0
+    if not (Bound_parameters.is_empty params)
     then fprintf ppf " %a" Bound_parameters.print params;
     fprintf ppf "@<0>%s #%a:@<0>%s@]@ @[<hov 0>%a@]" (Flambda_colours.elide ())
       (Or_unknown.print Num_occurrences.print)
@@ -615,12 +615,12 @@ and print_continuation_handler (recursive : Recursive.t) ppf k
           let apply_renaming = apply_renaming_continuation_handler_t0
         end) in
     let<> params, { handler; _ } = t.cont_handler_abst in
-    print (Bound_parameters.to_list params) ~handler
+    print params ~handler
   else
     let params, { handler; num_normal_occurrences_of_params = _ } =
       Name_abstraction.peek_for_printing t.cont_handler_abst
     in
-    print (Bound_parameters.to_list params) ~handler
+    print params ~handler
 
 and print_function_params_and_body ppf t =
   let print ~return_continuation ~exn_continuation params ~body ~my_closure
@@ -1027,8 +1027,8 @@ module Continuation_handler = struct
       match free_names_of_handler with
       | Unknown -> Variable.Map.empty
       | Known free_names_of_handler ->
-        ListLabels.fold_left params ~init:Variable.Map.empty
-          ~f:(fun num_occurrences param ->
+        ListLabels.fold_left (Bound_parameters.to_list params)
+          ~init:Variable.Map.empty ~f:(fun num_occurrences param ->
             let var = Bound_parameter.var param in
             let num =
               Name_occurrences.count_variable_normal_mode free_names_of_handler
@@ -1037,7 +1037,7 @@ module Continuation_handler = struct
             Variable.Map.add var num num_occurrences)
     in
     let t0 : T0.t = { num_normal_occurrences_of_params; handler } in
-    let cont_handler_abst = A.create (Bound_parameters.create params) t0 in
+    let cont_handler_abst = A.create params t0 in
     { cont_handler_abst; is_exn_handler }
 
   let pattern_match t ~f =

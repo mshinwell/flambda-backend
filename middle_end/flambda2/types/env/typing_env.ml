@@ -911,7 +911,7 @@ let add_definitions_of_params t ~params =
 
 let check_params_and_types ~params ~param_types =
   if Flambda_features.check_invariants ()
-     && List.compare_lengths params param_types <> 0
+     && List.compare_lengths (Bound_parameters.to_list params) param_types <> 0
   then
     Misc.fatal_errorf
       "Mismatch between number of [params] and [param_types]:@ (%a)@ and@ %a"
@@ -924,7 +924,9 @@ let add_equations_on_params t ~params ~param_types ~meet_type =
   List.fold_left2
     (fun t param param_type ->
       add_equation t (Bound_parameter.name param) param_type ~meet_type)
-    t params param_types
+    t
+    (Bound_parameters.to_list params)
+    param_types
 
 let add_to_code_age_relation t ~new_code_id ~old_code_id =
   let code_age_relation =
