@@ -1483,7 +1483,7 @@ let close_let_rec acc env ~function_declarations
     let acc, body = body acc env in
     let named = Named.create_set_of_closures set_of_closures in
     Let_with_acc.create acc
-      (Bound_pattern.set_of_closures ~closure_vars)
+      (Bound_pattern.set_of_closures closure_vars)
       named ~body
 
 let wrap_partial_application acc env apply_continuation (apply : IR.apply)
@@ -1761,7 +1761,7 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
     Code_id.Map.fold
       (fun code_id code (g2c, s2g) ->
         let id = fresh_group_id () in
-        let bound = Bound_symbols.Pattern.code code_id in
+        let bound = Bound_static.Pattern.code code_id in
         let const = Static_const_or_code.create_code code in
         ( GroupMap.add id (bound, const) g2c,
           CIS.Map.add (CIS.create_code_id code_id) id s2g ))
@@ -1773,7 +1773,7 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
       (fun (g2c, s2g) (symbols, set_of_closures) ->
         let id = fresh_group_id () in
         let symbols = Closure_id.Lmap.map fst symbols in
-        let bound = Bound_symbols.Pattern.set_of_closures symbols in
+        let bound = Bound_static.Pattern.set_of_closures symbols in
         let const =
           Static_const_or_code.create_static_const
             (Set_of_closures set_of_closures)
@@ -1818,22 +1818,22 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
         | No_loop group_id -> [group_id]
         | Has_loop group_ids -> group_ids
       in
-      let bound_symbols, static_consts =
+      let bound_static, static_consts =
         List.fold_left
-          (fun (bound_symbols, static_consts) group_id ->
+          (fun (bound_static, static_consts) group_id ->
             let bound_symbol, static_const =
               try GroupMap.find group_id group_to_bound_consts
               with Not_found ->
                 Misc.fatal_errorf "Unbound static consts group ID %d" group_id
             in
-            bound_symbol :: bound_symbols, static_const :: static_consts)
+            bound_symbol :: bound_static, static_const :: static_consts)
           ([], []) group_ids
       in
       let defining_expr =
         Static_const_group.create static_consts |> Named.create_static_consts
       in
       Let_with_acc.create acc
-        (Bound_pattern.symbols (Bound_symbols.create bound_symbols))
+        (Bound_pattern.static (Bound_static.create bound_static))
         defining_expr ~body)
     (acc, body) components
 
@@ -1873,8 +1873,8 @@ let close_program ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
           ~dbg:Debuginfo.none
       in
       let acc, return = Expr_with_acc.create_apply_cont acc apply_cont in
-      let bound_symbols =
-        Bound_symbols.singleton (Bound_symbols.Pattern.block_like module_symbol)
+      let bound_static =
+        Bound_static.singleton (Bound_static.Pattern.block_like module_symbol)
       in
       let named =
         Named.create_static_consts
@@ -1882,7 +1882,7 @@ let close_program ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
              [Static_const_or_code.create_static_const static_const])
       in
       Let_with_acc.create acc
-        (Bound_pattern.symbols bound_symbols)
+        (Bound_pattern.static bound_static)
         named ~body:return
     in
     let block_access : P.Block_access_kind.t =
@@ -1965,8 +1965,8 @@ let close_program ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
   let acc, body =
     List.fold_left
       (fun (acc, body) (symbol, static_const) ->
-        let bound_symbols =
-          Bound_symbols.singleton (Bound_symbols.Pattern.block_like symbol)
+        let bound_static =
+          Bound_static.singleton (Bound_static.Pattern.block_like symbol)
         in
         let defining_expr =
           Static_const_group.create
@@ -1974,7 +1974,7 @@ let close_program ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
           |> Named.create_static_consts
         in
         Let_with_acc.create acc
-          (Bound_pattern.symbols bound_symbols)
+          (Bound_pattern.static bound_static)
           defining_expr ~body)
       (acc, body) (Acc.declared_symbols acc)
   in

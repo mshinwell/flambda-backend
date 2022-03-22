@@ -726,7 +726,7 @@ module Let_with_acc = struct
     let is_unused_singleton =
       match Bound_pattern.must_be_singleton_opt let_bound with
       | Some var ->
-        not (Name_occurrences.mem_var (Acc.free_names acc) (Bound_var.create_var var))
+        not (Name_occurrences.mem_var (Acc.free_names acc) (Bound_var.var var))
       | None -> false
     in
     let has_no_effects =
@@ -763,7 +763,7 @@ module Let_with_acc = struct
       let acc =
         Bound_pattern.fold_all_bound_names let_bound ~init:acc
           ~var:(fun acc var ->
-            Acc.remove_var_from_free_names (Bound_var.create_var var) acc)
+            Acc.remove_var_from_free_names (Bound_var.var var) acc)
           ~symbol:(fun acc s -> Acc.remove_symbol_from_free_names s acc)
           ~code_id:(fun acc cid -> Acc.remove_code_id_from_free_names cid acc)
       in

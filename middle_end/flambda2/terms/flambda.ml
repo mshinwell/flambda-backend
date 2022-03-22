@@ -495,7 +495,7 @@ let rec named_must_be_static_consts (named : named) =
     Misc.fatal_errorf "Must be [Static_consts], but is not: %a" print_named
       named
 
-and match_against_bound_pattern_static_const_or_code :
+and match_against_bound_static_pattern_static_const_or_code :
       'a.
       static_const_or_code ->
       Bound_static.Pattern.t ->
@@ -525,10 +525,10 @@ and match_against_bound_pattern_static_const_or_code :
       Bound_static.Pattern.print pat print_static_const_or_code
       static_const_or_code
 
-and match_against_bound_pattern_static_const_group :
+and match_against_bound_static__static_const_group :
       'a.
       static_const_group ->
-      Bound_pattern.t ->
+      Bound_static.t ->
       init:'a ->
       code:('a -> Code_id.t -> function_params_and_body Code0.t -> 'a) ->
       deleted_code:('a -> Code_id.t -> 'a) ->
@@ -748,7 +748,7 @@ and print_let_cont_expr ppf t =
 (* CR mshinwell: Remove [second_or_later_binding_within_one_set] if it doesn't
    become used soon. *)
 and flatten_for_printing0 bound_static defining_exprs =
-  match_against_bound_static_static_const_group defining_exprs bound_static
+  match_against_bound_static__static_const_group defining_exprs bound_static
     ~init:([], false)
     ~code:(fun (flattened_acc, second_or_later_rec_binding) code_id code ->
       let flattened =
@@ -1448,7 +1448,8 @@ module Static_const_group = struct
 
   let all_ids_for_export = all_ids_for_export_static_const_group
 
-  let match_against_bound_static = match_against_bound_static_static_const_group
+  let match_against_bound_static =
+    match_against_bound_static__static_const_group
 
   let pieces_of_code t =
     List.filter_map Static_const_or_code.to_code' t |> Code_id.Map.of_list

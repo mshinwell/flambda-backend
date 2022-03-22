@@ -271,7 +271,7 @@ end = struct
     let v, variables = Variable_name_map.bind t.variables v in
     v, { t with variables }
 
-  let bind_bound_var t v = bind_var t (v |> Bound_var.create_var)
+  let bind_bound_var t v = bind_var t (v |> Bound_var.var)
 
   let bind_symbol t s =
     let is_local =
@@ -637,10 +637,10 @@ and let_expr env le =
       let defining_expr = Flambda.Let_expr.defining_expr le in
       match bound with
       | Singleton var -> dynamic_let_expr env [var] defining_expr body
-      | Set_of_closures { closure_vars; _ } ->
+      | Set_of_closures closure_vars ->
         dynamic_let_expr env closure_vars defining_expr body
-      | Symbols { bound_symbols } ->
-        static_let_expr env bound_symbols defining_expr body)
+      | Static bound_static ->
+        static_let_expr env bound_static defining_expr body)
 
 and dynamic_let_expr env vars (defining_expr : Flambda.Named.t) body :
     Fexpr.expr =
@@ -668,13 +668,13 @@ and dynamic_let_expr env vars (defining_expr : Flambda.Named.t) body :
   in
   Let { bindings; closure_elements; body }
 
-and static_let_expr env bound_symbols defining_expr body : Fexpr.expr =
+and static_let_expr env bound_static defining_expr body : Fexpr.expr =
   let static_consts =
     Named.must_be_static_consts defining_expr |> Static_const_group.to_list
   in
-  let bound_symbols = bound_symbols |> Bound_symbols.to_list in
+  let bound_static = bound_static |> Bound_static.to_list in
   let env =
-    let bind_names env (pat : Bound_symbols.Pattern.t) =
+    let bind_names env (pat : Bound_static.Pattern.t) =
       match pat with
       | Code _code_id ->
         (* Already bound at the beginning; see [bind_all_code_ids] *)
@@ -689,9 +689,9 @@ and static_let_expr env bound_symbols defining_expr body : Fexpr.expr =
             env)
           closure_symbols env
     in
-    List.fold_left bind_names env bound_symbols
+    List.fold_left bind_names env bound_static
   in
-  let translate_const (pat : Bound_symbols.Pattern.t)
+  let translate_const (pat : Bound_static.Pattern.t)
       (const : Static_const_or_code.t) : Fexpr.symbol_binding =
     match pat, const with
     | Block_like symbol, Static_const const ->
@@ -779,9 +779,9 @@ and static_let_expr env bound_symbols defining_expr body : Fexpr.expr =
       Deleted_code (code_id |> Env.find_code_id_exn env)
     | (Code _ | Block_like _), _ | Set_of_closures _, (Code _ | Deleted_code) ->
       Misc.fatal_errorf "Mismatched pattern and constant: %a vs. %a"
-        Bound_symbols.Pattern.print pat Static_const_or_code.print const
+        Bound_static.Pattern.print pat Static_const_or_code.print const
   in
-  let bindings = List.map2 translate_const bound_symbols static_consts in
+  let bindings = List.map2 translate_const bound_static static_consts in
   let body = expr env body in
   (* If there's exactly one set of closures, make it implicit *)
   let only_set_of_closures =

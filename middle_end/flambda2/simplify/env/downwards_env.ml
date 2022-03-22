@@ -199,14 +199,12 @@ let enter_set_of_closures
 
 let define_variable t var kind =
   let typing_env =
-    let var = Bound_name.var var in
+    let var = Bound_name.create_var var in
     TE.add_definition t.typing_env var kind
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then
-      Variable.Set.add (Bound_var.create_var var)
-        t.variables_defined_at_toplevel
+    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   { t with typing_env; variables_defined_at_toplevel }
@@ -229,17 +227,15 @@ let add_name t name ty =
 
 let add_variable0 t var ty ~at_unit_toplevel =
   let typing_env =
-    let var' = Bound_name.var var in
+    let var' = Bound_name.create_var var in
     TE.add_equation
       (TE.add_definition t.typing_env var' (T.kind ty))
-      (Name.var (Bound_var.create_var var))
+      (Name.var (Bound_var.var var))
       ty
   in
   let variables_defined_at_toplevel =
     if at_unit_toplevel
-    then
-      Variable.Set.add (Bound_var.create_var var)
-        t.variables_defined_at_toplevel
+    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   { t with typing_env; variables_defined_at_toplevel }
@@ -354,14 +350,12 @@ let mark_parameters_as_toplevel t params =
 let define_variable_and_extend_typing_environment t var kind env_extension =
   (* This is a combined operation to reduce allocation. *)
   let typing_env =
-    let var' = Bound_name.var var in
+    let var' = Bound_name.create_var var in
     TE.add_definition t.typing_env var' kind
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then
-      Variable.Set.add (Bound_var.create_var var)
-        t.variables_defined_at_toplevel
+    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   let typing_env = TE.add_env_extension typing_env env_extension in
@@ -370,17 +364,15 @@ let define_variable_and_extend_typing_environment t var kind env_extension =
 let add_variable_and_extend_typing_environment t var ty env_extension =
   (* This is a combined operation to reduce allocation. *)
   let typing_env =
-    let var' = Bound_name.var var in
+    let var' = Bound_name.create_var var in
     TE.add_equation
       (TE.add_definition t.typing_env var' (T.kind ty))
-      (Name.var (Bound_var.create_var var))
+      (Name.var (Bound_var.var var))
       ty
   in
   let variables_defined_at_toplevel =
     if t.at_unit_toplevel
-    then
-      Variable.Set.add (Bound_var.create_var var)
-        t.variables_defined_at_toplevel
+    then Variable.Set.add (Bound_var.var var) t.variables_defined_at_toplevel
     else t.variables_defined_at_toplevel
   in
   let typing_env = TE.add_env_extension typing_env env_extension in
