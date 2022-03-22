@@ -1243,13 +1243,13 @@ let simplify_lifted_set_of_closures0 context ~closure_symbols
   in
   let dacc = introduce_code dacc code in
   let code_patterns =
-    Code_id.Lmap.keys code |> List.map Bound_symbols.Pattern.code
+    Code_id.Lmap.keys code |> List.map Bound_static.Pattern.code
   in
   let set_of_closures_pattern =
-    Bound_symbols.Pattern.set_of_closures closure_symbols
+    Bound_static.Pattern.set_of_closures closure_symbols
   in
-  let bound_symbols =
-    set_of_closures_pattern :: code_patterns |> Bound_symbols.create
+  let bound_static =
+    set_of_closures_pattern :: code_patterns |> Bound_static.create
   in
   let code_static_consts = Code_id.Lmap.data code in
   let set_of_closures_static_const =
@@ -1261,7 +1261,7 @@ let simplify_lifted_set_of_closures0 context ~closure_symbols
     set_of_closures_static_const :: code_static_consts
     |> Rebuilt_static_const.Group.create
   in
-  bound_symbols, static_consts, dacc
+  bound_static, static_consts, dacc
 
 module List = struct
   include List
@@ -1307,9 +1307,9 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
       let patterns, static_consts, dacc =
         if Set_of_closures.is_empty set_of_closures
         then
-          let bound_symbols =
-            Bound_symbols.create
-              [Bound_symbols.Pattern.set_of_closures closure_symbols]
+          let bound_static =
+            Bound_static.create
+              [Bound_static.Pattern.set_of_closures closure_symbols]
           in
           let static_consts =
             Rebuilt_static_const.Group.create
@@ -1317,7 +1317,7 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
                   (DA.are_rebuilding_terms dacc)
                   set_of_closures ]
           in
-          bound_symbols, static_consts, dacc
+          bound_static, static_consts, dacc
         else
           simplify_lifted_set_of_closures0 context ~closure_symbols
             ~closure_bound_names_inside ~closure_elements ~closure_element_types
@@ -1328,8 +1328,8 @@ let simplify_lifted_sets_of_closures dacc ~all_sets_of_closures_and_symbols
       let static_const_group =
         Rebuilt_static_const.Group.concat static_consts static_consts_acc
       in
-      Bound_symbols.concat patterns patterns_acc, static_const_group, dacc)
-    (Bound_symbols.empty, Rebuilt_static_const.Group.empty, dacc)
+      Bound_static.concat patterns patterns_acc, static_const_group, dacc)
+    (Bound_static.empty, Rebuilt_static_const.Group.empty, dacc)
     all_sets_of_closures_and_symbols
     closure_bound_names_inside_functions_all_sets
     closure_elements_and_types_all_sets

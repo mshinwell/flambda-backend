@@ -350,10 +350,10 @@ let make_new_let_bindings uacc
         in
         expr, uacc)
 
-let create_raw_let_symbol uacc bound_symbols static_consts ~body =
+let create_raw_let_symbol uacc bound_static static_consts ~body =
   (* Upon entry to this function, [UA.name_occurrences uacc] must precisely
      indicate the free names of [body]. *)
-  let bindable = Bound_pattern.symbols bound_symbols in
+  let bindable = Bound_pattern.symbols bound_static in
   let free_names_of_static_consts =
     Rebuilt_static_const.Group.free_names static_consts
   in
@@ -366,7 +366,7 @@ let create_raw_let_symbol uacc bound_symbols static_consts ~body =
     Code_id_or_symbol.Set.fold
       (fun code_id_or_sym free_names ->
         Name_occurrences.remove_code_id_or_symbol free_names code_id_or_sym)
-      (Bound_symbols.everything_being_defined bound_symbols)
+      (Bound_static.everything_being_defined bound_static)
       name_occurrences
   in
   let uacc =
@@ -390,11 +390,11 @@ let create_raw_let_symbol uacc bound_symbols static_consts ~body =
         bindable defining_expr ~body ~free_names_of_body,
       uacc )
 
-let create_let_symbol0 uacc (bound_symbols : Bound_symbols.t)
+let create_let_symbol0 uacc (bound_static : Bound_static.t)
     (static_consts : Rebuilt_static_const.Group.t) ~body =
   (* Upon entry to this function, [UA.name_occurrences uacc] must precisely
      indicate the free names of [body]. *)
-  let will_bind_code = Bound_symbols.binds_code bound_symbols in
+  let will_bind_code = Bound_static.binds_code bound_static in
   (* Turn pieces of code that are only referenced in [newer_version_of] fields
      into [Deleted_code]. *)
   let code_ids_to_make_deleted =
@@ -402,7 +402,7 @@ let create_let_symbol0 uacc (bound_symbols : Bound_symbols.t)
     then Code_id.Set.empty
     else
       let all_code_ids_bound_names =
-        Bound_symbols.code_being_defined bound_symbols
+        Bound_static.code_being_defined bound_static
       in
       Code_id.Set.fold
         (fun bound_code_id result ->
@@ -426,7 +426,7 @@ let create_let_symbol0 uacc (bound_symbols : Bound_symbols.t)
             ~if_code_id_is_member_of:code_ids_to_make_deleted)
   in
   let expr, uacc =
-    create_raw_let_symbol uacc bound_symbols static_consts ~body
+    create_raw_let_symbol uacc bound_static static_consts ~body
   in
   let uacc =
     if not will_bind_code
@@ -454,14 +454,14 @@ let remove_unused_closure_vars uacc static_const =
         (Set_of_closures.function_decls set_of_closures))
 
 let create_let_symbols uacc lifted_constant ~body =
-  let bound_symbols = LC.bound_symbols lifted_constant in
+  let bound_static = LC.bound_static lifted_constant in
   let symbol_projections = LC.symbol_projections lifted_constant in
   let static_consts =
     Rebuilt_static_const.Group.map
       (LC.defining_exprs lifted_constant)
       ~f:(remove_unused_closure_vars uacc)
   in
-  let expr, uacc = create_let_symbol0 uacc bound_symbols static_consts ~body in
+  let expr, uacc = create_let_symbol0 uacc bound_static static_consts ~body in
   Variable.Map.fold
     (fun var proj (expr, uacc) ->
       let rec apply_projection proj coercion_from_proj_to_var =

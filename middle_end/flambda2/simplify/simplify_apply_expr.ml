@@ -526,14 +526,14 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         ~free_names_of_body:Unknown
       |> Expr.create_let
     in
-    let bound_symbols =
-      Bound_symbols.singleton (Bound_symbols.Pattern.code code_id)
+    let bound_static =
+      Bound_static.singleton (Bound_static.Pattern.code code_id)
     in
     let static_consts = Static_const_group.create [code] in
     (* Since we are only generating a "let code" binding and not a "let symbol",
        it doesn't matter if we are not at toplevel. *)
     Let.create
-      (Bound_pattern.symbols bound_symbols)
+      (Bound_pattern.symbols bound_static)
       (Named.create_static_consts static_consts)
       ~body ~free_names_of_body:Unknown
     |> Expr.create_let
