@@ -18,9 +18,7 @@
 
 type t
 
-include Contains_names.S with type t := t
-
-include Contains_ids.S with type t := t
+include Bindable.S with type t := t
 
 val print : Format.formatter -> t -> unit
 
@@ -33,10 +31,6 @@ val cons : Bound_parameter.t -> t -> t
 val append : t -> t -> t
 
 val to_list : t -> Bound_parameter.t list
-
-val rename : t -> t
-
-val renaming : t -> guaranteed_fresh:t -> Renaming.t
 
 val is_empty : t -> bool
 
@@ -57,8 +51,6 @@ val to_set : t -> Bound_parameter.Set.t
 val vars : t -> Variable.t list
 
 val var_set : t -> Variable.Set.t
-
-val name_set : t -> Name.Set.t
 
 val filter : (Bound_parameter.t -> bool) -> t -> t
 

@@ -58,8 +58,6 @@ let to_set t = Bound_parameter.Set.of_list t
 
 let var_set t = Variable.Set.of_list (vars t)
 
-let name_set t = Name.Set.of_list (List.map Name.var (vars t))
-
 let rename t = List.map (fun t -> BP.rename t) t
 
 let arity t = List.map (fun t -> Flambda_kind.With_subkind.kind (BP.kind t)) t

@@ -16,8 +16,6 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module BP = Bound_parameter
-
 type t =
   { return_continuation : Continuation.t;
     exn_continuation : Continuation.t;
@@ -120,19 +118,19 @@ let rename
   }
 
 let renaming
-    ({ return_continuation = return_continuation1;
-       exn_continuation = exn_continuation1;
-       params = params1;
-       my_closure = my_closure1;
-       my_depth = my_depth1
-     } as t1)
+    { return_continuation = return_continuation1;
+      exn_continuation = exn_continuation1;
+      params = params1;
+      my_closure = my_closure1;
+      my_depth = my_depth1
+    }
     ~guaranteed_fresh:
-      ({ return_continuation = return_continuation2;
-         exn_continuation = exn_continuation2;
-         params = params2;
-         my_closure = my_closure2;
-         my_depth = my_depth2
-       } as t2) =
+      { return_continuation = return_continuation2;
+        exn_continuation = exn_continuation2;
+        params = params2;
+        my_closure = my_closure2;
+        my_depth = my_depth2
+      } =
   let renaming =
     Renaming.add_fresh_continuation Renaming.empty return_continuation1
       ~guaranteed_fresh:return_continuation2
@@ -142,17 +140,9 @@ let renaming
       ~guaranteed_fresh:exn_continuation2
   in
   let renaming =
-    let params1 = Bound_parameters.to_list params1 in
-    let params2 = Bound_parameters.to_list params2 in
-    try
-      List.fold_left2
-        (fun renaming param1 param2 ->
-          Renaming.add_variable renaming (BP.var param1) (BP.var param2))
-        renaming params1 params2
-    with Invalid_argument _ ->
-      assert (List.compare_lengths params1 params2 <> 0);
-      Misc.fatal_errorf "Parameter lists are of differing lengths:@ %a@ and@ %a"
-        print t1 print t2
+    Renaming.compose
+      ~second:(Bound_parameters.renaming params1 ~guaranteed_fresh:params2)
+      ~first:renaming
   in
   let renaming =
     Renaming.add_fresh_variable renaming my_closure1
