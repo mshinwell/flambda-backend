@@ -65,13 +65,15 @@ compiler: runtime-stdlib
 runtest: compiler
 	$(dune) runtest $(ws_main)
 
-
+export dune_boot_context
+export dune_runtime_stdlib_context
+export dune_main_context
 
 _build/_bootinstall: ocaml/Makefile.config
 # duneconf
-	$(file >duneconf/boot.ws,$(dune_boot_context))
-	$(file >duneconf/runtime_stdlib.ws,$(dune_runtime_stdlib_context))
-	$(file >duneconf/main.ws,$(dune_main_context))
+	echo "$$dune_boot_context" > duneconf/boot.ws
+	echo "$$dune_runtime_stdlib_context" > duneconf/runtime_stdlib.ws
+	echo "$$dune_main_context" > duneconf/main.ws
 
 # natdynlinkops2:
 # We need to augment dune's substitutions so this part isn't so
@@ -101,11 +103,11 @@ _build/_bootinstall: ocaml/Makefile.config
 	fi
 
 # flags.sexp
-	$(file >ocamlopt_flags.sexp,\
-	  (:standard $(if $(filter true,$(FUNCTION_SECTIONS)),-function-sections,)))
-	$(file >oc_cflags.sexp,( $(OC_CFLAGS) ))
-	$(file >oc_cppflags.sexp,( $(OC_CPPFLAGS) ))
-	$(file >sharedlib_cflags.sexp,( $(SHAREDLIB_CFLAGS) ))
+	echo "(:standard $(if $(filter true,$(FUNCTION_SECTIONS)),-function-sections,))" \
+	  >ocamlopt_flags.sexp
+	echo "( $(OC_CFLAGS) )" >oc_cflags.sexp
+	echo "( $(OC_CPPFLAGS) )" >oc_cppflags.sexp
+	echo "( $(SHAREDLIB_CFLAGS) )" >sharedlib_cflags.sexp
 
 # _build/_bootinstall: a minimal install directory for the boot compiler,
 # which is placed on PATH for subsequent builds
