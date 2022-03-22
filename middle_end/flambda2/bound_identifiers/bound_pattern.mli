@@ -14,24 +14,20 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-(** Things that a [Let]-expression binds. *)
-
-type symbols = private { bound_symbols : Bound_symbols.t }
+(** The patterns that occur on the left-hand sides of [Let]-expressions. *)
 
 type t = private
   | Variable of Bound_var.t
       (** The binding of a single variable, which is statically scoped. *)
-  | Set_of_closures of
-      { name_mode : Name_mode.t;
-        closure_vars : Bound_var.t list
-      }
+  | Set_of_closures of Bound_var.t list
       (** The binding of one or more variables to the individual closures in a
           set of closures. The variables are statically scoped. *)
   | Symbols of Bound_symbols.t
       (** The binding of one or more symbols to statically-allocated
-          constant(s). The scoping of the symbols may either be syntactic, or
-          follow the dominator tree. *)
+          constant(s). Symbols have dominator scoping. *)
   | Code of Code_id.t
+      (** The binding of a piece of code to a code ID. Code IDs have dominator
+          scoping, like symbols. *)
 
 include Bindable.S with type t := t
 
@@ -49,21 +45,15 @@ val must_be_variable_opt : t -> Bound_var.t option
 
 val must_be_set_of_closures : t -> Bound_var.t list
 
-val must_be_symbols : t -> symbols
+val must_be_symbols : t -> Bound_symbols.t
 
-val may_be_symbols : t -> symbols option
+val may_be_symbols : t -> Bound_symbols.t option
 
 val name_mode : t -> Name_mode.t
 
 val with_name_mode : t -> Name_mode.t -> t
 
-val exists_all_bound_vars : t -> f:(Bound_var.t -> bool) -> bool
-
 val fold_all_bound_vars : t -> init:'a -> f:('a -> Bound_var.t -> 'a) -> 'a
-
-val all_bound_vars : t -> Bound_var.Set.t
-
-val all_bound_vars' : t -> Variable.Set.t
 
 val fold_all_bound_names :
   t ->

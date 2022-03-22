@@ -14,7 +14,10 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
+
+(** The patterns on the left-hand sides of [Let]-expressions when [Symbol]s are
+    being bound. (Used via [Bound_pattern].) *)
 
 module Pattern : sig
   type t = private
@@ -39,16 +42,6 @@ val singleton : Pattern.t -> t
 val to_list : t -> Pattern.t list
 
 val being_defined : t -> Symbol.Set.t
-
-val binds_code : t -> bool
-
-val binds_symbols : t -> bool
-
-val non_closure_symbols_being_defined : t -> Symbol.Set.t
-
-val closure_symbols_being_defined : t -> Symbol.Set.t
-
-val everything_being_defined : t -> Symbol.Set.t
 
 val concat : t -> t -> t
 
