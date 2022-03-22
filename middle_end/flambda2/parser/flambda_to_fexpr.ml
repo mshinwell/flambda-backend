@@ -754,7 +754,10 @@ and static_let_expr env bound_static defining_expr body : Fexpr.expr =
             let exn_cont, env =
               Env.bind_named_continuation env exn_continuation
             in
-            let params, env = map_accum_left kinded_parameter env params in
+            let params, env =
+              map_accum_left kinded_parameter env
+                (Bound_parameters.to_list params)
+            in
             let closure_var, env = Env.bind_var env my_closure in
             let depth_var, env = Env.bind_var env my_depth in
             let body = expr env body in
@@ -862,7 +865,9 @@ and cont_handler env cont_id (sort : Continuation.Sort.t) h =
   in
   Flambda.Continuation_handler.pattern_match h
     ~f:(fun params ~handler : Fexpr.continuation_binding ->
-      let params, env = map_accum_left kinded_parameter env params in
+      let params, env =
+        map_accum_left kinded_parameter env (Bound_parameters.to_list params)
+      in
       let handler = expr env handler in
       { name = cont_id; params; sort; handler })
 

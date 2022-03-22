@@ -311,15 +311,18 @@ let define_parameters t ~params =
     (fun t param ->
       let var = Bound_var.create (BP.var param) Name_mode.normal in
       define_variable t var (K.With_subkind.kind (BP.kind param)))
-    t params
+    t
+    (Bound_parameters.to_list params)
 
 let add_parameters ?(name_mode = Name_mode.normal) ?at_unit_toplevel t params
     ~param_types =
+  let params' = params in
+  let params = Bound_parameters.to_list params in
   if List.compare_lengths params param_types <> 0
   then
     Misc.fatal_errorf
       "Mismatch between number of [params] and [param_types]:@ (%a)@ and@ %a"
-      Bound_parameters.print params
+      Bound_parameters.print params'
       (Format.pp_print_list ~pp_sep:Format.pp_print_space T.print)
       param_types;
   let at_unit_toplevel =
@@ -333,7 +336,7 @@ let add_parameters ?(name_mode = Name_mode.normal) ?at_unit_toplevel t params
 
 let add_parameters_with_unknown_types' ?name_mode ?at_unit_toplevel t params =
   let param_types =
-    ListLabels.map params ~f:(fun param ->
+    ListLabels.map (Bound_parameters.to_list params) ~f:(fun param ->
         T.unknown_with_subkind (BP.kind param))
   in
   add_parameters ?name_mode ?at_unit_toplevel t params ~param_types, param_types

@@ -138,9 +138,6 @@ module Expr : sig
   val create_switch : Switch_expr.t -> t
 
   val create_invalid : Invalid.t -> t
-
-  val bind_parameters_to_args_no_simplification :
-    params:Bound_parameters.t -> args:Simple.t list -> body:expr -> expr
 end
 
 module Named : sig
@@ -282,8 +279,7 @@ module Continuation_handler : sig
       'a) ->
     'a
 
-  val pattern_match :
-    t -> f:(Bound_parameters.t -> handler:expr -> 'a) -> 'a
+  val pattern_match : t -> f:(Bound_parameters.t -> handler:expr -> 'a) -> 'a
 
   module Pattern_match_pair_error : sig
     type t = Parameter_lists_have_different_lengths

@@ -17,7 +17,6 @@
 [@@@ocaml.warning "+a-30-40-41-42"]
 
 module K = Flambda_kind
-module BP = Bound_parameter
 module Apply = Apply_expr
 module Apply_cont = Apply_cont_expr
 module Switch = Switch_expr
@@ -1043,14 +1042,12 @@ module Continuation_handler = struct
   let pattern_match t ~f =
     let open A in
     let<> params, { handler; _ } = t.cont_handler_abst in
-    f (Bound_parameters.to_list params) ~handler
+    f params ~handler
 
   let pattern_match' t ~f =
     A.pattern_match t.cont_handler_abst
       ~f:(fun params { handler; num_normal_occurrences_of_params } ->
-        f
-          (Bound_parameters.to_list params)
-          ~num_normal_occurrences_of_params ~handler)
+        f params ~num_normal_occurrences_of_params ~handler)
 
   module Pattern_match_pair_error = struct
     type t = Parameter_lists_have_different_lengths
@@ -1063,15 +1060,14 @@ module Continuation_handler = struct
   let pattern_match_pair t1 t2 ~f =
     pattern_match t1 ~f:(fun params1 ~handler:_ ->
         pattern_match t2 ~f:(fun params2 ~handler:_ ->
-            if List.compare_lengths params1 params2 = 0
+            if Bound_parameters.same_number params1 params2
             then
               A.pattern_match_pair t1.cont_handler_abst t2.cont_handler_abst
                 ~f:(fun
                      params
                      ({ handler = handler1; _ } : T0.t)
                      ({ handler = handler2; _ } : T0.t)
-                   ->
-                  Ok (f (Bound_parameters.to_list params) ~handler1 ~handler2))
+                   -> Ok (f params ~handler1 ~handler2))
             else
               Error
                 Pattern_match_pair_error.Parameter_lists_have_different_lengths))
@@ -1636,19 +1632,6 @@ module Expr = struct
 
   let create_invalid reason =
     create (Invalid { message = Invalid.to_string reason })
-
-  let bind_parameters_to_args_no_simplification ~params ~args ~body =
-    if List.compare_lengths params args <> 0
-    then
-      Misc.fatal_errorf "Mismatching parameters and arguments: %a and %a"
-        Bound_parameters.print params Simple.List.print args;
-    ListLabels.fold_left2 (List.rev params) (List.rev args) ~init:body
-      ~f:(fun expr param arg ->
-        let var = Bound_var.create (BP.var param) Name_mode.normal in
-        Let_expr.create
-          (Bound_pattern.singleton var)
-          (Named.create_simple arg) ~body:expr ~free_names_of_body:Unknown
-        |> create_let)
 end
 
 module Let_cont_expr = struct

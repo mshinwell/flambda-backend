@@ -629,13 +629,14 @@ let no_rewrite apply_cont = Apply_cont apply_cont
 
 let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
   let args = Apply_cont.args apply_cont in
-  let original_params = Apply_cont_rewrite.original_params rewrite in
+  let original_params' = Apply_cont_rewrite.original_params rewrite in
+  let original_params = Bound_parameters.to_list original_params' in
   if List.compare_lengths args original_params <> 0
   then
     Misc.fatal_errorf
       "Arguments to this [Apply_cont]@ (%a)@ do not match@ [original_params] \
        (%a):@ %a"
-      Apply_cont.print apply_cont Bound_parameters.print original_params
+      Apply_cont.print apply_cont Bound_parameters.print original_params'
       Simple.List.print args;
   let original_params_with_args = List.combine original_params args in
   let args =
@@ -717,9 +718,10 @@ let rewrite_use uacc rewrite ~ctx id apply_cont : rewrite_use_result =
 (* CR-someday mshinwell: The code of this function could maybe be improved. *)
 let rewrite_exn_continuation rewrite id exn_cont =
   let exn_cont_arity = Exn_continuation.arity exn_cont in
-  let original_params = Apply_cont_rewrite.original_params rewrite in
+  let original_params' = Apply_cont_rewrite.original_params rewrite in
+  let original_params = Bound_parameters.to_list original_params' in
   let original_params_arity =
-    Bound_parameters.arity_with_subkinds original_params
+    Bound_parameters.arity_with_subkinds original_params'
   in
   if not
        (Flambda_arity.With_subkinds.equal exn_cont_arity original_params_arity)
@@ -727,7 +729,7 @@ let rewrite_exn_continuation rewrite id exn_cont =
     Misc.fatal_errorf
       "Arity of exception continuation %a does not match@ [original_params] \
        (%a)"
-      Exn_continuation.print exn_cont Bound_parameters.print original_params;
+      Exn_continuation.print exn_cont Bound_parameters.print original_params';
   assert (List.length exn_cont_arity >= 1);
   let pre_existing_extra_params_with_args =
     List.combine (List.tl original_params)
@@ -756,7 +758,9 @@ let rewrite_exn_continuation rewrite id exn_cont =
               Misc.fatal_error "[New_let_binding] not expected here"))
         (Apply_cont_rewrite.extra_args rewrite id)
     in
-    let used_extra_params = Apply_cont_rewrite.used_extra_params rewrite in
+    let used_extra_params =
+      Apply_cont_rewrite.used_extra_params rewrite |> Bound_parameters.to_list
+    in
     assert (List.compare_lengths used_extra_params extra_args_list = 0);
     List.map2
       (fun param (arg : Continuation_extra_params_and_args.Extra_arg.t) ->
@@ -820,7 +824,8 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
           ~is_exn_handler:false
       in
       let free_names =
-        ListLabels.fold_left params ~init:free_names ~f:(fun free_names param ->
+        ListLabels.fold_left (Bound_parameters.to_list params) ~init:free_names
+          ~f:(fun free_names param ->
             Name_occurrences.remove_var free_names (Bound_parameter.var param))
       in
       New_wrapper (new_cont, new_handler, free_names, cost_metrics)
@@ -832,6 +837,7 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
       let params = List.map (fun _kind -> Variable.create "param") arity in
       let params = List.map2 BP.create params arity in
       let args = List.map BP.simple params in
+      let params = Bound_parameters.create params in
       let apply_cont = Apply_cont.create cont ~args ~dbg:Debuginfo.none in
       let ctx = Apply_expr args in
       match rewrite_use uacc rewrite use_id ~ctx apply_cont with
@@ -862,7 +868,7 @@ let add_wrapper_for_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id
                 Cost_metrics.from_size (Code_size.apply_cont apply_cont),
                 Apply_cont.free_names apply_cont ))
         in
-        new_wrapper [] expr ~free_names ~cost_metrics))
+        new_wrapper Bound_parameters.empty expr ~free_names ~cost_metrics))
 
 type add_wrapper_for_switch_arm_result =
   | Apply_cont of Apply_cont.t

@@ -183,14 +183,14 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       | Return apply_return_continuation ->
         Result_types.pattern_match result_types
           ~f:(fun ~params ~results env_extension ->
-            if List.compare_lengths params_arity params <> 0
+            if List.length params_arity <> Bound_parameters.cardinal params
             then
               Misc.fatal_errorf
                 "Params arity %a does not match up with params in the result \
                  types structure:@ %a@ for application:@ %a"
                 Flambda_arity.With_subkinds.print params_arity
                 Result_types.print result_types Apply.print apply;
-            if List.compare_lengths result_arity results <> 0
+            if List.length result_arity <> Bound_parameters.cardinal results
             then
               Misc.fatal_errorf
                 "Result arity %a does not match up with the result types \
@@ -202,6 +202,8 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
               DE.add_parameters_with_unknown_types ~name_mode:Name_mode.in_types
                 denv params
             in
+            let params = Bound_parameters.to_list params in
+            let results = Bound_parameters.to_list results in
             let denv =
               let args = Apply.args apply in
               assert (List.compare_lengths params args = 0);
@@ -348,6 +350,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
           let param = Variable.create "param" in
           Bound_parameter.create param kind)
         remaining_param_arity
+      |> Bound_parameters.create
     in
     let call_kind =
       Call_kind.direct_function_call callee's_code_id callee's_closure_id
@@ -408,7 +411,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       in
       let callee = arg applied_callee in
       let args =
-        List.map arg applied_args @ List.map BP.simple remaining_params
+        List.map arg applied_args @ Bound_parameters.simples remaining_params
       in
       let full_application =
         Apply.create ~callee ~continuation:(Return return_continuation)

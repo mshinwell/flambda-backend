@@ -584,8 +584,9 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
     in
     let handler = expr handler_env handler in
     let handler =
-      Flambda.Continuation_handler.create params ~handler
-        ~free_names_of_handler:Unknown ~is_exn_handler
+      Flambda.Continuation_handler.create
+        (Bound_parameters.create params)
+        ~handler ~free_names_of_handler:Unknown ~is_exn_handler
     in
     match recursive with
     | Nonrecursive ->
@@ -783,7 +784,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           let params_and_body =
             Flambda.Function_params_and_body.create ~return_continuation
               ~exn_continuation:(Exn_continuation.exn_handler exn_continuation)
-              params ~body ~my_closure ~my_depth ~free_names_of_body:Unknown
+              (Bound_parameters.create params)
+              ~body ~my_closure ~my_depth ~free_names_of_body:Unknown
           in
           (* CR lmaurer: Add
            * [Name_occurrences.with_only_names_and_closure_vars] *)
@@ -818,7 +820,10 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           Code.create code_id ~params_and_body ~free_names_of_params_and_body
             ~newer_version_of ~params_arity ~num_trailing_local_params:0
             ~result_arity
-            ~result_types:(Result_types.create_unknown ~params ~result_arity)
+            ~result_types:
+              (Result_types.create_unknown
+                 ~params:(Bound_parameters.create params)
+                 ~result_arity)
             ~contains_no_escaping_local_allocs:false ~stub:false ~inline
             ~is_a_functor:false ~recursive
             ~cost_metrics (* CR poechsel: grab inlining arguments from fexpr. *)

@@ -504,6 +504,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
           (Variable.create ("result" ^ string_of_int i))
           kind_with_subkind)
       result_arity
+    |> Bound_parameters.create
   in
   let ( params,
         params_and_body,
@@ -699,7 +700,8 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
         | No_uses -> assert false (* should have been caught above *)
         | Uses { handler_env; _ } ->
           let params_and_results =
-            Bound_parameters.var_set (params @ return_cont_params)
+            Bound_parameters.var_set
+              (Bound_parameters.append params return_cont_params)
           in
           let typing_env = DE.typing_env handler_env in
           let results_and_types =
@@ -710,7 +712,7 @@ let simplify_function0 context ~used_closure_vars ~shareable_constants
                     (Some (K.With_subkind.kind (BP.kind result)))
                 in
                 BP.name result, ty)
-              return_cont_params
+              (Bound_parameters.to_list return_cont_params)
           in
           let env_extension =
             T.make_suitable_for_environment typing_env

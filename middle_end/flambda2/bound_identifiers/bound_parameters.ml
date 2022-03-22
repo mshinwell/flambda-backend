@@ -25,6 +25,8 @@ let print ppf t =
     (Format.pp_print_list ~pp_sep:Format.pp_print_space BP.print)
     t
 
+let empty = []
+
 let create params =
   (if Flambda_features.check_invariants ()
   then
@@ -36,27 +38,33 @@ let create params =
         print params);
   params
 
+let cons param t = create (param :: t)
+
+let append t1 t2 = create (t1 @ t2)
+
 let to_list t = t
 
 let is_empty t = match t with [] -> true | _ :: _ -> false
 
+let same_number t1 t2 = List.compare_lengths t1 t2 = 0
+
+let cardinal t = List.length t
+
 let vars t = List.map BP.var t
 
-(* let simples t = List.map BP.simple t
+let simples t = List.map BP.simple t
 
-   let equal_vars t1 t2 = List.length t1 = List.length t2 && List.for_all2 (fun
-   param1 var2 -> Variable.equal (BP.var param1) var2) t1 t2 *)
+let to_set t = Bound_parameter.Set.of_list t
 
 let var_set t = Variable.Set.of_list (vars t)
-(* let name_set t = Name.Set.of_list (List.map Name.var (vars t)) *)
+
+let name_set t = Name.Set.of_list (List.map Name.var (vars t))
 
 let rename t = List.map (fun t -> BP.rename t) t
 
 let arity t = List.map (fun t -> Flambda_kind.With_subkind.kind (BP.kind t)) t
 
 let arity_with_subkinds t = List.map (fun t -> BP.kind t) t
-(* let equal t1 t2 = List.compare_lengths t1 t2 = 0 && List.for_all2 BP.equal t1
-   t2 *)
 
 let free_names t =
   List.fold_left
@@ -87,3 +95,7 @@ let renaming t1 ~guaranteed_fresh:t2 =
     assert (List.compare_lengths t1 t2 <> 0);
     Misc.fatal_errorf "Parameter lists are of differing lengths:@ %a@ and@ %a"
       print t1 print t2
+
+let filter f t = List.filter f t
+
+let exists f t = List.exists f t

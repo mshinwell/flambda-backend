@@ -83,9 +83,9 @@ let add_continuation0 t cont scope cont_in_env =
   { t with continuations }
 
 let add_non_inlinable_continuation t cont scope ~params ~handler =
-  match params with
-  | [] -> add_continuation0 t cont scope (Non_inlinable_zero_arity { handler })
-  | _ :: _ ->
+  if Bound_parameters.is_empty params
+  then add_continuation0 t cont scope (Non_inlinable_zero_arity { handler })
+  else
     let arity = Bound_parameters.arity_with_subkinds params in
     add_continuation0 t cont scope (Non_inlinable_non_zero_arity { arity })
 

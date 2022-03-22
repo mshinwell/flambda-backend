@@ -454,7 +454,7 @@ let find_params t params =
       let name = Bound_parameter.name param in
       let kind = Flambda_kind.With_subkind.kind (Bound_parameter.kind param) in
       find t name (Some kind))
-    params
+    (Bound_parameters.to_list params)
 
 let binding_time_and_mode t name ~assume_not_from_missing_cmx_file =
   if (not assume_not_from_missing_cmx_file)
@@ -907,7 +907,8 @@ let add_definitions_of_params t ~params =
       in
       add_definition t name
         (Flambda_kind.With_subkind.kind (Bound_parameter.kind param)))
-    t params
+    t
+    (Bound_parameters.to_list params)
 
 let check_params_and_types ~params ~param_types =
   if Flambda_features.check_invariants ()

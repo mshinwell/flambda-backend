@@ -242,7 +242,6 @@ module Inlining = struct
   let make_inlined_body acc ~callee ~params ~args ~my_closure ~my_depth ~body
       ~free_names_of_body ~exn_continuation ~return_continuation
       ~apply_exn_continuation ~apply_return_continuation ~apply_depth =
-    let params = List.map BP.var params in
     let rec_info =
       match apply_depth with
       | None -> Rec_info_expr.initial
@@ -319,9 +318,10 @@ module Inlining = struct
           | Known free_names -> free_names
         in
         let make_inlined_body =
-          make_inlined_body ~callee ~params ~args ~my_closure ~my_depth ~body
-            ~free_names_of_body ~exn_continuation ~return_continuation
-            ~apply_depth
+          make_inlined_body ~callee
+            ~params:(Bound_parameters.vars params)
+            ~args ~my_closure ~my_depth ~body ~free_names_of_body
+            ~exn_continuation ~return_continuation ~apply_depth
         in
         let acc = Acc.with_free_names Name_occurrences.empty acc in
         let acc = Acc.increment_metrics cost_metrics acc in
@@ -474,7 +474,9 @@ let close_c_call acc env ~let_bound_var
   in
   let wrap_c_call acc ~handler_param ~code_after_call c_call =
     let return_kind = Flambda_kind.With_subkind.create return_kind Anything in
-    let params = [BP.create handler_param return_kind] in
+    let params =
+      [BP.create handler_param return_kind] |> Bound_parameters.create
+    in
     Let_cont_with_acc.build_non_recursive acc return_continuation
       ~handler_params:params ~handler:code_after_call ~body:c_call
       ~is_exn_handler:false
@@ -803,6 +805,7 @@ let close_let_cont acc env ~name ~is_exn_handler ~params
     List.map2
       (fun param (_, _, kind) -> BP.create param (LC.value_kind kind))
       params params_with_kinds
+    |> Bound_parameters.create
   in
   let handler acc =
     let handler_env =
@@ -1122,6 +1125,7 @@ let close_one_function acc ~external_env ~by_closure_id decl ~has_lifted_closure
   in
   let params =
     List.map (fun (var, kind) -> BP.create var (LC.value_kind kind)) param_vars
+    |> Bound_parameters.create
   in
   let acc = Acc.with_seen_a_function acc false in
   let acc, body =
@@ -1211,7 +1215,8 @@ let close_one_function acc ~external_env ~by_closure_id decl ~has_lifted_closure
   let acc =
     List.fold_left
       (fun acc param -> Acc.remove_var_from_free_names (BP.var param) acc)
-      acc params
+      acc
+      (Bound_parameters.to_list params)
     |> Acc.remove_var_from_free_names my_closure
     |> Acc.remove_var_from_free_names my_depth
     |> Acc.remove_continuation_from_free_names return_continuation
@@ -1634,14 +1639,17 @@ let wrap_over_application acc env full_call (apply : IR.apply) over_args
           ~body:call_return_continuation
       in
       Let_cont_with_acc.build_non_recursive acc after_over_application
-        ~handler_params:over_application_results ~handler
+        ~handler_params:(Bound_parameters.create over_application_results)
+        ~handler
         ~body:(fun acc -> Expr_with_acc.create_apply acc over_application)
         ~is_exn_handler:false
   in
   let body = full_call wrapper_cont in
   let acc, both_applications =
     Let_cont_with_acc.build_non_recursive acc wrapper_cont
-      ~handler_params:[BP.create returned_func K.With_subkind.any_value]
+      ~handler_params:
+        ([BP.create returned_func K.With_subkind.any_value]
+        |> Bound_parameters.create)
       ~handler:perform_over_application ~body ~is_exn_handler:false
   in
   match needs_region with
@@ -1909,6 +1917,7 @@ let close_program ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
   in
   let load_fields_handler_param =
     [BP.create module_block_var K.With_subkind.any_value]
+    |> Bound_parameters.create
   in
   let acc, body =
     (* This binds the return continuation that is free (or, at least, not bound)

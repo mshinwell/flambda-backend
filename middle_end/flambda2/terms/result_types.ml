@@ -73,6 +73,10 @@ module Bound = struct
           results = fresh_results;
           other_vars = fresh_other_vars
         } =
+    let params = Bound_parameters.to_list params in
+    let fresh_params = Bound_parameters.to_list fresh_params in
+    let results = Bound_parameters.to_list results in
+    let fresh_results = Bound_parameters.to_list fresh_results in
     if List.compare_lengths params fresh_params <> 0
        || List.compare_lengths results fresh_results <> 0
        || List.compare_lengths other_vars fresh_other_vars <> 0
@@ -140,7 +144,7 @@ let create_trivial ~params ~result_arity create_type =
           (create_type (Bound_parameter.kind result)))
       TEEV.empty results
   in
-  create ~params ~results env_extension
+  create ~params ~results:(Bound_parameters.create results) env_extension
 
 let create_unknown ~params ~result_arity =
   create_trivial ~params ~result_arity T.unknown_with_subkind
