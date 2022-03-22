@@ -32,3 +32,5 @@ val name : t -> Name.t
 val name_mode : t -> Name_mode.t
 
 val is_symbol : t -> bool
+
+val print : Format.formatter -> t -> unit

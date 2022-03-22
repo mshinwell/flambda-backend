@@ -91,11 +91,11 @@ let compare _ _ = `Be_explicit_about_total_or_partial_ordering
 module Or_absent = struct
   type t =
     | Absent
-    | Present of kind
+    | Present of name_mode
 
   let absent = Absent
 
-  let present kind = Present kind
+  let present name_mode = Present name_mode
 
   let is_present = function Absent -> false | Present _ -> true
 
@@ -110,8 +110,8 @@ module Or_absent = struct
     let [@ocamlformat "disable"] print ppf t =
       match t with
       | Absent -> Format.pp_print_string ppf "Absent"
-      | Present kind ->
-        Format.fprintf ppf "@[<hov 1>(Present@ %a)@]" print kind
+      | Present name_mode ->
+        Format.fprintf ppf "@[<hov 1>(Present@ %a)@]" print name_mode
 
     let hash _ = Misc.fatal_error "Not yet implemented"
 
@@ -120,7 +120,8 @@ module Or_absent = struct
       | Absent, Absent -> 0
       | Absent, Present _ -> -1
       | Present _, Absent -> 1
-      | Present kind1, Present kind2 -> compare_total_order kind1 kind2
+      | Present name_mode1, Present name_mode2 ->
+        compare_total_order name_mode1 name_mode2
 
     let equal t1 t2 = compare t1 t2 = 0
   end)
@@ -132,5 +133,6 @@ module Or_absent = struct
     | Absent, Absent -> Some 0
     | Absent, Present _ -> Some (-1)
     | Present _, Absent -> Some 1
-    | Present kind1, Present kind2 -> compare_partial_order kind1 kind2
+    | Present name_mode1, Present name_mode2 ->
+      compare_partial_order name_mode1 name_mode2
 end

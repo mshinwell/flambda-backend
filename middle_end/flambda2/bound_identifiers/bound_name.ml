@@ -37,9 +37,7 @@ let create name name_mode =
   { name; name_mode }
 
 let create_var v =
-  { name = Name.var (Bound_var.create_var v);
-    name_mode = Bound_var.name_mode v
-  }
+  { name = Name.var (Bound_var.var v); name_mode = Bound_var.name_mode v }
 
 let create_symbol sym = { name = Name.symbol sym; name_mode = Name_mode.normal }
 

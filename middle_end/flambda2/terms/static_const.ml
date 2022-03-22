@@ -352,10 +352,10 @@ let match_against_bound_symbols_pattern t (pat : Bound_symbols.Pattern.t)
       | Empty_array | Immutable_string _ | Mutable_string _ ),
       Block_like symbol ) ->
     block_like_callback symbol t
-  | Set_of_closures _, (Code _ | Block_like _)
+  | Set_of_closures _, Block_like _
   | ( ( Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
       | Boxed_nativeint _ | Immutable_float_block _ | Immutable_float_array _
       | Empty_array | Immutable_string _ | Mutable_string _ ),
-      (Code _ | Set_of_closures _) ) ->
+      Set_of_closures _ ) ->
     Misc.fatal_errorf "Mismatch on variety of [Static_const]:@ %a@ =@ %a"
       Bound_symbols.Pattern.print pat print t

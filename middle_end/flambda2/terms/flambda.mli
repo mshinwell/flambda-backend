@@ -247,8 +247,8 @@ module Let_expr : sig
     t ->
     dynamic:(Bound_pattern.t -> body1:expr -> body2:expr -> 'a) ->
     static:
-      (bound_symbols1:Bound_pattern.symbols ->
-      bound_symbols2:Bound_pattern.symbols ->
+      (bound_symbols1:Bound_symbols.t ->
+      bound_symbols2:Bound_symbols.t ->
       body1:expr ->
       body2:expr ->
       'a) ->

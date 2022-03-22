@@ -204,4 +204,5 @@ let fold_all_bound_names t ~init ~var ~symbol ~code_id:f_code_id =
     Symbol.Set.fold
       (fun s acc -> symbol acc s)
       (Bound_symbols.being_defined bound_symbols)
-  | Code code_id -> f_code_id code_id
+      init
+  | Code code_id -> f_code_id init code_id
