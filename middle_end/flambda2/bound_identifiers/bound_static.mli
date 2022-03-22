@@ -16,13 +16,17 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-(** The patterns on the left-hand sides of [Let]-expressions when [Symbol]s are
-    being bound. (Used via [Bound_pattern].) *)
+(** The left-hand sides of [Let]-expressions that bind statically-allocated
+    constants and pieces of code. Used via [Bound_pattern] in the term
+    language. *)
 
 module Pattern : sig
   type t = private
+    | Code of Code_id.t
     | Set_of_closures of Symbol.t Closure_id.Lmap.t
     | Block_like of Symbol.t
+
+  val code : Code_id.t -> t
 
   val set_of_closures : Symbol.t Closure_id.Lmap.t -> t
 
@@ -35,13 +39,25 @@ type t
 
 val empty : t
 
+(** Within a single value of type [t], symbols and code IDs bound by the
+    individual [Pattern]s are bound recursively, across all of the [Pattern]s.
+    However [Block_like] bindings are not bound recursively and are ordered in
+    the usual manner. (See [Simplify_static_const].) *)
 val create : Pattern.t list -> t
 
 val singleton : Pattern.t -> t
 
 val to_list : t -> Pattern.t list
 
-val being_defined : t -> Symbol.Set.t
+val binds_code : t -> bool
+
+val binds_symbols : t -> bool
+
+val symbols_being_defined : t -> Symbol.Set.t
+
+val code_being_defined : t -> Code_id.Set.t
+
+val everything_being_defined : t -> Code_id_or_symbol.Set.t
 
 val concat : t -> t -> t
 

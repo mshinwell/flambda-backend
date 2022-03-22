@@ -14,40 +14,39 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-(** The patterns that occur on the left-hand sides of [Let]-expressions. *)
+(** Things that a [Let]-expression binds. *)
 
 type t = private
-  | Variable of Bound_var.t
-      (** The binding of a single variable, which is statically scoped. *)
+  | Singleton of Bound_var.t
+      (** The binding of a single variable, which is statically scoped. This
+          case is not used for sets of closures. *)
   | Set_of_closures of Bound_var.t list
       (** The binding of one or more variables to the individual closures in a
           set of closures. The variables are statically scoped. *)
-  | Symbols of Bound_symbols.t
-      (** The binding of one or more symbols to statically-allocated
-          constant(s). Symbols have dominator scoping. *)
-  | Code of Code_id.t
-      (** The binding of a piece of code to a code ID. Code IDs have dominator
-          scoping, like symbols. *)
+  | Static of Bound_static.t
+      (** The binding of symbols and code IDs to statically-allocated constants
+          and pieces of code. The scoping of the symbols and code IDs follows
+          the dominator tree, not syntactic scope. *)
 
 include Bindable.S with type t := t
 
 include Contains_ids.S with type t := t
 
-val variable : Bound_var.t -> t
+val singleton : Bound_var.t -> t
 
 val set_of_closures : Bound_var.t list -> t
 
-val symbols : Bound_symbols.t -> t
+val static : Bound_static.t -> t
 
-val must_be_variable : t -> Bound_var.t
+val must_be_singleton : t -> Bound_var.t
 
-val must_be_variable_opt : t -> Bound_var.t option
+val must_be_singleton_opt : t -> Bound_var.t option
 
 val must_be_set_of_closures : t -> Bound_var.t list
 
-val must_be_symbols : t -> Bound_symbols.t
+val must_be_static : t -> Bound_static.t
 
-val may_be_symbols : t -> Bound_symbols.t option
+val may_be_static : t -> Bound_static.t option
 
 val name_mode : t -> Name_mode.t
 

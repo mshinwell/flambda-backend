@@ -247,8 +247,8 @@ module Let_expr : sig
     t ->
     dynamic:(Bound_pattern.t -> body1:expr -> body2:expr -> 'a) ->
     static:
-      (bound_symbols1:Bound_symbols.t ->
-      bound_symbols2:Bound_symbols.t ->
+      (bound_symbols1:Bound_static.t ->
+      bound_symbols2:Bound_static.t ->
       body1:expr ->
       body2:expr ->
       'a) ->
@@ -549,7 +549,7 @@ module Static_const_group : sig
 
   val match_against_bound_symbols :
     t ->
-    Bound_symbols.t ->
+    Bound_static.t ->
     init:'a ->
     code:('a -> Code_id.t -> Function_params_and_body.t Code0.t -> 'a) ->
     deleted_code:('a -> Code_id.t -> 'a) ->

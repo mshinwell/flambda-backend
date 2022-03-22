@@ -116,14 +116,14 @@ module Definition = struct
     | Set_of_closures { denv; _ } | Block_like { denv; _ } -> Some denv
 
   let bound_symbols_pattern t =
-    let module P = Bound_symbols.Pattern in
+    let module P = Bound_static.Pattern in
     match t.descr with
     | Code code_id -> P.code code_id
     | Set_of_closures { closure_symbols_with_types; _ } ->
       P.set_of_closures (Closure_id.Lmap.map fst closure_symbols_with_types)
     | Block_like { symbol; _ } -> P.block_like symbol
 
-  let bound_symbols t = Bound_symbols.create [bound_symbols_pattern t]
+  let bound_symbols t = Bound_static.create [bound_symbols_pattern t]
 
   let types_of_symbols t =
     match t.descr with
@@ -139,7 +139,7 @@ end
 
 type t =
   { definitions : Definition.t list;
-    bound_symbols : Bound_symbols.t;
+    bound_symbols : Bound_static.t;
     defining_exprs : Rebuilt_static_const.Group.t;
     symbol_projections : Symbol_projection.t Variable.Map.t;
     is_fully_static : bool
@@ -163,7 +163,7 @@ let [@ocamlformat "disable"] print ppf
 
 let compute_bound_symbols definitions =
   ListLabels.map definitions ~f:Definition.bound_symbols_pattern
-  |> Bound_symbols.create
+  |> Bound_static.create
 
 let compute_defining_exprs definitions =
   ListLabels.map definitions ~f:Definition.defining_expr
@@ -233,9 +233,8 @@ let concat ts =
   in
   let bound_symbols =
     List.fold_left
-      (fun bound_symbols t ->
-        Bound_symbols.concat t.bound_symbols bound_symbols)
-      Bound_symbols.empty ts
+      (fun bound_symbols t -> Bound_static.concat t.bound_symbols bound_symbols)
+      Bound_static.empty ts
   in
   let defining_exprs =
     List.fold_left
@@ -267,7 +266,7 @@ let defining_exprs t =
     (List.map Definition.defining_expr t.definitions)
 
 let bound_symbols t =
-  Bound_symbols.create (List.map Definition.bound_symbols_pattern t.definitions)
+  Bound_static.create (List.map Definition.bound_symbols_pattern t.definitions)
 
 let types_of_symbols t =
   ListLabels.fold_left t.definitions ~init:Symbol.Map.empty
