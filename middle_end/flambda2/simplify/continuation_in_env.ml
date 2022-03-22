@@ -18,7 +18,7 @@
 
 type t =
   | Linearly_used_and_inlinable of
-      { params : Bound_parameter.t list;
+      { params : Bound_parameters.t;
         handler : Rebuilt_expr.t;
         free_names_of_handler : Name_occurrences.t;
         cost_metrics_of_handler : Cost_metrics.t

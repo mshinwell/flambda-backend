@@ -24,9 +24,9 @@ include Contains_ids.S with type t := t
 
 val print : Format.formatter -> t -> unit
 
-val create : Bound_parameter.t list -> t
+val create : Bound_parameters.t -> t
 
-val to_list : t -> Bound_parameter.t list
+val to_list : t -> Bound_parameters.t
 
 val rename : t -> t
 

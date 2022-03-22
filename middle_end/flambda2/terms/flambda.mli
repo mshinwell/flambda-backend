@@ -140,7 +140,7 @@ module Expr : sig
   val create_invalid : Invalid.t -> t
 
   val bind_parameters_to_args_no_simplification :
-    params:Bound_parameter.t list -> args:Simple.t list -> body:expr -> expr
+    params:Bound_parameters.t -> args:Simple.t list -> body:expr -> expr
 end
 
 module Named : sig
@@ -265,7 +265,7 @@ module Continuation_handler : sig
 
   (** Create the representation of a single continuation handler. *)
   val create :
-    Bound_parameter.t list ->
+    Bound_parameters.t ->
     handler:expr ->
     free_names_of_handler:Name_occurrences.t Or_unknown.t ->
     is_exn_handler:bool ->
@@ -276,14 +276,14 @@ module Continuation_handler : sig
   val pattern_match' :
     t ->
     f:
-      (Bound_parameter.t list ->
+      (Bound_parameters.t ->
       num_normal_occurrences_of_params:Num_occurrences.t Variable.Map.t ->
       handler:expr ->
       'a) ->
     'a
 
   val pattern_match :
-    t -> f:(Bound_parameter.t list -> handler:expr -> 'a) -> 'a
+    t -> f:(Bound_parameters.t -> handler:expr -> 'a) -> 'a
 
   module Pattern_match_pair_error : sig
     type t = Parameter_lists_have_different_lengths
@@ -296,7 +296,7 @@ module Continuation_handler : sig
   val pattern_match_pair :
     t ->
     t ->
-    f:(Bound_parameter.t list -> handler1:expr -> handler2:expr -> 'a) ->
+    f:(Bound_parameters.t -> handler1:expr -> handler2:expr -> 'a) ->
     ('a, Pattern_match_pair_error.t) Result.t
 
   (** Whether the continuation is an exception handler.
@@ -444,7 +444,7 @@ module Function_params_and_body : sig
   val create :
     return_continuation:Continuation.t ->
     exn_continuation:Continuation.t ->
-    Bound_parameter.t list ->
+    Bound_parameters.t ->
     body:expr ->
     free_names_of_body:Name_occurrences.t Or_unknown.t ->
     my_closure:Variable.t ->
@@ -465,7 +465,7 @@ module Function_params_and_body : sig
       exn_continuation:Continuation.t
         (** To where we must jump if application of the function raises an
             exception. *) ->
-      Bound_parameter.t list ->
+      Bound_parameters.t ->
       body:expr ->
       my_closure:Variable.t ->
       is_my_closure_used:bool Or_unknown.t ->
@@ -489,7 +489,7 @@ module Function_params_and_body : sig
       exn_continuation:Continuation.t
         (** To where we must jump if application of the function raises an
             exception. *) ->
-      Bound_parameter.t list ->
+      Bound_parameters.t ->
       body1:expr ->
       body2:expr ->
       my_closure:Variable.t ->

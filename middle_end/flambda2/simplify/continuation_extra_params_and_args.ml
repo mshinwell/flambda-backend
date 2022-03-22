@@ -46,7 +46,7 @@ module Extra_arg = struct
 end
 
 type t =
-  { extra_params : Bound_parameter.t list;
+  { extra_params : Bound_parameters.t;
     extra_args : Extra_arg.t list Apply_cont_rewrite_id.Map.t
   }
 
