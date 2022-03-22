@@ -28,10 +28,8 @@ let [@ocamlformat "disable"] print ppf { var; name_mode; } =
   | Phantom -> Variable.print ppf var
 
 let create var name_mode =
-  if not (Name_mode.can_be_in_terms name_mode)
-  then
-    Misc.fatal_errorf "Name mode %a (for variable %a) not allowed in terms"
-      Name_mode.print name_mode Variable.print var;
+  (* Note that [name_mode] might be [In_types], e.g. when dealing with function
+     return types and also using [Typing_env.add_definition]. *)
   { var; name_mode }
 
 let var t = t.var

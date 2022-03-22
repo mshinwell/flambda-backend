@@ -30,10 +30,7 @@ let [@ocamlformat "disable"] print ppf { name; name_mode; } =
     Name_mode.print name_mode
 
 let create name name_mode =
-  if not (Name_mode.can_be_in_terms name_mode)
-  then
-    Misc.fatal_errorf "Name mode %a (for name %a) not allowed in terms"
-      Name_mode.print name_mode Name.print name;
+  (* See note about name modes in [Bound_var.create]. *)
   { name; name_mode }
 
 let create_var v =
