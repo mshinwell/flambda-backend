@@ -1498,7 +1498,7 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
      allow inlining and lifting *)
   let wrapper_id = Ident.create_local ("partial_" ^ Ident.name apply.func) in
   let closure_id =
-    Closure_id.wrap
+    Closure_id.create
       (Compilation_unit.get_current_exn ())
       (Variable.create_with_same_name_as_ident wrapper_id)
   in

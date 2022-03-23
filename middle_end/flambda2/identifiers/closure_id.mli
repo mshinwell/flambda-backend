@@ -29,11 +29,7 @@ include Container_types.S
 
 module Lmap : Lmap.S with type key = t
 
-val wrap : Compilation_unit.t -> Variable.t -> t
-
-val unwrap : t -> Variable.t
-
-val in_compilation_unit : t -> Compilation_unit.t -> bool
+val create : Compilation_unit.t -> Variable.t -> t
 
 val get_compilation_unit : t -> Compilation_unit.t
 

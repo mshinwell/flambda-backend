@@ -134,7 +134,7 @@ let fresh_code_id env { Fexpr.txt = name; loc = _ } =
 
 let fresh_closure_id env { Fexpr.txt = name; loc = _ } =
   let v = Variable.create name in
-  let c = Closure_id.wrap (Compilation_unit.get_current_exn ()) v in
+  let c = Closure_id.create (Compilation_unit.get_current_exn ()) v in
   UT.add env.closure_ids name c;
   c
 

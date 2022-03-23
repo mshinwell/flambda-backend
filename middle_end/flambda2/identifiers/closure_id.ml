@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-9-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
 type t =
   { compilation_unit : Compilation_unit.t;
@@ -37,20 +37,17 @@ module Self = Container_types.Make (struct
 
   let equal t1 t2 = compare t1 t2 = 0
 
-  let hash t = t.name_stamp lxor Compilation_unit.hash t.compilation_unit
+  let hash t =
+    Fast_hash.hash2 t.name_stamp (Compilation_unit.hash t.compilation_unit)
 
-  let [@ocamlformat "disable"] print ppf t =
+  let print ppf t =
     Format.fprintf ppf "@<0>%s" (Flambda_colours.closure_element ());
     if Compilation_unit.equal t.compilation_unit
-        (Compilation_unit.get_current_exn ())
-    then begin
-      Format.fprintf ppf "%s/%d"
-        t.name t.name_stamp
-    end else begin
-      Format.fprintf ppf "%a.%s/%d"
-        Compilation_unit.print t.compilation_unit
-        t.name t.name_stamp
-    end;
+         (Compilation_unit.get_current_exn ())
+    then Format.fprintf ppf "%s/%d" t.name t.name_stamp
+    else
+      Format.fprintf ppf "%a.%s/%d" Compilation_unit.print t.compilation_unit
+        t.name t.name_stamp;
     Format.fprintf ppf "@<0>%s" (Flambda_colours.normal ())
 end)
 
@@ -69,8 +66,6 @@ let get_next_stamp () =
   incr next_stamp;
   stamp
 
-let in_compilation_unit t cu = Compilation_unit.equal cu t.compilation_unit
-
 let get_compilation_unit t = t.compilation_unit
 
 let to_string t = t.name ^ "_" ^ string_of_int t.name_stamp
@@ -79,9 +74,7 @@ let name t = t.name
 
 let rename t = { t with name_stamp = get_next_stamp () }
 
-let unwrap t = Variable.create (to_string t)
-
-let wrap compilation_unit var =
+let create compilation_unit var =
   { compilation_unit;
     name = Variable.raw_name var;
     name_stamp = get_next_stamp ()

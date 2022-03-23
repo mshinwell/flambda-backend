@@ -1595,7 +1595,7 @@ and cps_function env ~fid ~stub ~(recursive : Recursive.t) ?free_idents
     { exn_handler = body_exn_cont; extra_args = [] }
   in
   let closure_id =
-    Closure_id.wrap
+    Closure_id.create
       (Compilation_unit.get_current_exn ())
       (Variable.create_with_same_name_as_ident fid)
   in

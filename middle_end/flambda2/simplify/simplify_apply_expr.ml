@@ -312,7 +312,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
   let wrapper_var = Variable.create "partial_app" in
   let compilation_unit = Compilation_unit.get_current_exn () in
   let wrapper_closure_id =
-    Closure_id.wrap compilation_unit (Variable.create "partial_app_closure")
+    Closure_id.create compilation_unit (Variable.create "partial_app_closure")
   in
   let new_closure_alloc_mode, num_trailing_local_params =
     (* If the closure has a local suffix, and we've supplied enough args to hit
