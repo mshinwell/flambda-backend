@@ -569,12 +569,8 @@ and apply_renaming_function_slot_indexed_product
 and apply_renaming_value_slot_indexed_product { value_slot_components_by_index }
     renaming =
   let value_slot_components_by_index =
-    (* CR-someday mshinwell: some loss of sharing here, potentially *)
-    Value_slot.Map.filter_map
-      (fun value_slot ty ->
-        if not (Renaming.value_slot_is_used renaming value_slot)
-        then None
-        else Some (apply_renaming ty renaming))
+    Value_slot.Map.map_sharing
+      (fun ty -> apply_renaming ty renaming)
       value_slot_components_by_index
   in
   { value_slot_components_by_index }

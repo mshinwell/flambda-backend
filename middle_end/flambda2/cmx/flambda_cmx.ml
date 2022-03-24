@@ -232,9 +232,7 @@ let prepare_cmx ~module_symbol create_typing_env ~free_names_of_name
     |> Slot_offsets.reexport_value_slots
          (Name_occurrences.all_value_slots slots_used_in_typing_env)
   in
-  Some
-    (Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets
-       ~used_value_slots)
+  Some (Flambda_cmx_format.create ~final_typing_env ~all_code ~exported_offsets)
 
 let prepare_cmx_file_contents ~final_typing_env ~module_symbol ~used_value_slots
     ~exported_offsets all_code =

@@ -121,11 +121,8 @@ let apply_renaming ({ function_decls; value_slots; alloc_mode } as t) renaming =
     Function_declarations.apply_renaming function_decls renaming
   in
   let value_slots' =
-    Value_slot.Map.filter_map
-      (fun var simple ->
-        if Renaming.value_slot_is_used renaming var
-        then Some (Simple.apply_renaming simple renaming)
-        else None)
+    Value_slot.Map.map_sharing
+      (fun simple -> Simple.apply_renaming simple renaming)
       value_slots
   in
   if function_decls == function_decls' && value_slots == value_slots'

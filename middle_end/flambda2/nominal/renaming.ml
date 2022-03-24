@@ -34,8 +34,6 @@ module Import_map : sig
     consts:Const.t Const.Map.t ->
     code_ids:Code_id.t Code_id.Map.t ->
     continuations:Continuation.t Continuation.Map.t ->
-    used_value_slots:Value_slot.Set.t ->
-    original_compilation_unit:Compilation_unit.t ->
     t
 
   val is_empty : t -> bool
@@ -51,8 +49,6 @@ module Import_map : sig
   val code_id : t -> Code_id.t -> Code_id.t
 
   val continuation : t -> Continuation.t -> Continuation.t
-
-  val value_slot_is_used : t -> Value_slot.t -> bool
 end = struct
   type t =
     { symbols : Symbol.t Symbol.Map.t;
@@ -60,53 +56,20 @@ end = struct
       simples : Simple.t Simple.Map.t;
       consts : Const.t Const.Map.t;
       code_ids : Code_id.t Code_id.Map.t;
-      continuations : Continuation.t Continuation.Map.t;
-      used_value_slots : Value_slot.Set.t;
-      (* CR vlaviron: [used_value_slots] is here because we need to rewrite the
-         types to remove occurrences of unused value slots, as otherwise the
-         types can contain references to code that is neither exported nor
-         present in the actual object file. But this means rewriting types, and
-         the only place a rewriting traversal is done at the moment is during
-         import. This solution is not ideal because the missing code IDs will
-         still be present in the emitted cmx files, and during the traversal in
-         [Flambda_cmx.compute_reachable_names_and_code] we have to assume that
-         code IDs can be missing (and so we cannot detect code IDs that are
-         really missing at this point). *)
-      original_compilation_unit : Compilation_unit.t
-          (* This complements [used_value_slots]. Removal of value slots is only
-             allowed for variables that are not used in the compilation unit
-             they are defined in. *)
+      continuations : Continuation.t Continuation.Map.t
     }
 
-  let is_empty
-      { symbols;
-        variables;
-        simples;
-        consts;
-        code_ids;
-        continuations;
-        used_value_slots;
-        original_compilation_unit = _
-      } =
+  let is_empty { symbols; variables; simples; consts; code_ids; continuations }
+      =
     Symbol.Map.is_empty symbols
     && Variable.Map.is_empty variables
     && Simple.Map.is_empty simples
     && Const.Map.is_empty consts
     && Code_id.Map.is_empty code_ids
     && Continuation.Map.is_empty continuations
-    && Value_slot.Set.is_empty used_value_slots
 
-  let create ~symbols ~variables ~simples ~consts ~code_ids ~continuations
-      ~used_value_slots ~original_compilation_unit =
-    { symbols;
-      variables;
-      simples;
-      consts;
-      code_ids;
-      continuations;
-      used_value_slots;
-      original_compilation_unit
-    }
+  let create ~symbols ~variables ~simples ~consts ~code_ids ~continuations =
+    { symbols; variables; simples; consts; code_ids; continuations }
 
   let symbol t orig =
     match Symbol.Map.find orig t.symbols with
@@ -139,12 +102,6 @@ end = struct
     match Simple.Map.find simple t.simples with
     | simple -> simple
     | exception Not_found -> simple
-
-  let value_slot_is_used t var =
-    if Value_slot.in_compilation_unit var t.original_compilation_unit
-    then Value_slot.Set.mem var t.used_value_slots
-    else (* This value slot might be used in other units *)
-      true
 end
 
 type t =
@@ -164,10 +121,10 @@ let empty =
   }
 
 let create_import_map ~symbols ~variables ~simples ~consts ~code_ids
-    ~continuations ~used_value_slots ~original_compilation_unit =
+    ~continuations =
   let import_map =
     Import_map.create ~symbols ~variables ~simples ~consts ~code_ids
-      ~continuations ~used_value_slots ~original_compilation_unit
+      ~continuations
   in
   if Import_map.is_empty import_map
   then empty
@@ -348,8 +305,3 @@ let apply_simple t simple =
   Simple.pattern_match simple ~name ~const:(fun cst ->
       assert (not (Simple.has_coercion simple));
       Simple.const (apply_const t cst))
-
-let value_slot_is_used t value_slot =
-  match t.import_map with
-  | None -> true (* N.B. not false! *)
-  | Some import_map -> Import_map.value_slot_is_used import_map value_slot

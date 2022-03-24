@@ -24,7 +24,6 @@ val create :
   final_typing_env:Flambda2_types.Typing_env.Serializable.t ->
   all_code:Exported_code.t ->
   exported_offsets:Exported_offsets.t ->
-  used_value_slots:Value_slot.Set.t ->
   t
 
 val import_typing_env_and_code :
