@@ -93,7 +93,8 @@ let transl_label_init_general f =
     Hashtbl.fold
       (fun c id expr ->
          let const =
-           Lprim (Popaque, [Lconst c], Debuginfo.Scoped_location.Loc_unknown)
+           Lprim (Popaque (Opaque_normal { opaque_in_cmm = true }),
+             [Lconst c], Debuginfo.Scoped_location.Loc_unknown)
          in
          Llet(Alias, Pgenval, id, const, expr))
       consts expr
@@ -187,7 +188,8 @@ let oo_wrap env req f x =
                         Loc_unknown)
                 in
                 Llet(StrictOpt, Pgenval, id,
-                     Lprim (Popaque, [cl], Loc_unknown),
+                     Lprim (Popaque (Opaque_normal { opaque_in_cmm = true }),
+                       [cl], Loc_unknown),
                      lambda))
              lambda !classes
          in

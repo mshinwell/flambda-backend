@@ -693,7 +693,14 @@ let simplify_unary_primitive dacc original_prim (prim : P.unary_primitive) ~arg
     | Is_boxed_float -> simplify_is_boxed_float
     | Is_flat_float_array -> simplify_is_flat_float_array
     | Int_as_pointer | Bigarray_length _ | Duplicate_array _ | Duplicate_block _
-    | Opaque_identity | End_region ->
+    | Opaque_identity Only_restrict_code_motion ->
+      fun dacc ~original_term:_ ~arg ~arg_ty ~result_var ->
+        let prim : P.t = Unary (prim, arg) in
+        let named = Named.create_prim prim dbg in
+        let dacc = DA.add_variable dacc result_var arg_ty in
+        (* Must not have [reify = true] or else the primitive may be deleted. *)
+        Simplified_named.reachable named ~try_reify:false, dacc
+    | Opaque_identity (Normal _) | End_region ->
       (* CR mshinwell: In these cases, the type of the argument should still be
          checked. Same for binary/ternary/etc. *)
       fun dacc ~original_term:_ ~arg ~arg_ty:_ ~result_var ->

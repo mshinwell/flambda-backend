@@ -601,8 +601,9 @@ let rec_catch_for_for_loop env ident start stop (dir : Asttypes.direction_flag)
     | Downto ->
       Lprim (Pintcomp Cge, [L.Lvar start_ident; L.Lvar stop_ident], Loc_unknown)
   in
+  let counter_temp = Ident.create_local "counter_temp" in
   let subsequent_test : L.lambda =
-    Lprim (Pintcomp Cne, [L.Lvar ident; L.Lvar stop_ident], Loc_unknown)
+    Lprim (Pintcomp Ceq, [L.Lvar counter_temp; L.Lvar stop_ident], Loc_unknown)
   in
   let one : L.lambda = Lconst (Const_base (Const_int 1)) in
   let next_value_of_counter =
@@ -610,6 +611,7 @@ let rec_catch_for_for_loop env ident start stop (dir : Asttypes.direction_flag)
     | Upto -> L.Lprim (Paddint, [L.Lvar ident; one], Loc_unknown)
     | Downto -> L.Lprim (Psubint, [L.Lvar ident; one], Loc_unknown)
   in
+  let next_value_of_counter_ident = Ident.create_local "next_value" in
   let lam : L.lambda =
     (* Care needs to be taken here not to cause overflow if, for an incrementing
        for-loop, the upper bound is [max_int]; likewise, for a decrementing
@@ -631,11 +633,28 @@ let rec_catch_for_for_loop env ident start stop (dir : Asttypes.direction_flag)
                     (cont, [ident, Pgenval]),
                     Lsequence
                       ( body,
-                        Lifthenelse
-                          ( subsequent_test,
-                            Lstaticraise (cont, [next_value_of_counter]),
-                            L.lambda_unit,
-                            Pgenval ) ),
+                        Llet
+                          ( Strict,
+                            Pintval,
+                            counter_temp,
+                            Lprim
+                              ( Popaque (Opaque_normal { opaque_in_cmm = true }),
+                                [Lvar ident],
+                                Loc_unknown ),
+                            Llet
+                              ( Strict,
+                                Pintval,
+                                next_value_of_counter_ident,
+                                Lprim
+                                  ( Popaque Opaque_only_restrict_code_motion,
+                                    [next_value_of_counter],
+                                    Loc_unknown ),
+                                Lifthenelse
+                                  ( subsequent_test,
+                                    L.lambda_unit,
+                                    Lstaticraise
+                                      (cont, [Lvar next_value_of_counter_ident]),
+                                    Pgenval ) ) ) ),
                     Pgenval ),
                 L.lambda_unit,
                 Pgenval ) ) )
@@ -774,7 +793,7 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Pbigstring_set_16 true
   | Pbigstring_set_32 true
   | Pbigstring_set_64 true
-  | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer | Popaque
+  | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer | Popaque _
   | Pprobe_is_enabled _ ->
     false
 

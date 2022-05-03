@@ -62,6 +62,10 @@ type region_close =
   | Rc_normal
   | Rc_close_at_apply
 
+type opaque_identity_semantics =
+  | Opaque_normal of { opaque_in_cmm : bool }
+  | Opaque_only_restrict_code_motion
+
 type primitive =
   | Pidentity
   | Pbytes_to_string
@@ -171,7 +175,7 @@ type primitive =
   (* Integer to external pointer *)
   | Pint_as_pointer
   (* Inhibition of optimisation *)
-  | Popaque
+  | Popaque of opaque_identity_semantics
   (* Statically-defined probes *)
   | Pprobe_is_enabled of { name: string }
 

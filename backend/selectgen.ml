@@ -825,7 +825,9 @@ method emit_expr (env:environment) exp =
         None -> None
       | Some (simple_args, env) ->
          let rs = self#emit_tuple env simple_args in
-         Some (self#insert_op_debug env Iopaque dbg rs rs)
+         let dests = Reg.createv_like rs in
+         self#insert_moves env rs dests;
+         Some (self#insert_op_debug env Iopaque dbg dests dests)
       end
   | Cop(op, args, dbg) ->
       begin match self#emit_parts_list env' args with
@@ -1014,13 +1016,23 @@ method emit_expr (env:environment) exp =
                   Misc.fatal_error ("Selection.emit_expr: unbound label "^
                                     Stdlib.Int.to_string nfail)
               in
-              (* Intermediate registers to handle cases where some
-                 registers from src are present in dest *)
-              let tmp_regs = Reg.createv_like src in
               (* Ccatch registers must not contain out of heap pointers *)
               Array.iter (fun reg -> assert(reg.typ <> Addr)) src;
-              self#insert_moves env src tmp_regs ;
-              self#insert_moves env tmp_regs (Array.concat dest_args) ;
+              (* Intermediate registers to handle cases where some
+                 registers from src are present in dest *)
+              let dest_args = Array.concat dest_args in
+              let has_overlap =
+                let src_regs = Reg.set_of_array src in
+                let dest_regs = Reg.set_of_array dest_args in
+                not (Reg.Set.is_empty (Reg.Set.inter src_regs dest_regs))
+              in
+              if not has_overlap then
+                self#insert_moves env src dest_args
+              else begin
+                let tmp_regs = Reg.createv_like src in
+                self#insert_moves env src tmp_regs ;
+                self#insert_moves env tmp_regs dest_args
+              end;
               begin match env_close_regions env dest_regions with
               | None -> ()
               | Some regs -> self#insert env (Iop Iendregion) regs [||]

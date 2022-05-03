@@ -420,7 +420,11 @@ let primitive ppf = function
   | Pbswap16 -> fprintf ppf "bswap16"
   | Pbbswap(bi,m) -> print_boxed_integer "bswap" ppf bi m
   | Pint_as_pointer -> fprintf ppf "int_as_pointer"
-  | Popaque -> fprintf ppf "opaque"
+  | Popaque (Opaque_normal { opaque_in_cmm = true }) -> fprintf ppf "opaque"
+  | Popaque (Opaque_normal { opaque_in_cmm = false }) ->
+      fprintf ppf "opaque_not_in_cmm"
+  | Popaque Opaque_only_restrict_code_motion ->
+      fprintf ppf "opaque_only_restrict_code_motion"
   | Pprobe_is_enabled {name} -> fprintf ppf "probe_is_enabled[%s]" name
 
 let name_of_primitive = function
@@ -528,7 +532,7 @@ let name_of_primitive = function
   | Pbswap16 -> "Pbswap16"
   | Pbbswap _ -> "Pbbswap"
   | Pint_as_pointer -> "Pint_as_pointer"
-  | Popaque -> "Popaque"
+  | Popaque _ -> "Popaque"
   | Pprobe_is_enabled _ -> "Pprobe_is_enabled"
 
 let function_attribute ppf { inline; specialise; local; is_a_functor; stub } =

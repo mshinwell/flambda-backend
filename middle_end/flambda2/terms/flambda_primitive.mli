@@ -234,6 +234,10 @@ type unary_float_arith_op =
   | Abs
   | Neg
 
+type opaque_identity_semantics =
+  | Normal of { opaque_in_cmm : bool }
+  | Only_restrict_code_motion
+
 (** Primitives taking exactly one argument. *)
 type unary_primitive =
   | Duplicate_block of
@@ -262,7 +266,7 @@ type unary_primitive =
      represented differently mshinwell: I think this should be ok now, please
      check *)
   | Int_as_pointer
-  | Opaque_identity
+  | Opaque_identity of opaque_identity_semantics
   | Int_arith of Flambda_kind.Standard_int.t * unary_int_arith_op
   | Float_arith of unary_float_arith_op
   | Num_conv of

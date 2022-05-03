@@ -617,7 +617,10 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list)
               ( Make_array (Naked_floats, Immutable, mode),
                 List.map unbox_float args ),
             Variadic (Make_array (Values, Immutable, mode), args) )))
-  | Popaque, [arg] -> Unary (Opaque_identity, arg)
+  | Popaque (Opaque_normal { opaque_in_cmm }), [arg] ->
+    Unary (Opaque_identity (Normal { opaque_in_cmm }), arg)
+  | Popaque Opaque_only_restrict_code_motion, [arg] ->
+    Unary (Opaque_identity Only_restrict_code_motion, arg)
   | Pduprecord (repr, num_fields), [arg] ->
     let kind : P.Duplicate_block_kind.t =
       match repr with
@@ -1116,7 +1119,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list)
       Printlambda.primitive prim H.print_list_of_simple_or_prim args
   | ( ( Pfield _ | Pnegint | Pnot | Poffsetint _ | Pintoffloat | Pfloatofint _
       | Pnegfloat _ | Pabsfloat _ | Pstringlength | Pbyteslength | Pbintofint _
-      | Pintofbint _ | Pnegbint _ | Popaque | Pduprecord _ | Parraylength _
+      | Pintofbint _ | Pnegbint _ | Popaque _ | Pduprecord _ | Parraylength _
       | Pduparray _ | Pfloatfield _ | Pcvtbint _ | Poffsetref _ | Pbswap16
       | Pbbswap _ | Pisint | Pint_as_pointer | Pbigarraydim _ ),
       ([] | _ :: _ :: _) ) ->

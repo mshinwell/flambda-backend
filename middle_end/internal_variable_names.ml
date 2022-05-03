@@ -13,306 +13,591 @@
 (**************************************************************************)
 
 [@@@ocaml.warning "+a-4-9-30-40-41-42-66"]
+
 open! Int_replace_polymorphic_compare
 
 type t = string
 
 let apply_arg = "apply_arg"
+
 let apply_funct = "apply_funct"
+
 let block_symbol = "block_symbol"
+
 let block_symbol_get = "block_symbol_get"
+
 let block_symbol_get_field = "block_symbol_get_field"
+
 let closure = "closure"
+
 let cond = "cond"
+
 let cond_sequor = "cond_sequor"
+
 let const_block = "const_block"
+
 let const_bool = "const_bool"
+
 let const_boxed_int = "const_boxed_int"
+
 let const_char = "const_char"
+
 let const_false = "const_false"
+
 let const_float = "const_float"
+
 let const_int = "const_int"
+
 let const_one = "const_one"
+
 let const_ptr = "const_ptr"
+
 let const_ptr_one = "const_ptr_one"
+
 let const_ptr_zero = "const_ptr_zero"
+
 let const_sequand = "const_sequand"
+
 let const_string = "const_string"
+
 let const_true = "const_true"
+
 let const_zero = "const_zero"
+
 let denominator = "denominator"
+
 let division_by_zero = "division_by_zero"
+
 let dummy = "dummy"
+
 let dup_func = "dup_func"
+
 let dup_set_of_closures = "dup_set_of_closures"
+
 let const_float_array = "const_float_array"
+
 let fake_effect_symbol = "fake_effect_symbol"
+
 let for_from = "for_from"
+
 let for_to = "for_to"
+
 let from_closure = "from_closure"
+
 let full_apply = "full_apply"
+
 let get_symbol_field = "get_symbol_field"
+
 let const_immstring = "const_immstring"
+
 let const_int32 = "const_int32"
+
 let const_int64 = "const_int64"
+
 let ignore = "ignore"
+
 let is_zero = "is_zero"
+
 let lifted_let_rec_block = "lifted_let_rec_block"
+
 let meth = "meth"
+
 let module_as_block = "module_as_block"
+
 let const_nativeint = "const_nativeint"
+
 let new_value = "new_value"
+
 let numerator = "numerator"
+
 let obj = "obj"
+
 let offsetted = "offsetted"
+
 let pabsfloat = "Pabsfloat"
+
 let paddbint = "Paddbint"
+
 let paddfloat = "Paddfloat"
+
 let paddint = "Paddint"
+
 let pandbint = "Pandbint"
+
 let pandint = "Pandint"
+
 let parraylength = "Parraylength"
+
 let parrayrefs = "Parrayrefs"
+
 let parrayrefu = "Parrayrefu"
+
 let parraysets = "Parraysets"
+
 let parraysetu = "Parraysetu"
+
 let pasrbint = "Pasrbint"
+
 let pasrint = "Pasrint"
+
 let pbbswap = "Pbbswap"
+
 let pbigarraydim = "Pbigarraydim"
+
 let pbigarrayref = "Pbigarrayref"
+
 let pbigarrayset = "Pbigarrayset"
+
 let pbigstring_load_16 = "Pbigstring_load_16"
+
 let pbigstring_load_32 = "Pbigstring_load_32"
+
 let pbigstring_load_64 = "Pbigstring_load_64"
+
 let pbigstring_set_16 = "Pbigstring_set_16"
+
 let pbigstring_set_32 = "Pbigstring_set_32"
+
 let pbigstring_set_64 = "Pbigstring_set_64"
+
 let pbintcomp = "Pbintcomp"
+
 let pbintofint = "Pbintofint"
+
 let pbswap16 = "Pbswap16"
+
 let pbytes_of_string = "Pbytes_of_string"
+
 let pbytes_load_16 = "Pbytes_load_16"
+
 let pbytes_load_32 = "Pbytes_load_32"
+
 let pbytes_load_64 = "Pbytes_load_64"
+
 let pbytes_set_16 = "Pbytes_set_16"
+
 let pbytes_set_32 = "Pbytes_set_32"
+
 let pbytes_set_64 = "Pbytes_set_64"
+
 let pbytes_to_string = "Pbytes_to_string"
+
 let pbyteslength = "Pbyteslength"
+
 let pbytesrefs = "Pbytesrefs"
+
 let pbytesrefu = "Pbytesrefu"
+
 let pbytessets = "Pbytessets"
+
 let pbytessetu = "Pbytessetu"
+
 let pccall = "Pccall"
+
 let pctconst = "Pctconst"
+
 let pcvtbint = "Pcvtbint"
+
 let pdirapply = "Pdirapply"
+
 let pdivbint = "Pdivbint"
+
 let pdivfloat = "Pdivfloat"
+
 let pdivint = "Pdivint"
+
 let pduparray = "Pduparray"
+
 let pduprecord = "Pduprecord"
+
 let pfield = "Pfield"
+
 let pfield_computed = "Pfield_computed"
+
 let pfloatcomp = "Pfloatcomp"
+
 let pfloatfield = "Pfloatfield"
+
 let pfloatofint = "Pfloatofint"
+
 let pgetglobal = "Pgetglobal"
+
 let pidentity = "Pidentity"
+
 let pignore = "Pignore"
+
 let pint_as_pointer = "Pint_as_pointer"
+
 let pintcomp = "Pintcomp"
+
 let pcompare_ints = "Pcompare_ints"
+
 let pcompare_floats = "Pcompare_floats"
+
 let pcompare_bints = "Pcompare_bints"
+
 let pintofbint = "Pintofbint"
+
 let pintoffloat = "Pintoffloat"
+
 let pisint = "Pisint"
+
 let pisout = "Pisout"
+
 let plslbint = "Plslbint"
+
 let plslint = "Plslint"
+
 let plsrbint = "Plsrbint"
+
 let plsrint = "Plsrint"
+
 let pmakearray = "Pmakearray"
+
 let pmakeblock = "Pmakeblock"
+
 let pmakefloatblock = "Pmakefloatblock"
+
 let pmodbint = "Pmodbint"
+
 let pmodint = "Pmodint"
+
 let pmulbint = "Pmulbint"
+
 let pmulfloat = "Pmulfloat"
+
 let pmulint = "Pmulint"
+
 let pnegbint = "Pnegbint"
+
 let pnegfloat = "Pnegfloat"
+
 let pnegint = "Pnegint"
+
 let pnot = "Pnot"
+
 let poffsetint = "Poffsetint"
+
 let poffsetref = "Poffsetref"
+
 let pointer = "pointer"
+
 let popaque = "Popaque"
+
 let porbint = "Porbint"
+
 let porint = "Porint"
+
 let praise = "Praise"
+
 let predef_exn = "predef_exn"
+
 let prevapply = "Prevapply"
+
 let project_closure = "project_closure"
+
 let psequand = "Psequand"
+
 let psequor = "Psequor"
+
 let psetfield = "Psetfield"
+
 let psetfield_computed = "Psetfield_computed"
+
 let psetfloatfield = "Psetfloatfield"
+
 let psetglobal = "Psetglobal"
+
 let pstring_load_16 = "Pstring_load_16"
+
 let pstring_load_32 = "Pstring_load_32"
+
 let pstring_load_64 = "Pstring_load_64"
+
 let pstringlength = "Pstringlength"
+
 let pstringrefs = "Pstringrefs"
+
 let pstringrefu = "Pstringrefu"
+
 let psubbint = "Psubbint"
+
 let psubfloat = "Psubfloat"
+
 let psubint = "Psubint"
+
 let pxorbint = "Pxorbint"
+
 let pxorint = "Pxorint"
+
 let pprobe_is_enabled = "Pprobe_is_enabled"
+
 let pabsfloat_arg = "Pabsfloat_arg"
+
 let paddbint_arg = "Paddbint_arg"
+
 let paddfloat_arg = "Paddfloat_arg"
+
 let paddint_arg = "Paddint_arg"
+
 let pandbint_arg = "Pandbint_arg"
+
 let pandint_arg = "Pandint_arg"
+
 let parraylength_arg = "Parraylength_arg"
+
 let parrayrefs_arg = "Parrayrefs_arg"
+
 let parrayrefu_arg = "Parrayrefu_arg"
+
 let parraysets_arg = "Parraysets_arg"
+
 let parraysetu_arg = "Parraysetu_arg"
+
 let partial_fun = "partial_fun"
+
 let pasrbint_arg = "Pasrbint_arg"
+
 let pasrint_arg = "Pasrint_arg"
+
 let pbbswap_arg = "Pbbswap_arg"
+
 let pbigarraydim_arg = "Pbigarraydim_arg"
+
 let pbigarrayref_arg = "Pbigarrayref_arg"
+
 let pbigarrayset_arg = "Pbigarrayset_arg"
+
 let pbigstring_load_16_arg = "Pbigstring_load_16_arg"
+
 let pbigstring_load_32_arg = "Pbigstring_load_32_arg"
+
 let pbigstring_load_64_arg = "Pbigstring_load_64_arg"
+
 let pbigstring_set_16_arg = "Pbigstring_set_16_arg"
+
 let pbigstring_set_32_arg = "Pbigstring_set_32_arg"
+
 let pbigstring_set_64_arg = "Pbigstring_set_64_arg"
+
 let pbintcomp_arg = "Pbintcomp_arg"
+
 let pbintofint_arg = "Pbintofint_arg"
+
 let pbswap16_arg = "Pbswap16_arg"
+
 let pbytes_of_string_arg = "Pbytes_of_string_arg"
+
 let pbytes_to_string_arg = "Pbytes_to_string_arg"
+
 let pbyteslength_arg = "Pbyteslength_arg"
+
 let pbytesrefs_arg = "Pbytesrefs_arg"
+
 let pbytesrefu_arg = "Pbytesrefu_arg"
+
 let pbytessets_arg = "Pbytessets_arg"
+
 let pbytessetu_arg = "Pbytessetu_arg"
+
 let pccall_arg = "Pccall_arg"
+
 let pctconst_arg = "Pctconst_arg"
+
 let pcvtbint_arg = "Pcvtbint_arg"
+
 let pdirapply_arg = "Pdirapply_arg"
+
 let pdivbint_arg = "Pdivbint_arg"
+
 let pdivfloat_arg = "Pdivfloat_arg"
+
 let pdivint_arg = "Pdivint_arg"
+
 let pduparray_arg = "Pduparray_arg"
+
 let pduprecord_arg = "Pduprecord_arg"
+
 let pfield_arg = "Pfield_arg"
+
 let pfield_computed_arg = "Pfield_computed_arg"
+
 let pfloatcomp_arg = "Pfloatcomp_arg"
+
 let pfloatfield_arg = "Pfloatfield_arg"
+
 let pfloatofint_arg = "Pfloatofint_arg"
+
 let pgetglobal_arg = "Pgetglobal_arg"
+
 let pidentity_arg = "Pidentity_arg"
+
 let pignore_arg = "Pignore_arg"
+
 let pint_as_pointer_arg = "Pint_as_pointer_arg"
+
 let pintcomp_arg = "Pintcomp_arg"
+
 let pcompare_ints_arg = "Pcompare_ints_arg"
+
 let pcompare_floats_arg = "Pcompare_floats_arg"
+
 let pcompare_bints_arg = "Pcompare_bints_arg"
+
 let pintofbint_arg = "Pintofbint_arg"
+
 let pintoffloat_arg = "Pintoffloat_arg"
+
 let pisint_arg = "Pisint_arg"
+
 let pisout_arg = "Pisout_arg"
+
 let plslbint_arg = "Plslbint_arg"
+
 let plslint_arg = "Plslint_arg"
+
 let plsrbint_arg = "Plsrbint_arg"
+
 let plsrint_arg = "Plsrint_arg"
+
 let pmakearray_arg = "Pmakearray_arg"
+
 let pmakeblock_arg = "Pmakeblock_arg"
+
 let pmakefloatblock_arg = "Pmakefloatblock_arg"
+
 let pmodbint_arg = "Pmodbint_arg"
+
 let pmodint_arg = "Pmodint_arg"
+
 let pmulbint_arg = "Pmulbint_arg"
+
 let pmulfloat_arg = "Pmulfloat_arg"
+
 let pmulint_arg = "Pmulint_arg"
+
 let pnegbint_arg = "Pnegbint_arg"
+
 let pnegfloat_arg = "Pnegfloat_arg"
+
 let pnegint_arg = "Pnegint_arg"
+
 let pnot_arg = "Pnot_arg"
+
 let poffsetint_arg = "Poffsetint_arg"
+
 let poffsetref_arg = "Poffsetref_arg"
+
 let popaque_arg = "Popaque_arg"
+
 let porbint_arg = "Porbint_arg"
+
 let porint_arg = "Porint_arg"
+
 let praise_arg = "Praise_arg"
+
 let prevapply_arg = "Prevapply_arg"
+
 let psequand_arg = "Psequand_arg"
+
 let psequor_arg = "Psequor_arg"
+
 let psetfield_arg = "Psetfield_arg"
+
 let psetfield_computed_arg = "Psetfield_computed_arg"
+
 let psetfloatfield_arg = "Psetfloatfield_arg"
+
 let psetglobal_arg = "Psetglobal_arg"
+
 let pstring_load_16_arg = "Pstring_load_16_arg"
+
 let pstring_load_32_arg = "Pstring_load_32_arg"
+
 let pstring_load_64_arg = "Pstring_load_64_arg"
+
 let pbytes_load_16_arg = "Pbytes_load_16_arg"
+
 let pbytes_load_32_arg = "Pbytes_load_32_arg"
+
 let pbytes_load_64_arg = "Pbytes_load_64_arg"
+
 let pbytes_set_16_arg = "Pbytes_set_16_arg"
+
 let pbytes_set_32_arg = "Pbytes_set_32_arg"
+
 let pbytes_set_64_arg = "Pbytes_set_64_arg"
+
 let pstringlength_arg = "Pstringlength_arg"
+
 let pstringrefs_arg = "Pstringrefs_arg"
+
 let pstringrefu_arg = "Pstringrefu_arg"
+
 let psubbint_arg = "Psubbint_arg"
+
 let psubfloat_arg = "Psubfloat_arg"
+
 let psubint_arg = "Psubint_arg"
+
 let pxorbint_arg = "Pxorbint_arg"
+
 let pxorint_arg = "Pxorint_arg"
+
 let pprobe_is_enabled_arg = "Pprobe_is_enabled_arg"
+
 let raise = "raise"
+
 let raise_arg = "raise_arg"
+
 let read_mutable = "read_mutable"
+
 let remove_unused_arguments = "remove_unused_arguments"
+
 let result = "result"
+
 let send_arg = "send_arg"
+
 let sequence = "sequence"
+
 let set_of_closures = "set_of_closures"
+
 let simplify_fv = "simplify_fv"
+
 let staticraise_arg = "staticraise_arg"
+
 let string_switch = "string_switch"
+
 let switch = "switch"
+
 let symbol = "symbol"
+
 let symbol_field = "symbol_field"
+
 let symbol_field_block = "symbol_field_block"
+
 let the_dead_constant = "the_dead_constant"
+
 let toplevel_substitution_named = "toplevel_substitution_named"
+
 let unbox_free_vars_of_closures = "unbox_free_vars_of_closures"
+
 let unit = "unit"
+
 let zero = "zero"
+
 let probe_handler = "probe_handler"
 
-let anon_fn_with_loc (sloc: Lambda.scoped_location) =
+let anon_fn_with_loc (sloc : Lambda.scoped_location) =
   let loc = Debuginfo.Scoped_location.to_location sloc in
-  let (file, line, startchar) = Location.get_pos_info loc.loc_start in
+  let file, line, startchar = Location.get_pos_info loc.loc_start in
   let endchar = loc.loc_end.pos_cnum - loc.loc_start.pos_bol in
   let pp_chars ppf =
-    if startchar >= 0 then Format.fprintf ppf ",%i--%i" startchar endchar in
-  if loc.Location.loc_ghost then "anon_fn"
-  else
-    Format.asprintf "anon_fn[%s:%i%t]"
-      (Filename.basename file) line pp_chars
+    if startchar >= 0 then Format.fprintf ppf ",%i--%i" startchar endchar
+  in
+  if loc.Location.loc_ghost
+  then "anon_fn"
+  else Format.asprintf "anon_fn[%s:%i%t]" (Filename.basename file) line pp_chars
 
 let of_primitive : Lambda.primitive -> string = function
   | Pidentity -> pidentity
@@ -419,7 +704,7 @@ let of_primitive : Lambda.primitive -> string = function
   | Pbswap16 -> pbswap16
   | Pbbswap _ -> pbbswap
   | Pint_as_pointer -> pint_as_pointer
-  | Popaque -> popaque
+  | Popaque _ -> popaque
   | Pprobe_is_enabled _ -> pprobe_is_enabled
 
 let of_primitive_arg : Lambda.primitive -> string = function
@@ -527,5 +812,5 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Pbswap16 -> pbswap16_arg
   | Pbbswap _ -> pbbswap_arg
   | Pint_as_pointer -> pint_as_pointer_arg
-  | Popaque -> popaque_arg
+  | Popaque _ -> popaque_arg
   | Pprobe_is_enabled _ -> pprobe_is_enabled_arg

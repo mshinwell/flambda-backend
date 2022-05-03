@@ -697,7 +697,7 @@ and transl_exp0 ~in_new_scope ~scopes e =
       else begin
         Lifthenelse
           (transl_exp ~scopes cond,
-           lambda_unit, 
+           lambda_unit,
            assert_failed ~scopes e,
            Pintval (* unit *))
       end
@@ -725,7 +725,7 @@ and transl_exp0 ~in_new_scope ~scopes e =
             optimisation in Flambda, but the concept of a mutable
             block doesn't really match what is going on here.  This
             value may subsequently turn into an immediate... *)
-         Lprim (Popaque,
+         Lprim (Popaque (Opaque_normal { opaque_in_cmm = true }),
                 [Lprim(Pmakeblock(Obj.forward_tag, Immutable, None,
                                   Alloc_heap),
                        [transl_exp ~scopes e],
