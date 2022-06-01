@@ -1249,24 +1249,70 @@ let fundecl fundecl =
 
 (* Emission of data *)
 
-let emit_item = function
-  | Cglobal_symbol s -> D.global (emit_symbol s)
-  | Cdefine_symbol s -> add_def_symbol s; _label (emit_symbol s)
-  | Cint8 n -> D.byte (const n)
-  | Cint16 n -> D.word (const n)
-  | Cint32 n -> D.long (const_nat n)
-  | Cint n -> D.qword (const_nat n)
-  | Csingle f -> D.long  (Const (Int64.of_int32 (Int32.bits_of_float f)))
-  | Cdouble f -> D.qword (Const (Int64.bits_of_float f))
-  | Csymbol_address s -> add_used_symbol s; D.qword (ConstLabel (emit_symbol s))
-  | Cstring s -> D.bytes s
-  | Cskip n -> if n > 0 then D.space n
-  | Calign n -> D.align n
+module String = Misc.String
+
+type data_env = {
+  symbol_byte_offsets : int String.Map.t
+}
+
+let emit_item env ~byte_offset item =
+  match item with
+  | Cglobal_symbol s ->
+    D.global (emit_symbol s);
+    env, 8
+  | Cdefine_symbol s ->
+    add_def_symbol s;
+    _label (emit_symbol s);
+    let symbol_byte_offsets =
+      String.Map.add s byte_offset env.symbol_byte_offsets
+    in
+    { env with symbol_byte_offsets }, 0
+  | Cint8 n ->
+    D.byte (const n);
+    env, 1
+  | Cint16 n ->
+    D.word (const n);
+    env, 2
+  | Cint32 n ->
+    D.long (const_nat n);
+    env, 4
+  | Cint n ->
+    D.qword (const_nat n);
+    env, 8
+  | Csingle f ->
+    D.long  (Const (Int64.of_int32 (Int32.bits_of_float f)));
+    env, 4
+  | Cdouble f ->
+    D.qword (Const (Int64.bits_of_float f));
+    env, 8
+  | Csymbol_address s ->
+    add_used_symbol s;
+    D.qword (ConstLabel (emit_symbol s));
+    env, 8
+  | Cstring s ->
+    D.bytes s;
+    env, String.length s
+  | Cskip n ->
+    if n > 0 then (
+      D.space n;
+      env, n
+    )
+    else env, 0
+  | Calign _ -> Misc.fatal_error "Calign unsupported"
 
 let data l =
   D.data ();
   D.align 8;
-  List.iter emit_item l
+  let env, total_size_in_bytes =
+    List.fold_left (fun (env, byte_offset) item ->
+        let env, bytes_emitted = emit_item env ~byte_offset item in
+        env, byte_offset + bytes_emitted)
+      { symbol_byte_offsets = String.Map.empty }
+      l
+  in
+  List.iter (fun (sym, byte_offset) ->
+      Format.eprintf "sym %s at byte offset %d\n%!" sym byte_offset)
+    env.symbol_byte_offsets
 
 (* Beginning / end of an assembly file *)
 
