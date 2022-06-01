@@ -55,7 +55,8 @@ val check_for_module_symbol : t -> Symbol.t -> t
 type result = private
   { data_items : Cmm.phrase list;
     gc_roots : Symbol.t list;
-    functions : Cmm.phrase list
+    functions : Cmm.phrase list;
+    symbol_offsets : int Symbol.Map.t
   }
 
 (** Archive the current data and then return the translated data present in the

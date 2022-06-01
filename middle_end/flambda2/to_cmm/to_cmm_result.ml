@@ -90,7 +90,8 @@ let add_function r f = { r with functions = f :: r.functions }
 type result =
   { data_items : Cmm.phrase list;
     gc_roots : Symbol.t list;
-    functions : Cmm.phrase list
+    functions : Cmm.phrase list;
+    symbol_offsets : int Symbol.Map.t
   }
 
 let define_module_symbol_if_missing r =
