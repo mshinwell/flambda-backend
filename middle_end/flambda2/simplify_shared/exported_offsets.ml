@@ -160,3 +160,13 @@ let merge env1 env2 =
   { function_slot_offsets; value_slot_offsets; symbol_offsets }
 
 let import_offsets env = current_offsets := merge env !current_offsets
+
+let apply_renaming { function_slot_offsets; value_slot_offsets; symbol_offsets }
+    renaming =
+  let symbol_offsets =
+    Symbol.Map.fold
+      (fun symbol offset result ->
+        Symbol.Map.add (Renaming.apply_symbol renaming symbol) offset result)
+      symbol_offsets Symbol.Map.empty
+  in
+  { function_slot_offsets; value_slot_offsets; symbol_offsets }

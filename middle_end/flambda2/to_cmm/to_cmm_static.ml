@@ -24,9 +24,9 @@ end
 module SC = Static_const
 module R = To_cmm_result
 
-let static_value v =
+let static_value env v =
   match (v : Field_of_static_block.t) with
-  | Symbol s -> C.symbol_address (Symbol.linkage_name_as_string s)
+  | Symbol s -> To_cmm_env.static_symbol_address env s
   | Dynamically_computed _ -> C.cint 1n
   | Tagged_immediate i ->
     C.cint
@@ -106,14 +106,21 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     (static_const : Static_const.t) =
   match bound_static, static_const with
   | Block_like s, Block (tag, _mut, fields) ->
-    let r = R.check_for_module_symbol r s in
+    let r, is_module_symbol = R.check_for_module_symbol r s in
+    let r =
+      if is_module_symbol
+      then r
+      else
+        R.record_symbol_offset r s
+          ~size_in_words_excluding_header:(List.length fields)
+    in
     let tag = Tag.Scannable.to_int tag in
     let block_name = Symbol.linkage_name_as_string s, Cmmgen_state.Global in
     let header = C.black_block_header tag (List.length fields) in
     let env, static_fields =
       List.fold_right
         (fun v (env, static_fields) ->
-          let static_field = static_value v in
+          let static_field = static_value env v in
           env, static_field :: static_fields)
         fields (env, [])
     in
@@ -127,6 +134,7 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     in
     env, r, updates
   | Block_like s, Boxed_float v ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let default = Numeric_types.Float_by_bit_pattern.zero in
     let transl = Numeric_types.Float_by_bit_pattern.to_float in
     let r, (env, updates) =
@@ -135,18 +143,21 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     in
     env, r, updates
   | Block_like s, Boxed_int32 v ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let r, (env, updates) =
       static_boxed_number Word_int env s 0l C.emit_int32_constant Fun.id v r
         updates
     in
     env, r, updates
   | Block_like s, Boxed_int64 v ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let r, (env, updates) =
       static_boxed_number Word_int env s 0L C.emit_int64_constant Fun.id v r
         updates
     in
     env, r, updates
   | Block_like s, Boxed_nativeint v ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let default = Targetint_32_64.zero in
     let transl = C.nativeint_of_targetint in
     let r, (env, updates) =
@@ -156,6 +167,10 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, r, updates
   | Block_like s, (Immutable_float_block fields | Immutable_float_array fields)
     ->
+    let r =
+      R.record_symbol_offset r s
+        ~size_in_words_excluding_header:(List.length fields)
+    in
     let aux =
       Or_variable.value_map ~default:0.
         ~f:Numeric_types.Float_by_bit_pattern.to_float
@@ -169,6 +184,7 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     let env, e = static_float_array_updates s env updates 0 fields in
     env, R.update_data r float_array, e
   | Block_like s, Empty_array ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:0 in
     (* Recall: empty arrays have tag zero, even if their kind is naked float. *)
     let block_name = Symbol.linkage_name_as_string s, Cmmgen_state.Global in
     let header = C.black_block_header 0 0 in
@@ -176,6 +192,10 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, R.set_data r block, updates
   | Block_like s, Mutable_string { initial_value = str }
   | Block_like s, Immutable_string str ->
+    let r =
+      R.record_symbol_offset r s
+        ~size_in_words_excluding_header:((String.length str + 8) / 8)
+    in
     let name = Symbol.linkage_name_as_string s in
     let data = C.emit_string_constant (name, Cmmgen_state.Global) str in
     env, R.update_data r data, updates

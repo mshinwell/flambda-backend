@@ -41,7 +41,7 @@ let rec load_cmx_file_contents loader comp_unit =
     | Some cmx ->
       let resolver comp_unit = load_cmx_file_contents loader comp_unit in
       let get_imported_names () = loader.imported_names in
-      let typing_env, all_code =
+      let typing_env, all_code, offsets =
         Flambda_cmx_format.import_typing_env_and_code cmx
       in
       let typing_env =
@@ -51,7 +51,6 @@ let rec load_cmx_file_contents loader comp_unit =
       loader.imported_names
         <- Name.Set.union newly_imported_names loader.imported_names;
       loader.imported_code <- EC.merge all_code loader.imported_code;
-      let offsets = Flambda_cmx_format.exported_offsets cmx in
       Exported_offsets.import_offsets offsets;
       loader.imported_units
         <- Compilation_unit.Map.add comp_unit (Some typing_env)

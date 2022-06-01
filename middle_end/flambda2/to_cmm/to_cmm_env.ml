@@ -389,3 +389,12 @@ let flush_delayed_lets ?(entering_loop = false) env =
   in
   let flush e = flush pures_to_flush env.stages e in
   flush, { env with stages = []; pures = pures_to_keep }
+
+let static_symbol_address t symbol =
+  let name = Symbol.linkage_name_as_string symbol in
+  (match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
+  | None -> ()
+  | Some bytes ->
+    Format.printf "Symbol %a can be reached via offset %d\n" Symbol.print symbol
+      bytes);
+  Cmm.Csymbol_address name

@@ -267,6 +267,7 @@ type data_item =
   | Csingle of float
   | Cdouble of float
   | Csymbol_address of string
+(*  | Csymbol_address_plus_byte_offset of string * int *)
   | Cstring of string
   | Cskip of int
   | Calign of int

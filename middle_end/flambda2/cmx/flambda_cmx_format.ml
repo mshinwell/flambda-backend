@@ -154,7 +154,10 @@ let import_typing_env_and_code0 t =
       renaming
   in
   let all_code = Exported_code.apply_renaming code_ids renaming t.all_code in
-  typing_env, all_code
+  let exported_offsets =
+    Exported_offsets.apply_renaming t.exported_offsets renaming
+  in
+  typing_env, all_code, exported_offsets
 
 let import_typing_env_and_code t =
   match t with
@@ -162,20 +165,20 @@ let import_typing_env_and_code t =
   | [t0] -> import_typing_env_and_code0 t0
   | t0 :: rem ->
     List.fold_left
-      (fun (typing_env, code) t0 ->
-        let typing_env0, code0 = import_typing_env_and_code0 t0 in
+      (fun (typing_env, code, exported_offsets) t0 ->
+        let typing_env0, code0, exported_offsets0 =
+          import_typing_env_and_code0 t0
+        in
         let typing_env =
           Flambda2_types.Typing_env.Serializable.merge typing_env typing_env0
         in
         let code = Exported_code.merge code code0 in
-        typing_env, code)
+        let exported_offsets =
+          Exported_offsets.merge exported_offsets exported_offsets0
+        in
+        typing_env, code, exported_offsets)
       (import_typing_env_and_code0 t0)
       rem
-
-let exported_offsets t =
-  List.fold_left
-    (fun offsets t0 -> Exported_offsets.merge offsets t0.exported_offsets)
-    Exported_offsets.empty t
 
 let functions_info t =
   List.fold_left
@@ -232,12 +235,12 @@ let print0 ppf t =
   Format.fprintf ppf "@[<hov>Original unit:@ %a@]@;" Compilation_unit.print
     t.original_compilation_unit;
   Compilation_unit.set_current t.original_compilation_unit;
-  let typing_env, code = import_typing_env_and_code0 t in
+  let typing_env, code, exported_offsets = import_typing_env_and_code0 t in
   Format.fprintf ppf "@[<hov>Typing env:@ %a@]@;"
     Flambda2_types.Typing_env.Serializable.print typing_env;
   Format.fprintf ppf "@[<hov>Code:@ %a@]@;" Exported_code.print code;
   Format.fprintf ppf "@[<hov>Offsets:@ %a@]@;" Exported_offsets.print
-    t.exported_offsets
+    exported_offsets
 
 let [@ocamlformat "disable"] print ppf t =
   let rec print_rest ppf = function

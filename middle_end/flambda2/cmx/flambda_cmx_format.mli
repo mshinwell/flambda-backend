@@ -28,9 +28,10 @@ val create :
   t
 
 val import_typing_env_and_code :
-  t -> Flambda2_types.Typing_env.Serializable.t * Exported_code.t
-
-val exported_offsets : t -> Exported_offsets.t
+  t ->
+  Flambda2_types.Typing_env.Serializable.t
+  * Exported_code.t
+  * Exported_offsets.t
 
 val functions_info : t -> Exported_code.t
 

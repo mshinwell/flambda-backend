@@ -26,7 +26,7 @@
 type t
 
 (** Create a result structure. *)
-val create : module_symbol:Symbol.t -> t
+val create : module_symbol:Symbol.t -> Exported_offsets.t -> t
 
 (** Archive the current data into the list of already-translated data. *)
 val archive_data : t -> t
@@ -49,14 +49,18 @@ val add_gc_roots : t -> Symbol.t list -> t
 val add_function : t -> Cmm.fundecl -> t
 
 (** Record the given symbol as having been defined. This is used to keep track
-    of whether the module block symbol for the current unit has been defined. *)
-val check_for_module_symbol : t -> Symbol.t -> t
+    of whether the module block symbol for the current unit has been defined.
+    Returns whether the current symbol is the module symbol. *)
+val check_for_module_symbol : t -> Symbol.t -> t * bool
+
+val record_symbol_offset :
+  t -> Symbol.t -> size_in_words_excluding_header:int -> t
 
 type result = private
   { data_items : Cmm.phrase list;
     gc_roots : Symbol.t list;
     functions : Cmm.phrase list;
-    symbol_offsets : int Symbol.Map.t
+    offsets : Exported_offsets.t
   }
 
 (** Archive the current data and then return the translated data present in the

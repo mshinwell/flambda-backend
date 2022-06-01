@@ -80,3 +80,5 @@ val imported_offsets : unit -> t
 
 (** Merge the offsets from two files *)
 val merge : t -> t -> t
+
+val apply_renaming : t -> Renaming.t -> t
