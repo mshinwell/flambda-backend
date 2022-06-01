@@ -59,6 +59,3 @@ val match_against_bound_static_pattern :
     (closure_symbols:Symbol.t Function_slot.Lmap.t -> Set_of_closures.t -> 'a) ->
   block_like:(Symbol.t -> t -> 'a) ->
   'a
-
-val size_in_bytes :
-  ?find_code_metadata:(Code_id.t -> Code_metadata.t) -> t -> int

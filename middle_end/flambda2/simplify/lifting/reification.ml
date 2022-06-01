@@ -61,16 +61,11 @@ let create_static_const dacc dbg (to_lift : T.to_lift) : Rebuilt_static_const.t
 
 let lift dacc ty ~bound_to static_const =
   let dacc, symbol =
-    let const =
+    let existing_symbol =
       match Rebuilt_static_const.to_const static_const with
       | None -> None
       | Some (Code _ | Deleted_code) -> None
-      | Some (Static_const const) -> Some const
-    in
-    let existing_symbol =
-      match const with
-      | None -> None
-      | Some const -> DA.find_shareable_constant dacc const
+      | Some (Static_const const) -> DA.find_shareable_constant dacc const
     in
     match existing_symbol with
     | Some symbol ->
@@ -86,10 +81,6 @@ let lift dacc ty ~bound_to static_const =
         Symbol.create
           (Compilation_unit.get_current_exn ())
           (Linkage_name.create (Variable.unique_name bound_to))
-          ~size_in_bytes:
-            (Option.map
-               (Static_const.size_in_bytes ?find_code_metadata:None)
-               const)
       in
       if not (K.equal (T.kind ty) K.value)
       then

@@ -97,10 +97,3 @@ val all_ids_for_export : t -> Ids_for_export.t
 val approx_equal : t -> t -> bool
 
 val map_result_types : t -> f:(Flambda2_types.t -> Flambda2_types.t) -> t
-
-type closure_code_pointers = private
-  | Full_application_only
-  | Full_and_partial_application
-
-val get_func_decl_params_arity :
-  t -> (Lambda.function_kind * int) * closure_code_pointers * Debuginfo.t

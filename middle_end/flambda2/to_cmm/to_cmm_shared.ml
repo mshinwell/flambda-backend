@@ -140,8 +140,6 @@ let invalid res ~message =
     Symbol.create
       (Compilation_unit.get_current_exn ())
       (Linkage_name.create (Variable.unique_name (Variable.create "invalid")))
-      ~size_in_bytes:
-        (Some (Static_const.size_in_bytes (Immutable_string message)))
   in
   let data_items =
     Cmm_helpers.emit_string_constant

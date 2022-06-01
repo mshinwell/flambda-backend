@@ -216,40 +216,32 @@ end
 module Symbol_data = struct
   type t =
     { compilation_unit : Compilation_unit.t;
-      linkage_name : Linkage_name.t;
-      size : int option
+      linkage_name : Linkage_name.t
     }
 
   let flags = symbol_flags
 
-  let [@ocamlformat "disable"] print ppf
-        { compilation_unit; linkage_name; size } =
+  let [@ocamlformat "disable"] print ppf { compilation_unit; linkage_name; } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(compilation_unit@ %a)@]@ \
-        @[<hov 1>(linkage_name@ %a)@]@ \
-        @[<hov 1>(size@ %a)@]\
+        @[<hov 1>(linkage_name@ %a)@]\
         )@]"
       Compilation_unit.print compilation_unit
       Linkage_name.print linkage_name
-      (Misc.Stdlib.Option.print Format.pp_print_int) size
 
-  let hash { compilation_unit = _; linkage_name; size = _ } =
+  let hash { compilation_unit = _; linkage_name } =
     (* Linkage names are unique across a whole project, so there's no need to
-       hash the compilation unit or size. *)
+       hash the compilation unit. *)
     Linkage_name.hash linkage_name
 
   let equal t1 t2 =
     if t1 == t2
     then true
     else
-      let { compilation_unit = _; linkage_name = linkage_name1; size = _ } =
-        t1
-      in
-      let { compilation_unit = _; linkage_name = linkage_name2; size = _ } =
-        t2
-      in
+      let { compilation_unit = _; linkage_name = linkage_name1 } = t1 in
+      let { compilation_unit = _; linkage_name = linkage_name2 } = t2 in
       (* Linkage names are unique across a whole project, so there's no need to
-         check the compilation units or sizes. *)
+         check the compilation units. *)
       Linkage_name.equal linkage_name1 linkage_name2
 end
 
@@ -466,14 +458,11 @@ module Symbol = struct
 
   let find_data t = Table.find !grand_table_of_symbols t
 
-  let unsafe_create0 compilation_unit linkage_name size =
-    let data : Symbol_data.t = { compilation_unit; linkage_name; size } in
+  let unsafe_create compilation_unit linkage_name =
+    let data : Symbol_data.t = { compilation_unit; linkage_name } in
     Table.add !grand_table_of_symbols data
 
-  let unsafe_create compilation_unit linkage_name =
-    unsafe_create0 compilation_unit linkage_name None
-
-  let create compilation_unit linkage_name ~size_in_bytes:size =
+  let create compilation_unit linkage_name =
     let unit_linkage_name =
       Linkage_name.to_string
         (Compilation_unit.get_linkage_name compilation_unit)
@@ -482,9 +471,7 @@ module Symbol = struct
       Linkage_name.create
         (unit_linkage_name ^ "__" ^ Linkage_name.to_string linkage_name)
     in
-    unsafe_create0 compilation_unit linkage_name size
-
-  let size_in_bytes t = (find_data t).size
+    unsafe_create compilation_unit linkage_name
 
   let compilation_unit t = (find_data t).compilation_unit
 

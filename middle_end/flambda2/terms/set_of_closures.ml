@@ -19,28 +19,23 @@
 type t =
   { function_decls : Function_declarations.t;
     value_slots : Simple.t Value_slot.Map.t;
-    alloc_mode : Alloc_mode.t;
-    set_of_closures_symbol : Symbol.t option
+    alloc_mode : Alloc_mode.t
   }
 
 let [@ocamlformat "disable"] print ppf
       { function_decls;
-        value_slots;
-        alloc_mode;
-        set_of_closures_symbol
+        value_slots;alloc_mode;
       } =
   Format.fprintf ppf "@[<hov 1>(%sset_of_closures%s@ \
       @[<hov 1>(function_decls@ %a)@]@ \
       @[<hov 1>(value_slots@ %a)@]@ \
-      @[<hov 1>(alloc_mode@ %a)@]@ \
-      @[<hov 1>(set_of_closures_symbol@ %a)@]\
+      @[<hov 1>(alloc_mode@ %a)@]\
       )@]"
     (Flambda_colours.prim_constructive ())
     (Flambda_colours.normal ())
     (Function_declarations.print) function_decls
     (Value_slot.Map.print Simple.print) value_slots
     Alloc_mode.print alloc_mode
-    (Misc.Stdlib.Option.print Symbol.print) set_of_closures_symbol
 
 include Container_types.Make (struct
   type nonrec t = t
@@ -52,42 +47,30 @@ include Container_types.Make (struct
   let compare
       { function_decls = function_decls1;
         value_slots = value_slots1;
-        alloc_mode = alloc_mode1;
-        set_of_closures_symbol = set_of_closures_symbol1
+        alloc_mode = alloc_mode1
       }
       { function_decls = function_decls2;
         value_slots = value_slots2;
-        alloc_mode = alloc_mode2;
-        set_of_closures_symbol = set_of_closures_symbol2
+        alloc_mode = alloc_mode2
       } =
     let c = Function_declarations.compare function_decls1 function_decls2 in
     if c <> 0
     then c
     else
       let c = Value_slot.Map.compare Simple.compare value_slots1 value_slots2 in
-      if c <> 0
-      then c
-      else
-        let c = Alloc_mode.compare alloc_mode1 alloc_mode2 in
-        if c <> 0
-        then c
-        else
-          Option.compare Symbol.compare set_of_closures_symbol1
-            set_of_closures_symbol2
+      if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
 
   let equal t1 t2 = compare t1 t2 = 0
 end)
 
-let is_empty
-    { function_decls; value_slots; alloc_mode = _; set_of_closures_symbol = _ }
-    =
+let is_empty { function_decls; value_slots; alloc_mode = _ } =
   Function_declarations.is_empty function_decls
   && Value_slot.Map.is_empty value_slots
 
-let create ~value_slots alloc_mode function_decls ~set_of_closures_symbol =
+let create ~value_slots alloc_mode function_decls =
   (* CR mshinwell: Make sure invariant checks are applied here, e.g. that the
      set of closures is indeed closed. *)
-  { function_decls; value_slots; alloc_mode; set_of_closures_symbol }
+  { function_decls; value_slots; alloc_mode }
 
 let function_decls t = t.function_decls
 
@@ -101,7 +84,6 @@ let [@ocamlformat "disable"] print ppf
       { function_decls;
         value_slots;
         alloc_mode;
-        set_of_closures_symbol = _
       } =
   if Value_slot.Map.is_empty value_slots then
     Format.fprintf ppf "@[<hov 1>(%sset_of_closures%s@ %a@ \
@@ -122,8 +104,7 @@ let [@ocamlformat "disable"] print ppf
       Function_declarations.print function_decls
       (Value_slot.Map.print Simple.print) value_slots
 
-let free_names
-    { function_decls; value_slots; alloc_mode = _; set_of_closures_symbol } =
+let free_names { function_decls; value_slots; alloc_mode = _ } =
   let free_names_of_value_slots =
     Value_slot.Map.fold
       (fun value_slot simple free_names ->
@@ -133,17 +114,9 @@ let free_names
       value_slots Name_occurrences.empty
   in
   Name_occurrences.union_list
-    [ Function_declarations.free_names function_decls;
-      free_names_of_value_slots;
-      (match set_of_closures_symbol with
-      | None -> Name_occurrences.empty
-      | Some set_of_closures_symbol ->
-        Name_occurrences.singleton_symbol set_of_closures_symbol
-          Name_mode.normal) ]
+    [Function_declarations.free_names function_decls; free_names_of_value_slots]
 
-let apply_renaming
-    ({ function_decls; value_slots; alloc_mode; set_of_closures_symbol } as t)
-    renaming =
+let apply_renaming ({ function_decls; value_slots; alloc_mode } as t) renaming =
   let function_decls' =
     Function_declarations.apply_renaming function_decls renaming
   in
@@ -155,41 +128,19 @@ let apply_renaming
         else None)
       value_slots
   in
-  let set_of_closures_symbol' =
-    match set_of_closures_symbol with
-    | None -> None
-    | Some symbol ->
-      let symbol' = Renaming.apply_symbol renaming symbol in
-      if symbol == symbol' then set_of_closures_symbol else Some symbol'
-  in
-  if function_decls == function_decls'
-     && value_slots == value_slots'
-     && set_of_closures_symbol == set_of_closures_symbol'
+  if function_decls == function_decls' && value_slots == value_slots'
   then t
   else
-    { function_decls = function_decls';
-      value_slots = value_slots';
-      alloc_mode;
-      set_of_closures_symbol = set_of_closures_symbol'
-    }
+    { function_decls = function_decls'; value_slots = value_slots'; alloc_mode }
 
-let all_ids_for_export
-    { function_decls; value_slots; alloc_mode = _; set_of_closures_symbol } =
+let all_ids_for_export { function_decls; value_slots; alloc_mode = _ } =
   let function_decls_ids =
     Function_declarations.all_ids_for_export function_decls
   in
-  let all_ids =
-    Value_slot.Map.fold
-      (fun _value_slot simple ids -> Ids_for_export.add_simple ids simple)
-      value_slots function_decls_ids
-  in
-  match set_of_closures_symbol with
-  | None -> all_ids
-  | Some set_of_closures_symbol ->
-    Ids_for_export.add_symbol all_ids set_of_closures_symbol
+  Value_slot.Map.fold
+    (fun _value_slot simple ids -> Ids_for_export.add_simple ids simple)
+    value_slots function_decls_ids
 
 let filter_function_declarations t ~f =
   let function_decls = Function_declarations.filter t.function_decls ~f in
   { t with function_decls }
-
-let set_of_closures_symbol t = t.set_of_closures_symbol

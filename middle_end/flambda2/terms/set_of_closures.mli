@@ -30,7 +30,6 @@ val create :
   value_slots:Simple.t Value_slot.Map.t ->
   Alloc_mode.t ->
   Function_declarations.t ->
-  set_of_closures_symbol:Symbol.t option ->
   t
 
 (** The function declarations associated with the set of closures. *)
@@ -46,7 +45,5 @@ val alloc_mode : t -> Alloc_mode.t
 
 val filter_function_declarations :
   t -> f:(Function_slot.t -> Code_id.t -> bool) -> t
-
-val set_of_closures_symbol : t -> Symbol.t option
 
 include Container_types.S with type t := t
