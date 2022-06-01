@@ -116,7 +116,8 @@ module Symbol : sig
 
   include Container_types.S with type t := t
 
-  val create : Compilation_unit.t -> Linkage_name.t -> t
+  val create :
+    Compilation_unit.t -> Linkage_name.t -> size:Symbol_data.size -> t
 
   (** Create the symbol without prefixing with the compilation unit. Used for
       predefined exceptions *)
@@ -134,6 +135,8 @@ module Symbol : sig
 
   val map_compilation_unit :
     (Compilation_unit.t -> Compilation_unit.t) -> exported -> exported
+
+  val size : t -> size
 end
 
 module Name : sig

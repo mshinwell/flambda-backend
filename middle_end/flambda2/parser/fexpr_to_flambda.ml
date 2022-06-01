@@ -476,6 +476,7 @@ let set_of_closures env fun_decls value_slots =
     List.map convert value_slots |> Value_slot.Map.of_list
   in
   Set_of_closures.create ~value_slots Heap fun_decls
+    ~set_of_closures_symbol:None
 
 let apply_cont env ({ cont; args; trap_action } : Fexpr.apply_cont) =
   let trap_action : Trap_action.t option =

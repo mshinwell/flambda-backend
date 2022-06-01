@@ -39,7 +39,8 @@ type value_slot_info =
 
 type t =
   { function_slot_offsets : function_slot_info Function_slot.Map.t;
-    value_slot_offsets : value_slot_info Value_slot.Map.t
+    value_slot_offsets : value_slot_info Value_slot.Map.t;
+    data_symbol_offsets : int Symbol.Map.t
   }
 
 let print_function_slot_info fmt = function
@@ -52,14 +53,21 @@ let print_value_slot_info fmt (info : value_slot_info) =
   | Dead_value_slot -> Format.fprintf fmt "@[<h>(removed)@]"
   | Live_value_slot { offset } -> Format.fprintf fmt "@[<h>(o:%d)@]" offset
 
-let [@ocamlformat "disable"] print fmt env =
-  Format.fprintf fmt "{@[<v>closures: @[<v>%a@]@,value_slots: @[<v>%a@]@]}"
-    (Function_slot.Map.print print_function_slot_info) env.function_slot_offsets
-    (Value_slot.Map.print print_value_slot_info) env.value_slot_offsets
+let [@ocamlformat "disable"] print fmt
+      { function_slot_offsets; value_slot_offsets; data_symbol_offsets } =
+  Format.fprintf fmt "@[<hov 1>(\
+      @[<hov 1>(function_slot_offsets@ %a)@] \
+      @[<hov 1>(value_slot_offsets@ %a)@] \
+      @[<hov 1>(data_symbol_offsets@ %a)@]\
+      )@]"
+    (Function_slot.Map.print print_function_slot_info) function_slot_offsets
+    (Value_slot.Map.print print_value_slot_info) value_slot_offsets
+    (Symbol.Map.print Format.pp_print_int) data_symbol_offsets
 
 let empty =
   { function_slot_offsets = Function_slot.Map.empty;
-    value_slot_offsets = Value_slot.Map.empty
+    value_slot_offsets = Value_slot.Map.empty;
+    data_symbol_offsets = Symbol.Map.empty
   }
 
 let equal_function_slot_info (info1 : function_slot_info)
@@ -102,6 +110,20 @@ let add_value_slot_offset env value_slot offset =
     in
     { env with value_slot_offsets }
 
+let add_data_symbol_offset env symbol ~bytes =
+  match Symbol.size_in_bytes symbol with
+  | None -> env
+  | Some _ -> (
+    match Symbol.Map.find symbol env.data_symbol_offsets with
+    | _ ->
+      Misc.fatal_errorf "Symbol offset for %a already defined" Symbol.print
+        symbol
+    | exception Not_found ->
+      let data_symbol_offsets =
+        Symbol.Map.add symbol bytes env.data_symbol_offsets
+      in
+      { env with data_symbol_offsets })
+
 let function_slot_offset env closure =
   match Function_slot.Map.find closure env.function_slot_offsets with
   | exception Not_found -> None
@@ -109,6 +131,11 @@ let function_slot_offset env closure =
 
 let value_slot_offset env value_slot =
   match Value_slot.Map.find value_slot env.value_slot_offsets with
+  | exception Not_found -> None
+  | res -> Some res
+
+let data_symbol_offset_in_bytes env symbol =
+  match Symbol.Map.find symbol env.data_symbol_offsets with
   | exception Not_found -> None
   | res -> Some res
 
@@ -132,6 +159,10 @@ let merge env1 env2 =
       ~print:print_value_slot_info env1.value_slot_offsets
       env2.value_slot_offsets
   in
-  { function_slot_offsets; value_slot_offsets }
+  let data_symbol_offsets =
+    Symbol.Map.disjoint_union ~eq:Int.equal ~print:Format.pp_print_int
+      env1.data_symbol_offsets env2.data_symbol_offsets
+  in
+  { function_slot_offsets; value_slot_offsets; data_symbol_offsets }
 
 let import_offsets env = current_offsets := merge env !current_offsets

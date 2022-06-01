@@ -361,3 +361,46 @@ let match_against_bound_static_pattern t (pat : Bound_static.Pattern.t)
       (Set_of_closures _ | Code _) ) ->
     Misc.fatal_errorf "Mismatch on variety of [Static_const]:@ %a@ =@ %a"
       Bound_static.Pattern.print pat print t
+
+(* XXX can't hard-code Arch.size_addr *)
+let size_addr = 8
+
+let size_in_bytes ?find_code_metadata t =
+  let size_in_words_excluding_header =
+    match t with
+    | Set_of_closures set -> (
+      match find_code_metadata with
+      | None ->
+        Misc.fatal_errorf
+          "Cannot find size of static const without [find_code_metadata]:@ %a"
+          print t
+      | Some find_code_metadata ->
+        let code_ids =
+          Set_of_closures.function_decls set
+          |> Function_declarations.funs |> Function_slot.Map.data
+        in
+        let num_function_slot_words =
+          List.fold_left
+            (fun words code_id ->
+              let _, closure_code_pointers, _ =
+                Code_metadata.get_func_decl_params_arity
+                  (find_code_metadata code_id)
+              in
+              match closure_code_pointers with
+              | Full_application_only -> words + 2
+              | Full_and_partial_application -> words + 3)
+            0 code_ids
+        in
+        let num_value_slots =
+          Set_of_closures.value_slots set |> Value_slot.Map.cardinal
+        in
+        num_function_slot_words + num_value_slots)
+    | Block (_, _, fields) -> List.length fields
+    | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _ -> 1
+    | Immutable_float_block fields | Immutable_float_array fields ->
+      List.length fields
+    | Empty_array -> 0
+    | Mutable_string { initial_value = str } | Immutable_string str ->
+      (String.length str + size_addr) / size_addr
+  in
+  (size_in_words_excluding_header + 1) * size_addr

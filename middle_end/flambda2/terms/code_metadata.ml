@@ -409,3 +409,22 @@ let approx_equal
 
 let map_result_types ({ result_types; _ } as t) ~f =
   { t with result_types = Result_types.map_result_types result_types ~f }
+
+type closure_code_pointers =
+  | Full_application_only
+  | Full_and_partial_application
+
+let get_func_decl_params_arity t =
+  let num_params = Flambda_arity.With_subkinds.cardinal (params_arity t) in
+  let kind : Lambda.function_kind =
+    if is_tupled t
+    then Lambda.Tupled
+    else Lambda.Curried { nlocal = num_trailing_local_params t }
+  in
+  let closure_code_pointers =
+    match kind, num_params with
+    | Curried _, (0 | 1) -> Full_application_only
+    | (Curried _ | Tupled), _ -> Full_and_partial_application
+  in
+  let arity = kind, num_params in
+  arity, closure_code_pointers, dbg t

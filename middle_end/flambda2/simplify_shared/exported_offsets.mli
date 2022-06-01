@@ -55,11 +55,15 @@ val value_slot_offset : t -> Value_slot.t -> value_slot_info option
     the given function slot. *)
 val function_slot_offset : t -> Function_slot.t -> function_slot_info option
 
+val data_symbol_offset_in_bytes : t -> Symbol.t -> int option
+
 (** Record the assignment of the given offset to the given function slot *)
 val add_function_slot_offset : t -> Function_slot.t -> function_slot_info -> t
 
 (** Record the assignment of the given offset to the given value slot *)
 val add_value_slot_offset : t -> Value_slot.t -> value_slot_info -> t
+
+val add_data_symbol_offset : t -> Symbol.t -> bytes:int -> t
 
 val map_function_slot_offsets :
   t -> (Function_slot.t -> function_slot_info -> 'a) -> 'a Function_slot.Map.t

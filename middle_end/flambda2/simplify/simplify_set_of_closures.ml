@@ -769,7 +769,8 @@ type simplify_set_of_closures0_result =
   }
 
 let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
-    ~closure_bound_names_inside ~value_slots ~value_slot_types =
+    ~closure_bound_names_inside ~value_slots ~value_slot_types
+    ~set_of_closures_symbol =
   let dacc = C.dacc_prior_to_sets context in
   let function_decls = Set_of_closures.function_decls set_of_closures in
   let all_function_decls_in_set =
@@ -950,6 +951,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
     Function_declarations.create all_function_decls_in_set
     |> Set_of_closures.create ~value_slots
          (Set_of_closures.alloc_mode set_of_closures)
+         ~set_of_closures_symbol
   in
   { set_of_closures; code; dacc }
 
