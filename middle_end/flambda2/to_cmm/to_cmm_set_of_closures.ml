@@ -120,9 +120,9 @@ end = struct
     | Value_slot v ->
       let simple = Value_slot.Map.find v value_slots in
       let contents, env, eff = P.simple ~dbg env r simple in
-      let env, fields, updates =
+      let env, r, fields, updates =
         match contents with
-        | `Data fields -> env, fields, updates
+        | `Data fields -> env, r, fields, updates
         | `Var v ->
           (* We should only get here in the static allocation case. *)
           assert (Option.is_some symbs);
@@ -134,7 +134,10 @@ end = struct
               ~symbol:(R.expr_symbol_address r set_of_closures_symbol dbg)
               v ~index:slot_offset ~prev_updates:updates
           in
-          env, [P.int ~dbg 1n], updates
+          let r =
+            R.increment_symbol_offset r ~size_in_words_excluding_header:1
+          in
+          env, r, [P.int ~dbg 1n], updates
       in
       List.rev_append fields acc, slot_offset + 1, env, r, eff, updates
     | Function_slot c -> (
@@ -181,16 +184,21 @@ end = struct
     match slots with
     | [] -> List.rev acc, starting_offset, env, r, effs, updates
     | (slot_offset, slot) :: slots ->
-      let acc =
+      let r, acc =
         if starting_offset > slot_offset
         then
           Misc.fatal_errorf "Starting offset %d is past slot offset %d"
             starting_offset slot_offset
         else if starting_offset = slot_offset
-        then acc
+        then r, acc
         else
-          List.init (slot_offset - starting_offset) (fun _ -> P.int ~dbg 1n)
-          @ acc
+          let gap_in_words = slot_offset - starting_offset in
+          let r =
+            R.increment_symbol_offset r
+              ~size_in_words_excluding_header:gap_in_words
+          in
+          let acc = List.init gap_in_words (fun _ -> P.int ~dbg 1n) @ acc in
+          r, acc
       in
       let acc, next_offset, env, r, eff, updates =
         fill_slot r ~set_of_closures_symbol_ref symbs decls dbg ~startenv

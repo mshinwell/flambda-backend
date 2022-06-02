@@ -64,6 +64,8 @@ val check_for_module_symbol : t -> Symbol.t -> t * bool
 val record_symbol_offset :
   t -> Symbol.t -> size_in_words_excluding_header:int -> t
 
+val increment_symbol_offset : t -> size_in_words_excluding_header:int -> t
+
 (** Get the Cmm data item to fetch the address of a [Symbol] (which may be an
     offset load from another symbol). *)
 val static_symbol_address : t -> Symbol.t -> Cmm.data_item
