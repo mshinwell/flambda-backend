@@ -124,23 +124,23 @@ let symbol_offset_in_bytes t symbol =
     | None -> None)
 
 let static_symbol_address t symbol : Cmm.data_item =
-  let[@inline] zero_offset () =
-    C.symbol_address (Symbol.linkage_name_as_string symbol)
-  in
   match symbol_offset_in_bytes t symbol with
-  | None -> zero_offset ()
+  | None -> C.symbol_address (Symbol.linkage_name_as_string symbol)
   | Some bytes ->
     if Targetint.equal bytes Targetint.zero
-    then zero_offset ()
-    else C.offset_symbol_address (Symbol.linkage_name_as_string symbol) ~bytes
+    then C.symbol_address (Symbol.linkage_name_as_string t.data_symbol)
+    else
+      C.offset_symbol_address
+        (Symbol.linkage_name_as_string t.data_symbol)
+        ~bytes
 
 let expr_symbol_address t symbol dbg : Cmm.expression =
-  let sym_expr =
-    C.symbol_from_string ~dbg (Symbol.linkage_name_as_string symbol)
-  in
   match symbol_offset_in_bytes t symbol with
-  | None -> sym_expr
+  | None -> C.symbol_from_string ~dbg (Symbol.linkage_name_as_string symbol)
   | Some bytes ->
+    let sym_expr =
+      C.symbol_from_string ~dbg (Symbol.linkage_name_as_string t.data_symbol)
+    in
     if Targetint.equal bytes Targetint.zero
     then sym_expr
     else
