@@ -62,6 +62,8 @@ let increment_symbol_offset t ~size_in_words_excluding_header =
   in
   { t with next_symbol_offset }
 
+let is_module_symbol t symbol = Symbol.equal t.module_symbol symbol
+
 let check_for_module_symbol t symbol =
   if Symbol.equal symbol t.module_symbol
   then begin
@@ -138,7 +140,7 @@ let add_gc_roots r l = { r with gc_roots = l @ r.gc_roots }
 
 let add_function r f = { r with functions = f :: r.functions }
 
-let is_module_symbol symbol =
+let is_module_symbol' symbol =
   let comp_unit = Compilation_unit.name (Symbol.compilation_unit symbol) in
   let linkage_name = Symbol.linkage_name_as_string symbol in
   String.equal ("caml" ^ comp_unit) linkage_name
@@ -161,8 +163,9 @@ let symbol_offset_in_bytes t symbol =
       Some bytes
     | None ->
       if (not (Symbol.is_predefined_exception symbol))
-         && not (is_module_symbol symbol)
-      then Format.eprintf "NOT FOUND Symbol %a\n" Symbol.print symbol;
+         && not (is_module_symbol' symbol)
+      then
+        Misc.fatal_errorf "Cannot find offset for symbol %a" Symbol.print symbol;
       None)
 
 let data_symbol_for_unit comp_unit =

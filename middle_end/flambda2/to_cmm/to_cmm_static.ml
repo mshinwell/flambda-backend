@@ -105,11 +105,11 @@ let preallocate_set_of_closures (r, updates, env) ~closure_symbols
   let r = R.set_data r data in
   r, updates, env
 
-let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
+let static_const_offsets0 env r ~updates (bound_static : Bound_static.Pattern.t)
     (static_const : Static_const.t) =
   match bound_static, static_const with
-  | Block_like s, Block (tag, _mut, fields) ->
-    let r, is_module_symbol = R.check_for_module_symbol r s in
+  | Block_like s, Block (_tag, _mut, fields) ->
+    let is_module_symbol = R.is_module_symbol r s in
     let r =
       if is_module_symbol
       then r
@@ -117,6 +117,63 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
         R.record_symbol_offset r s
           ~size_in_words_excluding_header:(List.length fields)
     in
+    env, r, updates
+  | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
+    let r, updates, env =
+      preallocate_set_of_closures (r, updates, env) ~closure_symbols
+        set_of_closures
+    in
+    env, r, updates
+  | Block_like s, Boxed_float _ ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    env, r, updates
+  | Block_like s, Boxed_int32 _ ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    env, r, updates
+  | Block_like s, Boxed_int64 _ ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    env, r, updates
+  | Block_like s, Boxed_nativeint _ ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    env, r, updates
+  | Block_like s, (Immutable_float_block fields | Immutable_float_array fields)
+    ->
+    let r =
+      R.record_symbol_offset r s
+        ~size_in_words_excluding_header:(List.length fields)
+    in
+    env, r, updates
+  | Block_like s, Empty_array ->
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:0 in
+    env, r, updates
+  | Block_like s, Mutable_string { initial_value = str }
+  | Block_like s, Immutable_string str ->
+    let r =
+      R.record_symbol_offset r s
+        ~size_in_words_excluding_header:((String.length str + 1 + 8) / 8)
+    in
+    env, r, updates
+  | Block_like _, Set_of_closures _ ->
+    Misc.fatal_errorf
+      "[Set_of_closures] values cannot be bound by [Block_like] bindings:@ %a"
+      SC.print static_const
+  | ( (Code _ | Set_of_closures _),
+      ( Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+      | Boxed_nativeint _ | Immutable_float_block _ | Immutable_float_array _
+      | Empty_array | Mutable_string _ | Immutable_string _ ) ) ->
+    Misc.fatal_errorf
+      "Block-like constants cannot be bound by [Code] or [Set_of_closures] \
+       bindings:@ %a"
+      SC.print static_const
+  | Code _, Set_of_closures _ ->
+    Misc.fatal_errorf "Sets of closures cannot be bound by [Code] bindings:@ %a"
+      SC.print static_const
+
+let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
+    (static_const : Static_const.t) =
+  match bound_static, static_const with
+  | Block_like s, Block (tag, _mut, fields) ->
+    let r, is_module_symbol = R.check_for_module_symbol r s in
     let tag = Tag.Scannable.to_int tag in
     let block_name = Symbol.linkage_name_as_string s, Cmmgen_state.Global in
     let header = C.black_block_header tag (List.length fields) in
@@ -137,7 +194,6 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     in
     env, r, updates, true
   | Block_like s, Boxed_float v ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let default = Numeric_types.Float_by_bit_pattern.zero in
     let transl = Numeric_types.Float_by_bit_pattern.to_float in
     let r, (env, updates) =
@@ -146,21 +202,18 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     in
     env, r, updates, true
   | Block_like s, Boxed_int32 v ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let r, (env, updates) =
       static_boxed_number Word_int env s 0l C.emit_int32_constant Fun.id v r
         updates
     in
     env, r, updates, true
   | Block_like s, Boxed_int64 v ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let r, (env, updates) =
       static_boxed_number Word_int env s 0L C.emit_int64_constant Fun.id v r
         updates
     in
     env, r, updates, true
   | Block_like s, Boxed_nativeint v ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     let default = Targetint_32_64.zero in
     let transl = C.nativeint_of_targetint in
     let r, (env, updates) =
@@ -170,10 +223,6 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, r, updates, true
   | Block_like s, (Immutable_float_block fields | Immutable_float_array fields)
     ->
-    let r =
-      R.record_symbol_offset r s
-        ~size_in_words_excluding_header:(List.length fields)
-    in
     let aux =
       Or_variable.value_map ~default:0.
         ~f:Numeric_types.Float_by_bit_pattern.to_float
@@ -187,7 +236,6 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     let env, e = static_float_array_updates s env r updates 0 fields in
     env, R.update_data r float_array, e, true
   | Block_like s, Empty_array ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:0 in
     (* Recall: empty arrays have tag zero, even if their kind is naked float. *)
     let block_name = Symbol.linkage_name_as_string s, Cmmgen_state.Global in
     let header = C.black_block_header 0 0 in
@@ -195,10 +243,6 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, R.set_data r block, updates, true
   | Block_like s, Mutable_string { initial_value = str }
   | Block_like s, Immutable_string str ->
-    let r =
-      R.record_symbol_offset r s
-        ~size_in_words_excluding_header:((String.length str + 8) / 8)
-    in
     let name = Symbol.linkage_name_as_string s in
     let data = C.emit_string_constant (name, Cmmgen_state.Global) str in
     env, R.update_data r data, updates, true
@@ -218,12 +262,53 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     Misc.fatal_errorf "Sets of closures cannot be bound by [Code] bindings:@ %a"
       SC.print static_const
 
+let static_const_or_code_offsets env r ~updates
+    (bound_static : Bound_static.Pattern.t)
+    (static_const_or_code : Static_const_or_code.t) =
+  let env, r, updates =
+    match bound_static, static_const_or_code with
+    | Block_like _, Static_const static_const ->
+      static_const_offsets0 env r ~updates bound_static static_const
+    | Set_of_closures _, Static_const static_const ->
+      static_const_offsets0 env r ~updates bound_static static_const
+    | Code code_id, Code code ->
+      if not (Code_id.equal code_id (Code.code_id code))
+      then
+        Misc.fatal_errorf "Code ID mismatch:@ %a@ =@ %a"
+          Bound_static.Pattern.print bound_static Code.print code;
+      (* Nothing needs doing here as we've already added the code to the
+         environment. *)
+      env, r, updates
+    | Code _, Deleted_code -> env, r, updates
+    | Code _, Static_const static_const ->
+      Misc.fatal_errorf "Only code can be bound by [Code] bindings:@ %a@ =@ %a"
+        Bound_static.Pattern.print bound_static SC.print static_const
+    | (Set_of_closures _ | Block_like _), Code code ->
+      Misc.fatal_errorf
+        "Pieces of code cannot be bound by [Block_like] or [Set_of_closures] \
+         bindings:@ %a@ =@ %a"
+        Bound_static.Pattern.print bound_static Code.print code
+    | (Set_of_closures _ | Block_like _), Deleted_code ->
+      Misc.fatal_errorf
+        "Deleted code cannot be bound by [Block_like] or [Set_of_closures] \
+         bindings:@ %a@ =@ <deleted code>"
+        Bound_static.Pattern.print bound_static
+  in
+  let r =
+    (* The only possible things here are sets of closures definitions. *)
+    R.archive_offset_data r
+  in
+  env, r, updates
+
 let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
     (static_const_or_code : Static_const_or_code.t) =
   let env, r, updates, is_offset_data =
     match bound_static, static_const_or_code with
-    | (Block_like _ | Set_of_closures _), Static_const static_const ->
+    | Block_like _, Static_const static_const ->
       static_const0 env r ~updates bound_static static_const
+    | Set_of_closures _, Static_const _ ->
+      (* Already done by [static_const_or_code_offsets]. *)
+      env, r, updates, false
     | Code code_id, Code code ->
       if not (Code_id.equal code_id (Code.code_id code))
       then
@@ -263,18 +348,21 @@ let static_consts0 env r ~params_and_body bound_static static_consts =
     Misc.fatal_errorf
       "Mismatch between [Bound_static] and [Static_const]s:@ %a@ =@ %a"
       Bound_static.print bound_static Static_const_group.print static_consts;
-  let env, r, updates =
+  let _env, r, updates =
     ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, None)
       ~f:(fun (env, r, updates) bound_symbol_pat const ->
-        static_const_or_code env r ~updates bound_symbol_pat const)
+        static_const_or_code_offsets env r ~updates bound_symbol_pat const)
   in
   let r =
-    (* Function bodies must be translated after the closures, to ensure that
-       symbol offsets for the closures are in [r]. *)
     ListLabels.fold_left static_consts' ~init:r ~f:(fun r static_const ->
         match Static_const_or_code.to_code static_const with
         | None -> r
         | Some code -> add_functions env ~params_and_body r code)
+  in
+  let env, r, updates =
+    ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, updates)
+      ~f:(fun (env, r, updates) bound_symbol_pat const ->
+        static_const_or_code env r ~updates bound_symbol_pat const)
   in
   env, r, updates
 

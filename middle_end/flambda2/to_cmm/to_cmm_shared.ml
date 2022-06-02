@@ -144,7 +144,7 @@ let invalid res ~message =
   in
   let res =
     To_cmm_result.record_symbol_offset res message_sym
-      ~size_in_words_excluding_header:((String.length message + 8) / 8)
+      ~size_in_words_excluding_header:((String.length message + 1 + 8) / 8)
   in
   let res =
     Cmm_helpers.emit_string_constant

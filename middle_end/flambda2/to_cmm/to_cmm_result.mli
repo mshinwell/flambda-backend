@@ -61,6 +61,8 @@ val add_function : t -> Cmm.fundecl -> t
     Returns whether the current symbol is the module symbol. *)
 val check_for_module_symbol : t -> Symbol.t -> t * bool
 
+val is_module_symbol : t -> Symbol.t -> bool
+
 val record_symbol_offset :
   t -> Symbol.t -> size_in_words_excluding_header:int -> t
 
