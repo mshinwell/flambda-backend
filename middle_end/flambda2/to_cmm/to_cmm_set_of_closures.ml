@@ -40,7 +40,7 @@ let get_whole_closure_symbol =
       let comp_unit = Compilation_unit.get_current_exn () in
       let linkage_name =
         Linkage_name.create
-          (Printf.sprintf ".clos_%d" !whole_closure_symb_count)
+          (Printf.sprintf ".set_of_closures%d" !whole_closure_symb_count)
       in
       let set_of_closures_symbol = Symbol.create comp_unit linkage_name in
       set_of_closures_symbol_ref := Some set_of_closures_symbol;
@@ -345,6 +345,9 @@ let let_static_set_of_closures0 env r symbs (layout : Slot_offsets.layout) set
     R.record_symbol_offset r set_of_closures_symbol
       ~size_in_words_excluding_header:0
   in
+  (* CR mshinwell: add interface for recording "symbol overlapped by others" or
+     something *)
+  let r = R.increment_symbol_offset r ~size_in_words_excluding_header:(-1) in
   let fun_decls = Set_of_closures.function_decls set in
   let decls = Function_declarations.funs fun_decls in
   let value_slots = Set_of_closures.value_slots set in

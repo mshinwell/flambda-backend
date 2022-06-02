@@ -47,6 +47,8 @@ let record_symbol_offset t symbol ~size_in_words_excluding_header =
     Exported_offsets.add_symbol_offset t.offsets symbol
       ~bytes:t.next_symbol_offset
   in
+  (* Format.eprintf "OFFSET for %a = %a bytes\n%!" Symbol.print symbol
+     Targetint.print t.next_symbol_offset; *)
   let next_symbol_offset =
     Targetint.add t.next_symbol_offset
       (Targetint.of_int (8 * (size_in_words_excluding_header + 1)))
