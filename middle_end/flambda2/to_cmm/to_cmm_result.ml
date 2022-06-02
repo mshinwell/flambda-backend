@@ -55,10 +55,9 @@ let record_symbol_offset t symbol ~size_in_words_excluding_header =
   in
   { t with offsets; next_symbol_offset }
 
-let increment_symbol_offset t ~size_in_words_excluding_header =
+let increment_symbol_offset t ~size_in_words =
   let next_symbol_offset =
-    Targetint.add t.next_symbol_offset
-      (Targetint.of_int (8 * size_in_words_excluding_header))
+    Targetint.add t.next_symbol_offset (Targetint.of_int (8 * size_in_words))
   in
   { t with next_symbol_offset }
 

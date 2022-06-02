@@ -116,13 +116,18 @@ end = struct
     match (slot : Slot_offsets.layout_slot) with
     | Infix_header ->
       let field = P.infix_header ~function_slot_offset:(slot_offset + 1) ~dbg in
+      let r = R.increment_symbol_offset r ~size_in_words:1 in
       field :: acc, slot_offset + 1, env, r, Ece.pure, updates
     | Value_slot v ->
       let simple = Value_slot.Map.find v value_slots in
       let contents, env, eff = P.simple ~dbg env r simple in
       let env, r, fields, updates =
         match contents with
-        | `Data fields -> env, r, fields, updates
+        | `Data fields ->
+          let r =
+            R.increment_symbol_offset r ~size_in_words:(List.length fields)
+          in
+          env, r, fields, updates
         | `Var v ->
           (* We should only get here in the static allocation case. *)
           assert (Option.is_some symbs);
@@ -134,9 +139,7 @@ end = struct
               ~symbol:(R.expr_symbol_address r set_of_closures_symbol dbg)
               v ~index:slot_offset ~prev_updates:updates
           in
-          let r =
-            R.increment_symbol_offset r ~size_in_words_excluding_header:1
-          in
+          let r = R.increment_symbol_offset r ~size_in_words:1 in
           env, r, [P.int ~dbg 1n], updates
       in
       List.rev_append fields acc, slot_offset + 1, env, r, eff, updates
@@ -193,10 +196,7 @@ end = struct
         then r, acc
         else
           let gap_in_words = slot_offset - starting_offset in
-          let r =
-            R.increment_symbol_offset r
-              ~size_in_words_excluding_header:gap_in_words
-          in
+          let r = R.increment_symbol_offset r ~size_in_words:gap_in_words in
           let acc = List.init gap_in_words (fun _ -> P.int ~dbg 1n) @ acc in
           r, acc
       in
@@ -347,7 +347,7 @@ let let_static_set_of_closures0 env r symbs (layout : Slot_offsets.layout) set
   in
   (* CR mshinwell: add interface for recording "symbol overlapped by others" or
      something *)
-  let r = R.increment_symbol_offset r ~size_in_words_excluding_header:(-1) in
+  let r = R.increment_symbol_offset r ~size_in_words:(-1) in
   let fun_decls = Set_of_closures.function_decls set in
   let decls = Function_declarations.funs fun_decls in
   let value_slots = Set_of_closures.value_slots set in
