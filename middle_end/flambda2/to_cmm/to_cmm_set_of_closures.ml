@@ -124,6 +124,8 @@ end = struct
       let env, r, fields, updates =
         match contents with
         | `Data fields ->
+          (* CR mshinwell: why is this a list? *)
+          assert (List.length fields = 1);
           let r =
             R.increment_symbol_offset r ~size_in_words:(List.length fields)
           in
@@ -159,9 +161,10 @@ end = struct
           let closure_symbol = Function_slot.Map.find c symbs in
           P.define_global_symbol r closure_symbol
             ~size_in_words_excluding_header:
-              (match closure_code_pointers with
-              | Full_application_only -> 2
-              | Full_and_partial_application -> 3)
+              ((match closure_code_pointers with
+               | Full_application_only -> 2
+               | Full_and_partial_application -> 3)
+              - 1 (* infix headers accounted for elsewhere *))
       in
       (* We build here the **reverse** list of fields for the function slot *)
       match closure_code_pointers with
