@@ -138,6 +138,11 @@ let add_gc_roots r l = { r with gc_roots = l @ r.gc_roots }
 
 let add_function r f = { r with functions = f :: r.functions }
 
+let is_module_symbol symbol =
+  let comp_unit = Compilation_unit.name (Symbol.compilation_unit symbol) in
+  let linkage_name = Symbol.linkage_name_as_string symbol in
+  String.equal ("caml" ^ comp_unit) linkage_name
+
 let symbol_offset_in_bytes t symbol =
   match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
   | Some bytes ->
@@ -156,7 +161,7 @@ let symbol_offset_in_bytes t symbol =
       Some bytes
     | None ->
       if (not (Symbol.is_predefined_exception symbol))
-         && not (Symbol.equal symbol t.module_symbol)
+         && not (is_module_symbol symbol)
       then Format.eprintf "NOT FOUND Symbol %a\n" Symbol.print symbol;
       None)
 

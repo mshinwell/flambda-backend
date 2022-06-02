@@ -215,10 +215,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     in
     begin
       match cmx with
-      | None ->
-        (* CR mshinwell: need to check this "no need" case *)
-        ()
-        (* Either opaque was passed, or there is no need to export offsets *)
+      | None -> assert !Clflags.opaque
       | Some cmx ->
         let cmx =
           Flambda_cmx_format.with_exported_offsets cmx offsets
