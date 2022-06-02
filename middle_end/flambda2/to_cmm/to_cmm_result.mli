@@ -59,7 +59,10 @@ val record_symbol_offset :
 
 (** Get the Cmm data item to fetch the address of a [Symbol] (which may be an
     offset load from another symbol). *)
-val static_symbol_address : t -> Symbol.t -> Cmm.data_item * t
+val static_symbol_address : t -> Symbol.t -> Cmm.data_item
+
+(** Like [static_symbol_address] but for expressions. *)
+val expr_symbol_address : t -> Symbol.t -> Debuginfo.t -> Cmm.expression
 
 type result = private
   { data_items : Cmm.phrase list;

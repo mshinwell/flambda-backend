@@ -103,27 +103,35 @@ let add_gc_roots r l = { r with gc_roots = l @ r.gc_roots }
 
 let add_function r f = { r with functions = f :: r.functions }
 
-let static_symbol_address t symbol =
-  let name = Symbol.linkage_name_as_string symbol in
-  let t =
-    match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
+let symbol_offset_in_bytes t symbol =
+  match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
+  | Some bytes ->
+    Format.eprintf "LOCAL Symbol %a can be reached via offset %d\n" Symbol.print
+      symbol bytes;
+    Some bytes
+  | None -> (
+    match
+      Exported_offsets.symbol_offset_in_bytes
+        (Exported_offsets.imported_offsets ())
+        symbol
+    with
     | Some bytes ->
-      Format.eprintf "LOCAL Symbol %a can be reached via offset %d\n"
+      Format.eprintf "IMPORTED Symbol %a can be reached via offset %d\n"
         Symbol.print symbol bytes;
-      t
-    | None -> (
-      match
-        Exported_offsets.symbol_offset_in_bytes
-          (Exported_offsets.imported_offsets ())
-          symbol
-      with
-      | Some bytes ->
-        Format.eprintf "IMPORTED Symbol %a can be reached via offset %d\n"
-          Symbol.print symbol bytes;
-        t
-      | None -> t)
+      Some bytes
+    | None -> None)
+
+let static_symbol_address t symbol =
+  let _offset = symbol_offset_in_bytes t symbol in
+  Cmm.Csymbol_address (Symbol.linkage_name_as_string symbol)
+
+let expr_symbol_address t symbol dbg : Cmm.expression =
+  let sym_expr =
+    C.symbol_from_string ~dbg (Symbol.linkage_name_as_string symbol)
   in
-  Cmm.Csymbol_address name, t
+  match symbol_offset_in_bytes t symbol with
+  | None -> sym_expr
+  | Some offset -> C.add_int sym_expr (C.int_const dbg offset) dbg
 
 type result =
   { data_items : Cmm.phrase list;

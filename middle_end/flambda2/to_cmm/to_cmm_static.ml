@@ -27,12 +27,11 @@ module R = To_cmm_result
 let static_value r v =
   match (v : Field_of_static_block.t) with
   | Symbol s -> To_cmm_result.static_symbol_address r s
-  | Dynamically_computed _ -> C.cint 1n, r
+  | Dynamically_computed _ -> C.cint 1n
   | Tagged_immediate i ->
-    ( C.cint
-        (C.nativeint_of_targetint
-           (C.tag_targetint (Targetint_31_63.to_targetint' i))),
-      r )
+    C.cint
+      (C.nativeint_of_targetint
+         (C.tag_targetint (Targetint_31_63.to_targetint' i)))
 
 let or_variable f default v cont =
   match (v : _ Or_variable.t) with
@@ -118,12 +117,12 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     let tag = Tag.Scannable.to_int tag in
     let block_name = Symbol.linkage_name_as_string s, Cmmgen_state.Global in
     let header = C.black_block_header tag (List.length fields) in
-    let env, r, static_fields =
+    let env, static_fields =
       List.fold_right
-        (fun v (env, r, static_fields) ->
-          let static_field, r = static_value r v in
-          env, r, static_field :: static_fields)
-        fields (env, r, [])
+        (fun v (env, static_fields) ->
+          let static_field = static_value r v in
+          env, static_field :: static_fields)
+        fields (env, [])
     in
     let block = C.emit_block block_name header static_fields in
     let env, updates = static_block_updates s env updates 0 fields in
