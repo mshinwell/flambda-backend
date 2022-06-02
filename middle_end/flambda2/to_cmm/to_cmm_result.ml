@@ -89,8 +89,11 @@ let add_to_data_list x l =
     then
       Misc.fatal_errorf
         "data list does not define any symbol, its elements will be unusable: \
-         %a"
-        Printcmm.data x;
+         %a\n\n\
+         Backtrace:\n\
+         %s\n"
+        Printcmm.data x
+        (Printexc.raw_backtrace_to_string (Printexc.get_callstack 100));
     C.cdata x :: l
 
 let archive_data r =
@@ -143,7 +146,9 @@ let symbol_offset_in_bytes t symbol =
          Symbol.print symbol Targetint.print bytes; *)
       Some bytes
     | None ->
-      Format.eprintf "NOT FOUND Symbol %a\n" Symbol.print symbol;
+      if (not (Symbol.is_predefined_exception symbol))
+         && not (Symbol.equal symbol t.module_symbol)
+      then Format.eprintf "NOT FOUND Symbol %a\n" Symbol.print symbol;
       None)
 
 let data_symbol_for_unit comp_unit =

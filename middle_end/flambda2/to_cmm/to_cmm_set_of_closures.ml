@@ -402,7 +402,7 @@ let lift_set_of_closures env res ~body ~bound_vars layout set ~translate_expr =
     Misc.fatal_errorf "non-empty [updates] when lifting set of closures: %a"
       Set_of_closures.print set;
   (* Update the result with the new static data *)
-  let res = R.archive_data (R.set_data res static_data) in
+  let res = R.archive_offset_data (R.set_data res static_data) in
   (* Bind the variables to the symbols for function slots. *)
   (* CR-someday gbury: inline the variables (requires extending To_cmm_env to
      inline pure variables more than once). *)

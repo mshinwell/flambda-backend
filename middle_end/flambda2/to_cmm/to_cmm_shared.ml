@@ -142,7 +142,11 @@ let invalid res ~message =
       (Compilation_unit.get_current_exn ())
       (Linkage_name.create (Variable.unique_name (Variable.create "invalid")))
   in
-  let data_items =
+  let res =
+    To_cmm_result.record_symbol_offset res message_sym
+      ~size_in_words_excluding_header:((String.length message + 8) / 8)
+  in
+  let res =
     Cmm_helpers.emit_string_constant
       (Symbol.linkage_name_as_string message_sym, Global)
       message []
@@ -151,9 +155,9 @@ let invalid res ~message =
   let call_expr =
     extcall ~dbg ~alloc:false ~is_c_builtin:false ~returns:false ~ty_args:[XInt]
       "caml_flambda2_invalid" Cmm.typ_void
-      [symbol res ~dbg message_sym]
+      [To_cmm_result.expr_symbol_address res message_sym dbg]
   in
-  call_expr, data_items
+  call_expr, res
 
 let make_update env dbg kind ~symbol var ~index ~prev_updates =
   let e, env, _ece = To_cmm_env.inline_variable env var in
