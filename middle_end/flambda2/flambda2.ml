@@ -220,7 +220,10 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
         ()
         (* Either opaque was passed, or there is no need to export offsets *)
       | Some cmx ->
-        let cmx = Flambda_cmx_format.with_exported_offsets cmx offsets in
+        let cmx =
+          Flambda_cmx_format.with_exported_offsets cmx offsets
+          |> Flambda_cmx_format.prepare_for_serialization
+        in
         Compilenv.flambda2_set_export_info cmx
     end;
     if not keep_symbol_tables

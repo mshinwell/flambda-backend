@@ -27,6 +27,8 @@ val create :
   used_value_slots:Value_slot.Set.t ->
   t
 
+val prepare_for_serialization : t -> t
+
 val import_typing_env_and_code :
   t ->
   Flambda2_types.Typing_env.Serializable.t

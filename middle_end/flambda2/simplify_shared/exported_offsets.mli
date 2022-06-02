@@ -82,3 +82,5 @@ val imported_offsets : unit -> t
 val merge : t -> t -> t
 
 val apply_renaming : t -> Renaming.t -> t
+
+val all_ids_for_export : t -> Ids_for_export.t

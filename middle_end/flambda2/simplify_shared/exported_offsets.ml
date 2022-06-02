@@ -170,3 +170,9 @@ let apply_renaming { function_slot_offsets; value_slot_offsets; symbol_offsets }
       symbol_offsets Symbol.Map.empty
   in
   { function_slot_offsets; value_slot_offsets; symbol_offsets }
+
+let all_ids_for_export
+    { function_slot_offsets = _; value_slot_offsets = _; symbol_offsets } =
+  Symbol.Map.fold
+    (fun symbol _offset ids -> Ids_for_export.add_symbol ids symbol)
+    symbol_offsets Ids_for_export.empty

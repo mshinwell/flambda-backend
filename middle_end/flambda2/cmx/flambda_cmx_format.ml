@@ -33,18 +33,31 @@ type t0 =
     all_code : Exported_code.t;
     exported_offsets : Exported_offsets.t;
     used_value_slots : Value_slot.Set.t;
-    table_data : table_data
+    table_data : table_data option
   }
 
 type t = t0 list
 
 let create ~final_typing_env ~all_code ~exported_offsets ~used_value_slots =
+  [ { original_compilation_unit = Compilation_unit.get_current_exn ();
+      final_typing_env;
+      all_code;
+      exported_offsets;
+      used_value_slots;
+      table_data = None
+    } ]
+
+let prepare_for_serialization0 t =
   let typing_env_exported_ids =
-    Flambda2_types.Typing_env.Serializable.all_ids_for_export final_typing_env
+    Flambda2_types.Typing_env.Serializable.all_ids_for_export t.final_typing_env
   in
-  let all_code_exported_ids = Exported_code.all_ids_for_export all_code in
+  let all_code_exported_ids = Exported_code.all_ids_for_export t.all_code in
+  let exported_offsets_ids =
+    Exported_offsets.all_ids_for_export t.exported_offsets
+  in
   let exported_ids =
-    Ids_for_export.union typing_env_exported_ids all_code_exported_ids
+    Ids_for_export.union typing_env_exported_ids
+      (Ids_for_export.union all_code_exported_ids exported_offsets_ids)
   in
   let symbols =
     Symbol.Set.fold
@@ -81,13 +94,9 @@ let create ~final_typing_env ~all_code ~exported_offsets ~used_value_slots =
   let table_data =
     { symbols; variables; simples; consts; code_ids; continuations }
   in
-  [ { original_compilation_unit = Compilation_unit.get_current_exn ();
-      final_typing_env;
-      all_code;
-      exported_offsets;
-      used_value_slots;
-      table_data
-    } ]
+  { t with table_data = Some table_data }
+
+let prepare_for_serialization t = List.map prepare_for_serialization0 t
 
 module Make_importer (S : sig
   type t
@@ -136,13 +145,22 @@ module Const_importer = Make_importer (Reg_width_const)
 module Code_id_importer = Make_importer (Code_id)
 module Continuation_importer = Make_importer (Continuation)
 
+let check_was_prepared_for_serialization t =
+  match t.table_data with
+  | Some table_data -> table_data
+  | None ->
+    Misc.fatal_errorf
+      "[Flambda_cmx_format.t] value for %a was not prepared for serialization"
+      Compilation_unit.print t.original_compilation_unit
+
 let import_typing_env_and_code0 t =
-  let symbols = Symbol_importer.import t.table_data.symbols in
-  let variables = Variable_importer.import t.table_data.variables in
-  let simples = Simple_importer.import t.table_data.simples in
-  let consts = Const_importer.import t.table_data.consts in
-  let code_ids = Code_id_importer.import t.table_data.code_ids in
-  let continuations = Continuation_importer.import t.table_data.continuations in
+  let table_data = check_was_prepared_for_serialization t in
+  let symbols = Symbol_importer.import table_data.symbols in
+  let variables = Variable_importer.import table_data.variables in
+  let simples = Simple_importer.import table_data.simples in
+  let consts = Const_importer.import table_data.consts in
+  let code_ids = Code_id_importer.import table_data.code_ids in
+  let continuations = Continuation_importer.import table_data.continuations in
   let used_value_slots = t.used_value_slots in
   let original_compilation_unit = t.original_compilation_unit in
   let renaming =
@@ -192,29 +210,30 @@ let with_exported_offsets t exported_offsets =
     Misc.fatal_error "Cannot set exported offsets on multiple units"
 
 let update_for_pack0 ~pack_units ~pack t =
+  let table_data = check_was_prepared_for_serialization t in
   let symbols =
-    Symbol_importer.update_for_pack ~pack_units ~pack t.table_data.symbols
+    Symbol_importer.update_for_pack ~pack_units ~pack table_data.symbols
   in
   let variables =
-    Variable_importer.update_for_pack ~pack_units ~pack t.table_data.variables
+    Variable_importer.update_for_pack ~pack_units ~pack table_data.variables
   in
   let simples =
-    Simple_importer.update_for_pack ~pack_units ~pack t.table_data.simples
+    Simple_importer.update_for_pack ~pack_units ~pack table_data.simples
   in
   let consts =
-    Const_importer.update_for_pack ~pack_units ~pack t.table_data.consts
+    Const_importer.update_for_pack ~pack_units ~pack table_data.consts
   in
   let code_ids =
-    Code_id_importer.update_for_pack ~pack_units ~pack t.table_data.code_ids
+    Code_id_importer.update_for_pack ~pack_units ~pack table_data.code_ids
   in
   let continuations =
     Continuation_importer.update_for_pack ~pack_units ~pack
-      t.table_data.continuations
+      table_data.continuations
   in
   let table_data =
     { symbols; variables; simples; consts; code_ids; continuations }
   in
-  { t with table_data }
+  { t with table_data = Some table_data }
 
 let update_for_pack ~pack_units ~pack t_opt =
   match t_opt with
