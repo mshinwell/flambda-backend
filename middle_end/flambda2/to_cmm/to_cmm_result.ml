@@ -19,7 +19,7 @@ module C = Cmm_helpers
 type t =
   { gc_roots : Symbol.t list;
     data_list : Cmm.phrase list;
-    offset_data_list : Cmm.phrase list;
+    offset_data_list : Cmm.data_item list;
     functions : Cmm.fundecl list;
     current_data : Cmm.data_item list;
     module_symbol : Symbol.t;
@@ -38,8 +38,7 @@ let create ~module_symbol ~data_symbol offsets =
     module_symbol;
     module_symbol_defined = false;
     offsets;
-    next_symbol_offset = Targetint.of_int 8;
-    (* Eight not zero: after the first header! *)
+    next_symbol_offset = Targetint.of_int 0;
     data_symbol
   }
 
@@ -74,6 +73,14 @@ let defines_a_symbol data =
   | Cskip _ | Calign _ ->
     false
 
+let defines_a_symbol_or_global data =
+  match (data : Cmm.data_item) with
+  | Cdefine_symbol _ | Cglobal_symbol _ -> true
+  | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _ | Cdouble _
+  | Csymbol_address _ | Coffset_symbol_address _ | Cstring _ | Cskip _
+  | Calign _ ->
+    false
+
 let add_to_data_list x l =
   match x with
   | [] -> l
@@ -93,14 +100,14 @@ let archive_data r =
   }
 
 let archive_offset_data r =
+  (* CR mshinwell: Add [Ccomment] to [Cmm.data_item] for debugging. *)
   { r with
     current_data = [];
     offset_data_list =
-      add_to_data_list
-        (List.filter
-           (fun data_item -> not (defines_a_symbol data_item))
-           r.current_data)
-        r.offset_data_list
+      r.offset_data_list
+      @ List.filter
+          (fun data_item -> not (defines_a_symbol_or_global data_item))
+          r.current_data
   }
 
 let update_data r f = { r with current_data = f r.current_data }
@@ -122,8 +129,8 @@ let add_function r f = { r with functions = f :: r.functions }
 let symbol_offset_in_bytes t symbol =
   match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
   | Some bytes ->
-    Format.eprintf "LOCAL Symbol %a can be reached via offset %a\n" Symbol.print
-      symbol Targetint.print bytes;
+    (* Format.eprintf "LOCAL Symbol %a can be reached via offset %a\n"
+       Symbol.print symbol Targetint.print bytes; *)
     Some bytes
   | None -> (
     match
@@ -132,28 +139,34 @@ let symbol_offset_in_bytes t symbol =
         symbol
     with
     | Some bytes ->
-      Format.eprintf "IMPORTED Symbol %a can be reached via offset %a\n"
-        Symbol.print symbol Targetint.print bytes;
+      (* Format.eprintf "IMPORTED Symbol %a can be reached via offset %a\n"
+         Symbol.print symbol Targetint.print bytes; *)
       Some bytes
-    | None -> None)
+    | None ->
+      Format.eprintf "NOT FOUND Symbol %a\n" Symbol.print symbol;
+      None)
+
+let data_symbol_for_unit comp_unit =
+  Symbol.create comp_unit (Linkage_name.create "data_symbol")
 
 let static_symbol_address t symbol : Cmm.data_item =
   match symbol_offset_in_bytes t symbol with
   | None -> C.symbol_address (Symbol.linkage_name_as_string symbol)
   | Some bytes ->
+    let data_symbol = data_symbol_for_unit (Symbol.compilation_unit symbol) in
     if Targetint.equal bytes Targetint.zero
-    then C.symbol_address (Symbol.linkage_name_as_string t.data_symbol)
+    then C.symbol_address (Symbol.linkage_name_as_string data_symbol)
     else
-      C.offset_symbol_address
-        (Symbol.linkage_name_as_string t.data_symbol)
-        ~bytes
+      C.offset_symbol_address (Symbol.linkage_name_as_string data_symbol) ~bytes
 
 let expr_symbol_address t symbol dbg : Cmm.expression =
   match symbol_offset_in_bytes t symbol with
   | None -> C.symbol_from_string ~dbg (Symbol.linkage_name_as_string symbol)
   | Some bytes ->
     let sym_expr =
-      C.symbol_from_string ~dbg (Symbol.linkage_name_as_string t.data_symbol)
+      C.symbol_from_string ~dbg
+        (Symbol.linkage_name_as_string
+           (data_symbol_for_unit (Symbol.compilation_unit symbol)))
     in
     if Targetint.equal bytes Targetint.zero
     then sym_expr
@@ -193,11 +206,24 @@ let to_cmm r =
   in
   let function_phrases = List.map (fun f -> C.cfunction f) sorted_functions in
   let data_items =
-    r.data_list
-    @ C.cdata
-        (C.define_symbol ~global:true
-           (Symbol.linkage_name_as_string r.data_symbol))
-      :: r.offset_data_list
+    match r.offset_data_list with
+    | [] -> r.data_list
+    | header :: rest -> (
+      (* Move the first block header prior to the data symbol definition. *)
+      match header with
+      | Cint _ ->
+        C.cdata
+          (header
+           :: C.define_symbol ~global:true
+                (Symbol.linkage_name_as_string r.data_symbol)
+          @ rest)
+        :: r.data_list
+      | Cdefine_symbol _ | Cglobal_symbol _ | Cint8 _ | Cint16 _ | Cint32 _
+      | Csingle _ | Cdouble _ | Csymbol_address _ | Coffset_symbol_address _
+      | Cstring _ | Cskip _ | Calign _ ->
+        Misc.fatal_errorf
+          "Malformed [offset_data_list], expected block header to begin:@ %a"
+          Printcmm.data r.offset_data_list)
   in
   (* let symbol_offsets_in_bytes, _offset_in_bytes = List.fold_left (fun
      (symbol_offsets_in_bytes, offset_in_bytes) (phrase : Cmm.phrase) -> match

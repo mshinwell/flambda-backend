@@ -1177,5 +1177,5 @@ val cdata : data_item list -> phrase
 (** Create the gc root table from a list of root symbols. *)
 val gc_root_table :
   make_symbol:(?unitname:string -> string option -> string) ->
-  string list ->
+  data_item list ->
   phrase

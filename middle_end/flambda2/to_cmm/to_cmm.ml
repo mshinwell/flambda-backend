@@ -118,9 +118,7 @@ let unit0 ~offsets ~make_symbol flambda_unit ~all_code =
   let cmm_helpers_data = flush_cmm_helpers_state () in
   let gc_root_data =
     C.gc_root_table ~make_symbol
-      (List.map
-         (fun sym -> Linkage_name.to_string (Symbol.linkage_name sym))
-         gc_roots)
+      (List.map (fun sym -> R.static_symbol_address res sym) gc_roots)
   in
   (gc_root_data :: data_items) @ cmm_helpers_data @ functions @ [entry], offsets
 
