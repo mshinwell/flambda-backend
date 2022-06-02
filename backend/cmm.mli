@@ -276,7 +276,7 @@ type data_item =
   | Csingle of float
   | Cdouble of float
   | Csymbol_address of string
-(*  | Csymbol_address_plus_byte_offset of string * int *)
+  | Coffset_symbol_address of { symbol : string; bytes : Targetint.t }
   | Cstring of string
   | Cskip of int
   | Calign of int

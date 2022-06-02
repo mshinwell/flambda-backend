@@ -1147,8 +1147,11 @@ val cint : nativeint -> data_item
 (** Static float. *)
 val cfloat : float -> data_item
 
-(** Static symbol. *)
+(** Address of symbol. *)
 val symbol_address : string -> data_item
+
+(** Address of symbol plus byte offset. *)
+val offset_symbol_address : string -> bytes:Targetint.t -> data_item
 
 (** Definition for a static symbol. *)
 val define_symbol : global:bool -> string -> data_item list

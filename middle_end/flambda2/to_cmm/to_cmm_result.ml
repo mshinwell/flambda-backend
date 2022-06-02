@@ -24,7 +24,7 @@ type t =
     module_symbol : Symbol.t;
     module_symbol_defined : bool;
     offsets : Exported_offsets.t;
-    next_symbol_offset : int;
+    next_symbol_offset : Targetint.t;
     data_symbol : Symbol.t
   }
 
@@ -36,7 +36,7 @@ let create ~module_symbol ~data_symbol offsets =
     module_symbol;
     module_symbol_defined = false;
     offsets;
-    next_symbol_offset = 0;
+    next_symbol_offset = Targetint.zero;
     data_symbol
   }
 
@@ -46,7 +46,8 @@ let record_symbol_offset t symbol ~size_in_words_excluding_header =
       ~bytes:t.next_symbol_offset
   in
   let next_symbol_offset =
-    t.next_symbol_offset + (8 * (size_in_words_excluding_header + 1))
+    Targetint.add t.next_symbol_offset
+      (Targetint.of_int (8 * (size_in_words_excluding_header + 1)))
   in
   { t with offsets; next_symbol_offset }
 
@@ -66,7 +67,8 @@ let defines_a_symbol data =
   match (data : Cmm.data_item) with
   | Cdefine_symbol _ -> true
   | Cglobal_symbol _ | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _
-  | Cdouble _ | Csymbol_address _ | Cstring _ | Cskip _ | Calign _ ->
+  | Cdouble _ | Csymbol_address _ | Coffset_symbol_address _ | Cstring _
+  | Cskip _ | Calign _ ->
     false
 
 let add_to_data_list x l =
@@ -106,8 +108,8 @@ let add_function r f = { r with functions = f :: r.functions }
 let symbol_offset_in_bytes t symbol =
   match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
   | Some bytes ->
-    Format.eprintf "LOCAL Symbol %a can be reached via offset %d\n" Symbol.print
-      symbol bytes;
+    Format.eprintf "LOCAL Symbol %a can be reached via offset %a\n" Symbol.print
+      symbol Targetint.print bytes;
     Some bytes
   | None -> (
     match
@@ -116,14 +118,21 @@ let symbol_offset_in_bytes t symbol =
         symbol
     with
     | Some bytes ->
-      Format.eprintf "IMPORTED Symbol %a can be reached via offset %d\n"
-        Symbol.print symbol bytes;
+      Format.eprintf "IMPORTED Symbol %a can be reached via offset %a\n"
+        Symbol.print symbol Targetint.print bytes;
       Some bytes
     | None -> None)
 
-let static_symbol_address t symbol =
-  let _offset = symbol_offset_in_bytes t symbol in
-  Cmm.Csymbol_address (Symbol.linkage_name_as_string symbol)
+let static_symbol_address t symbol : Cmm.data_item =
+  let[@inline] zero_offset () =
+    C.symbol_address (Symbol.linkage_name_as_string symbol)
+  in
+  match symbol_offset_in_bytes t symbol with
+  | None -> zero_offset ()
+  | Some bytes ->
+    if Targetint.equal bytes Targetint.zero
+    then zero_offset ()
+    else C.offset_symbol_address (Symbol.linkage_name_as_string symbol) ~bytes
 
 let expr_symbol_address t symbol dbg : Cmm.expression =
   let sym_expr =
@@ -131,7 +140,13 @@ let expr_symbol_address t symbol dbg : Cmm.expression =
   in
   match symbol_offset_in_bytes t symbol with
   | None -> sym_expr
-  | Some offset -> C.add_int sym_expr (C.int_const dbg offset) dbg
+  | Some bytes ->
+    if Targetint.equal bytes Targetint.zero
+    then sym_expr
+    else
+      let bytes = Int64.to_nativeint (Targetint.to_int64 bytes) in
+      (* Beware: this must be all in machine integers, not tagged integers. *)
+      Cop (Caddi, [sym_expr; Cconst_natint (bytes, dbg)], dbg)
 
 type result =
   { data_items : Cmm.phrase list;

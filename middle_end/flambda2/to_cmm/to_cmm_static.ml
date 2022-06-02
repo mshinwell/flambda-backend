@@ -38,31 +38,33 @@ let or_variable f default v cont =
   | Const c -> f c cont
   | Var _ -> f default cont
 
-let rec static_block_updates symb env acc i = function
+let rec static_block_updates symb env r acc i = function
   | [] -> env, acc
-  | sv :: r -> begin
+  | sv :: rem -> begin
     match (sv : Field_of_static_block.t) with
     | Symbol _ | Tagged_immediate _ ->
-      static_block_updates symb env acc (i + 1) r
+      static_block_updates symb env r acc (i + 1) rem
     | Dynamically_computed (var, dbg) ->
       let env, acc =
-        C.make_update env dbg Word_val ~symbol:(C.symbol ~dbg symb) var ~index:i
-          ~prev_updates:acc
+        C.make_update env dbg Word_val
+          ~symbol:(R.expr_symbol_address r symb dbg)
+          var ~index:i ~prev_updates:acc
       in
-      static_block_updates symb env acc (i + 1) r
+      static_block_updates symb env r acc (i + 1) rem
   end
 
-let rec static_float_array_updates symb env acc i = function
+let rec static_float_array_updates symb env r acc i = function
   | [] -> env, acc
-  | sv :: r -> begin
+  | sv :: rem -> begin
     match (sv : _ Or_variable.t) with
-    | Const _ -> static_float_array_updates symb env acc (i + 1) r
+    | Const _ -> static_float_array_updates symb env r acc (i + 1) rem
     | Var (var, dbg) ->
       let env, acc =
-        C.make_update env dbg Double ~symbol:(C.symbol ~dbg symb) var ~index:i
-          ~prev_updates:acc
+        C.make_update env dbg Double
+          ~symbol:(R.expr_symbol_address r symb dbg)
+          var ~index:i ~prev_updates:acc
       in
-      static_float_array_updates symb env acc (i + 1) r
+      static_float_array_updates symb env r acc (i + 1) rem
   end
 
 let static_boxed_number kind env symbol default emit transl v r updates =
@@ -75,8 +77,9 @@ let static_boxed_number kind env symbol default emit transl v r updates =
     match (v : _ Or_variable.t) with
     | Const _ -> env, None
     | Var (v, dbg) ->
-      C.make_update env dbg kind ~symbol:(C.symbol ~dbg symbol) v ~index:0
-        ~prev_updates:updates
+      C.make_update env dbg kind
+        ~symbol:(R.expr_symbol_address r symbol dbg)
+        v ~index:0 ~prev_updates:updates
   in
   R.update_data r (or_variable aux default v), updates
 
@@ -96,7 +99,7 @@ let preallocate_set_of_closures (r, updates, env) ~closure_symbols
       closure_symbols |> Function_slot.Lmap.bindings
       |> Function_slot.Map.of_list
     in
-    To_cmm_set_of_closures.let_static_set_of_closures env closure_symbols
+    To_cmm_set_of_closures.let_static_set_of_closures env r closure_symbols
       set_of_closures ~prev_updates:updates
   in
   let r = R.set_data r data in
@@ -125,7 +128,7 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
         fields (env, [])
     in
     let block = C.emit_block block_name header static_fields in
-    let env, updates = static_block_updates s env updates 0 fields in
+    let env, updates = static_block_updates s env r updates 0 fields in
     env, R.set_data r block, updates
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
     let r, updates, env =
@@ -181,7 +184,7 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
         (Symbol.linkage_name_as_string s, Cmmgen_state.Global)
         static_fields
     in
-    let env, e = static_float_array_updates s env updates 0 fields in
+    let env, e = static_float_array_updates s env r updates 0 fields in
     env, R.update_data r float_array, e
   | Block_like s, Empty_array ->
     let r = R.record_symbol_offset r s ~size_in_words_excluding_header:0 in

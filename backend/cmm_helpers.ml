@@ -4098,6 +4098,9 @@ let cfloat f = Cmm.Cdouble f
 
 let symbol_address s = Cmm.Csymbol_address s
 
+let offset_symbol_address symbol ~bytes =
+  Cmm.Coffset_symbol_address { symbol; bytes }
+
 let define_symbol ~global s =
   if global
   then [Cmm.Cglobal_symbol s; Cmm.Cdefine_symbol s]

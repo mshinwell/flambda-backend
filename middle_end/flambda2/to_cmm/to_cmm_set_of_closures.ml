@@ -77,6 +77,7 @@ module Make_layout_filler (P : sig
   val simple :
     dbg:Debuginfo.t ->
     To_cmm_env.t ->
+    To_cmm_result.t ->
     Simple.t ->
     [`Data of cmm_term list | `Var of Variable.t] * To_cmm_env.t * Ece.t
 
@@ -87,6 +88,7 @@ module Make_layout_filler (P : sig
   val define_global_symbol : string -> cmm_term list
 end) : sig
   val fill_layout :
+    To_cmm_result.t ->
     set_of_closures_symbol_ref:Symbol.t option ref ->
     Symbol.t Function_slot.Map.t option ->
     Code_id.t Function_slot.Map.t ->
@@ -100,7 +102,7 @@ end) : sig
     P.cmm_term list * int * Env.t * Ece.t * Cmm.expression option
 end = struct
   (* The [offset]s here are measured in units of words. *)
-  let fill_slot ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+  let fill_slot r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
       value_slots env acc ~slot_offset updates slot =
     match (slot : Slot_offsets.layout_slot) with
     | Infix_header ->
@@ -108,7 +110,7 @@ end = struct
       field :: acc, slot_offset + 1, env, Ece.pure, updates
     | Value_slot v ->
       let simple = Value_slot.Map.find v value_slots in
-      let contents, env, eff = P.simple ~dbg env simple in
+      let contents, env, eff = P.simple ~dbg env r simple in
       let env, fields, updates =
         match contents with
         | `Data fields -> env, fields, updates
@@ -120,7 +122,7 @@ end = struct
           in
           let env, updates =
             C.make_update env dbg Word_val
-              ~symbol:(C.symbol ~dbg set_of_closures_symbol)
+              ~symbol:(C.symbol r ~dbg set_of_closures_symbol)
               v ~index:slot_offset ~prev_updates:updates
           in
           env, [P.int ~dbg 1n], updates
@@ -164,7 +166,7 @@ end = struct
         in
         acc, slot_offset + 3, env, Ece.pure, updates)
 
-  let rec fill_layout0 ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+  let rec fill_layout0 r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
       value_slots env effs acc updates ~starting_offset slots =
     match slots with
     | [] -> List.rev acc, starting_offset, env, effs, updates
@@ -181,16 +183,16 @@ end = struct
           @ acc
       in
       let acc, next_offset, env, eff, updates =
-        fill_slot ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+        fill_slot r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
           value_slots env acc ~slot_offset updates slot
       in
       let effs = Ece.join eff effs in
-      fill_layout0 ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+      fill_layout0 r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
         value_slots env effs acc updates ~starting_offset:next_offset slots
 
-  let fill_layout ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+  let fill_layout r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
       value_slots env effs ~prev_updates slots =
-    fill_layout0 ~set_of_closures_symbol_ref symbs decls dbg ~startenv
+    fill_layout0 r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
       value_slots env effs [] prev_updates ~starting_offset:0 slots
 end
 
@@ -200,8 +202,8 @@ module Dynamic = Make_layout_filler (struct
 
   let int ~dbg i = C.nativeint ~dbg i
 
-  let simple ~dbg env simple =
-    let term, env, eff = C.simple ~dbg env simple in
+  let simple ~dbg env r simple =
+    let term, env, eff = C.simple ~dbg env r simple in
     `Data [term], env, eff
 
   let infix_header ~dbg ~function_slot_offset =
@@ -219,8 +221,8 @@ module Static = Make_layout_filler (struct
 
   let int ~dbg:_ i = C.cint i
 
-  let simple ~dbg:_ env simple =
-    let contents = C.simple_static simple in
+  let simple ~dbg:_ env r simple =
+    let contents = C.simple_static r simple in
     contents, env, Ece.pure
 
   let infix_header ~dbg:_ ~function_slot_offset =
@@ -314,7 +316,7 @@ let debuginfo_for_set_of_closures env set =
   (* Choose the debuginfo with the earliest source location. *)
   match dbg with [] -> Debuginfo.none | dbg :: _ -> dbg
 
-let let_static_set_of_closures0 env symbs (layout : Slot_offsets.layout) set
+let let_static_set_of_closures0 env r symbs (layout : Slot_offsets.layout) set
     ~prev_updates =
   let set_of_closures_symbol_ref = ref None in
   let fun_decls = Set_of_closures.function_decls set in
@@ -322,7 +324,7 @@ let let_static_set_of_closures0 env symbs (layout : Slot_offsets.layout) set
   let value_slots = Set_of_closures.value_slots set in
   let dbg = debuginfo_for_set_of_closures env set in
   let l, length, env, _effs, updates =
-    Static.fill_layout ~set_of_closures_symbol_ref (Some symbs) decls dbg
+    Static.fill_layout r ~set_of_closures_symbol_ref (Some symbs) decls dbg
       ~startenv:layout.startenv value_slots env Ece.pure ~prev_updates
       layout.slots
   in
@@ -342,9 +344,9 @@ let let_static_set_of_closures0 env symbs (layout : Slot_offsets.layout) set
   in
   env, block, updates
 
-let let_static_set_of_closures env symbs set ~prev_updates =
+let let_static_set_of_closures env r symbs set ~prev_updates =
   let layout = layout_for_set_of_closures env set in
-  let_static_set_of_closures0 env symbs layout set ~prev_updates
+  let_static_set_of_closures0 env r symbs layout set ~prev_updates
 
 (* Sets of closures with no value slots can be statically allocated. This
    usually happens earlier (in Simplify, or Closure_conversion for classic mode)
@@ -379,7 +381,7 @@ let lift_set_of_closures env res ~body ~bound_vars layout set ~translate_expr =
   in
   (* Statically allocate the set of closures *)
   let env, static_data, updates =
-    let_static_set_of_closures0 env closure_symbols layout set
+    let_static_set_of_closures0 env res closure_symbols layout set
       ~prev_updates:None
   in
   (* There should be no updates as there are no value slots *)
@@ -396,7 +398,9 @@ let lift_set_of_closures env res ~body ~bound_vars layout set ~translate_expr =
     List.fold_left2
       (fun acc cid v ->
         let v = Bound_var.var v in
-        let sym = C.symbol ~dbg (Function_slot.Map.find cid closure_symbols) in
+        let sym =
+          C.symbol ~dbg res (Function_slot.Map.find cid closure_symbols)
+        in
         Env.bind_variable acc v ~effects_and_coeffects_of_defining_expr:Ece.pure
           ~num_normal_occurrences_of_bound_vars:Unknown ~defining_expr:sym)
       env cids bound_vars
@@ -420,8 +424,8 @@ let let_dynamic_set_of_closures0 env res ~body ~bound_vars set
     decls |> Function_slot.Lmap.bindings |> Function_slot.Map.of_list
   in
   let l, _offset, env, effs, updates =
-    Dynamic.fill_layout ~set_of_closures_symbol_ref:(ref None) None decl_map dbg
-      ~startenv:layout.startenv value_slots env effs ~prev_updates:None
+    Dynamic.fill_layout res ~set_of_closures_symbol_ref:(ref None) None decl_map
+      dbg ~startenv:layout.startenv value_slots env effs ~prev_updates:None
       layout.slots
   in
   assert (Option.is_none updates);

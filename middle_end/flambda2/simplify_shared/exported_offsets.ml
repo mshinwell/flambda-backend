@@ -40,7 +40,7 @@ type value_slot_info =
 type t =
   { function_slot_offsets : function_slot_info Function_slot.Map.t;
     value_slot_offsets : value_slot_info Value_slot.Map.t;
-    symbol_offsets : int Symbol.Map.t
+    symbol_offsets : Targetint.t Symbol.Map.t
   }
 
 let print_function_slot_info fmt = function
@@ -62,7 +62,7 @@ let [@ocamlformat "disable"] print fmt
       )@]"
     (Function_slot.Map.print print_function_slot_info) function_slot_offsets
     (Value_slot.Map.print print_value_slot_info) value_slot_offsets
-    (Symbol.Map.print Format.pp_print_int) symbol_offsets
+    (Symbol.Map.print Targetint.print) symbol_offsets
 
 let empty =
   { function_slot_offsets = Function_slot.Map.empty;
@@ -154,7 +154,7 @@ let merge env1 env2 =
       env2.value_slot_offsets
   in
   let symbol_offsets =
-    Symbol.Map.disjoint_union ~eq:Int.equal ~print:Format.pp_print_int
+    Symbol.Map.disjoint_union ~eq:Targetint.equal ~print:Targetint.print
       env1.symbol_offsets env2.symbol_offsets
   in
   { function_slot_offsets; value_slot_offsets; symbol_offsets }

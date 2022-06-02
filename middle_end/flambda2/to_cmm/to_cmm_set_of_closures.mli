@@ -23,6 +23,7 @@ type translate_expr =
 
 val let_static_set_of_closures :
   To_cmm_env.t ->
+  To_cmm_result.t ->
   Symbol.t Function_slot.Map.t ->
   Set_of_closures.t ->
   prev_updates:Cmm.expression option ->

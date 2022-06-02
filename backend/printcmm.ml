@@ -362,6 +362,8 @@ let data_item ppf = function
   | Csingle f -> fprintf ppf "single %F" f
   | Cdouble f -> fprintf ppf "double %F" f
   | Csymbol_address s -> fprintf ppf "addr \"%s\"" s
+  | Coffset_symbol_address { symbol; bytes } ->
+    fprintf ppf "addr \"%s\" + %a" symbol Targetint.print bytes
   | Cstring s -> fprintf ppf "string \"%s\"" s
   | Cskip n -> fprintf ppf "skip %i" n
   | Calign n -> fprintf ppf "align %i" n
