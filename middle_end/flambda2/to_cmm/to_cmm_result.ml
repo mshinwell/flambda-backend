@@ -24,10 +24,11 @@ type t =
     module_symbol : Symbol.t;
     module_symbol_defined : bool;
     offsets : Exported_offsets.t;
-    next_symbol_offset : int
+    next_symbol_offset : int;
+    data_symbol : Symbol.t
   }
 
-let create ~module_symbol offsets =
+let create ~module_symbol ~data_symbol offsets =
   { gc_roots = [];
     data_list = [];
     functions = [];
@@ -35,7 +36,8 @@ let create ~module_symbol offsets =
     module_symbol;
     module_symbol_defined = false;
     offsets;
-    next_symbol_offset = 0
+    next_symbol_offset = 0;
+    data_symbol
   }
 
 let record_symbol_offset t symbol ~size_in_words_excluding_header =
@@ -100,6 +102,28 @@ let add_archive_data_items r l =
 let add_gc_roots r l = { r with gc_roots = l @ r.gc_roots }
 
 let add_function r f = { r with functions = f :: r.functions }
+
+let static_symbol_address t symbol =
+  let name = Symbol.linkage_name_as_string symbol in
+  let t =
+    match Exported_offsets.symbol_offset_in_bytes t.offsets symbol with
+    | Some bytes ->
+      Format.eprintf "LOCAL Symbol %a can be reached via offset %d\n"
+        Symbol.print symbol bytes;
+      t
+    | None -> (
+      match
+        Exported_offsets.symbol_offset_in_bytes
+          (Exported_offsets.imported_offsets ())
+          symbol
+      with
+      | Some bytes ->
+        Format.eprintf "IMPORTED Symbol %a can be reached via offset %d\n"
+          Symbol.print symbol bytes;
+        t
+      | None -> t)
+  in
+  Cmm.Csymbol_address name, t
 
 type result =
   { data_items : Cmm.phrase list;

@@ -26,7 +26,8 @@
 type t
 
 (** Create a result structure. *)
-val create : module_symbol:Symbol.t -> Exported_offsets.t -> t
+val create :
+  module_symbol:Symbol.t -> data_symbol:Symbol.t -> Exported_offsets.t -> t
 
 (** Archive the current data into the list of already-translated data. *)
 val archive_data : t -> t
@@ -55,6 +56,10 @@ val check_for_module_symbol : t -> Symbol.t -> t * bool
 
 val record_symbol_offset :
   t -> Symbol.t -> size_in_words_excluding_header:int -> t
+
+(** Get the Cmm data item to fetch the address of a [Symbol] (which may be an
+    offset load from another symbol). *)
+val static_symbol_address : t -> Symbol.t -> Cmm.data_item * t
 
 type result = private
   { data_items : Cmm.phrase list;

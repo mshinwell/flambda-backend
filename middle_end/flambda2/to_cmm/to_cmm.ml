@@ -85,8 +85,15 @@ let unit0 ~offsets ~make_symbol flambda_unit ~all_code =
       (Flambda_unit.return_continuation flambda_unit)
       ~param_types:(List.map snd return_cont_params)
   in
+  let data_symbol =
+    Symbol.create
+      (Compilation_unit.get_current_exn ())
+      (Linkage_name.create "data_symbol")
+  in
   let r =
-    R.create ~module_symbol:(Flambda_unit.module_symbol flambda_unit) offsets
+    R.create
+      ~module_symbol:(Flambda_unit.module_symbol flambda_unit)
+      ~data_symbol offsets
   in
   let body, res = To_cmm_expr.expr env r (Flambda_unit.body flambda_unit) in
   let body =

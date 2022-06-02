@@ -201,7 +201,3 @@ val get_continuation : t -> Continuation.t -> cont
     fatal error if given an unbound continuation, or a continuation that was
     registered (using [add_inline_cont]) to be inlined. *)
 val get_cmm_continuation : t -> Continuation.t -> Cmm.label
-
-(** Get the Cmm data item to fetch the address of a [Symbol] (which may be an
-    offset load from another symbol). *)
-val static_symbol_address : t -> Symbol.t -> Cmm.data_item
