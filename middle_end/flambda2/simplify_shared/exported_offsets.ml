@@ -143,21 +143,28 @@ let current_offsets = ref empty
 let imported_offsets () = !current_offsets
 
 let merge env1 env2 =
-  let function_slot_offsets =
-    Function_slot.Map.disjoint_union ~eq:equal_function_slot_info
-      ~print:print_function_slot_info env1.function_slot_offsets
-      env2.function_slot_offsets
-  in
-  let value_slot_offsets =
-    Value_slot.Map.disjoint_union ~eq:equal_value_slot_info
-      ~print:print_value_slot_info env1.value_slot_offsets
-      env2.value_slot_offsets
-  in
-  let symbol_offsets =
-    Symbol.Map.disjoint_union ~eq:Targetint.equal ~print:Targetint.print
-      env1.symbol_offsets env2.symbol_offsets
-  in
-  { function_slot_offsets; value_slot_offsets; symbol_offsets }
+  try
+    let function_slot_offsets =
+      Function_slot.Map.disjoint_union ~eq:equal_function_slot_info
+        ~print:print_function_slot_info env1.function_slot_offsets
+        env2.function_slot_offsets
+    in
+    let value_slot_offsets =
+      Value_slot.Map.disjoint_union ~eq:equal_value_slot_info
+        ~print:print_value_slot_info env1.value_slot_offsets
+        env2.value_slot_offsets
+    in
+    let symbol_offsets =
+      Symbol.Map.disjoint_union ~eq:Targetint.equal ~print:Targetint.print
+        env1.symbol_offsets env2.symbol_offsets
+    in
+    { function_slot_offsets; value_slot_offsets; symbol_offsets }
+  with Invalid_argument str as exn ->
+    if String.equal str "disjoint_union"
+    then
+      Misc.fatal_errorf "Cannot merge [Exported_offsets]:@ \n%a@ \n%a" print
+        env1 print env2
+    else raise exn
 
 let import_offsets env = current_offsets := merge env !current_offsets
 
