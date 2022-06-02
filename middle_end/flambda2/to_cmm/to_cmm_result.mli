@@ -29,8 +29,15 @@ type t
 val create :
   module_symbol:Symbol.t -> data_symbol:Symbol.t -> Exported_offsets.t -> t
 
-(** Archive the current data into the list of already-translated data. *)
+(** Archive the current data into the list of already-translated data. See note
+    on [archive_offset_data] below too. *)
 val archive_data : t -> t
+
+(** Like [archive_data] but must be used if the current data item list contains
+    symbols that have been translated to offsets from the single data symbol. It
+    is not permissible to mix such symbols with those not translated in that
+    manner in the same current data list. *)
+val archive_offset_data : t -> t
 
 (** Add already-translated Cmm data items into the archived part of the result
     structure. *)

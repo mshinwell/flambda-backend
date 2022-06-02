@@ -247,7 +247,17 @@ let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
          bindings:@ %a@ =@ <deleted code>"
         Bound_static.Pattern.print bound_static
   in
-  env, R.archive_data r, updates
+  let r =
+    match static_const_or_code with
+    | Static_const (Set_of_closures _) | Code _ | Deleted_code ->
+      R.archive_data r
+    | Static_const
+        ( Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+        | Boxed_nativeint _ | Immutable_float_block _ | Immutable_float_array _
+        | Empty_array | Mutable_string _ | Immutable_string _ ) ->
+      R.archive_offset_data r
+  in
+  env, r, updates
 
 let static_consts0 env r ~params_and_body bound_static static_consts =
   (* We cannot both build the environment and compile any functions in one

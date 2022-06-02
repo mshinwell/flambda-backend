@@ -19,6 +19,7 @@ module C = Cmm_helpers
 type t =
   { gc_roots : Symbol.t list;
     data_list : Cmm.phrase list;
+    offset_data_list : Cmm.phrase list;
     functions : Cmm.fundecl list;
     current_data : Cmm.data_item list;
     module_symbol : Symbol.t;
@@ -31,12 +32,14 @@ type t =
 let create ~module_symbol ~data_symbol offsets =
   { gc_roots = [];
     data_list = [];
+    offset_data_list = [];
     functions = [];
     current_data = [];
     module_symbol;
     module_symbol_defined = false;
     offsets;
-    next_symbol_offset = Targetint.zero;
+    next_symbol_offset = Targetint.of_int 8;
+    (* Eight not zero: after the first header! *)
     data_symbol
   }
 
@@ -87,6 +90,17 @@ let archive_data r =
   { r with
     current_data = [];
     data_list = add_to_data_list r.current_data r.data_list
+  }
+
+let archive_offset_data r =
+  { r with
+    current_data = [];
+    offset_data_list =
+      add_to_data_list
+        (List.filter
+           (fun data_item -> not (defines_a_symbol data_item))
+           r.current_data)
+        r.offset_data_list
   }
 
 let update_data r f = { r with current_data = f r.current_data }
@@ -178,7 +192,13 @@ let to_cmm r =
       r.functions
   in
   let function_phrases = List.map (fun f -> C.cfunction f) sorted_functions in
-  let data_items = r.data_list in
+  let data_items =
+    r.data_list
+    @ C.cdata
+        (C.define_symbol ~global:true
+           (Symbol.linkage_name_as_string r.data_symbol))
+      :: r.offset_data_list
+  in
   (* let symbol_offsets_in_bytes, _offset_in_bytes = List.fold_left (fun
      (symbol_offsets_in_bytes, offset_in_bytes) (phrase : Cmm.phrase) -> match
      phrase with | Cfunction _ -> symbol_offsets_in_bytes, offset_in_bytes |
