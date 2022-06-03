@@ -65,6 +65,8 @@ val add_value_slot_offset : t -> Value_slot.t -> value_slot_info -> t
 
 val add_symbol_offset : t -> Symbol.t -> bytes:Targetint.t -> t
 
+val symbol_offsets : t -> Targetint.t Symbol.Map.t
+
 val map_function_slot_offsets :
   t -> (Function_slot.t -> function_slot_info -> 'a) -> 'a Function_slot.Map.t
 

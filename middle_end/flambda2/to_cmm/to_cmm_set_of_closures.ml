@@ -90,6 +90,9 @@ module Make_layout_filler (P : sig
     Symbol.t ->
     size_in_words_excluding_header:int ->
     To_cmm_result.t
+
+  val increment_symbol_offset :
+    To_cmm_result.t -> size_in_words:int -> To_cmm_result.t
 end) : sig
   val fill_layout :
     To_cmm_result.t ->
@@ -116,20 +119,16 @@ end = struct
     match (slot : Slot_offsets.layout_slot) with
     | Infix_header ->
       let field = P.infix_header ~function_slot_offset:(slot_offset + 1) ~dbg in
-      let r = R.increment_symbol_offset r ~size_in_words:1 in
+      let r = P.increment_symbol_offset r ~size_in_words:1 in
       field :: acc, slot_offset + 1, env, r, Ece.pure, updates
     | Value_slot v ->
       let simple = Value_slot.Map.find v value_slots in
       let contents, env, eff = P.simple ~dbg env r simple in
-      let env, r, fields, updates =
+      let env, fields, updates =
         match contents with
         | `Data fields ->
-          (* CR mshinwell: why is this a list? *)
           assert (List.length fields = 1);
-          let r =
-            R.increment_symbol_offset r ~size_in_words:(List.length fields)
-          in
-          env, r, fields, updates
+          env, fields, updates
         | `Var v ->
           (* We should only get here in the static allocation case. *)
           assert (Option.is_some symbs);
@@ -141,9 +140,9 @@ end = struct
               ~symbol:(R.expr_symbol_address r set_of_closures_symbol dbg)
               v ~index:slot_offset ~prev_updates:updates
           in
-          let r = R.increment_symbol_offset r ~size_in_words:1 in
-          env, r, [P.int ~dbg 1n], updates
+          env, [P.int ~dbg 1n], updates
       in
+      let r = P.increment_symbol_offset r ~size_in_words:1 in
       List.rev_append fields acc, slot_offset + 1, env, r, eff, updates
     | Function_slot c -> (
       let code_id = Function_slot.Map.find c decls in
@@ -188,7 +187,10 @@ end = struct
   let rec fill_layout0 r ~set_of_closures_symbol_ref symbs decls dbg ~startenv
       value_slots env effs acc updates ~starting_offset slots =
     match slots with
-    | [] -> List.rev acc, starting_offset, env, r, effs, updates
+    | [] ->
+      (* Skip over the header of the subsequent block *)
+      let r = P.increment_symbol_offset r ~size_in_words:1 in
+      List.rev acc, starting_offset, env, r, effs, updates
     | (slot_offset, slot) :: slots ->
       let r, acc =
         if starting_offset > slot_offset
@@ -199,7 +201,7 @@ end = struct
         then r, acc
         else
           let gap_in_words = slot_offset - starting_offset in
-          let r = R.increment_symbol_offset r ~size_in_words:gap_in_words in
+          let r = P.increment_symbol_offset r ~size_in_words:gap_in_words in
           let acc = List.init gap_in_words (fun _ -> P.int ~dbg 1n) @ acc in
           r, acc
       in
@@ -234,6 +236,8 @@ module Dynamic = Make_layout_filler (struct
     C.symbol_from_linkage_name ~dbg linkage_name
 
   let define_global_symbol _ _ ~size_in_words_excluding_header:_ = assert false
+
+  let increment_symbol_offset r ~size_in_words:_ = r
 end)
 
 (* Filling-up of statically-allocated sets of closures. *)
@@ -254,6 +258,9 @@ module Static = Make_layout_filler (struct
 
   let define_global_symbol r sym ~size_in_words_excluding_header =
     R.record_symbol_offset r sym ~size_in_words_excluding_header
+
+  let increment_symbol_offset r ~size_in_words =
+    R.increment_symbol_offset r ~size_in_words
 end)
 
 (* Translation of the bodies of functions. *)
@@ -364,7 +371,13 @@ let let_static_set_of_closures0 env r symbs (layout : Slot_offsets.layout) set
     match l with
     | _ :: _ ->
       let header = C.cint (C.black_closure_header length) in
-      header :: l
+      let sdef =
+        match !set_of_closures_symbol_ref with
+        | None -> []
+        | Some s ->
+          C.define_symbol ~global:false (Symbol.linkage_name_as_string s)
+      in
+      (header :: sdef) @ l
     | [] ->
       Misc.fatal_error "Cannot statically allocate an empty set of closures"
   in

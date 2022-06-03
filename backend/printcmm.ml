@@ -364,9 +364,10 @@ let data_item ppf = function
   | Csymbol_address s -> fprintf ppf "addr \"%s\"" s
   | Coffset_symbol_address { symbol; bytes } ->
     fprintf ppf "(addr \"%s\" + %a)" symbol Targetint.print bytes
-  | Cstring s -> fprintf ppf "string \"%s\"" s
+  | Cstring s -> fprintf ppf "string[len=%d] \"%s\"" (String.length s) s
   | Cskip n -> fprintf ppf "skip %i" n
   | Calign n -> fprintf ppf "align %i" n
+  | Ccomment s -> fprintf ppf "# %s" s
 
 let data ppf dl =
   let items ppf = List.iter (fun d -> fprintf ppf "@ %a" data_item d) dl in

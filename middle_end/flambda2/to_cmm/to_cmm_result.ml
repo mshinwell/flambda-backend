@@ -59,6 +59,13 @@ let increment_symbol_offset t ~size_in_words =
   let next_symbol_offset =
     Targetint.add t.next_symbol_offset (Targetint.of_int (8 * size_in_words))
   in
+  Format.eprintf "increment_symbol_offset: %a -> %a\n%!" Targetint.print
+    t.next_symbol_offset Targetint.print next_symbol_offset;
+  let o = Targetint.to_int t.next_symbol_offset in
+  if o > 1150 && o < 1200
+  then
+    Format.eprintf "%s\n%!"
+      (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20));
   { t with next_symbol_offset }
 
 let is_module_symbol t symbol = Symbol.equal t.module_symbol symbol
@@ -80,15 +87,7 @@ let defines_a_symbol data =
   | Cdefine_symbol _ -> true
   | Cglobal_symbol _ | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _
   | Cdouble _ | Csymbol_address _ | Coffset_symbol_address _ | Cstring _
-  | Cskip _ | Calign _ ->
-    false
-
-let defines_a_symbol_or_global data =
-  match (data : Cmm.data_item) with
-  | Cdefine_symbol _ | Cglobal_symbol _ -> true
-  | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _ | Cdouble _
-  | Csymbol_address _ | Coffset_symbol_address _ | Cstring _ | Cskip _
-  | Calign _ ->
+  | Cskip _ | Calign _ | Ccomment _ ->
     false
 
 let add_to_data_list x l =
@@ -118,8 +117,15 @@ let archive_offset_data r =
     current_data = [];
     offset_data_list =
       r.offset_data_list
-      @ List.filter
-          (fun data_item -> not (defines_a_symbol_or_global data_item))
+      @ List.filter_map
+          (fun (data_item : Cmm.data_item) : Cmm.data_item option ->
+            match data_item with
+            | Cdefine_symbol symbol -> Some (Ccomment symbol (* ^ ":" *))
+            | Cglobal_symbol _ -> None
+            | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _ | Cdouble _
+            | Csymbol_address _ | Coffset_symbol_address _ | Cstring _ | Cskip _
+            | Calign _ | Ccomment _ ->
+              Some data_item)
           r.current_data
   }
 
@@ -157,6 +163,8 @@ let symbol_offset_in_bytes t symbol =
         symbol
     with
     | Some bytes ->
+      (* CR mshinwell: To cope with missing .cmx files, this offset now needs to
+         go in [t.offsets]. *)
       (* Format.eprintf "IMPORTED Symbol %a can be reached via offset %a\n"
          Symbol.print symbol Targetint.print bytes; *)
       Some bytes
@@ -241,22 +249,99 @@ let to_cmm r =
         :: r.data_list
       | Cdefine_symbol _ | Cglobal_symbol _ | Cint8 _ | Cint16 _ | Cint32 _
       | Csingle _ | Cdouble _ | Csymbol_address _ | Coffset_symbol_address _
-      | Cstring _ | Cskip _ | Calign _ ->
+      | Cstring _ | Cskip _ | Calign _ | Ccomment _ ->
         Misc.fatal_errorf
           "Malformed [offset_data_list], expected block header to begin:@ %a"
           Printcmm.data r.offset_data_list)
   in
-  (* let symbol_offsets_in_bytes, _offset_in_bytes = List.fold_left (fun
-     (symbol_offsets_in_bytes, offset_in_bytes) (phrase : Cmm.phrase) -> match
-     phrase with | Cfunction _ -> symbol_offsets_in_bytes, offset_in_bytes |
-     Cdata items -> List.fold_left (fun (symbol_offsets_in_bytes,
-     offset_in_bytes) (item : Cmm.data_item) -> match item with | Cdefine_symbol
-     symbol -> let symbol_offsets_in_bytes = | Cglobal_symbol _ ->
-     symbol_offsets_in_bytes_in_bytes | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ |
-     Csingle _ | Cdouble _ | Csymbol_address _ | Cstring _ | Cskip _ -> | Calign
-     _ -> Misc.fatal_error "Calign not supported")
-     (symbol_offsets_in_bytes_in_bytes, 0) items ) Symbol.Map.empty
-     data_items *)
+  (match Sys.getenv "OFFSETS" with
+  | exception Not_found -> ()
+  | _ ->
+    Format.eprintf "Offsets:@ \n%a\n\n%!" Exported_offsets.print r.offsets;
+    Format.eprintf "Data items:@ \n";
+    let _offset =
+      List.fold_left
+        (fun offset (phrase : Cmm.phrase) ->
+          match phrase with
+          | Cfunction _ -> assert false
+          | Cdata items ->
+            List.fold_left
+              (fun offset (item : Cmm.data_item) ->
+                let next_offset =
+                  match item with
+                  | Cdefine_symbol _ | Cglobal_symbol _ | Ccomment _ -> offset
+                  | Cint8 _ -> offset + 1
+                  | Cint16 _ -> offset + 2
+                  | Cint32 _ -> offset + 4
+                  | Cint _ -> offset + 8
+                  | Csingle _ -> offset + 4
+                  | Cdouble _ -> offset + 8
+                  | Csymbol_address _ | Coffset_symbol_address _ -> offset + 8
+                  | Cstring s -> String.length s + offset
+                  | Cskip n -> offset + n
+                  | Calign _ -> Misc.fatal_error "Calign unsupported"
+                in
+                Format.eprintf "Offset dec. %06d: %a\n" offset Printcmm.data
+                  [item];
+                next_offset)
+              offset items)
+        (-8) data_items
+    in
+    Format.eprintf "\n\n");
+  let module String = Misc.Stdlib.String in
+  let _offset, cmm_offsets =
+    List.fold_left
+      (fun (offset, cmm_offsets) (phrase : Cmm.phrase) ->
+        match phrase with
+        | Cfunction _ -> assert false
+        | Cdata items ->
+          List.fold_left
+            (fun (offset, cmm_offsets) (item : Cmm.data_item) ->
+              let next_offset, cmm_offsets =
+                match item with
+                | Cdefine_symbol _ | Cglobal_symbol _ -> offset, cmm_offsets
+                | Ccomment sym_name ->
+                  let cmm_offsets =
+                    String.Map.add sym_name offset cmm_offsets
+                  in
+                  offset, cmm_offsets
+                | Cint8 _ -> offset + 1, cmm_offsets
+                | Cint16 _ -> offset + 2, cmm_offsets
+                | Cint32 _ -> offset + 4, cmm_offsets
+                | Cint _ -> offset + 8, cmm_offsets
+                | Csingle _ -> offset + 4, cmm_offsets
+                | Cdouble _ -> offset + 8, cmm_offsets
+                | Csymbol_address _ | Coffset_symbol_address _ ->
+                  offset + 8, cmm_offsets
+                | Cstring s -> String.length s + offset, cmm_offsets
+                | Cskip n -> offset + n, cmm_offsets
+                | Calign _ -> Misc.fatal_error "Calign unsupported"
+              in
+              next_offset, cmm_offsets)
+            (offset, cmm_offsets) items)
+      (-8, String.Map.empty) data_items
+  in
+  let exported_sym_offsets =
+    Exported_offsets.symbol_offsets r.offsets
+    |> Symbol.Map.bindings
+    |> List.sort (fun (_sym1, offset1) (_sym2, offset2) ->
+           Targetint.compare offset1 offset2)
+  in
+  List.iter
+    (fun (sym, offset) ->
+      let offset = Targetint.to_int offset in
+      let sym_name = Symbol.linkage_name_as_string sym in
+      match String.Map.find sym_name cmm_offsets with
+      | exception Not_found ->
+        Format.eprintf "Can't find: %a\n%!" Symbol.print sym
+      | offset' ->
+        if offset <> offset'
+        then
+          Misc.fatal_errorf
+            "Offset for symbol %a is %d in exported offsets but %d in Cmm data \
+             list"
+            Symbol.print sym offset offset')
+    exported_sym_offsets;
   { data_items;
     gc_roots = r.gc_roots;
     functions = function_phrases;

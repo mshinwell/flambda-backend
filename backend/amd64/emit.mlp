@@ -1267,6 +1267,7 @@ let emit_item = function
   | Cstring s -> D.bytes s
   | Cskip n -> if n > 0 then D.space n
   | Calign n -> D.align n
+  | Ccomment s -> D.comment s
 
 let data l =
   D.data ();

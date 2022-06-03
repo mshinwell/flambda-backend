@@ -133,6 +133,9 @@ let symbol_offset_in_bytes env symbol =
   | exception Not_found -> None
   | res -> Some res
 
+(* CR mshinwell: remove once debugged *)
+let symbol_offsets t = t.symbol_offsets
+
 let map_function_slot_offsets env f =
   Function_slot.Map.mapi f env.function_slot_offsets
 
