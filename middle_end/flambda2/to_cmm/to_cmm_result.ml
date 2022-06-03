@@ -47,8 +47,8 @@ let record_symbol_offset t symbol ~size_in_words_excluding_header =
     Exported_offsets.add_symbol_offset t.offsets symbol
       ~bytes:t.next_symbol_offset
   in
-  (* Format.eprintf "OFFSET for %a = %a bytes\n%!" Symbol.print symbol
-     Targetint.print t.next_symbol_offset; *)
+  Format.eprintf "OFFSET for %a = %a bytes\n%!" Symbol.print symbol
+    Targetint.print t.next_symbol_offset;
   let next_symbol_offset =
     Targetint.add t.next_symbol_offset
       (Targetint.of_int (8 * (size_in_words_excluding_header + 1)))
@@ -61,11 +61,6 @@ let increment_symbol_offset t ~size_in_words =
   in
   Format.eprintf "increment_symbol_offset: %a -> %a\n%!" Targetint.print
     t.next_symbol_offset Targetint.print next_symbol_offset;
-  let o = Targetint.to_int t.next_symbol_offset in
-  if o > 1150 && o < 1200
-  then
-    Format.eprintf "%s\n%!"
-      (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20));
   { t with next_symbol_offset }
 
 let is_module_symbol t symbol = Symbol.equal t.module_symbol symbol
@@ -111,22 +106,23 @@ let archive_data r =
     data_list = add_to_data_list r.current_data r.data_list
   }
 
+let filter_offset_data data =
+  List.filter_map
+    (fun (data_item : Cmm.data_item) : Cmm.data_item option ->
+      match data_item with
+      | Cdefine_symbol symbol -> Some (Ccomment symbol (* ^ ":" *))
+      | Cglobal_symbol _ -> None
+      | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _ | Cdouble _
+      | Csymbol_address _ | Coffset_symbol_address _ | Cstring _ | Cskip _
+      | Calign _ | Ccomment _ ->
+        Some data_item)
+    data
+
 let archive_offset_data r =
   (* CR mshinwell: Add [Ccomment] to [Cmm.data_item] for debugging. *)
   { r with
     current_data = [];
-    offset_data_list =
-      r.offset_data_list
-      @ List.filter_map
-          (fun (data_item : Cmm.data_item) : Cmm.data_item option ->
-            match data_item with
-            | Cdefine_symbol symbol -> Some (Ccomment symbol (* ^ ":" *))
-            | Cglobal_symbol _ -> None
-            | Cint8 _ | Cint16 _ | Cint32 _ | Cint _ | Csingle _ | Cdouble _
-            | Csymbol_address _ | Coffset_symbol_address _ | Cstring _ | Cskip _
-            | Calign _ | Ccomment _ ->
-              Some data_item)
-          r.current_data
+    offset_data_list = r.offset_data_list @ filter_offset_data r.current_data
   }
 
 let update_data r f = { r with current_data = f r.current_data }
@@ -137,9 +133,6 @@ let set_data r l =
     | _ ->
       Misc.fatal_errorf "To_cmm_result.set_data: %s"
         "about to lose some translated static data items")
-
-let add_archive_data_items r l =
-  { r with data_list = add_to_data_list l r.data_list }
 
 let add_gc_roots r l = { r with gc_roots = l @ r.gc_roots }
 

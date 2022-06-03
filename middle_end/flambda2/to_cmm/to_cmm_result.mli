@@ -39,10 +39,6 @@ val archive_data : t -> t
     manner in the same current data list. *)
 val archive_offset_data : t -> t
 
-(** Add already-translated Cmm data items into the archived part of the result
-    structure. *)
-val add_archive_data_items : t -> Cmm.data_item list -> t
-
 (** Update the current data part of the result structure. *)
 val update_data : t -> (Cmm.data_item list -> Cmm.data_item list) -> t
 

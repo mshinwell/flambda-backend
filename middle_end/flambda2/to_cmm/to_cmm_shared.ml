@@ -144,13 +144,13 @@ let invalid res ~message =
   in
   let res =
     To_cmm_result.record_symbol_offset res message_sym
-      ~size_in_words_excluding_header:((String.length message + 1 + 8) / 8)
+      ~size_in_words_excluding_header:((String.length message + 8) / 8)
   in
   let res =
     Cmm_helpers.emit_string_constant
       (Symbol.linkage_name_as_string message_sym, Global)
       message []
-    |> To_cmm_result.add_archive_data_items res
+    |> To_cmm_result.set_data res |> To_cmm_result.archive_offset_data
   in
   let call_expr =
     extcall ~dbg ~alloc:false ~is_c_builtin:false ~returns:false ~ty_args:[XInt]

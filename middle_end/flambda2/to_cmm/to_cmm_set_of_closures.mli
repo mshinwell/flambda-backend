@@ -21,7 +21,12 @@ open! Flambda.Import
 type translate_expr =
   To_cmm_env.t -> To_cmm_result.t -> Expr.t -> Cmm.expression * To_cmm_result.t
 
+type pass =
+  | Offsets
+  | Data_items
+
 val let_static_set_of_closures :
+  pass ->
   To_cmm_env.t ->
   To_cmm_result.t ->
   Symbol.t Function_slot.Map.t ->

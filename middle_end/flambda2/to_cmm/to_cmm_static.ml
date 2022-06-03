@@ -92,17 +92,17 @@ let add_functions env ~params_and_body r (code : Code.t) =
     (Code.params_and_body code)
     ~fun_dbg:(Code.dbg code)
 
-let preallocate_set_of_closures (r, updates, env) ~closure_symbols
-    set_of_closures =
+let preallocate_set_of_closures (pass : To_cmm_set_of_closures.pass)
+    (r, updates, env) ~closure_symbols set_of_closures =
   let env, r, data, updates =
     let closure_symbols =
       closure_symbols |> Function_slot.Lmap.bindings
       |> Function_slot.Map.of_list
     in
-    To_cmm_set_of_closures.let_static_set_of_closures env r closure_symbols
+    To_cmm_set_of_closures.let_static_set_of_closures pass env r closure_symbols
       set_of_closures ~prev_updates:updates
   in
-  let r = R.set_data r data in
+  let r = match pass with Offsets -> r | Data_items -> R.set_data r data in
   r, updates, env
 
 let static_const_offsets0 env r ~updates (bound_static : Bound_static.Pattern.t)
@@ -120,7 +120,7 @@ let static_const_offsets0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, r, updates
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
     let r, updates, env =
-      preallocate_set_of_closures (r, updates, env) ~closure_symbols
+      preallocate_set_of_closures Offsets (r, updates, env) ~closure_symbols
         set_of_closures
     in
     env, r, updates
@@ -128,13 +128,13 @@ let static_const_offsets0 env r ~updates (bound_static : Bound_static.Pattern.t)
     let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
     env, r, updates
   | Block_like s, Boxed_int32 _ ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:2 in
     env, r, updates
   | Block_like s, Boxed_int64 _ ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:2 in
     env, r, updates
   | Block_like s, Boxed_nativeint _ ->
-    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:1 in
+    let r = R.record_symbol_offset r s ~size_in_words_excluding_header:2 in
     env, r, updates
   | Block_like s, (Immutable_float_block fields | Immutable_float_array fields)
     ->
@@ -150,7 +150,7 @@ let static_const_offsets0 env r ~updates (bound_static : Bound_static.Pattern.t)
   | Block_like s, Immutable_string str ->
     let r =
       R.record_symbol_offset r s
-        ~size_in_words_excluding_header:((String.length str + 1 + 8) / 8)
+        ~size_in_words_excluding_header:((String.length str + 8) / 8)
     in
     env, r, updates
   | Block_like _, Set_of_closures _ ->
@@ -189,7 +189,7 @@ let static_const0 env r ~updates (bound_static : Bound_static.Pattern.t)
     env, R.set_data r block, updates, not is_module_symbol
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
     let r, updates, env =
-      preallocate_set_of_closures (r, updates, env) ~closure_symbols
+      preallocate_set_of_closures Data_items (r, updates, env) ~closure_symbols
         set_of_closures
     in
     env, r, updates, true
@@ -295,8 +295,8 @@ let static_const_or_code_offsets env r ~updates
         Bound_static.Pattern.print bound_static
   in
   let r =
-    (* The only possible things here are sets of closures definitions. *)
-    R.archive_offset_data r
+    (* No data items should have been created. *)
+    R.set_data r []
   in
   env, r, updates
 
@@ -306,9 +306,8 @@ let static_const_or_code env r ~updates (bound_static : Bound_static.Pattern.t)
     match bound_static, static_const_or_code with
     | Block_like _, Static_const static_const ->
       static_const0 env r ~updates bound_static static_const
-    | Set_of_closures _, Static_const _ ->
-      (* Already done by [static_const_or_code_offsets]. *)
-      env, r, updates, false
+    | Set_of_closures _, Static_const static_const ->
+      static_const0 env r ~updates bound_static static_const
     | Code code_id, Code code ->
       if not (Code_id.equal code_id (Code.code_id code))
       then
@@ -348,21 +347,25 @@ let static_consts0 env r ~params_and_body bound_static static_consts =
     Misc.fatal_errorf
       "Mismatch between [Bound_static] and [Static_const]s:@ %a@ =@ %a"
       Bound_static.print bound_static Static_const_group.print static_consts;
+  let r =
+    (* ensure all data has been flushed *)
+    R.set_data r []
+  in
   let _env, r, updates =
     ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, None)
       ~f:(fun (env, r, updates) bound_symbol_pat const ->
         static_const_or_code_offsets env r ~updates bound_symbol_pat const)
+  in
+  let env, r, updates =
+    ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, updates)
+      ~f:(fun (env, r, updates) bound_symbol_pat const ->
+        static_const_or_code env r ~updates bound_symbol_pat const)
   in
   let r =
     ListLabels.fold_left static_consts' ~init:r ~f:(fun r static_const ->
         match Static_const_or_code.to_code static_const with
         | None -> r
         | Some code -> add_functions env ~params_and_body r code)
-  in
-  let env, r, updates =
-    ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, updates)
-      ~f:(fun (env, r, updates) bound_symbol_pat const ->
-        static_const_or_code env r ~updates bound_symbol_pat const)
   in
   env, r, updates
 
