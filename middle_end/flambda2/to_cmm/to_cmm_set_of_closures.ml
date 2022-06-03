@@ -229,7 +229,11 @@ end = struct
         then r, acc
         else
           let gap_in_words = slot_offset - starting_offset in
-          let r = P.increment_symbol_offset r ~size_in_words:gap_in_words in
+          let r =
+            match pass with
+            | Offsets -> P.increment_symbol_offset r ~size_in_words:gap_in_words
+            | Data_items -> r
+          in
           let acc = List.init gap_in_words (fun _ -> P.int ~dbg 1n) @ acc in
           r, acc
       in

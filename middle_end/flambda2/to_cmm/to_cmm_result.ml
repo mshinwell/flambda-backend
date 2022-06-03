@@ -165,7 +165,9 @@ let symbol_offset_in_bytes t symbol =
       if (not (Symbol.is_predefined_exception symbol))
          && not (is_module_symbol' symbol)
       then
-        Misc.fatal_errorf "Cannot find offset for symbol %a" Symbol.print symbol;
+        Misc.fatal_errorf "Cannot find offset for symbol %a, backtrace:@ \n%s"
+          Symbol.print symbol
+          (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20));
       None)
 
 let data_symbol_for_unit comp_unit =

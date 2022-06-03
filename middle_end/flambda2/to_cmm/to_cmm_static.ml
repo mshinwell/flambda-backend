@@ -348,16 +348,16 @@ let static_consts0 env r ~params_and_body bound_static static_consts =
       "Mismatch between [Bound_static] and [Static_const]s:@ %a@ =@ %a"
       Bound_static.print bound_static Static_const_group.print static_consts;
   let r =
-    (* ensure all data has been flushed *)
+    (* There shouldn't be any data items pending at this point. *)
     R.set_data r []
   in
-  let _env, r, updates =
+  let _env, r, _updates =
     ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, None)
       ~f:(fun (env, r, updates) bound_symbol_pat const ->
         static_const_or_code_offsets env r ~updates bound_symbol_pat const)
   in
   let env, r, updates =
-    ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, updates)
+    ListLabels.fold_left2 bound_static' static_consts' ~init:(env, r, None)
       ~f:(fun (env, r, updates) bound_symbol_pat const ->
         static_const_or_code env r ~updates bound_symbol_pat const)
   in
