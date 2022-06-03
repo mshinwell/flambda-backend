@@ -131,7 +131,14 @@ end = struct
       in
       field :: acc, slot_offset + 1, env, r, Ece.pure, updates
     | Value_slot v ->
-      let simple = Value_slot.Map.find v value_slots in
+      let simple =
+        match pass with
+        | Offsets ->
+          (* [Simple]s cannot be translated during the offsets pass, as they
+             might involve symbols. *)
+          Simple.const_zero
+        | Data_items -> Value_slot.Map.find v value_slots
+      in
       let contents, env, eff = P.simple ~dbg env r simple in
       let env, fields, updates =
         match contents with
@@ -141,6 +148,7 @@ end = struct
         | `Var v ->
           (* We should only get here in the static allocation case. *)
           assert (Option.is_some symbs);
+          assert (match pass with Data_items -> true | Offsets -> false);
           let set_of_closures_symbol =
             get_whole_closure_symbol ~set_of_closures_symbol_ref
           in

@@ -362,6 +362,9 @@ let static_consts0 env r ~params_and_body bound_static static_consts =
         static_const_or_code env r ~updates bound_symbol_pat const)
   in
   let r =
+    (* The function bodies must be translated after the static consts' data
+       items have been emitted, otherwise the ordering of the data items might
+       not match up with the assigned symbol offsets. *)
     ListLabels.fold_left static_consts' ~init:r ~f:(fun r static_const ->
         match Static_const_or_code.to_code static_const with
         | None -> r
