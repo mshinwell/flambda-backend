@@ -30,3 +30,8 @@ let read : t = No_effects, Has_coeffects
 (* Joining effects and coeffects *)
 let join (eff1, coeff1) (eff2, coeff2) =
   Effects.join eff1 eff2, Coeffects.join coeff1 coeff2
+
+let has_no_effects (t : t) =
+  match t with
+  | No_effects, _ -> true
+  | (Only_generative_effects _ | Arbitrary_effects), _ -> false

@@ -26,7 +26,7 @@ val make_inlined_body :
   body:'expr_with_acc ->
   exn_continuation:Continuation.t ->
   return_continuation:Continuation.t ->
-  apply_exn_continuation:Continuation.t ->
+  apply_exn_continuation:Continuation.t option ->
   apply_return_continuation:Flambda.Apply.Result_continuation.t ->
   bind_params:
     (params:'param list ->

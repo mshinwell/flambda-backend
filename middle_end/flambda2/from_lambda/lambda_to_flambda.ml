@@ -749,8 +749,18 @@ let wrap_return_continuation acc env ccenv (apply : IR.apply) =
 
 let primitive_can_raise (prim : Lambda.primitive) =
   match prim with
-  | Pccall _ | Praise _ | Parrayrefs _ | Parraysets _ | Pmodint _ | Pdivint _
-  | Pstringrefs | Pbytesrefs | Pbytessets
+  | Pccall { prim_effects; _ } -> (
+    match prim_effects with
+    | No_effects -> false
+    | Only_generative_effects ->
+      (* For Flambda primitives such as [Make_block], asynchronous exceptions
+         arising out of allocation points are ignored, but this will necessitate
+         special handling in the runtime. Here, we are able to have an exception
+         continuation for [prim], so we return [true] in this case. *)
+      true
+    | Arbitrary_effects -> true)
+  | Praise _ | Parrayrefs _ | Parraysets _ | Pmodint _ | Pdivint _ | Pstringrefs
+  | Pbytesrefs | Pbytessets
   | Pstring_load_16 false
   | Pstring_load_32 (false, _)
   | Pstring_load_64 (false, _)

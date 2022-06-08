@@ -241,7 +241,8 @@ module Inlining = struct
 
   let make_inlined_body acc ~callee ~params ~args ~my_closure ~my_depth ~body
       ~free_names_of_body ~exn_continuation ~return_continuation
-      ~apply_exn_continuation ~apply_return_continuation ~apply_depth =
+      ~(apply_exn_continuation : Exn_continuation.t) ~apply_return_continuation
+      ~apply_depth =
     let rec_info =
       match apply_depth with
       | None -> Rec_info_expr.initial
@@ -275,7 +276,8 @@ module Inlining = struct
       ~return_continuation ~apply_exn_continuation ~apply_return_continuation
       ~bind_params ~bind_depth ~apply_renaming
 
-  let wrap_inlined_body_for_exn_support acc ~extra_args ~apply_exn_continuation
+  let wrap_inlined_body_for_exn_support acc ~extra_args
+      ~(apply_exn_continuation : Exn_continuation.t option)
       ~apply_return_continuation ~result_arity ~make_inlined_body =
     let apply_cont_create acc ~trap_action cont ~args ~dbg =
       let acc, apply_cont =
@@ -325,16 +327,19 @@ module Inlining = struct
         in
         let acc = Acc.with_free_names Name_occurrences.empty acc in
         let acc = Acc.increment_metrics cost_metrics acc in
-        match Exn_continuation.extra_args apply_exn_continuation with
-        | [] ->
-          make_inlined_body acc
-            ~apply_exn_continuation:
-              (Exn_continuation.exn_handler apply_exn_continuation)
+        match apply_exn_continuation with
+        | None ->
+          make_inlined_body acc ~apply_exn_continuation
             ~apply_return_continuation
-        | extra_args ->
-          wrap_inlined_body_for_exn_support acc ~extra_args
-            ~apply_exn_continuation ~apply_return_continuation
-            ~result_arity:(Code.result_arity code) ~make_inlined_body)
+        | Some apply_exn_continuation -> (
+          match Exn_continuation.extra_args apply_exn_continuation with
+          | [] ->
+            make_inlined_body acc ~apply_exn_continuation
+              ~apply_return_continuation
+          | extra_args ->
+            wrap_inlined_body_for_exn_support acc ~extra_args
+              ~apply_exn_continuation ~apply_return_continuation
+              ~result_arity:(Code.result_arity code) ~make_inlined_body))
 end
 
 let close_c_call acc env ~loc ~let_bound_var
@@ -342,13 +347,14 @@ let close_c_call acc env ~loc ~let_bound_var
        prim_arity;
        prim_alloc;
        prim_c_builtin;
-       prim_effects = _;
-       prim_coeffects = _;
+       prim_effects;
+       prim_coeffects;
        prim_native_name;
        prim_native_repr_args;
        prim_native_repr_res
      } :
-      Primitive.description) ~(args : Simple.t list) exn_continuation dbg
+      Primitive.description) ~(args : Simple.t list)
+    (exn_continuation : Exn_continuation.t option) dbg
     (k : Acc.t -> Named.t option -> Expr_with_acc.t) : Expr_with_acc.t =
   (* We always replace the original let-binding with an Flambda expression, so
      we call [k] with [None], to get just the closure-converted body of that
@@ -393,9 +399,38 @@ let close_c_call acc env ~loc ~let_bound_var
   in
   let return_kind = kind_of_primitive_native_repr prim_native_repr_res in
   let return_arity = Flambda_arity.create [return_kind] in
+  let effects : Effects.t =
+    match prim_effects with
+    | No_effects -> No_effects
+    | Only_generative_effects ->
+      (* The frontend doesn't provide information as to whether the returned
+         value from the C call is mutable, so we have to assume it might be. *)
+      Only_generative_effects Mutable
+    | Arbitrary_effects -> Arbitrary_effects
+  in
+  let coeffects : Coeffects.t =
+    match prim_coeffects with
+    | No_coeffects -> No_coeffects
+    | Has_coeffects -> Has_coeffects
+  in
+  let effects_and_coeffects = effects, coeffects in
+  let no_effects = Effects_and_coeffects.has_no_effects effects_and_coeffects in
+  if prim_alloc && no_effects
+  then
+    Misc.fatal_errorf
+      "Application of primitive %s claims to have no effects but yet also \
+       allocates"
+      prim_name;
+  (if not no_effects
+  then
+    match exn_continuation with
+    | None ->
+      Misc.fatal_errorf "Pccall is missing exception continuation: %a"
+        IR.print_named named
+    | Some exn_continuation -> exn_continuation);
   let call_kind =
     Call_kind.c_call ~alloc:prim_alloc ~param_arity ~return_arity
-      ~is_c_builtin:prim_c_builtin
+      ~is_c_builtin:prim_c_builtin ~effects_and_coeffects
   in
   let call_symbol =
     let prim_name =
@@ -447,6 +482,7 @@ let close_c_call acc env ~loc ~let_bound_var
             prim_native_name)
     | _ ->
       let acc, callee = use_of_symbol_as_simple acc call_symbol in
+      let exn_continuation = if no_effects then None else exn_continuation in
       let apply =
         Apply.create ~callee ~continuation:(Return return_continuation)
           exn_continuation ~args ~call_kind dbg ~inlined:Default_inlined
@@ -559,13 +595,6 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
   let dbg = Debuginfo.from_location loc in
   match prim, args with
   | Pccall prim, args ->
-    let exn_continuation =
-      match exn_continuation with
-      | None ->
-        Misc.fatal_errorf "Pccall is missing exception continuation: %a"
-          IR.print_named named
-      | Some exn_continuation -> exn_continuation
-    in
     close_c_call acc env ~loc ~let_bound_var prim ~args exn_continuation dbg k
   | Pgetglobal id, [] ->
     let is_predef_exn = Ident.is_predef id in

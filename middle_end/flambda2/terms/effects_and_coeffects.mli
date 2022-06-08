@@ -37,3 +37,7 @@ val read : t
 
 (** Join two effects and coeffects. *)
 val join : t -> t -> t
+
+(** Returns [true] iff provided a value that states no effects will take place.
+    Coeffects are ignored. *)
+val has_no_effects : t -> bool

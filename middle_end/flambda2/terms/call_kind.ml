@@ -86,7 +86,8 @@ type t =
       { alloc : bool;
         param_arity : Flambda_arity.t;
         return_arity : Flambda_arity.t;
-        is_c_builtin : bool
+        is_c_builtin : bool;
+        effects_and_coeffects : Effects_and_coeffects.t
       }
 
 let [@ocamlformat "disable"] print ppf t =
@@ -107,11 +108,14 @@ let [@ocamlformat "disable"] print ppf t =
       Simple.print obj
       print_method_kind kind
       Alloc_mode.print alloc_mode
-  | C_call { alloc; param_arity; return_arity; is_c_builtin; } ->
+  | C_call { alloc; param_arity; return_arity; is_c_builtin;
+             effects_and_coeffects } ->
     fprintf ppf "@[(C@ @[(alloc %b)@]@ @[(is_c_builtin %b)@]@ \
+        @[<hov 1>(effects_and_coeffects@ %a)@]@ \
         @<0>%s@<1>\u{2237}@<0>%s %a @<1>\u{2192} %a)@]"
       alloc
       is_c_builtin
+      Effects_and_coeffects.print effects_and_coeffects
       (Flambda_colours.elide ())
       (Flambda_colours.normal ())
       Flambda_arity.print param_arity
@@ -133,7 +137,8 @@ let indirect_function_call_known_arity ~param_arity ~return_arity alloc_mode =
 
 let method_call kind ~obj alloc_mode = Method { kind; obj; alloc_mode }
 
-let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
+let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin
+    ~effects_and_coeffects =
   begin
     match Flambda_arity.to_list return_arity with
     | [] | [_] -> ()
@@ -141,7 +146,8 @@ let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
       Misc.fatal_errorf "Illegal return arity for C call: %a"
         Flambda_arity.print return_arity
   end;
-  C_call { alloc; param_arity; return_arity; is_c_builtin }
+  C_call
+    { alloc; param_arity; return_arity; is_c_builtin; effects_and_coeffects }
 
 let return_arity t =
   match t with
@@ -163,7 +169,13 @@ let free_names t =
           Indirect_known_arity { param_arity = _; return_arity = _ };
         alloc_mode = _
       }
-  | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
+  | C_call
+      { alloc = _;
+        param_arity = _;
+        return_arity = _;
+        is_c_builtin = _;
+        effects_and_coeffects = _
+      } ->
     Name_occurrences.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Simple.free_names obj
 
@@ -184,7 +196,13 @@ let apply_renaming t renaming =
           Indirect_known_arity { param_arity = _; return_arity = _ };
         alloc_mode = _
       }
-  | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
+  | C_call
+      { alloc = _;
+        param_arity = _;
+        return_arity = _;
+        is_c_builtin = _;
+        effects_and_coeffects = _
+      } ->
     t
   | Method { kind; obj; alloc_mode } ->
     let obj' = Simple.apply_renaming obj renaming in
@@ -202,6 +220,12 @@ let all_ids_for_export t =
           Indirect_known_arity { param_arity = _; return_arity = _ };
         alloc_mode = _
       }
-  | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
+  | C_call
+      { alloc = _;
+        param_arity = _;
+        return_arity = _;
+        is_c_builtin = _;
+        effects_and_coeffects = _
+      } ->
     Ids_for_export.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Ids_for_export.from_simple obj

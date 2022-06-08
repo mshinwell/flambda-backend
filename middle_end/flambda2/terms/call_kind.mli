@@ -57,9 +57,8 @@ type t = private
       { alloc : bool;
         param_arity : Flambda_arity.t;
         return_arity : Flambda_arity.t;
-        is_c_builtin : bool
-            (* CR mshinwell: This should have the effects and coeffects
-               fields *)
+        is_c_builtin : bool;
+        effects_and_coeffects : Effects_and_coeffects.t
       }
 
 include Expr_std.S with type t := t
@@ -86,6 +85,7 @@ val c_call :
   param_arity:Flambda_arity.t ->
   return_arity:Flambda_arity.t ->
   is_c_builtin:bool ->
+  effects_and_coeffects:Effects_and_coeffects.t ->
   t
 
 val return_arity : t -> Flambda_arity.With_subkinds.t

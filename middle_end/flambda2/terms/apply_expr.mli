@@ -39,7 +39,7 @@ end
 val create :
   callee:Simple.t ->
   continuation:Result_continuation.t ->
-  Exn_continuation.t ->
+  Exn_continuation.t option ->
   args:Simple.t list ->
   call_kind:Call_kind.t ->
   Debuginfo.t ->
@@ -62,8 +62,9 @@ val call_kind : t -> Call_kind.t
 (** Where to send the result of the application. *)
 val continuation : t -> Result_continuation.t
 
-(** Where to jump to upon the application raising an exception. *)
-val exn_continuation : t -> Exn_continuation.t
+(** Where to jump to upon the application raising an exception. If this returns
+    [None] then the call never raises. *)
+val exn_continuation : t -> Exn_continuation.t option
 
 (** Debugging information attached to the application. *)
 val dbg : t -> Debuginfo.t
@@ -75,9 +76,10 @@ val inlined : t -> Inlined_attribute.t
 (** Change the return continuation of an application. *)
 val with_continuation : t -> Result_continuation.t -> t
 
-val with_continuations : t -> Result_continuation.t -> Exn_continuation.t -> t
+val with_continuations :
+  t -> Result_continuation.t -> Exn_continuation.t option -> t
 
-val with_exn_continuation : t -> Exn_continuation.t -> t
+val with_exn_continuation : t -> Exn_continuation.t option -> t
 
 (** Change the arguments of an application *)
 val with_args : t -> Simple.t list -> t

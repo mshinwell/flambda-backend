@@ -60,7 +60,7 @@ end
 type t =
   { callee : Simple.t;
     continuation : Result_continuation.t;
-    exn_continuation : Exn_continuation.t;
+    exn_continuation : Exn_continuation.t option;
     args : Simple.t list;
     call_kind : Call_kind.t;
     dbg : Debuginfo.t;
@@ -89,7 +89,7 @@ let [@ocamlformat "disable"] print ppf
       )@]"
     Simple.print callee
     Result_continuation.print continuation
-    Exn_continuation.print exn_continuation
+    (Misc.Stdlib.Option.print Exn_continuation.print) exn_continuation
     Simple.List.print args
     Call_kind.print call_kind
     (Flambda_colours.debuginfo ())
@@ -107,7 +107,7 @@ let [@ocamlformat "disable"] print ppf
 let invariant
     ({ callee;
        continuation;
-       exn_continuation = _;
+       exn_continuation;
        args = _;
        call_kind;
        dbg = _;
@@ -119,8 +119,7 @@ let invariant
   begin
     match call_kind with
     | Function _ | Method _ -> ()
-    | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ }
-      ->
+    | C_call _ ->
       if not (Simple.is_symbol callee)
       then
         (* CR-someday mshinwell: We could expose indirect C calls at the source
@@ -130,7 +129,7 @@ let invariant
            a [Symbol]:@ %a"
           print t
   end;
-  match continuation with
+  (match continuation with
   | Never_returns ->
     let return_arity = Call_kind.return_arity call_kind in
     if not (Flambda_arity.With_subkinds.is_nullary return_arity)
@@ -139,7 +138,19 @@ let invariant
         "This [Apply] never returns and so should have a nullary return arity, \
          but instead has a return arity of %a:@ %a"
         Flambda_arity.With_subkinds.print return_arity print t
-  | Return _ -> ()
+  | Return _ -> ());
+  match exn_continuation with
+  | Some _ -> ()
+  | None -> (
+    match call_kind with
+    | C_call { effects_and_coeffects; _ }
+      when Effects_and_coeffects.has_no_effects effects_and_coeffects ->
+      ()
+    | Function _ | Method _ | C_call _ ->
+      Misc.fatal_errorf
+        "[Apply] expressions without exception continuations are only allowed \
+         for [C_call]s that do not have effects:@ %a"
+        print t)
 
 let create ~callee ~continuation exn_continuation ~args ~call_kind dbg ~inlined
     ~inlining_state ~probe_name ~relative_history =
@@ -192,7 +203,9 @@ let free_names
   Name_occurrences.union_list
     [ Simple.free_names callee;
       Result_continuation.free_names continuation;
-      Exn_continuation.free_names exn_continuation;
+      (match exn_continuation with
+      | None -> Name_occurrences.empty
+      | Some exn_continuation -> Exn_continuation.free_names exn_continuation);
       Simple.List.free_names args;
       Call_kind.free_names call_kind ]
 
@@ -212,7 +225,15 @@ let apply_renaming
     Result_continuation.apply_renaming continuation renaming
   in
   let exn_continuation' =
-    Exn_continuation.apply_renaming exn_continuation renaming
+    match exn_continuation with
+    | None -> None
+    | Some exn_continuation_orig ->
+      let exn_continuation_new =
+        Exn_continuation.apply_renaming exn_continuation_orig renaming
+      in
+      if exn_continuation_orig == exn_continuation_new
+      then exn_continuation
+      else Some exn_continuation_new
   in
   let callee' = Simple.apply_renaming callee renaming in
   let args' = Simple.List.apply_renaming args renaming in
@@ -257,7 +278,10 @@ let all_ids_for_export
     Result_continuation.all_ids_for_export continuation
   in
   let exn_continuation_ids =
-    Exn_continuation.all_ids_for_export exn_continuation
+    match exn_continuation with
+    | None -> Ids_for_export.empty
+    | Some exn_continuation ->
+      Exn_continuation.all_ids_for_export exn_continuation
   in
   Ids_for_export.union
     (Ids_for_export.union callee_and_args_ids call_kind_ids)
