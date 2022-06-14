@@ -14,18 +14,21 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-(** Simplification of primitives taking two arguments. *)
+type t =
+  { simplified_named : Simplified_named.t Or_invalid.t;
+    try_reify : bool;
+    dacc : Downwards_acc.t
+  }
 
-val simplify_binary_primitive :
-  Downwards_acc.t ->
-  Flambda_primitive.t ->
-  Flambda_primitive.binary_primitive ->
-  arg1:Simple.t ->
-  arg1_ty:Flambda2_types.t ->
-  arg2:Simple.t ->
-  arg2_ty:Flambda2_types.t ->
-  Debuginfo.t ->
-  result_var:Bound_var.t ->
-  Simplify_primitive_result.t
+let create named ~try_reify dacc =
+  { simplified_named = Ok (Simplified_named.create named); try_reify; dacc }
+
+let create_simplified simplified_named ~try_reify dacc =
+  { simplified_named = Ok simplified_named; try_reify; dacc }
+
+let create_invalid dacc =
+  { simplified_named = Invalid; try_reify = false; dacc }
+
+let with_dacc t dacc = { t with dacc }
