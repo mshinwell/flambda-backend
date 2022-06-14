@@ -14,18 +14,21 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-(** Simplification of primitives taking two arguments. *)
+open! Flambda.Import
 
-val simplify_binary_primitive :
-  Downwards_acc.t ->
-  Flambda_primitive.t ->
-  Flambda_primitive.binary_primitive ->
-  arg1:Simple.t ->
-  arg1_ty:Flambda2_types.t ->
-  arg2:Simple.t ->
-  arg2_ty:Flambda2_types.t ->
-  Debuginfo.t ->
-  result_var:Bound_var.t ->
-  Simplify_primitive_result.t
+type t = private
+  { simplified_named : Simplified_named.t Or_invalid.t;
+    try_reify : bool;
+    dacc : Downwards_acc.t
+  }
+
+val create : Named.t -> try_reify:bool -> Downwards_acc.t -> t
+
+val create_simplified :
+  Simplified_named.t -> try_reify:bool -> Downwards_acc.t -> t
+
+val create_invalid : Downwards_acc.t -> t
+
+val with_dacc : t -> Downwards_acc.t -> t
