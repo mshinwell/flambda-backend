@@ -230,16 +230,6 @@ let deleted_code =
       free_names = Name_occurrences.empty
     }
 
-let make_all_code_deleted t =
-  match t with
-  | Normal { const; _ } -> begin
-    match Static_const_or_code.to_code const with
-    | None -> t
-    | Some _code -> deleted_code
-  end
-  | Block_not_rebuilt _ | Set_of_closures_not_rebuilt _ -> t
-  | Code_not_rebuilt _ -> deleted_code
-
 let make_code_deleted t ~if_code_id_is_member_of =
   match t with
   | Normal { const; _ } -> begin
