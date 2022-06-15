@@ -67,8 +67,6 @@ val enter_set_of_closures : t -> t
 
 val increment_continuation_scope : t -> t
 
-val increment_continuation_scope_twice : t -> t
-
 val get_continuation_scope : t -> Scope.t
 
 val typing_env : t -> Flambda2_types.Typing_env.t
