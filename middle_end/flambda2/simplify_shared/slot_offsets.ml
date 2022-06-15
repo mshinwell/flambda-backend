@@ -269,9 +269,8 @@ module Greedy = struct
       Slots are assigned using a "first comes, first served" basis, filling
       upwards from 0.
 
-      As much as is possible, the algorithm tries to put all the function slots
-      first, and then all the value slots; however, that may be impossible
-      because of constraints read from a .cmx file.
+      See comment above about the requirement that all function slots must
+      become from all value slots.
 
       This strategy should be able to correctly compute offsets for all
       legitimate situations, with no expected blowup of computation time.
@@ -399,6 +398,8 @@ module Greedy = struct
       | Function_slot _ ->
         set.first_slot_after_function_slots
           <- max set.first_slot_after_function_slots (i + slot.size)));
+    (* This should never happen at the moment since sets of closures never have
+       closures added to them during Flambda. *)
     if set.first_slot_used_by_value_slots < set.first_slot_after_function_slots
     then
       Misc.fatal_errorf
