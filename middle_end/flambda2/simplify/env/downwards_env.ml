@@ -158,9 +158,6 @@ let set_inlining_history_tracker inlining_history_tracker t =
 let increment_continuation_scope t =
   { t with typing_env = TE.increment_scope t.typing_env }
 
-let increment_continuation_scope_twice t =
-  increment_continuation_scope (increment_continuation_scope t)
-
 let enter_set_of_closures
     { round;
       typing_env;
