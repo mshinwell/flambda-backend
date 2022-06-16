@@ -367,7 +367,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
         end in
         match dst with
         | Tagged_immediate ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Targetint_31_63
 
             let num_to_result_num = Num.to_immediate
@@ -378,7 +378,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_immediate ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Targetint_31_63
 
             let num_to_result_num = Num.to_immediate
@@ -389,7 +389,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_float ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Float
 
             let num_to_result_num = Num.to_naked_float
@@ -400,7 +400,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_int32 ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Int32
 
             let num_to_result_num = Num.to_naked_int32
@@ -411,7 +411,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_int64 ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Int64
 
             let num_to_result_num = Num.to_naked_int64
@@ -422,7 +422,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_nativeint ->
-          let module M = For_kind (struct
+          let module M = For_kind [@inlined] (struct
             module Result_num = Targetint_32_64
 
             let num_to_result_num = Num.to_naked_nativeint
