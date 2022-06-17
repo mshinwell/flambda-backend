@@ -300,6 +300,9 @@ let reify ?allowed_if_free_vars_defined_in ?additional_free_var_criterion
         | Some i -> Simple (Simple.const (Reg_width_const.naked_immediate i)))
       | Unknown -> try_canonical_simple ()
       | Invalid -> Invalid)
+    | Naked_immediate (Ok (Phys_equal _)) ->
+      (* CR mshinwell/vlaviron: use structurally-distinct check *)
+      try_canonical_simple ()
     | Naked_float (Ok fs) -> (
       match Float.Set.get_singleton fs with
       | None -> try_canonical_simple ()

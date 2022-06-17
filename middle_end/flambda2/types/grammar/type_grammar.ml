@@ -25,6 +25,10 @@ module TD = Type_descr
 open Or_bottom.Let_syntax
 open Or_unknown.Let_syntax
 
+type equality_comparison =
+  | Eq
+  | Neq
+
 module Block_size = struct
   include Targetint_31_63.Imm
 
@@ -75,6 +79,7 @@ and head_of_kind_naked_immediate =
   | Naked_immediates of Targetint_31_63.Set.t
   | Is_int of t
   | Get_tag of t
+  | Phys_equal of equality_comparison * t * t
 
 and head_of_kind_naked_float = Float.Set.t
 
@@ -212,6 +217,10 @@ and free_names_head_of_kind_naked_immediate0 ~follow_value_slots head =
   match head with
   | Naked_immediates _ -> Name_occurrences.empty
   | Is_int ty | Get_tag ty -> free_names0 ~follow_value_slots ty
+  | Phys_equal (_eq_comp, ty1, ty2) ->
+    Name_occurrences.union
+      (free_names0 ~follow_value_slots ty1)
+      (free_names0 ~follow_value_slots ty2)
 
 and free_names_head_of_kind_naked_float _ = Name_occurrences.empty
 
@@ -466,6 +475,10 @@ and apply_renaming_head_of_kind_naked_immediate head renaming =
   | Get_tag ty ->
     let ty' = apply_renaming ty renaming in
     if ty == ty' then head else Get_tag ty'
+  | Phys_equal (eq_comp, ty1, ty2) ->
+    let ty1' = apply_renaming ty1 renaming in
+    let ty2' = apply_renaming ty2 renaming in
+    if ty1 == ty1' && ty2 == ty2' then head else Phys_equal (eq_comp, ty1', ty2')
 
 and apply_renaming_head_of_kind_naked_float head _ = head
 
@@ -689,6 +702,10 @@ and print_head_of_kind_naked_immediate ppf head =
     Format.fprintf ppf "@[<hov 1>(%a)@]" Targetint_31_63.Set.print is
   | Is_int ty -> Format.fprintf ppf "@[<hov 1>(Is_int@ %a)@]" print ty
   | Get_tag ty -> Format.fprintf ppf "@[<hov 1>(Get_tag@ %a)@]" print ty
+  | Phys_equal (Eq, ty1, ty2) ->
+    Format.fprintf ppf "@[<hov 1>(Phys_equal@ %a@ %a)@]" print ty1 print ty2
+  | Phys_equal (Neq, ty1, ty2) ->
+    Format.fprintf ppf "@[<hov 1>(Phys_unequal@ %a@ %a)@]" print ty1 print ty2
 
 and print_head_of_kind_naked_float ppf head =
   Format.fprintf ppf "@[(Naked_float@ (%a))@]" Float.Set.print head
@@ -865,6 +882,8 @@ and all_ids_for_export_head_of_kind_naked_immediate head =
   match head with
   | Naked_immediates _ -> Ids_for_export.empty
   | Is_int t | Get_tag t -> all_ids_for_export t
+  | Phys_equal (_eq_comp, t1, t2) ->
+    Ids_for_export.union (all_ids_for_export t1) (all_ids_for_export t2)
 
 and all_ids_for_export_head_of_kind_naked_float _ = Ids_for_export.empty
 
@@ -1426,6 +1445,16 @@ and remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_immediate
         ~canonicalise
     in
     if ty == ty' then head else Get_tag ty'
+  | Phys_equal (eq_comp, ty1, ty2) ->
+    let ty1' =
+      remove_unused_value_slots_and_shortcut_aliases ty1 ~used_value_slots
+        ~canonicalise
+    in
+    let ty2' =
+      remove_unused_value_slots_and_shortcut_aliases ty2 ~used_value_slots
+        ~canonicalise
+    in
+    if ty1 == ty1' && ty2 == ty2' then head else Phys_equal (eq_comp, ty1', ty2')
 
 and remove_unused_value_slots_and_shortcut_aliases_head_of_kind_naked_float head
     ~used_value_slots:_ ~canonicalise:_ =
@@ -1824,6 +1853,10 @@ and project_head_of_kind_naked_immediate ~to_project ~expand head =
   | Get_tag ty ->
     let ty' = project_variables_out ~to_project ~expand ty in
     if ty == ty' then head else Get_tag ty'
+  | Phys_equal (eq_comp, ty1, ty2) ->
+    let ty1' = project_variables_out ~to_project ~expand ty1 in
+    let ty2' = project_variables_out ~to_project ~expand ty2 in
+    if ty1 == ty1' && ty2 == ty2' then head else Phys_equal (eq_comp, ty1', ty2')
 
 and project_head_of_kind_naked_float ~to_project:_ ~expand:_ head = head
 
@@ -2634,6 +2667,12 @@ let is_int_for_scrutinee ~scrutinee : t =
 let get_tag_for_block ~block : t =
   Naked_immediate (TD.create (Get_tag (alias_type_of K.value block)))
 
+let phys_equal eq_comp simple1 simple2 kind : t =
+  Naked_immediate
+    (TD.create
+       (Phys_equal
+          (eq_comp, alias_type_of kind simple1, alias_type_of kind simple2)))
+
 let boxed_float_alias_to ~naked_float =
   box_float (Naked_float (TD.create_equals (Simple.var naked_float)))
 
@@ -2754,4 +2793,6 @@ module Head_of_kind_naked_immediate = struct
   let create_is_int ty = Is_int ty
 
   let create_get_tag ty = Get_tag ty
+
+  let create_phys_equal eq_comp ty1 ty2 = Phys_equal (eq_comp, ty1, ty2)
 end

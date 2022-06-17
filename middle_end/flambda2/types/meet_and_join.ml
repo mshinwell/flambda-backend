@@ -484,7 +484,29 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
       TG.Head_of_kind_naked_immediate.create_get_tag ty, env_extension
     | Unknown ->
       Ok (TG.Head_of_kind_naked_immediate.create_get_tag ty, TEE.empty))
-  | (Is_int _ | Get_tag _), (Is_int _ | Get_tag _) ->
+  | Phys_equal _, Phys_equal _ -> Ok (t1, TEE.empty)
+  | Phys_equal (eq_comp, ty1, ty2), Naked_immediates results
+  | Naked_immediates results, Phys_equal (eq_comp, ty1, ty2) -> (
+    let[@inline hint] default_case () : _ Or_bottom.t =
+      (* The same note as for [Is_int] above applies *)
+      Ok
+        ( TG.Head_of_kind_naked_immediate.create_phys_equal eq_comp ty1 ty2,
+          TEE.empty )
+    in
+    match I.Set.elements results with
+    | [] -> Bottom
+    | [result] -> (
+      let is_zero = I.equal result I.zero in
+      let is_one = I.equal result I.one in
+      match eq_comp, is_zero, is_one with
+      | Neq, true, _ | Eq, _, true ->
+        let<+ _ty, env_extension = meet env ty1 ty2 in
+        ( TG.Head_of_kind_naked_immediate.create_naked_immediates results,
+          env_extension )
+      | (Neq | Eq), _, _ -> default_case ())
+    | _ :: _ :: _ -> default_case ())
+  | (Is_int _ | Get_tag _ | Phys_equal _), (Is_int _ | Get_tag _ | Phys_equal _)
+    ->
     (* We can't return Bottom, as it would be unsound, so we need to either do
        the actual meet with Naked_immediates, or just give up and return one of
        the arguments. *)
@@ -1162,7 +1184,12 @@ and join_head_of_kind_naked_immediate env
     if I.Set.is_empty tags
     then Known (TG.Head_of_kind_naked_immediate.create_get_tag ty)
     else Unknown
-  | (Is_int _ | Get_tag _), (Is_int _ | Get_tag _) -> Unknown
+  | Phys_equal _, (Phys_equal _ | Naked_immediates _)
+  | Naked_immediates _, Phys_equal _ ->
+    (* This will suffice for now. *) Unknown
+  | (Is_int _ | Get_tag _ | Phys_equal _), (Is_int _ | Get_tag _ | Phys_equal _)
+    ->
+    Unknown
 
 and join_head_of_kind_naked_float _env t1 t2 : _ Or_unknown.t =
   Known (Float.Set.union t1 t2)

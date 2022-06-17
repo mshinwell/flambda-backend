@@ -434,6 +434,13 @@ val is_int_for_scrutinee : scrutinee:Simple.t -> t
 
 val get_tag_for_block : block:Simple.t -> t
 
+type equality_comparison =
+  | Eq
+  | Neq
+
+val phys_equal :
+  equality_comparison -> Simple.t -> Simple.t -> Flambda_kind.t -> t
+
 val any_block : t
 
 (** The type of an immutable block with a known tag, size and field types. *)

@@ -16,7 +16,7 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-open! Simplify_import
+open! Flambda.Import
 
 type t = private
   { simplified_named : Simplified_named.t Or_invalid.t;

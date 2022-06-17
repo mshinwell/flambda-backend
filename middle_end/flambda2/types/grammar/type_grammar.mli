@@ -18,6 +18,9 @@
 
 (** The grammar of Flambda types plus the basic creation functions upon them
     that do not require an environment. *)
+type equality_comparison =
+  | Eq
+  | Neq
 
 module Block_size : sig
   type t
@@ -67,6 +70,7 @@ and head_of_kind_naked_immediate = private
   | Naked_immediates of Targetint_31_63.Set.t
   | Is_int of t
   | Get_tag of t
+  | Phys_equal of equality_comparison * t * t
 
 and head_of_kind_naked_float = Numeric_types.Float_by_bit_pattern.Set.t
 
@@ -244,6 +248,9 @@ val tag_immediate : t -> t
 val is_int_for_scrutinee : scrutinee:Simple.t -> t
 
 val get_tag_for_block : block:Simple.t -> t
+
+val phys_equal :
+  equality_comparison -> Simple.t -> Simple.t -> Flambda_kind.t -> t
 
 val create_variant :
   is_unique:bool ->
@@ -574,4 +581,7 @@ module Head_of_kind_naked_immediate : sig
   val create_is_int : flambda_type -> t
 
   val create_get_tag : flambda_type -> t
+
+  val create_phys_equal :
+    equality_comparison -> flambda_type -> flambda_type -> t
 end

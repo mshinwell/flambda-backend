@@ -252,6 +252,13 @@ let join_one_cse_equation ~cse_at_each_use prim bound_to_map
           Name.Map.add (Name.var var)
             (T.get_tag_for_block ~block)
             extra_equations
+        | Binary (Phys_equal (kind, eq_comp), simple1, simple2) ->
+          let eq_comp : T.equality_comparison =
+            match eq_comp with Eq -> Eq | Neq -> Neq
+          in
+          Name.Map.add (Name.var var)
+            (T.phys_equal eq_comp simple1 simple2 kind)
+            extra_equations
         | _ -> extra_equations
       in
       let allowed =

@@ -1030,7 +1030,7 @@ let simplify_immutable_block_load access_kind ~min_name_mode dacc ~original_term
   in
   if dacc == dacc' then result else SPR.with_dacc result dacc'
 
-let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
+let simplify_phys_equal (eq_comp : P.equality_comparison) (kind : K.t) dacc
     ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var =
   let const bool =
     let dacc =
@@ -1042,8 +1042,20 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
       ~try_reify:false dacc
   in
   if Simple.equal arg1 arg2
-  then match op with Eq -> const true | Neq -> const false
+  then match eq_comp with Eq -> const true | Neq -> const false
   else
+    let[@inline hint] cannot_prove () =
+      let eq_comp : T.equality_comparison =
+        match eq_comp with Eq -> Eq | Neq -> Neq
+      in
+      let dacc =
+        DA.add_variable dacc result_var (T.phys_equal eq_comp arg1 arg2 kind)
+      in
+      SPR.create original_term ~try_reify:false dacc
+    in
+    (* CR mshinwell: The following cases could be improved: we will fail to keep
+       the phys-(un)equal relation in the cases where the values are known. This
+       could be done in the functor above by checking for Eq and Neq *)
     match kind with
     | Value -> (
       let typing_env = DA.typing_env dacc in
@@ -1051,59 +1063,33 @@ let simplify_phys_equal (op : P.equality_comparison) (kind : K.t) dacc
       let proof2 = T.prove_equals_tagged_immediates typing_env arg2_ty in
       match proof1, proof2 with
       | Proved _, Proved _ ->
-        Binary_int_eq_comp_tagged_immediate.simplify op dacc ~original_term dbg
-          ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
-      | _, _ -> (
-        let physically_equal =
-          false
-          (* CR-someday mshinwell: Resurrect this -- see cps_types branch.
-             T.values_physically_equal arg1_ty arg2_ty *)
-        in
-        let physically_distinct =
-          false
-          (* CR-someday mshinwell: Resurrect this -- see cps_types branch. (*
-             Structural inequality implies physical inequality. *) let env =
-             E.get_typing_environment env in T.values_structurally_distinct
-             (env, arg1_ty) (env, arg2_ty) *)
-        in
-        match op, physically_equal, physically_distinct with
-        (* | Eq, true, _ -> const true | Neq, true, _ -> const false | Eq, _,
-           true -> const false | Neq, _, true -> const true *)
-        | _, _, _ ->
-          let dacc =
-            DA.add_variable dacc result_var
-              (T.these_naked_immediates Targetint_31_63.all_bools)
-          in
-          SPR.create original_term ~try_reify:false dacc))
+        Binary_int_eq_comp_tagged_immediate.simplify eq_comp dacc ~original_term
+          dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
+      | _, _ -> cannot_prove ())
     | Naked_number Naked_immediate -> (
       let typing_env = DA.typing_env dacc in
       let proof1 = T.prove_naked_immediates typing_env arg1_ty in
       let proof2 = T.prove_naked_immediates typing_env arg2_ty in
       match proof1, proof2 with
       | Proved _, Proved _ ->
-        Binary_int_eq_comp_naked_immediate.simplify op dacc ~original_term dbg
-          ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
-      | _, _ ->
-        let dacc =
-          DA.add_variable dacc result_var
-            (T.these_naked_immediates Targetint_31_63.all_bools)
-        in
-        SPR.create original_term ~try_reify:false dacc)
+        Binary_int_eq_comp_naked_immediate.simplify eq_comp dacc ~original_term
+          dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
+      | _, _ -> cannot_prove ())
     | Naked_number Naked_float ->
       (* CR mshinwell: Should this case be statically disallowed in the type, to
          force people to use [Float_comp]? *)
-      let op : P.comparison = match op with Eq -> Eq | Neq -> Neq in
-      Binary_float_comp.simplify (Yielding_bool op) dacc ~original_term dbg
+      let eq_comp : P.comparison = match eq_comp with Eq -> Eq | Neq -> Neq in
+      Binary_float_comp.simplify (Yielding_bool eq_comp) dacc ~original_term dbg
         ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
     | Naked_number Naked_int32 ->
-      Binary_int_eq_comp_int32.simplify op dacc ~original_term dbg ~arg1
+      Binary_int_eq_comp_int32.simplify eq_comp dacc ~original_term dbg ~arg1
         ~arg1_ty ~arg2 ~arg2_ty ~result_var
     | Naked_number Naked_int64 ->
-      Binary_int_eq_comp_int64.simplify op dacc ~original_term dbg ~arg1
+      Binary_int_eq_comp_int64.simplify eq_comp dacc ~original_term dbg ~arg1
         ~arg1_ty ~arg2 ~arg2_ty ~result_var
     | Naked_number Naked_nativeint ->
-      Binary_int_eq_comp_nativeint.simplify op dacc ~original_term dbg ~arg1
-        ~arg1_ty ~arg2 ~arg2_ty ~result_var
+      Binary_int_eq_comp_nativeint.simplify eq_comp dacc ~original_term dbg
+        ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
     | Region -> Misc.fatal_error "Region kind not expected here"
     | Rec_info -> Misc.fatal_error "Rec_info kind not expected here"
 

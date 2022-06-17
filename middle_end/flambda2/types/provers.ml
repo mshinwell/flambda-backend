@@ -315,6 +315,9 @@ let prove_naked_immediates env t : Targetint_31_63.Set.t proof =
       Proved is
     | Unknown -> Unknown
     | Invalid -> Invalid)
+  | Naked_immediate (Ok (Phys_equal _)) ->
+    (* CR mshinwell/vlaviron: will be similar to the case in Reify *)
+    Unknown
   | Naked_immediate Unknown -> Unknown
   | Naked_immediate Bottom -> Invalid
   | Value _ -> wrong_kind ()
