@@ -685,9 +685,11 @@ module Dependency_graph = struct
                        unneeded. *)
                     t)
                 t
-                (Bound_parameters.to_list (EPA.extra_params extra_params_and_args))
+                (Bound_parameters.to_list
+                   (EPA.extra_params extra_params_and_args))
                 extra_args)
-            (EPA.extra_args extra_params_and_args) t)
+            (EPA.extra_args extra_params_and_args)
+            t)
         extra t
     in
     t
