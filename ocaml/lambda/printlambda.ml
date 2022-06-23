@@ -69,10 +69,18 @@ let rec value_kind ppf = function
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf "[%s]" (boxed_integer_name bi)
-  | Pvariant { tag; fields } ->
-    fprintf ppf "[%d: %a]" tag
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-        value_kind') fields
+  | Pvariant { consts; non_consts; } ->
+    fprintf ppf "@[<hov 1>[(consts (%a))@ (non_consts (%a))]@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_int)
+      consts
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (fun ppf (tag, fields) ->
+          fprintf ppf "@[<hov 1>[%d:@ %a]@]"
+            tag
+            (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+              value_kind') fields
+        ))
+      non_consts
 
 and value_kind' ppf = function
   | Pgenval -> fprintf ppf "*"
@@ -80,10 +88,18 @@ and value_kind' ppf = function
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf "[%s]" (boxed_integer_name bi)
-  | Pvariant { tag; fields } ->
-    fprintf ppf "[%d: %a]" tag
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-        value_kind') fields
+  | Pvariant { consts; non_consts; } ->
+    fprintf ppf "@[<hov 1>[(consts (%a))@ (non_consts (%a))]@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_int)
+      consts
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (fun ppf (tag, fields) ->
+          fprintf ppf "@[<hov 1>[%d:@ %a]@]"
+            tag
+            (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+              value_kind') fields
+        ))
+      non_consts
 
 let return_kind ppf (mode, kind) =
   let smode = alloc_mode mode in
@@ -95,10 +111,18 @@ let return_kind ppf (mode, kind) =
   | Parrayval elt_kind ->
      fprintf ppf ": %s%sarray@ " smode (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf ": %s%s@ " smode (boxed_integer_name bi)
-  | Pvariant { tag; fields } ->
-    fprintf ppf ": %s[%d: %a]@ " smode tag
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-        value_kind') fields
+  | Pvariant { consts; non_consts; } ->
+    fprintf ppf "@[<hov 1>[(consts (%a))@ (non_consts (%a))]@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_int)
+      consts
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (fun ppf (tag, fields) ->
+          fprintf ppf "@[<hov 1>[%d:@ %a]@]"
+            tag
+            (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+              value_kind') fields
+        ))
+      non_consts
 
 let field_kind ppf = function
   | Pgenval -> pp_print_string ppf "*"
@@ -106,10 +130,18 @@ let field_kind ppf = function
   | Pfloatval -> pp_print_string ppf "float"
   | Parrayval elt_kind -> fprintf ppf "%s-array" (array_kind elt_kind)
   | Pboxedintval bi -> pp_print_string ppf (boxed_integer_name bi)
-  | Pvariant { tag; fields } ->
-    fprintf ppf "[%d: %a]" tag
-      (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-        value_kind') fields
+  | Pvariant { consts; non_consts; } ->
+    fprintf ppf "@[<hov 1>[(consts (%a))@ (non_consts (%a))]@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_int)
+      consts
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (fun ppf (tag, fields) ->
+          fprintf ppf "@[<hov 1>[%d:@ %a]@]"
+            tag
+            (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+              value_kind') fields
+        ))
+      non_consts
 
 let alloc_kind = function
   | Alloc_heap -> ""

@@ -210,7 +210,7 @@ let value_kind env ty =
               if is_mutable then
                 Pgenval
               else
-                Pvariant { tag = 0; fields }
+                Pvariant { consts = []; non_consts = [0, fields] }
             | _ ->
               Pgenval
           end
@@ -230,12 +230,16 @@ let value_kind env ty =
             Pgenval
           else begin match record_representation with
             | Record_regular ->
-              Pvariant { tag = 0; fields }
+              Pvariant { consts = []; non_consts = [0, fields] }
             | Record_float ->
-              Pvariant { tag = Obj.double_array_tag;
-                       fields = List.map (fun _ -> Pfloatval) fields }
+              Pvariant {
+                consts = [];
+                non_consts = [
+                  Obj.double_array_tag,
+                  List.map (fun _ -> Pfloatval) fields
+                ] }
             | Record_inlined tag ->
-              Pvariant { tag; fields }
+              Pvariant { consts = []; non_consts = [tag, fields] }
             | Record_unboxed _ ->
               begin match fields with
               | [field] -> field
@@ -255,7 +259,7 @@ let value_kind env ty =
         let visited = Numbers.Int.Set.add ty.id visited in
         let fuel = fuel - 1 in
         let fields = List.map (loop env ~visited ~fuel) fields in
-        Pvariant { tag = 0; fields }
+        Pvariant { consts = []; non_consts = [0, fields] }
       end
     | _ ->
       Pgenval
@@ -302,11 +306,6 @@ let classify_lazy_argument : Typedtree.expression ->
     | _ ->
        `Other
 
-let rec value_kind_union (k1 : Lambda.value_kind) (k2 : Lambda.value_kind) =
-  match k1, k2 with
-  | Pvariant { tag = tag1; fields = fields1 }, Pvariant { tag = tag2; fields = fields2 }
-    when tag1 = tag2 && List.length fields1 = List.length fields2 ->
-    Pvariant { tag = tag1; fields = List.map2 value_kind_union fields1 fields2 }
-  | _, _ ->
-    if Lambda.equal_value_kind k1 k2 then k1
-    else Pgenval
+let value_kind_union (k1 : Lambda.value_kind) (k2 : Lambda.value_kind) =
+  if Lambda.equal_value_kind k1 k2 then k1
+  else Pgenval
