@@ -582,11 +582,7 @@ let nullary_classify_for_printing p =
   match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
 
 type unary_primitive =
-  | Duplicate_block of
-      { kind : Duplicate_block_kind.t;
-        source_mutability : Mutability.t;
-        destination_mutability : Mutability.t
-      }
+  | Duplicate_block of { kind : Duplicate_block_kind.t }
   | Duplicate_array of
       { kind : Duplicate_array_kind.t;
         source_mutability : Mutability.t;
@@ -632,13 +628,9 @@ let unary_primitive_eligible_for_cse p ~arg =
         source_mutability = Immutable;
         destination_mutability = Immutable
       }
-  | Duplicate_block
-      { kind = _;
-        source_mutability = Immutable;
-        destination_mutability = Immutable
-      } ->
-    true
-  | Duplicate_array _ | Duplicate_block _ -> false
+  | Duplicate_array _ ->
+    false
+  | Duplicate_block { kind = _ } -> false
   | Is_int | Get_tag -> true
   | Array_length -> true
   | Bigarray_length _ -> false
@@ -710,24 +702,8 @@ let compare_unary_primitive p1 p2 =
       if c <> 0
       then c
       else Stdlib.compare destination_mutability1 destination_mutability2
-  | ( Duplicate_block
-        { kind = kind1;
-          source_mutability = source_mutability1;
-          destination_mutability = destination_mutability1
-        },
-      Duplicate_block
-        { kind = kind2;
-          source_mutability = source_mutability2;
-          destination_mutability = destination_mutability2
-        } ) ->
-    let c = Duplicate_block_kind.compare kind1 kind2 in
-    if c <> 0
-    then c
-    else
-      let c = Stdlib.compare source_mutability1 source_mutability2 in
-      if c <> 0
-      then c
-      else Stdlib.compare destination_mutability1 destination_mutability2
+  | Duplicate_block { kind = kind1 }, Duplicate_block { kind = kind2 } ->
+    Duplicate_block_kind.compare kind1 kind2
   | Is_int, Is_int -> 0
   | Get_tag, Get_tag -> 0
   | String_length kind1, String_length kind2 -> Stdlib.compare kind1 kind2
@@ -774,10 +750,9 @@ let equal_unary_primitive p1 p2 = compare_unary_primitive p1 p2 = 0
 let print_unary_primitive ppf p =
   let fprintf = Format.fprintf in
   match p with
-  | Duplicate_block { kind; source_mutability; destination_mutability } ->
-    fprintf ppf "@[<hov 1>(Duplicate_block %a (source %a) (dest %a))@]"
-      Duplicate_block_kind.print kind Mutability.print source_mutability
-      Mutability.print destination_mutability
+  | Duplicate_block { kind } ->
+    fprintf ppf "@[<hov 1>(Duplicate_block %a)@]" Duplicate_block_kind.print
+      kind
   | Duplicate_array { kind; source_mutability; destination_mutability } ->
     fprintf ppf "@[<hov 1>(Duplicate_array %a (source %a) (dest %a))@]"
       Duplicate_array_kind.print kind Mutability.print source_mutability
@@ -868,7 +843,6 @@ let result_kind_of_unary_primitive p : result_kind =
 let effects_and_coeffects_of_unary_primitive p =
   match p with
   | Duplicate_array { kind = _; source_mutability; destination_mutability; _ }
-  | Duplicate_block { kind = _; source_mutability; destination_mutability; _ }
     -> (
     match source_mutability with
     | Immutable ->
@@ -877,14 +851,20 @@ let effects_and_coeffects_of_unary_primitive p =
         Coeffects.No_coeffects )
     | Immutable_unique ->
       (* XCR vlaviron: this should never occur, but it's hard to express it
-         without duplicating the mutability type mshinwell: Adding a second
-         mutability type seems like a good thing to avoid confusion in the
-         future. It could maybe be a submodule of [Mutability]. *)
+         without duplicating the mutability type
+
+         mshinwell: Adding a second mutability type seems like a good thing to
+         avoid confusion in the future. It could maybe be a submodule of
+         [Mutability]. *)
       ( Effects.Only_generative_effects destination_mutability,
         Coeffects.No_coeffects )
     | Mutable ->
       ( Effects.Only_generative_effects destination_mutability,
         Coeffects.Has_coeffects ))
+  | Duplicate_block { kind = _ } ->
+    (* We have to assume that the fields might be mutable. (This information
+       isn't currently propagated from [Lambda].) *)
+    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
   | Is_int -> Effects.No_effects, Coeffects.No_coeffects
   | Get_tag ->
     (* [Obj.truncate] has now been removed. *)

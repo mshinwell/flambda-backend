@@ -143,3 +143,6 @@ let extract_symbol_approx env symbol find_code =
     Typing_env.find env (Name.symbol sym) (Some Flambda_kind.value)
   in
   type_to_approx (get_symbol_type symbol)
+
+let remove_outermost_alias env ty =
+  Expand_head.expand_head env ty |> Expand_head.Expanded_type.to_type
