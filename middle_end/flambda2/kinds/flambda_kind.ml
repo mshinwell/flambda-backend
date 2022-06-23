@@ -463,7 +463,7 @@ module With_subkind = struct
     | Pboxedintval Pint64 -> boxed_int64
     | Pboxedintval Pnativeint -> boxed_nativeint
     | Pintval -> tagged_immediate
-    | Pblock { tag; fields } ->
+    | Pvariant { tag; fields } ->
       (* If we have [Obj.double_array_tag] here, this is always an all-float
          block, not an array. *)
       if tag = Obj.double_array_tag

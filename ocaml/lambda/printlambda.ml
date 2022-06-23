@@ -69,7 +69,7 @@ let rec value_kind ppf = function
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf "[%s]" (boxed_integer_name bi)
-  | Pblock { tag; fields } ->
+  | Pvariant { tag; fields } ->
     fprintf ppf "[%d: %a]" tag
       (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
         value_kind') fields
@@ -80,7 +80,7 @@ and value_kind' ppf = function
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf "[%s]" (boxed_integer_name bi)
-  | Pblock { tag; fields } ->
+  | Pvariant { tag; fields } ->
     fprintf ppf "[%d: %a]" tag
       (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
         value_kind') fields
@@ -95,7 +95,7 @@ let return_kind ppf (mode, kind) =
   | Parrayval elt_kind ->
      fprintf ppf ": %s%sarray@ " smode (array_kind elt_kind)
   | Pboxedintval bi -> fprintf ppf ": %s%s@ " smode (boxed_integer_name bi)
-  | Pblock { tag; fields } ->
+  | Pvariant { tag; fields } ->
     fprintf ppf ": %s[%d: %a]@ " smode tag
       (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
         value_kind') fields
@@ -106,7 +106,7 @@ let field_kind ppf = function
   | Pfloatval -> pp_print_string ppf "float"
   | Parrayval elt_kind -> fprintf ppf "%s-array" (array_kind elt_kind)
   | Pboxedintval bi -> pp_print_string ppf (boxed_integer_name bi)
-  | Pblock { tag; fields } ->
+  | Pvariant { tag; fields } ->
     fprintf ppf "[%d: %a]" tag
       (Format.pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
         value_kind') fields
