@@ -190,30 +190,43 @@ let value_kind env ty =
           in
           if List.for_all is_constant constructors then
             Pintval
-          else begin match constructors with
-            | [ constructor ] ->
-              let is_mutable, fields =
-                match constructor.cd_args with
-                | Cstr_tuple fields ->
-                  false, List.map (loop env ~visited ~fuel) fields
-                | Cstr_record labels ->
-                  List.fold_left_map
-                    (fun is_mutable (label:Types.label_declaration) ->
-                       let is_mutable =
-                         match label.ld_mutable with
-                         | Mutable -> true
-                         | Immutable -> is_mutable
-                       in
-                       is_mutable, loop env ~visited ~fuel label.ld_type)
-                    false labels
-              in
-              if is_mutable then
-                Pgenval
-              else
-                Pvariant { consts = []; non_consts = [0, fields] }
-            | _ ->
-              Pgenval
-          end
+          else
+            let for_one_constructor
+                  (constructor : Types.constructor_declaration) =
+              match constructor.cd_args with
+              | Cstr_tuple fields ->
+                false, List.map (loop env ~visited ~fuel) fields
+              | Cstr_record labels ->
+                List.fold_left_map
+                  (fun is_mutable (label:Types.label_declaration) ->
+                      let is_mutable =
+                        match label.ld_mutable with
+                        | Mutable -> true
+                        | Immutable -> is_mutable
+                      in
+                      is_mutable, loop env ~visited ~fuel label.ld_type)
+                  false labels
+            in
+            let result =
+              List.fold_left (fun result constructor ->
+                  match result with
+                  | None -> None
+                  | Some (next_const, consts, next_tag, non_consts) ->
+                    let is_mutable, fields = for_one_constructor constructor in
+                    if is_mutable then None
+                    else if List.compare_length_with fields 0 = 0 then
+                      let consts = next_const :: consts in
+                      Some (next_const + 1, consts, next_tag, non_consts)
+                    else
+                      let non_consts = (next_tag, fields) :: non_consts in
+                      Some (next_const, consts, next_tag + 1, non_consts))
+                (Some (0, [], 0, []))
+                constructors
+            in
+            begin match result with
+            | None -> Pgenval
+            | Some (_, consts, _, non_consts) -> Pvariant { consts; non_consts }
+            end
         | Type_record (labels, record_representation) ->
           let is_mutable, fields =
             List.fold_left_map
