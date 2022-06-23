@@ -358,15 +358,11 @@ let arithmetic_conversion dbg src dst arg =
   | Naked_float, Naked_int32 ->
     None, C.sign_extend_32 dbg (C.int_of_float ~dbg arg)
 
-let binary_phys_comparison _env dbg kind op x y =
-  match (kind : Flambda_kind.t), (op : P.equality_comparison) with
-  (* int64 special case *)
-  | (Naked_number Naked_int64, Eq | Naked_number Naked_int64, Neq)
-    when Target_system.is_32_bit ->
-    C.unsupported_32_bit ()
+let phys_equal _env dbg op x y =
+  match (op : P.equality_comparison) with
   (* General case *)
-  | _, Eq -> C.eq ~dbg x y
-  | _, Neq -> C.neq ~dbg x y
+  | Eq -> C.eq ~dbg x y
+  | Neq -> C.neq ~dbg x y
 
 let binary_int_arith_primitive _env dbg kind op x y =
   match (kind : Flambda_kind.Standard_int.t), (op : P.binary_int_arith_op) with
@@ -452,18 +448,17 @@ let binary_int_shift_primitive _env dbg kind op x y =
   | (Naked_int64 | Naked_nativeint | Naked_immediate), Lsr -> C.lsr_int x y dbg
   | (Naked_int64 | Naked_nativeint | Naked_immediate), Asr -> C.asr_int x y dbg
 
-let binary_int_comp_primitive _env dbg kind signed cmp x y =
+let binary_int_comp_primitive _env dbg kind cmp x y =
   match
     ( (kind : Flambda_kind.Standard_int.t),
-      (signed : P.signed_or_unsigned),
-      (cmp : P.ordered_comparison) )
+      (cmp : P.signed_or_unsigned P.comparison) )
   with
   (* XXX arch32 cases need [untag_int] now. *)
-  | Naked_int64, Signed, Lt
-  | Naked_int64, Signed, Le
-  | Naked_int64, Signed, Gt
-  | Naked_int64, Signed, Ge
-  | Naked_int64, Unsigned, (Lt | Le | Gt | Ge)
+  | Naked_int64, Lt Signed
+  | Naked_int64, Le Signed
+  | Naked_int64, Gt Signed
+  | Naked_int64, Ge Signed
+  | Naked_int64, (Lt Unsigned | Le Unsigned | Gt Unsigned | Ge Unsigned)
     when Target_system.is_32_bit ->
     C.unsupported_32_bit ()
   (* There are no runtime C functions to do that afaict *)
@@ -478,43 +473,50 @@ let binary_int_comp_primitive _env dbg kind signed cmp x y =
      last bit of y, as expected.
 
      The same reasoning applies to the other comparisons. *)
-  | Tagged_immediate, Signed, Lt -> C.lt ~dbg x (C.ignore_low_bit_int y)
-  | Tagged_immediate, Signed, Le -> C.le ~dbg (C.ignore_low_bit_int x) y
-  | Tagged_immediate, Signed, Gt -> C.gt ~dbg (C.ignore_low_bit_int x) y
-  | Tagged_immediate, Signed, Ge -> C.ge ~dbg x (C.ignore_low_bit_int y)
-  | Tagged_immediate, Unsigned, Lt -> C.ult ~dbg x (C.ignore_low_bit_int y)
-  | Tagged_immediate, Unsigned, Le -> C.ule ~dbg (C.ignore_low_bit_int x) y
-  | Tagged_immediate, Unsigned, Gt -> C.ugt ~dbg (C.ignore_low_bit_int x) y
-  | Tagged_immediate, Unsigned, Ge -> C.uge ~dbg x (C.ignore_low_bit_int y)
+  | Tagged_immediate, Lt Signed -> C.lt ~dbg x (C.ignore_low_bit_int y)
+  | Tagged_immediate, Le Signed -> C.le ~dbg (C.ignore_low_bit_int x) y
+  | Tagged_immediate, Gt Signed -> C.gt ~dbg (C.ignore_low_bit_int x) y
+  | Tagged_immediate, Ge Signed -> C.ge ~dbg x (C.ignore_low_bit_int y)
+  | Tagged_immediate, Lt Unsigned -> C.ult ~dbg x (C.ignore_low_bit_int y)
+  | Tagged_immediate, Le Unsigned -> C.ule ~dbg (C.ignore_low_bit_int x) y
+  | Tagged_immediate, Gt Unsigned -> C.ugt ~dbg (C.ignore_low_bit_int x) y
+  | Tagged_immediate, Ge Unsigned -> C.uge ~dbg x (C.ignore_low_bit_int y)
   (* Naked integers. *)
-  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Signed, Lt
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Lt Signed
     ->
     C.lt ~dbg x y
-  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Signed, Le
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Le Signed
     ->
     C.le ~dbg x y
-  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Signed, Gt
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Gt Signed
     ->
     C.gt ~dbg x y
-  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Signed, Ge
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Ge Signed
     ->
     C.ge ~dbg x y
-  | ( (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate),
-      Unsigned,
-      Lt ) ->
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Lt Unsigned
+    ->
     C.ult ~dbg x y
-  | ( (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate),
-      Unsigned,
-      Le ) ->
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Le Unsigned
+    ->
     C.ule ~dbg x y
-  | ( (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate),
-      Unsigned,
-      Gt ) ->
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Gt Unsigned
+    ->
     C.ugt ~dbg x y
-  | ( (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate),
-      Unsigned,
-      Ge ) ->
+  | (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate), Ge Unsigned
+    ->
     C.uge ~dbg x y
+  (* int64 special case *)
+  | Naked_int64, (Eq | Neq) when Target_system.is_32_bit ->
+    C.unsupported_32_bit ()
+  | ( ( Tagged_immediate | Naked_int32 | Naked_int64 | Naked_nativeint
+      | Naked_immediate ),
+      Eq ) ->
+    C.eq ~dbg x y
+  | ( ( Tagged_immediate | Naked_int32 | Naked_int64 | Naked_nativeint
+      | Naked_immediate ),
+      Neq ) ->
+    C.neq ~dbg x y
 
 let binary_int_comp_primitive_yielding_int _env dbg _kind
     (signed : P.signed_or_unsigned) x y =
@@ -533,13 +535,13 @@ let binary_float_arith_primitive _env dbg op x y =
   | Div -> C.float_div ~dbg x y
 
 let binary_float_comp_primitive _env dbg op x y =
-  match (op : P.comparison) with
+  match (op : unit P.comparison) with
   | Eq -> C.float_eq ~dbg x y
   | Neq -> C.float_neq ~dbg x y
-  | Lt -> C.float_lt ~dbg x y
-  | Gt -> C.float_gt ~dbg x y
-  | Le -> C.float_le ~dbg x y
-  | Ge -> C.float_ge ~dbg x y
+  | Lt () -> C.float_lt ~dbg x y
+  | Gt () -> C.float_gt ~dbg x y
+  | Le () -> C.float_le ~dbg x y
+  | Ge () -> C.float_ge ~dbg x y
 
 let binary_float_comp_primitive_yielding_int _env dbg x y =
   C.mk_compare_floats_untagged dbg x y
@@ -664,17 +666,17 @@ let binary_primitive env dbg f x y =
     string_like_load ~dbg kind width x y
   | Bigarray_load (_dimensions, kind, _layout) ->
     bigarray_load ~dbg kind ~bigarray:x ~offset:y
-  | Phys_equal (kind, op) -> binary_phys_comparison env dbg kind op x y
+  | Phys_equal op -> phys_equal env dbg op x y
   | Int_arith (kind, op) -> binary_int_arith_primitive env dbg kind op x y
   | Int_shift (kind, op) -> binary_int_shift_primitive env dbg kind op x y
-  | Int_comp (kind, signed, Yielding_bool cmp) ->
-    binary_int_comp_primitive env dbg kind signed cmp x y
-  | Int_comp (kind, signed, Yielding_int_like_compare_functions) ->
+  | Int_comp (kind, Yielding_bool cmp) ->
+    binary_int_comp_primitive env dbg kind cmp x y
+  | Int_comp (kind, Yielding_int_like_compare_functions signed) ->
     binary_int_comp_primitive_yielding_int env dbg kind signed x y
   | Float_arith op -> binary_float_arith_primitive env dbg op x y
   | Float_comp (Yielding_bool cmp) ->
     binary_float_comp_primitive env dbg cmp x y
-  | Float_comp Yielding_int_like_compare_functions ->
+  | Float_comp (Yielding_int_like_compare_functions ()) ->
     binary_float_comp_primitive_yielding_int env dbg x y
 
 let ternary_primitive _env dbg f x y z =
