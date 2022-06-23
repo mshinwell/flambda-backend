@@ -345,7 +345,7 @@ module With_subkind = struct
       let rec print ppf t =
         let colour = Flambda_colours.subkind () in
         match t with
-        | Anything -> ()
+        | Anything -> Format.fprintf ppf "*"
         | Tagged_immediate ->
           Format.fprintf ppf "@<0>%s=tagged_@<1>\u{2115}@<1>\u{1d55a}@<0>%s"
             colour
@@ -370,8 +370,10 @@ module With_subkind = struct
           Format.fprintf ppf
             "@<0>%s=Variant((consts (%a))@ (non_consts (%a)))@<0>%s" colour
             Targetint_31_63.Set.print consts
-            (Tag.Scannable.Map.print
-               (Format.pp_print_list ~pp_sep:Format.pp_print_space print))
+            (Tag.Scannable.Map.print (fun ppf fields ->
+                 Format.fprintf ppf "[%a]"
+                   (Format.pp_print_list ~pp_sep:Format.pp_print_space print)
+                   fields))
             non_consts
             (Flambda_colours.normal ())
         | Float_block { num_fields } ->
