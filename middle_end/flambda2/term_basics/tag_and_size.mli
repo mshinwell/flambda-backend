@@ -19,3 +19,7 @@
 type t = Tag.t * Targetint_31_63.Imm.t
 
 include Container_types.S with type t := t
+
+val tag : t -> Tag.t
+
+val size : t -> Targetint_31_63.Imm.t

@@ -509,4 +509,6 @@ module With_subkind = struct
     | Tagged_immediate | Block _ | Float_block _ | Float_array | Immediate_array
     | Value_array | Generic_array ->
       true
+
+  let erase_subkind t = { t with subkind = Anything }
 end

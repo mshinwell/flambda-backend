@@ -198,5 +198,7 @@ module With_subkind : sig
 
   val compatible : t -> when_used_at:t -> bool
 
+  val erase_subkind : t -> t
+
   include Container_types.S with type t := t
 end
