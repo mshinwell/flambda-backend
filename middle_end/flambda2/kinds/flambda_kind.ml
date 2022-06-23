@@ -16,8 +16,6 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-module Int = Numbers.Int
-
 module Naked_number_kind = struct
   type t =
     | Naked_immediate
@@ -274,7 +272,7 @@ module With_subkind = struct
       | Boxed_nativeint
       | Tagged_immediate
       | Variant of
-          { consts : Int.Set.t;
+          { consts : Targetint_31_63.Set.t;
             non_consts : t list Tag.Scannable.Map.t
           }
       | Float_block of { num_fields : int }
@@ -299,7 +297,7 @@ module With_subkind = struct
         true
       | ( Variant { consts = consts1; non_consts = non_consts1 },
           Variant { consts = consts2; non_consts = non_consts2 } ) ->
-        if not (Int.Set.equal consts1 consts2)
+        if not (Targetint_31_63.Set.equal consts1 consts2)
         then false
         else
           let tags1 = Tag.Scannable.Map.keys non_consts1 in
@@ -371,7 +369,7 @@ module With_subkind = struct
         | Variant { consts; non_consts } ->
           Format.fprintf ppf
             "@<0>%s=Variant((consts (%a))@ (non_consts (%a)))@<0>%s" colour
-            Int.Set.print consts
+            Targetint_31_63.Set.print consts
             (Tag.Scannable.Map.print
                (Format.pp_print_list ~pp_sep:Format.pp_print_space print))
             non_consts
@@ -467,7 +465,7 @@ module With_subkind = struct
     | Some tag ->
       create value
         (Variant
-           { consts = Int.Set.empty;
+           { consts = Targetint_31_63.Set.empty;
              non_consts = Tag.Scannable.Map.singleton tag fields
            })
     | None -> Misc.fatal_errorf "Tag %a is not scannable" Tag.print tag
@@ -498,7 +496,13 @@ module With_subkind = struct
            block, not an array. *)
         float_block ~num_fields:(List.length fields)
       | [], _ :: _ | _ :: _, [] | _ :: _, _ :: _ ->
-        let consts = Int.Set.of_list consts in
+        let consts =
+          Targetint_31_63.Set.of_list
+            (List.map
+               (fun const ->
+                 Targetint_31_63.int (Targetint_31_63.Imm.of_int const))
+               consts)
+        in
         let non_consts =
           List.fold_left
             (fun non_consts (tag, fields) ->
