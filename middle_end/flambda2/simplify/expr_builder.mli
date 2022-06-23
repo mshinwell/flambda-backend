@@ -41,13 +41,10 @@ val make_new_let_bindings :
   Rebuilt_expr.t * Upwards_acc.t
 
 (** Create the "let symbol" binding(s) around a given body necessary to define
-    the given lifted constant. Two optimisations are performed:
+    the given lifted constant.
 
-    1. Best efforts are made not to create the binding(s) if it/they would be
-    redundant.
-
-    2. Closure variables are removed if they are not used according to the given
-    [uacc]. (Such [uacc] must have seen all uses in the whole compilation unit.)
+    Value slots are removed if they are not used according to the given [uacc].
+    (Such [uacc] must have seen all uses in the whole compilation unit.)
 
     The [name_occurrences] in the provided [uacc] must contain exactly the free
     names of the [body]. *)
@@ -57,12 +54,8 @@ val create_let_symbols :
   body:Rebuilt_expr.t ->
   Rebuilt_expr.t * Upwards_acc.t
 
-(** Place lifted constants whose defining expressions involve [Name]s (for
-    example those bound by a [Let] or a [Let_cont]) that are about to go out of
-    scope.
-
-    The [name_occurrences] in the provided [uacc] must contain exactly the free
-    names of the [body]. *)
+(** Place lifted constants arising from a let-expr (coming from both the
+    defining_expr and the body). *)
 val place_lifted_constants :
   Upwards_acc.t ->
   lifted_constants_from_defining_expr:Lifted_constant_state.t ->
@@ -135,7 +128,7 @@ val rewrite_fixed_arity_apply :
   use_id:Apply_cont_rewrite_id.t ->
   Flambda_arity.With_subkinds.t ->
   Apply.t ->
-  Rebuilt_expr.t * Upwards_acc.t
+  Upwards_acc.t * Rebuilt_expr.t
 
 val rewrite_exn_continuation :
   Apply_cont_rewrite.t ->
