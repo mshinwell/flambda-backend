@@ -766,3 +766,5 @@ val extract_symbol_approx :
   Symbol.t ->
   (Code_id.t -> 'code) ->
   'code Value_approximation.t
+
+val remove_outermost_alias : Typing_env.t -> t -> t
