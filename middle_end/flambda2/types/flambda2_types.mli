@@ -198,6 +198,8 @@ module Typing_env : sig
     val choose_opt : t -> Simple.t option
 
     val inter : t -> t -> t
+
+    val print : Format.formatter -> t -> unit
   end
 
   val aliases_of_simple :
