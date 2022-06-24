@@ -33,14 +33,12 @@ module P = Flambda_primitive
 module VB = Bound_var
 
 type 'a close_program_metadata =
-  | Normal : [ `Normal ] close_program_metadata
+  | Normal : [`Normal] close_program_metadata
   | Classic :
-      ( Exported_code.t
-        * Flambda_cmx_format.t option
-        * Exported_offsets.t) -> [ `Classic ] close_program_metadata
+      (Exported_code.t * Flambda_cmx_format.t option * Exported_offsets.t)
+      -> [`Classic] close_program_metadata
 
-type 'a close_program_result =
-  Flambda_unit.t * 'a close_program_metadata
+type 'a close_program_result = Flambda_unit.t * 'a close_program_metadata
 
 type close_functions_result =
   | Lifted of (Symbol.t * Env.value_approximation) Function_slot.Lmap.t
@@ -1870,7 +1868,8 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
 
 let close_program (type mode) ~(mode : mode Flambda_features.mode)
     ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
-    ~module_block_size_in_words ~program ~prog_return_cont ~exn_continuation : mode close_program_result =
+    ~module_block_size_in_words ~program ~prog_return_cont ~exn_continuation :
+    mode close_program_result =
   let symbol_for_global ident = symbol_for_global ?comp_unit:None ident in
   let env = Env.create ~symbol_for_global ~big_endian ~cmx_loader in
   let module_symbol =
@@ -2017,12 +2016,12 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
   in
   match mode with
   | Normal ->
-    (* CR chambart/gbury: we could probably get away with not computing some of the
-       fields of the Acc, when not in classic mode. For instance, the slot offsets
-       constraints accumulation is not needed in "normal" mode. *)
+    (* CR chambart/gbury: we could probably get away with not computing some of
+       the fields of the Acc, when not in classic mode. For instance, the slot
+       offsets constraints accumulation is not needed in "normal" mode. *)
     let unit =
-      Flambda_unit.create ~return_continuation:return_cont ~exn_continuation ~body
-        ~module_symbol ~used_value_slots:Unknown
+      Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
+        ~body ~module_symbol ~used_value_slots:Unknown
     in
     unit, Normal
   | Classic ->
@@ -2052,8 +2051,7 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
         ~module_symbol ~exported_offsets ~used_value_slots all_code
     in
     let unit =
-      Flambda_unit.create ~return_continuation:return_cont ~exn_continuation ~body
-        ~module_symbol ~used_value_slots:(Known used_value_slots)
+      Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
+        ~body ~module_symbol ~used_value_slots:(Known used_value_slots)
     in
     unit, Classic (all_code, cmx, exported_offsets)
-

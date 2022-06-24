@@ -161,7 +161,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~filename ~module_ident
     let cmx_loader =
       Flambda_cmx.create_loader ~get_global_info ~symbol_for_global
     in
-    let Mode mode = Flambda_features.mode () in
+    let (Mode mode) = Flambda_features.mode () in
     let raw_flambda, close_program_metadata =
       Profile.record_call "lambda_to_flambda" (fun () ->
           Lambda_to_flambda.lambda_to_flambda ~mode ~symbol_for_global
