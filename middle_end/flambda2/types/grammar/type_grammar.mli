@@ -575,3 +575,5 @@ module Head_of_kind_naked_immediate : sig
 
   val create_get_tag : flambda_type -> t
 end
+
+val recover_some_aliases : t -> t
