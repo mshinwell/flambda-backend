@@ -190,30 +190,43 @@ let value_kind env ty =
           in
           if List.for_all is_constant constructors then
             Pintval
-          else begin match constructors with
-            | [ constructor ] ->
-              let is_mutable, fields =
-                match constructor.cd_args with
-                | Cstr_tuple fields ->
-                  false, List.map (loop env ~visited ~fuel) fields
-                | Cstr_record labels ->
-                  List.fold_left_map
-                    (fun is_mutable (label:Types.label_declaration) ->
-                       let is_mutable =
-                         match label.ld_mutable with
-                         | Mutable -> true
-                         | Immutable -> is_mutable
-                       in
-                       is_mutable, loop env ~visited ~fuel label.ld_type)
-                    false labels
-              in
-              if is_mutable then
-                Pgenval
-              else
-                Pblock { tag = 0; fields }
-            | _ ->
-              Pgenval
-          end
+          else
+            let for_one_constructor
+                  (constructor : Types.constructor_declaration) =
+              match constructor.cd_args with
+              | Cstr_tuple fields ->
+                false, List.map (loop env ~visited ~fuel) fields
+              | Cstr_record labels ->
+                List.fold_left_map
+                  (fun is_mutable (label:Types.label_declaration) ->
+                      let is_mutable =
+                        match label.ld_mutable with
+                        | Mutable -> true
+                        | Immutable -> is_mutable
+                      in
+                      is_mutable, loop env ~visited ~fuel label.ld_type)
+                  false labels
+            in
+            let result =
+              List.fold_left (fun result constructor ->
+                  match result with
+                  | None -> None
+                  | Some (next_const, consts, next_tag, non_consts) ->
+                    let is_mutable, fields = for_one_constructor constructor in
+                    if is_mutable then None
+                    else if List.compare_length_with fields 0 = 0 then
+                      let consts = next_const :: consts in
+                      Some (next_const + 1, consts, next_tag, non_consts)
+                    else
+                      let non_consts = (next_tag, fields) :: non_consts in
+                      Some (next_const, consts, next_tag + 1, non_consts))
+                (Some (0, [], 0, []))
+                constructors
+            in
+            begin match result with
+            | None -> Pgenval
+            | Some (_, consts, _, non_consts) -> Pvariant { consts; non_consts }
+            end
         | Type_record (labels, record_representation) ->
           let is_mutable, fields =
             List.fold_left_map
@@ -230,12 +243,16 @@ let value_kind env ty =
             Pgenval
           else begin match record_representation with
             | Record_regular ->
-              Pblock { tag = 0; fields }
+              Pvariant { consts = []; non_consts = [0, fields] }
             | Record_float ->
-              Pblock { tag = Obj.double_array_tag;
-                       fields = List.map (fun _ -> Pfloatval) fields }
+              Pvariant {
+                consts = [];
+                non_consts = [
+                  Obj.double_array_tag,
+                  List.map (fun _ -> Pfloatval) fields
+                ] }
             | Record_inlined tag ->
-              Pblock { tag; fields }
+              Pvariant { consts = []; non_consts = [tag, fields] }
             | Record_unboxed _ ->
               begin match fields with
               | [field] -> field
@@ -255,7 +272,7 @@ let value_kind env ty =
         let visited = Numbers.Int.Set.add ty.id visited in
         let fuel = fuel - 1 in
         let fields = List.map (loop env ~visited ~fuel) fields in
-        Pblock { tag = 0; fields }
+        Pvariant { consts = []; non_consts = [0, fields] }
       end
     | _ ->
       Pgenval
@@ -302,11 +319,6 @@ let classify_lazy_argument : Typedtree.expression ->
     | _ ->
        `Other
 
-let rec value_kind_union (k1 : Lambda.value_kind) (k2 : Lambda.value_kind) =
-  match k1, k2 with
-  | Pblock { tag = tag1; fields = fields1 }, Pblock { tag = tag2; fields = fields2 }
-    when tag1 = tag2 && List.length fields1 = List.length fields2 ->
-    Pblock { tag = tag1; fields = List.map2 value_kind_union fields1 fields2 }
-  | _, _ ->
-    if Lambda.equal_value_kind k1 k2 then k1
-    else Pgenval
+let value_kind_union (k1 : Lambda.value_kind) (k2 : Lambda.value_kind) =
+  if Lambda.equal_value_kind k1 k2 then k1
+  else Pgenval
