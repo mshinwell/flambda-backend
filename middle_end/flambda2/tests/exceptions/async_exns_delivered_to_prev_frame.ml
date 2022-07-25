@@ -1,15 +1,13 @@
-(* Test to ensure that asynchronous exceptions from the GC skip the
-   current frame under Flambda 2. *)
+(* Test to ensure that asynchronous exceptions from the GC skip the current
+   frame under Flambda 2. *)
 
 let whoops = "whoops"
 
 let[@inline never] h x =
   try
-    if Sys.opaque_identity false then begin
-      failwith "just to keep exn handler alive"
-    end;
-    (* An allocation is done in a loop so that the finaliser for [pair],
-       below, is eventually run. *)
+    if Sys.opaque_identity false then failwith "just to keep exn handler alive";
+    (* An allocation is done in a loop so that the finaliser for [pair], below,
+       is eventually run. *)
     while true do
       (* The emerging async exn should skip the handler in [h] *)
       let _ = Sys.opaque_identity (x, Random.int 42) in
@@ -29,12 +27,10 @@ let[@inline never] g x =
   exit 2
 
 let[@inline never] f () =
-  try
-    g 1  (* not a tail call because of the try/with *)
-  with (Failure msg) ->  (* the async exn should be delivered here *)
+  try g 1 (* not a tail call because of the try/with *)
+  with Failure msg ->
+    (* the async exn should be delivered here *)
     assert (String.equal msg whoops);
     exit 0
 
-let () =
-  if Config.flambda2 then f ()
-  else ()
+let () = if Config.flambda2 then f () else ()
