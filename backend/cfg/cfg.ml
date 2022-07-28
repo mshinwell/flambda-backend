@@ -261,7 +261,8 @@ let dump_basic ppf (basic : basic) =
   | Op op -> dump_op ppf op
   | Call call -> fprintf ppf "Call %a" dump_call call
   | Reloadretaddr -> fprintf ppf "Reloadretaddr"
-  | Pushtrap { lbl_handler } -> fprintf ppf "Pushtrap handler=%d" lbl_handler
+  | Pushtrap { lbl_handler; has_extra_args = _ } ->
+    fprintf ppf "Pushtrap handler=%d" lbl_handler
   | Poptrap -> fprintf ppf "Poptrap"
   | Prologue -> fprintf ppf "Prologue"
 

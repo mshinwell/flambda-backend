@@ -243,8 +243,14 @@ let translate_jump_to_continuation env res apply types cont args =
       | None -> []
       | Some (Pop _) -> [Cmm.Pop]
       | Some (Push { exn_handler }) ->
-        let cont = Env.get_cmm_continuation env exn_handler in
-        [Cmm.Push cont]
+        let handler = Env.get_cmm_continuation env exn_handler in
+        let has_extra_args =
+          (* This annotation is ultimately required for [caml_raise_async]. *)
+          match Env.get_exn_extra_args env exn_handler with
+          | [] -> false
+          | _ :: _ -> true
+        in
+        [Cmm.Push { handler; has_extra_args }]
     in
     let dbg = Apply_cont.debuginfo apply in
     let args, env, _ = C.simple_list ~dbg env args in

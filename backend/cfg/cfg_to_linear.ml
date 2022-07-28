@@ -41,7 +41,8 @@ let from_basic (basic : Cfg.basic) : L.instruction_desc =
   match basic with
   | Prologue -> Lprologue
   | Reloadretaddr -> Lreloadretaddr
-  | Pushtrap { lbl_handler } -> Lpushtrap { lbl_handler }
+  | Pushtrap { lbl_handler; has_extra_args } ->
+    Lpushtrap { lbl_handler; has_extra_args }
   | Poptrap -> Lpoptrap
   | Call (F Indirect) -> Lop Icall_ind
   | Call (F (Direct { func_symbol })) -> Lop (Icall_imm { func = func_symbol })

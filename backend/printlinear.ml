@@ -63,7 +63,7 @@ let instr ppf i =
       fprintf ppf "enter trap"
   | Ladjust_stack_offset { delta_bytes } ->
       fprintf ppf "adjust pseudo stack offset by %d bytes" delta_bytes
-  | Lpushtrap { lbl_handler; } ->
+  | Lpushtrap { lbl_handler; has_extra_args = _ } ->
       fprintf ppf "push trap %a" label lbl_handler
   | Lpoptrap ->
       fprintf ppf "pop trap"

@@ -147,7 +147,7 @@ type phantom_defining_expr =
 type trywith_shared_label = int
 
 type trap_action =
-  | Push of trywith_shared_label
+  | Push of { handler : trywith_shared_label; has_extra_args : bool }
   | Pop
 
 type trywith_kind =

@@ -1148,7 +1148,7 @@ let emit_instr fallthrough i =
   | Ladjust_stack_offset { delta_bytes; } ->
       cfi_adjust_cfa_offset delta_bytes;
       stack_offset := !stack_offset + delta_bytes
-  | Lpushtrap { lbl_handler; } ->
+  | Lpushtrap { lbl_handler; has_extra_args; } ->
       emit_push_trap_label lbl_handler;
       let load_label_addr s arg =
         if !Clflags.pic_code then
@@ -1157,6 +1157,7 @@ let emit_instr fallthrough i =
           I.mov (sym (emit_label s)) arg
       in
       load_label_addr lbl_handler r11;
+      if Config.flambda2 && has_extra_args then I.or_ (nat 1n) r11;
       I.push r11;
       cfi_adjust_cfa_offset 8;
       I.push (domain_field Domainstate.Domain_exception_pointer);
@@ -1183,6 +1184,7 @@ let emit_instr fallthrough i =
           I.mov (domain_field Domainstate.Domain_exception_pointer) rsp;
           I.pop (domain_field Domainstate.Domain_exception_pointer);
           I.pop r11;
+          if Config.flambda2 then I.and_ (nat (Nativeint.lognot 1n)) r11;
           I.jmp r11
       end
 

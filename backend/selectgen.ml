@@ -79,7 +79,8 @@ let env_set_trap_stack env trap_stack =
 
 let rec combine_traps trap_stack = function
   | [] -> trap_stack
-  | (Push t) :: l -> combine_traps (Specific_trap (t, trap_stack)) l
+  | (Push { handler; has_extra_args }) :: l ->
+      combine_traps (Specific_trap (handler, trap_stack)) l
   | Pop :: l ->
       begin match trap_stack with
       | Uncaught -> Misc.fatal_error "Trying to pop a trap from an empty stack"

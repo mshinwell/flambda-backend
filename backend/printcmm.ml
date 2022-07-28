@@ -134,7 +134,7 @@ let exit_label ppf = function
 
 let trap_action ppf ta =
   match ta with
-  | Push i -> fprintf ppf "push(%d)" i
+  | Push { handler; has_extra_args = _ } -> fprintf ppf "push(%d)" handler
   | Pop -> fprintf ppf "pop"
 
 let trap_action_list ppf traps =
