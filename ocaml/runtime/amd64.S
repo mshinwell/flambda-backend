@@ -584,6 +584,9 @@ LBL(caml_start_program):
         movq    Caml_state(young_ptr), %r15
     /* Build an exception handler */
         lea     LBL(108)(%rip), %r13
+#ifdef CAML_FLAMBDA2
+        sal     %r13
+#endif
         pushq   %r13; CFI_ADJUST(8)
         pushq   Caml_state(exception_pointer); CFI_ADJUST(8)
         movq    %rsp, Caml_state(exception_pointer)
@@ -625,7 +628,7 @@ LBL(1100):
         popq    Caml_state(exception_pointer); CFI_ADJUST(-8)
         popq    %r11
 #ifdef CAML_FLAMBDA2
-        andq    $0xfffffffffffffffe, %r11
+        sar     %r11
 #endif
         jmp     *%r11
 LBL(110):

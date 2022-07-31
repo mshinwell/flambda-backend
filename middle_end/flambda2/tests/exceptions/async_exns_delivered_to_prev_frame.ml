@@ -1,21 +1,23 @@
-(* Test to ensure that asynchronous exceptions from the GC skip the current
-   frame under Flambda 2. *)
+(* Test to ensure that asynchronous exceptions from the GC skip exception
+   handlers with extra arguments under Flambda 2. *)
 
 let whoops = "whoops"
 
 let[@inline never] h x =
+  let mut_var = ref 0 in
   try
     if Sys.opaque_identity false then failwith "just to keep exn handler alive";
     (* An allocation is done in a loop so that the finaliser for [pair], below,
        is eventually run. *)
     while true do
-      (* The emerging async exn should skip the handler in [h] *)
+      (* The emerging async exn from the allocation of the pair on the next line
+         should skip the handler in [h] because it uses a mutable variable *)
       let _ = Sys.opaque_identity (x, Random.int 42) in
-      ()
+      incr mut_var
     done
   with exn ->
-    Printf.eprintf "should not have caught exn here (%s)\n%!"
-      (Printexc.to_string exn);
+    Printf.eprintf "should not have caught exn here (%s, mut_var=%d)\n%!"
+      (Printexc.to_string exn) !mut_var;
     exit 1
 
 let[@inline never] g x =

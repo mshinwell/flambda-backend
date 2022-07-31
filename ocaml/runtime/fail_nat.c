@@ -90,12 +90,9 @@ CAMLno_asan void caml_raise(value v)
   caml_raise_exception(Caml_state, v);
 }
 
-CAMLnoreturn_start void caml_raise_async(value v)
-    CAMLnoreturn_end;
+CAMLnoreturn_start void caml_raise_async(value v) CAMLnoreturn_end;
 
-CAMLno_asan
-    CAMLexport void
-    caml_raise_async(value v)
+CAMLno_asan CAMLexport void caml_raise_async(value v)
 {
 #ifndef CAML_FLAMBDA2
   caml_raise(v);
@@ -108,10 +105,8 @@ CAMLno_asan
   while (Caml_state->exception_pointer != NULL
     && ((uintnat *) Caml_state->exception_pointer)[1] & 0x1)
   {
-    char *next_exception_pointer =
-        (char *) (((uintnat *) Caml_state->exception_pointer)[0]);
-    CAMLassert(next_exception_pointer < Caml_state->exception_pointer);
-    Caml_state->exception_pointer = next_exception_pointer;
+    Caml_state->exception_pointer =
+      (char *) (((uintnat *) Caml_state->exception_pointer)[0]);
   }
 
   /* If we still have a valid trap, deliver the exception to the corresponding

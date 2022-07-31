@@ -18,7 +18,11 @@
 type trap_stack =
   | Uncaught
   | Generic_trap of trap_stack
-  | Specific_trap of Cmm.trywith_shared_label * trap_stack
+  | Specific_trap of {
+      handler : Cmm.trywith_shared_label;
+      trap_stack : trap_stack;
+      has_extra_args : bool;
+    }
 
 type integer_comparison =
     Isigned of Cmm.integer_comparison

@@ -22,6 +22,7 @@ type liveness_env =
   { at_exit : (int * Reg.Set.t) list;
     at_raise : Reg.Set.t;
     last_regular_trywith_handler : Reg.Set.t;
+    current_exn_handler_has_extra_args : bool;
     free_conts_for_handlers : Numbers.Int.Set.t Numbers.Int.Map.t;
   }
 
@@ -29,6 +30,7 @@ let initial_env fundecl =
   { at_exit = [];
     at_raise = Reg.Set.empty;
     last_regular_trywith_handler = Reg.Set.empty;
+    current_exn_handler_has_extra_args = false;
     free_conts_for_handlers = Mach.free_conts_for_handlers fundecl;
   }
 
@@ -77,13 +79,14 @@ let find_live_at_exit env k =
   | Not_found -> Misc.fatal_error "Liveness.find_live_at_exit"
 
 let env_from_trap_stack env ts =
-  let at_raise =
+  let at_raise, current_exn_handler_has_extra_args =
     match ts with
-    | Uncaught -> Reg.Set.empty
-    | Generic_trap _ -> env.last_regular_trywith_handler
-    | Specific_trap (nfail, _) -> find_live_at_exit env nfail
+    | Uncaught -> Reg.Set.empty, false
+    | Generic_trap _ -> env.last_regular_trywith_handler, false
+    | Specific_trap { handler; trap_stack = _; has_extra_args } ->
+      find_live_at_exit env handler, has_extra_args
   in
-  { env with at_raise; }
+  { env with at_raise; current_exn_handler_has_extra_args }
 
 let rec live env i finally =
   (* finally is the set of registers live after execution of the
@@ -208,8 +211,10 @@ let rec live env i finally =
             { env with at_raise = live_at_raise;
                        last_regular_trywith_handler = live_at_raise;
             }
-        | Delayed nfail ->
-            { env with at_exit = (nfail, live_at_raise) :: env.at_exit; }
+        | Delayed { handler; has_extra_args } ->
+            assert Config.flambda2;
+            { env with at_exit =
+              (handler, live_at_raise, has_extra_args) :: env.at_exit; }
       in
       let before_body = live env body at_join in
       i.live <- before_body;
