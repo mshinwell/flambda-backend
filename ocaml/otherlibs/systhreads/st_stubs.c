@@ -619,7 +619,8 @@ CAMLexport int caml_c_thread_register(void)
   st_thread_set_id(Ident(th->descr));
   /* Create the tick thread if not already done.  */
   if (! caml_tick_thread_running) {
-    err = st_thread_create(&caml_tick_thread_id, caml_thread_tick, NULL);
+    err = st_thread_create(&caml_tick_thread_id, caml_thread_tick,
+      &caml_master_lock);
     if (err == 0) caml_tick_thread_running = 1;
   }
   /* Exit the run-time system */

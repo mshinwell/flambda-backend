@@ -376,6 +376,14 @@ static void * caml_thread_tick(void * arg)
 {
   struct timeval timeout;
   sigset_t mask;
+  int kick_masterlock = 0;
+  char *env_var;
+  int reduced_frequency_timer = 0;
+  st_masterlock *masterlock = (st_masterlock*) arg;
+
+  /* Workaround for https://sourceware.org/bugzilla/show_bug.cgi?id=25847 */
+  env_var = getenv("KICK_MASTERLOCK");
+  if (env_var && strlen(env_var) > 0) kick_masterlock = 1;
 
   /* Block all signals so that we don't try to execute an OCaml signal handler*/
   sigfillset(&mask);
@@ -390,6 +398,16 @@ static void * caml_thread_tick(void * arg)
      go through caml_handle_signal(), just record signal delivery via
      caml_record_signal(). */
     caml_record_signal(SIGPREEMPTION);
+
+    if (kick_masterlock) {
+      reduced_frequency_timer++;
+      if (reduced_frequency_timer >= 4) {
+        /* This should run about once every 200ms.  The idea is to guard
+           against lost pthread_cond_signal wakeups elsewhere. */
+        pthread_cond_signal(&masterlock->is_free);
+        reduced_frequency_timer = 0;
+      }
+    }
   }
   return NULL;
 }
