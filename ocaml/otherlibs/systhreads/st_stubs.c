@@ -574,7 +574,8 @@ CAMLprim value caml_thread_new(value clos)          /* ML */
      Because of PR#4666, we start the tick thread late, only when we create
      the first additional thread in the current process*/
   if (! caml_tick_thread_running) {
-    err = st_thread_create(&caml_tick_thread_id, caml_thread_tick, NULL);
+    err = st_thread_create(&caml_tick_thread_id, caml_thread_tick,
+      &caml_master_lock);
     st_check_error(err, "Thread.create");
     caml_tick_thread_running = 1;
   }
