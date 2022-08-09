@@ -214,10 +214,14 @@ DECLARE_SIGNAL_HANDLER(segv_handler)
 #error "CONTEXT_PC must be defined if RETURN_AFTER_STACK_OVERFLOW is"
 #endif
 #else
+/* Raising Stack_overflow directly from here is not yet supported with
+   the new asynchronous exceptions delivery model. */
+#if 0
     /* Raise a Stack_overflow exception straight from this signal handler */
 #if defined(CONTEXT_YOUNG_PTR) && defined(CONTEXT_EXCEPTION_POINTER)
     Caml_state->exception_pointer == (char *) CONTEXT_EXCEPTION_POINTER;
     Caml_state->young_ptr = (value *) CONTEXT_YOUNG_PTR;
+#endif
 #endif
     caml_raise_stack_overflow();
 #endif
