@@ -287,7 +287,7 @@ CAMLprim value caml_with_async_exns(value body_callback)
 
   exn = Extract_exception(result);
 
-  /* Use rereraise to avoid clobbering a backtrace which should lead back
+  /* Use reraise to avoid clobbering a backtrace which should lead back
      to a finaliser, signal handler, etc. */
   if (exn == caml_exn_Stack_overflow || exn == caml_exn_Async)
     caml_reraise_exn(exn);
