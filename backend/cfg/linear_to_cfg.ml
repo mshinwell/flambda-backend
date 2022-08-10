@@ -528,10 +528,10 @@ let rec create_blocks (t : t) (i : L.instruction) (block : C.basic_block)
        based on optimization and perf data? *)
     add_terminator t block i (Switch labels) ~stack_offset ~traps;
     create_blocks t i.next block ~stack_offset ~traps
-  | Lpushtrap { lbl_handler; has_extra_args } ->
+  | Lpushtrap { lbl_handler } ->
     t.trap_handlers <- Label.Set.add lbl_handler t.trap_handlers;
     record_traps t lbl_handler traps;
-    let desc = C.Pushtrap { lbl_handler; has_extra_args } in
+    let desc = C.Pushtrap { lbl_handler } in
     block.body <- create_instruction t desc ~stack_offset i :: block.body;
     let stack_offset = stack_offset + Proc.trap_size_in_bytes in
     let traps = T.push traps lbl_handler in

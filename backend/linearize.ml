@@ -143,10 +143,9 @@ let rec add_traps env i traps =
   | [] -> i
   | Cmm.Pop :: traps ->
     add_traps env (cons_instr Lpoptrap i) traps
-  | Cmm.Push { handler; has_extra_args } :: traps ->
+  | Cmm.Push handler :: traps ->
     let lbl_handler = find_exit_label env handler in
-    add_traps env (cons_instr (Lpushtrap { lbl_handler; has_extra_args }) i)
-      traps
+    add_traps env (cons_instr (Lpushtrap { lbl_handler; }) i) traps
 
 let delta_traps_diff traps =
   let delta =
@@ -285,7 +284,7 @@ let linear i n contains_calls =
           { env with trap_stack = Mach.Generic_trap env.trap_stack; }
         in
         assert (i.Mach.arg = [| |]);
-        let n3 = cons_instr (Lpushtrap { lbl_handler; has_extra_args = false })
+        let n3 = cons_instr (Lpushtrap { lbl_handler; })
                    (linear env_body body
                       (cons_instr
                          Lpoptrap

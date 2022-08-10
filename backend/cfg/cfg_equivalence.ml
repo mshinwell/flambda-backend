@@ -342,9 +342,8 @@ let check_basic : State.t -> location -> Cfg.basic -> Cfg.basic -> unit =
   | Op expected, Op result -> check_operation location expected result
   | Call expected, Call result -> check_call_operation location expected result
   | Reloadretaddr, Reloadretaddr -> ()
-  | ( Pushtrap { lbl_handler = expected_lbl_handler; has_extra_args = _ },
-      Pushtrap { lbl_handler = result_lbl_handler; has_extra_args = _ } ) ->
-    (* The setting of [has_extra_args] is implied by [lbl_handler]. *)
+  | ( Pushtrap { lbl_handler = expected_lbl_handler },
+      Pushtrap { lbl_handler = result_lbl_handler } ) ->
     State.add_to_explore state expected_lbl_handler result_lbl_handler
   | Poptrap, Poptrap -> ()
   | Prologue, Prologue -> ()

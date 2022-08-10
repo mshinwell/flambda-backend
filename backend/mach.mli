@@ -20,11 +20,7 @@ type trap_stack =
   (** Exceptions escape the current function *)
   | Generic_trap of trap_stack
   (** Current handler is a regular Trywith *)
-  | Specific_trap of {
-      handler : Cmm.trywith_shared_label;
-      trap_stack : trap_stack;
-      has_extra_args : bool;
-    }
+  | Specific_trap of Cmm.trywith_shared_label * trap_stack
   (** Current handler is a delayed/shared Trywith *)
 
 type integer_comparison =

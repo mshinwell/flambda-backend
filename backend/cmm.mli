@@ -137,7 +137,7 @@ type phantom_defining_expr =
 type trywith_shared_label = int (* Same as Ccatch handlers *)
 
 type trap_action =
-  | Push of { handler : trywith_shared_label; has_extra_args : bool }
+  | Push of trywith_shared_label
   (** Add the corresponding handler to the trap stack. *)
   | Pop
   (** Remove the last handler from the trap stack. *)

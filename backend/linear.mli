@@ -39,7 +39,7 @@ and instruction_desc =
   | Lswitch of label array
   | Lentertrap
   | Ladjust_stack_offset of { delta_bytes : int; }
-  | Lpushtrap of { lbl_handler : label; has_extra_args : bool }
+  | Lpushtrap of { lbl_handler : label; }
   | Lpoptrap
   | Lraise of Lambda.raise_kind
 

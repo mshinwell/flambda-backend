@@ -361,11 +361,6 @@ let extract_block_info : State.t -> Mach.instruction -> block_info =
    return. *)
 let fallthrough_label : Label.t = -1
 
-type starts_with_pushtrap =
-  { lbl_handler : Label.t;
-    has_extra_args : bool
-  }
-
 (* [add_blocks instr state ~starts_with_pushtrap ~start ~next] adds the block
    beginning at [instr] with label [start], and all recursively-reachable blocks
    to [state]. [next] is the label of the block to be executed after the one
@@ -374,7 +369,7 @@ type starts_with_pushtrap =
 let rec add_blocks :
     Mach.instruction ->
     State.t ->
-    starts_with_pushtrap:starts_with_pushtrap option ->
+    starts_with_pushtrap:Label.t option ->
     start:Label.t ->
     next:Label.t ->
     unit =
@@ -385,19 +380,16 @@ let rec add_blocks :
     let body =
       match starts_with_pushtrap with
       | None -> body
-      | Some { lbl_handler; has_extra_args } ->
-        make_instruction state
-          ~desc:(Cfg.Pushtrap { lbl_handler; has_extra_args })
-        :: body
+      | Some lbl_handler ->
+        make_instruction state ~desc:(Cfg.Pushtrap { lbl_handler }) :: body
     in
     let body =
       body
       @ List.map
           (function
-            | Cmm.Push { handler = handler_id; has_extra_args } ->
+            | Cmm.Push handler_id ->
               let lbl_handler = State.get_catch_handler state ~handler_id in
-              make_instruction state
-                ~desc:(Cfg.Pushtrap { lbl_handler; has_extra_args })
+              make_instruction state ~desc:(Cfg.Pushtrap { lbl_handler })
             | Cmm.Pop -> make_instruction state ~desc:Cfg.Poptrap)
           trap_actions
     in
@@ -541,7 +533,7 @@ let rec add_blocks :
         match kind with
         | Regular ->
           let label = Cmm.new_label () in
-          label, Some { lbl_handler = label; has_extra_args = false }
+          label, Some label
         | Delayed handler_id ->
           let label = State.add_catch_handler state ~handler_id in
           label, None
@@ -620,7 +612,7 @@ module Stack_offset_and_exn = struct
    fun cfg ~stack_offset ~traps instr ->
     let instr = check_and_set_stack_offset instr ~stack_offset ~traps in
     match instr.desc with
-    | Pushtrap { lbl_handler; has_extra_args = _ } ->
+    | Pushtrap { lbl_handler } ->
       update_block cfg lbl_handler ~stack_offset ~traps;
       stack_offset, lbl_handler :: traps, instr
     | Poptrap -> (

@@ -139,10 +139,7 @@ module S = struct
     | Op of operation
     | Call of call_operation
     | Reloadretaddr
-    | Pushtrap of
-        { lbl_handler : Label.t;
-          has_extra_args : bool
-        }
+    | Pushtrap of { lbl_handler : Label.t }
     | Poptrap
     | Prologue
 
