@@ -1,6 +1,6 @@
 # Asynchronous exceptions model
 
-## Idea
+## Overview
 
 A means is provided of installing handlers for _async exceptions_
 which is a defined set arising from safe points (allocation and polling
@@ -9,10 +9,11 @@ used by the GC (`Stack_overflow` and `Out_of_memory`) together with
 exceptions arising from user code in signal handlers and finalisers (in
 particular, `Sys.Break`).
 
-A similar stack discipline to normal exception handlers will apply for
+A similar stack discipline to normal exception handlers applies for
 async exception handlers.  An exception will only be delivered to
 an async exception handler, as the user sees it, if and only if
-such exception is async.
+such exception is async.  Async exceptions are never delivered to any
+other handlers.
 
 ## Front end
 
@@ -23,15 +24,18 @@ external with_async_exns : (unit -> 'a) -> (exn -> 'a) -> 'a
   = "%with_async_exns"
 ```
 
-There is also a new predefined exn constructor `Async_exn` taking an argument of
-type `exn`.  User code must not raise this.  There will be a new constraint that
-user code must not raise `Stack_overflow` or `Out_of_memory`.
+This behaves like `try ... with` except that the supplied handler only
+receives async exceptions.
 
-In Lambda, `Ltrywith` has an extra annotation: `Normal | Async`.
+There is also a new predefined exn constructor `Async_exn` taking an argument of
+type `exn`.  User code must not raise this.  There is a new constraint that
+user code must not raise `Stack_overflow` or `Out_of_memory`.
 
 ## Middle end
 
-The translation `[[ with_async_exns e1 e2 ]]` is:
+In Lambda, there would be a new primitive corresponding to `%with_async_exns`.
+
+The semantics of `[[ with_async_exns e1 e2 ]]` is:
 ```
   let body = [[ e1 ]] in
   let handler = [[ e2 ]] in
@@ -41,13 +45,28 @@ The translation `[[ with_async_exns e1 e2 ]]` is:
     (* This pattern must cover all async exception constructors.  Owing
        to the constraints above we know that these can only have been raised
        by the GC. *)
-    unwind_normal_exception_stack ();  (* see below *)
+    unwind_normal_exception_stack ();  (* see "Scenarios", below *)
     handler [@inlined never] exn
   | exn ->
     (* This cannot be an async exception. *)
-    unwind_async_exception_stack ();  (* see below *)
+    unwind_async_exception_stack ();  (* likewise *)
     reraise exn
 ```
+where `try_async` is like normal `try` but with a flag saying that it
+binds an async exception handler.
+
+### Closure and Flambda 1
+
+These middle ends will need to annotate their `try ... with` constructs as to
+whether they are binding normal or async exception handlers, but that should be
+all.  This information will need to be propagated to the generated Clambda
+code.
+
+### Flambda 2
+
+Trap actions will need to be augmented to say whether they are normal
+or async.  This information will need to be propagated to the generated
+Cmm code.
 
 In Flambda 2, an async exception handler never has _extra arguments_,
 so its Cmm translation will not involve mutable variables.  (Flambda 2
@@ -72,12 +91,13 @@ avoid triple-barrelled CPS.
 
 ## Backend
 
-The backend push/pop annotations will be enhanced with the `Normal` or
+The backend push/pop annotations are enhanced with the `Normal` or
 `Async` specifications, for translating `try` and `try_async` respectively.
 
-Whenever an async exception handler is installed, a normal exception
-handler is installed too.  This ensures that management of the async
+**Key point:** Whenever an async exception handler is installed, a normal
+exception handler is installed too.  This ensures that management of the async
 exception stack can be kept in sync with that of the normal exception stack.
+(See "Scenarios", below.)
 
 During a normal exception raise an async handler may be called.  In
 this circumstance it may be necessary to unwind the async exception
@@ -131,8 +151,17 @@ An alternative to `caml_async_exception_pointer` would be to mark trap frames as
 to whether they are `Normal` or `Async` at runtime.  One way this can be done is
 by using the top bit of the handler code pointer (the bottom bit cannot be used
 without alterations to the backend to align exception handler entry points,
-which is a bit tricky).  However this increases the length of the code sequences
-required for raising exceptions.
+which is a bit tricky and potentially wasteful of space).  However this
+increases the length of the code sequences required for raising exceptions,
+which doesn't seem like a good trade-off, given that async exception handlers
+will be relatively rare (non-existent in many programs).
+
+The runtime needs altering (as has already been done in PR194) so there is
+a separate code path for raising of async exceptions called from the
+appropriate places.  We will need to check that the logic here is
+reasonable.
+
+## Scenarios
 
 ### Raising an async exception
 
