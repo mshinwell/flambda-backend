@@ -59,7 +59,6 @@
   #define CONTEXT_STATE (((ucontext_t *)context)->uc_mcontext->CONTEXT_REG(ss))
   #define CONTEXT_C_ARG_1 (CONTEXT_STATE.CONTEXT_REG(rdi))
   #define CONTEXT_PC (CONTEXT_STATE.CONTEXT_REG(rip))
-  #define CONTEXT_EXCEPTION_POINTER (CONTEXT_STATE.__x[26])
   #define CONTEXT_YOUNG_PTR (CONTEXT_STATE.CONTEXT_REG(r15))
   #define CONTEXT_SP (CONTEXT_STATE.CONTEXT_REG(rsp))
   #define CONTEXT_FAULTING_ADDRESS ((char *) info->si_addr)
@@ -83,8 +82,8 @@
   typedef unsigned long context_reg;
   #define CONTEXT_PC (context->uc_mcontext.arm_pc)
   #define CONTEXT_SP (context->uc_mcontext.arm_sp)
-  #define CONTEXT_EXCEPTION_PTR (context->uc_mcontext.arm_r8)
-  #define CONTEXT_YOUNG_PTR (context->uc_mcontext.arm_r10)
+  #define CONTEXT_EXCEPTION_POINTER (context->uc_mcontext.arm_fp)
+  #define CONTEXT_YOUNG_PTR (context->uc_mcontext.arm_r8)
   #define CONTEXT_FAULTING_ADDRESS ((char *) context->uc_mcontext.fault_address)
 
 /****************** ARM64, Linux */
