@@ -154,9 +154,9 @@ void caml_set_minor_heap_size (asize_t bsz)
   }
   CAMLassert (Caml_state->young_ptr == Caml_state->young_alloc_end);
   new_heap = caml_stat_alloc_aligned_noexc(bsz, 0, &new_heap_base);
-  if (new_heap == NULL) caml_raise_out_of_memory();
+  if (new_heap == NULL) caml_raise_out_of_memory_fatal();
   if (caml_page_table_add(In_young, new_heap, new_heap + bsz) != 0)
-    caml_raise_out_of_memory();
+    caml_raise_out_of_memory_fatal();
 
   if (Caml_state->young_start != NULL){
     caml_page_table_remove(In_young, Caml_state->young_start,

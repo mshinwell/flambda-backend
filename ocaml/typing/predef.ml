@@ -96,6 +96,7 @@ and ident_sys_blocked_io = ident_create "Sys_blocked_io"
 and ident_assert_failure = ident_create "Assert_failure"
 and ident_undefined_recursive_module =
         ident_create "Undefined_recursive_module"
+and ident_async_exn = ident_create "Async_exn"
 
 let all_predef_exns = [
   ident_match_failure;
@@ -110,6 +111,7 @@ let all_predef_exns = [
   ident_sys_blocked_io;
   ident_assert_failure;
   ident_undefined_recursive_module;
+  ident_async_exn
 ]
 
 let path_match_failure = Pident ident_match_failure

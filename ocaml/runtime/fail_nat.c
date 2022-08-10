@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include "caml/alloc.h"
+#include "caml/callback.h"
 #include "caml/domain.h"
 #include "caml/fail.h"
 #include "caml/io.h"
@@ -48,14 +49,19 @@ extern caml_generated_constant
     caml_exn_Sys_blocked_io,
     caml_exn_Stack_overflow,
     caml_exn_Assert_failure,
-    caml_exn_Undefined_recursive_module;
+    caml_exn_Undefined_recursive_module,
+    caml_exn_Async;
 
 /* Exception raising */
 
 CAMLnoreturn_start extern void caml_raise_exception(caml_domain_state *state, value bucket)
     CAMLnoreturn_end;
 
-CAMLno_asan static value prepare_for_raise(value v)
+CAMLnoreturn_start extern void caml_reraise_exception(caml_domain_state *state,
+  value bucket)
+    CAMLnoreturn_end;
+
+CAMLno_asan static value prepare_for_raise(value v, char *exception_pointer)
 {
   Unlock_exn();
 
@@ -66,16 +72,16 @@ CAMLno_asan static value prepare_for_raise(value v)
   if (Is_exception_result(v))
     v = Extract_exception(v);
 
-  if (Caml_state->exception_pointer == NULL)
+  if (exception_pointer == NULL)
     caml_fatal_uncaught_exception(v);
 
   return v;
 }
 
-CAMLno_asan static void unwind_local_roots(void)
+CAMLno_asan static void unwind_local_roots(char *exception_pointer)
 {
   while (Caml_state->local_roots != NULL &&
-         (char *)Caml_state->local_roots < Caml_state->exception_pointer)
+         (char *)Caml_state->local_roots < exception_pointer)
   {
     Caml_state->local_roots = Caml_state->local_roots->next;
   }
@@ -85,40 +91,46 @@ CAMLno_asan static void unwind_local_roots(void)
    segv_handler in signals_nat.c). */
 CAMLno_asan void caml_raise(value v)
 {
-  v = prepare_for_raise(v);
-  unwind_local_roots();
+  v = prepare_for_raise(v, Caml_state->exception_pointer);
+  unwind_local_roots(Caml_state->exception_pointer);
   caml_raise_exception(Caml_state, v);
 }
 
+static void reraise(value v)
+{
+  v = prepare_for_raise(v, Caml_state->exception_pointer);
+  unwind_local_roots(Caml_state->exception_pointer);
+  caml_reraise_exception(Caml_state, v);
+}
+
+
 CAMLnoreturn_start void caml_raise_async(value v) CAMLnoreturn_end;
 
-CAMLno_asan CAMLexport void caml_raise_async(value v)
+static value wrap_async_exception(value exn)
 {
-#ifndef CAML_FLAMBDA2
-  caml_raise(v);
-#endif
+  value wrapped;
 
-  /* Unwind the exception trap frames until we find one whose handler
-     requires no extra arguments.  Handlers with extra arguments cannot be
-     called from this point as Flambda 2 will not have emitted the setup code
-     for such arguments. */
-  while (Caml_state->exception_pointer != NULL
-    && ((uintnat *) Caml_state->exception_pointer)[1] & 0x1)
-  {
-    Caml_state->exception_pointer =
-      (char *) (((uintnat *) Caml_state->exception_pointer)[0]);
-  }
+  /* [Stack_overflow] can be raised from a signal handler, so we cannot
+     rely on being able to allocate. */
+  if (exn == caml_exn_Stack_overflow) return exn;
 
-  /* If we still have a valid trap, deliver the exception to the corresponding
-     handler having unwound the local roots, otherwise deliver an uncaught
-     exception. */
-  v = prepare_for_raise(v);
-  if (Caml_state->exception_pointer == NULL)
-  {
-    caml_fatal_uncaught_exception(v);
-  }
-  unwind_local_roots();
-  caml_raise_exception(Caml_state, v);
+  wrapped = caml_alloc_small(2, 0);
+  Field(wrapped, 0) = caml_exn_Async;
+  Field(wrapped, 1) = exn;
+
+  return wrapped;
+}
+
+CAMLno_asan CAMLexport void caml_raise_async(value exn_unwrapped)
+{
+  value exn = wrap_async_exception(exn_unwrapped);
+
+  exn = prepare_for_raise(wrap_async_exception(exn_unwrapped),
+          Caml_state->async_exception_pointer);
+
+  unwind_local_roots(Caml_state->async_exception_pointer);
+
+  caml_raise_async_exception(Caml_state, v);
 }
 
 /* Used by the stack overflow handler -> deactivate ASAN (see
@@ -189,6 +201,12 @@ void caml_raise_out_of_memory(void)
   caml_raise_async((value)caml_exn_Out_of_memory);
 }
 
+void caml_raise_out_of_memory_fatal(void)
+{
+  fprintf(stderr, "[ocaml] Out of memory\n");
+  abort();
+}
+
 /* Used by the stack overflow handler -> deactivate ASAN (see
    segv_handler in signals_nat.c). */
 CAMLno_asan void caml_raise_stack_overflow(void)
@@ -256,4 +274,23 @@ void caml_array_bound_error(void)
 int caml_is_special_exception(value exn)
 {
   return exn == (value)caml_exn_Match_failure || exn == (value)caml_exn_Assert_failure || exn == (value)caml_exn_Undefined_recursive_module;
+}
+
+CAMLprim value caml_with_async_exns(value body_callback)
+{
+  value exn, result;
+
+  result = caml_callback1_exn(body_callback, Val_unit);
+
+  if (!Is_exception_result(result))
+    return result;
+
+  exn = Extract_exception(result);
+
+  /* Use rereraise to avoid clobbering a backtrace which should lead back
+     to a finaliser, signal handler, etc. */
+  if (exn == caml_exn_Stack_overflow || exn == caml_exn_Async)
+    caml_reraise_exn(exn);
+
+  return result;
 }
