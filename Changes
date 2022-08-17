@@ -248,6 +248,12 @@ OCaml 5.2 maintenance version
   previously.
   (David Allsopp, review by ???)
 
+- #14???: New --enable-runtime-search configure option controls the
+  -runtime-search option used to build the bytecode binaries in the compiler
+  distribution. --enable-runtime-search-target controls the default value of
+  -runtime-search used for bytecode executables produced by the compiler.
+  (David Allsopp, review by ???)
+
 ### Bug fixes:
 
 * #13070: On Windows, when configured with bootstrapped flexdll, don't add

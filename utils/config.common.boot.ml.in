@@ -90,6 +90,12 @@ let launch_method =
 
 type search_method = Absolute | Absolute_then_search | Search
 
+let search_method =
+  match search_method with
+  | "always" -> Search
+  | "enable" -> Absolute_then_search
+  | _ -> Absolute
+
 let interface_suffix = ref ".mli"
 
 let max_tag = 243

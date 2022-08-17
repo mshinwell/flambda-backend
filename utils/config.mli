@@ -404,6 +404,11 @@ type search_method =
                            if that fails *)
 | Search               (** Always search for the interpreter *)
 
+val search_method : search_method
+(** Default search mechanism for bytecode executables
+
+    @since 5.5 *)
+
 val suffixing : bool
 (** Whether the runtime executable and shared library filenames and C stub
     library filenames are being mangled with Runtime IDs and the {!target}.

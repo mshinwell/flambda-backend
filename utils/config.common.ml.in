@@ -86,6 +86,12 @@ let launch_method =
   | "sh" -> Shebang None
   | _ -> Shebang (Some launch_method)
 
+let search_method =
+  match search_method with
+  | "always" -> Search
+  | "enable" -> Absolute_then_search
+  | _ -> Absolute
+
 let interface_suffix = ref ".mli"
 
 let max_tag = 243

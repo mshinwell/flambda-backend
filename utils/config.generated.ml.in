@@ -150,3 +150,5 @@ let oxcaml_dwarf = "@enable_oxcaml_dwarf@" = "yes"
 let suffixing = @suffixing@
 
 let launch_method = {@QS@|@target_launch_method@|@QS@}
+
+let search_method = {@QS@|@runtime_search_target@|@QS@}

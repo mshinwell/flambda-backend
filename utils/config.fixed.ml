@@ -92,3 +92,4 @@ let naked_pointers = false
 let parameterised_modules = true
 let suffixing = false
 let launch_method = "sh"
+let search_method = "always"
