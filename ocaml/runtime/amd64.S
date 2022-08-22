@@ -704,18 +704,6 @@ LBL(112):
 CFI_ENDPROC
 ENDFUNCTION(G(caml_raise_exception))
 
-/* Raise an async exception from C */
-
-FUNCTION(G(caml_raise_async_exception))
-CFI_STARTPROC
-        movq    C_ARG_1, %r14   /* Caml_state */
-        /* %rax is about to be clobbered anyway */
-        movq    Caml_state(async_exception_pointer), %rax
-        movq    %rax, Caml_state(exception_pointer)
-        jmp     G(caml_raise_exception)
-CFI_ENDPROC
-ENDFUNCTION(G(caml_raise_async_exception))
-
 /* Raise a Stack_overflow exception on return from segv_handler()
    (in runtime/signals_nat.c).  On entry, the stack is full, so we
    cannot record a backtrace.

@@ -49,25 +49,19 @@ extern caml_generated_constant
     caml_exn_Sys_blocked_io,
     caml_exn_Stack_overflow,
     caml_exn_Assert_failure,
-    caml_exn_Undefined_recursive_module,
-    caml_exn_Finaliser_raised,
-    caml_exn_Memprof_callback_raised,
-    caml_exn_Signal_handler_raised;
+    caml_exn_Undefined_recursive_module;
 
 /* Exception raising */
 
 CAMLnoreturn_start extern void caml_raise_exception(caml_domain_state *state, value bucket)
     CAMLnoreturn_end;
 
-CAMLnoreturn_start extern void caml_raise_async_exception(
-  caml_domain_state *state, value bucket)
+CAMLnoreturn_start void caml_raise_async_exception(value bucket)
     CAMLnoreturn_end;
 
-CAMLno_asan static value prepare_for_raise(value v, char *exception_pointer,
-  int *turned_into_async_exn)
+CAMLno_asan static value prepare_for_raise(value v, int *turned_into_async_exn)
 {
   Unlock_exn();
-
   CAMLassert(!Is_exception_result(v));
 
   // avoid calling caml_raise recursively
@@ -76,19 +70,17 @@ CAMLno_asan static value prepare_for_raise(value v, char *exception_pointer,
   {
     v = Extract_exception(v);
 
-    /* [v] should now be raised as an asynchronous exception. */
+    // [v] should now be raised as an asynchronous exception.
 
-    if (Caml_state->async_exception_pointer == NULL)
-      caml_fatal_uncaught_exception(v);
+    if (turned_into_async_exn != NULL)
+      *turned_into_async_exn = 1;
 
-    *turned_into_async_exn = 1;
     return v;
   }
 
-  if (exception_pointer == NULL)
-    caml_fatal_uncaught_exception(v);
+  if (turned_into_async_exn != NULL)
+    *turned_into_async_exn = 0;
 
-  *turned_into_async_exn = 0;
   return v;
 }
 
@@ -101,106 +93,46 @@ CAMLno_asan static void unwind_local_roots(char *exception_pointer)
   }
 }
 
+CAMLno_asan void caml_raise_async_exception(value v)
+{
+  Caml_state->exception_pointer = Caml_state->async_exception_pointer;
+  caml_raise_exception(Caml_state, v);
+}
+
 /* Used by the stack overflow handler -> deactivate ASAN (see
    segv_handler in signals_nat.c). */
 CAMLno_asan void caml_raise(value v)
 {
-  int is_async_exn;
-  v = prepare_for_raise(v, Caml_state->exception_pointer, &is_async_exn);
+  int turned_into_async_exn = 0;
+  v = prepare_for_raise(v, &turned_into_async_exn);
 
-  if (is_async_exn)
+  if (turned_into_async_exn)
   {
+    if (Caml_state->async_exception_pointer == NULL)
+      caml_fatal_uncaught_exception(v);
+
     unwind_local_roots(Caml_state->async_exception_pointer);
     caml_raise_async_exception(Caml_state, v);
   }
   else
   {
+    if (Caml_state->exception_pointer == NULL)
+      caml_fatal_uncaught_exception(v);
+
     unwind_local_roots(Caml_state->exception_pointer);
     caml_raise_exception(Caml_state, v);
   }
 }
 
-CAMLno_asan void caml_raise_never_async(value v)
-{
-  int is_async_exn;
-  v = prepare_for_raise(v, Caml_state->exception_pointer, &is_async_exn);
-
-  unwind_local_roots(Caml_state->exception_pointer);
-  caml_raise_exception(Caml_state, v);
-}
-
-CAMLexport value caml_wrap_if_async_exn(value result,
-  pending_action_type action)
-{
-  CAMLparam1(result);
-  value exn;
-  value tag = Val_unit;
-  value wrapped;
-
-  if (!Is_exception_result(result)) CAMLreturn(result);
-
-  /* CR mshinwell: think more about these cases (the eintr.ml gc test can
-     trigger them -- signal handler executed from signal handler,
-     presumably) */
-
-  exn = Extract_exception(result);
-
-  if (Is_block(exn)
-      && Wosize_val(exn) == 2
-      && (Field(exn, 0) == (value) caml_exn_Signal_handler_raised
-          || Field(exn, 1) == (value) caml_exn_Finaliser_raised
-          || Field(exn, 2) == (value) caml_exn_Memprof_callback_raised))
-  {
-    /* Don't double-wrap exceptions. */
-    CAMLreturn(result);
-  }
-
-  wrapped = caml_alloc_small(2, 0);
-
-  switch (action)
-  {
-    case pending_SIGNAL_HANDLER:
-      tag = (value) caml_exn_Signal_handler_raised;
-      break;
-
-    case pending_FINALISER:
-      tag = (value) caml_exn_Finaliser_raised;
-      break;
-
-    case pending_MEMPROF_CALLBACK:
-      tag = (value) caml_exn_Memprof_callback_raised;
-      break;
-
-    default:
-      CAMLassert(0);
-  }
-
-  Field(wrapped, 0) = tag;
-  Field(wrapped, 1) = exn;
-
-  CAMLreturn(Make_exception_result(wrapped));
-}
-
 CAMLno_asan
 CAMLprim value caml_raise_async(value exn)
 {
-  int turned_into_async_exn;
+  exn = prepare_for_raise(exn, NULL);
 
-  if (Caml_state->async_exceptions_masked)
-  {
-    if (exn == (value) caml_exn_Stack_overflow)
-    {
-      fprintf(stderr, "[ocaml] Stack overflow\n");
-      abort();
-    }
-    return Val_unit;
-  }
-
-  exn = prepare_for_raise(exn, Caml_state->async_exception_pointer,
-    &turned_into_async_exn);
+  if (Caml_state->async_exception_pointer == NULL)
+    caml_fatal_uncaught_exception(v);
 
   unwind_local_roots(Caml_state->async_exception_pointer);
-
   caml_raise_async_exception(Caml_state, exn);
 
   return Val_unit;
@@ -286,7 +218,6 @@ void caml_raise_out_of_memory_fatal(void)
 CAMLno_asan void caml_raise_stack_overflow(void)
 {
   caml_raise_async((value)caml_exn_Stack_overflow);
-  abort();  /* CR mshinwell: what are we supposed to use for "unreachable"? */
 }
 
 void caml_raise_sys_error(value msg)
@@ -365,26 +296,17 @@ extern value (caml_callback_asm_async_exn)
 CAMLprim value caml_with_async_exns(value body_callback)
 {
   value unit = Val_unit;
-  value result = caml_callback_asm_async_exn(Caml_state, body_callback, &unit);
+  value result = caml_callback_async_exn(body_callback, &unit);
 
   if (!Is_exception_result(result))
     return result;
 
-  /* All exceptions, including any async ones that arise during processing
-     in [caml_raise], must be raised as non-async exceptions from this
-     point. */
-  caml_raise_never_async(Extract_exception(result));
-  abort(); /* unreachable */
-}
+  /* Irrespective as to whether the exception was asynchronous, it is raised as
+     a normal exception, without any processing of pending actions. */
 
-CAMLprim value caml_mask_async_exns(value unit)
-{
-  Caml_state->async_exceptions_masked = 1;
-  return Val_unit;
-}
+  if (Caml_state->exception_pointer == NULL)
+    caml_fatal_uncaught_exception(v);
 
-CAMLprim value caml_unmask_async_exns(value unit)
-{
-  Caml_state->async_exceptions_masked = 0;
-  return Val_unit;
+  unwind_local_roots(Caml_state->exception_pointer);
+  caml_raise_exception(Caml_state, v);
 }

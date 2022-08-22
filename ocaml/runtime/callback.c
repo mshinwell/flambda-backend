@@ -51,7 +51,8 @@ static void init_callback_code(void)
   callback_code_inited = 1;
 }
 
-CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
+static value caml_callbackN_exn0(value closure, int narg, value args[],
+                                 int is_async_exn)
 {
   int i;
   value res;
@@ -67,9 +68,14 @@ CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
   if (!callback_code_inited) init_callback_code();
   callback_code[1] = narg + 3;
   callback_code[3] = narg;
-  res = caml_interprete(callback_code, sizeof(callback_code));
+  res = caml_interprete(callback_code, sizeof(callback_code), is_async_exn);
   if (Is_exception_result(res)) Caml_state->extern_sp += narg + 4; /* PR#3419 */
   return res;
+}
+
+CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
+{
+  return caml_callbackN_exn0(closure, narg, args, 0);
 }
 
 CAMLexport value caml_callback_exn(value closure, value arg1)
@@ -95,6 +101,13 @@ CAMLexport value caml_callback3_exn(value closure,
   arg[1] = arg2;
   arg[2] = arg3;
   return caml_callbackN_exn(closure, 3, arg);
+}
+
+CAMLexport value caml_callback_async_exn(value closure, value arg)
+{
+  value arg[1];
+  arg[0] = arg1;
+  return caml_callbackN_exn0(closure, 1, arg, 1);
 }
 
 #else
@@ -154,6 +167,11 @@ CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
     }
   }
   CAMLreturn (res);
+}
+
+CAMLexport value caml_callback_async_exn(value closure, value arg)
+{
+  return caml_callback_asm_async_exn(Caml_state, closure, &arg);
 }
 
 #endif

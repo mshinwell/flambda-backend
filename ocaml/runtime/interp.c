@@ -211,7 +211,7 @@ static intnat caml_bcodcount;
 
 /* The interpreter itself */
 
-value caml_interprete(code_t prog, asize_t prog_size)
+value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
 {
 #ifdef PC_REG
   register code_t pc PC_REG;
@@ -232,6 +232,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
   value env;
   intnat extra_args;
   struct longjmp_buffer * initial_external_raise;
+  struct longjmp_buffer * initial_external_raise_async;
   intnat initial_sp_offset;
   /* volatile ensures that initial_local_roots
      will keep correct value across longjmp */
@@ -262,9 +263,12 @@ value caml_interprete(code_t prog, asize_t prog_size)
   initial_sp_offset =
     (char *) Caml_state->stack_high - (char *) Caml_state->extern_sp;
   initial_external_raise = Caml_state->external_raise;
+  initial_external_raise_async = Caml_state->external_raise_async;
+
   caml_callback_depth++;
 
   if (sigsetjmp(raise_buf.buf, 0)) {
+caught_exn:
     Caml_state->local_roots = initial_local_roots;
     sp = Caml_state->extern_sp;
     accu = Caml_state->exn_bucket;
@@ -279,6 +283,9 @@ value caml_interprete(code_t prog, asize_t prog_size)
     goto raise_notrace;
   }
   Caml_state->external_raise = &raise_buf;
+
+  if (catch_async_exns)
+    Caml_state->external_raise_async = &raise_buf;
 
   sp = Caml_state->extern_sp;
   pc = prog;

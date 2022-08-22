@@ -120,18 +120,6 @@ exception Undefined_recursive_module of (string * int * int)
    is evaluated. The arguments are the location of the definition in
    the source code (file name, line number, column number). *)
 
-exception Signal_handler_raised of exn
-(** Exception raised from a signal handler.  This should be caught using
-    [Sys.with_async_exns].  Only for native code compilation. *)
-
-exception Finaliser_raised of exn
-(** Exception raised from a finaliser.  This should be caught using
-    [Sys.with_async_exns].  Only for native code compilation. *)
-
-exception Memprof_callback_raised of exn
-(** Exception raised from a memprof callback.  This should be caught using
-    [Sys.with_async_exns].  Only for native code compilation. *)
-
 (** {1 Comparisons} *)
 
 external ( = ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%equal"

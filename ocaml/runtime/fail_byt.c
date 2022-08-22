@@ -31,7 +31,7 @@
 #include "caml/signals.h"
 #include "caml/stacks.h"
 
-CAMLexport void caml_raise(value v)
+static void prepare_for_raise(value v, int *turned_into_async_exn)
 {
   Unlock_exn();
   CAMLassert(!Is_exception_result(v));
@@ -39,15 +39,52 @@ CAMLexport void caml_raise(value v)
   // avoid calling caml_raise recursively
   v = caml_process_pending_actions_with_root_exn(v);
   if (Is_exception_result(v))
+  {
     v = Extract_exception(v);
 
-  /* CR mshinwell: if supporting masking in bytecode, we will need to
-     ignore any exception that came from
-     [caml_process_pending_actions_with_root_exn], if masking is enabled. */
+    // [v] should now be raised as an asynchronous exception.
+
+    if (turned_into_async_exn != NULL)
+      *turned_into_async_exn = 1;
+  }
+  else
+  {
+    if (turned_into_async_exn != NULL)
+      *turned_into_async_exn = 0;
+  }
 
   Caml_state->exn_bucket = v;
-  if (Caml_state->external_raise == NULL) caml_fatal_uncaught_exception(v);
-  siglongjmp(Caml_state->external_raise->buf, 1);
+}
+
+CAMLexport void caml_raise(value v)
+{
+  int turned_into_async_exn = 0;
+  prepare_for_raise(v, &turned_into_async_exn);
+
+  if (turned_into_async_exn)
+  {
+    if (Caml_state->external_raise_async == NULL)
+      caml_fatal_uncaught_exception(v);
+
+    siglongjmp(Caml_state->external_raise_async->buf, 1);
+  }
+  else
+  {
+    if (Caml_state->external_raise == NULL)
+      caml_fatal_uncaught_exception(v);
+
+    siglongjmp(Caml_state->external_raise->buf, 1);
+  }
+}
+
+CAMLexport void caml_raise_async(value v)
+{
+  prepare_for_raise(v, NULL);
+
+  if (Caml_state->external_raise_async == NULL)
+    caml_fatal_uncaught_exception(v);
+
+  siglongjmp(Caml_state->external_raise_async->buf, 1);
 }
 
 CAMLexport void caml_raise_constant(value tag)
@@ -235,55 +272,6 @@ CAMLexport value caml_raise_async_if_exception(value result)
   return caml_raise_if_exception(result);
 }
 
-CAMLexport value caml_wrap_if_async_exn(value result,
-  pending_action_type action)
-{
-  CAMLparam1(result);
-  value exn;
-  value tag = Val_unit;
-  value wrapped;
-  const char *msg = "caml_wrap_if_async_exn";
-
-  if (!Is_exception_result(result)) CAMLreturn(result);
-
-  exn = Extract_exception(result);
-
-  if (Is_block(exn)
-      && Wosize_val(exn) == 2
-      && (Field(exn, 0) == caml_get_signal_handler_raised_tag(msg)
-          || Field(exn, 1) == caml_get_finaliser_raised_tag(msg)
-          || Field(exn, 2) == caml_get_memprof_callback_raised_tag(msg)))
-  {
-    /* Don't double-wrap exceptions. */
-    CAMLreturn(result);
-  }
-
-  wrapped = caml_alloc_small(2, 0);
-
-  switch (action)
-  {
-    case pending_SIGNAL_HANDLER:
-      tag = caml_get_signal_handler_raised_tag(msg);
-      break;
-
-    case pending_FINALISER:
-      tag = caml_get_finaliser_raised_tag(msg);
-      break;
-
-    case pending_MEMPROF_CALLBACK:
-      tag = caml_get_memprof_callback_raised_tag(msg);
-      break;
-
-    default:
-      abort ();
-  }
-
-  Field(wrapped, 0) = tag;
-  Field(wrapped, 1) = Extract_exception(result);
-
-  CAMLreturn(Make_exception_result(wrapped));
-}
-
 int caml_is_special_exception(value exn) {
   /* this function is only used in caml_format_exception to produce
      a more readable textual representation of some exceptions. It is
@@ -295,23 +283,19 @@ int caml_is_special_exception(value exn) {
     || exn == Field(caml_global_data, UNDEFINED_RECURSIVE_MODULE_EXN);
 }
 
-CAMLexport value caml_raise_async(value exn)
-{
-  caml_raise(exn);
-}
-
 CAMLprim value caml_with_async_exns(value body_callback)
 {
-  return caml_callback(body_callback, Val_unit);
-}
+  value result = caml_callback_async_exn(body_callback, Val_unit);
 
-CAMLprim value caml_mask_async_exns(value unit)
-{
-  /* CR mshinwell: maybe this could be supported in bytecode */
-  return Val_unit;
-}
+  if (!Is_exception_result(result))
+    return result;
 
-CAMLprim value caml_unmask_async_exns(value unit)
-{
-  return Val_unit;
+  /* Irrespective as to whether the exception was asynchronous, it is raised as
+     a normal exception, without any processing of pending actions. */
+
+  if (Caml_state->external_raise == NULL)
+    caml_fatal_uncaught_exception(v);
+
+  Caml_state->exn_bucket = v;
+  siglongjmp(Caml_state->external_raise->buf, 1);
 }
