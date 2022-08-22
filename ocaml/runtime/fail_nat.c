@@ -124,8 +124,7 @@ CAMLno_asan void caml_raise(value v)
   }
 }
 
-CAMLno_asan
-CAMLprim value caml_raise_async(value exn)
+CAMLno_asan void caml_raise_async(value exn)
 {
   exn = prepare_for_raise(exn, NULL);
 
@@ -134,8 +133,6 @@ CAMLprim value caml_raise_async(value exn)
 
   unwind_local_roots(Caml_state->async_exception_pointer);
   caml_raise_async_exception(Caml_state, exn);
-
-  return Val_unit;
 }
 
 /* Used by the stack overflow handler -> deactivate ASAN (see
