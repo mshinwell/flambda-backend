@@ -39,6 +39,7 @@
 #define SYS_BLOCKED_IO 9        /* "Sys_blocked_io" */
 #define ASSERT_FAILURE_EXN 10   /* "Assert_failure" */
 #define UNDEFINED_RECURSIVE_MODULE_EXN 11 /* "Undefined_recursive_module" */
+#define BREAK_EXN 12 /* "Break" */
 
 #ifdef POSIX_SIGNALS
 struct longjmp_buffer {
@@ -62,6 +63,8 @@ struct longjmp_buffer {
 /* Global variables moved to Caml_state in 4.10 */
 #define caml_external_raise (Caml_state_field(external_raise))
 #define caml_exn_bucket (Caml_state_field(exn_bucket))
+
+CAMLextern value caml_check_async_exn(value res);
 
 int caml_is_special_exception(value exn);
 

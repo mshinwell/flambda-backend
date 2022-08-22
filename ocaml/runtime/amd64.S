@@ -565,9 +565,6 @@ ENDFUNCTION(G(caml_c_call))
 
 /* Start the OCaml program */
 
-/* CR mshinwell: check failure of "unwind" test on macos (doesn't fail
-   on macos CI though) */
-
 FUNCTION(G(caml_start_program))
        CFI_STARTPROC
     /* Save callee-save registers */

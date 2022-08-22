@@ -80,8 +80,6 @@ struct caml_thread_struct {
   char * exception_pointer; /* Saved value of Caml_state->exception_pointer */
   char * async_exception_pointer;
                        /* Saved value of Caml_state->async_exception_pointer */
-  char async_exceptions_masked;
-                       /* Saved value of Caml_state->async_exceptions_masked */
   struct caml__roots_block * local_roots; /* Saved value of local_roots */
   struct caml_local_arenas * local_arenas;
   struct longjmp_buffer * exit_buf; /* For thread exit */
@@ -187,7 +185,6 @@ Caml_inline void caml_thread_save_runtime_state(void)
   curr_thread->gc_regs = Caml_state->gc_regs;
   curr_thread->exception_pointer = Caml_state->exception_pointer;
   curr_thread->async_exception_pointer = Caml_state->async_exception_pointer;
-  curr_thread->async_exceptions_masked = Caml_state->async_exceptions_masked;
   curr_thread->local_arenas = caml_get_local_arenas();
 #else
   curr_thread->stack_low = Caml_state->stack_low;
@@ -213,7 +210,6 @@ Caml_inline void caml_thread_restore_runtime_state(void)
   Caml_state->gc_regs = curr_thread->gc_regs;
   Caml_state->exception_pointer = curr_thread->exception_pointer;
   Caml_state->async_exception_pointer = curr_thread->async_exception_pointer;
-  Caml_state->async_exceptions_masked = curr_thread->async_exceptions_masked;
   caml_set_local_arenas(curr_thread->local_arenas);
 #else
   Caml_state->stack_low = curr_thread->stack_low;
@@ -343,7 +339,6 @@ static caml_thread_t caml_thread_new_info(void)
   th->last_retaddr = 1;
   th->exception_pointer = NULL;
   th->async_exception_pointer = NULL;
-  th->async_exceptions_masked = 0;
   th->local_roots = NULL;
   th->local_arenas = NULL;
   th->exit_buf = NULL;

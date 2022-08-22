@@ -450,8 +450,7 @@ Caml_inline value run_callback_exn(
   local->callback_status = ea == &entries_global ? t_idx : CB_LOCAL;
   t->running = local;
   t->user_data = Val_unit;      /* Release root. */
-  res = caml_wrap_if_async_exn(caml_callback_exn(cb, param),
-    pending_MEMPROF_CALLBACK);
+  res = caml_check_async_exn(caml_callback_exn(cb, param), "memprof callback");
   if (local->callback_status == CB_STOPPED) {
     /* Make sure this entry has not been removed by [caml_memprof_stop] */
     local->callback_status = CB_IDLE;

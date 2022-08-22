@@ -224,7 +224,7 @@ value caml_execute_signal_exn(int signal_number, int in_signal_handler)
     caml_sigmask_hook(SIG_SETMASK, &sigs, NULL);
   }
 #endif
-  return caml_wrap_if_async_exn(res, pending_SIGNAL_HANDLER);
+  return caml_check_async_exn(res, "signal handler");
 }
 
 void caml_update_young_limit (void)

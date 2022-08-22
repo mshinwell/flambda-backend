@@ -120,6 +120,9 @@ exception Undefined_recursive_module of (string * int * int)
    is evaluated. The arguments are the location of the definition in
    the source code (file name, line number, column number). *)
 
+exception Break
+(** Alias for [Sys.Break]. *)
+
 (** {1 Comparisons} *)
 
 external ( = ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%equal"

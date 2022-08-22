@@ -169,6 +169,9 @@ CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
   CAMLreturn (res);
 }
 
+extern value (caml_callback_asm_async_exn)
+  (caml_domain_state* state, value closure, value* args);
+
 CAMLexport value caml_callback_async_exn(value closure, value arg)
 {
   return caml_callback_asm_async_exn(Caml_state, closure, &arg);

@@ -49,7 +49,8 @@ extern caml_generated_constant
     caml_exn_Sys_blocked_io,
     caml_exn_Stack_overflow,
     caml_exn_Assert_failure,
-    caml_exn_Undefined_recursive_module;
+    caml_exn_Undefined_recursive_module,
+    caml_exn_Break;
 
 /* Exception raising */
 
@@ -74,12 +75,12 @@ CAMLno_asan static value prepare_for_raise(value v, int *turned_into_async_exn)
 
     if (turned_into_async_exn != NULL)
       *turned_into_async_exn = 1;
-
-    return v;
   }
-
-  if (turned_into_async_exn != NULL)
-    *turned_into_async_exn = 0;
+  else
+  {
+    if (turned_into_async_exn != NULL)
+      *turned_into_async_exn = 0;
+  }
 
   return v;
 }
@@ -287,8 +288,21 @@ int caml_is_special_exception(value exn)
   return exn == (value)caml_exn_Match_failure || exn == (value)caml_exn_Assert_failure || exn == (value)caml_exn_Undefined_recursive_module;
 }
 
-extern value (caml_callback_asm_async_exn)
-  (caml_domain_state* state, value closure, value* args);
+CAMLexport value caml_check_async_exn(value res, const char *msg)
+{
+  value exn;
+
+  if (!Is_exception_result(res))
+    return res;
+
+  exn = Extract_exception(res);
+
+  if (exn == (value) caml_exn_Break
+      || exn == (value) caml_exn_Stack_overflow)
+    return res;
+
+  caml_fatal_uncaught_exception_with_message(exn, msg);
+}
 
 CAMLprim value caml_with_async_exns(value body_callback)
 {
