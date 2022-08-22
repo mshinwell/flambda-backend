@@ -168,5 +168,5 @@ void caml_fatal_uncaught_exception_with_message(value exn, const char *msg)
 
 void caml_fatal_uncaught_exception(value exn)
 {
-  caml_fatal_uncaught_exception(exn, NULL);
+  caml_fatal_uncaught_exception_with_message(exn, NULL);
 }

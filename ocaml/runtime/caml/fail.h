@@ -68,7 +68,7 @@ CAMLextern value caml_prepare_for_raise(value v, int *turned_into_async_exn);
 CAMLextern value caml_check_async_exn0(value res, const char *msg,
                                        value stack_overflow_exn);
 
-CAMLextern value caml_check_async_exn(value res);
+CAMLextern value caml_check_async_exn(value res, const char *msg);
 
 int caml_is_special_exception(value exn);
 

@@ -255,17 +255,20 @@ CAMLexport value caml_check_async_exn(value res, const char *msg)
 
 CAMLprim value caml_with_async_exns(value body_callback)
 {
+  value exn;
   value result = caml_callback_async_exn(body_callback, Val_unit);
 
   if (!Is_exception_result(result))
     return result;
 
+  exn = Extract_exception(result);
+
   /* Irrespective as to whether the exception was asynchronous, it is raised as
      a normal exception, without any processing of pending actions. */
 
   if (Caml_state->external_raise == NULL)
-    caml_fatal_uncaught_exception(v);
+    caml_fatal_uncaught_exception(exn);
 
-  Caml_state->exn_bucket = v;
+  Caml_state->exn_bucket = exn;
   siglongjmp(Caml_state->external_raise->buf, 1);
 }

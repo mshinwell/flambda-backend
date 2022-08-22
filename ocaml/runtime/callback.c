@@ -103,7 +103,7 @@ CAMLexport value caml_callback3_exn(value closure,
   return caml_callbackN_exn(closure, 3, arg);
 }
 
-CAMLexport value caml_callback_async_exn(value closure, value arg)
+CAMLexport value caml_callback_async_exn(value closure, value arg1)
 {
   value arg[1];
   arg[0] = arg1;
