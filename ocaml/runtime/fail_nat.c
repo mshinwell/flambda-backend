@@ -227,8 +227,7 @@ CAMLexport value caml_raise_if_exception(value res)
 
 CAMLexport value caml_raise_async_if_exception(value result)
 {
-  if (Is_exception_result(result))
-    caml_raise_async(Extract_exception(result));
+  if (Is_exception_result(result)) caml_raise_async(Extract_exception(result));
 
   return result;
 }

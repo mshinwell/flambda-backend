@@ -46,7 +46,8 @@ CAMLexport void caml_raise(value v)
   {
     if (Caml_state->external_raise_async == NULL)
       caml_fatal_uncaught_exception(v);
-
+fprintf(stderr, "jumping to external_raise_async, turned_into_async_exn=1\n");
+fflush(stderr);
     siglongjmp(Caml_state->external_raise_async->buf, 1);
   }
   else
@@ -60,6 +61,8 @@ CAMLexport void caml_raise(value v)
 
 CAMLexport void caml_raise_async(value v)
 {
+fprintf(stderr, "normal external_raise_async\n");
+fflush(stderr);
   prepare_for_raise(v, NULL);
 
   if (Caml_state->external_raise_async == NULL)
@@ -232,7 +235,9 @@ CAMLexport value caml_raise_if_exception(value res)
 
 CAMLexport value caml_raise_async_if_exception(value result)
 {
-  return caml_raise_if_exception(result);
+  if (Is_exception_result(result)) caml_raise_async(Extract_exception(result));
+
+  return result;
 }
 
 int caml_is_special_exception(value exn) {

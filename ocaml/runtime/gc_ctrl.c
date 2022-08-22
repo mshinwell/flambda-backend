@@ -617,7 +617,7 @@ CAMLprim value caml_gc_major_slice (value v)
     caml_major_collection_slice (Long_val (v));
   }
   CAML_EV_END(EV_EXPLICIT_GC_MAJOR_SLICE);
-  caml_raise_async_if_exception (exn);
+  caml_raise_async_if_exception(exn);
   return Val_long (0);
 }
 
