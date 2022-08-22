@@ -32,7 +32,7 @@ let () =
       Unix.read rd (Bytes.make 1 'a') 0 1)
   with
   | _ -> assert false
-  | exception (Signal_handler_raised Sys.Break) ->
+  | exception Sys.Break ->
     print_endline "break: ok" end;
   Sys.catch_break false;
   Unix.close rd;
@@ -90,13 +90,7 @@ let () =
     raise Sys.Break));
   begin match Sys.with_async_exns test_body with
   | () -> assert false
-  | exception (Signal_handler_raised Sys.Break) -> ()
-  (*
-  | exception (Signal_handler_raised exn) ->
-    print_string "Signal_handler_raised ";
-    print_endline (Printexc.to_string exn);
-    assert false
-  *)
+  | exception Sys.Break -> ()
   end;
   let expected = Sys.opaque_identity (mklist ()) in
   assert (!before = expected);
