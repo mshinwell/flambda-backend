@@ -321,7 +321,7 @@ val sigxfsz : int
     @since 4.03 *)
 
 
-exception Break = Break
+exception Break
 (** Exception raised on interactive interrupt if {!Sys.catch_break}
    is on. *)
 

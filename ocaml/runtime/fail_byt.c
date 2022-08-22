@@ -33,26 +33,7 @@
 
 static void prepare_for_raise(value v, int *turned_into_async_exn)
 {
-  Unlock_exn();
-  CAMLassert(!Is_exception_result(v));
-
-  // avoid calling caml_raise recursively
-  v = caml_process_pending_actions_with_root_exn(v);
-  if (Is_exception_result(v))
-  {
-    v = Extract_exception(v);
-
-    // [v] should now be raised as an asynchronous exception.
-
-    if (turned_into_async_exn != NULL)
-      *turned_into_async_exn = 1;
-  }
-  else
-  {
-    if (turned_into_async_exn != NULL)
-      *turned_into_async_exn = 0;
-  }
-
+  caml_prepare_for_raise(v, turned_into_async_exn);
   Caml_state->exn_bucket = v;
 }
 
@@ -263,6 +244,13 @@ int caml_is_special_exception(value exn) {
   return exn == Field(caml_global_data, MATCH_FAILURE_EXN)
     || exn == Field(caml_global_data, ASSERT_FAILURE_EXN)
     || exn == Field(caml_global_data, UNDEFINED_RECURSIVE_MODULE_EXN);
+}
+
+CAMLexport value caml_check_async_exn(value res, const char *msg)
+{
+  check_global_data("Stack_overflow");
+  return caml_check_async_exn0(res, msg,
+    Field(caml_global_data, STACK_OVERFLOW_EXN));
 }
 
 CAMLprim value caml_with_async_exns(value body_callback)

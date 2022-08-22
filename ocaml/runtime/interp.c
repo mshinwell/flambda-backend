@@ -268,7 +268,6 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   caml_callback_depth++;
 
   if (sigsetjmp(raise_buf.buf, 0)) {
-caught_exn:
     Caml_state->local_roots = initial_local_roots;
     sp = Caml_state->extern_sp;
     accu = Caml_state->exn_bucket;

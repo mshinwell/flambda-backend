@@ -64,6 +64,10 @@ struct longjmp_buffer {
 #define caml_external_raise (Caml_state_field(external_raise))
 #define caml_exn_bucket (Caml_state_field(exn_bucket))
 
+CAMLextern value caml_prepare_for_raise(value v, int *turned_into_async_exn);
+CAMLextern value caml_check_async_exn0(value res, const char *msg,
+                                       value stack_overflow_exn);
+
 CAMLextern value caml_check_async_exn(value res);
 
 int caml_is_special_exception(value exn);

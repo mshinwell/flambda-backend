@@ -60,31 +60,6 @@ CAMLnoreturn_start extern void caml_raise_exception(caml_domain_state *state, va
 CAMLnoreturn_start void caml_raise_async_exception(value bucket)
     CAMLnoreturn_end;
 
-CAMLno_asan static value prepare_for_raise(value v, int *turned_into_async_exn)
-{
-  Unlock_exn();
-  CAMLassert(!Is_exception_result(v));
-
-  // avoid calling caml_raise recursively
-  v = caml_process_pending_actions_with_root_exn(v);
-  if (Is_exception_result(v))
-  {
-    v = Extract_exception(v);
-
-    // [v] should now be raised as an asynchronous exception.
-
-    if (turned_into_async_exn != NULL)
-      *turned_into_async_exn = 1;
-  }
-  else
-  {
-    if (turned_into_async_exn != NULL)
-      *turned_into_async_exn = 0;
-  }
-
-  return v;
-}
-
 CAMLno_asan static void unwind_local_roots(char *exception_pointer)
 {
   while (Caml_state->local_roots != NULL &&
@@ -105,7 +80,7 @@ CAMLno_asan void caml_raise_async_exception(value v)
 CAMLno_asan void caml_raise(value v)
 {
   int turned_into_async_exn = 0;
-  v = prepare_for_raise(v, &turned_into_async_exn);
+  v = caml_prepare_for_raise(v, &turned_into_async_exn);
 
   if (turned_into_async_exn)
   {
@@ -127,7 +102,7 @@ CAMLno_asan void caml_raise(value v)
 
 CAMLno_asan void caml_raise_async(value exn)
 {
-  exn = prepare_for_raise(exn, NULL);
+  exn = caml_prepare_for_raise(exn, NULL);
 
   if (Caml_state->async_exception_pointer == NULL)
     caml_fatal_uncaught_exception(v);
@@ -290,18 +265,7 @@ int caml_is_special_exception(value exn)
 
 CAMLexport value caml_check_async_exn(value res, const char *msg)
 {
-  value exn;
-
-  if (!Is_exception_result(res))
-    return res;
-
-  exn = Extract_exception(res);
-
-  if (exn == (value) caml_exn_Break
-      || exn == (value) caml_exn_Stack_overflow)
-    return res;
-
-  caml_fatal_uncaught_exception_with_message(exn, msg);
+  return caml_check_async_exn0(res, msg, caml_exn_Stack_overflow);
 }
 
 CAMLprim value caml_with_async_exns(value body_callback)

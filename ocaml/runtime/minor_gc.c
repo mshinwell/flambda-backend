@@ -555,7 +555,6 @@ void caml_alloc_small_dispatch (intnat wosize, int flags,
 {
   intnat whsize = Whsize_wosize (wosize);
   value res;
-  pending_action_type exn_action;
 
   /* First, we un-do the allocation performed in [Alloc_small] */
   Caml_state->young_ptr += whsize;
@@ -566,7 +565,7 @@ void caml_alloc_small_dispatch (intnat wosize, int flags,
     if (flags & CAML_FROM_CAML) {
       /* In the case of allocations performed from OCaml, execute
          asynchronous callbacks. */
-      res = caml_do_pending_actions_exn (&exn_action);
+      res = caml_do_pending_actions_exn ();
       if (Is_exception_result(res)) {
         caml_raise_async(Extract_exception(res));
       }
