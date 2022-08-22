@@ -153,24 +153,6 @@ static void check_global_data_param(char const *exception_name, char const *msg)
   }
 }
 
-Caml_inline value caml_get_finaliser_raised_tag (char const *msg)
-{
-  check_global_data_param("Finaliser_raised", msg);
-  return Field(caml_global_data, FINALISER_RAISED_EXN);
-}
-
-Caml_inline value caml_get_memprof_callback_raised_tag (char const *msg)
-{
-  check_global_data_param("Memprof_callback_raised", msg);
-  return Field(caml_global_data, MEMPROF_CALLBACK_RAISED_EXN);
-}
-
-Caml_inline value caml_get_signal_handler_raised_tag (char const *msg)
-{
-  check_global_data_param("Signal_handler_raised", msg);
-  return Field(caml_global_data, SIGNAL_HANDLER_RAISED_EXN);
-}
-
 Caml_inline value caml_get_failwith_tag (char const *msg)
 {
   check_global_data_param("Failure", msg);

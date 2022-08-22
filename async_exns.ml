@@ -1,7 +1,8 @@
 let () =
+  let done = ref false in
   try
     let b = Bytes.create 42 in
-    Gc.finalise_last (fun () -> raise Exit) b;
+    Gc.finalise_last (fun () -> done := true; raise Break) b;
     Sys.with_async_exns (fun () ->
       try
         let _ = Sys.opaque_identity b in
@@ -12,12 +13,14 @@ let () =
       with exn -> assert false
     )
   with
-  | Finaliser_raised Exit -> Printf.printf "OK\n%!"
+  | Break -> assert !done; Printf.printf "OK\n%!"
   | _ -> assert false
 
+(*
 exception E
 
 let () =
+  let done = ref false in
   try
     Sys.with_async_exns (fun () ->
       Sys.bracket ~acquire:(fun () ->
@@ -35,7 +38,7 @@ let () =
         ~release:(fun n -> Printf.printf "release %d\n%!" n)
         (fun n ->
           let b2 = Bytes.create 42 in
-          Gc.finalise_last (fun () -> raise E) b2;
+          Gc.finalise_last (fun () -> done := true; raise Break) b2;
           for x = 0 to 1_000_000 do
             let _ = Sys.opaque_identity (42, Random.int 42) in
             ()
@@ -43,5 +46,6 @@ let () =
           assert false
         )
     )
-  with Finaliser_raised E -> Printf.printf "OK\n"
+  with Break -> assert !done; Printf.printf "OK\n"
   | _ -> assert false
+*)
