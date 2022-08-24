@@ -194,7 +194,7 @@ CAMLexport void caml_raise_out_of_memory_fatal(void)
 CAMLexport void caml_raise_stack_overflow(void)
 {
   check_global_data("Stack_overflow");
-  caml_raise_constant(Field(caml_global_data, STACK_OVERFLOW_EXN));
+  caml_raise_async(Field(caml_global_data, STACK_OVERFLOW_EXN));
 }
 
 CAMLexport void caml_raise_sys_error(value msg)
