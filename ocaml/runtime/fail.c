@@ -71,8 +71,7 @@ CAMLexport value caml_check_async_exn0(value res, const char *msg,
   /* [Break] is not introduced as a predefined exception (in predef.ml and
      stdlib.ml) since it causes trouble in conjunction with warnings about
      constructor shadowing e.g. in format.ml.
-     "Sys.Break" must match stdlib/sys.mlp.
-     */
+     "Sys.Break" must match stdlib/sys.mlp. */
   break_exn = caml_named_value("Sys.Break");
   if (break_exn != NULL && exn == *break_exn)
     return res;

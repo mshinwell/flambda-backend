@@ -51,11 +51,26 @@ static void init_callback_code(void)
   callback_code_inited = 1;
 }
 
+static int is_async_exn(value exn)
+{
+  const value *break_exn;
+
+  if (caml_global_data == 0) return 0;
+
+  if (exn == Field(caml_global_data, STACK_OVERFLOW_EXN)) return 1;
+
+  /* "Sys.Break" must match stdlib/sys.mlp. */
+  break_exn = caml_named_value("Sys.Break");
+  if (break_exn != NULL && exn == *break_exn) return 1;
+
+  return 0;
+}
+
 static value caml_callbackN_exn0(value closure, int narg, value args[],
-                                 int is_async_exn)
+                                 int catch_async_exns)
 {
   int i;
-  value res;
+  value res, exn;
 
   CAMLassert(narg + 4 <= 256);
 
@@ -68,8 +83,21 @@ static value caml_callbackN_exn0(value closure, int narg, value args[],
   if (!callback_code_inited) init_callback_code();
   callback_code[1] = narg + 3;
   callback_code[3] = narg;
-  res = caml_interprete(callback_code, sizeof(callback_code), is_async_exn);
+  res = caml_interprete(callback_code, sizeof(callback_code), catch_async_exns);
   if (Is_exception_result(res)) Caml_state->extern_sp += narg + 4; /* PR#3419 */
+
+  if (!Is_exception_result(res)) return res;
+
+  exn = Extract_exception(res);
+  if (!catch_async_exns && is_async_exn(exn)) {
+    fprintf(stderr, "caml_callbackN_exn0 now calling caml_raise_async\n");
+    fflush(stderr);
+    caml_raise_async(exn);
+  }
+
+  fprintf(stderr, "caml_callbackN_exn0 returning normally with exn (is async? %d, catching async? %d)\n", is_async_exn(exn), catch_async_exns);
+  fflush(stderr);
+
   return res;
 }
 
@@ -107,6 +135,7 @@ CAMLexport value caml_callback_async_exn(value closure, value arg1)
 {
   value arg[1];
   arg[0] = arg1;
+
   return caml_callbackN_exn0(closure, 1, arg, 1);
 }
 

@@ -237,7 +237,8 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   /* volatile ensures that initial_local_roots
      will keep correct value across longjmp */
   struct caml__roots_block * volatile initial_local_roots;
-  struct longjmp_buffer raise_buf;
+  struct longjmp_buffer raise_buf, raise_async_buf;
+  static value *initial_trapsp;
 #ifndef THREADED_CODE
   opcode_t curr_instr;
 #endif
@@ -264,6 +265,7 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
     (char *) Caml_state->stack_high - (char *) Caml_state->extern_sp;
   initial_external_raise = Caml_state->external_raise;
   initial_external_raise_async = Caml_state->external_raise_async;
+  initial_trapsp = Caml_state->trapsp;
 
   caml_callback_depth++;
 
@@ -283,8 +285,21 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   }
   Caml_state->external_raise = &raise_buf;
 
-  if (catch_async_exns)
-    Caml_state->external_raise_async = &raise_buf;
+  if (sigsetjmp(raise_async_buf.buf, 0)) {
+    Caml_state->local_roots = initial_local_roots;
+    sp = Caml_state->extern_sp;
+    accu = Caml_state->exn_bucket;
+
+    Check_trap_barrier;
+    if (Caml_state->backtrace_active) {
+      caml_stash_backtrace(accu, sp, 0);
+    }
+
+    Caml_state->trapsp = initial_trapsp;
+
+    goto raise_async;
+  }
+  Caml_state->external_raise_async = &raise_async_buf;
 
   sp = Caml_state->extern_sp;
   pc = prog;
@@ -894,7 +909,9 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
     raise_notrace:
       if ((char *) Caml_state->trapsp
           >= (char *) Caml_state->stack_high - initial_sp_offset) {
+    raise_async:
         Caml_state->external_raise = initial_external_raise;
+        Caml_state->external_raise_async = initial_external_raise_async;
         Caml_state->extern_sp = (value *) ((char *) Caml_state->stack_high
                                     - initial_sp_offset);
         caml_callback_depth--;
