@@ -234,11 +234,11 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   struct longjmp_buffer * initial_external_raise;
   struct longjmp_buffer * initial_external_raise_async;
   intnat initial_sp_offset;
-  /* volatile ensures that initial_local_roots
-     will keep correct value across longjmp */
+  /* volatile ensures that initial_local_roots and initial_trapsp
+     will keep correct values across longjmp */
   struct caml__roots_block * volatile initial_local_roots;
+  volatile value *initial_trapsp;
   struct longjmp_buffer raise_buf, raise_async_buf;
-  static value *initial_trapsp;
 #ifndef THREADED_CODE
   opcode_t curr_instr;
 #endif
@@ -266,10 +266,13 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   initial_external_raise = Caml_state->external_raise;
   initial_external_raise_async = Caml_state->external_raise_async;
   initial_trapsp = Caml_state->trapsp;
+  fprintf(stderr, "recording initial_trapsp as %p\n", initial_trapsp);
 
   caml_callback_depth++;
 
   if (sigsetjmp(raise_buf.buf, 0)) {
+    fprintf(stderr, "landed in raise_buf, initial_trapsp=%p, trapsp=%p, catch_async_exns=%d\n",
+      (void*) initial_trapsp, (void*) Caml_state->trapsp, catch_async_exns);
     Caml_state->local_roots = initial_local_roots;
     sp = Caml_state->extern_sp;
     accu = Caml_state->exn_bucket;
@@ -286,6 +289,9 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   Caml_state->external_raise = &raise_buf;
 
   if (sigsetjmp(raise_async_buf.buf, 0)) {
+    fprintf(stderr, "landed in raise_async_buf, initial_trapsp=%p, trapsp=%p, catch_async_exns=%d\n",
+      (void*) initial_trapsp, (void*) Caml_state->trapsp, catch_async_exns);
+
     Caml_state->local_roots = initial_local_roots;
     sp = Caml_state->extern_sp;
     accu = Caml_state->exn_bucket;
@@ -873,6 +879,7 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
       sp[2] = env;
       sp[3] = Val_long(extra_args);
       Caml_state->trapsp = sp;
+      fprintf(stderr, "PUSHTRAP, new trapsp=%p\n", (void*) Caml_state->trapsp);
       pc++;
       Next;
 

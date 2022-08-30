@@ -74,6 +74,8 @@ static value caml_callbackN_exn0(value closure, int narg, value args[],
 
   CAMLassert(narg + 4 <= 256);
 
+  fprintf(stderr, "caml_callbackN_exn0 on entry, trapsp=%p, catch_async_exns=%d\n", (void*) (Caml_state->trapsp), catch_async_exns);
+
   Caml_state->extern_sp -= narg + 4;
   for (i = 0; i < narg; i++) Caml_state->extern_sp[i] = args[i]; /* arguments */
   Caml_state->extern_sp[narg] = (value)(callback_code + 4); /* return address */
@@ -87,6 +89,8 @@ static value caml_callbackN_exn0(value closure, int narg, value args[],
   if (Is_exception_result(res)) Caml_state->extern_sp += narg + 4; /* PR#3419 */
 
   if (!Is_exception_result(res)) return res;
+
+  fprintf(stderr, "caml_callbackN_exn0 on exit from caml_interprete, trapsp=%p\n", (void*) (Caml_state->trapsp));
 
   exn = Extract_exception(res);
   if (!catch_async_exns && is_async_exn(exn)) {
