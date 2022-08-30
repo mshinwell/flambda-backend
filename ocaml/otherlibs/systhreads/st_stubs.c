@@ -92,6 +92,8 @@ struct caml_thread_struct {
   /* Saved value of Caml_state->local_roots */
   struct caml__roots_block * local_roots;
   struct longjmp_buffer * external_raise; /* Saved Caml_state->external_raise */
+  struct longjmp_buffer * external_raise_async;
+                                    /* Saved Caml_state->external_raise_async */
 #endif
   int backtrace_pos; /* Saved Caml_state->backtrace_pos */
   backtrace_slot * backtrace_buffer; /* Saved Caml_state->backtrace_buffer */
@@ -193,6 +195,7 @@ Caml_inline void caml_thread_save_runtime_state(void)
   curr_thread->sp = Caml_state->extern_sp;
   curr_thread->trapsp = Caml_state->trapsp;
   curr_thread->external_raise = Caml_state->external_raise;
+  curr_thread->external_raise_async = Caml_state->external_raise_async;
 #endif
   curr_thread->local_roots = Caml_state->local_roots;
   curr_thread->backtrace_pos = Caml_state->backtrace_pos;
@@ -218,6 +221,7 @@ Caml_inline void caml_thread_restore_runtime_state(void)
   Caml_state->extern_sp = curr_thread->sp;
   Caml_state->trapsp = curr_thread->trapsp;
   Caml_state->external_raise = curr_thread->external_raise;
+  Caml_state->external_raise_async = curr_thread->external_raise_async;
 #endif
   Caml_state->local_roots = curr_thread->local_roots;
   Caml_state->backtrace_pos = curr_thread->backtrace_pos;
@@ -351,6 +355,7 @@ static caml_thread_t caml_thread_new_info(void)
   th->trapsp = th->stack_high;
   th->local_roots = NULL;
   th->external_raise = NULL;
+  th->external_raise_async = NULL;
 #endif
   th->backtrace_pos = 0;
   th->backtrace_buffer = NULL;

@@ -1170,6 +1170,7 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
 
     Instruct(STOP):
       Caml_state->external_raise = initial_external_raise;
+      Caml_state->external_raise_async = initial_external_raise_async;
       Caml_state->extern_sp = sp;
       caml_callback_depth--;
       return accu;

@@ -33,7 +33,7 @@
 
 static void prepare_for_raise(value v, int *turned_into_async_exn)
 {
-  caml_prepare_for_raise(v, turned_into_async_exn);
+  v = caml_prepare_for_raise(v, turned_into_async_exn);
   Caml_state->exn_bucket = v;
 }
 
@@ -44,8 +44,11 @@ CAMLexport void caml_raise(value v)
 
   if (turned_into_async_exn)
   {
-    if (Caml_state->external_raise_async == NULL)
+    if (Caml_state->external_raise_async == NULL) {
+      fprintf(stderr, "caml_raise causing fatal exn, external_raise_async is NULL\n");
+      fflush(stderr);
       caml_fatal_uncaught_exception(v);
+    }
 
     siglongjmp(Caml_state->external_raise_async->buf, 1);
   }
@@ -63,7 +66,11 @@ CAMLexport void caml_raise_async(value v)
   prepare_for_raise(v, NULL);
 
   if (Caml_state->external_raise_async == NULL)
+  {
+    fprintf(stderr, "caml_raise_async causing fatal exn, external_raise_async is NULL\n");
+    fflush(stderr);
     caml_fatal_uncaught_exception(v);
+  }
 
   siglongjmp(Caml_state->external_raise_async->buf, 1);
 }
