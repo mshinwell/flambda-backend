@@ -277,7 +277,7 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   fprintf(stderr, "...stack_high=%p, initial_sp_offset=%x\n", (void*) Caml_state->stack_high, (unsigned int)initial_sp_offset);
   */
 
-  if (sigsetjmp(raise_buf.buf, 0)) {
+  if (sigsetjmp(raise_buf.buf, 1)) {
     /*
     fprintf(stderr, "hit longjmp target (normal), extern_sp=%p\n", (void*) Caml_state->extern_sp);
     */
@@ -296,7 +296,7 @@ value caml_interprete(code_t prog, asize_t prog_size, int catch_async_exns)
   }
   Caml_state->external_raise = &raise_buf;
 
-  if (sigsetjmp(raise_async_buf.buf, 0)) {
+  if (sigsetjmp(raise_async_buf.buf, 1)) {
 /*    fprintf(stderr, "hit longjmp target (async), extern_sp=%p\n", (void*) Caml_state->extern_sp);*/
     Caml_state->local_roots = initial_local_roots;
     sp = Caml_state->extern_sp;

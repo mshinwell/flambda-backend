@@ -8,7 +8,7 @@ include systhreads
 *)
 
 let signals_requested = Atomic.make 0
-let signal_delay = 0.1
+let signal_delay = 0.5
 let _ = Thread.create (fun () ->
   let signals_sent = ref 0 in
   ignore (Thread.sigmask Unix.SIG_BLOCK [Sys.sigint]);
