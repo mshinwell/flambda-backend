@@ -45,8 +45,8 @@ CAMLexport void caml_raise(value v)
   if (turned_into_async_exn)
   {
     if (Caml_state->external_raise_async == NULL) {
-      fprintf(stderr, "caml_raise causing fatal exn, external_raise_async is NULL\n");
-      fflush(stderr);
+  //    fprintf(stderr, "caml_raise causing fatal exn, external_raise_async is NULL\n");
+  //  fflush(stderr);
       caml_fatal_uncaught_exception(v);
     }
 
@@ -63,12 +63,14 @@ CAMLexport void caml_raise(value v)
 
 CAMLexport void caml_raise_async(value v)
 {
+  //fprintf(stderr, "caml_raise_async, v=%p\n", (void*) v);
+
   prepare_for_raise(v, NULL);
 
   if (Caml_state->external_raise_async == NULL)
   {
-    fprintf(stderr, "caml_raise_async causing fatal exn, external_raise_async is NULL\n");
-    fflush(stderr);
+    //fprintf(stderr, "caml_raise_async causing fatal exn, external_raise_async is NULL\n");
+    //fflush(stderr);
     caml_fatal_uncaught_exception(v);
   }
 
@@ -265,6 +267,7 @@ CAMLexport value caml_check_async_exn(value res, const char *msg)
 CAMLprim value caml_with_async_exns(value body_callback)
 {
   value exn;
+//  fprintf(stderr, "caml_with_async_exns\n");
   value result = caml_callback_async_exn(body_callback, Val_unit);
 
   if (!Is_exception_result(result))
@@ -274,6 +277,8 @@ CAMLprim value caml_with_async_exns(value body_callback)
 
   /* Irrespective as to whether the exception was asynchronous, it is raised as
      a normal exception, without any processing of pending actions. */
+
+//  fprintf(stderr, "caml_with_async_exns raising normally\n");
 
   if (Caml_state->external_raise == NULL)
     caml_fatal_uncaught_exception(exn);
