@@ -441,6 +441,8 @@ module With_subkind = struct
 
   let naked_nativeint = create naked_nativeint Anything
 
+  let region = create region Anything
+
   let boxed_float = create value Boxed_float
 
   let boxed_int32 = create value Boxed_int32

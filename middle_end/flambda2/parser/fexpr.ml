@@ -438,6 +438,7 @@ and code_size = int
 and params_and_body =
   { params : kinded_parameter list;
     closure_var : variable;
+    region_var : variable;
     depth_var : variable;
     ret_cont : continuation_id;
     exn_cont : continuation_id;

@@ -290,6 +290,7 @@ let params_and_body env res code_id p ~fun_dbg ~translate_expr =
          ~body
          ~my_closure
          ~is_my_closure_used
+         ~my_region:_
          ~my_depth:_
          ~free_names_of_body:_
        ->
