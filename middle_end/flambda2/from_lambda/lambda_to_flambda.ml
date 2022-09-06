@@ -130,6 +130,10 @@ module Env : sig
     continuation_after_closing_region:Continuation.t ->
     t
 
+  val entering_try_region : t -> Ident.t -> t
+
+  val leaving_try_region : t -> t
+
   val current_region : t -> Ident.t
 
   (** The innermost (newest) region is first in the list. *)
@@ -343,6 +347,14 @@ end = struct
           { continuation_closing_region; continuation_after_closing_region }
           t.region_closure_continuations
     }
+
+  let entering_try_region t region =
+    { t with region_stack = region :: t.region_stack }
+
+  let leaving_try_region t =
+    match t.region_stack with
+    | [] -> Misc.fatal_error "Cannot pop try region, region stack is empty"
+    | _ :: region_stack -> { t with region_stack }
 
   let current_region t =
     match t.region_stack with [] -> t.my_region | region :: _ -> region
@@ -1128,6 +1140,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let body_result = Ident.create_local "body_result" in
     let result_var = Ident.create_local "try_with_result" in
     let region = Ident.create_local "try_region" in
+    let env = Env.entering_try_region env region in
     (* As for all other constructs, the OCaml type checker and the Lambda
        generation pass ensures that there will be an enclosing region around the
        whole [Ltrywith] (possibly not immediately enclosing, but maybe further
@@ -1167,6 +1180,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
               ~handler:(fun acc env ccenv ->
                 CC.close_let acc ccenv (Ident.create_local "unit")
                   Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                    let env = Env.leaving_try_region env in
                     cps_tail acc env ccenv handler after_continuation k_exn)))
           ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
   | Lifthenelse (cond, ifso, ifnot, kind) ->
@@ -1585,6 +1599,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
   | Ltrywith (body, id, handler, kind) ->
     let body_result = Ident.create_local "body_result" in
     let region = Ident.create_local "try_region" in
+    let env = Env.entering_try_region env region in
     let dbg = Debuginfo.none (* CR mshinwell: Fix [Lambda] *) in
     CC.close_let acc ccenv region Not_user_visible Begin_region
       ~body:(fun acc ccenv ->
@@ -1613,6 +1628,7 @@ and cps_tail acc env ccenv (lam : L.lambda) (k : Continuation.t)
           ~handler:(fun acc env ccenv ->
             CC.close_let acc ccenv (Ident.create_local "unit")
               Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                let env = Env.leaving_try_region env in
                 cps_tail acc env ccenv handler k k_exn)))
   | Lifthenelse (cond, ifso, ifnot, kind) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot ~kind in
