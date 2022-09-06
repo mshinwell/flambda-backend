@@ -611,9 +611,7 @@ let effects_and_coeffects_of_nullary_primitive p =
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
   | Begin_region ->
     (* Ensure these don't get moved, but allow them to be deleted. *)
-    (* XXX and below *)
-    ( Effects.Arbitrary_effects,
-      (* Effects.Only_generative_effects Mutable, *) Coeffects.Has_coeffects )
+    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
 
 let nullary_classify_for_printing p =
   match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
@@ -947,9 +945,11 @@ let effects_and_coeffects_of_unary_primitive p =
     (* Tags on heap blocks are immutable. *)
     Effects.No_effects, Coeffects.No_coeffects
   | End_region ->
-    (* Ensure these don't get moved, but allow them to be deleted. *)
-    ( Effects.Arbitrary_effects (* Effects.Only_generative_effects Mutable *),
-      Coeffects.Has_coeffects )
+    (* These can't be [Only_generative_effects] or the primitives would get
+       deleted without regard to prior uses of the region. Instead there are
+       special cases in [Simplify_let_expr] and [Expr_builder] for this
+       primitive. *)
+    Effects.Arbitrary_effects, Coeffects.Has_coeffects
 
 let unary_classify_for_printing p =
   match p with
@@ -1930,3 +1930,14 @@ module Without_args = struct
     | Ternary prim -> print_ternary_primitive ppf prim
     | Variadic prim -> print_variadic_primitive ppf prim
 end
+
+let is_end_region t =
+  match t with
+  | Unary (End_region, region) -> (
+    match Simple.must_be_var region with
+    | Some (region, _coercion) -> Some region
+    | None ->
+      Misc.fatal_errorf "End_region with non-Variable argument:@ %a"
+        Simple.print region)
+  | _ -> None
+  [@@ocaml.warning "-fragile-match"]
