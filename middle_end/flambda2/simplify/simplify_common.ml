@@ -91,13 +91,14 @@ let project_tuple ~dbg ~size ~field tuple =
   Named.create_prim prim dbg
 
 let split_direct_over_application apply ~param_arity ~result_arity
-    ~(apply_alloc_mode : Alloc_mode.t) ~contains_no_escaping_local_allocs =
+    ~(apply_alloc_mode : Alloc_mode.With_region.t)
+    ~contains_no_escaping_local_allocs =
   let arity = Flambda_arity.With_subkinds.cardinal param_arity in
   let args = Apply.args apply in
   assert (arity < List.length args);
   let first_args, remaining_args = Misc.Stdlib.List.split_at arity args in
   let func_var = Variable.create "full_apply" in
-  let needs_region =
+  let needs_region, over_app_region =
     (* If the function being called might do a local allocation that escapes,
        then we need a region for such function's return value, unless the
        allocation mode of the [Apply] is already [Local]. Note that we must not
@@ -108,12 +109,16 @@ let split_direct_over_application apply ~param_arity ~result_arity
        been allocated in their region). *)
     match apply_alloc_mode, contains_no_escaping_local_allocs with
     | Heap, false ->
-      Some (Variable.create "over_app_region", Continuation.create ())
-    | Heap, true | Local, _ -> None
+      let over_app_region = Variable.create "over_app_region" in
+      Some (over_app_region, Continuation.create ()), Some over_app_region
+    | Heap, true -> None, None
+    | Local { region }, _ -> None, Some region
   in
   let perform_over_application =
-    let alloc_mode : Alloc_mode.t =
-      if contains_no_escaping_local_allocs then Heap else Local
+    let alloc_mode : Alloc_mode.With_region.t =
+      match over_app_region with
+      | None -> Heap
+      | Some region -> Local { region }
     in
     let continuation =
       (* If there is no need for a new region, then the second (over)

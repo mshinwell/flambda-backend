@@ -262,7 +262,7 @@ let init_or_assign ppf ia =
     match ia with
     | Initialization -> "="
     | Assignment Heap -> "<-"
-    | Assignment Local -> "<-local"
+    | Assignment (Local _) -> "<-local"
   in
   Format.fprintf ppf "%s" str
 

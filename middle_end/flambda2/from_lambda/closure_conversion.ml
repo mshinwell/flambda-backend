@@ -706,7 +706,7 @@ let close_named acc env ~let_bound_var (named : IR.named)
       ~register_const_string:(fun acc -> register_const_string acc)
       prim Debuginfo.none
       (fun acc named -> k acc (Some named))
-  | Prim { prim; args; loc; exn_continuation } ->
+  | Prim { prim; args; loc; exn_continuation; current_region } ->
     close_primitive acc env ~let_bound_var named prim ~args loc exn_continuation
       k
 
@@ -853,11 +853,13 @@ let close_exact_or_unknown_apply acc env
        inlined;
        probe;
        mode;
-       region_close
+       region_close;
+       current_region
      } :
       IR.apply) callee_approx : Expr_with_acc.t =
   let callee = find_simple_from_id env func in
-  let mode = Alloc_mode.from_lambda mode in
+  let current_region = Env.find_var env current_region in
+  let mode = Alloc_mode.With_region.from_lambda mode ~current_region in
   let acc, call_kind =
     match kind with
     | Function -> (
@@ -1306,7 +1308,7 @@ let close_one_function acc ~external_env ~by_function_slot decl
   let acc = Acc.with_seen_a_function acc true in
   acc, Function_slot.Map.add function_slot (code_id, approx) by_function_slot
 
-let close_functions acc external_env function_declarations =
+let close_functions acc external_env ~current_region function_declarations =
   let compilation_unit = Compilation_unit.get_current_exn () in
   let value_slots_from_idents =
     Ident.Set.fold
@@ -1407,7 +1409,9 @@ let close_functions acc external_env function_declarations =
   in
   let set_of_closures =
     Set_of_closures.create ~value_slots
-      (Alloc_mode.from_lambda (Function_decls.alloc_mode function_declarations))
+      (Alloc_mode.With_region.from_lambda
+         (Function_decls.alloc_mode function_declarations)
+         ~current_region)
       function_decls
   in
   let acc =
@@ -1614,17 +1618,22 @@ let wrap_over_application acc env full_call (apply : IR.apply) over_args
   let returned_func = Variable.create "func" in
   (* See comments in [Simplify_common.split_direct_over_application] about this
      code for handling local allocations. *)
-  let apply_alloc_mode = Alloc_mode.from_lambda apply.mode in
+  let apply_alloc_mode =
+    Alloc_mode.With_region.from_lambda apply.mode
+      ~current_region:apply.current_region
+  in
   let apply_return_continuation =
     Apply.Result_continuation.Return apply.continuation
   in
   let acc, args = find_simples acc env over_args in
   let apply_dbg = Debuginfo.from_location apply.loc in
-  let needs_region =
+  let needs_region, over_app_region =
     match apply_alloc_mode, contains_no_escaping_local_allocs with
     | Heap, false ->
-      Some (Variable.create "over_app_region", Continuation.create ())
-    | Heap, true | Local, _ -> None
+      let over_app_region = Variable.create "over_app_region" in
+      Some (over_app_region, Continuation.create ()), Some over_app_region
+    | Heap, true -> None, None
+    | Local { region }, _ -> None, Some region
   in
   let perform_over_application acc =
     let acc, apply_exn_continuation =
@@ -1641,8 +1650,10 @@ let wrap_over_application acc env full_call (apply : IR.apply) over_args
       | Rc_normal | Rc_close_at_apply -> Apply.Position.Normal
       | Rc_nontail -> Apply.Position.Nontail
     in
-    let alloc_mode : Alloc_mode.t =
-      if contains_no_escaping_local_allocs then Heap else Local
+    let alloc_mode : Alloc_mode.With_region.t =
+      match over_app_region with
+      | None -> Heap
+      | Some region -> Local { region }
     in
     let call_kind = Call_kind.indirect_function_call_unknown_arity alloc_mode in
     let continuation =

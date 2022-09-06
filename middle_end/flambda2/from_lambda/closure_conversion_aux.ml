@@ -41,7 +41,8 @@ module IR = struct
         { prim : Lambda.primitive;
           args : simple list;
           loc : Lambda.scoped_location;
-          exn_continuation : exn_continuation option
+          exn_continuation : exn_continuation option;
+          current_region : Ident.t
         }
 
   type apply_kind =
@@ -61,7 +62,8 @@ module IR = struct
       region_close : Lambda.region_close;
       inlined : Lambda.inlined_attribute;
       probe : Lambda.probe;
-      mode : Lambda.alloc_mode
+      mode : Lambda.alloc_mode;
+      current_region : Ident.t
     }
 
   type switch =

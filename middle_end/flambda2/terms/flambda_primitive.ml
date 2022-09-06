@@ -230,20 +230,20 @@ type string_or_bytes =
 module Init_or_assign = struct
   type t =
     | Initialization
-    | Assignment of Alloc_mode.t
+    | Assignment of Alloc_mode.With_region.t
 
   let [@ocamlformat "disable"] print ppf t =
     let fprintf = Format.fprintf in
     match t with
     | Initialization -> fprintf ppf "Init"
-    | Assignment mode -> fprintf ppf "Assign %a" Alloc_mode.print mode
+    | Assignment mode -> fprintf ppf "Assign %a" Alloc_mode.With_region.print mode
 
   let compare = Stdlib.compare
 
   let to_lambda t : Lambda.initialization_or_assignment =
     match t with
     | Initialization -> Heap_initialization
-    | Assignment mode -> Assignment (Alloc_mode.to_lambda mode)
+    | Assignment mode -> Assignment (Alloc_mode.With_region.to_lambda mode)
 end
 
 type array_like_operation =
@@ -591,8 +591,8 @@ let effects_and_coeffects_of_nullary_primitive p =
        moved around. *)
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
   | Begin_region ->
-    (* Ensure these don't get moved or deleted. *)
-    Effects.Arbitrary_effects, Coeffects.Has_coeffects
+    (* Ensure these don't get moved, but allow them to be deleted. *)
+    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
 
 let nullary_classify_for_printing p =
   match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
@@ -620,7 +620,7 @@ type unary_primitive =
   | Boolean_not
   | Reinterpret_int64_as_float
   | Unbox_number of Flambda_kind.Boxable_number.t
-  | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.t
+  | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.With_region.t
   | Untag_immediate
   | Tag_immediate
   | Project_function_slot of
@@ -653,7 +653,7 @@ let unary_primitive_eligible_for_cse p ~arg =
     Flambda_features.float_const_prop ()
   | Num_conv _ | Boolean_not | Reinterpret_int64_as_float -> true
   | Unbox_number _ | Untag_immediate -> false
-  | Box_number (_, Local) ->
+  | Box_number (_, Local _) ->
     (* For the moment we don't CSE any local allocations. *)
     (* CR mshinwell: relax this in the future? *)
     false
@@ -734,7 +734,7 @@ let compare_unary_primitive p1 p2 =
     K.Boxable_number.compare kind1 kind2
   | Box_number (kind1, alloc_mode1), Box_number (kind2, alloc_mode2) ->
     let c = K.Boxable_number.compare kind1 kind2 in
-    if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
+    if c <> 0 then c else Alloc_mode.With_region.compare alloc_mode1 alloc_mode2
   | Untag_immediate, Untag_immediate -> 0
   | Tag_immediate, Tag_immediate -> 0
   | ( Project_function_slot { move_from = move_from1; move_to = move_to1 },
@@ -790,10 +790,9 @@ let print_unary_primitive ppf p =
   | Unbox_number k ->
     fprintf ppf "Unbox_%a" K.Boxable_number.print_lowercase_short k
   | Tag_immediate -> fprintf ppf "Tag_imm"
-  | Box_number (k, Heap) ->
-    fprintf ppf "Box_%a" K.Boxable_number.print_lowercase_short k
-  | Box_number (k, Local) ->
-    fprintf ppf "Box_%a[local]" K.Boxable_number.print_lowercase_short k
+  | Box_number (k, alloc_mode) ->
+    fprintf ppf "Box_%a[%a]" K.Boxable_number.print_lowercase_short k
+      Alloc_mode.With_region.print alloc_mode
   | Project_function_slot { move_from; move_to } ->
     Format.fprintf ppf "@[(Project_function_slot@ (%a \u{2192} %a@<0>%s))@]"
       Function_slot.print move_from Function_slot.print move_to
@@ -918,7 +917,7 @@ let effects_and_coeffects_of_unary_primitive p =
     let coeffects : Coeffects.t =
       match alloc_mode with
       | Heap -> Coeffects.No_coeffects
-      | Local -> Coeffects.Has_coeffects
+      | Local _ -> Coeffects.Has_coeffects
     in
     Effects.Only_generative_effects Immutable, coeffects
   | Project_function_slot _ | Project_value_slot _ ->
@@ -927,8 +926,8 @@ let effects_and_coeffects_of_unary_primitive p =
     (* Tags on heap blocks are immutable. *)
     Effects.No_effects, Coeffects.No_coeffects
   | End_region ->
-    (* Ensure these don't get moved or deleted. *)
-    Effects.Arbitrary_effects, Coeffects.Has_coeffects
+    (* Ensure these don't get moved, but allow them to be deleted. *)
+    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
 
 let unary_classify_for_printing p =
   match p with
@@ -1273,12 +1272,12 @@ let ternary_classify_for_printing p =
     Neither
 
 type variadic_primitive =
-  | Make_block of Block_kind.t * Mutability.t * Alloc_mode.t
-  | Make_array of Array_kind.t * Mutability.t * Alloc_mode.t
+  | Make_block of Block_kind.t * Mutability.t * Alloc_mode.With_region.t
+  | Make_array of Array_kind.t * Mutability.t * Alloc_mode.With_region.t
 
 let variadic_primitive_eligible_for_cse p ~args =
   match p with
-  | Make_block (_, _, Local) | Make_array (_, Immutable, Local) -> false
+  | Make_block (_, _, Local _) | Make_array (_, Immutable, Local _) -> false
   | Make_block (_, Immutable, Heap) | Make_array (_, Immutable, _) ->
     (* See comment in [unary_primitive_eligible_for_cse], above, on [Box_number]
        case. *)
@@ -1296,7 +1295,9 @@ let compare_variadic_primitive p1 p2 =
     then c
     else
       let c = Stdlib.compare mut1 mut2 in
-      if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
+      if c <> 0
+      then c
+      else Alloc_mode.With_region.compare alloc_mode1 alloc_mode2
   | Make_array (kind1, mut1, alloc_mode1), Make_array (kind2, mut2, alloc_mode2)
     ->
     let c = Array_kind.compare kind1 kind2 in
@@ -1304,7 +1305,9 @@ let compare_variadic_primitive p1 p2 =
     then c
     else
       let c = Stdlib.compare mut1 mut2 in
-      if c <> 0 then c else Alloc_mode.compare alloc_mode1 alloc_mode2
+      if c <> 0
+      then c
+      else Alloc_mode.With_region.compare alloc_mode1 alloc_mode2
   | Make_block _, Make_array _ -> -1
   | Make_array _, Make_block _ -> 1
 
@@ -1315,10 +1318,10 @@ let print_variadic_primitive ppf p =
   match p with
   | Make_block (kind, mut, alloc_mode) ->
     fprintf ppf "@[<hov 1>(Make_block@ %a@ %a@ %a)@]" Block_kind.print kind
-      Mutability.print mut Alloc_mode.print alloc_mode
+      Mutability.print mut Alloc_mode.With_region.print alloc_mode
   | Make_array (kind, mut, alloc_mode) ->
     fprintf ppf "@[<hov 1>(Make_array@ %a@ %a@ %a)@]" Array_kind.print kind
-      Mutability.print mut Alloc_mode.print alloc_mode
+      Mutability.print mut Alloc_mode.With_region.print alloc_mode
 
 let args_kind_of_variadic_primitive p : arg_kinds =
   match p with
@@ -1336,7 +1339,7 @@ let effects_and_coeffects_of_variadic_primitive p ~args =
     let coeffects : Coeffects.t =
       match alloc_mode with
       | Heap -> Coeffects.No_coeffects
-      | Local -> Coeffects.Has_coeffects
+      | Local _ -> Coeffects.Has_coeffects
     in
     if List.length args >= 1
     then Effects.Only_generative_effects mut, coeffects
