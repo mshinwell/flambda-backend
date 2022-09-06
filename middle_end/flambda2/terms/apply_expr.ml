@@ -312,8 +312,8 @@ let with_call_kind t call_kind =
 
 let with_args t args = { t with args }
 
-let with_continuation_callee_and_args t continuation ~callee ~args =
-  let t = { t with continuation; callee; args } in
+let with_continuation_callee_and_args t continuation ~callee ~args ~region =
+  let t = { t with continuation; callee; args; region } in
   invariant t;
   t
 

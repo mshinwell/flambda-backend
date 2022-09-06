@@ -49,7 +49,7 @@ let record_free_names_of_apply_as_used dacc apply =
 
 let simplify_direct_tuple_application ~simplify_expr dacc apply
     ~params_arity:param_arity ~result_arity ~apply_alloc_mode
-    ~contains_no_escaping_local_allocs ~down_to_up =
+    ~contains_no_escaping_local_allocs ~current_region ~down_to_up =
   let dbg = Apply.dbg apply in
   let n = Flambda_arity.With_subkinds.cardinal param_arity in
   (* Split the tuple argument from other potential over application arguments *)
@@ -82,6 +82,7 @@ let simplify_direct_tuple_application ~simplify_expr dacc apply
          one on [apply] so there's nothing to do here. *)
       Simplify_common.split_direct_over_application apply ~param_arity
         ~result_arity ~apply_alloc_mode ~contains_no_escaping_local_allocs
+        ~current_region
   in
   (* Insert the projections and simplify the new expression, to allow field
      projections to be simplified, and over-application/full_application
@@ -348,10 +349,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
   let contains_no_escaping_local_allocs =
     Code_metadata.contains_no_escaping_local_allocs callee's_code_metadata
   in
-  let apply_alloc_mode : Alloc_mode.With_region.t =
-    if contains_no_escaping_local_allocs
-    then Heap
-    else Local { region = current_region }
+  let apply_alloc_mode : Alloc_mode.t =
+    if contains_no_escaping_local_allocs then Heap else Local
   in
   let wrapper_taking_remaining_args, dacc, code_id, code =
     let return_continuation = Continuation.create () in
@@ -406,6 +405,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     let applied_args = List.map applied_value applied_args in
     let applied_values = applied_callee :: applied_args in
     let my_closure = Variable.create "my_closure" in
+    let my_region = Variable.create "my_region" in
     let my_depth = Variable.create "my_depth" in
     let exn_continuation =
       Apply.exn_continuation apply |> Exn_continuation.without_extra_args
@@ -427,7 +427,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
           exn_continuation ~args ~call_kind dbg ~inlined:Default_inlined
           ~inlining_state:(Apply.inlining_state apply)
           ~position:Normal ~probe_name:None
-          ~relative_history:Inlining_history.Relative.empty
+          ~relative_history:Inlining_history.Relative.empty ~region:my_region
       in
       let cost_metrics =
         Cost_metrics.from_size (Code_size.apply full_application)
@@ -473,7 +473,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       (* Note that [exn_continuation] has no extra args -- see above. *)
       Function_params_and_body.create ~return_continuation
         ~exn_continuation:(Exn_continuation.exn_handler exn_continuation)
-        remaining_params ~body ~my_closure ~my_depth ~free_names_of_body:Unknown
+        remaining_params ~body ~my_closure ~my_region ~my_depth
+        ~free_names_of_body:Unknown
     in
     let name = Function_slot.to_string callee's_function_slot ^ "_partial" in
     let absolute_history, relative_history =
@@ -570,11 +571,12 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
 
 let simplify_direct_over_application ~simplify_expr dacc apply ~param_arity
     ~result_arity ~down_to_up ~coming_from_indirect ~apply_alloc_mode
-    ~contains_no_escaping_local_allocs =
+    ~contains_no_escaping_local_allocs ~current_region =
   fail_if_probe apply;
   let expr =
     Simplify_common.split_direct_over_application apply ~param_arity
       ~result_arity ~apply_alloc_mode ~contains_no_escaping_local_allocs
+      ~current_region
   in
   let down_to_up dacc ~rebuild =
     let rebuild uacc ~after_rebuild =
@@ -662,7 +664,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
         ~contains_no_escaping_local_allocs:
           (Code_metadata.contains_no_escaping_local_allocs
              callee's_code_metadata)
-        ~down_to_up
+        ~current_region ~down_to_up
     else
       let args = Apply.args apply in
       let provided_num_args = List.length args in
@@ -680,6 +682,7 @@ let simplify_direct_function_call ~simplify_expr dacc apply
           ~contains_no_escaping_local_allocs:
             (Code_metadata.contains_no_escaping_local_allocs
                callee's_code_metadata)
+          ~current_region
       else if provided_num_args > 0 && provided_num_args < num_params
       then
         simplify_direct_partial_application ~simplify_expr dacc apply
@@ -901,6 +904,7 @@ let simplify_apply_shared dacc apply =
         (Inlining_history.Relative.concat
            ~earlier:(DE.relative_history (DA.denv dacc))
            ~later:(Apply.relative_history apply))
+      ~region:(Apply.region apply)
   in
   dacc, callee_ty, apply, arg_types
 

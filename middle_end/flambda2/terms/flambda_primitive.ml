@@ -592,7 +592,9 @@ let effects_and_coeffects_of_nullary_primitive p =
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
   | Begin_region ->
     (* Ensure these don't get moved, but allow them to be deleted. *)
-    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
+    (* XXX and below *)
+    ( Effects.Arbitrary_effects,
+      (* Effects.Only_generative_effects Mutable, *) Coeffects.Has_coeffects )
 
 let nullary_classify_for_printing p =
   match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
@@ -927,7 +929,8 @@ let effects_and_coeffects_of_unary_primitive p =
     Effects.No_effects, Coeffects.No_coeffects
   | End_region ->
     (* Ensure these don't get moved, but allow them to be deleted. *)
-    Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
+    ( Effects.Arbitrary_effects (* Effects.Only_generative_effects Mutable *),
+      Coeffects.Has_coeffects )
 
 let unary_classify_for_printing p =
   match p with

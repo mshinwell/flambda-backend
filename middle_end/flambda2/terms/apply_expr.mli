@@ -105,7 +105,12 @@ val with_call_kind : t -> Call_kind.t -> t
 
 (** Change the continuation, callee and arguments of an application. *)
 val with_continuation_callee_and_args :
-  t -> Result_continuation.t -> callee:Simple.t -> args:Simple.t list -> t
+  t ->
+  Result_continuation.t ->
+  callee:Simple.t ->
+  args:Simple.t list ->
+  region:Variable.t ->
+  t
 
 val inlining_state : t -> Inlining_state.t
 

@@ -197,7 +197,9 @@ end = struct
               T.exactly_this_closure function_slot ~all_function_slots_in_set
                 ~all_closure_types_in_set:closure_types_via_aliases
                 ~all_value_slots_in_set:value_slot_types_inside_function
-                (Known (Set_of_closures.alloc_mode set_of_closures)))
+                (Known
+                   (Alloc_mode.With_region.without_region
+                      (Set_of_closures.alloc_mode set_of_closures))))
             all_function_slots_in_set)
         all_sets_of_closures
         (List.combine closure_types_via_aliases_all_sets
@@ -387,10 +389,10 @@ end
 
 module C = Context_for_multiple_sets_of_closures
 
-let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_depth
-    function_slot_opt ~closure_bound_names_inside_function ~inlining_arguments
-    ~absolute_history code_id ~return_continuation ~exn_continuation
-    ~return_cont_params code_metadata =
+let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
+    ~my_depth function_slot_opt ~closure_bound_names_inside_function
+    ~inlining_arguments ~absolute_history code_id ~return_continuation
+    ~exn_continuation ~return_cont_params code_metadata =
   let dacc =
     DA.map_denv (C.dacc_inside_functions context) ~f:(fun denv ->
         let num_leading_heap_params =
@@ -436,6 +438,10 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_depth
               DE.add_variable denv
                 (Bound_var.create my_closure NM.normal)
                 (T.alias_type_of K.value (Simple.name name)))
+        in
+        let denv =
+          let my_region = Bound_var.create my_region Name_mode.normal in
+          DE.add_variable denv my_region (T.unknown K.region)
         in
         let denv =
           let my_depth = Bound_var.create my_depth Name_mode.normal in
@@ -555,14 +561,16 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
            ~body
            ~my_closure
            ~is_my_closure_used:_
+           ~my_region
            ~my_depth
            ~free_names_of_body:_
          ->
         let dacc_at_function_entry =
-          dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_depth
-            function_slot_opt ~closure_bound_names_inside_function
-            ~inlining_arguments ~absolute_history code_id ~return_continuation
-            ~exn_continuation ~return_cont_params (Code.code_metadata code)
+          dacc_inside_function context ~outer_dacc ~params ~my_closure
+            ~my_region ~my_depth function_slot_opt
+            ~closure_bound_names_inside_function ~inlining_arguments
+            ~absolute_history code_id ~return_continuation ~exn_continuation
+            ~return_cont_params (Code.code_metadata code)
         in
         let dacc = dacc_at_function_entry in
         if not (DA.no_lifted_constants dacc)
@@ -587,7 +595,7 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
           let params_and_body =
             RE.Function_params_and_body.create ~free_names_of_body
               ~return_continuation ~exn_continuation params ~body ~my_closure
-              ~my_depth
+              ~my_region ~my_depth
           in
           (* Free names of the code = free names of the body minus the return
              and exception continuations, the parameters and the [my_closure]
@@ -856,7 +864,9 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
               ~all_function_slots_in_set:fun_types
               ~all_closure_types_in_set:closure_types_via_aliases
               ~all_value_slots_in_set:value_slot_types
-              (Known (Set_of_closures.alloc_mode set_of_closures))
+              (Known
+                 (Alloc_mode.With_region.without_region
+                    (Set_of_closures.alloc_mode set_of_closures)))
           in
           (bound_name, closure_type) :: closure_types)
       fun_types []
@@ -1120,7 +1130,7 @@ let type_value_slots_and_make_lifting_decision_for_one_set dacc
                   || DE.is_defined_at_toplevel (DA.denv dacc) var
                      &&
                      match Set_of_closures.alloc_mode set_of_closures with
-                     | Local -> (
+                     | Local _ -> (
                        match
                          T.never_holds_locally_allocated_values
                            (DA.typing_env dacc) var K.value

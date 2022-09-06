@@ -139,7 +139,7 @@ let split_direct_over_application apply ~param_arity ~result_arity
       ~inlining_state:(Apply.inlining_state apply)
       ~probe_name:(Apply.probe_name apply) ~position:(Apply.position apply)
       ~relative_history:(Apply.relative_history apply)
-      ~current_region
+      ~region:current_region
   in
   let perform_over_application_free_names =
     Apply.free_names perform_over_application
@@ -213,7 +213,7 @@ let split_direct_over_application apply ~param_arity ~result_arity
   let full_apply =
     Apply.with_continuation_callee_and_args apply
       (Return after_full_application) ~callee:(Apply.callee apply)
-      ~args:first_args ~current_region
+      ~args:first_args ~region:current_region
   in
   let both_applications =
     Let_cont.create_non_recursive after_full_application
