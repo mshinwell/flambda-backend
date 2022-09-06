@@ -598,8 +598,8 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
               ~my_region ~my_depth
           in
           (* Free names of the code = free names of the body minus the return
-             and exception continuations, the parameters and the [my_closure]
-             variable. *)
+             and exception continuations, the parameters and the [my_*]
+             variables. *)
           let free_names_of_code =
             Name_occurrences.remove_continuation free_names_of_body
               return_continuation
@@ -610,6 +610,9 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
           in
           let free_names_of_code =
             Name_occurrences.remove_var free_names_of_code my_closure
+          in
+          let free_names_of_code =
+            Name_occurrences.remove_var free_names_of_code my_region
           in
           let free_names_of_code =
             Name_occurrences.remove_var free_names_of_code my_depth

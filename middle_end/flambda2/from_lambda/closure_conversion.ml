@@ -1049,7 +1049,7 @@ let close_one_function acc ~external_env ~by_function_slot decl
   let return_continuation = Function_decl.return_continuation decl in
   let recursive = Function_decl.recursive decl in
   let my_closure = Variable.create "my_closure" in
-  let my_region = Variable.create "my_region" in
+  let my_region = Function_decl.my_region decl in
   let function_slot = Function_decl.function_slot decl in
   let my_depth = Variable.create "my_depth" in
   let next_depth = Variable.create "next_depth" in
@@ -1143,12 +1143,15 @@ let close_one_function acc ~external_env ~by_function_slot decl
     in
     Env.add_simple_to_substitute_map env_with_vars simples_for_closure_vars
   in
-  let closure_env_without_history =
-    List.fold_right
-      (fun (id, _) env ->
-        let env, _var = Env.add_var_like env id User_visible in
-        env)
-      params closure_env_without_parameters
+  let closure_env_without_history, my_region =
+    let closure_env =
+      List.fold_right
+        (fun (id, _) env ->
+          let env, _var = Env.add_var_like env id User_visible in
+          env)
+        params closure_env_without_parameters
+    in
+    Env.add_var_like closure_env my_region Not_user_visible
   in
   let closure_env = Env.with_depth closure_env_without_history my_depth in
   let closure_env, absolute_history, relative_history =
@@ -1924,8 +1927,8 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
 
 let close_program (type mode) ~(mode : mode Flambda_features.mode)
     ~symbol_for_global ~big_endian ~cmx_loader ~module_ident
-    ~module_block_size_in_words ~program ~prog_return_cont ~exn_continuation :
-    mode close_program_result =
+    ~module_block_size_in_words ~program ~prog_return_cont ~exn_continuation
+    ~toplevel_my_region : mode close_program_result =
   let symbol_for_global ident = symbol_for_global ?comp_unit:None ident in
   let env = Env.create ~symbol_for_global ~big_endian ~cmx_loader in
   let module_symbol =
@@ -1934,6 +1937,9 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
   let module_block_tag = Tag.Scannable.zero in
   let module_block_var = Variable.create "module_block" in
   let return_cont = Continuation.create ~sort:Toplevel_return () in
+  let env, toplevel_my_region =
+    Env.add_var_like env toplevel_my_region Not_user_visible
+  in
   let slot_offsets = Slot_offsets.empty in
   let acc = Acc.create ~symbol_for_global ~slot_offsets in
   let load_fields_body acc =
@@ -2079,7 +2085,7 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
        offsets constraints accumulation is not needed in "normal" mode. *)
     let unit =
       Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
-        ~body ~module_symbol ~used_value_slots:Unknown
+        ~toplevel_my_region ~body ~module_symbol ~used_value_slots:Unknown
     in
     unit, Normal
   | Classic ->
@@ -2110,6 +2116,7 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode)
     in
     let unit =
       Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
-        ~body ~module_symbol ~used_value_slots:(Known used_value_slots)
+        ~toplevel_my_region ~body ~module_symbol
+        ~used_value_slots:(Known used_value_slots)
     in
     unit, Classic (all_code, cmx, exported_offsets)

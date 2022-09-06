@@ -1976,13 +1976,14 @@ let lambda_to_flambda ~mode ~symbol_for_global ~big_endian ~cmx_loader
   in
   let return_continuation = Continuation.create ~sort:Define_root_symbol () in
   let exn_continuation = Continuation.create () in
+  let toplevel_my_region = Ident.create_local "toplevel_my_region" in
   let env =
     Env.create ~current_unit_id ~return_continuation ~exn_continuation
-      ~my_region:(Ident.create_local "toplevel_my_region")
+      ~my_region:toplevel_my_region
   in
   let toplevel acc ccenv =
     cps_tail acc env ccenv lam return_continuation exn_continuation
   in
   CC.close_program ~mode ~symbol_for_global ~big_endian ~cmx_loader
     ~module_ident ~module_block_size_in_words ~program:toplevel
-    ~prog_return_cont:return_continuation ~exn_continuation
+    ~prog_return_cont:return_continuation ~exn_continuation ~toplevel_my_region

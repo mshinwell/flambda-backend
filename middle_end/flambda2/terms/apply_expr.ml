@@ -92,19 +92,23 @@ let [@ocamlformat "disable"] print ppf
     { callee; continuation; exn_continuation; args; call_kind;
       dbg; inlined; inlining_state; probe_name; position; relative_history; region } =
   Format.fprintf ppf "@[<hov 1>(\
-      @[<hov 1>(%a\u{3008}%a\u{3009}\u{300a}%a\u{300b}@ (%a))@]@ \
+      @[<hov 1>(%a\u{3008}%a\u{3009}\u{300a}%a\u{300b}\
+      \u{27c5}@<0>%s%a@<0>%s\u{27c6}@ \
+      (%a))@]@ \
       @[<hov 1>(call_kind@ %a)@]@ \
       @[<hov 1>@<0>%s(dbg@ %a)@<0>%s@]@ \
       @[<hov 1>(inline@ %a)@]@ \
       @[<hov 1>(inlining_state@ %a)@]@ \
       %a\
       @[<hov 1>(probe_name@ %a)@]@ \
-      @[<hov 1>(position@ %a)@]@ \
-      @[<hov 1>(region@ %a)@]\
+      @[<hov 1>(position@ %a)@]@\
       )@]"
     Simple.print callee
     Result_continuation.print continuation
     Exn_continuation.print exn_continuation
+    (Flambda_colours.variable ())
+    Variable.print region
+    (Flambda_colours.normal ())
     Simple.List.print args
     Call_kind.print call_kind
     (Flambda_colours.debuginfo ())
@@ -123,7 +127,6 @@ let [@ocamlformat "disable"] print ppf
        | Position.Normal -> Format.pp_print_string ppf "Normal"
        | Position.Nontail -> Format.pp_print_string ppf "Nontail")
     position
-    Variable.print region
 
 let invariant
     ({ callee;

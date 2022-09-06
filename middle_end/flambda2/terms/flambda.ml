@@ -563,18 +563,17 @@ and print_function_params_and_body ppf t =
     let my_closure =
       Bound_parameter.create my_closure (K.With_subkind.create K.value Anything)
     in
-    let my_region =
-      Bound_parameter.create my_region (K.With_subkind.create K.region Anything)
-    in
     fprintf ppf
       "@[<hov 1>(@<0>%s@<1>\u{03bb}@<0>%s@[<hov \
-       1>@<1>\u{3008}%a@<1>\u{3009}@<1>\u{300a}%a@<1>\u{300b}%a %a %a @<0>%s%a \
-       @<0>%s.@<0>%s@]@ %a))@]"
+       1>@<1>\u{3008}%a@<1>\u{3009}@<1>\u{300a}%a@<1>\u{300b}\u{27c5}@<0>%s%a@<0>%s\u{27c6}@ \
+       %a %a @<0>%s%a @<0>%s.@<0>%s@]@ %a))@]"
       (Flambda_colours.lambda ())
       (Flambda_colours.normal ())
       Continuation.print return_continuation Continuation.print exn_continuation
+      (Flambda_colours.parameter ())
+      Variable.print my_region
+      (Flambda_colours.normal ())
       Bound_parameters.print params Bound_parameter.print my_closure
-      Bound_parameter.print my_region
       (Flambda_colours.depth_variable ())
       Variable.print my_depth (Flambda_colours.elide ())
       (Flambda_colours.normal ())

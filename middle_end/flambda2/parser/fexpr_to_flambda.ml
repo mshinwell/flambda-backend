@@ -910,5 +910,6 @@ let conv ~symbol_for_global ~module_ident (fexpr : Fexpr.flambda_unit) :
   let exn_continuation = Exn_continuation.exn_handler error_continuation in
   let env = bind_all_code_ids env fexpr in
   let body = expr env fexpr.body in
-  Flambda_unit.create ~return_continuation ~exn_continuation ~body
-    ~module_symbol ~used_value_slots:Unknown
+  Flambda_unit.create ~return_continuation ~exn_continuation
+    ~toplevel_my_region:(Variable.create "XXX") (* XXX *)
+    ~body ~module_symbol ~used_value_slots:Unknown
