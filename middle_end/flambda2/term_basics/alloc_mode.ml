@@ -29,6 +29,9 @@ let compare t1 t2 =
   | Heap, Local -> -1
   | Local, Heap -> 1
 
+let from_lambda (mode : Lambda.alloc_mode) =
+  match mode with Alloc_heap -> Heap | Alloc_local -> Local
+
 let to_lambda t =
   match t with Heap -> Lambda.alloc_heap | Local -> Lambda.alloc_local
 
