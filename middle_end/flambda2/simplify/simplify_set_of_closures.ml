@@ -634,10 +634,10 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
             Misc.fatal_errorf
               "Unexpected free name(s):@ %a@ in:@ \n\
                %a@ \n\
-               Simplified version:@ fun %a %a %a ->@ \n\
+               Simplified version:@ fun %a %a %a %a ->@ \n\
               \  %a" Name_occurrences.print free_names_of_code Code_id.print
               code_id Bound_parameters.print params Variable.print my_closure
-              Variable.print my_depth
+              Variable.print my_region Variable.print my_depth
               (RE.print (UA.are_rebuilding_terms uacc))
               body;
           ( params,

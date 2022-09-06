@@ -1615,7 +1615,8 @@ let equal t1 t2 = compare t1 t2 = 0
 
 let free_names t =
   match t with
-  | Nullary _ -> Name_occurrences.empty
+  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
+    Name_occurrences.empty
   | Unary (prim, x0) ->
     Name_occurrences.union
       (free_names_unary_primitive prim)
@@ -1639,7 +1640,7 @@ let free_names t =
 let apply_renaming t renaming =
   let apply simple = Simple.apply_renaming simple renaming in
   match t with
-  | Nullary _ -> t
+  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) -> t
   | Unary (prim, x0) ->
     let prim' = apply_renaming_unary_primitive prim renaming in
     let x0' = apply x0 in
@@ -1648,23 +1649,26 @@ let apply_renaming t renaming =
     let prim' = apply_renaming_binary_primitive prim renaming in
     let x0' = apply x0 in
     let x1' = apply x1 in
-    if x0' == x0 && x1' == x1 then t else Binary (prim', x0', x1')
+    if prim == prim' && x0' == x0 && x1' == x1
+    then t
+    else Binary (prim', x0', x1')
   | Ternary (prim, x0, x1, x2) ->
     let prim' = apply_renaming_ternary_primitive prim renaming in
     let x0' = apply x0 in
     let x1' = apply x1 in
     let x2' = apply x2 in
-    if x0' == x0 && x1' == x1 && x2' == x2
+    if prim == prim' && x0' == x0 && x1' == x1 && x2' == x2
     then t
     else Ternary (prim', x0', x1', x2')
   | Variadic (prim, xs) ->
     let prim' = apply_renaming_variadic_primitive prim renaming in
     let xs' = Simple.List.apply_renaming xs renaming in
-    if xs' == xs then t else Variadic (prim', xs')
+    if prim == prim' && xs' == xs then t else Variadic (prim', xs')
 
 let ids_for_export t =
   match t with
-  | Nullary _ -> Ids_for_export.empty
+  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
+    Ids_for_export.empty
   | Unary (prim, x0) ->
     Ids_for_export.union
       (ids_for_export_unary_primitive prim)
