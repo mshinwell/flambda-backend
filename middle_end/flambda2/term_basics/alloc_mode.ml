@@ -64,4 +64,22 @@ module With_region = struct
 
   let to_lambda t =
     match t with Heap -> Lambda.alloc_heap | Local _ -> Lambda.alloc_local
+
+  let free_names t =
+    match t with
+    | Heap -> Name_occurrences.empty
+    | Local { region } ->
+      Name_occurrences.singleton_variable region Name_mode.normal
+
+  let apply_renaming t renaming =
+    match t with
+    | Heap -> Heap
+    | Local { region } ->
+      let region' = Renaming.apply_variable renaming region in
+      if region == region' then t else Local { region = region' }
+
+  let ids_for_export t =
+    match t with
+    | Heap -> Ids_for_export.empty
+    | Local { region } -> Ids_for_export.singleton_variable region
 end

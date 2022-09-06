@@ -41,4 +41,8 @@ module With_region : sig
   val from_lambda : Lambda.alloc_mode -> current_region:Variable.t -> t
 
   val to_lambda : t -> Lambda.alloc_mode
+
+  include Contains_names.S with type t := t
+
+  include Contains_ids.S with type t := t
 end

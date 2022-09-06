@@ -101,7 +101,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>(inlining_state@ %a)@]@ \
       %a\
       @[<hov 1>(probe_name@ %a)@]@ \
-      @[<hov 1>(position@ %a)@]@\
+      @[<hov 1>(position@ %a)@]\
       )@]"
     Simple.print callee
     Result_continuation.print continuation

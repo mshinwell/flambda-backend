@@ -244,6 +244,25 @@ module Init_or_assign = struct
     match t with
     | Initialization -> Heap_initialization
     | Assignment mode -> Assignment (Alloc_mode.With_region.to_lambda mode)
+
+  let free_names t =
+    match t with
+    | Initialization -> Name_occurrences.empty
+    | Assignment alloc_mode -> Alloc_mode.With_region.free_names alloc_mode
+
+  let apply_renaming t renaming =
+    match t with
+    | Initialization -> Initialization
+    | Assignment alloc_mode ->
+      let alloc_mode' =
+        Alloc_mode.With_region.apply_renaming alloc_mode renaming
+      in
+      if alloc_mode == alloc_mode' then t else Assignment alloc_mode'
+
+  let ids_for_export t =
+    match t with
+    | Initialization -> Ids_for_export.empty
+    | Assignment alloc_mode -> Alloc_mode.With_region.ids_for_export alloc_mode
 end
 
 type array_like_operation =
