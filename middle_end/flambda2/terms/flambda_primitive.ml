@@ -965,6 +965,54 @@ let unary_classify_for_printing p =
   | Is_boxed_float | Is_flat_float_array -> Neither
   | End_region -> Neither
 
+let free_names_unary_primitive p =
+  match p with
+  | Box_number (_kind, alloc_mode) ->
+    Alloc_mode.With_region.free_names alloc_mode
+  | Project_function_slot { move_from; move_to } ->
+    Name_occurrences.add_function_slot_in_projection
+      (Name_occurrences.add_function_slot_in_projection Name_occurrences.empty
+         move_to Name_mode.normal)
+      move_from Name_mode.normal
+  | Project_value_slot { value_slot; project_from } ->
+    Name_occurrences.add_function_slot_in_projection
+      (Name_occurrences.add_value_slot_in_projection Name_occurrences.empty
+         value_slot Name_mode.normal)
+      project_from Name_mode.normal
+  | Duplicate_array _ | Duplicate_block _ | Is_int _ | Get_tag | String_length _
+  | Int_as_pointer | Opaque_identity | Int_arith _ | Num_conv _ | Boolean_not
+  | Reinterpret_int64_as_float | Float_arith _ | Array_length
+  | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
+  | Is_boxed_float | Is_flat_float_array | End_region ->
+    Name_occurrences.empty
+
+let apply_renaming_unary_primitive p renaming =
+  match p with
+  | Box_number (kind, alloc_mode) ->
+    let alloc_mode' =
+      Alloc_mode.With_region.apply_renaming alloc_mode renaming
+    in
+    if alloc_mode == alloc_mode' then p else Box_number (kind, alloc_mode')
+  | Duplicate_array _ | Duplicate_block _ | Is_int _ | Get_tag | String_length _
+  | Int_as_pointer | Opaque_identity | Int_arith _ | Num_conv _ | Boolean_not
+  | Reinterpret_int64_as_float | Float_arith _ | Array_length
+  | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
+  | Is_boxed_float | Is_flat_float_array | End_region | Project_function_slot _
+  | Project_value_slot _ ->
+    p
+
+let ids_for_export_unary_primitive p =
+  match p with
+  | Box_number (_kind, alloc_mode) ->
+    Alloc_mode.With_region.ids_for_export alloc_mode
+  | Duplicate_array _ | Duplicate_block _ | Is_int _ | Get_tag | String_length _
+  | Int_as_pointer | Opaque_identity | Int_arith _ | Num_conv _ | Boolean_not
+  | Reinterpret_int64_as_float | Float_arith _ | Array_length
+  | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
+  | Is_boxed_float | Is_flat_float_array | End_region | Project_function_slot _
+  | Project_value_slot _ ->
+    Ids_for_export.empty
+
 type binary_int_arith_op =
   | Add
   | Sub
@@ -1190,6 +1238,27 @@ let binary_classify_for_printing p =
   | Float_comp _ | Bigarray_load _ | String_or_bigstring_load _ ->
     Neither
 
+let free_names_binary_primitive p =
+  match p with
+  | Block_load _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
+  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
+  | Float_comp _ ->
+    Name_occurrences.empty
+
+let apply_renaming_binary_primitive p _renaming =
+  match p with
+  | Block_load _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
+  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
+  | Float_comp _ ->
+    p
+
+let ids_for_export_binary_primitive p =
+  match p with
+  | Block_load _ | Array_load _ | String_or_bigstring_load _ | Bigarray_load _
+  | Phys_equal _ | Int_arith _ | Int_shift _ | Int_comp _ | Float_arith _
+  | Float_comp _ ->
+    Ids_for_export.empty
+
 type ternary_primitive =
   | Block_set of Block_access_kind.t * Init_or_assign.t
   | Array_set of Array_kind.t * Init_or_assign.t
@@ -1293,6 +1362,40 @@ let ternary_classify_for_printing p =
   | Block_set _ | Array_set _ | Bytes_or_bigstring_set _ | Bigarray_set _ ->
     Neither
 
+let free_names_ternary_primitive p =
+  match p with
+  | Block_set (_kind, init_or_assign) ->
+    Init_or_assign.free_names init_or_assign
+  | Array_set (_kind, init_or_assign) ->
+    Init_or_assign.free_names init_or_assign
+  | Bytes_or_bigstring_set _ | Bigarray_set _ -> Name_occurrences.empty
+
+let apply_renaming_ternary_primitive p renaming =
+  match p with
+  | Block_set (kind, init_or_assign) ->
+    let init_or_assign' =
+      Init_or_assign.apply_renaming init_or_assign renaming
+    in
+    if init_or_assign == init_or_assign'
+    then p
+    else Block_set (kind, init_or_assign')
+  | Array_set (kind, init_or_assign) ->
+    let init_or_assign' =
+      Init_or_assign.apply_renaming init_or_assign renaming
+    in
+    if init_or_assign == init_or_assign'
+    then p
+    else Array_set (kind, init_or_assign')
+  | Bytes_or_bigstring_set _ | Bigarray_set _ -> p
+
+let ids_for_export_ternary_primitive p =
+  match p with
+  | Block_set (_kind, init_or_assign) ->
+    Init_or_assign.ids_for_export init_or_assign
+  | Array_set (_kind, init_or_assign) ->
+    Init_or_assign.ids_for_export init_or_assign
+  | Bytes_or_bigstring_set _ | Bigarray_set _ -> Ids_for_export.empty
+
 type variadic_primitive =
   | Make_block of Block_kind.t * Mutability.t * Alloc_mode.With_region.t
   | Make_array of Array_kind.t * Mutability.t * Alloc_mode.With_region.t
@@ -1373,6 +1476,33 @@ let effects_and_coeffects_of_variadic_primitive p ~args =
 
 let variadic_classify_for_printing p =
   match p with Make_block _ | Make_array _ -> Constructive
+
+let free_names_variadic_primitive p =
+  match p with
+  | Make_block (_kind, _mut, alloc_mode) ->
+    Alloc_mode.With_region.free_names alloc_mode
+  | Make_array (_kind, _mut, alloc_mode) ->
+    Alloc_mode.With_region.free_names alloc_mode
+
+let apply_renaming_variadic_primitive p renaming =
+  match p with
+  | Make_block (kind, mut, alloc_mode) ->
+    let alloc_mode' =
+      Alloc_mode.With_region.apply_renaming alloc_mode renaming
+    in
+    if alloc_mode == alloc_mode' then p else Make_block (kind, mut, alloc_mode')
+  | Make_array (kind, mut, alloc_mode) ->
+    let alloc_mode' =
+      Alloc_mode.With_region.apply_renaming alloc_mode renaming
+    in
+    if alloc_mode == alloc_mode' then p else Make_array (kind, mut, alloc_mode')
+
+let ids_for_export_variadic_primitive p =
+  match p with
+  | Make_block (_kind, _mut, alloc_mode) ->
+    Alloc_mode.With_region.ids_for_export alloc_mode
+  | Make_array (_kind, _mut, alloc_mode) ->
+    Alloc_mode.With_region.ids_for_export alloc_mode
 
 type t =
   | Nullary of nullary_primitive
@@ -1486,59 +1616,73 @@ let equal t1 t2 = compare t1 t2 = 0
 let free_names t =
   match t with
   | Nullary _ -> Name_occurrences.empty
-  | Unary (Project_function_slot { move_from; move_to }, x0) ->
-    Name_occurrences.add_function_slot_in_projection
-      (Name_occurrences.add_function_slot_in_projection (Simple.free_names x0)
-         move_to Name_mode.normal)
-      move_from Name_mode.normal
-  | Unary (Project_value_slot { value_slot; project_from }, x0) ->
-    Name_occurrences.add_function_slot_in_projection
-      (Name_occurrences.add_value_slot_in_projection (Simple.free_names x0)
-         value_slot Name_mode.normal)
-      project_from Name_mode.normal
-  | Unary (_prim, x0) -> Simple.free_names x0
-  | Binary (_prim, x0, x1) ->
-    Name_occurrences.union_list [Simple.free_names x0; Simple.free_names x1]
-  | Ternary (_prim, x0, x1, x2) ->
+  | Unary (prim, x0) ->
+    Name_occurrences.union
+      (free_names_unary_primitive prim)
+      (Simple.free_names x0)
+  | Binary (prim, x0, x1) ->
     Name_occurrences.union_list
-      [Simple.free_names x0; Simple.free_names x1; Simple.free_names x2]
-  | Variadic (_prim, xs) -> Simple.List.free_names xs
-  [@@ocaml.warning "-fragile-match"]
+      [ free_names_binary_primitive prim;
+        Simple.free_names x0;
+        Simple.free_names x1 ]
+  | Ternary (prim, x0, x1, x2) ->
+    Name_occurrences.union_list
+      [ free_names_ternary_primitive prim;
+        Simple.free_names x0;
+        Simple.free_names x1;
+        Simple.free_names x2 ]
+  | Variadic (prim, xs) ->
+    Name_occurrences.union
+      (free_names_variadic_primitive prim)
+      (Simple.List.free_names xs)
 
 let apply_renaming t renaming =
   let apply simple = Simple.apply_renaming simple renaming in
   match t with
   | Nullary _ -> t
   | Unary (prim, x0) ->
+    let prim' = apply_renaming_unary_primitive prim renaming in
     let x0' = apply x0 in
-    if x0' == x0 then t else Unary (prim, x0')
+    if prim == prim' && x0' == x0 then t else Unary (prim', x0')
   | Binary (prim, x0, x1) ->
+    let prim' = apply_renaming_binary_primitive prim renaming in
     let x0' = apply x0 in
     let x1' = apply x1 in
-    if x0' == x0 && x1' == x1 then t else Binary (prim, x0', x1')
+    if x0' == x0 && x1' == x1 then t else Binary (prim', x0', x1')
   | Ternary (prim, x0, x1, x2) ->
+    let prim' = apply_renaming_ternary_primitive prim renaming in
     let x0' = apply x0 in
     let x1' = apply x1 in
     let x2' = apply x2 in
     if x0' == x0 && x1' == x1 && x2' == x2
     then t
-    else Ternary (prim, x0', x1', x2')
+    else Ternary (prim', x0', x1', x2')
   | Variadic (prim, xs) ->
+    let prim' = apply_renaming_variadic_primitive prim renaming in
     let xs' = Simple.List.apply_renaming xs renaming in
-    if xs' == xs then t else Variadic (prim, xs')
+    if xs' == xs then t else Variadic (prim', xs')
 
 let ids_for_export t =
   match t with
   | Nullary _ -> Ids_for_export.empty
-  | Unary (_prim, x0) -> Ids_for_export.from_simple x0
-  | Binary (_prim, x0, x1) ->
-    Ids_for_export.add_simple (Ids_for_export.from_simple x0) x1
-  | Ternary (_prim, x0, x1, x2) ->
-    Ids_for_export.add_simple
+  | Unary (prim, x0) ->
+    Ids_for_export.union
+      (ids_for_export_unary_primitive prim)
+      (Ids_for_export.from_simple x0)
+  | Binary (prim, x0, x1) ->
+    Ids_for_export.union
+      (ids_for_export_binary_primitive prim)
       (Ids_for_export.add_simple (Ids_for_export.from_simple x0) x1)
-      x2
-  | Variadic (_prim, xs) ->
-    List.fold_left Ids_for_export.add_simple Ids_for_export.empty xs
+  | Ternary (prim, x0, x1, x2) ->
+    Ids_for_export.union
+      (ids_for_export_ternary_primitive prim)
+      (Ids_for_export.add_simple
+         (Ids_for_export.add_simple (Ids_for_export.from_simple x0) x1)
+         x2)
+  | Variadic (prim, xs) ->
+    Ids_for_export.union
+      (ids_for_export_variadic_primitive prim)
+      (List.fold_left Ids_for_export.add_simple Ids_for_export.empty xs)
 
 let args t =
   match t with
