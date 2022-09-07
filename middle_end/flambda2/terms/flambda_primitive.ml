@@ -591,8 +591,11 @@ let effects_and_coeffects_of_nullary_primitive p =
        moved around. *)
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
   | Begin_region ->
-    (* Ensure these don't get moved or deleted. *)
-    Effects.Arbitrary_effects, Coeffects.Has_coeffects
+    if Flambda_features.stack_allocation_enabled ()
+    then
+      (* Ensure these don't get moved or deleted. *)
+      Effects.Arbitrary_effects, Coeffects.Has_coeffects
+    else Effects.No_effects, Coeffects.No_coeffects
 
 let nullary_classify_for_printing p =
   match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
