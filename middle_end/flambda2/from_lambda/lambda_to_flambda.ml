@@ -1154,7 +1154,6 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
     let body_result = Ident.create_local "body_result" in
     let result_var = Ident.create_local "try_with_result" in
     let region = Ident.create_local "try_region" in
-    let env = Env.entering_try_region env region in
     (* As for all other constructs, the OCaml type checker and the Lambda
        generation pass ensures that there will be an enclosing region around the
        whole [Ltrywith] (possibly not immediately enclosing, but maybe further
@@ -1168,6 +1167,7 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
           ~is_exn_handler:false
           ~params:[result_var, Not_user_visible, kind]
           ~body:(fun acc env ccenv after_continuation ->
+            let env = Env.entering_try_region env region in
             let_cont_nonrecursive_with_extra_params acc env ccenv
               ~is_exn_handler:true
               ~params:[id, User_visible, Pgenval]
@@ -1194,10 +1194,9 @@ let rec cps_non_tail acc env ccenv (lam : L.lambda)
               ~handler:(fun acc env ccenv ->
                 CC.close_let acc ccenv (Ident.create_local "unit")
                   Not_user_visible (End_region region) ~body:(fun acc ccenv ->
+                    let env = Env.leaving_try_region env in
                     cps_tail acc env ccenv handler after_continuation k_exn)))
-          ~handler:(fun acc env ccenv ->
-            let env = Env.leaving_try_region env in
-            k acc env ccenv result_var))
+          ~handler:(fun acc env ccenv -> k acc env ccenv result_var))
   | Lifthenelse (cond, ifso, ifnot, kind) ->
     let lam = switch_for_if_then_else ~cond ~ifso ~ifnot ~kind in
     cps_non_tail acc env ccenv lam k k_exn
