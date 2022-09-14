@@ -83,6 +83,40 @@ type t =
     stages : stage list (* Stages of let-bindings, most recent at the head. *)
   }
 
+(* Creation *)
+
+let create offsets functions_info ~return_continuation ~exn_continuation
+    ~my_region =
+  (* We bind the [region] parameter to a fresh (not bound) cmm variable. This is correct
+     because the actual value of the region is not used at runtime:
+
+    - local allocs take the region as parameter in flambda2, but not at runtime
+     (in practice, the region parameter will be translated but ignored during to_cmm translation)
+
+     - the region of the function is never closed explicitly
+
+     So the actual value of the region is not used, but the primitive translation will
+     still try to generate cmm expressions for it (even though the cmm expression is then
+     dropped). Hence we bind the region ot a dummy fresh variable, so that cmm translation
+     succeeds, but if the value of that region is actually used, the rest of the backend
+     should complain about that unbound variable.
+  *)
+  let region_cmm_var = Backend_var.create_local "dummy_region_variable" in
+  { return_continuation;
+    exn_continuation;
+    offsets;
+    functions_info;
+    stages = [];
+    pures = Variable.Map.empty;
+    vars = Variable.Map.singleton my_region (C.var region_cmm_var);
+    vars_extra = Variable.Map.empty;
+    conts = Continuation.Map.empty;
+    exn_handlers = Continuation.Set.singleton exn_continuation;
+    exn_conts_extra_args = Continuation.Map.empty
+  }
+
+(* Access *)
+
 let return_continuation env = env.return_continuation
 
 let exn_continuation env = env.exn_continuation
@@ -370,28 +404,6 @@ let flush_delayed_lets ?(entering_loop = false) env =
   let flush e = flush pures_to_flush env.stages e in
   flush, { env with stages = []; pures = pures_to_keep }
 
-(* Creation *)
-
-let create offsets functions_info ~return_continuation ~exn_continuation
-    ~my_region =
-  let t =
-    { return_continuation;
-      exn_continuation;
-      offsets;
-      functions_info;
-      stages = [];
-      pures = Variable.Map.empty;
-      vars = Variable.Map.empty;
-      vars_extra = Variable.Map.empty;
-      conts = Continuation.Map.empty;
-      exn_handlers = Continuation.Set.singleton exn_continuation;
-      exn_conts_extra_args = Continuation.Map.empty
-    }
-  in
-  (* Dummy binding for [my_region] *)
-  bind_variable t my_region ~num_normal_occurrences_of_bound_vars:Unknown
-    ~effects_and_coeffects_of_defining_expr:Ece.pure
-    ~defining_expr:(C.int_const Debuginfo.none 0)
 
 (* Code and closures *)
 
