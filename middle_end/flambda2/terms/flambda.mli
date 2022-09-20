@@ -37,11 +37,19 @@ module Switch = Switch_expr
 
 type expr
 
-and expr_descr = private
+type let_expr
+
+type non_recursive_let_cont_handler
+
+type recursive_let_cont_handlers
+
+type function_params_and_body
+
+type static_const_group
+
+type expr_descr = private
   | Let of let_expr
-      (** Bind variable(s) or symbol(s). There can be no effect on control flow
-          (save for asynchronous operations such as the invocation of finalisers
-          or signal handlers as a result of reaching a safe point). *)
+      (** Bind variable(s) or symbol(s); there are no effects on control flow. *)
   | Let_cont of let_cont_expr  (** Define one or more continuations. *)
   | Apply of Apply.t
       (** Call an OCaml function, external function or method. *)
@@ -52,8 +60,6 @@ and expr_descr = private
   | Switch of Switch.t  (** Conditional control flow. *)
   | Invalid of { message : string }
       (** Code proved type-incorrect and therefore unreachable. *)
-
-and let_expr
 
 (** The defining expressions of [Let]-bindings. *)
 and named = private
@@ -84,18 +90,10 @@ and let_cont_expr = private
       }
   | Recursive of recursive_let_cont_handlers
 
-and non_recursive_let_cont_handler
-
-and recursive_let_cont_handlers
-
-and function_params_and_body
-
 and static_const_or_code = private
   | Code of function_params_and_body Code0.t
   | Deleted_code
   | Static_const of Static_const.t
-
-and static_const_group
 
 module Invalid : sig
   type t =
