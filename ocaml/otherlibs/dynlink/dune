@@ -416,6 +416,7 @@
    -o
    dynlink.cmxa
    ; NOTE: Be sure to keep these arguments in dependency order!
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Int_replace_polymorphic_compare.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Binutils.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Local_store.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Build_path_prefix_map.cmx
@@ -431,16 +432,14 @@
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Location.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ident.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Longident.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Builtin_attributes.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Type_immediacy.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Compilation_unit.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Linkage_name.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Symbol.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Path.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Attr_helper.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Primitive.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Types.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Syntaxerr.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Bytesections.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Cmi_format.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Int_replace_polymorphic_compare.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Debuginfo.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Btype.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Consistbl.cmx
@@ -451,6 +450,10 @@
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Persistent_env.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Docstrings.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ast_helper.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Builtin_attributes.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Type_immediacy.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Attr_helper.cmx
+   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Primitive.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Predef.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ast_mapper.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Subst.cmx
@@ -462,9 +465,6 @@
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Runtimedef.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Symtable.cmx
    .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Opcodes.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Compilation_unit.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Linkage_name.cmx
-   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Symbol.cmx
    .dynlink_internal.objs/native/dynlink_types.cmx
    .dynlink_internal.objs/native/dynlink_platform_intf.cmx
    .dynlink_internal.objs/native/dynlink_common.cmx
