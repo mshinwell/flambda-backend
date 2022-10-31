@@ -45,9 +45,6 @@ let is_tmc_attribute =
   [ ["tail_mod_cons"; "ocaml.tail_mod_cons"], true ]
 
 let is_poll_attribute =
-  [ ["poll"], true ]
-
-let is_poll_attribute =
   [ ["poll"; "ocaml.poll"], true ]
 
 let is_loop_attribute =
@@ -385,28 +382,8 @@ let add_check_attribute expr loc attributes =
             (Warnings.Duplicated_attribute (to_string check))
       end;
       let attr = { attr with check } in
-      Lfunction { funct with attr }
+      lfunction_with_attr ~attr funct
     | (_ :: _ :: _) -> assert false
-    end
-  | _ -> expr
-
-let add_poll_attribute expr loc attributes =
-  match expr with
-  | Lfunction({ attr = { stub = false } as attr } as funct) ->
-    begin match get_poll_attribute attributes with
-    | Default_poll -> expr
-    | Error_poll as poll ->
-      begin match attr.poll with
-      | Default_poll -> ()
-      | Error_poll ->
-        Location.prerr_warning loc
-          (Warnings.Duplicated_attribute "error_poll")
-      end;
-      let attr = { attr with poll } in
-      check_poll_inline loc attr;
-      check_poll_local loc attr;
-      let attr = { attr with inline = Never_inline; local = Never_local } in
-      Lfunction { funct with attr }
     end
   | _ -> expr
 
@@ -423,7 +400,7 @@ let add_loop_attribute expr loc attributes =
             (Warnings.Duplicated_attribute "loop")
       end;
       let attr = { attr with loop } in
-      Lfunction { funct with attr = attr }
+      lfunction_with_attr ~attr funct
     end
   | _ -> expr
 

@@ -371,10 +371,6 @@ type poll_attribute =
 type property =
   | Noalloc
 
-type poll_attribute =
-  | Error_poll (* [@poll error] *)
-  | Default_poll (* no [@poll] attribute *)
-
 type check_attribute =
   | Default_check
   | Assert of property
