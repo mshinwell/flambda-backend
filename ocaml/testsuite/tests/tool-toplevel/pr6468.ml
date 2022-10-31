@@ -2,6 +2,8 @@
    * toplevel
 *)
 
+# 5 "toplevel/byte/topeval.ml"
+
 (* Make the test reproducible regardless of whether OCAMLRUNPARAM=b or not *)
 Printexc.record_backtrace true;;
 
