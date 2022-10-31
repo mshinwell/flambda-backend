@@ -3105,14 +3105,12 @@ type ternary_primitive =
 
 let setfield_computed ptr init arg1 arg2 arg3 dbg =
   match assignment_kind ptr init with
-  | Caml_modify ->
-      return_unit dbg (addr_array_set arg1 arg2 arg3 dbg)
+  | Caml_modify -> return_unit dbg (addr_array_set arg1 arg2 arg3 dbg)
   | Caml_modify_local ->
-      return_unit dbg (addr_array_set_local arg1 arg2 arg3 dbg)
+    return_unit dbg (addr_array_set_local arg1 arg2 arg3 dbg)
   | Caml_initialize ->
-      return_unit dbg (addr_array_initialize arg1 arg2 arg3 dbg)
-  | Simple _ ->
-      return_unit dbg (int_array_set arg1 arg2 arg3 dbg)
+    return_unit dbg (addr_array_initialize arg1 arg2 arg3 dbg)
+  | Simple _ -> return_unit dbg (int_array_set arg1 arg2 arg3 dbg)
 
 let bytesset_unsafe arg1 arg2 arg3 dbg =
   return_unit dbg
