@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-9-30-40-41-42-66"]
+[@@@ocaml.warning "+a-4-9-30-40-41-42-66-69"]
 open! Int_replace_polymorphic_compare
 
 module Env = Closure_conversion_aux.Env
