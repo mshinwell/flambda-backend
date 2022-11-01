@@ -557,39 +557,37 @@ let check_attribute ppf check =
   | Assert p -> fprintf ppf "assert %s@ " (check_property p)
   | Assume p -> fprintf ppf "assume %s@ " (check_property p)
 
-let function_attribute ppf
-    { inline; specialise; check; local; is_a_functor; stub; poll; loop;
-      tmc_candidate } =
-  if is_a_functor then
+let function_attribute ppf t =
+  if t.is_a_functor then
     fprintf ppf "is_a_functor@ ";
-  if stub then
+  if t.stub then
     fprintf ppf "stub@ ";
-  begin match inline with
+  begin match t.inline with
   | Default_inline -> ()
   | Always_inline -> fprintf ppf "always_inline@ "
   | Available_inline -> fprintf ppf "available_inline@ "
   | Never_inline -> fprintf ppf "never_inline@ "
   | Unroll i -> fprintf ppf "unroll(%i)@ " i
   end;
-  begin match specialise with
+  begin match t.specialise with
   | Default_specialise -> ()
   | Always_specialise -> fprintf ppf "always_specialise@ "
   | Never_specialise -> fprintf ppf "never_specialise@ "
   end;
-  begin match local with
+  begin match t.local with
   | Default_local -> ()
   | Always_local -> fprintf ppf "always_local@ "
   | Never_local -> fprintf ppf "never_local@ "
   end;
-  check_attribute ppf check;
-  begin match loop with
+  check_attribute ppf t.check;
+  if t.tmc_candidate then
+    fprintf ppf "tail_mod_cons@ ";
+  begin match t.loop with
   | Default_loop -> ()
   | Always_loop -> fprintf ppf "always_loop@ "
   | Never_loop -> fprintf ppf "never_loop@ "
   end;
-  if tmc_candidate then
-    fprintf ppf "tail_mod_cons@ ";
-  begin match poll with
+  begin match t.poll with
   | Default_poll -> ()
   | Error_poll -> fprintf ppf "error_poll@ "
   end

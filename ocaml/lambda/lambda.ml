@@ -364,12 +364,12 @@ type local_attribute =
   | Never_local (* [@local never] *)
   | Default_local (* [@local maybe] or no [@local] attribute *)
 
+type property =
+  | Noalloc
+
 type poll_attribute =
   | Error_poll (* [@poll error] *)
   | Default_poll (* no [@poll] attribute *)
-
-type property =
-  | Noalloc
 
 type check_attribute =
   | Default_check

@@ -21,7 +21,7 @@
    -principal
    -absname
    -w
-   +a-4-9-40-41-42-44-45-48-69-70
+   +a-4-9-40-41-42-44-45-48
    -warn-error
    A
    -bin-annot
@@ -140,6 +140,8 @@
 
 (copy_files ../../utils/linkage_name.ml)
 
+(copy_files ../../utils/lazy_backtrack.ml)
+
 (copy_files ../../parsing/location.ml)
 
 (copy_files ../../parsing/longident.ml)
@@ -238,7 +240,7 @@
 
 (copy_files ../../utils/linkage_name.mli)
 
-(copy_files ../../utils/lazy_backtrack.ml)
+(copy_files ../../utils/lazy_backtrack.mli)
 
 (copy_files ../../parsing/location.mli)
 
@@ -345,6 +347,8 @@
 
 (rule
  (targets dynlink.cma)
+ (action
+  (run %{ocamlc} -g -a -ccopt %{read:natdynlinkops} -o dynlink.cma %{deps}))
  (deps
   ; Note: Be sure to keep these arguments in dependency order!
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Int_replace_polymorphic_compare.cmo
@@ -399,9 +403,7 @@
   .dynlink_internal.objs/byte/dynlink_types.cmo
   .dynlink_internal.objs/byte/dynlink_platform_intf.cmo
   .dynlink_internal.objs/byte/dynlink_common.cmo
-  .dynlink_internal.objs/byte/dynlink.cmo)
- (action
-  (run %{ocamlc} -g -a -ccopt %{read:natdynlinkops} -o dynlink.cma %{deps})))
+  .dynlink_internal.objs/byte/dynlink.cmo))
 
 (rule
  (targets dynlink.cmxa dynlink.a)

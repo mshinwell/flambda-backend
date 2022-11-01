@@ -370,11 +370,9 @@ let add_check_attribute expr loc attributes =
     | Assume p -> Printf.sprintf "%s assume" (to_string p)
     | Default_check -> assert false
   in
-  match expr with
-  | Lfunction({ attr = { stub = false } as attr } as funct) ->
-    begin match get_check_attribute attributes with
-    | [] -> expr
-    | [check] ->
+  match expr, get_check_attribute attributes with
+  | expr, [] -> expr
+  | Lfunction({ attr = { stub = false } as attr } as funct), [check] ->
       begin match attr.check with
       | Default_check -> ()
       | Assert Noalloc | Assume Noalloc ->
@@ -383,9 +381,15 @@ let add_check_attribute expr loc attributes =
       end;
       let attr = { attr with check } in
       lfunction_with_attr ~attr funct
-    | (_ :: _ :: _) -> assert false
-    end
-  | _ -> expr
+  | expr, [check] ->
+      Location.prerr_warning loc
+        (Warnings.Misplaced_attribute (to_string check));
+      expr
+  | expr, a::b::_ ->
+    Location.prerr_warning loc
+      (Warnings.Duplicated_attribute
+         (Printf.sprintf "%s/%s"(to_string a) (to_string b)));
+    expr
 
 let add_loop_attribute expr loc attributes =
   match expr with
