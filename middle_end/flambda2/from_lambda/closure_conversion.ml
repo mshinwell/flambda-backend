@@ -702,9 +702,10 @@ let close_named acc env ~let_bound_var (named : IR.named)
       ~register_const_string:(fun acc -> register_const_string acc)
       prim Debuginfo.none
       (fun acc named -> k acc (Some named))
-  | Begin_region ->
+  | Begin_region { try_region_parent } ->
+    let try_region_parent = Option.map (Env.find_var env) try_region_parent in
     let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
-      Nullary Begin_region
+      Nullary (Begin_region { try_region_parent })
     in
     Lambda_to_flambda_primitives_helpers.bind_rec acc None
       ~register_const_string:(fun acc -> register_const_string acc)
@@ -732,7 +733,7 @@ let close_let acc env id user_visible defining_expr
       let body_env = Env.add_simple_to_substitute env id simple in
       body acc body_env
     | None -> body acc body_env
-    | Some (Prim ((Nullary Begin_region | Unary (End_region, _)), _))
+    | Some (Prim ((Nullary (Begin_region _) | Unary (End_region, _)), _))
       when not (Flambda_features.stack_allocation_enabled ()) ->
       (* We use [body_env] to ensure the region variables are still in the
          environment, to avoid lookup errors, even though the [Let] won't be
@@ -1904,7 +1905,9 @@ let wrap_over_application acc env full_call (apply : IR.apply) over_args
   | Some (region, _) ->
     Let_with_acc.create acc
       (Bound_pattern.singleton (Bound_var.create region Name_mode.normal))
-      (Named.create_prim (Nullary Begin_region) apply_dbg)
+      (Named.create_prim
+         (Nullary (Begin_region { try_region_parent = None }))
+         apply_dbg)
       ~body:both_applications
 
 type call_args_split =

@@ -204,9 +204,11 @@ type nullary_primitive =
           let-binding. *)
   | Probe_is_enabled of { name : string }
       (** Returns a boolean saying whether the given tracing probe is enabled. *)
-  | Begin_region
+  | Begin_region of { try_region_parent : Variable.t option }
       (** Starting delimiter of local allocation region, returning a region
-          name. *)
+          name. If [try_region_parent] is specified, this region will only be
+          deleted if the parent is. This is used for regions in the "try" part
+          of a "try...with". *)
 
 (** Untagged binary integer arithmetic operations.
 
