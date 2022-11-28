@@ -1252,6 +1252,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                         cps_tail acc env ccenv body poptrap_continuation
                           handler_continuation))
                   ~handler:(fun acc env ccenv ->
+                    let env = Env.leaving_try_region env in
                     apply_cont_with_extra_args acc env ccenv ~dbg k
                       (Some (IR.Pop { exn_handler = handler_continuation }))
                       [IR.Var body_result]))
