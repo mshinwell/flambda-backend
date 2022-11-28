@@ -514,8 +514,8 @@ let nullary_primitive _env dbg prim : _ * Cmm.expression =
        should instead always use smart constructors defined in `cmm_helpers` or
        `to_cmm_shared.ml` *)
     let expr = Cmm.Cop (Cprobe_is_enabled { name }, [], dbg) in
-    None, res, expr
-  | Begin_region _ -> None, res, C.beginregion ~dbg
+    None, expr
+  | Begin_region _ -> None, C.beginregion ~dbg
 
 let unary_primitive env res dbg f arg =
   match (f : P.unary_primitive) with
