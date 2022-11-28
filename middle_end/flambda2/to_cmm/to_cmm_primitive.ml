@@ -509,8 +509,13 @@ let binary_float_comp_primitive_yielding_int _env dbg x y =
 let nullary_primitive _env dbg prim : _ * Cmm.expression =
   match (prim : P.nullary_primitive) with
   | Optimised_out _ -> Misc.fatal_errorf "TODO: phantom let-bindings in to_cmm"
-  | Probe_is_enabled { name } -> None, Cop (Cprobe_is_enabled { name }, [], dbg)
-  | Begin_region -> None, C.beginregion ~dbg
+  | Probe_is_enabled { name } ->
+    (* CR gbury: we should never manually build cmm expression in this file. We
+       should instead always use smart constructors defined in `cmm_helpers` or
+       `to_cmm_shared.ml` *)
+    let expr = Cmm.Cop (Cprobe_is_enabled { name }, [], dbg) in
+    None, res, expr
+  | Begin_region _ -> None, res, C.beginregion ~dbg
 
 let unary_primitive env res dbg f arg =
   match (f : P.unary_primitive) with

@@ -570,21 +570,23 @@ type result_kind =
 type nullary_primitive =
   | Optimised_out of K.t
   | Probe_is_enabled of { name : string }
-  | Begin_region
+  | Begin_region of { try_region_parent : Variable.t option }
 
 let nullary_primitive_eligible_for_cse = function
-  | Optimised_out _ | Probe_is_enabled _ | Begin_region -> false
+  | Optimised_out _ | Probe_is_enabled _ | Begin_region _ -> false
 
 let compare_nullary_primitive p1 p2 =
   match p1, p2 with
   | Optimised_out k1, Optimised_out k2 -> K.compare k1 k2
   | Probe_is_enabled { name = name1 }, Probe_is_enabled { name = name2 } ->
     String.compare name1 name2
-  | Begin_region, Begin_region -> 0
-  | Optimised_out _, (Probe_is_enabled _ | Begin_region) -> -1
-  | Probe_is_enabled _, Begin_region -> -1
+  | ( Begin_region { try_region_parent = try_region_parent1 },
+      Begin_region { try_region_parent = try_region_parent2 } ) ->
+    Option.compare Variable.compare try_region_parent1 try_region_parent2
+  | Optimised_out _, (Probe_is_enabled _ | Begin_region _) -> -1
+  | Probe_is_enabled _, Begin_region _ -> -1
   | Probe_is_enabled _, Optimised_out _ -> 1
-  | Begin_region, (Optimised_out _ | Probe_is_enabled _) -> 1
+  | Begin_region _, (Optimised_out _ | Probe_is_enabled _) -> 1
 
 let equal_nullary_primitive p1 p2 = compare_nullary_primitive p1 p2 = 0
 
@@ -595,13 +597,17 @@ let print_nullary_primitive ppf p =
       Flambda_colours.pop
   | Probe_is_enabled { name } ->
     Format.fprintf ppf "@[<hov 1>(Probe_is_enabled@ %s)@]" name
-  | Begin_region -> Format.pp_print_string ppf "Begin_region"
+  | Begin_region { try_region_parent = None } ->
+    Format.pp_print_string ppf "Begin_region"
+  | Begin_region { try_region_parent = Some try_region_parent } ->
+    Format.fprintf ppf "@[<hov 1>(Begin_region@ (try_region_parent %a))@]"
+      Variable.print try_region_parent
 
 let result_kind_of_nullary_primitive p : result_kind =
   match p with
   | Optimised_out k -> Singleton k
   | Probe_is_enabled _ -> Singleton K.naked_immediate
-  | Begin_region -> Singleton K.region
+  | Begin_region _ -> Singleton K.region
 
 let effects_and_coeffects_of_nullary_primitive p =
   match p with
@@ -610,12 +616,13 @@ let effects_and_coeffects_of_nullary_primitive p =
     (* This doesn't really have effects, but we want to make sure it never gets
        moved around. *)
     Effects.Arbitrary_effects, Coeffects.Has_coeffects
-  | Begin_region ->
+  | Begin_region _ ->
     (* Ensure these don't get moved, but allow them to be deleted. *)
     Effects.Only_generative_effects Mutable, Coeffects.Has_coeffects
 
 let nullary_classify_for_printing p =
-  match p with Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
+  match p with
+  | Optimised_out _ | Probe_is_enabled _ | Begin_region _ -> Neither
 
 type unary_primitive =
   | Duplicate_block of { kind : Duplicate_block_kind.t }
@@ -1628,8 +1635,12 @@ let equal t1 t2 = compare t1 t2 = 0
 
 let free_names t =
   match t with
-  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
+  | Nullary
+      ( Optimised_out _ | Probe_is_enabled _
+      | Begin_region { try_region_parent = None } ) ->
     Name_occurrences.empty
+  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
+    Name_occurrences.singleton_variable try_region_parent Name_mode.normal
   | Unary (prim, x0) ->
     Name_occurrences.union
       (free_names_unary_primitive prim)
@@ -1653,7 +1664,17 @@ let free_names t =
 let apply_renaming t renaming =
   let apply simple = Simple.apply_renaming simple renaming in
   match t with
-  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) -> t
+  | Nullary
+      ( Optimised_out _ | Probe_is_enabled _
+      | Begin_region { try_region_parent = None } ) ->
+    t
+  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
+    let try_region_parent' =
+      Renaming.apply_variable renaming try_region_parent
+    in
+    if try_region_parent == try_region_parent'
+    then t
+    else Nullary (Begin_region { try_region_parent = Some try_region_parent' })
   | Unary (prim, x0) ->
     let prim' = apply_renaming_unary_primitive prim renaming in
     let x0' = apply x0 in
@@ -1680,8 +1701,12 @@ let apply_renaming t renaming =
 
 let ids_for_export t =
   match t with
-  | Nullary (Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
+  | Nullary
+      ( Optimised_out _ | Probe_is_enabled _
+      | Begin_region { try_region_parent = None } ) ->
     Ids_for_export.empty
+  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
+    Ids_for_export.singleton_variable try_region_parent
   | Unary (prim, x0) ->
     Ids_for_export.union
       (ids_for_export_unary_primitive prim)
@@ -1946,7 +1971,7 @@ end
 
 let is_begin_or_end_region t =
   match t with
-  | Nullary Begin_region | Unary (End_region, _) -> true
+  | Nullary (Begin_region _) | Unary (End_region, _) -> true
   | _ -> false
   [@@ocaml.warning "-fragile-match"]
 
