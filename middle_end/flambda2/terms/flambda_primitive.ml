@@ -573,10 +573,10 @@ type nullary_primitive =
   | Invalid of K.t
   | Optimised_out of K.t
   | Probe_is_enabled of { name : string }
-  | Begin_region of { try_region_parent : Variable.t option }
+  | Begin_region
 
 let nullary_primitive_eligible_for_cse = function
-  | Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region _ -> false
+  | Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region -> false
 
 let compare_nullary_primitive p1 p2 =
   match p1, p2 with
@@ -584,15 +584,13 @@ let compare_nullary_primitive p1 p2 =
   | Optimised_out k1, Optimised_out k2 -> K.compare k1 k2
   | Probe_is_enabled { name = name1 }, Probe_is_enabled { name = name2 } ->
     String.compare name1 name2
-  | ( Begin_region { try_region_parent = try_region_parent1 },
-      Begin_region { try_region_parent = try_region_parent2 } ) ->
-    Option.compare Variable.compare try_region_parent1 try_region_parent2
-  | Invalid _, (Optimised_out _ | Probe_is_enabled _ | Begin_region _) -> -1
-  | Optimised_out _, (Probe_is_enabled _ | Begin_region _) -> -1
+  | Begin_region, Begin_region -> 0
+  | Invalid _, (Optimised_out _ | Probe_is_enabled _ | Begin_region) -> -1
+  | Optimised_out _, (Probe_is_enabled _ | Begin_region) -> -1
   | Optimised_out _, Invalid _ -> 1
-  | Probe_is_enabled _, Begin_region _ -> -1
+  | Probe_is_enabled _, Begin_region -> -1
   | Probe_is_enabled _, (Invalid _ | Optimised_out _) -> 1
-  | Begin_region _, (Invalid _ | Optimised_out _ | Probe_is_enabled _) -> 1
+  | Begin_region, (Invalid _ | Optimised_out _ | Probe_is_enabled _) -> 1
 
 let equal_nullary_primitive p1 p2 = compare_nullary_primitive p1 p2 = 0
 
@@ -606,18 +604,18 @@ let print_nullary_primitive ppf p =
       Flambda_colours.pop
   | Probe_is_enabled { name } ->
     Format.fprintf ppf "@[<hov 1>(Probe_is_enabled@ %s)@]" name
-  | Begin_region { try_region_parent = None } ->
-    Format.pp_print_string ppf "Begin_region"
-  | Begin_region { try_region_parent = Some try_region_parent } ->
-    Format.fprintf ppf "@[<hov 1>(Begin_region@ (try_region_parent %a))@]"
-      Variable.print try_region_parent
+  | Begin_region -> Format.pp_print_string ppf "Begin_region"
 
 let result_kind_of_nullary_primitive p : result_kind =
   match p with
   | Invalid k -> Singleton k
   | Optimised_out k -> Singleton k
   | Probe_is_enabled _ -> Singleton K.naked_immediate
-  | Begin_region _ -> Singleton K.region
+  | Begin_region -> Singleton K.region
+
+let effects_and_coeffects_of_begin_region : Effects_and_coeffects.t =
+  (* Ensure these don't get moved, but allow them to be deleted. *)
+  Only_generative_effects Mutable, Has_coeffects, Strict
 
 let effects_and_coeffects_of_nullary_primitive p : Effects_and_coeffects.t =
   match p with
@@ -627,13 +625,11 @@ let effects_and_coeffects_of_nullary_primitive p : Effects_and_coeffects.t =
     (* This doesn't really have effects, but we want to make sure it never gets
        moved around. *)
     Arbitrary_effects, Has_coeffects, Strict
-  | Begin_region _ ->
-    (* Ensure these don't get moved, but allow them to be deleted. *)
-    Only_generative_effects Mutable, Has_coeffects, Strict
+  | Begin_region -> effects_and_coeffects_of_begin_region
 
 let nullary_classify_for_printing p =
   match p with
-  | Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region _ -> Neither
+  | Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region -> Neither
 
 type unary_primitive =
   | Duplicate_block of { kind : Duplicate_block_kind.t }
@@ -671,6 +667,7 @@ type unary_primitive =
       }
   | Is_boxed_float
   | Is_flat_float_array
+  | Begin_try_region
   | End_region
   | Obj_dup
 
@@ -703,7 +700,7 @@ let unary_primitive_eligible_for_cse p ~arg =
     Simple.is_var arg
   | Project_function_slot _ | Project_value_slot _ -> false
   | Is_boxed_float | Is_flat_float_array -> true
-  | End_region | Obj_dup -> false
+  | Begin_try_region | End_region | Obj_dup -> false
 
 let compare_unary_primitive p1 p2 =
   let unary_primitive_numbering p =
@@ -730,8 +727,9 @@ let compare_unary_primitive p1 p2 =
     | Project_value_slot _ -> 19
     | Is_boxed_float -> 20
     | Is_flat_float_array -> 21
-    | End_region -> 22
-    | Obj_dup -> 23
+    | Begin_try_region -> 22
+    | End_region -> 23
+    | Obj_dup -> 24
   in
   match p1, p2 with
   | ( Duplicate_array
@@ -797,8 +795,8 @@ let compare_unary_primitive p1 p2 =
       | Num_conv _ | Boolean_not | Reinterpret_int64_as_float | Float_arith _
       | Array_length | Bigarray_length _ | Unbox_number _ | Box_number _
       | Untag_immediate | Tag_immediate | Project_function_slot _
-      | Project_value_slot _ | Is_boxed_float | Is_flat_float_array | End_region
-      | Obj_dup ),
+      | Project_value_slot _ | Is_boxed_float | Is_flat_float_array
+      | Begin_try_region | End_region | Obj_dup ),
       _ ) ->
     Stdlib.compare (unary_primitive_numbering p1) (unary_primitive_numbering p2)
 
@@ -847,6 +845,7 @@ let print_unary_primitive ppf p =
       project_from Value_slot.print value_slot
   | Is_boxed_float -> fprintf ppf "Is_boxed_float"
   | Is_flat_float_array -> fprintf ppf "Is_flat_float_array"
+  | Begin_try_region -> Format.pp_print_string ppf "Begin_try_region"
   | End_region -> Format.pp_print_string ppf "End_region"
   | Obj_dup -> Format.pp_print_string ppf "Obj_dup"
 
@@ -870,6 +869,7 @@ let arg_kind_of_unary_primitive p =
   | Project_function_slot _ | Project_value_slot _ | Is_boxed_float
   | Is_flat_float_array ->
     K.value
+  | Begin_try_region -> K.region
   | End_region -> K.region
   | Obj_dup -> K.value
 
@@ -896,6 +896,7 @@ let result_kind_of_unary_primitive p : result_kind =
   | Project_value_slot _ ->
     Singleton K.value
   | Is_boxed_float | Is_flat_float_array -> Singleton K.naked_immediate
+  | Begin_try_region -> Singleton K.region
   | End_region -> Singleton K.value
   | Obj_dup -> Singleton K.value
 
@@ -970,6 +971,7 @@ let effects_and_coeffects_of_unary_primitive p : Effects_and_coeffects.t =
   | Is_boxed_float | Is_flat_float_array ->
     (* Tags on heap blocks are immutable. *)
     No_effects, No_coeffects, Strict
+  | Begin_try_region -> effects_and_coeffects_of_begin_region
   | End_region ->
     (* These can't be [Only_generative_effects] or the primitives would get
        deleted without regard to prior uses of the region. Instead there are
@@ -993,7 +995,7 @@ let unary_classify_for_printing p =
   | Box_number _ | Tag_immediate -> Constructive
   | Project_function_slot _ | Project_value_slot _ -> Destructive
   | Is_boxed_float | Is_flat_float_array -> Neither
-  | End_region -> Neither
+  | Begin_try_region | End_region -> Neither
 
 let free_names_unary_primitive p =
   match p with
@@ -1013,7 +1015,8 @@ let free_names_unary_primitive p =
   | Int_as_pointer | Opaque_identity _ | Int_arith _ | Num_conv _ | Boolean_not
   | Reinterpret_int64_as_float | Float_arith _ | Array_length
   | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
-  | Is_boxed_float | Is_flat_float_array | End_region | Obj_dup ->
+  | Is_boxed_float | Is_flat_float_array | Begin_try_region | End_region
+  | Obj_dup ->
     Name_occurrences.empty
 
 let apply_renaming_unary_primitive p renaming =
@@ -1027,8 +1030,8 @@ let apply_renaming_unary_primitive p renaming =
   | Int_as_pointer | Opaque_identity _ | Int_arith _ | Num_conv _ | Boolean_not
   | Reinterpret_int64_as_float | Float_arith _ | Array_length
   | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
-  | Is_boxed_float | Is_flat_float_array | End_region | Project_function_slot _
-  | Project_value_slot _ | Obj_dup ->
+  | Is_boxed_float | Is_flat_float_array | Begin_try_region | End_region
+  | Project_function_slot _ | Project_value_slot _ | Obj_dup ->
     p
 
 let ids_for_export_unary_primitive p =
@@ -1039,8 +1042,8 @@ let ids_for_export_unary_primitive p =
   | Int_as_pointer | Opaque_identity _ | Int_arith _ | Num_conv _ | Boolean_not
   | Reinterpret_int64_as_float | Float_arith _ | Array_length
   | Bigarray_length _ | Unbox_number _ | Untag_immediate | Tag_immediate
-  | Is_boxed_float | Is_flat_float_array | End_region | Project_function_slot _
-  | Project_value_slot _ | Obj_dup ->
+  | Is_boxed_float | Is_flat_float_array | Begin_try_region | End_region
+  | Project_function_slot _ | Project_value_slot _ | Obj_dup ->
     Ids_for_export.empty
 
 type binary_int_arith_op =
@@ -1639,12 +1642,8 @@ let equal t1 t2 = compare t1 t2 = 0
 
 let free_names t =
   match t with
-  | Nullary
-      ( Invalid _ | Optimised_out _ | Probe_is_enabled _
-      | Begin_region { try_region_parent = None } ) ->
+  | Nullary (Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
     Name_occurrences.empty
-  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
-    Name_occurrences.singleton_variable try_region_parent Name_mode.normal
   | Unary (prim, x0) ->
     Name_occurrences.union
       (free_names_unary_primitive prim)
@@ -1668,17 +1667,8 @@ let free_names t =
 let apply_renaming t renaming =
   let apply simple = Simple.apply_renaming simple renaming in
   match t with
-  | Nullary
-      ( Invalid _ | Optimised_out _ | Probe_is_enabled _
-      | Begin_region { try_region_parent = None } ) ->
+  | Nullary (Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
     t
-  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
-    let try_region_parent' =
-      Renaming.apply_variable renaming try_region_parent
-    in
-    if try_region_parent == try_region_parent'
-    then t
-    else Nullary (Begin_region { try_region_parent = Some try_region_parent' })
   | Unary (prim, x0) ->
     let prim' = apply_renaming_unary_primitive prim renaming in
     let x0' = apply x0 in
@@ -1705,12 +1695,8 @@ let apply_renaming t renaming =
 
 let ids_for_export t =
   match t with
-  | Nullary
-      ( Invalid _ | Optimised_out _ | Probe_is_enabled _
-      | Begin_region { try_region_parent = None } ) ->
+  | Nullary (Invalid _ | Optimised_out _ | Probe_is_enabled _ | Begin_region) ->
     Ids_for_export.empty
-  | Nullary (Begin_region { try_region_parent = Some try_region_parent }) ->
-    Ids_for_export.singleton_variable try_region_parent
   | Unary (prim, x0) ->
     Ids_for_export.union
       (ids_for_export_unary_primitive prim)
@@ -1984,7 +1970,7 @@ end
 
 let is_begin_or_end_region t =
   match t with
-  | Nullary (Begin_region _) | Unary (End_region, _) -> true
+  | Nullary Begin_region | Unary ((Begin_try_region | End_region), _) -> true
   | _ -> false
   [@@ocaml.warning "-fragile-match"]
 

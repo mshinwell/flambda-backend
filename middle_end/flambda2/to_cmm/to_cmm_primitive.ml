@@ -519,7 +519,7 @@ let nullary_primitive _env res dbg prim =
        `to_cmm_shared.ml` *)
     let expr = Cmm.Cop (Cprobe_is_enabled { name }, [], dbg) in
     None, res, expr
-  | Begin_region _ -> None, res, C.beginregion ~dbg
+  | Begin_region -> None, res, C.beginregion ~dbg
 
 let unary_primitive env res dbg f arg =
   match (f : P.unary_primitive) with
@@ -617,6 +617,7 @@ let unary_primitive env res dbg f arg =
         ~else_dbg:dbg )
   | Is_flat_float_array ->
     None, res, C.eq ~dbg (C.get_tag arg dbg) (C.floatarray_tag dbg)
+  | Begin_try_region -> None, res, C.beginregion ~dbg
   | End_region -> None, res, C.return_unit dbg (C.endregion ~dbg arg)
 
 let binary_primitive env dbg f x y =

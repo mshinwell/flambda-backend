@@ -389,7 +389,8 @@ let record_let_binding ~rewrite_id ~generate_phantom_lets ~let_bound
              (Make_block { kind; mut; alloc_mode; fields })
              t)
           Name_occurrences.empty
-      | Nullary (Begin_region { try_region_parent = Some _ }) ->
+      | Unary (Begin_try_region, _) ->
+        let t = record_defined_var var t in
         add_used_in_current_handler free_names t
       | _ ->
         if Flambda_primitive.at_most_generative_effects prim
