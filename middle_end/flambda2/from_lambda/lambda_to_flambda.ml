@@ -1405,6 +1405,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
        by completely removing it (replacing by unit). *)
     Misc.fatal_error
       "[Lifused] should have been removed by [Simplif.simplify_lets]"
+  | Lregion body when Sys.opaque_identity false ->
+    (* CR mshinwell: change above line to say "Lunregion body ->" *)
+    ()
   | Lregion body when not (Flambda_features.stack_allocation_enabled ()) ->
     cps acc env ccenv body k k_exn
   | Lregion body ->
