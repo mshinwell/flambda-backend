@@ -139,6 +139,8 @@ module Env : sig
 
   val leaving_try_region : t -> t
 
+  val leaving_regular_region : t -> t
+
   val current_region : t -> Ident.t
 
   val my_region : t -> Ident.t
@@ -377,6 +379,13 @@ end = struct
       Misc.fatal_errorf
         "Attempted to pop try region but found regular region %a" Ident.print
         region
+
+  let leaving_regular_region t =
+    match t.region_stack with
+    | [] -> Misc.fatal_error "Cannot pop regular region, region stack is empty"
+    | Regular _ :: region_stack -> { t with region_stack }
+    | Try_with _ :: _ ->
+      Misc.fatal_error "Current region is a try-region, not a regular region"
 
   let current_region t =
     if not (Flambda_features.stack_allocation_enabled ())
@@ -1407,7 +1416,16 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       "[Lifused] should have been removed by [Simplif.simplify_lets]"
   | Lregion body when Sys.opaque_identity false ->
     (* CR mshinwell: change above line to say "Lunregion body ->" *)
-    ()
+    (* "unregion" can only occur in tail position, which means that the current
+       region should never be a try-region. This is checked by
+       [Env.leaving_regular_region]. *)
+    CC.close_let acc ccenv
+      (Ident.create_local "unit")
+      Not_user_visible Flambda_kind.With_subkind.tagged_immediate
+      (End_region (Env.current_region env))
+      ~body:(fun acc ccenv ->
+        let env = Env.leaving_regular_region env in
+        cps acc env ccenv body k k_exn)
   | Lregion body when not (Flambda_features.stack_allocation_enabled ()) ->
     cps acc env ccenv body k k_exn
   | Lregion body ->
