@@ -85,7 +85,7 @@ let raise_exn_for_failure acc ~dbg exn_cont exn_bucket extra_let_binding =
     exn_bucket :: extra_args
   in
   let acc, apply_cont =
-    Apply_cont_with_acc.create acc ~trap_action exn_handler ~args ~dbg
+    Apply_cont_with_acc.create acc ~trap_action exn_handler ~args ~args_approx:None ~dbg
   in
   let acc, apply_cont = Expr_with_acc.create_apply_cont acc apply_cont in
   match extra_let_binding with
@@ -334,7 +334,7 @@ let rec bind_rec acc env exn_cont ~register_const_string (prim : expr_primitive)
       @@ fun acc _env ifso ->
       let acc, apply_cont =
         Apply_cont_with_acc.create acc join_point_cont
-          ~args:[Simple.var ifso_result] ~dbg
+          ~args:[Simple.var ifso_result] ~args_approx:None ~dbg
       in
       let acc, body = Expr_with_acc.create_apply_cont acc apply_cont in
       Let_with_acc.create acc
@@ -346,7 +346,7 @@ let rec bind_rec acc env exn_cont ~register_const_string (prim : expr_primitive)
       @@ fun acc _env ifnot ->
       let acc, apply_cont =
         Apply_cont_with_acc.create acc join_point_cont
-          ~args:[Simple.var ifnot_result] ~dbg
+          ~args:[Simple.var ifnot_result] ~args_approx:None ~dbg
       in
       let acc, body = Expr_with_acc.create_apply_cont acc apply_cont in
       Let_with_acc.create acc
