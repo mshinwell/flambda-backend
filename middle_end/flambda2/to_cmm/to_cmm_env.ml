@@ -95,7 +95,8 @@ type 'kind binding =
     effs : Ece.t;
     inline : 'kind inline;
     bound_expr : 'kind bound_expr;
-    cmm_var : Backend_var.With_provenance.t
+    cmm_var : Backend_var.With_provenance.t;
+    is_alias : Cmm.expression option
   }
 
 type any_binding = Binding : _ binding -> any_binding [@@unboxed]
@@ -192,17 +193,19 @@ let [@ocamlformat "disable"] print_bound_expr (type a) ppf (b : a bound_expr) =
       (Format.pp_print_list (fun ppf (cmm, _) -> Printcmm.expression ppf cmm)) args
 
 let [@ocamlformat "disable"] print_binding (type a) ppf
-    ({ order; inline; effs; cmm_var; bound_expr; } : a binding) =
+    ({ order; inline; effs; cmm_var; bound_expr; is_alias } : a binding) =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(order@ %d)@]@ \
       @[<hov 1>(inline@ %a)@]@ \
       @[<hov 1>(effs@ %a)@]@ \
+      @[<hov 1>(is_alias@ %a)@]@ \
       @[<hov 1>(var@ %a)@]@ \
       @[<hov 1>(expr@ %a)@]\
       )@]"
     order
     print_inline inline
     Ece.print effs
+    (Misc.Stdlib.Option.print Printcmm.expression) is_alias
     Backend_var.With_provenance.print cmm_var
     print_bound_expr bound_expr
 
@@ -349,7 +352,7 @@ let is_cmm_simple cmm =
 (* Helper function to create bindings *)
 
 let create_binding_aux (type a) effs var ~(inline : a inline)
-    (bound_expr : a bound_expr) =
+    (bound_expr : a bound_expr) ~is_alias =
   let order =
     let incr =
       match bound_expr with
@@ -360,11 +363,13 @@ let create_binding_aux (type a) effs var ~(inline : a inline)
     !next_order
   in
   let cmm_var = gen_variable var in
-  let binding = Binding { order; inline; effs; cmm_var; bound_expr } in
+  let binding =
+    Binding { order; inline; effs; cmm_var; bound_expr; is_alias }
+  in
   binding
 
 let create_binding (type a) effs var ~(inline : a inline)
-    (bound_expr : a bound_expr) =
+    (bound_expr : a bound_expr) ~is_alias =
   (* In order to avoid generating binding of the form: "let x = y in ...", when
      'y' is trivial i.e. is a value that fits in a register, we mark 'x' as a
      must_inline_and_duplicate (since it basically replaces a variable by either
@@ -376,8 +381,9 @@ let create_binding (type a) effs var ~(inline : a inline)
     let effs = Ece.pure_can_be_duplicated in
     create_binding_aux effs var ~inline:Must_inline_and_duplicate
       (Split { cmm_expr })
+      ~is_alias
   | Simple _ | Split _ | Splittable_prim _ ->
-    create_binding_aux effs var ~inline bound_expr
+    create_binding_aux effs var ~inline bound_expr ~is_alias
 
 (* Binding splitting *)
 (* CR gbury: we actually need to "lie" about the effects and coeffects of
@@ -450,7 +456,8 @@ let new_bindings_for_splitting order args =
                 effs = arg_effs;
                 inline = Do_not_inline;
                 bound_expr = Simple { cmm_expr = cmm_arg };
-                cmm_var = new_cmm_var
+                cmm_var = new_cmm_var;
+                is_alias = None
               }
           in
           ( (binding :: new_bindings, order - 1),
@@ -520,7 +527,8 @@ let split_complex_binding ~env ~res (binding : complex binding) =
         effs;
         inline = binding.inline;
         bound_expr = Split { cmm_expr = new_cmm_expr };
-        cmm_var = binding.cmm_var
+        cmm_var = binding.cmm_var;
+        is_alias = None
       }
     in
     res, Split { new_bindings; split_binding }
@@ -618,7 +626,7 @@ and split_in_env ?ensure_in_env env res var binding =
 
 let bind_variable_with_decision (type a) ?extra env res var ~inline
     ~(defining_expr : a bound_expr) ~effects_and_coeffects_of_defining_expr:effs
-    =
+    ~is_alias =
   let effs =
     let classification =
       To_cmm_effects.classify_by_effects_and_coeffects effs
@@ -659,7 +667,7 @@ let bind_variable_with_decision (type a) ?extra env res var ~inline
       | _, _, Strict -> Ece.pure)
     | _, _ -> effs
   in
-  let binding = create_binding ~inline effs var defining_expr in
+  let binding = create_binding ~inline effs var defining_expr ~is_alias in
   add_binding_to_env ?extra env res var binding
 
 let bind_variable ?extra env res var ~defining_expr
@@ -676,24 +684,24 @@ let bind_variable ?extra env res var ~defining_expr
     let defining_expr = simple defining_expr in
     bind_variable_with_decision ?extra env res var
       ~effects_and_coeffects_of_defining_expr ~defining_expr
-      ~inline:Do_not_inline
+      ~inline:Do_not_inline ~is_alias:None
   | May_inline_once ->
     let defining_expr = simple defining_expr in
     bind_variable_with_decision ?extra env res var
       ~effects_and_coeffects_of_defining_expr ~defining_expr
-      ~inline:May_inline_once
+      ~inline:May_inline_once ~is_alias:None
   | Must_inline_once ->
     let defining_expr = complex_no_split defining_expr in
     bind_variable_with_decision ?extra env res var
       ~effects_and_coeffects_of_defining_expr ~defining_expr
-      ~inline:Must_inline_once
+      ~inline:Must_inline_once ~is_alias:None
   | Must_inline_and_duplicate ->
     let defining_expr = complex_no_split defining_expr in
     bind_variable_with_decision ?extra env res var
       ~effects_and_coeffects_of_defining_expr ~defining_expr
-      ~inline:Must_inline_and_duplicate
+      ~inline:Must_inline_and_duplicate ~is_alias:None
 
-let bind_variable_to_primitive = bind_variable_with_decision
+let bind_variable_to_primitive = bind_variable_with_decision ~is_alias:None
 
 (* Variable lookup (for potential inlining) *)
 
@@ -866,12 +874,19 @@ let add_alias t res ~var
   if debug ()
   then
     Format.eprintf "cmm_expr for alias_of: %a\n%!" Printcmm.expression cmm_expr;
+  let alias_of_cmm =
+    match Variable.Map.find alias_of t.vars with
+    | exception Not_found ->
+      Misc.fatal_errorf "No Cmm variable for %a (being aliased to %a)"
+        Variable.print alias_of Variable.print var
+    | cmm -> cmm
+  in
   let[@inline] simple_case () =
     if debug () then Format.eprintf "...simple case\n%!";
     let defining_expr : simple bound_expr = Simple { cmm_expr } in
     let inline : simple inline = Do_not_inline in
     bind_variable_with_decision t res var ~inline ~defining_expr
-      ~effects_and_coeffects_of_defining_expr:ece
+      ~effects_and_coeffects_of_defining_expr:ece ~is_alias:(Some alias_of_cmm)
   in
   let[@inline] complex_case ~(inline_alias_of : complex inline) =
     if debug () then Format.eprintf "...complex case: ";
@@ -891,7 +906,7 @@ let add_alias t res ~var
         Must_inline_and_duplicate
     in
     bind_variable_with_decision t res var ~inline ~defining_expr
-      ~effects_and_coeffects_of_defining_expr:ece
+      ~effects_and_coeffects_of_defining_expr:ece ~is_alias:(Some alias_of_cmm)
   in
   match inline with
   | None -> simple_case ()
@@ -940,6 +955,63 @@ let flush_delayed_lets ~mode env res =
         Backend_var.With_provenance.print b.cmm_var print_bound_expr
         b.bound_expr;
     bindings_to_flush := M.add b.order binding !bindings_to_flush
+  in
+  let bindings_to_keep =
+    Variable.Map.map_sharing
+      (fun (Binding
+             { effs = (effects, _, _) as effs;
+               inline;
+               is_alias;
+               cmm_var;
+               bound_expr;
+               order
+             }) ->
+        match is_alias with
+        | None -> Binding { bound_expr; effs; inline; is_alias; cmm_var; order }
+        | Some alias_of -> (
+          if match effects with
+             | Arbitrary_effects -> true
+             | Only_generative_effects _ | No_effects -> false
+          then Binding { bound_expr; effs; inline; is_alias; cmm_var; order }
+          else
+            match inline with
+            | Do_not_inline ->
+              Binding
+                { bound_expr = Simple { cmm_expr = alias_of };
+                  effs;
+                  inline;
+                  is_alias;
+                  cmm_var;
+                  order
+                }
+            | May_inline_once ->
+              Binding
+                { bound_expr = Simple { cmm_expr = alias_of };
+                  effs;
+                  inline;
+                  is_alias;
+                  cmm_var;
+                  order
+                }
+            | Must_inline_once ->
+              Binding
+                { bound_expr = Split { cmm_expr = alias_of };
+                  effs;
+                  inline;
+                  is_alias;
+                  cmm_var;
+                  order
+                }
+            | Must_inline_and_duplicate ->
+              Binding
+                { bound_expr = Split { cmm_expr = alias_of };
+                  effs;
+                  inline;
+                  is_alias;
+                  cmm_var;
+                  order
+                }))
+      env.bindings
   in
   let bindings_to_keep =
     Variable.Map.filter_map
@@ -1004,7 +1076,7 @@ let flush_delayed_lets ~mode env res =
           | Generative_immutable | Coeffect_only | Effect ->
             flush binding;
             None))
-      env.bindings
+      bindings_to_keep
   in
   let flush e = wrap_flush !bindings_to_flush e in
   flush, { env with stages = []; bindings = bindings_to_keep }, !res
