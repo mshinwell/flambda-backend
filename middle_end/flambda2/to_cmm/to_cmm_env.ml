@@ -881,12 +881,17 @@ let add_alias t res ~var
         Variable.print alias_of Variable.print var
     | cmm -> cmm
   in
-  let[@inline] simple_case () =
+  let[@inline] simple_case ~(inline_alias_of : simple inline option) =
     if debug () then Format.eprintf "...simple case\n%!";
     let defining_expr : simple bound_expr = Simple { cmm_expr } in
     let inline : simple inline = Do_not_inline in
+    let is_alias =
+      match inline_alias_of with
+      | Some Do_not_inline -> Some alias_of_cmm
+      | None | Some May_inline_once -> None
+    in
     bind_variable_with_decision t res var ~inline ~defining_expr
-      ~effects_and_coeffects_of_defining_expr:ece ~is_alias:(Some alias_of_cmm)
+      ~effects_and_coeffects_of_defining_expr:ece ~is_alias
   in
   let[@inline] complex_case ~(inline_alias_of : complex inline) =
     if debug () then Format.eprintf "...complex case: ";
@@ -905,12 +910,18 @@ let add_alias t res ~var
         if debug () then Format.eprintf "Must_inline_and_dup (2)\n%!";
         Must_inline_and_duplicate
     in
+    let is_alias =
+      match inline_alias_of with
+      | Must_inline_once -> None
+      | Must_inline_and_duplicate -> Some alias_of_cmm
+    in
     bind_variable_with_decision t res var ~inline ~defining_expr
-      ~effects_and_coeffects_of_defining_expr:ece ~is_alias:(Some alias_of_cmm)
+      ~effects_and_coeffects_of_defining_expr:ece ~is_alias
   in
   match inline with
-  | None -> simple_case ()
-  | Some (Any_inline (Do_not_inline | May_inline_once)) -> simple_case ()
+  | None -> simple_case ~inline_alias_of:None
+  | Some (Any_inline ((Do_not_inline | May_inline_once) as inline)) ->
+    simple_case ~inline_alias_of:(Some inline)
   | Some (Any_inline ((Must_inline_once | Must_inline_and_duplicate) as inline))
     ->
     complex_case ~inline_alias_of:inline
