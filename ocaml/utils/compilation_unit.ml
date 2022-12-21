@@ -321,7 +321,10 @@ let which_cmx_file desired_comp_unit ~accessed_by : Name.t =
 
 let print_name ppf t = Format.fprintf ppf "%a" Name.print t.name
 
-let full_path_as_string t = Format.asprintf "%a" print t
+let full_path_as_string t =
+  if Prefix.is_empty t.for_pack_prefix
+  then Name.to_string t.name
+  else Format.asprintf "%a" print t
 
 let to_global_ident_for_bytecode t =
   Ident.create_persistent (full_path_as_string t)
