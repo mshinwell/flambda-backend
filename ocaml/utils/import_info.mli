@@ -2,10 +2,9 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*             Xavier Leroy, projet Gallium, INRIA Rocquencourt           *)
+(*             Mark Shinwell, Jane Street UK Partnership LLP              *)
 (*                                                                        *)
-(*   Copyright 2010 Institut National de Recherche en Informatique et     *)
-(*     en Automatique                                                     *)
+(*   Copyright 2022 Jane Street Group LLC                                 *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -13,21 +12,26 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* Format of .cmxs files *)
+module CU = Compilation_unit
 
-(* Each .cmxs dynamically-loaded plugin contains a symbol
-   "caml_plugin_header" containing the following info
-   (as an externed record) *)
+(* CR mshinwell: maybe there should be a phantom type allowing to distinguish
+   the .cmx case from the others. Unclear it's worth it. *)
+type t
 
-type dynunit = {
-  dynu_name: Compilation_unit.t;
-  dynu_crc: Digest.t;
-  dynu_imports_cmi: Import_info.t list;
-  dynu_imports_cmx: Import_info.t list;
-  dynu_defines: Compilation_unit.t list;
-}
+val create : CU.Name.t -> crc_with_unit:(CU.t * string) option -> t
 
-type dynheader = {
-  dynu_magic: string;
-  dynu_units: dynunit list;
-}
+val create_normal : CU.t -> crc:string option -> t
+
+val name : t -> CU.Name.t
+
+(** This function will cause a fatal error if a [CU.t] was not provided when the
+    supplied value of type [t] was created. *)
+val cu : t -> CU.t
+
+val crc : t -> string option
+
+val crc_with_unit : t -> (CU.t * string) option
+
+val has_name : t -> name:CU.Name.t -> bool
+
+val dummy : t
