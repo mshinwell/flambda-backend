@@ -355,6 +355,20 @@ let make_cmi penv modname sign alerts =
     cmi_flags = flags
   }
 
+let ensure_crc_sharing crcs =
+  (* Force sharing between the [CU.Name.t] and the similar component in
+     the [CU.t], if they are the same strings. *)
+  List.map (fun ((cu_name, cu_and_crc_opt) as import) ->
+      match cu_and_crc_opt with
+      | None -> import
+      | Some (cu, _crc) ->
+        let module CU = Compilation_unit in
+        let cu_name_from_cu = CU.name cu in
+        if cu_name == cu_name_from_cu then import
+        else if not (CU.Name.equal cu_name cu_name_from_cu) then import
+        else cu_name_from_cu, cu_and_crc_opt)
+    crcs
+
 let save_cmi penv psig pm =
   let { Persistent_signature.filename; cmi } = psig in
   Misc.try_finally (fun () ->
@@ -378,6 +392,8 @@ let save_cmi penv psig pm =
           ps_filename = filename;
           ps_flags = flags;
         } in
+      let ps_crcs = ensure_crc_sharing ps.ps_crcs in
+      let ps = { ps with ps_crcs } in
       save_pers_struct penv crc ps pm
     )
     ~exceptionally:(fun () -> remove_file filename)
