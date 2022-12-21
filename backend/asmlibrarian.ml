@@ -63,7 +63,11 @@ let create_archive file_list lib_name =
          (fun file_name (unit, crc) ->
             Asmlink.check_consistency file_name unit crc)
          file_list descr_list;
-       let cmis = Asmlink.extract_crc_interfaces () |> Array.of_list in
+       let cmis =
+          Asmlink.extract_crc_interfaces ()
+          |> Persistent_env.ensure_crc_sharing
+          |> Array.of_list
+       in
        let cmxs = Asmlink.extract_crc_implementations () |> Array.of_list in
        let cmi_index = Compilation_unit.Name.Tbl.create 42 in
        Array.iteri

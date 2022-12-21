@@ -109,3 +109,6 @@ val crc_of_unit: 'a t -> (Persistent_signature.t -> 'a)
 
 (* Forward declaration to break mutual recursion with Typecore. *)
 val add_delayed_check_forward: ((unit -> unit) -> unit) ref
+
+val ensure_crc_sharing : Cmi_format.import_info list
+  -> Cmi_format.import_info list
