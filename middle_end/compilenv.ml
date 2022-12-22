@@ -337,6 +337,25 @@ let need_send_fun n mode =
 
 (* Write the description of the current unit *)
 
+let ensure_sharing_between_cmi_and_cmx_imports cmi_imports cmx_imports =
+  (* If a [CU.t] in the .cmx imports also occurs in the .cmi imports, use
+     the one in the .cmi imports, to increase sharing.  (Such a [CU.t] in
+     the .cmi imports may already have part of its value shared with the
+     first [CU.Name.t] component in the .cmi imports, c.f.
+     [Persistent_env.ensure_crc_sharing], so it's best to pick this [CU.t].) *)
+  List.map (fun ((comp_unit, crc) as import) ->
+      match
+        List.find_map (function
+            | _, None -> None
+            | _, Some (comp_unit', _) ->
+              if CU.equal comp_unit comp_unit' then Some comp_unit'
+              else None)
+          cmi_imports
+      with
+      | None -> import
+      | Some comp_unit -> comp_unit, crc)
+    cmx_imports
+
 let write_unit_info info filename =
   let raw_export_info, sections =
     match info.ui_export_info with
@@ -348,11 +367,16 @@ let write_unit_info info filename =
       Flambda2_raw (Some info), sections
   in
   let serialized_sections, toc, total_length = File_sections.serialize sections in
+  let uir_imports_cmi = Persistent_env.ensure_crc_sharing info.ui_imports_cmi in
+  let uir_imports_cmx =
+    ensure_sharing_between_cmi_and_cmx_imports uir_imports_cmi
+      info.ui_imports_cmx
+  in
   let raw_info = {
     uir_unit = info.ui_unit;
     uir_defines = info.ui_defines;
-    uir_imports_cmi = Persistent_env.ensure_crc_sharing info.ui_imports_cmi;
-    uir_imports_cmx = info.ui_imports_cmx;
+    uir_imports_cmi;
+    uir_imports_cmx;
     uir_generic_fns = info.ui_generic_fns;
     uir_export_info = raw_export_info;
     uir_checks = info.ui_checks;
