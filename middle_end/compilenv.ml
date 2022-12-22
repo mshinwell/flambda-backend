@@ -173,8 +173,8 @@ let read_unit_info filename =
     let ui = {
       ui_unit = uir.uir_unit;
       ui_defines = uir.uir_defines;
-      ui_imports_cmi = uir.uir_imports_cmi;
-      ui_imports_cmx = uir.uir_imports_cmx;
+      ui_imports_cmi = uir.uir_imports_cmi |> Array.to_list;
+      ui_imports_cmx = uir.uir_imports_cmx |> Array.to_list;
       ui_generic_fns = uir.uir_generic_fns;
       ui_export_info = export_info;
       ui_checks = uir.uir_checks;
@@ -226,8 +226,11 @@ let get_unit_info comp_unit ~cmx_name =
               (None, None)
           end
       in
-      current_unit.ui_imports_cmx <-
-        (comp_unit, crc) :: current_unit.ui_imports_cmx;
+      let import =
+        Import_info.create (CU.name comp_unit)
+          ~crc_with_unit:(Option.map (fun crc -> comp_unit, crc) crc)
+      in
+      current_unit.ui_imports_cmx <- import :: current_unit.ui_imports_cmx;
       CU.Name.Tbl.add global_infos_table cmx_name infos;
       infos
   end
@@ -337,6 +340,8 @@ let need_send_fun n mode =
 
 (* Write the description of the current unit *)
 
+(* CR mshinwell: let's think about this later, quadratic algorithm
+
 let ensure_sharing_between_cmi_and_cmx_imports cmi_imports cmx_imports =
   (* If a [CU.t] in the .cmx imports also occurs in the .cmi imports, use
      the one in the .cmi imports, to increase sharing.  (Such a [CU.t] in
@@ -355,6 +360,7 @@ let ensure_sharing_between_cmi_and_cmx_imports cmi_imports cmx_imports =
       | None -> import
       | Some comp_unit -> comp_unit, crc)
     cmx_imports
+*)
 
 let write_unit_info info filename =
   let raw_export_info, sections =
@@ -367,16 +373,11 @@ let write_unit_info info filename =
       Flambda2_raw (Some info), sections
   in
   let serialized_sections, toc, total_length = File_sections.serialize sections in
-  let uir_imports_cmi = Persistent_env.ensure_crc_sharing info.ui_imports_cmi in
-  let uir_imports_cmx =
-    ensure_sharing_between_cmi_and_cmx_imports uir_imports_cmi
-      info.ui_imports_cmx
-  in
   let raw_info = {
     uir_unit = info.ui_unit;
     uir_defines = info.ui_defines;
-    uir_imports_cmi;
-    uir_imports_cmx;
+    uir_imports_cmi = Array.of_list info.ui_imports_cmi;
+    uir_imports_cmx = Array.of_list info.ui_imports_cmx;
     uir_generic_fns = info.ui_generic_fns;
     uir_export_info = raw_export_info;
     uir_checks = info.ui_checks;

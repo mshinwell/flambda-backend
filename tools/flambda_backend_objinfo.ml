@@ -58,12 +58,21 @@ let print_name_crc (name, crco) =
   in
     printf "\t%s\t%a\n" crc Compilation_unit.Name.output name
 
-let print_intf_import (name, data) =
-  let crco = data |> Option.map (fun (_unit, crc) -> crc) in
+(* CR-someday mshinwell: consider moving to [Import_info.print] *)
+
+let print_intf_import import =
+  let name = Import_info.name import in
+  let crco = Import_info.crc import in
   print_name_crc (name, crco)
 
-let print_impl_import (unit, crco) =
+let print_impl_import import =
+  let unit = Import_info.cu import in
+  let crco = Import_info.crc import in
   print_name_crc (Compilation_unit.name unit, crco)
+
+let print_old_intf_import (name, data) =
+  let crco = data |> Option.map (fun (_unit, crc) -> crc) in
+  print_name_crc (name, crco)
 
 let print_line name =
   printf "\t%s\n" name
@@ -77,7 +86,7 @@ let print_required_global id =
 let print_cmo_infos cu =
   printf "Unit name: %a\n" Compilation_unit.output cu.cu_name;
   print_string "Interfaces imported:\n";
-  List.iter print_intf_import cu.cu_imports;
+  Array.iter print_intf_import cu.cu_imports;
   print_string "Required globals:\n";
   List.iter print_required_global cu.cu_required_globals;
   printf "Uses unsafe features: ";
@@ -114,7 +123,7 @@ let print_cmt_infos cmt =
   let open Cmt_format in
   printf "Cmt unit name: %a\n" Compilation_unit.output cmt.cmt_modname;
   print_string "Cmt interfaces imported:\n";
-  List.iter print_intf_import cmt.cmt_imports;
+  List.iter print_old_intf_import cmt.cmt_imports;
   printf "Source file: %s\n"
          (match cmt.cmt_sourcefile with None -> "(none)" | Some f -> f);
   printf "Compilation flags:";
@@ -243,7 +252,7 @@ let dump_byte ic =
                p_list
                  "Imported units"
                  print_intf_import
-                 (input_value ic : Cmo_format.import_info list)
+                 ((input_value ic : Import_info.t array) |> Array.to_list)
            | "DLLS" ->
                p_list
                  "Used DLLs"
@@ -313,7 +322,8 @@ let dump_obj_by_kind filename ic obj_kind =
        begin match cmi with
          | None -> ()
          | Some cmi ->
-            print_cmi_infos cmi.Cmi_format.cmi_name cmi.Cmi_format.cmi_crcs
+            print_cmi_infos cmi.Cmi_format.cmi_name
+              (cmi.Cmi_format.cmi_crcs |> Array.to_list)
        end;
        begin match cmt with
          | None -> ()

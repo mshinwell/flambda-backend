@@ -98,10 +98,11 @@ val without_cmis : 'a t -> ('b -> 'c) -> 'b -> 'c
     allow [penv] to openi cmis during its execution *)
 
 (* may raise Consistbl.Inconsistency *)
-val import_crcs : 'a t -> source:filepath -> Cmi_format.import_info list -> unit
+val import_crcs : 'a t -> source:filepath ->
+  Import_info.t array -> unit
 
 (* Return the set of compilation units imported, with their CRC *)
-val imports : 'a t -> Cmi_format.import_info list
+val imports : 'a t -> Import_info.t list
 
 (* Return the CRC of the interface of the given compilation unit *)
 val crc_of_unit: 'a t -> (Persistent_signature.t -> 'a)
@@ -109,6 +110,3 @@ val crc_of_unit: 'a t -> (Persistent_signature.t -> 'a)
 
 (* Forward declaration to break mutual recursion with Typecore. *)
 val add_delayed_check_forward: ((unit -> unit) -> unit) ref
-
-val ensure_crc_sharing : Cmi_format.import_info list
-  -> Cmi_format.import_info list
