@@ -373,6 +373,7 @@ let save_cmi penv psig pm =
   let { Persistent_signature.filename; cmi } = psig in
   Misc.try_finally (fun () ->
       let imports = ensure_crc_sharing cmi.cmi_crcs in
+      let cmi = { cmi with cmi_crcs = imports; } in
       let {
         cmi_name = modname;
         cmi_sign = _;
