@@ -2,7 +2,7 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*                   Mark Shinwell, Jane Street Europe                    *)
+(*             Mark Shinwell, Jane Street UK Partnership LLP              *)
 (*                                                                        *)
 (*   Copyright 2022 Jane Street Group LLC                                 *)
 (*                                                                        *)
