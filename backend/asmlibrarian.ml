@@ -66,9 +66,13 @@ let create_archive file_list lib_name =
        let cmis =
           Asmlink.extract_crc_interfaces ()
           |> Persistent_env.ensure_crc_sharing
-          |> Array.of_list
        in
-       let cmxs = Asmlink.extract_crc_implementations () |> Array.of_list in
+       let cmxs = Asmlink.extract_crc_implementations () in
+       let cmxs =
+         Compilenv.ensure_sharing_between_cmi_and_cmx_imports cmis cmxs
+       in
+       let cmis = Array.of_list cmis in
+       let cmxs = Array.of_list cmxs in
        let cmi_index = Compilation_unit.Name.Tbl.create 42 in
        Array.iteri
          (fun i (name, _crc) -> Compilation_unit.Name.Tbl.add cmi_index name i)
