@@ -372,10 +372,11 @@ let ensure_crc_sharing crcs =
 let save_cmi penv psig pm =
   let { Persistent_signature.filename; cmi } = psig in
   Misc.try_finally (fun () ->
+      let imports = ensure_crc_sharing cmi.cmi_crcs in
       let {
         cmi_name = modname;
         cmi_sign = _;
-        cmi_crcs = imports;
+        cmi_crcs = _;
         cmi_flags = flags;
       } = cmi in
       let crc =
@@ -392,8 +393,6 @@ let save_cmi penv psig pm =
           ps_filename = filename;
           ps_flags = flags;
         } in
-      let ps_crcs = ensure_crc_sharing ps.ps_crcs in
-      let ps = { ps with ps_crcs } in
       save_pers_struct penv crc ps pm
     )
     ~exceptionally:(fun () -> remove_file filename)
