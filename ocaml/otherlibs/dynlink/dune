@@ -256,6 +256,7 @@
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Ident.cmo
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Longident.cmo
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Compilation_unit.cmo
+      .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Import_info.cmo
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Linkage_name.cmo
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Symbol.cmo
       .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Path.cmo
@@ -322,6 +323,7 @@
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Ident.cmx
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Longident.cmx
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Compilation_unit.cmx
+      .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Import_info.cmx
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Linkage_name.cmx
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Symbol.cmx
       .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Path.cmx
