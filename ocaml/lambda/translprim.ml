@@ -90,8 +90,8 @@ type prim =
   | Send_cache of Lambda.region_close
   | Frame_pointers
   | Identity
-  | Apply of Lambda.region_close
-  | Revapply of Lambda.region_close
+  | Apply of Lambda.region_close * Lambda.layout
+  | Revapply of Lambda.region_close * Lambda.layout
 
 let units_with_used_primitives = Hashtbl.create 7
 let add_used_primitive loc env path =
@@ -132,8 +132,8 @@ let lookup_primitive loc poly pos p =
     | "%bytes_to_string" -> Primitive (Pbytes_to_string, 1)
     | "%bytes_of_string" -> Primitive (Pbytes_of_string, 1)
     | "%ignore" -> Primitive (Pignore, 1)
-    | "%revapply" -> Revapply pos
-    | "%apply" -> Apply pos
+    | "%revapply" -> Revapply (pos, Lambda.layout_any_value)
+    | "%apply" -> Apply (pos, Lambda.layout_any_value)
     | "%loc_LOC" -> Loc Loc_LOC
     | "%loc_FILE" -> Loc Loc_FILE
     | "%loc_LINE" -> Loc Loc_LINE
@@ -734,11 +734,12 @@ let lambda_of_prim prim_name prim loc args arg_exps =
       in
       Lconst (const_int frame_pointers)
   | Identity, [arg] -> arg
-  | Apply pos, [func; arg]
-  | Revapply pos, [arg; func] ->
+  | Apply (pos, layout), [func; arg]
+  | Revapply (pos, layout), [arg; func] ->
       Lapply {
         ap_func = func;
         ap_args = [arg];
+        ap_result_layout = layout;
         ap_loc = loc;
         (* CR-someday lwhite: it would be nice to be able to give
            application attributes to functions applied with the application

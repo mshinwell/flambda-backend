@@ -1053,6 +1053,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
   | Lapply
       { ap_func;
         ap_args;
+        ap_result_layout;
         ap_region_close;
         ap_mode;
         ap_loc;
@@ -1063,7 +1064,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       } ->
     (* Note that we don't need kind information about [ap_args] since we already
        have it on the corresponding [Simple]s in the environment. *)
-    maybe_insert_let_cont "apply_result" Lambda.layout_top k acc env ccenv
+    maybe_insert_let_cont "apply_result" ap_result_layout k acc env ccenv
       (fun acc env ccenv k ->
         cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
           ap_loc ap_inlined ap_probe k k_exn)

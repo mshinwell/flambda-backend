@@ -476,6 +476,7 @@ and lambda_for =
 and lambda_apply =
   { ap_func : lambda;
     ap_args : lambda list;
+    ap_result_layout : layout;
     ap_region_close : region_close;
     ap_mode : alloc_mode;
     ap_loc : scoped_location;
@@ -565,6 +566,7 @@ let layout_string = Pvalue Pgenval
 let layout_boxedint bi = Pvalue (Pboxedintval bi)
 let layout_lazy = Pvalue Pgenval
 let layout_lazy_contents = Pvalue Pgenval
+let layout_any_value = Pvalue Pgenval
 
 let layout_top = Pvalue Pgenval
 
@@ -1070,11 +1072,12 @@ let shallow_map ~tail ~non_tail:f = function
   | Lvar _
   | Lmutvar _
   | Lconst _ as lam -> lam
-  | Lapply { ap_func; ap_args; ap_region_close; ap_mode; ap_loc; ap_tailcall;
+  | Lapply { ap_func; ap_args; ap_result_layout; ap_region_close; ap_mode; ap_loc; ap_tailcall;
              ap_inlined; ap_specialised; ap_probe } ->
       Lapply {
         ap_func = f ap_func;
         ap_args = List.map f ap_args;
+        ap_result_layout;
         ap_region_close;
         ap_mode;
         ap_loc;

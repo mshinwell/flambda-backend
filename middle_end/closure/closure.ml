@@ -1099,6 +1099,7 @@ let rec close ({ backend; fenv; cenv ; mutable_vars; kinds; catch_env } as env) 
                  ap_loc=loc;
                  ap_func=(Lvar funct_var);
                  ap_args=internal_args;
+                 ap_result_layout=Lambda.layout_top;
                  ap_region_close=Rc_normal;
                  ap_mode=ret_mode;
                  ap_tailcall=Default_tailcall;
