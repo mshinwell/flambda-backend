@@ -170,8 +170,8 @@ let print_generic_fns gfns =
 
 let print_cmx_infos (ui, crc) =
   print_general_infos Compilation_unit.output ui.ui_unit crc ui.ui_defines
-    (fun f -> Array.iter f ui.ui_imports_cmi)
-    (fun f -> Array.iter f ui.ui_imports_cmx);
+    (fun f -> List.iter f ui.ui_imports_cmi)
+    (fun f -> List.iter f ui.ui_imports_cmx);
   begin
     match ui.ui_export_info with
     | Clambda approx ->
@@ -228,8 +228,8 @@ let print_cmxs_infos header =
     (fun ui ->
       print_general_infos Compilation_unit.output ui.dynu_name ui.dynu_crc
         ui.dynu_defines
-        (fun f -> List.iter f ui.dynu_imports_cmi)
-        (fun f -> List.iter f ui.dynu_imports_cmx))
+        (fun f -> Array.iter f ui.dynu_imports_cmi)
+        (fun f -> Array.iter f ui.dynu_imports_cmx))
     header.dynu_units
 
 let p_title title = printf "%s:\n" title
@@ -314,8 +314,7 @@ let dump_obj_by_kind filename ic obj_kind =
       match cmi with
       | None -> ()
       | Some cmi ->
-        print_cmi_infos cmi.Cmi_format.cmi_name
-          (cmi.Cmi_format.cmi_crcs |> Array.to_list)
+        print_cmi_infos cmi.Cmi_format.cmi_name cmi.Cmi_format.cmi_crcs
     end;
     begin
       match cmt with None -> () | Some cmt -> print_cmt_infos cmt
