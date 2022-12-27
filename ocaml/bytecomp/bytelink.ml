@@ -514,7 +514,7 @@ let link_bytecode_as_c tolink outfile with_main =
        let sections =
          [ "SYMB", Symtable.data_global_map();
            "PRIM", Obj.repr(Symtable.data_primitive_names());
-           "CRCS", Obj.repr(extract_crc_interfaces()) ] in
+           "CRCS", Obj.repr(extract_crc_interfaces() |> Array.of_list) ] in
        output_string outchan "static char caml_sections[] = {\n";
        output_data_string outchan
          (Marshal.to_string sections []);
