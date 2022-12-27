@@ -22,8 +22,10 @@
 type dynunit = {
   dynu_name: Compilation_unit.t;
   dynu_crc: Digest.t;
-  dynu_imports_cmi: Import_info.t list;
-  dynu_imports_cmx: Import_info.t list;
+  (* CR mshinwell: consider using arrays here *)
+  dynu_imports_cmi:
+    (Compilation_unit.Name.t * (Compilation_unit.t * Digest.t) option) list;
+  dynu_imports_cmx: (Compilation_unit.t * Digest.t option) list;
   dynu_defines: Compilation_unit.t list;
 }
 

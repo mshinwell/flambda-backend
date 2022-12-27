@@ -2869,8 +2869,8 @@ let plugin_header units =
   let mk ((ui : Cmx_format.unit_infos),crc) : Cmxs_format.dynunit =
     { dynu_name = ui.ui_unit;
       dynu_crc = crc;
-      dynu_imports_cmi = ui.ui_imports_cmi;
-      dynu_imports_cmx = ui.ui_imports_cmx;
+      dynu_imports_cmi = Array.to_list ui.ui_imports_cmi;
+      dynu_imports_cmx = Array.to_list ui.ui_imports_cmx;
       dynu_defines = ui.ui_defines
     } in
   global_data "caml_plugin_header"
