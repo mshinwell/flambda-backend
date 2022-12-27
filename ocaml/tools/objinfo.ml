@@ -224,8 +224,8 @@ let print_cmxs_infos header =
          (ui.dynu_name |> Compilation_unit.full_path_as_string)
          ui.dynu_crc
          ui.dynu_defines
-         (Array.of_list ui.dynu_imports_cmi)
-         (Array.of_list ui.dynu_imports_cmx))
+         ui.dynu_imports_cmi
+         ui.dynu_imports_cmx)
     header.dynu_units
 
 let p_title title = printf "%s:\n" title

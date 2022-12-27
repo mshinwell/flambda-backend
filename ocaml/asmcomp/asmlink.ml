@@ -104,8 +104,7 @@ let check_consistency file_name unit crc =
 
 let extract_crc_interfaces () =
   Cmi_consistbl.extract !interfaces crc_interfaces
-  |> List.map (fun (name, crc) ->
-      let crc_with_unit = Cmi_consistbl.find crc_interfaces name in
+  |> List.map (fun (name, crc_with_unit) ->
       Import_info.create name ~crc_with_unit)
 
 let extract_crc_implementations () =

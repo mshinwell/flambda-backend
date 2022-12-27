@@ -242,9 +242,9 @@ module Native = struct
       cu, crc
 
     let interface_imports (t : t) =
-      List.map convert_cmi_import t.dynu_imports_cmi
+      List.map convert_cmi_import (Array.to_list t.dynu_imports_cmi)
     let implementation_imports (t : t) =
-      List.map convert_cmx_import t.dynu_imports_cmx
+      List.map convert_cmx_import (Array.to_list t.dynu_imports_cmx)
 
     let defined_symbols (t : t) =
       List.map (fun comp_unit ->
