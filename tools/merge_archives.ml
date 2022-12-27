@@ -106,7 +106,7 @@ let merge_cmxa0 ~archives =
           let b = B.make (Array.length newarr) in
           oldb
           |> B.iter (fun i ->
-               B.set b (snd (Hashtbl.find tbl (get_key oldarr.(i)))));
+                 B.set b (snd (Hashtbl.find tbl (get_key oldarr.(i)))));
           b
         in
         let new_units =
@@ -118,7 +118,7 @@ let merge_cmxa0 ~archives =
                     ~get_key:Import_info.name;
                 li_imports_cmx =
                   remap cmxa.lib_imports_cmx cmxs cmx_table li.li_imports_cmx
-                    ~get_key:Import_info.cu;
+                    ~get_key:Import_info.cu
               })
             cmxa.lib_units
         in
