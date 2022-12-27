@@ -407,7 +407,7 @@ let link_bytecode ?final_name tolink exec_name standalone =
        Symtable.output_global_map outchan;
        Bytesections.record outchan "SYMB";
        (* CRCs for modules *)
-       output_value outchan ((extract_crc_interfaces() : Import_info.t list));
+       output_value outchan ((extract_crc_interfaces() |> Array.of_list));
        Bytesections.record outchan "CRCS";
        (* Debug info *)
        if !Clflags.debug then begin
