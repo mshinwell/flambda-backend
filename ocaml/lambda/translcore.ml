@@ -840,12 +840,14 @@ and transl_exp0 ~in_new_scope ~scopes e =
           tmc_candidate = false;
         } in
       let funcid = Ident.create_local ("probe_handler_" ^ name) in
+      let layout = Typeopt.layout exp.exp_env exp.exp_type in
+      (* CR ncourant: how do we get the layouts for the free variables? *)
       let handler =
         let scopes = enter_value_definition ~scopes funcid in
         lfunction
           ~kind:(Curried {nlocal=0})
           ~params:(List.map (fun v -> v, Lambda.layout_top) param_idents)
-          ~return:Lambda.layout_top
+          ~return:layout
           ~body
           ~loc:(of_location ~scopes exp.exp_loc)
           ~attr
@@ -855,7 +857,7 @@ and transl_exp0 ~in_new_scope ~scopes e =
       let app =
         { ap_func = Lvar funcid;
           ap_args = List.map (fun id -> Lvar id) arg_idents;
-          ap_result_layout = Typeopt.layout exp.exp_env exp.exp_type;
+          ap_result_layout = layout;
           ap_region_close = Rc_normal;
           ap_mode = alloc_heap;
           ap_loc = of_location e.exp_loc ~scopes;
@@ -894,6 +896,9 @@ and pure_module m =
 
 and transl_list ~scopes expr_list =
   List.map (transl_exp ~scopes) expr_list
+
+and transl_list_with_layout ~scopes expr_list =
+  List.map (fun exp -> transl_exp ~scopes exp, Typeopt.layout exp.exp_env exp.exp_type) expr_list
 
 and transl_list_with_shape ~scopes expr_list =
   let transl_with_shape e =
@@ -947,7 +952,7 @@ and transl_apply ~scopes
       ~result_layout
       lam sargs loc
   =
-  let lapply funct args loc pos mode =
+  let lapply funct args loc pos mode result_layout =
     match funct, pos with
     | Lsend((Self | Public) as k, lmet, lobj, [], _, _, _), _ ->
         Lsend(k, lmet, lobj, args, pos, mode, loc)
@@ -998,7 +1003,10 @@ and transl_apply ~scopes
               (Lvar id, layout)
         in
         let lam =
-          if args = [] then lam else lapply lam (List.rev args) loc pos ap_mode
+          if args = [] then
+            lam
+          else
+            lapply lam (List.rev args) loc pos ap_mode layout_function
         in
         let handle, _ = protect "func" (lam, layout_function) in
         let l =
@@ -1026,15 +1034,16 @@ and transl_apply ~scopes
             | Alloc_local -> false
             | Alloc_heap -> true
           in
+          (* CR ncourant: need layout of the omitted parameter *)
           lfunction ~kind:(Curried {nlocal}) ~params:[id_arg, Lambda.layout_top]
-                    ~return:Lambda.layout_top ~body ~mode ~region
+                    ~return:result_layout ~body ~mode ~region
                     ~attr:default_stub_attribute ~loc
         in
         List.fold_right
           (fun (id, layout, lam) body -> Llet(Strict, layout, id, lam, body))
           !defs body
     | Arg (arg, _) :: l -> build_apply lam (arg :: args) loc pos ap_mode l
-    | [] -> lapply lam (List.rev args) loc pos ap_mode
+    | [] -> lapply lam (List.rev args) loc pos ap_mode result_layout
   in
   let args =
     List.map
@@ -1169,6 +1178,7 @@ and transl_function0
       match cases with
       | [] ->
         (* With Camlp4, a pattern matching might be empty *)
+        (* CR ncourant: here we probably would need a true layout_bottom value, which is compatible with the layout_union function *)
         Lambda.layout_top
       | {c_lhs=pat} :: other_cases ->
         (* All the patterns might not share the same types. We must take the
@@ -1466,7 +1476,7 @@ and transl_match ~scopes e arg pat_expr_list partial =
       assert (static_handlers = []);
       let mode = transl_exp_mode arg in
       Matching.for_multiple_match ~scopes layout e.exp_loc
-        (transl_list ~scopes argl) mode val_cases partial
+        (transl_list_with_layout ~scopes argl) mode val_cases partial
     | {exp_desc = Texp_tuple argl}, _ :: _ ->
         let val_ids =
           List.map
@@ -1476,7 +1486,7 @@ and transl_match ~scopes e arg pat_expr_list partial =
             )
             argl
         in
-        let lvars = List.map (fun (id, _) -> Lvar id) val_ids in
+        let lvars = List.map (fun (id, layout) -> Lvar id, layout) val_ids in
         let mode = transl_exp_mode arg in
         static_catch (transl_list ~scopes argl) val_ids
           (Matching.for_multiple_match ~scopes layout e.exp_loc
@@ -1507,14 +1517,17 @@ and transl_letop ~scopes loc env let_ ands param case partial warnings =
             and_.bop_op_type and_.bop_op_path and_.bop_op_val Id_value
         in
         let exp = transl_exp ~scopes and_.bop_exp in
-        let layout = layout and_.bop_exp.exp_env and_.bop_exp.exp_type in
+        let right_layout = layout and_.bop_exp.exp_env and_.bop_exp.exp_type in
+        let result_layout = function2_return_layout
+          env and_.bop_op_type
+        in
         let lam =
-          bind_with_layout Strict (right_id, layout) exp
+          bind_with_layout Strict (right_id, right_layout) exp
             (Lapply{
                ap_loc = of_location ~scopes and_.bop_loc;
                ap_func = op;
                ap_args=[Lvar left_id; Lvar right_id];
-               ap_result_layout = layout;
+               ap_result_layout = result_layout;
                ap_region_close=Rc_normal;
                ap_mode=alloc_heap;
                ap_tailcall = Default_tailcall;
@@ -1523,7 +1536,7 @@ and transl_letop ~scopes loc env let_ ands param case partial warnings =
                ap_probe=None;
              })
         in
-        bind_with_layout Strict (left_id, prev_layout) prev_lam (loop Lambda.layout_top lam rest)
+        bind_with_layout Strict (left_id, prev_layout) prev_lam (loop result_layout lam rest)
   in
   let op =
     transl_ident (of_location ~scopes let_.bop_op_name.loc) env
@@ -1549,7 +1562,7 @@ and transl_letop ~scopes loc env let_ ands param case partial warnings =
     ap_loc = of_location ~scopes loc;
     ap_func = op;
     ap_args=[exp; func];
-    ap_result_layout=Lambda.layout_top;
+    ap_result_layout=function2_return_layout env let_.bop_op_type;
     ap_region_close=Rc_normal;
     ap_mode=alloc_heap;
     ap_tailcall = Default_tailcall;

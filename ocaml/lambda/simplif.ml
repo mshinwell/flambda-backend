@@ -770,10 +770,10 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
             ap_probe=None;
           }
         in
-        let inner_params = List.map map_param (List.map fst params) in
-        let new_ids = List.map Ident.rename inner_params in
+        let inner_params = List.map (fun (param, layout) -> (map_param param, layout)) params in
+        let new_ids = List.map (fun (param, layout) -> (Ident.rename param, layout)) inner_params in
         let subst =
-          List.fold_left2 (fun s id new_id ->
+          List.fold_left2 (fun s (id, _) (new_id, _) ->
             Ident.Map.add id new_id s
           ) Ident.Map.empty inner_params new_ids
         in
@@ -781,7 +781,7 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
         let body = if add_region then Lregion body else body in
         let inner_fun =
           lfunction ~kind:(Curried {nlocal=0})
-            ~params:(List.map (fun id -> id, Lambda.layout_top) new_ids)
+            ~params:new_ids
             ~return ~body ~attr ~loc ~mode ~region:true
         in
         (wrapper_body, (inner_id, inner_fun))
