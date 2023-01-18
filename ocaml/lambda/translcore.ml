@@ -396,8 +396,10 @@ and transl_exp0 ~in_new_scope ~scopes e =
         let e = { e with exp_desc = Texp_apply(funct, oargs, pos) } in
         let position = transl_apply_position pos in
         let mode = transl_exp_mode e in
+        let result_layout = Typeopt.layout e.exp_env e.exp_type in
         event_after ~scopes e
           (transl_apply ~scopes ~tailcall ~inlined ~specialised ~position ~mode
+             ~result_layout
              lam extra_args (of_location ~scopes e.exp_loc))
       end
   | Texp_apply(funct, oargs, position) ->
@@ -407,9 +409,10 @@ and transl_exp0 ~in_new_scope ~scopes e =
       let e = { e with exp_desc = Texp_apply(funct, oargs, position) } in
       let position = transl_apply_position position in
       let mode = transl_exp_mode e in
+      let result_layout = Typeopt.layout e.exp_env e.exp_type in
       event_after ~scopes e
         (transl_apply ~scopes ~tailcall ~inlined ~specialised
-           ~position ~mode (transl_exp ~scopes funct)
+           ~position ~mode ~result_layout (transl_exp ~scopes funct)
            oargs (of_location ~scopes e.exp_loc))
   | Texp_match(arg, pat_expr_list, partial) ->
       transl_match ~scopes e arg pat_expr_list partial
@@ -941,6 +944,7 @@ and transl_apply ~scopes
       ?(specialised = Default_specialise)
       ?(position=Rc_normal)
       ?(mode=alloc_heap)
+      ~result_layout
       lam sargs loc
   =
   let lapply funct args loc pos mode =
@@ -972,7 +976,7 @@ and transl_apply ~scopes
           ap_loc=loc;
           ap_func=lexp;
           ap_args=args;
-          ap_result_layout=Lambda.layout_top;
+          ap_result_layout=result_layout;
           ap_region_close=pos;
           ap_mode=mode;
           ap_tailcall=tailcall;
@@ -985,18 +989,18 @@ and transl_apply ~scopes
     | Omitted { mode_closure; mode_arg; mode_ret } :: l ->
         assert (pos = Rc_normal);
         let defs = ref [] in
-        let protect name lam =
+        let protect name (lam, layout) =
           match lam with
-            Lvar _ | Lconst _ -> lam
+            Lvar _ | Lconst _ -> (lam, layout)
           | _ ->
               let id = Ident.create_local name in
-              defs := (id, lam) :: !defs;
-              Lvar id
+              defs := (id, layout, lam) :: !defs;
+              (Lvar id, layout)
         in
         let lam =
           if args = [] then lam else lapply lam (List.rev args) loc pos ap_mode
         in
-        let handle = protect "func" lam in
+        let handle, _ = protect "func" (lam, layout_function) in
         let l =
           List.map
             (fun arg ->
@@ -1027,9 +1031,9 @@ and transl_apply ~scopes
                     ~attr:default_stub_attribute ~loc
         in
         List.fold_right
-          (fun (id, lam) body -> Llet(Strict, Lambda.layout_top, id, lam, body))
+          (fun (id, layout, lam) body -> Llet(Strict, layout, id, lam, body))
           !defs body
-    | Arg arg :: l -> build_apply lam (arg :: args) loc pos ap_mode l
+    | Arg (arg, _) :: l -> build_apply lam (arg :: args) loc pos ap_mode l
     | [] -> lapply lam (List.rev args) loc pos ap_mode
   in
   let args =
@@ -1037,7 +1041,7 @@ and transl_apply ~scopes
       (fun (_, arg) ->
          match arg with
          | Omitted _ as arg -> arg
-         | Arg exp -> Arg (transl_exp ~scopes exp))
+         | Arg exp -> Arg (transl_exp ~scopes exp, Typeopt.layout exp.exp_env exp.exp_type))
       sargs
   in
   build_apply lam [] loc position mode args
@@ -1567,9 +1571,9 @@ let transl_scoped_exp ~scopes exp =
   maybe_region (transl_scoped_exp ~scopes exp)
 
 let transl_apply
-      ~scopes ?tailcall ?inlined ?specialised ?position ?mode fn args loc =
+      ~scopes ?tailcall ?inlined ?specialised ?position ?mode ~result_layout fn args loc =
   maybe_region (transl_apply
-      ~scopes ?tailcall ?inlined ?specialised ?position ?mode fn args loc)
+      ~scopes ?tailcall ?inlined ?specialised ?position ?mode ~result_layout fn args loc)
 
 (* Error report *)
 

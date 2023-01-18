@@ -224,7 +224,7 @@ let rec build_object_init ~scopes cl_table obj params inh_init obj_init cl =
       let (inh_init, obj_init) =
         build_object_init ~scopes cl_table obj params inh_init obj_init cl
       in
-      (inh_init, transl_apply ~scopes obj_init oexprs Loc_unknown)
+      (inh_init, transl_apply ~scopes ~result_layout:layout_top obj_init oexprs Loc_unknown)
   | Tcl_let (rec_flag, defs, vals, cl) ->
       let (inh_init, obj_init) =
         build_object_init ~scopes cl_table obj (vals @ params)
@@ -496,7 +496,7 @@ let rec transl_class_rebind ~scopes obj_init cl vf =
   | Tcl_apply (cl, oexprs) ->
       let path, path_lam, obj_init =
         transl_class_rebind ~scopes obj_init cl vf in
-      (path, path_lam, transl_apply ~scopes obj_init oexprs Loc_unknown)
+      (path, path_lam, transl_apply ~scopes ~result_layout:layout_top obj_init oexprs Loc_unknown)
   | Tcl_let (rec_flag, defs, _vals, cl) ->
       let path, path_lam, obj_init =
         transl_class_rebind ~scopes obj_init cl vf in
