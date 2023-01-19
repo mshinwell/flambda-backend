@@ -3664,7 +3664,7 @@ let rec map_return f = function
   | ( Lvar _ | Lmutvar _ | Lconst _ | Lapply _ | Lfunction _ | Lsend _ | Lprim _
     | Lwhile _ | Lfor _ | Lassign _ | Lifused _ ) as l ->
       f l
-  | Lregion l -> Lregion (map_return f l)
+  | Lregion (l, layout) -> Lregion (map_return f l, layout)
 
 (* The 'opt' reference indicates if the optimization is worthy.
 
@@ -3840,7 +3840,9 @@ let do_for_multiple_match ~scopes value_kind loc paraml mode pat_act_list partia
   let repr = None in
   let arg =
     let sloc = Scoped_location.of_location ~scopes loc in
-    (* TODO Note that this match failure will need to build a block which could be a mixed block, how to fix? *)
+    (* CR ncourant: this can build a mixed block, but it should never actually be
+       created except if the pattern-matching binds it, in which case it should be
+       rejected by the typing. Do we really trust this case will not happen? *)
     Lprim (Pmakeblock (0, Immutable, None, mode), List.map fst paraml, sloc) in
   let handler =
     let partial = check_partial pat_act_list partial in
