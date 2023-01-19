@@ -225,7 +225,7 @@ let rec build_object_init ~scopes cl_table obj params inh_init obj_init cl =
       let (inh_init, obj_init) =
         build_object_init ~scopes cl_table obj params inh_init obj_init cl
       in
-      (inh_init, transl_apply ~scopes ~result_layout:layout_top obj_init oexprs Loc_unknown)
+      (inh_init, transl_apply ~scopes ~result_layout:layout_object obj_init oexprs Loc_unknown)
   | Tcl_let (rec_flag, defs, vals, cl) ->
       let (inh_init, obj_init) =
         build_object_init ~scopes cl_table obj (vals @ params)
@@ -479,12 +479,13 @@ let rec transl_class_rebind ~scopes obj_init cl vf =
       let build params rem =
         let param = name_pattern "param" pat in
         let param_layout = Typeopt.layout pat.pat_env pat.pat_type in
+        let return_layout = layout_class in
         Lambda.lfunction
                   ~kind:(Curried {nlocal=0}) ~params:((param, param_layout)::params)
-                  ~return:Lambda.layout_top
+                  ~return:return_layout
                   ~attr:default_function_attribute
                   ~loc:(of_location ~scopes pat.pat_loc)
-                  ~body:(Matching.for_function ~scopes Lambda.layout_top pat.pat_loc
+                  ~body:(Matching.for_function ~scopes return_layout pat.pat_loc
                             None (Lvar param, param_layout) [pat, rem] partial)
                   ~mode:alloc_heap
                   ~region:true
@@ -498,7 +499,7 @@ let rec transl_class_rebind ~scopes obj_init cl vf =
   | Tcl_apply (cl, oexprs) ->
       let path, path_lam, obj_init =
         transl_class_rebind ~scopes obj_init cl vf in
-      (path, path_lam, transl_apply ~scopes ~result_layout:layout_top obj_init oexprs Loc_unknown)
+      (path, path_lam, transl_apply ~scopes ~result_layout:layout_class obj_init oexprs Loc_unknown)
   | Tcl_let (rec_flag, defs, _vals, cl) ->
       let path, path_lam, obj_init =
         transl_class_rebind ~scopes obj_init cl vf in
