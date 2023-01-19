@@ -3556,9 +3556,9 @@ let toplevel_handler ~scopes value_kind loc ~failer partial args cases compile_f
           check_total ~scopes value_kind loc ~failer total lam raise_num
       end
 
-let compile_matching ~scopes value_kind loc ~failer repr arg pat_act_list partial =
+let compile_matching ~scopes value_kind loc ~failer repr (arg, arg_layout) pat_act_list partial =
   let partial = check_partial pat_act_list partial in
-  let args = [ (arg, Strict, layout_top) ] in
+  let args = [ (arg, Strict, arg_layout) ] in
   let rows = map_on_rows (fun pat -> (pat, [])) pat_act_list in
   toplevel_handler ~scopes value_kind loc ~failer partial args rows (fun partial pm ->
     compile_match_nonempty ~scopes value_kind repr partial (Context.start 1) pm)
@@ -3577,11 +3577,11 @@ let for_trywith ~scopes value_kind loc param pat_act_list =
      the reraise (hence the [_noloc]) to avoid seeing this
      silent reraise in exception backtraces. *)
   compile_matching ~scopes value_kind loc ~failer:(Reraise_noloc param)
-    None param pat_act_list Partial
+    None (param, layout_block) pat_act_list Partial
 
 let simple_for_let ~scopes value_kind loc param pat body =
   compile_matching ~scopes value_kind loc ~failer:Raise_match_failure
-    None param [ (pat, body) ] Partial
+    None (param, Typeopt.layout pat.pat_env pat.pat_type) [ (pat, body) ] Partial
 
 (* Optimize binding of immediate tuples
 

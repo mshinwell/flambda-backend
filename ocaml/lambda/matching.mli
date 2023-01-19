@@ -22,7 +22,7 @@ open Debuginfo.Scoped_location
 (* Entry points to match compiler *)
 val for_function:
         scopes:scopes -> layout -> Location.t ->
-        int ref option -> lambda -> (pattern * lambda) list -> partial ->
+        int ref option -> (lambda * layout) -> (pattern * lambda) list -> partial ->
         lambda
 val for_trywith:
         scopes:scopes -> layout -> Location.t ->

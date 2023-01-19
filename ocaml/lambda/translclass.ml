@@ -204,13 +204,14 @@ let rec build_object_init ~scopes cl_table obj params inh_init obj_init cl =
       (inh_init,
        let build params rem =
          let param = name_pattern "param" pat in
+         let param_layout = Typeopt.layout pat.pat_env pat.pat_type in
          Lambda.lfunction
-                   ~kind:(Curried {nlocal=0}) ~params:((param, Lambda.layout_top)::params)
+                   ~kind:(Curried {nlocal=0}) ~params:((param, param_layout)::params)
                    ~return:layout_obj
                    ~attr:default_function_attribute
                    ~loc:(of_location ~scopes pat.pat_loc)
                    ~body:(Matching.for_function ~scopes layout_obj pat.pat_loc
-                             None (Lvar param) [pat, rem] partial)
+                             None (Lvar param, param_layout) [pat, rem] partial)
                    ~mode:alloc_heap
                    ~region:true
        in
@@ -477,13 +478,14 @@ let rec transl_class_rebind ~scopes obj_init cl vf =
         transl_class_rebind ~scopes obj_init cl vf in
       let build params rem =
         let param = name_pattern "param" pat in
+        let param_layout = Typeopt.layout pat.pat_env pat.pat_type in
         Lambda.lfunction
-                  ~kind:(Curried {nlocal=0}) ~params:((param, Lambda.layout_top)::params)
+                  ~kind:(Curried {nlocal=0}) ~params:((param, param_layout)::params)
                   ~return:Lambda.layout_top
                   ~attr:default_function_attribute
                   ~loc:(of_location ~scopes pat.pat_loc)
                   ~body:(Matching.for_function ~scopes Lambda.layout_top pat.pat_loc
-                            None (Lvar param) [pat, rem] partial)
+                            None (Lvar param, param_layout) [pat, rem] partial)
                   ~mode:alloc_heap
                   ~region:true
       in

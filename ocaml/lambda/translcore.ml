@@ -1095,7 +1095,7 @@ and transl_curried_function
              Curried {nlocal = nlocal + 1}
         in
         ((fnkind, (param, layout) :: params, return, region),
-         Matching.for_function ~scopes return_layout loc None (Lvar param)
+         Matching.for_function ~scopes return_layout loc None (Lvar param, layout)
            [pat, body] partial)
       else begin
         begin match partial with
@@ -1189,7 +1189,7 @@ and transl_function0
           (layout pat.pat_env pat.pat_type) other_cases
     in
     let body =
-      Matching.for_function ~scopes return loc repr (Lvar param)
+      Matching.for_function ~scopes return loc repr (Lvar param, layout)
         (transl_cases ~scopes cases) partial
     in
     let region = region || not (may_allocate_in_region body) in
@@ -1493,14 +1493,15 @@ and transl_match ~scopes e arg pat_expr_list partial =
              lvars mode val_cases partial)
     | arg, [] ->
       assert (static_handlers = []);
+      let k = Typeopt.layout arg.exp_env arg.exp_type in
       Matching.for_function ~scopes layout e.exp_loc
-        None (transl_exp ~scopes arg) val_cases partial
+        None (transl_exp ~scopes arg, k) val_cases partial
     | arg, _ :: _ ->
         let val_id = Typecore.name_pattern "val" (List.map fst val_cases) in
         let k = Typeopt.layout arg.exp_env arg.exp_type in
         static_catch [transl_exp ~scopes arg] [val_id, k]
           (Matching.for_function ~scopes layout e.exp_loc
-             None (Lvar val_id) val_cases partial)
+             None (Lvar val_id, k) val_cases partial)
   in
   List.fold_left (fun body (static_exception_id, val_ids, handler) ->
     Lstaticcatch (body, (static_exception_id, val_ids), handler, layout)
