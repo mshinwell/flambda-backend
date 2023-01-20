@@ -241,7 +241,7 @@ let rec prepare_letrec (recursive_set : Ident.Set.t)
     let lam =
       List.fold_left
         (fun body (id, def) : Lambda.lambda ->
-          Llet (Strict, Lambda.layout_top, id, def, body))
+          Llet (Strict, Lambda.layout_block, id, def, body))
         (Lambda.Lprim (prim, args, dbg))
         defs
     in
@@ -386,7 +386,7 @@ let rec prepare_letrec (recursive_set : Ident.Set.t)
         List.fold_right
           (fun (id, def) (letrec, inner_effects, inner_functions) ->
             let let_def =
-              { let_kind = Strict; layout = Lambda.layout_top; ident = id }
+              { let_kind = Strict; layout = Lambda.layout_letrec; ident = id }
             in
             if Ident.Set.mem id outer_vars
             then
@@ -527,7 +527,7 @@ let dissect_letrec ~bindings ~body =
     List.fold_right
       (fun (id, def) letrec ->
         let let_def =
-          { let_kind = Strict; layout = Lambda.layout_top; ident = id }
+          { let_kind = Strict; layout = Lambda.layout_letrec; ident = id }
         in
         prepare_letrec letbound (Some let_def) def letrec)
       bindings
@@ -581,7 +581,8 @@ let dissect_letrec ~bindings ~body =
   let with_preallocations =
     List.fold_left
       (fun body (id, binding) ->
-        Llet (Strict, Lambda.layout_top, id, binding, body))
+        (* Preallocations can only be blocks *)
+        Llet (Strict, Lambda.layout_block, id, binding, body))
       with_non_rec preallocations
   in
   let with_constants =
@@ -596,16 +597,17 @@ let dissect_letrec ~bindings ~body =
       with_preallocations letrec.consts
   in
   let substituted = Lambda.rename letrec.substitution with_constants in
+  let body_layout = Lambda.layout_top in
   if not letrec.needs_region
   then substituted
   else
     Lstaticcatch
-      ( Lregion (Lambda.rename bound_ids_freshening substituted, Lambda.layout_top),
+      ( Lregion (Lambda.rename bound_ids_freshening substituted, body_layout),
         ( cont,
-          List.map (fun (bound_id, _) -> bound_id, Lambda.layout_top) bindings
+          List.map (fun (bound_id, _) -> bound_id, Lambda.layout_letrec) bindings
         ),
         real_body,
-        Lambda.layout_top )
+        body_layout )
 
 type dissected =
   | Dissected of Lambda.lambda
