@@ -129,9 +129,13 @@ let translate_apply0 env res apply =
         return_arity |> Flambda_arity.With_subkinds.to_arity
         |> C.machtype_of_return_arity
       in
+      let args_ty = List.map (fun k ->
+          C.machtype_of_kind (Flambda_kind.With_subkind.kind k)
+        ) (Flambda_arity.With_subkinds.to_list param_arity)
+      in
       ( C.indirect_full_call ~dbg ty pos
           (Alloc_mode.For_types.to_lambda alloc_mode)
-          callee args,
+          callee args_ty args,
         env,
         res,
         Ece.all )
