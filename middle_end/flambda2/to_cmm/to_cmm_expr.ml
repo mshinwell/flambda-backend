@@ -108,7 +108,7 @@ let translate_apply0 env res apply =
         Ece.all ))
   | Function { function_call = Indirect_unknown_arity; alloc_mode } ->
     fail_if_probe apply;
-    let args_ty, ty = assert false in
+    let args_ty, ty = Cmm.(List.map (fun _ -> [|Val|]) args, [|Val|]) in
     ( C.indirect_call ~dbg ty pos
         (Alloc_mode.For_types.to_lambda alloc_mode)
         callee args_ty args,
@@ -180,7 +180,7 @@ let translate_apply0 env res apply =
       Ece.all )
   | Call_kind.Method { kind; obj; alloc_mode } ->
     fail_if_probe apply;
-    let args_ty, ty = assert false in
+    let args_ty, ty = Cmm.(List.map (fun _ -> [|Val|]) args, [|Val|]) in
     let obj, env, res, _ = C.simple ~dbg env res obj in
     let kind = Call_kind.Method_kind.to_lambda kind in
     let alloc_mode = Alloc_mode.For_types.to_lambda alloc_mode in
