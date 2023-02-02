@@ -78,16 +78,22 @@ let rec structured_constant ppf = function
 
 and one_fun ppf f =
   let idents ppf =
-    List.iter
-      (fun (x, k) ->
-         fprintf ppf "@ %a%a"
-           VP.print x
-           Printlambda.layout k
-      )
+    let rec iter params layouts =
+      match params, layouts with
+      | [], [] -> ()
+      | [param], [] ->
+        fprintf ppf "@ %a%a"
+          VP.print param Printlambda.layout Lambda.layout_function
+      | param :: params, layout :: layouts ->
+        fprintf ppf "@ %a%a"
+          VP.print param Printlambda.layout layout
+      | _ -> Misc.fatal_error "arity inconsistent with params"
+    in
+    iter f.params f.arity.params_layout
   in
-  fprintf ppf "(fun@ %s%s%a@ %d@ @[<2>%a@]@ @[<2>%a@])"
+  fprintf ppf "(fun@ %s%s%a@ %d@ @[<2>%t@]@ @[<2>%a@])"
     f.label (layout f.arity.return_layout) Printlambda.check_attribute f.check
-    (List.length f.arity.params_layout) idents (List.combine f.params f.arity.params_layout) lam f.body
+    (List.length f.arity.params_layout) idents lam f.body
 
 and phantom_defining_expr ppf = function
   | Uphantom_const const -> uconstant ppf const

@@ -108,9 +108,10 @@ let translate_apply0 env res apply =
         Ece.all ))
   | Function { function_call = Indirect_unknown_arity; alloc_mode } ->
     fail_if_probe apply;
-    ( C.indirect_call ~dbg Cmm.typ_val pos
+    let args_ty, ty = assert false in
+    ( C.indirect_call ~dbg ty pos
         (Alloc_mode.For_types.to_lambda alloc_mode)
-        callee args,
+        callee args_ty args,
       env,
       res,
       Ece.all )
@@ -179,10 +180,11 @@ let translate_apply0 env res apply =
       Ece.all )
   | Call_kind.Method { kind; obj; alloc_mode } ->
     fail_if_probe apply;
+    let args_ty, ty = assert false in
     let obj, env, res, _ = C.simple ~dbg env res obj in
     let kind = Call_kind.Method_kind.to_lambda kind in
     let alloc_mode = Alloc_mode.For_types.to_lambda alloc_mode in
-    C.send kind callee obj args (pos, alloc_mode) dbg, env, res, Ece.all
+    C.send kind callee obj args args_ty ty (pos, alloc_mode) dbg, env, res, Ece.all
 
 (* Function calls that have an exn continuation with extra arguments must be
    wrapped with assignments for the mutable variables used to pass the extra
