@@ -25,7 +25,7 @@
         (setfield_ptr(root-init) 3 (global Anonymous!) s))
       (ignore
         (let
-          (*match* =
+          (*match* =[int]
              (setfield_ptr 0 (field 3 (global Anonymous!)) "Hello World!"))
           (makeblock 0)))
       (let (drop = (function param : int 0))

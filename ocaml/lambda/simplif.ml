@@ -184,7 +184,7 @@ let simplify_exits lam =
   | Lsend(_k, m, o, ll, _, _, _) -> List.iter (count ~try_depth) (m::o::ll)
   | Levent(l, _) -> count ~try_depth l
   | Lifused(_v, l) -> count ~try_depth l
-  | Lregion (l, _) -> count ~try_depth l
+  | Lregion (l, _) -> count ~try_depth:(try_depth+1) l
 
   and count_default ~try_depth sw = match sw.sw_failaction with
   | None -> ()
@@ -220,20 +220,22 @@ let simplify_exits lam =
   *)
 
   let subst = Hashtbl.create 17 in
-  let rec simplif ~try_depth = function
-  | (Lvar _| Lmutvar _ | Lconst _) as l -> l
+  let rec simplif ?layout ~try_depth l =
+    let result_layout ly = Option.value layout ~default:ly in
+    match l with
+  | Lvar _| Lmutvar _ | Lconst _ -> l
   | Lapply ap ->
       Lapply{ap with ap_func = simplif ~try_depth ap.ap_func;
                      ap_args = List.map (simplif ~try_depth) ap.ap_args}
   | Lfunction{kind; params; return; mode; region; body = l; attr; loc} ->
      lfunction ~kind ~params ~return ~mode ~region ~body:(simplif ~try_depth l) ~attr ~loc
   | Llet(str, kind, v, l1, l2) ->
-      Llet(str, kind, v, simplif ~try_depth l1, simplif ~try_depth l2)
+      Llet(str, kind, v, simplif ~try_depth l1, simplif ?layout ~try_depth l2)
   | Lmutlet(kind, v, l1, l2) ->
-      Lmutlet(kind, v, simplif ~try_depth l1, simplif ~try_depth l2)
+      Lmutlet(kind, v, simplif ~try_depth l1, simplif ?layout ~try_depth l2)
   | Lletrec(bindings, body) ->
       Lletrec(List.map (fun (v, l) -> (v, simplif ~try_depth l)) bindings,
-      simplif ~try_depth body)
+      simplif ?layout ~try_depth body)
   | Lprim(p, ll, loc) -> begin
     let ll = List.map (simplif ~try_depth) ll in
     match p, ll with
@@ -252,19 +254,19 @@ let simplify_exits lam =
   | Lswitch(l, sw, loc, kind) ->
       let new_l = simplif ~try_depth l
       and new_consts =
-      List.map (fun (n, e) -> (n, simplif ~try_depth e)) sw.sw_consts
+      List.map (fun (n, e) -> (n, simplif ?layout ~try_depth e)) sw.sw_consts
       and new_blocks =
-      List.map (fun (n, e) -> (n, simplif ~try_depth e)) sw.sw_blocks
-      and new_fail = Option.map (simplif ~try_depth) sw.sw_failaction in
+      List.map (fun (n, e) -> (n, simplif ?layout ~try_depth e)) sw.sw_blocks
+      and new_fail = Option.map (simplif ?layout ~try_depth) sw.sw_failaction in
       Lswitch
         (new_l,
          {sw with sw_consts = new_consts ; sw_blocks = new_blocks;
                   sw_failaction = new_fail},
-         loc, kind)
+         loc, result_layout kind)
   | Lstringswitch(l,sw,d,loc, kind) ->
       Lstringswitch
-        (simplif ~try_depth l,List.map (fun (s,l) -> s,simplif ~try_depth l) sw,
-         Option.map (simplif ~try_depth) d,loc,kind)
+        (simplif ~try_depth l,List.map (fun (s,l) -> s,simplif ?layout ~try_depth l) sw,
+         Option.map (simplif ?layout ~try_depth) d,loc,result_layout kind)
   | Lstaticraise (i,[]) as l ->
       begin try
         let _,handler =  Hashtbl.find subst i in
@@ -295,27 +297,27 @@ let simplify_exits lam =
       | Not_found -> Lstaticraise (i,ls)
       end
   | Lstaticcatch (l1,(i,[]),(Lstaticraise (_j,[]) as l2),_) ->
-      Hashtbl.add subst i ([],simplif ~try_depth l2) ;
-      simplif ~try_depth l1
+      Hashtbl.add subst i ([],simplif ?layout ~try_depth l2) ;
+      simplif ?layout ~try_depth l1
   | Lstaticcatch (l1,(i,xs),l2,kind) ->
       let {count; max_depth} = get_exit i in
       if count = 0 then
         (* Discard staticcatch: not matching exit *)
-        simplif ~try_depth l1
+        simplif ?layout ~try_depth l1
       else if
       count = 1 && max_depth <= try_depth then begin
         (* Inline handler if there is a single occurrence and it is not
            nested within an inner try..with *)
         assert(max_depth = try_depth);
-        Hashtbl.add subst i (xs,simplif ~try_depth l2);
-        simplif ~try_depth l1
+        Hashtbl.add subst i (xs,simplif ?layout ~try_depth l2);
+        simplif ~layout:(result_layout kind) ~try_depth l1
       end else
-        Lstaticcatch (simplif ~try_depth l1, (i,xs), simplif ~try_depth l2, kind)
+        Lstaticcatch (simplif ?layout ~try_depth l1, (i,xs), simplif ?layout ~try_depth l2, result_layout kind)
   | Ltrywith(l1, v, l2, kind) ->
-      let l1 = simplif ~try_depth:(try_depth + 1) l1 in
-      Ltrywith(l1, v, simplif ~try_depth l2, kind)
+      let l1 = simplif ?layout ~try_depth:(try_depth + 1) l1 in
+      Ltrywith(l1, v, simplif ?layout ~try_depth l2, result_layout kind)
   | Lifthenelse(l1, l2, l3, kind) -> Lifthenelse(simplif ~try_depth l1,
-    simplif ~try_depth l2, simplif ~try_depth l3, kind)
+    simplif ~try_depth l2, simplif ~try_depth l3, result_layout kind)
   | Lsequence(l1, l2) -> Lsequence(simplif ~try_depth l1, simplif ~try_depth l2)
   | Lwhile lw -> Lwhile {lw with wh_cond = simplif ~try_depth lw.wh_cond;
                                  wh_body = simplif ~try_depth lw.wh_body}
@@ -329,7 +331,7 @@ let simplify_exits lam =
       List.map (simplif ~try_depth) ll, pos, mode, loc)
   | Levent(l, ev) -> Levent(simplif ~try_depth l, ev)
   | Lifused(v, l) -> Lifused (v,simplif ~try_depth l)
-  | Lregion (l, layout) -> Lregion (simplif ~try_depth l, layout)
+  | Lregion (l, layout) -> Lregion (simplif ~try_depth:(try_depth + 1) l, result_layout layout)
   in
   simplif ~try_depth:0 lam
 

@@ -26,14 +26,14 @@ match (3, 2, 1) with
 | _ -> false
 ;;
 [%%expect{|
-(let (*match*/274 = 3 *match*/275 = 2 *match*/276 = 1)
+(let (*match*/274 =[int] 3 *match*/275 =[int] 2 *match*/276 =[int] 1)
   (catch
     (catch
       (catch (if (!= *match*/275 3) (exit 3) (exit 1)) with (3)
         (if (!= *match*/274 1) (exit 2) (exit 1)))
      with (2) 0)
    with (1) 1))
-(let (*match*/274 = 3 *match*/275 = 2 *match*/276 = 1)
+(let (*match*/274 =[int] 3 *match*/275 =[int] 2 *match*/276 =[int] 1)
   (catch (if (!= *match*/275 3) (if (!= *match*/274 1) 0 (exit 1)) (exit 1))
    with (1) 1))
 - : bool = false
@@ -47,7 +47,7 @@ match (3, 2, 1) with
 | _ -> false
 ;;
 [%%expect{|
-(let (*match*/279 = 3 *match*/280 = 2 *match*/281 = 1)
+(let (*match*/279 =[int] 3 *match*/280 =[int] 2 *match*/281 =[int] 1)
   (catch
     (catch
       (catch
@@ -65,7 +65,7 @@ match (3, 2, 1) with
      with (5) 0)
    with (4 x/277[(consts ()) (non_consts ([0: [int], [int], [int]]))])
     (seq (ignore x/277) 1)))
-(let (*match*/279 = 3 *match*/280 = 2 *match*/281 = 1)
+(let (*match*/279 =[int] 3 *match*/280 =[int] 2 *match*/281 =[int] 1)
   (catch
     (if (!= *match*/280 3)
       (if (!= *match*/279 1) 0
