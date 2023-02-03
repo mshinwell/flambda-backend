@@ -2587,7 +2587,7 @@ let read_machtype_from_closure t clos base_offset dbg =
   Cop (Cload (memory_chunk, Asttypes.Mutable),
        [field_address clos base_offset dbg], dbg)
 
-let curry_clos_has_nary_application narity n =
+let curry_clos_has_nary_application ~narity n =
   narity <= max_arity_optimized && n < narity - 1
 
 let rec make_curry_apply result narity args_type args clos n =
@@ -2601,7 +2601,7 @@ let rec make_curry_apply result narity args_type args clos n =
   | arg_type :: args_type ->
     let newclos = V.create_local "clos" in
     let arg_pos =
-      if curry_clos_has_nary_application narity n then 3 else 2
+      if curry_clos_has_nary_application ~narity n then 3 else 2
     in
     let clos_pos = arg_pos + machtype_stored_size arg_type in
     Clet
@@ -2650,7 +2650,7 @@ let intermediate_curry_functions nlocal arity result =
       if num >= narity - nlocal then Lambda.alloc_local else Lambda.alloc_heap
     in
     let curried n = Lambda.Curried { nlocal = min nlocal n }, n in
-    let has_nary = curry_clos_has_nary_application narity num in
+    let has_nary = curry_clos_has_nary_application ~narity (num + 1) in
     let header_size = if has_nary then 3 else 2 in
     Cfunction
       { fun_name = name2;

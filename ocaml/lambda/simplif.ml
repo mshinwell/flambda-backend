@@ -754,8 +754,14 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
         List.iter (fun (id, _) -> if Ident.Set.mem id fv then raise Exit) map;
 
         let inner_id = Ident.create_local (Ident.name fun_id ^ "_inner") in
-        let map_param p = try List.assoc p map with Not_found -> p in
-        let args = List.map (fun (p, _) -> Lvar (map_param p)) params in
+        let map_param p layout =
+          try
+            (* If the param is optional, then it must be a value *)
+            List.assoc p map, Lambda.layout_field
+          with
+            Not_found -> p, layout
+        in
+        let args = List.map (fun (p, layout) -> Lvar (fst (map_param p layout))) params in
         let wrapper_body =
           Lapply {
             ap_func = Lvar inner_id;
@@ -770,7 +776,7 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
             ap_probe=None;
           }
         in
-        let inner_params = List.map (fun (param, layout) -> (map_param param, layout)) params in
+        let inner_params = List.map (fun (param, layout) -> map_param param layout) params in
         let new_ids = List.map (fun (param, layout) -> (Ident.rename param, layout)) inner_params in
         let subst =
           List.fold_left2 (fun s (id, _) (new_id, _) ->
