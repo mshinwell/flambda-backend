@@ -604,8 +604,9 @@ let dissect_letrec ~bindings ~body =
     Lstaticcatch
       ( Lregion (Lambda.rename bound_ids_freshening substituted, body_layout),
         ( cont,
-          List.map (fun (bound_id, _) -> bound_id, Lambda.layout_letrec) bindings
-        ),
+          List.map
+            (fun (bound_id, _) -> bound_id, Lambda.layout_letrec)
+            bindings ),
         real_body,
         body_layout )
 

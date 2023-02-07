@@ -903,8 +903,10 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
   let arities : Fexpr.function_arities option =
     match Apply_expr.call_kind app with
     | Function
-        { function_call = Indirect_full_application; alloc_mode = _; return_arity }
-      ->
+        { function_call = Indirect_full_application;
+          alloc_mode = _;
+          return_arity
+        } ->
       let _ret_arity = arity return_arity in
       assert false (* Some { params_arity; ret_arity } *)
     | Function { function_call = Direct _; return_arity; alloc_mode = _ } ->
@@ -925,11 +927,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
         arity (return_arity |> Flambda_arity.With_subkinds.of_arity)
       in
       Some { params_arity; ret_arity }
-    | Function
-        { function_call = Indirect;
-          return_arity = _;
-          alloc_mode = _
-        }
+    | Function { function_call = Indirect; return_arity = _; alloc_mode = _ }
     | Method _ ->
       None
   in

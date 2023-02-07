@@ -796,8 +796,7 @@ module Expr_with_acc = struct
         &&
         match Apply.call_kind apply with
         | Function { function_call = Direct _; _ } -> true
-        | Function
-            { function_call = Indirect | Indirect_full_application; _ }
+        | Function { function_call = Indirect | Indirect_full_application; _ }
           ->
           false
         | Method _ -> false

@@ -392,15 +392,13 @@ let apply apply =
   match Apply_expr.call_kind apply with
   | Function { function_call = Direct _; _ } -> direct_call_size
   (* CR mshinwell: Check / fix these numbers *)
+  | Function { function_call = Indirect; return_arity = _; alloc_mode = _ } ->
+    indirect_call_size
   | Function
-      { function_call = Indirect;
+      { function_call = Indirect_full_application;
         return_arity = _;
         alloc_mode = _
       } ->
-    indirect_call_size
-  | Function
-      { function_call = Indirect_full_application; return_arity = _; alloc_mode = _ }
-    ->
     indirect_call_size
   | C_call { alloc = true; _ } -> alloc_extcall_size
   | C_call { alloc = false; _ } -> nonalloc_extcall_size

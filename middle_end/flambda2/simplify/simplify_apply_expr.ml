@@ -832,8 +832,8 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
           (Non_inlinable { escaping = true })
           ~env_at_use ~arg_types:[T.any_value]
       in
-      ( Call_kind.indirect_function_call
-          ~return_arity:apply_return_arity apply_alloc_mode,
+      ( Call_kind.indirect_function_call ~return_arity:apply_return_arity
+          apply_alloc_mode,
         use_id,
         dacc )
     | Indirect_full_application ->
@@ -874,10 +874,10 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
 
      When simplifying a function call, it can happen that we need to change the
      calling convention. Currently this only happens when we have a generic call
-     (Indirect), which uses the generic/function_declaration
-     calling convention, but se simplify it into a direct call, which uses the
-     callee's code calling convention. In this case, we need to "detuple" the
-     call in order to correctly adapt to the change in calling convention. *)
+     (Indirect), which uses the generic/function_declaration calling convention,
+     but se simplify it into a direct call, which uses the callee's code calling
+     convention. In this case, we need to "detuple" the call in order to
+     correctly adapt to the change in calling convention. *)
   let call_must_be_detupled is_function_decl_tupled =
     match call with
     | Direct _ | Indirect_full_application ->

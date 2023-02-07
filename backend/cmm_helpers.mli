@@ -61,7 +61,7 @@ val boxedintnat_header : nativeint
 
 (** Closure info for a closure of given arity and distance to environment *)
 val closure_info :
-  arity:(Lambda.function_kind * int) -> startenv:int -> is_last:bool -> nativeint
+  arity:Lambda.function_kind * int -> startenv:int -> is_last:bool -> nativeint
 
 (** Wrappers *)
 val alloc_infix_header : int -> Debuginfo.t -> expression
@@ -410,11 +410,13 @@ val opaque : expression -> Debuginfo.t -> expression
 
 (** Get the symbol for the generic application with [n] arguments, and ensure
     its presence in the set of defined symbols *)
-val apply_function_sym : machtype list -> machtype -> Lambda.alloc_mode -> string
+val apply_function_sym :
+  machtype list -> machtype -> Lambda.alloc_mode -> string
 
 (** Get the symbol for the generic currying or tuplifying wrapper with [n]
     arguments, and ensure its presence in the set of defined symbols. *)
-val curry_function_sym : Lambda.function_kind -> machtype list -> machtype -> string
+val curry_function_sym :
+  Lambda.function_kind -> machtype list -> machtype -> string
 
 (** Bigarrays *)
 
