@@ -1484,8 +1484,14 @@ let transl_function f =
     else
       [ Reduce_code_size ]
   in
+  let params_layout =
+    if List.length f.params = List.length f.arity.params_layout then
+      f.arity.params_layout
+    else
+      f.arity.params_layout @ [Lambda.layout_function]
+  in
   Cfunction {fun_name = f.label;
-             fun_args = List.map2 (fun id ty -> (id, machtype_of_layout ty)) f.params f.arity.params_layout;
+             fun_args = List.map2 (fun id ty -> (id, machtype_of_layout ty)) f.params params_layout;
              fun_body = cmm_body;
              fun_codegen_options;
              fun_poll = f.poll;
