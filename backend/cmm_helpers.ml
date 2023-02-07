@@ -980,25 +980,28 @@ let lookup_label obj lab dbg =
 
 let machtype_identifier t =
   let char_of_component = function
-    | Val -> 'V' | Int -> 'I' | Float -> 'F'
+    | Val -> 'V'
+    | Int -> 'I'
+    | Float -> 'F'
     | Addr ->
-      Misc.fatal_error
-        "[Addr] is forbidden inside arity for generic functions"
+      Misc.fatal_error "[Addr] is forbidden inside arity for generic functions"
   in
   String.of_seq (Seq.map char_of_component (Array.to_seq t))
 
 let unique_arity_identifier arity =
-  if List.for_all (function [|Val|] -> true | _ -> false) arity then
-    Int.to_string (List.length arity)
-  else
-    String.concat "_" (List.map machtype_identifier arity)
+  if List.for_all (function [| Val |] -> true | _ -> false) arity
+  then Int.to_string (List.length arity)
+  else String.concat "_" (List.map machtype_identifier arity)
 
 let send_function_name arity result (mode : Lambda.alloc_mode) =
-  let res = match result with [|Val|] -> "" | _ -> "_R" ^ machtype_identifier result in
+  let res =
+    match result with [| Val |] -> "" | _ -> "_R" ^ machtype_identifier result
+  in
   let suff = match mode with Alloc_heap -> "" | Alloc_local -> "L" in
   "caml_send" ^ unique_arity_identifier arity ^ res ^ suff
 
-let call_cached_method obj tag cache pos args args_type result (apos, mode) dbg =
+let call_cached_method obj tag cache pos args args_type result (apos, mode) dbg
+    =
   let cache = array_indexing log2_size_addr cache pos dbg in
   Compilenv.need_send_fun args_type result mode;
   Cop
@@ -1079,7 +1082,9 @@ let make_checkbound dbg = function
 
 (* Record application and currying functions *)
 let apply_function_name arity result (mode : Lambda.alloc_mode) =
-  let res = match result with [|Val|] -> "" | _ -> "_R" ^ machtype_identifier result in
+  let res =
+    match result with [| Val |] -> "" | _ -> "_R" ^ machtype_identifier result
+  in
   let suff = match mode with Alloc_heap -> "" | Alloc_local -> "L" in
   "caml_apply" ^ unique_arity_identifier arity ^ res ^ suff
 
@@ -1092,14 +1097,21 @@ let curry_function_sym function_kind arity result =
   Compilenv.need_curry_fun function_kind arity result;
   match function_kind with
   | Lambda.Curried { nlocal } ->
-    "caml_curry" ^ unique_arity_identifier arity
-    ^ (match result with [|Val|] -> "" | _ -> "_R" ^ machtype_identifier result)
-    ^ (if nlocal > 0 then "L" ^ Int.to_string nlocal else "")
-  | Lambda.Tupled ->
-    if List.exists (function [|Val|] -> false | _ -> true) arity then
-      Misc.fatal_error "tuplify_function is currently unsupported if arity contains non-values";
-    "caml_tuplify" ^ Int.to_string (List.length arity)
-    ^ (match result with [|Val|] -> "" | _ -> "_R" ^ machtype_identifier result)
+    "caml_curry"
+    ^ unique_arity_identifier arity
+    ^ (match result with
+      | [| Val |] -> ""
+      | _ -> "_R" ^ machtype_identifier result)
+    ^ if nlocal > 0 then "L" ^ Int.to_string nlocal else ""
+  | Lambda.Tupled -> (
+    if List.exists (function [| Val |] -> false | _ -> true) arity
+    then
+      Misc.fatal_error
+        "tuplify_function is currently unsupported if arity contains non-values";
+    "caml_tuplify"
+    ^ Int.to_string (List.length arity)
+    ^
+    match result with [| Val |] -> "" | _ -> "_R" ^ machtype_identifier result)
 
 (* Big arrays *)
 
@@ -2110,7 +2122,8 @@ let direct_apply lbl args (pos, _mode) dbg =
 let call_caml_apply ty args_type mut clos args pos mode dbg =
   let really_call_caml_apply clos args =
     let cargs =
-      (Cconst_symbol (apply_function_sym args_type ty mode, dbg) :: args) @ [clos]
+      (Cconst_symbol (apply_function_sym args_type ty mode, dbg) :: args)
+      @ [clos]
     in
     Cop (Capply (ty, pos), cargs, dbg)
   in
@@ -2143,7 +2156,7 @@ let call_caml_apply ty args_type mut clos args pos mode dbg =
                 dbg,
                 really_call_caml_apply clos args,
                 dbg,
-                Vval Pgenval (* dummy, for unboxing only *))))
+                Vval Pgenval (* dummy, for unboxing only *) )))
   else really_call_caml_apply clos args
 
 let generic_apply mut clos args args_type result (pos, mode) dbg =
@@ -2158,11 +2171,13 @@ let send kind met obj args args_type result akind dbg =
   let call_met obj args args_type clos =
     (* met is never a simple expression, so it never gets turned into an
        Immutable load *)
-    generic_apply Asttypes.Mutable clos (obj :: args) (typ_val :: args_type) result akind dbg
+    generic_apply Asttypes.Mutable clos (obj :: args) (typ_val :: args_type)
+      result akind dbg
   in
   bind "obj" obj (fun obj ->
       match (kind : Lambda.meth_kind), args, args_type with
-      | Self, _, _ -> bind "met" (lookup_label obj met dbg) (call_met obj args args_type)
+      | Self, _, _ ->
+        bind "met" (lookup_label obj met dbg) (call_met obj args args_type)
       | Cached, cache :: pos :: args, _ :: _ :: args_type ->
         call_cached_method obj met cache pos args args_type result akind dbg
       | _ -> bind "met" (lookup_tag obj met dbg) (call_met obj args args_type))
@@ -2331,7 +2346,7 @@ let apply_function_body arity result (mode : Lambda.alloc_mode) =
   let rec app_fun clos args =
     match args with
     | [] -> Misc.fatal_error "apply_function_body for empty arity"
-    | [arg] ->
+    | [arg] -> (
       let app =
         Cop
           ( Capply (result, Rc_normal),
@@ -2340,7 +2355,7 @@ let apply_function_body arity result (mode : Lambda.alloc_mode) =
               Cvar clos ],
             dbg () )
       in
-      (match region with
+      match region with
       | None -> app
       | Some region ->
         (* To preserve tail-call behaviour, we do a runtime check whether
@@ -2359,9 +2374,8 @@ let apply_function_body arity result (mode : Lambda.alloc_mode) =
                  Csequence (Cop (Cendregion, [Cvar region], dbg ()), Cvar res)
                )),
             dbg (),
-            Vval Pgenval (* Incorrect but only used for unboxing *) )
-      )
-      | arg :: args ->
+            Vval Pgenval (* Incorrect but only used for unboxing *) ))
+    | arg :: args ->
       let newclos = V.create_local "clos" in
       Clet
         ( VP.create newclos,
@@ -2492,8 +2506,10 @@ let apply_function (arity, result, mode) =
  *)
 
 let tuplify_function arity return =
-  if List.exists (function [|Val|] -> false | _ -> true) arity then
-    Misc.fatal_error "typlify_function is currently unsupported if arity contains non-values";
+  if List.exists (function [| Val |] -> false | _ -> true) arity
+  then
+    Misc.fatal_error
+      "typlify_function is currently unsupported if arity contains non-values";
   let arity = List.length arity in
   let dbg = placeholder_dbg in
   let arg = V.create_local "arg" in
@@ -2553,30 +2569,38 @@ let tuplify_function arity return =
 let max_arity_optimized = 15
 
 let machtype_stored_size t =
-  Array.fold_left (fun cur c ->
+  Array.fold_left
+    (fun cur c ->
       match c with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Val | Int -> cur + 1
-      | Float -> cur + if Arch.size_int = 4 then 2 else 1
-    ) 0 t
+      | Float -> cur + if Arch.size_int = 4 then 2 else 1)
+    0 t
 
 let machtype_non_scanned_size t =
-  Array.fold_left (fun cur c ->
+  Array.fold_left
+    (fun cur c ->
       match c with
       | Addr -> Misc.fatal_error "[Addr] cannot be stored"
       | Val -> cur
       | Int -> cur + 1
-      | Float -> cur + if Arch.size_int = 4 then 2 else 1
-    ) 0 t
+      | Float -> cur + if Arch.size_int = 4 then 2 else 1)
+    0 t
 
 let layout_machtype_for_closure t v =
-  if Array.length t > 1 then
-    Misc.fatal_error "[layout_machtype_for_closure] currently does not support complex machtypes";
+  if Array.length t > 1
+  then
+    Misc.fatal_error
+      "[layout_machtype_for_closure] currently does not support complex \
+       machtypes";
   [Cvar v]
 
 let read_machtype_from_closure t clos base_offset dbg =
-  if Array.length t <> 1 then
-    Misc.fatal_error "[read_machtype_from_closure] currently does not support complex machtypes";
+  if Array.length t <> 1
+  then
+    Misc.fatal_error
+      "[read_machtype_from_closure] currently does not support complex \
+       machtypes";
   let memory_chunk =
     match t.(0) with
     | Addr -> Misc.fatal_error "[Addr] cannot be read"
@@ -2584,8 +2608,10 @@ let read_machtype_from_closure t clos base_offset dbg =
     | Int -> Word_int
     | Float -> Double
   in
-  Cop (Cload (memory_chunk, Asttypes.Mutable),
-       [field_address clos base_offset dbg], dbg)
+  Cop
+    ( Cload (memory_chunk, Asttypes.Mutable),
+      [field_address clos base_offset dbg],
+      dbg )
 
 let curry_clos_has_nary_application ~narity n =
   narity <= max_arity_optimized && n < narity - 1
@@ -2596,24 +2622,22 @@ let rec make_curry_apply result narity args_type args clos n =
   | [] ->
     Cop
       ( Capply (result, Rc_normal),
-        get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ()) :: args @ [Cvar clos],
+        (get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ()) :: args)
+        @ [Cvar clos],
         dbg () )
   | arg_type :: args_type ->
     let newclos = V.create_local "clos" in
-    let arg_pos =
-      if curry_clos_has_nary_application ~narity n then 3 else 2
-    in
+    let arg_pos = if curry_clos_has_nary_application ~narity n then 3 else 2 in
     let clos_pos = arg_pos + machtype_stored_size arg_type in
     Clet
       ( VP.create newclos,
         get_field_gen Asttypes.Mutable (Cvar clos) clos_pos (dbg ()),
-        make_curry_apply
-          result narity args_type
-          (read_machtype_from_closure arg_type (Cvar clos) arg_pos (dbg ()) :: args)
+        make_curry_apply result narity args_type
+          (read_machtype_from_closure arg_type (Cvar clos) arg_pos (dbg ())
+          :: args)
           newclos (n - 1) )
 
-let machtype_of_layout = function
-  | Lambda.Pvalue _ -> typ_val
+let machtype_of_layout = function Lambda.Pvalue _ -> typ_val
 
 let final_curry_function nlocal arity result =
   let last_arg = V.create_local "arg" in
@@ -2621,14 +2645,18 @@ let final_curry_function nlocal arity result =
   let narity = List.length arity in
   let fun_name =
     curry_function_sym (Lambda.Curried { nlocal }) arity result
-      ^ "_" ^ Int.to_string (narity - 1)
+    ^ "_"
+    ^ Int.to_string (narity - 1)
   in
   let args_type = List.rev arity in
   let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
   Cfunction
     { fun_name;
-      fun_args = [VP.create last_arg, List.hd args_type; VP.create last_clos, typ_val];
-      fun_body = make_curry_apply result narity (List.tl args_type) [Cvar last_arg] last_clos (narity - 1);
+      fun_args =
+        [VP.create last_arg, List.hd args_type; VP.create last_clos, typ_val];
+      fun_body =
+        make_curry_apply result narity (List.tl args_type) [Cvar last_arg]
+          last_clos (narity - 1);
       fun_codegen_options = [];
       fun_dbg;
       fun_poll = Default_poll
@@ -2643,83 +2671,89 @@ let intermediate_curry_functions nlocal arity result =
     | [] -> Misc.fatal_error "Empty arity for [intermediate_curry_functions]"
     | [_] -> [final_curry_function nlocal arity result]
     | arg_type :: remaining_args ->
-    let name2 = if num = 0 then name1 else name1 ^ "_" ^ Int.to_string num in
-    let arg = V.create_local "arg" and clos = V.create_local "clos" in
-    let fun_dbg = placeholder_fun_dbg ~human_name:name2 in
-    let mode : Lambda.alloc_mode =
-      if num >= narity - nlocal then Lambda.alloc_local else Lambda.alloc_heap
-    in
-    let curried n = Lambda.Curried { nlocal = min nlocal n }, n in
-    let has_nary = curry_clos_has_nary_application ~narity (num + 1) in
-    let header_size = if has_nary then 3 else 2 in
-    Cfunction
-      { fun_name = name2;
-        fun_args = [VP.create arg, arg_type; VP.create clos, typ_val];
-        fun_body =
-          Cop
-            ( Calloc mode,
-              [ alloc_closure_header ~mode (header_size + 1 + machtype_stored_size arg_type) (dbg ());
-                Cconst_symbol (name1 ^ "_" ^ Int.to_string (num + 1), dbg ());
-                alloc_closure_info
-                  ~arity:(curried (if has_nary then narity - num - 1 else 1))
-                  ~startenv:(3 + machtype_non_scanned_size arg_type) (dbg ()) ~is_last:true
-              ] @
-              (if has_nary then
-                [Cconst_symbol
-                  (name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app", dbg ())]
-              else []) @
-              layout_machtype_for_closure arg_type arg @
-              [Cvar clos],
-              dbg () );
-        fun_codegen_options = [];
-        fun_dbg;
-        fun_poll = Default_poll
-      }
-    ::
-    (if has_nary then
-       let direct_args =
-         List.mapi (fun i ty ->
-             (V.create_local (Printf.sprintf "arg%d" (i + num + 2)), ty)
-           ) remaining_args
-       in
-      let fun_args =
-        List.map
-          (fun (arg, ty) -> VP.create arg, ty)
-          (direct_args @ [clos, typ_val])
+      let name2 = if num = 0 then name1 else name1 ^ "_" ^ Int.to_string num in
+      let arg = V.create_local "arg" and clos = V.create_local "clos" in
+      let fun_dbg = placeholder_fun_dbg ~human_name:name2 in
+      let mode : Lambda.alloc_mode =
+        if num >= narity - nlocal then Lambda.alloc_local else Lambda.alloc_heap
       in
-      let fun_name = name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app" in
-      let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
-      let cf =
-        Cfunction
-          { fun_name;
-            fun_args;
-            fun_body =
-              make_curry_apply result narity (arg_type :: accumulated_args)
-                (List.map (fun (arg, _) -> Cvar arg) direct_args) clos
-                (num + 1);
-            fun_codegen_options = [];
-            fun_dbg;
-            fun_poll = Default_poll
-          }
-      in
-      [cf]
-     else [])
-    @ loop (arg_type :: accumulated_args) remaining_args (num + 1)
-   in loop [] arity 0
+      let curried n = Lambda.Curried { nlocal = min nlocal n }, n in
+      let has_nary = curry_clos_has_nary_application ~narity (num + 1) in
+      let header_size = if has_nary then 3 else 2 in
+      Cfunction
+        { fun_name = name2;
+          fun_args = [VP.create arg, arg_type; VP.create clos, typ_val];
+          fun_body =
+            Cop
+              ( Calloc mode,
+                [ alloc_closure_header ~mode
+                    (header_size + 1 + machtype_stored_size arg_type)
+                    (dbg ());
+                  Cconst_symbol (name1 ^ "_" ^ Int.to_string (num + 1), dbg ());
+                  alloc_closure_info
+                    ~arity:(curried (if has_nary then narity - num - 1 else 1))
+                    ~startenv:(3 + machtype_non_scanned_size arg_type)
+                    (dbg ()) ~is_last:true ]
+                @ (if has_nary
+                  then
+                    [ Cconst_symbol
+                        (name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app", dbg ())
+                    ]
+                  else [])
+                @ layout_machtype_for_closure arg_type arg
+                @ [Cvar clos],
+                dbg () );
+          fun_codegen_options = [];
+          fun_dbg;
+          fun_poll = Default_poll
+        }
+      ::
+      (if has_nary
+      then
+        let direct_args =
+          List.mapi
+            (fun i ty ->
+              V.create_local (Printf.sprintf "arg%d" (i + num + 2)), ty)
+            remaining_args
+        in
+        let fun_args =
+          List.map
+            (fun (arg, ty) -> VP.create arg, ty)
+            (direct_args @ [clos, typ_val])
+        in
+        let fun_name = name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app" in
+        let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
+        let cf =
+          Cfunction
+            { fun_name;
+              fun_args;
+              fun_body =
+                make_curry_apply result narity
+                  (arg_type :: accumulated_args)
+                  (List.map (fun (arg, _) -> Cvar arg) direct_args)
+                  clos (num + 1);
+              fun_codegen_options = [];
+              fun_dbg;
+              fun_poll = Default_poll
+            }
+        in
+        [cf]
+      else [])
+      @ loop (arg_type :: accumulated_args) remaining_args (num + 1)
+  in
+  loop [] arity 0
 
 let curry_function (kind, arity, return) =
   match kind with
-  | Lambda.Tupled ->
-    [tuplify_function arity return]
+  | Lambda.Tupled -> [tuplify_function arity return]
   | Lambda.Curried { nlocal } ->
     intermediate_curry_functions nlocal arity return
 
 let default_generic_fns : Cmx_format.generic_fns =
   { curry_fun = [];
-    apply_fun = [
-      [typ_val; typ_val], typ_val, Lambda.alloc_heap;
-      [typ_val; typ_val; typ_val], typ_val, Lambda.alloc_heap
-    ];
+    apply_fun =
+      [ [typ_val; typ_val], typ_val, Lambda.alloc_heap;
+        [typ_val; typ_val; typ_val], typ_val, Lambda.alloc_heap ];
     send_fun = []
   }
 (* These apply funs are always present in the main program because the run-time
@@ -3478,7 +3512,7 @@ let fundecls_size fundecls =
     (fun (f : Clambda.ufunction) ->
       let indirect_call_code_pointer_size =
         match f.arity with
-        | { function_kind = Curried _ ; params_layout = [] | [_]; _ } ->
+        | { function_kind = Curried _; params_layout = [] | [_]; _ } ->
           0
           (* arity 1 does not need an indirect call handler. arity 0 cannot be
              indirect called *)
@@ -3515,15 +3549,24 @@ let emit_constant_closure ((_, global_symb) as symb) fundecls clos_vars cont =
       | (f2 : Clambda.ufunction) :: rem -> (
         let is_last = match rem with [] -> true | _ :: _ -> false in
         match f2.arity with
-        | { function_kind = Curried _ ; params_layout = [] | [_]; _ } as arity ->
+        | { function_kind = Curried _; params_layout = [] | [_]; _ } as arity ->
           (Cint (infix_header pos) :: closure_symbol f2)
           @ Csymbol_address f2.label
-            :: Cint (closure_info ~arity:(arity.function_kind, List.length arity.params_layout) ~startenv:(startenv - pos) ~is_last)
+            :: Cint
+                 (closure_info
+                    ~arity:(arity.function_kind, List.length arity.params_layout)
+                    ~startenv:(startenv - pos) ~is_last)
             :: emit_others (pos + 3) rem
         | arity ->
           (Cint (infix_header pos) :: closure_symbol f2)
-          @ Csymbol_address (curry_function_sym arity.function_kind (List.map machtype_of_layout arity.params_layout) (machtype_of_layout arity.return_layout))
-            :: Cint (closure_info ~arity:(arity.function_kind, List.length arity.params_layout) ~startenv:(startenv - pos) ~is_last)
+          @ Csymbol_address
+              (curry_function_sym arity.function_kind
+                 (List.map machtype_of_layout arity.params_layout)
+                 (machtype_of_layout arity.return_layout))
+            :: Cint
+                 (closure_info
+                    ~arity:(arity.function_kind, List.length arity.params_layout)
+                    ~startenv:(startenv - pos) ~is_last)
             :: Csymbol_address f2.label
             :: emit_others (pos + 4) rem)
     in
@@ -3533,13 +3576,22 @@ let emit_constant_closure ((_, global_symb) as symb) fundecls clos_vars cont =
     @ closure_symbol f1
     @
     match f1.arity with
-    | { function_kind = Curried _ ; params_layout = [] | [_]; _ } as arity ->
+    | { function_kind = Curried _; params_layout = [] | [_]; _ } as arity ->
       Csymbol_address f1.label
-      :: Cint (closure_info ~arity:(arity.function_kind, List.length arity.params_layout) ~startenv ~is_last)
+      :: Cint
+           (closure_info
+              ~arity:(arity.function_kind, List.length arity.params_layout)
+              ~startenv ~is_last)
       :: emit_others 3 remainder
     | arity ->
-      Csymbol_address (curry_function_sym arity.function_kind (List.map machtype_of_layout arity.params_layout) (machtype_of_layout arity.return_layout))
-      :: Cint (closure_info ~arity:(arity.function_kind, List.length arity.params_layout) ~startenv ~is_last)
+      Csymbol_address
+        (curry_function_sym arity.function_kind
+           (List.map machtype_of_layout arity.params_layout)
+           (machtype_of_layout arity.return_layout))
+      :: Cint
+           (closure_info
+              ~arity:(arity.function_kind, List.length arity.params_layout)
+              ~startenv ~is_last)
       :: Csymbol_address f1.label :: emit_others 4 remainder)
 
 (* Build the NULL terminated array of gc roots *)
@@ -3808,7 +3860,8 @@ let indirect_call ~dbg ty pos alloc_mode f args_type args =
            ( Capply (ty, pos),
              [load ~dbg Word_int Asttypes.Mutable ~addr:(Cvar v); arg; Cvar v],
              dbg ))
-  | args -> call_caml_apply ty args_type Asttypes.Mutable f args pos alloc_mode dbg
+  | args ->
+    call_caml_apply ty args_type Asttypes.Mutable f args pos alloc_mode dbg
 
 let indirect_full_call ~dbg ty pos alloc_mode f args_type = function
   (* the single-argument case is already optimized by indirect_call *)
