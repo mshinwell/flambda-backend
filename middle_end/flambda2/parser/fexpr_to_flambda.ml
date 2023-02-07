@@ -838,7 +838,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         match arities with
         | Some { params_arity = _; ret_arity } ->
           let return_arity = arity ret_arity in
-          Call_kind.indirect_function_call_known_arity ~return_arity
+          Call_kind.indirect_function_call_full_application ~return_arity
             Alloc_mode.For_types.heap
         | None -> (* CR mshinwell: fixme *) assert false)
       | C_call { alloc } -> (

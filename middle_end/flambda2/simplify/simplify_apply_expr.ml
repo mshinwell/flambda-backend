@@ -832,14 +832,14 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
           (Non_inlinable { escaping = true })
           ~env_at_use ~arg_types:[T.any_value]
       in
-      ( Call_kind.indirect_function_call_unknown_arity
+      ( Call_kind.indirect_function_call
           ~return_arity:apply_return_arity apply_alloc_mode,
         use_id,
         dacc )
     | Indirect_full_application ->
       let dacc, use_id = record_return_cont_use () in
       let call_kind =
-        Call_kind.indirect_function_call_known_arity
+        Call_kind.indirect_function_call_full_application
           ~return_arity:apply_return_arity apply_alloc_mode
       in
       call_kind, use_id, dacc
@@ -849,7 +849,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
          which function it is. *)
       let dacc, use_id = record_return_cont_use () in
       let call_kind =
-        Call_kind.indirect_function_call_known_arity
+        Call_kind.indirect_function_call_full_application
           ~return_arity:apply_return_arity apply_alloc_mode
       in
       call_kind, use_id, dacc

@@ -138,7 +138,7 @@ let split_direct_over_application apply ~result_arity
       (Apply.exn_continuation apply)
       ~args:remaining_args
       ~call_kind:
-        (Call_kind.indirect_function_call_unknown_arity
+        (Call_kind.indirect_function_call
            ~return_arity:result_arity apply_alloc_mode)
       (Apply.dbg apply) ~inlined:(Apply.inlined apply)
       ~inlining_state:(Apply.inlining_state apply)

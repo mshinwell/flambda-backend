@@ -925,10 +925,10 @@ let close_exact_or_unknown_apply acc env
             (* CR keryan : We could do better here since we know the arity, but
                we would have to untuple the arguments and we lack information
                for now *)
-            Call_kind.indirect_function_call_unknown_arity ~return_arity mode
+            Call_kind.indirect_function_call ~return_arity mode
           else Call_kind.direct_function_call code_id ~return_arity mode
         | None ->
-          Call_kind.indirect_function_call_unknown_arity
+          Call_kind.indirect_function_call
             ~return_arity:(Flambda_arity.With_subkinds.create [return_arity])
             mode
         | Some
@@ -1884,7 +1884,7 @@ let wrap_over_application acc env full_call (apply : IR.apply) over_args
       | Rc_nontail -> Apply.Position.Nontail
     in
     let call_kind =
-      Call_kind.indirect_function_call_unknown_arity
+      Call_kind.indirect_function_call
         ~return_arity:(Flambda_arity.With_subkinds.create [apply.return])
         (Alloc_mode.For_types.from_lambda apply.mode)
     in

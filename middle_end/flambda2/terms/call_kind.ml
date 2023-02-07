@@ -110,10 +110,10 @@ let direct_function_call code_id ~return_arity alloc_mode =
   check_arity return_arity;
   Function { function_call = Direct code_id; return_arity; alloc_mode }
 
-let indirect_function_call_unknown_arity ~return_arity alloc_mode =
+let indirect_function_call ~return_arity alloc_mode =
   Function { function_call = Indirect; return_arity; alloc_mode }
 
-let indirect_function_call_known_arity ~return_arity alloc_mode =
+let indirect_function_call_full_application ~return_arity alloc_mode =
   check_arity return_arity;
   Function
     { function_call = Indirect_full_application; return_arity; alloc_mode }

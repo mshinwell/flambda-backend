@@ -72,10 +72,10 @@ val direct_function_call :
   Alloc_mode.For_types.t ->
   t
 
-val indirect_function_call_unknown_arity :
+val indirect_function_call :
   return_arity:Flambda_arity.With_subkinds.t -> Alloc_mode.For_types.t -> t
 
-val indirect_function_call_known_arity :
+val indirect_function_call_full_application :
   return_arity:Flambda_arity.With_subkinds.t -> Alloc_mode.For_types.t -> t
 
 val method_call : Method_kind.t -> obj:Simple.t -> Alloc_mode.For_types.t -> t
