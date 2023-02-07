@@ -2133,7 +2133,7 @@ let call_caml_apply ty args_type mut clos args pos mode dbg =
                           [ get_field_gen mut clos 1 dbg;
                             Cconst_int (pos_arity_in_closinfo, dbg) ],
                           dbg );
-                      Cconst_int (arity, dbg) ],
+                      Cconst_int (List.length args, dbg) ],
                     dbg ),
                 dbg,
                 Cop
