@@ -34,14 +34,14 @@ type closure_code_pointers =
 
 let get_func_decl_params_arity t code_id =
   let info = Env.get_code_metadata t code_id in
-  let params_ty = List.map (fun k ->
-      C.machtype_of_kind (Flambda_kind.With_subkind.kind k)
-    ) (Flambda_arity.With_subkinds.to_list (Code_metadata.params_arity info))
+  let params_ty =
+    List.map
+      (fun k -> Env.machtype_of_kind (Flambda_kind.With_subkind.kind k))
+      (Flambda_arity.With_subkinds.to_list (Code_metadata.params_arity info))
   in
   let result_ty =
     C.machtype_of_return_arity
-      (Flambda_arity.With_subkinds.to_arity
-         (Code_metadata.result_arity info))
+      (Flambda_arity.With_subkinds.to_arity (Code_metadata.result_arity info))
   in
   let kind : Lambda.function_kind =
     if Code_metadata.is_tupled info
@@ -157,8 +157,9 @@ end = struct
         get_func_decl_params_arity env code_id
       in
       let closure_info =
-        C.closure_info ~arity:(kind, List.length params_ty) ~startenv:(startenv - slot_offset)
-          ~is_last:last_function_slot
+        C.closure_info
+          ~arity:(kind, List.length params_ty)
+          ~startenv:(startenv - slot_offset) ~is_last:last_function_slot
       in
       let acc =
         match for_static_sets with
@@ -200,7 +201,8 @@ end = struct
           P.symbol_from_linkage_name ~dbg code_linkage_name
           :: P.int ~dbg closure_info
           :: P.symbol_from_linkage_name ~dbg
-               (Linkage_name.of_string (C.curry_function_sym kind params_ty result_ty))
+               (Linkage_name.of_string
+                  (C.curry_function_sym kind params_ty result_ty))
           :: acc
         in
         acc, slot_offset + size, env, res, Ece.pure, updates)
@@ -321,7 +323,9 @@ let params_and_body0 env res code_id ~fun_dbg ~check ~return_continuation
      code, so we don't need any binder for it (this is why we can ignore
      [_bound_var]). If it does end up in generated code, Selection will complain
      and refuse to compile the code. *)
-  let env, _bound_var = Env.create_bound_parameter env my_region in
+  let env, _bound_var =
+    Env.create_bound_parameter env (my_region, [| Cmm.Int |])
+  in
   (* Translate the arg list and body *)
   let env, fun_args = C.bound_parameters env params in
   let fun_body, res = translate_expr env res body in
@@ -488,6 +492,7 @@ let lift_set_of_closures env res ~body ~bound_vars layout set ~translate_expr
         let v = Bound_var.var v in
         let sym = C.symbol ~dbg (Function_slot.Map.find cid closure_symbols) in
         Env.bind_variable env res v ~defining_expr:sym
+          ~machtype_of_defining_expr:[| Cmm.Val |]
           ~num_normal_occurrences_of_bound_vars
           ~effects_and_coeffects_of_defining_expr:Ece.pure_can_be_duplicated)
       (env, res) cids bound_vars
@@ -528,10 +533,13 @@ let let_dynamic_set_of_closures0 env res ~body ~bound_vars set
   let env, res =
     Env.bind_variable_to_primitive env res soc_var ~inline:Env.Do_not_inline
       ~defining_expr ~effects_and_coeffects_of_defining_expr:effs
+      ~machtype_of_defining_expr:[| Cmm.Val |]
   in
   (* Get from the env the cmm variable that was created and bound to the
      compiled set of closures. *)
-  let soc_cmm_var, env, res, peff = Env.inline_variable env res soc_var in
+  let soc_cmm_var, _machtype, env, res, peff =
+    Env.inline_variable env res soc_var
+  in
   assert (
     match To_cmm_effects.classify_by_effects_and_coeffects peff with
     | Pure -> true
@@ -559,7 +567,8 @@ let let_dynamic_set_of_closures0 env res ~body ~bound_vars set
           let v = Bound_var.var v in
           Env.bind_variable env res v ~defining_expr
             ~num_normal_occurrences_of_bound_vars
-            ~effects_and_coeffects_of_defining_expr)
+            ~effects_and_coeffects_of_defining_expr
+            ~machtype_of_defining_expr:[| Cmm.Val |])
       (env, res)
       (Function_slot.Lmap.keys decls)
       bound_vars
