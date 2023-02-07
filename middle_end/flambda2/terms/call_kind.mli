@@ -20,8 +20,10 @@ module Function_call : sig
   type t = private
     | Direct of Code_id.t
         (** The [code_id] uniquely determines the function symbol to call. *)
-    | Indirect
     | Indirect_full_application
+    | Indirect
+        (** [Indirect] can be used even if the application is known to be a
+            full application. *)
 end
 
 module Method_kind : sig
