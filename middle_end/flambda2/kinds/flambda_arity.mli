@@ -57,7 +57,5 @@ module With_subkinds : sig
   (** [of_arity] sets the subkind information to [Anything]. *)
   val of_arity : arity -> t
 
-  val compatible : t -> when_used_at:t -> bool
-
   include Container_types.S with type t := t
 end

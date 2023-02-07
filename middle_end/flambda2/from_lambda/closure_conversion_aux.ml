@@ -64,7 +64,7 @@ module IR = struct
       probe : Lambda.probe;
       mode : Lambda.alloc_mode;
       region : Ident.t;
-      return : Flambda_kind.With_subkind.t;
+      return : Flambda_kind.With_subkind.t
     }
 
   type switch =
@@ -797,9 +797,8 @@ module Expr_with_acc = struct
         match Apply.call_kind apply with
         | Function { function_call = Direct _; _ } -> true
         | Function
-            { function_call = Indirect_unknown_arity | Indirect_known_arity _;
-              _
-            } ->
+            { function_call = Indirect_unknown_arity | Indirect_known_arity; _ }
+          ->
           false
         | Method _ -> false
         | C_call _ -> false)

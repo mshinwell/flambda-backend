@@ -101,14 +101,4 @@ module With_subkinds = struct
 
   let of_arity arity =
     List.map (fun kind -> Flambda_kind.With_subkind.create kind Anything) arity
-
-  let compatible t ~when_used_at =
-    if List.compare_lengths t when_used_at <> 0
-    then
-      Misc.fatal_errorf "Mismatched arities:@ %a@ and@ %a" print t print
-        when_used_at;
-    List.for_all2
-      (fun kind when_used_at ->
-        Flambda_kind.With_subkind.compatible kind ~when_used_at)
-      t when_used_at
 end

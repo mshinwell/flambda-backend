@@ -18,20 +18,10 @@
 
 module Function_call : sig
   type t = private
-    | Direct of
-        { code_id : Code_id.t;
-              (** The [code_id] uniquely determines the function symbol that
-                  must be called. *)
-          return_arity : Flambda_arity.With_subkinds.t
-              (** [return_arity] describes what the callee returns. It matches
-                  up with the arity of [continuation] in the enclosing [Apply.t]
-                  record. *)
-        }
+    | Direct of Code_id.t
+        (** The [code_id] uniquely determines the function symbol to call. *)
     | Indirect_unknown_arity
-    | Indirect_known_arity of
-        { param_arity : Flambda_arity.With_subkinds.t;
-          return_arity : Flambda_arity.With_subkinds.t
-        }
+    | Indirect_known_arity
 end
 
 module Method_kind : sig
@@ -50,7 +40,11 @@ end
 type t = private
   | Function of
       { function_call : Function_call.t;
-        alloc_mode : Alloc_mode.For_types.t
+        alloc_mode : Alloc_mode.For_types.t;
+        return_arity : Flambda_arity.With_subkinds.t
+            (** [return_arity] describes what the callee returns. It matches
+                up with the arity of [continuation] in the enclosing [Apply.t]
+                record. *)
       }
   | Method of
       { kind : Method_kind.t;
@@ -76,13 +70,11 @@ val direct_function_call :
   Alloc_mode.For_types.t ->
   t
 
-val indirect_function_call_unknown_arity : Alloc_mode.For_types.t -> t
+val indirect_function_call_unknown_arity :
+  return_arity:Flambda_arity.With_subkinds.t -> Alloc_mode.For_types.t -> t
 
 val indirect_function_call_known_arity :
-  param_arity:Flambda_arity.With_subkinds.t ->
-  return_arity:Flambda_arity.With_subkinds.t ->
-  Alloc_mode.For_types.t ->
-  t
+  return_arity:Flambda_arity.With_subkinds.t -> Alloc_mode.For_types.t -> t
 
 val method_call : Method_kind.t -> obj:Simple.t -> Alloc_mode.For_types.t -> t
 

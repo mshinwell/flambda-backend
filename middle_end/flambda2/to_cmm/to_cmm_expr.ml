@@ -82,8 +82,8 @@ let translate_apply0 env res apply =
     | Nontail -> Lambda.Rc_nontail
   in
   match Apply.call_kind apply with
-  | Function
-      { function_call = Direct { code_id; return_arity }; alloc_mode = _ } -> (
+  | Function { function_call = Direct code_id; return_arity; alloc_mode = _ }
+    -> (
     let code_metadata = Env.get_code_metadata env code_id in
     let params_arity = Code_metadata.params_arity code_metadata in
     if not (C.check_arity params_arity args)
@@ -116,43 +116,36 @@ let translate_apply0 env res apply =
         env,
         res,
         Ece.all ))
-  | Function { function_call = Indirect_unknown_arity; alloc_mode } ->
+  | Function
+      { function_call = Indirect_unknown_arity; return_arity; alloc_mode } ->
     fail_if_probe apply;
-    let args_ty, ty = Cmm.(List.map snd args_with_machtypes, [| Val |]) in
-    ( C.indirect_call ~dbg ty pos
+    let return_ty =
+      return_arity |> Flambda_arity.With_subkinds.to_arity
+      |> C.machtype_of_return_arity
+    in
+    let args_ty = List.map snd args_with_machtypes in
+    ( C.indirect_call ~dbg return_ty pos
+        (Alloc_mode.For_types.to_lambda alloc_mode)
+        callee args_ty args,
+      return_ty,
+      env,
+      res,
+      Ece.all )
+  | Function { function_call = Indirect_known_arity; return_arity; alloc_mode }
+    ->
+    fail_if_probe apply;
+    let ty =
+      return_arity |> Flambda_arity.With_subkinds.to_arity
+      |> C.machtype_of_return_arity
+    in
+    let args_ty = List.map snd args_with_machtypes in
+    ( C.indirect_full_call ~dbg ty pos
         (Alloc_mode.For_types.to_lambda alloc_mode)
         callee args_ty args,
       ty,
       env,
       res,
       Ece.all )
-  | Function
-      { function_call = Indirect_known_arity { return_arity; param_arity };
-        alloc_mode
-      } ->
-    fail_if_probe apply;
-    if not (C.check_arity param_arity args)
-    then
-      Misc.fatal_errorf
-        "To_cmm expects indirect_known_arity calls to be full applications in \
-         order to translate it"
-    else
-      let ty =
-        return_arity |> Flambda_arity.With_subkinds.to_arity
-        |> C.machtype_of_return_arity
-      in
-      let args_ty =
-        List.map
-          (fun k -> Env.machtype_of_kind (Flambda_kind.With_subkind.kind k))
-          (Flambda_arity.With_subkinds.to_list param_arity)
-      in
-      ( C.indirect_full_call ~dbg ty pos
-          (Alloc_mode.For_types.to_lambda alloc_mode)
-          callee args_ty args,
-        ty,
-        env,
-        res,
-        Ece.all )
   | Call_kind.C_call { alloc; return_arity; param_arity; is_c_builtin } ->
     fail_if_probe apply;
     let callee =

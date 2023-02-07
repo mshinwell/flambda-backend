@@ -22,38 +22,21 @@ let fprintf = Format.fprintf
 
 module Function_call = struct
   type t =
-    | Direct of
-        { code_id : Code_id.t;
-          return_arity : Flambda_arity.With_subkinds.t
-        }
+    | Direct of Code_id.t
     | Indirect_unknown_arity
-    | Indirect_known_arity of
-        { param_arity : Flambda_arity.With_subkinds.t;
-          return_arity : Flambda_arity.With_subkinds.t
-        }
+    | Indirect_known_arity
 
   let [@ocamlformat "disable"] print ppf call =
     match call with
-    | Direct { code_id; return_arity; } ->
+    | Direct code_id ->
       fprintf ppf "@[<hov 1>(Direct@ \
           @[<hov 1>(code_id@ %a)@]@ \
-          @[<hov 1>(return_arity@ %a)@]\
           )@]"
         Code_id.print code_id
-        Flambda_arity.With_subkinds.print return_arity
     | Indirect_unknown_arity ->
       fprintf ppf "Indirect_unknown_arity"
-    | Indirect_known_arity { param_arity; return_arity; } ->
-      fprintf ppf "@[<hov 1>(Indirect_known_arity %a \u{2192} %a)@]"
-        Flambda_arity.With_subkinds.print param_arity
-        Flambda_arity.With_subkinds.print return_arity
-
-  let return_arity call =
-    match call with
-    | Direct { return_arity; _ } | Indirect_known_arity { return_arity; _ } ->
-      return_arity
-    | Indirect_unknown_arity ->
-      Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.any_value]
+    | Indirect_known_arity ->
+      fprintf ppf "Indirect_known_arity"
 end
 
 module Method_kind = struct
@@ -78,7 +61,8 @@ end
 type t =
   | Function of
       { function_call : Function_call.t;
-        alloc_mode : Alloc_mode.For_types.t
+        alloc_mode : Alloc_mode.For_types.t;
+        return_arity : Flambda_arity.With_subkinds.t
       }
   | Method of
       { kind : Method_kind.t;
@@ -94,13 +78,15 @@ type t =
 
 let [@ocamlformat "disable"] print ppf t =
   match t with
-  | Function { function_call; alloc_mode } ->
+  | Function { function_call; alloc_mode; return_arity } ->
     fprintf ppf "@[<hov 1>(Function@ \
         @[<hov 1>(function_call@ %a)@]@ \
-        @[<hov 1>(alloc_mode@ %a)@]\
+        @[<hov 1>(alloc_mode@ %a)@]@ \
+        @[<hov 1>(return_arity@ %a)@]\
         )@]"
       Function_call.print function_call
       Alloc_mode.For_types.print alloc_mode
+      Flambda_arity.With_subkinds.print return_arity
   | Method { kind; obj; alloc_mode } ->
     fprintf ppf "@[<hov 1>(Method@ \
         @[<hov 1>(obj@ %a)@]@ \
@@ -122,17 +108,14 @@ let [@ocamlformat "disable"] print ppf t =
 
 let direct_function_call code_id ~return_arity alloc_mode =
   check_arity return_arity;
-  Function { function_call = Direct { code_id; return_arity }; alloc_mode }
+  Function { function_call = Direct code_id; return_arity; alloc_mode }
 
-let indirect_function_call_unknown_arity alloc_mode =
-  Function { function_call = Indirect_unknown_arity; alloc_mode }
+let indirect_function_call_unknown_arity ~return_arity alloc_mode =
+  Function { function_call = Indirect_unknown_arity; return_arity; alloc_mode }
 
-let indirect_function_call_known_arity ~param_arity ~return_arity alloc_mode =
+let indirect_function_call_known_arity ~return_arity alloc_mode =
   check_arity return_arity;
-  Function
-    { function_call = Indirect_known_arity { param_arity; return_arity };
-      alloc_mode
-    }
+  Function { function_call = Indirect_known_arity; return_arity; alloc_mode }
 
 let method_call kind ~obj alloc_mode = Method { kind; obj; alloc_mode }
 
@@ -146,7 +129,7 @@ let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
 
 let return_arity t =
   match t with
-  | Function { function_call; _ } -> Function_call.return_arity function_call
+  | Function { return_arity; _ } -> return_arity
   | Method _ ->
     Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.any_value]
   | C_call { return_arity; _ } ->
@@ -155,36 +138,33 @@ let return_arity t =
 let free_names t =
   match t with
   | Function
-      { function_call = Direct { code_id; return_arity = _ }; alloc_mode = _ }
-    ->
+      { function_call = Direct code_id; return_arity = _; alloc_mode = _ } ->
     Name_occurrences.singleton_code_id code_id Name_mode.normal
-  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
   | Function
-      { function_call =
-          Indirect_known_arity { param_arity = _; return_arity = _ };
+      { function_call = Indirect_unknown_arity;
+        return_arity = _;
         alloc_mode = _
       }
+  | Function
+      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Simple.free_names obj
 
 let apply_renaming t renaming =
   match t with
-  | Function { function_call = Direct { code_id; return_arity }; alloc_mode } ->
+  | Function { function_call = Direct code_id; return_arity; alloc_mode } ->
     let code_id' = Renaming.apply_code_id renaming code_id in
     if code_id == code_id'
     then t
-    else
-      Function
-        { function_call = Direct { code_id = code_id'; return_arity };
-          alloc_mode
-        }
-  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
+    else Function { function_call = Direct code_id'; return_arity; alloc_mode }
   | Function
-      { function_call =
-          Indirect_known_arity { param_arity = _; return_arity = _ };
+      { function_call = Indirect_unknown_arity;
+        return_arity = _;
         alloc_mode = _
       }
+  | Function
+      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
   | Method { kind; obj; alloc_mode } ->
@@ -194,15 +174,15 @@ let apply_renaming t renaming =
 let ids_for_export t =
   match t with
   | Function
-      { function_call = Direct { code_id; return_arity = _ }; alloc_mode = _ }
-    ->
+      { function_call = Direct code_id; return_arity = _; alloc_mode = _ } ->
     Ids_for_export.add_code_id Ids_for_export.empty code_id
-  | Function { function_call = Indirect_unknown_arity; alloc_mode = _ }
   | Function
-      { function_call =
-          Indirect_known_arity { param_arity = _; return_arity = _ };
+      { function_call = Indirect_unknown_arity;
+        return_arity = _;
         alloc_mode = _
       }
+  | Function
+      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Ids_for_export.from_simple obj

@@ -836,14 +836,11 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           Alloc_mode.For_types.heap
       | Function Indirect -> (
         match arities with
-        | Some { params_arity = Some params_arity; ret_arity } ->
-          let param_arity = arity params_arity in
+        | Some { params_arity = _; ret_arity } ->
           let return_arity = arity ret_arity in
-          Call_kind.indirect_function_call_known_arity ~param_arity
-            ~return_arity Alloc_mode.For_types.heap
-        | None | Some { params_arity = None; ret_arity = _ } ->
-          Call_kind.indirect_function_call_unknown_arity
-            Alloc_mode.For_types.heap)
+          Call_kind.indirect_function_call_known_arity ~return_arity
+            Alloc_mode.For_types.heap
+        | None -> (* CR mshinwell: fixme *) assert false)
       | C_call { alloc } -> (
         match arities with
         | Some { params_arity = Some params_arity; ret_arity } ->

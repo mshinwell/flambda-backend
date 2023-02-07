@@ -699,8 +699,9 @@ let simplify_direct_function_call ~simplify_expr dacc apply
     Call_kind.return_arity (Apply.call_kind apply)
   in
   if not
-       (Flambda_arity.With_subkinds.compatible result_arity
-          ~when_used_at:result_arity_of_application)
+       (Flambda_arity.equal
+          (Flambda_arity.With_subkinds.to_arity result_arity)
+          (Flambda_arity.With_subkinds.to_arity result_arity_of_application))
   then
     Misc.fatal_errorf
       "Wrong return arity for direct OCaml function call (expected %a, found \
@@ -791,7 +792,7 @@ let rebuild_function_call_where_callee's_type_unavailable apply call_kind
   after_rebuild expr uacc
 
 let simplify_function_call_where_callee's_type_unavailable dacc apply
-    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~args:_ ~arg_types
+    (call : Call_kind.Function_call.t) ~apply_return_arity ~apply_alloc_mode
     ~down_to_up =
   fail_if_probe apply;
   let cont =
@@ -817,11 +818,11 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
         (T.unknown_types_from_arity_with_subkinds
            (Exn_continuation.arity (Apply.exn_continuation apply)))
   in
-  let record_return_cont_use ~return_arity =
+  let record_return_cont_use () =
     DA.record_continuation_use dacc cont
       (Non_inlinable { escaping = true })
       ~env_at_use
-      ~arg_types:(T.unknown_types_from_arity_with_subkinds return_arity)
+      ~arg_types:(T.unknown_types_from_arity_with_subkinds apply_return_arity)
   in
   let call_kind, use_id, dacc =
     match call with
@@ -831,39 +832,25 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
           (Non_inlinable { escaping = true })
           ~env_at_use ~arg_types:[T.any_value]
       in
-      ( Call_kind.indirect_function_call_unknown_arity apply_alloc_mode,
+      ( Call_kind.indirect_function_call_unknown_arity
+          ~return_arity:apply_return_arity apply_alloc_mode,
         use_id,
         dacc )
-    | Indirect_known_arity { param_arity; return_arity } ->
-      let args_arity =
-        T.arity_of_list arg_types |> Flambda_arity.With_subkinds.of_arity
-      in
-      if not
-           (Flambda_arity.With_subkinds.compatible args_arity
-              ~when_used_at:param_arity)
-      then
-        Misc.fatal_errorf
-          "Argument arity on indirect-known-arity application doesn't match \
-           [Call_kind] (expected %a, found %a):@ %a"
-          Flambda_arity.With_subkinds.print param_arity
-          Flambda_arity.With_subkinds.print args_arity Apply.print apply;
-      let dacc, use_id = record_return_cont_use ~return_arity in
+    | Indirect_known_arity ->
+      let dacc, use_id = record_return_cont_use () in
       let call_kind =
-        Call_kind.indirect_function_call_known_arity ~param_arity ~return_arity
-          apply_alloc_mode
+        Call_kind.indirect_function_call_known_arity
+          ~return_arity:apply_return_arity apply_alloc_mode
       in
       call_kind, use_id, dacc
-    | Direct { return_arity; _ } ->
-      let param_arity =
-        T.arity_of_list arg_types |> Flambda_arity.With_subkinds.of_arity
-      in
+    | Direct _ ->
       (* Some types have regressed in precision. Since this used to be a direct
          call, however, we know the function's arity even though we don't know
          which function it is. *)
-      let dacc, use_id = record_return_cont_use ~return_arity in
+      let dacc, use_id = record_return_cont_use () in
       let call_kind =
-        Call_kind.indirect_function_call_known_arity ~param_arity ~return_arity
-          apply_alloc_mode
+        Call_kind.indirect_function_call_known_arity
+          ~return_arity:apply_return_arity apply_alloc_mode
       in
       call_kind, use_id, dacc
   in
@@ -877,9 +864,8 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
          ~use_id ~exn_cont_use_id)
 
 let simplify_function_call ~simplify_expr dacc apply ~callee_ty
-    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~arg_types ~down_to_up
-    =
-  let args = Apply.args apply in
+    (call : Call_kind.Function_call.t) ~apply_return_arity ~apply_alloc_mode
+    ~arg_types ~down_to_up =
   (* Function declarations and params and body might not have the same calling
      convention. Currently the only case when it happens is for tupled
      functions. For such functions, the function_declaration declares a
@@ -894,7 +880,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
      call in order to correctly adapt to the change in calling convention. *)
   let call_must_be_detupled is_function_decl_tupled =
     match call with
-    | Direct _ | Indirect_known_arity _ ->
+    | Direct _ | Indirect_known_arity ->
       (* In these cases, the calling convention already used in the application
          being simplified is that of the code actually called. Thus we must not
          detuple the function. *)
@@ -911,7 +897,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
         "[@inlined] attribute was not used on this function application (the \
          optimizer did not know what function was being applied)";
     simplify_function_call_where_callee's_type_unavailable dacc apply call
-      ~apply_alloc_mode ~args ~arg_types ~down_to_up
+      ~apply_return_arity ~apply_alloc_mode ~down_to_up
   in
   (* CR-someday mshinwell: Should this be using [meet_shape], like for
      primitives? *)
@@ -924,8 +910,8 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
         func_decl_type ) ->
     let callee's_code_id_from_call_kind =
       match call with
-      | Direct { code_id; _ } -> Some code_id
-      | Indirect_unknown_arity | Indirect_known_arity _ -> None
+      | Direct code_id -> Some code_id
+      | Indirect_unknown_arity | Indirect_known_arity -> None
     in
     let callee's_code_id_from_type = T.Function_type.code_id func_decl_type in
     let callee's_code_or_metadata =
@@ -1135,9 +1121,13 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~param_arity
 let simplify_apply ~simplify_expr dacc apply ~down_to_up =
   let dacc, callee_ty, apply, arg_types = simplify_apply_shared dacc apply in
   match Apply.call_kind apply with
-  | Function { function_call; alloc_mode = apply_alloc_mode } ->
+  | Function
+      { function_call;
+        return_arity = apply_return_arity;
+        alloc_mode = apply_alloc_mode
+      } ->
     simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
-      ~apply_alloc_mode ~arg_types ~down_to_up
+      ~apply_return_arity ~apply_alloc_mode ~arg_types ~down_to_up
   | Method { kind; obj; alloc_mode = _ } ->
     simplify_method_call dacc apply ~callee_ty ~kind ~obj ~arg_types ~down_to_up
   | C_call { alloc = _; param_arity; return_arity; is_c_builtin = _ } ->
