@@ -826,7 +826,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
   in
   let call_kind, use_id, dacc =
     match call with
-    | Indirect_unknown_arity ->
+    | Indirect ->
       let dacc, use_id =
         DA.record_continuation_use dacc cont
           (Non_inlinable { escaping = true })
@@ -836,7 +836,7 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
           ~return_arity:apply_return_arity apply_alloc_mode,
         use_id,
         dacc )
-    | Indirect_known_arity ->
+    | Indirect_full_application ->
       let dacc, use_id = record_return_cont_use () in
       let call_kind =
         Call_kind.indirect_function_call_known_arity
@@ -874,13 +874,13 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
 
      When simplifying a function call, it can happen that we need to change the
      calling convention. Currently this only happens when we have a generic call
-     (Indirect_unknown_arity), which uses the generic/function_declaration
+     (Indirect), which uses the generic/function_declaration
      calling convention, but se simplify it into a direct call, which uses the
      callee's code calling convention. In this case, we need to "detuple" the
      call in order to correctly adapt to the change in calling convention. *)
   let call_must_be_detupled is_function_decl_tupled =
     match call with
-    | Direct _ | Indirect_known_arity ->
+    | Direct _ | Indirect_full_application ->
       (* In these cases, the calling convention already used in the application
          being simplified is that of the code actually called. Thus we must not
          detuple the function. *)
@@ -888,7 +888,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       (* In the indirect case, the calling convention used currently is the
          generic one. Thus we need to detuple the call iff the function
          declaration is tupled. *)
-    | Indirect_unknown_arity -> is_function_decl_tupled
+    | Indirect -> is_function_decl_tupled
   in
   let type_unavailable () =
     if Are_rebuilding_terms.are_rebuilding (DA.are_rebuilding_terms dacc)
@@ -911,7 +911,7 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
     let callee's_code_id_from_call_kind =
       match call with
       | Direct code_id -> Some code_id
-      | Indirect_unknown_arity | Indirect_known_arity -> None
+      | Indirect | Indirect_full_application -> None
     in
     let callee's_code_id_from_type = T.Function_type.code_id func_decl_type in
     let callee's_code_or_metadata =

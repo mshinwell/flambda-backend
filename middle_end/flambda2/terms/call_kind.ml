@@ -23,8 +23,8 @@ let fprintf = Format.fprintf
 module Function_call = struct
   type t =
     | Direct of Code_id.t
-    | Indirect_unknown_arity
-    | Indirect_known_arity
+    | Indirect
+    | Indirect_full_application
 
   let [@ocamlformat "disable"] print ppf call =
     match call with
@@ -33,10 +33,10 @@ module Function_call = struct
           @[<hov 1>(code_id@ %a)@]@ \
           )@]"
         Code_id.print code_id
-    | Indirect_unknown_arity ->
-      fprintf ppf "Indirect_unknown_arity"
-    | Indirect_known_arity ->
-      fprintf ppf "Indirect_known_arity"
+    | Indirect ->
+      fprintf ppf "Indirect"
+    | Indirect_full_application ->
+      fprintf ppf "Indirect_full_application"
 end
 
 module Method_kind = struct
@@ -111,11 +111,11 @@ let direct_function_call code_id ~return_arity alloc_mode =
   Function { function_call = Direct code_id; return_arity; alloc_mode }
 
 let indirect_function_call_unknown_arity ~return_arity alloc_mode =
-  Function { function_call = Indirect_unknown_arity; return_arity; alloc_mode }
+  Function { function_call = Indirect; return_arity; alloc_mode }
 
 let indirect_function_call_known_arity ~return_arity alloc_mode =
   check_arity return_arity;
-  Function { function_call = Indirect_known_arity; return_arity; alloc_mode }
+  Function { function_call = Indirect_full_application; return_arity; alloc_mode }
 
 let method_call kind ~obj alloc_mode = Method { kind; obj; alloc_mode }
 
@@ -141,12 +141,12 @@ let free_names t =
       { function_call = Direct code_id; return_arity = _; alloc_mode = _ } ->
     Name_occurrences.singleton_code_id code_id Name_mode.normal
   | Function
-      { function_call = Indirect_unknown_arity;
+      { function_call = Indirect;
         return_arity = _;
         alloc_mode = _
       }
   | Function
-      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
+      { function_call = Indirect_full_application; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Simple.free_names obj
@@ -159,12 +159,12 @@ let apply_renaming t renaming =
     then t
     else Function { function_call = Direct code_id'; return_arity; alloc_mode }
   | Function
-      { function_call = Indirect_unknown_arity;
+      { function_call = Indirect;
         return_arity = _;
         alloc_mode = _
       }
   | Function
-      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
+      { function_call = Indirect_full_application; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
   | Method { kind; obj; alloc_mode } ->
@@ -177,12 +177,12 @@ let ids_for_export t =
       { function_call = Direct code_id; return_arity = _; alloc_mode = _ } ->
     Ids_for_export.add_code_id Ids_for_export.empty code_id
   | Function
-      { function_call = Indirect_unknown_arity;
+      { function_call = Indirect;
         return_arity = _;
         alloc_mode = _
       }
   | Function
-      { function_call = Indirect_known_arity; return_arity = _; alloc_mode = _ }
+      { function_call = Indirect_full_application; return_arity = _; alloc_mode = _ }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
   | Method { kind = _; obj; alloc_mode = _ } -> Ids_for_export.from_simple obj

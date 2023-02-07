@@ -117,7 +117,7 @@ let translate_apply0 env res apply =
         res,
         Ece.all ))
   | Function
-      { function_call = Indirect_unknown_arity; return_arity; alloc_mode } ->
+      { function_call = Indirect; return_arity; alloc_mode } ->
     fail_if_probe apply;
     let return_ty =
       return_arity |> Flambda_arity.With_subkinds.to_arity
@@ -131,7 +131,7 @@ let translate_apply0 env res apply =
       env,
       res,
       Ece.all )
-  | Function { function_call = Indirect_known_arity; return_arity; alloc_mode }
+  | Function { function_call = Indirect_full_application; return_arity; alloc_mode }
     ->
     fail_if_probe apply;
     let ty =

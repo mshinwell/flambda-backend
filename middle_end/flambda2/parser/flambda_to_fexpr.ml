@@ -892,7 +892,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
       (* CR mshinwell: remove [function_slot] *)
       Function (Direct { code_id; function_slot })
     | Function
-        { function_call = Indirect_unknown_arity | Indirect_known_arity;
+        { function_call = Indirect | Indirect_full_application;
           alloc_mode = _;
           return_arity = _
         } ->
@@ -903,7 +903,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
   let arities : Fexpr.function_arities option =
     match Apply_expr.call_kind app with
     | Function
-        { function_call = Indirect_known_arity; alloc_mode = _; return_arity }
+        { function_call = Indirect_full_application; alloc_mode = _; return_arity }
       ->
       let _ret_arity = arity return_arity in
       assert false (* Some { params_arity; ret_arity } *)
@@ -926,7 +926,7 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
       in
       Some { params_arity; ret_arity }
     | Function
-        { function_call = Indirect_unknown_arity;
+        { function_call = Indirect;
           return_arity = _;
           alloc_mode = _
         }

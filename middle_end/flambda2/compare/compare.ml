@@ -919,13 +919,13 @@ let call_kinds env (call_kind1 : Call_kind.t) (call_kind2 : Call_kind.t) :
              Alloc_mode.For_types.heap)
   | ( Function
         { function_call =
-            Indirect_known_arity
+            Indirect_full_application
               { param_arity = param_arity1; return_arity = return_arity1 };
           _
         },
       Function
         { function_call =
-            Indirect_known_arity
+            Indirect_full_application
               { param_arity = param_arity2; return_arity = return_arity2 };
           _
         } ) ->
@@ -933,8 +933,8 @@ let call_kinds env (call_kind1 : Call_kind.t) (call_kind2 : Call_kind.t) :
        && Flambda_arity.With_subkinds.equal return_arity1 return_arity2
     then Equivalent
     else Different { approximant = call_kind1 }
-  | ( Function { function_call = Indirect_unknown_arity; _ },
-      Function { function_call = Indirect_unknown_arity; _ } ) ->
+  | ( Function { function_call = Indirect; _ },
+      Function { function_call = Indirect; _ } ) ->
     Equivalent
   | ( Method { kind = kind1; obj = obj1; _ },
       Method { kind = kind2; obj = obj2; _ } ) ->
