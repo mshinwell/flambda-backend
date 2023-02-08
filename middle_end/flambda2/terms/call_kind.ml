@@ -67,7 +67,8 @@ type t =
   | Method of
       { kind : Method_kind.t;
         obj : Simple.t;
-        alloc_mode : Alloc_mode.For_types.t
+        alloc_mode : Alloc_mode.For_types.t;
+        return_arity : Flambda_arity.With_subkinds.t
       }
   | C_call of
       { alloc : bool;
@@ -87,15 +88,17 @@ let [@ocamlformat "disable"] print ppf t =
       Function_call.print function_call
       Alloc_mode.For_types.print alloc_mode
       Flambda_arity.With_subkinds.print return_arity
-  | Method { kind; obj; alloc_mode } ->
+  | Method { kind; obj; alloc_mode; return_arity } ->
     fprintf ppf "@[<hov 1>(Method@ \
         @[<hov 1>(obj@ %a)@]@ \
         @[<hov 1>(kind@ %a)@]@ \
-        @[<hov 1>(alloc_mode@ %a)@]\
+        @[<hov 1>(alloc_mode@ %a)@]@ \
+        @[<hov 1>(return_arity@ %a)@]\
         )@]"
       Simple.print obj
       Method_kind.print kind
       Alloc_mode.For_types.print alloc_mode
+      Flambda_arity.With_subkinds.print return_arity
   | C_call { alloc; param_arity; return_arity; is_c_builtin; } ->
     fprintf ppf "@[(C@ @[(alloc %b)@]@ @[(is_c_builtin %b)@]@ \
         %t@<1>\u{2237}%t %a @<1>\u{2192} %a)@]"
@@ -118,7 +121,8 @@ let indirect_function_call_full_application ~return_arity alloc_mode =
   Function
     { function_call = Indirect_full_application; return_arity; alloc_mode }
 
-let method_call kind ~obj alloc_mode = Method { kind; obj; alloc_mode }
+let method_call kind ~obj ~return_arity alloc_mode =
+  Method { kind; obj; alloc_mode; return_arity }
 
 let c_call ~alloc ~param_arity ~return_arity ~is_c_builtin =
   (match Flambda_arity.to_list return_arity with
@@ -149,7 +153,8 @@ let free_names t =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Name_occurrences.empty
-  | Method { kind = _; obj; alloc_mode = _ } -> Simple.free_names obj
+  | Method { kind = _; obj; alloc_mode = _; return_arity = _ } ->
+    Simple.free_names obj
 
 let apply_renaming t renaming =
   match t with
@@ -166,9 +171,11 @@ let apply_renaming t renaming =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     t
-  | Method { kind; obj; alloc_mode } ->
+  | Method { kind; obj; alloc_mode; return_arity } ->
     let obj' = Simple.apply_renaming obj renaming in
-    if obj == obj' then t else Method { kind; obj = obj'; alloc_mode }
+    if obj == obj'
+    then t
+    else Method { kind; obj = obj'; alloc_mode; return_arity }
 
 let ids_for_export t =
   match t with
@@ -183,4 +190,5 @@ let ids_for_export t =
       }
   | C_call { alloc = _; param_arity = _; return_arity = _; is_c_builtin = _ } ->
     Ids_for_export.empty
-  | Method { kind = _; obj; alloc_mode = _ } -> Ids_for_export.from_simple obj
+  | Method { kind = _; obj; alloc_mode = _; return_arity = _ } ->
+    Ids_for_export.from_simple obj

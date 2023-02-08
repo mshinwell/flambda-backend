@@ -1284,7 +1284,12 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                       }
                     in
                     let apply : IR.apply =
-                      { kind = Method { kind = meth_kind; obj };
+                      { kind =
+                          Method
+                            { kind = meth_kind;
+                              obj;
+                              return_arity = Flambda_kind.With_subkind.any_value
+                            };
                         func = meth;
                         continuation = k;
                         exn_continuation;

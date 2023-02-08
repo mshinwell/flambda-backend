@@ -184,9 +184,13 @@ let translate_apply0 env res apply =
       env,
       res,
       Ece.all )
-  | Call_kind.Method { kind; obj; alloc_mode } ->
+  | Call_kind.Method { kind; obj; alloc_mode; return_arity } ->
     fail_if_probe apply;
-    let args_ty, ty = Cmm.(List.map snd args_with_machtypes, [| Val |]) in
+    let return_tys =
+      C.machtype_of_return_arity
+        (Flambda_arity.With_subkinds.to_arity return_arity)
+    in
+    let args_ty, ty = List.map snd args_with_machtypes, return_tys in
     let obj, env, res, _ = C.simple ~dbg env res obj in
     let kind = Call_kind.Method_kind.to_lambda kind in
     let alloc_mode = Alloc_mode.For_types.to_lambda alloc_mode in

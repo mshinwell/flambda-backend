@@ -51,7 +51,8 @@ type t = private
   | Method of
       { kind : Method_kind.t;
         obj : Simple.t;
-        alloc_mode : Alloc_mode.For_types.t
+        alloc_mode : Alloc_mode.For_types.t;
+        return_arity : Flambda_arity.With_subkinds.t
       }
   | C_call of
       { alloc : bool;
@@ -78,7 +79,12 @@ val indirect_function_call :
 val indirect_function_call_full_application :
   return_arity:Flambda_arity.With_subkinds.t -> Alloc_mode.For_types.t -> t
 
-val method_call : Method_kind.t -> obj:Simple.t -> Alloc_mode.For_types.t -> t
+val method_call :
+  Method_kind.t ->
+  obj:Simple.t ->
+  return_arity:Flambda_arity.With_subkinds.t ->
+  Alloc_mode.For_types.t ->
+  t
 
 val c_call :
   alloc:bool ->

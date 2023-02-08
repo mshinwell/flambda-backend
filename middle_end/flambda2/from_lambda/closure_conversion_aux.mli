@@ -53,7 +53,8 @@ module IR : sig
     | Function
     | Method of
         { kind : Lambda.meth_kind;
-          obj : simple
+          obj : simple;
+          return_arity : Flambda_kind.With_subkind.t
         }
 
   type apply =

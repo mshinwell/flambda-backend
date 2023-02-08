@@ -936,11 +936,13 @@ let close_exact_or_unknown_apply acc env
             | Block_approximation _ ) ->
           assert false
         (* See [close_apply] *) ))
-    | Method { kind; obj } ->
+    | Method { kind; obj; return_arity } ->
       let acc, obj = find_simple acc env obj in
+      let return_arity = Flambda_arity.With_subkinds.create [return_arity] in
       ( acc,
-        Call_kind.method_call (Call_kind.Method_kind.from_lambda kind) ~obj mode
-      )
+        Call_kind.method_call
+          (Call_kind.Method_kind.from_lambda kind)
+          ~obj ~return_arity mode )
   in
   let acc, apply_exn_continuation =
     close_exn_continuation acc env exn_continuation

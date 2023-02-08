@@ -1128,7 +1128,7 @@ let simplify_apply ~simplify_expr dacc apply ~down_to_up =
       } ->
     simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
       ~apply_return_arity ~apply_alloc_mode ~arg_types ~down_to_up
-  | Method { kind; obj; alloc_mode = _ } ->
+  | Method { kind; obj; return_arity = _; alloc_mode = _ } ->
     simplify_method_call dacc apply ~callee_ty ~kind ~obj ~arg_types ~down_to_up
   | C_call { alloc = _; param_arity; return_arity; is_c_builtin = _ } ->
     simplify_c_call ~simplify_expr dacc apply ~callee_ty ~param_arity
