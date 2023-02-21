@@ -719,6 +719,26 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
       (Bound_pattern.static
          (Bound_static.create [Bound_static.Pattern.block_like symbol]))
       defining_expr ~body
+  | Pmakeblock (tag, mutability, _, _), args
+    when Option.is_some (Tag.Scannable.create tag)
+         && List.for_all Simple.is_symbol args ->
+    let fields =
+      List.map
+        (fun simple ->
+          match Simple.must_be_symbol simple with
+          | Some (symbol, _coercion) -> Field_of_static_block.Symbol symbol
+          | None -> assert false)
+        args
+    in
+    let acc, sym =
+      register_const0 acc
+        (Static_const.block
+           (Tag.Scannable.create_exn tag)
+           (Mutability.from_lambda mutability)
+           fields)
+        "empty_block"
+    in
+    k acc (Some (Named.create_simple (Simple.symbol sym)))
   | prim, args ->
     Lambda_to_flambda_primitives.convert_and_bind acc exn_continuation
       ~big_endian:(Env.big_endian env)
