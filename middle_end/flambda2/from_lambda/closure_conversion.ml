@@ -814,6 +814,13 @@ let close_let acc env id user_visible kind defining_expr
     match defining_expr with
     | Some (Simple simple) ->
       let body_env = Env.add_simple_to_substitute env id simple kind in
+      let body_env =
+        match find_value_approximation acc body_env simple with
+        | Value_unknown -> body_env
+        | ( Block_approximation _ | Value_symbol _ | Value_int _
+          | Closure_approximation _ ) as approx ->
+          Env.add_var_approximation body_env var approx
+      in
       body acc body_env
     | None -> body acc body_env
     | Some (Prim ((Nullary Begin_region | Unary (End_region, _)), _))
