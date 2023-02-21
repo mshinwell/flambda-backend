@@ -722,13 +722,16 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
   | Pmakeblock (tag, mutability, _, _), args
     when Option.is_some (Tag.Scannable.create tag)
          && List.for_all Simple.is_symbol args ->
-    let fields =
+    let fields, approx_fields =
       List.map
         (fun simple ->
           match Simple.must_be_symbol simple with
-          | Some (symbol, _coercion) -> Field_of_static_block.Symbol symbol
+          | Some (symbol, _coercion) ->
+            ( Field_of_static_block.Symbol symbol,
+              Value_approximation.Value_symbol symbol )
           | None -> assert false)
         args
+      |> List.split
     in
     let acc, sym =
       register_const0 acc
@@ -738,6 +741,11 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
            fields)
         (Variable.name let_bound_var)
     in
+    let approx : Env.value_approximation =
+      Block_approximation
+        (Array.of_list approx_fields, Alloc_mode.For_types.heap)
+    in
+    let acc = Acc.add_symbol_approximation acc sym approx in
     k acc (Some (Named.create_simple (Simple.symbol sym)))
   | prim, args ->
     Lambda_to_flambda_primitives.convert_and_bind acc exn_continuation
