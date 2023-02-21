@@ -820,6 +820,7 @@ let close_let acc env id user_visible kind defining_expr
         | ( Block_approximation _ | Value_symbol _ | Value_int _
           | Closure_approximation _ ) as approx ->
           Env.add_var_approximation body_env var approx
+        | exception Not_found -> body_env
       in
       body acc body_env
     | None -> body acc body_env
