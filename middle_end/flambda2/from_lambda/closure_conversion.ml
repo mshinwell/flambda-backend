@@ -736,7 +736,7 @@ let close_primitive acc env ~let_bound_var named (prim : Lambda.primitive) ~args
            (Tag.Scannable.create_exn tag)
            (Mutability.from_lambda mutability)
            fields)
-        "empty_block"
+        (Variable.name let_bound_var)
     in
     k acc (Some (Named.create_simple (Simple.symbol sym)))
   | prim, args ->
