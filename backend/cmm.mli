@@ -226,6 +226,10 @@ type value_kind =
   | Vaddr (* Derived pointers *)
   | Vfloat (* Unboxed floating-point numbers *)
 
+type is_global = Global | Local
+
+type symbol = string * is_global
+
 (** Every basic block should have a corresponding [Debuginfo.t] for its
     beginning. *)
 type expression =

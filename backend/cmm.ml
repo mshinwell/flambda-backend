@@ -224,6 +224,10 @@ type value_kind =
   | Vaddr (* Derived pointers *)
   | Vfloat (* Unboxed floating-point numbers *)
 
+type is_global = Global | Local
+
+type symbol = string * is_global
+
 type expression =
     Cconst_int of int * Debuginfo.t
   | Cconst_natint of nativeint * Debuginfo.t
