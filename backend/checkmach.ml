@@ -345,9 +345,9 @@ end = struct
       check_call t handler_code_sym ~desc dbg
     | Icall_ind -> report_fail t "indirect call" dbg
     | Itailcall_ind -> report_fail t "indirect tailcall" dbg
-    | Icall_imm { func } ->
+    | Icall_imm { func = { sym_name = func; _ } } ->
       check_call t func ~desc:("direct call to " ^ func) dbg
-    | Itailcall_imm { func } ->
+    | Itailcall_imm { func = { sym_name = func; _ } } ->
       check_call t func ~desc:("direct tailcall to " ^ func) dbg
     | Iextcall { alloc = false; _ } -> ()
     | Iextcall { func; alloc = true; _ } ->
