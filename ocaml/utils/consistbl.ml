@@ -62,7 +62,7 @@ end) = struct
     try check_ tbl name data crc source; true
     with Not_found -> (
       Module_name.Tbl.add tbl name (data, crc, source);
-      false
+     false
     )
 
   let check_noadd tbl name data crc source =
@@ -79,15 +79,13 @@ end) = struct
     | exception Not_found -> None
     | (data, crc, _) -> Some (data, crc)
 
-  let extract l tbl =
-    let l = List.sort_uniq Module_name.compare l in
+  let extract ?no_dups l tbl =
+    let l =
+      match no_dups with
+      | Some () -> l
+      | None -> List.sort_uniq Module_name.compare l
+    in
     List.fold_left (fun assc name -> (name, find tbl name) :: assc) [] l
-
-  let extract_set mod_names tbl =
-    Module_name.Set.fold
-      (fun name assc -> (name, find tbl name) :: assc)
-      mod_names
-      []
 
   let extract_map mod_names tbl =
     Module_name.Set.fold

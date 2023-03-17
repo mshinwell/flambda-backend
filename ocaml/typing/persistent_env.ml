@@ -70,7 +70,10 @@ type 'a pers_struct_info =
 type 'a t = {
   persistent_structures :
     (CU.Name.t, 'a pers_struct_info) Hashtbl.t;
-  imported_units: CU.Name.Set.t ref;
+  imported_units: CU.Name.t list ref;
+  imported_units_old: CU.Name.Set.t ref;
+  weak_imported_units: CU.Name.Set.t ref;
+  (* [weak_imported_units] and [imported_units] are disjoint. *)
   imported_opaque_units: CU.Name.Set.t ref;
   crc_units: Consistbl.t;
   can_load_cmis: can_load_cmis ref;
@@ -78,7 +81,9 @@ type 'a t = {
 
 let empty () = {
   persistent_structures = Hashtbl.create 17;
-  imported_units = ref CU.Name.Set.empty;
+  imported_units = ref [];
+  imported_units_old = ref CU.Name.Set.empty;
+  weak_imported_units = ref CU.Name.Set.empty;
   imported_opaque_units = ref CU.Name.Set.empty;
   crc_units = Consistbl.create ();
   can_load_cmis = ref Can_load_cmis;
@@ -88,12 +93,16 @@ let clear penv =
   let {
     persistent_structures;
     imported_units;
+    imported_units_old;
+    weak_imported_units;
     imported_opaque_units;
     crc_units;
     can_load_cmis;
   } = penv in
   Hashtbl.clear persistent_structures;
-  imported_units := CU.Name.Set.empty;
+  imported_units := [];
+  imported_units_old := CU.Name.Set.empty;
+  weak_imported_units := CU.Name.Set.empty;
   imported_opaque_units := CU.Name.Set.empty;
   Consistbl.clear crc_units;
   can_load_cmis := Can_load_cmis;
@@ -107,10 +116,37 @@ let clear_missing {persistent_structures; _} =
   in
   List.iter (Hashtbl.remove persistent_structures) missing_entries
 
-let add_import {imported_units; _} s =
-(*  if CU.Name.Set.mem s !imported_units then
-    Printf.eprintf "dup: %s\n%!" (Printexc.raw_backtrace_to_string (Printexc.get_callstack 5)); *)
-  imported_units := CU.Name.Set.add s !imported_units
+let add_or_re_add_weak_import penv name =
+  penv.weak_imported_units := CU.Name.Set.add name !(penv.weak_imported_units)
+
+let add_import {imported_units; imported_units_old; _} s =
+  let already_imported =
+    List.exists (fun name' -> CU.Name.equal s name') !imported_units
+  in
+  if already_imported then
+    Format.eprintf "dup trying to add %a: %s\n%!"
+      CU.Name.print s
+      (Printexc.raw_backtrace_to_string (Printexc.get_callstack 5));
+  if not (CU.Name.Set.... )
+  imported_units := s :: !imported_units;
+  imported_units_old := CU.Name.Set.add s !imported_units_old
+
+let add_old_import { imported_units_old; _} s =
+  imported_units_old := CU.Name.Set.add s !imported_units_old
+
+let check_imports { imported_units; imported_units_old; weak_imported_units; _ } =
+  let imported_units = !imported_units in
+  let imported_units_old = !imported_units_old in
+  let weak_imported_units = !weak_imported_units in
+  let imported_units_set = CU.Name.Set.of_list imported_units in
+  if (not (CU.Name.Set.equal imported_units_set imported_units_old))
+    || (not (CU.Name.Set.is_empty (CU.Name.Set.inter imported_units_set weak_imported_units)))
+    || List.length imported_units <> CU.Name.Set.cardinal imported_units_old
+  then
+    Misc.fatal_errorf "mismatch: new list:@ %a@ old set:@ %a@ weak units:@ %a\n%!"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space CU.Name.print) imported_units
+      CU.Name.Set.print imported_units_old
+      CU.Name.Set.print weak_imported_units
 
 let register_import_as_opaque {imported_opaque_units; _} s =
   imported_opaque_units := CU.Name.Set.add s !imported_opaque_units
@@ -128,11 +164,13 @@ let import_crcs penv ~source crcs =
     let crco = Import_info.crc_with_unit import_info in
     match crco with
     | None -> ()
-    | Some (unit, crc) ->
-      ( Format.eprintf "adding import %a\n%!" CU.Name.print name;
-        if not (Consistbl.check_did_exist crc_units name unit crc source) then
-          add_import penv name
-      )
+    | Some (unit, crc) -> (
+      (*
+      Format.eprintf "adding import %a\n%!" CU.Name.print name;
+      *)
+      if not (Consistbl.check_did_exist crc_units name unit crc source) then
+        add_import penv name
+    )
   in Array.iter import_crc crcs
 
 let check_consistency penv ps =
@@ -226,17 +264,19 @@ let acknowledge_pers_struct penv check modname pers_sig pm =
   ps
 
 let read_pers_struct penv val_of_pers_sig check modname filename =
-(*  add_import penv modname; *)
+  add_old_import penv modname;
   let cmi = read_cmi filename in
   let pers_sig = { Persistent_signature.filename; cmi } in
   let pm = val_of_pers_sig pers_sig in
   let ps = acknowledge_pers_struct penv check modname pers_sig pm in
+  check_imports penv;
   (ps, pm)
 
 let find_pers_struct penv val_of_pers_sig check name =
 (*  Format.eprintf "FIND_PERS_STRUCT %a\n%!" CU.Name.print name; *)
   let {persistent_structures; _} = penv in
   if CU.Name.equal name CU.Name.predef_exn then raise Not_found;
+  check_imports penv;
   match Hashtbl.find persistent_structures name with
   | Found (ps, pm) -> (ps, pm)
   | Missing -> raise Not_found
@@ -251,7 +291,7 @@ let find_pers_struct penv val_of_pers_sig check name =
             Hashtbl.add persistent_structures name Missing;
             raise Not_found
         in
-        (* add_import penv name; *)
+        add_old_import penv name;
         let pm = val_of_pers_sig psig in
         let ps = acknowledge_pers_struct penv check name psig pm in
         (ps, pm)
@@ -264,6 +304,7 @@ let describe_prefix ppf prefix =
 
 (* Emits a warning if there is no valid cmi for name *)
 let check_pers_struct penv f ~loc name =
+  check_imports penv;
   let name_as_string = CU.Name.to_string name in
   try
     ignore (find_pers_struct penv f false name)
@@ -310,12 +351,13 @@ let find penv f name =
   snd (find_pers_struct penv f true name)
 
 let check penv f ~loc name =
-  let {persistent_structures; _} = penv in
+  let { persistent_structures; crc_units } = penv in
   if not (Hashtbl.mem persistent_structures name) then begin
     (* PR#6843: record the weak dependency ([add_import]) regardless of
        whether the check succeeds, to help make builds more
        deterministic. *)
-    (* XXX add_import penv name; *)
+    if Option.is_none (Consistbl.find crc_units name) then
+      add_or_re_add_weak_import penv name;
     if (Warnings.is_active (Warnings.No_cmi_file("", None))) then
       !add_delayed_check_forward
         (fun () -> check_pers_struct penv f ~loc name)
@@ -347,17 +389,21 @@ let crc_of_unit penv f name =
     | None -> assert false
     | Some crc -> crc
 
-let imports {imported_units; crc_units; _} =
-  let imports = Consistbl.extract_set !imported_units crc_units in
+let imports {imported_units; weak_imported_units; crc_units; _} =
+  let imports = Consistbl.extract ~no_dups:() !imported_units crc_units in
+  let imports =
+    CU.Name.Set.fold (fun name imports -> (name, None) :: imports)
+      !weak_imported_units
+      imports
+  in
+  assert (List.length imports =
+    CU.Name.Set.cardinal (CU.Name.Set.of_list (List.map fst imports)));
   List.map (fun (cu_name, crc_with_unit) ->
       Import_info.create cu_name ~crc_with_unit)
     imports
 
 let looked_up {persistent_structures; _} modname =
   Hashtbl.mem persistent_structures modname
-
-let is_imported {imported_units; _} s =
-  CU.Name.Set.mem s !imported_units
 
 let is_imported_opaque {imported_opaque_units; _} s =
   CU.Name.Set.mem s !imported_opaque_units
