@@ -76,6 +76,12 @@ end) = struct
     let l = List.sort_uniq Module_name.compare l in
     List.fold_left (fun assc name -> (name, find tbl name) :: assc) [] l
 
+  let extract_set mod_names tbl =
+    Module_name.Set.fold
+      (fun name assc -> (name, find tbl name) :: assc)
+      mod_names
+      []
+
   let extract_map mod_names tbl =
     Module_name.Set.fold
       (fun name result -> Module_name.Map.add name (find tbl name) result)

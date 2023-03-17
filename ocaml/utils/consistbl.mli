@@ -67,6 +67,10 @@ end) : sig
            in [names] to the data and CRC associated with it in [tbl]. If no CRC
            is associated with a name then it is mapped to [None]. *)
 
+  val extract_set:
+    Module_name.Set.t -> t -> (Module_name.t * (Data.t * Digest.t) option) list
+        (* Like [extract] but takes a set. *)
+
   val extract_map :
     Module_name.Set.t -> t -> (Data.t * Digest.t) option Module_name.Map.t
         (* Like [extract] but with a more sophisticated type. *)

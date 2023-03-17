@@ -343,10 +343,7 @@ let crc_of_unit penv f name =
     | Some crc -> crc
 
 let imports {imported_units; crc_units; _} =
-  let imports =
-    Consistbl.extract (CU.Name.Set.elements !imported_units)
-      crc_units
-  in
+  let imports = Consistbl.extract_set !imported_units crc_units in
   List.map (fun (cu_name, crc_with_unit) ->
       Import_info.create cu_name ~crc_with_unit)
     imports
