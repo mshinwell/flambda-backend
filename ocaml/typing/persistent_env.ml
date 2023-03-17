@@ -111,7 +111,8 @@ let clear_missing {persistent_structures; _} =
   in
   List.iter (Hashtbl.remove persistent_structures) missing_entries
 
-let add_import {imported_units; imported_units_old; _} s =
+let add_import {imported_units; imported_units_old = _; _} s =
+  (*
   let already_imported =
     List.exists (fun name' -> CU.Name.equal s name') !imported_units
   in
@@ -119,12 +120,16 @@ let add_import {imported_units; imported_units_old; _} s =
     Format.eprintf "dup trying to add %a: %s\n%!"
       CU.Name.print s
       (Printexc.raw_backtrace_to_string (Printexc.get_callstack 5));
-  imported_units := s :: !imported_units;
   imported_units_old := CU.Name.Set.add s !imported_units_old
+  *)
+  imported_units := s :: !imported_units
 
+(*
 let add_old_import { imported_units_old; _} s =
   imported_units_old := CU.Name.Set.add s !imported_units_old
+*)
 
+(*
 let check_imports { imported_units; imported_units_old; _ } =
   let imported_units = !imported_units in
   let imported_units_old = !imported_units_old in
@@ -135,6 +140,7 @@ let check_imports { imported_units; imported_units_old; _ } =
     Misc.fatal_errorf "mismatch: new list:@ %a@ old set:@ %a\n%!"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space CU.Name.print) imported_units
       CU.Name.Set.print imported_units_old
+*)
 
 let register_import_as_opaque {imported_opaque_units; _} s =
   imported_opaque_units := CU.Name.Set.add s !imported_opaque_units
@@ -253,19 +259,19 @@ let acknowledge_pers_struct penv check modname pers_sig pm =
   ps
 
 let read_pers_struct penv val_of_pers_sig check modname filename =
-  add_old_import penv modname;
+  (* add_old_import penv modname; *)
   let cmi = read_cmi filename in
   let pers_sig = { Persistent_signature.filename; cmi } in
   let pm = val_of_pers_sig pers_sig in
   let ps = acknowledge_pers_struct penv check modname pers_sig pm in
-  check_imports penv;
+  (* check_imports penv; *)
   (ps, pm)
 
 let find_pers_struct penv val_of_pers_sig check name =
 (*  Format.eprintf "FIND_PERS_STRUCT %a\n%!" CU.Name.print name; *)
   let {persistent_structures; _} = penv in
   if CU.Name.equal name CU.Name.predef_exn then raise Not_found;
-  check_imports penv;
+  (* check_imports penv; *)
   match Hashtbl.find persistent_structures name with
   | Found (ps, pm) -> (ps, pm)
   | Missing -> raise Not_found
@@ -280,7 +286,7 @@ let find_pers_struct penv val_of_pers_sig check name =
             Hashtbl.add persistent_structures name Missing;
             raise Not_found
         in
-        add_old_import penv name;
+        (* add_old_import penv name; *)
         let pm = val_of_pers_sig psig in
         let ps = acknowledge_pers_struct penv check name psig pm in
         (ps, pm)
@@ -293,7 +299,7 @@ let describe_prefix ppf prefix =
 
 (* Emits a warning if there is no valid cmi for name *)
 let check_pers_struct penv f ~loc name =
-  check_imports penv;
+  (* check_imports penv; *)
   let name_as_string = CU.Name.to_string name in
   try
     ignore (find_pers_struct penv f false name)
@@ -350,7 +356,7 @@ let check penv f ~loc name =
     if not (Consistbl.check_did_exist crc_units name None)
     then
       add_import penv name;
-    add_old_import penv name;
+    (* add_old_import penv name; *)
     if (Warnings.is_active (Warnings.No_cmi_file("", None))) then
       !add_delayed_check_forward
         (fun () -> check_pers_struct penv f ~loc name)
