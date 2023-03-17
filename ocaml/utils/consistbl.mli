@@ -45,10 +45,13 @@ end) : sig
              [source] is the name of the file from which the information
              comes from.  This is used for error reporting. *)
 
-  val check_did_exist: t -> Module_name.t -> Data.t -> Digest.t -> filepath
+  val check_did_exist: t -> Module_name.t
+     -> (Data.t * Digest.t * filepath) option
      -> bool
-        (* Same as [check], but says whether the module name was already
-           known by the table or not. *)
+        (* Same as [check], but:
+           1. allows the addition of weak dependencies;
+           2. returns whether the module name was already known by the table
+              (whether as a weak or strong dependency) or not. *)
 
   val check_noadd: t -> Module_name.t -> Data.t -> Digest.t -> filepath -> unit
         (* Same as [check], but raise [Not_available] if no CRC was previously
