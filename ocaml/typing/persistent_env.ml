@@ -130,7 +130,7 @@ let check_imports { imported_units; imported_units_old; _ } =
   let imported_units_old = !imported_units_old in
   let imported_units_set = CU.Name.Set.of_list imported_units in
   if (not (CU.Name.Set.equal imported_units_set imported_units_old))
-(*    || List.length imported_units <> CU.Name.Set.cardinal imported_units_old *)
+    || List.length imported_units <> CU.Name.Set.cardinal imported_units_old
   then
     Misc.fatal_errorf "mismatch: new list:@ %a@ old set:@ %a\n%!"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space CU.Name.print) imported_units

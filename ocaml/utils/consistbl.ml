@@ -43,6 +43,7 @@ end) = struct
   exception Not_available of Module_name.t
 
   external raise_notrace : exn -> _ = "%raise_notrace"
+  exception Weak_dep
 
   let check_ tbl name data_crc_source =
     match Module_name.Tbl.find tbl name with
@@ -50,7 +51,7 @@ end) = struct
       (* Note this isn't the case where the module isn't in the table.
          It's the case where the module is in the table, but the CRC etc
          is [None], i.e. it's currently a weak dependency. *)
-      raise_notrace Not_found
+      raise_notrace Weak_dep
     | Some (old_data, old_crc, old_source) ->
       match data_crc_source with
       | None ->
@@ -70,19 +71,22 @@ end) = struct
   let check tbl name data crc source =
     let data_crc_source = Some (data, crc, source) in
     try check_ tbl name data_crc_source
-    with Not_found ->
+    with Not_found | Weak_dep ->
       Module_name.Tbl.replace tbl name data_crc_source
 
   let check_did_exist tbl name data_crc_source =
     try check_ tbl name data_crc_source; true
-    with Not_found -> (
+    with
+    | Not_found ->
       Module_name.Tbl.replace tbl name data_crc_source;
       false
-    )
+    | Weak_dep ->
+      Module_name.Tbl.replace tbl name data_crc_source;
+      true
 
   let check_noadd tbl name data crc source =
     try check_ tbl name (Some (data, crc, source))
-    with Not_found ->
+    with Not_found | Weak_dep ->
       raise (Not_available name)
 
   let set tbl name data crc source =
