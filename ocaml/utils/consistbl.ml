@@ -58,6 +58,13 @@ end) = struct
     with Not_found ->
       Module_name.Tbl.add tbl name (data, crc, source)
 
+  let check_did_exist tbl name data crc source =
+    try check_ tbl name data crc source; true
+    with Not_found -> (
+      Module_name.Tbl.add tbl name (data, crc, source);
+      false
+    )
+
   let check_noadd tbl name data crc source =
     try check_ tbl name data crc source
     with Not_found ->

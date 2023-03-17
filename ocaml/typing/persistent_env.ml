@@ -108,6 +108,8 @@ let clear_missing {persistent_structures; _} =
   List.iter (Hashtbl.remove persistent_structures) missing_entries
 
 let add_import {imported_units; _} s =
+(*  if CU.Name.Set.mem s !imported_units then
+    Printf.eprintf "dup: %s\n%!" (Printexc.raw_backtrace_to_string (Printexc.get_callstack 5)); *)
   imported_units := CU.Name.Set.add s !imported_units
 
 let register_import_as_opaque {imported_opaque_units; _} s =
@@ -127,8 +129,10 @@ let import_crcs penv ~source crcs =
     match crco with
     | None -> ()
     | Some (unit, crc) ->
-        add_import penv name;
-        Consistbl.check crc_units name unit crc source
+      ( Format.eprintf "adding import %a\n%!" CU.Name.print name;
+        if not (Consistbl.check_did_exist crc_units name unit crc source) then
+          add_import penv name
+      )
   in Array.iter import_crc crcs
 
 let check_consistency penv ps =
@@ -222,7 +226,7 @@ let acknowledge_pers_struct penv check modname pers_sig pm =
   ps
 
 let read_pers_struct penv val_of_pers_sig check modname filename =
-  add_import penv modname;
+(*  add_import penv modname; *)
   let cmi = read_cmi filename in
   let pers_sig = { Persistent_signature.filename; cmi } in
   let pm = val_of_pers_sig pers_sig in
@@ -230,6 +234,7 @@ let read_pers_struct penv val_of_pers_sig check modname filename =
   (ps, pm)
 
 let find_pers_struct penv val_of_pers_sig check name =
+(*  Format.eprintf "FIND_PERS_STRUCT %a\n%!" CU.Name.print name; *)
   let {persistent_structures; _} = penv in
   if CU.Name.equal name CU.Name.predef_exn then raise Not_found;
   match Hashtbl.find persistent_structures name with
@@ -246,7 +251,7 @@ let find_pers_struct penv val_of_pers_sig check name =
             Hashtbl.add persistent_structures name Missing;
             raise Not_found
         in
-        add_import penv name;
+        (* add_import penv name; *)
         let pm = val_of_pers_sig psig in
         let ps = acknowledge_pers_struct penv check name psig pm in
         (ps, pm)
@@ -310,7 +315,7 @@ let check penv f ~loc name =
     (* PR#6843: record the weak dependency ([add_import]) regardless of
        whether the check succeeds, to help make builds more
        deterministic. *)
-    add_import penv name;
+    (* XXX add_import penv name; *)
     if (Warnings.is_active (Warnings.No_cmi_file("", None))) then
       !add_delayed_check_forward
         (fun () -> check_pers_struct penv f ~loc name)
