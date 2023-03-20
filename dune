@@ -83,6 +83,7 @@
   backend_var
   clambda
   clambda_primitives
+  clambda_layout
   compilenv
   mangling
   convert_primitives

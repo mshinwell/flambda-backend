@@ -726,8 +726,8 @@ let rewrite_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id arity :
     if not (Flambda_arity.equal_ignoring_subkinds arity arity_in_rewrite)
     then
       Misc.fatal_errorf
-        "Arity %a provided to fixed-arity-wrapper addition function does not \
-         match arity %a in rewrite:@ %a"
+        "Arity %a provided to fixed-arity-wrapper addition\n\
+        \       function does not  match arity %a in rewrite:@ %a"
         Flambda_arity.print arity Flambda_arity.print arity_in_rewrite
         Apply_cont_rewrite.print rewrite;
     This_continuation cont
@@ -757,9 +757,11 @@ let rewrite_fixed_arity_continuation0 uacc cont_or_apply_cont ~use_id arity :
       let params =
         List.map
           (fun _kind -> Variable.create "param")
-          (Flambda_arity.to_list arity)
+          (Flambda_arity.unarized_components arity)
       in
-      let params = List.map2 BP.create params (Flambda_arity.to_list arity) in
+      let params =
+        List.map2 BP.create params (Flambda_arity.unarized_components arity)
+      in
       let args = List.map BP.simple params in
       let params = Bound_parameters.create params in
       let apply_cont = Apply_cont.create cont ~args ~dbg:Debuginfo.none in

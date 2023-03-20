@@ -131,6 +131,9 @@ type primitive =
   | Pbox_float of alloc_mode
   | Punbox_int of boxed_integer
   | Pbox_int of boxed_integer * alloc_mode
+  (* Unboxed products *)
+  | Pmake_unboxed_product of layout list
+  | Punboxed_product_field of int * (layout list)
 
 and integer_comparison = Lambda.integer_comparison =
     Ceq | Cne | Clt | Cgt | Cle | Cge
@@ -167,6 +170,7 @@ and layout = Lambda.layout =
   | Pvalue of value_kind
   | Punboxed_float
   | Punboxed_int of boxed_integer
+  | Punboxed_product of layout list
   | Pbottom
 
 and block_shape = Lambda.block_shape

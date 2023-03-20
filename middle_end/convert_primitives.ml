@@ -38,6 +38,9 @@ let convert (prim : Lambda.primitive) : Clambda_primitives.primitive =
   | Psetfloatfield (field, init_or_assign) ->
       Psetfloatfield (field, init_or_assign)
   | Pduprecord (repr, size) -> Pduprecord (repr, size)
+  | Pmake_unboxed_product layouts -> Pmake_unboxed_product layouts
+  | Punboxed_product_field (field, layouts) ->
+    Punboxed_product_field (field, layouts)
   | Pccall prim -> Pccall prim
   | Praise kind -> Praise kind
   | Psequand -> Psequand

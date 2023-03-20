@@ -128,6 +128,9 @@ type primitive =
   | Pbox_float of alloc_mode
   | Punbox_int of boxed_integer
   | Pbox_int of boxed_integer * alloc_mode
+  (* Unboxed products *)
+  | Pmake_unboxed_product of layout list
+  | Punboxed_product_field of int * (layout list)
 
 and integer_comparison = Lambda.integer_comparison =
     Ceq | Cne | Clt | Cgt | Cle | Cge
@@ -164,6 +167,7 @@ and layout = Lambda.layout =
   | Pvalue of value_kind
   | Punboxed_float
   | Punboxed_int of boxed_integer
+  | Punboxed_product of layout list
   | Pbottom
 
 and block_shape = Lambda.block_shape
@@ -195,4 +199,6 @@ let result_layout (p : primitive) =
   match p with
   | Punbox_float -> Lambda.Punboxed_float
   | Punbox_int bi -> Lambda.Punboxed_int bi
+  | Pmake_unboxed_product layouts -> Lambda.Punboxed_product layouts
+  | Punboxed_product_field (field, layouts) -> List.nth layouts field
   | _ -> Lambda.layout_any_value
