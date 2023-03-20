@@ -491,11 +491,11 @@ let rec transl env e =
                 transl_fundecls (pos + 3) rem
               | arity ->
                 Cconst_symbol
-                  (global_symbol
-                    (curry_function_sym
+                  (
+                    curry_function_sym
                       arity.function_kind
                       (List.map machtype_of_layout arity.params_layout)
-                      (machtype_of_layout arity.return_layout)),
+                      (machtype_of_layout arity.return_layout),
                    dbg) ::
                 alloc_closure_info ~arity
                                    ~startenv:(startenv - pos) ~is_last dbg ::
