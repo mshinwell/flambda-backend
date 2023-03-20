@@ -528,6 +528,7 @@ module With_subkind = struct
     | Punboxed_int Pint32 -> naked_int32
     | Punboxed_int Pint64 -> naked_int64
     | Punboxed_int Pnativeint -> naked_nativeint
+    | Punboxed_product _ -> Misc.fatal_error "Punboxed_product disallowed here"
 
   include Container_types.Make (struct
     type nonrec t = t
