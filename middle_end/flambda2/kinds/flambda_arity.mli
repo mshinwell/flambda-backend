@@ -19,14 +19,14 @@
 
 type t
 
-type for_creation =
+type component_for_creation =
   | Singleton of Flambda_kind.With_subkind.t
     (* The nullary unboxed product is called "void". *)
-  | Unboxed_product of for_creation list
+  | Unboxed_product of component_for_creation list
 
 (** One component per function or continuation parameter, for example. Each
     component may in turn have an arity describing an unboxed product. *)
-val create : for_creation list -> t
+val create : component_for_creation list -> t
 
 val create_singletons : Flambda_kind.With_subkind.t list -> t
 

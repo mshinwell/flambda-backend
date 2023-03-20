@@ -49,7 +49,7 @@ end
 
 type t = Component.t list
 
-type for_creation = Component.t =
+type component_for_creation = Component.t =
   | Singleton of Flambda_kind.With_subkind.t
   | Unboxed_product of Component.t list
 
