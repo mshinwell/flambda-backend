@@ -14,19 +14,34 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Arities are used to describe things such as the kinding of function and
-    continuation parameter lists. *)
+(** Arities are used to describe the layouts of things like function and
+    continuation parameter lists.
+
+    In Flambda 2, variables are always assigned kinds, which are at most
+    register width (presently machine word width, but in the future of SIMD
+    widths too).  Variables from Lambda which cannot be accommodated in one
+    register, for example if they are of an unboxed product layout, are split
+    by a process called unarization.
+
+    Despite this, the arities preserve the information about any unboxed
+    products, for later use (e.g. during Cmm translation to optimize
+    caml_apply).
+*)
 
 type t
 
-type component_for_creation =
-  | Singleton of Flambda_kind.With_subkind.t
-    (* The nullary unboxed product is called "void". *)
-  | Unboxed_product of component_for_creation list
+module Component_for_creation : sig
+  type t =
+    | Singleton of Flambda_kind.With_subkind.t
+      (* The nullary unboxed product is called "void". *)
+    | Unboxed_product of t list
+
+  val from_lambda : Lambda.layout -> t
+end
 
 (** One component per function or continuation parameter, for example. Each
     component may in turn have an arity describing an unboxed product. *)
-val create : component_for_creation list -> t
+val create : Component_for_creation.t list -> t
 
 val create_singletons : Flambda_kind.With_subkind.t list -> t
 

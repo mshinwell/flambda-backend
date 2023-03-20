@@ -49,9 +49,23 @@ end
 
 type t = Component.t list
 
-type component_for_creation = Component.t =
-  | Singleton of Flambda_kind.With_subkind.t
-  | Unboxed_product of Component.t list
+module Component_for_creation = struct
+  type t = Component.t =
+    | Singleton of Flambda_kind.With_subkind.t
+    | Unboxed_product of Component.t list
+
+  let rec from_lambda (layout : Lambda.layout) =
+    match layout with
+    | Pvalue _ | Punboxed_float | Punboxed_int _ ->
+      Singleton (Flambda_kind.With_subkind.from_lambda layout)
+    | Punboxed_product layouts -> Unboxed_product (List.map from_lambda layouts)
+    | Ptop ->
+      Misc.fatal_error
+        "Cannot convert Ptop to Flambda_arity.Component_for_creation"
+    | Pbottom ->
+      Misc.fatal_error
+        "Cannot convert Pbottom to Flambda_arity.Component_for_creation"
+end
 
 let nullary = []
 
@@ -69,12 +83,12 @@ let equal_ignoring_subkinds t1 t2 =
 
 let is_singleton_value_not_unarized t =
   match t with
-  | [Singleton kind]
+  | [Component.Singleton kind]
     when Flambda_kind.equal
            (Flambda_kind.With_subkind.kind kind)
            Flambda_kind.value ->
     true
-  | [] | Singleton _ :: _ | Unboxed_product _ :: _ -> false
+  | [] | Component.Singleton _ :: _ | Component.Unboxed_product _ :: _ -> false
 
 let cardinal_not_unarized t = List.length t
 
