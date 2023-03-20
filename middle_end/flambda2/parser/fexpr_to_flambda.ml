@@ -283,7 +283,7 @@ let value_kind_with_subkind_opt :
   | None -> Flambda_kind.With_subkind.any_value
 
 let arity a =
-  Flambda_arity.With_subkinds.create (List.map value_kind_with_subkind a)
+  Flambda_arity.create (List.map value_kind_with_subkind a)
 
 let const (c : Fexpr.const) : Reg_width_const.t =
   match c with
@@ -792,12 +792,12 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
               (fun ({ kind; _ } : Fexpr.kinded_parameter) ->
                 value_kind_with_subkind_opt kind)
               params_and_body.params
-            |> Flambda_arity.With_subkinds.create
+            |> Flambda_arity.create
         in
         let result_arity =
           match ret_arity with
           | None ->
-            Flambda_arity.With_subkinds.create
+            Flambda_arity.create
               [Flambda_kind.With_subkind.any_value]
           | Some ar -> arity ar
         in
@@ -830,7 +830,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           let my_depth, env = fresh_var env depth_var in
           let return_continuation, env =
             fresh_cont env ret_cont ~sort:Return
-              ~arity:(Flambda_arity.With_subkinds.cardinal result_arity)
+              ~arity:(Flambda_arity.cardinal result_arity)
           in
           let exn_continuation, env = fresh_exn_cont env exn_cont in
           assert (
@@ -914,13 +914,13 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         let params_arity =
           (* CR mshinwell: This needs fixing to cope with the fact that the
              arities have moved onto [Apply_expr] *)
-          Flambda_arity.With_subkinds.create
+          Flambda_arity.create
             (List.map (fun _ -> Flambda_kind.With_subkind.any_value) args)
         in
         let return_arity =
           match arities with
           | None ->
-            Flambda_arity.With_subkinds.create
+            Flambda_arity.create
               [Flambda_kind.With_subkind.any_value]
           | Some { ret_arity; _ } -> arity ret_arity
         in
@@ -939,13 +939,13 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
           let params_arity =
             (* CR mshinwell: This needs fixing to cope with the fact that the
                arities have moved onto [Apply_expr] *)
-            Flambda_arity.With_subkinds.create
+            Flambda_arity.create
               (List.map (fun _ -> Flambda_kind.With_subkind.any_value) args)
           in
           let return_arity =
             (* CR mshinwell: This needs fixing to cope with the fact that the
                arities have moved onto [Apply_expr] *)
-            Flambda_arity.With_subkinds.create
+            Flambda_arity.create
               [Flambda_kind.With_subkind.any_value]
           in
           ( Call_kind.indirect_function_call_unknown_arity alloc,
