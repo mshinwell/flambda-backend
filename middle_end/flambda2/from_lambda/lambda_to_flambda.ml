@@ -960,31 +960,28 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Punboxed_product_field _ ->
     false
 
-let rec primitive_result_kind (prim : Lambda.primitive) :
-    Flambda_arity.With_subkinds.t =
+let rec primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t =
   match prim with
   | Pccall { prim_native_repr_res = _, Untagged_int; _ } ->
-    Flambda_arity.With_subkinds.create
-      [Flambda_kind.With_subkind.tagged_immediate]
+    Flambda_arity.create [Flambda_kind.With_subkind.tagged_immediate]
   | Pccall { prim_native_repr_res = _, Unboxed_float; _ }
   | Pfloatofint _ | Pnegfloat _ | Pabsfloat _ | Paddfloat _ | Psubfloat _
   | Pmulfloat _ | Pdivfloat _ | Pfloatfield _
   | Parrayrefs Pfloatarray
   | Parrayrefu Pfloatarray
   | Pbigarrayref (_, _, (Pbigarray_float32 | Pbigarray_float64), _) ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.boxed_float]
+    Flambda_arity.create [Flambda_kind.With_subkind.boxed_float]
   | Pccall { prim_native_repr_res = _, Unboxed_integer Pnativeint; _ }
   | Pbigarrayref (_, _, Pbigarray_native_int, _) ->
-    Flambda_arity.With_subkinds.create
-      [Flambda_kind.With_subkind.boxed_nativeint]
+    Flambda_arity.create [Flambda_kind.With_subkind.boxed_nativeint]
   | Pccall { prim_native_repr_res = _, Unboxed_integer Pint32; _ }
   | Pstring_load_32 _ | Pbytes_load_32 _ | Pbigstring_load_32 _
   | Pbigarrayref (_, _, Pbigarray_int32, _) ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.boxed_int32]
+    Flambda_arity.create [Flambda_kind.With_subkind.boxed_int32]
   | Pccall { prim_native_repr_res = _, Unboxed_integer Pint64; _ }
   | Pstring_load_64 _ | Pbytes_load_64 _ | Pbigstring_load_64 _
   | Pbigarrayref (_, _, Pbigarray_int64, _) ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.boxed_int64]
+    Flambda_arity.create [Flambda_kind.With_subkind.boxed_int64]
   | Pnegint | Paddint | Psubint | Pmulint | Pandint | Porint | Pxorint | Plslint
   | Plsrint | Pasrint | Pmodint _ | Pdivint _ | Pignore | Psequand | Psequor
   | Pnot | Pbytesrefs | Pstringrefs | Pbytessets | Pstring_load_16 _
@@ -1005,8 +1002,7 @@ let rec primitive_result_kind (prim : Lambda.primitive) :
         ( Pbigarray_sint8 | Pbigarray_uint8 | Pbigarray_sint16
         | Pbigarray_uint16 | Pbigarray_caml_int ),
         _ ) ->
-    Flambda_arity.With_subkinds.create
-      [Flambda_kind.With_subkind.tagged_immediate]
+    Flambda_arity.create [Flambda_kind.With_subkind.tagged_immediate]
   | Pdivbint { size = bi; _ }
   | Pmodbint { size = bi; _ }
   | Pandbint (bi, _)
@@ -1023,17 +1019,16 @@ let rec primitive_result_kind (prim : Lambda.primitive) :
   | Pcvtbint (_, bi, _)
   | Pbbswap (bi, _)
   | Pbox_int (bi, _) ->
-    Flambda_arity.With_subkinds.create
+    Flambda_arity.create
       [ (match bi with
         | Pint32 -> Flambda_kind.With_subkind.boxed_int32
         | Pint64 -> Flambda_kind.With_subkind.boxed_int64
         | Pnativeint -> Flambda_kind.With_subkind.boxed_nativeint) ]
   | Popaque layout | Pobj_magic layout ->
-    Flambda_arity.With_subkinds.create
-      [Flambda_kind.With_subkind.from_lambda layout]
+    Flambda_arity.create [Flambda_kind.With_subkind.from_lambda layout]
   | Praise _ ->
     (* CR ncourant: this should be bottom, but we don't have it *)
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.any_value]
+    Flambda_arity.create [Flambda_kind.With_subkind.any_value]
   | Pccall { prim_native_repr_res = _, Same_as_ocaml_repr; _ }
   | Parrayrefs (Pgenarray | Paddrarray)
   | Parrayrefu (Pgenarray | Paddrarray)
@@ -1044,13 +1039,11 @@ let rec primitive_result_kind (prim : Lambda.primitive) :
   | Pbigarrayref
       (_, _, (Pbigarray_complex32 | Pbigarray_complex64 | Pbigarray_unknown), _)
   | Pint_as_pointer | Pobj_dup ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.any_value]
-  | Pbox_float _ ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.boxed_float]
-  | Punbox_float ->
-    Flambda_arity.With_subkinds.create [Flambda_kind.With_subkind.naked_float]
+    Flambda_arity.create [Flambda_kind.With_subkind.any_value]
+  | Pbox_float _ -> Flambda_arity.create [Flambda_kind.With_subkind.boxed_float]
+  | Punbox_float -> Flambda_arity.create [Flambda_kind.With_subkind.naked_float]
   | Punbox_int bi ->
-    Flambda_arity.With_subkinds.create
+    Flambda_arity.create
       [ (match bi with
         | Pint32 -> Flambda_kind.With_subkind.naked_int32
         | Pint64 -> Flambda_kind.With_subkind.naked_int64
@@ -1058,7 +1051,7 @@ let rec primitive_result_kind (prim : Lambda.primitive) :
   | Pmake_unboxed_product layouts ->
     layouts
     |> List.map Flambda_kind.With_subkind.from_lambda
-    |> Flambda_arity.With_subkinds.create
+    |> Flambda_arity.create
   | Punboxed_product_field (_n, layout) -> ()
 
 type cps_continuation =
@@ -1672,8 +1665,7 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
       params
   in
   let return =
-    Flambda_arity.create
-      [Flambda_kind.With_subkind.from_lambda return]
+    Flambda_arity.create [Flambda_kind.With_subkind.from_lambda return]
   in
   Function_decl.create ~let_rec_ident:(Some fid) ~function_slot ~kind ~params
     ~return ~return_continuation:body_cont ~exn_continuation ~my_region ~body

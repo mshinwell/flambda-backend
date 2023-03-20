@@ -21,14 +21,28 @@ type t
 
 val nullary : t
 
-val create : Flambda_kind.With_subkind.t list -> t
+type for_creation =
+  | Singleton of Flambda_kind.With_subkind.t
+  | Unboxed_product of for_creation list
 
-val to_list : t -> Flambda_kind.With_subkind.t list
+val create : for_creation list -> t
 
-val cardinal : t -> int
+val create_singletons : Flambda_kind.With_subkind.t list -> t
 
-val is_singleton_value : t -> bool
+val unarize : t -> Flambda_kind.With_subkind.t list
+
+val cardinal_not_unarized : t -> int
+
+val is_singleton_value_not_unarized : t -> bool
 
 val print : Format.formatter -> t -> unit
 
 val equal_ignoring_subkinds : t -> t -> bool
+
+module Component : sig
+  type t = private
+    | Singleton of Flambda_kind.With_subkind.t
+    | Unboxed_product of t list
+end
+
+val to_list_not_unarized : t -> Component.t list
