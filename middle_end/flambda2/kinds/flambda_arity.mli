@@ -14,30 +14,32 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Arities are lists of kinds (with subkinds) used to describe things
-    such as the kinding of function and continuation parameter lists. *)
+(** Arities are used to describe things such as the kinding of function and
+    continuation parameter lists. *)
 
 type t
 
-val nullary : t
-
 type for_creation =
   | Singleton of Flambda_kind.With_subkind.t
+    (* The nullary unboxed product is called "void". *)
   | Unboxed_product of for_creation list
 
+(** One component per function or continuation parameter, for example. Each
+    component may in turn have an arity describing an unboxed product. *)
 val create : for_creation list -> t
 
 val create_singletons : Flambda_kind.With_subkind.t list -> t
 
-val unarize : t -> Flambda_kind.With_subkind.t list
-
-val cardinal_not_unarized : t -> int
-
-val is_singleton_value_not_unarized : t -> bool
+(** "No parameters".  (Not e.g. "one parameter of type void".) *)
+val nullary : t
 
 val print : Format.formatter -> t -> unit
 
 val equal_ignoring_subkinds : t -> t -> bool
+
+val cardinal_not_unarized : t -> int
+
+val is_singleton_value_not_unarized : t -> bool
 
 module Component : sig
   type t = private
@@ -46,3 +48,7 @@ module Component : sig
 end
 
 val to_list_not_unarized : t -> Component.t list
+
+(** Convert, in a left-to-right depth-first order, an arity into a flattened
+    list of kinds for each parameter. *)
+val unarize : t -> Flambda_kind.With_subkind.t list list

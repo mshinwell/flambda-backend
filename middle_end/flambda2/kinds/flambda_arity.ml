@@ -17,7 +17,6 @@
 module Component = struct
   type t =
     | Singleton of Flambda_kind.With_subkind.t
-    (* The nullary unboxed product is called "void". *)
     | Unboxed_product of t list
 
   let rec equal_ignoring_subkinds t1 t2 =
@@ -48,8 +47,6 @@ module Component = struct
     | Unboxed_product ts -> List.concat_map unarize ts
 end
 
-(* One component per function or continuation parameter, for example. Each
-   component may in turn have an arity describing an unboxed product. *)
 type t = Component.t list
 
 type for_creation = Component.t =
@@ -81,4 +78,4 @@ let is_singleton_value_not_unarized t =
 
 let cardinal_not_unarized t = List.length t
 
-let unarize t = List.concat_map Component.unarize t
+let unarize t = List.map Component.unarize t
