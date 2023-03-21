@@ -960,8 +960,7 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Punboxed_product_field _ ->
     false
 
-let (* rec *) primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t
-    =
+let primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t =
   match prim with
   | Pccall { prim_native_repr_res = _, Untagged_int; _ } ->
     Flambda_arity.create_singletons [Flambda_kind.With_subkind.tagged_immediate]
@@ -1054,9 +1053,11 @@ let (* rec *) primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t
         | Pnativeint -> Flambda_kind.With_subkind.naked_nativeint) ]
   | Pmake_unboxed_product layouts ->
     layouts
-    |> List.map Flambda_kind.With_subkind.from_lambda
-    |> Flambda_arity.create_singletons
-  | Punboxed_product_field (_n, _layout) -> Misc.fatal_error "TODO"
+    |> List.map Flambda_arity.Component_for_creation.from_lambda
+    |> Flambda_arity.create
+  | Punboxed_product_field (_n, layout) ->
+    Flambda_arity.create
+      [Flambda_arity.Component_for_creation.from_lambda layout]
 
 type cps_continuation =
   | Tail of Continuation.t
@@ -1236,7 +1237,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     | Dissected lam -> cps acc env ccenv lam k k_exn)
   | Lprim (prim, args, loc) -> (
     match transform_primitive env prim args loc with
-    | Primitive (prim, args, loc) ->
+    | Primitive (prim, args, loc) -> (
       let name = Printlambda.name_of_primitive prim in
       let result_var = Ident.create_local name in
       let exn_continuation : IR.exn_continuation option =
@@ -1250,14 +1251,24 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       in
       let current_region = Env.current_region env in
       let dbg = Debuginfo.from_location loc in
-      cps_non_tail_list acc env ccenv args
-        (fun acc env ccenv args ->
-          let body acc ccenv = apply_cps_cont ~dbg k acc env ccenv result_var in
-          CC.close_let acc ccenv result_var Not_user_visible
-            (primitive_result_kind prim)
-            (Prim { prim; args; loc; exn_continuation; region = current_region })
-            ~body)
-        k_exn
+      let arity = primitive_result_kind prim in
+      match Flambda_arity.must_be_one_param arity with
+      | None ->
+        Misc.fatal_errorf
+          "Expected the following Lprim to require exactly one variable \
+           binding:@ %a"
+          Printlambda.lambda lam
+      | Some kind ->
+        cps_non_tail_list acc env ccenv args
+          (fun acc env ccenv args ->
+            let body acc ccenv =
+              apply_cps_cont ~dbg k acc env ccenv result_var
+            in
+            CC.close_let acc ccenv result_var Not_user_visible kind
+              (Prim
+                 { prim; args; loc; exn_continuation; region = current_region })
+              ~body)
+          k_exn)
     | Transformed lam -> cps acc env ccenv lam k k_exn)
   | Lswitch (scrutinee, switch, loc, kind) ->
     maybe_insert_let_cont "switch_result" kind k acc env ccenv
@@ -1332,7 +1343,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                         mode;
                         region = Env.current_region env;
                         return_arity =
-                          Flambda_arity.create
+                          Flambda_arity.create_singletons
                             [Flambda_kind.With_subkind.from_lambda layout]
                       }
                     in
@@ -1532,7 +1543,7 @@ and cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode ap_loc
               mode = ap_mode;
               region = Env.current_region env;
               return_arity =
-                Flambda_arity.create
+                Flambda_arity.create_singletons
                   [Flambda_kind.With_subkind.from_lambda ap_return]
             }
           in
@@ -1669,7 +1680,8 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
       params
   in
   let return =
-    Flambda_arity.create [Flambda_kind.With_subkind.from_lambda return]
+    Flambda_arity.create_singletons
+      [Flambda_kind.With_subkind.from_lambda return]
   in
   Function_decl.create ~let_rec_ident:(Some fid) ~function_slot ~kind ~params
     ~return ~return_continuation:body_cont ~exn_continuation ~my_region ~body

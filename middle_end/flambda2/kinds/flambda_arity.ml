@@ -95,3 +95,9 @@ let unarize t = List.map Component.unarize t
 let unarize_flat t = List.concat (unarize t)
 
 let cardinal_unarized t = List.length (unarize_flat t)
+
+let rec must_be_one_param t =
+  match t with
+  | [Component.Singleton kind] -> Some kind
+  | [Component.Unboxed_product component] -> must_be_one_param component
+  | [] | (Component.Singleton _ | Component.Unboxed_product _) :: _ -> None

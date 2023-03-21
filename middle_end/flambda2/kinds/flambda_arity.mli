@@ -54,6 +54,8 @@ val equal_ignoring_subkinds : t -> t -> bool
 
 val is_one_param_of_kind_value : t -> bool
 
+val must_be_one_param : t -> Flambda_kind.With_subkind.t option
+
 module Component : sig
   type t = private
     | Singleton of Flambda_kind.With_subkind.t
