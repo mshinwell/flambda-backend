@@ -767,6 +767,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
         List.map Flambda_arity.Component_for_creation.from_lambda layouts
         |> Flambda_arity.create
       in
+      (* XXX not right yet, shouldn't need to create bindings here *)
       let lam, fields_rev, _ =
         List.fold_left2
           (fun (lam, fields_rev, n) arg layout ->
@@ -778,7 +779,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
       in
       let fields = List.rev fields_rev in
       let env = Env.register_unboxed_product env ~unboxed_product:id ~fields in
-      Unboxed_binding (List.map fst fields, arity, env, fun body -> body))
+      Unboxed_binding (fields, env, fun _ccenv _args body -> body))
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array
@@ -788,6 +789,8 @@ let transform_primitive env id (prim : L.primitive) args loc =
       |> Flambda_arity.create
     in
     let field_arity =
+      (* The arity of the field being projected may in itself be an unboxed
+         product (see comment below). *)
       layouts_array.(n) |> Flambda_arity.Component_for_creation.from_lambda
       |> fun component -> [component] |> Flambda_arity.create
     in
@@ -1324,9 +1327,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         id,
         Lprim (prim, args, loc),
         body ) -> (
-    match
-      transform_primitive env ~id_and_body:(Some (id, body)) prim args loc
-    with
+    match transform_primitive env id prim args loc with
     | Primitive (prim, args, loc) ->
       (* This case avoids extraneous continuations. *)
       let exn_continuation : IR.exn_continuation option =
@@ -1352,14 +1353,16 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         (fun acc env ccenv (args : IR.simple list) ->
           cps_non_tail_simple acc env ccenv body
             (fun acc env ccenv (body_result : IR.simple list) ->
-              if List.compare_lengths body_result ids <> 0
+              if List.compare_lengths body_result ids_with_kinds <> 0
               then
                 Misc.fatal_errorf
                   "Body result Simple(s) (%a) for unboxed binding don't match \
-                   arity (%a): %a"
+                   length of identifier list (%d): %a"
                   (Format.pp_print_list ~pp_sep:Format.pp_print_space
                      IR.print_simple)
-                  body_result Flambda_arity.print arity Printlambda.lambda lam;
+                  body_result
+                  (List.length ids_with_kinds)
+                  Printlambda.lambda lam;
               let body = apply_cps_cont_simple k acc env ccenv body_result in
               List.fold_left2
                 (fun (acc, body) (id, kind) arg ->
