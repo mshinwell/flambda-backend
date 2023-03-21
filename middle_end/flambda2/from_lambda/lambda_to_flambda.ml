@@ -40,23 +40,27 @@ module Env : sig
 
   val is_mutable : t -> Ident.t -> bool
 
-  val register_mutable_variable : t -> Ident.t -> Lambda.layout -> t * Ident.t
+  val register_mutable_variable :
+    t -> Ident.t -> Flambda_kind.With_subkind.t -> t * Ident.t
 
   val update_mutable_variable : t -> Ident.t -> t * Ident.t
 
   val register_unboxed_product :
-    t -> unboxed_product:Ident.t -> fields:(Ident.t * Lambda.layout) list -> t
+    t ->
+    unboxed_product:Ident.t ->
+    fields:(Ident.t * Flambda_kind.With_subkind.t) list ->
+    t
 
   val find_component_of_unboxed_product :
     t ->
     unboxed_product:Ident.t ->
     field_num:int ->
-    (Ident.t * Lambda.layout) option
+    (Ident.t * Flambda_kind.With_subkind.t) option
 
   type add_continuation_result = private
     { body_env : t;
       handler_env : t;
-      extra_params : (Ident.t * Lambda.layout) list
+      extra_params : (Ident.t * Flambda_kind.With_subkind.t) list
     }
 
   val add_continuation :
@@ -82,11 +86,12 @@ module Env : sig
   val extra_args_for_continuation : t -> Continuation.t -> Ident.t list
 
   val extra_args_for_continuation_with_kinds :
-    t -> Continuation.t -> (Ident.t * Lambda.layout) list
+    t -> Continuation.t -> (Ident.t * Flambda_kind.With_subkind.t) list
 
   val get_mutable_variable : t -> Ident.t -> Ident.t
 
-  val get_mutable_variable_with_kind : t -> Ident.t -> Ident.t * Lambda.layout
+  val get_mutable_variable_with_kind :
+    t -> Ident.t -> Ident.t * Flambda_kind.With_subkind.t
 
   (** About local allocation regions:
 
@@ -182,10 +187,10 @@ end = struct
   type t =
     { current_unit : Compilation_unit.t;
       current_values_of_mutables_in_scope :
-        (Ident.t * Lambda.layout) Ident.Map.t;
+        (Ident.t * Flambda_kind.With_subkind.t) Ident.Map.t;
       mutables_needed_by_continuations : Ident.Set.t Continuation.Map.t;
       unboxed_product_components_in_scope :
-        (Ident.t * Lambda.layout) array Ident.Map.t;
+        (Ident.t * Flambda_kind.With_subkind.t) array Ident.Map.t;
       unboxed_product_components_needed_by_continuations :
         Ident.Set.t Continuation.Map.t;
       try_stack : Continuation.t list;
@@ -279,7 +284,7 @@ end = struct
   type add_continuation_result =
     { body_env : t;
       handler_env : t;
-      extra_params : (Ident.t * Lambda.layout) list
+      extra_params : (Ident.t * Flambda_kind.With_subkind.t) list
     }
 
   let add_continuation t cont ~push_to_try_stack (recursive : Asttypes.rec_flag)
@@ -498,8 +503,10 @@ module Acc = Closure_conversion_aux.Acc
 type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
-  | Transformed_with_env of Env.t * L.lambda
-  | Unboxed_binding of Ident.t list * Flambda_arity.t
+  | Unboxed_binding of
+      (Ident.t * Flambda_kind.With_subkind.t) list
+      * Env.t
+      * (CCenv.t -> IR.simple list -> Expr_with_acc.t -> Expr_with_acc.t)
 
 let must_be_singleton_simple simples =
   match simples with
@@ -526,13 +533,7 @@ let name_for_function (func : Lambda.lfunction) =
     Format.asprintf "anon-fn[%a]" print_compact_location loc
 
 let extra_args_for_exn_continuation env exn_handler =
-  let more_extra_args =
-    Env.extra_args_for_continuation_with_kinds env exn_handler
-  in
-  List.map
-    (fun (arg, kind) : (IR.simple * _) ->
-      Var arg, Flambda_kind.With_subkind.from_lambda kind)
-    more_extra_args
+  Env.extra_args_for_continuation_with_kinds env exn_handler
 
 let _print_stack ppf stack =
   Format.fprintf ppf "%a"
@@ -646,7 +647,7 @@ let switch_for_if_then_else ~cond ~ifso ~ifnot ~kind =
   in
   L.Lswitch (cond, switch, Loc_unknown, kind)
 
-let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
+let transform_primitive env id (prim : L.primitive) args loc =
   match prim, args with
   | Psequor, [arg1; arg2] ->
     let const_true = Ident.create_local "const_true" in
@@ -775,12 +776,9 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
               n + 1 ))
           (body, [], 0) args layouts
       in
-      let env =
-        Env.register_unboxed_product env ~unboxed_product:id
-          ~fields:(List.rev fields_rev)
-      in
-      (* XXX maybe this needs to be an unboxed binding too? *)
-      Transformed_with_env (env, lam))
+      let fields = List.rev fields_rev in
+      let env = Env.register_unboxed_product env ~unboxed_product:id ~fields in
+      Unboxed_binding (List.map fst fields, arity, env, fun body -> body))
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array
@@ -789,13 +787,53 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
       List.map Flambda_arity.Component_for_creation.from_lambda layouts
       |> Flambda_arity.create
     in
-    let ids =
+    let field_arity =
+      layouts_array.(n) |> Flambda_arity.Component_for_creation.from_lambda
+      |> fun component -> [component] |> Flambda_arity.create
+    in
+    let ids_all_fields_with_kinds =
       List.mapi
-        (fun n _ -> Ident.create_local (Printf.sprintf "unboxed%d" n))
+        (fun n kind -> Ident.create_local (Printf.sprintf "unboxed%d" n), kind)
         (Flambda_arity.unarize_flat arity)
     in
-    (* XXX this needs to then select the [n]th field *)
-    Unboxed_binding (ids, arity)
+    let num_fields_prior_to_projected_fields =
+      Misc.Stdlib.List.split_at n layouts
+      |> fst
+      |> List.map Flambda_arity.Component_for_creation.from_lambda
+      |> Flambda_arity.create |> Flambda_arity.cardinal_unarized
+    in
+    let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
+    let[@inline] cut_list_down_to_projected_fields fields =
+      assert (List.compare_lengths fields ids_all_fields_with_kinds = 0);
+      fields
+      |> Misc.Stdlib.List.split_at num_fields_prior_to_projected_fields
+      |> snd
+      |> Misc.Stdlib.List.split_at num_projected_fields
+      |> fst
+    in
+    let ids_projected_fields =
+      cut_list_down_to_projected_fields ids_all_fields_with_kinds
+    in
+    (* The field being projected, which is bound to [id], may in itself be an
+       unboxed product. In this case we must ensure any occurrences of [id] get
+       expanded to the individual fields. *)
+    let env =
+      if List.length ids_projected_fields > 1
+      then
+        Env.register_unboxed_product env ~unboxed_product:id
+          ~fields:ids_projected_fields
+      else env
+    in
+    let wrap_body ccenv args (acc, body) =
+      let args = cut_list_down_to_projected_fields args in
+      assert (List.compare_lengths ids_projected_fields args = 0);
+      List.fold_left2
+        (fun (acc, body) (id, kind) arg ->
+          CC.close_let acc ccenv id Not_user_visible kind (Simple arg)
+            ~body:(fun acc _ccenv -> acc, body))
+        (acc, body) ids_projected_fields args
+    in
+    Unboxed_binding (ids_all_fields_with_kinds, env, wrap_body)
   | Punboxed_product_field _, (([] | _ :: _) as args) ->
     Misc.fatal_errorf
       "Punboxed_product_field only takes one argument, but found: %a"
@@ -896,10 +934,7 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
       params
   in
   let extra_params =
-    List.map
-      (fun (id, kind) ->
-        id, IR.User_visible, Flambda_kind.With_subkind.from_lambda kind)
-      extra_params
+    List.map (fun (id, kind) -> id, IR.User_visible, kind) extra_params
   in
   let handler acc ccenv = handler acc handler_env ccenv in
   let body acc ccenv = body acc body_env ccenv cont in
@@ -1312,11 +1347,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             (Prim { prim; args; loc; exn_continuation; region })
             ~body)
         k_exn
-    | Unboxed_binding (ids, arity) ->
-      assert (List.length ids = Flambda_arity.cardinal_unarized arity);
-      let ids_with_kinds =
-        List.combine ids (Flambda_arity.unarize_flat arity)
-      in
+    | Unboxed_binding (ids_with_kinds, env, wrap_body) ->
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv (args : IR.simple list) ->
           cps_non_tail_simple acc env ccenv body
@@ -1334,12 +1365,11 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                 (fun (acc, body) (id, kind) arg ->
                   CC.close_let acc ccenv id Not_user_visible kind (Simple arg)
                     ~body:(fun acc _ccenv -> acc, body))
-                body ids_with_kinds args)
+                (wrap_body ccenv args body)
+                ids_with_kinds args)
             k_exn)
         k_exn
     | Transformed lam ->
-      cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn
-    | Transformed_with_env (env, lam) ->
       cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn)
   | Llet
       ( (Strict | Alias | StrictOpt),
