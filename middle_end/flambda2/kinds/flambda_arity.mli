@@ -72,4 +72,5 @@ val unarize : t -> Flambda_kind.With_subkind.t list list
     parameter. *)
 val unarize_flat : t -> Flambda_kind.With_subkind.t list
 
+(** The length of the list returned by [unarize_flat]. *)
 val cardinal_unarized : t -> int

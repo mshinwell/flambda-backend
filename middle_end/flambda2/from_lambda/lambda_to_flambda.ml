@@ -498,7 +498,7 @@ module Acc = Closure_conversion_aux.Acc
 type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
-  | Transformed_with_env of Env.t * L.lambda
+  | Unboxed_binding of Ident.t list * Flambda_arity.t
 
 let print_compact_location ppf (loc : Location.t) =
   if loc.loc_start.pos_fname = "//toplevel//"
@@ -767,20 +767,20 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
           ~fields:(List.rev fields_rev)
       in
       Transformed_with_env (env, lam))
-  | Punboxed_product_field (n, _layout), [L.Lvar unboxed_product] -> (
-    match
-      Env.find_component_of_unboxed_product env ~unboxed_product ~field_num:n
-    with
-    | None ->
-      Misc.fatal_errorf
-        "Unboxed product %a not registered, cannot project field %d" Ident.print
-        unboxed_product n
-    | Some (field, _layout) -> Transformed (L.Lvar field))
-  | Punboxed_product_field _, [unboxed_product] ->
-    Misc.fatal_errorf
-      "Cannot compile Punboxed_product_field unless its argument is Lvar, \
-       found: %a"
-      Printlambda.lambda unboxed_product
+  | Punboxed_product_field (n, layouts), [_] ->
+    let layouts_array = Array.of_list layouts in
+    if n < 0 || n >= Array.length layouts_array
+    then Misc.fatal_errorf "Invalid field index %d for Punboxed_product_field" n;
+    let arity =
+      List.map Flambda_arity.Component_for_creation.from_lambda layouts
+      |> Flambda_arity.create
+    in
+    let ids =
+      List.mapi
+        (fun n _ -> Ident.create_local (Printf.sprintf "unboxed%d" n))
+        (Flambda_arity.unarize_flat arity)
+    in
+    Unboxed_binding (ids, arity)
   | Punboxed_product_field _, (([] | _ :: _) as args) ->
     Misc.fatal_errorf
       "Punboxed_product_field only takes one argument, but found: %a"
@@ -1165,20 +1165,21 @@ let primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t =
     |> List.map Flambda_arity.Component_for_creation.from_lambda
     |> Flambda_arity.create
   | Punboxed_product_field (_n, layout) ->
+    (* XXX need to get the correct field *)
     Flambda_arity.create
       [Flambda_arity.Component_for_creation.from_lambda layout]
 
 type cps_continuation =
   | Tail of Continuation.t
-  | Non_tail of (Acc.t -> Env.t -> CCenv.t -> IR.simple -> Expr_with_acc.t)
+  | Non_tail of (Acc.t -> Env.t -> CCenv.t -> IR.simple list -> Expr_with_acc.t)
 
 let apply_cps_cont_simple k ?(dbg = Debuginfo.none) acc env ccenv simple =
   match k with
-  | Tail k -> apply_cont_with_extra_args acc env ccenv ~dbg k None [simple]
+  | Tail k -> apply_cont_with_extra_args acc env ccenv ~dbg k None simple
   | Non_tail k -> k acc env ccenv simple
 
 let apply_cps_cont k ?dbg acc env ccenv id =
-  apply_cps_cont_simple k ?dbg acc env ccenv (IR.Var id)
+  apply_cps_cont_simple k ?dbg acc env ccenv [IR.Var id]
 
 let maybe_insert_let_cont result_var_name kind k acc env ccenv body =
   match k with
@@ -1187,7 +1188,7 @@ let maybe_insert_let_cont result_var_name kind k acc env ccenv body =
     let result_var = Ident.create_local result_var_name in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
       ~params:[result_var, IR.Not_user_visible, kind]
-      ~handler:(fun acc env ccenv -> k acc env ccenv (IR.Var result_var))
+      ~handler:(fun acc env ccenv -> k acc env ccenv [IR.Var result_var])
       ~body
 
 let name_if_not_var acc ccenv name simple kind body =
@@ -1207,7 +1208,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
   | Lmutvar id ->
     let return_id = Env.get_mutable_variable env id in
     apply_cps_cont k acc env ccenv return_id
-  | Lconst const -> apply_cps_cont_simple k acc env ccenv (IR.Const const)
+  | Lconst const -> apply_cps_cont_simple k acc env ccenv [IR.Const const]
   | Lapply
       { ap_func;
         ap_args;
@@ -1294,8 +1295,31 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             (Prim { prim; args; loc; exn_continuation; region })
             ~body)
         k_exn
-    | Transformed_with_env (env, lam) ->
-      cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn
+    | Unboxed_binding (ids, arity) ->
+      assert (List.length ids = Flambda_arity.cardinal_unarized arity);
+      let ids_with_kinds =
+        List.combine ids (Flambda_arity.unarize_flat arity)
+      in
+      cps_non_tail_list acc env ccenv args
+        (fun acc env ccenv (args : IR.simple list) ->
+          cps_non_tail acc env ccenv body
+            (fun acc env ccenv (body_result : IR.simple list) ->
+              if List.compare_lengths body_result ids <> 0
+              then
+                Misc.fatal_errorf
+                  "Body result Simple(s) (%a) for unboxed binding don't match \
+                   arity (%a): %a"
+                  (Format.pp_print_list ~pp_sep:Format.pp_print_space
+                     IR.print_simple)
+                  body_result Flambda_arity.print arity Printlambda.lambda lam;
+              let body = apply_cps_cont_simple k acc env ccenv body_result in
+              List.fold_left2
+                (fun (acc, body) (id, kind) arg ->
+                  CC.close_let acc ccenv id Not_user_visible kind (Simple arg)
+                    ~body:(fun acc _ccenv -> acc, body))
+                body ids_with_kinds args)
+            k_exn)
+        k_exn
     | Transformed lam ->
       cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn)
   | Llet
@@ -1549,7 +1573,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       (fun acc env ccenv new_value ->
         let env, new_id = Env.update_mutable_variable env being_assigned in
         let body acc ccenv =
-          apply_cps_cont_simple k acc env ccenv (Const L.const_unit)
+          apply_cps_cont_simple k acc env ccenv [Const L.const_unit]
         in
         let _, value_kind =
           Env.get_mutable_variable_with_kind env being_assigned
@@ -1677,7 +1701,7 @@ and cps_non_tail_list acc env ccenv lams k k_exn =
     k_exn
 
 and cps_non_tail_list_core acc env ccenv (lams : L.lambda list)
-    (k : Acc.t -> Env.t -> CCenv.t -> IR.simple list -> Expr_with_acc.t)
+    (k : Acc.t -> Env.t -> CCenv.t -> IR.simple list list -> Expr_with_acc.t)
     (k_exn : Continuation.t) =
   match lams with
   | [] -> k acc env ccenv []

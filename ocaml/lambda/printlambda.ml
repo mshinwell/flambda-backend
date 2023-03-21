@@ -303,8 +303,9 @@ let primitive ppf = function
   | Pmake_unboxed_product layouts ->
       fprintf ppf "make_unboxed_product (%a)"
         (pp_print_list ~pp_sep:pp_print_space layout) layouts
-  | Punboxed_product_field (n, layout_) ->
-      fprintf ppf "unboxed_product_field %d %a" n layout layout_
+  | Punboxed_product_field (n, layouts) ->
+      fprintf ppf "unboxed_product_field %d %a" n
+        (pp_print_list ~pp_sep:pp_print_space layout) layouts
   | Pccall p -> fprintf ppf "%s" p.prim_name
   | Praise k -> fprintf ppf "%s" (Lambda.raise_kind k)
   | Psequand -> fprintf ppf "&&"

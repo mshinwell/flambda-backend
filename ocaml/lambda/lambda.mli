@@ -97,7 +97,7 @@ type primitive =
   | Pduprecord of Types.record_representation * int
   (* Unboxed products *)
   | Pmake_unboxed_product of layout list
-  | Punboxed_product_field of int * layout
+  | Punboxed_product_field of int * (layout list)
   (* External call *)
   | Pccall of Primitive.description
   (* Exceptions *)
