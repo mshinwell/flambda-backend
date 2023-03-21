@@ -762,6 +762,10 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
           layouts
           (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.lambda)
           args;
+      let arity =
+        List.map Flambda_arity.Component_for_creation.from_lambda layouts
+        |> Flambda_arity.create
+      in
       let lam, fields_rev, _ =
         List.fold_left2
           (fun (lam, fields_rev, n) arg layout ->
@@ -775,6 +779,7 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
         Env.register_unboxed_product env ~unboxed_product:id
           ~fields:(List.rev fields_rev)
       in
+      (* XXX maybe this needs to be an unboxed binding too? *)
       Transformed_with_env (env, lam))
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
@@ -789,6 +794,7 @@ let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
         (fun n _ -> Ident.create_local (Printf.sprintf "unboxed%d" n))
         (Flambda_arity.unarize_flat arity)
     in
+    (* XXX this needs to then select the [n]th field *)
     Unboxed_binding (ids, arity)
   | Punboxed_product_field _, (([] | _ :: _) as args) ->
     Misc.fatal_errorf
