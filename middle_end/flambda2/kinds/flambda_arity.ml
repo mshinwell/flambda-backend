@@ -22,7 +22,9 @@ module Component = struct
   let rec equal_ignoring_subkinds t1 t2 =
     match t1, t2 with
     | Singleton kind1, Singleton kind2 ->
-      Flambda_kind.With_subkind.equal kind1 kind2
+      Flambda_kind.With_subkind.equal
+        (Flambda_kind.With_subkind.erase_subkind kind1)
+        (Flambda_kind.With_subkind.erase_subkind kind2)
     | Unboxed_product ts1, Unboxed_product ts2 ->
       List.equal equal_ignoring_subkinds ts1 ts2
     | Singleton _, Unboxed_product _ | Unboxed_product _, Singleton _ -> false

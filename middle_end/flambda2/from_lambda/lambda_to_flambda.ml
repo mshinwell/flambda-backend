@@ -44,6 +44,15 @@ module Env : sig
 
   val update_mutable_variable : t -> Ident.t -> t * Ident.t
 
+  val register_unboxed_product :
+    t -> unboxed_product:Ident.t -> fields:(Ident.t * Lambda.layout) list -> t
+
+  val find_component_of_unboxed_product :
+    t ->
+    unboxed_product:Ident.t ->
+    field_num:int ->
+    (Ident.t * Lambda.layout) option
+
   type add_continuation_result = private
     { body_env : t;
       handler_env : t;
@@ -175,6 +184,10 @@ end = struct
       current_values_of_mutables_in_scope :
         (Ident.t * Lambda.layout) Ident.Map.t;
       mutables_needed_by_continuations : Ident.Set.t Continuation.Map.t;
+      unboxed_product_components_in_scope :
+        (Ident.t * Lambda.layout) array Ident.Map.t;
+      unboxed_product_components_needed_by_continuations :
+        Ident.Set.t Continuation.Map.t;
       try_stack : Continuation.t list;
       try_stack_at_handler : Continuation.t list Continuation.Map.t;
       static_exn_continuation : Continuation.t Numeric_types.Int.Map.t;
@@ -190,9 +203,15 @@ end = struct
       Continuation.Map.of_list
         [return_continuation, Ident.Set.empty; exn_continuation, Ident.Set.empty]
     in
+    let unboxed_product_components_needed_by_continuations =
+      Continuation.Map.of_list
+        [return_continuation, Ident.Set.empty; exn_continuation, Ident.Set.empty]
+    in
     { current_unit;
       current_values_of_mutables_in_scope = Ident.Map.empty;
       mutables_needed_by_continuations;
+      unboxed_product_components_in_scope = Ident.Map.empty;
+      unboxed_product_components_needed_by_continuations;
       try_stack = [];
       try_stack_at_handler = Continuation.Map.empty;
       static_exn_continuation = Numeric_types.Int.Map.empty;
@@ -232,6 +251,31 @@ end = struct
 
   let mutables_in_scope t = Ident.Map.keys t.current_values_of_mutables_in_scope
 
+  let register_unboxed_product t ~unboxed_product ~fields =
+    { t with
+      unboxed_product_components_in_scope =
+        Ident.Map.add unboxed_product (Array.of_list fields)
+          t.unboxed_product_components_in_scope
+    }
+
+  let find_component_of_unboxed_product t ~unboxed_product ~field_num =
+    if field_num < 0 then Misc.fatal_errorf "Invalid field number %d" field_num;
+    match
+      Ident.Map.find unboxed_product t.unboxed_product_components_in_scope
+    with
+    | exception Not_found -> None
+    | fields ->
+      if field_num >= Array.length fields
+      then
+        Misc.fatal_errorf
+          "Unboxed product %a only has %d fields, but projection requested for \
+           field %d"
+          Ident.print unboxed_product (Array.length fields) field_num;
+      Some fields.(field_num)
+
+  let unboxed_product_components_in_scope t =
+    Ident.Map.keys t.unboxed_product_components_in_scope
+
   type add_continuation_result =
     { body_env : t;
       handler_env : t;
@@ -248,11 +292,17 @@ end = struct
         Continuation.Map.add cont (mutables_in_scope t)
           t.mutables_needed_by_continuations
       in
+      let unboxed_product_components_needed_by_continuations =
+        Continuation.Map.add cont
+          (unboxed_product_components_in_scope t)
+          t.unboxed_product_components_needed_by_continuations
+      in
       let try_stack =
         if push_to_try_stack then cont :: t.try_stack else t.try_stack
       in
       { t with
         mutables_needed_by_continuations;
+        unboxed_product_components_needed_by_continuations;
         try_stack;
         region_stack_in_cont_scope
       }
@@ -261,6 +311,12 @@ end = struct
       Ident.Map.mapi
         (fun mut_var (_outer_value, kind) -> Ident.rename mut_var, kind)
         t.current_values_of_mutables_in_scope
+    in
+    let unboxed_product_components_in_scope =
+      Ident.Map.map
+        (fun fields ->
+          Array.map (fun (field, layout) -> Ident.rename field, layout) fields)
+        t.unboxed_product_components_in_scope
     in
     let handler_env =
       let handler_env =
@@ -273,11 +329,17 @@ end = struct
       in
       { handler_env with
         current_values_of_mutables_in_scope;
+        unboxed_product_components_in_scope;
         region_stack_in_cont_scope
       }
     in
+    let extra_params_for_unboxed_products =
+      Ident.Map.data handler_env.unboxed_product_components_in_scope
+      |> List.map Array.to_list |> List.concat
+    in
     let extra_params =
       Ident.Map.data handler_env.current_values_of_mutables_in_scope
+      @ extra_params_for_unboxed_products
     in
     { body_env; handler_env; extra_params }
 
@@ -436,6 +498,7 @@ module Acc = Closure_conversion_aux.Acc
 type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
+  | Transformed_with_env of Env.t * L.lambda
 
 let print_compact_location ppf (loc : Location.t) =
   if loc.loc_start.pos_fname = "//toplevel//"
@@ -574,7 +637,7 @@ let switch_for_if_then_else ~cond ~ifso ~ifnot ~kind =
   in
   L.Lswitch (cond, switch, Loc_unknown, kind)
 
-let transform_primitive env (prim : L.primitive) args loc =
+let transform_primitive env ~id_and_body (prim : L.primitive) args loc =
   match prim, args with
   | Psequor, [arg1; arg2] ->
     let const_true = Ident.create_local "const_true" in
@@ -672,11 +735,57 @@ let transform_primitive env (prim : L.primitive) args loc =
         Primitive (L.Pccall desc, args, loc)
       else
         Misc.fatal_errorf
-          "Lambda_to_flambda.transform_primimive: Pbigarrayset with unknown \
+          "Lambda_to_flambda.transform_primitive: Pbigarrayset with unknown \
            layout and elements should only have dimensions between 1 and 3 \
            (see translprim).")
-  | Pmake_unboxed_product _, _ | Punboxed_product_field _, _ ->
-    Misc.fatal_error "TODO"
+  | Pmake_unboxed_product layouts, args -> (
+    match id_and_body with
+    | None ->
+      Misc.fatal_error
+        "Pmake_unboxed_product can only occur as the defining expression of \
+         Llet"
+    | Some (id, body) ->
+      if List.compare_lengths layouts args <> 0
+      then
+        Misc.fatal_errorf
+          "Pmake_unboxed_product layouts (%a) don't match arguments (%a)"
+          (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout)
+          layouts
+          (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.lambda)
+          args;
+      let lam, fields_rev, _ =
+        List.fold_left2
+          (fun (lam, fields_rev, n) arg layout ->
+            let field = Ident.create_local (Printf.sprintf "unboxed%d" n) in
+            ( L.Llet (Strict, layout, field, arg, lam),
+              (field, layout) :: fields_rev,
+              n + 1 ))
+          (body, [], 0) args layouts
+      in
+      let env =
+        Env.register_unboxed_product env ~unboxed_product:id
+          ~fields:(List.rev fields_rev)
+      in
+      Transformed_with_env (env, lam))
+  | Punboxed_product_field (n, _layout), [L.Lvar unboxed_product] -> (
+    match
+      Env.find_component_of_unboxed_product env ~unboxed_product ~field_num:n
+    with
+    | None ->
+      Misc.fatal_errorf
+        "Unboxed product %a not registered, cannot project field %d" Ident.print
+        unboxed_product n
+    | Some (field, _layout) -> Transformed (L.Lvar field))
+  | Punboxed_product_field _, [unboxed_product] ->
+    Misc.fatal_errorf
+      "Cannot compile Punboxed_product_field unless its argument is Lvar, \
+       found: %a"
+      Printlambda.lambda unboxed_product
+  | Punboxed_product_field _, (([] | _ :: _) as args) ->
+    Misc.fatal_errorf
+      "Punboxed_product_field only takes one argument, but found: %a"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.lambda)
+      args
   | _, _ -> Primitive (prim, args, loc)
   [@@ocaml.warning "-fragile-match"]
 
@@ -1162,7 +1271,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         id,
         Lprim (prim, args, loc),
         body ) -> (
-    match transform_primitive env prim args loc with
+    match
+      transform_primitive env ~id_and_body:(Some (id, body)) prim args loc
+    with
     | Primitive (prim, args, loc) ->
       (* This case avoids extraneous continuations. *)
       let exn_continuation : IR.exn_continuation option =
@@ -1183,6 +1294,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             (Prim { prim; args; loc; exn_continuation; region })
             ~body)
         k_exn
+    | Transformed_with_env (env, lam) ->
+      cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn
     | Transformed lam ->
       cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn)
   | Llet
@@ -1236,7 +1349,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         ~current_region:(Env.current_region env)
     | Dissected lam -> cps acc env ccenv lam k k_exn)
   | Lprim (prim, args, loc) -> (
-    match transform_primitive env prim args loc with
+    match transform_primitive env ~id_and_body:None prim args loc with
     | Primitive (prim, args, loc) -> (
       let name = Printlambda.name_of_primitive prim in
       let result_var = Ident.create_local name in
@@ -1269,7 +1382,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                  { prim; args; loc; exn_continuation; region = current_region })
               ~body)
           k_exn)
-    | Transformed lam -> cps acc env ccenv lam k k_exn)
+    | Transformed lam -> cps acc env ccenv lam k k_exn
+    | Transformed_with_env (env, lam) -> cps acc env ccenv lam k k_exn)
   | Lswitch (scrutinee, switch, loc, kind) ->
     maybe_insert_let_cont "switch_result" kind k acc env ccenv
       (fun acc env ccenv k ->
