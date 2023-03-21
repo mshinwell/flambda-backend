@@ -234,14 +234,16 @@ let make_rewrite rewrite ~ctx id args =
 
 let rewrite_exn_continuation rewrite id exn_cont =
   let exn_cont_arity = Exn_continuation.arity exn_cont in
-  if not (Flambda_arity.equal_ignoring_subkinds exn_cont_arity (original_params_arity rewrite))
+  if not
+       (Flambda_arity.equal_ignoring_subkinds exn_cont_arity
+          (original_params_arity rewrite))
   then
     Misc.fatal_errorf
       "Arity of exception continuation %a does not match@ [original_params] \
        (%a)"
       Exn_continuation.print exn_cont Bound_parameters.print
       rewrite.original_params;
-  assert (Flambda_arity.cardinal exn_cont_arity >= 1);
+  assert (Flambda_arity.cardinal_unarized exn_cont_arity >= 1);
   if List.hd rewrite.original_params_usage <> Used
   then
     Misc.fatal_errorf

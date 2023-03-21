@@ -81,7 +81,7 @@ let to_list_not_unarized t = t
 let equal_ignoring_subkinds t1 t2 =
   List.equal Component.equal_ignoring_subkinds t1 t2
 
-let is_singleton_value_not_unarized t =
+let is_one_param_of_kind_value t =
   match t with
   | [Component.Singleton kind]
     when Flambda_kind.equal
@@ -90,6 +90,8 @@ let is_singleton_value_not_unarized t =
     true
   | [] | Component.Singleton _ :: _ | Component.Unboxed_product _ :: _ -> false
 
-let cardinal_not_unarized t = List.length t
-
 let unarize t = List.map Component.unarize t
+
+let unarize_flat t = List.concat (unarize t)
+
+let cardinal_unarized t = List.length (unarize_flat t)

@@ -52,9 +52,7 @@ val print : Format.formatter -> t -> unit
 
 val equal_ignoring_subkinds : t -> t -> bool
 
-val cardinal_not_unarized : t -> int
-
-val is_singleton_value_not_unarized : t -> bool
+val is_one_param_of_kind_value : t -> bool
 
 module Component : sig
   type t = private
@@ -67,3 +65,9 @@ val to_list_not_unarized : t -> Component.t list
 (** Convert, in a left-to-right depth-first order, an arity into a flattened
     list of kinds for each parameter. *)
 val unarize : t -> Flambda_kind.With_subkind.t list list
+
+(** Like [unarize] but only returns a single list, not one list per
+    parameter. *)
+val unarize_flat : t -> Flambda_kind.With_subkind.t list
+
+val cardinal_unarized : t -> int
