@@ -498,7 +498,16 @@ module Acc = Closure_conversion_aux.Acc
 type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
+  | Transformed_with_env of Env.t * L.lambda
   | Unboxed_binding of Ident.t list * Flambda_arity.t
+
+let must_be_singleton_simple simples =
+  match simples with
+  | [simple] -> simple
+  | [] | _ :: _ ->
+    Misc.fatal_errorf "Expected singleton Simple but got: %a"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space IR.print_simple)
+      simples
 
 let print_compact_location ppf (loc : Location.t) =
   if loc.loc_start.pos_fname = "//toplevel//"
@@ -1160,14 +1169,16 @@ let primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t =
         | Pint32 -> Flambda_kind.With_subkind.naked_int32
         | Pint64 -> Flambda_kind.With_subkind.naked_int64
         | Pnativeint -> Flambda_kind.With_subkind.naked_nativeint) ]
-  | Pmake_unboxed_product layouts ->
-    layouts
-    |> List.map Flambda_arity.Component_for_creation.from_lambda
-    |> Flambda_arity.create
-  | Punboxed_product_field (_n, layout) ->
-    (* XXX need to get the correct field *)
-    Flambda_arity.create
-      [Flambda_arity.Component_for_creation.from_lambda layout]
+  | Pmake_unboxed_product _ | Punboxed_product_field _ ->
+    Misc.fatal_errorf "Primitive not allowed here:@ %a" Printlambda.primitive
+      prim
+(* | Pmake_unboxed_product layouts -> layouts |> List.map
+   Flambda_arity.Component_for_creation.from_lambda |> Flambda_arity.create |
+   Punboxed_product_field (n, layout) -> let layouts_array = Array.of_list
+   layouts in if n < 0 || n >= Array.length layouts_array then Misc.fatal_errorf
+   "Invalid field index %d for Punboxed_product_field" n; (* XXX need to get the
+   correct field *) Flambda_arity.create
+   [Flambda_arity.Component_for_creation.from_lambda layout] *)
 
 type cps_continuation =
   | Tail of Continuation.t
@@ -1302,7 +1313,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       in
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv (args : IR.simple list) ->
-          cps_non_tail acc env ccenv body
+          cps_non_tail_simple acc env ccenv body
             (fun acc env ccenv (body_result : IR.simple list) ->
               if List.compare_lengths body_result ids <> 0
               then
@@ -1321,6 +1332,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             k_exn)
         k_exn
     | Transformed lam ->
+      cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn
+    | Transformed_with_env (env, lam) ->
       cps acc env ccenv (L.Llet (let_kind, layout, id, lam, body)) k k_exn)
   | Llet
       ( (Strict | Alias | StrictOpt),
@@ -1336,6 +1349,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         being_assigned;
     cps_non_tail_simple acc env ccenv new_value
       (fun acc env ccenv new_value ->
+        let new_value = must_be_singleton_simple new_value in
         let env, new_id = Env.update_mutable_variable env being_assigned in
         let body acc ccenv =
           let body acc ccenv = cps acc env ccenv body k k_exn in
@@ -1406,8 +1420,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                  { prim; args; loc; exn_continuation; region = current_region })
               ~body)
           k_exn)
-    | Transformed lam -> cps acc env ccenv lam k k_exn
-    | Transformed_with_env (env, lam) -> cps acc env ccenv lam k k_exn)
+    | Unboxed_binding _ -> assert false (* XXX *)
+    | Transformed lam -> cps acc env ccenv lam k k_exn)
   | Lswitch (scrutinee, switch, loc, kind) ->
     maybe_insert_let_cont "switch_result" kind k acc env ccenv
       (fun acc env ccenv k ->
