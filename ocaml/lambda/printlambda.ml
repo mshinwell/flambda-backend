@@ -87,7 +87,7 @@ let rec value_kind ppf = function
     variant_kind value_kind' ppf ~consts ~non_consts
 
 and value_kind' ppf = function
-  | Pgenval -> fprintf ppf "*"
+  | Pgenval -> fprintf ppf "[val]"
   | Pintval -> fprintf ppf "[int]"
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
@@ -97,7 +97,7 @@ and value_kind' ppf = function
 
 let rec layout ppf layout_ =
   match layout_ with
-  | Pvalue k -> value_kind ppf k
+  | Pvalue k -> value_kind' ppf k
   | Ptop -> fprintf ppf "[top]"
   | Pbottom -> fprintf ppf "[bottom]"
   | Punboxed_float -> fprintf ppf "[unboxed_float]"
@@ -301,11 +301,11 @@ let primitive ppf = function
       fprintf ppf "setfloatfield%s %i" init n
   | Pduprecord (rep, size) -> fprintf ppf "duprecord %a %i" record_rep rep size
   | Pmake_unboxed_product layouts ->
-      fprintf ppf "make_unboxed_product (%a)"
-        (pp_print_list ~pp_sep:pp_print_space layout) layouts
+      fprintf ppf "make_unboxed_product [%a]"
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") layout) layouts
   | Punboxed_product_field (n, layouts) ->
-      fprintf ppf "unboxed_product_field %d %a" n
-        (pp_print_list ~pp_sep:pp_print_space layout) layouts
+      fprintf ppf "unboxed_product_field %d [%a]" n
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") layout) layouts
   | Pccall p -> fprintf ppf "%s" p.prim_name
   | Praise k -> fprintf ppf "%s" (Lambda.raise_kind k)
   | Psequand -> fprintf ppf "&&"

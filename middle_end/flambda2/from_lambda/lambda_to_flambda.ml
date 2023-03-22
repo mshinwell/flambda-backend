@@ -51,8 +51,7 @@ module Env : sig
     fields:(Ident.t * Flambda_kind.With_subkind.t) list ->
     t
 
-  (* val find_component_of_unboxed_product : t -> unboxed_product:Ident.t ->
-     field_num:int -> (Ident.t * Flambda_kind.With_subkind.t) option *)
+  val get_unboxed_product_fields : t -> Ident.t -> Ident.t list option
 
   type add_continuation_result = private
     { body_env : t;
@@ -89,8 +88,6 @@ module Env : sig
 
   val get_mutable_variable_with_kind :
     t -> Ident.t -> Ident.t * Flambda_kind.With_subkind.t
-
-  val get_unboxed_product_fields : t -> Ident.t -> Ident.t list option
 
   (** About local allocation regions:
 
@@ -256,26 +253,17 @@ end = struct
   let mutables_in_scope t = Ident.Map.keys t.current_values_of_mutables_in_scope
 
   let register_unboxed_product t ~unboxed_product ~fields =
+    Format.eprintf "register_unboxed_product %a: fields: %a\n%!" Ident.print
+      unboxed_product
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf (id, kind) ->
+           Format.fprintf ppf "%a :: %a" Ident.print id
+             Flambda_kind.With_subkind.print kind))
+      fields;
     { t with
       unboxed_product_components_in_scope =
         Ident.Map.add unboxed_product (Array.of_list fields)
           t.unboxed_product_components_in_scope
     }
-
-  let _find_component_of_unboxed_product t ~unboxed_product ~field_num =
-    if field_num < 0 then Misc.fatal_errorf "Invalid field number %d" field_num;
-    match
-      Ident.Map.find unboxed_product t.unboxed_product_components_in_scope
-    with
-    | exception Not_found -> None
-    | fields ->
-      if field_num >= Array.length fields
-      then
-        Misc.fatal_errorf
-          "Unboxed product %a only has %d fields, but projection requested for \
-           field %d"
-          Ident.print unboxed_product (Array.length fields) field_num;
-      Some fields.(field_num)
 
   let unboxed_product_components_in_scope t =
     Ident.Map.keys t.unboxed_product_components_in_scope
@@ -345,6 +333,10 @@ end = struct
       Ident.Map.data handler_env.current_values_of_mutables_in_scope
       @ extra_params_for_unboxed_products
     in
+    Format.eprintf "Adding continuation %a with extra params: %a\n%!"
+      Continuation.print cont
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
+      (List.map fst extra_params);
     { body_env; handler_env; extra_params }
 
   let add_static_exn_continuation t static_exn cont =
@@ -396,18 +388,46 @@ end = struct
     | stack -> stack
 
   let extra_args_for_continuation_with_kinds t cont =
-    match Continuation.Map.find cont t.mutables_needed_by_continuations with
-    | exception Not_found ->
-      Misc.fatal_errorf "Unbound continuation %a" Continuation.print cont
-    | mutables ->
-      let mutables = Ident.Set.elements mutables in
-      List.map
-        (fun mut ->
-          match Ident.Map.find mut t.current_values_of_mutables_in_scope with
-          | exception Not_found ->
-            Misc.fatal_errorf "No current value for %a" Ident.print mut
-          | current_value, kind -> current_value, kind)
-        mutables
+    let for_mutables =
+      match Continuation.Map.find cont t.mutables_needed_by_continuations with
+      | exception Not_found ->
+        Misc.fatal_errorf "Unbound continuation %a" Continuation.print cont
+      | mutables ->
+        let mutables = Ident.Set.elements mutables in
+        List.map
+          (fun mut ->
+            match Ident.Map.find mut t.current_values_of_mutables_in_scope with
+            | exception Not_found ->
+              Misc.fatal_errorf "No current value for %a" Ident.print mut
+            | current_value, kind -> current_value, kind)
+          mutables
+    in
+    let for_unboxed_products =
+      match
+        Continuation.Map.find cont
+          t.unboxed_product_components_needed_by_continuations
+      with
+      | exception Not_found ->
+        Misc.fatal_errorf "Unbound continuation %a" Continuation.print cont
+      | unboxed_products_to_fields ->
+        let unboxed_products = Ident.Set.elements unboxed_products_to_fields in
+        List.concat_map
+          (fun unboxed_product ->
+            match
+              Ident.Map.find unboxed_product
+                t.unboxed_product_components_in_scope
+            with
+            | exception Not_found ->
+              Misc.fatal_errorf
+                "No field list registered for unboxed product %a" Ident.print
+                unboxed_product
+            | fields -> Array.to_list fields)
+          unboxed_products
+    in
+    Format.eprintf "Extra args for %a are: %a\n%!" Continuation.print cont
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
+      (List.map fst (for_mutables @ for_unboxed_products));
+    for_mutables @ for_unboxed_products
 
   let extra_args_for_continuation t cont =
     List.map fst (extra_args_for_continuation_with_kinds t cont)
@@ -759,6 +779,8 @@ let transform_primitive env id (prim : L.primitive) args loc =
            layout and elements should only have dimensions between 1 and 3 \
            (see translprim).")
   | Pmake_unboxed_product layouts, args ->
+    (* CR mshinwell: should there be a case here for when args is a
+       singleton? *)
     if List.compare_lengths layouts args <> 0
     then
       Misc.fatal_errorf
@@ -1348,8 +1370,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         id,
         Lprim (prim, args, loc),
         body ) -> (
-    Format.eprintf "Handling let %a = %a\n%!" Ident.print id Printlambda.lambda
-      lam;
+    Format.eprintf "Handling let-binding: %a\n%!" Printlambda.lambda lam;
     match transform_primitive env id prim args loc with
     | Primitive (prim, args, loc) ->
       (* This case avoids extraneous continuations. *)
