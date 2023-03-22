@@ -528,7 +528,7 @@ type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
   | Unboxed_binding of
-      (Ident.t * Flambda_kind.With_subkind.t) list
+      (Ident.t * Flambda_kind.With_subkind.t) option list
       * Env.t
       * (IR.simple list ->
         (Acc.t -> CCenv.t -> Expr_with_acc.t) ->
@@ -803,6 +803,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
     let env = Env.register_unboxed_product env ~unboxed_product:id ~fields in
     Format.eprintf "Making unboxed product, bound to %a: num fields = %d\n%!"
       Ident.print id (List.length fields);
+    let fields = List.map (fun ident_and_kind -> Some ident_and_kind) fields in
     Unboxed_binding (fields, env, fun _args body -> body)
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
@@ -856,25 +857,29 @@ let transform_primitive env id (prim : L.primitive) args loc =
        %!"
       (List.length ids_all_fields_with_kinds)
       (List.length ids_projected_fields);
-    let wrapper args (body : Acc.t -> CCenv.t -> Expr_with_acc.t) :
-        Acc.t -> CCenv.t -> Expr_with_acc.t =
-      let args = cut_list_down_to_projected_fields args in
-      assert (List.compare_lengths ids_projected_fields args = 0);
-      let ids_projected_fields =
-        (* In the case where only a single variable is required, i.e. we haven't
-           registered [id] as an unboxed product above, we must actually bind
-           [id] itself. *)
-        match ids_projected_fields with
-        | [(_, kind)] -> [id, kind]
-        | [] | _ :: _ -> ids_projected_fields
-      in
-      List.fold_left2
-        (fun body (id, kind) arg : (Acc.t -> CCenv.t -> Expr_with_acc.t) ->
-          fun acc ccenv ->
-           CC.close_let acc ccenv id Not_user_visible kind (Simple arg) ~body)
-        body ids_projected_fields args
+    let field_mask =
+      List.mapi
+        (fun cur_field (field, kind) ->
+          if cur_field < n || cur_field >= n + List.length ids_projected_fields
+          then None
+          else
+            match ids_projected_fields with
+            | [(_, kind)] -> Some (id, kind)
+            | [] | _ :: _ -> Some (field, kind))
+        ids_all_fields_with_kinds
     in
-    Unboxed_binding (ids_all_fields_with_kinds, env, wrapper)
+    (* let wrapper args (body : Acc.t -> CCenv.t -> Expr_with_acc.t) : Acc.t ->
+       CCenv.t -> Expr_with_acc.t = let args = cut_list_down_to_projected_fields
+       args in assert (List.compare_lengths ids_projected_fields args = 0); let
+       ids_projected_fields = (* In the case where only a single variable is
+       required, i.e. we haven't registered [id] as an unboxed product above, we
+       must actually bind [id] itself. *) match ids_projected_fields with | [(_,
+       kind)] -> [id, kind] | [] | _ :: _ -> ids_projected_fields in
+       List.fold_left2 (fun body (id, kind) arg : (Acc.t -> CCenv.t ->
+       Expr_with_acc.t) -> fun acc ccenv -> CC.close_let acc ccenv id
+       Not_user_visible kind (Simple arg) ~body) body ids_projected_fields args
+       in *)
+    Unboxed_binding (field_mask, env, fun _ body -> body (* wrapper*))
   | Punboxed_product_field _, (([] | _ :: _) as args) ->
     Misc.fatal_errorf
       "Punboxed_product_field only takes one argument, but found: %a"
@@ -1395,18 +1400,21 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     | Unboxed_binding (ids_with_kinds, env, wrapper) ->
       Format.eprintf "Unboxed_binding: (%a)\n%!"
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
-           (fun ppf (id, kind) ->
-             Format.fprintf ppf "%a :: %a" Ident.print id
-               Flambda_kind.With_subkind.print kind))
+           (Misc.Stdlib.Option.print (fun ppf (id, kind) ->
+                Format.fprintf ppf "%a :: %a" Ident.print id
+                  Flambda_kind.With_subkind.print kind)))
         ids_with_kinds;
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv (args : IR.simple list) ->
           let body acc ccenv = cps acc env ccenv body k k_exn in
           let builder =
             List.fold_left2
-              (fun body (id, kind) arg acc ccenv ->
-                CC.close_let acc ccenv id Not_user_visible kind (Simple arg)
-                  ~body)
+              (fun body id_and_kind_opt arg acc ccenv ->
+                match id_and_kind_opt with
+                | None -> body acc ccenv
+                | Some (id, kind) ->
+                  CC.close_let acc ccenv id Not_user_visible kind (Simple arg)
+                    ~body)
               (wrapper args body) ids_with_kinds args
           in
           builder acc ccenv
