@@ -90,6 +90,8 @@ module Env : sig
   val get_mutable_variable_with_kind :
     t -> Ident.t -> Ident.t * Flambda_kind.With_subkind.t
 
+  val get_unboxed_product_fields : t -> Ident.t -> Ident.t list option
+
   (** About local allocation regions:
 
       In this pass, we have to transform [Lregion] expressions in Lambda to
@@ -417,6 +419,11 @@ end = struct
     | id, kind -> id, kind
 
   let get_mutable_variable t id = fst (get_mutable_variable_with_kind t id)
+
+  let get_unboxed_product_fields t id =
+    match Ident.Map.find id t.unboxed_product_components_in_scope with
+    | exception Not_found -> None
+    | fields -> Some (List.map fst (Array.to_list fields))
 
   let entering_region t id ~continuation_closing_region
       ~continuation_after_closing_region =
@@ -1218,10 +1225,10 @@ type cps_continuation =
   | Tail of Continuation.t
   | Non_tail of (Acc.t -> Env.t -> CCenv.t -> IR.simple list -> Expr_with_acc.t)
 
-let apply_cps_cont_simple k ?(dbg = Debuginfo.none) acc env ccenv simple =
+let apply_cps_cont_simple k ?(dbg = Debuginfo.none) acc env ccenv simples =
   match k with
-  | Tail k -> apply_cont_with_extra_args acc env ccenv ~dbg k None simple
-  | Non_tail k -> k acc env ccenv simple
+  | Tail k -> apply_cont_with_extra_args acc env ccenv ~dbg k None simples
+  | Non_tail k -> k acc env ccenv simples
 
 let apply_cps_cont k ?dbg acc env ccenv id =
   apply_cps_cont_simple k ?dbg acc env ccenv [IR.Var id]
@@ -1247,9 +1254,13 @@ let name_if_not_var acc ccenv name simple kind body =
 let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     (k_exn : Continuation.t) : Expr_with_acc.t =
   match lam with
-  | Lvar id ->
+  | Lvar id -> (
     assert (not (Env.is_mutable env id));
-    apply_cps_cont k acc env ccenv id
+    match Env.get_unboxed_product_fields env id with
+    | None -> apply_cps_cont k acc env ccenv id
+    | Some fields ->
+      let fields = List.map (fun id -> IR.Var id) fields in
+      apply_cps_cont_simple k acc env ccenv fields)
   | Lmutvar id ->
     let return_id = Env.get_mutable_variable env id in
     apply_cps_cont k acc env ccenv return_id
@@ -1413,29 +1424,81 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       CC.close_let_rec acc ccenv ~function_declarations ~body
         ~current_region:(Env.current_region env)
     | Dissected lam -> cps acc env ccenv lam k k_exn)
-  | Lprim (prim, _, _) ->
-    (* CR mshinwell: need to think about this change *)
-    let id = Ident.create_local "prim" in
-    cps acc env ccenv
-      (L.Llet (Strict, L.primitive_result_layout prim, id, lam, L.Lvar id))
-      k k_exn
-    (* | Lprim (prim, args, loc) -> ( match transform_primitive env id prim args
-       loc with | Primitive (prim, args, loc) -> ( let name =
-       Printlambda.name_of_primitive prim in let result_var = Ident.create_local
-       name in let exn_continuation : IR.exn_continuation option = if
-       primitive_can_raise prim then Some { exn_handler = k_exn; extra_args =
-       extra_args_for_exn_continuation env k_exn } else None in let
-       current_region = Env.current_region env in let dbg =
-       Debuginfo.from_location loc in let arity = primitive_result_kind prim in
-       match Flambda_arity.must_be_one_param arity with | None ->
-       Misc.fatal_errorf "Expected the following Lprim to require exactly one
-       variable \ binding:@ %a" Printlambda.lambda lam | Some kind ->
-       cps_non_tail_list acc env ccenv args (fun acc env ccenv args -> let body
-       acc ccenv = apply_cps_cont ~dbg k acc env ccenv result_var in
-       CC.close_let acc ccenv result_var Not_user_visible kind (Prim { prim;
-       args; loc; exn_continuation; region = current_region }) ~body) k_exn) |
-       Unboxed_binding _ -> assert false (* XXX *) | Transformed lam -> cps acc
-       env ccenv lam k k_exn) *)
+  | Lprim (prim, args, loc) -> (
+    match prim with
+    | Pmake_unboxed_product _ | Punboxed_product_field _ ->
+      (* This transformation cannot be done for [Praise] (because of the bottom
+         layout in Lambda) and is probably less efficient than the normal code
+         path in the next clause. *)
+      let id = Ident.create_local "prim" in
+      cps acc env ccenv
+        (L.Llet (Strict, L.primitive_result_layout prim, id, lam, L.Lvar id))
+        k k_exn
+    | Pbytes_to_string | Pbytes_of_string | Pignore | Pgetglobal _
+    | Psetglobal _ | Pgetpredef _ | Pmakeblock _ | Pmakefloatblock _ | Pfield _
+    | Pfield_computed _ | Psetfield _ | Psetfield_computed _ | Pfloatfield _
+    | Psetfloatfield _ | Pduprecord _ | Pccall _ | Praise _ | Psequand | Psequor
+    | Pnot | Pnegint | Paddint | Psubint | Pmulint | Pdivint _ | Pmodint _
+    | Pandint | Porint | Pxorint | Plslint | Plsrint | Pasrint | Pintcomp _
+    | Pcompare_ints | Pcompare_floats | Pcompare_bints _ | Poffsetint _
+    | Poffsetref _ | Pintoffloat | Pfloatofint _ | Pnegfloat _ | Pabsfloat _
+    | Paddfloat _ | Psubfloat _ | Pmulfloat _ | Pdivfloat _ | Pfloatcomp _
+    | Pstringlength | Pstringrefu | Pstringrefs | Pbyteslength | Pbytesrefu
+    | Pbytessetu | Pbytesrefs | Pbytessets | Pmakearray _ | Pduparray _
+    | Parraylength _ | Parrayrefu _ | Parraysetu _ | Parrayrefs _ | Parraysets _
+    | Pisint _ | Pisout | Pbintofint _ | Pintofbint _ | Pcvtbint _ | Pnegbint _
+    | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _
+    | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _
+    | Pbintcomp _ | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _
+    | Pstring_load_16 _ | Pstring_load_32 _ | Pstring_load_64 _
+    | Pbytes_load_16 _ | Pbytes_load_32 _ | Pbytes_load_64 _ | Pbytes_set_16 _
+    | Pbytes_set_32 _ | Pbytes_set_64 _ | Pbigstring_load_16 _
+    | Pbigstring_load_32 _ | Pbigstring_load_64 _ | Pbigstring_set_16 _
+    | Pbigstring_set_32 _ | Pbigstring_set_64 _ | Pctconst _ | Pbswap16
+    | Pbbswap _ | Pint_as_pointer | Popaque _ | Pprobe_is_enabled _ | Pobj_dup
+    | Pobj_magic _ | Punbox_float | Pbox_float _ | Punbox_int _ | Pbox_int _
+      -> (
+      match
+        transform_primitive env (Ident.create_local "dummy") prim args loc
+      with
+      | Primitive (prim, args, loc) -> (
+        let name = Printlambda.name_of_primitive prim in
+        let result_var = Ident.create_local name in
+        let exn_continuation : IR.exn_continuation option =
+          if primitive_can_raise prim
+          then
+            Some
+              { exn_handler = k_exn;
+                extra_args = extra_args_for_exn_continuation env k_exn
+              }
+          else None
+        in
+        let current_region = Env.current_region env in
+        let dbg = Debuginfo.from_location loc in
+        let arity = _primitive_result_kind prim in
+        match Flambda_arity.must_be_one_param arity with
+        | None ->
+          Misc.fatal_errorf
+            "Expected the following Lprim to require exactly one\n\
+            \       variable  binding:@ %a" Printlambda.lambda lam
+        | Some kind ->
+          cps_non_tail_list acc env ccenv args
+            (fun acc env ccenv args ->
+              let body acc ccenv =
+                apply_cps_cont ~dbg k acc env ccenv result_var
+              in
+              CC.close_let acc ccenv result_var Not_user_visible kind
+                (Prim
+                   { prim;
+                     args;
+                     loc;
+                     exn_continuation;
+                     region = current_region
+                   })
+                ~body)
+            k_exn)
+      | Unboxed_binding _ -> assert false
+      | Transformed lam -> cps acc env ccenv lam k k_exn))
   | Lswitch (scrutinee, switch, loc, kind) ->
     maybe_insert_let_cont "switch_result" kind k acc env ccenv
       (fun acc env ccenv k ->

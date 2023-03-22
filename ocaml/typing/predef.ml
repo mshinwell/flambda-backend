@@ -46,6 +46,7 @@ and ident_lazy_t = ident_create "lazy_t"
 and ident_string = ident_create "string"
 and ident_extension_constructor = ident_create "extension_constructor"
 and ident_floatarray = ident_create "floatarray"
+and ident_unboxed_pair = ident_create "unboxed_pair"
 
 let path_int = Pident ident_int
 and path_char = Pident ident_char
@@ -183,6 +184,28 @@ let common_initial_env add_type add_extension empty_env =
       }
     in
     add_type type_ident decl env
+  and add_type2 ?(kind=fun _ -> Type_abstract) type_ident
+      ~variance ~separability env =
+    let param0 = newgenvar () in
+    let param1 = newgenvar () in
+    let decl =
+      {type_params = [param0; param1];
+       type_arity = 2;
+       type_kind = kind param0;
+       type_loc = Location.none;
+       type_private = Asttypes.Public;
+       type_manifest = None;
+       type_variance = [variance];
+       type_separability = [separability];
+       type_is_newtype = false;
+       type_expansion_scope = lowest_level;
+       type_attributes = [];
+       type_immediate = Unknown;
+       type_unboxed_default = false;
+       type_uid = Uid.of_predef_id type_ident;
+      }
+    in
+    add_type type_ident decl env
   in
   let add_extension id l =
     add_extension id
@@ -236,6 +259,9 @@ let common_initial_env add_type add_extension empty_env =
   |> add_type ident_unit
        ~immediate:Always
        ~kind:(variant [cstr ident_void []])
+  |> add_type2 ident_unboxed_pair
+       ~variance:Variance.covariant
+       ~separability:Separability.Ind
   (* Predefined exceptions - alphabetical order *)
   |> add_extension ident_assert_failure
        [newgenty (Ttuple[type_string; type_int; type_int])]

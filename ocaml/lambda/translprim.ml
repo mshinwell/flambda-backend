@@ -399,6 +399,12 @@ let lookup_primitive loc poly pos p =
     | "%compare" -> Comparison(Compare, Compare_generic)
     | "%obj_dup" -> Primitive(Pobj_dup, 1)
     | "%obj_magic" -> Primitive(Pobj_magic Lambda.layout_any_value, 1)
+    | "%make_unboxed_pair_v_v" ->
+      Primitive(Pmake_unboxed_product [Pvalue Pgenval; Pvalue Pgenval], 2)
+    | "%unboxed_pair_field_0_v_v" ->
+      Primitive(Punboxed_product_field (0, [Pvalue Pgenval; Pvalue Pgenval]), 1)
+    | "%unboxed_pair_field_1_v_v" ->
+      Primitive(Punboxed_product_field (1, [Pvalue Pgenval; Pvalue Pgenval]), 1)
     | s when String.length s > 0 && s.[0] = '%' ->
        raise(Error(loc, Unknown_builtin_primitive s))
     | _ -> External p
