@@ -1013,10 +1013,11 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
           let handler_env =
             Env.register_unboxed_product handler_env ~unboxed_product:id ~fields
           in
-          let new_params =
+          let new_params_rev =
             List.map (fun (id, kind) -> id, IR.Not_user_visible, kind) fields
+            |> List.rev
           in
-          handler_env, List.rev new_params @ params_rev)
+          handler_env, new_params_rev @ params_rev)
       (handler_env, []) params
   in
   let params = List.rev params_rev in
@@ -1448,14 +1449,16 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             ~body)
         k_exn
     | Unboxed_binding (ids_with_kinds, env, wrapper) ->
-      Format.eprintf "Unboxed_binding: (%a)\n%!"
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space
-           (Misc.Stdlib.Option.print (fun ppf (id, kind) ->
-                Format.fprintf ppf "%a :: %a" Ident.print id
-                  Flambda_kind.With_subkind.print kind)))
-        ids_with_kinds;
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv (args : IR.simple list) ->
+          Format.eprintf "Unboxed_binding: ids_with_kinds=(%a) args=(%a)\n%!"
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space
+               (Misc.Stdlib.Option.print (fun ppf (id, kind) ->
+                    Format.fprintf ppf "%a :: %a" Ident.print id
+                      Flambda_kind.With_subkind.print kind)))
+            ids_with_kinds
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space IR.print_simple)
+            args;
           let body acc ccenv = cps acc env ccenv body k k_exn in
           if List.compare_lengths ids_with_kinds args <> 0
           then
@@ -1942,7 +1945,8 @@ and cps_non_tail_list_core acc env ccenv (lams : L.lambda list)
     cps_non_tail_simple acc env ccenv lam
       (fun acc env ccenv simples ->
         cps_non_tail_list_core acc env ccenv lams
-          (fun acc env ccenv simples' -> k acc env ccenv (simples @ simples'))
+          (fun acc env ccenv simples' ->
+            k acc env ccenv (List.rev simples @ simples'))
           k_exn)
       k_exn
 
