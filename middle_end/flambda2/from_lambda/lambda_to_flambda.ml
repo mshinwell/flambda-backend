@@ -796,7 +796,10 @@ let transform_primitive env id (prim : L.primitive) args loc =
     let fields =
       List.mapi
         (fun n kind ->
-          let ident = Ident.create_local (Printf.sprintf "unboxed%d" n) in
+          let ident =
+            Ident.create_local
+              (Printf.sprintf "%s_unboxed%d" (Ident.unique_name id) n)
+          in
           ident, kind)
         (Flambda_arity.unarize_flat arity)
     in
@@ -805,7 +808,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
       Ident.print id (List.length fields);
     let fields = List.map (fun ident_and_kind -> Some ident_and_kind) fields in
     Unboxed_binding (fields, env, fun _args body -> body)
-  | Punboxed_product_field (n, layouts), [_] ->
+  | Punboxed_product_field (n, layouts), [_arg] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array
     then Misc.fatal_errorf "Invalid field index %d for Punboxed_product_field" n;
@@ -813,6 +816,9 @@ let transform_primitive env id (prim : L.primitive) args loc =
       List.map Flambda_arity.Component_for_creation.from_lambda layouts
       |> Flambda_arity.create
     in
+    Format.eprintf
+      "Punboxed_product_field bound to %a, product %a, field %d, arity %a:\n%!"
+      Ident.print id Printlambda.lambda _arg n Flambda_arity.print arity;
     let field_arity =
       (* N.B. The arity of the field being projected, bound to [id], may in
          itself be an unboxed product. *)
@@ -821,7 +827,10 @@ let transform_primitive env id (prim : L.primitive) args loc =
     in
     let ids_all_fields_with_kinds =
       List.mapi
-        (fun n kind -> Ident.create_local (Printf.sprintf "unboxed%d" n), kind)
+        (fun n kind ->
+          ( Ident.create_local
+              (Printf.sprintf "%s_unboxed%d" (Ident.unique_name id) n),
+            kind ))
         (Flambda_arity.unarize_flat arity)
     in
     let num_fields_prior_to_projected_fields =
@@ -830,6 +839,8 @@ let transform_primitive env id (prim : L.primitive) args loc =
       |> List.map Flambda_arity.Component_for_creation.from_lambda
       |> Flambda_arity.create |> Flambda_arity.cardinal_unarized
     in
+    Format.eprintf "num_fields_prior_to_projected_fields %d\n%!"
+      num_fields_prior_to_projected_fields;
     let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
     let[@inline] cut_list_down_to_projected_fields fields =
       assert (List.compare_lengths fields ids_all_fields_with_kinds = 0);
@@ -860,7 +871,10 @@ let transform_primitive env id (prim : L.primitive) args loc =
     let field_mask =
       List.mapi
         (fun cur_field (field, kind) ->
-          if cur_field < n || cur_field >= n + List.length ids_projected_fields
+          if cur_field < num_fields_prior_to_projected_fields
+             || cur_field
+                >= num_fields_prior_to_projected_fields
+                   + List.length ids_projected_fields
           then None
           else
             match ids_projected_fields with
@@ -973,12 +987,48 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   let { Env.body_env; handler_env; extra_params } =
     Env.add_continuation env cont ~push_to_try_stack:is_exn_handler Nonrecursive
   in
-  let params =
-    List.map
-      (fun (id, visible, kind) ->
-        id, visible, Flambda_kind.With_subkind.from_lambda kind)
-      params
+  let orig_params = params in
+  let handler_env, params_rev =
+    List.fold_left
+      (fun (handler_env, params_rev) (id, visible, layout) ->
+        let arity_component =
+          Flambda_arity.Component_for_creation.from_lambda layout
+        in
+        match arity_component with
+        | Singleton kind ->
+          let param = id, visible, kind in
+          env, param :: params_rev
+        | Unboxed_product _ ->
+          let arity = Flambda_arity.create [arity_component] in
+          let fields =
+            List.mapi
+              (fun n kind ->
+                let field =
+                  Ident.create_local
+                    (Printf.sprintf "%s_unboxed%d" (Ident.unique_name id) n)
+                in
+                field, kind)
+              (Flambda_arity.unarize_flat arity)
+          in
+          let handler_env =
+            Env.register_unboxed_product handler_env ~unboxed_product:id ~fields
+          in
+          let new_params =
+            List.map (fun (id, kind) -> id, IR.Not_user_visible, kind) fields
+          in
+          handler_env, List.rev new_params @ params_rev)
+      (handler_env, []) params
   in
+  let params = List.rev params_rev in
+  if List.compare_lengths params orig_params <> 0
+  then
+    Format.eprintf
+      "Continuation %a has unboxed arities: orig_params %a, params %a\n%!"
+      Continuation.print cont
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
+      (List.map (fun (id, _, _) -> id) orig_params)
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
+      (List.map (fun (id, _, _) -> id) params);
   let extra_params =
     List.map (fun (id, kind) -> id, IR.User_visible, kind) extra_params
   in
@@ -1407,6 +1457,18 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv (args : IR.simple list) ->
           let body acc ccenv = cps acc env ccenv body k k_exn in
+          if List.compare_lengths ids_with_kinds args <> 0
+          then
+            Misc.fatal_errorf
+              "ids_with_kinds (%a) doesn't match args (%a) for:@ %a"
+              (Format.pp_print_list ~pp_sep:Format.pp_print_space
+                 (Misc.Stdlib.Option.print (fun ppf (id, kind) ->
+                      Format.fprintf ppf "%a :: %a" Ident.print id
+                        Flambda_kind.With_subkind.print kind)))
+              ids_with_kinds
+              (Format.pp_print_list ~pp_sep:Format.pp_print_space
+                 IR.print_simple)
+              args Printlambda.lambda lam;
           let builder =
             List.fold_left2
               (fun body id_and_kind_opt arg acc ccenv ->
