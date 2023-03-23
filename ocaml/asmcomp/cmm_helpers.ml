@@ -3283,3 +3283,4 @@ let kind_of_layout (layout : Lambda.layout) =
   | Punboxed_float -> Vfloat
   | Punboxed_int _ -> Vint
   | Pvalue kind -> Vval kind
+  | Punboxed_product _ -> Misc.fatal_error "TBD"
