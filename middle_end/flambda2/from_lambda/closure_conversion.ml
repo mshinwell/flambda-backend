@@ -1999,6 +1999,19 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
           kind_with_subkind ))
       (Flambda_arity.unarize missing_arity)
   in
+  let params_arity =
+    Flambda_arity.partially_apply arity
+      ~num_unarized_params_provided:num_provided
+  in
+  (match Sys.getenv "DEBUG" with
+  | exception Not_found -> ()
+  | _ ->
+    Format.eprintf
+      "partial application (in CC) of %a: old params arity is %a, new params \
+       arity is %a\n\
+       %!"
+      Ident.print apply.func Flambda_arity.print arity Flambda_arity.print
+      params_arity);
   let return_continuation = Continuation.create ~sort:Return () in
   let exn_continuation =
     IR.{ exn_handler = Continuation.create (); extra_args = [] }
@@ -2014,6 +2027,7 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
       { apply with
         kind = Function;
         args = all_args;
+        args_arity = Some arity;
         continuation = return_continuation;
         exn_continuation;
         inlined = Lambda.Default_inlined;
@@ -2057,7 +2071,6 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
     Misc.fatal_errorf "Partial application of %a with wrong mode at %s"
       Ident.print apply.IR.func
       (Debuginfo.Scoped_location.string_of_scoped_location apply.IR.loc);
-  let params_arity = Flambda_arity.create_singletons (List.map snd params) in
   let function_declarations =
     [ Function_decl.create ~let_rec_ident:(Some wrapper_id) ~function_slot
         ~kind:(Lambda.Curried { nlocal = num_trailing_local_params })
