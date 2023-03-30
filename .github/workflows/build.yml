@@ -56,6 +56,11 @@ jobs:
             os: ubuntu-latest
             ocamlparam: ''
 
+          - name: flambda2_naked_pointers_checker
+            config: --enable-middle-end=flambda2 --enable-naked-pointers-checker
+            os: ubuntu-latest
+            ocamlparam: ''
+
           - name: flambda2_frame_pointers
             config: --enable-middle-end=flambda2 --enable-frame-pointers --enable-poll-insertion
             os: ubuntu-latest
