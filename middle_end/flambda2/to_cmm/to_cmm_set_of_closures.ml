@@ -45,7 +45,6 @@ let get_func_decl_params_arity t code_id =
       (fun k ->
         C.extended_machtype_of_kind k
         |> C.Extended_machtype.change_tagged_int_to_val)
-      (Flambda_arity.With_subkinds.to_list (Code_metadata.params_arity info))
       (Flambda_arity.unarize (Code_metadata.params_arity info))
   in
   let result_machtype =
