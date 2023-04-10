@@ -860,6 +860,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
         (Array.of_list ids_all_fields_with_kinds)
         num_fields_prior_to_projected_fields num_projected_fields
       |> Array.to_list
+      (* CR mshinwell: try to keep this as an array? *)
     in
     let env =
       if num_projected_fields > 1
