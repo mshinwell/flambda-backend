@@ -563,4 +563,6 @@ module With_subkind = struct
       true
 
   let erase_subkind t = { t with subkind = Anything }
+
+  let equal_ignoring_subkind t1 t2 = equal (erase_subkind t1) (erase_subkind t2)
 end

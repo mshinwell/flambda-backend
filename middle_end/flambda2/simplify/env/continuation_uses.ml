@@ -107,12 +107,10 @@ let get_arg_types_by_use_id_for_invariant_params arity l =
   List.fold_left
     (fun arg_maps t ->
       if not
-           (Misc.Stdlib.List.is_prefix ~equal:Flambda_kind.equal
-              (Flambda_arity.to_list arity
-              |> List.map Flambda_kind.With_subkind.kind)
-              ~of_:
-                (Flambda_arity.to_list t.arity
-                |> List.map Flambda_kind.With_subkind.kind))
+           (Misc.Stdlib.List.is_prefix
+              ~equal:Flambda_kind.With_subkind.equal_ignoring_subkind
+              (Flambda_arity.to_list arity)
+              ~of_:(Flambda_arity.to_list t.arity))
       then
         Misc.fatal_errorf
           "Arity of invariant params@ (%a) is not a prefix of the arity of the \
