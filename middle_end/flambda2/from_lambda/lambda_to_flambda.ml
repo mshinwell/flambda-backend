@@ -855,16 +855,11 @@ let transform_primitive env id (prim : L.primitive) args loc =
       Format.eprintf "num_fields_prior_to_projected_fields %d\n%!"
         num_fields_prior_to_projected_fields;
     let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
-    let[@inline] cut_list_down_to_projected_fields fields =
-      assert (List.compare_lengths fields ids_all_fields_with_kinds = 0);
-      fields
-      |> Misc.Stdlib.List.split_at num_fields_prior_to_projected_fields
-      |> snd
-      |> Misc.Stdlib.List.split_at num_projected_fields
-      |> fst
-    in
     let ids_projected_fields =
-      cut_list_down_to_projected_fields ids_all_fields_with_kinds
+      Array.sub
+        (Array.of_list ids_all_fields_with_kinds)
+        num_fields_prior_to_projected_fields num_projected_fields
+      |> Array.to_list
     in
     let env =
       if num_projected_fields > 1
