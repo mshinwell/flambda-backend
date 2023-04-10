@@ -238,7 +238,7 @@ module Inlining = struct
     | Some (Closure_approximation { code; _ }) ->
       let metadata = Code_or_metadata.code_metadata code in
       let fun_params_length =
-        Code_metadata.params_arity metadata |> Flambda_arity.cardinal_unarized
+        Code_metadata.params_arity metadata |> Flambda_arity.num_params
       in
       if (not (Code_or_metadata.code_present code))
          || fun_params_length > List.length (Apply_expr.args apply)
@@ -2058,7 +2058,10 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
   in
   let closure_alloc_mode, num_trailing_local_params =
     let num_leading_heap_params =
-      Flambda_arity.cardinal_unarized arity - num_trailing_local_params
+      (* This is a pre-unarization calculation so uses [num_params] not
+         [cardinal_unarized]. *)
+      (* CR mshinwell: check this is correct *)
+      Flambda_arity.num_params arity - num_trailing_local_params
     in
     if num_provided <= num_leading_heap_params
     then Lambda.alloc_heap, num_trailing_local_params

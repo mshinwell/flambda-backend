@@ -58,9 +58,7 @@ module Code_metadata_accessors (X : Metadata_view_type) = struct
 
   let num_leading_heap_params t =
     let { params_arity; num_trailing_local_params; _ } = metadata t in
-    let n =
-      Flambda_arity.cardinal_unarized params_arity - num_trailing_local_params
-    in
+    let n = Flambda_arity.num_params params_arity - num_trailing_local_params in
     assert (n >= 0);
     (* see [create] *)
     n

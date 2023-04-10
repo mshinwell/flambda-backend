@@ -721,8 +721,7 @@ let simplify_non_lifted_set_of_closures0 dacc bound_vars ~closure_bound_vars
       Cost_metrics.
         { cost_metrics = Code_metadata.cost_metrics code_metadata;
           params_arity =
-            Flambda_arity.cardinal_unarized
-              (Code_metadata.params_arity code_metadata)
+            Flambda_arity.num_params (Code_metadata.params_arity code_metadata)
         }
     in
     Simplified_named.create_with_known_free_names ~find_code_characteristics

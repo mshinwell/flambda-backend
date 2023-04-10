@@ -119,6 +119,8 @@ let fresh_idents_unarized t ~id =
 
 let cardinal_unarized t = List.length (unarize t)
 
+let num_params t = List.length t
+
 let rec must_be_one_param t =
   match t with
   | [Component.Singleton kind] -> Some kind
@@ -128,6 +130,7 @@ let rec must_be_one_param t =
 let from_lambda_list layouts =
   layouts |> List.map Component_for_creation.from_lambda |> create
 
+(* XXX needs more work *)
 let rec partially_apply t ~num_unarized_params_provided =
   if num_unarized_params_provided < 0
   then
