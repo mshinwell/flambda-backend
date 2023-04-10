@@ -20,9 +20,7 @@ module Component = struct
   let equal_ignoring_subkinds t1 t2 =
     match t1, t2 with
     | Singleton kind1, Singleton kind2 ->
-      Flambda_kind.With_subkind.equal
-        (Flambda_kind.With_subkind.erase_subkind kind1)
-        (Flambda_kind.With_subkind.erase_subkind kind2)
+      Flambda_kind.With_subkind.equal_ignoring_subkind kind1 kind2
 
   let equal_exact t1 t2 =
     match t1, t2 with

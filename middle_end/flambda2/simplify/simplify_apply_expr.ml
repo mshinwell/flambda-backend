@@ -1028,8 +1028,7 @@ let simplify_method_call dacc apply ~callee_ty ~kind:_ ~obj ~arg_types
     DA.record_continuation_use dacc apply_cont
       (Non_inlinable { escaping = true })
       ~env_at_use:denv
-      ~arg_types:
-        (T.unknown_types_from_arity_with_subkinds (Apply.return_arity apply))
+      ~arg_types:(T.unknown_types_from_arity (Apply.return_arity apply))
   in
   let dacc, exn_cont_use_id =
     DA.record_continuation_use dacc
