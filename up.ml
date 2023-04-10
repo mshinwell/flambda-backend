@@ -1,7 +1,7 @@
 external make_unboxed_pair_v_v : 'a -> 'b -> ('a, 'b) unboxed_pair = "%make_unboxed_pair_v_v"
 external unboxed_pair_field_0_v_v : ('a, 'b) unboxed_pair -> 'a = "%unboxed_pair_field_0_v_v"
 external unboxed_pair_field_1_v_v : ('a, 'b) unboxed_pair -> 'b = "%unboxed_pair_field_1_v_v"
-
+(*
 let f i x y =
   let p = make_unboxed_pair_v_v x y in
   if i < 0 then unboxed_pair_field_0_v_v p
@@ -37,11 +37,12 @@ let h i x y =
   in
   if i < 0 then unboxed_pair_field_0_v_v r
   else unboxed_pair_field_1_v_v r
+  *)
 
 external make_unboxed_pair_i_i : 'a -> 'b -> ('a, 'b) unboxed_pair = "%make_unboxed_pair_i_i"
 external unboxed_pair_field_0_i_i : ('a, 'b) unboxed_pair -> 'a = "%unboxed_pair_field_0_i_i"
 external unboxed_pair_field_1_i_i : ('a, 'b) unboxed_pair -> 'b = "%unboxed_pair_field_1_i_i"
-
+(*
 let[@inline never] takes_unboxed_pair (p : (int, int) unboxed_pair) =
   let p0 = unboxed_pair_field_0_i_i p in
   let p1 = unboxed_pair_field_1_i_i p in
@@ -73,3 +74,23 @@ let make_partial x y =
 
 let () =
   Printf.printf "%d\n%!" (make_partial 100 42)
+  *)
+
+let[@inline never] returns_unboxed_pair_not_inlined x =
+  if x < 0 then make_unboxed_pair_i_i x x
+  else make_unboxed_pair_i_i (x + 1) (x + 2)
+
+let[@inline] returns_unboxed_pair_inlined x =
+  if x < 0 then make_unboxed_pair_i_i x x
+  else make_unboxed_pair_i_i (x + 1) (x + 2)
+
+(*
+let call_function_returning_unboxed_pair x =
+  let p1 = returns_unboxed_pair_not_inlined x in
+  let p2 = returns_unboxed_pair_inlined x in
+  let p1_0 = unboxed_pair_field_0_i_i p1 in
+  let p1_1 = unboxed_pair_field_1_i_i p1 in
+  let p2_0 = unboxed_pair_field_0_i_i p2 in
+  let p2_1 = unboxed_pair_field_1_i_i p2 in
+  p1_0 + p1_1 + p2_0 + p2_1
+  *)

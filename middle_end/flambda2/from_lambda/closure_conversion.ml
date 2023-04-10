@@ -2094,6 +2094,13 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
 
 let wrap_over_application acc env full_call (apply : IR.apply) ~remaining
     ~remaining_arity ~contains_no_escaping_local_allocs =
+  (* Format.eprintf "wrap_over_application of %a, args %a, args_arity(apply)=%a,
+     \ result_arity(apply)=%a@ remaining=(%a)@ remaining_arity=%a\n\ %!"
+     Ident.print apply.func (Format.pp_print_list ~pp_sep:Format.pp_print_space
+     IR.print_simple) apply.args (Misc.Stdlib.Option.print Flambda_arity.print)
+     apply.args_arity Flambda_arity.print apply.return_arity
+     (Format.pp_print_list ~pp_sep:Format.pp_print_space IR.print_simple)
+     remaining Flambda_arity.print remaining_arity; *)
   let wrapper_cont = Continuation.create () in
   let returned_func = Variable.create "func" in
   (* See comments in [Simplify_common.split_direct_over_application] about this
@@ -2201,6 +2208,7 @@ type call_args_split =
       }
   | Over_app of
       { full : IR.simple list;
+        provided_arity : Flambda_arity.t;
         remaining : IR.simple list;
         remaining_arity : Flambda_arity.t
       }
@@ -2262,9 +2270,10 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
             }
         else
           let full, remaining = cut arity_l args in
-          let _, remaining_arity = cut arity_l args_arity in
+          let provided_arity, remaining_arity = cut arity_l args_arity in
           Over_app
             { full;
+              provided_arity = Flambda_arity.create_singletons provided_arity;
               remaining;
               remaining_arity = Flambda_arity.create_singletons remaining_arity
             }
@@ -2287,7 +2296,7 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
       wrap_partial_application acc env apply.continuation apply approx ~provided
         ~missing_arity ~arity ~num_trailing_local_params
         ~contains_no_escaping_local_allocs
-    | Over_app { full; remaining; remaining_arity } ->
+    | Over_app { full; provided_arity; remaining; remaining_arity } ->
       let full_args_call apply_continuation ~region acc =
         let mode =
           if contains_no_escaping_local_allocs
@@ -2297,6 +2306,7 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
         close_exact_or_unknown_apply acc env
           { apply with
             args = full;
+            args_arity = Some provided_arity;
             continuation = apply_continuation;
             mode;
             return_arity =

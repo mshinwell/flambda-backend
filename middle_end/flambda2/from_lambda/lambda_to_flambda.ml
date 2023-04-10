@@ -1987,8 +1987,8 @@ and cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode ap_loc
               region = Env.current_region env;
               args_arity = Some (Flambda_arity.create args_arity);
               return_arity =
-                Flambda_arity.create_singletons
-                  [Flambda_kind.With_subkind.from_lambda ap_return]
+                Flambda_arity.create
+                  [Flambda_arity.Component_for_creation.from_lambda ap_return]
             }
           in
           wrap_return_continuation acc env ccenv apply)
@@ -2171,8 +2171,8 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
   let unboxed_products = !unboxed_products in
   let removed_params = Ident.Map.keys unboxed_products in
   let return =
-    Flambda_arity.create_singletons
-      [Flambda_kind.With_subkind.from_lambda return]
+    Flambda_arity.create
+      [Flambda_arity.Component_for_creation.from_lambda return]
   in
   let body acc ccenv =
     let ccenv = CCenv.set_path_to_root ccenv loc in
