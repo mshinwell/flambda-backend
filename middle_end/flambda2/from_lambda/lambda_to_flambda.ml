@@ -1115,9 +1115,16 @@ let wrap_return_continuation acc env ccenv (apply : IR.apply) =
     | [] -> CC.close_apply acc ccenv { apply with continuation; region }
     | _ :: _ ->
       let wrapper_cont = Continuation.create () in
-      let return_value = Ident.create_local "return_val" in
+      let return_kinds = Flambda_arity.unarize apply.return_arity in
+      let return_value_components =
+        List.mapi
+          (fun i _ -> Ident.create_local (Printf.sprintf "return_val%d" i))
+          return_kinds
+      in
       let args =
-        List.map (fun var : IR.simple -> Var var) (return_value :: extra_args)
+        List.map
+          (fun var : IR.simple -> Var var)
+          (return_value_components @ extra_args)
       in
       let dbg = Debuginfo.none in
       let handler acc ccenv =
@@ -1127,20 +1134,14 @@ let wrap_return_continuation acc env ccenv (apply : IR.apply) =
         CC.close_apply acc ccenv
           { apply with continuation = wrapper_cont; region }
       in
-      let return_arity =
-        match Flambda_arity.unarize apply.return_arity with
-        | [return_kind] -> return_kind
-        | _ :: _ ->
-          Misc.fatal_errorf
-            "Multiple return values for application of %a not supported yet"
-            Ident.print apply.func
-        | [] ->
-          Misc.fatal_errorf "Nullary return arity for application of %a"
-            Ident.print apply.func
+      let params =
+        List.map2
+          (fun return_value_component kind ->
+            return_value_component, IR.Not_user_visible, kind)
+          return_value_components return_kinds
       in
       CC.close_let_cont acc ccenv ~name:wrapper_cont ~is_exn_handler:false
-        ~params:[return_value, Not_user_visible, return_arity]
-        ~recursive:Nonrecursive ~body ~handler
+        ~params ~recursive:Nonrecursive ~body ~handler
   in
   restore_continuation_context acc env ccenv apply.continuation ~close_early
     body
