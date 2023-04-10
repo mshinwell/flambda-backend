@@ -86,13 +86,9 @@ let[@inline] returns_unboxed_pair_inlined x =
 
 let call_function_returning_unboxed_pair x =
   let p1 = returns_unboxed_pair_not_inlined x in
-  (*
   let p2 = returns_unboxed_pair_inlined x in
-  *)
   let p1_0 = unboxed_pair_field_0_i_i p1 in
   let p1_1 = unboxed_pair_field_1_i_i p1 in
-  (*
   let p2_0 = unboxed_pair_field_0_i_i p2 in
   let p2_1 = unboxed_pair_field_1_i_i p2 in
-  *)
-  p1_0 + p1_1 (* + p2_0 + p2_1 *)
+  p1_0 + p1_1 + p2_0 + p2_1
