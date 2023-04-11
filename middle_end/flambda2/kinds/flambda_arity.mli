@@ -95,7 +95,7 @@ val fresh_idents_unarized :
 val cardinal_unarized : _ t -> int
 
 (** Take a list of Lambda layouts, one per parameter, and form the
-corresponding arity. *)
+    corresponding arity. *)
 val from_lambda_list : Lambda.layout list -> [`Unarized | `Complex] t
 
 (** Remove the first portion of an arity to correspond to a partial application
