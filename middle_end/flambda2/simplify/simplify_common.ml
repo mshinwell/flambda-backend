@@ -231,7 +231,9 @@ let split_direct_over_application apply
       ~continuation:(Return after_full_application)
       (Apply.exn_continuation apply)
       ~args:first_args ~args_arity:callee's_params_arity
-      ~return_arity:(Code_metadata.result_arity callee's_code_metadata)
+      ~return_arity:
+        (Flambda_arity.unarize_t
+           (Code_metadata.result_arity callee's_code_metadata))
       ~call_kind:(Call_kind.direct_function_call callee's_code_id alloc_mode)
       (Apply.dbg apply) ~inlined:(Apply.inlined apply)
       ~inlining_state:(Apply.inlining_state apply)

@@ -595,10 +595,12 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         Code.create code_id ~params_and_body
           ~free_names_of_params_and_body:free_names ~newer_version_of:None
           ~params_arity:(Bound_parameters.arity remaining_params)
-          ~num_trailing_local_params ~result_arity ~result_types:Unknown
-          ~contains_no_escaping_local_allocs ~stub:true ~inline:Default_inline
-          ~poll_attribute:Default ~check:Check_attribute.Default_check
-          ~is_a_functor:false ~recursive ~cost_metrics:cost_metrics_of_body
+          ~num_trailing_local_params
+          ~result_arity:(Flambda_arity.unarize_t result_arity)
+          ~result_types:Unknown ~contains_no_escaping_local_allocs ~stub:true
+          ~inline:Default_inline ~poll_attribute:Default
+          ~check:Check_attribute.Default_check ~is_a_functor:false ~recursive
+          ~cost_metrics:cost_metrics_of_body
           ~inlining_arguments:(DE.inlining_arguments (DA.denv dacc))
           ~dbg ~is_tupled:false
           ~is_my_closure_used:
@@ -802,8 +804,10 @@ let simplify_direct_function_call ~simplify_expr dacc apply
             Apply.print apply;
         simplify_direct_partial_application ~simplify_expr dacc apply
           ~callee's_code_id ~callee's_code_metadata ~callee's_function_slot
-          ~param_arity:params_arity ~result_arity ~recursive ~down_to_up
-          ~coming_from_indirect ~closure_alloc_mode_from_type ~current_region
+          ~param_arity:params_arity
+          ~result_arity:(Flambda_arity.unarize_t result_arity)
+          ~recursive ~down_to_up ~coming_from_indirect
+          ~closure_alloc_mode_from_type ~current_region
           ~num_trailing_local_params:
             (Code_metadata.num_trailing_local_params callee's_code_metadata))
       else

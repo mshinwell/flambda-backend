@@ -1137,7 +1137,9 @@ let close_exact_or_unknown_apply acc env
   in
   let apply =
     Apply.create ~callee ~continuation:(Return continuation)
-      apply_exn_continuation ~args ~args_arity ~return_arity ~call_kind
+      apply_exn_continuation ~args ~args_arity
+      ~return_arity:(Flambda_arity.unarize_t return_arity)
+      ~call_kind
       (Debuginfo.from_location loc)
       ~inlined:inlined_call
       ~inlining_state:(Inlining_state.default ~round:0)
@@ -2151,7 +2153,8 @@ let wrap_over_application acc env full_call (apply : IR.apply) ~remaining
     let over_application =
       Apply.create ~callee:(Simple.var returned_func) ~continuation
         apply_exn_continuation ~args:remaining ~args_arity:remaining_arity
-        ~return_arity:apply.return_arity ~call_kind apply_dbg ~inlined
+        ~return_arity:(Flambda_arity.unarize_t apply.return_arity)
+        ~call_kind apply_dbg ~inlined
         ~inlining_state:(Inlining_state.default ~round:0)
         ~probe_name ~position
         ~relative_history:(Env.relative_history_from_scoped ~loc:apply.loc env)
@@ -2213,7 +2216,7 @@ type call_args_split =
       { full : IR.simple list;
         provided_arity : [`Unarized | `Complex] Flambda_arity.t;
         remaining : IR.simple list;
-        remaining_arity : [`Unarized| `Complex] Flambda_arity.t
+        remaining_arity : [`Unarized | `Complex] Flambda_arity.t
       }
 
 let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =

@@ -515,13 +515,12 @@ val kind : t -> Flambda_kind.t
 val get_alias_exn : t -> Simple.t
 
 (** For each of the kinds in an arity, create an "unknown" type. *)
-val unknown_types_from_arity : [`Unarized | `Complex] Flambda_arity.t -> t list
+val unknown_types_from_arity : _ Flambda_arity.t -> t list
 
-val unknown_types_from_arity_with_subkinds :
-  [`Unarized | `Complex] Flambda_arity.t -> t list
+val unknown_types_from_arity_with_subkinds : _ Flambda_arity.t -> t list
 
 (** For each of the kinds in an arity, create an "bottom" type. *)
-val bottom_types_from_arity : [`Unarized | `Complex] Flambda_arity.t -> t list
+val bottom_types_from_arity : _ Flambda_arity.t -> t list
 
 (** Whether the given type says that a term of that type can never be
     constructed (in other words, it is [Invalid]). *)

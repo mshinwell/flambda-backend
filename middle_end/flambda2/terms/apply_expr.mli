@@ -52,7 +52,7 @@ val create :
   Exn_continuation.t ->
   args:Simple.t list ->
   args_arity:[`Unarized | `Complex] Flambda_arity.t ->
-  return_arity:[`Unarized | `Complex] Flambda_arity.t ->
+  return_arity:[`Unarized] Flambda_arity.t ->
   call_kind:Call_kind.t ->
   Debuginfo.t ->
   inlined:Inlined_attribute.t ->
@@ -80,7 +80,7 @@ val args : t -> Simple.t list
 val args_arity : t -> [`Unarized | `Complex] Flambda_arity.t
 
 (** The arity of the result(s) of the application. *)
-val return_arity : t -> [`Unarized | `Complex] Flambda_arity.t
+val return_arity : t -> [`Unarized] Flambda_arity.t
 
 (** Information about what kind of call is involved (direct function call,
     method call, etc). *)
