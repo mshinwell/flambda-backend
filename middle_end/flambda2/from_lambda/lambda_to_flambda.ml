@@ -51,14 +51,17 @@ module Env : sig
   val register_unboxed_product :
     t ->
     unboxed_product:Ident.t ->
-    before_unarization:Flambda_arity.Component_for_creation.t ->
+    before_unarization:
+      [`Unarized | `Complex] Flambda_arity.Component_for_creation.t ->
     fields:(Ident.t * Flambda_kind.With_subkind.t) list ->
     t
 
   val get_unboxed_product_fields :
     t ->
     Ident.t ->
-    (Flambda_arity.Component_for_creation.t * Ident.t list) option
+    ([`Unarized | `Complex] Flambda_arity.Component_for_creation.t
+    * Ident.t list)
+    option
 
   type add_continuation_result = private
     { body_env : t;
@@ -191,7 +194,7 @@ end = struct
         (Ident.t * Flambda_kind.With_subkind.t) Ident.Map.t;
       mutables_needed_by_continuations : Ident.Set.t Continuation.Map.t;
       unboxed_product_components_in_scope :
-        (Flambda_arity.Component_for_creation.t
+        ([`Unarized | `Complex] Flambda_arity.Component_for_creation.t
         * (Ident.t * Flambda_kind.With_subkind.t) array)
         Ident.Map.t;
       unboxed_product_components_needed_by_continuations :
@@ -1226,7 +1229,7 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Punboxed_product_field _ ->
     false
 
-let primitive_result_kind (prim : Lambda.primitive) : Flambda_arity.t =
+let primitive_result_kind (prim : Lambda.primitive) : _ Flambda_arity.t =
   match prim with
   | Pccall { prim_native_repr_res = _, Untagged_int; _ } ->
     Flambda_arity.create_singletons [Flambda_kind.With_subkind.tagged_immediate]
@@ -1326,7 +1329,7 @@ type non_tail_continuation =
   Env.t ->
   CCenv.t ->
   IR.simple list ->
-  Flambda_arity.Component_for_creation.t ->
+  [`Unarized | `Complex] Flambda_arity.Component_for_creation.t ->
   Expr_with_acc.t
 
 type non_tail_list_continuation =
@@ -1334,7 +1337,7 @@ type non_tail_list_continuation =
   Env.t ->
   CCenv.t ->
   IR.simple list ->
-  Flambda_arity.Component_for_creation.t list ->
+  [`Unarized | `Complex] Flambda_arity.Component_for_creation.t list ->
   Expr_with_acc.t
 
 type cps_continuation =
@@ -1342,13 +1345,15 @@ type cps_continuation =
   | Non_tail of non_tail_continuation
 
 let apply_cps_cont_simple k ?(dbg = Debuginfo.none) acc env ccenv simples
-    (arity_component : Flambda_arity.Component_for_creation.t) =
+    (arity_component :
+      [`Unarized | `Complex] Flambda_arity.Component_for_creation.t) =
   match k with
   | Tail k -> apply_cont_with_extra_args acc env ccenv ~dbg k None simples
   | Non_tail k -> k acc env ccenv simples arity_component
 
 let apply_cps_cont k ?dbg acc env ccenv id
-    (arity_component : Flambda_arity.Component_for_creation.t) =
+    (arity_component :
+      [`Unarized | `Complex] Flambda_arity.Component_for_creation.t) =
   apply_cps_cont_simple k ?dbg acc env ccenv [IR.Var id] arity_component
 
 let maybe_insert_let_cont result_var_name layout k acc env ccenv body =
@@ -1944,7 +1949,7 @@ and cps_non_tail_var :
     Env.t ->
     CCenv.t ->
     Ident.t ->
-    Flambda_arity.Component_for_creation.t ->
+    [`Unarized | `Complex] Flambda_arity.Component_for_creation.t ->
     Expr_with_acc.t) ->
     Continuation.t ->
     Expr_with_acc.t =
@@ -2007,7 +2012,9 @@ and cps_non_tail_list :
   let lams = List.rev lams in
   (* Always evaluate right-to-left. *)
   cps_non_tail_list_core acc env ccenv lams
-    (fun acc env ccenv ids (arity : Flambda_arity.Component_for_creation.t list) ->
+    (fun acc env ccenv ids
+         (arity :
+           [`Unarized | `Complex] Flambda_arity.Component_for_creation.t list) ->
       k acc env ccenv (List.rev ids) (List.rev arity))
     k_exn
 

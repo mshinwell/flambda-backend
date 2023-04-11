@@ -53,7 +53,7 @@ let record_free_names_of_apply_as_used0 apply ~use_id ~exn_cont_use_id data_flow
     | Return k, Some use_id -> Some (use_id, k)
     | Never_returns, Some _ | Return _, None -> assert false
   in
-  let result_arity = Apply.return_arity apply in
+  let result_arity = Apply.return_arity apply |> Flambda_arity.unarize_t in
   Flow.Acc.add_apply_conts
     ~exn_cont:(exn_cont_use_id, exn_cont)
     ~result_arity ~result_cont data_flow
@@ -149,7 +149,9 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
       in
       uacc, RE.create_apply (UA.are_rebuilding_terms uacc) apply
     | Some use_id ->
-      EB.rewrite_fixed_arity_apply uacc ~use_id result_arity apply
+      EB.rewrite_fixed_arity_apply uacc ~use_id
+        (Flambda_arity.unarize_t result_arity)
+        apply
   in
   after_rebuild expr uacc
 
@@ -817,7 +819,9 @@ let rebuild_function_call_where_callee's_type_unavailable apply call_kind
     |> Simplify_common.update_exn_continuation_extra_args uacc ~exn_cont_use_id
   in
   let uacc, expr =
-    EB.rewrite_fixed_arity_apply uacc ~use_id (Apply.return_arity apply) apply
+    EB.rewrite_fixed_arity_apply uacc ~use_id
+      (Flambda_arity.unarize_t (Apply.return_arity apply))
+      apply
   in
   after_rebuild expr uacc
 
@@ -999,7 +1003,9 @@ let rebuild_method_call apply ~use_id ~exn_cont_use_id uacc ~after_rebuild =
       apply
   in
   let uacc, expr =
-    EB.rewrite_fixed_arity_apply uacc ~use_id (Apply.return_arity apply) apply
+    EB.rewrite_fixed_arity_apply uacc ~use_id
+      (Flambda_arity.unarize_t (Apply.return_arity apply))
+      apply
   in
   after_rebuild expr uacc
 
@@ -1060,7 +1066,9 @@ let rebuild_c_call apply ~use_id ~exn_cont_use_id ~return_arity uacc
   let uacc, expr =
     match use_id with
     | Some use_id ->
-      EB.rewrite_fixed_arity_apply uacc ~use_id return_arity apply
+      EB.rewrite_fixed_arity_apply uacc ~use_id
+        (Flambda_arity.unarize_t return_arity)
+        apply
     | None ->
       let uacc =
         UA.add_free_names uacc (Apply.free_names apply)

@@ -28,73 +28,78 @@
     caml_apply).
 *)
 
-type t
+type _ t
 
 module Component_for_creation : sig
-  type t =
-    | Singleton of Flambda_kind.With_subkind.t
+  type _ t =
+    | Singleton : Flambda_kind.With_subkind.t -> [> `Unarized] t
       (* The nullary unboxed product is called "void". It is important to
          propagate information about void layouts, even though the corresponding
          variables have no runtime representation, as they interact with
          currying. *)
-    | Unboxed_product of t list
+    | Unboxed_product : _ t list -> [> `Complex] t
 
-  val from_lambda : Lambda.layout -> t
+  val from_lambda : Lambda.layout -> [`Unarized | `Complex] t
 end
 
 (** One component per function or continuation parameter, for example. Each
     component may in turn have an arity describing an unboxed product. *)
-val create : Component_for_creation.t list -> t
+val create :
+  'unarized_or_complex Component_for_creation.t list -> 'unarized_or_complex t
 
-val create_singletons : Flambda_kind.With_subkind.t list -> t
+val create_singletons : Flambda_kind.With_subkind.t list -> [> `Unarized] t
 
-val components : t -> Component_for_creation.t list
+val components :
+  'unarized_or_complex t -> 'unarized_or_complex Component_for_creation.t list
 
-val num_params : t -> int
+val num_params : _ t -> int
 
 (** "No parameters".  (Not e.g. "one parameter of type void".) *)
-val nullary : t
+val nullary : [> `Unarized] t
 
-val print : Format.formatter -> t -> unit
+val print : Format.formatter -> _ t -> unit
 
-val equal_ignoring_subkinds : t -> t -> bool
+val equal_ignoring_subkinds : _ t -> _ t -> bool
 
 (* It's usually a mistake to use this function, but it's needed for
    [Compare]. *)
-val equal_exact : t -> t -> bool
+val equal_exact : _ t -> _ t -> bool
 
-val is_one_param_of_kind_value : t -> bool
+val is_one_param_of_kind_value : _ t -> bool
 
-val must_be_one_param : t -> Flambda_kind.With_subkind.t option
+val must_be_one_param : _ t -> Flambda_kind.With_subkind.t option
 
 module Component : sig
-  type t = private
-    | Singleton of Flambda_kind.With_subkind.t
-    | Unboxed_product of t list
+  type _ t = private
+    | Singleton : Flambda_kind.With_subkind.t -> [> `Unarized] t
+    | Unboxed_product : _ t list -> [> `Complex] t
 end
 
 (** Converts, in a left-to-right depth-first order, an arity into a flattened
     list of kinds for all parameters. *)
-val unarize : t -> Flambda_kind.With_subkind.t list
+val unarize : _ t -> Flambda_kind.With_subkind.t list
 
 (** Like [unarize] but returns one list per parameter. *)
-val unarize_per_parameter : t -> Flambda_kind.With_subkind.t list list
+val unarize_per_parameter : _ t -> Flambda_kind.With_subkind.t list list
+
+(** Like [unarize] but returns a value of type [t]. *)
+val unarize_t : _ t -> [> `Unarized] t
 
 (** Given an arity and an identifier, produce a list of identifiers (with
     corresponding kinds) whose length matches [unarize t], with names derived
     from the given identifier. *)
 val fresh_idents_unarized :
-  t -> id:Ident.t -> (Ident.t * Flambda_kind.With_subkind.t) list
+  _ t -> id:Ident.t -> (Ident.t * Flambda_kind.With_subkind.t) list
 
 (** The length of the list returned by [unarize]. *)
-val cardinal_unarized : t -> int
+val cardinal_unarized : _ t -> int
 
 (** Take a list of Lambda layouts, one per parameter, and form the
 corresponding arity. *)
-val from_lambda_list : Lambda.layout list -> t
+val from_lambda_list : Lambda.layout list -> [`Unarized | `Complex] t
 
 (** Remove the first portion of an arity to correspond to a partial application
     of a given number of unarized arguments.  Such number must correspond to
     a whole number of non-unarized parameters, i.e. unboxed products cannot
     be subdivided.  *)
-val partially_apply : t -> num_unarized_params_provided:int -> t
+val partially_apply : 'uc t -> num_unarized_params_provided:int -> 'uc t

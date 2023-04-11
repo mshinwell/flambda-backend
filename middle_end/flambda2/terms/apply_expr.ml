@@ -73,8 +73,8 @@ type t =
     continuation : Result_continuation.t;
     exn_continuation : Exn_continuation.t;
     args : Simple.t list;
-    args_arity : Flambda_arity.t;
-    return_arity : Flambda_arity.t;
+    args_arity : [`Unarized | `Complex] Flambda_arity.t;
+    return_arity : [`Unarized | `Complex] Flambda_arity.t;
     call_kind : Call_kind.t;
     dbg : Debuginfo.t;
     inlined : Inlined_attribute.t;

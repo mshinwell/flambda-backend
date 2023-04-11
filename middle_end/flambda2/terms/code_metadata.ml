@@ -17,9 +17,9 @@
 type t =
   { code_id : Code_id.t;
     newer_version_of : Code_id.t option;
-    params_arity : Flambda_arity.t;
+    params_arity : [`Unarized | `Complex] Flambda_arity.t;
     num_trailing_local_params : int;
-    result_arity : Flambda_arity.t;
+    result_arity : [`Unarized | `Complex] Flambda_arity.t;
     result_types : Result_types.t Or_unknown_or_bottom.t;
     contains_no_escaping_local_allocs : bool;
     stub : bool;
@@ -124,9 +124,9 @@ include Code_metadata_accessors [@inlined hint] (Metadata_view)
 type 'a create_type =
   Code_id.t ->
   newer_version_of:Code_id.t option ->
-  params_arity:Flambda_arity.t ->
+  params_arity:[`Unarized | `Complex] Flambda_arity.t ->
   num_trailing_local_params:int ->
-  result_arity:Flambda_arity.t ->
+  result_arity:[`Unarized | `Complex] Flambda_arity.t ->
   result_types:Result_types.t Or_unknown_or_bottom.t ->
   contains_no_escaping_local_allocs:bool ->
   stub:bool ->
