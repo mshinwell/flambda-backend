@@ -23,7 +23,7 @@
     register, for example if they are of an unboxed product layout, are split
     by a process called unarization.
 
-    Despite this, the arities preserve the information about any unboxed
+    Despite this, [`Complex] arities preserve the information about any unboxed
     products, for later use (e.g. during Cmm translation to optimize
     caml_apply).
 *)
