@@ -44,13 +44,11 @@ end
 
 (** One component per function or continuation parameter, for example. Each
     component may in turn have an arity describing an unboxed product. *)
-val create :
-  'unarized_or_complex Component_for_creation.t list -> 'unarized_or_complex t
+val create : 'uc Component_for_creation.t list -> 'uc t
 
 val create_singletons : Flambda_kind.With_subkind.t list -> [> `Unarized] t
 
-val components :
-  'unarized_or_complex t -> 'unarized_or_complex Component_for_creation.t list
+val components : 'uc t -> 'uc Component_for_creation.t list
 
 val num_params : _ t -> int
 
