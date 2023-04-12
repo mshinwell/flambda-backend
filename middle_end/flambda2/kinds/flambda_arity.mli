@@ -48,12 +48,10 @@ val create : 'uc Component_for_creation.t list -> 'uc t
 
 val create_singletons : Flambda_kind.With_subkind.t list -> [> `Unarized] t
 
-val components : 'uc t -> 'uc Component_for_creation.t list
-
-val num_params : _ t -> int
-
 (** "No parameters".  (Not e.g. "one parameter of type void".) *)
 val nullary : [> `Unarized] t
+
+val num_params : _ t -> int
 
 val print : Format.formatter -> _ t -> unit
 

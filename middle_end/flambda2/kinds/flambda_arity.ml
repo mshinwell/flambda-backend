@@ -86,8 +86,6 @@ let create t = t
 
 let create_singletons t = List.map (fun kind -> Component.Singleton kind) t
 
-let components t = t
-
 let print ppf t =
   Format.fprintf ppf "@[%a@]"
     (Format.pp_print_list Component.print ~pp_sep:(fun ppf () ->
