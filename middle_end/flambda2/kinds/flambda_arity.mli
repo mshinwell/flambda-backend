@@ -67,12 +67,6 @@ val is_one_param_of_kind_value : _ t -> bool
 
 val must_be_one_param : _ t -> Flambda_kind.With_subkind.t option
 
-module Component : sig
-  type _ t = private
-    | Singleton : Flambda_kind.With_subkind.t -> [> `Unarized] t
-    | Unboxed_product : _ t list -> [> `Complex] t
-end
-
 (** Converts, in a left-to-right depth-first order, an arity into a flattened
     list of kinds for all parameters. *)
 val unarize : _ t -> Flambda_kind.With_subkind.t list
