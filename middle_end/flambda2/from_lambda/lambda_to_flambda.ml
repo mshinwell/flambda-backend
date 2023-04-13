@@ -1605,8 +1605,41 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       (* CR mshinwell: One note though is that [primitive_result_kind] could be
          deleted if we could use a path like this all the time. *)
       let id = Ident.create_local "prim" in
+      let result_layout =
+        match prim with
+        | Pmake_unboxed_product layouts -> L.Punboxed_product layouts
+        | Punboxed_product_field (field, layouts) ->
+          (Array.of_list layouts).(field)
+        | Pbytes_to_string | Pbytes_of_string | Pignore | Pgetglobal _
+        | Psetglobal _ | Pgetpredef _ | Pmakeblock _ | Pmakefloatblock _
+        | Pfield _ | Pfield_computed _ | Psetfield _ | Psetfield_computed _
+        | Pfloatfield _ | Psetfloatfield _ | Pduprecord _ | Pccall _ | Praise _
+        | Psequand | Psequor | Pnot | Pnegint | Paddint | Psubint | Pmulint
+        | Pdivint _ | Pmodint _ | Pandint | Porint | Pxorint | Plslint | Plsrint
+        | Pasrint | Pintcomp _ | Pcompare_ints | Pcompare_floats
+        | Pcompare_bints _ | Poffsetint _ | Poffsetref _ | Pintoffloat
+        | Pfloatofint _ | Pnegfloat _ | Pabsfloat _ | Paddfloat _ | Psubfloat _
+        | Pmulfloat _ | Pdivfloat _ | Pfloatcomp _ | Pstringlength | Pstringrefu
+        | Pstringrefs | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs
+        | Pbytessets | Pmakearray _ | Pduparray _ | Parraylength _
+        | Parrayrefu _ | Parraysetu _ | Parrayrefs _ | Parraysets _ | Pisint _
+        | Pisout | Pbintofint _ | Pintofbint _ | Pcvtbint _ | Pnegbint _
+        | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _
+        | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
+        | Pasrbint _ | Pbintcomp _ | Pbigarrayref _ | Pbigarrayset _
+        | Pbigarraydim _ | Pstring_load_16 _ | Pstring_load_32 _
+        | Pstring_load_64 _ | Pbytes_load_16 _ | Pbytes_load_32 _
+        | Pbytes_load_64 _ | Pbytes_set_16 _ | Pbytes_set_32 _ | Pbytes_set_64 _
+        | Pbigstring_load_16 _ | Pbigstring_load_32 _ | Pbigstring_load_64 _
+        | Pbigstring_set_16 _ | Pbigstring_set_32 _ | Pbigstring_set_64 _
+        | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer | Popaque _
+        | Pprobe_is_enabled _ | Pobj_dup | Pobj_magic _ | Punbox_float
+        | Pbox_float _ | Punbox_int _ | Pbox_int _ | Parray_of_iarray
+        | Parray_to_iarray ->
+          assert false
+      in
       cps acc env ccenv
-        (L.Llet (Strict, L.primitive_result_layout prim, id, lam, L.Lvar id))
+        (L.Llet (Strict, result_layout, id, lam, L.Lvar id))
         k k_exn
     | Pbytes_to_string | Pbytes_of_string | Pignore | Pgetglobal _
     | Psetglobal _ | Pgetpredef _ | Pmakeblock _ | Pmakefloatblock _ | Pfield _
