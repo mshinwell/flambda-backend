@@ -73,6 +73,30 @@ let make_partial x y =
 
 let () =
   Printf.printf "%d\n%!" (make_partial 1 2)
+
+let[@inline never] takes_three_unboxed_pairs
+      (p : (int, int) unboxed_pair)
+      (q : (int, int) unboxed_pair)
+      (r : (int, int) unboxed_pair) =
+  let p0 = unboxed_pair_field_0_i_i p in
+  let p1 = unboxed_pair_field_1_i_i p in
+  let q0 = unboxed_pair_field_0_i_i q in
+  let q1 = unboxed_pair_field_1_i_i q in
+  let r0 = unboxed_pair_field_0_i_i r in
+  let r1 = unboxed_pair_field_1_i_i r in
+  p0 + 10*p1 + 100*q0 + 1000*q1 + 10000*r0 + 100000*r1
+
+let make_partial3 a b c d e f =
+  let p = make_unboxed_pair_i_i a b in
+  let q = make_unboxed_pair_i_i c d in
+  let r = make_unboxed_pair_i_i e f in
+  let partial1 = takes_three_unboxed_pairs p in
+  let partial2 = (Sys.opaque_identity partial1) q in
+  (Sys.opaque_identity partial2) r
+
+let () =
+  Printf.printf "%d\n%!" (make_partial3 1 2 3 4 5 6)
+
 (*
 let[@inline never] returns_unboxed_pair_not_inlined x =
   if x < 0 then make_unboxed_pair_i_i x x
