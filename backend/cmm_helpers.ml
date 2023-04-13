@@ -4013,8 +4013,8 @@ let direct_call ~dbg ty pos f_code_sym args =
   Cop (Capply (ty, pos), f_code_sym :: args, dbg)
 
 let indirect_call ~dbg ty pos alloc_mode f args_type args =
-  match args with
-  | [arg] ->
+  match args_type with
+  | [_] ->
     (* Use a variable to avoid duplicating the cmm code of the closure [f]. *)
     let v = Backend_var.create_local "*closure*" in
     let v' = Backend_var.With_provenance.create v in
@@ -4022,10 +4022,10 @@ let indirect_call ~dbg ty pos alloc_mode f args_type args =
       ~body:
         (Cop
            ( Capply (Extended_machtype.to_machtype ty, pos),
-             [load ~dbg Word_int Asttypes.Mutable ~addr:(Cvar v); arg; Cvar v],
+             (load ~dbg Word_int Asttypes.Mutable ~addr:(Cvar v) :: args)
+             @ [Cvar v],
              dbg ))
-  | args ->
-    call_caml_apply ty args_type Asttypes.Mutable f args pos alloc_mode dbg
+  | _ -> call_caml_apply ty args_type Asttypes.Mutable f args pos alloc_mode dbg
 
 let indirect_full_call ~dbg ty pos alloc_mode f args_type = function
   (* the single-argument case is already optimized by indirect_call *)
