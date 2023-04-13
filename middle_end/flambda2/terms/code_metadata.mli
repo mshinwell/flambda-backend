@@ -35,6 +35,7 @@ module type Code_metadata_accessors_result_type = sig
 
   val num_leading_heap_params : 'a t -> int
 
+  (* XXX rename to num_trailing_local_non_unarized_params *)
   val num_trailing_local_params : 'a t -> int
 
   val result_arity : 'a t -> [`Unarized | `Complex] Flambda_arity.t

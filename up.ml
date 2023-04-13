@@ -159,7 +159,7 @@ let () =
   Printf.printf "after definition\n%!";
   Printf.printf "%d (expected 42)\n%!" (p (void ()))
 
-(* With partial applications visible to flambda *)
+(* With partial applications visible to flambda (From_lambda) *)
 let () =
   let p = Sys.opaque_identity (two_voids_const (void ())) in
   Printf.printf "%d (expected 42)\n%!" (p (void ()));
@@ -169,3 +169,18 @@ let () =
   let p = Sys.opaque_identity (two_voids_const_side2 (void ())) in
   Printf.printf "after definition\n%!";
   Printf.printf "%d (expected 42)\n%!" (p (void ()))
+
+(* With partial applications visible to flambda (Simplify) *)
+let[@inline] to_inline two_voids_const two_voids_const_side1
+      two_voids_const_side2 =
+  let p = Sys.opaque_identity (two_voids_const (void ())) in
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = Sys.opaque_identity (two_voids_const_side1 (void ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = Sys.opaque_identity (two_voids_const_side2 (void ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()))
+
+let () =
+  to_inline two_voids_const two_voids_const_side1 two_voids_const_side2

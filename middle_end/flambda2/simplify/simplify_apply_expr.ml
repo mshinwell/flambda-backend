@@ -347,9 +347,10 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
 
 let simplify_direct_partial_application ~simplify_expr dacc apply
     ~callee's_code_id ~callee's_code_metadata ~callee's_function_slot
-    ~param_arity ~result_arity ~recursive ~down_to_up ~coming_from_indirect
+    ~param_arity ~args_arity ~result_arity ~recursive ~down_to_up
+    ~coming_from_indirect
     ~(closure_alloc_mode_from_type : Alloc_mode.For_types.t) ~current_region
-    ~num_trailing_local_params =
+    ~num_trailing_local_non_unarized_params =
   (* Partial-applications are converted in full applications. Let's assume that
      [foo] takes 6 arguments. Then [foo a b c] gets transformed into:
 
@@ -387,15 +388,20 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
          Inlining_helpers.(
            inlined_attribute_on_partial_application_msg Unrolled))
   | Default_inlined | Hint_inlined -> ());
-  let arity = Flambda_arity.cardinal_unarized param_arity in
-  let args_arity = List.length args in
-  assert (arity > args_arity);
-  let applied_args, remaining_param_arity =
+  let num_non_unarized_params = Flambda_arity.num_params param_arity in
+  let num_non_unarized_args = Flambda_arity.num_params args_arity in
+  let remaining_param_arity =
+    Flambda_arity.partially_apply param_arity
+      ~num_non_unarized_params_provided:(Flambda_arity.num_params args_arity)
+  in
+  let applied_unarized_args, _ =
     Misc.Stdlib.List.map2_prefix
       (fun arg kind -> arg, kind)
       args
       (Flambda_arity.unarize param_arity)
   in
+  (* If the remaining arguments are all void, these might be equal *)
+  assert (Flambda_arity.cardinal_unarized param_arity >= List.length args);
   let wrapper_var = Variable.create "partial_app" in
   let compilation_unit = Compilation_unit.get_current_exn () in
   let wrapper_function_slot =
@@ -406,13 +412,17 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     (* If the closure has a local suffix, and we've supplied enough args to hit
        it, then the closure must be local (because the args or closure might
        be). *)
-    let num_leading_heap_params = arity - num_trailing_local_params in
-    if args_arity <= num_leading_heap_params
-    then Alloc_mode.For_allocations.heap, num_trailing_local_params
+    let num_leading_heap_non_unarized_params =
+      num_non_unarized_params - num_trailing_local_non_unarized_params
+    in
+    if num_non_unarized_args <= num_leading_heap_non_unarized_params
+    then Alloc_mode.For_allocations.heap, num_trailing_local_non_unarized_params
     else
-      let num_supplied_local_args = args_arity - num_leading_heap_params in
+      let num_supplied_local_args =
+        num_non_unarized_args - num_leading_heap_non_unarized_params
+      in
       ( Alloc_mode.For_allocations.local ~region:current_region,
-        num_trailing_local_params - num_supplied_local_args )
+        num_trailing_local_non_unarized_params - num_supplied_local_args )
   in
   (match closure_alloc_mode_from_type with
   | Heap_or_local -> ()
@@ -452,7 +462,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         (fun kind ->
           let param = Variable.create "param" in
           Bound_parameter.create param kind)
-        remaining_param_arity
+        (Flambda_arity.unarize remaining_param_arity)
       |> Bound_parameters.create
     in
     let call_kind =
@@ -503,8 +513,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     let applied_callee =
       applied_value (Apply.callee apply, K.With_subkind.any_value)
     in
-    let applied_args = List.map applied_value applied_args in
-    let applied_values = applied_callee :: applied_args in
+    let applied_unarized_args = List.map applied_value applied_unarized_args in
+    let applied_values = applied_callee :: applied_unarized_args in
     let my_closure = Variable.create "my_closure" in
     let my_region = Variable.create "my_region" in
     let my_depth = Variable.create "my_depth" in
@@ -521,7 +531,8 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       in
       let callee = arg applied_callee in
       let args =
-        List.map arg applied_args @ Bound_parameters.simples remaining_params
+        List.map arg applied_unarized_args
+        @ Bound_parameters.simples remaining_params
       in
       let full_application =
         Apply.create ~callee ~continuation:(Return return_continuation)
@@ -751,9 +762,9 @@ let simplify_direct_function_call ~simplify_expr dacc apply
         ~apply_alloc_mode ~current_region ~callee's_code_id
         ~callee's_code_metadata ~down_to_up
     else
-      let args = Apply.args apply in
-      let provided_num_args = List.length args in
-      let num_params = Flambda_arity.cardinal_unarized params_arity in
+      let args_arity = Apply.args_arity apply in
+      let num_params = Flambda_arity.num_params params_arity in
+      let provided_num_args = Flambda_arity.num_params args_arity in
       let result_arity_of_application = Apply.return_arity apply in
       if provided_num_args = num_params
       then (
@@ -805,11 +816,11 @@ let simplify_direct_function_call ~simplify_expr dacc apply
             Apply.print apply;
         simplify_direct_partial_application ~simplify_expr dacc apply
           ~callee's_code_id ~callee's_code_metadata ~callee's_function_slot
-          ~param_arity:params_arity
+          ~param_arity:params_arity ~args_arity
           ~result_arity:(Flambda_arity.unarize_t result_arity)
           ~recursive ~down_to_up ~coming_from_indirect
           ~closure_alloc_mode_from_type ~current_region
-          ~num_trailing_local_params:
+          ~num_trailing_local_non_unarized_params:
             (Code_metadata.num_trailing_local_params callee's_code_metadata))
       else
         Misc.fatal_errorf
