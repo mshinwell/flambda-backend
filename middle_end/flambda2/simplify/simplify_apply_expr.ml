@@ -768,7 +768,8 @@ let simplify_direct_function_call ~simplify_expr dacc apply
            present on the application expression, so all we can do is check that
            the function being overapplied returns kind Value. *)
         if not
-             (Flambda_arity.equal_ignoring_subkinds result_arity
+             (Flambda_arity.equal_ignoring_subkinds
+                (Flambda_arity.unarize_t result_arity)
                 result_arity_of_application)
         then
           Misc.fatal_errorf
