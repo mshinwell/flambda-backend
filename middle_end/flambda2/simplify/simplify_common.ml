@@ -96,15 +96,26 @@ let split_direct_over_application apply
   let callee's_params_arity =
     Code_metadata.params_arity callee's_code_metadata
   in
-  let arity = Flambda_arity.cardinal_unarized callee's_params_arity in
-  let args = Apply.args apply in
-  assert (arity < List.length args);
-  let first_args, remaining_args = Misc.Stdlib.List.split_at arity args in
-  let _, remaining_arity =
-    Misc.Stdlib.List.split_at arity
-      (Apply.args_arity apply |> Flambda_arity.unarize)
+  let num_non_unarized_params =
+    Flambda_arity.num_params callee's_params_arity
   in
-  assert (List.compare_lengths remaining_args remaining_arity = 0);
+  let args_arity = Apply.args_arity apply in
+  let num_non_unarized_args = Flambda_arity.num_params args_arity in
+  assert (num_non_unarized_params < num_non_unarized_args);
+  let args = Apply.args apply in
+  let first_args, remaining_args =
+    Misc.Stdlib.List.split_at
+      (Flambda_arity.cardinal_unarized callee's_params_arity)
+      args
+  in
+  let remaining_arity =
+    Flambda_arity.partially_apply args_arity
+      ~num_non_unarized_params_provided:num_non_unarized_params
+  in
+  assert (
+    List.compare_length_with remaining_args
+      (Flambda_arity.cardinal_unarized remaining_arity)
+    = 0);
   let func_var = Variable.create "full_apply" in
   let contains_no_escaping_local_allocs =
     Code_metadata.contains_no_escaping_local_allocs callee's_code_metadata
@@ -141,8 +152,7 @@ let split_direct_over_application apply
     in
     Apply.create ~callee:(Simple.var func_var) ~continuation
       (Apply.exn_continuation apply)
-      ~args:remaining_args
-      ~args_arity:(Flambda_arity.create_singletons remaining_arity)
+      ~args:remaining_args ~args_arity:remaining_arity
       ~return_arity:(Apply.return_arity apply)
       ~call_kind:
         (Call_kind.indirect_function_call_unknown_arity apply_alloc_mode)

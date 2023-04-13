@@ -390,6 +390,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
   | Default_inlined | Hint_inlined -> ());
   let num_non_unarized_params = Flambda_arity.num_params param_arity in
   let num_non_unarized_args = Flambda_arity.num_params args_arity in
+  assert (num_non_unarized_params > num_non_unarized_args);
   let remaining_param_arity =
     Flambda_arity.partially_apply param_arity
       ~num_non_unarized_params_provided:(Flambda_arity.num_params args_arity)
@@ -400,8 +401,6 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       args
       (Flambda_arity.unarize param_arity)
   in
-  (* If the remaining arguments are all void, these might be equal *)
-  assert (Flambda_arity.cardinal_unarized param_arity >= List.length args);
   let wrapper_var = Variable.create "partial_app" in
   let compilation_unit = Compilation_unit.get_current_exn () in
   let wrapper_function_slot =

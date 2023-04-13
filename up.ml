@@ -140,11 +140,11 @@ let apply_void1a_no_wrapper x y =
 let () =
   Printf.printf "%d (expected 1)\n%!" (apply_void1a_no_wrapper 1 2)
 
-let two_voids_const (v : void) (v : void) = 42
-let two_voids_const_side1 (v : void) =
+let[@inline never] two_voids_const (v : void) (v : void) = 42
+let[@inline never] two_voids_const_side1 (v : void) =
   Printf.printf "foo\n%!"; fun (v : void) -> 42
 
-let two_voids_const_side2 (v : void) (v : void) =
+let[@inline never] two_voids_const_side2 (v : void) (v : void) =
   Printf.printf "bar\n%!";
   42
 
@@ -184,3 +184,34 @@ let[@inline] to_inline two_voids_const two_voids_const_side1
 
 let () =
   to_inline two_voids_const two_voids_const_side1 two_voids_const_side2
+
+(* Overapplications concealed from flambda *)
+let () =
+  Printf.printf "OVERAPP1\n%!";
+  let x = (Sys.opaque_identity two_voids_const) (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = (Sys.opaque_identity two_voids_const_side1) (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = (Sys.opaque_identity two_voids_const_side2) (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x
+
+(* Overapplications visible to flambda *)
+let () =
+  Printf.printf "OVERAPP2\n%!";
+  let x = two_voids_const (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = two_voids_const_side1 (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = two_voids_const_side2 (void ()) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" x
+
+(* Overapplications visible to simplify only *)
+let[@inline always] g (f : void -> void -> int) : int = f (void ()) (void ())
+let () =
+  Printf.printf "OVERAPP3\n%!";
+  let x = g two_voids_const in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = g two_voids_const_side1 in
+  Printf.printf "%d (expected 42)\n%!" x;
+  let x = g two_voids_const_side2 in
+  Printf.printf "%d (expected 42)\n%!" x
