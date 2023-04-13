@@ -104,9 +104,9 @@ let rebuild_arm uacc arm (action, use_id, arity, env_at_use)
           | Non_inlinable_zero_arity { handler = Known handler } ->
             check_handler ~handler ~action
           | Non_inlinable_zero_arity { handler = Unknown } -> Some action
-          | Invalid _ -> None
-          | Non_inlinable_non_zero_arity _
-          | Toplevel_or_function_return_or_exn_continuation _ ->
+          | Invalid _ | Toplevel_or_function_return_or_exn_continuation _ ->
+            None
+          | Non_inlinable_non_zero_arity _ ->
             Misc.fatal_errorf
               "Inconsistency for %a between [Apply_cont.is_goto] and \
                continuation environment in [UA]:@ %a"

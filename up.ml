@@ -251,3 +251,30 @@ let () =
   let p = Sys.opaque_identity (two_voids_const_side2 (void_from_product_inlined ())) in
   Printf.printf "after definition\n%!";
   Printf.printf "%d (expected 42)\n%!" (p (void_from_product_inlined ()))
+
+let[@inline never] returns_unboxed_pair_of_voids_not_inlined x =
+  if x < 0 then make_unboxed_pair_o_o (void ()) (void ())
+  else (
+    Printf.printf "foo\n%!";
+    make_unboxed_pair_o_o (void ()) (void ())
+  )
+
+let[@inline] returns_unboxed_pair_of_voids_inlined x =
+  if x < 0 then make_unboxed_pair_o_o (void ()) (void ())
+  else (
+    Printf.printf "foo2\n%!";
+    make_unboxed_pair_o_o (void ()) (void ())
+  )
+
+let print_foo (_ : void) = Printf.printf "FOO\n%!"
+
+let[@inline never] call_functions_returning_unboxed_pair_of_voids x =
+  let p1 = returns_unboxed_pair_of_voids_not_inlined x in
+  let p2 = returns_unboxed_pair_of_voids_inlined x in
+  print_foo (unboxed_pair_field_0_o_o p1);
+  print_foo (unboxed_pair_field_1_o_o p1);
+  print_foo (unboxed_pair_field_0_o_o p2);
+  print_foo (unboxed_pair_field_1_o_o p2)
+
+let () = call_functions_returning_unboxed_pair_of_voids 100
+let () = call_functions_returning_unboxed_pair_of_voids (-100)
