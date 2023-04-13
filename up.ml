@@ -252,6 +252,10 @@ let () =
   Printf.printf "after definition\n%!";
   Printf.printf "%d (expected 42)\n%!" (p (void_from_product_inlined ()))
 
+(* version without printing to declutter Cmm *)
+let[@inline never] returns_unboxed_pair_of_voids_not_inlined0 x =
+  make_unboxed_pair_o_o (void ()) (void ())
+
 let[@inline never] returns_unboxed_pair_of_voids_not_inlined x =
   if x < 0 then make_unboxed_pair_o_o (void ()) (void ())
   else (
@@ -278,3 +282,10 @@ let[@inline never] call_functions_returning_unboxed_pair_of_voids x =
 
 let () = call_functions_returning_unboxed_pair_of_voids 100
 let () = call_functions_returning_unboxed_pair_of_voids (-100)
+
+external make_unboxed_triple_o_i_o
+  : void -> int -> void -> (void, int, void) unboxed_triple =
+  "%make_unboxed_triple_o_i_o"
+
+let[@inline never] returns_unboxed_triple_of_void_int_void_not_inlined x =
+  make_unboxed_triple_o_i_o (void ()) x (void ())

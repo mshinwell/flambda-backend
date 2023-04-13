@@ -207,6 +207,9 @@ let rec layout env ty =
     | Tconstr(p, args, _) when Path.same p Predef.path_unboxed_pair ->
       let layouts = List.map (layout env) args in
       num_nodes_visited, Punboxed_product layouts
+    | Tconstr(p, args, _) when Path.same p Predef.path_unboxed_triple ->
+      let layouts = List.map (layout env) args in
+      num_nodes_visited, Punboxed_product layouts
     | Tconstr(p, _, _) when Path.same p Predef.path_void ->
       num_nodes_visited, Punboxed_product []
     | Tconstr(p, _, _)

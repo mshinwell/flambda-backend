@@ -438,6 +438,9 @@ let lookup_primitive loc poly pos p =
       Primitive(Punboxed_product_field (0, two_unboxed_pairs_of_values), 1)
     | "%unboxed_pair_field_1_vup_vup" ->
       Primitive(Punboxed_product_field (1, two_unboxed_pairs_of_values), 1)
+    (* unboxed triples (void, int, void) *)
+    | "%make_unboxed_triple_o_i_o" ->
+      Primitive(Pmake_unboxed_product [Punboxed_product []; Pvalue Pintval; Punboxed_product []], 3)
     (* void is special as the external is declared to have one parameter
        but the primitive takes zero arguments *)
     | "%void" -> Void
