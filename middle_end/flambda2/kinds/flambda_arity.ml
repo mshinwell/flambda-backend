@@ -139,7 +139,7 @@ let rec must_be_one_param : type uc. uc t -> Flambda_kind.With_subkind.t option
 let from_lambda_list layouts =
   layouts |> List.map Component_for_creation.from_lambda |> create
 
-let rec partially_apply t ~num_non_unarized_params_provided =
+let partially_apply t ~num_non_unarized_params_provided =
   if num_non_unarized_params_provided < 0
      || num_non_unarized_params_provided >= List.length t
   then
