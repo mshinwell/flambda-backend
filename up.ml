@@ -1,3 +1,4 @@
+(*
 external make_unboxed_pair_v_v : 'a -> 'b -> ('a, 'b) unboxed_pair = "%make_unboxed_pair_v_v"
 external unboxed_pair_field_0_v_v : ('a, 'b) unboxed_pair -> 'a = "%unboxed_pair_field_0_v_v"
 external unboxed_pair_field_1_v_v : ('a, 'b) unboxed_pair -> 'b = "%unboxed_pair_field_1_v_v"
@@ -116,7 +117,7 @@ let call_function_returning_unboxed_pair x =
 
 let () =
   Printf.printf "%d\n%!" (call_function_returning_unboxed_pair 42)
-
+*)
 external void : unit -> void = "%void"
 
 let void_const (v : void) = 42
@@ -147,6 +148,7 @@ let two_voids_const_side2 (v : void) (v : void) =
   Printf.printf "bar\n%!";
   42
 
+(* With partial applications concealed from flambda *)
 let () =
   let p = (Sys.opaque_identity two_voids_const) (void ()) in
   Printf.printf "%d (expected 42)\n%!" (p (void ()));
@@ -155,4 +157,15 @@ let () =
   Printf.printf "%d (expected 42)\n%!" (p (void ()));
   let p = (Sys.opaque_identity two_voids_const_side2) (void ()) in
   Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()))
+
+(* With partial applications visible to flambda *)
+let () =
+  let p = Sys.opaque_identity (two_voids_const (void ())) in
   Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = Sys.opaque_identity (two_voids_const_side1 (void ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = Sys.opaque_identity (two_voids_const_side2 (void ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()))

@@ -64,7 +64,7 @@ module IR = struct
       probe : Lambda.probe;
       mode : Lambda.alloc_mode;
       region : Ident.t;
-      args_arity : [`Unarized | `Complex] Flambda_arity.t option;
+      args_arity : [`Unarized | `Complex] Flambda_arity.t;
       return_arity : [`Unarized | `Complex] Flambda_arity.t
     }
 

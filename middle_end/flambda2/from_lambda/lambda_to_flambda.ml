@@ -1755,7 +1755,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
                         probe = None;
                         mode;
                         region = Env.current_region env;
-                        args_arity = Some (Flambda_arity.create args_arity);
+                        args_arity = Flambda_arity.create args_arity;
                         return_arity =
                           Flambda_arity.create_singletons
                             [Flambda_kind.With_subkind.from_lambda layout]
@@ -1986,7 +1986,7 @@ and cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode ap_loc
               probe = ap_probe;
               mode = ap_mode;
               region = Env.current_region env;
-              args_arity = Some (Flambda_arity.create args_arity);
+              args_arity = Flambda_arity.create args_arity;
               return_arity =
                 Flambda_arity.create
                   [Flambda_arity.Component_for_creation.from_lambda ap_return]

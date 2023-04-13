@@ -1120,12 +1120,7 @@ let close_exact_or_unknown_apply acc env
     close_exn_continuation acc env exn_continuation
   in
   let acc, args_with_arity = find_simples_and_arity acc env args in
-  let args, split_args_arity = List.split args_with_arity in
-  let args_arity =
-    match args_arity with
-    | Some args_arity -> args_arity
-    | None -> Flambda_arity.create_singletons split_args_arity
-  in
+  let args, _split_args_arity = List.split args_with_arity in
   let inlined_call = Inlined_attribute.from_lambda inlined in
   let probe_name =
     match probe with None -> None | Some { name } -> Some name
@@ -2001,10 +1996,7 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
           kind_with_subkind ))
       (Flambda_arity.unarize missing_arity)
   in
-  let params_arity =
-    Flambda_arity.partially_apply arity
-      ~num_unarized_params_provided:num_provided
-  in
+  let params_arity = missing_arity in
   (match Sys.getenv "DEBUG" with
   | exception Not_found -> ()
   | _ ->
@@ -2029,7 +2021,7 @@ let wrap_partial_application acc env apply_continuation (apply : IR.apply)
       { apply with
         kind = Function;
         args = all_args;
-        args_arity = Some arity;
+        args_arity = arity;
         continuation = return_continuation;
         exn_continuation;
         inlined = Lambda.Default_inlined;
@@ -2210,7 +2202,7 @@ type call_args_split =
   | Exact of IR.simple list
   | Partial_app of
       { provided : IR.simple list;
-        missing_arity : [`Unarized] Flambda_arity.t
+        missing_arity : [`Unarized | `Complex] Flambda_arity.t
       }
   | Over_app of
       { full : IR.simple list;
@@ -2248,9 +2240,9 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
         is_tupled,
         num_trailing_local_params,
         contains_no_escaping_local_allocs ) -> (
-    let acc, args_with_arities = find_simples_and_arity acc env apply.args in
-    let args_arity = List.map snd args_with_arities in
+    let acc, _ = find_simples_and_arity acc env apply.args in
     let split_args =
+      let non_unarized_arity = arity in
       let arity = Flambda_arity.unarize arity in
       let split args arity =
         let rec cut n l =
@@ -2263,25 +2255,28 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
               let before, after = cut (n - 1) t in
               h :: before, after
         in
-        let args_l = List.length args in
-        let arity_l = List.length arity in
+        let args_l = Flambda_arity.num_params apply.args_arity in
+        let arity_l = Flambda_arity.num_params non_unarized_arity in
         if args_l = arity_l
         then Exact args
         else if args_l < arity_l
         then
-          let _provided_arity, missing_arity = cut args_l arity in
-          Partial_app
-            { provided = args;
-              missing_arity = Flambda_arity.create_singletons missing_arity
-            }
+          let missing_arity =
+            Flambda_arity.partially_apply non_unarized_arity
+              ~num_non_unarized_params_provided:args_l
+          in
+          Partial_app { provided = args; missing_arity }
         else
-          let full, remaining = cut arity_l args in
-          let provided_arity, remaining_arity = cut arity_l args_arity in
+          let full, remaining = cut (List.length arity) args in
+          let remaining_arity =
+            Flambda_arity.partially_apply apply.args_arity
+              ~num_non_unarized_params_provided:arity_l
+          in
           Over_app
             { full;
-              provided_arity = Flambda_arity.create_singletons provided_arity;
+              provided_arity = non_unarized_arity;
               remaining;
-              remaining_arity = Flambda_arity.create_singletons remaining_arity
+              remaining_arity
             }
       in
       let arity =
@@ -2312,7 +2307,7 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
         close_exact_or_unknown_apply acc env
           { apply with
             args = full;
-            args_arity = Some provided_arity;
+            args_arity = provided_arity;
             continuation = apply_continuation;
             mode;
             return_arity =

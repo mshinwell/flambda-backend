@@ -88,8 +88,6 @@ val cardinal_unarized : _ t -> int
     corresponding arity. *)
 val from_lambda_list : Lambda.layout list -> [`Unarized | `Complex] t
 
-(** Remove the first portion of an arity to correspond to a partial application
-    of a given number of unarized arguments.  Such number must correspond to
-    a whole number of non-unarized parameters, i.e. unboxed products cannot
-    be subdivided.  *)
-val partially_apply : 'uc t -> num_unarized_params_provided:int -> 'uc t
+(** Remove the first portion of an arity to correspond to a partial
+    application. *)
+val partially_apply : 'uc t -> num_non_unarized_params_provided:int -> 'uc t
