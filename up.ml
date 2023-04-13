@@ -1,4 +1,3 @@
-(*
 external make_unboxed_pair_v_v : 'a -> 'b -> ('a, 'b) unboxed_pair = "%make_unboxed_pair_v_v"
 external unboxed_pair_field_0_v_v : ('a, 'b) unboxed_pair -> 'a = "%unboxed_pair_field_0_v_v"
 external unboxed_pair_field_1_v_v : ('a, 'b) unboxed_pair -> 'b = "%unboxed_pair_field_1_v_v"
@@ -117,7 +116,7 @@ let call_function_returning_unboxed_pair x =
 
 let () =
   Printf.printf "%d\n%!" (call_function_returning_unboxed_pair 42)
-*)
+
 external void : unit -> void = "%void"
 
 let void_const (v : void) = 42
@@ -215,3 +214,40 @@ let () =
   Printf.printf "%d (expected 42)\n%!" x;
   let x = g two_voids_const_side2 in
   Printf.printf "%d (expected 42)\n%!" x
+
+(* From above: with partial applications visible to flambda (From_lambda),
+   but using void arguments extracted from unboxed products *)
+external make_unboxed_pair_o_o : void -> void -> (void, void) unboxed_pair =
+  "%make_unboxed_pair_o_o"
+external unboxed_pair_field_0_o_o : (void, void) unboxed_pair -> void =
+  "%unboxed_pair_field_0_o_o"
+external unboxed_pair_field_1_o_o : (void, void) unboxed_pair -> void =
+  "%unboxed_pair_field_1_o_o"
+
+let[@inline never] void_from_product () =
+  let p = make_unboxed_pair_o_o (void ()) (void ()) in
+  unboxed_pair_field_0_o_o p
+
+let[@inline] void_from_product_inlined () =
+  let p = make_unboxed_pair_o_o (void ()) (void ()) in
+  unboxed_pair_field_0_o_o p
+
+let () =
+  let p = Sys.opaque_identity (two_voids_const (void_from_product ())) in
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product ()));
+  let p = Sys.opaque_identity (two_voids_const_side1 (void_from_product ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product ()));
+  let p = Sys.opaque_identity (two_voids_const_side2 (void_from_product ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product ()))
+
+let () =
+  let p = Sys.opaque_identity (two_voids_const (void_from_product_inlined ())) in
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product_inlined ()));
+  let p = Sys.opaque_identity (two_voids_const_side1 (void_from_product_inlined ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product_inlined ()));
+  let p = Sys.opaque_identity (two_voids_const_side2 (void_from_product_inlined ())) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void_from_product_inlined ()))

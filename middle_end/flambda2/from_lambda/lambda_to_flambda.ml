@@ -866,7 +866,7 @@ let transform_primitive env id (prim : L.primitive) args loc =
       (* CR mshinwell: try to keep this as an array? *)
     in
     let env =
-      if num_projected_fields > 1
+      if num_projected_fields <> 1
       then
         (* If the field being projected is an unboxed product, we must ensure
            any occurrences of [id] get expanded to the individual fields, just
@@ -1360,12 +1360,24 @@ let maybe_insert_let_cont result_var_name layout k acc env ccenv body =
   match k with
   | Tail k -> body acc env ccenv k
   | Non_tail k ->
-    let result_var = Ident.create_local result_var_name in
-    let arity = Flambda_arity.Component_for_creation.from_lambda layout in
-    let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[result_var, IR.Not_user_visible, layout]
-      ~handler:(fun acc env ccenv -> k acc env ccenv [IR.Var result_var] arity)
-      ~body
+    let arity_component =
+      Flambda_arity.Component_for_creation.from_lambda layout
+    in
+    let arity = Flambda_arity.create [arity_component] in
+    if Flambda_arity.cardinal_unarized arity < 1
+    then
+      let_cont_nonrecursive_with_extra_params acc env ccenv
+        ~is_exn_handler:false ~params:[]
+        ~handler:(fun acc env ccenv -> k acc env ccenv [] arity_component)
+        ~body
+    else
+      let result_var = Ident.create_local result_var_name in
+      let_cont_nonrecursive_with_extra_params acc env ccenv
+        ~is_exn_handler:false
+        ~params:[result_var, IR.Not_user_visible, layout]
+        ~handler:(fun acc env ccenv ->
+          k acc env ccenv [IR.Var result_var] arity_component)
+        ~body
 
 let name_if_not_var acc ccenv name simple kind body =
   match simple with
