@@ -116,3 +116,43 @@ let call_function_returning_unboxed_pair x =
 
 let () =
   Printf.printf "%d\n%!" (call_function_returning_unboxed_pair 42)
+
+external void : unit -> void = "%void"
+
+let void_const (v : void) = 42
+
+let void0 (v : void) x = x
+
+let void1a (v : void) x y = x
+let void1b (v : void) x y = y
+
+let void2a x (v : void) y = x
+let void2b x (v : void) y = y
+
+let void3a x y (v : void) = x
+let void3b x y (v : void) = y
+
+let apply_void1a_no_wrapper x y =
+  let p = (Sys.opaque_identity void1a) (void ()) in
+  p x y
+
+let () =
+  Printf.printf "%d (expected 1)\n%!" (apply_void1a_no_wrapper 1 2)
+
+let two_voids_const (v : void) (v : void) = 42
+let two_voids_const_side1 (v : void) =
+  Printf.printf "foo\n%!"; fun (v : void) -> 42
+
+let two_voids_const_side2 (v : void) (v : void) =
+  Printf.printf "bar\n%!";
+  42
+
+let () =
+  let p = (Sys.opaque_identity two_voids_const) (void ()) in
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = (Sys.opaque_identity two_voids_const_side1) (void ()) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));
+  let p = (Sys.opaque_identity two_voids_const_side2) (void ()) in
+  Printf.printf "after definition\n%!";
+  Printf.printf "%d (expected 42)\n%!" (p (void ()));

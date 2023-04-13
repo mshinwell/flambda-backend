@@ -47,6 +47,7 @@ and ident_string = ident_create "string"
 and ident_extension_constructor = ident_create "extension_constructor"
 and ident_floatarray = ident_create "floatarray"
 and ident_unboxed_pair = ident_create "unboxed_pair"
+and ident_real_void = ident_create "void"
 
 let path_int = Pident ident_int
 and path_char = Pident ident_char
@@ -67,6 +68,7 @@ and path_string = Pident ident_string
 and path_extension_constructor = Pident ident_extension_constructor
 and path_floatarray = Pident ident_floatarray
 and path_unboxed_pair = Pident ident_unboxed_pair
+and path_void = Pident ident_real_void
 
 let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
 and type_char = newgenty (Tconstr(path_char, [], ref Mnil))
@@ -259,6 +261,7 @@ let common_initial_env add_type add_extension empty_env =
   |> add_type2 ident_unboxed_pair
        ~variance:Variance.covariant
        ~separability:Separability.Ind
+  |> add_type ident_real_void
   (* Predefined exceptions - alphabetical order *)
   |> add_extension ident_assert_failure
        [newgenty (Ttuple[type_string; type_int; type_int])]

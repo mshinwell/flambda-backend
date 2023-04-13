@@ -93,6 +93,7 @@ type prim =
   | Identity
   | Apply of Lambda.region_close * Lambda.layout
   | Revapply of Lambda.region_close * Lambda.layout
+  | Void
 
 let units_with_used_primitives = Hashtbl.create 7
 let add_used_primitive loc env path =
@@ -427,6 +428,7 @@ let lookup_primitive loc poly pos p =
       Primitive(Punboxed_product_field (0, two_unboxed_pairs_of_values), 1)
     | "%unboxed_pair_field_1_vup_vup" ->
       Primitive(Punboxed_product_field (1, two_unboxed_pairs_of_values), 1)
+    | "%void" -> Void
     | s when String.length s > 0 && s.[0] = '%' ->
        raise(Error(loc, Unknown_builtin_primitive s))
     | _ -> External p
@@ -788,6 +790,7 @@ let lambda_of_prim prim_name prim loc args arg_exps =
         ap_region_close = pos;
         ap_mode = alloc_heap;
       }
+  | Void, _ -> Lprim (Pmake_unboxed_product [], [], loc)
   | (Raise _ | Raise_with_backtrace
     | Lazy_force _ | Loc _ | Primitive _ | Sys_argv | Comparison _
     | Send _ | Send_self _ | Send_cache _ | Frame_pointers | Identity
@@ -816,6 +819,7 @@ let check_primitive_arity loc p =
     | Frame_pointers -> p.prim_arity = 0
     | Identity -> p.prim_arity = 1
     | Apply _ | Revapply _ -> p.prim_arity = 2
+    | Void -> true
   in
   if not ok then raise(Error(loc, Wrong_arity_builtin_primitive p.prim_name))
 
@@ -925,7 +929,7 @@ let primitive_needs_event_after = function
       lambda_primitive_needs_event_after (comparison_primitive comp knd)
   | Lazy_force _ | Send _ | Send_self _ | Send_cache _
   | Apply _ | Revapply _ -> true
-  | Raise _ | Raise_with_backtrace | Loc _ | Frame_pointers | Identity -> false
+  | Raise _ | Raise_with_backtrace | Loc _ | Frame_pointers | Identity | Void -> false
 
 let transl_primitive_application loc p env ty mode path exp args arg_exps pos =
   let prim =
