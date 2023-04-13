@@ -93,9 +93,15 @@ let translate_apply0 ~dbg_with_inlined:dbg env res apply =
       Lambda.Rc_normal
     | Nontail -> Lambda.Rc_nontail
   in
-  let args_arity = Apply.args_arity apply |> Flambda_arity.unarize in
+  let args_arity =
+    Apply.args_arity apply |> Flambda_arity.unarize_per_parameter
+  in
   let return_arity = Apply.return_arity apply in
-  let args_ty = List.map C.extended_machtype_of_kind args_arity in
+  let args_ty =
+    List.map
+      (fun kinds -> List.map C.extended_machtype_of_kind kinds |> Array.concat)
+      args_arity
+  in
   let return_ty = C.extended_machtype_of_return_arity return_arity in
   match Apply.call_kind apply with
   | Function { function_call = Direct code_id; alloc_mode = _ } -> (
