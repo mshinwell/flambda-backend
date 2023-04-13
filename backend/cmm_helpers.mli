@@ -1184,7 +1184,7 @@ val indirect_call :
   Lambda.alloc_mode ->
   expression ->
   Extended_machtype.t list ->
-  expression list ->
+  expression list list ->
   expression
 
 (** Same as {!direct_call} but for an indirect call that is know to be a full

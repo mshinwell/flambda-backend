@@ -47,6 +47,14 @@ let bind_list name args fn =
   in
   aux [] (List.rev args)
 
+let bind_list_list name args fn =
+  let rec aux bound_args = function
+    | [] -> fn bound_args
+    | arg :: args ->
+      bind_list name arg (fun bound_arg -> aux (bound_arg :: bound_args) args)
+  in
+  aux [] (List.rev args)
+
 let caml_black = Nativeint.shift_left (Nativeint.of_int 3) 8
 
 let caml_local = Nativeint.shift_left (Nativeint.of_int 2) 8
@@ -2259,14 +2267,15 @@ let ptr_offset ptr offset dbg =
 let direct_apply lbl ty args (pos, _mode) dbg =
   Cop (Capply (ty, pos), Cconst_symbol (lbl, dbg) :: args, dbg)
 
-let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
+let call_caml_apply extended_ty extended_args_type mut clos
+    (args : expression list list) pos mode dbg =
   (* Treat tagged int arguments and results as [typ_val], to avoid generating
      excessive numbers of caml_apply functions. *)
   let ty = Extended_machtype.to_machtype extended_ty in
   let really_call_caml_apply clos args =
     let cargs =
       Cconst_symbol (apply_function_sym extended_args_type extended_ty mode, dbg)
-      :: args
+      :: List.concat args
       @ [clos]
     in
     Cop (Capply (ty, pos), cargs, dbg)
@@ -2280,7 +2289,7 @@ let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
      *)
     (* CR-someday gyorsh: in the [else] case above, call another version of
        caml_applyN that has only the cold path. *)
-    bind_list "arg" args (fun args ->
+    bind_list_list "arg" args (fun args ->
         bind "fun" clos (fun clos ->
             Cifthenelse
               ( Cop
@@ -2295,7 +2304,7 @@ let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
                 dbg,
                 Cop
                   ( Capply (ty, pos),
-                    (get_field_gen mut clos 2 dbg :: args) @ [clos],
+                    (get_field_gen mut clos 2 dbg :: List.concat args) @ [clos],
                     dbg ),
                 dbg,
                 really_call_caml_apply clos args,
@@ -2311,7 +2320,10 @@ let generic_apply mut clos args args_type result (pos, mode) dbg =
           ( Capply (Extended_machtype.to_machtype result, pos),
             [get_field_gen mut clos 0 dbg; arg; clos],
             dbg ))
-  | _ -> call_caml_apply result args_type mut clos args pos mode dbg
+  | _ ->
+    call_caml_apply result args_type mut clos
+      (List.map (fun arg -> [arg]) args)
+      pos mode dbg
 
 let send kind met obj args args_type result akind dbg =
   let call_met obj args args_type clos =
@@ -4022,7 +4034,8 @@ let indirect_call ~dbg ty pos alloc_mode f args_type args =
       ~body:
         (Cop
            ( Capply (Extended_machtype.to_machtype ty, pos),
-             [load ~dbg Word_int Asttypes.Mutable ~addr:(Cvar v); arg; Cvar v],
+             (load ~dbg Word_int Asttypes.Mutable ~addr:(Cvar v) :: arg)
+             @ [Cvar v],
              dbg ))
   | args ->
     call_caml_apply ty args_type Asttypes.Mutable f args pos alloc_mode dbg
@@ -4042,7 +4055,7 @@ let indirect_full_call ~dbg ty pos alloc_mode f args_type = function
       ~body:
         (Cop
            ( Capply (Extended_machtype.to_machtype ty, pos),
-             (fun_ptr :: args) @ [Cvar v],
+             (fun_ptr :: List.concat args) @ [Cvar v],
              dbg ))
 
 let bigarray_load ~dbg ~elt_kind ~elt_size ~elt_chunk ~bigarray ~index =
