@@ -3514,11 +3514,16 @@ let bigstring_set size unsafe arg1 arg2 arg3 dbg =
 
 let cdefine_symbol sym = [Cdefine_symbol sym]
 
-let emit_block symb white_header cont =
+let emit_block ?second_symbol symb white_header cont =
   (* Headers for structured constants must be marked black in case we are in
      no-naked-pointers mode. See [caml_darken]. *)
   let black_header = Nativeint.logor white_header caml_black in
-  (Cint black_header :: cdefine_symbol symb) @ cont
+  let second_symbol =
+    match second_symbol with
+    | None -> []
+    | Some second_symbol -> cdefine_symbol second_symbol
+  in
+  ((Cint black_header :: cdefine_symbol symb) @ second_symbol) @ cont
 
 let emit_string_constant_fields s cont =
   let n = size_int - 1 - (String.length s mod size_int) in

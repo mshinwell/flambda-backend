@@ -26,10 +26,17 @@ type t =
        [Symbol.t], e.g. module entry point names. *)
     module_symbol : Symbol.t;
     module_symbol_defined : bool;
+    local_module_symbol : Cmm.symbol;
     invalid_message_symbols : Symbol.t String.Map.t
   }
 
 let create ~module_symbol ~reachable_names =
+  let local_module_symbol : Cmm.symbol =
+    { sym_name =
+        Linkage_name.to_string (Symbol.linkage_name module_symbol) ^ "_local";
+      sym_global = Local
+    }
+  in
   { gc_roots = [];
     data_list = [];
     functions = [];
@@ -38,6 +45,7 @@ let create ~module_symbol ~reachable_names =
     symbols = String.Map.empty;
     module_symbol;
     module_symbol_defined = false;
+    local_module_symbol;
     invalid_message_symbols = String.Map.empty
   }
 
@@ -58,7 +66,7 @@ let raw_symbol res ~global:sym_global sym_name : t * Cmm.symbol =
       Misc.fatal_errorf "The symbol %s is declared as both local and global"
         sym_name
 
-let symbol res sym =
+let symbol0 res sym =
   let sym_name = Linkage_name.to_string (Symbol.linkage_name sym) in
   let sym_global =
     if Compilation_unit.is_current (Symbol.compilation_unit sym)
@@ -68,6 +76,11 @@ let symbol res sym =
   in
   let s : Cmm.symbol = { sym_name; sym_global } in
   s
+
+let symbol res sym =
+  if Symbol.equal sym res.module_symbol
+  then res.local_module_symbol
+  else symbol0 res sym
 
 let symbol_of_code_id res code_id : Cmm.symbol =
   let sym_name = Linkage_name.to_string (Code_id.linkage_name code_id) in
@@ -89,8 +102,8 @@ let check_for_module_symbol t symbol =
       Misc.fatal_errorf
         "check_for_module_symbol %a: Module block symbol (%a) already defined"
         Symbol.print symbol Symbol.print t.module_symbol;
-    { t with module_symbol_defined = true })
-  else t
+    { t with module_symbol_defined = true }, Some (symbol0 t t.module_symbol))
+  else t, None
 
 let defines_a_symbol data =
   match (data : Cmm.data_item) with

@@ -60,8 +60,11 @@ val add_gc_roots : t -> Symbol.t list -> t
 val add_function : t -> Cmm.fundecl -> t
 
 (** Record the given symbol as having been defined. This is used to keep track
-    of whether the module block symbol for the current unit has been defined. *)
-val check_for_module_symbol : t -> Symbol.t -> t
+    of whether the module block symbol for the current unit has been defined.
+    If this function is supplied with the module block symbol then it will
+    return [Some global_sym] where [global_sym] is the global alias to the
+    module block.  Other calls to [symbol] will return the local alias. *)
+val check_for_module_symbol : t -> Symbol.t -> t * Cmm.symbol option
 
 (** Caching of symbols associated with [Invalid] messages. *)
 val add_invalid_message_symbol : t -> Symbol.t -> message:string -> t

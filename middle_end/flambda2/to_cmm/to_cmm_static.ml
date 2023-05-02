@@ -107,7 +107,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
   match bound_static, static_const with
   | Block_like s, Block (tag, _mut, fields) ->
     let sym = R.symbol res s in
-    let res = R.check_for_module_symbol res s in
+    let res, module_block_global_sym = R.check_for_module_symbol res s in
     let tag = Tag.Scannable.to_int tag in
     let header = C.black_block_header tag (List.length fields) in
     let static_fields =
@@ -117,7 +117,10 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
           static_field :: static_fields)
         fields []
     in
-    let block = C.emit_block sym header static_fields in
+    let block =
+      C.emit_block ?second_symbol:module_block_global_sym sym header
+        static_fields
+    in
     let env, res, updates = static_block_updates sym env res updates 0 fields in
     env, R.set_data res block, updates
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->

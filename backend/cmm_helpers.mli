@@ -912,8 +912,14 @@ val cdefine_symbol : symbol -> data_item list
 
 (** [emit_block symb white_header cont] prepends to [cont] the header and symbol
     for the block. [cont] must already contain the fields of the block (and may
-    contain additional data items afterwards). *)
-val emit_block : symbol -> nativeint -> data_item list -> data_item list
+    contain additional data items afterwards).
+    If [second_symbol] is provided, that symbol will be defined too. *)
+val emit_block :
+  ?second_symbol:symbol ->
+  symbol ->
+  nativeint ->
+  data_item list ->
+  data_item list
 
 (** Emit specific kinds of constant blocks as data items *)
 val emit_float_constant : symbol -> float -> data_item list -> data_item list
