@@ -36,7 +36,7 @@ let or_variable f default v cont =
   | Const c -> f c cont
   | Var _ -> f default cont
 
-let rec static_block_updates symb env res acc i = function
+let rec static_block_updates (symb : Cmm.expression) env res acc i = function
   | [] -> env, res, acc
   | sv :: r -> (
     match (sv : Field_of_static_block.t) with
@@ -44,8 +44,8 @@ let rec static_block_updates symb env res acc i = function
       static_block_updates symb env res acc (i + 1) r
     | Dynamically_computed (var, dbg) ->
       let env, res, acc =
-        C.make_update env res dbg Word_val ~symbol:(C.symbol ~dbg symb) var
-          ~index:i ~prev_updates:acc
+        C.make_update env res dbg Word_val ~symbol:symb var ~index:i
+          ~prev_updates:acc
       in
       static_block_updates symb env res acc (i + 1) r)
 
@@ -106,7 +106,8 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     (static_const : Static_const.t) =
   match bound_static, static_const with
   | Block_like s, Block (tag, _mut, fields) ->
-    let sym = R.symbol_definition res s in
+    let sym_def = R.symbol_definition res s in
+    let sym = R.symbol res Debuginfo.none s in
     let res = R.check_for_module_symbol res s in
     let tag = Tag.Scannable.to_int tag in
     let header = C.black_block_header tag (List.length fields) in
@@ -117,7 +118,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
           static_field :: static_fields)
         fields []
     in
-    let block = C.emit_block sym header static_fields in
+    let block = C.emit_block sym_def header static_fields in
     let env, res, updates = static_block_updates sym env res updates 0 fields in
     env, R.set_data res block, updates
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
@@ -170,7 +171,8 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     let env, res, e = static_float_array_updates sym env res updates 0 fields in
     env, R.update_data res float_array, e
   | Block_like s, Immutable_value_array fields ->
-    let sym = R.symbol_definition res s in
+    let sym_def = R.symbol_definition res s in
+    let sym = R.symbol res Debuginfo.none s in
     let header = C.black_block_header 0 (List.length fields) in
     let static_fields =
       List.fold_right
@@ -179,7 +181,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
           static_field :: static_fields)
         fields []
     in
-    let block = C.emit_block sym header static_fields in
+    let block = C.emit_block sym_def header static_fields in
     let env, res, updates = static_block_updates sym env res updates 0 fields in
     env, R.set_data res block, updates
   | Block_like s, Empty_array ->
