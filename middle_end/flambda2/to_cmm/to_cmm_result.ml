@@ -26,16 +26,14 @@ type t =
        [Symbol.t], e.g. module entry point names. *)
     module_symbol : Symbol.t;
     module_symbol_defined : bool;
-    local_module_symbol : Cmm.symbol;
+    module_block_var : Backend_var.t;
     invalid_message_symbols : Symbol.t String.Map.t
   }
 
 let create ~module_symbol ~reachable_names =
-  let local_module_symbol : Cmm.symbol =
-    { sym_name =
-        Linkage_name.to_string (Symbol.linkage_name module_symbol) ^ "_local";
-      sym_global = Local
-    }
+  let module_block_var =
+    Backend_var.create_local
+      (Linkage_name.to_string (Symbol.linkage_name module_symbol))
   in
   { gc_roots = [];
     data_list = [];
@@ -45,7 +43,7 @@ let create ~module_symbol ~reachable_names =
     symbols = String.Map.empty;
     module_symbol;
     module_symbol_defined = false;
-    local_module_symbol;
+    module_block_var;
     invalid_message_symbols = String.Map.empty
   }
 
@@ -66,7 +64,7 @@ let raw_symbol res ~global:sym_global sym_name : t * Cmm.symbol =
       Misc.fatal_errorf "The symbol %s is declared as both local and global"
         sym_name
 
-let symbol0 res sym =
+let symbol_definition res sym =
   let sym_name = Linkage_name.to_string (Symbol.linkage_name sym) in
   let sym_global =
     if Compilation_unit.is_current (Symbol.compilation_unit sym)
@@ -77,10 +75,10 @@ let symbol0 res sym =
   let s : Cmm.symbol = { sym_name; sym_global } in
   s
 
-let symbol res sym =
+let symbol res dbg sym =
   if Symbol.equal sym res.module_symbol
-  then res.local_module_symbol
-  else symbol0 res sym
+  then Cmm_helpers.var res.module_block_var
+  else Cmm_helpers.symbol ~dbg (symbol_definition res sym)
 
 let symbol_of_code_id res code_id : Cmm.symbol =
   let sym_name = Linkage_name.to_string (Code_id.linkage_name code_id) in
@@ -102,8 +100,8 @@ let check_for_module_symbol t symbol =
       Misc.fatal_errorf
         "check_for_module_symbol %a: Module block symbol (%a) already defined"
         Symbol.print symbol Symbol.print t.module_symbol;
-    { t with module_symbol_defined = true }, Some (symbol0 t t.module_symbol))
-  else t, None
+    { t with module_symbol_defined = true })
+  else t
 
 let defines_a_symbol data =
   match (data : Cmm.data_item) with
@@ -172,6 +170,8 @@ let add_invalid_message_symbol t symbol ~message =
 let invalid_message_symbol t ~message =
   String.Map.find_opt message t.invalid_message_symbols
 
+let module_block_var t = t.module_block_var
+
 let to_cmm r =
   (* Make sure the module symbol is defined *)
   let r = define_module_symbol_if_missing r in
@@ -186,6 +186,6 @@ let to_cmm r =
   in
   let function_phrases = List.map (fun f -> C.cfunction f) sorted_functions in
   (* Translate roots to Cmm symbols *)
-  let roots = List.map (symbol r) r.gc_roots in
+  let roots = List.map (symbol_definition r) r.gc_roots in
   (* Return the data list, gc roots and function declarations *)
   { data_items = r.data_list; gc_roots = roots; functions = function_phrases }
