@@ -2935,6 +2935,205 @@ let curry_function (kind, arity, return) =
   | Lambda.Curried { nlocal } ->
     intermediate_curry_functions ~nlocal ~arity return
 
+let generic_curry_function () =
+  let dbg = Debuginfo.none in
+  let num_param_regs ~is_float =
+    Proc.all_phys_regs |> Array.to_list
+    |> List.filter (fun (reg : Reg.t) ->
+           match reg.typ with
+           | Val | Addr | Int -> not is_float
+           | Float -> is_float)
+    |> List.length
+  in
+  let make_params name ~is_float =
+    List.init (num_param_regs ~is_float) (fun i ->
+        let machtype = if is_float then typ_float else typ_addr in
+        VP.create (Ident.create_local (Printf.sprintf "%s%d" name i)), machtype)
+  in
+  let int_params = make_params "i" ~is_float:false in
+  let int_params_vars =
+    Array.of_list
+      (List.map
+         (fun vp_with_machtype -> VP.var (fst vp_with_machtype))
+         int_params)
+  in
+  let float_params = make_params "f" ~is_float:true in
+  let float_params_vars =
+    Array.of_list
+      (List.map
+         (fun vp_with_machtype -> VP.var (fst vp_with_machtype))
+         float_params)
+  in
+  let params = int_params @ float_params in
+  let temp_closure = Ident.create_local "temp_closure" in
+  let alloc_temp_closure =
+    Cop
+      ( Cextcall
+          { func = "malloc";
+            ty = typ_int;
+            ty_args = [XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [Cconst_int (1000 * Arch.size_addr, dbg)],
+        dbg )
+  in
+  let register_or_deregister_temp_closure_root ~register ~closure_field =
+    Cop
+      ( Cextcall
+          { func =
+              (if register
+              then "caml_register_global_root"
+              else "caml_remove_global_root");
+            ty = typ_int;
+            ty_args = [XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [ Cop
+            ( Caddi,
+              [ Cvar temp_closure;
+                Cop
+                  (Cmuli, [closure_field; Cconst_int (Arch.size_addr, dbg)], dbg)
+              ],
+              dbg ) ],
+        dbg )
+  in
+  let make_write_to_closure ~is_float ~chunk_type ~params_vars =
+    let num = num_param_regs ~is_float in
+    let scrutinees = Array.init num (fun i -> i) in
+    let cases =
+      Array.init num (fun i ->
+          ( Cop
+              ( Cstore (chunk_type, Initialization),
+                [Cconst_int (12345, dbg); Cvar params_vars.(i)],
+                dbg ),
+            dbg ))
+    in
+    Cswitch (Cconst_int (42, dbg), scrutinees, cases, dbg, Any)
+  in
+  let write_int_to_closure =
+    make_write_to_closure ~is_float:false ~chunk_type:Word_int
+      ~params_vars:int_params_vars
+  in
+  let write_float_to_closure =
+    make_write_to_closure ~is_float:true ~chunk_type:Double
+      ~params_vars:float_params_vars
+  in
+  let write_to_closure =
+    Csequence
+      ( register_or_deregister_temp_closure_root ~register:true
+          ~closure_field:(Cconst_int (1234, dbg)),
+        Cifthenelse
+          ( Cconst_int (43, dbg),
+            dbg,
+            write_int_to_closure,
+            dbg,
+            write_float_to_closure,
+            dbg,
+            Any ) )
+  in
+  let real_closure = Ident.create_local "real_closure" in
+  let alloc_closure =
+    Cop
+      ( Cextcall
+          { func = "caml_alloc_small";
+            ty = typ_val;
+            ty_args = [XInt; XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [Cconst_int (1000, dbg); Cconst_int (Obj.closure_tag, dbg)],
+        dbg )
+  in
+  let blit_to_closure =
+    Cop
+      ( Cextcall
+          { func = "memcpy";
+            ty = typ_int;
+            ty_args = [XInt; XInt; XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [Cvar real_closure; Cvar temp_closure; Cconst_int (1000, dbg)],
+        dbg )
+  in
+  let deregister_k = Lambda.next_raise_count () in
+  let after_deregister_k = Lambda.next_raise_count () in
+  let deregister_closure =
+    let counter = Ident.create_local "counter" in
+    Ccatch
+      ( Recursive,
+        [ ( deregister_k,
+            [VP.create counter, typ_int],
+            Cifthenelse
+              ( Cop (Ccmpi Cge, [Cvar counter; Cconst_int (1000, dbg)], dbg),
+                dbg,
+                Cexit (Lbl after_deregister_k, [], []),
+                dbg,
+                Csequence
+                  ( register_or_deregister_temp_closure_root ~register:false
+                      ~closure_field:(Cvar counter),
+                    Cexit
+                      ( Lbl deregister_k,
+                        [Cop (Cadda, [Cvar counter; Cconst_int (1, dbg)], dbg)],
+                        [] ) ),
+                dbg,
+                Any ),
+            dbg ) ],
+        Cexit (Lbl deregister_k, [Cconst_int (0, dbg)], []),
+        Any )
+  in
+  let loop_k = Lambda.next_raise_count () in
+  let after_loop_k = Lambda.next_raise_count () in
+  let body =
+    Clet
+      ( VP.create temp_closure,
+        alloc_temp_closure,
+        Ccatch
+          ( Nonrecursive,
+            [ ( after_loop_k,
+                [],
+                Clet
+                  ( VP.create real_closure,
+                    alloc_closure,
+                    Csequence
+                      ( blit_to_closure,
+                        Ccatch
+                          ( Nonrecursive,
+                            [after_deregister_k, [], Cvar real_closure, dbg],
+                            deregister_closure,
+                            Any ) ) ),
+                dbg ) ],
+            Ccatch
+              ( Recursive,
+                [loop_k, [], write_to_closure, dbg],
+                Cexit (Lbl loop_k, [], []),
+                Any ),
+            Any ) )
+  in
+  Cfunction
+    { fun_name = { sym_name = "caml_curry_generic"; sym_global = Global };
+      fun_args = params;
+      fun_body = body;
+      fun_codegen_options = [];
+      fun_dbg = dbg;
+      (* XXX need to stop poll insertion *)
+      fun_poll = Default_poll
+    }
+
 let default_generic_fns : Cmx_format.generic_fns =
   { curry_fun = [];
     apply_fun =
@@ -2984,7 +3183,7 @@ let generic_functions shared tbl =
   let ({ curry_fun; apply_fun; send_fun } : Cmx_format.generic_fns) =
     Generic_fns_tbl.entries tbl
   in
-  List.concat_map curry_function curry_fun
+  (generic_curry_function () :: List.concat_map curry_function curry_fun)
   @ List.map send_function send_fun
   @ List.map apply_function apply_fun
 
