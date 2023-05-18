@@ -2937,13 +2937,19 @@ let curry_function (kind, arity, return) =
 
 let generic_curry_function () =
   let dbg = Debuginfo.none in
+  let closure_param =
+    VP.create (Ident.create_local "callee_closure"), typ_val
+  in
   let num_param_regs ~is_float =
-    Proc.all_phys_regs |> Array.to_list
-    |> List.filter (fun (reg : Reg.t) ->
-           match reg.typ with
-           | Val | Addr | Int -> not is_float
-           | Float -> is_float)
-    |> List.length
+    let num =
+      Proc.all_phys_regs |> Array.to_list
+      |> List.filter (fun (reg : Reg.t) ->
+             match reg.typ with
+             | Val | Addr | Int -> not is_float
+             | Float -> is_float)
+      |> List.length
+    in
+    if not is_float then num - 1 (* allow for [closure_param] *) else num
   in
   let make_params name ~is_float =
     List.init (num_param_regs ~is_float) (fun i ->
@@ -2964,9 +2970,34 @@ let generic_curry_function () =
          (fun vp_with_machtype -> VP.var (fst vp_with_machtype))
          float_params)
   in
-  let params = int_params @ float_params in
+  let params = (closure_param :: int_params) @ float_params in
+  let get_closinfo ~closure =
+    Cop
+      ( Cload (Word_int, Immutable),
+        [Cop (Caddi, [closure; Cconst_int (Arch.size_addr, dbg)], dbg)],
+        dbg )
+  in
+  let get_startenv ~closure =
+    Cop
+      ( Clsr,
+        [ Cop (Clsl, [get_closinfo ~closure; Cconst_int (9, dbg)], dbg);
+          Cconst_int (10, dbg) ],
+        dbg )
+  in
+  let get_num_params_already_applied ~startenv =
+    Cop
+      ( Cload (Word_int, Immutable),
+        [Cop (Csubi, [startenv; Cconst_int (Arch.size_addr * 2, dbg)], dbg)],
+        dbg )
+  in
+  let get_layout ~startenv =
+    Cop
+      ( Cload (Word_int, Immutable),
+        [Cop (Csubi, [startenv; Cconst_int (Arch.size_addr, dbg)], dbg)],
+        dbg )
+  in
   let temp_closure = Ident.create_local "temp_closure" in
-  let alloc_temp_closure =
+  let alloc_temp_closure ~closure_size =
     Cop
       ( Cextcall
           { func = "malloc";
@@ -2978,9 +3009,10 @@ let generic_curry_function () =
             effects = Arbitrary_effects;
             coeffects = Has_coeffects
           },
-        [Cconst_int (1000 * Arch.size_addr, dbg)],
+        [Cop (Cmuli, [closure_size; Cconst_int (Arch.size_addr, dbg)], dbg)],
         dbg )
   in
+  (* XXX we must only register the scannable environment fields *)
   let register_or_deregister_temp_closure_root ~register ~closure_field =
     Cop
       ( Cextcall
@@ -3008,15 +3040,40 @@ let generic_curry_function () =
   let make_write_to_closure ~is_float ~chunk_type ~params_vars =
     let num = num_param_regs ~is_float in
     let scrutinees = Array.init num (fun i -> i) in
+    let addr_var = Ident.create_local "clos_field_addr" in
+    let addr = Cvar addr_var in
+    let reg_num_var = Ident.create_local "reg_num" in
+    let reg_num = Cvar reg_num_var in
     let cases =
       Array.init num (fun i ->
           ( Cop
               ( Cstore (chunk_type, Initialization),
-                [Cconst_int (12345, dbg); Cvar params_vars.(i)],
+                [addr; Cvar params_vars.(i)],
                 dbg ),
             dbg ))
     in
-    Cswitch (Cconst_int (42, dbg), scrutinees, cases, dbg, Any)
+    Clet
+      ( VP.create addr_var,
+        Cconst_int (12345, dbg),
+        Clet
+          ( VP.create reg_num_var,
+            Cconst_int (42, dbg),
+            Cifthenelse
+              ( Cop
+                  ( Ccmpi Cge,
+                    [reg_num; Cconst_int (Array.length params_vars, dbg)],
+                    dbg ),
+                dbg,
+                Cop
+                  ( Cmove_incoming_param,
+                    [ Cconst_int ((if is_float then 1 else 0), dbg);
+                      reg_num;
+                      addr ],
+                    dbg ),
+                dbg,
+                Cswitch (reg_num, scrutinees, cases, dbg, Any),
+                dbg,
+                Any ) ) )
   in
   let write_int_to_closure =
     make_write_to_closure ~is_float:false ~chunk_type:Word_int
@@ -3040,7 +3097,7 @@ let generic_curry_function () =
             Any ) )
   in
   let real_closure = Ident.create_local "real_closure" in
-  let alloc_closure =
+  let alloc_closure ~closure_size =
     Cop
       ( Cextcall
           { func = "caml_alloc_small";
@@ -3052,7 +3109,7 @@ let generic_curry_function () =
             effects = Arbitrary_effects;
             coeffects = Has_coeffects
           },
-        [Cconst_int (1000, dbg); Cconst_int (Obj.closure_tag, dbg)],
+        [closure_size; Cconst_int (Obj.closure_tag, dbg)],
         dbg )
   in
   let blit_to_closure =
@@ -3098,31 +3155,162 @@ let generic_curry_function () =
   in
   let loop_k = Lambda.next_raise_count () in
   let after_loop_k = Lambda.next_raise_count () in
+  let startenv_var = Ident.create_local "startenv" in
+  let startenv = Cvar startenv_var in
+  let num_params_already_applied_var =
+    Ident.create_local "num_params_already_applied"
+  in
+  let layout_var = Ident.create_local "layout" in
+  let layout_this_param_var = Ident.create_local "layout_this_param" in
+  let num_scannable = Ident.create_local "num_scannable" in
+  let num_non_scannable = Ident.create_local "num_non_scannable" in
+  let closure_size = Ident.create_local "closure_size" in
+  let alloc_temp_closure_and_write_to_it =
+    Clet
+      ( VP.create closure_size,
+        Cop
+          ( Caddi,
+            [ Cop (Caddi, [Cvar num_scannable; Cvar num_non_scannable], dbg);
+              (* Apart from the value slots themselves: 1 field for the code
+                 pointer (only one code pointer, always one-step application) 1
+                 field for the arity 1 field for the num-params-already-applied
+                 1 field for the layout *)
+              Cconst_int (4, dbg) ],
+            dbg ),
+        Clet
+          ( VP.create temp_closure,
+            alloc_temp_closure ~closure_size:(Cvar closure_size),
+            Ccatch
+              ( Nonrecursive,
+                [ ( after_loop_k,
+                    [],
+                    Clet
+                      ( VP.create real_closure,
+                        alloc_closure ~closure_size:(Cvar closure_size),
+                        Csequence
+                          ( blit_to_closure,
+                            Ccatch
+                              ( Nonrecursive,
+                                [after_deregister_k, [], Cvar real_closure, dbg],
+                                deregister_closure,
+                                Any ) ) ),
+                    dbg ) ],
+                Ccatch
+                  ( Recursive,
+                    [loop_k, [], write_to_closure, dbg],
+                    Cexit (Lbl loop_k, [], []),
+                    Any ),
+                Any ) ) )
+  in
+  let compute_size_loop_k = Lambda.next_raise_count () in
+  let after_compute_size_loop_k = Lambda.next_raise_count () in
+  let num_scannable_in_loop = Ident.create_local "num_scannable_in_loop" in
+  let num_non_scannable_in_loop =
+    Ident.create_local "num_non_scannable_in_loop"
+  in
+  let layout_field_var = Ident.create_local "layout_field" in
+  let compute_size_loop =
+    Ccatch
+      ( Recursive,
+        [ ( compute_size_loop_k,
+            [ VP.create num_scannable_in_loop, typ_int;
+              VP.create num_non_scannable_in_loop, typ_float ],
+            Clet
+              ( VP.create layout_field_var,
+                Cop
+                  ( Cload (Word_int, Immutable),
+                    [Cvar layout_this_param_var],
+                    dbg ),
+                Cifthenelse
+                  ( Cop
+                      (* zero => end of current param *)
+                      ( Ccmpi Cne,
+                        [Cvar layout_field_var; Cconst_int (0, dbg)],
+                        dbg ),
+                    dbg,
+                    (* 1 => scannable, 2 => non-scannable, 3 => float *)
+                    Cexit
+                      ( Lbl compute_size_loop_k,
+                        [ Cifthenelse
+                            ( Cop
+                                ( Ccmpi Cge,
+                                  [Cvar layout_field_var; Cconst_int (2, dbg)],
+                                  dbg ),
+                              dbg,
+                              Cvar num_scannable_in_loop,
+                              dbg,
+                              Cop
+                                ( Caddi,
+                                  [ Cvar num_scannable_in_loop;
+                                    Cconst_int (1, dbg) ],
+                                  dbg ),
+                              dbg,
+                              Any );
+                          Cifthenelse
+                            ( Cop
+                                ( Ccmpi Clt,
+                                  [Cvar layout_field_var; Cconst_int (2, dbg)],
+                                  dbg ),
+                              dbg,
+                              Cvar num_non_scannable_in_loop,
+                              dbg,
+                              Cop
+                                ( Caddi,
+                                  [ Cvar num_non_scannable_in_loop;
+                                    Cconst_int (1, dbg) ],
+                                  dbg ),
+                              dbg,
+                              Any ) ],
+                        [] ),
+                    dbg,
+                    Cexit
+                      ( Lbl after_compute_size_loop_k,
+                        [ Cvar num_scannable_in_loop;
+                          Cvar num_non_scannable_in_loop ],
+                        [] ),
+                    dbg,
+                    Any ) ),
+            dbg ) ],
+        Cexit
+          ( Lbl compute_size_loop_k,
+            [Cconst_int (0, dbg); Cconst_int (0, dbg)],
+            [] ),
+        Any )
+  in
+  (* alloc_temp_closure_and_write_to_it, *)
   let body =
     Clet
-      ( VP.create temp_closure,
-        alloc_temp_closure,
-        Ccatch
-          ( Nonrecursive,
-            [ ( after_loop_k,
-                [],
+      ( VP.create startenv_var,
+        get_startenv ~closure:(Cvar (VP.var (fst closure_param))),
+        Clet
+          ( VP.create layout_var,
+            (* Layout: pointer to array, one member per complex param, each
+               member being a pointer to a zero-terminated array per unarized
+               param of each complex param. *)
+            get_layout ~startenv,
+            Clet
+              ( VP.create num_params_already_applied_var,
+                get_num_params_already_applied ~startenv,
                 Clet
-                  ( VP.create real_closure,
-                    alloc_closure,
-                    Csequence
-                      ( blit_to_closure,
-                        Ccatch
-                          ( Nonrecursive,
-                            [after_deregister_k, [], Cvar real_closure, dbg],
-                            deregister_closure,
-                            Any ) ) ),
-                dbg ) ],
-            Ccatch
-              ( Recursive,
-                [loop_k, [], write_to_closure, dbg],
-                Cexit (Lbl loop_k, [], []),
-                Any ),
-            Any ) )
+                  ( VP.create layout_this_param_var,
+                    Cop
+                      ( Caddi,
+                        [ Cvar layout_var;
+                          Cop
+                            ( Cmuli,
+                              [ Cvar num_params_already_applied_var;
+                                Cconst_int (Arch.size_addr, dbg) ],
+                              dbg ) ],
+                        dbg ),
+                    Ccatch
+                      ( Nonrecursive,
+                        [ ( after_compute_size_loop_k,
+                            [ VP.create num_scannable, typ_int;
+                              VP.create num_non_scannable, typ_int ],
+                            alloc_temp_closure_and_write_to_it,
+                            dbg ) ],
+                        compute_size_loop,
+                        Any ) ) ) ) )
   in
   Cfunction
     { fun_name = { sym_name = "caml_curry_generic"; sym_global = Global };

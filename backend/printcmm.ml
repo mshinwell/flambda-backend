@@ -236,6 +236,7 @@ let operation d = function
   | Copaque -> "opaque"
   | Cbeginregion -> "beginregion"
   | Cendregion -> "endregion"
+  | Cmove_incoming_param -> "move_incoming_param"
 
 
 let rec expr ppf = function

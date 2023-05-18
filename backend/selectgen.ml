@@ -228,6 +228,7 @@ let oper_result_type = function
        naked pointer into the local allocation stack. *)
     typ_int
   | Cendregion -> typ_void
+  | Cmove_incoming_param -> typ_void
 
 (* Infer the size in bytes of the result of an expression whose evaluation
    may be deferred (cf. [emit_parts]). *)
@@ -491,6 +492,7 @@ method is_simple_expr = function
       | Craise _ | Ccheckbound | Catomic _
       | Cprobe _ | Cprobe_is_enabled _ | Copaque -> false
       | Cprefetch _ | Cbeginregion | Cendregion -> false (* avoid reordering *)
+      | Cmove_incoming_param -> false
         (* The remaining operations are simple if their args are *)
       | Cload _ | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi | Cand | Cor
       | Cxor | Clsl | Clsr | Casr | Ccmpi _ | Caddv | Cadda | Ccmpa _ | Cnegf
@@ -546,6 +548,7 @@ method effects_of exp =
       | Cload (_, Asttypes.Immutable) -> EC.none
       | Cload (_, Asttypes.Mutable) -> EC.coeffect_only Coeffect.Read_mutable
       | Cprobe_is_enabled _ -> EC.coeffect_only Coeffect.Arbitrary
+      | Cmove_incoming_param -> EC.arbitrary
       | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi | Cand | Cor | Cxor
       | Cbswap _
       | Ccsel _
@@ -695,6 +698,7 @@ method select_operation op args _dbg =
   | (Cprobe_is_enabled {name}, _) -> Iprobe_is_enabled {name}, []
   | (Cbeginregion, _) -> Ibeginregion, []
   | (Cendregion, _) -> Iendregion, args
+  | (Cmove_incoming_param, _) -> Iendregion, args (* XXX *)
   | _ -> Misc.fatal_error "Selection.select_oper"
 
 method private select_arith_comm op = function
