@@ -3074,13 +3074,9 @@ let generic_curry_function () =
   let non_scannable_ptr = Cvar non_scannable_ptr_var in
   let scannable_ptr_var = Ident.create_local "scannable_ptr" in
   let scannable_ptr = Cvar scannable_ptr_var in
-  let make_write_to_closure ~is_float ~chunk_type ~params_vars =
+  let make_write_to_closure ~is_float ~chunk_type ~params_vars ~reg_num ~addr =
     let num = num_param_regs ~is_float in
     let scrutinees = Array.init num (fun i -> i) in
-    let addr_var = Ident.create_local "clos_field_addr" in
-    let addr = Cvar addr_var in
-    let reg_num_var = Ident.create_local "reg_num" in
-    let reg_num = Cvar reg_num_var in
     let cases =
       Array.init num (fun i ->
           ( Cop
@@ -3089,36 +3085,28 @@ let generic_curry_function () =
                 dbg ),
             dbg ))
     in
-    Clet
-      ( VP.create addr_var,
-        Cconst_int (12345, dbg),
-        Clet
-          ( VP.create reg_num_var,
-            Cconst_int (42, dbg),
-            Cifthenelse
-              ( Cop
-                  ( Ccmpi Cge,
-                    [reg_num; Cconst_int (Array.length params_vars, dbg)],
-                    dbg ),
-                dbg,
-                Cop
-                  ( Cmove_incoming_param,
-                    [ Cconst_int ((if is_float then 1 else 0), dbg);
-                      reg_num;
-                      addr ],
-                    dbg ),
-                dbg,
-                Cswitch (reg_num, scrutinees, cases, dbg, Any),
-                dbg,
-                Any ) ) )
+    Cifthenelse
+      ( Cop
+          (Ccmpi Cge, [reg_num; Cconst_int (Array.length params_vars, dbg)], dbg),
+        dbg,
+        Cop
+          ( Cmove_incoming_param,
+            [Cconst_int ((if is_float then 1 else 0), dbg); reg_num; addr],
+            dbg ),
+        dbg,
+        Cswitch (reg_num, scrutinees, cases, dbg, Any),
+        dbg,
+        Any )
   in
-  let write_int_to_closure =
+  let write_int_to_closure ~scannable =
     make_write_to_closure ~is_float:false ~chunk_type:Word_int
-      ~params_vars:int_params_vars
+      ~params_vars:int_params_vars ~reg_num:int_reg_num
+      ~addr:(if scannable then scannable_ptr else non_scannable_ptr)
   in
   let write_float_to_closure =
     make_write_to_closure ~is_float:true ~chunk_type:Double
-      ~params_vars:float_params_vars
+      ~params_vars:float_params_vars ~reg_num:float_reg_num
+      ~addr:non_scannable_ptr
   in
   let layout_this_param_var = Ident.create_local "layout_this_param" in
   let loop_k = Lambda.next_raise_count () in
@@ -3145,7 +3133,7 @@ let generic_curry_function () =
               (* layout_field_var = zero => end of current param; all unarized
                  params for the current complex param have now been written into
                  the temporary closure. *)
-              (Ccmpi Cne, [Cvar layout_field_var; Cconst_int (0, dbg)], dbg),
+              (Ccmpi Ceq, [Cvar layout_field_var; Cconst_int (0, dbg)], dbg),
             dbg,
             Cexit (Lbl after_loop_k, [], []),
             dbg,
@@ -3155,18 +3143,18 @@ let generic_curry_function () =
               ( Cop
                   (Ccmpi Cne, [Cvar layout_field_var; Cconst_int (3, dbg)], dbg),
                 dbg,
-                (* XXX need to put int into scannable/non-scannable part as
-                   appropriate *)
-                Csequence
-                  ( write_int_to_closure,
-                    (* Roots must only be registered for scannable slots *)
-                    Cifthenelse
-                      ( Cop
-                          ( Ccmpi Cne,
-                            [Cvar layout_field_var; Cconst_int (2, dbg)],
-                            dbg ),
-                        dbg,
+                (* In this case we have an int. Determine if it's scannable. *)
+                Cifthenelse
+                  ( Cop
+                      ( Ccmpi Ceq,
+                        [Cvar layout_field_var; Cconst_int (1, dbg)],
+                        dbg ),
+                    dbg,
+                    Csequence
+                      ( write_int_to_closure ~scannable:true,
                         Csequence
+                          (* Roots must only be registered for scannable
+                             slots *)
                           ( register_temp_closure_root ~ptr:scannable_ptr,
                             Cexit
                               ( Lbl loop_k,
@@ -3181,8 +3169,11 @@ let generic_curry_function () =
                                       [ scannable_ptr;
                                         Cconst_int (Arch.size_addr, dbg) ],
                                       dbg ) ],
-                                [] ) ),
-                        dbg,
+                                [] ) ) ),
+                    dbg,
+                    Csequence
+                      (* Non-scannable int *)
+                      ( write_int_to_closure ~scannable:false,
                         Cexit
                           ( Lbl loop_k,
                             [ Cop
@@ -3194,11 +3185,12 @@ let generic_curry_function () =
                                     Cconst_int (Arch.size_addr, dbg) ],
                                   dbg );
                               scannable_ptr ],
-                            [] ),
-                        dbg,
-                        Any ) ),
+                            [] ) ),
+                    dbg,
+                    Any ),
                 dbg,
                 Csequence
+                  (* Float *)
                   ( write_float_to_closure,
                     Cexit
                       ( Lbl loop_k,
