@@ -2940,6 +2940,7 @@ let generic_curry_function () =
   let closure_param =
     VP.create (Ident.create_local "callee_closure"), typ_val
   in
+  let callee's_closure = Cvar (VP.var (fst closure_param)) in
   let num_param_regs ~is_float =
     let num =
       Proc.all_phys_regs |> Array.to_list
@@ -3029,14 +3030,25 @@ let generic_curry_function () =
         [temp_closure],
         dbg )
   in
-  (* XXX we must only register the scannable environment fields *)
-  let register_or_deregister_temp_closure_root ~register ~closure_field =
+  let register_temp_closure_root ~ptr =
     Cop
       ( Cextcall
-          { func =
-              (if register
-              then "caml_register_global_root"
-              else "caml_remove_global_root");
+          { func = "caml_register_global_root";
+            ty = typ_int;
+            ty_args = [XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [ptr],
+        dbg )
+  in
+  let deregister_temp_closure_root ~closure_field =
+    Cop
+      ( Cextcall
+          { func = "caml_remove_global_root";
             ty = typ_int;
             ty_args = [XInt];
             alloc = false;
@@ -3054,6 +3066,14 @@ let generic_curry_function () =
               dbg ) ],
         dbg )
   in
+  let int_reg_num_var = Ident.create_local "int_reg_num" in
+  let int_reg_num = Cvar int_reg_num_var in
+  let float_reg_num_var = Ident.create_local "float_reg_num" in
+  let float_reg_num = Cvar float_reg_num_var in
+  let non_scannable_ptr_var = Ident.create_local "non_scannable_ptr" in
+  let non_scannable_ptr = Cvar non_scannable_ptr_var in
+  let scannable_ptr_var = Ident.create_local "scannable_ptr" in
+  let scannable_ptr = Cvar scannable_ptr_var in
   let make_write_to_closure ~is_float ~chunk_type ~params_vars =
     let num = num_param_regs ~is_float in
     let scrutinees = Array.init num (fun i -> i) in
@@ -3100,16 +3120,99 @@ let generic_curry_function () =
     make_write_to_closure ~is_float:true ~chunk_type:Double
       ~params_vars:float_params_vars
   in
+  let layout_this_param_var = Ident.create_local "layout_this_param" in
+  let loop_k = Lambda.next_raise_count () in
+  let after_loop_k = Lambda.next_raise_count () in
   let write_to_closure =
-    Csequence
-      ( register_or_deregister_temp_closure_root ~register:true
-          ~closure_field:(Cconst_int (1234, dbg)),
+    let layout_field_var = Ident.create_local "layout_field" in
+    Clet
+      ( VP.create layout_field_var,
+        (* XXX maybe use another loop parameter to keep the pointer in *)
+        Cop
+          ( Cload (Word_int, Immutable),
+            [ Cop
+                ( Caddi,
+                  [ Cvar layout_this_param_var;
+                    Cop
+                      ( Cmuli,
+                        [ Cop (Caddi, [int_reg_num; float_reg_num], dbg);
+                          Cconst_int (Arch.size_addr, dbg) ],
+                        dbg ) ],
+                  dbg ) ],
+            dbg ),
         Cifthenelse
-          ( Cconst_int (43, dbg),
+          ( Cop
+              (* layout_field_var = zero => end of current param; all unarized
+                 params for the current complex param have now been written into
+                 the temporary closure. *)
+              (Ccmpi Cne, [Cvar layout_field_var; Cconst_int (0, dbg)], dbg),
             dbg,
-            write_int_to_closure,
+            Cexit (Lbl after_loop_k, [], []),
             dbg,
-            write_float_to_closure,
+            (* layout_field_var = 1 => scannable, 2 => non-scannable, 3 =>
+               float *)
+            Cifthenelse
+              ( Cop
+                  (Ccmpi Cne, [Cvar layout_field_var; Cconst_int (3, dbg)], dbg),
+                dbg,
+                (* XXX need to put int into scannable/non-scannable part as
+                   appropriate *)
+                Csequence
+                  ( write_int_to_closure,
+                    (* Roots must only be registered for scannable slots *)
+                    Cifthenelse
+                      ( Cop
+                          ( Ccmpi Cne,
+                            [Cvar layout_field_var; Cconst_int (2, dbg)],
+                            dbg ),
+                        dbg,
+                        Csequence
+                          ( register_temp_closure_root ~ptr:scannable_ptr,
+                            Cexit
+                              ( Lbl loop_k,
+                                [ Cop
+                                    ( Caddi,
+                                      [int_reg_num; Cconst_int (1, dbg)],
+                                      dbg );
+                                  float_reg_num;
+                                  non_scannable_ptr;
+                                  Cop
+                                    ( Caddi,
+                                      [ scannable_ptr;
+                                        Cconst_int (Arch.size_addr, dbg) ],
+                                      dbg ) ],
+                                [] ) ),
+                        dbg,
+                        Cexit
+                          ( Lbl loop_k,
+                            [ Cop
+                                (Caddi, [int_reg_num; Cconst_int (1, dbg)], dbg);
+                              float_reg_num;
+                              Cop
+                                ( Caddi,
+                                  [ non_scannable_ptr;
+                                    Cconst_int (Arch.size_addr, dbg) ],
+                                  dbg );
+                              scannable_ptr ],
+                            [] ),
+                        dbg,
+                        Any ) ),
+                dbg,
+                Csequence
+                  ( write_float_to_closure,
+                    Cexit
+                      ( Lbl loop_k,
+                        [ int_reg_num;
+                          Cop (Caddi, [float_reg_num; Cconst_int (1, dbg)], dbg);
+                          Cop
+                            ( Caddi,
+                              [ non_scannable_ptr;
+                                Cconst_int (Arch.size_addr, dbg) ],
+                              dbg );
+                          scannable_ptr ],
+                        [] ) ),
+                dbg,
+                Any ),
             dbg,
             Any ) )
   in
@@ -3166,8 +3269,7 @@ let generic_curry_function () =
                 Cexit (Lbl after_deregister_k, [], []),
                 dbg,
                 Csequence
-                  ( register_or_deregister_temp_closure_root ~register:false
-                      ~closure_field:(Cvar counter),
+                  ( deregister_temp_closure_root ~closure_field:(Cvar counter),
                     Cexit
                       ( Lbl deregister_k,
                         [Cop (Cadda, [Cvar counter; Cconst_int (1, dbg)], dbg)],
@@ -3186,47 +3288,106 @@ let generic_curry_function () =
             [] ),
         Any )
   in
-  let initialize_code_pointer_and_arity ~num_non_scannable =
+  let initialize_code_pointer_and_arity_etc ~num_non_scannable
+      ~num_params_already_applied ~layout ~callee's_closure =
+    let startenv_var = Ident.create_local "startenv" in
+    let startenv = Cvar startenv_var in
     let arity_and_is_last_closinfo =
       Cconst_int
         ( (1 (* arity *) lsl 56) lor (1 (* is_last *) lsl 55) lor (* tag *) 1,
+          dbg )
+    in
+    let offset_to_scannable_env_in_words =
+      Cop
+        ( Caddi,
+          [ num_non_scannable
+            (* 4 = code pointer, arity, num-params-already-applied, layout *);
+            Cconst_int (4, dbg) ],
           dbg )
     in
     let closinfo =
       Cop
         ( Cor,
           [ arity_and_is_last_closinfo;
-            Cop
-              ( Clsl,
-                [ Cop
-                    ( Caddi,
-                      [ num_non_scannable
-                        (* 4 = code pointer, arity, num-params-already-applied,
-                           layout *);
-                        Cconst_int (4, dbg) ],
-                      dbg );
-                  Cconst_int (1, dbg) ],
-                dbg ) ],
+            Cop (Clsl, [startenv; Cconst_int (1, dbg)], dbg) ],
           dbg )
     in
-    Csequence
-      ( Cop
-          ( Cstore (Word_int, Initialization),
-            [ Cvar real_closure;
-              Cconst_symbol
-                ({ sym_name = "caml_curry_generic"; sym_global = Global }, dbg)
-            ],
-            dbg ),
-        Cop
-          ( Cstore (Word_int, Initialization),
-            [ Cop
-                ( Caddi,
-                  [Cvar real_closure; Cconst_int (Arch.size_addr, dbg)],
-                  dbg );
-              closinfo ],
-            dbg ) )
+    Clet
+      ( VP.create startenv_var,
+        offset_to_scannable_env_in_words,
+        let offset_to_scannable_env_in_words = startenv in
+        Csequence
+          ( (* Code pointer *)
+            Cop
+              ( Cstore (Word_int, Initialization),
+                [ Cvar real_closure;
+                  Cconst_symbol
+                    ( { sym_name = "caml_curry_generic"; sym_global = Global },
+                      dbg ) ],
+                dbg ),
+            (* closinfo word *)
+            Csequence
+              ( Cop
+                  ( Cstore (Word_int, Initialization),
+                    [ Cop
+                        ( Caddi,
+                          [Cvar real_closure; Cconst_int (Arch.size_addr, dbg)],
+                          dbg );
+                      closinfo ],
+                    dbg ),
+                (* Number of params seen thus far *)
+                Csequence
+                  ( Cop
+                      ( Cstore (Word_int, Initialization),
+                        [ Cop
+                            ( Caddi,
+                              [ Cvar real_closure;
+                                Cop
+                                  ( Cmuli,
+                                    [ Cop
+                                        ( Csubi,
+                                          [ offset_to_scannable_env_in_words;
+                                            Cconst_int (2, dbg) ],
+                                          dbg );
+                                      Cconst_int (Arch.size_addr, dbg) ],
+                                    dbg ) ],
+                              dbg );
+                          num_params_already_applied ],
+                        dbg ),
+                    Csequence
+                      ( (* Layout *)
+                        Cop
+                          ( Cstore (Word_int, Initialization),
+                            [ Cop
+                                ( Caddi,
+                                  [ Cvar real_closure;
+                                    Cop
+                                      ( Cmuli,
+                                        [ Cop
+                                            ( Csubi,
+                                              [ offset_to_scannable_env_in_words;
+                                                Cconst_int (1, dbg) ],
+                                              dbg );
+                                          Cconst_int (Arch.size_addr, dbg) ],
+                                        dbg ) ],
+                                  dbg );
+                              layout ],
+                            dbg ),
+                        (* Callee's closure *)
+                        Cop
+                          ( Cstore (Word_int, Initialization),
+                            [ Cop
+                                ( Caddi,
+                                  [ Cvar real_closure;
+                                    Cop
+                                      ( Cmuli,
+                                        [ offset_to_scannable_env_in_words;
+                                          Cconst_int (Arch.size_addr, dbg) ],
+                                        dbg ) ],
+                                  dbg );
+                              callee's_closure ],
+                            dbg ) ) ) ) ) )
   in
-  let loop_k = Lambda.next_raise_count () in
   let after_loop_k = Lambda.next_raise_count () in
   let startenv_var = Ident.create_local "startenv" in
   let startenv = Cvar startenv_var in
@@ -3234,7 +3395,6 @@ let generic_curry_function () =
     Ident.create_local "num_params_already_applied"
   in
   let layout_var = Ident.create_local "layout" in
-  let layout_this_param_var = Ident.create_local "layout_this_param" in
   let num_scannable = Ident.create_local "num_scannable" in
   let num_non_scannable = Ident.create_local "num_non_scannable" in
   let closure_size = Ident.create_local "closure_size" in
@@ -3269,8 +3429,11 @@ let generic_curry_function () =
                         Csequence
                           ( Csequence
                               ( blit_to_closure,
-                                initialize_code_pointer_and_arity
-                                  ~num_non_scannable:(Cvar num_non_scannable) ),
+                                initialize_code_pointer_and_arity_etc
+                                  ~num_non_scannable:(Cvar num_non_scannable)
+                                  ~num_params_already_applied:
+                                    (Cvar num_params_already_applied_var)
+                                  ~layout:(Cvar layout_var) ~callee's_closure ),
                             Ccatch
                               ( Nonrecursive,
                                 [ ( after_deregister_k,
@@ -3287,8 +3450,26 @@ let generic_curry_function () =
                     dbg ) ],
                 Ccatch
                   ( Recursive,
-                    [loop_k, [], write_to_closure, dbg],
-                    Cexit (Lbl loop_k, [], []),
+                    [ ( loop_k,
+                        [ VP.create int_reg_num_var, typ_int;
+                          VP.create float_reg_num_var, typ_float;
+                          VP.create non_scannable_ptr_var, typ_int;
+                          VP.create scannable_ptr_var, typ_int ],
+                        write_to_closure,
+                        dbg ) ],
+                    Cexit
+                      ( Lbl loop_k,
+                        [ (* int reg number *)
+                          Cconst_int (0, dbg);
+                          (* float reg number *)
+                          Cconst_int (0, dbg);
+                          (* ptr into temp closure for next non-scannable value
+                             slot *)
+                          Cconst_int (42, dbg);
+                          (* ptr into temp closure for next scannable value
+                             slot *)
+                          Cconst_int (43, dbg) ],
+                        [] ),
                     Any ),
                 Any ) ) )
   in
@@ -3384,7 +3565,7 @@ let generic_curry_function () =
   let body =
     Clet
       ( VP.create startenv_var,
-        get_startenv ~closure:(Cvar (VP.var (fst closure_param))),
+        get_startenv ~closure:callee's_closure,
         Clet
           ( VP.create layout_var,
             (* Layout: pointer to array, one member per complex param, each
