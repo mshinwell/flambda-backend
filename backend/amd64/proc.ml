@@ -220,6 +220,21 @@ let loc_results_return res =
 
 let max_arguments_for_tailcalls = 10 (* in regs *) + 64 (* in domain state *)
 
+let all_phys_param_regs =
+  ((
+    hard_int_reg |>
+    Array.to_list
+    |> List.filteri ( fun i _ -> i < 10)
+  )
+  @
+   (
+    hard_float_reg |>
+    Array.to_list
+    |> List.filteri ( fun i _ -> i < 10)
+  ))
+  |> Array.of_list
+
+
 (* C calling conventions under Unix:
      first integer args in rdi, rsi, rdx, rcx, r8, r9
      first float args in xmm0 ... xmm7

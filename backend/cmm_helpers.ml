@@ -2943,7 +2943,7 @@ let generic_curry_function () =
   let callee's_closure = Cvar (VP.var (fst closure_param)) in
   let num_param_regs ~is_float =
     let num =
-      Proc.all_phys_regs |> Array.to_list
+      Proc.all_phys_param_regs |> Array.to_list
       |> List.filter (fun (reg : Reg.t) ->
              match reg.typ with
              | Val | Addr | Int -> not is_float
@@ -3456,11 +3456,31 @@ let generic_curry_function () =
                           (* float reg number *)
                           Cconst_int (0, dbg);
                           (* ptr into temp closure for next non-scannable value
-                             slot *)
-                          Cconst_int (42, dbg);
+                             slot. Recall that the temp closure doesn't have the
+                             code pointer and arity fields. *)
+                          Cvar temp_closure;
                           (* ptr into temp closure for next scannable value
                              slot *)
-                          Cconst_int (43, dbg) ],
+                          Cop
+                            ( Caddi,
+                              [ Cvar temp_closure;
+                                Cop
+                                  ( Cmuli,
+                                    [ Cop
+                                        ( Caddi,
+                                          [ Cvar num_non_scannable;
+                                            Cconst_int
+                                              ( 3
+                                                (* allow for num-params-seen,
+                                                   layout and the callee's
+                                                   closure, all of which we
+                                                   leave a gap for in the temp
+                                                   closure *),
+                                                dbg ) ],
+                                          dbg );
+                                      Cconst_int (Arch.size_addr, dbg) ],
+                                    dbg ) ],
+                              dbg ) ],
                         [] ),
                     Any ),
                 Any ) ) )

@@ -28,6 +28,7 @@ val register_name: int -> string
 val phys_reg: int -> Reg.t
 val rotate_registers: bool
 val all_phys_regs : Reg.t array
+val all_phys_param_regs : Reg.t array
 
 (* Calling conventions *)
 val loc_arguments: Cmm.machtype -> Reg.t array * int
