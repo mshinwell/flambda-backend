@@ -3009,7 +3009,24 @@ let generic_curry_function () =
             effects = Arbitrary_effects;
             coeffects = Has_coeffects
           },
+        (* This is a slight overallocation (by two words, for the code pointer
+           and arity). *)
         [Cop (Cmuli, [closure_size; Cconst_int (Arch.size_addr, dbg)], dbg)],
+        dbg )
+  in
+  let free_temp_closure ~temp_closure =
+    Cop
+      ( Cextcall
+          { func = "free";
+            ty = typ_int;
+            ty_args = [XInt];
+            alloc = false;
+            builtin = false;
+            returns = true;
+            effects = Arbitrary_effects;
+            coeffects = Has_coeffects
+          },
+        [temp_closure],
         dbg )
   in
   (* XXX we must only register the scannable environment fields *)
@@ -3124,19 +3141,27 @@ let generic_curry_function () =
             effects = Arbitrary_effects;
             coeffects = Has_coeffects
           },
-        [Cvar real_closure; Cvar temp_closure; Cconst_int (1000, dbg)],
+        [ Cop
+            ( Caddi,
+              [ Cvar real_closure;
+                (* Skip code pointer and arity slots which will be filled in
+                   separately *)
+                Cconst_int (2 * Arch.size_addr, dbg) ],
+              dbg );
+          Cvar temp_closure;
+          Cconst_int (1000, dbg) ],
         dbg )
   in
   let deregister_k = Lambda.next_raise_count () in
   let after_deregister_k = Lambda.next_raise_count () in
-  let deregister_closure =
+  let deregister_closure ~num_non_scannable ~closure_size =
     let counter = Ident.create_local "counter" in
     Ccatch
       ( Recursive,
         [ ( deregister_k,
             [VP.create counter, typ_int],
             Cifthenelse
-              ( Cop (Ccmpi Cge, [Cvar counter; Cconst_int (1000, dbg)], dbg),
+              ( Cop (Ccmpi Cge, [Cvar counter; closure_size], dbg),
                 dbg,
                 Cexit (Lbl after_deregister_k, [], []),
                 dbg,
@@ -3150,8 +3175,56 @@ let generic_curry_function () =
                 dbg,
                 Any ),
             dbg ) ],
-        Cexit (Lbl deregister_k, [Cconst_int (0, dbg)], []),
+        Cexit
+          ( Lbl deregister_k,
+            [ Cop
+                ( Caddi,
+                  (* This skips to the start of the scannable environment. 2 =
+                     num-params-already-applied + layout *)
+                  [num_non_scannable; Cconst_int (2, dbg)],
+                  dbg ) ],
+            [] ),
         Any )
+  in
+  let initialize_code_pointer_and_arity ~num_non_scannable =
+    let arity_and_is_last_closinfo =
+      Cconst_int
+        ( (1 (* arity *) lsl 56) lor (1 (* is_last *) lsl 55) lor (* tag *) 1,
+          dbg )
+    in
+    let closinfo =
+      Cop
+        ( Cor,
+          [ arity_and_is_last_closinfo;
+            Cop
+              ( Clsl,
+                [ Cop
+                    ( Caddi,
+                      [ num_non_scannable
+                        (* 4 = code pointer, arity, num-params-already-applied,
+                           layout *);
+                        Cconst_int (4, dbg) ],
+                      dbg );
+                  Cconst_int (1, dbg) ],
+                dbg ) ],
+          dbg )
+    in
+    Csequence
+      ( Cop
+          ( Cstore (Word_int, Initialization),
+            [ Cvar real_closure;
+              Cconst_symbol
+                ({ sym_name = "caml_curry_generic"; sym_global = Global }, dbg)
+            ],
+            dbg ),
+        Cop
+          ( Cstore (Word_int, Initialization),
+            [ Cop
+                ( Caddi,
+                  [Cvar real_closure; Cconst_int (Arch.size_addr, dbg)],
+                  dbg );
+              closinfo ],
+            dbg ) )
   in
   let loop_k = Lambda.next_raise_count () in
   let after_loop_k = Lambda.next_raise_count () in
@@ -3171,10 +3244,16 @@ let generic_curry_function () =
         Cop
           ( Caddi,
             [ Cop (Caddi, [Cvar num_scannable; Cvar num_non_scannable], dbg);
-              (* Apart from the value slots themselves: 1 field for the code
-                 pointer (only one code pointer, always one-step application) 1
-                 field for the arity 1 field for the num-params-already-applied
-                 1 field for the layout *)
+              (* Apart from the value slots themselves:
+
+                 - 1 field for the code pointer (only one code pointer, always
+                 one-step application)
+
+                 - 1 field for the arity
+
+                 - 1 field for the num-params-already-applied
+
+                 - 1 field for the layout *)
               Cconst_int (4, dbg) ],
             dbg ),
         Clet
@@ -3188,11 +3267,22 @@ let generic_curry_function () =
                       ( VP.create real_closure,
                         alloc_closure ~closure_size:(Cvar closure_size),
                         Csequence
-                          ( blit_to_closure,
+                          ( Csequence
+                              ( blit_to_closure,
+                                initialize_code_pointer_and_arity
+                                  ~num_non_scannable:(Cvar num_non_scannable) ),
                             Ccatch
                               ( Nonrecursive,
-                                [after_deregister_k, [], Cvar real_closure, dbg],
-                                deregister_closure,
+                                [ ( after_deregister_k,
+                                    [],
+                                    Csequence
+                                      ( free_temp_closure
+                                          ~temp_closure:(Cvar temp_closure),
+                                        Cvar real_closure ),
+                                    dbg ) ],
+                                deregister_closure
+                                  ~num_non_scannable:(Cvar num_non_scannable)
+                                  ~closure_size:(Cvar closure_size),
                                 Any ) ) ),
                     dbg ) ],
                 Ccatch
@@ -3217,9 +3307,23 @@ let generic_curry_function () =
               VP.create num_non_scannable_in_loop, typ_float ],
             Clet
               ( VP.create layout_field_var,
+                (* XXX maybe use another loop parameter to keep the pointer
+                   in *)
                 Cop
                   ( Cload (Word_int, Immutable),
-                    [Cvar layout_this_param_var],
+                    [ Cop
+                        ( Caddi,
+                          [ Cvar layout_this_param_var;
+                            Cop
+                              ( Cmuli,
+                                [ Cop
+                                    ( Caddi,
+                                      [ Cvar num_scannable_in_loop;
+                                        Cvar num_non_scannable_in_loop ],
+                                      dbg );
+                                  Cconst_int (Arch.size_addr, dbg) ],
+                                dbg ) ],
+                          dbg ) ],
                     dbg ),
                 Cifthenelse
                   ( Cop
@@ -3277,7 +3381,6 @@ let generic_curry_function () =
             [] ),
         Any )
   in
-  (* alloc_temp_closure_and_write_to_it, *)
   let body =
     Clet
       ( VP.create startenv_var,
