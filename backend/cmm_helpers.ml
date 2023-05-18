@@ -3215,7 +3215,7 @@ let generic_curry_function () =
           { func = "caml_alloc_small";
             ty = typ_val;
             ty_args = [XInt; XInt];
-            alloc = false;
+            alloc = true;
             builtin = false;
             returns = true;
             effects = Arbitrary_effects;
@@ -3264,7 +3264,7 @@ let generic_curry_function () =
                   ( deregister_temp_closure_root ~closure_field:(Cvar counter),
                     Cexit
                       ( Lbl deregister_k,
-                        [Cop (Cadda, [Cvar counter; Cconst_int (1, dbg)], dbg)],
+                        [Cop (Caddi, [Cvar counter; Cconst_int (1, dbg)], dbg)],
                         [] ) ),
                 dbg,
                 Any ),
@@ -3380,7 +3380,6 @@ let generic_curry_function () =
                               callee's_closure ],
                             dbg ) ) ) ) ) )
   in
-  let after_loop_k = Lambda.next_raise_count () in
   let startenv_var = Ident.create_local "startenv" in
   let startenv = Cvar startenv_var in
   let num_params_already_applied_var =
@@ -3444,7 +3443,7 @@ let generic_curry_function () =
                   ( Recursive,
                     [ ( loop_k,
                         [ VP.create int_reg_num_var, typ_int;
-                          VP.create float_reg_num_var, typ_float;
+                          VP.create float_reg_num_var, typ_int;
                           VP.create non_scannable_ptr_var, typ_int;
                           VP.create scannable_ptr_var, typ_int ],
                         write_to_closure,
@@ -3497,7 +3496,7 @@ let generic_curry_function () =
       ( Recursive,
         [ ( compute_size_loop_k,
             [ VP.create num_scannable_in_loop, typ_int;
-              VP.create num_non_scannable_in_loop, typ_float ],
+              VP.create num_non_scannable_in_loop, typ_int ],
             Clet
               ( VP.create layout_field_var,
                 (* XXX maybe use another loop parameter to keep the pointer
