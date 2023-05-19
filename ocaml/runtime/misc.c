@@ -229,14 +229,12 @@ void caml_flambda2_invalid (value message)
 /* Helper function for copying parameters out of closures and assembling
    them into memory blocks for a variadic call in caml_curry_generic */
 
-static value traverse_closure (value closure, uintnat* buffer,
+static value extricate_parameters (value closure, uintnat* buffer,
   /* Total number unarized params: */
   uintnat num_int, uintnat num_float,
   /* Number of unarized params written to [buffer]: */
   uintnat* num_int_written, uintnat* num_float_written,
-  /* Index of the current complex param being written: */
-  uintnat* complex_param_index;
-  /* Number of unarized params seen during the [traverse_closure] recursion
+  /* Number of unarized params seen during the [extricate_parameters] recursion
      on the way to the earliest closure: */
   uintnat num_passed_over,
   /* Function pointer of the actual closure for the function being called.
@@ -248,13 +246,23 @@ static value traverse_closure (value closure, uintnat* buffer,
   uintnat total_num_unarized_params;
   value parent_closure;
   value actual_closure;
+  uintnat num_complex_params_seen_this_closure;
+  uintnat* layout;
+  uintnat* layout_this_complex_param;
+  uintnat* clos_field_non_scannable;
+  value* clos_field_scannable;
 
   total_num_unarized_params = num_int + num_float;
   CAMLassert(num_passed_over <= total_num_unarized_params);
 
   /* XXX or check the num-params field, which increments by 1 in each
      linked closure */
+
   startenv = Start_env_closinfo(Closinfo_val(closure));
+  /* caml_generic_curry closures are always of arity 1 */
+  CAMLassert(Arity_closinfo(Closinfo_val(closure)) == 1);
+  CAMLassert(Wosize_val(closure)) >= 2);
+
   if (num_passed_over < total_num_unarized_params) {
     num_unarized_params_this_closure = Wosize_val(closure)
       - 1 /* code pointer */
@@ -270,7 +278,7 @@ static value traverse_closure (value closure, uintnat* buffer,
     /* Note that [parent_closure] should never have tag [Infix_tag]. */
     CAMLassert(Tag_val(parent_closure) == Closure_tag);
 
-    actual_closure = traverse_closure(parent_closure, buffer,
+    actual_closure = extricate_parameters(parent_closure, buffer,
       num_int, num_float, num_int_written, num_float_written,
       num_passed_over, func_ptr);
   }
@@ -291,14 +299,41 @@ static value traverse_closure (value closure, uintnat* buffer,
     *func_ptr = (uintnat) Field(actual_closure, 2);
   }
 
+  num_complex_params_seen_this_closure = (uintnat) Field(closure, startenv - 2);
+  layout = (uintnat*) Field(closure, startenv - 1);
 
+  /* For example, when caml_curry_generic creates a closure with the num-seen
+     value equal to 1, that means such closure corresponds to the first
+     complex parameter.  (Recall that caml_curry_generic applications are
+     always done one complex parameter at a time.) */
+  layout_this_complex_param = layout[num_complex_params_seen_this_closure - 1];
 
-/* extract function pointer from the actual closure (pointed to by the
-   earliest closure) + return in buffer
-   need to also get that actual closure + put it in the buffer as the last
-   int arg (since these functions always have arity >= 2, maybe assert that)
-   The num_int value is to include the closure arg
-   */
+  /* Traverse the zero-terminated array for the current complex parameter
+     and copy the corresponding stored unarized arguments into the buffer. */
+  clos_field_non_scannable = (uintnat*) &Field(closure, 2);
+  clos_field_scannable = &Field(closure, startenv + 1 /* skip closure link */);
+
+  buffer += 3; /* skip the three header words */
+  while (*layout_this_complex_param != NULL) {
+    switch (*layout_this_complex_param++) {
+      case 1: /* scannable */
+        buffer[*num_int_written++] = *clos_field_scannable++;
+        break;
+
+      case 2: /* non-scannable int */
+        buffer[*num_int_written++] = *clos_field_non_scannable++;
+        break;
+
+      case 3: /* float */
+        buffer[num_int + 1 /* closure arg */ + *num_float_written++] =
+          *clos_field_non_scannable++;
+        break;
+
+      default:
+        CAMLassert(0);
+        abort();
+    }
+  }
 
   return actual_closure;
 }
@@ -334,6 +369,7 @@ uintnat* caml_curry_generic_helper (value callee_closure)
 
   complex_param_index = 0;
 
+  /* XXX use the num-seen value for the bound */
   while (layout[complex_param_index] != NULL) {
 
   }
@@ -346,11 +382,10 @@ uintnat* caml_curry_generic_helper (value callee_closure)
 
   num_int_written = 0;
   num_float_written = 0;
-  complex_param_index = 0;
 
-  actual_closure = traverse_closure(Field(callee_closure, startenv), buffer,
-    num_int, num_float, &num_int_written, &num_float_written,
-    &complex_param_index, 0, &func_ptr);
+  actual_closure = extricate_parameters(Field(callee_closure, startenv), buffer,
+    num_int, num_float, &num_int_written, &num_float_written, 0,
+    &func_ptr);
 
   buffer[0] = func_ptr;
   buffer[1] = num_int + 1  /* + 1 for [actual_closure] */
