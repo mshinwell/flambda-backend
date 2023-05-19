@@ -226,3 +226,136 @@ void caml_flambda2_invalid (value message)
   abort ();
 }
 
+/* Helper function for copying parameters out of closures and assembling
+   them into memory blocks for a variadic call in caml_curry_generic */
+
+static value traverse_closure (value closure, uintnat* buffer,
+  /* Total number unarized params: */
+  uintnat num_int, uintnat num_float,
+  /* Number of unarized params written to [buffer]: */
+  uintnat* num_int_written, uintnat* num_float_written,
+  /* Index of the current complex param being written: */
+  uintnat* complex_param_index;
+  /* Number of unarized params seen during the [traverse_closure] recursion
+     on the way to the earliest closure: */
+  uintnat num_passed_over,
+  /* Function pointer of the actual closure for the function being called.
+     The closure itself is the return value. */
+  uintnat* func_ptr)
+{
+  uintnat startenv;
+  uintnat num_unarized_params_this_closure;
+  uintnat total_num_unarized_params;
+  value parent_closure;
+  value actual_closure;
+
+  total_num_unarized_params = num_int + num_float;
+  CAMLassert(num_passed_over <= total_num_unarized_params);
+
+  /* XXX or check the num-params field, which increments by 1 in each
+     linked closure */
+  startenv = Start_env_closinfo(Closinfo_val(closure));
+  if (num_passed_over < total_num_unarized_params) {
+    num_unarized_params_this_closure = Wosize_val(closure)
+      - 1 /* code pointer */
+      - 1 /* arity */
+      - 1 /* num complex params applied thus far */
+      - 1 /* layout */
+      - 1 /* parent closure link */
+      ;
+    num_passed_over += num_unarized_params_this_closure;
+
+    parent_closure = Field(closure, startenv);
+    CAMLassert(Is_block(parent_closure));
+    /* Note that [parent_closure] should never have tag [Infix_tag]. */
+    CAMLassert(Tag_val(parent_closure) == Closure_tag);
+
+    actual_closure = traverse_closure(parent_closure, buffer,
+      num_int, num_float, num_int_written, num_float_written,
+      num_passed_over, func_ptr);
+  }
+  else {
+    /* At this point we've either reached the base case of the recursion,
+       i.e. the oldest closure made by caml_curry_generic. */
+
+    /* Extract the actual closure for the function ultimately being called. */
+    actual_closure = Field(closure, startenv);
+
+    CAMLassert(Is_block(actual_closure));
+    CAMLassert(Tag_val(actual_closure) == Closure_tag
+      || Tag_val(actual_closure) == Infix_tag);
+    CAMLassert(Arity_closinfo(Closinfo_val(actual_closure)) > 1);
+    CAMLassert(Wosize_val(actual_closure)) >= 3);
+
+    /* Extract the full application code pointer. */
+    *func_ptr = (uintnat) Field(actual_closure, 2);
+  }
+
+
+
+/* extract function pointer from the actual closure (pointed to by the
+   earliest closure) + return in buffer
+   need to also get that actual closure + put it in the buffer as the last
+   int arg (since these functions always have arity >= 2, maybe assert that)
+   The num_int value is to include the closure arg
+   */
+
+  return actual_closure;
+}
+
+uintnat* caml_curry_generic_helper (value callee_closure)
+{
+  uintnat startenv;
+  uintnat* layout;
+  uintnat num_int, num_float;
+  uintnat num_int_written, num_float_written;
+  uintnat complex_param_index;
+  uintnat* buffer;
+  uintnat func_ptr;
+  value actual_closure;
+
+  /* Format of returned buffer, by word:
+
+     function pointer to be called
+     num of unarized int arguments (including the closure argument)
+     num of unarized float arguments
+     unarized int arguments (excluding the closure argument)
+     closure argument
+     unarized float arguments
+
+     The caller is responsible for calling [free] on the buffer.
+  */
+
+  startenv = Start_env_closinfo(Closinfo_val(callee_closure));
+  layout = Field(callee_closure, startenv - 1);
+
+  num_int = 0;
+  num_float = 0;
+
+  complex_param_index = 0;
+
+  while (layout[complex_param_index] != NULL) {
+
+  }
+
+  /* 4 = words for: func_ptr, num_int, num_float, closure arg */
+  buffer = (uintnat*) malloc(sizeof(uintnat) * (num_int + num_float + 4));
+  if (buffer == NULL) {
+    caml_fatal_out_of_memory ();
+  }
+
+  num_int_written = 0;
+  num_float_written = 0;
+  complex_param_index = 0;
+
+  actual_closure = traverse_closure(Field(callee_closure, startenv), buffer,
+    num_int, num_float, &num_int_written, &num_float_written,
+    &complex_param_index, 0, &func_ptr);
+
+  buffer[0] = func_ptr;
+  buffer[1] = num_int + 1  /* + 1 for [actual_closure] */
+  buffer[2] = num_float;
+  buffer[num_int + 2] = (uintnat) actual_closure;
+
+  return buffer;
+}

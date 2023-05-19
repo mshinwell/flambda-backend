@@ -3129,6 +3129,7 @@ let generic_curry_function () =
                   dbg ) ],
             dbg ),
         Cifthenelse
+          (* The outer layout array must be zero-terminated for the C helper *)
           ( Cop
               (* layout_field_var = zero => end of current param; all unarized
                  params for the current complex param have now been written into
