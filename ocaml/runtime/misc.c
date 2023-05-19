@@ -313,7 +313,7 @@ static value extricate_parameters (value closure, uintnat* buffer,
   clos_field_non_scannable = (uintnat*) &Field(closure, 2);
   clos_field_scannable = &Field(closure, startenv + 1 /* skip closure link */);
 
-  buffer += 3; /* skip the three header words */
+  buffer += 4; /* skip the header words */
   while (*layout_this_complex_param != NULL) {
     switch (*layout_this_complex_param++) {
       case 1: /* scannable */
@@ -338,6 +338,8 @@ static value extricate_parameters (value closure, uintnat* buffer,
   return actual_closure;
 }
 
+/* XXX needs to know the number of int and float regs */
+/* XXX need separate area, in correct order, for stack/DS args */
 uintnat* caml_curry_generic_helper (value callee_closure)
 {
   uintnat startenv;
@@ -351,12 +353,23 @@ uintnat* caml_curry_generic_helper (value callee_closure)
 
   /* Format of returned buffer, by word:
 
+     -----------------------------------------------------------------------
      function pointer to be called
-     num of unarized int arguments (including the closure argument)
-     num of unarized float arguments
-     unarized int arguments (excluding the closure argument)
-     closure argument
+     num of unarized int register arguments
+       (potentially including the closure argument)
+     num of unarized float register arguments
+     num of unarized stack/domainstate arguments (int or float)
+       (potentially including the closure argument)
+     -----------------------------------------------------------------------
+     unarized int arguments (potentially including the closure argument)
+     ...
+     -----------------------------------------------------------------------
      unarized float arguments
+     ...
+     -----------------------------------------------------------------------
+     unarized stack/domainstate args (potentially including the closure arg)
+     ...
+     -----------------------------------------------------------------------
 
      The caller is responsible for calling [free] on the buffer.
   */
