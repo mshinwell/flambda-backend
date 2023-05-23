@@ -255,18 +255,21 @@ module Inlining = struct
         let code = Code_or_metadata.get_code code in
         let inlined_call = Apply_expr.inlined apply in
         let decision, res =
-          match inlined_call with
-          | Never_inlined ->
-            ( Call_site_inlining_decision_type.Never_inlined_attribute,
-              Not_inlinable )
-          | Always_inlined | Hint_inlined ->
-            Call_site_inlining_decision_type.Attribute_always, Inlinable code
-          | Default_inlined | Unroll _ ->
-            (* Closure ignores completely [@unrolled] attributes, so it seems
-               safe to do the same. *)
-            ( Call_site_inlining_decision_type.Definition_says_inline
-                { was_inline_always = false },
-              Inlinable code )
+          if Code_metadata.stub metadata
+          then Call_site_inlining_decision_type.Attribute_always, Inlinable code
+          else
+            match inlined_call with
+            | Never_inlined ->
+              ( Call_site_inlining_decision_type.Never_inlined_attribute,
+                Not_inlinable )
+            | Always_inlined | Hint_inlined ->
+              Call_site_inlining_decision_type.Attribute_always, Inlinable code
+            | Default_inlined | Unroll _ ->
+              (* Closure ignores completely [@unrolled] attributes, so it seems
+                 safe to do the same. *)
+              ( Call_site_inlining_decision_type.Definition_says_inline
+                  { was_inline_always = false },
+                Inlinable code )
         in
         Inlining_report.record_decision_at_call_site_for_known_function ~tracker
           ~apply ~pass:After_closure_conversion ~unrolling_depth:None
