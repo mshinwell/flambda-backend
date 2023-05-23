@@ -1543,12 +1543,12 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot decl
   let is_tupled =
     match Function_decl.kind decl with Curried _ -> false | Tupled -> true
   in
-  let inlining_decision =
-    if Flambda_features.classic_mode ()
+  let inlining_decision : Function_decl_inlining_decision_type.t =
+    if stub
+    then Stub
+    else if Flambda_features.classic_mode ()
     then Inlining.definition_inlining_decision inline cost_metrics
-    else if stub
-    then Function_decl_inlining_decision_type.Stub
-    else Function_decl_inlining_decision_type.Not_yet_decided
+    else Not_yet_decided
   in
   let loopify : Loopify_attribute.t =
     match Function_decl.loop decl with
