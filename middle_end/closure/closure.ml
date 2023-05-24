@@ -938,6 +938,14 @@ let strengthen_approx appl approx =
 (* If a term has approximation Value_integer and is pure,
    replace it by an integer constant *)
 
+let convert_layout kind : Clambda_primitives.layout =
+  match (kind : Lambda.layout) with
+  | Ptop ->  Ptop
+  | Pvalue vk -> Pvalue vk
+  | Punboxed_float -> Punboxed_float
+  | Punboxed_int i -> Punboxed_int i
+  | Pbottom -> Pbottom
+
 let check_constant_result ulam approx =
   match approx with
     Value_const c when is_pure ulam -> make_const c
@@ -948,7 +956,7 @@ let check_constant_result ulam approx =
           let glb =
             Uprim(P.Pread_symbol id, [], Debuginfo.none)
           in
-          Uprim(P.Pfield (i, Lambda.layout_any_value), [glb], Debuginfo.none), approx
+          Uprim(P.Pfield (i, convert_layout Lambda.layout_any_value), [glb], Debuginfo.none), approx
       end
   | _ -> (ulam, approx)
 
@@ -1326,7 +1334,7 @@ let rec close ({ backend; fenv; cenv ; mutable_vars; kinds; catch_env } as env) 
   | Lprim(Pfield (n, _), [lam], loc) ->
       let (ulam, approx) = close env lam in
       let dbg = Debuginfo.from_location loc in
-      check_constant_result (Uprim(P.Pfield (n, Lambda.layout_any_value), [ulam], dbg))
+      check_constant_result (Uprim(P.Pfield (n, convert_layout Lambda.layout_any_value), [ulam], dbg))
                             (field_approx n approx)
   | Lprim(Psetfield(n, is_ptr, init),
           [Lprim(Pgetglobal cu, [], _); lam], loc)->
@@ -1568,11 +1576,13 @@ and close_functions { backend; fenv; cenv; mutable_vars; kinds; catch_env } fun_
     let env_param = V.create_local "env" in
     let cenv_fv =
       add_to_closure_env env_param
-        (fv_pos - env_pos) V.Map.empty not_scanned_fv
+        (fv_pos - env_pos) V.Map.empty
+        (List.map (fun (id, layout) -> id, convert_layout layout) not_scanned_fv)
     in
     let cenv_fv =
       add_to_closure_env env_param
-        (fv_pos - env_pos + not_scanned_fv_size) cenv_fv scanned_fv
+        (fv_pos - env_pos + not_scanned_fv_size) cenv_fv
+        (List.map (fun (id, layout) -> id, convert_layout layout) scanned_fv)
     in
     let cenv_body =
       List.fold_right2

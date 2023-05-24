@@ -20,6 +20,14 @@ module V = Backend_var
 module VP = Backend_var.With_provenance
 module Int = Misc.Stdlib.Int
 
+let convert_layout kind : Clambda_primitives.layout =
+  match (kind : Lambda.layout) with
+  | Ptop ->  Ptop
+  | Pvalue vk -> Pvalue vk
+  | Punboxed_float -> Punboxed_float
+  | Punboxed_int i -> Punboxed_int i
+  | Pbottom -> Pbottom
+
 type 'a for_one_or_more_units = {
   fun_offset_table : int Closure_id.Map.t;
   fv_offset_table : int Var_within_closure.Map.t;
@@ -504,7 +512,7 @@ and to_clambda_named t env var (named : Flambda.named) : Clambda.ulambda * Lambd
     let fun_offset = get_fun_offset t closure_id in
     let var_offset = get_fv_offset t var in
     let pos = var_offset - fun_offset in
-    Uprim (Pfield (pos, kind),
+    Uprim (Pfield (pos, convert_layout kind),
       [check_field t (check_closure t ulam (Expr (Var closure)))
          pos (Some named)],
       Debuginfo.none),
@@ -657,7 +665,7 @@ and to_clambda_set_of_closures t env
         in
         let pos = var_offset - fun_offset in
         Env.add_subst env id
-          (Uprim (Pfield (pos, spec_to.kind), [Clambda.Uvar env_var], Debuginfo.none))
+          (Uprim (Pfield (pos, convert_layout spec_to.kind), [Clambda.Uvar env_var], Debuginfo.none))
           spec_to.kind
       in
       let env = Variable.Map.fold add_env_free_variable free_vars env in

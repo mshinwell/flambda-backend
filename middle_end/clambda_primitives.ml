@@ -145,7 +145,7 @@ and value_kind = Lambda.value_kind =
     }
   | Parrayval of array_kind
 
-and layout = Lambda.layout =
+and layout =
   | Ptop
   | Pvalue of value_kind
   | Punboxed_float
@@ -179,6 +179,6 @@ let equal (x: primitive) (y: primitive) = x = y
 
 let result_layout (p : primitive) =
   match p with
-  | Punbox_float -> Lambda.Punboxed_float
-  | Punbox_int bi -> Lambda.Punboxed_int bi
+  | Punbox_float -> Lambda.layout_unboxed_float
+  | Punbox_int bi -> Lambda.layout_unboxed_int bi
   | _ -> Lambda.layout_any_value

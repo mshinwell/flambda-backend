@@ -487,7 +487,7 @@ let value_kind env loc ty =
 
 (* CR layouts v2: We'll have other layouts. Think about what to do with the
    sanity check in value_kind. *)
-let layout env loc ty = Lambda.Pvalue (value_kind env loc ty)
+let layout env loc ty = Lambda.layout_value (value_kind env loc ty)
 
 let function_return_layout env loc ty =
   match is_function_type env ty with
@@ -543,12 +543,12 @@ let layout_union l1 l2 =
   | Pbottom, l
   | l, Pbottom -> l
   | Pvalue layout1, Pvalue layout2 ->
-      Pvalue (value_kind_union layout1 layout2)
-  | Punboxed_float, Punboxed_float -> Punboxed_float
+      Lambda.layout_value (value_kind_union layout1 layout2)
+  | Punboxed_float, Punboxed_float -> Lambda.layout_unboxed_float
   | Punboxed_int bi1, Punboxed_int bi2 ->
-      if equal_boxed_integer bi1 bi2 then l1 else Ptop
+      if equal_boxed_integer bi1 bi2 then l1 else Lambda.layout_top
   | (Ptop | Pvalue _ | Punboxed_float | Punboxed_int _), _ ->
-      Ptop
+      Lambda.layout_top
 
 (* Error report *)
 open Format

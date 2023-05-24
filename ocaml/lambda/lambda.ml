@@ -611,6 +611,10 @@ let lfunction ~kind ~params ~return ~body ~attr ~loc ~mode ~region =
 
 let lambda_unit = Lconst const_unit
 
+let layout_unboxed_float = Punboxed_float
+let layout_unboxed_int i = Punboxed_int i
+let layout_value vk = Pvalue vk
+let _layout_top = Ptop
 let layout_unit = Pvalue Pintval
 let layout_int = Pvalue Pintval
 let layout_array kind = Pvalue (Parrayval kind)

@@ -1242,7 +1242,7 @@ and transl_tupled_function
           match arg_layout with
           | Pvalue (Pvariant { consts = []; non_consts = [0, kinds] }) ->
               (* CR layouts v2: to change when we have non-value args. *)
-              List.map (fun vk -> Pvalue vk) kinds
+              List.map (fun vk -> Lambda.layout_value vk) kinds
           | _ ->
               Misc.fatal_error
                 "Translcore.transl_tupled_function: \

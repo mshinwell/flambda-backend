@@ -34,7 +34,7 @@ let layout_t = layout_any_value
 let layout_obj = layout_array Pgenarray
 let layout_table = layout_block
 let layout_meth = layout_any_value
-let layout_tables = Lambda.Pvalue Pgenval
+let layout_tables = Lambda.layout_value Pgenval
 
 
 let lfunction ?(kind=Curried {nlocal=0}) ?(region=true) return_layout params body =

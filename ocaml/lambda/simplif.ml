@@ -583,7 +583,7 @@ let simplify_lets lam =
       begin try
         let kind = match kind_ref with
           | None -> Lambda.layout_field
-          | Some [field_kind] -> Pvalue field_kind
+          | Some [field_kind] -> Lambda.layout_value field_kind
           | Some _ -> assert false
         in
         mkmutlet kind v slinit (eliminate_ref v slbody)

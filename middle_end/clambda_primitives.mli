@@ -148,7 +148,7 @@ and value_kind = Lambda.value_kind =
     }
   | Parrayval of array_kind
 
-and layout = Lambda.layout =
+and layout =
   | Ptop
   | Pvalue of value_kind
   | Punboxed_float

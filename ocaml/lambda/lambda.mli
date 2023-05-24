@@ -222,7 +222,7 @@ and value_kind =
 
 (* Because we check for and error on void in the translation to lambda, we don't
    need a constructor for it here. *)
-and layout =
+and layout = private
   | Ptop
   | Pvalue of value_kind
   | Punboxed_float
@@ -519,8 +519,11 @@ val layout_lazy : layout
 val layout_lazy_contents : layout
 (* A layout that is Pgenval because we are missing layout polymorphism *)
 val layout_any_value : layout
+val layout_value : value_kind -> layout
 (* A layout that is Pgenval because it is bound by a letrec *)
 val layout_letrec : layout
+val layout_unboxed_float: layout
+val layout_unboxed_int:boxed_integer -> layout
 
 val layout_top : layout
 val layout_bottom : layout

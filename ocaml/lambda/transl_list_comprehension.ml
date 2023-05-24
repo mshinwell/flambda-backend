@@ -176,7 +176,7 @@ let iterator ~transl_exp ~scopes = function
          correct (i.e., left-to-right) order *)
       let transl_bound var bound =
         Let_binding.make
-          (Immutable Strict) (Pvalue Pintval)
+          (Immutable Strict) (Lambda.layout_value Pintval)
           var (transl_exp ~scopes bound)
       in
       let start = transl_bound "start" start in
@@ -186,12 +186,12 @@ let iterator ~transl_exp ~scopes = function
                         | Downto -> rev_dlist_concat_iterate_down)
       ; arg_lets     = [start; stop]
       ; element      = ident
-      ; element_kind = Pvalue Pintval
+      ; element_kind = Lambda.layout_value Pintval
       ; add_bindings = Fun.id
       }
   | Texp_comp_in { pattern; sequence } ->
       let iter_list =
-        Let_binding.make (Immutable Strict) (Pvalue Pgenval)
+        Let_binding.make (Immutable Strict) (Lambda.layout_value Pgenval)
           "iter_list" (transl_exp ~scopes sequence)
       in
       (* Create a fresh variable to use as the function argument *)
@@ -204,7 +204,7 @@ let iterator ~transl_exp ~scopes = function
       ; add_bindings =
           (* CR layouts: to change when we allow non-values in sequences *)
           Matching.for_let
-            ~scopes pattern.pat_loc (Lvar element) pattern (Pvalue Pgenval)
+            ~scopes pattern.pat_loc (Lvar element) pattern (Lambda.layout_value Pgenval)
       }
 
 (** Translates a list comprehension binding
@@ -246,8 +246,8 @@ let rec translate_bindings
           ~kind:(Curried { nlocal = 2 })
           (* Only the accumulator is local, but since the function itself is
              local, [nlocal] has to be equal to the number of parameters *)
-          ~params:[element, element_kind; inner_acc, Pvalue Pgenval]
-          ~return:(Pvalue Pgenval)
+          ~params:[element, element_kind; inner_acc, Lambda.layout_value Pgenval]
+          ~return:(Lambda.layout_value Pgenval)
           ~attr:default_function_attribute
           ~loc
           ~mode:alloc_local
@@ -261,7 +261,7 @@ let rec translate_bindings
           (Lazy.force builder)
           (List.map (fun Let_binding.{id; _} -> Lvar id) arg_lets @
            [body_func; accumulator])
-          ~result_layout:(Pvalue Pgenval)
+          ~result_layout:(Lambda.layout_value Pgenval)
       in
       arg_lets @ body_arg_lets, result
   | [] ->
@@ -292,7 +292,7 @@ let rec translate_clauses
             Lifthenelse(transl_exp ~scopes cond,
                         body ~accumulator,
                         accumulator,
-                        (Pvalue Pgenval) (* [list]s have the standard representation *))
+                        (Lambda.layout_value Pgenval) (* [list]s have the standard representation *))
       end
   | [] ->
       comprehension_body ~accumulator
@@ -313,4 +313,4 @@ let comprehension ~transl_exp ~scopes ~loc { comp_body; comp_clauses } =
     ~mode:alloc_heap
     (Lazy.force rev_list_to_list)
     [rev_comprehension]
-    ~result_layout:(Pvalue Pgenval)
+    ~result_layout:(Lambda.layout_value Pgenval)

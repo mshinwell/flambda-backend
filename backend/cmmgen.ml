@@ -26,6 +26,14 @@ open Lambda
 open Clambda
 open Clambda_primitives
 open Cmm
+let convert_layout kind : Clambda_primitives.layout =
+  match (kind : Lambda.layout) with
+  | Ptop ->  Ptop
+  | Pvalue vk -> Pvalue vk
+  | Punboxed_float -> Punboxed_float
+  | Punboxed_int i -> Punboxed_int i
+  | Pbottom -> Pbottom
+
 
 module String = Misc.Stdlib.String
 module IntMap = Map.Make(Int)
@@ -523,9 +531,11 @@ let rec transl env e =
     in
     direct_apply sym (machtype_of_layout result_layout) args kind dbg
   | Ugeneric_apply(clos, args, args_layout, result_layout, kind, dbg) ->
+        let args_type = List.map Extended_machtype.of_layout args_layout in
+    let args_layout = List.map convert_layout args_layout in
       let clos = transl env clos in
       let args = List.map (transl env) args in
-      if List.mem Pbottom args_layout then
+      if List.exists (fun layout -> layout = Clambda_primitives.Pbottom) args_layout then
         (* [Extended_machtype.of_layout] will fail on Pbottom, convert it to a
            sequence and remove the call, preserving the execution order. *)
         List.fold_left2 (fun rest arg arg_layout ->
@@ -535,7 +545,6 @@ let rec transl env e =
               Csequence(remove_unit arg, rest)
           ) (Ctuple []) args args_layout
       else
-        let args_type = List.map Extended_machtype.of_layout args_layout in
         let return = Extended_machtype.of_layout result_layout in
         generic_apply (mut_from_env env clos) clos args args_type return kind dbg
   | Usend(kind, met, obj, args, args_layout, result_layout, pos, dbg) ->
