@@ -22,8 +22,9 @@ type linear_item_info =
 
 type linear_unit_info =
   {
-    mutable unit : Compilation_unit.t;
+    mutable unit_name : string;
     mutable items : linear_item_info list;
+    mutable for_pack : string option
   }
 
 type error =

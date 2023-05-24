@@ -1,4 +1,3 @@
-# 1 "callback.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Registering OCaml values with the C runtime.
 

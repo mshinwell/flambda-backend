@@ -22,11 +22,6 @@ type gc_call =
     gc_frame_lbl: label;                (* Label of frame descriptor *)
   }
 
-(* Record calls to local stack reallocation *)
-type local_realloc_call =
-  { lr_lbl: label;
-    lr_return_lbl: label; }
-
 (* Record calls to caml_ml_array_bound_error.
    In -g mode, we maintain one call to caml_ml_array_bound_error
    per bound check site.  Without -g, we can share a single call. *)
@@ -76,10 +71,9 @@ type per_function_env = {
   mutable stack_offset : int;
   mutable call_gc_sites : gc_call list;  (* used in all targets except power *)
   mutable call_gc_label : label;                       (* used only in power *)
-  mutable local_realloc_sites : local_realloc_call list;
   mutable bound_error_sites : bound_error_call list;
                                          (* used in all targets except power *)
-  mutable bound_error_call : label option;       (* used in amd64,i386,s390x *)
+  mutable bound_error_call : label option;       (* used in amd64,s390x *)
 
   (* record jump tables (for PPC64).  In order to reduce the size of the TOC,
      we concatenate all jumptables and emit them at the end of the function. *)
@@ -87,12 +81,6 @@ type per_function_env = {
   mutable jumptables : label list; (* in reverse order *)
 
   (* pending literals *)
-  mutable float_literals : float_literal list;   (* in all except amd64,i386 *)
+  mutable float_literals : float_literal list;   (* in all except amd64 *)
   mutable int_literals : int_literal list;             (* used only in s390x *)
-  mutable offset_literals : offset_computation list;     (* used only in arm *)
-  mutable gotrel_literals : gotrel_literal list;         (* used only in arm *)
-  mutable symbol_literals : symbol_literal list;         (* used only in arm *)
-  (* [size_literals] is the total space (in words) occupied
-     by pending literals. *)
-  mutable size_literals : int;                           (* used only in arm *)
 }

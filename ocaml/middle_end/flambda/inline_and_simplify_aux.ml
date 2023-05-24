@@ -16,7 +16,6 @@
 
 [@@@ocaml.warning "+a-4-9-30-40-41-42-66"]
 open! Int_replace_polymorphic_compare
-module Int = Misc.Stdlib.Int
 
 module Env = struct
   type scope = Current | Outer
@@ -443,7 +442,6 @@ module Result = struct
       inlining_threshold : Inlining_cost.Threshold.t option;
       benefit : Inlining_cost.Benefit.t;
       num_direct_applications : int;
-      may_use_region : bool;
     }
 
   let create () =
@@ -452,7 +450,6 @@ module Result = struct
       inlining_threshold = None;
       benefit = Inlining_cost.Benefit.zero;
       num_direct_applications = 0;
-      may_use_region = false;
     }
 
   let approx t = t.approx
@@ -472,11 +469,6 @@ module Result = struct
     }
 
   let used_static_exceptions t = t.used_static_exceptions
-
-  let set_region_use t b =
-    { t with may_use_region = b }
-
-  let may_use_region t = t.may_use_region
 
   let exit_scope_catch t i =
     { t with
@@ -551,7 +543,7 @@ let keep_body_check ~is_classic_mode ~recursive =
         match fun_decl.inline with
         | Default_inline -> can_inline_non_rec_function fun_decl
         | Unroll factor -> factor > 0
-        | Always_inline | Available_inline -> true
+        | Always_inline | Hint_inline -> true
         | Never_inline -> false
       end
     end
@@ -576,7 +568,8 @@ let prepare_to_simplify_set_of_closures ~env
         let approx = E.find_exn env var in
         (* The projections are freshened below in one step, once we know
            the closure freshening substitution. *)
-        ({ external_var with var } : Flambda.specialised_to), approx)
+        let projection = external_var.projection in
+        ({ var; projection; } : Flambda.specialised_to), approx)
       set_of_closures.free_vars
   in
   let specialised_args =
@@ -602,7 +595,8 @@ let prepare_to_simplify_set_of_closures ~env
             | None -> var
             | Some var -> var
           in
-          Some ({ spec_to with var } : Flambda.specialised_to))
+          let projection = spec_to.projection in
+          Some ({ var; projection; } : Flambda.specialised_to))
   in
   let environment_before_cleaning = env in
   (* [E.local] helps us to catch bugs whereby variables escape their scope. *)

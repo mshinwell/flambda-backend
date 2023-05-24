@@ -46,7 +46,7 @@ and binary_part =
 | Partial_module_type of module_type
 
 type cmt_infos = {
-  cmt_modname : Compilation_unit.t;
+  cmt_modname : string;
   cmt_annots : binary_annots;
   cmt_value_dependencies :
     (Types.value_description * Types.value_description) list;
@@ -57,7 +57,7 @@ type cmt_infos = {
   cmt_loadpath : string list;
   cmt_source_digest : Digest.t option;
   cmt_initial_env : Env.t;
-  cmt_imports : Import_info.t array;
+  cmt_imports : (string * Digest.t option) list;
   cmt_interface_digest : Digest.t option;
   cmt_use_summaries : bool;
   cmt_uid_to_loc : Location.t Shape.Uid.Tbl.t;
@@ -109,7 +109,7 @@ let input_cmt ic = (input_value ic : cmt_infos)
 
 let output_cmt oc cmt =
   output_string oc Config.cmt_magic_number;
-  output_value oc (cmt : cmt_infos)
+  Marshal.(to_channel oc (cmt : cmt_infos) [Compression])
 
 let read filename =
 (*  Printf.fprintf stderr "Cmt_format.read %s\n%!" filename; *)
@@ -122,7 +122,7 @@ let read filename =
          if magic_number = Config.cmt_magic_number then
            None, Some (input_cmt ic)
          else if magic_number = Config.cmi_magic_number then
-           let cmi = Cmi_format.input_cmi_lazy ic in
+           let cmi = Cmi_format.input_cmi ic in
            let cmt = try
                let magic_number = read_magic_number ic in
                if magic_number = Config.cmt_magic_number then
@@ -175,16 +175,6 @@ let save_cmt filename modname binary_annots sourcefile initial_env cmi shape =
            | Some cmi -> Some (output_cmi temp_file_name oc cmi)
          in
          let source_digest = Option.map Digest.file sourcefile in
-         let compare_imports import1 import2 =
-           let modname1 = Import_info.name import1 in
-           let modname2 = Import_info.name import2 in
-           Compilation_unit.Name.compare modname1 modname2
-         in
-         let get_imports () =
-           let imports = Array.of_list (Env.imports ()) in
-           Array.sort compare_imports imports;
-           imports
-         in
          let cmt = {
            cmt_modname = modname;
            cmt_annots = clear_env binary_annots;
@@ -197,7 +187,7 @@ let save_cmt filename modname binary_annots sourcefile initial_env cmi shape =
            cmt_source_digest = source_digest;
            cmt_initial_env = if need_to_clear_env then
                keep_only_summary initial_env else initial_env;
-           cmt_imports = get_imports ();
+           cmt_imports = List.sort compare (Env.imports ());
            cmt_interface_digest = this_crc;
            cmt_use_summaries = need_to_clear_env;
            cmt_uid_to_loc = Env.get_uid_to_loc_tbl ();

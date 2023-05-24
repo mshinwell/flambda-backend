@@ -1,4 +1,3 @@
-# 1 "result.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,10 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
 
 type ('a, 'e) t = ('a, 'e) result = Ok of 'a | Error of 'e
 

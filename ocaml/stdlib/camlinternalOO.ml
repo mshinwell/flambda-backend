@@ -1,4 +1,3 @@
-# 1 "camlinternalOO.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,25 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.inline 0]
-[@@@ocaml.afl_inst_ratio 0]
-
-let magic x = Sys.opaque_identity (Obj.magic x)
-let of_repr x = Sys.opaque_identity (Obj.obj x)
-
-let repr = Obj.repr
-let dup = Obj.dup
-let new_block = Obj.new_block
-let set_field = Obj.set_field
-
-let set_object_field (arr : _ array) field new_value =
-  Array.unsafe_set (Sys.opaque_identity arr) field new_value
-
-let get_object_field (arr : _ array) field =
-  Array.unsafe_get (Sys.opaque_identity arr) field
-
 (**** Object representation ****)
 
 external set_id: 'a -> 'a = "caml_set_oo_id" [@@noalloc]
@@ -40,7 +20,7 @@ external set_id: 'a -> 'a = "caml_set_oo_id" [@@noalloc]
 (**** Object copy ****)
 
 let copy o =
-  let o = (of_repr (dup (repr o))) in
+  let o = (Obj.obj (Obj.dup (Obj.repr o))) in
   set_id o
 
 (**** Compression options ****)
@@ -70,7 +50,7 @@ let initial_object_size = 2
 type item = DummyA | DummyB | DummyC of int
 let _ = [DummyA; DummyB; DummyC 0] (* to avoid warnings *)
 
-let dummy_item = (magic () : item)
+let dummy_item = (Obj.magic () : item)
 
 (**** Types ****)
 
@@ -95,7 +75,7 @@ let public_method_label s : tag =
   (* make it signed for 64 bits architectures *)
   let tag = if !accu > 0x3FFFFFFF then !accu - (1 lsl 31) else !accu in
   (* Printf.eprintf "%s = %d\n" s tag; flush stderr; *)
-  magic tag
+  Obj.magic tag
 
 (**** Sparse array ****)
 
@@ -136,7 +116,7 @@ let dummy_table =
 let table_count = ref 0
 
 (* dummy_met should be a pointer, so use an atom *)
-let dummy_met : item = of_repr (new_block 0 0)
+let dummy_met : item = Obj.obj (Obj.new_block 0 0)
 (* if debugging is needed, this could be a good idea: *)
 (* let dummy_met () = failwith "Undefined method" *)
 
@@ -148,9 +128,9 @@ let new_table pub_labels =
   incr table_count;
   let len = Array.length pub_labels in
   let methods = Array.make (len*2+2) dummy_met in
-  methods.(0) <- magic len;
-  methods.(1) <- magic (fit_size len * Sys.word_size / 8 - 1);
-  for i = 0 to len - 1 do methods.(i*2+3) <- magic pub_labels.(i) done;
+  methods.(0) <- Obj.magic len;
+  methods.(1) <- Obj.magic (fit_size len * Sys.word_size / 8 - 1);
+  for i = 0 to len - 1 do methods.(i*2+3) <- Obj.magic pub_labels.(i) done;
   { methods = methods;
     methods_by_name = Meths.empty;
     methods_by_label = Labs.empty;
@@ -209,7 +189,7 @@ let get_method table label =
   with Not_found -> table.methods.(label)
 
 let to_list arr =
-  if arr == magic 0 then [] else Array.to_list arr
+  if arr == Obj.magic 0 then [] else Array.to_list arr
 
 let narrow table vars virt_meths concr_meths =
   let vars = to_list vars
@@ -281,7 +261,7 @@ let new_variable table name =
     index
 
 let to_array arr =
-  if arr = magic 0 then [||] else arr
+  if arr = Obj.magic 0 then [||] else arr
 
 let new_methods_variables table meths vals =
   let meths = to_array meths in
@@ -316,7 +296,7 @@ let get_key tags : item =
 *)
 
 let create_table public_methods =
-  if public_methods == magic 0 then new_table [||] else
+  if public_methods == Obj.magic 0 then new_table [||] else
   (* [public_methods] must be in ascending order for bytecode *)
   let tags = Array.map public_method_label public_methods in
   let table = new_table tags in
@@ -331,25 +311,25 @@ let create_table public_methods =
 let init_class table =
   inst_var_count := !inst_var_count + table.size - 1;
   table.initializers <- List.rev table.initializers;
-  resize table (3 + magic table.methods.(1) * 16 / Sys.word_size)
+  resize table (3 + Obj.magic table.methods.(1) * 16 / Sys.word_size)
 
 let inherits cla vals virt_meths concr_meths (_, super, _, env) top =
   narrow cla vals virt_meths concr_meths;
   let init =
-    if top then super cla env else repr (super cla) in
+    if top then super cla env else Obj.repr (super cla) in
   widen cla;
   Array.concat
-    [[| repr init |];
-     magic (Array.map (get_variable cla) (to_array vals) : int array);
+    [[| Obj.repr init |];
+     Obj.magic (Array.map (get_variable cla) (to_array vals) : int array);
      Array.map
-       (fun nm -> repr (get_method cla (get_method_label cla nm) : closure))
+       (fun nm -> Obj.repr (get_method cla (get_method_label cla nm) : closure))
        (to_array concr_meths) ]
 
 let make_class pub_meths class_init =
   let table = create_table pub_meths in
   let env_init = class_init table in
   init_class table;
-  (env_init (repr 0), class_init, env_init, repr 0)
+  (env_init (Obj.repr 0), class_init, env_init, Obj.repr 0)
 
 type init_table = { mutable env_init: t; mutable class_init: table -> t }
 [@@warning "-unused-field"]
@@ -363,24 +343,24 @@ let make_class_store pub_meths class_init init_table =
 
 let dummy_class loc =
   let undef = fun _ -> raise (Undefined_recursive_module loc) in
-  (magic undef, undef, undef, repr 0)
+  (Obj.magic undef, undef, undef, Obj.repr 0)
 
 (**** Objects ****)
 
 let create_object table =
   (* XXX Appel de [obj_block] | Call to [obj_block]  *)
-  let obj = new_block Obj.object_tag table.size in
+  let obj = Obj.new_block Obj.object_tag table.size in
   (* XXX Appel de [caml_modify] | Call to [caml_modify] *)
-  set_field obj 0 (repr table.methods);
-  of_repr (set_id obj)
+  Obj.set_field obj 0 (Obj.repr table.methods);
+  Obj.obj (set_id obj)
 
 let create_object_opt obj_0 table =
-  if (magic obj_0 : bool) then obj_0 else begin
+  if (Obj.magic obj_0 : bool) then obj_0 else begin
     (* XXX Appel de [obj_block] | Call to [obj_block]  *)
-    let obj = new_block Obj.object_tag table.size in
+    let obj = Obj.new_block Obj.object_tag table.size in
     (* XXX Appel de [caml_modify] | Call to [caml_modify] *)
-    set_field obj 0 (repr table.methods);
-    of_repr (set_id obj)
+    Obj.set_field obj 0 (Obj.repr table.methods);
+    Obj.obj (set_id obj)
   end
 
 let rec iter_f obj =
@@ -394,14 +374,14 @@ let run_initializers obj table =
     iter_f obj inits
 
 let run_initializers_opt obj_0 obj table =
-  if (magic obj_0 : bool) then obj else begin
+  if (Obj.magic obj_0 : bool) then obj else begin
     let inits = table.initializers in
     if inits <> [] then iter_f obj inits;
     obj
   end
 
 let create_object_and_run_initializers obj_0 table =
-  if (magic obj_0 : bool) then obj_0 else begin
+  if (Obj.magic obj_0 : bool) then obj_0 else begin
     let obj = create_object table in
     run_initializers obj table;
     obj
@@ -440,8 +420,7 @@ let get_next = function
   | Cons tables -> tables.next
 
 let build_path n keys tables =
-  let obj_zero = magic 0 in
-  let res = Cons {key = obj_zero; data = Empty; next = Empty} in
+  let res = Cons {key = Obj.magic 0; data = Empty; next = Empty} in
   let r = ref res in
   for i = 0 to n do
     r := Cons {key = keys.(i); data = !r; next = Empty}
@@ -478,59 +457,59 @@ let lookup_tables root keys =
 (**** builtin methods ****)
 
 let get_const x = ret (fun _obj -> x)
-let get_var n   = ret (fun obj -> get_object_field obj n)
+let get_var n   = ret (fun obj -> Array.unsafe_get obj n)
 let get_env e n =
   ret (fun obj ->
-    get_object_field (magic (get_object_field obj e) : obj) n)
+    Array.unsafe_get (Obj.magic (Array.unsafe_get obj e) : obj) n)
 let get_meth n  = ret (fun obj -> sendself obj n)
-let set_var n   = ret (fun obj x -> set_object_field obj n x)
+let set_var n   = ret (fun obj x -> Array.unsafe_set obj n x)
 let app_const f x = ret (fun _obj -> f x)
-let app_var f n   = ret (fun obj -> f (get_object_field obj n))
+let app_var f n   = ret (fun obj -> f (Array.unsafe_get obj n))
 let app_env f e n =
   ret (fun obj ->
-    f (get_object_field (magic (get_object_field obj e) : obj) n))
+    f (Array.unsafe_get (Obj.magic (Array.unsafe_get obj e) : obj) n))
 let app_meth f n  = ret (fun obj -> f (sendself obj n))
 let app_const_const f x y = ret (fun _obj -> f x y)
-let app_const_var f x n   = ret (fun obj -> f x (get_object_field obj n))
+let app_const_var f x n   = ret (fun obj -> f x (Array.unsafe_get obj n))
 let app_const_meth f x n = ret (fun obj -> f x (sendself obj n))
-let app_var_const f n x = ret (fun obj -> f (get_object_field obj n) x)
+let app_var_const f n x = ret (fun obj -> f (Array.unsafe_get obj n) x)
 let app_meth_const f n x = ret (fun obj -> f (sendself obj n) x)
 let app_const_env f x e n =
   ret (fun obj ->
-    f x (get_object_field (magic (get_object_field obj e) : obj) n))
+    f x (Array.unsafe_get (Obj.magic (Array.unsafe_get obj e) : obj) n))
 let app_env_const f e n x =
   ret (fun obj ->
-    f (get_object_field (magic (get_object_field obj e) : obj) n) x)
+    f (Array.unsafe_get (Obj.magic (Array.unsafe_get obj e) : obj) n) x)
 let meth_app_const n x = ret (fun obj -> (sendself obj n : _ -> _) x)
 let meth_app_var n m =
-  ret (fun obj -> (sendself obj n : _ -> _) (get_object_field obj m))
+  ret (fun obj -> (sendself obj n : _ -> _) (Array.unsafe_get obj m))
 let meth_app_env n e m =
   ret (fun obj -> (sendself obj n : _ -> _)
-      (get_object_field (magic (get_object_field obj e) : obj) m))
+      (Array.unsafe_get (Obj.magic (Array.unsafe_get obj e) : obj) m))
 let meth_app_meth n m =
   ret (fun obj -> (sendself obj n : _ -> _) (sendself obj m))
 let send_const m x c =
-  ret (fun obj -> sendcache x m (get_object_field obj 0) c)
+  ret (fun obj -> sendcache x m (Array.unsafe_get obj 0) c)
 let send_var m n c =
   ret (fun obj ->
-    sendcache (magic (get_object_field obj n) : obj) m
-      (get_object_field obj 0) c)
+    sendcache (Obj.magic (Array.unsafe_get obj n) : obj) m
+      (Array.unsafe_get obj 0) c)
 let send_env m e n c =
   ret (fun obj ->
     sendcache
-      (magic (get_object_field
-                    (magic (get_object_field obj e) : obj) n) : obj)
-      m (get_object_field obj 0) c)
+      (Obj.magic (Array.unsafe_get
+                    (Obj.magic (Array.unsafe_get obj e) : obj) n) : obj)
+      m (Array.unsafe_get obj 0) c)
 let send_meth m n c =
   ret (fun obj ->
-    sendcache (sendself obj n) m (get_object_field obj 0) c)
+    sendcache (sendself obj n) m (Array.unsafe_get obj 0) c)
 let new_cache table =
   let n = new_method table in
   let n =
-    if n mod 2 = 0 || n > 2 + magic table.methods.(1) * 16 / Sys.word_size
+    if n mod 2 = 0 || n > 2 + Obj.magic table.methods.(1) * 16 / Sys.word_size
     then n else new_method table
   in
-  table.methods.(n) <- magic 0;
+  table.methods.(n) <- Obj.magic 0;
   n
 
 type impl =
@@ -561,7 +540,7 @@ type impl =
   | Closure of closure
 
 let method_impl table i arr =
-  let next () = incr i; magic arr.(!i) in
+  let next () = incr i; Obj.magic arr.(!i) in
   match next() with
     GetConst -> let x : t = next() in get_const x
   | GetVar   -> let n = next() in get_var n
@@ -613,7 +592,7 @@ let method_impl table i arr =
       send_env m e n (new_cache table)
   | SendMeth ->
       let m = next() in let n = next () in send_meth m n (new_cache table)
-  | Closure _ as clo -> magic clo
+  | Closure _ as clo -> Obj.magic clo
 
 let set_methods table methods =
   let len = Array.length methods in let i = ref 0 in

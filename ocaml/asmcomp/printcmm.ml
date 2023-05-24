@@ -114,18 +114,20 @@ let location d =
   else Debuginfo.to_string d
 
 let operation d = function
-  | Capply(_ty, _) -> "app" ^ location d
+  | Capply _ty -> "app" ^ location d
   | Cextcall(lbl, _ty_res, _ty_args, _alloc) ->
       Printf.sprintf "extcall \"%s\"%s" lbl (location d)
-  | Cload (c, Asttypes.Immutable) -> Printf.sprintf "load %s" (chunk c)
-  | Cload (c, Asttypes.Mutable) -> Printf.sprintf "load_mut %s" (chunk c)
-  | Calloc Alloc_heap -> "alloc" ^ location d
-  | Calloc Alloc_local -> "alloc_local" ^ location d
+  | Cload {memory_chunk; mutability} -> (
+    match mutability with
+    | Asttypes.Immutable -> Printf.sprintf "load %s" (chunk memory_chunk)
+    | Asttypes.Mutable   -> Printf.sprintf "load_mut %s" (chunk memory_chunk))
+  | Calloc -> "alloc" ^ location d
   | Cstore (c, init) ->
     let init =
       match init with
-      | Initialization -> "(heap-init)"
-      | Assignment -> ""
+      | Lambda.Heap_initialization -> "(heap-init)"
+      | Lambda.Root_initialization -> "(root-init)"
+      | Lambda.Assignment -> ""
     in
     Printf.sprintf "store %s%s" (chunk c) init
   | Caddi -> "+"
@@ -155,12 +157,8 @@ let operation d = function
   | Ccmpf c -> Printf.sprintf "%sf" (float_comparison c)
   | Craise k -> Lambda.raise_kind k ^ location d
   | Ccheckbound -> "checkbound" ^ location d
-  | Cprobe { name; handler_code_sym } ->
-    Printf.sprintf "probe[%s %s]" name handler_code_sym
-  | Cprobe_is_enabled {name} -> Printf.sprintf "probe_is_enabled[%s]" name
   | Copaque -> "opaque"
-  | Cbeginregion -> "beginregion"
-  | Cendregion -> "endregion"
+  | Cdls_get -> "dls_get"
 
 let rec expr ppf = function
   | Cconst_int (n, _dbg) -> fprintf ppf "%i" n
@@ -223,7 +221,7 @@ let rec expr ppf = function
       fprintf ppf "@[<2>(%s" (operation dbg op);
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       begin match op with
-      | Capply(mty, _) -> fprintf ppf "@ %a" machtype mty
+      | Capply mty -> fprintf ppf "@ %a" machtype mty
       | Cextcall(_, ty_res, ty_args, _) ->
           fprintf ppf "@ %a" extcall_signature (ty_res, ty_args)
       | _ -> ()
@@ -231,9 +229,9 @@ let rec expr ppf = function
       fprintf ppf ")@]"
   | Csequence(e1, e2) ->
       fprintf ppf "@[<2>(seq@ %a@ %a)@]" sequence e1 sequence e2
-  | Cifthenelse(e1, _e2_dbg, e2, _e3_dbg, e3, _dbg, _kind) ->
+  | Cifthenelse(e1, _e2_dbg, e2, _e3_dbg, e3, _dbg) ->
       fprintf ppf "@[<2>(if@ %a@ %a@ %a)@]" expr e1 expr e2 expr e3
-  | Cswitch(e1, index, cases, _dbg, _kind) ->
+  | Cswitch(e1, index, cases, _dbg) ->
       let print_case i ppf =
         for j = 0 to Array.length index - 1 do
           if index.(j) = i then fprintf ppf "case %i:" j
@@ -243,7 +241,7 @@ let rec expr ppf = function
         fprintf ppf "@ @[<2>%t@ %a@]" (print_case i) sequence (fst cases.(i))
        done in
       fprintf ppf "@[<v 0>@[<2>(switch@ %a@ @]%t)@]" expr e1 print_cases
-  | Ccatch(flag, handlers, e1, _kind) ->
+  | Ccatch(flag, handlers, e1) ->
       let print_handler ppf (i, ids, e2, _dbg) =
         fprintf ppf "(%d%a)@ %a"
           i
@@ -267,13 +265,9 @@ let rec expr ppf = function
       fprintf ppf "@[<2>(exit %d" i;
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       fprintf ppf ")@]"
-  | Ctrywith(e1, id, e2, _dbg, _value_kind) ->
+  | Ctrywith(e1, id, e2, _dbg) ->
       fprintf ppf "@[<2>(try@ %a@;<1 -2>with@ %a@ %a)@]"
              sequence e1 VP.print id sequence e2
-  | Cregion e ->
-      fprintf ppf "@[<2>(region@ %a)@]" sequence e
-  | Cexclave e ->
-      fprintf ppf "@[<2>(exclave@ %a)@]" sequence e
 
 and sequence ppf = function
   | Csequence(e1, e2) -> fprintf ppf "%a@ %a" sequence e1 sequence e2

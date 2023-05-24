@@ -97,20 +97,20 @@ let string_is_prefix sub str =
 
 let rec lident_of_path = function
   | Path.Pident id -> Longident.Lident (Ident.name id)
-  | Path.Pdot (p, s) -> Longident.Ldot (lident_of_path p, s)
   | Path.Papply (p1, p2) ->
       Longident.Lapply (lident_of_path p1, lident_of_path p2)
+  | Path.Pdot (p, s) | Path.Pextra_ty (p, Pcstr_ty s) ->
+      Longident.Ldot (lident_of_path p, s)
+  | Path.Pextra_ty (p, _) -> lident_of_path p
 
 let map_loc sub {loc; txt} = {loc = sub.location sub loc; txt}
 
 (** Try a name [$name$0], check if it's free, if not, increment and repeat. *)
 let fresh_name s env =
-  let rec aux i =
-    let name = s ^ Int.to_string i in
-    if Env.bound_value name env then aux (i+1)
-    else name
-  in
-  aux 0
+  let name i = s ^ Int.to_string i in
+  let available i = not (Env.bound_value (name i) env) in
+  let first_i = Misc.find_first_mono available in
+  name first_i
 
 (** Extract the [n] patterns from the case of a letop *)
 let rec extract_letop_patterns n pat =
@@ -168,7 +168,7 @@ let structure_item sub item =
   let loc = sub.location sub item.str_loc in
   let desc =
     match item.str_desc with
-      Tstr_eval (exp, _, attrs) -> Pstr_eval (sub.expr sub exp, attrs)
+      Tstr_eval (exp, attrs) -> Pstr_eval (sub.expr sub exp, attrs)
     | Tstr_value (rec_flag, list) ->
         Pstr_value (rec_flag, List.map (sub.value_binding sub) list)
     | Tstr_primitive vd ->
@@ -198,15 +198,7 @@ let structure_item sub item =
              (fun (_id, _name, ct) -> sub.class_type_declaration sub ct)
              list)
     | Tstr_include incl ->
-        let pincl = sub.include_declaration sub incl in
-        begin match incl.incl_kind with
-        | Tincl_structure ->
-            Pstr_include pincl
-        | Tincl_functor _ | Tincl_gen_functor _ ->
-            Jane_syntax.Include_functor.str_item_of
-              ~loc
-              (Jane_syntax.Include_functor.Ifstr_include_functor pincl)
-        end
+        Pstr_include (sub.include_declaration sub incl)
     | Tstr_attribute x ->
         Pstr_attribute x
   in
@@ -253,7 +245,7 @@ let type_kind sub tk = match tk with
   | Ttype_open -> Ptype_open
 
 let constructor_arguments sub = function
-   | Cstr_tuple l -> Pcstr_tuple (List.map (fun (ty, _) -> sub.typ sub ty) l)
+   | Cstr_tuple l -> Pcstr_tuple (List.map (sub.typ sub) l)
    | Cstr_record l -> Pcstr_record (List.map (sub.label_declaration sub) l)
 
 let constructor_declaration sub cd =
@@ -306,7 +298,7 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
   match pat with
       { pat_extra=[Tpat_unpack, loc, _attrs]; pat_desc = Tpat_any; _ } ->
         Ppat_unpack { txt = None; loc  }
-    | { pat_extra=[Tpat_unpack, _, _attrs]; pat_desc = Tpat_var (_,name,_); _ } ->
+    | { pat_extra=[Tpat_unpack, _, _attrs]; pat_desc = Tpat_var (_,name); _ } ->
         Ppat_unpack { name with txt = Some name.txt }
     | { pat_extra=[Tpat_type (_path, lid), _, _attrs]; _ } ->
         Ppat_type (map_loc sub lid)
@@ -316,7 +308,7 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
     | _ ->
     match pat.pat_desc with
       Tpat_any -> Ppat_any
-    | Tpat_var (id, name,_) ->
+    | Tpat_var (id, name) ->
         begin
           match (Ident.name id).[0] with
             'A'..'Z' ->
@@ -329,11 +321,11 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
        The compiler transforms (x:t) into (_ as x : t).
        This avoids transforming a warning 27 into a 26.
      *)
-    | Tpat_alias ({pat_desc = Tpat_any; pat_loc}, _id, name, _mode)
+    | Tpat_alias ({pat_desc = Tpat_any; pat_loc}, _id, name)
          when pat_loc = pat.pat_loc ->
        Ppat_var name
 
-    | Tpat_alias (pat, _id, name, _mode) ->
+    | Tpat_alias (pat, _id, name) ->
         Ppat_alias (sub.pat sub pat, name)
     | Tpat_constant cst -> Ppat_constant (constant cst)
     | Tpat_tuple list ->
@@ -365,14 +357,7 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
     | Tpat_record (list, closed) ->
         Ppat_record (List.map (fun (lid, _, pat) ->
             map_loc sub lid, sub.pat sub pat) list, closed)
-    | Tpat_array (am, list) -> begin
-        let pats = List.map (sub.pat sub) list in
-        match am with
-        | Mutable   -> Ppat_array pats
-        | Immutable -> Jane_syntax.Immutable_arrays.pat_of
-                         ~loc
-                         (Iapat_immutable_array pats)
-      end
+    | Tpat_array list -> Ppat_array (List.map (sub.pat sub) list)
     | Tpat_lazy p -> Ppat_lazy (sub.pat sub p)
 
     | Tpat_exception p -> Ppat_exception (sub.pat sub p)
@@ -411,40 +396,12 @@ let value_binding sub vb =
     (sub.pat sub vb.vb_pat)
     (sub.expr sub vb.vb_expr)
 
-let comprehension sub comp_type comp =
-  let open Jane_syntax.Comprehensions in
-  let iterator = function
-    | Texp_comp_range { ident = _; pattern; start ; stop ; direction } ->
-        pattern,
-        Range { start = sub.expr sub start
-              ; stop  = sub.expr sub stop
-              ; direction }
-    | Texp_comp_in { pattern; sequence } ->
-        sub.pat sub pattern,
-        In (sub.expr sub sequence)
-  in
-  let binding { comp_cb_iterator ; comp_cb_attributes } =
-    let pattern, iterator = iterator comp_cb_iterator in
-    { pattern
-    ; iterator
-    ; attributes = comp_cb_attributes }
-  in
-  let clause = function
-    | Texp_comp_for  bindings -> For (List.map binding bindings)
-    | Texp_comp_when cond     -> When (sub.expr sub cond)
-  in
-  let comprehension { comp_body; comp_clauses } =
-    { body    = sub.expr sub comp_body
-    ; clauses = List.map clause comp_clauses }
-  in
-  Jane_syntax.Comprehensions.expr_of (comp_type (comprehension comp))
-
 let expression sub exp =
   let loc = sub.location sub exp.exp_loc in
   let attrs = sub.attributes sub exp.exp_attributes in
   let desc =
     match exp.exp_desc with
-      Texp_ident (_path, lid, _, _) -> Pexp_ident (map_loc sub lid)
+      Texp_ident (_path, lid, _) -> Pexp_ident (map_loc sub lid)
     | Texp_constant cst -> Pexp_constant (constant cst)
     | Texp_let (rec_flag, list, exp) ->
         Pexp_let (rec_flag,
@@ -466,20 +423,20 @@ let expression sub exp =
         Pexp_fun (label, None, Pat.var ~loc {loc;txt = name },
           Exp.match_ ~loc (Exp.ident ~loc {loc;txt= Lident name})
                           (List.map (sub.case sub) cases))
-    | Texp_apply (exp, list, _, _) ->
+    | Texp_apply (exp, list) ->
         Pexp_apply (sub.expr sub exp,
-          List.fold_right (fun (label, arg) list ->
-              match arg with
-              | Omitted _ -> list
-              | Arg exp -> (label, sub.expr sub exp) :: list
+          List.fold_right (fun (label, expo) list ->
+              match expo with
+                None -> list
+              | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
-    | Texp_match (exp, _, cases, _) ->
+    | Texp_match (exp, cases, _) ->
       Pexp_match (sub.expr sub exp, List.map (sub.case sub) cases)
     | Texp_try (exp, cases) ->
         Pexp_try (sub.expr sub exp, List.map (sub.case sub) cases)
-    | Texp_tuple (list, _) ->
+    | Texp_tuple list ->
         Pexp_tuple (List.map (sub.expr sub) list)
-    | Texp_construct (lid, _, args, _) ->
+    | Texp_construct (lid, _, args) ->
         Pexp_construct (map_loc sub lid,
           (match args with
               [] -> None
@@ -489,7 +446,7 @@ let expression sub exp =
                 (Exp.tuple ~loc (List.map (sub.expr sub) args))
           ))
     | Texp_variant (label, expo) ->
-        Pexp_variant (label, Option.map (fun (e, _) -> sub.expr sub e) expo)
+        Pexp_variant (label, Option.map (sub.expr sub) expo)
     | Texp_record { fields; extended_expression; _ } ->
         let list = Array.fold_left (fun l -> function
             | _, Kept _ -> l
@@ -497,45 +454,31 @@ let expression sub exp =
             [] fields
         in
         Pexp_record (list, Option.map (sub.expr sub) extended_expression)
-    | Texp_field (exp, lid, _label, _) ->
+    | Texp_field (exp, lid, _label) ->
         Pexp_field (sub.expr sub exp, map_loc sub lid)
-    | Texp_setfield (exp1, _, lid, _label, exp2) ->
+    | Texp_setfield (exp1, lid, _label, exp2) ->
         Pexp_setfield (sub.expr sub exp1, map_loc sub lid,
           sub.expr sub exp2)
-    | Texp_array (amut, list, _) -> begin
-        (* Can be inlined when we get to upstream immutable arrays *)
-        let plist = List.map (sub.expr sub) list in
-        match amut with
-        | Mutable ->
-            Pexp_array plist
-        | Immutable ->
-            Jane_syntax.Immutable_arrays.expr_of
-              ~loc (Iaexp_immutable_array plist)
-      end
-    | Texp_list_comprehension comp ->
-        comprehension
-          ~loc sub (fun comp -> Cexp_list_comprehension comp) comp
-    | Texp_array_comprehension (amut, comp) ->
-        comprehension
-          ~loc sub (fun comp -> Cexp_array_comprehension (amut, comp)) comp
+    | Texp_array list ->
+        Pexp_array (List.map (sub.expr sub) list)
     | Texp_ifthenelse (exp1, exp2, expo) ->
         Pexp_ifthenelse (sub.expr sub exp1,
           sub.expr sub exp2,
           Option.map (sub.expr sub) expo)
-    | Texp_sequence (exp1, _layout, exp2) ->
+    | Texp_sequence (exp1, exp2) ->
         Pexp_sequence (sub.expr sub exp1, sub.expr sub exp2)
-    | Texp_while {wh_cond; wh_body} ->
-        Pexp_while (sub.expr sub wh_cond, sub.expr sub wh_body)
-    | Texp_for {for_pat; for_from; for_to; for_dir; for_body} ->
-        Pexp_for (for_pat,
-          sub.expr sub for_from, sub.expr sub for_to,
-          for_dir, sub.expr sub for_body)
-    | Texp_send (exp, meth, _, _) ->
+    | Texp_while (exp1, exp2) ->
+        Pexp_while (sub.expr sub exp1, sub.expr sub exp2)
+    | Texp_for (_id, name, exp1, exp2, dir, exp3) ->
+        Pexp_for (name,
+          sub.expr sub exp1, sub.expr sub exp2,
+          dir, sub.expr sub exp3)
+    | Texp_send (exp, meth) ->
         Pexp_send (sub.expr sub exp, match meth with
             Tmeth_name name -> mkloc name loc
           | Tmeth_val id -> mkloc (Ident.name id) loc
           | Tmeth_ancestor(id, _) -> mkloc (Ident.name id) loc)
-    | Texp_new (_path, lid, _, _) -> Pexp_new (map_loc sub lid)
+    | Texp_new (_path, lid, _) -> Pexp_new (map_loc sub lid)
     | Texp_instvar (_, path, name) ->
       Pexp_ident ({loc = sub.location sub name.loc ; txt = lident_of_path path})
     | Texp_setinstvar (_, _path, lid, exp) ->
@@ -550,7 +493,7 @@ let expression sub exp =
     | Texp_letexception (ext, exp) ->
         Pexp_letexception (sub.extension_constructor sub ext,
                            sub.expr sub exp)
-    | Texp_assert exp -> Pexp_assert (sub.expr sub exp)
+    | Texp_assert (exp, _) -> Pexp_assert (sub.expr sub exp)
     | Texp_lazy exp -> Pexp_lazy (sub.expr sub exp)
     | Texp_object (cl, _) ->
         Pexp_object (sub.class_structure sub cl)
@@ -572,53 +515,7 @@ let expression sub exp =
                                  (Exp.construct ~loc (map_loc sub lid) None)
                              ])
     | Texp_open (od, exp) ->
-      Pexp_open (sub.open_declaration sub od, sub.expr sub exp)
-    | Texp_probe {name; handler} ->
-        Pexp_extension
-          ({ txt = "ocaml.probe"; loc}
-          , PStr ([
-              { pstr_desc=
-                  Pstr_eval
-                    ( { pexp_desc=(Pexp_apply (
-                        { pexp_desc=(Pexp_constant
-                                       (Pconst_string(name,loc,None)))
-                        ; pexp_loc=loc
-                        ; pexp_loc_stack =[]
-                        ; pexp_attributes=[]
-                        }
-                      , [Nolabel, sub.expr sub handler]))
-                      ; pexp_loc=loc
-                      ; pexp_loc_stack =[]
-                      ; pexp_attributes=[]
-                      }
-                    , [])
-              ; pstr_loc = loc
-              }]))
-    | Texp_probe_is_enabled {name} ->
-        Pexp_extension
-          ({ txt = "ocaml.probe_is_enabled"; loc}
-          , PStr([
-               { pstr_desc=
-                   Pstr_eval
-                     ( { pexp_desc=(Pexp_constant
-                                      (Pconst_string(name,loc,None)))
-                       ; pexp_loc=loc
-                       ; pexp_loc_stack =[]
-                       ; pexp_attributes=[]
-                       }
-                     , [])
-               ; pstr_loc = loc
-               }]))
-    | Texp_exclave exp ->
-        Pexp_apply ({
-        pexp_desc =
-          Pexp_extension
-            ({ txt = "ocaml.exclave"; loc}
-            , PStr []);
-        pexp_loc = loc;
-        pexp_loc_stack = [];
-        pexp_attributes = [];
-      }, [Nolabel, sub.expr sub exp])
+        Pexp_open (sub.open_declaration sub od, sub.expr sub exp)
   in
   List.fold_right (exp_extra sub) exp.exp_extra
     (Exp.mk ~loc ~attrs desc)
@@ -672,15 +569,7 @@ let signature_item sub item =
     | Tsig_open od ->
         Psig_open (sub.open_description sub od)
     | Tsig_include incl ->
-        let pincl = sub.include_description sub incl in
-        begin match incl.incl_kind with
-        | Tincl_structure ->
-            Psig_include pincl
-        | Tincl_functor _ | Tincl_gen_functor _ ->
-            Jane_syntax.Include_functor.sig_item_of
-              ~loc
-              (Jane_syntax.Include_functor.Ifsig_include_functor pincl)
-        end
+        Psig_include (sub.include_description sub incl)
     | Tsig_class list ->
         Psig_class (List.map (sub.class_description sub) list)
     | Tsig_class_type list ->
@@ -707,7 +596,8 @@ let module_substitution sub ms =
 let include_infos f sub incl =
   let loc = sub.location sub incl.incl_loc in
   let attrs = sub.attributes sub incl.incl_attributes in
-  Incl.mk ~loc ~attrs (f sub incl.incl_mod)
+  Incl.mk ~loc ~attrs
+    (f sub incl.incl_mod)
 
 let include_declaration sub = include_infos sub.module_expr sub
 let include_description sub = include_infos sub.module_type sub
@@ -778,7 +668,10 @@ let module_expr (sub : mapper) mexpr =
               Pmod_functor
                 (functor_parameter sub arg, sub.module_expr sub mexpr)
           | Tmod_apply (mexp1, mexp2, _) ->
-              Pmod_apply (sub.module_expr sub mexp1, sub.module_expr sub mexp2)
+              Pmod_apply (sub.module_expr sub mexp1,
+                          sub.module_expr sub mexp2)
+          | Tmod_apply_unit mexp1 ->
+              Pmod_apply_unit (sub.module_expr sub mexp1)
           | Tmod_constraint (mexpr, _, Tmodtype_explicit mtype, _) ->
               Pmod_constraint (sub.module_expr sub mexpr,
                 sub.module_type sub mtype)
@@ -807,8 +700,8 @@ let class_expr sub cexpr =
         Pcl_apply (sub.class_expr sub cl,
           List.fold_right (fun (label, expo) list ->
               match expo with
-              | Omitted _ -> list
-              | Arg exp -> (label, sub.expr sub exp) :: list
+                None -> list
+              | Some exp -> (label, sub.expr sub exp) :: list
           ) args [])
 
     | Tcl_let (rec_flat, bindings, _ivars, cl) ->
@@ -892,7 +785,7 @@ let core_type sub ct =
 
 let class_structure sub cs =
   let rec remove_self = function
-    | { pat_desc = Tpat_alias (p, id, _s, _mode) }
+    | { pat_desc = Tpat_alias (p, id, _s) }
       when string_is_prefix "selfpat-" (Ident.name id) ->
         remove_self p
     | p -> p
@@ -922,7 +815,7 @@ let object_field sub {of_loc; of_desc; of_attributes;} =
   Of.mk ~loc ~attrs desc
 
 and is_self_pat = function
-  | { pat_desc = Tpat_alias(_pat, id, _, _mode) } ->
+  | { pat_desc = Tpat_alias(_pat, id, _) } ->
       string_is_prefix "self-" (Ident.name id)
   | _ -> false
 

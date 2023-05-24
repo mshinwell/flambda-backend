@@ -15,7 +15,6 @@
 
 (* Typechecking of type expressions for the core language *)
 
-open Layouts
 open Types
 
 module TyVarEnv : sig
@@ -43,17 +42,18 @@ module TyVarEnv : sig
      Env.t -> Location.t -> poly_univars -> type_expr list
     (** Same as [check_poly_univars], but instantiates the resulting
        type scheme (i.e. variables become Tvar rather than Tunivar) *)
+
 end
 
 val valid_tyvar_name : string -> bool
 
 val transl_simple_type:
-        Env.t -> ?univars:TyVarEnv.poly_univars -> closed:bool -> alloc_mode_const
+        Env.t -> ?univars:TyVarEnv.poly_univars -> closed:bool
         -> Parsetree.core_type -> Typedtree.core_type
 val transl_simple_type_univars:
         Env.t -> Parsetree.core_type -> Typedtree.core_type
 val transl_simple_type_delayed
-  :  Env.t -> alloc_mode_const
+  :  Env.t
   -> Parsetree.core_type
   -> Typedtree.core_type * type_expr * (unit -> unit)
         (* Translate a type, but leave type variables unbound. Returns
@@ -62,14 +62,9 @@ val transl_simple_type_delayed
 val transl_type_scheme:
         Env.t -> Parsetree.core_type -> Typedtree.core_type
 val transl_type_param:
-  Env.t -> Parsetree.core_type -> layout -> Typedtree.core_type
-
-val get_alloc_mode : Parsetree.core_type -> alloc_mode_const
+  Env.t -> Parsetree.core_type -> Typedtree.core_type
 
 exception Already_bound
-
-type value_loc =
-    Fun_arg | Fun_ret | Tuple | Poly_variant | Package_constraint | Object_field
 
 type error =
   | Unbound_type_variable of string * string list
@@ -92,10 +87,6 @@ type error =
   | Method_mismatch of string * type_expr * type_expr
   | Opened_object of Path.t option
   | Not_an_object of type_expr
-  | Unsupported_extension of Language_extension.t
-  | Polymorphic_optional_param
-  | Non_value of
-      {vloc : value_loc; typ : type_expr; err : Layout.Violation.violation}
 
 exception Error of Location.t * Env.t * error
 
@@ -106,7 +97,3 @@ val transl_modtype_longident:  (* from Typemod *)
     (Location.t -> Env.t -> Longident.t -> Path.t) ref
 val transl_modtype: (* from Typemod *)
     (Env.t -> Parsetree.module_type -> Typedtree.module_type) ref
-val create_package_mty:
-    Location.t -> Env.t -> Parsetree.package_type ->
-    (Longident.t Asttypes.loc * Parsetree.core_type) list *
-      Parsetree.module_type

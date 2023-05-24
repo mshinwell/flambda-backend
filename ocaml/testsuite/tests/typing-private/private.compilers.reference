@@ -112,6 +112,7 @@ Line 3, characters 40-63:
 3 | module Test2 : module type of Test with type t = private Test.t = Test;;
                                             ^^^^^^^^^^^^^^^^^^^^^^^
 Alert deprecated: spurious use of private
+
 module Test2 : sig type t = Test.t = private A end
 type t = private < x : int; .. >
 type t = private < x : int; .. >
@@ -122,7 +123,7 @@ Error: Type declarations do not match:
          type !'a t = private < x : int; .. > constraint 'a = 'a t
        is not included in
          type 'a t
-       Their parameters differ:
+       Their parameters differ
        The type 'b t as 'b is not equal to the type 'a
 type 'a t = private 'a constraint 'a = < x : int; .. >
 type t = [ `Closed ]

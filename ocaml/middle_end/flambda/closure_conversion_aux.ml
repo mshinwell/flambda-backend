@@ -19,11 +19,10 @@ open! Int_replace_polymorphic_compare
 
 module Env = struct
   type t = {
-    variables : (Variable.t * Lambda.layout) Ident.tbl;
-    mutable_variables : (Mutable_variable.t * Lambda.layout) Ident.tbl;
+    variables : Variable.t Ident.tbl;
+    mutable_variables : Mutable_variable.t Ident.tbl;
     static_exceptions : Static_exception.t Numbers.Int.Map.t;
     globals : Symbol.t Numbers.Int.Map.t;
-    at_toplevel : bool;
   }
 
   let empty = {
@@ -31,16 +30,13 @@ module Env = struct
     mutable_variables = Ident.empty;
     static_exceptions = Numbers.Int.Map.empty;
     globals = Numbers.Int.Map.empty;
-    at_toplevel = true;
   }
 
   let clear_local_bindings env =
     { empty with globals = env.globals }
 
-  let add_var t id var kind =
-    { t with variables = Ident.add id (var, kind) t.variables }
-  let add_vars t ids vars =
-    List.fold_left2 (fun t id (var, kind) -> add_var t id var kind) t ids vars
+  let add_var t id var = { t with variables = Ident.add id var t.variables }
+  let add_vars t ids vars = List.fold_left2 add_var t ids vars
 
   let find_var t id =
     try Ident.find_same id t.variables
@@ -52,9 +48,8 @@ module Env = struct
   let find_var_exn t id =
     Ident.find_same id t.variables
 
-  let add_mutable_var t id mutable_var kind =
-    let mutable_variables = Ident.add id (mutable_var, kind) t.mutable_variables in
-    { t with mutable_variables }
+  let add_mutable_var t id mutable_var =
+    { t with mutable_variables = Ident.add id mutable_var t.mutable_variables }
 
   let find_mutable_var_exn t id =
     Ident.find_same id t.mutable_variables
@@ -78,10 +73,6 @@ module Env = struct
     with Not_found ->
       Misc.fatal_error ("Closure_conversion.Env.find_global: global "
         ^ Int.to_string pos)
-
-  let at_toplevel t = t.at_toplevel
-
-  let not_at_toplevel t = { t with at_toplevel = false; }
 end
 
 module Function_decls = struct
@@ -90,18 +81,15 @@ module Function_decls = struct
       let_rec_ident : Ident.t;
       closure_bound_var : Variable.t;
       kind : Lambda.function_kind;
-      mode : Lambda.alloc_mode;
-      region : bool;
-      params : (Ident.t * Lambda.layout) list;
-      return_layout : Lambda.layout;
+      params : Ident.t list;
       body : Lambda.lambda;
       free_idents_of_body : Ident.Set.t;
       attr : Lambda.function_attribute;
       loc : Lambda.scoped_location
     }
 
-    let create ~let_rec_ident ~closure_bound_var ~kind ~mode ~region
-          ~params ~return_layout ~body ~attr ~loc =
+    let create ~let_rec_ident ~closure_bound_var ~kind ~params ~body
+        ~attr ~loc =
       let let_rec_ident =
         match let_rec_ident with
         | None -> Ident.create_local "unnamed_function"
@@ -110,10 +98,7 @@ module Function_decls = struct
       { let_rec_ident;
         closure_bound_var;
         kind;
-        mode;
-        region;
         params;
-        return_layout;
         body;
         free_idents_of_body = Lambda.free_variables body;
         attr;
@@ -123,10 +108,7 @@ module Function_decls = struct
     let let_rec_ident t = t.let_rec_ident
     let closure_bound_var t = t.closure_bound_var
     let kind t = t.kind
-    let mode t = t.mode
-    let region t = t.region
     let params t = t.params
-    let return_layout t = t.return_layout
     let body t = t.body
     let free_idents t = t.free_idents_of_body
     let inline t = t.attr.inline
@@ -170,10 +152,10 @@ module Function_decls = struct
      difference *)
   let all_free_idents function_decls =
     set_diff (set_diff (all_free_idents function_decls)
-        (List.map fst (all_params function_decls)))
+        (all_params function_decls))
       (let_rec_idents function_decls)
 
-  let create (function_decls : Function_decl.t list) =
+  let create function_decls =
     { function_decls;
       all_free_idents = all_free_idents function_decls;
     }
@@ -187,13 +169,11 @@ module Function_decls = struct
       (* For "let rec"-bound functions. *)
       List.fold_right (fun function_decl env ->
           Env.add_var env (Function_decl.let_rec_ident function_decl)
-            (Function_decl.closure_bound_var function_decl) Lambda.layout_function)
+            (Function_decl.closure_bound_var function_decl))
         t.function_decls (Env.clear_local_bindings external_env)
     in
     (* For free variables. *)
     Ident.Set.fold (fun id env ->
-        let _, kind = Env.find_var external_env id in
-        Env.add_var env id (Variable.create_with_same_name_as_ident id) kind
-      )
+        Env.add_var env id (Variable.create_with_same_name_as_ident id))
       t.all_free_idents closure_env
 end

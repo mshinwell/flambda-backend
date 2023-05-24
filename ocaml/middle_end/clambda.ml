@@ -20,12 +20,6 @@ open Asttypes
 open Lambda
 
 type function_label = string
-type arity = {
-  function_kind : Lambda.function_kind ;
-  params_layout : Lambda.layout list ;
-  return_layout : Lambda.layout ;
-}
-type apply_kind = Lambda.region_close * Lambda.alloc_mode
 
 type ustructured_constant =
   | Uconst_float of float
@@ -52,61 +46,42 @@ and uphantom_defining_expr =
 and ulambda =
     Uvar of Backend_var.t
   | Uconst of uconstant
-  | Udirect_apply of
-      function_label * ulambda list * Lambda.probe * Lambda.layout * apply_kind * Debuginfo.t
-  | Ugeneric_apply of
-      ulambda * ulambda list * Lambda.layout list * Lambda.layout * apply_kind * Debuginfo.t
-  | Uclosure of {
-      functions : ufunction list ;
-      not_scanned_slots : ulambda list ;
-      scanned_slots : ulambda list ;
-    }
+  | Udirect_apply of function_label * ulambda list * Debuginfo.t
+  | Ugeneric_apply of ulambda * ulambda list * Debuginfo.t
+  | Uclosure of ufunction list * ulambda list
   | Uoffset of ulambda * int
-  | Ulet of mutable_flag * layout * Backend_var.With_provenance.t
+  | Ulet of mutable_flag * value_kind * Backend_var.With_provenance.t
       * ulambda * ulambda
   | Uphantom_let of Backend_var.With_provenance.t
       * uphantom_defining_expr option * ulambda
   | Uletrec of (Backend_var.With_provenance.t * ulambda) list * ulambda
   | Uprim of Clambda_primitives.primitive * ulambda list * Debuginfo.t
-  | Uswitch of ulambda * ulambda_switch * Debuginfo.t * layout
-  | Ustringswitch of
-      ulambda *
-      (string * ulambda) list *
-      ulambda option *
-      layout
+  | Uswitch of ulambda * ulambda_switch * Debuginfo.t
+  | Ustringswitch of ulambda * (string * ulambda) list * ulambda option
   | Ustaticfail of int * ulambda list
   | Ucatch of
       int *
-      (Backend_var.With_provenance.t * layout) list *
+      (Backend_var.With_provenance.t * value_kind) list *
       ulambda *
-      ulambda *
-      layout
-  | Utrywith of
-      ulambda *
-      Backend_var.With_provenance.t *
-      ulambda *
-      layout
-  | Uifthenelse of ulambda * ulambda * ulambda * layout
+      ulambda
+  | Utrywith of ulambda * Backend_var.With_provenance.t * ulambda
+  | Uifthenelse of ulambda * ulambda * ulambda
   | Usequence of ulambda * ulambda
   | Uwhile of ulambda * ulambda
   | Ufor of Backend_var.With_provenance.t * ulambda * ulambda
       * direction_flag * ulambda
   | Uassign of Backend_var.t * ulambda
-  | Usend of
-      meth_kind * ulambda * ulambda * ulambda list
-      * Lambda.layout list * Lambda.layout * apply_kind * Debuginfo.t
+  | Usend of meth_kind * ulambda * ulambda * ulambda list * Debuginfo.t
   | Uunreachable
-  | Uregion of ulambda
-  | Uexclave of ulambda
 
 and ufunction = {
   label  : function_label;
-  arity  : arity;
-  params : Backend_var.With_provenance.t list;
+  arity  : int;
+  params : (Backend_var.With_provenance.t * value_kind) list;
+  return : value_kind;
   body   : ulambda;
   dbg    : Debuginfo.t;
   env    : Backend_var.t option;
-  mode   : Lambda.alloc_mode;
   poll   : poll_attribute;
 }
 
@@ -120,20 +95,18 @@ and ulambda_switch =
 
 type function_description =
   { fun_label: function_label;          (* Label of direct entry point *)
-    fun_arity: arity;                   (* Number of (curried/tupled) arguments *)
+    fun_arity: int;                     (* Number of arguments *)
     mutable fun_closed: bool;           (* True if environment not used *)
     mutable fun_inline: (Backend_var.With_provenance.t list * ulambda) option;
     mutable fun_float_const_prop: bool; (* Can propagate FP consts *)
-    fun_region: bool;                   (* If false, may locally allocate
-                                           in caller's region *)
-    fun_poll: poll_attribute;           (* Error on poll/alloc/call *)
+    fun_poll: poll_attribute;               (* Error on poll/alloc/call *)
   }
 
 (* Approximation of values *)
 
 type value_approximation =
-    Value_closure of alloc_mode * function_description * value_approximation
-  | Value_tuple of alloc_mode * value_approximation array
+    Value_closure of function_description * value_approximation
+  | Value_tuple of value_approximation array
   | Value_unknown
   | Value_const of uconstant
   | Value_global_field of string * int

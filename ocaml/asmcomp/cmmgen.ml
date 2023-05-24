@@ -18,7 +18,6 @@
 [@@@ocaml.warning "-40"]
 
 open Misc
-open Arch
 open Asttypes
 open Primitive
 open Types
@@ -36,8 +35,8 @@ open Cmm_helpers
 (* Environments used for translation to Cmm. *)
 
 type boxed_number =
-  | Boxed_float of alloc_mode * Debuginfo.t
-  | Boxed_integer of boxed_integer * alloc_mode * Debuginfo.t
+  | Boxed_float of Debuginfo.t
+  | Boxed_integer of boxed_integer * Debuginfo.t
 
 type env = {
   unboxed_ids : (V.t * boxed_number) V.tbl;
@@ -108,47 +107,30 @@ let invert_then_else = function
 
 let mut_from_env env ptr =
   match env.environment_param with
-  | None -> Asttypes.Mutable
+  | None -> Mutable
   | Some environment_param ->
     match ptr with
     | Cvar ptr ->
       (* Loads from the current function's closure are immutable. *)
-      if V.same environment_param ptr then Asttypes.Immutable
-      else Asttypes.Mutable
-    | _ -> Asttypes.Mutable
+      if V.same environment_param ptr then Immutable
+      else Mutable
+    | _ -> Mutable
 
-let get_field env layout ptr n dbg =
+let get_field env ptr n dbg =
   let mut = mut_from_env env ptr in
-  let memory_chunk =
-    match layout with
-    | Pvalue Pintval | Punboxed_int _ -> Word_int
-    | Pvalue _ -> Word_val
-    | Punboxed_float -> Double
-    | Ptop ->
-        Misc.fatal_errorf "get_field with Ptop: %a" Debuginfo.print_compact dbg
-    | Pbottom ->
-        Misc.fatal_errorf "get_field with Pbottom: %a" Debuginfo.print_compact
-          dbg
-  in
-  get_field_gen_given_memory_chunk memory_chunk mut ptr n dbg
+  get_field_gen mut ptr n dbg
 
 type rhs_kind =
-  | RHS_block of Lambda.alloc_mode * int
-  | RHS_infix of { blocksize : int; offset : int; blockmode: Lambda.alloc_mode }
-  | RHS_floatblock of Lambda.alloc_mode * int
+  | RHS_block of int
+  | RHS_infix of { blocksize : int; offset : int }
+  | RHS_floatblock of int
   | RHS_nonrec
-;;
 
 let rec expr_size env = function
   | Uvar id ->
       begin try V.find_same id env with Not_found -> RHS_nonrec end
-  | Uclosure { functions ; not_scanned_slots ; scanned_slots } ->
-      (* should all have the same mode *)
-      let fn_mode = (List.hd functions).mode in
-      List.iter (fun f -> assert (Lambda.eq_mode fn_mode f.mode)) functions;
-      RHS_block (fn_mode,
-                 fundecls_size functions + List.length not_scanned_slots
-                 + List.length scanned_slots)
+  | Uclosure(fundecls, clos_vars) ->
+      RHS_block (fundecls_size fundecls + List.length clos_vars)
   | Ulet(_str, _kind, id, exp, body) ->
       expr_size (V.add (VP.var id) (expr_size env exp) env) body
   | Uletrec(bindings, body) ->
@@ -158,27 +140,24 @@ let rec expr_size env = function
           bindings env
       in
       expr_size env body
-  | Uprim(Pmakeblock (_, _, _, mode), args, _) ->
-      RHS_block (mode, List.length args)
-  | Uprim(Pmakearray((Paddrarray | Pintarray), _, mode), args, _) ->
-      RHS_block (mode, List.length args)
-  | Uprim(Pmakearray(Pfloatarray, _, mode), args, _) ->
-      RHS_floatblock (mode, List.length args)
-  | Uprim(Pmakearray(Pgenarray, _, _mode), _, _) ->
+  | Uprim(Pmakeblock _, args, _) ->
+      RHS_block (List.length args)
+  | Uprim(Pmakearray((Paddrarray | Pintarray), _), args, _) ->
+      RHS_block (List.length args)
+  | Uprim(Pmakearray(Pfloatarray, _), args, _) ->
+      RHS_floatblock (List.length args)
+  | Uprim(Pmakearray(Pgenarray, _), _, _) ->
      (* Pgenarray is excluded from recursive bindings by the
         check in Translcore.check_recursive_lambda *)
      RHS_nonrec
-  | Uprim (Pduprecord ((Record_boxed _ | Record_inlined (_, Variant_boxed _)),
-                       sz), _, _) ->
-      RHS_block (Lambda.alloc_heap, sz)
-  | Uprim (Pduprecord ((Record_unboxed
-                       | Record_inlined (_, Variant_unboxed)),
-                       _), _, _) ->
+  | Uprim (Pduprecord ((Record_regular | Record_inlined _), sz), _, _) ->
+      RHS_block sz
+  | Uprim (Pduprecord (Record_unboxed _, _), _, _) ->
       assert false
-  | Uprim (Pduprecord (Record_inlined (_, Variant_extensible), sz), _, _) ->
-      RHS_block (Lambda.alloc_heap, sz + 1)
+  | Uprim (Pduprecord (Record_extension _, sz), _, _) ->
+      RHS_block (sz + 1)
   | Uprim (Pduprecord (Record_float, sz), _, _) ->
-      RHS_floatblock (Lambda.alloc_heap, sz)
+      RHS_floatblock sz
   | Uprim (Pccall { prim_name; _ }, closure::_, _)
         when prim_name = "caml_check_value_is_closure" ->
       (* Used for "-clambda-checks". *)
@@ -187,14 +166,9 @@ let rec expr_size env = function
       expr_size env exp'
   | Uoffset (exp, offset) ->
       (match expr_size env exp with
-      | RHS_block (blockmode, blocksize) ->
-         RHS_infix { blocksize; offset; blockmode }
+      | RHS_block blocksize -> RHS_infix { blocksize; offset }
       | RHS_nonrec -> RHS_nonrec
       | _ -> assert false)
-  | Uregion exp ->
-      expr_size env exp
-  | Uexclave exp ->
-      expr_size env exp
   | _ -> RHS_nonrec
 
 (* Translate structured constants to Cmm data items *)
@@ -251,7 +225,7 @@ let box_int_constant sym bi n =
       let n = Int64.of_nativeint n in
       emit_int64_constant (sym, Local) n []
 
-let box_int dbg bi mode arg =
+let box_int dbg bi arg =
   match arg with
   | Cconst_int (n, _) ->
       let sym = Compilenv.new_const_symbol () in
@@ -264,13 +238,12 @@ let box_int dbg bi mode arg =
       Cmmgen_state.add_data_items data_items;
       Cconst_symbol (sym, dbg)
   | _ ->
-      box_int_gen dbg bi mode arg
+      box_int_gen dbg bi arg
 
 (* Boxed numbers *)
 
 let typ_of_boxed_number = function
   | Boxed_float _ -> Cmm.typ_float
-  | Boxed_integer (Pint64, _,_) when size_int = 4 -> [|Int;Int|]
   | Boxed_integer _ -> Cmm.typ_int
 
 let equal_unboxed_integer ui1 ui2 =
@@ -283,24 +256,24 @@ let equal_unboxed_integer ui1 ui2 =
 let equal_boxed_number bn1 bn2 =
   match bn1, bn2 with
   | Boxed_float _, Boxed_float _ -> true
-  | Boxed_integer(ui1, m, _), Boxed_integer(ui2, m', _) ->
-    equal_unboxed_integer ui1 ui2 && Lambda.eq_mode m m'
+  | Boxed_integer(ui1, _), Boxed_integer(ui2, _) ->
+    equal_unboxed_integer ui1 ui2
   | _, _ -> false
 
 let box_number bn arg =
   match bn with
-  | Boxed_float (m, dbg) -> box_float dbg m arg
-  | Boxed_integer (bi, m, dbg) -> box_int dbg bi m arg
+  | Boxed_float dbg -> box_float dbg arg
+  | Boxed_integer (bi, dbg) -> box_int dbg bi arg
 
 (* Returns the unboxed representation of a boxed float or integer.
    For Pint32 on 64-bit archs, the high 32 bits of the result are undefined. *)
 let unbox_number dbg bn arg =
   match bn with
-  | Boxed_float (_, dbg) ->
+  | Boxed_float dbg ->
     unbox_float dbg arg
-  | Boxed_integer (Pint32, _, _) ->
+  | Boxed_integer (Pint32, _) ->
     low_32 dbg (unbox_int dbg Pint32 arg)
-  | Boxed_integer (bi, _, _) ->
+  | Boxed_integer (bi, _) ->
     unbox_int dbg bi arg
 
 (* Auxiliary functions for optimizing "let" of boxed numbers (floats and
@@ -338,41 +311,39 @@ let is_unboxed_number_cmm ~strict cmm =
     r := join_unboxed_number_kind ~strict !r k
   in
   let rec aux = function
-    | Cop(Calloc mode, [Cconst_natint (hdr, _); _], dbg)
+    | Cop(Calloc, [Cconst_natint (hdr, _); _], dbg)
       when Nativeint.equal hdr float_header ->
-        notify (Boxed (Boxed_float (mode,dbg), false))
-    | Cop(Calloc mode, [Cconst_natint (hdr, _); Cconst_symbol (ops, _); _], dbg) ->
+        notify (Boxed (Boxed_float dbg, false))
+    | Cop(Calloc, [Cconst_natint (hdr, _); Cconst_symbol (ops, _); _], dbg) ->
         if Nativeint.equal hdr boxedintnat_header
         && String.equal ops caml_nativeint_ops
         then
-          notify (Boxed (Boxed_integer (Pnativeint, mode, dbg), false))
+          notify (Boxed (Boxed_integer (Pnativeint, dbg), false))
         else
         if Nativeint.equal hdr boxedint32_header
         && String.equal ops caml_int32_ops
         then
-          notify (Boxed (Boxed_integer (Pint32, mode, dbg), false))
+          notify (Boxed (Boxed_integer (Pint32, dbg), false))
         else
         if Nativeint.equal hdr boxedint64_header
         && String.equal ops caml_int64_ops
         then
-          notify (Boxed (Boxed_integer (Pint64, mode, dbg), false))
+          notify (Boxed (Boxed_integer (Pint64, dbg), false))
         else
           notify No_unboxing
     | Cconst_symbol (s, _) ->
         begin match Cmmgen_state.structured_constant_of_sym s with
         | Some (Uconst_float _) ->
-            notify (Boxed (Boxed_float (alloc_heap, Debuginfo.none), true))
+            notify (Boxed (Boxed_float Debuginfo.none, true))
         | Some (Uconst_nativeint _) ->
-            notify (Boxed (Boxed_integer (Pnativeint, alloc_heap, Debuginfo.none), true))
+            notify (Boxed (Boxed_integer (Pnativeint, Debuginfo.none), true))
         | Some (Uconst_int32 _) ->
-            notify (Boxed (Boxed_integer (Pint32, alloc_heap, Debuginfo.none), true))
+            notify (Boxed (Boxed_integer (Pint32, Debuginfo.none), true))
         | Some (Uconst_int64 _) ->
-            notify (Boxed (Boxed_integer (Pint64, alloc_heap, Debuginfo.none), true))
+            notify (Boxed (Boxed_integer (Pint64, Debuginfo.none), true))
         | _ ->
             notify No_unboxing
         end
-    | Cregion e ->
-        aux e
     | l ->
         if not (Cmm.iter_shallow_tail aux l) then
           notify No_unboxing
@@ -391,53 +362,34 @@ let rec transl env e =
       end
   | Uconst sc ->
       transl_constant Debuginfo.none sc
-  | Uclosure { functions ; not_scanned_slots = [] ; scanned_slots = [] } ->
+  | Uclosure(fundecls, []) ->
       let sym = Compilenv.new_const_symbol() in
-      Cmmgen_state.add_constant sym (Const_closure (Local, functions, []));
-      List.iter (fun f -> Cmmgen_state.add_function f) functions;
+      Cmmgen_state.add_constant sym (Const_closure (Local, fundecls, []));
+      List.iter (fun f -> Cmmgen_state.add_function f) fundecls;
       let dbg =
-        match functions with
+        match fundecls with
         | [] -> Debuginfo.none
         | fundecl::_ -> fundecl.dbg
       in
       Cconst_symbol (sym, dbg)
-  | Uclosure { functions ; not_scanned_slots ; scanned_slots } ->
-      let startenv = fundecls_size functions + List.length not_scanned_slots in
-      let mode =
-        Option.get @@
-        List.fold_left (fun s { mode; dbg; _ } ->
-          match s with
-          | None -> Some mode
-          | Some m' ->
-             if not (Lambda.eq_mode mode m') then
-               Misc.fatal_errorf "Inconsistent modes in let rec at %s"
-                 (Debuginfo.to_string dbg);
-             s) None functions in
+  | Uclosure(fundecls, clos_vars) ->
+      let startenv = fundecls_size fundecls in
       let rec transl_fundecls pos = function
           [] ->
-            List.map (transl env) (not_scanned_slots @ scanned_slots)
+            List.map (transl env) clos_vars
         | f :: rem ->
-            let is_last = match rem with [] -> true | _::_ -> false in
             Cmmgen_state.add_function f;
             let dbg = f.dbg in
             let without_header =
-              match f.arity with
-              | { function_kind = Curried _ ; params_layout = ([] | [_]) } as arity ->
+              if f.arity = 1 || f.arity = 0 then
                 Cconst_symbol (f.label, dbg) ::
-                alloc_closure_info ~arity
-                                   ~startenv:(startenv - pos) ~is_last dbg ::
+                alloc_closure_info ~arity:f.arity
+                                   ~startenv:(startenv - pos) dbg ::
                 transl_fundecls (pos + 3) rem
-              | arity ->
-                Cconst_symbol
-                  (curry_function_sym
-                     arity.function_kind
-                     (List.map machtype_of_layout_changing_tagged_int_to_val
-                       arity.params_layout)
-                     (machtype_of_layout_changing_tagged_int_to_val
-                       arity.return_layout),
-                   dbg) ::
-                alloc_closure_info ~arity
-                                   ~startenv:(startenv - pos) ~is_last dbg ::
+              else
+                Cconst_symbol (curry_function_sym f.arity, dbg) ::
+                alloc_closure_info ~arity:f.arity
+                                   ~startenv:(startenv - pos) dbg ::
                 Cconst_symbol (f.label, dbg) ::
                 transl_fundecls (pos + 4) rem
             in
@@ -446,46 +398,28 @@ let rec transl env e =
             else alloc_infix_header pos f.dbg :: without_header
       in
       let dbg =
-        match functions with
+        match fundecls with
         | [] -> Debuginfo.none
         | fundecl::_ -> fundecl.dbg
       in
-      make_alloc ~mode dbg Obj.closure_tag (transl_fundecls 0 functions)
+      make_alloc dbg Obj.closure_tag (transl_fundecls 0 fundecls)
   | Uoffset(arg, offset) ->
       (* produces a valid Caml value, pointing just after an infix header *)
       let ptr = transl env arg in
       let dbg = Debuginfo.none in
       ptr_offset ptr offset dbg
-  | Udirect_apply(handler_code_sym, args, Some { name; }, _, _, dbg) ->
+  | Udirect_apply(lbl, args, dbg) ->
       let args = List.map (transl env) args in
-      return_unit dbg
-        (Cop(Cprobe { name; handler_code_sym; }, args, dbg))
-  | Udirect_apply(lbl, args, None, result_layout, kind, dbg) ->
-      let args = List.map (transl env) args in
-      direct_apply lbl (machtype_of_layout result_layout) args kind dbg
-  | Ugeneric_apply(clos, args, args_layout, result_layout, kind, dbg) ->
+      direct_apply lbl args dbg
+  | Ugeneric_apply(clos, args, dbg) ->
       let clos = transl env clos in
       let args = List.map (transl env) args in
-      if List.mem Pbottom args_layout then
-        (* [Extended_machtype.of_layout] will fail on Pbottom, convert it to a
-           sequence and remove the call, preserving the execution order. *)
-        List.fold_left2 (fun rest arg arg_layout ->
-            if arg_layout = Pbottom then
-              arg
-            else
-              Csequence(remove_unit arg, rest)
-          ) (Ctuple []) args args_layout
-      else
-        let args_type = List.map Extended_machtype.of_layout args_layout in
-        let return = Extended_machtype.of_layout result_layout in
-        generic_apply (mut_from_env env clos) clos args args_type return kind dbg
-  | Usend(kind, met, obj, args, args_layout, result_layout, pos, dbg) ->
+      generic_apply (mut_from_env env clos) clos args dbg
+  | Usend(kind, met, obj, args, dbg) ->
       let met = transl env met in
       let obj = transl env obj in
       let args = List.map (transl env) args in
-      let args_type = List.map Extended_machtype.of_layout args_layout in
-      let return = Extended_machtype.of_layout result_layout in
-      send kind met obj args args_type return pos dbg
+      send kind met obj args dbg
   | Ulet(str, kind, id, exp, body) ->
       transl_let env str kind id exp (fun env -> transl env body)
   | Uphantom_let (var, defining_expr, body) ->
@@ -522,11 +456,11 @@ let rec transl env e =
           Cconst_symbol (sym, dbg)
       | (Pmakeblock _, []) ->
           assert false
-      | (Pmakeblock(tag, _mut, _kind, mode), args) ->
-          make_alloc ~mode dbg tag (List.map (transl env) args)
+      | (Pmakeblock(tag, _mut, _kind), args) ->
+          make_alloc dbg tag (List.map (transl env) args)
       | (Pccall prim, args) ->
           transl_ccall env prim args dbg
-      | (Pduparray (kind, _), [Uprim (Pmakearray (kind', _, _), args, _dbg)]) ->
+      | (Pduparray (kind, _), [Uprim (Pmakearray (kind', _), args, _dbg)]) ->
           (* We arrive here in two cases:
              1. When using Closure, all the time.
              2. When using Flambda, if a float array longer than
@@ -538,7 +472,7 @@ let rec transl env e =
              state of [Translcore], we will in fact only get here with
              [Pfloatarray]s. *)
           assert (kind = kind');
-          transl_make_array dbg env kind alloc_heap args
+          transl_make_array dbg env kind args
       | (Pduparray _, [arg]) ->
           let prim_obj_dup =
             Primitive.simple ~name:"caml_obj_dup" ~arity:1 ~alloc:true
@@ -546,19 +480,17 @@ let rec transl env e =
           transl_ccall env prim_obj_dup [arg] dbg
       | (Pmakearray _, []) ->
           Misc.fatal_error "Pmakearray is not allowed for an empty array"
-      | (Pmakearray (kind, _, mode), args) ->
-         transl_make_array dbg env kind mode args
+      | (Pmakearray (kind, _), args) -> transl_make_array dbg env kind args
       | (Pbigarrayref(unsafe, _num_dims, elt_kind, layout), arg1 :: argl) ->
           let elt =
             bigarray_get unsafe elt_kind layout
               (transl env arg1) (List.map (transl env) argl) dbg in
           begin match elt_kind with
-          (* TODO: local allocation of bigarray elements *)
-            Pbigarray_float32 | Pbigarray_float64 -> box_float dbg alloc_heap elt
+            Pbigarray_float32 | Pbigarray_float64 -> box_float dbg elt
           | Pbigarray_complex32 | Pbigarray_complex64 -> elt
-          | Pbigarray_int32 -> box_int dbg Pint32 alloc_heap elt
-          | Pbigarray_int64 -> box_int dbg Pint64 alloc_heap elt
-          | Pbigarray_native_int -> box_int dbg Pnativeint alloc_heap elt
+          | Pbigarray_int32 -> box_int dbg Pint32 elt
+          | Pbigarray_int64 -> box_int dbg Pint64 elt
+          | Pbigarray_native_int -> box_int dbg Pnativeint elt
           | Pbigarray_caml_int -> tag_int elt dbg
           | Pbigarray_sint8 | Pbigarray_uint8
           | Pbigarray_sint16 | Pbigarray_uint16 -> tag_int elt dbg
@@ -586,11 +518,9 @@ let rec transl env e =
             dbg)
       | (Pbigarraydim(n), [b]) ->
           let dim_ofs = 4 + n in
-          tag_int (Cop(Cload (Word_int, Mutable),
+          tag_int (Cop(mk_load_mut Word_int,
             [field_address (transl env b) dim_ofs dbg],
-                       dbg)) dbg
-      | (Pprobe_is_enabled {name}, []) ->
-          tag_int (Cop(Cprobe_is_enabled {name}, [], dbg)) dbg
+            dbg)) dbg
       | (p, [arg]) ->
           transl_prim_1 env p arg dbg
       | (p, [arg1; arg2]) ->
@@ -601,15 +531,18 @@ let rec transl env e =
       | (Pbigarrayset (_, _, _, _), [])
       | (Pbigarrayref (_, _, _, _), [])
       | ((Pbigarraydim _ | Pduparray (_, _)), ([] | _::_::_::_::_))
-      | (Pprobe_is_enabled _, _)
         ->
           fatal_error "Cmmgen.transl:prim, wrong arity"
       | ((Pfield_computed|Psequand
+         | Prunstack | Pperform | Presume | Preperform
+         | Pdls_get
+         | Patomic_load _ | Patomic_exchange
+         | Patomic_cas | Patomic_fetch_add
          | Psequor | Pnot | Pnegint | Paddint | Psubint
          | Pmulint | Pandint | Porint | Pxorint | Plslint
-         | Plsrint | Pasrint | Pintoffloat | Pfloatofint _
-         | Pnegfloat _ | Pabsfloat _ | Paddfloat _ | Psubfloat _
-         | Pmulfloat _ | Pdivfloat _ | Pstringlength | Pstringrefu
+         | Plsrint | Pasrint | Pintoffloat | Pfloatofint
+         | Pnegfloat | Pabsfloat | Paddfloat | Psubfloat
+         | Pmulfloat | Pdivfloat | Pstringlength | Pstringrefu
          | Pstringrefs | Pbyteslength | Pbytesrefu | Pbytessetu
          | Pbytesrefs | Pbytessets | Pisint | Pisout
          | Pbswap16 | Pint_as_pointer | Popaque | Pfield _
@@ -619,19 +552,18 @@ let rec transl env e =
          | Pcompare_ints | Pcompare_floats | Pcompare_bints _
          | Poffsetref _ | Pfloatcomp _ | Parraylength _
          | Parrayrefu _ | Parraysetu _ | Parrayrefs _ | Parraysets _
-         | Pbintofint _ | Pintofbint _ | Pcvtbint _ | Pnegbint _
+         | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _) | Pnegbint _
          | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _
          | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
          | Pasrbint _ | Pbintcomp (_, _) | Pstring_load _ | Pbytes_load _
          | Pbytes_set _ | Pbigstring_load _ | Pbigstring_set _
-         | Punbox_float | Pbox_float _ | Punbox_int _ | Pbox_int _
          | Pbbswap _), _)
         ->
           fatal_error "Cmmgen.transl:prim"
       end
 
   (* Control structures *)
-  | Uswitch(arg, s, dbg, kind) ->
+  | Uswitch(arg, s, dbg) ->
       (* As in the bytecode interpreter, only matching against constants
          can be checked *)
       if Array.length s.us_index_blocks = 0 then
@@ -639,42 +571,42 @@ let rec transl env e =
           (untag_int (transl env arg) dbg)
           s.us_index_consts
           (Array.map (fun expr -> transl env expr, dbg) s.us_actions_consts)
-          dbg (kind_of_layout kind)
+          dbg
       else if Array.length s.us_index_consts = 0 then
         bind "switch" (transl env arg) (fun arg ->
-          transl_switch dbg (kind_of_layout kind) env (get_tag arg dbg)
+          transl_switch dbg env (get_tag arg dbg)
             s.us_index_blocks s.us_actions_blocks)
       else
         bind "switch" (transl env arg) (fun arg ->
           Cifthenelse(
           Cop(Cand, [arg; Cconst_int (1, dbg)], dbg),
           dbg,
-          transl_switch dbg (kind_of_layout kind) env
+          transl_switch dbg env
             (untag_int arg dbg) s.us_index_consts s.us_actions_consts,
           dbg,
-          transl_switch dbg (kind_of_layout kind) env
+          transl_switch dbg env
             (get_tag arg dbg) s.us_index_blocks s.us_actions_blocks,
-          dbg, kind_of_layout kind))
-  | Ustringswitch(arg,sw,d, kind) ->
+          dbg))
+  | Ustringswitch(arg,sw,d) ->
       let dbg = Debuginfo.none in
       bind "switch" (transl env arg)
         (fun arg ->
-          strmatch_compile dbg (kind_of_layout kind) arg (Option.map (transl env) d)
+          strmatch_compile dbg arg (Option.map (transl env) d)
             (List.map (fun (s,act) -> s,transl env act) sw))
   | Ustaticfail (nfail, args) ->
       let cargs = List.map (transl env) args in
       notify_catch nfail env cargs;
       Cexit (nfail, cargs)
-  | Ucatch(nfail, [], body, handler, kind) ->
+  | Ucatch(nfail, [], body, handler) ->
       let dbg = Debuginfo.none in
-      make_catch (kind_of_layout kind) nfail (transl env body) (transl env handler) dbg
-  | Ucatch(nfail, ids, body, handler, kind) ->
+      make_catch nfail (transl env body) (transl env handler) dbg
+  | Ucatch(nfail, ids, body, handler) ->
       let dbg = Debuginfo.none in
-      transl_catch (kind_of_layout kind) env nfail ids body handler dbg
-  | Utrywith(body, exn, handler, kind) ->
+      transl_catch env nfail ids body handler dbg
+  | Utrywith(body, exn, handler) ->
       let dbg = Debuginfo.none in
-      Ctrywith(transl env body, exn, transl env handler, dbg, kind_of_layout kind)
-  | Uifthenelse(cond, ifso, ifnot, kind) ->
+      Ctrywith(transl env body, exn, transl env handler, dbg)
+  | Uifthenelse(cond, ifso, ifnot) ->
       let ifso_dbg = Debuginfo.none in
       let ifnot_dbg = Debuginfo.none in
       let dbg = Debuginfo.none in
@@ -686,7 +618,7 @@ let rec transl env e =
         | Cconst_int (3, _), Cconst_int (1, _) -> Then_true_else_false
         | _, _ -> Unknown
       in
-      transl_if env (kind_of_layout kind) approx dbg cond
+      transl_if env approx dbg cond
         ifso_dbg ifso ifnot_dbg ifnot
   | Usequence(exp1, exp2) ->
       Csequence(remove_unit(transl env exp1), transl env exp2)
@@ -696,12 +628,12 @@ let rec transl env e =
       return_unit dbg
         (ccatch
            (raise_num, [],
-            create_loop(transl_if env Any Unknown dbg cond
+            create_loop(transl_if env Unknown dbg cond
                     dbg (remove_unit(transl env body))
                     dbg (Cexit (raise_num,[])))
               dbg,
             Ctuple [],
-            dbg, Any))
+            dbg))
   | Ufor(id, low, high, dir, body) ->
       let dbg = Debuginfo.none in
       let tst = match dir with Upto -> Cgt   | Downto -> Clt in
@@ -732,11 +664,11 @@ let rec transl env e =
                                   dbg),
                                 dbg, Cexit (raise_num,[]),
                                 dbg, Ctuple [],
-                                dbg, Any)))))
+                                dbg)))))
                       dbg,
-                   dbg, Any),
+                   dbg),
                  Ctuple [],
-                 dbg, Any))))
+                 dbg))))
   | Uassign(id, exp) ->
       let dbg = Debuginfo.none in
       let cexp = transl env exp in
@@ -748,22 +680,19 @@ let rec transl env e =
       end
   | Uunreachable ->
       let dbg = Debuginfo.none in
-      Cop(Cload (Word_int, Mutable), [Cconst_int (0, dbg)], dbg)
-  | Uregion e ->
-      region (transl env e)
-  | Uexclave e ->
-      Cexclave (transl env e)
+      Cop(mk_load_mut Word_int, [Cconst_int (0, dbg)], dbg)
 
-and transl_catch (kind : Cmm.kind_for_unboxing) env nfail ids body handler dbg =
+and transl_catch env nfail ids body handler dbg =
   let ids = List.map (fun (id, kind) -> (id, kind, ref No_result)) ids in
   (* Translate the body, and while doing so, collect the "unboxing type" for
      each argument.  *)
   let report args =
     List.iter2
-      (fun (_id, layout, u) c ->
-         let strict = match kind_of_layout layout with
-           | Boxed_integer _ | Boxed_float -> false
-           | Any -> true
+      (fun (_id, kind, u) c ->
+         let strict =
+           match kind with
+           | Pfloatval | Pboxedintval _ -> false
+           | Pintval | Pgenval -> true
          in
          u := join_unboxed_number_kind ~strict !u
              (is_unboxed_number_cmm ~strict c)
@@ -774,12 +703,12 @@ and transl_catch (kind : Cmm.kind_for_unboxing) env nfail ids body handler dbg =
   let body = transl env_body body in
   let new_env, rewrite, ids =
     List.fold_right
-      (fun (id, layout, u) (env, rewrite, ids) ->
+      (fun (id, _kind, u) (env, rewrite, ids) ->
          match !u with
          | No_unboxing | Boxed (_, true) | No_result ->
              env,
              (fun x -> x) :: rewrite,
-             (id, machtype_of_layout layout) :: ids
+             (id, Cmm.typ_val) :: ids
          | Boxed (bn, false) ->
              let unboxed_id = V.create_local (VP.name id) in
              add_unboxed_id (VP.var id) unboxed_id bn env,
@@ -790,7 +719,7 @@ and transl_catch (kind : Cmm.kind_for_unboxing) env nfail ids body handler dbg =
   in
   if env == new_env then
     (* No unboxing *)
-    ccatch (nfail, ids, body, transl env handler, dbg, kind)
+    ccatch (nfail, ids, body, transl env handler, dbg)
   else
     (* allocate new "nfail" to catch errors more easily *)
     let new_nfail = next_raise_count () in
@@ -804,24 +733,17 @@ and transl_catch (kind : Cmm.kind_for_unboxing) env nfail ids body handler dbg =
       in
       aux body
     in
-    ccatch (new_nfail, ids, body, transl new_env handler, dbg, kind)
+    ccatch (new_nfail, ids, body, transl new_env handler, dbg)
 
-and transl_make_array dbg env kind mode args =
+and transl_make_array dbg env kind args =
   match kind with
   | Pgenarray ->
-      let prim =
-        match (mode : Lambda.alloc_mode) with
-        | Alloc_heap -> "caml_make_array"
-        | Alloc_local ->
-          assert Config.stack_allocation;
-          "caml_make_array_local"
-      in
-      Cop(Cextcall(prim, typ_val, [], true),
-          [make_alloc ~mode dbg 0 (List.map (transl env) args)], dbg)
+      Cop(Cextcall("caml_make_array", typ_val, [], true),
+          [make_alloc dbg 0 (List.map (transl env) args)], dbg)
   | Paddrarray | Pintarray ->
-      make_alloc ~mode dbg 0 (List.map (transl env) args)
+      make_alloc dbg 0 (List.map (transl env) args)
   | Pfloatarray ->
-      make_float_alloc ~mode dbg Obj.double_array_tag
+      make_float_alloc dbg Obj.double_array_tag
                       (List.map (transl_unbox_float dbg env) args)
 
 and transl_ccall env prim args dbg =
@@ -849,20 +771,17 @@ and transl_ccall env prim args dbg =
         (List.map (fun _ -> XInt) args, List.map (transl env) args)
     | _, [] ->
         assert false
-    | (_, native_repr) :: native_repr_args, arg :: args ->
+    | native_repr :: native_repr_args, arg :: args ->
         let (ty1, arg') = transl_arg native_repr arg in
         let (tys, args') = transl_args native_repr_args args in
         (ty1 :: tys, arg' :: args')
   in
   let typ_res, wrap_result =
     match prim.prim_native_repr_res with
-    | _, Same_as_ocaml_repr -> (typ_val, fun x -> x)
-    (* TODO: Allow Alloc_local on suitably typed C stubs *)
-    | _, Unboxed_float -> (typ_float, box_float dbg alloc_heap)
-    | _, Unboxed_integer Pint64 when size_int = 4 ->
-        ([|Int; Int|], box_int dbg Pint64 alloc_heap)
-    | _, Unboxed_integer bi -> (typ_int, box_int dbg bi alloc_heap)
-    | _, Untagged_int -> (typ_int, (fun i -> tag_int i dbg))
+    | Same_as_ocaml_repr -> (typ_val, fun x -> x)
+    | Unboxed_float -> (typ_float, box_float dbg)
+    | Unboxed_integer bi -> (typ_int, box_int dbg bi)
+    | Untagged_int -> (typ_int, (fun i -> tag_int i dbg))
   in
   let typ_args, args = transl_args prim.prim_native_repr_args args in
   wrap_result
@@ -875,11 +794,11 @@ and transl_prim_1 env p arg dbg =
     Popaque ->
       opaque (transl env arg) dbg
   (* Heap operations *)
-  | Pfield (n, layout) ->
-      get_field env layout (transl env arg) n dbg
-  | Pfloatfield (n,mode) ->
+  | Pfield(n, _, _) ->
+      get_field env (transl env arg) n dbg
+  | Pfloatfield n ->
       let ptr = transl env arg in
-      box_float dbg mode (floatfield n ptr dbg)
+      box_float dbg (floatfield n ptr dbg)
   | Pint_as_pointer ->
       int_as_pointer (transl env arg) dbg
   (* Exceptions *)
@@ -892,23 +811,15 @@ and transl_prim_1 env p arg dbg =
       offsetint n (transl env arg) dbg
   | Poffsetref n ->
       offsetref n (transl env arg) dbg
-  | Punbox_int bi ->
-    transl_unbox_int dbg env bi arg
-  | Pbox_int (bi, m) ->
-    box_int dbg bi m (transl env arg)
   (* Floating-point operations *)
-  | Punbox_float ->
-      transl_unbox_float dbg env arg
-  | Pbox_float m ->
-      box_float dbg m (transl env arg)
-  | Pfloatofint m ->
-      box_float dbg m (Cop(Cfloatofint, [untag_int(transl env arg) dbg], dbg))
+  | Pfloatofint ->
+      box_float dbg (Cop(Cfloatofint, [untag_int(transl env arg) dbg], dbg))
   | Pintoffloat ->
      tag_int(Cop(Cintoffloat, [transl_unbox_float dbg env arg], dbg)) dbg
-  | Pnegfloat m ->
-      box_float dbg m (Cop(Cnegf, [transl_unbox_float dbg env arg], dbg))
-  | Pabsfloat m ->
-      box_float dbg m (Cop(Cabsf, [transl_unbox_float dbg env arg], dbg))
+  | Pnegfloat ->
+      box_float dbg (Cop(Cnegf, [transl_unbox_float dbg env arg], dbg))
+  | Pabsfloat ->
+      box_float dbg (Cop(Cabsf, [transl_unbox_float dbg env arg], dbg))
   (* String operations *)
   | Pstringlength | Pbyteslength ->
       tag_int(string_length (transl env arg) dbg) dbg
@@ -917,7 +828,7 @@ and transl_prim_1 env p arg dbg =
       arraylength kind (transl env arg) dbg
   (* Boolean operations *)
   | Pnot ->
-      transl_if env Any Then_false_else_true
+      transl_if env Then_false_else_true
         dbg arg
         dbg (Cconst_int (1, dbg))
         dbg (Cconst_int (3, dbg))
@@ -925,30 +836,43 @@ and transl_prim_1 env p arg dbg =
   | Pisint ->
       tag_int(Cop(Cand, [transl env arg; Cconst_int (1, dbg)], dbg)) dbg
   (* Boxed integers *)
-  | Pbintofint (bi, m) ->
-      box_int dbg bi m (untag_int (transl env arg) dbg)
+  | Pbintofint bi ->
+      box_int dbg bi (untag_int (transl env arg) dbg)
   | Pintofbint bi ->
       tag_int (transl_unbox_int dbg env bi arg) dbg
-  | Pcvtbint(bi1, bi2, m) ->
-      box_int dbg bi2 m (transl_unbox_int dbg env bi1 arg)
-  | Pnegbint (bi, m) ->
-      box_int dbg bi m
+  | Pcvtbint(bi1, bi2) ->
+      box_int dbg bi2 (transl_unbox_int dbg env bi1 arg)
+  | Pnegbint bi ->
+      box_int dbg bi
         (Cop(Csubi, [Cconst_int (0, dbg); transl_unbox_int dbg env bi arg],
           dbg))
-  | Pbbswap (bi, m) ->
-      box_int dbg bi m (bbswap bi (transl_unbox_int dbg env bi arg) dbg)
+  | Pbbswap bi ->
+      box_int dbg bi (bbswap bi (transl_unbox_int dbg env bi arg) dbg)
   | Pbswap16 ->
       tag_int (bswap16 (ignore_high_bit_int (untag_int
         (transl env arg) dbg)) dbg) dbg
+  | Pperform ->
+      let cont = make_alloc dbg Obj.cont_tag [int_const dbg 0] in
+      Cop(Capply typ_val,
+       [Cconst_symbol ("caml_perform", dbg); transl env arg; cont],
+       dbg)
+  | Pdls_get ->
+      Cop(Cdls_get, [transl env arg], dbg)
+  | Patomic_load {immediate_or_pointer = Immediate} ->
+      Cop(mk_load_atomic Word_int, [transl env arg], dbg)
+  | Patomic_load {immediate_or_pointer = Pointer} ->
+      Cop(mk_load_atomic Word_val, [transl env arg], dbg)
   | (Pfield_computed | Psequand | Psequor
+    | Prunstack | Presume | Preperform
+    | Patomic_exchange | Patomic_cas | Patomic_fetch_add
     | Paddint | Psubint | Pmulint | Pandint
     | Porint | Pxorint | Plslint | Plsrint | Pasrint
-    | Paddfloat _ | Psubfloat _ | Pmulfloat _ | Pdivfloat _
+    | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
     | Pstringrefu | Pstringrefs | Pbytesrefu | Pbytessetu
     | Pbytesrefs | Pbytessets | Pisout | Pread_symbol _
-    | Pmakeblock (_, _, _, _) | Psetfield (_, _, _) | Psetfield_computed (_, _)
+    | Pmakeblock (_, _, _) | Psetfield (_, _, _) | Psetfield_computed (_, _)
     | Psetfloatfield (_, _) | Pduprecord (_, _) | Pccall _ | Pdivint _
-    | Pmodint _ | Pintcomp _ | Pfloatcomp _ | Pmakearray (_, _, _)
+    | Pmodint _ | Pintcomp _ | Pfloatcomp _ | Pmakearray (_, _)
     | Pcompare_ints | Pcompare_floats | Pcompare_bints _
     | Pduparray (_, _) | Parrayrefu _ | Parraysetu _
     | Parrayrefs _ | Parraysets _ | Paddbint _ | Psubbint _ | Pmulbint _
@@ -956,7 +880,7 @@ and transl_prim_1 env p arg dbg =
     | Plslbint _ | Plsrbint _ | Pasrbint _ | Pbintcomp (_, _)
     | Pbigarrayref (_, _, _, _) | Pbigarrayset (_, _, _, _)
     | Pbigarraydim _ | Pstring_load _ | Pbytes_load _ | Pbytes_set _
-    | Pbigstring_load _ | Pbigstring_set _ | Pprobe_is_enabled _)
+    | Pbigstring_load _ | Pbigstring_set _)
     ->
       fatal_errorf "Cmmgen.transl_prim_1: %a"
         Printclambda_primitives.primitive p
@@ -976,7 +900,7 @@ and transl_prim_2 env p arg1 arg2 dbg =
   (* Boolean operations *)
   | Psequand ->
       let dbg' = Debuginfo.none in
-      transl_sequand env Any Then_true_else_false
+      transl_sequand env Then_true_else_false
         dbg arg1
         dbg' arg2
         dbg (Cconst_int (3, dbg))
@@ -986,7 +910,7 @@ and transl_prim_2 env p arg1 arg2 dbg =
            Cifthenelse(test_bool dbg (Cvar id), transl env arg2, Cvar id)) *)
   | Psequor ->
       let dbg' = Debuginfo.none in
-      transl_sequor env Any Then_true_else_false
+      transl_sequor env Then_true_else_false
         dbg arg1
         dbg' arg2
         dbg (Cconst_int (3, dbg))
@@ -1030,23 +954,23 @@ and transl_prim_2 env p arg1 arg2 dbg =
   | Pisout ->
       transl_isout (transl env arg1) (transl env arg2) dbg
   (* Float operations *)
-  | Paddfloat m ->
-      box_float dbg m (Cop(Caddf,
+  | Paddfloat ->
+      box_float dbg (Cop(Caddf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
                     dbg))
-  | Psubfloat m ->
-      box_float dbg m (Cop(Csubf,
+  | Psubfloat ->
+      box_float dbg (Cop(Csubf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
                     dbg))
-  | Pmulfloat m ->
-      box_float dbg m (Cop(Cmulf,
+  | Pmulfloat ->
+      box_float dbg (Cop(Cmulf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
                     dbg))
-  | Pdivfloat m ->
-      box_float dbg m (Cop(Cdivf,
+  | Pdivfloat ->
+      box_float dbg (Cop(Cdivf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
                     dbg))
@@ -1061,10 +985,10 @@ and transl_prim_2 env p arg1 arg2 dbg =
       stringref_unsafe (transl env arg1) (transl env arg2) dbg
   | Pstringrefs | Pbytesrefs ->
       stringref_safe (transl env arg1) (transl env arg2) dbg
-  | Pstring_load(size, unsafe, mode) | Pbytes_load(size, unsafe, mode) ->
-      string_load size unsafe mode (transl env arg1) (transl env arg2) dbg
-  | Pbigstring_load(size, unsafe, mode) ->
-      bigstring_load size unsafe mode (transl env arg1) (transl env arg2) dbg
+  | Pstring_load(size, unsafe) | Pbytes_load(size, unsafe) ->
+      string_load size unsafe (transl env arg1) (transl env arg2) dbg
+  | Pbigstring_load(size, unsafe) ->
+      bigstring_load size unsafe (transl env arg1) (transl env arg2) dbg
 
   (* Array operations *)
   | Parrayrefu kind ->
@@ -1073,69 +997,74 @@ and transl_prim_2 env p arg1 arg2 dbg =
       arrayref_safe kind (transl env arg1) (transl env arg2) dbg
 
   (* Boxed integers *)
-  | Paddbint (bi, mode) ->
-      box_int dbg bi mode (add_int
+  | Paddbint bi ->
+      box_int dbg bi (add_int
                         (transl_unbox_int_low dbg env bi arg1)
                         (transl_unbox_int_low dbg env bi arg2) dbg)
-  | Psubbint (bi, mode) ->
-      box_int dbg bi mode (sub_int
+  | Psubbint bi ->
+      box_int dbg bi (sub_int
                         (transl_unbox_int_low dbg env bi arg1)
                         (transl_unbox_int_low dbg env bi arg2) dbg)
-  | Pmulbint (bi, mode) ->
-      box_int dbg bi mode (mul_int
+  | Pmulbint bi ->
+      box_int dbg bi (mul_int
                         (transl_unbox_int_low dbg env bi arg1)
                         (transl_unbox_int_low dbg env bi arg2) dbg)
-  | Pdivbint { size = bi; is_safe; mode } ->
-      box_int dbg bi mode (safe_div_bi is_safe
+  | Pdivbint { size = bi; is_safe } ->
+      box_int dbg bi (safe_div_bi is_safe
                       (transl_unbox_int dbg env bi arg1)
                       (transl_unbox_int dbg env bi arg2)
                       bi dbg)
-  | Pmodbint { size = bi; is_safe; mode } ->
-      box_int dbg bi mode (safe_mod_bi is_safe
+  | Pmodbint { size = bi; is_safe } ->
+      box_int dbg bi (safe_mod_bi is_safe
                       (transl_unbox_int dbg env bi arg1)
                       (transl_unbox_int dbg env bi arg2)
                       bi dbg)
-  | Pandbint (bi,mode) ->
-      box_int dbg bi mode (Cop(Cand,
+  | Pandbint bi ->
+      box_int dbg bi (Cop(Cand,
                      [transl_unbox_int_low dbg env bi arg1;
                       transl_unbox_int_low dbg env bi arg2], dbg))
-  | Porbint (bi, mode) ->
-      box_int dbg bi mode (Cop(Cor,
+  | Porbint bi ->
+      box_int dbg bi (Cop(Cor,
                      [transl_unbox_int_low dbg env bi arg1;
                       transl_unbox_int_low dbg env bi arg2], dbg))
-  | Pxorbint (bi, mode) ->
-      box_int dbg bi mode (Cop(Cxor,
+  | Pxorbint bi ->
+      box_int dbg bi (Cop(Cxor,
                      [transl_unbox_int_low dbg env bi arg1;
                       transl_unbox_int_low dbg env bi arg2], dbg))
-  | Plslbint (bi, mode) ->
-      box_int dbg bi mode (lsl_int
+  | Plslbint bi ->
+      box_int dbg bi (lsl_int
                         (transl_unbox_int_low dbg env bi arg1)
                         (untag_int(transl env arg2) dbg) dbg)
-  | Plsrbint (bi, mode) ->
-      box_int dbg bi mode (lsr_int
+  | Plsrbint bi ->
+      box_int dbg bi (lsr_int
                         (make_unsigned_int bi (transl_unbox_int dbg env bi arg1)
                                         dbg)
                         (untag_int(transl env arg2) dbg) dbg)
-  | Pasrbint (bi, mode) ->
-      box_int dbg bi mode (asr_int
+  | Pasrbint bi ->
+      box_int dbg bi (asr_int
                         (transl_unbox_int dbg env bi arg1)
                         (untag_int(transl env arg2) dbg) dbg)
   | Pbintcomp(bi, cmp) ->
       tag_int (Cop(Ccmpi cmp,
                      [transl_unbox_int dbg env bi arg1;
                       transl_unbox_int dbg env bi arg2], dbg)) dbg
-  | Pnot | Pnegint | Pintoffloat | Pfloatofint _ | Pnegfloat _
-  | Pabsfloat _ | Pstringlength | Pbyteslength | Pbytessetu | Pbytessets
+  | Patomic_exchange ->
+     Cop (Cextcall ("caml_atomic_exchange", typ_val, [], false),
+          [transl env arg1; transl env arg2], dbg)
+  | Patomic_fetch_add ->
+     Cop (Cextcall ("caml_atomic_fetch_add", typ_int, [], false),
+          [transl env arg1; transl env arg2], dbg)
+  | Prunstack | Pperform | Presume | Preperform | Pdls_get
+  | Patomic_cas | Patomic_load _
+  | Pnot | Pnegint | Pintoffloat | Pfloatofint | Pnegfloat
+  | Pabsfloat | Pstringlength | Pbyteslength | Pbytessetu | Pbytessets
   | Pisint | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _
-  | Pmakeblock (_, _, _, _) | Pfield _ | Psetfield_computed (_, _)
-  | Pfloatfield _
+  | Pmakeblock (_, _, _) | Pfield _ | Psetfield_computed (_, _) | Pfloatfield _
   | Pduprecord (_, _) | Pccall _ | Praise _ | Poffsetint _ | Poffsetref _
-  | Pmakearray (_, _, _) | Pduparray (_, _) | Parraylength _ | Parraysetu _
-  | Parraysets _ | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _, _)
+  | Pmakearray (_, _) | Pduparray (_, _) | Parraylength _ | Parraysetu _
+  | Parraysets _ | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _)
   | Pnegbint _ | Pbigarrayref (_, _, _, _) | Pbigarrayset (_, _, _, _)
   | Pbigarraydim _ | Pbytes_set _ | Pbigstring_set _ | Pbbswap _
-  | Pprobe_is_enabled _
-  | Punbox_float | Pbox_float _ | Punbox_int _ | Pbox_int _
     ->
       fatal_errorf "Cmmgen.transl_prim_2: %a"
         Printclambda_primitives.primitive p
@@ -1178,25 +1107,47 @@ and transl_prim_3 env p arg1 arg2 arg3 dbg =
       bigstring_set size unsafe (transl env arg1) (transl env arg2)
         (transl_unbox_sized size dbg env arg3) dbg
 
+  | Patomic_cas ->
+     Cop (Cextcall ("caml_atomic_cas", typ_int, [], false),
+          [transl env arg1; transl env arg2; transl env arg3], dbg)
+
+  (* Effects *)
+  | Presume ->
+      Cop (Capply typ_val,
+           [Cconst_symbol ("caml_resume", dbg);
+           transl env arg1; transl env arg2; transl env arg3],
+           dbg)
+
+  | Prunstack ->
+      Cop (Capply typ_val,
+           [Cconst_symbol ("caml_runstack", dbg);
+           transl env arg1; transl env arg2; transl env arg3],
+           dbg)
+
+  | Preperform ->
+      Cop (Capply typ_val,
+           [Cconst_symbol ("caml_reperform", dbg);
+           transl env arg1; transl env arg2; transl env arg3],
+           dbg)
+
+  | Pperform | Pdls_get
+  | Patomic_exchange | Patomic_fetch_add | Patomic_load _
   | Pfield_computed | Psequand | Psequor | Pnot | Pnegint | Paddint
   | Psubint | Pmulint | Pandint | Porint | Pxorint | Plslint | Plsrint | Pasrint
-  | Pintoffloat | Pfloatofint _ | Pnegfloat _ | Pabsfloat _ | Paddfloat _ | Psubfloat _
-  | Pmulfloat _ | Pdivfloat _ | Pstringlength | Pstringrefu | Pstringrefs
+  | Pintoffloat | Pfloatofint | Pnegfloat | Pabsfloat | Paddfloat | Psubfloat
+  | Pmulfloat | Pdivfloat | Pstringlength | Pstringrefu | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytesrefs | Pisint | Pisout
-  | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _
-  | Pmakeblock (_, _, _, _)
+  | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _ | Pmakeblock (_, _, _)
   | Pfield _ | Psetfield (_, _, _) | Pfloatfield _ | Psetfloatfield (_, _)
   | Pduprecord (_, _) | Pccall _ | Praise _ | Pdivint _ | Pmodint _ | Pintcomp _
   | Pcompare_ints | Pcompare_floats | Pcompare_bints _
-  | Poffsetint _ | Poffsetref _ | Pfloatcomp _ | Pmakearray (_, _, _)
+  | Poffsetint _ | Poffsetref _ | Pfloatcomp _ | Pmakearray (_, _)
   | Pduparray (_, _) | Parraylength _ | Parrayrefu _ | Parrayrefs _
-  | Pbintofint _ | Pintofbint _ | Pcvtbint _ | Pnegbint _ | Paddbint _
+  | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _) | Pnegbint _ | Paddbint _
   | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _ | Pandbint _ | Porbint _
   | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _ | Pbintcomp (_, _)
   | Pbigarrayref (_, _, _, _) | Pbigarrayset (_, _, _, _) | Pbigarraydim _
   | Pstring_load _ | Pbytes_load _ | Pbigstring_load _ | Pbbswap _
-  | Pprobe_is_enabled _
-  | Punbox_float | Pbox_float _ | Punbox_int _ | Pbox_int _
     ->
       fatal_errorf "Cmmgen.transl_prim_3: %a"
         Printclambda_primitives.primitive p
@@ -1219,7 +1170,7 @@ and transl_unbox_sized size dbg env exp =
   | Thirty_two -> transl_unbox_int dbg env Pint32 exp
   | Sixty_four -> transl_unbox_int dbg env Pint64 exp
 
-and transl_let_value env str (kind : Lambda.value_kind) id exp transl_body =
+and transl_let env str kind id exp transl_body =
   let dbg = Debuginfo.none in
   let cexp = transl env exp in
   let unboxing =
@@ -1227,21 +1178,18 @@ and transl_let_value env str (kind : Lambda.value_kind) id exp transl_body =
        reference) and it contains a type of unboxable numbers, then
        force unboxing.  Indeed, if not boxed, each assignment to the variable
        might require some boxing, but such local references are often
-       used in loops and we really want to avoid repeated boxing.
-
-       We conservatively mark these as Alloc_heap, although with more tracking
-       of allocation mode it may be possible to mark some Alloc_local *)
+       used in loops and we really want to avoid repeated boxing. *)
     match str, kind with
     | Mutable, Pfloatval ->
-        Boxed (Boxed_float (alloc_heap, dbg), false)
+        Boxed (Boxed_float dbg, false)
     | Mutable, Pboxedintval bi ->
-        Boxed (Boxed_integer (bi, alloc_heap, dbg), false)
+        Boxed (Boxed_integer (bi, dbg), false)
     | _, (Pfloatval | Pboxedintval _) ->
         (* It would be safe to always unbox in this case, but
            we do it only if this indeed allows us to get rid of
            some allocations in the bound expression. *)
         is_unboxed_number_cmm ~strict:false cexp
-    | _, (Pgenval | Pvariant _ | Parrayval _) ->
+    | _, Pgenval ->
         (* Here we don't know statically that the bound expression
            evaluates to an unboxable number type.  We need to be stricter
            and ensure that all possible branches in the expression
@@ -1256,7 +1204,7 @@ and transl_let_value env str (kind : Lambda.value_kind) id exp transl_body =
       (* N.B. [body] must still be traversed even if [exp] will never return:
          there may be constant closures inside that need lifting out. *)
       begin match str, kind with
-      | (Immutable | Immutable_unique), _ -> Clet(id, cexp, transl_body env)
+      | Immutable, _ -> Clet(id, cexp, transl_body env)
       | Mutable, Pintval -> Clet_mut(id, typ_int, cexp, transl_body env)
       | Mutable, _ -> Clet_mut(id, typ_val, cexp, transl_body env)
       end
@@ -1267,126 +1215,101 @@ and transl_let_value env str (kind : Lambda.value_kind) id exp transl_body =
       let body =
         transl_body (add_unboxed_id (VP.var id) unboxed_id boxed_number env) in
       begin match str, boxed_number with
-      | (Immutable | Immutable_unique), _ -> Clet (v, cexp, body)
+      | Immutable, _ -> Clet (v, cexp, body)
       | Mutable, bn -> Clet_mut (v, typ_of_boxed_number bn, cexp, body)
       end
 
-and transl_let env str (layout : Lambda.layout) id exp transl_body =
-  match layout with
-  | Ptop ->
-      Misc.fatal_errorf "Variable %a with layout [Ptop] can't be compiled"
-        VP.print id
-  | Pbottom ->
-      let cexp = transl env exp in
-      (* N.B. [body] must still be traversed even if [exp] will never return:
-         there may be constant closures inside that need lifting out. *)
-      let _cbody : expression = transl_body env in
-      cexp
-  | Punboxed_float | Punboxed_int _ -> begin
-      let cexp = transl env exp in
-      let cbody = transl_body env in
-      match str with
-      | (Immutable | Immutable_unique) ->
-        Clet(id, cexp, cbody)
-      | Mutable ->
-        let typ = machtype_of_layout layout in
-        Clet_mut(id, typ, cexp, cbody)
-  end
-  | Pvalue kind ->
-      transl_let_value env str kind id exp transl_body
-
-and make_catch (kind : Cmm.kind_for_unboxing) ncatch body handler dbg = match body with
+and make_catch ncatch body handler dbg = match body with
 | Cexit (nexit,[]) when nexit=ncatch -> handler
-| _ ->  ccatch (ncatch, [], body, handler, dbg, kind)
+| _ ->  ccatch (ncatch, [], body, handler, dbg)
 
 and is_shareable_cont exp =
   match exp with
   | Cexit (_,[]) -> true
   | _ -> false
 
-and make_shareable_cont (kind : Cmm.kind_for_unboxing) dbg mk exp =
+and make_shareable_cont dbg mk exp =
   if is_shareable_cont exp then mk exp
   else begin
     let nfail = next_raise_count () in
     make_catch
-      kind
       nfail
       (mk (Cexit (nfail,[])))
       exp
       dbg
   end
 
-and transl_if env (kind : Cmm.kind_for_unboxing) (approx : then_else)
+and transl_if env (approx : then_else)
       (dbg : Debuginfo.t) cond
       (then_dbg : Debuginfo.t) then_
       (else_dbg : Debuginfo.t) else_ =
   match cond with
   | Uconst (Uconst_int 0) -> else_
   | Uconst (Uconst_int 1) -> then_
-  | Uifthenelse (arg1, arg2, Uconst (Uconst_int 0), _) ->
+  | Uifthenelse (arg1, arg2, Uconst (Uconst_int 0)) ->
       (* CR mshinwell: These Debuginfos will flow through from Clambda *)
       let inner_dbg = Debuginfo.none in
       let ifso_dbg = Debuginfo.none in
-      transl_sequand env kind approx
+      transl_sequand env approx
         inner_dbg arg1
         ifso_dbg arg2
         then_dbg then_
         else_dbg else_
-  | Ulet(str, kind_, id, exp, cond) ->
-      transl_let env str kind_ id exp (fun env ->
-        transl_if env kind approx dbg cond then_dbg then_ else_dbg else_)
+  | Ulet(str, kind, id, exp, cond) ->
+      transl_let env str kind id exp (fun env ->
+        transl_if env approx dbg cond then_dbg then_ else_dbg else_)
   | Uprim (Psequand, [arg1; arg2], inner_dbg) ->
-      transl_sequand env kind approx
+      transl_sequand env approx
         inner_dbg arg1
         inner_dbg arg2
         then_dbg then_
         else_dbg else_
-  | Uifthenelse (arg1, Uconst (Uconst_int 1), arg2, _) ->
+  | Uifthenelse (arg1, Uconst (Uconst_int 1), arg2) ->
       let inner_dbg = Debuginfo.none in
       let ifnot_dbg = Debuginfo.none in
-      transl_sequor env kind approx
+      transl_sequor env approx
         inner_dbg arg1
         ifnot_dbg arg2
         then_dbg then_
         else_dbg else_
   | Uprim (Psequor, [arg1; arg2], inner_dbg) ->
-      transl_sequor env kind approx
+      transl_sequor env approx
         inner_dbg arg1
         inner_dbg arg2
         then_dbg then_
         else_dbg else_
   | Uprim (Pnot, [arg], _dbg) ->
-      transl_if env kind (invert_then_else approx)
+      transl_if env (invert_then_else approx)
         dbg arg
         else_dbg else_
         then_dbg then_
-  | Uifthenelse (Uconst (Uconst_int 1), ifso, _, _) ->
+  | Uifthenelse (Uconst (Uconst_int 1), ifso, _) ->
       let ifso_dbg = Debuginfo.none in
-      transl_if env kind approx
+      transl_if env approx
         ifso_dbg ifso
         then_dbg then_
         else_dbg else_
-  | Uifthenelse (Uconst (Uconst_int 0), _, ifnot, _) ->
+  | Uifthenelse (Uconst (Uconst_int 0), _, ifnot) ->
       let ifnot_dbg = Debuginfo.none in
-      transl_if env kind approx
+      transl_if env approx
         ifnot_dbg ifnot
         then_dbg then_
         else_dbg else_
-  | Uifthenelse (cond, ifso, ifnot, _) ->
+  | Uifthenelse (cond, ifso, ifnot) ->
       let inner_dbg = Debuginfo.none in
       let ifso_dbg = Debuginfo.none in
       let ifnot_dbg = Debuginfo.none in
-      make_shareable_cont kind then_dbg
+      make_shareable_cont then_dbg
         (fun shareable_then ->
-           make_shareable_cont kind else_dbg
+           make_shareable_cont else_dbg
              (fun shareable_else ->
                 mk_if_then_else
-                  inner_dbg kind (test_bool inner_dbg (transl env cond))
-                  ifso_dbg (transl_if env kind approx
+                  inner_dbg (test_bool inner_dbg (transl env cond))
+                  ifso_dbg (transl_if env approx
                     ifso_dbg ifso
                     then_dbg shareable_then
                     else_dbg shareable_else)
-                  ifnot_dbg (transl_if env kind approx
+                  ifnot_dbg (transl_if env approx
                     ifnot_dbg ifnot
                     then_dbg shareable_then
                     else_dbg shareable_else))
@@ -1400,50 +1323,50 @@ and transl_if env (kind : Cmm.kind_for_unboxing) (approx : then_else)
           mk_not dbg (transl env cond)
       | Unknown ->
           mk_if_then_else
-            dbg kind (test_bool dbg (transl env cond))
+            dbg (test_bool dbg (transl env cond))
             then_dbg then_
             else_dbg else_
     end
 
-and transl_sequand env (kind : Cmm.kind_for_unboxing) (approx : then_else)
+and transl_sequand env (approx : then_else)
       (arg1_dbg : Debuginfo.t) arg1
       (arg2_dbg : Debuginfo.t) arg2
       (then_dbg : Debuginfo.t) then_
       (else_dbg : Debuginfo.t) else_ =
-  make_shareable_cont kind else_dbg
+  make_shareable_cont else_dbg
     (fun shareable_else ->
-       transl_if env kind Unknown
+       transl_if env Unknown
          arg1_dbg arg1
-         arg2_dbg (transl_if env kind approx
+         arg2_dbg (transl_if env approx
            arg2_dbg arg2
            then_dbg then_
            else_dbg shareable_else)
          else_dbg shareable_else)
     else_
 
-and transl_sequor env (kind : Cmm.kind_for_unboxing) (approx : then_else)
+and transl_sequor env (approx : then_else)
       (arg1_dbg : Debuginfo.t) arg1
       (arg2_dbg : Debuginfo.t) arg2
       (then_dbg : Debuginfo.t) then_
       (else_dbg : Debuginfo.t) else_ =
-  make_shareable_cont kind then_dbg
+  make_shareable_cont then_dbg
     (fun shareable_then ->
-       transl_if env kind Unknown
+       transl_if env Unknown
          arg1_dbg arg1
          then_dbg shareable_then
-         arg2_dbg (transl_if env kind approx
+         arg2_dbg (transl_if env approx
            arg2_dbg arg2
            then_dbg shareable_then
            else_dbg else_))
     then_
 
 (* This assumes that [arg] can be safely discarded if it is not used. *)
-and transl_switch dbg (kind : Cmm.kind_for_unboxing) env arg index cases = match Array.length cases with
+and transl_switch dbg env arg index cases = match Array.length cases with
 | 0 -> fatal_error "Cmmgen.transl_switch"
 | 1 -> transl env cases.(0)
 | _ ->
     let cases = Array.map (transl env) cases in
-    transl_switch_clambda dbg kind arg index cases
+    transl_switch_clambda dbg arg index cases
 
 and transl_letrec env bindings cont =
   let dbg = Debuginfo.none in
@@ -1455,19 +1378,14 @@ and transl_letrec env bindings cont =
     Cop(Cextcall(prim, typ_val, [], true), args, dbg) in
   let rec init_blocks = function
     | [] -> fill_nonrec bsz
-    | (_, _,
-       (RHS_block (Alloc_local, _) |
-        RHS_infix {blockmode=Alloc_local; _} |
-        RHS_floatblock (Alloc_local, _))) :: _ ->
-      Misc.fatal_error "Invalid stack allocation found"
-    | (id, _exp, RHS_block (Alloc_heap, sz)) :: rem ->
+    | (id, _exp, RHS_block sz) :: rem ->
         Clet(id, op_alloc "caml_alloc_dummy" [int_const dbg sz],
           init_blocks rem)
-    | (id, _exp, RHS_infix { blocksize; offset; blockmode=Alloc_heap }) :: rem ->
+    | (id, _exp, RHS_infix { blocksize; offset}) :: rem ->
         Clet(id, op_alloc "caml_alloc_dummy_infix"
              [int_const dbg blocksize; int_const dbg offset],
              init_blocks rem)
-    | (id, _exp, RHS_floatblock (Alloc_heap, sz)) :: rem ->
+    | (id, _exp, RHS_floatblock sz) :: rem ->
         Clet(id, op_alloc "caml_alloc_dummy_float" [int_const dbg sz],
           init_blocks rem)
     | (id, _exp, RHS_nonrec) :: rem ->
@@ -1506,15 +1424,8 @@ let transl_function f =
     else
       [ Reduce_code_size ]
   in
-  let params_layout =
-    if List.length f.params = List.length f.arity.params_layout then
-      f.arity.params_layout
-    else
-      f.arity.params_layout @ [Lambda.layout_function]
-  in
   Cfunction {fun_name = f.label;
-             fun_args = List.map2 (fun id ty -> (id, machtype_of_layout ty))
-                 f.params params_layout;
+             fun_args = List.map (fun (id, _) -> (id, typ_val)) f.params;
              fun_body = cmm_body;
              fun_codegen_options;
              fun_poll = f.poll;
@@ -1607,7 +1518,7 @@ let compunit (ulam, preallocated_blocks, constants) =
         (fun () -> dbg)
     else
       transl empty_env ulam in
-  let c1 = [Cfunction {fun_name = make_symbol "entry";
+  let c1 = [Cfunction {fun_name = Compilenv.make_symbol (Some "entry");
                        fun_args = [];
                        fun_body = init_code;
                        (* This function is often large and run only once.

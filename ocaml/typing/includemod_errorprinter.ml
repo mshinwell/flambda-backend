@@ -140,8 +140,12 @@ module Illegal_permutation = struct
 
   (* Find module type at position [path] and convert the [coerce_pos] path to
      a [pos] path *)
-  let rec find env ctx path (mt:Types.module_type) =
-    match Mtype.scrape_alias env mt, path with
+  let rec find env ctx path (mt:Types.module_type) = match mt, path with
+    | (Mty_ident p | Mty_alias p), _ ->
+        begin match (Env.find_modtype p env).mtd_type with
+        | None -> raise Not_found
+        | Some mt -> find env ctx path mt
+        end
     | Mty_signature s , [] -> List.rev ctx, s
     | Mty_signature s, Item k :: q ->
         begin match runtime_item k s with
@@ -334,6 +338,7 @@ module With_shorthand = struct
     let arg, mty = ua.item in
     match (arg: Err.functor_arg_descr) with
     | Unit -> Format.dprintf "()"
+    | Empty_struct -> Format.dprintf "(struct end)"
     | Named p ->
         let mty = modtype { ua with item = mty } in
         Format.dprintf
@@ -352,6 +357,7 @@ module With_shorthand = struct
     let arg, mty = ua.item in
     match (arg: Err.functor_arg_descr) with
     | Unit -> Format.dprintf "()"
+    | Empty_struct -> Format.dprintf "(struct end)"
     | Named p -> fun ppf -> Printtyp.path ppf p
     | Anonymous ->
         let short_mty = modtype { ua with item=mty } in
@@ -514,7 +520,10 @@ module Functor_suberror = struct
       | Named _ | Anonymous ->
           Format.dprintf
             "The functor was expected to be generative at this position"
-
+      | Empty_struct ->
+          (* an empty structure can be used in both applicative and generative
+             context *)
+          assert false
   end
 
   let subcase sub ~expansion_token env (pos, diff) =
@@ -870,8 +879,6 @@ let all env = function
   | In_Module_type_substitution (id,diff) ->
       module_type_subst ~env id diff
   | In_Signature diff ->
-      signature ~expansion_token:true ~before:[] ~env ~ctx:[] diff
-  | In_Include_functor_signature diff ->
       signature ~expansion_token:true ~before:[] ~env ~ctx:[] diff
   | In_Expansion cmts ->
       match core_module_type_symptom cmts with

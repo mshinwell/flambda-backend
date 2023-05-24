@@ -83,7 +83,8 @@ val pred : t -> t
    [Targetint.pred x] is [Targetint.sub x Targetint.one]. *)
 
 val abs : t -> t
-(** Return the absolute value of its argument. *)
+(** [abs x] is the absolute value of [x]. On [min_int] this
+   is [min_int] itself and thus remains negative. *)
 
 val size : int
 (** The size in bits of a target native integer. *)
@@ -205,9 +206,3 @@ val repr : t -> repr
 
 val print : Format.formatter -> t -> unit
 (** Print a target integer to a formatter. *)
-
-val size_in_bytes_as_targetint : t
-(** The width of a target integer in bytes, expressed as a value of type [t]. *)
-
-val nonnegative_to_uint64_exn : t -> Numbers.Uint64.t
-(** Convert the non-negative given target integer to an unsigned 64-bit integer. *)

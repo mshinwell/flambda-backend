@@ -1,4 +1,3 @@
-# 1 "camlinternalFormatBasics.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,7 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-[@@@ocaml.zero_alloc check]
 
 (* Padding position. *)
 type padty =

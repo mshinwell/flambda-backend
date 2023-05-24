@@ -19,27 +19,33 @@ open Misc
 open Config
 open Cmo_format
 
-module CU = Compilation_unit
+module Dep = struct
+  type t = string * string
+  let compare = compare
+end
+
+module DepSet = Set.Make (Dep)
 
 type error =
   | File_not_found of filepath
   | Not_an_object_file of filepath
   | Wrong_object_name of filepath
   | Symbol_error of filepath * Symtable.error
-  | Inconsistent_import of Compilation_unit.Name.t * filepath * filepath
+  | Inconsistent_import of modname * filepath * filepath
   | Custom_runtime
   | File_exists of filepath
   | Cannot_open_dll of filepath
-  | Required_module_unavailable of string * Compilation_unit.t
+  | Required_module_unavailable of modname * modname
   | Camlheader of string * filepath
-  | Wrong_link_order of (string * string) list
+  | Wrong_link_order of DepSet.t
+  | Multiple_definition of modname * filepath * filepath
 
 exception Error of error
 
 type link_action =
-    Link_object of string * compilation_unit_descr
+    Link_object of string * compilation_unit
       (* Name of .cmo file and descriptor of the unit *)
-  | Link_archive of string * compilation_unit_descr list
+  | Link_archive of string * compilation_unit list
       (* Name of .cma file and descriptors of the units to be linked. *)
 
 (* Add C objects and options from a library descriptor *)
@@ -91,7 +97,11 @@ let add_ccobjs origin l =
 
 let missing_globals = ref Ident.Map.empty
 let provided_globals = ref Ident.Set.empty
-let badly_ordered_dependencies : (string * string) list ref = ref []
+let badly_ordered_dependencies : DepSet.t ref = ref DepSet.empty
+
+let record_badly_ordered_dependency (id, compunit) =
+  let dep = ((Ident.name id), compunit.cu_name) in
+  badly_ordered_dependencies := DepSet.add dep !badly_ordered_dependencies
 
 let is_required (rel, _pos) =
   match rel with
@@ -101,18 +111,12 @@ let is_required (rel, _pos) =
 
 let add_required compunit =
   let add id =
-    if Ident.Set.mem id !provided_globals then begin
-      let cu_name = CU.full_path_as_string compunit.cu_name in
-      badly_ordered_dependencies :=
-        ((Ident.name id), cu_name) :: !badly_ordered_dependencies;
-    end;
+    if Ident.Set.mem id !provided_globals then
+      record_badly_ordered_dependency (id, compunit);
     missing_globals := Ident.Map.add id compunit.cu_name !missing_globals
   in
-  let add_unit unit =
-    add (unit |> Compilation_unit.to_global_ident_for_bytecode)
-  in
   List.iter add (Symtable.required_globals compunit.cu_reloc);
-  List.iter add_unit compunit.cu_required_globals
+  List.iter add compunit.cu_required_globals
 
 let remove_required (rel, _pos) =
   match rel with
@@ -136,7 +140,7 @@ let scan_file obj_name tolink =
          requires. *)
       let compunit_pos = input_binary_int ic in  (* Go to descriptor *)
       seek_in ic compunit_pos;
-      let compunit = (input_value ic : compilation_unit_descr) in
+      let compunit = (input_value ic : compilation_unit) in
       close_in ic;
       add_required compunit;
       List.iter remove_required compunit.cu_reloc;
@@ -174,25 +178,25 @@ let scan_file obj_name tolink =
 
 (* Consistency check between interfaces *)
 
-module Consistbl = Consistbl.Make (CU.Name) (Compilation_unit)
+module Consistbl = Consistbl.Make (Misc.Stdlib.String)
 
 let crc_interfaces = Consistbl.create ()
-let interfaces = ref ([] : CU.Name.t list)
-let implementations_defined = ref ([] : (CU.Name.t * string) list)
+let interfaces = ref ([] : string list)
+let implementations_defined = ref ([] : (string * string) list)
 
 let check_consistency file_name cu =
   begin try
-    Array.iter
-      (fun import ->
-        let name = Import_info.name import in
-        let crco = Import_info.crc_with_unit import in
+    let source = List.assoc cu.cu_name !implementations_defined in
+    raise (Error (Multiple_definition(cu.cu_name, file_name, source)));
+  with Not_found -> ()
+  end;
+  begin try
+    List.iter
+      (fun (name, crco) ->
         interfaces := name :: !interfaces;
         match crco with
           None -> ()
-        | Some (full_name, crc) ->
-            if CU.Name.equal name (CU.name cu.cu_name)
-            then Consistbl.set crc_interfaces name full_name crc file_name
-            else Consistbl.check crc_interfaces name full_name crc file_name)
+        | Some crc -> Consistbl.check crc_interfaces name crc file_name)
       cu.cu_imports
   with Consistbl.Inconsistency {
       unit_name = name;
@@ -201,21 +205,11 @@ let check_consistency file_name cu =
     } ->
     raise(Error(Inconsistent_import(name, user, auth)))
   end;
-  begin try
-    let source = List.assoc (CU.name cu.cu_name) !implementations_defined in
-    Location.prerr_warning (Location.in_file file_name)
-      (Warnings.Module_linked_twice(cu.cu_name |> CU.full_path_as_string,
-                                    Location.show_filename file_name,
-                                    Location.show_filename source))
-  with Not_found -> ()
-  end;
   implementations_defined :=
-    (CU.name cu.cu_name, file_name) :: !implementations_defined
+    (cu.cu_name, file_name) :: !implementations_defined
 
 let extract_crc_interfaces () =
   Consistbl.extract !interfaces crc_interfaces
-  |> List.map (fun (name, crc_with_unit) ->
-       Import_info.create name ~crc_with_unit)
 
 let clear_crc_interfaces () =
   Consistbl.clear crc_interfaces;
@@ -267,7 +261,7 @@ let link_archive output_fun currpos_fun file_name units_required =
   try
     List.iter
       (fun cu ->
-         let name = file_name ^ "(" ^ (CU.full_path_as_string cu.cu_name) ^ ")" in
+         let name = file_name ^ "(" ^ cu.cu_name ^ ")" in
          try
            link_compunit output_fun currpos_fun inchan name cu
          with Symtable.Error msg ->
@@ -303,11 +297,6 @@ let output_debug_info oc =
     !debug_info;
   debug_info := []
 
-(* Output a list of strings with 0-termination *)
-
-let output_stringlist oc l =
-  List.iter (fun s -> output_string oc s; output_byte oc 0) l
-
 (* Transform a file name into an absolute file name *)
 
 let make_absolute file =
@@ -325,7 +314,9 @@ let link_bytecode ?final_name tolink exec_name standalone =
     | Link_object(file_name, _) when file_name = exec_name ->
       raise (Error (Wrong_object_name exec_name));
     | _ -> ()) tolink;
-  Misc.remove_file exec_name; (* avoid permission problems, cf PR#8354 *)
+  (* Remove the output file if it exists to avoid permission problems (PR#8354),
+     but don't risk removing a special file (PR#11302). *)
+  Misc.remove_file exec_name;
   let outperm = if !Clflags.with_runtime then 0o777 else 0o666 in
   let outchan =
     open_out_gen [Open_wronly; Open_trunc; Open_creat; Open_binary]
@@ -348,22 +339,22 @@ let link_bytecode ?final_name tolink exec_name standalone =
          | Not_found -> raise (Error (File_not_found header))
          | Sys_error msg -> raise (Error (Camlheader (header, msg)))
        end;
-       Bytesections.init_record outchan;
+       let toc_writer = Bytesections.init_record outchan in
        (* The path to the bytecode interpreter (in use_runtime mode) *)
        if String.length !Clflags.use_runtime > 0 && !Clflags.with_runtime then
        begin
          let runtime = make_absolute !Clflags.use_runtime in
          let runtime =
            (* shebang mustn't exceed 128 including the #! and \0 *)
-           if String.length runtime > 125 then
+           if String.length runtime > 125 || String.contains runtime ' ' then
              "/bin/sh\n\
-              exec \"" ^ runtime ^ "\" \"$0\" \"$@\""
+              exec " ^ Filename.quote runtime ^ " \"$0\" \"$@\""
            else
              runtime
          in
          output_string outchan runtime;
          output_char outchan '\n';
-         Bytesections.record outchan "RNTM"
+         Bytesections.record toc_writer Bytesections.Name.RNTM
        end;
        (* The bytecode *)
        let start_code = pos_out outchan in
@@ -385,37 +376,37 @@ let link_bytecode ?final_name tolink exec_name standalone =
        (* The final STOP instruction *)
        output_byte outchan Opcodes.opSTOP;
        output_byte outchan 0; output_byte outchan 0; output_byte outchan 0;
-       Bytesections.record outchan "CODE";
+       Bytesections.record toc_writer CODE;
        (* DLL stuff *)
        if standalone then begin
          (* The extra search path for DLLs *)
-         output_stringlist outchan !Clflags.dllpaths;
-         Bytesections.record outchan "DLPT";
+         output_string outchan (concat_null_terminated !Clflags.dllpaths);
+         Bytesections.record toc_writer DLPT;
          (* The names of the DLLs *)
-         output_stringlist outchan sharedobjs;
-         Bytesections.record outchan "DLLS"
+         output_string outchan (concat_null_terminated sharedobjs);
+         Bytesections.record toc_writer DLLS
        end;
        (* The names of all primitives *)
        Symtable.output_primitive_names outchan;
-       Bytesections.record outchan "PRIM";
+       Bytesections.record toc_writer PRIM;
        (* The table of global data *)
        Emitcode.marshal_to_channel_with_possibly_32bit_compat
          ~filename:final_name ~kind:"bytecode executable"
          outchan (Symtable.initial_global_table());
-       Bytesections.record outchan "DATA";
+       Bytesections.record toc_writer DATA;
        (* The map of global identifiers *)
        Symtable.output_global_map outchan;
-       Bytesections.record outchan "SYMB";
+       Bytesections.record toc_writer SYMB;
        (* CRCs for modules *)
-       output_value outchan ((extract_crc_interfaces() |> Array.of_list));
-       Bytesections.record outchan "CRCS";
+       output_value outchan (extract_crc_interfaces());
+       Bytesections.record toc_writer CRCS;
        (* Debug info *)
        if !Clflags.debug then begin
          output_debug_info outchan;
-         Bytesections.record outchan "DBUG"
+         Bytesections.record toc_writer DBUG
        end;
        (* The table of contents and the trailer *)
-       Bytesections.write_toc_and_trailer outchan;
+       Bytesections.write_toc_and_trailer toc_writer;
     )
 
 (* Output a string as a C array of unsigned ints *)
@@ -463,15 +454,15 @@ let output_cds_file outfile =
     ~always:(fun () -> close_out outchan)
     ~exceptionally:(fun () -> remove_file outfile)
     (fun () ->
-       Bytesections.init_record outchan;
+       let toc_writer = Bytesections.init_record outchan in
        (* The map of global identifiers *)
        Symtable.output_global_map outchan;
-       Bytesections.record outchan "SYMB";
+       Bytesections.record toc_writer SYMB;
        (* Debug info *)
        output_debug_info outchan;
-       Bytesections.record outchan "DBUG";
+       Bytesections.record toc_writer DBUG;
        (* The table of contents and the trailer *)
-       Bytesections.write_toc_and_trailer outchan;
+       Bytesections.write_toc_and_trailer toc_writer;
     )
 
 (* Output a bytecode executable as a C file *)
@@ -511,10 +502,14 @@ let link_bytecode_as_c tolink outfile with_main =
          (Marshal.to_string (Symtable.initial_global_table()) []);
        output_string outchan "\n};\n\n";
        (* The sections *)
-       let sections =
-         [ "SYMB", Symtable.data_global_map();
-           "PRIM", Obj.repr(Symtable.data_primitive_names());
-           "CRCS", Obj.repr(extract_crc_interfaces() |> Array.of_list) ] in
+       let sections : (string * Obj.t) list =
+         [ Bytesections.Name.to_string SYMB,
+           Symtable.data_global_map();
+           Bytesections.Name.to_string PRIM,
+           Obj.repr(Symtable.data_primitive_names());
+           Bytesections.Name.to_string CRCS,
+           Obj.repr(extract_crc_interfaces()) ]
+       in
        output_string outchan "static char caml_sections[] = {\n";
        output_data_string outchan
          (Marshal.to_string sections []);
@@ -636,18 +631,15 @@ let link objfiles output_name =
     | _                  -> "stdlib.cma" :: objfiles @ ["std_exit.cmo"]
   in
   let tolink = List.fold_right scan_file objfiles [] in
-  let missing_modules =
-    Ident.Map.filter (fun id _ -> not (Ident.is_predef id)) !missing_globals
-  in
   begin
-    match Ident.Map.bindings missing_modules with
+    match Ident.Map.bindings !missing_globals with
     | [] -> ()
     | (id, cu_name) :: _ ->
-        match !badly_ordered_dependencies with
-        | [] ->
+        if DepSet.is_empty !badly_ordered_dependencies
+        then
             raise (Error (Required_module_unavailable (Ident.name id, cu_name)))
-        | l ->
-            raise (Error (Wrong_link_order l))
+        else
+            raise (Error (Wrong_link_order !badly_ordered_dependencies))
   end;
   Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs; (* put user's libs last *)
   Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
@@ -767,10 +759,10 @@ let report_error ppf = function
   | Inconsistent_import(intf, file1, file2) ->
       fprintf ppf
         "@[<hov>Files %a@ and %a@ \
-                 make inconsistent assumptions over interface %a@]"
+                 make inconsistent assumptions over interface %s@]"
         Location.print_filename file1
         Location.print_filename file2
-        CU.Name.print intf
+        intf
   | Custom_runtime ->
       fprintf ppf "Error while building custom runtime system"
   | File_exists file ->
@@ -780,17 +772,23 @@ let report_error ppf = function
       fprintf ppf "Error on dynamically loaded library: %a"
         Location.print_filename file
   | Required_module_unavailable (s, m) ->
-      fprintf ppf "Module `%s' is unavailable (required by `%a')"
-        s
-        Compilation_unit.print m
+      fprintf ppf "Module `%s' is unavailable (required by `%s')" s m
   | Camlheader (msg, header) ->
       fprintf ppf "System error while copying file %s: %s" header msg
-  | Wrong_link_order l ->
+  | Wrong_link_order depset ->
+      let l = DepSet.elements depset in
       let depends_on ppf (dep, depending) =
         fprintf ppf "%s depends on %s" depending dep
       in
       fprintf ppf "@[<hov 2>Wrong link order: %a@]"
         (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ") depends_on) l
+  | Multiple_definition(modname, file1, file2) ->
+      fprintf ppf
+        "@[<hov>Files %a@ and %a@ both define a module named %s@]"
+        Location.print_filename file1
+        Location.print_filename file2
+        modname
+
 
 let () =
   Location.register_error_of_exn

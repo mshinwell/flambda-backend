@@ -42,7 +42,7 @@ let rec eliminate_ref id = function
   | Lletrec(idel, e2) ->
       Lletrec(List.map (fun (v, e) -> (v, eliminate_ref id e)) idel,
               eliminate_ref id e2)
-  | Lprim(Pfield (0, _sem), [Lvar v], _) when Ident.same v id ->
+  | Lprim(Pfield (0, _, _), [Lvar v], _) when Ident.same v id ->
       Lmutvar id
   | Lprim(Psetfield(0, _, _), [Lvar v; e], _) when Ident.same v id ->
       Lassign(id, eliminate_ref id e)
@@ -50,7 +50,7 @@ let rec eliminate_ref id = function
       Lassign(id, Lprim(Poffsetint delta, [Lmutvar id], loc))
   | Lprim(p, el, loc) ->
       Lprim(p, List.map (eliminate_ref id) el, loc)
-  | Lswitch(e, sw, loc, kind) ->
+  | Lswitch(e, sw, loc) ->
       Lswitch(eliminate_ref id e,
         {sw_numconsts = sw.sw_numconsts;
          sw_consts =
@@ -60,45 +60,38 @@ let rec eliminate_ref id = function
             List.map (fun (n, e) -> (n, eliminate_ref id e)) sw.sw_blocks;
          sw_failaction =
             Option.map (eliminate_ref id) sw.sw_failaction; },
-         loc,
-         kind)
-  | Lstringswitch(e, sw, default, loc, kind) ->
+        loc)
+  | Lstringswitch(e, sw, default, loc) ->
       Lstringswitch
         (eliminate_ref id e,
          List.map (fun (s, e) -> (s, eliminate_ref id e)) sw,
-         Option.map (eliminate_ref id) default, loc, kind)
+         Option.map (eliminate_ref id) default, loc)
   | Lstaticraise (i,args) ->
       Lstaticraise (i,List.map (eliminate_ref id) args)
-  | Lstaticcatch(e1, i, e2, kind) ->
-      Lstaticcatch(eliminate_ref id e1, i, eliminate_ref id e2, kind)
-  | Ltrywith(e1, v, e2, kind) ->
-      Ltrywith(eliminate_ref id e1, v, eliminate_ref id e2, kind)
-  | Lifthenelse(e1, e2, e3, kind) ->
+  | Lstaticcatch(e1, i, e2) ->
+      Lstaticcatch(eliminate_ref id e1, i, eliminate_ref id e2)
+  | Ltrywith(e1, v, e2) ->
+      Ltrywith(eliminate_ref id e1, v, eliminate_ref id e2)
+  | Lifthenelse(e1, e2, e3) ->
       Lifthenelse(eliminate_ref id e1,
                   eliminate_ref id e2,
-                  eliminate_ref id e3, kind)
+                  eliminate_ref id e3)
   | Lsequence(e1, e2) ->
       Lsequence(eliminate_ref id e1, eliminate_ref id e2)
-  | Lwhile lw ->
-      Lwhile { wh_cond = eliminate_ref id lw.wh_cond;
-               wh_body = eliminate_ref id lw.wh_body}
-  | Lfor lf ->
-      Lfor {lf with for_from = eliminate_ref id lf.for_from;
-                    for_to = eliminate_ref id lf.for_to;
-                    for_body = eliminate_ref id lf.for_body }
+  | Lwhile(e1, e2) ->
+      Lwhile(eliminate_ref id e1, eliminate_ref id e2)
+  | Lfor(v, e1, e2, dir, e3) ->
+      Lfor(v, eliminate_ref id e1, eliminate_ref id e2,
+           dir, eliminate_ref id e3)
   | Lassign(v, e) ->
       Lassign(v, eliminate_ref id e)
-  | Lsend(k, m, o, el, pos, mode, loc, layout) ->
+  | Lsend(k, m, o, el, loc) ->
       Lsend(k, eliminate_ref id m, eliminate_ref id o,
-            List.map (eliminate_ref id) el, pos, mode, loc, layout)
+            List.map (eliminate_ref id) el, loc)
   | Levent(l, ev) ->
       Levent(eliminate_ref id l, ev)
   | Lifused(v, e) ->
       Lifused(v, eliminate_ref id e)
-  | Lregion (e, layout) ->
-      Lregion(eliminate_ref id e, layout)
-  | Lexclave e ->
-      Lexclave(eliminate_ref id e)
 
 (* Simplification of exits *)
 
@@ -120,7 +113,7 @@ let simplify_exits lam =
     match Hashtbl.find_opt exits i with
     | Some r ->
         r.count <- r.count + nb;
-        r.max_depth <- Misc.Stdlib.Int.max r.max_depth d
+        r.max_depth <- Int.max r.max_depth d
     | None ->
         let r = {count = nb; max_depth = d} in
         Hashtbl.add exits i r
@@ -139,12 +132,12 @@ let simplify_exits lam =
       List.iter (fun (_v, l) -> count ~try_depth l) bindings;
       count ~try_depth body
   | Lprim(_p, ll, _) -> List.iter (count ~try_depth) ll
-  | Lswitch(l, sw, _loc, _kind) ->
+  | Lswitch(l, sw, _loc) ->
       count_default ~try_depth sw ;
       count ~try_depth l;
       List.iter (fun (_, l) -> count ~try_depth l) sw.sw_consts;
       List.iter (fun (_, l) -> count ~try_depth l) sw.sw_blocks
-  | Lstringswitch(l, sw, d, _, _kind) ->
+  | Lstringswitch(l, sw, d, _) ->
       count ~try_depth l;
       List.iter (fun (_, l) -> count ~try_depth l) sw;
       begin match  d with
@@ -157,37 +150,35 @@ let simplify_exits lam =
   | Lstaticraise (i,ls) ->
       incr_exit i 1 try_depth;
       List.iter (count ~try_depth) ls
-  | Lstaticcatch (l1,(i,[]),Lstaticraise (j,[]), _) ->
+  | Lstaticcatch (l1,(i,[]),Lstaticraise (j,[])) ->
       (* i will be replaced by j in l1, so each occurrence of i in l1
          increases j's ref count *)
       count ~try_depth l1 ;
       let ic = get_exit i in
-      incr_exit j ic.count (Misc.Stdlib.Int.max try_depth ic.max_depth)
-  | Lstaticcatch(l1, (i,_), l2, _) ->
+      incr_exit j ic.count (Int.max try_depth ic.max_depth)
+  | Lstaticcatch(l1, (i,_), l2) ->
       count ~try_depth l1;
       (* If l1 does not contain (exit i),
          l2 will be removed, so don't count its exits *)
       if (get_exit i).count > 0 then
         count ~try_depth l2
-  | Ltrywith(l1, _v, l2, _kind) ->
+  | Ltrywith(l1, _v, l2) ->
       count ~try_depth:(try_depth+1) l1;
       count ~try_depth l2;
-  | Lifthenelse(l1, l2, l3, _kind) ->
+  | Lifthenelse(l1, l2, l3) ->
       count ~try_depth l1;
       count ~try_depth l2;
       count ~try_depth l3
   | Lsequence(l1, l2) -> count ~try_depth l1; count ~try_depth l2
-  | Lwhile lw -> count ~try_depth lw.wh_cond; count ~try_depth lw.wh_body
-  | Lfor lf ->
-      count ~try_depth lf.for_from;
-      count ~try_depth lf.for_to;
-      count ~try_depth lf.for_body
+  | Lwhile(l1, l2) -> count ~try_depth l1; count ~try_depth l2
+  | Lfor(_, l1, l2, _dir, l3) ->
+      count ~try_depth l1;
+      count ~try_depth l2;
+      count ~try_depth l3
   | Lassign(_v, l) -> count ~try_depth l
-  | Lsend(_k, m, o, ll, _, _, _, _) -> List.iter (count ~try_depth) (m::o::ll)
+  | Lsend(_k, m, o, ll, _) -> List.iter (count ~try_depth) (m::o::ll)
   | Levent(l, _) -> count ~try_depth l
   | Lifused(_v, l) -> count ~try_depth l
-  | Lregion (l, _) -> count ~try_depth:(try_depth+1) l
-  | Lexclave l -> count ~try_depth:(try_depth-1) l
 
   and count_default ~try_depth sw = match sw.sw_failaction with
   | None -> ()
@@ -223,34 +214,28 @@ let simplify_exits lam =
   *)
 
   let subst = Hashtbl.create 17 in
-  let rec simplif ~layout ~try_depth l =
-    (* layout is the expected layout of the result: [None] if we want to
-       leave it unchanged, [Some layout] if we need to update the layout of
-       the result to [layout]. *)
-    let result_layout ly = Option.value layout ~default:ly in
-    match l with
-  | Lvar _| Lmutvar _ | Lconst _ -> l
+  let rec simplif ~try_depth = function
+  | (Lvar _| Lmutvar _ | Lconst _) as l -> l
   | Lapply ap ->
-      Lapply{ap with ap_func = simplif ~layout:None ~try_depth ap.ap_func;
-                     ap_args = List.map (simplif ~layout:None ~try_depth) ap.ap_args}
-  | Lfunction{kind; params; return; mode; region; body = l; attr; loc} ->
-     lfunction ~kind ~params ~return ~mode ~region
-       ~body:(simplif ~layout:None ~try_depth l) ~attr ~loc
+      Lapply{ap with ap_func = simplif ~try_depth ap.ap_func;
+                     ap_args = List.map (simplif ~try_depth) ap.ap_args}
+  | Lfunction{kind; params; return; body = l; attr; loc} ->
+     lfunction ~kind ~params ~return ~body:(simplif ~try_depth l) ~attr ~loc
   | Llet(str, kind, v, l1, l2) ->
-      Llet(str, kind, v, simplif ~layout:None ~try_depth l1, simplif ~layout ~try_depth l2)
+      Llet(str, kind, v, simplif ~try_depth l1, simplif ~try_depth l2)
   | Lmutlet(kind, v, l1, l2) ->
-      Lmutlet(kind, v, simplif ~layout:None ~try_depth l1, simplif ~layout ~try_depth l2)
+      Lmutlet(kind, v, simplif ~try_depth l1, simplif ~try_depth l2)
   | Lletrec(bindings, body) ->
-      Lletrec(List.map (fun (v, l) -> (v, simplif ~layout:None ~try_depth l)) bindings,
-      simplif ~layout ~try_depth body)
+      Lletrec(List.map (fun (v, l) -> (v, simplif ~try_depth l)) bindings,
+      simplif ~try_depth body)
   | Lprim(p, ll, loc) -> begin
-    let ll = List.map (simplif ~layout:None ~try_depth) ll in
+    let ll = List.map (simplif ~try_depth) ll in
     match p, ll with
         (* Simplify Obj.with_tag *)
       | Pccall { Primitive.prim_name = "caml_obj_with_tag"; _ },
         [Lconst (Const_base (Const_int tag));
-         Lprim (Pmakeblock (_, mut, shape, mode), fields, loc)] ->
-         Lprim (Pmakeblock(tag, mut, shape, mode), fields, loc)
+         Lprim (Pmakeblock (_, mut, shape), fields, loc)] ->
+         Lprim (Pmakeblock(tag, mut, shape), fields, loc)
       | Pccall { Primitive.prim_name = "caml_obj_with_tag"; _ },
         [Lconst (Const_base (Const_int tag));
          Lconst (Const_block (_, fields))] ->
@@ -258,25 +243,22 @@ let simplify_exits lam =
 
       | _ -> Lprim(p, ll, loc)
      end
-  | Lswitch(l, sw, loc, kind) ->
-      let new_l = simplif ~layout:None ~try_depth l
+  | Lswitch(l, sw, loc) ->
+      let new_l = simplif ~try_depth l
       and new_consts =
-      List.map (fun (n, e) -> (n, simplif ~layout ~try_depth e)) sw.sw_consts
+      List.map (fun (n, e) -> (n, simplif ~try_depth e)) sw.sw_consts
       and new_blocks =
-      List.map (fun (n, e) -> (n, simplif ~layout ~try_depth e)) sw.sw_blocks
-      and new_fail = Option.map (simplif ~layout ~try_depth) sw.sw_failaction in
+      List.map (fun (n, e) -> (n, simplif ~try_depth e)) sw.sw_blocks
+      and new_fail = Option.map (simplif ~try_depth) sw.sw_failaction in
       Lswitch
         (new_l,
          {sw with sw_consts = new_consts ; sw_blocks = new_blocks;
                   sw_failaction = new_fail},
-         loc, result_layout kind)
-  | Lstringswitch(l,sw,d,loc, kind) ->
+         loc)
+  | Lstringswitch(l,sw,d,loc) ->
       Lstringswitch
-        (simplif ~layout:None ~try_depth l,
-         List.map (fun (s,l) -> s,simplif ~layout ~try_depth l) sw,
-         Option.map (simplif ~layout ~try_depth) d,
-         loc,
-         result_layout kind)
+        (simplif ~try_depth l,List.map (fun (s,l) -> s,simplif ~try_depth l) sw,
+         Option.map (simplif ~try_depth) d,loc)
   | Lstaticraise (i,[]) as l ->
       begin try
         let _,handler =  Hashtbl.find subst i in
@@ -285,7 +267,7 @@ let simplify_exits lam =
       | Not_found -> l
       end
   | Lstaticraise (i,ls) ->
-      let ls = List.map (simplif ~layout:None ~try_depth) ls in
+      let ls = List.map (simplif ~try_depth) ls in
       begin try
         let xs,handler =  Hashtbl.find subst i in
         let ys = List.map (fun (x, k) -> Ident.rename x, k) xs in
@@ -306,59 +288,41 @@ let simplify_exits lam =
       with
       | Not_found -> Lstaticraise (i,ls)
       end
-  | Lstaticcatch (l1,(i,[]),(Lstaticraise (_j,[]) as l2),_) ->
-      Hashtbl.add subst i ([],simplif ~layout ~try_depth l2) ;
-      simplif ~layout ~try_depth l1
-  | Lstaticcatch (l1,(i,xs),l2,kind) ->
+  | Lstaticcatch (l1,(i,[]),(Lstaticraise (_j,[]) as l2)) ->
+      Hashtbl.add subst i ([],simplif ~try_depth l2) ;
+      simplif ~try_depth l1
+  | Lstaticcatch (l1,(i,xs),l2) ->
       let {count; max_depth} = get_exit i in
       if count = 0 then
         (* Discard staticcatch: not matching exit *)
-        simplif ~layout ~try_depth l1
+        simplif ~try_depth l1
       else if
       count = 1 && max_depth <= try_depth then begin
         (* Inline handler if there is a single occurrence and it is not
            nested within an inner try..with *)
         assert(max_depth = try_depth);
-        Hashtbl.add subst i (xs,simplif ~layout ~try_depth l2);
-        simplif ~layout:(Some (result_layout kind)) ~try_depth l1
+        Hashtbl.add subst i (xs,simplif ~try_depth l2);
+        simplif ~try_depth l1
       end else
-        Lstaticcatch (
-          simplif ~layout ~try_depth l1,
-          (i,xs),
-          simplif ~layout ~try_depth l2,
-          result_layout kind)
-  | Ltrywith(l1, v, l2, kind) ->
-      let l1 = simplif ~layout ~try_depth:(try_depth + 1) l1 in
-      Ltrywith(l1, v, simplif ~layout ~try_depth l2, result_layout kind)
-  | Lifthenelse(l1, l2, l3, kind) ->
-      Lifthenelse(
-        simplif ~layout:None ~try_depth l1,
-        simplif ~layout ~try_depth l2,
-        simplif ~layout ~try_depth l3,
-        result_layout kind)
-  | Lsequence(l1, l2) ->
-      Lsequence(
-        simplif ~layout:None ~try_depth l1,
-        simplif ~layout ~try_depth l2)
-  | Lwhile lw -> Lwhile {
-      wh_cond = simplif ~layout:None ~try_depth lw.wh_cond;
-      wh_body = simplif ~layout:None ~try_depth lw.wh_body}
-  | Lfor lf ->
-      Lfor {lf with for_from = simplif ~layout:None ~try_depth lf.for_from;
-                    for_to = simplif ~layout:None ~try_depth lf.for_to;
-                    for_body = simplif ~layout:None ~try_depth lf.for_body}
-  | Lassign(v, l) -> Lassign(v, simplif ~layout:None ~try_depth l)
-  | Lsend(k, m, o, ll, pos, mode, loc, layout) ->
-      Lsend(k, simplif ~layout:None ~try_depth m, simplif ~layout:None ~try_depth o,
-            List.map (simplif ~layout:None ~try_depth) ll, pos, mode, loc, layout)
-  | Levent(l, ev) -> Levent(simplif ~layout ~try_depth l, ev)
-  | Lifused(v, l) -> Lifused (v,simplif ~layout ~try_depth l)
-  | Lregion (l, ly) -> Lregion (
-      simplif ~layout ~try_depth:(try_depth + 1) l,
-      result_layout ly)
-  | Lexclave l -> Lexclave (simplif ~layout ~try_depth:(try_depth - 1) l)
+        Lstaticcatch (simplif ~try_depth l1, (i,xs), simplif ~try_depth l2)
+  | Ltrywith(l1, v, l2) ->
+      let l1 = simplif ~try_depth:(try_depth + 1) l1 in
+      Ltrywith(l1, v, simplif ~try_depth l2)
+  | Lifthenelse(l1, l2, l3) -> Lifthenelse(simplif ~try_depth l1,
+    simplif ~try_depth l2, simplif ~try_depth l3)
+  | Lsequence(l1, l2) -> Lsequence(simplif ~try_depth l1, simplif ~try_depth l2)
+  | Lwhile(l1, l2) -> Lwhile(simplif ~try_depth l1, simplif ~try_depth l2)
+  | Lfor(v, l1, l2, dir, l3) ->
+      Lfor(v, simplif ~try_depth l1, simplif ~try_depth l2, dir,
+      simplif ~try_depth l3)
+  | Lassign(v, l) -> Lassign(v, simplif ~try_depth l)
+  | Lsend(k, m, o, ll, loc) ->
+      Lsend(k, simplif ~try_depth m, simplif ~try_depth o,
+      List.map (simplif ~try_depth) ll, loc)
+  | Levent(l, ev) -> Levent(simplif ~try_depth l, ev)
+  | Lifused(v, l) -> Lifused (v,simplif ~try_depth l)
   in
-  simplif ~layout:None ~try_depth:0 lam
+  simplif ~try_depth:0 lam
 
 (* Compile-time beta-reduction of functions immediately applied:
       Lapply(Lfunction(Curried, params, body), args, loc) ->
@@ -456,12 +420,12 @@ let simplify_lets lam =
       List.iter (fun (_v, l) -> count bv l) bindings;
       count bv body
   | Lprim(_p, ll, _) -> List.iter (count bv) ll
-  | Lswitch(l, sw, _loc, _kind) ->
+  | Lswitch(l, sw, _loc) ->
       count_default bv sw ;
       count bv l;
       List.iter (fun (_, l) -> count bv l) sw.sw_consts;
       List.iter (fun (_, l) -> count bv l) sw.sw_blocks
-  | Lstringswitch(l, sw, d, _, _kind) ->
+  | Lstringswitch(l, sw, d, _) ->
       count bv l ;
       List.iter (fun (_, l) -> count bv l) sw ;
       begin match d with
@@ -473,26 +437,21 @@ let simplify_lets lam =
       | None -> ()
       end
   | Lstaticraise (_i,ls) -> List.iter (count bv) ls
-  | Lstaticcatch(l1, _, l2, _) -> count bv l1; count bv l2
-  | Ltrywith(l1, _v, l2, _kind) -> count bv l1; count bv l2
-  | Lifthenelse(l1, l2, l3, _kind) -> count bv l1; count bv l2; count bv l3
+  | Lstaticcatch(l1, _, l2) -> count bv l1; count bv l2
+  | Ltrywith(l1, _v, l2) -> count bv l1; count bv l2
+  | Lifthenelse(l1, l2, l3) -> count bv l1; count bv l2; count bv l3
   | Lsequence(l1, l2) -> count bv l1; count bv l2
-  | Lwhile {wh_cond; wh_body} ->
-      count Ident.Map.empty wh_cond; count Ident.Map.empty wh_body
-  | Lfor {for_from; for_to; for_body} ->
-      count bv for_from; count bv for_to; count Ident.Map.empty for_body
+  | Lwhile(l1, l2) -> count Ident.Map.empty l1; count Ident.Map.empty l2
+  | Lfor(_, l1, l2, _dir, l3) ->
+      count bv l1; count bv l2; count Ident.Map.empty l3
   | Lassign(_v, l) ->
       (* Lalias-bound variables are never assigned, so don't increase
          v's refcount *)
       count bv l
-  | Lsend(_, m, o, ll, _, _, _, _) -> List.iter (count bv) (m::o::ll)
+  | Lsend(_, m, o, ll, _) -> List.iter (count bv) (m::o::ll)
   | Levent(l, _) -> count bv l
   | Lifused(v, l) ->
       if count_var v > 0 then count bv l
-  | Lregion (l, _) ->
-      count bv l
-  | Lexclave l ->
-      count bv l
 
   and count_default bv sw = match sw.sw_failaction with
   | None -> ()
@@ -551,39 +510,32 @@ let simplify_lets lam =
           end
       | _ -> no_opt ()
       end
-  | Lfunction{kind=outer_kind; params; return=outer_return; body = l;
-              attr; loc; mode; region=outer_region} ->
-      begin match outer_kind, outer_region, simplif l with
-        Curried {nlocal=0},
-        true,
-        Lfunction{kind=Curried _ as kind; params=params'; return=return2;
-                  body; attr; loc; mode=inner_mode; region}
-        when optimize &&
+  | Lfunction{kind; params; return=return1; body = l; attr; loc} ->
+      begin match simplif l with
+        Lfunction{kind=Curried; params=params'; return=return2; body; attr; loc}
+        when kind = Curried && optimize &&
              List.length params + List.length params' <= Lambda.max_arity() ->
-          (* The returned function's mode should match the outer return mode *)
-          assert (is_heap_mode inner_mode);
           (* The return type is the type of the value returned after
              applying all the parameters to the function. The return
              type of the merged function taking [params @ params'] as
              parameters is the type returned after applying [params']. *)
           let return = return2 in
-          lfunction ~kind ~params:(params @ params') ~return ~body ~attr ~loc ~mode ~region
-      | kind, region, body ->
-          lfunction ~kind ~params ~return:outer_return ~body ~attr ~loc ~mode ~region
+          lfunction ~kind ~params:(params @ params') ~return ~body ~attr ~loc
+      | body ->
+          lfunction ~kind ~params ~return:return1 ~body ~attr ~loc
       end
   | Llet(_str, _k, v, Lvar w, l2) when optimize ->
       Hashtbl.add subst v (simplif (Lvar w));
       simplif l2
   | Llet(Strict, kind, v,
-         Lprim(Pmakeblock(0, Mutable, kind_ref, _mode) as prim, [linit], loc),
-         lbody)
+         Lprim(Pmakeblock(0, Mutable, kind_ref) as prim, [linit], loc), lbody)
     when optimize ->
       let slinit = simplif linit in
       let slbody = simplif lbody in
       begin try
         let kind = match kind_ref with
-          | None -> Lambda.layout_field
-          | Some [field_kind] -> Pvalue field_kind
+          | None -> Pgenval
+          | Some [field_kind] -> field_kind
           | Some _ -> assert false
         in
         mkmutlet kind v slinit (eliminate_ref v slbody)
@@ -606,7 +558,7 @@ let simplify_lets lam =
   | Lletrec(bindings, body) ->
       Lletrec(List.map (fun (v, l) -> (v, simplif l)) bindings, simplif body)
   | Lprim(p, ll, loc) -> Lprim(p, List.map simplif ll, loc)
-  | Lswitch(l, sw, loc, kind) ->
+  | Lswitch(l, sw, loc) ->
       let new_l = simplif l
       and new_consts =  List.map (fun (n, e) -> (n, simplif e)) sw.sw_consts
       and new_blocks =  List.map (fun (n, e) -> (n, simplif e)) sw.sw_blocks
@@ -615,35 +567,31 @@ let simplify_lets lam =
         (new_l,
          {sw with sw_consts = new_consts ; sw_blocks = new_blocks;
                   sw_failaction = new_fail},
-         loc, kind)
-  | Lstringswitch (l,sw,d,loc, kind) ->
+         loc)
+  | Lstringswitch (l,sw,d,loc) ->
       Lstringswitch
         (simplif l,List.map (fun (s,l) -> s,simplif l) sw,
-         Option.map simplif d,loc, kind)
+         Option.map simplif d,loc)
   | Lstaticraise (i,ls) ->
       Lstaticraise (i, List.map simplif ls)
-  | Lstaticcatch(l1, (i,args), l2, kind) ->
-      Lstaticcatch (simplif l1, (i,args), simplif l2, kind)
-  | Ltrywith(l1, v, l2, kind) -> Ltrywith(simplif l1, v, simplif l2, kind)
-  | Lifthenelse(l1, l2, l3, kind) -> Lifthenelse(simplif l1, simplif l2, simplif l3, kind)
+  | Lstaticcatch(l1, (i,args), l2) ->
+      Lstaticcatch (simplif l1, (i,args), simplif l2)
+  | Ltrywith(l1, v, l2) -> Ltrywith(simplif l1, v, simplif l2)
+  | Lifthenelse(l1, l2, l3) -> Lifthenelse(simplif l1, simplif l2, simplif l3)
   | Lsequence(Lifused(v, l1), l2) ->
       if count_var v > 0
       then Lsequence(simplif l1, simplif l2)
       else simplif l2
   | Lsequence(l1, l2) -> Lsequence(simplif l1, simplif l2)
-  | Lwhile lw -> Lwhile { wh_cond = simplif lw.wh_cond;
-                          wh_body = simplif lw.wh_body}
-  | Lfor lf -> Lfor {lf with for_from = simplif lf.for_from;
-                             for_to = simplif lf.for_to;
-                             for_body = simplif lf.for_body}
+  | Lwhile(l1, l2) -> Lwhile(simplif l1, simplif l2)
+  | Lfor(v, l1, l2, dir, l3) ->
+      Lfor(v, simplif l1, simplif l2, dir, simplif l3)
   | Lassign(v, l) -> Lassign(v, simplif l)
-  | Lsend(k, m, o, ll, pos, mode, loc, layout) ->
-      Lsend(k, simplif m, simplif o, List.map simplif ll, pos, mode, loc, layout)
+  | Lsend(k, m, o, ll, loc) ->
+      Lsend(k, simplif m, simplif o, List.map simplif ll, loc)
   | Levent(l, ev) -> Levent(simplif l, ev)
   | Lifused(v, l) ->
       if count_var v > 0 then simplif l else lambda_unit
-  | Lregion (l, layout) -> Lregion (simplif l, layout)
-  | Lexclave l -> Lexclave (simplif l)
   in
   simplif lam
 
@@ -683,10 +631,7 @@ let rec emit_tail_infos is_tail lambda =
   | Lletrec (bindings, body) ->
       List.iter (fun (_, lam) -> emit_tail_infos false lam) bindings;
       emit_tail_infos is_tail body
-  | Lprim ((Pbytes_to_string | Pbytes_of_string |
-            Parray_to_iarray | Parray_of_iarray),
-           [arg],
-           _) ->
+  | Lprim ((Pbytes_to_string | Pbytes_of_string), [arg], _) ->
       emit_tail_infos is_tail arg
   | Lprim (Psequand, [arg1; arg2], _)
   | Lprim (Psequor, [arg1; arg2], _) ->
@@ -694,12 +639,12 @@ let rec emit_tail_infos is_tail lambda =
       emit_tail_infos is_tail arg2
   | Lprim (_, l, _) ->
       list_emit_tail_infos false l
-  | Lswitch (lam, sw, _loc, _k) ->
+  | Lswitch (lam, sw, _loc) ->
       emit_tail_infos false lam;
       list_emit_tail_infos_fun snd is_tail sw.sw_consts;
       list_emit_tail_infos_fun snd is_tail sw.sw_blocks;
       Option.iter  (emit_tail_infos is_tail) sw.sw_failaction
-  | Lstringswitch (lam, sw, d, _, _k) ->
+  | Lstringswitch (lam, sw, d, _) ->
       emit_tail_infos false lam;
       List.iter
         (fun (_,lam) ->  emit_tail_infos is_tail lam)
@@ -707,39 +652,35 @@ let rec emit_tail_infos is_tail lambda =
       Option.iter (emit_tail_infos is_tail) d
   | Lstaticraise (_, l) ->
       list_emit_tail_infos false l
-  | Lstaticcatch (body, _, handler, _kind) ->
+  | Lstaticcatch (body, _, handler) ->
       emit_tail_infos is_tail body;
       emit_tail_infos is_tail handler
-  | Ltrywith (body, _, handler, _k) ->
+  | Ltrywith (body, _, handler) ->
       emit_tail_infos false body;
       emit_tail_infos is_tail handler
-  | Lifthenelse (cond, ifso, ifno, _k) ->
+  | Lifthenelse (cond, ifso, ifno) ->
       emit_tail_infos false cond;
       emit_tail_infos is_tail ifso;
       emit_tail_infos is_tail ifno
   | Lsequence (lam1, lam2) ->
       emit_tail_infos false lam1;
       emit_tail_infos is_tail lam2
-  | Lwhile lw ->
-      emit_tail_infos false lw.wh_cond;
-      emit_tail_infos false lw.wh_body
-  | Lfor {for_from; for_to; for_body} ->
-      emit_tail_infos false for_from;
-      emit_tail_infos false for_to;
-      emit_tail_infos false for_body
+  | Lwhile (cond, body) ->
+      emit_tail_infos false cond;
+      emit_tail_infos false body
+  | Lfor (_, low, high, _, body) ->
+      emit_tail_infos false low;
+      emit_tail_infos false high;
+      emit_tail_infos false body
   | Lassign (_, lam) ->
       emit_tail_infos false lam
-  | Lsend (_, meth, obj, args, _, _, _loc, _) ->
+  | Lsend (_, meth, obj, args, _loc) ->
       emit_tail_infos false meth;
       emit_tail_infos false obj;
       list_emit_tail_infos false args
   | Levent (lam, _) ->
       emit_tail_infos is_tail lam
   | Lifused (_, lam) ->
-      emit_tail_infos is_tail lam
-  | Lregion (lam, _) ->
-      emit_tail_infos is_tail lam
-  | Lexclave lam ->
       emit_tail_infos is_tail lam
 and list_emit_tail_infos_fun f is_tail =
   List.iter (fun x -> emit_tail_infos is_tail (f x))
@@ -754,9 +695,8 @@ and list_emit_tail_infos is_tail =
    'Some' constructor, only to deconstruct it immediately in the
    function's body. *)
 
-let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
-      ~attr ~loc ~mode ~region:orig_region =
-  let rec aux map add_region = function
+let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body ~attr ~loc =
+  let rec aux map = function
     (* When compiling [fun ?(x=expr) -> body], this is first translated
        to:
        [fun *opt* ->
@@ -773,15 +713,13 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
        the pattern-matching compiler for options.
     *)
     | Llet(Strict, k, id,
-           (Lifthenelse(Lprim (Pisint _, [Lvar optparam], _), _, _, _) as def),
+           (Lifthenelse(Lprim (Pisint, [Lvar optparam], _), _, _) as def),
            rest) when
         Ident.name optparam = "*opt*" && List.mem_assoc optparam params
           && not (List.mem_assoc optparam map)
       ->
-        let wrapper_body, inner = aux ((optparam, id) :: map) add_region rest in
+        let wrapper_body, inner = aux ((optparam, id) :: map) rest in
         Llet(Strict, k, id, def, wrapper_body), inner
-    | Lregion (rest, _) -> aux map true rest
-    | Lexclave rest -> aux map true rest
     | _ when map = [] -> raise Exit
     | body ->
         (* Check that those *opt* identifiers don't appear in the remaining
@@ -790,56 +728,39 @@ let split_default_wrapper ~id:fun_id ~kind ~params ~return ~body
         List.iter (fun (id, _) -> if Ident.Set.mem id fv then raise Exit) map;
 
         let inner_id = Ident.create_local (Ident.name fun_id ^ "_inner") in
-        let map_param p layout =
-          try
-            (* If the param is optional, then it must be a value *)
-            List.assoc p map, Lambda.layout_field
-          with
-            Not_found -> p, layout
-        in
-        let args = List.map (fun (p, layout) -> Lvar (fst (map_param p layout))) params in
+        let map_param p = try List.assoc p map with Not_found -> p in
+        let args = List.map (fun (p, _) -> Lvar (map_param p)) params in
         let wrapper_body =
           Lapply {
             ap_func = Lvar inner_id;
             ap_args = args;
-            ap_result_layout = return;
             ap_loc = Loc_unknown;
-            ap_region_close = Rc_normal;
-            ap_mode = alloc_heap;
             ap_tailcall = Default_tailcall;
-            ap_inlined = Default_inlined;
+            ap_inlined = Default_inline;
             ap_specialised = Default_specialise;
-            ap_probe=None;
           }
         in
-        let inner_params = List.map (fun (param, layout) -> map_param param layout) params in
-        let new_ids = List.map (fun (param, layout) -> (Ident.rename param, layout)) inner_params in
+        let inner_params = List.map map_param (List.map fst params) in
+        let new_ids = List.map Ident.rename inner_params in
         let subst =
-          List.fold_left2 (fun s (id, _) (new_id, _) ->
+          List.fold_left2 (fun s id new_id ->
             Ident.Map.add id new_id s
           ) Ident.Map.empty inner_params new_ids
         in
         let body = Lambda.rename subst body in
-        let body = if add_region then Lregion (body, return) else body in
         let inner_fun =
-          lfunction ~kind:(Curried {nlocal=0})
-            ~params:new_ids
-            ~return ~body ~attr ~loc ~mode ~region:true
+          lfunction ~kind:Curried
+            ~params:(List.map (fun id -> id, Pgenval) new_ids)
+            ~return ~body ~attr ~loc
         in
         (wrapper_body, (inner_id, inner_fun))
   in
   try
-    (* TODO: enable this optimisation even in the presence of local returns *)
-    begin match kind with
-    | Curried {nlocal} when nlocal > 0 -> raise Exit
-    | Tupled when not orig_region -> raise Exit
-    | _ -> assert orig_region
-    end;
-    let body, inner = aux [] false body in
-    let attr = { default_stub_attribute with check = attr.check } in
-    [(fun_id, lfunction ~kind ~params ~return ~body ~attr ~loc ~mode ~region:true); inner]
+    let body, inner = aux [] body in
+    let attr = default_stub_attribute in
+    [(fun_id, lfunction ~kind ~params ~return ~body ~attr ~loc); inner]
   with Exit ->
-    [(fun_id, lfunction ~kind ~params ~return ~body ~attr ~loc ~mode ~region:orig_region)]
+    [(fun_id, lfunction ~kind ~params ~return ~body ~attr ~loc)]
 
 (* Simplify local let-bound functions: if all occurrences are
    fully-applied function calls in the same "tail scope", replace the
@@ -870,7 +791,8 @@ let simplify_local_functions lam =
      by the outermost lambda for which the the current lambda
      is in tail position. *)
   let current_scope = ref lam in
-  let current_region_scope = ref None in
+  (* PR11383: We will only apply the transformation if we don't have to move
+     code across function boundaries *)
   let current_function_scope = ref lam in
   let check_static lf =
     if lf.attr.local = Always_local then
@@ -880,23 +802,19 @@ let simplify_local_functions lam =
   in
   let enabled = function
     | {local = Always_local; _}
-    | {local = Default_local;
-       inline = (Never_inline | Default_inline | Available_inline); _}
+    | {local = Default_local; inline = (Never_inline | Default_inline); _}
       -> true
     | {local = Default_local;
-       inline = (Always_inline | Unroll _); _}
+       inline = (Always_inline | Unroll _ | Hint_inline); _}
     | {local = Never_local; _}
       -> false
-  in
-  let is_current_region_scope scope =
-    match !current_region_scope with
-    | None -> false
-    | Some sco -> sco == scope
   in
   let rec tail = function
     | Llet (_str, _kind, id, Lfunction lf, cont) when enabled lf.attr ->
         let r =
-          {func = lf; function_scope = !current_function_scope; scope = None}
+          { func = lf;
+            function_scope = !current_function_scope;
+            scope = None }
         in
         Hashtbl.add slots id r;
         tail cont;
@@ -905,8 +823,7 @@ let simplify_local_functions lam =
             let st = next_raise_count () in
             let sc =
               (* Do not move higher than current lambda *)
-              if scope == !current_scope
-              || is_current_region_scope scope then cont
+              if scope == !current_scope then cont
               else scope
             in
             Hashtbl.add static_id id st;
@@ -919,27 +836,22 @@ let simplify_local_functions lam =
             (* note: if scope = None, the function is unused *)
             function_definition lf
         end
-    | Lapply {ap_func = Lvar id; ap_args; ap_region_close; _} ->
-        let curr_scope =
-          match ap_region_close with
-          | Rc_normal | Rc_nontail -> !current_scope
-          | Rc_close_at_apply -> Option.get !current_region_scope
-        in
+    | Lapply {ap_func = Lvar id; ap_args; _} ->
         begin match Hashtbl.find_opt slots id with
         | Some {func; _}
           when exact_application func ap_args = None ->
             (* Wrong arity *)
             Hashtbl.remove slots id
-        | Some {scope = Some scope; _} when scope != curr_scope ->
+        | Some {scope = Some scope; _} when scope != !current_scope ->
             (* Different "tail scope" *)
             Hashtbl.remove slots id
         | Some {function_scope = fscope; _}
           when fscope != !current_function_scope ->
-            (* Different function *)
+            (* Non local function *)
             Hashtbl.remove slots id
         | Some ({scope = None; _} as slot) ->
             (* First use of the function: remember the current tail scope *)
-            slot.scope <- Some curr_scope
+            slot.scope <- Some !current_scope
         | _ ->
             ()
         end;
@@ -949,28 +861,10 @@ let simplify_local_functions lam =
     | Lfunction lf ->
         check_static lf;
         function_definition lf
-    | Lregion (lam, _) -> region lam
-    | Lexclave lam -> exclave lam
     | lam ->
         Lambda.shallow_iter ~tail ~non_tail lam
   and non_tail lam =
     with_scope ~scope:lam lam
-  and region lam =
-    let old_tail_scope = !current_region_scope in
-    let old_scope = !current_scope in
-    current_region_scope := Some !current_scope;
-    current_scope := lam;
-    tail lam;
-    current_scope := old_scope;
-    current_region_scope := old_tail_scope
-  and exclave lam =
-    let old_current_scope = !current_scope in
-    let old_tail_scope = !current_region_scope in
-    current_scope := Option.get !current_region_scope;
-    current_region_scope := None;
-    tail lam;
-    current_region_scope := old_tail_scope;
-    current_scope := old_current_scope
   and function_definition lf =
     let old_function_scope = !current_function_scope in
     current_function_scope := lf.body;
@@ -978,12 +872,9 @@ let simplify_local_functions lam =
     current_function_scope := old_function_scope
   and with_scope ~scope lam =
     let old_scope = !current_scope in
-    let old_tail_scope = !current_region_scope in
     current_scope := scope;
-    current_region_scope := None;
     tail lam;
-    current_scope := old_scope;
-    current_region_scope := old_tail_scope
+    current_scope := old_scope
   in
   tail lam;
   let rec rewrite lam0 =
@@ -1000,11 +891,11 @@ let simplify_local_functions lam =
               Lstaticraise (st, List.map rewrite exact_args)
          end
       | lam ->
-          Lambda.shallow_map ~tail:rewrite ~non_tail:rewrite lam
+          Lambda.shallow_map rewrite lam
     in
     List.fold_right
       (fun (st, lf) lam ->
-         Lstaticcatch (lam, (st, lf.params), rewrite lf.body, lf.return)
+         Lstaticcatch (lam, (st, lf.params), rewrite lf.body)
       )
       (LamTbl.find_all static lam0)
       lam

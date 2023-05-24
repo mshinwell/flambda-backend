@@ -1,4 +1,3 @@
-# 1 "option.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Option values.
 
@@ -48,7 +45,7 @@ val join : 'a option option -> 'a option
 (** [join oo] is [Some v] if [oo] is [Some (Some v)] and [None] otherwise. *)
 
 val map : ('a -> 'b) -> 'a option -> 'b option
-(** [map f o] is [None] if [o] is [None] and [Some (f v)] is [o] is [Some v]. *)
+(** [map f o] is [None] if [o] is [None] and [Some (f v)] if [o] is [Some v]. *)
 
 val fold : none:'a -> some:('b -> 'a) -> 'b option -> 'a
 (** [fold ~none ~some o] is [none] if [o] is [None] and [some v] if [o] is

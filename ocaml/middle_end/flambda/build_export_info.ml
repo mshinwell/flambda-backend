@@ -57,7 +57,7 @@ module Env : sig
       export descriptions with the given global environment. *)
   val empty_of_global : symbols_being_defined:Symbol.Set.t -> Global.t -> t
 end = struct
-  let fresh_id () = Export_id.create (Compilation_unit.get_current_exn ())
+  let fresh_id () = Export_id.create (Compilenv.current_unit ())
 
   module Global = struct
     type t =
@@ -114,7 +114,7 @@ end = struct
     with Not_found -> None
 
   let extern_symbol_descr sym =
-    if Symbol.is_predef_exn sym
+    if Compilenv.is_predefined_exception sym
     then None
     else
       match
@@ -258,10 +258,6 @@ let rec approx_of_expr (env : Env.t) (flam : Flambda.t) : Export_info.approx =
         Closure_id.Map.find closure_id results
       | _ -> Value_unknown
     end
-  | Region body ->
-    approx_of_expr env body
-  | Exclave body ->
-    approx_of_expr env body
   | Assign _ -> Value_id (Env.new_unit_descr env)
   | For _ -> Value_id (Env.new_unit_descr env)
   | While _ -> Value_id (Env.new_unit_descr env)
@@ -284,13 +280,13 @@ and descr_of_named (env : Env.t) (named : Flambda.named)
     Value_id (Env.new_descr env (descr_of_constant const))
   | Allocated_const const ->
     Value_id (Env.new_descr env (descr_of_allocated_constant const))
-  | Prim (Pmakeblock (tag, Immutable, _value_kind, _mode), args, _dbg) ->
+  | Prim (Pmakeblock (tag, Immutable, _value_kind), args, _dbg) ->
     let approxs = List.map (Env.find_approx env) args in
     let descr : Export_info.descr =
       Value_block (Tag.create_exn tag, Array.of_list approxs)
     in
     Value_id (Env.new_descr env descr)
-  | Prim (Pfield (i, _), [arg], _) ->
+  | Prim (Pfield (i, _, _), [arg], _) ->
     begin match Env.get_descr env (Env.find_approx env arg) with
     | Some (Value_block (_, fields)) when Array.length fields > i -> fields.(i)
     | _ -> Value_unknown
@@ -531,10 +527,11 @@ let describe_program (env : Env.Global.t) (program : Flambda.program) =
   loop env program.program_body
 
 
-let build_transient (program : Flambda.program) : Export_info.transient =
+let build_transient ~(backend : (module Backend_intf.S))
+      (program : Flambda.program) : Export_info.transient =
   if !Clflags.opaque then
-    let compilation_unit = Compilation_unit.get_current_exn () in
-    let root_symbol = Symbol.for_current_unit () in
+    let compilation_unit = Compilenv.current_unit () in
+    let root_symbol = Compilenv.current_unit_symbol () in
     Export_info.opaque_transient ~root_symbol ~compilation_unit
   else
     (* CR-soon pchambart: Should probably use that instead of the ident of
@@ -552,7 +549,8 @@ let build_transient (program : Flambda.program) : Export_info.transient =
       let set_of_closures_approx { Flambda. function_decls; _ } =
         let recursive =
           lazy
-            (Find_recursive_functions.in_function_declarations function_decls)
+            (Find_recursive_functions.in_function_declarations
+               function_decls ~backend)
         in
         let keep_body =
           Inline_and_simplify_aux.keep_body_check
@@ -573,7 +571,8 @@ let build_transient (program : Flambda.program) : Export_info.transient =
              if function_decls.is_classic_mode then begin
                Variable.Map.empty
              end else begin
-               Invariant_params.invariant_params_in_recursion function_decls
+               Invariant_params.invariant_params_in_recursion
+                 ~backend function_decls
              end)
           (Flambda_utils.all_sets_of_closures_map program)
       in
@@ -613,7 +612,8 @@ let build_transient (program : Flambda.program) : Export_info.transient =
              if function_decls.is_classic_mode then begin
                Variable.Set.empty
              end else begin
-               Find_recursive_functions.in_function_declarations function_decls
+               Find_recursive_functions.in_function_declarations
+                 ~backend function_decls
              end)
           (Flambda_utils.all_sets_of_closures_map program)
       in
@@ -677,10 +677,9 @@ let build_transient (program : Flambda.program) : Export_info.transient =
         ~sets_of_closures_map
         ~closure_id_to_set_of_closures_id
         ~function_declarations_map
-        ~values:(Compilation_unit.Map.find
-          (Compilation_unit.get_current_exn ()) values)
+        ~values:(Compilation_unit.Map.find (Compilenv.current_unit ()) values)
         ~symbol_id
-        ~root_symbol:(Symbol.for_current_unit ())
+        ~root_symbol:(Compilenv.current_unit_symbol ())
     in
     let sets_of_closures =
       function_declarations_map |> Set_of_closures_id.Map.filter_map

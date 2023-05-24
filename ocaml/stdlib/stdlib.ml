@@ -1,4 +1,3 @@
-# 1 "stdlib.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,10 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "-49"]
-[@@@ocaml.flambda_o3]
-[@@@ocaml.zero_alloc check]
-
 (* Exceptions *)
 
 external register_named_value : string -> 'a -> unit
@@ -28,7 +23,7 @@ let () =
   register_named_value "Pervasives.array_bound_error"
     (Invalid_argument "index out of bounds")
 
-external raise : exn -> 'a = "%reraise"
+external raise : exn -> 'a = "%raise"
 external raise_notrace : exn -> 'a = "%raise_notrace"
 
 let failwith s = raise(Failure s)
@@ -68,63 +63,61 @@ external __POS_OF__ : 'a -> (string * int * int * int) * 'a = "%loc_POS"
 
 (* Comparisons *)
 
-external ( = ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%equal"
-external ( <> ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%notequal"
-external ( < ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%lessthan"
-external ( > ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%greaterthan"
-external ( <= ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%lessequal"
-external ( >= ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%greaterequal"
-external compare : ('a[@local_opt]) -> ('a[@local_opt]) -> int = "%compare"
+external ( = ) : 'a -> 'a -> bool = "%equal"
+external ( <> ) : 'a -> 'a -> bool = "%notequal"
+external ( < ) : 'a -> 'a -> bool = "%lessthan"
+external ( > ) : 'a -> 'a -> bool = "%greaterthan"
+external ( <= ) : 'a -> 'a -> bool = "%lessequal"
+external ( >= ) : 'a -> 'a -> bool = "%greaterequal"
+external compare : 'a -> 'a -> int = "%compare"
 
 let min x y = if x <= y then x else y
 let max x y = if x >= y then x else y
 
-external ( == ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%eq"
-external ( != ) : ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%noteq"
+external ( == ) : 'a -> 'a -> bool = "%eq"
+external ( != ) : 'a -> 'a -> bool = "%noteq"
 
 (* Boolean operations *)
 
-external not : (bool[@local_opt]) -> bool = "%boolnot"
-external ( & ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool = "%sequand"
-external ( && ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool = "%sequand"
-external ( or ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool = "%sequor"
-external ( || ) : (bool[@local_opt]) -> (bool[@local_opt]) -> bool = "%sequor"
+external not : bool -> bool = "%boolnot"
+external ( && ) : bool -> bool -> bool = "%sequand"
+external ( || ) : bool -> bool -> bool = "%sequor"
 
 (* Integer operations *)
 
-external ( ~- ) : (int[@local_opt]) -> int = "%negint"
-external ( ~+ ) : (int[@local_opt]) -> int = "%identity"
-external succ : (int[@local_opt]) -> int = "%succint"
-external pred : (int[@local_opt]) -> int = "%predint"
-external ( + ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%addint"
-external ( - ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%subint"
-external ( * ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%mulint"
-external ( / ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%divint"
-external ( mod ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%modint"
+external ( ~- ) : int -> int = "%negint"
+external ( ~+ ) : int -> int = "%identity"
+external succ : int -> int = "%succint"
+external pred : int -> int = "%predint"
+external ( + ) : int -> int -> int = "%addint"
+external ( - ) : int -> int -> int = "%subint"
+external ( * ) : int -> int -> int = "%mulint"
+external ( / ) : int -> int -> int = "%divint"
+external ( mod ) : int -> int -> int = "%modint"
 
 let abs x = if x >= 0 then x else -x
 
-external ( land ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%andint"
-external ( lor ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%orint"
-external ( lxor ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%xorint"
+external ( land ) : int -> int -> int = "%andint"
+external ( lor ) : int -> int -> int = "%orint"
+external ( lxor ) : int -> int -> int = "%xorint"
 
 let lnot x = x lxor (-1)
 
-external ( lsl ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lslint"
-external ( lsr ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lsrint"
-external ( asr ) : (int[@local_opt]) -> (int[@local_opt]) -> int = "%asrint"
+external ( lsl ) : int -> int -> int = "%lslint"
+external ( lsr ) : int -> int -> int = "%lsrint"
+external ( asr ) : int -> int -> int = "%asrint"
 
 let max_int = (-1) lsr 1
 let min_int = max_int + 1
 
 (* Floating-point operations *)
 
-external ( ~-. ) : (float[@local_opt]) -> (float[@local_opt]) = "%negfloat"
-external ( ~+. ) : (float[@local_opt]) -> (float[@local_opt]) = "%identity"
-external ( +. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%addfloat"
-external ( -. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%subfloat"
-external ( *. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%mulfloat"
-external ( /. ) : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%divfloat"
+external ( ~-. ) : float -> float = "%negfloat"
+external ( ~+. ) : float -> float = "%identity"
+external ( +. ) : float -> float -> float = "%addfloat"
+external ( -. ) : float -> float -> float = "%subfloat"
+external ( *. ) : float -> float -> float = "%mulfloat"
+external ( /. ) : float -> float -> float = "%divfloat"
 external ( ** ) : float -> float -> float = "caml_power_float" "pow"
   [@@unboxed] [@@noalloc]
 external exp : float -> float = "caml_exp_float" "exp" [@@unboxed] [@@noalloc]
@@ -166,7 +159,7 @@ external ceil : float -> float = "caml_ceil_float" "ceil"
   [@@unboxed] [@@noalloc]
 external floor : float -> float = "caml_floor_float" "floor"
   [@@unboxed] [@@noalloc]
-external abs_float : (float[@local_opt]) -> (float[@local_opt]) = "%absfloat"
+external abs_float : float -> float = "%absfloat"
 external copysign : float -> float -> float
                   = "caml_copysign_float" "caml_copysign"
                   [@@unboxed] [@@noalloc]
@@ -176,10 +169,10 @@ external frexp : float -> float * int = "caml_frexp_float"
 external ldexp : (float [@unboxed]) -> (int [@untagged]) -> (float [@unboxed]) =
   "caml_ldexp_float" "caml_ldexp_float_unboxed" [@@noalloc]
 external modf : float -> float * float = "caml_modf_float"
-external float : (int[@local_opt]) -> (float[@local_opt]) = "%floatofint"
-external float_of_int : (int[@local_opt]) -> (float[@local_opt]) = "%floatofint"
-external truncate : (float[@local_opt]) -> int = "%intoffloat"
-external int_of_float : (float[@local_opt]) -> int = "%intoffloat"
+external float : int -> float = "%floatofint"
+external float_of_int : int -> float = "%floatofint"
+external truncate : float -> int = "%intoffloat"
+external int_of_float : float -> int = "%intoffloat"
 external float_of_bits : int64 -> float
   = "caml_int64_float_of_bits" "caml_int64_float_of_bits_unboxed"
   [@@unboxed] [@@noalloc]
@@ -236,17 +229,17 @@ external ignore : 'a -> unit = "%ignore"
 
 (* Pair operations *)
 
-external fst : ('a * 'b[@local_opt]) -> ('a[@local_opt]) = "%field0_immut"
-external snd : ('a * 'b[@local_opt]) -> ('b[@local_opt]) = "%field1_immut"
+external fst : 'a * 'b -> 'a = "%field0"
+external snd : 'a * 'b -> 'b = "%field1"
 
 (* References *)
 
 type 'a ref = { mutable contents : 'a }
-external ref : 'a -> ('a ref[@local_opt]) = "%makemutable"
-external ( ! ) : ('a ref[@local_opt]) -> 'a = "%field0"
-external ( := ) : ('a ref[@local_opt]) -> 'a -> unit = "%setfield0"
-external incr : (int ref[@local_opt]) -> unit = "%incr"
-external decr : (int ref[@local_opt]) -> unit = "%decr"
+external ref : 'a -> 'a ref = "%makemutable"
+external ( ! ) : 'a ref -> 'a = "%field0"
+external ( := ) : 'a ref -> 'a -> unit = "%setfield0"
+external incr : int ref -> unit = "%incr"
+external decr : int ref -> unit = "%decr"
 
 (* Result type *)
 
@@ -302,10 +295,12 @@ let float_of_string_opt s =
 
 (* List operations -- more in module List *)
 
-let rec ( @ ) l1 l2 =
+let[@tail_mod_cons] rec ( @ ) l1 l2 =
   match l1 with
-    [] -> l2
-  | hd :: tl -> hd :: (tl @ l2)
+  | [] -> l2
+  | h1 :: [] -> h1 :: l2
+  | h1 :: h2 :: [] -> h1 :: h2 :: l2
+  | h1 :: h2 :: h3 :: tl -> h1 :: h2 :: h3 :: (tl @ l2)
 
 (* I/O operations *)
 
@@ -554,21 +549,31 @@ let ( ^^ ) (Format (fmt1, str1)) (Format (fmt2, str2)) =
 
 external sys_exit : int -> 'a = "caml_sys_exit"
 
-let exit_function = CamlinternalAtomic.make flush_all
+(* for at_exit *)
+type 'a atomic_t
+external atomic_make : 'a -> 'a atomic_t = "%makemutable"
+external atomic_get : 'a atomic_t -> 'a = "%atomic_load"
+external atomic_compare_and_set : 'a atomic_t -> 'a -> 'a -> bool
+  = "%atomic_cas"
+
+let exit_function = atomic_make flush_all
 
 let rec at_exit f =
-  let module Atomic = CamlinternalAtomic in
   (* MPR#7253, MPR#7796: make sure "f" is executed only once *)
-  let f_yet_to_run = Atomic.make true in
-  let old_exit = Atomic.get exit_function in
+  let f_yet_to_run = atomic_make true in
+  let old_exit = atomic_get exit_function in
   let new_exit () =
-    if Atomic.compare_and_set f_yet_to_run true false then f () ;
+    if atomic_compare_and_set f_yet_to_run true false then f () ;
     old_exit ()
   in
-  let success = Atomic.compare_and_set exit_function old_exit new_exit in
+  let success = atomic_compare_and_set exit_function old_exit new_exit in
   if not success then at_exit f
 
-let do_at_exit () = (CamlinternalAtomic.get exit_function) ()
+let do_domain_local_at_exit = ref (fun () -> ())
+
+let do_at_exit () =
+  (!do_domain_local_at_exit) ();
+  (atomic_get exit_function) ()
 
 let exit retcode =
   do_at_exit ();
@@ -576,66 +581,64 @@ let exit retcode =
 
 let _ = register_named_value "Pervasives.do_at_exit" do_at_exit
 
-external major : unit -> unit = "caml_gc_major"
-external naked_pointers_checked : unit -> bool
-  = "caml_sys_const_naked_pointers_checked"
-let () = if naked_pointers_checked () then at_exit major
-
 (*MODULE_ALIASES*)
-module Arg          = Arg
-module Array        = Array
-module ArrayLabels  = ArrayLabels
-module Atomic       = Atomic
-module Bigarray     = Bigarray
-module Bool         = Bool
-module Buffer       = Buffer
-module Bytes        = Bytes
-module BytesLabels  = BytesLabels
-module Callback     = Callback
-module Char         = Char
-module Complex      = Complex
-module Digest       = Digest
-module Either       = Either
-module Ephemeron    = Ephemeron
-module Filename     = Filename
-module Float        = Float
-module Format       = Format
-module Fun          = Fun
-module Gc           = Gc
-module Genlex       = Genlex
-module Hashtbl      = Hashtbl
-module In_channel   = In_channel
-module Int          = Int
-module Int32        = Int32
-module Int64        = Int64
-module Lazy         = Lazy
-module Lexing       = Lexing
-module List         = List
-module ListLabels   = ListLabels
-module Map          = Map
-module Marshal      = Marshal
-module MoreLabels   = MoreLabels
-module Nativeint    = Nativeint
-module Obj          = Obj
-module Oo           = Oo
-module Option       = Option
-module Out_channel  = Out_channel
-module Parsing      = Parsing
-module Pervasives   = Pervasives
-module Printexc     = Printexc
-module Printf       = Printf
-module Queue        = Queue
-module Random       = Random
-module Result       = Result
-module Scanf        = Scanf
-module Seq          = Seq
-module Set          = Set
-module Stack        = Stack
-module StdLabels    = StdLabels
-module Stream       = Stream
-module String       = String
-module StringLabels = StringLabels
-module Sys          = Sys
-module Uchar        = Uchar
-module Unit         = Unit
-module Weak         = Weak
+module Arg            = Arg
+module Array          = Array
+module ArrayLabels    = ArrayLabels
+module Atomic         = Atomic
+module Bigarray       = Bigarray
+module Bool           = Bool
+module Buffer         = Buffer
+module Bytes          = Bytes
+module BytesLabels    = BytesLabels
+module Callback       = Callback
+module Char           = Char
+module Complex        = Complex
+module Condition      = Condition
+module Digest         = Digest
+module Domain         = Domain
+module Effect         = Effect
+module Either         = Either
+module Ephemeron      = Ephemeron
+module Filename       = Filename
+module Float          = Float
+module Format         = Format
+module Fun            = Fun
+module Gc             = Gc
+module Hashtbl        = Hashtbl
+module In_channel     = In_channel
+module Int            = Int
+module Int32          = Int32
+module Int64          = Int64
+module Lazy           = Lazy
+module Lexing         = Lexing
+module List           = List
+module ListLabels     = ListLabels
+module Map            = Map
+module Marshal        = Marshal
+module MoreLabels     = MoreLabels
+module Mutex          = Mutex
+module Nativeint      = Nativeint
+module Obj            = Obj
+module Oo             = Oo
+module Option         = Option
+module Out_channel    = Out_channel
+module Parsing        = Parsing
+module Printexc       = Printexc
+module Printf         = Printf
+module Queue          = Queue
+module Random         = Random
+module Result         = Result
+module Scanf          = Scanf
+module Semaphore      = Semaphore
+module Seq            = Seq
+module Set            = Set
+module Stack          = Stack
+module StdLabels      = StdLabels
+module String         = String
+module StringLabels   = StringLabels
+module Sys            = Sys
+module Type           = Type
+module Uchar          = Uchar
+module Unit           = Unit
+module Weak           = Weak

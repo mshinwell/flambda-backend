@@ -16,7 +16,6 @@
 (* Basic operations on core types *)
 
 open Asttypes
-open Layouts
 open Types
 
 (**** Sets, maps and hashtables of types ****)
@@ -60,9 +59,9 @@ val generic_level: int
 
 val newgenty: type_desc -> type_expr
         (* Create a generic type *)
-val newgenvar: ?name:string -> layout -> type_expr
+val newgenvar: ?name:string -> unit -> type_expr
         (* Return a fresh generic variable *)
-val newgenstub: scope:int -> layout -> type_expr
+val newgenstub: scope:int -> type_expr
         (* Return a fresh generic node, to be instantiated
            by [Transient_expr.set_stub_desc] *)
 
@@ -78,8 +77,6 @@ val newmarkedgenvar: unit -> type_expr
 val is_Tvar: type_expr -> bool
 val is_Tunivar: type_expr -> bool
 val is_Tconstr: type_expr -> bool
-val is_Tpoly: type_expr -> bool
-
 val dummy_method: label
 
 (**** polymorphic variants ****)
@@ -108,13 +105,6 @@ val hash_variant: label -> int
 val proxy: type_expr -> type_expr
         (* Return the proxy representative of the type: either itself
            or a row variable *)
-
-(* Poly types. *)
-
-(* These three functions can only be called on [Tpoly] nodes. *)
-val tpoly_is_mono : type_expr -> bool
-val tpoly_get_mono : type_expr -> type_expr
-val tpoly_get_poly : type_expr -> type_expr * type_expr list
 
 (**** Utilities for private abbreviations with fixed rows ****)
 val row_of_type: type_expr -> type_expr

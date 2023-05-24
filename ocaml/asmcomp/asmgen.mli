@@ -41,7 +41,7 @@ val compile_phrase :
 
 type error =
   | Assembler_error of string
-  | Mismatched_for_pack of Compilation_unit.Prefix.t
+  | Mismatched_for_pack of string option
   | Asm_generation of string * Emitaux.error
 
 exception Error of error

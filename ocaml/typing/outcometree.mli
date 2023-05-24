@@ -39,7 +39,7 @@ type out_attribute =
   { oattr_name: string }
 
 type out_value =
-  | Oval_array of out_value list * Asttypes.mutable_flag
+  | Oval_array of out_value list
   | Oval_char of char
   | Oval_constr of out_ident * out_value list
   | Oval_ellipsis
@@ -56,64 +56,36 @@ type out_value =
   | Oval_tuple of out_value list
   | Oval_variant of string * out_value option
 
-type out_layout =
-  | Olay_const of Asttypes.const_layout
-  | Olay_var of string
-
-type out_type_param =
-  { oparam_name : string;
-    oparam_variance : Asttypes.variance;
-    oparam_injectivity : Asttypes.injectivity;
-    oparam_layout : out_layout option }
-
-type out_mutable_or_global =
-  | Ogom_mutable
-  | Ogom_global
-  | Ogom_nonlocal
-  | Ogom_immutable
-
-type out_global =
-  | Ogf_global
-  | Ogf_nonlocal
-  | Ogf_unrestricted
+type out_type_param = string * (Asttypes.variance * Asttypes.injectivity)
 
 type out_type =
   | Otyp_abstract
   | Otyp_open
-  | Otyp_alias of out_type * string
-  | Otyp_arrow of string * out_alloc_mode * out_type * out_alloc_mode * out_type
-  | Otyp_class of bool * out_ident * out_type list
+  | Otyp_alias of {non_gen:bool; aliased:out_type; alias:string}
+  | Otyp_arrow of string * out_type * out_type
+  | Otyp_class of out_ident * out_type list
   | Otyp_constr of out_ident * out_type list
   | Otyp_manifest of out_type * out_type
-  | Otyp_object of (string * out_type) list * bool option
-  | Otyp_record of (string * out_mutable_or_global * out_type) list
+  | Otyp_object of { fields: (string * out_type) list; open_row:bool}
+  | Otyp_record of (string * bool * out_type) list
   | Otyp_stuff of string
   | Otyp_sum of out_constructor list
   | Otyp_tuple of out_type list
   | Otyp_var of bool * string
-  | Otyp_variant of
-      bool * out_variant * bool * (string list) option
+  | Otyp_variant of out_variant * bool * (string list) option
   | Otyp_poly of string list * out_type
   | Otyp_module of out_ident * (string * out_type) list
   | Otyp_attribute of out_type * out_attribute
-  | Otyp_layout_annot of out_type * out_layout
-      (* Currently only introduced with very explicit code in [Printtyp] and not
-         synthesized directly from the [Typedtree] *)
 
 and out_constructor = {
   ocstr_name: string;
-  ocstr_args: (out_type * out_global) list;
+  ocstr_args: out_type list;
   ocstr_return_type: out_type option;
 }
 
 and out_variant =
   | Ovar_fields of (string * bool * out_type list) list
   | Ovar_typ of out_type
-
-and out_alloc_mode =
-  | Oam_local
-  | Oam_global
-  | Oam_unknown
 
 type out_class_type =
   | Octy_constr of out_ident * out_type list
@@ -148,14 +120,14 @@ and out_type_decl =
     otype_params: out_type_param list;
     otype_type: out_type;
     otype_private: Asttypes.private_flag;
-    otype_layout: Asttypes.const_layout option;
+    otype_immediate: Type_immediacy.t;
     otype_unboxed: bool;
     otype_cstrs: (out_type * out_type) list }
 and out_extension_constructor =
   { oext_name: string;
     oext_type_name: string;
     oext_type_params: string list;
-    oext_args: (out_type * out_global) list;
+    oext_args: out_type list;
     oext_ret_type: out_type option;
     oext_private: Asttypes.private_flag }
 and out_type_extension =

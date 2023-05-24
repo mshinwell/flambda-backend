@@ -19,7 +19,6 @@ open Misc
 open Format
 open Longident
 open Path
-open Layouts
 open Types
 open Outcometree
 module Out_name = Printtyp.Out_name
@@ -212,6 +211,10 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
           else Oide_dot (Printtyp.tree_of_path p, Out_name.print name)
       | Papply _ ->
           Printtyp.tree_of_path ty_path
+      | Pextra_ty _ ->
+          (* These can only appear directly inside of the associated
+             constructor so we can just drop the prefix *)
+          Oide_ident name
 
     let tree_of_constr =
       tree_of_qualified
@@ -267,7 +270,6 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
           | Tarrow _ ->
               Oval_stuff "<fun>"
           | Ttuple(ty_list) ->
-              let ty_list = List.map (fun t -> (t,false)) ty_list in
               Oval_tuple (tree_of_val_list 0 depth obj ty_list)
           | Tconstr(path, [ty_arg], _)
             when Path.same path Predef.path_list ->
@@ -293,10 +295,24 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                 Oval_list []
           | Tconstr(path, [ty_arg], _)
             when Path.same path Predef.path_array ->
-              tree_of_generic_array Asttypes.Mutable depth obj ty_arg
-          | Tconstr(path, [ty_arg], _)
-            when Path.same path Predef.path_iarray ->
-              tree_of_generic_array Asttypes.Immutable depth obj ty_arg
+              let length = O.size obj in
+              if length > 0 then
+                match check_depth depth obj ty with
+                  Some x -> x
+                | None ->
+                    let rec tree_of_items tree_list i =
+                      if !printer_steps < 0 || depth < 0 then
+                        Oval_ellipsis :: tree_list
+                      else if i < length then
+                        let tree =
+                          nest tree_of_val (depth - 1) (O.field obj i) ty_arg
+                        in
+                        tree_of_items (tree :: tree_list) (i + 1)
+                      else tree_list
+                    in
+                    Oval_array (List.rev (tree_of_items [] 0))
+              else
+                Oval_array []
 
           | Tconstr(path, [], _)
               when Path.same path Predef.path_string ->
@@ -374,36 +390,14 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                     tree_of_val depth obj
                       (instantiate_type env decl.type_params ty_list body)
                 | {type_kind = Type_variant (constr_list,rep)} ->
-                  (* Here we work backwards from the actual runtime value to
-                     find the appropriate `constructor_declaration` in
-                     `constr_list`.  `Datarepr.find_constr_by_tag` does most
-                     of the work, but needs two pieces of information in
-                     addition to the tag:
-                     1) Whether the value is a block or immediate (because tags
-                        are only unique within a category).
-                     2) The `constructor_description`s, because the declarations
-                        don't record the layout information needed to determine
-                        which constructors are immediate due to void arguments.
-                  *)
-                    let cstrs =
-                      Env.lookup_all_constructors_from_type ~use:false
-                        ~loc:Location.none Positive path env
-                    in
-                    let constant, tag =
-                      if O.is_block obj
-                      then false, O.tag obj
-                      else true, O.obj obj
-                    in
-                    let {cstr_uid;cstr_arg_layouts} =
-                      Datarepr.find_constr_by_tag ~constant tag cstrs
-                    in
+                    let unbx = (rep = Variant_unboxed) in
+                    let tag =
+                      if unbx then Cstr_unboxed
+                      else if O.is_block obj
+                      then Cstr_block(O.tag obj)
+                      else Cstr_constant(O.obj obj) in
                     let {cd_id;cd_args;cd_res} =
-                      try
-                        List.find (fun {cd_uid} -> Uid.equal cd_uid cstr_uid)
-                          constr_list
-                      with
-                      | Not_found -> raise Datarepr.Constr_not_found
-                    in
+                      Datarepr.find_constr_by_tag tag constr_list in
                     let type_params =
                       match cd_res with
                         Some t ->
@@ -413,23 +407,11 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                           | _ -> assert false end
                       | None -> decl.type_params
                     in
-                    let unbx =
-                      match rep with
-                      | Variant_unboxed -> true
-                      | Variant_boxed _ | Variant_extensible -> false
-                    in
                     begin
                       match cd_args with
                       | Cstr_tuple l ->
                           let ty_args =
                             instantiate_types env type_params ty_list l in
-                          let ty_args =
-                            List.mapi
-                              (fun i ty_arg ->
-                                 (ty_arg,
-                                  Layout.(equal void cstr_arg_layouts.(i)))
-                              ) ty_args
-                          in
                           tree_of_constr_with_args (tree_of_constr env path)
                             (Ident.name cd_id) false 0 depth obj
                             ty_args unbx
@@ -449,11 +431,11 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                     | None ->
                         let pos =
                           match rep with
-                          | Record_inlined (_, Variant_extensible) -> 1
+                          | Record_extension _ -> 1
                           | _ -> 0
                         in
                         let unbx =
-                          match rep with Record_unboxed -> true | _ -> false
+                          match rep with Record_unboxed _ -> true | _ -> false
                         in
                         tree_of_record_fields depth
                           env path decl.type_params ty_list
@@ -504,20 +486,18 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
 
       and tree_of_record_fields depth env path type_params ty_list
           lbl_list pos obj unboxed =
-        let rec tree_of_fields first pos = function
+        let rec tree_of_fields pos = function
           | [] -> []
-          | {ld_id; ld_type; ld_layout} :: remainder ->
+          | {ld_id; ld_type} :: remainder ->
               let ty_arg = instantiate_type env type_params ty_list ld_type in
               let name = Ident.name ld_id in
               (* PR#5722: print full module path only
                  for first record field *)
-              let is_void = Layout.(equal void ld_layout) in
               let lid =
-                if first then tree_of_label env path (Out_name.create name)
+                if pos = 0 then tree_of_label env path (Out_name.create name)
                 else Oide_ident (Out_name.create name)
               and v =
-                if is_void then Oval_stuff "<void>"
-                else if unboxed then
+                if unboxed then
                   tree_of_val (depth - 1) obj ty_arg
                 else begin
                   let fld =
@@ -529,43 +509,17 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
                   nest tree_of_val (depth - 1) fld ty_arg
                 end
               in
-              let pos = if is_void then pos else pos + 1 in
-              (lid, v) :: tree_of_fields false pos remainder
+              (lid, v) :: tree_of_fields (pos + 1) remainder
         in
-        Oval_record (tree_of_fields (pos = 0) pos lbl_list)
+        Oval_record (tree_of_fields pos lbl_list)
 
-      (* CR layouts v4: When we allow other layouts in tuples, this should be
-         generalized to take a list or array of layouts, rather than just
-         pairing each type with a bool indicating whether it is void *)
       and tree_of_val_list start depth obj ty_list =
         let rec tree_list i = function
           | [] -> []
-          | (_,true) :: ty_list -> Oval_stuff "<void>" :: tree_list i ty_list
-          | (ty,false) :: ty_list ->
+          | ty :: ty_list ->
               let tree = nest tree_of_val (depth - 1) (O.field obj i) ty in
               tree :: tree_list (i + 1) ty_list in
       tree_list start ty_list
-
-      and tree_of_generic_array am depth obj ty_arg =
-        let oval elts = Oval_array (elts, am) in
-        let length = O.size obj in
-        if length > 0 then
-          match check_depth depth obj ty with
-            Some x -> x
-          | None ->
-              let rec tree_of_items tree_list i =
-                if !printer_steps < 0 || depth < 0 then
-                  Oval_ellipsis :: tree_list
-                else if i < length then
-                  let tree =
-                    nest tree_of_val (depth - 1) (O.field obj i) ty_arg
-                  in
-                  tree_of_items (tree :: tree_list) (i + 1)
-                else tree_list
-              in
-              oval (List.rev (tree_of_items [] 0))
-        else
-          oval []
 
       and tree_of_constr_with_args
              tree_of_cstr cstr_name inlined start depth obj ty_args unboxed =
@@ -573,8 +527,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
         let args =
           if inlined || unboxed then
             match ty_args with
-            | [_,true] -> [ Oval_stuff "<void>" ]
-            | [ty,false] -> [ tree_of_val (depth - 1) obj ty ]
+            | [ty] -> [ tree_of_val (depth - 1) obj ty ]
             | _ -> assert false
           else
             tree_of_val_list start depth obj ty_args
@@ -599,7 +552,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
         let cstr = Env.find_constructor_by_name lid env in
         let path =
           match cstr.cstr_tag with
-              Extension (p,_) -> p
+            Cstr_extension(p, _) -> p
             | _ -> raise Not_found
         in
         let addr = Env.find_constructor_address path env in
@@ -615,10 +568,6 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
           | _ -> assert false
         in
         let args = instantiate_types env type_params ty_list cstr.cstr_args in
-        let args = List.mapi (fun i arg ->
-            (arg, Layout.(equal void cstr.cstr_arg_layouts.(i))))
-            args
-        in
         tree_of_constr_with_args
            (fun x -> Oide_ident x) name (cstr.cstr_inlined <> None)
            1 depth bucket
@@ -636,7 +585,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
       with Ctype.Cannot_apply -> abstract_type
 
     and instantiate_types env type_params ty_list args =
-      List.map (fun (ty, _) -> instantiate_type env type_params ty_list ty) args
+      List.map (instantiate_type env type_params ty_list) args
 
     and find_printer depth env ty =
       let rec find = function

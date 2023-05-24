@@ -1,4 +1,3 @@
-# 1 "int64.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** 64-bit integers.
 
@@ -46,19 +43,19 @@ val one : int64
 val minus_one : int64
 (** The 64-bit integer -1. *)
 
-external neg : (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_neg"
+external neg : int64 -> int64 = "%int64_neg"
 (** Unary negation. *)
 
-external add : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_add"
+external add : int64 -> int64 -> int64 = "%int64_add"
 (** Addition. *)
 
-external sub : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_sub"
+external sub : int64 -> int64 -> int64 = "%int64_sub"
 (** Subtraction. *)
 
-external mul : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_mul"
+external mul : int64 -> int64 -> int64 = "%int64_mul"
 (** Multiplication. *)
 
-external div : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_div"
+external div : int64 -> int64 -> int64 = "%int64_div"
 (** Integer division.
    @raise Division_by_zero if the second
    argument is zero.  This division rounds the real quotient of
@@ -68,9 +65,9 @@ val unsigned_div : int64 -> int64 -> int64
 (** Same as {!div}, except that arguments and result are interpreted as {e
     unsigned} 64-bit integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
-external rem : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_mod"
+external rem : int64 -> int64 -> int64 = "%int64_mod"
 (** Integer remainder.  If [y] is not zero, the result
    of [Int64.rem x y] satisfies the following property:
    [x = Int64.add (Int64.mul (Int64.div x y) y) (Int64.rem x y)].
@@ -80,7 +77,7 @@ val unsigned_rem : int64 -> int64 -> int64
 (** Same as {!rem}, except that arguments and result are interpreted as {e
     unsigned} 64-bit integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 val succ : int64 -> int64
 (** Successor.  [Int64.succ x] is [Int64.add x Int64.one]. *)
@@ -89,7 +86,8 @@ val pred : int64 -> int64
 (** Predecessor.  [Int64.pred x] is [Int64.sub x Int64.one]. *)
 
 val abs : int64 -> int64
-(** Return the absolute value of its argument. *)
+(** [abs x] is the absolute value of [x]. On [min_int] this
+   is [min_int] itself and thus remains negative. *)
 
 val max_int : int64
 (** The greatest representable 64-bit integer, 2{^63} - 1. *)
@@ -97,39 +95,39 @@ val max_int : int64
 val min_int : int64
 (** The smallest representable 64-bit integer, -2{^63}. *)
 
-external logand : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_and"
+external logand : int64 -> int64 -> int64 = "%int64_and"
 (** Bitwise logical and. *)
 
-external logor : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_or"
+external logor : int64 -> int64 -> int64 = "%int64_or"
 (** Bitwise logical or. *)
 
-external logxor : (int64[@local_opt]) -> (int64[@local_opt]) -> (int64[@local_opt]) = "%int64_xor"
+external logxor : int64 -> int64 -> int64 = "%int64_xor"
 (** Bitwise logical exclusive or. *)
 
 val lognot : int64 -> int64
 (** Bitwise logical negation. *)
 
-external shift_left : (int64[@local_opt]) -> int -> (int64[@local_opt]) = "%int64_lsl"
+external shift_left : int64 -> int -> int64 = "%int64_lsl"
 (** [Int64.shift_left x y] shifts [x] to the left by [y] bits.
    The result is unspecified if [y < 0] or [y >= 64]. *)
 
-external shift_right : (int64[@local_opt]) -> int -> (int64[@local_opt]) = "%int64_asr"
+external shift_right : int64 -> int -> int64 = "%int64_asr"
 (** [Int64.shift_right x y] shifts [x] to the right by [y] bits.
    This is an arithmetic shift: the sign bit of [x] is replicated
    and inserted in the vacated bits.
    The result is unspecified if [y < 0] or [y >= 64]. *)
 
-external shift_right_logical : (int64[@local_opt]) -> int -> (int64[@local_opt]) = "%int64_lsr"
+external shift_right_logical : int64 -> int -> int64 = "%int64_lsr"
 (** [Int64.shift_right_logical x y] shifts [x] to the right by [y] bits.
    This is a logical shift: zeroes are inserted in the vacated bits
    regardless of the sign of [x].
    The result is unspecified if [y < 0] or [y >= 64]. *)
 
-external of_int : int -> (int64[@local_opt]) = "%int64_of_int"
+external of_int : int -> int64 = "%int64_of_int"
 (** Convert the given integer (type [int]) to a 64-bit integer
     (type [int64]). *)
 
-external to_int : (int64[@local_opt]) -> int = "%int64_to_int"
+external to_int : int64 -> int = "%int64_to_int"
 (** Convert the given 64-bit integer (type [int64]) to an
    integer (type [int]).  On 64-bit platforms, the 64-bit integer
    is taken modulo 2{^63}, i.e. the high-order bit is lost
@@ -142,7 +140,7 @@ val unsigned_to_int : int64 -> int option
     Returns [None] if the unsigned value of the argument cannot fit into an
     [int].
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 external of_float : float -> int64
   = "caml_int64_of_float" "caml_int64_of_float_unboxed"
@@ -232,27 +230,32 @@ val unsigned_compare: t -> t -> int
 (** Same as {!compare}, except that arguments are interpreted as {e unsigned}
     64-bit integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 val equal: t -> t -> bool
 (** The equal function for int64s.
-    @since 4.03.0 *)
+    @since 4.03 *)
 
 val min: t -> t -> t
 (** Return the smaller of the two arguments.
-    @since 4.13.0
+    @since 4.13
 *)
 
 val max: t -> t -> t
 (** Return the greater of the two arguments.
-    @since 4.13.0
+    @since 4.13
  *)
 
-(**/**)
+val seeded_hash : int -> t -> int
+(** A seeded hash function for 64-bit ints, with the same output value as
+    {!Hashtbl.seeded_hash}. This function allows this module to be passed as
+    argument to the functor {!Hashtbl.MakeSeeded}.
 
-(** {1 Deprecated functions} *)
+    @since 5.1 *)
 
-external format : string -> int64 -> string = "caml_int64_format"
-[@@ocaml.deprecated "Use Printf.sprintf with a [%L...] format instead."]
-(** Do not use this deprecated function.  Instead,
-   used {!Printf.sprintf} with a [%L...] format. *)
+val hash : t -> int
+(** An unseeded hash function for 64-bit ints, with the same output value as
+    {!Hashtbl.hash}. This function allows this module to be passed as argument
+    to the functor {!Hashtbl.Make}.
+
+    @since 5.1 *)

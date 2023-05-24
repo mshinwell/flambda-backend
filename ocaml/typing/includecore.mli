@@ -16,7 +16,6 @@
 (* Inclusion checks for the core language *)
 
 open Typedtree
-open Layouts
 open Types
 
 type position = Errortrace.position = First | Second
@@ -25,9 +24,6 @@ type primitive_mismatch =
   | Name
   | Arity
   | No_alloc of position
-  | Builtin
-  | Effects
-  | Coeffects
   | Native_name
   | Result_repr
   | Argument_repr of int
@@ -47,24 +43,24 @@ type privacy_mismatch =
   | Private_extensible_variant
   | Private_row_type
 
-type locality_mismatch =
-  { order : position
-  ; nonlocal : bool
-  (* whether expected mode is nonlocal or global *)
-  }
+type type_kind =
+  | Kind_abstract
+  | Kind_record
+  | Kind_variant
+  | Kind_open
+
+type kind_mismatch = type_kind * type_kind
 
 type label_mismatch =
   | Type of Errortrace.equality_error
   | Mutability of position
-  | Nonlocality of locality_mismatch
 
 type record_change =
   (Types.label_declaration as 'ld, 'ld, label_mismatch) Diffing_with_keys.change
 
 type record_mismatch =
   | Label_mismatch of record_change list
-  | Inlined_representation of position
-  | Float_representation of position
+  | Unboxed_float_representation of position
 
 type constructor_mismatch =
   | Type of Errortrace.equality_error
@@ -72,7 +68,6 @@ type constructor_mismatch =
   | Inline_record of record_change list
   | Kind of position
   | Explicit_return_type of position
-  | Nonlocality of int * locality_mismatch
 
 type extension_constructor_mismatch =
   | Constructor_privacy
@@ -98,7 +93,7 @@ type private_object_mismatch =
 type type_mismatch =
   | Arity
   | Privacy of privacy_mismatch
-  | Kind
+  | Kind of kind_mismatch
   | Constraint of Errortrace.equality_error
   | Manifest of Errortrace.equality_error
   | Private_variant of type_expr * type_expr * private_variant_mismatch
@@ -106,9 +101,8 @@ type type_mismatch =
   | Variance
   | Record_mismatch of record_mismatch
   | Variant_mismatch of variant_change list
-  | Unboxed_representation of position * attributes
-  | Extensible_representation of position
-  | Layout of Layout.Violation.violation
+  | Unboxed_representation of position
+  | Immediate of Type_immediacy.Violation.t
 
 val value_descriptions:
   loc:Location.t -> Env.t -> string ->

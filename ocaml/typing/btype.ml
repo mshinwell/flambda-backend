@@ -108,10 +108,9 @@ let pivot_level = 2 * lowest_level - 1
 
 (**** Some type creators ****)
 
-let newgenty desc = newty2 ~level:generic_level desc
-let newgenvar ?name layout = newgenty (Tvar { name; layout })
-let newgenstub ~scope layout =
-  newty3 ~level:generic_level ~scope (Tvar { name=None; layout })
+let newgenty desc      = newty2 ~level:generic_level desc
+let newgenvar ?name () = newgenty (Tvar name)
+let newgenstub ~scope  = newty3 ~level:generic_level ~scope (Tvar None)
 
 (*
 let newmarkedvar level =
@@ -126,7 +125,6 @@ let newmarkedgenvar () =
 let is_Tvar ty = match get_desc ty with Tvar _ -> true | _ -> false
 let is_Tunivar ty = match get_desc ty with Tunivar _ -> true | _ -> false
 let is_Tconstr ty = match get_desc ty with Tconstr _ -> true | _ -> false
-let is_Tpoly ty = match get_desc ty with Tpoly _ -> true | _ -> false
 
 let dummy_method = "*dummy method*"
 
@@ -316,11 +314,11 @@ type type_iterators =
     it_path: Path.t -> unit; }
 
 let iter_type_expr_cstr_args f = function
-  | Cstr_tuple tl -> List.iter (fun (ty, _) -> f ty) tl
+  | Cstr_tuple tl -> List.iter f tl
   | Cstr_record lbls -> List.iter (fun d -> f d.ld_type) lbls
 
 let map_type_expr_cstr_args f = function
-  | Cstr_tuple tl -> Cstr_tuple (List.map (fun (ty, gf) -> (f ty, gf)) tl)
+  | Cstr_tuple tl -> Cstr_tuple (List.map f tl)
   | Cstr_record lbls ->
       Cstr_record (List.map (fun d -> {d with ld_type=f d.ld_type}) lbls)
 
@@ -441,8 +439,7 @@ let copy_row f fixed row keep more =
 let copy_commu c = if is_commu_ok c then commu_ok else commu_var ()
 
 let rec copy_type_desc ?(keep_names=false) f = function
-    Tvar { layout; _ } as tv ->
-     if keep_names then tv else Tvar { name=None; layout }
+    Tvar _ as ty        -> if keep_names then ty else Tvar None
   | Tarrow (p, ty1, ty2, c)-> Tarrow (p, f ty1, f ty2, copy_commu c)
   | Ttuple l            -> Ttuple (List.map f l)
   | Tconstr (p, l, _)   -> Tconstr (p, List.map f l, ref Mnil)
@@ -605,7 +602,6 @@ let rec signature_of_class_type =
   | Cty_signature sign     -> sign
   | Cty_arrow (_, _, cty)   -> signature_of_class_type cty
 
-
 let rec class_body cty =
   match cty with
     Cty_constr _ ->
@@ -706,26 +702,6 @@ let instance_variable_type label sign =
   match Vars.find label sign.csig_vars with
   | (_, _, ty) -> ty
   | exception Not_found -> assert false
-
-                  (********************************)
-                  (*  Utilities for poly types    *)
-                  (********************************)
-
-let tpoly_is_mono ty =
-  match get_desc ty with
-  | Tpoly(_, []) -> true
-  | Tpoly(_, _ :: _) -> false
-  | _ -> assert false
-
-let tpoly_get_poly ty =
-  match get_desc ty with
-  | Tpoly(ty, vars) -> (ty, vars)
-  | _ -> assert false
-
-let tpoly_get_mono ty =
-  match get_desc ty with
-  | Tpoly(ty, []) -> ty
-  | _ -> assert false
 
                   (**********************************)
                   (*  Utilities for level-marking   *)

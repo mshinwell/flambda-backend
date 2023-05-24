@@ -30,11 +30,9 @@ let prompt = ref true
 let time = ref true
 let version = ref true
 
-let topdirs_path = ref (Filename.concat Config.standard_library "compiler-libs")
-
 let add_path dir =
   Load_path.add_dir dir;
-  Envaux.reset_cache ~preserve_persistent_env:false
+  Envaux.reset_cache()
 
 let add_path_for mdl dir =
   let old = try Hashtbl.find load_path_for mdl with Not_found -> [] in

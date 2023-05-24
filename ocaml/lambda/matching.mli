@@ -21,24 +21,24 @@ open Debuginfo.Scoped_location
 
 (* Entry points to match compiler *)
 val for_function:
-        scopes:scopes -> layout -> Location.t ->
-        int ref option -> (lambda * layout) -> (pattern * lambda) list -> partial ->
+        scopes:scopes -> Location.t ->
+        int ref option -> lambda -> (pattern * lambda) list -> partial ->
         lambda
 val for_trywith:
-        scopes:scopes -> layout -> Location.t ->
+        scopes:scopes -> Location.t ->
         lambda -> (pattern * lambda) list ->
         lambda
 val for_let:
         scopes:scopes -> Location.t ->
-        lambda -> pattern -> layout -> lambda ->
+        lambda -> pattern -> lambda ->
         lambda
 val for_multiple_match:
-        scopes:scopes -> layout -> Location.t ->
-        (lambda * layout) list -> alloc_mode -> (pattern * lambda) list -> partial ->
+        scopes:scopes -> Location.t ->
+        lambda list -> (pattern * lambda) list -> partial ->
         lambda
 
 val for_tupled_function:
-        scopes:scopes -> Location.t -> layout ->
+        scopes:scopes -> Location.t ->
         Ident.t list -> (pattern list * lambda) list -> partial ->
         lambda
 
@@ -48,7 +48,7 @@ val flatten_pattern: int -> pattern -> pattern list
 
 (* Expand stringswitch to  string test tree *)
 val expand_stringswitch:
-    scoped_location -> layout -> lambda -> (string * lambda) list ->
+    scoped_location -> lambda -> (string * lambda) list ->
     lambda option -> lambda
 
-val inline_lazy_force : lambda -> region_close -> scoped_location -> lambda
+val inline_lazy_force : lambda -> scoped_location -> lambda

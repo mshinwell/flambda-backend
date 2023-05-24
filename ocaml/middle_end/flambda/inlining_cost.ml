@@ -16,7 +16,6 @@
 
 [@@@ocaml.warning "+a-4-9-30-40-41-42-66"]
 open! Int_replace_polymorphic_compare
-module Int = Misc.Stdlib.Int
 
 (* Simple approximation of the space cost of a primitive. *)
 
@@ -27,7 +26,7 @@ let prim_size (prim : Clambda_primitives.primitive) args =
   | Psetfield (_, isptr, init) ->
     begin match init with
     | Root_initialization -> 1  (* never causes a write barrier hit *)
-    | Assignment _ | Heap_initialization ->
+    | Assignment | Heap_initialization ->
       match isptr with
       | Pointer -> 4
       | Immediate -> 1
@@ -57,7 +56,6 @@ let prim_size (prim : Clambda_primitives.primitive) args =
   | Psequand | Psequor ->
     Misc.fatal_error "Psequand and Psequor are not allowed in Prim \
         expressions; translate out instead (cf. closure_conversion.ml)"
-  | Pprobe_is_enabled _ -> 4 (* Similar to Pgetglobal and comparison *)
   (* CR-soon mshinwell: This match must be made exhaustive.
      mshinwell: Let's do this when we have the new size computation. *)
   | _ -> 2 (* arithmetic and comparisons *)
@@ -75,14 +73,11 @@ let lambda_smaller' lam ~than:threshold =
     if !size > threshold then raise Exit;
     match lam with
     | Var _ -> ()
-    | Apply ({ func = _; args = _; probe = None; kind = direct }) ->
+    | Apply ({ func = _; args = _; kind = direct }) ->
       let call_cost =
         match direct with Indirect -> 6 | Direct _ -> direct_call_size
       in
       size := !size + call_cost
-    | Apply {probe=Some _} -> ()
-    (* Do not affect inlining decision.
-       Actual cost is either 1, 5 or 6 bytes, depending on their kind. *)
     | Assign _ -> incr size
     | Send _ -> size := !size + 8
     | Proved_unreachable -> ()
@@ -103,28 +98,24 @@ let lambda_smaller' lam ~than:threshold =
       List.iter (fun (_, lam) -> lambda_size lam) sw.consts;
       List.iter (fun (_, lam) -> lambda_size lam) sw.blocks;
       Option.iter lambda_size sw.failaction
-    | String_switch (_, sw, def, _) ->
+    | String_switch (_, sw, def) ->
       List.iter (fun (_, lam) ->
           size := !size + 2;
           lambda_size lam)
         sw;
       Option.iter lambda_size def
     | Static_raise _ -> ()
-    | Static_catch (_, _, body, handler, _) ->
+    | Static_catch (_, _, body, handler) ->
       incr size; lambda_size body; lambda_size handler
-    | Try_with (body, _, handler, _) ->
+    | Try_with (body, _, handler) ->
       size := !size + 8; lambda_size body; lambda_size handler
-    | If_then_else (_, ifso, ifnot, _) ->
+    | If_then_else (_, ifso, ifnot) ->
       size := !size + 2;
       lambda_size ifso; lambda_size ifnot
     | While (cond, body) ->
       size := !size + 2; lambda_size cond; lambda_size body
     | For { body; _ } ->
       size := !size + 4; lambda_size body
-    | Region body ->
-      size := !size + 2; lambda_size body
-    | Exclave body ->
-      lambda_size body
   and lambda_named_size (named : Flambda.named) =
     if !size > threshold then raise Exit;
     match named with
@@ -276,7 +267,7 @@ module Benefit = struct
     | If_then_else _ | While _ | For _ -> b := remove_branch !b
     | Apply _ | Send _ -> b := remove_call !b
     | Let _ | Let_mutable _ | Let_rec _ | Proved_unreachable | Var _
-    | Region _ | Exclave _ | Static_catch _ -> ()
+    | Static_catch _ -> ()
 
   let remove_code_helper_named b (named : Flambda.named) =
     match named with

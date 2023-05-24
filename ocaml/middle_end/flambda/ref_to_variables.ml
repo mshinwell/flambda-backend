@@ -52,23 +52,23 @@ let variables_not_used_as_local_reference (tree:Flambda.t) =
     | Let_mutable { initial_value = v; body } ->
       set := Variable.Set.add v !set;
       loop body
-    | If_then_else (cond, ifso, ifnot, _kind) ->
+    | If_then_else (cond, ifso, ifnot) ->
       set := Variable.Set.add cond !set;
       loop ifso;
       loop ifnot
-    | Switch (cond, { consts; blocks; failaction; kind = _ }) ->
+    | Switch (cond, { consts; blocks; failaction }) ->
       set := Variable.Set.add cond !set;
       List.iter (fun (_, branch) -> loop branch) consts;
       List.iter (fun (_, branch) -> loop branch) blocks;
       Option.iter loop failaction
-    | String_switch (cond, branches, default, _kind) ->
+    | String_switch (cond, branches, default) ->
       set := Variable.Set.add cond !set;
       List.iter (fun (_, branch) -> loop branch) branches;
       Option.iter loop default
-    | Static_catch (_, _, body, handler, _) ->
+    | Static_catch (_, _, body, handler) ->
       loop body;
       loop handler
-    | Try_with (body, _, handler, _kind) ->
+    | Try_with (body, _, handler) ->
       loop body;
       loop handler
     | While (cond, body) ->
@@ -80,10 +80,6 @@ let variables_not_used_as_local_reference (tree:Flambda.t) =
       loop body
     | Static_raise (_, args) ->
       set := Variable.Set.union (Variable.Set.of_list args) !set
-    | Region body ->
-      loop body
-    | Exclave body ->
-      loop body
     | Proved_unreachable | Apply _ | Send _ | Assign _ ->
       set := Variable.Set.union !set (Flambda.free_variables flam)
   in
@@ -95,7 +91,7 @@ let variables_containing_ref (flam:Flambda.t) =
   let aux (flam : Flambda.t) =
     match flam with
     | Let { var;
-            defining_expr = Prim(Pmakeblock(0, Mutable, _, _), l, _);
+            defining_expr = Prim(Pmakeblock(0, Asttypes.Mutable, _), l, _);
           } ->
       map := Variable.Map.add var (List.length l) !map
     | _ -> ()
@@ -131,7 +127,7 @@ let eliminate_ref_of_expr flam =
     let aux (flam : Flambda.t) : Flambda.t =
       match flam with
       | Let { var;
-              defining_expr = Prim(Pmakeblock(0, Mutable, shape, _mode), l,_);
+              defining_expr = Prim(Pmakeblock(0, Asttypes.Mutable, shape), l,_);
               body }
         when convertible_variable var ->
         let shape = match shape with
@@ -147,7 +143,7 @@ let eliminate_ref_of_expr flam =
                 (Let_mutable { var = field_var;
                                initial_value = init;
                                body;
-                               contents_kind = Lambda.Pvalue kind } : Flambda.t))
+                               contents_kind = kind } : Flambda.t))
             (0,body) l shape in
         expr
       | Let _ | Let_mutable _
@@ -155,11 +151,11 @@ let eliminate_ref_of_expr flam =
       | Let_rec _ | Switch _ | String_switch _
       | Static_raise _ | Static_catch _
       | Try_with _ | If_then_else _
-      | While _ | For _ | Region _ | Exclave _ | Send _ | Proved_unreachable ->
+      | While _ | For _ | Send _ | Proved_unreachable ->
         flam
     and aux_named (named : Flambda.named) : Flambda.named =
       match named with
-      | Prim(Pfield (field, _), [v], _)
+      | Prim(Pfield (field, _, _), [v], _)
         when convertible_variable v ->
         (match get_variable v field with
          | None -> Expr Proved_unreachable

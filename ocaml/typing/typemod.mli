@@ -20,7 +20,6 @@
 
 *)
 
-open Layouts
 open Types
 
 module Signature_names : sig
@@ -36,11 +35,11 @@ val type_structure:
   Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
   Env.t
 val type_toplevel_phrase:
-  Env.t -> Types.signature -> Parsetree.structure ->
+  Env.t -> Parsetree.structure ->
   Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
   Env.t
 val type_implementation:
-  string -> string -> Compilation_unit.t -> Env.t ->
+  string -> string -> string -> Env.t ->
   Parsetree.structure -> Typedtree.implementation
 val type_interface:
         Env.t -> Parsetree.signature -> Typedtree.signature
@@ -61,15 +60,15 @@ val modtype_of_package:
 val path_of_module : Typedtree.module_expr -> Path.t option
 
 val save_signature:
-  Compilation_unit.t -> Typedtree.signature -> string -> string ->
-  Env.t -> Cmi_format.cmi_infos_lazy -> unit
+  string -> Typedtree.signature -> string -> string ->
+  Env.t -> Cmi_format.cmi_infos -> unit
 
 val package_units:
-  Env.t -> string list -> string -> Compilation_unit.t -> Typedtree.module_coercion
+  Env.t -> string list -> string -> string -> Typedtree.module_coercion
 
 (* Should be in Envaux, but it breaks the build of the debugger *)
 val initial_env:
-  loc:Location.t -> safe_string:bool ->
+  loc:Location.t ->
   initially_opened_module:string option ->
   open_implicit_modules:string list -> Env.t
 
@@ -104,21 +103,12 @@ type hiding_error =
       user_loc: Location.t;
     }
 
-type functor_dependency_error =
-    Functor_applied
-  | Functor_included
-
 type error =
     Cannot_apply of module_type
   | Not_included of Includemod.explanation
-  | Not_included_functor of Includemod.explanation
-  | Cannot_eliminate_dependency of functor_dependency_error * module_type
+  | Cannot_eliminate_dependency of module_type
   | Signature_expected
   | Structure_expected of module_type
-  | Functor_expected of module_type
-  | Signature_parameter_expected of module_type
-  | Signature_result_expected of module_type
-  | Recursive_include_functor
   | With_no_component of Longident.t
   | With_mismatch of Longident.t * Includemod.explanation
   | With_makes_applicative_functor_ill_typed of
@@ -126,12 +116,12 @@ type error =
   | With_changes_module_alias of Longident.t * Ident.t * Path.t
   | With_cannot_remove_constrained_type
   | Repeated_name of Sig_component_kind.t * string
-  | Non_generalizable of type_expr
-  | Non_generalizable_module of module_type
+  | Non_generalizable of { vars : type_expr list; expression : type_expr }
+  | Non_generalizable_module of
+      { vars : type_expr list; item : value_description; mty : module_type }
   | Implementation_is_required of string
   | Interface_not_compiled of string
   | Not_allowed_in_functor_body
-  | Not_includable_in_functor_body
   | Not_a_packed_module of type_expr
   | Incomplete_packed_module of type_expr
   | Scoping_pack of Longident.t * type_expr
@@ -144,13 +134,8 @@ type error =
   | Invalid_type_subst_rhs
   | Unpackable_local_modtype_subst of Path.t
   | With_cannot_remove_packed_modtype of Path.t * module_type
-  | Toplevel_nonvalue of string * sort
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
 
 val report_error: Env.t -> loc:Location.t -> error -> Location.error
-
-(** Clear several bits of global state that may retain large amounts of memory
-    after typechecking is finished. *)
-val reset : preserve_persistent_env:bool -> unit

@@ -28,11 +28,7 @@ let init_path () = Compmisc.init_path ()
 
 (** Return the initial environment in which compilation proceeds. *)
 let initial_env () =
-  let current =
-    match Env.get_unit_name () with
-    | Some cu -> cu |> Compilation_unit.full_path_as_string
-    | None -> ""
-  in
+  let current = Env.get_unit_name () in
   let initial = !Odoc_global.initially_opened_module in
   let initially_opened_module =
     if initial = current then
@@ -46,7 +42,6 @@ let initial_env () =
     ln @ List.rev !Clflags.open_modules in
   Typemod.initial_env
     ~loc:(Location.in_file "ocamldoc command line")
-    ~safe_string:(Config.safe_string || not !Clflags.unsafe_string)
     ~open_implicit_modules
     ~initially_opened_module
 
@@ -75,11 +70,7 @@ let process_implementation_file sourcefile =
   init_path ();
   let prefixname = Filename.chop_extension sourcefile in
   let modulename = String.capitalize_ascii(Filename.basename prefixname) in
-  let compilation_unit =
-    Compilation_unit.create (Compilation_unit.Prefix.from_clflags ())
-      (modulename |> Compilation_unit.Name.of_string)
-  in
-  Env.set_unit_name (Some compilation_unit);
+  Env.set_unit_name modulename;
   let inputfile = preprocess sourcefile in
   let env = initial_env () in
   try
@@ -89,7 +80,7 @@ let process_implementation_file sourcefile =
     in
     let typedtree =
       Typemod.type_implementation
-        sourcefile prefixname compilation_unit env parsetree
+        sourcefile prefixname modulename env parsetree
     in
     (Some (parsetree, typedtree), inputfile)
   with
@@ -113,11 +104,7 @@ let process_interface_file sourcefile =
   init_path ();
   let prefixname = Filename.chop_extension sourcefile in
   let modulename = String.capitalize_ascii(Filename.basename prefixname) in
-  let compilation_unit =
-    Compilation_unit.create (Compilation_unit.Prefix.from_clflags ())
-      (modulename |> Compilation_unit.Name.of_string)
-  in
-  Env.set_unit_name (Some compilation_unit);
+  Env.set_unit_name modulename;
   let inputfile = preprocess sourcefile in
   let ast =
     Pparse.file ~tool_name inputfile
@@ -368,8 +355,12 @@ and remove_module_elements_between_stop_in_module_kind k =
   | Odoc_module.Module_functor (params, k2)  ->
       Odoc_module.Module_functor (params, remove_module_elements_between_stop_in_module_kind k2)
   | Odoc_module.Module_apply (k1, k2) ->
-      Odoc_module.Module_apply (remove_module_elements_between_stop_in_module_kind k1,
-                    remove_module_elements_between_stop_in_module_kind k2)
+      Odoc_module.Module_apply
+        (remove_module_elements_between_stop_in_module_kind k1,
+         remove_module_elements_between_stop_in_module_kind k2)
+  | Odoc_module.Module_apply_unit k1 ->
+      Odoc_module.Module_apply_unit
+        (remove_module_elements_between_stop_in_module_kind k1)
   | Odoc_module.Module_with (mtkind, s) ->
       Odoc_module.Module_with (remove_module_elements_between_stop_in_module_type_kind mtkind, s)
   | Odoc_module.Module_constraint (k2, mtkind) ->

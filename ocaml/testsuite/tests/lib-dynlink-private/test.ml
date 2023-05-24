@@ -75,9 +75,7 @@ program = "./test.byte.exe"
 libraries = "dynlink"
 all_modules = "sheep.cmo test.cmo"
 module = ""
-************************** script
-script = "cp ${test_build_directory}/plugin2/cow.cmo ${test_build_directory}/plugin2/cow_copy.cmo"
-*************************** run
+************************** run
 
 ** native-dynlink
 *** setup-ocamlopt.byte-build-env
@@ -166,9 +164,7 @@ flags = ""
 program = "./test.opt.exe"
 libraries = "dynlink"
 all_modules = "sheep.cmx test.cmx"
-*************************** script
-script = "cp ${test_build_directory}/plugin2/cow.cmxs ${test_build_directory}/plugin2/cow_copy.cmxs"
-**************************** run
+*************************** run
 *)
 
 let () = Sheep.baa Sheep.s (* Use Sheep module *)
@@ -187,29 +183,12 @@ let test_sheep () =
   | exception Dynlink.Error (
       Dynlink.Module_already_loaded "Sheep") -> ()
 
-(* Test repeated loading of a privately-loaded module from the same .cmxs
-   file.  This is forbidden in native code. *)
+(* Test repeated loading of a privately-loaded module. *)
 let test_cow_repeated () =
-  if Dynlink.is_native then begin
-    let load () = Dynlink.loadfile_private "plugin2/cow.cmxs" in
-    begin try load () with _ -> assert false end;
-    match load () with
-    | () -> assert false
-    | exception Dynlink.Error (
-        Dynlink.Library_file_already_loaded_privately _) -> ()
-  end
-
-(* Test repeated loading of the same privately-loaded module from two
-   different .cmo / .cmxs files.  This is similar to the previous case, but is
-   ok, because we're not trying to load the same .cmxs file twice. *)
-let test_cow_repeated_different_cmxs () =
-  try
-    (* Note that [Cow] is already loaded from the previous test. *)
-    if Dynlink.is_native then
-      Dynlink.loadfile_private "plugin2/cow_copy.cmxs"
-    else
-      Dynlink.loadfile_private "plugin2/cow_copy.cmo"
-  with _ -> assert false
+  if Dynlink.is_native then
+    Dynlink.loadfile_private "plugin2/cow.cmxs"
+  else
+    Dynlink.loadfile_private "plugin2/cow.cmo"
 
 (* Test that a privately loaded module can have the same name as a
    previous privately loaded module, in the case where the interfaces are
@@ -269,10 +248,17 @@ let test_pheasant () =
   | exception Dynlink.Error (
       Dynlink.Module_already_loaded "Partridge") -> ()
 
+let debug_runtime = String.equal (Sys.runtime_variant ()) "d"
+
+(* test_cow_repeated is disabled when running with the debug runtime.
+   Reloading multiple times a module can cause an already initialized block
+   to be overwritten. See https://github.com/ocaml/ocaml/issues/11016 *)
 let () =
   test_sheep ();
-  test_cow_repeated ();
-  test_cow_repeated_different_cmxs ();
+  if (not debug_runtime) then (
+    test_cow_repeated ();
+    test_cow_repeated ()
+  );
   test_cow_same_name_same_mli ();
   test_cow_same_name_different_mli ();
   test_pig ();

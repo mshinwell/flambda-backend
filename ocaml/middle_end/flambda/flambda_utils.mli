@@ -65,12 +65,8 @@ val description_of_toplevel_node : Flambda.t -> string
 val make_closure_declaration
    : is_classic_mode:bool
   -> id:Variable.t
-  -> alloc_mode:Lambda.alloc_mode
-  -> region:bool
   -> body:Flambda.t
   -> params:Parameter.t list
-  -> return_layout:Lambda.layout
-  -> free_variables:Lambda.layout Variable.Map.t
   -> Flambda.t
 
 val toplevel_substitution
@@ -181,12 +177,14 @@ end
 *)
 val fun_vars_referenced_in_decls
    : Flambda.function_declarations
+  -> closure_symbol:(Closure_id.t -> Symbol.t)
   -> Variable.Set.t Variable.Map.t
 
 (** Computes the set of closure_id in the set of closures that are
     required used (transitively) the entry_point *)
 val closures_required_by_entry_point
    : entry_point:Closure_id.t
+  -> closure_symbol:(Closure_id.t -> Symbol.t)
   -> Flambda.function_declarations
   -> Variable.Set.t
 

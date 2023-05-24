@@ -97,9 +97,9 @@ let rec analyse_expr ~which_variables expr =
       List.iter check_free_variable args
     | Assign { new_value; _ } ->
       check_free_variable new_value
-    | If_then_else (var, _, _, _)
+    | If_then_else (var, _, _)
     | Switch (var, _)
-    | String_switch (var, _, _, _) ->
+    | String_switch (var, _, _) ->
       check_free_variable var
     | Static_raise (_, args) ->
       List.iter check_free_variable args
@@ -107,7 +107,6 @@ let rec analyse_expr ~which_variables expr =
       check_free_variable from_value;
       check_free_variable to_value
     | Let _ | Let_rec _ | Static_catch _ | While _ | Try_with _
-    | Region _ | Exclave _
     | Proved_unreachable -> ()
   in
   let for_named (named : Flambda.named) =
@@ -125,7 +124,7 @@ let rec analyse_expr ~which_variables expr =
         when Variable.Map.mem move.closure which_variables ->
       projections :=
         Projection.Set.add (Move_within_set_of_closures move) !projections
-    | Prim (Pfield (field_index, Pvalue _), [var], _dbg)
+    | Prim (Pfield (field_index, _, _), [var], _dbg)
         when Variable.Map.mem var which_variables ->
       projections :=
         Projection.Set.add (Field (field_index, var)) !projections

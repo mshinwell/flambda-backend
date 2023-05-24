@@ -33,20 +33,18 @@ let apply_on_subexpressions f f_named (flam : Flambda.t) =
     List.iter (fun (_,l) -> f l) sw.consts;
     List.iter (fun (_,l) -> f l) sw.blocks;
     Option.iter f sw.failaction
-  | String_switch (_, sw, def, _kind) ->
+  | String_switch (_, sw, def) ->
     List.iter (fun (_,l) -> f l) sw;
     Option.iter f def
-  | Static_catch (_,_,f1,f2, _) ->
+  | Static_catch (_,_,f1,f2) ->
     f f1; f f2;
-  | Try_with (f1,_,f2, _kind) ->
+  | Try_with (f1,_,f2) ->
     f f1; f f2
-  | If_then_else (_,f1, f2, _kind) ->
+  | If_then_else (_,f1, f2) ->
     f f1;f f2
   | While (f1,f2) ->
     f f1; f f2
   | For { body; _ } -> f body
-  | Region body -> f body
-  | Exclave body -> f body
 
 let rec list_map_sharing f l =
   match l with
@@ -120,34 +118,34 @@ let map_subexpressions f f_named (tree:Flambda.t) : Flambda.t =
         }
       in
       Switch (arg, sw)
-  | String_switch (arg, sw, def, kind) ->
+  | String_switch (arg, sw, def) ->
     let new_sw = list_map_sharing (map_snd_sharing (fun _ v -> f v)) sw in
     let new_def = may_map_sharing f def in
     if sw == new_sw && def == new_def then
       tree
     else
-      String_switch(arg, new_sw, new_def, kind)
-  | Static_catch (i, vars, body, handler, kind) ->
+      String_switch(arg, new_sw, new_def)
+  | Static_catch (i, vars, body, handler) ->
     let new_body = f body in
     let new_handler = f handler in
     if new_body == body && new_handler == handler then
       tree
     else
-      Static_catch (i, vars, new_body, new_handler, kind)
-  | Try_with(body, id, handler, kind) ->
+      Static_catch (i, vars, new_body, new_handler)
+  | Try_with(body, id, handler) ->
     let new_body = f body in
     let new_handler = f handler in
     if body == new_body && handler == new_handler then
       tree
     else
-      Try_with(new_body, id, new_handler, kind)
-  | If_then_else(arg, ifso, ifnot, kind) ->
+      Try_with(new_body, id, new_handler)
+  | If_then_else(arg, ifso, ifnot) ->
     let new_ifso = f ifso in
     let new_ifnot = f ifnot in
     if new_ifso == ifso && new_ifnot == ifnot then
       tree
     else
-      If_then_else(arg, new_ifso, new_ifnot, kind)
+      If_then_else(arg, new_ifso, new_ifnot)
   | While(cond, body) ->
     let new_cond = f cond in
     let new_body = f body in
@@ -161,18 +159,6 @@ let map_subexpressions f f_named (tree:Flambda.t) : Flambda.t =
       tree
     else
       For { bound_var; from_value; to_value; direction; body = new_body; }
-  | Region body ->
-    let new_body = f body in
-    if new_body == body then
-      tree
-    else
-      Region new_body
-  | Exclave body ->
-    let new_body = f body in
-    if new_body == body then
-      tree
-    else
-      Exclave new_body
 
 let iter_general = Flambda.iter_general
 
@@ -349,7 +335,7 @@ let map_general ~toplevel f f_named tree =
             tree
           else
             Switch (arg, sw)
-        | String_switch (arg, sw, def, kind) ->
+        | String_switch (arg, sw, def) ->
           let done_something = ref false in
           let sw =
             List.map (fun (i, v) -> i, aux_done_something v done_something) sw
@@ -362,28 +348,28 @@ let map_general ~toplevel f f_named tree =
           if not !done_something then
             tree
           else
-            String_switch(arg, sw, def, kind)
-        | Static_catch (i, vars, body, handler, kind) ->
+            String_switch(arg, sw, def)
+        | Static_catch (i, vars, body, handler) ->
           let new_body = aux body in
           let new_handler = aux handler in
           if new_body == body && new_handler == handler then
             tree
           else
-            Static_catch (i, vars, new_body, new_handler, kind)
-        | Try_with(body, id, handler, kind) ->
+            Static_catch (i, vars, new_body, new_handler)
+        | Try_with(body, id, handler) ->
           let new_body = aux body in
           let new_handler = aux handler in
           if new_body == body && new_handler == handler then
             tree
           else
-            Try_with (new_body, id, new_handler, kind)
-        | If_then_else (arg, ifso, ifnot, kind) ->
+            Try_with (new_body, id, new_handler)
+        | If_then_else (arg, ifso, ifnot) ->
           let new_ifso = aux ifso in
           let new_ifnot = aux ifnot in
           if new_ifso == ifso && new_ifnot == ifnot then
             tree
           else
-            If_then_else (arg, new_ifso, new_ifnot, kind)
+            If_then_else (arg, new_ifso, new_ifnot)
         | While (cond, body) ->
           let new_cond = aux cond in
           let new_body = aux body in
@@ -398,18 +384,6 @@ let map_general ~toplevel f f_named tree =
           else
             For { bound_var; from_value; to_value; direction;
               body = new_body; }
-        | Region body ->
-          let new_body = aux body in
-          if new_body == body then
-            tree
-          else
-            Region new_body
-        | Exclave body ->
-          let new_body = aux body in
-          if new_body == body then
-            tree
-          else
-            Exclave new_body
       in
       f exp
   and aux_done_something expr done_something =
@@ -436,8 +410,8 @@ let map_general ~toplevel f f_named tree =
                   func_decl
                 end else begin
                   done_something := true;
-                  Flambda.update_function_declaration_body func_decl
-                    ~body:new_body
+                  Flambda.update_function_declaration func_decl
+                    ~params:func_decl.params ~body:new_body
                 end)
               function_decls.funs
           in
@@ -520,7 +494,8 @@ let map_symbols_on_set_of_closures
         if not (body == func_decl.body) then begin
           done_something := true;
         end;
-        Flambda.update_function_declaration_body func_decl ~body)
+        Flambda.update_function_declaration func_decl
+          ~params:func_decl.params ~body)
       function_decls.funs
   in
   if not !done_something then
@@ -607,8 +582,8 @@ let map_function_bodies (set_of_closures : Flambda.set_of_closures) ~f =
           function_decl
         else begin
           done_something := true;
-          Flambda.update_function_declaration_body function_decl
-            ~body:new_body
+          Flambda.update_function_declaration function_decl
+            ~body:new_body ~params:function_decl.params
         end)
       set_of_closures.function_decls.funs
   in
@@ -638,7 +613,8 @@ let map_sets_of_closures_of_program (program : Flambda.program)
                 function_decl
               else begin
                 done_something := true;
-                Flambda.update_function_declaration_body function_decl ~body
+                Flambda.update_function_declaration function_decl
+                  ~body ~params:function_decl.params
               end)
             set_of_closures.function_decls.funs
         in
@@ -733,7 +709,8 @@ let map_exprs_at_toplevel_of_program (program : Flambda.program)
               function_decl
             else begin
               done_something := true;
-              Flambda.update_function_declaration_body function_decl ~body
+              Flambda.update_function_declaration function_decl
+                ~body ~params:function_decl.params
             end)
           set_of_closures.function_decls.funs
       in

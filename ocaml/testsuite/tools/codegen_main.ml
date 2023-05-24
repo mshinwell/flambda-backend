@@ -21,11 +21,7 @@ let compile_file filename =
     let out_name = Filename.chop_extension filename ^ ".s" in
     Emitaux.output_channel := open_out out_name
   end; (* otherwise, stdout *)
-  let compilation_unit =
-    Compilation_unit.create Compilation_unit.Prefix.empty
-      ("test" |> Compilation_unit.Name.of_string)
-  in
-  Compilenv.reset compilation_unit;
+  Compilenv.reset "test";
   Clflags.cmm_invariants := true;
   Emit.begin_assembly();
   let ic = open_in filename in
@@ -81,5 +77,5 @@ let main() =
 
 let () =
   main ();
-  Profile.print Format.std_formatter !Clflags.profile_columns ~timings_precision:!Clflags.timings_precision;
+  Profile.print Format.std_formatter !Clflags.profile_columns;
   exit 0

@@ -1,4 +1,3 @@
-# 1 "camlinternalFormat.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,11 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
 (* No comments, OCaml stdlib internal use only. *)
-
-[@@@ocaml.warning "+A-e"]
 
 open CamlinternalFormatBasics
 

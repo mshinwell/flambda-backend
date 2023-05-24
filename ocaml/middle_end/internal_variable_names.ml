@@ -118,15 +118,12 @@ let pfloatcomp = "Pfloatcomp"
 let pfloatfield = "Pfloatfield"
 let pfloatofint = "Pfloatofint"
 let pgetglobal = "Pgetglobal"
-let pgetpredef = "Pgetpredef"
 let pignore = "Pignore"
 let pint_as_pointer = "Pint_as_pointer"
 let pintcomp = "Pintcomp"
 let pcompare_ints = "Pcompare_ints"
 let pcompare_floats = "Pcompare_floats"
 let pcompare_bints = "Pcompare_bints"
-let pobj_dup = "Pobj_dup"
-let pobj_magic = "Pobj_magic"
 let pintofbint = "Pintofbint"
 let pintoffloat = "Pintoffloat"
 let pisint = "Pisint"
@@ -137,7 +134,6 @@ let plsrbint = "Plsrbint"
 let plsrint = "Plsrint"
 let pmakearray = "Pmakearray"
 let pmakeblock = "Pmakeblock"
-let pmakefloatblock = "Pmakefloatblock"
 let pmodbint = "Pmodbint"
 let pmodint = "Pmodint"
 let pmulbint = "Pmulbint"
@@ -173,9 +169,16 @@ let psubfloat = "Psubfloat"
 let psubint = "Psubint"
 let pxorbint = "Pxorbint"
 let pxorint = "Pxorint"
-let pprobe_is_enabled = "Pprobe_is_enabled"
-let parray_of_iarray = "Parray_of_iarray"
-let parray_to_iarray = "Parray_to_iarray"
+let patomic_cas = "Patomic_cas"
+let patomic_exchange = "Patomic_exchange"
+let patomic_fetch_add = "Patomic_fetch_add"
+let patomic_load = "Patomic_load"
+let prunstack = "Prunstack"
+let pperform = "Pperform"
+let presume = "Presume"
+let preperform = "Preperform"
+let pdls_get = "Pdls_get"
+
 let pabsfloat_arg = "Pabsfloat_arg"
 let paddbint_arg = "Paddbint_arg"
 let paddfloat_arg = "Paddfloat_arg"
@@ -224,9 +227,6 @@ let pfloatcomp_arg = "Pfloatcomp_arg"
 let pfloatfield_arg = "Pfloatfield_arg"
 let pfloatofint_arg = "Pfloatofint_arg"
 let pgetglobal_arg = "Pgetglobal_arg"
-let pgetpredef_arg = "Pgetpredef_arg"
-let pobj_dup_arg = "Pobj_dup_arg"
-let pobj_magic_arg = "Pobj_magic_arg"
 let pignore_arg = "Pignore_arg"
 let pint_as_pointer_arg = "Pint_as_pointer_arg"
 let pintcomp_arg = "Pintcomp_arg"
@@ -243,7 +243,6 @@ let plsrbint_arg = "Plsrbint_arg"
 let plsrint_arg = "Plsrint_arg"
 let pmakearray_arg = "Pmakearray_arg"
 let pmakeblock_arg = "Pmakeblock_arg"
-let pmakefloatblock_arg = "Pmakefloatblock_arg"
 let pmodbint_arg = "Pmodbint_arg"
 let pmodint_arg = "Pmodint_arg"
 let pmulbint_arg = "Pmulbint_arg"
@@ -282,9 +281,16 @@ let psubfloat_arg = "Psubfloat_arg"
 let psubint_arg = "Psubint_arg"
 let pxorbint_arg = "Pxorbint_arg"
 let pxorint_arg = "Pxorint_arg"
-let pprobe_is_enabled_arg = "Pprobe_is_enabled_arg"
-let parray_of_iarray_arg = "Parray_of_iarray_arg"
-let parray_to_iarray_arg = "Parray_to_iarray_arg"
+let patomic_cas_arg = "Patomic_cas_arg"
+let patomic_exchange_arg = "Patomic_exchange_arg"
+let patomic_fetch_add_arg = "Patomic_fetch_add_arg"
+let patomic_load_arg = "Patomic_load_arg"
+let prunstack_arg = "Prunstack_arg"
+let pperform_arg = "Pperform_arg"
+let presume_arg = "Presume_arg"
+let preperform_arg = "Preperform_arg"
+let pdls_get_arg = "Pdls_get_arg"
+
 let raise = "raise"
 let raise_arg = "raise_arg"
 let read_mutable = "read_mutable"
@@ -305,15 +311,6 @@ let toplevel_substitution_named = "toplevel_substitution_named"
 let unbox_free_vars_of_closures = "unbox_free_vars_of_closures"
 let unit = "unit"
 let zero = "zero"
-let probe_handler = "probe_handler"
-let punbox_float = "Punbox_float"
-let pbox_float = "Pbox_float"
-let punbox_float_arg = "Punbox_float_arg"
-let pbox_float_arg = "Pbox_float_arg"
-let punbox_int = "Punbox_int"
-let pbox_int = "Pbox_int"
-let punbox_int_arg = "Punbox_int_arg"
-let pbox_int_arg = "Pbox_int_arg"
 
 let anon_fn_with_loc (sloc: Lambda.scoped_location) =
   let loc = Debuginfo.Scoped_location.to_location sloc in
@@ -332,11 +329,9 @@ let of_primitive : Lambda.primitive -> string = function
   | Pignore -> pignore
   | Pgetglobal _ -> pgetglobal
   | Psetglobal _ -> psetglobal
-  | Pgetpredef _ -> pgetpredef
   | Pmakeblock _ -> pmakeblock
-  | Pmakefloatblock _ -> pmakefloatblock
   | Pfield _ -> pfield
-  | Pfield_computed _ -> pfield_computed
+  | Pfield_computed -> pfield_computed
   | Psetfield _ -> psetfield
   | Psetfield_computed _ -> psetfield_computed
   | Pfloatfield _ -> pfloatfield
@@ -366,13 +361,13 @@ let of_primitive : Lambda.primitive -> string = function
   | Poffsetint _ -> poffsetint
   | Poffsetref _ -> poffsetref
   | Pintoffloat -> pintoffloat
-  | Pfloatofint _ -> pfloatofint
-  | Pnegfloat _ -> pnegfloat
-  | Pabsfloat _ -> pabsfloat
-  | Paddfloat _ -> paddfloat
-  | Psubfloat _ -> psubfloat
-  | Pmulfloat _ -> pmulfloat
-  | Pdivfloat _ -> pdivfloat
+  | Pfloatofint -> pfloatofint
+  | Pnegfloat -> pnegfloat
+  | Pabsfloat -> pabsfloat
+  | Paddfloat -> paddfloat
+  | Psubfloat -> psubfloat
+  | Pmulfloat -> pmulfloat
+  | Pdivfloat -> pdivfloat
   | Pfloatcomp _ -> pfloatcomp
   | Pstringlength -> pstringlength
   | Pstringrefu -> pstringrefu
@@ -390,7 +385,7 @@ let of_primitive : Lambda.primitive -> string = function
   | Parrayrefs _ -> parrayrefs
   | Parraysets _ -> parraysets
   | Pctconst _ -> pctconst
-  | Pisint _ -> pisint
+  | Pisint -> pisint
   | Pisout -> pisout
   | Pbintofint _ -> pbintofint
   | Pintofbint _ -> pintofbint
@@ -429,16 +424,16 @@ let of_primitive : Lambda.primitive -> string = function
   | Pbswap16 -> pbswap16
   | Pbbswap _ -> pbbswap
   | Pint_as_pointer -> pint_as_pointer
-  | Popaque _ -> popaque
-  | Pprobe_is_enabled _ -> pprobe_is_enabled
-  | Pobj_dup -> pobj_dup
-  | Pobj_magic _ -> pobj_magic
-  | Punbox_float -> punbox_float
-  | Pbox_float _ -> pbox_float
-  | Punbox_int _ -> punbox_int
-  | Pbox_int _ -> pbox_int
-  | Parray_of_iarray -> parray_of_iarray
-  | Parray_to_iarray -> parray_to_iarray
+  | Popaque -> popaque
+  | Patomic_cas -> patomic_cas
+  | Patomic_exchange -> patomic_exchange
+  | Patomic_fetch_add -> patomic_fetch_add
+  | Patomic_load _ -> patomic_load
+  | Prunstack -> prunstack
+  | Pperform -> pperform
+  | Presume -> presume
+  | Preperform -> preperform
+  | Pdls_get -> pdls_get
 
 let of_primitive_arg : Lambda.primitive -> string = function
   | Pbytes_of_string -> pbytes_of_string_arg
@@ -446,11 +441,9 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Pignore -> pignore_arg
   | Pgetglobal _ -> pgetglobal_arg
   | Psetglobal _ -> psetglobal_arg
-  | Pgetpredef _ -> pgetpredef_arg
   | Pmakeblock _ -> pmakeblock_arg
-  | Pmakefloatblock _ -> pmakefloatblock_arg
   | Pfield _ -> pfield_arg
-  | Pfield_computed _ -> pfield_computed_arg
+  | Pfield_computed -> pfield_computed_arg
   | Psetfield _ -> psetfield_arg
   | Psetfield_computed _ -> psetfield_computed_arg
   | Pfloatfield _ -> pfloatfield_arg
@@ -480,13 +473,13 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Poffsetint _ -> poffsetint_arg
   | Poffsetref _ -> poffsetref_arg
   | Pintoffloat -> pintoffloat_arg
-  | Pfloatofint _ -> pfloatofint_arg
-  | Pnegfloat _ -> pnegfloat_arg
-  | Pabsfloat _ -> pabsfloat_arg
-  | Paddfloat _ -> paddfloat_arg
-  | Psubfloat _ -> psubfloat_arg
-  | Pmulfloat _ -> pmulfloat_arg
-  | Pdivfloat _ -> pdivfloat_arg
+  | Pfloatofint -> pfloatofint_arg
+  | Pnegfloat -> pnegfloat_arg
+  | Pabsfloat -> pabsfloat_arg
+  | Paddfloat -> paddfloat_arg
+  | Psubfloat -> psubfloat_arg
+  | Pmulfloat -> pmulfloat_arg
+  | Pdivfloat -> pdivfloat_arg
   | Pfloatcomp _ -> pfloatcomp_arg
   | Pstringlength -> pstringlength_arg
   | Pstringrefu -> pstringrefu_arg
@@ -504,7 +497,7 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Parrayrefs _ -> parrayrefs_arg
   | Parraysets _ -> parraysets_arg
   | Pctconst _ -> pctconst_arg
-  | Pisint _ -> pisint_arg
+  | Pisint -> pisint_arg
   | Pisout -> pisout_arg
   | Pbintofint _ -> pbintofint_arg
   | Pintofbint _ -> pintofbint_arg
@@ -543,13 +536,13 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Pbswap16 -> pbswap16_arg
   | Pbbswap _ -> pbbswap_arg
   | Pint_as_pointer -> pint_as_pointer_arg
-  | Popaque _ -> popaque_arg
-  | Pprobe_is_enabled _ -> pprobe_is_enabled_arg
-  | Pobj_dup -> pobj_dup_arg
-  | Pobj_magic _ -> pobj_magic_arg
-  | Punbox_float -> punbox_float_arg
-  | Pbox_float _ -> pbox_float_arg
-  | Punbox_int _ -> punbox_int_arg
-  | Pbox_int _ -> pbox_int_arg
-  | Parray_of_iarray -> parray_of_iarray_arg
-  | Parray_to_iarray -> parray_to_iarray_arg
+  | Popaque -> popaque_arg
+  | Patomic_cas -> patomic_cas_arg
+  | Patomic_exchange -> patomic_exchange_arg
+  | Patomic_fetch_add -> patomic_fetch_add_arg
+  | Patomic_load _ -> patomic_load_arg
+  | Prunstack -> prunstack_arg
+  | Pperform -> pperform_arg
+  | Presume -> presume_arg
+  | Preperform -> preperform_arg
+  | Pdls_get -> pdls_get_arg

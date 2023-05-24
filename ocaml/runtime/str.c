@@ -78,14 +78,6 @@ CAMLprim value caml_create_bytes(value len)
   return caml_alloc_string(size);
 }
 
-CAMLprim value caml_create_local_bytes(value len)
-{
-  mlsize_t size = Long_val(len);
-  if (size > Bsize_wsize (Max_wosize) - 1){
-    caml_invalid_argument("Bytes.create");
-  }
-  return caml_alloc_local_string(size);
-}
 
 
 CAMLprim value caml_string_get(value str, value index)
@@ -477,16 +469,6 @@ CAMLprim value caml_string_of_bytes(value bv)
 }
 
 CAMLprim value caml_bytes_of_string(value bv)
-{
-  return bv;
-}
-
-CAMLprim value caml_iarray_of_array(value bv)
-{
-  return bv;
-}
-
-CAMLprim value caml_array_of_iarray(value bv)
 {
   return bv;
 }

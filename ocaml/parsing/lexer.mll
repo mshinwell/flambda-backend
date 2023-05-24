@@ -31,9 +31,8 @@ type error =
   | Keyword_as_label of string
   | Invalid_literal of string
   | Invalid_directive of string * string option
-;;
 
-exception Error of error * Location.t;;
+exception Error of error * Location.t
 
 (* The table of keywords *)
 
@@ -57,7 +56,6 @@ let keyword_table =
     "fun", FUN;
     "function", FUNCTION;
     "functor", FUNCTOR;
-    "global_", GLOBAL;
     "if", IF;
     "in", IN;
     "include", INCLUDE;
@@ -65,13 +63,11 @@ let keyword_table =
     "initializer", INITIALIZER;
     "lazy", LAZY;
     "let", LET;
-    "local_", LOCAL;
     "match", MATCH;
     "method", METHOD;
     "module", MODULE;
     "mutable", MUTABLE;
     "new", NEW;
-    "nonlocal_", NONLOCAL;
     "nonrec", NONREC;
     "object", OBJECT;
     "of", OF;
@@ -102,12 +98,6 @@ let keyword_table =
     "asr", INFIXOP4("asr")
 ]
 
-let lookup_keyword name =
-  match Hashtbl.find keyword_table name with
-  | kw -> kw
-  | exception Not_found ->
-     LIDENT name
-
 (* To buffer string literals *)
 
 let string_buffer = Buffer.create 256
@@ -120,9 +110,9 @@ let store_string s = Buffer.add_string string_buffer s
 let store_lexeme lexbuf = store_string (Lexing.lexeme lexbuf)
 
 (* To store the position of the beginning of a string and comment *)
-let string_start_loc = ref Location.none;;
-let comment_start_loc = ref [];;
-let in_comment () = !comment_start_loc <> [];;
+let string_start_loc = ref Location.none
+let comment_start_loc = ref []
+let in_comment () = !comment_start_loc <> []
 let is_in_string = ref false
 let in_string () = !is_in_string
 let print_warnings = ref true
@@ -238,10 +228,7 @@ let uchar_for_uchar_escape lexbuf =
       illegal_escape lexbuf
         (Printf.sprintf "%X is not a Unicode scalar value" cp)
 
-let is_keyword name =
-  match lookup_keyword name with
-  | LIDENT _ -> false
-  | _ -> true
+let is_keyword name = Hashtbl.mem keyword_table name
 
 let check_label_name lexbuf name =
   if is_keyword name then error lexbuf (Keyword_as_label name)
@@ -259,7 +246,6 @@ let update_loc lexbuf file line absolute chars =
     pos_lnum = if absolute then line else pos.pos_lnum + line;
     pos_bol = pos.pos_cnum - chars;
   }
-;;
 
 let preprocessor = ref None
 
@@ -317,7 +303,7 @@ let prepare_error loc = function
       let msg = "Illegal empty character literal ''" in
       let sub =
         [Location.msg
-           "Hint: Did you mean ' ' or a type variable 'a?"] in
+           "@{<hint>Hint@}: Did you mean ' ' or a type variable 'a?"] in
       Location.error ~loc ~sub msg
   | Keyword_as_label kwd ->
       Location.errorf ~loc
@@ -419,7 +405,8 @@ rule token = parse
       { warn_latin1 lexbuf;
         OPTLABEL name }
   | lowercase identchar * as name
-      { lookup_keyword name }
+      { try Hashtbl.find keyword_table name
+        with Not_found -> LIDENT name }
   | lowercase_latin1 identchar_latin1 * as name
       { warn_latin1 lexbuf; LIDENT name }
   | uppercase identchar * as name
@@ -546,7 +533,6 @@ rule token = parse
   | "="  { EQUAL }
   | "["  { LBRACKET }
   | "[|" { LBRACKETBAR }
-  | "[:" { LBRACKETCOLON }
   | "[<" { LBRACKETLESS }
   | "[>" { LBRACKETGREATER }
   | "]"  { RBRACKET }
@@ -555,7 +541,6 @@ rule token = parse
   | "|"  { BAR }
   | "||" { BARBAR }
   | "|]" { BARRBRACKET }
-  | ":]" { COLONRBRACKET }
   | ">"  { GREATER }
   | ">]" { GREATERRBRACKET }
   | "}"  { RBRACE }

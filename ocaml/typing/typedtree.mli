@@ -70,17 +70,17 @@ and pat_extra =
         (** (module P)     { pat_desc  = Tpat_var "P"
                            ; pat_extra = (Tpat_unpack, _, _) :: ... }
             (module _)     { pat_desc  = Tpat_any
-                           ; pat_extra = (Tpat_unpack, _, _) :: ... }
+            ; pat_extra = (Tpat_unpack, _, _) :: ... }
          *)
 
 and 'k pattern_desc =
   (* value patterns *)
   | Tpat_any : value pattern_desc
         (** _ *)
-  | Tpat_var : Ident.t * string loc * Types.value_mode -> value pattern_desc
+  | Tpat_var : Ident.t * string loc -> value pattern_desc
         (** x *)
   | Tpat_alias :
-      value general_pattern * Ident.t * string loc * Types.value_mode -> value pattern_desc
+      value general_pattern * Ident.t * string loc -> value pattern_desc
         (** P as a *)
   | Tpat_constant : constant -> value pattern_desc
         (** 1, 'a', "true", 1.0, 1l, 1L, 1n *)
@@ -118,10 +118,8 @@ and 'k pattern_desc =
 
             Invariant: n > 0
          *)
-  | Tpat_array :
-      mutable_flag * value general_pattern list -> value pattern_desc
-        (** [| P1; ...; Pn |]    (flag = Mutable)
-            [: P1; ...; Pn :]    (flag = Immutable) *)
+  | Tpat_array : value general_pattern list -> value pattern_desc
+        (** [| P1; ...; Pn |] *)
   | Tpat_lazy : value general_pattern -> value pattern_desc
         (** lazy P *)
   (* computation patterns *)
@@ -174,32 +172,8 @@ and exp_extra =
   | Texp_newtype of string
         (** fun (type t) ->  *)
 
-and fun_curry_state =
-  | More_args of { partial_mode : Types.alloc_mode }
-        (** [partial_mode] is the mode of the resulting closure
-            if this function is partially applied *)
-  | Final_arg of { partial_mode : Types.alloc_mode }
-        (** [partial_mode] is relevant for the final arg only
-            because of an optimisation that Simplif does to merge
-            functions, which might result in this arg no longer being
-            final *)
-
-(** Layouts in the typed tree: Compilation of the typed tree to lambda sometimes
-    requires layout information.  Our approach is to propagate layout
-    information inward during compilation.  This requires us to annotate places
-    in the typed tree where the layout of a subexpression is not determined by
-    the layout of the expression containing it.  For example, to the left of a
-    semicolon, or in value_bindings.
-
-    CR layouts v1.5: Some of these were mainly needed for void (e.g., left of a
-    semicolon).  If we redo how void is compiled, perhaps we can drop those.  On
-    the other hand, there are some places we're not annotating now (e.g.,
-    function arguments) that will need annotations in the future because we'll
-    allow other layouts there.  Just do a rationalization pass on this.
-*)
 and expression_desc =
-    Texp_ident of
-      Path.t * Longident.t loc * Types.value_description * ident_kind
+    Texp_ident of Path.t * Longident.t loc * Types.value_description
         (** x
             M.x
          *)
@@ -210,11 +184,7 @@ and expression_desc =
             let rec P1 = E1 and ... and Pn = EN in E   (flag = Recursive)
          *)
   | Texp_function of { arg_label : arg_label; param : Ident.t;
-      cases : value case list; partial : partial;
-      region : bool; curry : fun_curry_state;
-      warnings : Warnings.state;
-      arg_mode : Types.alloc_mode;
-      alloc_mode : Types.alloc_mode}
+      cases : value case list; partial : partial; }
         (** [Pexp_fun] and [Pexp_function] both translate to [Texp_function].
             See {!Parsetree} for more details.
 
@@ -224,14 +194,11 @@ and expression_desc =
             partial =
               [Partial] if the pattern match is partial
               [Total] otherwise.
-
-            partial_mode is the mode of the resulting closure if this function
-            is partially applied to a single argument.
          *)
-  | Texp_apply of expression * (arg_label * apply_arg) list * apply_position * Types.alloc_mode
+  | Texp_apply of expression * (arg_label * expression option) list
         (** E0 ~l1:E1 ... ~ln:En
 
-            The expression can be Omitted if the expression is abstracted over
+            The expression can be None if the expression is abstracted over
             this argument. It currently appears when a label is applied.
 
             For example:
@@ -240,43 +207,34 @@ and expression_desc =
 
             The resulting typedtree for the application is:
             Texp_apply (Texp_ident "f/1037",
-                        [(Nolabel, Omitted _);
+                        [(Nolabel, None);
                          (Labelled "y", Some (Texp_constant Const_int 3))
                         ])
          *)
-  | Texp_match of expression * Layouts.sort * computation case list * partial
+  | Texp_match of expression * computation case list * partial
         (** match E0 with
             | P1 -> E1
             | P2 | exception P3 -> E2
             | exception P4 -> E3
 
-            [Texp_match (E0, sort_of_E0, [(P1, E1); (P2 | exception P3, E2);
+            [Texp_match (E0, [(P1, E1); (P2 | exception P3, E2);
                               (exception P4, E3)], _)]
          *)
   | Texp_try of expression * value case list
         (** try E with P1 -> E1 | ... | PN -> EN *)
-  | Texp_tuple of expression list * Types.alloc_mode
+  | Texp_tuple of expression list
         (** (E1, ..., EN) *)
   | Texp_construct of
-      Longident.t loc * Types.constructor_description * expression list * Types.alloc_mode option
+      Longident.t loc * Types.constructor_description * expression list
         (** C                []
             C E              [E]
             C (E1, ..., En)  [E1;...;En]
-
-            [alloc_mode] is the allocation mode of the construct,
-            or [None] if the constructor is [Cstr_unboxed] or [Cstr_constant],
-            in which case it does not need allocation.
          *)
-  | Texp_variant of label * (expression * Types.alloc_mode) option
-        (** [alloc_mode] is the allocation mode of the variant,
-            or [None] if the variant has no argument,
-            in which case it does not need allocation.
-          *)
+  | Texp_variant of label * expression option
   | Texp_record of {
       fields : ( Types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : expression option;
-      alloc_mode : Types.alloc_mode option
     }
         (** { l1=P1; ...; ln=Pn }           (extended_expression = None)
             { E0 with l1=P1; ...; ln=Pn }   (extended_expression = Some E0)
@@ -288,46 +246,19 @@ and expression_desc =
             Texp_record
               { fields = [| l1, Kept t1; l2 Override P2 |]; representation;
                 extended_expression = Some E0 }
-            [alloc_mode] is the allocation mode of the record,
-            or [None] if it is [Record_unboxed],
-            in which case it does not need allocation.
-          *)
-  | Texp_field of expression * Longident.t loc * Types.label_description * Types.alloc_mode option
-    (** [alloc_mode] is the allocation mode of the result; available ONLY
-        when getting a (float) field from a [Record_float] record
-      *)
+        *)
+  | Texp_field of expression * Longident.t loc * Types.label_description
   | Texp_setfield of
-      expression * Types.alloc_mode * Longident.t loc * Types.label_description * expression
-    (** [alloc_mode] translates to the [modify_mode] of the record *)
-  | Texp_array of mutable_flag * expression list * Types.alloc_mode
-  | Texp_list_comprehension of comprehension
-  | Texp_array_comprehension of mutable_flag * comprehension
+      expression * Longident.t loc * Types.label_description * expression
+  | Texp_array of expression list
   | Texp_ifthenelse of expression * expression * expression option
-  | Texp_sequence of expression * Layouts.layout * expression
-    (* CR layouts v5: The layout above is only used for the void sanity check now.
-       Remove it at an appropriate time. *)
-  | Texp_while of {
-      wh_cond : expression;
-      wh_body : expression;
-      wh_body_layout : Layouts.layout
-      (* CR layouts v5: The layout above is only used for the void sanity check
-         now.  Remove it at an appropriate time. *)
-    }
-  | Texp_for of {
-      for_id  : Ident.t;
-      for_pat : Parsetree.pattern;
-      for_from : expression;
-      for_to   : expression;
-      for_dir  : direction_flag;
-      for_body : expression;
-      for_body_layout : Layouts.layout;
-      (* CR layouts v5: The layout above is only used for the void sanity check
-         now.  Remove it at an appropriate time. *)
-    }
-  | Texp_send of expression * meth * apply_position * Types.alloc_mode
-    (** [alloc_mode] is the allocation mode of the result *)
-  | Texp_new of
-      Path.t * Longident.t loc * Types.class_declaration * apply_position
+  | Texp_sequence of expression * expression
+  | Texp_while of expression * expression
+  | Texp_for of
+      Ident.t * Parsetree.pattern * expression * expression * direction_flag *
+        expression
+  | Texp_send of expression * meth
+  | Texp_new of Path.t * Longident.t loc * Types.class_declaration
   | Texp_instvar of Path.t * Path.t * string loc
   | Texp_setinstvar of Path.t * Path.t * string loc * expression
   | Texp_override of Path.t * (Ident.t * string loc * expression) list
@@ -335,7 +266,7 @@ and expression_desc =
       Ident.t option * string option loc * Types.module_presence * module_expr *
         expression
   | Texp_letexception of extension_constructor * expression
-  | Texp_assert of expression
+  | Texp_assert of expression * Location.t
   | Texp_lazy of expression
   | Texp_object of class_structure * string list
   | Texp_pack of module_expr
@@ -345,57 +276,16 @@ and expression_desc =
       param : Ident.t;
       body : value case;
       partial : partial;
-      warnings : Warnings.state;
     }
   | Texp_unreachable
   | Texp_extension_constructor of Longident.t loc * Path.t
   | Texp_open of open_declaration * expression
         (** let open[!] M in e *)
-  | Texp_probe of { name:string; handler:expression; enabled_at_init:bool }
-  | Texp_probe_is_enabled of { name:string }
-  | Texp_exclave of expression
-
-and ident_kind = Id_value | Id_prim of Types.alloc_mode option
 
 and meth =
     Tmeth_name of string
   | Tmeth_val of Ident.t
   | Tmeth_ancestor of Ident.t * Path.t
-
-and comprehension =
-  {
-    comp_body : expression;
-    comp_clauses : comprehension_clause list
-  }
-
-and comprehension_clause =
-  | Texp_comp_for of comprehension_clause_binding list
-  | Texp_comp_when of expression
-
-and comprehension_clause_binding =
-  {
-    comp_cb_iterator : comprehension_iterator;
-    comp_cb_attributes : attribute list
-    (** No built-in attributes are meaningful here; this would correspond to
-        [[body for[@attr] x in xs]], and there are no built-in attributes that
-        would be efficacious there.  (The only ones that might make sense would
-        be inlining, but you can't do that with list/array items that are being
-        iterated over.) *)
-  }
-  (** We move the pattern into the [comprehension_iterator], compared to the
-      untyped syntax tree, so that range-based iterators can have just an
-      identifier instead of a full pattern *)
-
-and comprehension_iterator =
-  | Texp_comp_range of
-      { ident     : Ident.t
-      ; pattern   : Parsetree.pattern (** Redundant with [ident] *)
-      ; start     : expression
-      ; stop      : expression
-      ; direction : direction_flag }
-  | Texp_comp_in of
-      { pattern  : pattern
-      ; sequence : expression }
 
 and 'k case =
     {
@@ -405,7 +295,7 @@ and 'k case =
     }
 
 and record_label_definition =
-  | Kept of Types.type_expr
+  | Kept of Types.type_expr * mutable_flag
   | Overridden of Longident.t loc * expression
 
 and binding_op =
@@ -419,26 +309,6 @@ and binding_op =
     bop_exp : expression;
     bop_loc : Location.t;
   }
-
-and ('a, 'b) arg_or_omitted =
-  | Arg of 'a
-  | Omitted of 'b
-
-and omitted_parameter =
-  { mode_closure : Types.alloc_mode;
-    mode_arg : Types.alloc_mode;
-    mode_ret : Types.alloc_mode;
-    (* CR ncourant: actually, we only need this to be able to compute the layout
-       in [Translcore], change this when merging with the front-end. *)
-    ty_arg : Types.type_expr;
-    ty_env : Env.t}
-
-and apply_arg = (expression, omitted_parameter) arg_or_omitted
-
-and apply_position =
-  | Tail          (* must be tail-call optimised *)
-  | Nontail       (* must not be tail-call optimised *)
-  | Default       (* tail-call optimised if in tail position *)
 
 (* Value expressions for the class language *)
 
@@ -457,7 +327,7 @@ and class_expr_desc =
   | Tcl_fun of
       arg_label * pattern * (Ident.t * expression) list
       * class_expr * partial
-  | Tcl_apply of class_expr * (arg_label * apply_arg) list
+  | Tcl_apply of class_expr * (arg_label * expression option) list
   | Tcl_let of rec_flag * value_binding list *
                   (Ident.t * expression) list * class_expr
   | Tcl_constraint of
@@ -522,6 +392,7 @@ and module_expr_desc =
   | Tmod_structure of structure
   | Tmod_functor of functor_parameter * module_expr
   | Tmod_apply of module_expr * module_expr * module_coercion
+  | Tmod_apply_unit of module_expr
   | Tmod_constraint of
       module_expr * Types.module_type * module_type_constraint * module_coercion
     (** ME          (constraint = Tmodtype_implicit)
@@ -542,9 +413,7 @@ and structure_item =
   }
 
 and structure_item_desc =
-    Tstr_eval of expression * Layouts.layout * attributes
-    (* CR layouts v5: The above layout is now only used to implement the void
-       sanity check.  Consider removing when void is handled properly. *)
+    Tstr_eval of expression * attributes
   | Tstr_value of rec_flag * value_binding list
   | Tstr_primitive of value_description
   | Tstr_type of rec_flag * type_declaration list
@@ -573,7 +442,6 @@ and value_binding =
   {
     vb_pat: pattern;
     vb_expr: expression;
-    vb_sort: Layouts.sort;
     vb_attributes: attributes;
     vb_loc: Location.t;
   }
@@ -606,7 +474,6 @@ and primitive_coercion =
   {
     pc_desc: Primitive.description;
     pc_type: Types.type_expr;
-    pc_poly_mode: Types.alloc_mode option;
     pc_env: Env.t;
     pc_loc : Location.t;
   }
@@ -682,19 +549,12 @@ and open_description = (Path.t * Longident.t loc) open_infos
 
 and open_declaration = module_expr open_infos
 
-and include_kind =
-  | Tincl_structure
-  | Tincl_functor of (Ident.t * module_coercion) list
-      (* S1 -> S2 *)
-  | Tincl_gen_functor of (Ident.t * module_coercion) list
-      (* S1 -> () -> S2 *)
 
 and 'a include_infos =
     {
      incl_mod: 'a;
      incl_type: Types.signature;
      incl_loc: Location.t;
-     incl_kind: include_kind;
      incl_attributes: attribute list;
     }
 
@@ -782,7 +642,6 @@ and type_declaration =
     typ_manifest: core_type option;
     typ_loc: Location.t;
     typ_attributes: attributes;
-    typ_layout_annotation: Layouts.layout option;
    }
 
 and type_kind =
@@ -796,7 +655,6 @@ and label_declaration =
      ld_id: Ident.t;
      ld_name: string loc;
      ld_mutable: mutable_flag;
-     ld_global: Types.global_flag;
      ld_type: core_type;
      ld_loc: Location.t;
      ld_attributes: attributes;
@@ -814,7 +672,7 @@ and constructor_declaration =
     }
 
 and constructor_arguments =
-  | Cstr_tuple of (core_type * Types.global_flag) list
+  | Cstr_tuple of core_type list
   | Cstr_record of label_declaration list
 
 and type_extension =
@@ -899,7 +757,6 @@ and 'a class_infos =
     ci_id_class: Ident.t;
     ci_id_class_type : Ident.t;
     ci_id_object : Ident.t;
-    ci_id_typehash : Ident.t;
     ci_expr: 'a;
     ci_decl: Types.class_declaration;
     ci_type_decl : Types.class_type_declaration;
@@ -954,9 +811,6 @@ val exists_pattern: (pattern -> bool) -> pattern -> bool
 val let_bound_idents: value_binding list -> Ident.t list
 val let_bound_idents_full:
     value_binding list -> (Ident.t * string loc * Types.type_expr) list
-val let_bound_idents_with_modes_and_sorts:
-  value_binding list
-  -> (Ident.t * (Location.t * Types.value_mode * Layouts.sort) list) list
 
 (** Alpha conversion of patterns *)
 val alpha_pat:
@@ -966,12 +820,13 @@ val mknoloc: 'a -> 'a Asttypes.loc
 val mkloc: 'a -> Location.t -> 'a Asttypes.loc
 
 val pat_bound_idents: 'k general_pattern -> Ident.t list
-val pat_bound_idents_with_types:
-  'k general_pattern -> (Ident.t * Types.type_expr) list
 val pat_bound_idents_full:
-  Layouts.sort -> 'k general_pattern
-  -> (Ident.t * string loc * Types.type_expr * Layouts.sort) list
+  'k general_pattern -> (Ident.t * string loc * Types.type_expr) list
 
 (** Splits an or pattern into its value (left) and exception (right) parts. *)
 val split_pattern:
   computation general_pattern -> pattern option * pattern option
+
+(** Whether an expression looks nice as the subject of a sentence in a error
+    message. *)
+val exp_is_nominal : expression -> bool

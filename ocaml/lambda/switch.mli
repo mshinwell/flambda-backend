@@ -81,8 +81,6 @@ module type S =
     type test
     (* type of actions *)
     type act
-    (* type of layouts *)
-    type layout
 
     (* Various constructors, for making a binder,
         adding one integer, etc. *)
@@ -112,14 +110,14 @@ module type S =
        to a boolean test *)
     val arg_as_test : arg -> test
     (* [make_if cond ifso ifnot] generates a conditional branch *)
-    val make_if : layout -> test -> act -> act -> act
+    val make_if : test -> act -> act -> act
    (* construct an actual switch :
       make_switch arg cases acts
       NB:  cases is in the value form *)
-    val make_switch : loc -> layout -> arg -> int array -> act array -> act
+    val make_switch : loc -> arg -> int array -> act array -> act
 
    (* Build last minute sharing of action stuff *)
-   val make_catch : layout -> act -> int * (act -> act)
+   val make_catch : act -> int * (act -> act)
    val make_exit : int -> act
   end
 
@@ -140,7 +138,6 @@ module Make :
 (* Standard entry point, sharing is tracked *)
       val zyva :
           Arg.loc ->
-          Arg.layout ->
           (int * int) ->
            Arg.arg ->
            (int * int * int) array ->
@@ -149,7 +146,6 @@ module Make :
 
 (* Output test sequence, sharing tracked *)
      val test_sequence :
-           Arg.layout ->
            Arg.arg ->
            (int * int * int) array ->
            (Arg.act, _) t_store ->

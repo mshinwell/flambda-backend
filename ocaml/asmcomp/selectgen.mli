@@ -29,8 +29,6 @@ val env_find : Backend_var.t -> environment -> Reg.t array
 
 val size_expr : environment -> Cmm.expression -> int
 
-module Region_stack : sig type t end
-
 module Effect : sig
   type t =
     | None
@@ -128,13 +126,17 @@ class virtual selector_generic : object
 
   method mark_c_tailcall : unit
   (* informs the code emitter that the current function may call
-     a C function that never returns; by default, does nothing.
+     a C function that never returns; by default, sets
+     [contains_calls := true] in [-g] mode and does nothing otherwise.
 
-     It is unnecessary to save the stack pointer in this situation
-     (which is the main purpose of tracking leaf functions) but some
-     architectures still need to ensure that the stack is properly
-     aligned when the C function is called. This is achieved by
-     overloading this method to set [contains_calls := true] *)
+     It is unnecessary to save the stack pointer in this situation,
+     unless we need to produce exact stack backtraces, hence the default
+     definition.
+
+     Some architectures still need to ensure that the stack is properly
+     aligned when the C function is called, regardless of [-g].
+     This is achieved by overloading this method to set
+     [contains_calls := true]. *)
 
   method mark_instr : Mach.instruction_desc -> unit
   (* dispatches on instructions to call one of the marking function
@@ -161,14 +163,8 @@ class virtual selector_generic : object
   method insert_move_results :
     environment -> Reg.t array -> Reg.t array -> int -> unit
   method insert_moves : environment -> Reg.t array -> Reg.t array -> unit
-  method insert_endregions :
-    environment -> Reg.t array list -> unit
-  method insert_endregions_until :
-    environment -> suffix:Region_stack.t -> Region_stack.t -> unit
   method emit_expr :
     environment -> Cmm.expression -> Reg.t array option
-  method emit_expr_aux :
-    environment -> Cmm.expression -> (Reg.t array * Region_stack.t) option
   method emit_tail : environment -> Cmm.expression -> unit
 
   (* [contains_calls] is declared as a reference instance variable,

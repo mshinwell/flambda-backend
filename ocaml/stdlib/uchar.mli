@@ -1,4 +1,3 @@
-# 1 "uchar.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Unicode characters.
 
@@ -40,14 +37,14 @@ val bom : t
     {{:http://unicode.org/glossary/#byte_order_mark}byte order mark} (BOM)
     character.
 
-    @since 4.06.0 *)
+    @since 4.06 *)
 
 val rep : t
 (** [rep] is U+FFFD, the
     {{:http://unicode.org/glossary/#replacement_character}replacement}
     character.
 
-    @since 4.06.0 *)
+    @since 4.06 *)
 
 val succ : t -> t
 (** [succ u] is the scalar value after [u] in the set of Unicode scalar

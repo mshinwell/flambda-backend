@@ -122,12 +122,16 @@ let operation op arg ppf res =
       (if alloc then "" else " (noalloc)")
   | Istackoffset n ->
       fprintf ppf "offset stack %i" n
-  | Iload(chunk, addr, Immutable) ->
-      fprintf ppf "%s[%a]"
-       (Printcmm.chunk chunk) (Arch.print_addressing reg addr) arg
-  | Iload(chunk, addr, Mutable) ->
-      fprintf ppf "%s mut[%a]"
-       (Printcmm.chunk chunk) (Arch.print_addressing reg addr) arg
+  | Iload { memory_chunk; addressing_mode; mutability=Immutable; is_atomic } ->
+      fprintf ppf "%s %a[%a]"
+       (Printcmm.chunk memory_chunk)
+       (fun pp a -> if a then fprintf pp "atomic" else ()) is_atomic
+       (Arch.print_addressing reg addressing_mode) arg
+  | Iload { memory_chunk; addressing_mode; mutability=Mutable; is_atomic } ->
+      fprintf ppf "%s %a mut[%a]"
+       (Printcmm.chunk memory_chunk)
+       (fun pp a -> if a then fprintf pp "atomic" else ()) is_atomic
+       (Arch.print_addressing reg addressing_mode) arg
   | Istore(chunk, addr, is_assign) ->
       fprintf ppf "%s[%a] := %a %s"
        (Printcmm.chunk chunk)
@@ -135,12 +139,11 @@ let operation op arg ppf res =
        (Array.sub arg 1 (Array.length arg - 1))
        reg arg.(0)
        (if is_assign then "(assign)" else "(init)")
-  | Ialloc { bytes = n; mode = Alloc_heap } ->
+  | Ialloc { bytes = n; } ->
     fprintf ppf "alloc %i" n;
-  | Ialloc { bytes = n; mode = Alloc_local } ->
-    fprintf ppf "alloc_local %i" n;
   | Iintop(op) -> fprintf ppf "%a%s%a" reg arg.(0) (intop op) reg arg.(1)
   | Iintop_imm(op, n) -> fprintf ppf "%a%s%i" reg arg.(0) (intop op) n
+  | Icompf cmp -> fprintf ppf "%a%s%a" reg arg.(0) (floatcomp cmp) reg arg.(1)
   | Inegf -> fprintf ppf "-f %a" reg arg.(0)
   | Iabsf -> fprintf ppf "absf %a" reg arg.(0)
   | Iaddf -> fprintf ppf "%a +f %a" reg arg.(0) reg arg.(1)
@@ -150,20 +153,15 @@ let operation op arg ppf res =
   | Ifloatofint -> fprintf ppf "floatofint %a" reg arg.(0)
   | Iintoffloat -> fprintf ppf "intoffloat %a" reg arg.(0)
   | Iopaque -> fprintf ppf "opaque %a" reg arg.(0)
-  | Ibeginregion -> fprintf ppf "beginregion"
-  | Iendregion -> fprintf ppf "endregion %a" reg arg.(0)
   | Ispecific op ->
       Arch.print_specific_operation reg op ppf arg
+  | Idls_get -> fprintf ppf "dls_get"
   | Ipoll { return_label } ->
       fprintf ppf "poll call";
-      begin match return_label with
+      match return_label with
       | None -> ()
       | Some return_label ->
         fprintf ppf " returning to L%d" return_label
-      end
-  | Iprobe {name;handler_code_sym} ->
-    fprintf ppf "probe \"%s\" %s %a" name handler_code_sym regs arg
-  | Iprobe_is_enabled {name} -> fprintf ppf "probe_is_enabled \"%s\"" name
 
 let rec instr ppf i =
   if !Clflags.dump_live then begin
@@ -254,10 +252,10 @@ let interval ppf i =
       i.ranges in
   fprintf ppf "@[<2>%a:%t@]@." reg i.reg interv
 
-let intervals ppf () =
+let intervals ppf (intervals : Interval.result) =
   fprintf ppf "*** Intervals@.";
-  List.iter (interval ppf) (Interval.all_fixed_intervals());
-  List.iter (interval ppf) (Interval.all_intervals())
+  List.iter (interval ppf) intervals.fixed_intervals;
+  List.iter (interval ppf) intervals.intervals
 
 let preference ppf r =
   let prefs ppf =

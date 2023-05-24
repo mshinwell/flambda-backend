@@ -17,7 +17,7 @@ open Misc
 
 type info = {
   source_file : string;
-  module_name : Compilation_unit.t;
+  module_name : string;
   output_prefix : string;
   env : Env.t;
   ppf_dump : Format.formatter;
@@ -33,24 +33,19 @@ let annot i = i.output_prefix ^ ".annot"
 let with_info ~native ~tool_name ~source_file ~output_prefix ~dump_ext k =
   Compmisc.init_path ();
   let module_name = Compenv.module_of_filename source_file output_prefix in
-  let for_pack_prefix = Compilation_unit.Prefix.from_clflags () in
-  let compilation_unit =
-    Compilation_unit.create for_pack_prefix
-      (module_name |> Compilation_unit.Name.of_string)
-  in
-  Compilation_unit.set_current (Some compilation_unit);
+  Env.set_unit_name module_name;
   let env = Compmisc.initial_env() in
   let dump_file = String.concat "." [output_prefix; dump_ext] in
-  Compmisc.with_ppf_dump ~file_prefix:dump_file (fun ppf_dump ->
+  Compmisc.with_ppf_dump ~file_prefix:dump_file @@ fun ppf_dump ->
   k {
-    module_name = compilation_unit;
+    module_name;
     output_prefix;
     env;
     source_file;
     ppf_dump;
     tool_name;
     native;
-  })
+  }
 
 (** Compile a .mli file *)
 
@@ -74,7 +69,6 @@ let typecheck_intf info ast =
           sg);
   ignore (Includemod.signatures info.env ~mark:Mark_both sg sg);
   Typecore.force_delayed_checks ();
-  Builtin_attributes.warn_unused ();
   Warnings.check_fatal ();
   tsg
 
@@ -87,13 +81,11 @@ let emit_signature info ast tsg =
   Typemod.save_signature info.module_name tsg
     info.output_prefix info.source_file info.env sg
 
-let interface ~hook_parse_tree ~hook_typed_tree info =
+let interface info =
   Profile.record_call info.source_file @@ fun () ->
   let ast = parse_intf info in
-  hook_parse_tree ast;
   if Clflags.(should_stop_after Compiler_pass.Parsing) then () else begin
     let tsg = typecheck_intf info ast in
-    hook_typed_tree tsg;
     if not !Clflags.print_types then begin
       emit_signature info ast tsg
     end
@@ -117,7 +109,7 @@ let typecheck_impl i parsetree =
   |> print_if i.ppf_dump Clflags.dump_shape
     (fun fmt {Typedtree.shape; _} -> Shape.print fmt shape)
 
-let implementation ~hook_parse_tree ~hook_typed_tree info ~backend =
+let implementation info ~backend =
   Profile.record_call info.source_file @@ fun () ->
   let exceptionally () =
     let sufs = if info.native then [ cmx; obj ] else [ cmo ] in
@@ -125,14 +117,11 @@ let implementation ~hook_parse_tree ~hook_typed_tree info ~backend =
   in
   Misc.try_finally ?always:None ~exceptionally (fun () ->
     let parsed = parse_impl info in
-    hook_parse_tree parsed;
     if Clflags.(should_stop_after Compiler_pass.Parsing) then () else begin
       let typed = typecheck_impl info parsed in
-      hook_typed_tree typed;
       if Clflags.(should_stop_after Compiler_pass.Typing) then () else begin
         backend info typed
       end;
     end;
-    Builtin_attributes.warn_unused ();
     Warnings.check_fatal ();
   )

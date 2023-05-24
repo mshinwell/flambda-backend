@@ -196,7 +196,8 @@ let apply_mutable_variable t mut_var =
    | Not_found -> mut_var
 
 let rewrite_recursive_calls_with_symbols t
-      (function_declarations : Flambda.function_declarations) =
+      (function_declarations : Flambda.function_declarations)
+      ~make_closure_symbol =
   match t with
   | Inactive -> function_declarations
   | Active _ ->
@@ -211,7 +212,7 @@ let rewrite_recursive_calls_with_symbols t
     let closure_symbols =
       Variable.Map.fold (fun var _ map ->
         let closure_id = Closure_id.wrap var in
-        let sym = Symbol_utils.Flambda.for_closure closure_id in
+        let sym = make_closure_symbol closure_id in
         if Symbol.Set.mem sym all_free_symbols then begin
           closure_symbols_used := true;
           Symbol.Map.add sym var map
@@ -320,10 +321,7 @@ module Project_var = struct
           Flambda_utils.toplevel_substitution subst.sb_var func_decl.body
         in
         let function_decl =
-          Flambda.create_function_declaration
-            ~params ~alloc_mode:func_decl.alloc_mode ~region:func_decl.region
-            ~return_layout:func_decl.return_layout
-            ~body
+          Flambda.create_function_declaration ~params ~body
             ~stub:func_decl.stub ~dbg:func_decl.dbg
             ~inline:func_decl.inline ~specialise:func_decl.specialise
             ~is_a_functor:func_decl.is_a_functor
@@ -418,12 +416,11 @@ let does_not_freshen t vars =
 let freshen_projection (projection : Projection.t) ~freshening
       ~closure_freshening : Projection.t =
   match projection with
-  | Project_var { closure; closure_id; var; kind } ->
+  | Project_var { closure; closure_id; var; } ->
     Project_var {
       closure = apply_variable freshening closure;
       closure_id = Project_var.apply_closure_id closure_freshening closure_id;
       var = Project_var.apply_var_within_closure closure_freshening var;
-      kind;
     }
   | Project_closure { set_of_closures; closure_id; } ->
     Project_closure {

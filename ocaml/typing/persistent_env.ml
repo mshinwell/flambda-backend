@@ -19,21 +19,14 @@
 open Misc
 open Cmi_format
 
-module CU = Compilation_unit
-module Consistbl = Consistbl.Make (CU.Name) (CU)
+module Consistbl = Consistbl.Make (Misc.Stdlib.String)
 
 let add_delayed_check_forward = ref (fun _ -> assert false)
 
 type error =
-  | Illegal_renaming of CU.Name.t * CU.Name.t * filepath
-  | Inconsistent_import of CU.Name.t * filepath * filepath
-  | Need_recursive_types of CU.t
-  | Depend_on_unsafe_string_unit of CU.t
-  | Inconsistent_package_declaration of CU.t * filepath
-  | Inconsistent_package_declaration_between_imports of
-      filepath * CU.t * CU.t
-  | Direct_reference_from_wrong_package of
-      CU.t * filepath * CU.Prefix.t
+  | Illegal_renaming of modname * modname * filepath
+  | Inconsistent_import of modname * filepath * filepath
+  | Need_recursive_types of modname
 
 exception Error of error
 let error err = raise (Error err)
@@ -41,12 +34,11 @@ let error err = raise (Error err)
 module Persistent_signature = struct
   type t =
     { filename : string;
-      cmi : Cmi_format.cmi_infos_lazy }
+      cmi : Cmi_format.cmi_infos }
 
   let load = ref (fun ~unit_name ->
-      let unit_name = CU.Name.to_string unit_name in
       match Load_path.find_uncap (unit_name ^ ".cmi") with
-      | filename -> Some { filename; cmi = read_cmi_lazy filename }
+      | filename -> Some { filename; cmi = read_cmi filename }
       | exception Not_found -> None)
 end
 
@@ -55,11 +47,13 @@ type can_load_cmis =
   | Cannot_load_cmis of Lazy_backtrack.log
 
 type pers_struct = {
-  ps_name: CU.t;
-  ps_crcs: Import_info.t array;
+  ps_name: string;
+  ps_crcs: (string * Digest.t option) list;
   ps_filename: string;
   ps_flags: pers_flags list;
 }
+
+module String = Misc.Stdlib.String
 
 (* If a .cmi file is missing (or invalid), we
    store it as Missing in the cache. *)
@@ -68,18 +62,17 @@ type 'a pers_struct_info =
   | Found of pers_struct * 'a
 
 type 'a t = {
-  persistent_structures :
-    (CU.Name.t, 'a pers_struct_info) Hashtbl.t;
-  imported_units: CU.Name.Set.t ref;
-  imported_opaque_units: CU.Name.Set.t ref;
+  persistent_structures : (string, 'a pers_struct_info) Hashtbl.t;
+  imported_units: String.Set.t ref;
+  imported_opaque_units: String.Set.t ref;
   crc_units: Consistbl.t;
   can_load_cmis: can_load_cmis ref;
 }
 
 let empty () = {
   persistent_structures = Hashtbl.create 17;
-  imported_units = ref CU.Name.Set.empty;
-  imported_opaque_units = ref CU.Name.Set.empty;
+  imported_units = ref String.Set.empty;
+  imported_opaque_units = ref String.Set.empty;
   crc_units = Consistbl.create ();
   can_load_cmis = ref Can_load_cmis;
 }
@@ -93,8 +86,8 @@ let clear penv =
     can_load_cmis;
   } = penv in
   Hashtbl.clear persistent_structures;
-  imported_units := CU.Name.Set.empty;
-  imported_opaque_units := CU.Name.Set.empty;
+  imported_units := String.Set.empty;
+  imported_opaque_units := String.Set.empty;
   Consistbl.clear crc_units;
   can_load_cmis := Can_load_cmis;
   ()
@@ -108,10 +101,10 @@ let clear_missing {persistent_structures; _} =
   List.iter (Hashtbl.remove persistent_structures) missing_entries
 
 let add_import {imported_units; _} s =
-  imported_units := CU.Name.Set.add s !imported_units
+  imported_units := String.Set.add s !imported_units
 
 let register_import_as_opaque {imported_opaque_units; _} s =
-  imported_opaque_units := CU.Name.Set.add s !imported_opaque_units
+  imported_opaque_units := String.Set.add s !imported_opaque_units
 
 let find_in_cache {persistent_structures; _} s =
   match Hashtbl.find persistent_structures s with
@@ -121,15 +114,13 @@ let find_in_cache {persistent_structures; _} s =
 
 let import_crcs penv ~source crcs =
   let {crc_units; _} = penv in
-  let import_crc import_info =
-    let name = Import_info.name import_info in
-    let crco = Import_info.crc_with_unit import_info in
+  let import_crc (name, crco) =
     match crco with
     | None -> ()
-    | Some (unit, crc) ->
+    | Some crc ->
         add_import penv name;
-        Consistbl.check crc_units name unit crc source
-  in Array.iter import_crc crcs
+        Consistbl.check crc_units name crc source
+  in List.iter import_crc crcs
 
 let check_consistency penv ps =
   try import_crcs penv ~source:ps.ps_filename ps.ps_crcs
@@ -137,13 +128,8 @@ let check_consistency penv ps =
       unit_name = name;
       inconsistent_source = source;
       original_source = auth;
-      inconsistent_data = source_unit;
-      original_data = auth_unit;
     } ->
-    if CU.equal source_unit auth_unit
-    then error (Inconsistent_import(name, auth, source))
-    else error (Inconsistent_package_declaration_between_imports(
-        ps.ps_filename, auth_unit, source_unit))
+    error (Inconsistent_import(name, auth, source))
 
 let can_load_cmis penv =
   !(penv.can_load_cmis)
@@ -170,16 +156,15 @@ let fold {persistent_structures; _} f x =
 
 let save_pers_struct penv crc ps pm =
   let {persistent_structures; crc_units; _} = penv in
-  let modname = CU.name ps.ps_name in
+  let modname = ps.ps_name in
   Hashtbl.add persistent_structures modname (Found (ps, pm));
   List.iter
     (function
         | Rectypes -> ()
         | Alerts _ -> ()
-        | Unsafe_string -> ()
         | Opaque -> register_import_as_opaque penv modname)
     ps.ps_flags;
-  Consistbl.set crc_units modname ps.ps_name crc ps.ps_filename;
+  Consistbl.check crc_units modname crc ps.ps_filename;
   add_import penv modname
 
 let acknowledge_pers_struct penv check modname pers_sig pm =
@@ -192,38 +177,24 @@ let acknowledge_pers_struct penv check modname pers_sig pm =
              ps_filename = filename;
              ps_flags = flags;
            } in
-  let found_name = CU.name name in
-  if not (CU.Name.equal modname found_name) then
-    error (Illegal_renaming(modname, found_name, filename));
+  if ps.ps_name <> modname then
+    error (Illegal_renaming(modname, ps.ps_name, filename));
   List.iter
     (function
         | Rectypes ->
             if not !Clflags.recursive_types then
               error (Need_recursive_types(ps.ps_name))
-        | Unsafe_string ->
-            if Config.safe_string then
-              error (Depend_on_unsafe_string_unit(ps.ps_name));
         | Alerts _ -> ()
         | Opaque -> register_import_as_opaque penv modname)
     ps.ps_flags;
   if check then check_consistency penv ps;
-  begin match CU.get_current () with
-  | Some current_unit ->
-      let access_allowed =
-        CU.can_access_by_name name ~accessed_by:current_unit
-      in
-      if not access_allowed then
-        let prefix = CU.for_pack_prefix current_unit in
-        error (Direct_reference_from_wrong_package (name, filename, prefix));
-  | None -> ()
-  end;
   let {persistent_structures; _} = penv in
   Hashtbl.add persistent_structures modname (Found (ps, pm));
   ps
 
 let read_pers_struct penv val_of_pers_sig check modname filename =
   add_import penv modname;
-  let cmi = read_cmi_lazy filename in
+  let cmi = read_cmi filename in
   let pers_sig = { Persistent_signature.filename; cmi } in
   let pm = val_of_pers_sig pers_sig in
   let ps = acknowledge_pers_struct penv check modname pers_sig pm in
@@ -231,7 +202,7 @@ let read_pers_struct penv val_of_pers_sig check modname filename =
 
 let find_pers_struct penv val_of_pers_sig check name =
   let {persistent_structures; _} = penv in
-  if CU.Name.equal name CU.Name.predef_exn then raise Not_found;
+  if name = "*predef*" then raise Not_found;
   match Hashtbl.find persistent_structures name with
   | Found (ps, pm) -> (ps, pm)
   | Missing -> raise Not_found
@@ -251,24 +222,17 @@ let find_pers_struct penv val_of_pers_sig check name =
         let ps = acknowledge_pers_struct penv check name psig pm in
         (ps, pm)
 
-let describe_prefix ppf prefix =
-  if CU.Prefix.is_empty prefix then
-    Format.fprintf ppf "outside of any package"
-  else
-    Format.fprintf ppf "package %a" CU.Prefix.print prefix
-
 (* Emits a warning if there is no valid cmi for name *)
 let check_pers_struct penv f ~loc name =
-  let name_as_string = CU.Name.to_string name in
   try
     ignore (find_pers_struct penv f false name)
   with
   | Not_found ->
-      let warn = Warnings.No_cmi_file(name_as_string, None) in
+      let warn = Warnings.No_cmi_file(name, None) in
         Location.prerr_warning loc warn
   | Cmi_format.Error err ->
       let msg = Format.asprintf "%a" Cmi_format.report_error err in
-      let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
+      let warn = Warnings.No_cmi_file(name, Some msg) in
         Location.prerr_warning loc warn
   | Error err ->
       let msg =
@@ -276,26 +240,15 @@ let check_pers_struct penv f ~loc name =
         | Illegal_renaming(name, ps_name, filename) ->
             Format.asprintf
               " %a@ contains the compiled interface for @ \
-               %a when %a was expected"
-              Location.print_filename filename
-              CU.Name.print ps_name
-              CU.Name.print name
+               %s when %s was expected"
+              Location.print_filename filename ps_name name
         | Inconsistent_import _ -> assert false
         | Need_recursive_types name ->
-            Format.asprintf
-              "%a uses recursive types"
-              CU.print name
-        | Depend_on_unsafe_string_unit name ->
-            Format.asprintf "%a uses -unsafe-string"
-              CU.print name
-        | Inconsistent_package_declaration _ -> assert false
-        | Inconsistent_package_declaration_between_imports _ -> assert false
-        | Direct_reference_from_wrong_package (unit, _filename, prefix) ->
-            Format.asprintf "%a is inaccessible from %a"
-              CU.print unit
-              describe_prefix prefix
+            Format.sprintf
+              "%s uses recursive types"
+              name
       in
-      let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
+      let warn = Warnings.No_cmi_file(name, Some msg) in
         Location.prerr_warning loc warn
 
 let read penv f modname filename =
@@ -316,56 +269,35 @@ let check penv f ~loc name =
         (fun () -> check_pers_struct penv f ~loc name)
   end
 
-(* CR mshinwell: delete this having moved to 4.14 build compilers *)
-module Array = struct
-  include Array
-
-  (* From stdlib/array.ml *)
-  let find_opt p a =
-    let n = Array.length a in
-    let rec loop i =
-      if i = n then None
-      else
-        let x = Array.unsafe_get a i in
-        if p x then Some x
-        else loop (succ i)
-    in
-    loop 0
-end
-
 let crc_of_unit penv f name =
   let (ps, _pm) = find_pers_struct penv f true name in
-  match Array.find_opt (Import_info.has_name ~name) ps.ps_crcs with
-  | None -> assert false
-  | Some import_info ->
-    match Import_info.crc import_info with
-    | None -> assert false
+  let crco =
+    try
+      List.assoc name ps.ps_crcs
+    with Not_found ->
+      assert false
+  in
+    match crco with
+      None -> assert false
     | Some crc -> crc
 
 let imports {imported_units; crc_units; _} =
-  let imports =
-    Consistbl.extract (CU.Name.Set.elements !imported_units)
-      crc_units
-  in
-  List.map (fun (cu_name, crc_with_unit) ->
-      Import_info.create cu_name ~crc_with_unit)
-    imports
+  Consistbl.extract (String.Set.elements !imported_units) crc_units
 
 let looked_up {persistent_structures; _} modname =
   Hashtbl.mem persistent_structures modname
 
 let is_imported {imported_units; _} s =
-  CU.Name.Set.mem s !imported_units
+  String.Set.mem s !imported_units
 
 let is_imported_opaque {imported_opaque_units; _} s =
-  CU.Name.Set.mem s !imported_opaque_units
+  String.Set.mem s !imported_opaque_units
 
 let make_cmi penv modname sign alerts =
   let flags =
     List.concat [
       if !Clflags.recursive_types then [Cmi_format.Rectypes] else [];
       if !Clflags.opaque then [Cmi_format.Opaque] else [];
-      (if !Clflags.unsafe_string then [Cmi_format.Unsafe_string] else []);
       [Alerts alerts];
     ]
   in
@@ -373,7 +305,7 @@ let make_cmi penv modname sign alerts =
   {
     cmi_name = modname;
     cmi_sign = sign;
-    cmi_crcs = Array.of_list crcs;
+    cmi_crcs = crcs;
     cmi_flags = flags
   }
 
@@ -394,10 +326,7 @@ let save_cmi penv psig pm =
          will also return its crc *)
       let ps =
         { ps_name = modname;
-          ps_crcs =
-            Array.append
-              [| Import_info.create_normal cmi.cmi_name ~crc:(Some crc) |]
-              imports;
+          ps_crcs = (cmi.cmi_name, Some crc) :: imports;
           ps_filename = filename;
           ps_flags = flags;
         } in
@@ -410,44 +339,16 @@ let report_error ppf =
   function
   | Illegal_renaming(modname, ps_name, filename) -> fprintf ppf
       "Wrong file naming: %a@ contains the compiled interface for@ \
-       %a when %a was expected"
-      Location.print_filename filename
-      CU.Name.print ps_name
-      CU.Name.print modname
+       %s when %s was expected"
+      Location.print_filename filename ps_name modname
   | Inconsistent_import(name, source1, source2) -> fprintf ppf
       "@[<hov>The files %a@ and %a@ \
-              make inconsistent assumptions@ over interface %a@]"
-      Location.print_filename source1 Location.print_filename source2
-      CU.Name.print name
+              make inconsistent assumptions@ over interface %s@]"
+      Location.print_filename source1 Location.print_filename source2 name
   | Need_recursive_types(import) ->
       fprintf ppf
-        "@[<hov>Invalid import of %a, which uses recursive types.@ %s@]"
-        CU.print import
-        "The compilation flag -rectypes is required"
-  | Depend_on_unsafe_string_unit(import) ->
-      fprintf ppf
-        "@[<hov>Invalid import of %a, compiled with -unsafe-string.@ %s@]"
-        CU.print import
-        "This compiler has been configured in strict \
-                           safe-string mode (-force-safe-string)"
-  | Inconsistent_package_declaration(intf_package, intf_filename) ->
-      fprintf ppf
-        "@[<hov>The interface %a@ is compiled for package %s.@ %s@]"
-        CU.print intf_package intf_filename
-        "The compilation flag -for-pack with the same package is required"
-  | Inconsistent_package_declaration_between_imports (filename, unit1, unit2) ->
-      fprintf ppf
-        "@[<hov>The file %s@ is imported both as %a@ and as %a.@]"
-        filename
-        CU.print unit1
-        CU.print unit2
-  | Direct_reference_from_wrong_package(unit, filename, prefix) ->
-      fprintf ppf
-        "@[<hov>Invalid reference to %a (in file %s) from %a.@ %s]"
-        CU.print unit
-        filename
-        describe_prefix prefix
-        "Can only access members of this library's package or a containing package"
+        "@[<hov>Invalid import of %s, which uses recursive types.@ %s@]"
+        import "The compilation flag -rectypes is required"
 
 let () =
   Location.register_error_of_exn

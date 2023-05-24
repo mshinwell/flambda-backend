@@ -51,7 +51,7 @@ let print_info cmt =
     | Some filename -> open_out filename
   in
   let open Cmt_format in
-  Printf.fprintf oc "module name: %a\n" Compilation_unit.output cmt.cmt_modname;
+  Printf.fprintf oc "module name: %s\n" cmt.cmt_modname;
   begin match cmt.cmt_annots with
     Packed (_, list) ->
       Printf.fprintf oc "pack: %s\n" (String.concat " " list)
@@ -82,26 +82,14 @@ let print_info cmt =
     | Some digest ->
       Printf.fprintf oc "interface digest: %s\n" (Digest.to_hex digest);
   end;
-  let compare_imports (name1, _crco1) (name2, _crco2) =
-    Compilation_unit.Name.compare name1 name2
-  in
-  let imports =
-    let imports =
-      Array.map (fun import ->
-          Import_info.name import, Import_info.crc_with_unit import)
-        cmt.cmt_imports
-    in
-    Array.sort compare_imports imports;
-    Array.to_list imports
-  in
   List.iter (fun (name, crco) ->
     let crc =
       match crco with
         None -> dummy_crc
-      | Some (_unit, crc) -> Digest.to_hex crc
+      | Some crc -> Digest.to_hex crc
     in
-    Printf.fprintf oc "import: %a %s\n" Compilation_unit.Name.output name crc;
-  ) imports;
+    Printf.fprintf oc "import: %s %s\n" name crc;
+  ) (List.sort compare cmt.cmt_imports);
   Printf.fprintf oc "%!";
   begin match !target_filename with
   | None -> ()
@@ -185,7 +173,7 @@ let main () =
           | Some "-" -> None
           | Some _ as x -> x
         in
-        Envaux.reset_cache ~preserve_persistent_env:false;
+        Envaux.reset_cache ();
         List.iter Load_path.add_dir cmt.cmt_loadpath;
         Cmt2annot.gen_annot target_filename
           ~sourcefile:cmt.cmt_sourcefile
@@ -201,8 +189,7 @@ let main () =
     end
   ) arg_usage
 
-
-let () =
+let main () =
   try
     main ()
   with x ->
@@ -210,3 +197,5 @@ let () =
     Location.report_exception Format.err_formatter x;
     Format.fprintf Format.err_formatter "@.";
     exit 2
+
+let _ = main ()

@@ -15,7 +15,7 @@
 
 (* Second intermediate language (machine independent) *)
 
-type machtype_component = Cmx_format.machtype_component =
+type machtype_component =
   | Val
   | Addr
   | Int
@@ -98,10 +98,6 @@ val cur_label: unit -> label
 
 type rec_flag = Nonrecursive | Recursive
 
-type initialization_or_assignment =
-  | Initialization
-  | Assignment
-
 type phantom_defining_expr =
   (* CR-soon mshinwell: Convert this to [Targetint.OCaml.t] (or whatever the
      representation of "target-width OCaml integers of type [int]"
@@ -143,14 +139,18 @@ type memory_chunk =
                                           see PR#10433 *)
 
 and operation =
-    Capply of machtype * Lambda.region_close
+    Capply of machtype
   | Cextcall of string * machtype * exttype list * bool
       (** The [machtype] is the machine type of the result.
           The [exttype list] describes the unboxing types of the arguments.
-          An empty list means "all arguments are machine words [XInt]". *)
-  | Cload of memory_chunk * Asttypes.mutable_flag
-  | Calloc of Lambda.alloc_mode
-  | Cstore of memory_chunk * initialization_or_assignment
+          An empty list means "all arguments are machine words [XInt]".
+          The boolean indicates whether the function may allocate. *)
+  | Cload of
+      { memory_chunk: memory_chunk
+      ; mutability: Asttypes.mutable_flag
+      ; is_atomic: bool }
+  | Calloc
+  | Cstore of memory_chunk * Lambda.initialization_or_assignment
   | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi
   | Cand | Cor | Cxor | Clsl | Clsr | Casr
   | Ccmpi of integer_comparison
@@ -166,21 +166,12 @@ and operation =
                    then the index.
                    It results in a bounds error if the index is greater than
                    or equal to the bound. *)
-  | Cprobe of { name: string; handler_code_sym: string; }
-  | Cprobe_is_enabled of { name: string }
   | Copaque (* Sys.opaque_identity *)
-  | Cbeginregion | Cendregion
-
-(* This is information used exclusively during construction of cmm terms by
-   cmmgen, and thus irrelevant for selectgen. *)
-type kind_for_unboxing =
-  | Any (* This may contain anything, including non-scannable things *)
-  | Boxed_integer of Lambda.boxed_integer
-  | Boxed_float
+  | Cdls_get
 
 (** Every basic block should have a corresponding [Debuginfo.t] for its
     beginning. *)
-type expression =
+and expression =
     Cconst_int of int * Debuginfo.t
   | Cconst_natint of nativeint * Debuginfo.t
   | Cconst_float of float * Debuginfo.t
@@ -197,20 +188,17 @@ type expression =
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
-      * Debuginfo.t * expression * Debuginfo.t * kind_for_unboxing
+      * Debuginfo.t * expression * Debuginfo.t
   | Cswitch of expression * int array * (expression * Debuginfo.t) array
-      * Debuginfo.t * kind_for_unboxing
+      * Debuginfo.t
   | Ccatch of
       rec_flag
         * (int * (Backend_var.With_provenance.t * machtype) list
           * expression * Debuginfo.t) list
         * expression
-        * kind_for_unboxing
   | Cexit of int * expression list
   | Ctrywith of expression * Backend_var.With_provenance.t * expression
-      * Debuginfo.t * kind_for_unboxing
-  | Cregion of expression
-  | Cexclave of expression
+      * Debuginfo.t
 
 type codegen_option =
   | Reduce_code_size
@@ -245,7 +233,7 @@ type phrase =
 
 val ccatch :
      int * (Backend_var.With_provenance.t * machtype) list
-       * expression * expression * Debuginfo.t * kind_for_unboxing
+       * expression * expression * Debuginfo.t
   -> expression
 
 val reset : unit -> unit
@@ -259,18 +247,11 @@ val iter_shallow_tail: (expression -> unit) -> expression -> bool
       considered to be in tail position (because their result become
       the final result for the expression).  *)
 
-val map_shallow_tail: ?kind:kind_for_unboxing -> (expression -> expression) -> expression -> expression
-  (** Apply the transformation to those immediate sub-expressions of an
-      expression that are in tail position, using the same definition of "tail"
-      as [iter_shallow_tail] *)
-
-val map_tail: ?kind:kind_for_unboxing -> (expression -> expression) -> expression -> expression
+val map_tail: (expression -> expression) -> expression -> expression
   (** Apply the transformation to an expression, trying to push it
-      to all inner sub-expressions that can produce the final result,
-      by recursively applying map_shallow_tail *)
-
-val iter_shallow: (expression -> unit) -> expression -> unit
-  (** Apply the callback to each immediate sub-expression. *)
+      to all inner sub-expressions that can produce the final result.
+      Same disclaimer as for [iter_shallow_tail] about the notion
+      of "tail" sub-expression. *)
 
 val map_shallow: (expression -> expression) -> expression -> expression
   (** Apply the transformation to each immediate sub-expression. *)

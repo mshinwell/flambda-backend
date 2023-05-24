@@ -25,6 +25,16 @@ type condition =
   | S | NS     (* sign *)
   | P | NP     (* parity *)
 
+type float_condition =
+  | EQf
+  | LTf
+  | LEf
+  | UNORDf
+  | NEQf
+  | NLTf
+  | NLEf
+  | ORDf
+
 type rounding =
   | RoundUp
   | RoundDown
@@ -104,6 +114,7 @@ type instruction =
   | CDQ
   | CMOV of condition * arg * arg
   | CMP of arg * arg
+  | CMPSD of float_condition * arg * arg
   | COMISD of arg * arg
   | CQO
   | CVTSD2SI of arg * arg
@@ -157,6 +168,7 @@ type instruction =
   | LEAVE
   | MOV of arg * arg
   | MOVAPD of arg * arg
+  | MOVD of arg * arg
   | MOVLPD of arg * arg
   | MOVSD of arg * arg
   | MOVSS of arg * arg
@@ -184,16 +196,6 @@ type instruction =
   | XOR of arg * arg
   | XORPD of arg * arg
 
-(* ELF specific *)
-type reloc_type =
-  | R_X86_64_PLT32
-
-type reloc =
-  { offset : constant;
-    name : reloc_type;
-    expr : constant;
-  }
-
 type asm_line =
   | Ins of instruction
 
@@ -202,8 +204,6 @@ type asm_line =
   | Bytes of string
   | Comment of string
   | Global of string
-  | Hidden of string
-  | Weak of string
   | Long of constant
   | NewLabel of string * data_type
   | Quad of constant
@@ -220,6 +220,10 @@ type asm_line =
   | Cfi_adjust_cfa_offset of int
   | Cfi_endproc
   | Cfi_startproc
+  | Cfi_remember_state
+  | Cfi_restore_state
+  | Cfi_def_cfa_register of string
+  | Cfi_def_cfa_offset of int
   | File of int * string (* (file_num, file_name) *)
   | Indirect_symbol of string
   | Loc of int * int * int (* (file_num, line, col) *)
@@ -227,6 +231,5 @@ type asm_line =
   | Set of string * constant
   | Size of string * constant
   | Type of string * string
-  | Reloc of reloc
 
 type asm_program = asm_line list

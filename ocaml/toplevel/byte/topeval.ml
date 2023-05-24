@@ -15,8 +15,6 @@
 
 (* The interactive toplevel loop *)
 
-#18 "ocaml/toplevel/byte/topeval.ml"
-
 open Format
 open Misc
 open Parsetree
@@ -45,19 +43,19 @@ let implementation_label = ""
 
 module EvalBase = struct
 
-  let eval_compilation_unit cu =
-    try
-      Symtable.get_global_value
-        (cu |> Compilation_unit.to_global_ident_for_bytecode)
-    with Symtable.Error (Undefined_global name) ->
-      raise (Undefined_global name)
-
   let eval_ident id =
-    let name = Translmod.toplevel_name id in
-    try
-      String.Map.find name !toplevel_value_bindings
-    with Not_found ->
-      raise (Undefined_global name)
+    if Ident.persistent id || Ident.global id then begin
+      try
+        Symtable.get_global_value id
+      with Symtable.Error (Undefined_global name) ->
+        raise (Undefined_global name)
+    end else begin
+      let name = Translmod.toplevel_name id in
+      try
+        String.Map.find name !toplevel_value_bindings
+      with Not_found ->
+        raise (Undefined_global name)
+    end
 
 end
 
@@ -88,14 +86,18 @@ let load_lambda ppf lam =
   let bytecode, closure = Meta.reify_bytecode code [| events |] None in
   match
     may_trace := true;
-    Fun.protect
-      ~finally:(fun () -> may_trace := false;
-                          if can_free then Meta.release_bytecode bytecode)
-      closure
+    closure ()
   with
-  | retval -> Result retval
+  | retval ->
+    may_trace := false;
+    if can_free then Meta.release_bytecode bytecode;
+
+    Result retval
   | exception x ->
+    may_trace := false;
     record_backtrace ();
+    if can_free then Meta.release_bytecode bytecode;
+
     toplevel_value_bindings := initial_bindings; (* PR#6211 *)
     Symtable.restore_state initial_symtable;
     Exception x
@@ -117,10 +119,9 @@ let execute_phrase print_outcome ppf phr =
   match phr with
   | Ptop_def sstr ->
       let oldenv = !toplevel_env in
-      let oldsig = !toplevel_sig in
       Typecore.reset_delayed_checks ();
       let (str, sg, sn, shape, newenv) =
-        Typemod.type_toplevel_phrase oldenv oldsig sstr
+        Typemod.type_toplevel_phrase oldenv sstr
       in
       if !Clflags.dump_typedtree then Printtyped.implementation ppf str;
       let sg' = Typemod.Signature_names.simplify newenv sn sg in
@@ -132,7 +133,6 @@ let execute_phrase print_outcome ppf phr =
       Warnings.check_fatal ();
       begin try
         toplevel_env := newenv;
-        toplevel_sig := List.rev_append sg' oldsig;
         let res = load_lambda ppf lam in
         let out_phr =
           match res with
@@ -151,19 +151,24 @@ let execute_phrase print_outcome ppf phr =
               else Ophr_signature []
           | Exception exn ->
               toplevel_env := oldenv;
-              toplevel_sig := oldsig;
               if exn = Out_of_memory then Gc.full_major();
               let outv =
                 outval_of_value !toplevel_env (Obj.repr exn) Predef.type_exn
               in
               Ophr_exception (exn, outv)
         in
-        !print_out_phrase ppf out_phr;
+        begin match out_phr with
+        | Ophr_signature [] -> ()
+        | _ ->
+            Location.separate_new_message ppf;
+            !print_out_phrase ppf out_phr;
+        end;
         if Printexc.backtrace_status ()
         then begin
           match !backtrace with
             | None -> ()
             | Some b ->
+                Location.separate_new_message ppf;
                 pp_print_string ppf b;
                 pp_print_flush ppf ();
                 backtrace := None;
@@ -173,7 +178,7 @@ let execute_phrase print_outcome ppf phr =
         | Ophr_exception _ -> false
         end
       with x ->
-        toplevel_env := oldenv; toplevel_sig := oldsig; raise x
+        toplevel_env := oldenv; raise x
       end
   | Ptop_dir {pdir_name = {Location.txt = dir_name}; pdir_arg } ->
       try_run_directive ppf dir_name pdir_arg
@@ -201,8 +206,8 @@ let check_consistency ppf filename cu =
       original_source = auth;
     } ->
     fprintf ppf "@[<hv 0>The files %s@ and %s@ \
-                 disagree over interface %a@]@."
-            user auth Compilation_unit.Name.print name;
+                 disagree over interface %s@]@."
+            user auth name;
     raise Load_failed
 
 (* This is basically Dynlink.Bytecode.run with no digest *)
@@ -255,7 +260,7 @@ and really_load_file recursive ppf name filename ic =
     if buffer = Config.cmo_magic_number then begin
       let compunit_pos = input_binary_int ic in  (* Go to descriptor *)
       seek_in ic compunit_pos;
-      let cu : compilation_unit_descr = input_value ic in
+      let cu : compilation_unit = input_value ic in
       if recursive then
         List.iter
           (function

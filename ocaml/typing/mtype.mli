@@ -21,10 +21,6 @@ val scrape: Env.t -> module_type -> module_type
         (* Expand toplevel module type abbreviations
            till hitting a "hard" module type (signature, functor,
            or abstract module type ident. *)
-val scrape_alias: Env.t -> module_type -> module_type
-        (* Expand toplevel module type abbreviations and aliases
-           till hitting a "hard" module type (signature, functor,
-           or abstract module type ident. *)
 val scrape_for_functor_arg: Env.t -> module_type -> module_type
         (* Remove aliases in a functor argument type *)
 val scrape_for_type_of:
@@ -33,38 +29,15 @@ val scrape_for_type_of:
 val freshen: scope:int -> module_type -> module_type
         (* Return an alpha-equivalent copy of the given module type
            where bound identifiers are fresh. *)
-val strengthen_lazy:
-        aliasable:bool -> Env.t -> Subst.Lazy.module_type -> Path.t -> Subst.Lazy.module_type
 val strengthen: aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
         (* Strengthen abstract type components relative to the
            given path. *)
-val strengthen_lazy_decl:
-  aliasable:bool -> Env.t -> Subst.Lazy.module_declaration -> Path.t -> Subst.Lazy.module_declaration
 val strengthen_decl:
   aliasable:bool -> Env.t -> module_declaration -> Path.t -> module_declaration
-
-val find_type_of_module:
-  strengthen:bool -> aliasable:bool -> Env.t -> Path.t -> module_type
-        (* Get the type of a module, strengthening if necessary. *)
-
-val sig_make_manifest : signature -> signature
-        (* Make abstract types manifest.  Similar to strengthening, but rather
-           than providing definitions by making the name of the current module
-           explicit, simply create new identifiers with the same string part as
-           the originals and assume they are defined in the context in which
-           this signature appears.  *)
-
 val nondep_supertype: Env.t -> Ident.t list -> module_type -> module_type
         (* Return the smallest supertype of the given type
            in which none of the given idents appears.
            @raise [Ctype.Nondep_cannot_erase] if no such type exists. *)
-
-val nondep_sig: Env.t -> Ident.t list -> signature -> signature
-        (* Return the signature with the types of its elements updated to be the
-           smallest supertypes of their initial types in which none of the given
-           ident appears.
-           @raise [Ctype.Nondep_cannot_erase] if no such type exists. *)
-
 val nondep_sig_item: Env.t -> Ident.t list -> signature_item -> signature_item
         (* Returns the signature item with its type updated
            to be the smallest supertype of its initial type

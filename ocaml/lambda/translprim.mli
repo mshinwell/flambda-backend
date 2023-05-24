@@ -27,24 +27,19 @@ val add_exception_ident : Ident.t -> unit
 val remove_exception_ident : Ident.t -> unit
 
 val clear_used_primitives : unit -> unit
-val get_units_with_used_primitives: unit -> Compilation_unit.t list
+val get_used_primitives: unit -> Path.t list
 
 val check_primitive_arity :
   Location.t -> Primitive.description -> unit
 
 val transl_primitive :
   Lambda.scoped_location -> Primitive.description -> Env.t ->
-  Types.type_expr ->
-  poly_mode:Types.alloc_mode option ->
-  Path.t option ->
-  Lambda.lambda
+  Types.type_expr -> Path.t option -> Lambda.lambda
 
 val transl_primitive_application :
   Lambda.scoped_location -> Primitive.description -> Env.t ->
-  Types.type_expr -> Types.alloc_mode option -> Path.t ->
-  Typedtree.expression option ->
-  Lambda.lambda list -> Typedtree.expression list ->
-  Lambda.region_close -> Lambda.lambda
+  Types.type_expr -> Path.t -> Typedtree.expression option ->
+  Lambda.lambda list -> Typedtree.expression list -> Lambda.lambda
 
 (* Errors *)
 

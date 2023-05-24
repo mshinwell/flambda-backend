@@ -24,52 +24,13 @@ module Int = Numbers.Int
 module V = Backend_var
 module VP = Backend_var.With_provenance
 
-module Region_stack : sig
-  (* A nested set of regions, with the innermost at the head *)
-  type t = Reg.t array list
-
-  val equal : t -> t -> bool
-
-  (* Given two region stacks that are suffixes of the same
-     original stack, return their common suffix.
-
-     (This is always the shorter of the two arguments) *)
-  val common_suffix : t -> t -> t
-
-  (* Given a region stack R and one of its suffixes S,
-     return the prefix P where R = P @ S *)
-  val strip_suffix : suffix:t -> t -> t
-end  = struct
-  type t = Reg.t array list
-
-  let equal a b =
-    (a == b) || List.equal (==) a b
-
-  let common_suffix xs ys =
-    if xs == ys || List.compare_lengths xs ys <= 0
-    then xs
-    else ys
-
-  let strip_suffix ~suffix t =
-    match suffix with
-    | [] -> t
-    | _ when suffix == t -> []
-    | suff ->
-       let pre, suff' =
-         Misc.Stdlib.List.split_at (List.length t - List.length suff) t
-       in
-       assert (equal suff' suff);
-       pre
-end
-
 type environment =
   { vars : (Reg.t array
             * Backend_var.Provenance.t option
             * Asttypes.mutable_flag) V.Map.t;
-    static_exceptions : (Reg.t array list * Region_stack.t) Int.Map.t;
+    static_exceptions : Reg.t array list Int.Map.t;
     (** Which registers must be populated when jumping to the given
         handler. *)
-    regions : Region_stack.t;
   }
 
 let env_add ?(mut=Asttypes.Immutable) var regs env =
@@ -78,8 +39,7 @@ let env_add ?(mut=Asttypes.Immutable) var regs env =
   { env with vars = V.Map.add var (regs, provenance, mut) env.vars }
 
 let env_add_static_exception id v env =
-  { env with static_exceptions =
-               Int.Map.add id (v, env.regions) env.static_exceptions }
+  { env with static_exceptions = Int.Map.add id v env.static_exceptions }
 
 let env_find id env =
   let regs, _provenance, _mut = V.Map.find id env.vars in
@@ -100,22 +60,22 @@ let env_find_static_exception id env =
 let env_empty = {
   vars = V.Map.empty;
   static_exceptions = Int.Map.empty;
-  regions = [];
 }
 
 (* Infer the type of the result of an operation *)
 
 let oper_result_type = function
-  | Capply(ty, _) -> ty
+    Capply ty -> ty
   | Cextcall(_s, ty_res, _ty_args, _alloc) -> ty_res
-  | Cload (c, _) ->
-      begin match c with
+  | Cload {memory_chunk} ->
+      begin match memory_chunk with
       | Word_val -> typ_val
       | Single | Double -> typ_float
       | _ -> typ_int
       end
-  | Calloc _ -> typ_val
+  | Calloc -> typ_val
   | Cstore (_c, _) -> typ_void
+  | Cdls_get -> typ_val
   | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi |
     Cand | Cor | Cxor | Clsl | Clsr | Casr |
     Ccmpi _ | Ccmpa _ | Ccmpf _ -> typ_int
@@ -126,14 +86,7 @@ let oper_result_type = function
   | Cintoffloat -> typ_int
   | Craise _ -> typ_void
   | Ccheckbound -> typ_void
-  | Cprobe _ -> typ_void
-  | Cprobe_is_enabled _ -> typ_int
   | Copaque -> typ_val
-  | Cbeginregion ->
-    (* This must not be typ_val; the begin-region operation returns a
-       naked pointer into the local allocation stack. *)
-    typ_int
-  | Cendregion -> typ_void
 
 (* Infer the size in bytes of the result of an expression whose evaluation
    may be deferred (cf. [emit_parts]). *)
@@ -213,7 +166,7 @@ let join env opt_r1 seq1 opt_r2 seq2 =
   match (opt_r1, opt_r2) with
     (None, _) -> opt_r2
   | (_, None) -> opt_r1
-  | (Some (r1, uncl1), Some (r2, uncl2)) ->
+  | (Some r1, Some r2) ->
       let l1 = Array.length r1 in
       assert (l1 = Array.length r2);
       let r = Array.make l1 Reg.dummy in
@@ -235,10 +188,7 @@ let join env opt_r1 seq1 opt_r2 seq2 =
           seq2#insert_move env r2.(i) r.(i)
         end
       done;
-      let suffix = Region_stack.common_suffix uncl1 uncl2 in
-      seq1#insert_endregions_until env ~suffix uncl1;
-      seq2#insert_endregions_until env ~suffix uncl2;
-      Some (r, suffix)
+      Some r
 
 (* Same, for N branches *)
 
@@ -248,19 +198,18 @@ let join_array env rs =
     let (r, _) = rs.(i) in
     match r with
     | None -> ()
-    | Some (r, uncl) ->
+    | Some r ->
       match !some_res with
-      | None ->
-        some_res := Some (r, Array.map (fun r -> r.typ) r, uncl)
-      | Some (r', types, uncl') ->
+      | None -> some_res := Some (r, Array.map (fun r -> r.typ) r)
+      | Some (r', types) ->
         let types =
           Array.map2 (fun r typ -> Cmm.lub_component r.typ typ) r types
         in
-        some_res := Some (r', types, Region_stack.common_suffix uncl uncl')
+        some_res := Some (r', types)
   done;
   match !some_res with
     None -> None
-  | Some (template, types, regions) ->
+  | Some (template, types) ->
       let size_res = Array.length template in
       let res = Array.make size_res Reg.dummy in
       for i = 0 to size_res - 1 do
@@ -270,11 +219,9 @@ let join_array env rs =
         let (r, s) = rs.(i) in
         match r with
           None -> ()
-        | Some (r, uncl) ->
-           s#insert_moves env r res;
-           s#insert_endregions_until env ~suffix:regions uncl;
+        | Some r -> s#insert_moves env r res
       done;
-      Some (res, regions)
+      Some res
 
 (* Name of function being compiled *)
 let current_function_name = ref ""
@@ -356,7 +303,7 @@ end
 
 (* The default instruction selection class *)
 
-class virtual selector_generic = object (self : 'self)
+class virtual selector_generic = object (self)
 
 (* A syntactic criterion used in addition to judgements about (co)effects as
    to whether the evaluation of a given expression may be deferred by
@@ -377,18 +324,16 @@ method is_simple_expr = function
   | Cop(op, args, _) ->
       begin match op with
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc _ | Cstore _
-      | Craise _ | Ccheckbound
-      | Cprobe _ | Cprobe_is_enabled _ | Copaque -> false
-      | Cbeginregion | Cendregion -> false (* avoid reordering *)
+      | Capply _ | Cextcall _ | Calloc | Cstore _ | Craise _ | Copaque -> false
         (* The remaining operations are simple if their args are *)
       | Cload _ | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor
       | Cxor | Clsl | Clsr | Casr | Ccmpi _ | Caddv | Cadda | Ccmpa _ | Cnegf
       | Cabsf | Caddf | Csubf | Cmulf | Cdivf | Cfloatofint | Cintoffloat
-      | Ccmpf _ -> List.for_all self#is_simple_expr args
+      | Ccmpf _ | Ccheckbound | Cdls_get ->
+          List.for_all self#is_simple_expr args
       end
   | Cassign _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _
-  | Ctrywith _ | Cregion _ | Cexclave _ -> false
+  | Ctrywith _ -> false
 
 (* Analyses the effects and coeffects of an expression.  This is used across
    a whole list of expressions with a view to determining which expressions
@@ -413,29 +358,26 @@ method effects_of exp =
   | Cphantom_let (_var, _defining_expr, body) -> self#effects_of body
   | Csequence (e1, e2) ->
     EC.join (self#effects_of e1) (self#effects_of e2)
-  | Cifthenelse (cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg, _kind) ->
+  | Cifthenelse (cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg) ->
     EC.join (self#effects_of cond)
       (EC.join (self#effects_of ifso) (self#effects_of ifnot))
   | Cop (op, args, _) ->
     let from_op =
       match op with
-      | Capply _ | Cextcall _ | Cprobe _ | Copaque -> EC.arbitrary
-      | Calloc Alloc_heap -> EC.none
-      | Calloc Alloc_local -> EC.coeffect_only Coeffect.Arbitrary
+      | Capply _ | Cextcall _ | Copaque -> EC.arbitrary
+      | Calloc -> EC.none
       | Cstore _ -> EC.effect_only Effect.Arbitrary
-      | Cbeginregion | Cendregion -> EC.arbitrary
       | Craise _ | Ccheckbound -> EC.effect_only Effect.Raise
-      | Cload (_, Asttypes.Immutable) -> EC.none
-      | Cload (_, Asttypes.Mutable) -> EC.coeffect_only Coeffect.Read_mutable
-      | Cprobe_is_enabled _ -> EC.coeffect_only Coeffect.Arbitrary
+      | Cload {mutability = Asttypes.Immutable} -> EC.none
+      | Cload {mutability = Asttypes.Mutable} | Cdls_get ->
+          EC.coeffect_only Coeffect.Read_mutable
       | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor | Cxor
       | Clsl | Clsr | Casr | Ccmpi _ | Caddv | Cadda | Ccmpa _ | Cnegf | Cabsf
       | Caddf | Csubf | Cmulf | Cdivf | Cfloatofint | Cintoffloat | Ccmpf _ ->
         EC.none
     in
     EC.join from_op (EC.join_list_map args self#effects_of)
-  | Cassign _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _
-  | Cregion _ | Cexclave _ ->
+  | Cassign _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ ->
     EC.arbitrary
 
 (* Says whether an integer constant is a suitable immediate argument for
@@ -469,10 +411,11 @@ method mark_call =
 
 method mark_tailcall = ()
 
-method mark_c_tailcall = ()
+method mark_c_tailcall =
+  if !Clflags.debug then contains_calls := true
 
 method mark_instr = function
-  | Iop (Icall_ind | Icall_imm _ | Iextcall _ | Iprobe _) ->
+  | Iop (Icall_ind | Icall_imm _ | Iextcall _) ->
       self#mark_call
   | Iop (Itailcall_ind | Itailcall_imm _) ->
       self#mark_tailcall
@@ -486,8 +429,8 @@ method mark_instr = function
       | Lambda.Raise_regular
       | Lambda.Raise_reraise ->
           (* PR#6239 *)
-          (* caml_stash_backtrace; we #mark_call rather than
-             #mark_c_tailcall to get a good stack backtrace *)
+        (* caml_stash_backtrace; we #mark_call rather than
+           #mark_c_tailcall to get a good stack backtrace *)
           self#mark_call
     end
   | Itrywith _ ->
@@ -503,16 +446,17 @@ method select_operation op args _dbg =
   | (Capply _, _) ->
     (Icall_ind, args)
   | (Cextcall(func, ty_res, ty_args, alloc), _) ->
-    Iextcall { func; ty_res; ty_args; alloc; }, args
-  | (Cload (chunk, mut), [arg]) ->
-      let (addr, eloc) = self#select_addressing chunk arg in
-      (Iload(chunk, addr, mut), [eloc])
+    Iextcall { func; alloc; ty_res; ty_args; stack_ofs = -1}, args
+  | (Cload {memory_chunk; mutability; is_atomic}, [arg]) ->
+      let (addressing_mode, eloc) = self#select_addressing memory_chunk arg in
+      (Iload {memory_chunk; addressing_mode; mutability; is_atomic}, [eloc])
   | (Cstore (chunk, init), [arg1; arg2]) ->
       let (addr, eloc) = self#select_addressing chunk arg1 in
       let is_assign =
         match init with
-        | Initialization -> false
-        | Assignment -> true
+        | Lambda.Root_initialization -> false
+        | Lambda.Heap_initialization -> false
+        | Lambda.Assignment -> true
       in
       if chunk = Word_int || chunk = Word_val then begin
         let (op, newarg2) = self#select_store is_assign addr arg2 in
@@ -521,7 +465,8 @@ method select_operation op args _dbg =
         (Istore(chunk, addr, is_assign), [arg2; eloc])
         (* Inversion addr/datum in Istore *)
       end
-  | (Calloc mode, _) -> (Ialloc {bytes = 0; dbginfo = []; mode}), args
+  | (Cdls_get, _) -> Idls_get, args
+  | (Calloc, _) -> (Ialloc {bytes = 0; dbginfo = []}), args
   | (Caddi, _) -> self#select_arith_comm Iadd args
   | (Csubi, _) -> self#select_arith Isub args
   | (Cmuli, _) -> self#select_arith_comm Imul args
@@ -538,6 +483,7 @@ method select_operation op args _dbg =
   | (Caddv, _) -> self#select_arith_comm Iadd args
   | (Cadda, _) -> self#select_arith_comm Iadd args
   | (Ccmpa comp, _) -> self#select_arith_comp (Iunsigned comp) args
+  | (Ccmpf comp, _) -> (Icompf comp, args)
   | (Cnegf, _) -> (Inegf, args)
   | (Cabsf, _) -> (Iabsf, args)
   | (Caddf, _) -> (Iaddf, args)
@@ -548,11 +494,6 @@ method select_operation op args _dbg =
   | (Cintoffloat, _) -> (Iintoffloat, args)
   | (Ccheckbound, _) ->
     self#select_arith Icheckbound args
-  | (Cprobe { name; handler_code_sym; }, _) ->
-    Iprobe { name; handler_code_sym; }, args
-  | (Cprobe_is_enabled {name}, _) -> Iprobe_is_enabled {name}, []
-  | (Cbeginregion, _) -> Ibeginregion, []
-  | (Cendregion, _) -> Iendregion, args
   | _ -> Misc.fatal_error "Selection.select_oper"
 
 method private select_arith_comm op = function
@@ -638,7 +579,7 @@ method insert_move env src dst =
     self#insert env (Iop Imove) [|src|] [|dst|]
 
 method insert_moves env src dst =
-  for i = 0 to Misc.Stdlib.Int.min (Array.length src) (Array.length dst) - 1 do
+  for i = 0 to Stdlib.Int.min (Array.length src) (Array.length dst) - 1 do
     self#insert_move env src.(i) dst.(i)
   done
 
@@ -651,10 +592,10 @@ method insert_move_args env arg loc stacksize =
   self#insert_moves env arg loc
 
 method insert_move_results env loc res stacksize =
-  self#insert_moves env loc res;
   if stacksize <> 0 then begin
     self#insert env (Iop(Istackoffset(-stacksize))) [||] [||]
-  end
+  end;
+  self#insert_moves env loc res
 
 (* Add an Iop opcode. Can be overridden by processor description
    to insert moves before and after the operation, i.e. for two-address
@@ -667,50 +608,20 @@ method insert_op_debug env op dbg rs rd =
 method insert_op env op rs rd =
   self#insert_op_debug env op Debuginfo.none rs rd
 
-method insert_endregions env regions =
-  match regions with
-  | [] -> ()
-  | regions ->
-     (* Coalesce multiple simultaneous Iendregion *)
-     let final_region = List.hd (List.rev regions) in
-     self#insert env (Iop Iendregion) final_region [| |]
+(* Add the instructions for the given expression
+   at the end of the self sequence *)
 
-method insert_endregions_until env ~suffix regions =
-  self#insert_endregions env (Region_stack.strip_suffix ~suffix regions)
-
-(* Emit an expression, which is assumed not to end any regions early.
-   (This holds for any expression not in tail position of Cregion)
-
-   Returns:
-     - [None] if the expression does not finish normally (e.g. raises)
-     - [Some rs] if the expression yields a result in registers [rs] *)
 method emit_expr (env:environment) exp =
-  match self#emit_expr_aux env exp with
-  | None -> None
-  | Some (res, unclosed) ->
-     assert (Region_stack.equal unclosed env.regions);
-     Some res
-
-(* Emit an expression which may end some regions early.
-
-   Returns:
-    - [None] if the expression does not finish normally (e.g. raises)
-    - [Some (rs, unclosed)] if the expression yields a result in [rs],
-      having left [unclosed] (a suffix of env.regions) regions open *)
-method emit_expr_aux (env:environment) exp :
-  (Reg.t array * Region_stack.t) option =
-  (* Normal case of returning a value: no regions are closed *)
-  let ret res = Some (res, env.regions) in
   match exp with
     Cconst_int (n, _dbg) ->
       let r = self#regs_for typ_int in
-      ret (self#insert_op env (Iconst_int(Nativeint.of_int n)) [||] r)
+      Some(self#insert_op env (Iconst_int(Nativeint.of_int n)) [||] r)
   | Cconst_natint (n, _dbg) ->
       let r = self#regs_for typ_int in
-      ret (self#insert_op env (Iconst_int n) [||] r)
+      Some(self#insert_op env (Iconst_int n) [||] r)
   | Cconst_float (n, _dbg) ->
       let r = self#regs_for typ_float in
-      ret (self#insert_op env (Iconst_float (Int64.bits_of_float n)) [||] r)
+      Some(self#insert_op env (Iconst_float (Int64.bits_of_float n)) [||] r)
   | Cconst_symbol (n, _dbg) ->
       (* Cconst_symbol _ evaluates to a statically-allocated address, so its
          value fits in a typ_int register and is never changed by the GC.
@@ -720,25 +631,25 @@ method emit_expr_aux (env:environment) exp :
          registered in the compilation unit's global roots structure, so
          adding this register to the frame table would be redundant *)
       let r = self#regs_for typ_int in
-      ret (self#insert_op env (Iconst_symbol n) [||] r)
+      Some(self#insert_op env (Iconst_symbol n) [||] r)
   | Cvar v ->
       begin try
-        ret (env_find v env)
+        Some(env_find v env)
       with Not_found ->
         Misc.fatal_error("Selection.emit_expr: unbound var " ^ V.unique_name v)
       end
   | Clet(v, e1, e2) ->
       begin match self#emit_expr env e1 with
         None -> None
-      | Some r1 -> self#emit_expr_aux (self#bind_let env v r1) e2
+      | Some r1 -> self#emit_expr (self#bind_let env v r1) e2
       end
   | Clet_mut(v, k, e1, e2) ->
       begin match self#emit_expr env e1 with
         None -> None
-      | Some r1 -> self#emit_expr_aux (self#bind_let_mut env v k r1) e2
+      | Some r1 -> self#emit_expr (self#bind_let_mut env v k r1) e2
       end
   | Cphantom_let (_var, _defining_expr, body) ->
-      self#emit_expr_aux env body
+      self#emit_expr env body
   | Cassign(v, e1) ->
       let rv =
         try
@@ -748,15 +659,15 @@ method emit_expr_aux (env:environment) exp :
       begin match self#emit_expr env e1 with
         None -> None
       | Some r1 ->
-          self#insert_moves env r1 rv; ret [||]
+          self#insert_moves env r1 rv; Some [||]
       end
   | Ctuple [] ->
-      ret [||]
+      Some [||]
   | Ctuple exp_list ->
       begin match self#emit_parts_list env exp_list with
         None -> None
       | Some(simple_list, ext_env) ->
-          ret (self#emit_tuple ext_env simple_list)
+          Some(self#emit_tuple ext_env simple_list)
       end
   | Cop(Craise k, [arg], dbg) ->
       begin match self#emit_expr env arg with
@@ -767,103 +678,84 @@ method emit_expr_aux (env:environment) exp :
           self#insert_debug env  (Iraise k) dbg rd [||];
           None
       end
-  | Cop(Ccmpf _, _, dbg) ->
-      self#emit_expr_aux env
-        (Cifthenelse (exp,
-          dbg, Cconst_int (1, dbg),
-          dbg, Cconst_int (0, dbg),
-          dbg, Any))
   | Cop(Copaque, args, dbg) ->
       begin match self#emit_parts_list env args with
         None -> None
       | Some (simple_args, env) ->
          let rs = self#emit_tuple env simple_args in
-         ret (self#insert_op_debug env Iopaque dbg rs rs)
+         Some (self#insert_op_debug env Iopaque dbg rs rs)
       end
   | Cop(op, args, dbg) ->
       begin match self#emit_parts_list env args with
         None -> None
       | Some(simple_args, env) ->
           let ty = oper_result_type op in
-          let unclosed_regions =
-            match op with
-            | Capply (_, Rc_close_at_apply) -> List.tl env.regions
-            | _ -> env.regions
-          in
           let (new_op, new_args) = self#select_operation op simple_args dbg in
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in
               let rarg = Array.sub r1 1 (Array.length r1 - 1) in
               let rd = self#regs_for ty in
-              self#insert_endregions_until env ~suffix:unclosed_regions env.regions;
-              let (loc_arg, stack_ofs_args) = Proc.loc_arguments (Reg.typv rarg) in
-              let (loc_res, stack_ofs_res) = Proc.loc_results_call (Reg.typv rd) in
-              let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+              let (loc_arg, stack_ofs) = Proc.loc_arguments (Reg.typv rarg) in
+              let loc_res = Proc.loc_results (Reg.typv rd) in
               self#insert_move_args env rarg loc_arg stack_ofs;
               self#insert_debug env (Iop new_op) dbg
                           (Array.append [|r1.(0)|] loc_arg) loc_res;
               self#insert_move_results env loc_res rd stack_ofs;
-              Some (rd, unclosed_regions)
+              Some rd
           | Icall_imm _ ->
               let r1 = self#emit_tuple env new_args in
               let rd = self#regs_for ty in
-              self#insert_endregions_until env ~suffix:unclosed_regions env.regions;
-              let (loc_arg, stack_ofs_args) = Proc.loc_arguments (Reg.typv r1) in
-              let (loc_res, stack_ofs_res) = Proc.loc_results_call (Reg.typv rd) in
-              let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+              let (loc_arg, stack_ofs) = Proc.loc_arguments (Reg.typv r1) in
+              let loc_res = Proc.loc_results (Reg.typv rd) in
               self#insert_move_args env r1 loc_arg stack_ofs;
               self#insert_debug env (Iop new_op) dbg loc_arg loc_res;
               self#insert_move_results env loc_res rd stack_ofs;
-              Some (rd, unclosed_regions)
-          | Iextcall { ty_args; _} ->
+              Some rd
+          | Iextcall r ->
               let (loc_arg, stack_ofs) =
-                self#emit_extcall_args env ty_args new_args in
+                self#emit_extcall_args env r.ty_args new_args in
               let rd = self#regs_for ty in
               let loc_res =
-                self#insert_op_debug env new_op dbg
+                self#insert_op_debug env
+                  (Iextcall {r with stack_ofs = stack_ofs}) dbg
                   loc_arg (Proc.loc_external_results (Reg.typv rd)) in
               self#insert_move_results env loc_res rd stack_ofs;
-              assert (Region_stack.equal unclosed_regions env.regions);
-              ret rd
-          | Ialloc { bytes = _; mode } ->
+              Some rd
+          | Ialloc { bytes = _; } ->
               let rd = self#regs_for typ_val in
               let bytes = size_expr env (Ctuple new_args) in
               assert (bytes mod Arch.size_addr = 0);
               let alloc_words = bytes / Arch.size_addr in
               let op =
-                Ialloc { bytes;
-                         dbginfo = [{alloc_words; alloc_dbg = dbg}];
-                         mode }
+                Ialloc { bytes; dbginfo = [{alloc_words; alloc_dbg = dbg}] }
               in
               self#insert_debug env (Iop op) dbg [||] rd;
               self#emit_stores env new_args rd;
-              assert (Region_stack.equal unclosed_regions env.regions);
-              ret rd
+              Some rd
           | op ->
               let r1 = self#emit_tuple env new_args in
               let rd = self#regs_for ty in
-              assert (Region_stack.equal unclosed_regions env.regions);
-              ret (self#insert_op_debug env op dbg r1 rd)
+              Some (self#insert_op_debug env op dbg r1 rd)
       end
   | Csequence(e1, e2) ->
       begin match self#emit_expr env e1 with
         None -> None
-      | Some _ -> self#emit_expr_aux env e2
+      | Some _ -> self#emit_expr env e2
       end
-  | Cifthenelse(econd, _ifso_dbg, eif, _ifnot_dbg, eelse, _dbg, _kind) ->
+  | Cifthenelse(econd, _ifso_dbg, eif, _ifnot_dbg, eelse, _dbg) ->
       let (cond, earg) = self#select_condition econd in
       begin match self#emit_expr env earg with
         None -> None
       | Some rarg ->
-          let (rif, (sif : 'self)) = self#emit_sequence env eif in
-          let (relse, (selse : 'self)) = self#emit_sequence env eelse in
+          let (rif, sif) = self#emit_sequence env eif in
+          let (relse, selse) = self#emit_sequence env eelse in
           let r = join env rif sif relse selse in
           self#insert env (Iifthenelse(cond, sif#extract, selse#extract))
                       rarg [||];
           r
       end
-  | Cswitch(esel, index, ecases, _dbg, _kind) ->
+  | Cswitch(esel, index, ecases, _dbg) ->
       begin match self#emit_expr env esel with
         None -> None
       | Some rsel ->
@@ -876,9 +768,9 @@ method emit_expr_aux (env:environment) exp :
                       rsel [||];
           r
       end
-  | Ccatch(_, [], e1, _) ->
-      self#emit_expr_aux env e1
-  | Ccatch(rec_flag, handlers, body, _) ->
+  | Ccatch(_, [], e1) ->
+      self#emit_expr env e1
+  | Ccatch(rec_flag, handlers, body) ->
       let handlers =
         List.map (fun (nfail, ids, e2, dbg) ->
             let rs =
@@ -919,7 +811,7 @@ method emit_expr_aux (env:environment) exp :
         None -> None
       | Some (simple_list, ext_env) ->
           let src = self#emit_tuple ext_env simple_list in
-          let dest_args, dest_regions =
+          let dest_args =
             try env_find_static_exception nfail env
             with Not_found ->
               Misc.fatal_error ("Selection.emit_expr: unbound label "^
@@ -932,20 +824,10 @@ method emit_expr_aux (env:environment) exp :
           Array.iter (fun reg -> assert(reg.typ <> Addr)) src;
           self#insert_moves env src tmp_regs ;
           self#insert_moves env tmp_regs (Array.concat dest_args) ;
-          self#insert_endregions_until env ~suffix:dest_regions env.regions;
           self#insert env (Iexit nfail) [||] [||];
           None
       end
-  | Ctrywith(e1, v, e2, _dbg, _value_kind) ->
-      let end_region =
-        if Config.stack_allocation then begin
-          let reg = self#regs_for typ_int in
-          self#insert env (Iop Ibeginregion) [| |] reg;
-          fun handler_instruction -> instr_cons (Iop Iendregion) reg [| |] handler_instruction
-        end
-        else
-          fun handler_instruction -> handler_instruction
-      in
+  | Ctrywith(e1, v, e2, _dbg) ->
       let (r1, s1) = self#emit_sequence env e1 in
       let rv = self#regs_for typ_val in
       let (r2, s2) = self#emit_sequence (env_add v rv env) e2 in
@@ -953,38 +835,13 @@ method emit_expr_aux (env:environment) exp :
       self#insert env
         (Itrywith(s1#extract,
                   instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv
-                    (end_region s2#extract)))
+                             (s2#extract)))
         [||] [||];
       r
-  | Cregion e ->
-     assert (Config.stack_allocation);
-     let old_regions = env.regions in
-     let reg = self#regs_for typ_int in
-     self#insert env (Iop Ibeginregion) [| |] reg;
-     let env = { env with regions = reg :: old_regions } in
-     begin match self#emit_expr_aux env e with
-     | None -> None
-     | Some (rd, reg' :: unclosed) when reg == reg' ->
-        (* Compiling e closed no regions *)
-        assert (Region_stack.equal unclosed old_regions);
-        self#insert_endregions env [reg];
-        Some (rd, unclosed)
-     | Some (rd, unclosed) ->
-        (* Compiling e closed [reg], and possibly other regions too *)
-        assert (List.length unclosed <= List.length old_regions);
-        Some (rd, unclosed)
-     end
-  | Cexclave e ->
-     begin match env.regions with
-     | [] -> Misc.fatal_error "Selectgen.emit_expr: Cexclave but not in tail of a region"
-     | cl :: rest ->
-       self#insert_endregions env [cl];
-       self#emit_expr_aux { env with regions = rest } e
-     end
 
-method private emit_sequence (env:environment) exp : _ * 'self=
-  let s : 'self = {< instr_seq = dummy_instr >} in
-  let r = s#emit_expr_aux env exp in
+method private emit_sequence (env:environment) exp =
+  let s = {< instr_seq = dummy_instr >} in
+  let r = s#emit_expr env exp in
   (r, s)
 
 method private bind_let (env:environment) v r1 =
@@ -1155,29 +1012,14 @@ method emit_stores env data regs_addr =
 
 (* Same, but in tail position *)
 
-method private insert_return (env:environment) r =
-  match r with
+method private emit_return (env:environment) exp =
+  match self#emit_expr env exp with
     None -> ()
-  | Some (r, unclosed_regions) ->
-      self#insert_endregions env unclosed_regions;
-      let loc = Proc.loc_results_return (Reg.typv r) in
+  | Some r ->
+      let loc = Proc.loc_results (Reg.typv r) in
       self#insert_moves env r loc;
       self#insert env Ireturn loc [||]
 
-method private emit_return (env:environment) exp =
-  self#insert_return env (self#emit_expr_aux env exp)
-
-method private tail_call_possible (env:environment) (pos:Lambda.region_close) =
-  match pos, env.regions with
-  | (Rc_normal | Rc_nontail), [] -> true
-  | (Rc_normal | Rc_nontail), _ :: _ -> false
-  | Rc_close_at_apply, [] ->
-     Misc.fatal_error "Selectgen: Rc_close_at_apply with no region to close"
-  | Rc_close_at_apply, [_] -> true
-  | Rc_close_at_apply, _ :: _ :: _ -> false
-
-(* Emit an expression in tail position of a function,
-   closing all regions in [env.regions] *)
 method emit_tail (env:environment) exp =
   match exp with
     Clet(v, e1, e2) ->
@@ -1192,9 +1034,7 @@ method emit_tail (env:environment) exp =
      end
   | Cphantom_let (_var, _defining_expr, body) ->
       self#emit_tail env body
-  | Cop((Capply(ty, ((Rc_close_at_apply | Rc_normal) as pos))) as op,
-        args, dbg)
-       when self#tail_call_possible env pos ->
+  | Cop((Capply ty) as op, args, dbg) ->
       begin match self#emit_parts_list env args with
         None -> ()
       | Some(simple_args, env) ->
@@ -1202,18 +1042,16 @@ method emit_tail (env:environment) exp =
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in
-              let rd = self#regs_for ty in
               let rarg = Array.sub r1 1 (Array.length r1 - 1) in
-              self#insert_endregions env env.regions;
-              let (loc_arg, stack_ofs_args) = Proc.loc_arguments (Reg.typv rarg) in
-              let (loc_res, stack_ofs_res) = Proc.loc_results_call (Reg.typv rd) in
-              let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+              let (loc_arg, stack_ofs) = Proc.loc_arguments (Reg.typv rarg) in
               if stack_ofs = 0 then begin
                 let call = Iop (Itailcall_ind) in
                 self#insert_moves env rarg loc_arg;
                 self#insert_debug env call dbg
                             (Array.append [|r1.(0)|] loc_arg) [||];
               end else begin
+                let rd = self#regs_for ty in
+                let loc_res = Proc.loc_results (Reg.typv rd) in
                 self#insert_move_args env rarg loc_arg stack_ofs;
                 self#insert_debug env (Iop new_op) dbg
                             (Array.append [|r1.(0)|] loc_arg) loc_res;
@@ -1222,11 +1060,7 @@ method emit_tail (env:environment) exp =
               end
           | Icall_imm { func; } ->
               let r1 = self#emit_tuple env new_args in
-              let rd = self#regs_for ty in
-              self#insert_endregions env env.regions;
-              let (loc_arg, stack_ofs_args) = Proc.loc_arguments (Reg.typv r1) in
-              let (loc_res, stack_ofs_res) = Proc.loc_results_call (Reg.typv rd) in
-              let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+              let (loc_arg, stack_ofs) = Proc.loc_arguments (Reg.typv r1) in
               if stack_ofs = 0 then begin
                 let call = Iop (Itailcall_imm { func; }) in
                 self#insert_moves env r1 loc_arg;
@@ -1237,6 +1071,8 @@ method emit_tail (env:environment) exp =
                 self#insert_moves env r1 loc_arg';
                 self#insert_debug env call dbg loc_arg' [||];
               end else begin
+                let rd = self#regs_for ty in
+                let loc_res = Proc.loc_results (Reg.typv rd) in
                 self#insert_move_args env r1 loc_arg stack_ofs;
                 self#insert_debug env (Iop new_op) dbg loc_arg loc_res;
                 self#insert env (Iop(Istackoffset(-stack_ofs))) [||] [||];
@@ -1249,7 +1085,7 @@ method emit_tail (env:environment) exp =
         None -> ()
       | Some _ -> self#emit_tail env e2
       end
-  | Cifthenelse(econd, _ifso_dbg, eif, _ifnot_dbg, eelse, _dbg, _kind) ->
+  | Cifthenelse(econd, _ifso_dbg, eif, _ifnot_dbg, eelse, _dbg) ->
       let (cond, earg) = self#select_condition econd in
       begin match self#emit_expr env earg with
         None -> ()
@@ -1259,7 +1095,7 @@ method emit_tail (env:environment) exp =
                                          self#emit_tail_sequence env eelse))
                       rarg [||]
       end
-  | Cswitch(esel, index, ecases, _dbg, _kind) ->
+  | Cswitch(esel, index, ecases, _dbg) ->
       begin match self#emit_expr env esel with
         None -> ()
       | Some rsel ->
@@ -1269,9 +1105,9 @@ method emit_tail (env:environment) exp =
           in
           self#insert env (Iswitch (index, cases)) rsel [||]
       end
-  | Ccatch(_, [], e1, _) ->
+  | Ccatch(_, [], e1) ->
       self#emit_tail env e1
-  | Ccatch(rec_flag, handlers, e1, _) ->
+  | Ccatch(rec_flag, handlers, e1) ->
       let handlers =
         List.map (fun (nfail, ids, e2, dbg) ->
             let rs =
@@ -1296,36 +1132,20 @@ method emit_tail (env:environment) exp =
       in
       self#insert env (Icatch(rec_flag, List.map aux handlers, s_body))
         [||] [||]
-  | Ctrywith(e1, v, e2, _dbg, _value_kind) ->
-      let end_region =
-        if Config.stack_allocation then begin
-          let reg = self#regs_for typ_int in
-          self#insert env (Iop Ibeginregion) [| |] reg;
-          fun handler_instruction -> instr_cons (Iop Iendregion) reg [| |] handler_instruction
-        end
-        else
-          fun handler_instruction -> handler_instruction
-      in
+  | Ctrywith(e1, v, e2, _dbg) ->
       let (opt_r1, s1) = self#emit_sequence env e1 in
       let rv = self#regs_for typ_val in
       let s2 = self#emit_tail_sequence (env_add v rv env) e2 in
       self#insert env
         (Itrywith(s1#extract,
-                  instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv
-                    (end_region s2)))
+                  instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv s2))
         [||] [||];
-      self#insert_return env opt_r1
-  | Cregion e ->
-      assert (Config.stack_allocation);
-      let reg = self#regs_for typ_int in
-      self#insert env (Iop Ibeginregion) [| |] reg;
-      self#emit_tail {env with regions = reg::env.regions} e
-  | Cexclave e ->
-      begin match env.regions with
-      | [] -> Misc.fatal_error "Selectgen.emit_tail: Cexclave not inside Cregion"
-      | reg :: regions ->
-         self#insert_endregions env [reg];
-         self#emit_tail { env with regions } e
+      begin match opt_r1 with
+        None -> ()
+      | Some r1 ->
+          let loc = Proc.loc_results (Reg.typv r1) in
+          self#insert_moves env r1 loc;
+          self#insert env Ireturn loc [||]
       end
   | Cop _
   | Cconst_int _ | Cconst_natint _ | Cconst_float _ | Cconst_symbol _

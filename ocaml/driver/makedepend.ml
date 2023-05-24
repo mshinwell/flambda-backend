@@ -19,7 +19,7 @@ module String = Misc.Stdlib.String
 let ppf = Format.err_formatter
 (* Print the dependencies *)
 
-type file_kind = ML | MLI;;
+type file_kind = ML | MLI
 
 let load_path = ref ([] : (string * string array) list)
 let ml_synonyms = ref [".ml"]
@@ -38,7 +38,6 @@ let allow_approximation = ref false
 let map_files = ref []
 let module_map = ref String.Map.empty
 let debug = ref false
-let strict = ref false
 
 module Error_occurred : sig
   val set : unit -> unit
@@ -195,7 +194,6 @@ let print_filename s =
     loop 0 0;
     print_bytes result;
   end
-;;
 
 let print_dependencies target_files deps =
   let pos = ref 0 in
@@ -328,7 +326,7 @@ let read_parse_and_extract parse_function extract_function def ast_kind
     end
   with x -> begin
     print_exception x;
-    if !strict || not !allow_approximation then begin
+    if not !allow_approximation then begin
       Error_occurred.set ();
       (String.Set.empty, def)
     end else
@@ -416,9 +414,7 @@ let process_file_as process_fun def source_file =
       ));
   Location.input_name := source_file;
   try
-    if !strict || Sys.file_exists source_file
-    then process_fun source_file
-    else def
+    if Sys.file_exists source_file then process_fun source_file else def
   with x -> report_err x; def
 
 let process_file source_file ~ml_file ~mli_file ~def =
@@ -562,7 +558,6 @@ let parse_map fname =
   end;
   let mm = Depend.(weaken_map (String.Set.singleton modname) mm) in
   module_map := String.Map.add modname mm !module_map
-;;
 
 (* Dependency processing *)
 
@@ -581,13 +576,11 @@ let process_dep_args dep_args = List.iter process_dep_arg dep_args
 
 let print_version () =
   Format.printf "ocamldep, version %s@." Sys.ocaml_version;
-  exit 0;
-;;
+  exit 0
 
 let print_version_num () =
   Format.printf "%s@." Sys.ocaml_version;
-  exit 0;
-;;
+  exit 0
 
 
 let run_main argv =
@@ -600,6 +593,8 @@ let run_main argv =
     Clflags.add_arguments __LOC__ [
       "-absname", Arg.Set Clflags.absname,
         " Show absolute filenames in error messages";
+      "-no-absname", Arg.Clear Clflags.absname,
+        " Do not try to show absolute filenames in error messages (default)";
       "-all", Arg.Set all_dependencies,
         " Generate dependencies on all files";
       "-allow-approx", Arg.Set allow_approximation,
@@ -644,10 +639,10 @@ let run_main argv =
         " Generate dependencies for native plugin files (.cmxs targets)";
       "-slash", Arg.Set Clflags.force_slash,
         " (Windows) Use forward slash / instead of backslash \\ in file paths";
+      "-no-slash", Arg.Clear Clflags.force_slash,
+        " (Windows) Preserve any backslash \\ in file paths";
       "-sort", Arg.Set sort_files,
         " Sort files according to their dependencies";
-     "-strict", Arg.Set strict,
-       " Fail if an input file does not exist";
       "-version", Arg.Unit print_version,
         " Print version and exit";
       "-vnum", Arg.Unit print_version_num,
@@ -662,7 +657,6 @@ let run_main argv =
     let program = Filename.basename Sys.argv.(0) in
     Compenv.parse_arguments (ref argv)
       (add_dep_arg (fun f -> Src (f, None))) program;
-    List.iter Language_extension.enable Language_extension.max_compatible;
     process_dep_args (List.rev !dep_args_rev);
     Compenv.readenv ppf Before_link;
     if !sort_files then sort_files_by_dependencies !files

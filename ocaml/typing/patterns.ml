@@ -58,7 +58,7 @@ module Simple = struct
     | `Variant of label * pattern option * row_desc ref
     | `Record of
         (Longident.t loc * label_description * pattern) list * closed_flag
-    | `Array of mutable_flag * pattern list
+    | `Array of pattern list
     | `Lazy of pattern
   ]
 
@@ -79,18 +79,18 @@ end
 module General = struct
   type view = [
     | Half_simple.view
-    | `Var of Ident.t * string loc * value_mode
-    | `Alias of pattern * Ident.t * string loc * value_mode
+    | `Var of Ident.t * string loc
+    | `Alias of pattern * Ident.t * string loc
   ]
   type pattern = view pattern_data
 
   let view_desc = function
     | Tpat_any ->
        `Any
-    | Tpat_var (id, str, mode) ->
-       `Var (id, str, mode)
-    | Tpat_alias (p, id, str, mode) ->
-       `Alias (p, id, str, mode)
+    | Tpat_var (id, str) ->
+       `Var (id, str)
+    | Tpat_alias (p, id, str) ->
+       `Alias (p, id, str)
     | Tpat_constant cst ->
        `Constant cst
     | Tpat_tuple ps ->
@@ -101,7 +101,7 @@ module General = struct
        `Variant (cstr, arg, row_desc)
     | Tpat_record (fields, closed) ->
        `Record (fields, closed)
-    | Tpat_array (am,ps) -> `Array (am, ps)
+    | Tpat_array ps -> `Array ps
     | Tpat_or (p, q, row_desc) -> `Or (p, q, row_desc)
     | Tpat_lazy p -> `Lazy p
 
@@ -110,8 +110,8 @@ module General = struct
 
   let erase_desc = function
     | `Any -> Tpat_any
-    | `Var (id, str, mode) -> Tpat_var (id, str, mode)
-    | `Alias (p, id, str, mode) -> Tpat_alias (p, id, str, mode)
+    | `Var (id, str) -> Tpat_var (id, str)
+    | `Alias (p, id, str) -> Tpat_alias (p, id, str)
     | `Constant cst -> Tpat_constant cst
     | `Tuple ps -> Tpat_tuple ps
     | `Construct (cstr, cst_descr, args) ->
@@ -120,7 +120,7 @@ module General = struct
        Tpat_variant (cstr, arg, row_desc)
     | `Record (fields, closed) ->
        Tpat_record (fields, closed)
-    | `Array (am, ps) -> Tpat_array (am, ps)
+    | `Array ps -> Tpat_array ps
     | `Or (p, q, row_desc) -> Tpat_or (p, q, row_desc)
     | `Lazy p -> Tpat_lazy p
 
@@ -129,7 +129,7 @@ module General = struct
 
   let rec strip_vars (p : pattern) : Half_simple.pattern =
     match p.pat_desc with
-    | `Alias (p, _, _, _) -> strip_vars (view p)
+    | `Alias (p, _, _) -> strip_vars (view p)
     | `Var _ -> { p with pat_desc = `Any }
     | #Half_simple.view as view -> { p with pat_desc = view }
 end
@@ -147,7 +147,7 @@ module Head : sig
         { tag: label; has_arg: bool;
           cstr_row: row_desc ref;
           type_row : unit -> row_desc; }
-    | Array of mutable_flag * int
+    | Array of int
     | Lazy
 
   type t = desc pattern_data
@@ -174,7 +174,7 @@ end = struct
           type_row : unit -> row_desc; }
           (* the row of the type may evolve if [close_variant] is called,
              hence the (unit -> ...) delay *)
-    | Array of mutable_flag * int
+    | Array of int
     | Lazy
 
   type t = desc pattern_data
@@ -199,8 +199,8 @@ end = struct
             | _ -> assert false
           in
           Variant {tag; has_arg; cstr_row; type_row}, pats
-      | `Array (am, args) ->
-          Array (am, List.length args), args
+      | `Array args ->
+          Array (List.length args), args
       | `Record (largs, _) ->
           let lbls = List.map (fun (_,lbl,_) -> lbl) largs in
           let pats = List.map (fun (_,_,pat) -> pat) largs in
@@ -216,7 +216,7 @@ end = struct
       | Any -> 0
       | Constant _ -> 0
       | Construct c -> c.cstr_arity
-      | Tuple n | Array (_, n) -> n
+      | Tuple n | Array n -> n
       | Record l -> List.length l
       | Variant { has_arg; _ } -> if has_arg then 1 else 0
       | Lazy -> 1
@@ -229,7 +229,7 @@ end = struct
       | Lazy -> Tpat_lazy omega
       | Constant c -> Tpat_constant c
       | Tuple n -> Tpat_tuple (omegas n)
-      | Array (am, n) -> Tpat_array (am, omegas n)
+      | Array n -> Tpat_array (omegas n)
       | Construct c ->
           let lid_loc = mkloc (Longident.Lident c.cstr_name) in
           Tpat_construct (lid_loc, c, omegas c.cstr_arity, None)

@@ -15,24 +15,25 @@
 
 (* Symbol table information for .cmo and .cma files *)
 
+open Misc
+
 (* Relocation information *)
 
 type reloc_info =
-    Reloc_literal of Lambda.structured_constant    (* structured constant *)
+    Reloc_literal of Obj.t                  (* structured constant *)
   | Reloc_getglobal of Ident.t              (* reference to a global *)
   | Reloc_setglobal of Ident.t              (* definition of a global *)
   | Reloc_primitive of string               (* C primitive number *)
 
 (* Descriptor for compilation units *)
 
-type compilation_unit_descr =
-  { cu_name: Compilation_unit.t;        (* Name of compilation unit *)
+type compilation_unit =
+  { cu_name: modname;                   (* Name of compilation unit *)
     mutable cu_pos: int;                (* Absolute position in file *)
     cu_codesize: int;                   (* Size of code block *)
     cu_reloc: (reloc_info * int) list;  (* Relocation information *)
-    cu_imports: Import_info.t array;    (* Names and CRC of intfs imported *)
-    cu_required_globals: Compilation_unit.t list;
-                                        (* Compilation units whose
+    cu_imports: crcs;                   (* Names and CRC of intfs imported *)
+    cu_required_globals: Ident.t list;  (* Compilation units whose
                                            initialization side effects
                                            must occur before this one. *)
     cu_primitives: string list;         (* Primitives declared inside *)
@@ -50,7 +51,7 @@ type compilation_unit_descr =
 (* Descriptor for libraries *)
 
 type library =
-  { lib_units: compilation_unit_descr list; (* List of compilation units *)
+  { lib_units: compilation_unit list;   (* List of compilation units *)
     lib_custom: bool;                   (* Requires custom mode linking? *)
     (* In the following fields the lists are reversed with respect to
        how they end up being used on the command line. *)

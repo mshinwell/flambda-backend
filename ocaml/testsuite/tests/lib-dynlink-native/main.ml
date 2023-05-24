@@ -12,182 +12,174 @@ include dynlink
 
 ** native-dynlink
 libraries = "" (* We will add them manually where appropriated *)
-*** setup-ocamlopt.opt-build-env
+*** setup-ocamlopt.byte-build-env
 ocamlopt_default_flags = "" (* Removes the -ccopt -no-pie on ised on OpenBSD *)
 
-**** ocamlopt.opt
+**** ocamlopt.byte
 module = "api.ml"
-***** ocamlopt.opt
+***** ocamlopt.byte
 flags = "-opaque"
 module = "plugin.mli"
-****** ocamlopt.opt
+****** ocamlopt.byte
 flags = ""
 module = "plugin.ml"
-******* ocamlopt.opt
+******* ocamlopt.byte
 module= ""
 flags = "-shared"
 program = "plugin.so"
 all_modules = "plugin.cmx"
 ******** script
 script = "mv plugin.cmx plugin.cmx.bak"
-********* ocamlopt.opt
+********* ocamlopt.byte
 flags = ""
 module = "plugin2.ml"
 ********** script
 script = "mv plugin.cmx.bak plugin.cmx"
-*********** ocamlopt.opt
+*********** ocamlopt.byte
 module= ""
 flags = "-shared"
 program = "plugin2.so"
 all_modules = "plugin2.cmx"
-************ ocamlopt.opt
+************ ocamlopt.byte
 flags = ""
 module = "sub/plugin.ml"
-************* ocamlopt.opt
+************* ocamlopt.byte
 module = ""
 flags = "-shared"
 program = "sub/plugin.so"
 all_modules = "sub/plugin.cmx"
 ************** cd
 cwd = "sub"
-*************** ocamlopt.opt
+*************** ocamlopt.byte
 module = "api.mli"
 flags = "-opaque"
-**************** ocamlopt.opt
+**************** ocamlopt.byte
 flags = ""
 module = "api.ml"
 ***************** script
 script = "mv api.cmx api.cmx.bak"
-****************** ocamlopt.opt
+****************** ocamlopt.byte
 module = "plugin3.ml"
 ******************* script
 script = "mv api.cmx.bak api.cmx"
 ******************** cd
 cwd = ".."
-********************* ocamlopt.opt
+********************* ocamlopt.byte
 module = ""
 flags = "-shared"
 program = "sub/plugin3.so"
 all_modules = "sub/plugin3.cmx"
-********************** ocamlopt.opt
+********************** ocamlopt.byte
 flags = ""
 module = "plugin4.ml"
-*********************** ocamlopt.opt
+*********************** ocamlopt.byte
 module = ""
 flags = "-shared"
 program = "plugin4.so"
 all_modules = "plugin4.cmx"
-************************ ocamlopt.opt
+************************ ocamlopt.byte
 module = "packed1.ml"
 flags = "-for-pack Mypack"
-************************* ocamlopt.opt
+************************* ocamlopt.byte
 flags = "-S -pack"
 module = ""
 program = "mypack.cmx"
 all_modules = "packed1.cmx"
-************************** ocamlopt.opt
+************************** ocamlopt.byte
 program = "mypack.so"
 flags = "-shared"
 all_modules = "mypack.cmx"
-*************************** ocamlopt.opt
+*************************** ocamlopt.byte
 program = "packed1.so"
 flags = "-shared"
 all_modules = "packed1.cmx"
-**************************** ocamlopt.opt
-flags = "-for-pack Mypack"
-module = "packed1_client.ml"
-***************************** ocamlopt.opt
-module = ""
-program = "packed1_client.so"
-flags = "-shared"
-all_modules = "packed1_client.cmx"
-****************************** ocamlopt.opt
+**************************** ocamlopt.byte
 flags = ""
 module = "pack_client.ml"
-******************************* ocamlopt.opt
+***************************** ocamlopt.byte
 module = ""
 program = "pack_client.so"
 flags = "-shared"
 all_modules = "pack_client.cmx"
-******************************** ocamlopt.opt
+****************************** ocamlopt.byte
 flags = ""
 module = "plugin_ref.ml"
-********************************* ocamlopt.opt
+******************************* ocamlopt.byte
 module = ""
 program = "plugin_ref.so"
 flags = "-shared"
 all_modules = "plugin_ref.cmx"
-********************************** ocamlopt.opt
+******************************** ocamlopt.byte
 flags = ""
 module = "plugin_high_arity.ml"
-*********************************** ocamlopt.opt
+********************************* ocamlopt.byte
 module = ""
 program = "plugin_high_arity.so"
 flags = "-shared"
 all_modules = "plugin_high_arity.cmx"
-************************************ ocamlopt.opt
+********************************** ocamlopt.byte
 flags = "-ccopt ${shared_library_cflags}"
 module = "factorial.c"
-************************************* ocamlopt.opt
+*********************************** ocamlopt.byte
 flags = ""
 module = "plugin_ext.ml"
-************************************** ocamlopt.opt
+************************************ ocamlopt.byte
 module = ""
 program = "plugin_ext.so"
 flags = "-shared"
 all_modules = "factorial.${objext} plugin_ext.cmx"
-*************************************** ocamlopt.opt
+************************************* ocamlopt.byte
 module = "plugin_simple.ml"
 flags = ""
-**************************************** ocamlopt.opt
+************************************** ocamlopt.byte
 module = ""
 program = "plugin_simple.so"
 flags = "-shared"
 all_modules = "plugin_simple.cmx"
-**************************************** ocamlopt.opt
+************************************** ocamlopt.byte
 module = "bug.ml"
 flags = ""
-***************************************** ocamlopt.opt
+*************************************** ocamlopt.byte
 module = ""
 program = "bug.so"
 flags = "-shared"
 all_modules = "bug.cmx"
-***************************************** ocamlopt.opt
+*************************************** ocamlopt.byte
 module = "plugin_thread.ml"
 flags = ""
-****************************************** ocamlopt.opt
+**************************************** ocamlopt.byte
 module = ""
 program = "plugin_thread.so"
 flags = "-shared"
 all_modules = "plugin_thread.cmx"
-******************************************* ocamlopt.opt
+***************************************** ocamlopt.byte
 program = "plugin4_unix.so"
 all_modules = "unix.cmxa plugin4.cmx"
-******************************************** ocamlopt.opt
+****************************************** ocamlopt.byte
 flags = ""
 compile_only = "true"
 all_modules = "a.ml b.ml c.ml main.ml"
-********************************************* ocamlopt.opt
+******************************************* ocamlopt.byte
 module = ""
 compile_only = "false"
 flags = "-shared"
 program = "a.so"
 all_modules = "a.cmx"
-********************************************** ocamlopt.opt
+******************************************** ocamlopt.byte
 program = "b.so"
 all_modules = "b.cmx"
-*********************************************** ocamlopt.opt
+********************************************* ocamlopt.byte
 program = "c.so"
 all_modules = "c.cmx"
-************************************************ ocamlopt.opt
+********************************************** ocamlopt.byte
 program = "mylib.cmxa"
 flags = "-a"
 all_modules = "plugin.cmx plugin2.cmx"
-************************************************* ocamlopt.opt
+*********************************************** ocamlopt.byte
 program = "mylib.so"
 flags = "-shared -linkall"
 all_modules = "mylib.cmxa"
-************************************************** ocamlopt.opt
+************************************************ ocamlopt.byte
 program = "${test_build_directory}/main.exe"
 libraries = "unix threads dynlink"
 flags = "-linkall"
@@ -202,9 +194,9 @@ We thus do not check compiler output. This was not done either before the
 test was ported to ocamltest.
 *)
 
-*************************************************** run
+************************************************* run
 arguments = "plugin.so plugin2.so plugin_thread.so"
-**************************************************** check-program-output
+************************************************** check-program-output
 *)
 
 let () =

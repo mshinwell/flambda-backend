@@ -1,5 +1,7 @@
 (* TEST
    flags = "-g"
+   * skip
+   reason = "port stat-mem-prof : https://github.com/ocaml/ocaml/pull/8634"
 *)
 
 open Gc.Memprof
@@ -45,13 +47,13 @@ let check_distrib len cnt rate =
   assert (abs_float (mean -. float !smp) <= stddev *. 5.7)
 
 let () =
-  check_distrib 10 100000 0.01;
+  check_distrib 10 1000000 0.01;
   check_distrib 1000000 10 0.00001;
-  check_distrib 100000 10 0.0001;
-  check_distrib 100000 10 0.001;
-  check_distrib 100000 10 0.01;
-  check_distrib 10000 10 0.1;
-  check_distrib 10000 10 0.9
+  check_distrib 1000000 10 0.0001;
+  check_distrib 1000000 10 0.001;
+  check_distrib 1000000 10 0.01;
+  check_distrib 100000 10 0.1;
+  check_distrib 100000 10 0.9
 
 let () =
   Printf.printf "OK !\n"

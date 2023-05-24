@@ -1,4 +1,3 @@
-# 1 "stringLabels.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,12 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
 (* Module [StringLabels]: labelled String module *)
-
-[@@@ocaml.nolabels]
 
 include String

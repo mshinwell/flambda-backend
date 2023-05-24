@@ -18,7 +18,6 @@
 open Reg
 open Mach
 open Linear
-module Int = Misc.Stdlib.Int
 
 (* Representation of the code DAG. *)
 
@@ -136,7 +135,12 @@ let rec remove_instr node = function
 
 (* We treat Lreloadretaddr as a word-sized load *)
 
-let some_load = (Iload(Cmm.Word_int, Arch.identity_addressing, Mutable))
+let some_load =
+  Iload {
+    memory_chunk = Cmm.Word_int;
+    addressing_mode = Arch.identity_addressing;
+    mutability = Mutable;
+    is_atomic = false }
 
 (* The generic scheduler *)
 
@@ -156,7 +160,6 @@ method oper_in_basic_block = function
   | Iextcall _ -> false
   | Istackoffset _ -> false
   | Ialloc _ | Ipoll _ -> false
-  | Iprobe _ -> false
   | _ -> true
 
 (* Determine whether an instruction ends a basic block or not *)
@@ -183,7 +186,7 @@ method is_store = function
   | _ -> false
 
 method is_load = function
-    Iload(_, _, _) -> true
+    Iload _ -> true
   | _ -> false
 
 method is_checkbound = function
@@ -379,7 +382,7 @@ method schedule_fundecl f =
       let critical_outputs =
         match i.desc with
           Lop(Icall_ind | Itailcall_ind) -> [| i.arg.(0) |]
-        | Lop(Icall_imm _ | Itailcall_imm _ | Iextcall _ | Iprobe _) -> [||]
+        | Lop(Icall_imm _ | Itailcall_imm _ | Iextcall _) -> [||]
         | Lreturn -> [||]
         | _ -> i.arg in
       List.iter (fun x -> ignore (longest_path critical_outputs x)) ready_queue;
@@ -390,6 +393,7 @@ method schedule_fundecl f =
     let new_body = schedule f.fun_body 0 in
     clear_code_dag();
     { fun_name = f.fun_name;
+      fun_args = f.fun_args;
       fun_body = new_body;
       fun_fast = f.fun_fast;
       fun_dbg  = f.fun_dbg;

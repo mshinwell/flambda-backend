@@ -53,9 +53,6 @@ let arg_mem b {arch; typ=_; idx; scale; base; sym; displ} =
     Buffer.add_char b ')'
   end
 
-let reloc_type_to_string = function
-  | R_X86_64_PLT32 -> "R_X86_64_PLT32"
-
 let arg b = function
   | Sym x -> Buffer.add_char b '$'; Buffer.add_string b x
   | Imm x -> bprintf b "$%Ld" x
@@ -127,6 +124,8 @@ let print_instr b = function
   | CDQ -> i0 b "cltd"
   | CMOV (c, arg1, arg2) -> i2 b ("cmov" ^ string_of_condition c) arg1 arg2
   | CMP (arg1, arg2) -> i2_s b "cmp" arg1 arg2
+  | CMPSD (c, arg1, arg2) ->
+      i2 b ("cmp" ^ string_of_float_condition c ^ "sd") arg1 arg2
   | COMISD (arg1, arg2) -> i2 b "comisd" arg1 arg2
   | CQO ->  i0 b "cqto"
   | CVTSD2SI (arg1, arg2) -> i2 b "cvtsd2si" arg1 arg2
@@ -192,6 +191,7 @@ let print_instr b = function
       i2 b "movabsq" arg1 arg2
   | MOV (arg1, arg2) -> i2_s b "mov" arg1 arg2
   | MOVAPD (arg1, arg2) -> i2 b "movapd" arg1 arg2
+  | MOVD (arg1, arg2) -> i2 b "movd" arg1 arg2
   | MOVLPD (arg1, arg2) -> i2 b "movlpd" arg1 arg2
   | MOVSD (arg1, arg2) -> i2 b "movsd" arg1 arg2
   | MOVSS (arg1, arg2) -> i2 b "movss" arg1 arg2
@@ -256,8 +256,6 @@ let print_line b = function
       else bprintf b "\t.ascii\t\"%s\"" (string_of_string_literal s)
   | Comment s -> bprintf b "\t\t\t\t/* %s */" s
   | Global s -> bprintf b "\t.globl\t%s" s;
-  | Hidden s -> bprintf b "\t.hidden\t%s" s;
-  | Weak s -> bprintf b "\t.weak\t%s" s;
   | Long n -> bprintf b "\t.long\t%a" cst n
   | NewLabel (s, _) -> bprintf b "%s:" s
   | Quad n -> bprintf b "\t.quad\t%a" cst n
@@ -284,6 +282,10 @@ let print_line b = function
   | Cfi_adjust_cfa_offset n -> bprintf b "\t.cfi_adjust_cfa_offset %d" n
   | Cfi_endproc -> bprintf b "\t.cfi_endproc"
   | Cfi_startproc -> bprintf b "\t.cfi_startproc"
+  | Cfi_remember_state -> bprintf b "\t.cfi_remember_state"
+  | Cfi_restore_state -> bprintf b "\t.cfi_restore_state"
+  | Cfi_def_cfa_register reg -> bprintf b "\t.cfi_def_cfa_register %%%s" reg
+  | Cfi_def_cfa_offset n -> bprintf b "\t.cfi_def_cfa_offset %d" n
   | File (file_num, file_name) ->
       bprintf b "\t.file\t%d\t\"%s\""
         file_num (X86_proc.string_of_string_literal file_name)
@@ -296,11 +298,6 @@ let print_line b = function
   | Set (arg1, arg2) -> bprintf b "\t.set %s, %a" arg1 cst arg2
   | Size (s, c) -> bprintf b "\t.size %s,%a" s cst c
   | Type (s, typ) -> bprintf b "\t.type %s,%s" s typ
-  | Reloc {offset; name; expr} ->
-      bprintf b "\t.reloc %a,%s,%a"
-        cst offset
-        (reloc_type_to_string name)
-        cst expr
 
   (* masm only *)
   | External _

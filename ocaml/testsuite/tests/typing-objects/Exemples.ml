@@ -291,6 +291,7 @@ Line 3, characters 2-36:
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Warning 13 [instance-variable-override]: the following instance variables are overridden by the class printable_point :
   x
+
 class printable_color_point :
   int ->
   string ->
@@ -516,7 +517,7 @@ class ['a] sorted_list :
 
 let l = new sorted_list ();;
 [%%expect{|
-val l : _#comparable sorted_list = <obj>
+val l : (#comparable as '_weak1) sorted_list = <obj>
 |}];;
 let c = new int_comparable 10;;
 [%%expect{|
@@ -541,7 +542,10 @@ Error: Type
            < cmp : int_comparable2 -> int; set_x : int -> unit; x : int >
        is not a subtype of
          int_comparable = < cmp : int_comparable -> int; x : int >
-       Type int_comparable is not a subtype of int_comparable2
+       Type int_comparable = < cmp : int_comparable -> int; x : int >
+       is not a subtype of
+         int_comparable2 =
+           < cmp : int_comparable2 -> int; set_x : int -> unit; x : int >
        The first object type has no method set_x
 |}];;      (* Fail : 'a comp2 is not a subtype *)
 (new sorted_list ())#add c2;;
@@ -602,6 +606,7 @@ Line 2, characters 2-69:
 2 |   List.map (fun c -> Format.print_int c#x; Format.print_string " ") l;
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Warning 10 [non-unit-statement]: this expression should have type unit.
+
 val pr : < x : int; .. > list -> unit = <fun>
 |}];;
 let l = [new int_comparable 5; (new int_comparable3 2 :> int_comparable);

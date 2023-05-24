@@ -50,7 +50,7 @@ module Typedtree_search =
 
     let iter_val_pattern = function
       | Typedtree.Tpat_any -> None
-      | Typedtree.Tpat_var (name, _, _) -> Some (Name.from_ident name)
+      | Typedtree.Tpat_var (name, _) -> Some (Name.from_ident name)
       | Typedtree.Tpat_tuple _ -> None (* FIXME when we will handle tuples *)
       | _ -> None
 
@@ -206,6 +206,15 @@ module Typedtree_search =
       iter cls.Typedtree.cstr_fields
   end
 
+(** Like {!Odoc_sig.analyze_toplevel_alerts} but acts on a structure. *)
+let analyze_toplevel_alerts info ast =
+  let rec extract_attributes = function
+    | { Parsetree.pstr_desc = Parsetree.Pstr_attribute attr; _ } :: tl ->
+        attr :: extract_attributes tl
+    | _ :: _ | [] -> []
+  in
+  Odoc_sig.analyze_alerts info (extract_attributes ast)
+
 module Analyser =
   functor (My_ir : Odoc_sig.Info_retriever) ->
 
@@ -241,14 +250,14 @@ module Analyser =
     let tt_param_info_from_pattern env f_desc pat =
       let rec iter_pattern pat =
         match pat.pat_desc with
-          Typedtree.Tpat_var (ident, _, _) ->
+          Typedtree.Tpat_var (ident, _) ->
             let name = Name.from_ident ident in
             Simple_name { sn_name = name ;
                           sn_text = f_desc name ;
                           sn_type = Odoc_env.subst_type env pat.pat_type
                         }
 
-        | Typedtree.Tpat_alias (pat, _, _, _) ->
+        | Typedtree.Tpat_alias (pat, _, _) ->
             iter_pattern pat
 
         | Typedtree.Tpat_tuple patlist ->
@@ -306,7 +315,7 @@ module Analyser =
                 (
                  (
                   match func_body.exp_desc with
-                    Typedtree.Texp_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id, _, _) };
+                    Typedtree.Texp_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id, _) };
                                             vb_expr=exp} :: _, func_body2) ->
                       let name = Name.from_ident id in
                       let new_param = Simple_name
@@ -333,10 +342,11 @@ module Analyser =
 
      (** Analysis of a Tstr_value from the typedtree. Create and return a list of [t_value].
         @raise Failure if an error occurs.*)
-     let tt_analyse_value env current_module_name comment_opt loc pat_exp rec_flag =
+     let tt_analyse_value env current_module_name comment_opt loc pat_exp rec_flag attrs =
        let (pat, exp) = pat_exp in
+       let comment_opt = Odoc_sig.analyze_alerts comment_opt attrs in
        match (pat.pat_desc, exp.exp_desc) with
-         (Typedtree.Tpat_var (ident, _, _), Typedtree.Texp_function { cases = pat_exp_list2; _ }) ->
+         (Typedtree.Tpat_var (ident, _), Typedtree.Texp_function { cases = pat_exp_list2; _ }) ->
            (* a new function is defined *)
            let name_pre = Name.from_ident ident in
            let name = Name.parens_if_infix name_pre in
@@ -361,7 +371,7 @@ module Analyser =
            in
            [ new_value ]
 
-       | (Typedtree.Tpat_var (ident, _, _), _) ->
+       | (Typedtree.Tpat_var (ident, _), _) ->
            (* a new value is defined *)
            let name_pre = Name.from_ident ident in
            let name = Name.parens_if_infix name_pre in
@@ -465,7 +475,7 @@ module Analyser =
                             (
                              (
                               match body.exp_desc with
-                                Typedtree.Texp_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id, _, _) };
+                                Typedtree.Texp_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id, _) };
                                                         vb_expr=exp} :: _, body2) ->
                                   let name = Name.from_ident id in
                                   let new_param = Simple_name
@@ -726,11 +736,11 @@ module Analyser =
               a default value. In this case, we look for the good parameter pattern *)
            let (parameter, next_tt_class_exp) =
              match pat.Typedtree.pat_desc with
-               Typedtree.Tpat_var (ident, _, _) when Name.from_ident ident = "*opt*" ->
+               Typedtree.Tpat_var (ident, _) when Name.from_ident ident = "*opt*" ->
                  (
                   (* there must be a Tcl_let just after *)
                   match tt_class_expr2.Typedtree.cl_desc with
-                    Typedtree.Tcl_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id,_,_) };
+                    Typedtree.Tcl_let (_, {vb_pat={pat_desc = Typedtree.Tpat_var (id,_) };
                                            vb_expr=exp} :: _, _, tt_class_expr3) ->
                       let name = Name.from_ident id in
                       let new_param = Simple_name
@@ -761,7 +771,7 @@ module Analyser =
             in
            (parameter :: params, k)
 
-      | (Parsetree.Pcl_apply (p_class_expr2, _), Tcl_apply (tt_class_expr2, arg_list)) ->
+      | (Parsetree.Pcl_apply (p_class_expr2, _), Tcl_apply (tt_class_expr2, exp_opt_optional_list)) ->
           let applied_name =
             (* we want an ident, or else the class applied will appear in the form object ... end,
                because if the class applied has no name, the code is kinda ugly, isn't it ? *)
@@ -777,12 +787,12 @@ module Analyser =
                     Odoc_messages.object_end
           in
           let param_exps = List.fold_left
-              (fun acc -> fun (_, arg) ->
-                match arg with
-                | Omitted _ -> acc
-                | Arg e -> acc @ [e])
+              (fun acc -> fun (_, exp_opt) ->
+                match exp_opt with
+                  None -> acc
+                | Some e -> acc @ [e])
               []
-              arg_list
+              exp_opt_optional_list
           in
           let param_types = List.map (fun e -> e.Typedtree.exp_type) param_exps in
           let params_code =
@@ -847,6 +857,9 @@ module Analyser =
           tt_class_exp
           table
       in
+      let comment_opt =
+        Odoc_sig.analyze_alerts comment_opt p_class_decl.Parsetree.pci_attributes
+      in
       {
         cl_name = complete_name ;
         cl_info = comment_opt ;
@@ -867,6 +880,7 @@ module Analyser =
       | Typedtree.Tmod_structure _
       | Typedtree.Tmod_functor _
       | Typedtree.Tmod_apply _
+      | Typedtree.Tmod_apply_unit _
       | Typedtree.Tmod_unpack _ ->
           Odoc_messages.struct_end
 
@@ -1037,13 +1051,13 @@ module Analyser =
                 [] -> pos_limit
               | item2 :: _ -> item2.Parsetree.pstr_loc.Location.loc_start.Lexing.pos_cnum
             in
-            let (maybe_more, new_env, elements) = analyse_structure_item_nondesc
+            let (maybe_more, new_env, elements) = analyse_structure_item
                 env
                 current_module_name
                 item.Parsetree.pstr_loc
                 pos_limit2
                 comment_opt
-                item
+                item.Parsetree.pstr_desc
                 typedtree
                 table
                 table_values
@@ -1051,27 +1065,6 @@ module Analyser =
             ele_comments @ elements @ (iter new_env (item.Parsetree.pstr_loc.Location.loc_end.Lexing.pos_cnum + maybe_more) q)
       in
       iter env last_pos parsetree
-
-   and analyse_structure_item_include ~env ~comment_opt _incl =
-     (* we add a dummy included module which will be replaced by a correct
-        one at the end of the module analysis,
-        to use the Path.t of the included modules in the typdtree. *)
-     let im =
-       {
-         im_name = "dummy" ;
-         im_module = None ;
-         im_info = comment_opt ;
-       }
-     in
-     (0, env, [ Element_included_module im ]) (* FIXME: extend the environment? With what? *)
-
-   and analyse_structure_item_jst env _current_module_name _loc _pos_limit comment_opt jstritem _typedtree
-        _table _table_values =
-     match (jstritem : Jane_syntax.Structure_item.t) with
-      | Jstr_include_functor ifincl -> begin match ifincl with
-          | Ifstr_include_functor incl ->
-              analyse_structure_item_include ~env ~comment_opt incl
-        end
 
    (** Analysis of a parse tree structure item to obtain a new environment and a list of elements.*)
    and analyse_structure_item env current_module_name loc pos_limit comment_opt parsetree_item_desc _typedtree
@@ -1099,7 +1092,7 @@ module Analyser =
             match p_e_list with
               [] ->
                 (acc_env, acc)
-            | {Parsetree.pvb_pat=pat; pvb_expr=exp} :: q ->
+            | {Parsetree.pvb_pat=pat; pvb_expr=exp;pvb_attributes=attrs} :: q ->
                 let value_name_opt = iter_pat pat.Parsetree.ppat_desc in
                 let new_last_pos = exp.Parsetree.pexp_loc.Location.loc_end.Lexing.pos_cnum in
                 match value_name_opt with
@@ -1124,6 +1117,7 @@ module Analyser =
                           loc
                           pat_exp
                           rec_flag
+                          attrs
                       in
                       let new_env = List.fold_left
                           (fun e -> fun v ->
@@ -1158,6 +1152,7 @@ module Analyser =
               else
                 None
             in
+            let comment_opt = Odoc_sig.analyze_alerts comment_opt val_desc.Parsetree.pval_attributes in
             let new_value = {
                 val_name = complete_name ;
                 val_info = comment_opt ;
@@ -1215,20 +1210,26 @@ module Analyser =
                     else
                       get_comments_in_module last_pos loc_start
                   in
+                  let new_end = loc_end + maybe_more in
+                  let (maybe_more2, info_after_opt) =
+                    My_ir.just_after_special
+                    !file_name
+                    (get_string_of_file new_end pos_limit2)
+                  in
+                  let com_opt = Sig.merge_infos com_opt info_after_opt in
+                  let com_opt =
+                    Odoc_sig.analyze_alerts com_opt type_decl.Parsetree.ptype_attributes
+                  in
                   let kind = Sig.get_type_kind
                     env name_comment_list
                     tt_type_decl.Types.type_kind
                   in
-                  let new_end = loc_end + maybe_more in
                   let t =
                     {
                       ty_name = complete_name ;
                       ty_info = com_opt ;
                       ty_parameters =
-                      List.map2
-                       (fun p v ->
-                         let (co, cn) = Types.Variance.get_upper v in
-                         (Odoc_env.subst_type env p, co, cn))
+                      List.map2 (fun p v -> Odoc_env.subst_type env p, v)
                        tt_type_decl.Types.type_params
                        tt_type_decl.Types.type_variance ;
                       ty_kind = kind ;
@@ -1248,12 +1249,6 @@ module Analyser =
                       ) ;
                     }
                   in
-                  let (maybe_more2, info_after_opt) =
-                    My_ir.just_after_special
-                    !file_name
-                    (get_string_of_file new_end pos_limit2)
-                  in
-                  t.ty_info <- Sig.merge_infos t.ty_info info_after_opt ;
                   let (maybe_more3, eles) = f (maybe_more + maybe_more2) (new_end + maybe_more2) q in
                   (maybe_more3, ele_comments @ ((Element_type t) :: eles))
             in
@@ -1281,6 +1276,10 @@ module Analyser =
               )
               env
               tyext.Parsetree.ptyext_constructors
+          in
+          let comment_opt =
+            Odoc_sig.analyze_alerts comment_opt
+              tyext.Parsetree.ptyext_attributes
           in
           let loc_start = loc.Location.loc_start.Lexing.pos_cnum in
           let loc_end =  loc.Location.loc_end.Lexing.pos_cnum in
@@ -1347,8 +1346,12 @@ module Analyser =
                       in
                       let s = get_string_of_file ext_loc_end pos_limit2 in
                       let (maybe_more, comment_opt) =  My_ir.just_after_special !file_name s in
-                        new_xt.xt_text <- comment_opt;
-                        analyse_extension_constructors maybe_more (new_xt :: exts_acc) q
+                      let comment_opt =
+                        Odoc_sig.analyze_alerts comment_opt
+                          tt_ext.ext_attributes
+                      in
+                      new_xt.xt_text <- comment_opt;
+                      analyse_extension_constructors maybe_more (new_xt :: exts_acc) q
           in
             let (maybe_more, exts) = analyse_extension_constructors 0 [] tt_tyext.tyext_constructors in
               new_te.te_constructors <- exts;
@@ -1363,6 +1366,9 @@ module Analyser =
             try Typedtree_search.search_exception table name.txt
             with Not_found ->
               raise (Failure (Odoc_messages.exception_not_found_in_typedtree complete_name))
+          in
+          let comment_opt =
+            Odoc_sig.analyze_alerts comment_opt ext.Parsetree.ptyexn_attributes
           in
           let new_env = Odoc_env.add_extension env complete_name in
           let new_ext =
@@ -1527,7 +1533,8 @@ module Analyser =
           let eles = f ~first: true loc.Location.loc_start.Lexing.pos_cnum mods in
           (0, new_env, eles)
 
-      | Parsetree.Pstr_modtype {Parsetree.pmtd_name=name; pmtd_type=modtype} ->
+      | Parsetree.Pstr_modtype {Parsetree.pmtd_name=name; pmtd_type=modtype;
+                                pmtd_attributes} ->
           let complete_name = Name.concat current_module_name name.txt in
           let tt_module_type =
             try Typedtree_search.search_module_type table name.txt
@@ -1541,6 +1548,9 @@ module Analyser =
                         modtype mty_type.mty_type),
                 Some mty_type.mty_type
             | _ -> None, None
+          in
+          let comment_opt =
+            Odoc_sig.analyze_alerts comment_opt pmtd_attributes
           in
           let mt =
             {
@@ -1656,6 +1666,10 @@ module Analyser =
                   else
                     get_comments_in_module last_pos class_type_decl.Parsetree.pci_loc.Location.loc_start.Lexing.pos_cnum
                 in
+                let com_opt =
+                  Odoc_sig.analyze_alerts com_opt
+                    class_type_decl.Parsetree.pci_attributes
+                in
                 let last_pos2 = class_type_decl.Parsetree.pci_loc.Location.loc_end.Lexing.pos_cnum in
                 let new_ele =
                   Element_class_type
@@ -1674,22 +1688,18 @@ module Analyser =
           in
           (0, new_env, f ~first: true loc.Location.loc_start.Lexing.pos_cnum class_type_decl_list)
 
-      | Parsetree.Pstr_include incl ->
-          analyse_structure_item_include ~env ~comment_opt incl
-
-   and analyse_structure_item_nondesc env current_module_name loc pos_limit comment_opt parsetree_item typedtree
-        table table_values =
-     match Jane_syntax.Structure_item.of_ast parsetree_item with
-     | Some jparsetree_item ->
-         analyse_structure_item_jst
-           env current_module_name loc pos_limit comment_opt
-           jparsetree_item
-           typedtree table table_values
-     | None ->
-         analyse_structure_item
-           env current_module_name loc pos_limit comment_opt
-           parsetree_item.Parsetree.pstr_desc
-           typedtree table table_values
+      | Parsetree.Pstr_include _ ->
+          (* we add a dummy included module which will be replaced by a correct
+             one at the end of the module analysis,
+             to use the Path.t of the included modules in the typdtree. *)
+          let im =
+            {
+              im_name = "dummy" ;
+              im_module = None ;
+              im_info = comment_opt ;
+            }
+          in
+          (0, env, [ Element_included_module im ]) (* FIXME: extend the environment? With what? *)
 
      (** Analysis of a [Parsetree.module_expr] and a name to return a [t_module].*)
      and analyse_module env current_module_name module_name comment_opt p_module_expr tt_module_expr =
@@ -1709,6 +1719,9 @@ module Analyser =
             Some (get_string_of_file loc_start loc_end)
         | _ ->
             None
+      in
+      let comment_opt =
+        Odoc_sig.analyze_alerts comment_opt p_module_expr.Parsetree.pmod_attributes
       in
       let m_base =
         {
@@ -1809,6 +1822,23 @@ module Analyser =
           in
           { m_base with m_kind = Module_apply (m1.m_kind, m2.m_kind) }
 
+      | (Parsetree.Pmod_apply_unit p_module_expr1,
+         Typedtree.Tmod_apply_unit tt_module_expr1)
+      | (Parsetree.Pmod_apply_unit p_module_expr1,
+         Typedtree.Tmod_constraint
+           ({ Typedtree.mod_desc = Typedtree.Tmod_apply_unit tt_module_expr1}, _,
+            _, _)
+        ) ->
+          let m1 = analyse_module
+              env
+              current_module_name
+              module_name
+              None
+              p_module_expr1
+              tt_module_expr1
+          in
+          { m_base with m_kind = Module_apply_unit m1.m_kind }
+
       | (Parsetree.Pmod_constraint (p_module_expr2, p_modtype),
          Typedtree.Tmod_constraint (tt_module_expr2, tt_modtype, _, _)) ->
           let m_base2 = analyse_module
@@ -1881,6 +1911,7 @@ module Analyser =
        let mod_name = String.capitalize_ascii (Filename.basename (Filename.chop_extension source_file)) in
        let len, info_opt = Sig.preamble !file_name !file
            (fun x -> x.Parsetree.pstr_loc) parsetree in
+      let info_opt = analyze_toplevel_alerts info_opt parsetree in
        (* we must complete the included modules *)
        let elements = analyse_structure Odoc_env.empty mod_name len (String.length !file) parsetree tree_structure in
        let included_modules_from_tt = tt_get_included_module_list tree_structure in

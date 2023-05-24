@@ -29,7 +29,6 @@ module Int_arg_helper : sig
   val parse_no_error : string -> parsed ref -> parse_result
 
   val get : key:int -> parsed -> int
-  val default : int -> parsed
 end
 
 (** Optimization parameters represented as floats indexed by round number. *)
@@ -44,20 +43,40 @@ module Float_arg_helper : sig
   val parse_no_error : string -> parsed ref -> parse_result
 
   val get : key:int -> parsed -> float
-  val default : float -> parsed
 end
-val set_int_arg :
-    int option -> Int_arg_helper.parsed ref -> int -> int option -> unit
-val set_float_arg :
-    int option -> Float_arg_helper.parsed ref -> float -> float option -> unit
+
+type inlining_arguments = {
+  inline_call_cost : int option;
+  inline_alloc_cost : int option;
+  inline_prim_cost : int option;
+  inline_branch_cost : int option;
+  inline_indirect_cost : int option;
+  inline_lifting_benefit : int option;
+  inline_branch_factor : float option;
+  inline_max_depth : int option;
+  inline_max_unroll : int option;
+  inline_threshold : float option;
+  inline_toplevel_threshold : int option;
+}
+
+val classic_arguments : inlining_arguments
+val o1_arguments : inlining_arguments
+val o2_arguments : inlining_arguments
+val o3_arguments : inlining_arguments
+
+(** Set all the inlining arguments for a round.
+    The default is set if no round is provided. *)
+val use_inlining_arguments_set : ?round:int -> inlining_arguments -> unit
 
 val objfiles : string list ref
 val ccobjs : string list ref
 val dllibs : string list ref
+val cmi_file : string option ref
 val compile_only : bool ref
 val output_name : string option ref
 val include_dirs : string list ref
 val no_std_include : bool ref
+val no_cwd : bool ref
 val print_types : bool ref
 val make_archive : bool ref
 val debug : bool ref
@@ -75,13 +94,13 @@ val all_ccopts : string list ref
 val classic : bool ref
 val nopervasives : bool ref
 val match_context_rows : int ref
+val safer_matching : bool ref
 val open_modules : string list ref
 val preprocessor : string option ref
 val all_ppx : string list ref
 val absname : bool ref
 val annotations : bool ref
 val binary_annotations : bool ref
-val binary_annotations_cms : bool ref
 val use_threads : bool ref
 val noassert : bool ref
 val verbose : bool ref
@@ -138,7 +157,6 @@ val dump_reload : bool ref
 val dump_scheduling : bool ref
 val dump_linear : bool ref
 val dump_interval : bool ref
-val debug_ocaml : bool ref
 val keep_startup_file : bool ref
 val dump_combine : bool ref
 val native_code : bool ref
@@ -177,10 +195,7 @@ val with_runtime : bool ref
 val force_slash : bool ref
 val keep_docs : bool ref
 val keep_locs : bool ref
-val unsafe_string : bool ref
 val opaque : bool ref
-val default_timings_precision : int
-val timings_precision : int ref
 val profile_columns : Profile.column list ref
 val flambda_invariant_checks : bool ref
 val unbox_closures : bool ref
@@ -198,7 +213,6 @@ val classic_inlining : bool ref
 val afl_instrument : bool ref
 val afl_inst_ratio : int ref
 val function_sections : bool ref
-val probes : bool ref
 
 val all_passes : string list ref
 val dumped_pass : string -> bool
@@ -226,32 +240,8 @@ val unboxed_types : bool ref
 val insn_sched : bool ref
 val insn_sched_default : bool
 
-module Opt_flag_handler : sig
-  type t = {
-    set_oclassic : unit -> unit;
-    set_o2 : unit -> unit;
-    set_o3 : unit -> unit;
-  }
-
-  val default : t
-
-  val set : t -> unit
-end
-
-val set_oclassic : unit -> unit
-val set_o2 : unit -> unit
-val set_o3 : unit -> unit
-
-module Compiler_ir : sig
-  type t = Linear | Cfg
-  val all : t list
-  val to_string : t -> string
-  val extension : t -> string
-  val extract_extension_with_pass : string -> (t * string) option
-end
-
 module Compiler_pass : sig
-  type t = Parsing | Typing | Scheduling | Emit | Simplify_cfg | Selection
+  type t = Parsing | Typing | Lambda | Scheduling | Emit
   val of_string : string -> t option
   val to_string : t -> string
   val is_compilation_pass : t -> bool
@@ -265,8 +255,6 @@ val stop_after : Compiler_pass.t option ref
 val should_stop_after : Compiler_pass.t -> bool
 val set_save_ir_after : Compiler_pass.t -> bool -> unit
 val should_save_ir_after : Compiler_pass.t -> bool
-
-val is_flambda2 : unit -> bool
 
 val arg_spec : (string * Arg.spec * string) list ref
 
@@ -284,7 +272,3 @@ val print_arguments : string -> unit
 
 (* [reset_arguments ()] clear all declared arguments *)
 val reset_arguments : unit -> unit
-
-val zero_alloc_check : bool ref
-val zero_alloc_check_assert_all : bool ref
-

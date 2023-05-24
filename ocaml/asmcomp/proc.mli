@@ -29,9 +29,8 @@ val rotate_registers: bool
 
 (* Calling conventions *)
 val loc_arguments: Cmm.machtype -> Reg.t array * int
-val loc_results_call: Cmm.machtype -> Reg.t array * int
+val loc_results: Cmm.machtype -> Reg.t array
 val loc_parameters: Cmm.machtype -> Reg.t array
-val loc_results_return: Cmm.machtype -> Reg.t array
 (* For argument number [n] split across multiple registers, the target-specific
    implementation of [loc_external_arguments] must return [regs] such that
    [regs.(n).(0)] is to hold the part of the value at the lowest address. *)
@@ -55,9 +54,6 @@ val max_register_pressure: Mach.operation -> int array
 val destroyed_at_oper: Mach.instruction_desc -> Reg.t array
 val destroyed_at_raise: Reg.t array
 val destroyed_at_reloadretaddr : Reg.t array
-
-(* Volatile registers: those that change value when read *)
-val regs_are_volatile: Reg.t array -> bool
 
 (* Info for laying out the stack frame *)
 val frame_required : Mach.fundecl -> bool

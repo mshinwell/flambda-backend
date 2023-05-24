@@ -67,7 +67,7 @@ let print_out_phrase = Oprint.out_phrase
 let find_eval_phrase str =
   let open Typedtree in
   match str.str_items with
-  | [ { str_desc = Tstr_eval (e, _, attrs) ; str_loc = loc } ]
+  | [ { str_desc = Tstr_eval (e, attrs) ; str_loc = loc } ]
   | [ { str_desc = Tstr_value (Asttypes.Nonrecursive,
                                 [{ vb_expr = e
                                  ; vb_pat = { pat_desc = Tpat_any; _ }
@@ -80,7 +80,6 @@ let find_eval_phrase str =
 (* The current typing environment for the toplevel *)
 
 let toplevel_env = ref Env.empty
-let toplevel_sig = ref []
 
 let backtrace = ref None
 
@@ -90,18 +89,16 @@ exception Undefined_global of string
 
 module type EVAL_BASE = sig
 
-  val eval_compilation_unit: Compilation_unit.t -> Obj.t
-
   (* Return the value referred to by a base ident.
      @raise [Undefined_global] if not found *)
   val eval_ident: Ident.t -> Obj.t
+
 end
 
 module MakeEvalPrinter (E: EVAL_BASE) = struct
 
   let rec eval_address = function
-    | Env.Aunit cu -> E.eval_compilation_unit cu
-    | Env.Alocal id -> E.eval_ident id
+    | Env.Aident id -> E.eval_ident id
     | Env.Adot(p, pos) -> Obj.field (eval_address p) pos
 
   let eval_path find env path =
@@ -262,7 +259,7 @@ let refill_lexbuf buffer len =
       len
   end
 
-let set_paths () =
+let set_paths ?(auto_include=Compmisc.auto_include) () =
   (* Add whatever -I options have been specified on the command line,
      but keep the directories that user code linked in with ocamlmktop
      may have added to load_path. *)
@@ -277,12 +274,18 @@ let set_paths () =
       [expand "+camlp4"];
     ]
   in
-  Load_path.init load_path;
+  Load_path.init ~auto_include load_path;
   Dll.add_path load_path
 
+let update_search_path_from_env () =
+  let extra_paths =
+    let env = Sys.getenv_opt "OCAMLTOP_INCLUDE_PATH" in
+    Option.fold ~none:[] ~some:Misc.split_path_contents env
+  in
+  Clflags.include_dirs := List.rev_append extra_paths !Clflags.include_dirs
+
 let initialize_toplevel_env () =
-  toplevel_env := Compmisc.initial_env();
-  toplevel_sig := []
+  toplevel_env := Compmisc.initial_env()
 
 external caml_sys_modify_argv : string array -> unit =
   "caml_sys_modify_argv"
@@ -291,6 +294,11 @@ let override_sys_argv new_argv =
   caml_sys_modify_argv new_argv;
   Arg.current := 0
 
+let is_command_like_name s =
+  not (String.length s = 0
+       || s.[0] = '-'
+       || Filename.basename s <> s
+       || Filename.extension s <> "")
 
 (* The table of toplevel directives.
    Filled by functions from module topdirs. *)
@@ -372,3 +380,39 @@ let try_run_directive ppf dir_name pdir_arg =
             dir_name dir_type arg_type;
           false
   end
+
+(* Overriding exception printers with toplevel-specific ones *)
+
+let loading_hint_printer ppf s =
+  Symtable.report_error ppf (Symtable.Undefined_global s);
+  let find_with_ext ext =
+    try Some (Load_path.find_uncap (s ^ ext)) with Not_found -> None
+  in
+  fprintf ppf
+    "@.Hint: @[\
+     This means that the interface of a module is loaded, \
+     but its implementation is not.@,";
+  (* Filenames don't have to correspond to module names,
+     especially for archives (cmas), which bundle multiple modules.
+     But very often they do. *)
+  begin match List.find_map find_with_ext [".cma"; ".cmo"] with
+  | Some path ->
+    fprintf ppf
+      "Found %s @,in the load paths. \
+       @,Did you mean to load it using @,#load \"%s\" \
+       @,or by passing it as an argument to the toplevel?"
+       path (Filename.basename path)
+  | None ->
+    fprintf ppf
+      "Did you mean to load a compiled implementation of the module \
+       @,using #load or by passing it as an argument to the toplevel?"
+  end;
+  fprintf ppf "@]"
+
+let () =
+  Location.register_error_of_exn
+    (function
+      | Symtable.Error (Symtable.Undefined_global s) ->
+        Some (Location.error_of_printer_file loading_hint_printer s)
+      | _ -> None
+    )

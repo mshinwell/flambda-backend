@@ -18,7 +18,7 @@
 
 type info = {
   source_file : string;
-  module_name : Compilation_unit.t;
+  module_name : string;
   output_prefix : string;
   env : Env.t;
   ppf_dump : Format.formatter;
@@ -60,10 +60,7 @@ val emit_signature : info -> Parsetree.signature -> Typedtree.signature -> unit
     containing the given signature.
 *)
 
-val interface :
-  hook_parse_tree:(Parsetree.signature -> unit)
-  -> hook_typed_tree:(Typedtree.signature -> unit)
-  -> info -> unit
+val interface : info -> unit
 (** The complete compilation pipeline for interfaces. *)
 
 (** {2 Implementations} *)
@@ -78,11 +75,7 @@ val typecheck_impl : info -> Parsetree.structure -> Typedtree.implementation
 *)
 
 val implementation :
-  hook_parse_tree:(Parsetree.structure -> unit)
-  -> hook_typed_tree:(Typedtree.implementation -> unit)
-  -> info ->
-  backend:(info -> Typedtree.implementation -> unit) ->
-  unit
+  info -> backend:(info -> Typedtree.implementation -> unit) -> unit
 (** The complete compilation pipeline for implementations. *)
 
 (** {2 Build artifacts} *)

@@ -1,4 +1,3 @@
-# 1 "listLabels.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,12 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
 (* Module [ListLabels]: labelled List module *)
-
-[@@@ocaml.nolabels]
 
 include List

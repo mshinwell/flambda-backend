@@ -1,4 +1,3 @@
-# 1 "nativeint.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Processor-native integers.
 
@@ -49,19 +46,19 @@ val one : nativeint
 val minus_one : nativeint
 (** The native integer -1.*)
 
-external neg : (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_neg"
+external neg : nativeint -> nativeint = "%nativeint_neg"
 (** Unary negation. *)
 
-external add : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_add"
+external add : nativeint -> nativeint -> nativeint = "%nativeint_add"
 (** Addition. *)
 
-external sub : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_sub"
+external sub : nativeint -> nativeint -> nativeint = "%nativeint_sub"
 (** Subtraction. *)
 
-external mul : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_mul"
+external mul : nativeint -> nativeint -> nativeint = "%nativeint_mul"
 (** Multiplication. *)
 
-external div : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_div"
+external div : nativeint -> nativeint -> nativeint = "%nativeint_div"
 (** Integer division. This division rounds the real quotient of
    its arguments towards zero, as specified for {!Stdlib.(/)}.
 
@@ -72,9 +69,9 @@ val unsigned_div : nativeint -> nativeint -> nativeint
 (** Same as {!div}, except that arguments and result are interpreted as {e
     unsigned} native integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
-external rem : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_mod"
+external rem : nativeint -> nativeint -> nativeint = "%nativeint_mod"
 (** Integer remainder.  If [y] is not zero, the result
    of [Nativeint.rem x y] satisfies the following properties:
    [Nativeint.zero <= Nativeint.rem x y < Nativeint.abs y] and
@@ -86,7 +83,7 @@ val unsigned_rem : nativeint -> nativeint -> nativeint
 (** Same as {!rem}, except that arguments and result are interpreted as {e
     unsigned} native integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 val succ : nativeint -> nativeint
 (** Successor.
@@ -97,7 +94,8 @@ val pred : nativeint -> nativeint
    [Nativeint.pred x] is [Nativeint.sub x Nativeint.one]. *)
 
 val abs : nativeint -> nativeint
-(** Return the absolute value of its argument. *)
+(** [abs x] is the absolute value of [x]. On [min_int] this
+   is [min_int] itself and thus remains negative. *)
 
 val size : int
 (** The size in bits of a native integer.  This is equal to [32]
@@ -113,32 +111,32 @@ val min_int : nativeint
    either -2{^31} on a 32-bit platform,
    or -2{^63} on a 64-bit platform. *)
 
-external logand : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_and"
+external logand : nativeint -> nativeint -> nativeint = "%nativeint_and"
 (** Bitwise logical and. *)
 
-external logor : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_or"
+external logor : nativeint -> nativeint -> nativeint = "%nativeint_or"
 (** Bitwise logical or. *)
 
-external logxor : (nativeint[@local_opt]) -> (nativeint[@local_opt]) -> (nativeint[@local_opt]) = "%nativeint_xor"
+external logxor : nativeint -> nativeint -> nativeint = "%nativeint_xor"
 (** Bitwise logical exclusive or. *)
 
 val lognot : nativeint -> nativeint
 (** Bitwise logical negation. *)
 
-external shift_left : (nativeint[@local_opt]) -> int -> (nativeint[@local_opt]) = "%nativeint_lsl"
+external shift_left : nativeint -> int -> nativeint = "%nativeint_lsl"
 (** [Nativeint.shift_left x y] shifts [x] to the left by [y] bits.
    The result is unspecified if [y < 0] or [y >= bitsize],
    where [bitsize] is [32] on a 32-bit platform and
    [64] on a 64-bit platform. *)
 
-external shift_right : (nativeint[@local_opt]) -> int -> (nativeint[@local_opt]) = "%nativeint_asr"
+external shift_right : nativeint -> int -> nativeint = "%nativeint_asr"
 (** [Nativeint.shift_right x y] shifts [x] to the right by [y] bits.
    This is an arithmetic shift: the sign bit of [x] is replicated
    and inserted in the vacated bits.
    The result is unspecified if [y < 0] or [y >= bitsize]. *)
 
 external shift_right_logical :
-  (nativeint[@local_opt]) -> int -> (nativeint[@local_opt]) = "%nativeint_lsr"
+  nativeint -> int -> nativeint = "%nativeint_lsr"
 (** [Nativeint.shift_right_logical x y] shifts [x] to the right
    by [y] bits.
    This is a logical shift: zeroes are inserted in the vacated bits
@@ -146,11 +144,11 @@ external shift_right_logical :
    The result is unspecified if [y < 0] or [y >= bitsize]. *)
 
 
-external of_int : int -> (nativeint[@local_opt]) = "%nativeint_of_int"
+external of_int : int -> nativeint = "%nativeint_of_int"
 (** Convert the given integer (type [int]) to a native integer
    (type [nativeint]). *)
 
-external to_int : (nativeint[@local_opt]) -> int = "%nativeint_to_int"
+external to_int : nativeint -> int = "%nativeint_to_int"
 (** Convert the given native integer (type [nativeint]) to an
    integer (type [int]).  The high-order bit is lost during
    the conversion. *)
@@ -160,7 +158,7 @@ val unsigned_to_int : nativeint -> int option
     Returns [None] if the unsigned value of the argument cannot fit into an
     [int].
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 external of_float : float -> nativeint
   = "caml_nativeint_of_float" "caml_nativeint_of_float_unboxed"
@@ -222,32 +220,32 @@ val unsigned_compare: t -> t -> int
 (** Same as {!compare}, except that arguments are interpreted as {e unsigned}
     native integers.
 
-    @since 4.08.0 *)
+    @since 4.08 *)
 
 val equal: t -> t -> bool
 (** The equal function for native ints.
-    @since 4.03.0 *)
+    @since 4.03 *)
 
 val min: t -> t -> t
 (** Return the smaller of the two arguments.
-    @since 4.13.0
+    @since 4.13
 *)
 
 val max: t -> t -> t
 (** Return the greater of the two arguments.
-    @since 4.13.0
+    @since 4.13
  *)
 
+val seeded_hash : int -> t -> int
+(** A seeded hash function for native ints, with the same output value as
+    {!Hashtbl.seeded_hash}. This function allows this module to be passed as
+    argument to the functor {!Hashtbl.MakeSeeded}.
 
-(**/**)
+    @since 5.1 *)
 
-(** {1 Deprecated functions} *)
+val hash : t -> int
+(** An unseeded hash function for native ints, with the same output value as
+    {!Hashtbl.hash}. This function allows this module to be passed as argument
+    to the functor {!Hashtbl.Make}.
 
-external format : string -> nativeint -> string = "caml_nativeint_format"
-[@@ocaml.deprecated "Use Printf.sprintf with a [%n...] format instead."]
-(** [Nativeint.format fmt n] return the string representation of the
-   native integer [n] in the format specified by [fmt].
-   [fmt] is a [Printf]-style format consisting of exactly
-   one [%d], [%i], [%u], [%x], [%X] or [%o] conversion specification.
-   This function is deprecated; use {!Printf.sprintf} with a [%nx] format
-   instead. *)
+    @since 5.1 *)

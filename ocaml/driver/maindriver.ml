@@ -24,6 +24,7 @@ let main argv ppf =
   Clflags.add_arguments __LOC__
     ["-depend", Arg.Unit Makedepend.main_from_option,
      "<options> Compute dependencies (use 'ocamlc -depend -help' for details)"];
+  let exception Continue in
   match
     Compenv.readenv ppf Before_args;
     Compenv.parse_arguments (ref argv) Compenv.anonymous program;
@@ -44,6 +45,8 @@ let main argv ppf =
         exit 2
       end
     end;
+    if Clflags.(should_stop_after Compiler_pass.Lambda)
+      then raise Continue;
     Compenv.readenv ppf Before_link;
     if
       List.length
@@ -56,15 +59,14 @@ let main argv ppf =
       | None ->
           Compenv.fatal
             "Please specify at most one of -pack, -a, -c, -output-obj";
-      | Some ((P.Parsing | P.Typing) as p) ->
+      | Some ((P.Parsing | P.Typing | P.Lambda) as p) ->
         assert (P.is_compilation_pass p);
         Printf.ksprintf Compenv.fatal
           "Options -i and -stop-after (%s) \
            are  incompatible with -pack, -a, -output-obj"
           (String.concat "|"
              (P.available_pass_names ~filter:(fun _ -> true) ~native:false))
-      | Some (P.Scheduling | P.Simplify_cfg | P.Emit | P.Selection) ->
-        assert false (* native only *)
+      | Some (P.Scheduling | P.Emit) -> assert false (* native only *)
     end;
     if !make_archive then begin
       Compmisc.init_path ();
@@ -107,10 +109,11 @@ let main argv ppf =
   with
   | exception (Compenv.Exit_with_status n) ->
     n
-  | exception x ->
-    Location.report_exception ppf x;
-    2
+  | exception Continue
   | () ->
-    Compmisc.with_ppf_dump ~stdout:() ~file_prefix:"profile"
-      (fun ppf -> Profile.print ppf !Clflags.profile_columns ~timings_precision:!Clflags.timings_precision);
+    Compmisc.with_ppf_dump ~file_prefix:"profile"
+      (fun ppf -> Profile.print ppf !Clflags.profile_columns);
     0
+  | exception x ->
+  Location.report_exception ppf x;
+  2

@@ -3,18 +3,13 @@
    ** ocamlc.byte
       flags = "-dlambda -dno-unique-ids"
    *** flat-float-array
-   **** stack-allocation
-   ***** check-ocamlc.byte-output
-         compiler_reference =
-           "${test_source_directory}/array_spec.stack.flat.reference"
-   **** no-stack-allocation
-   ***** check-ocamlc.byte-output
-         compiler_reference =
-           "${test_source_directory}/array_spec.heap.flat.reference"
-   *** no-flat-float-array
    **** check-ocamlc.byte-output
         compiler_reference =
-          "${test_source_directory}/array_spec.compilers.no-flat.reference"
+          "${test_source_directory}/array_spec.compilers.flat.reference"
+   *** no-flat-float-array
+   **** check-ocamlc.byte-output
+       compiler_reference =
+         "${test_source_directory}/array_spec.compilers.no-flat.reference"
 *)
 
 external len : 'a array -> int = "%array_length"

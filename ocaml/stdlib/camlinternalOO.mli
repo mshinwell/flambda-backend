@@ -1,4 +1,3 @@
-# 1 "camlinternalOO.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Run-time support for objects and classes.
     All functions in this module are for system use only, not for the

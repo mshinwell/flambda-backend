@@ -20,8 +20,7 @@ val interface: source_file:string -> output_prefix:string -> unit
 val implementation:
    backend:(module Backend_intf.S)
    -> start_from:Clflags.Compiler_pass.t
-   -> source_file:string -> output_prefix:string -> keep_symbol_tables:bool
-   -> unit
+   -> source_file:string -> output_prefix:string -> unit
 
 (** {2 Internal functions} **)
 

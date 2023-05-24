@@ -1,4 +1,3 @@
-#2 "asmcomp/s390x/emit.mlp"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -44,10 +43,6 @@ let slot_offset env loc cls =
   | Incoming n -> frame_size env + n
   | Outgoing n -> n
   | Domainstate _ -> assert false  (* not a stack slot *)
-
-(* Output a symbol *)
-
-let emit_symbol s = Emitaux.emit_symbol '.' s
 
 (* Output function call *)
 
@@ -364,9 +359,9 @@ let emit_instr env i =
         emit_stack_adjust n;
         env.stack_offset <- env.stack_offset + n
 
-     | Lop(Iload(chunk, addr, _mut)) ->
+     | Lop(Iload { memory_chunk; addressing_mode; _ }) ->
         let loadinstr =
-          match chunk with
+          match memory_chunk with
             Byte_unsigned -> "llgc"
           | Byte_signed -> "lgb"
           | Sixteen_unsigned -> "llgh"
@@ -376,8 +371,8 @@ let emit_instr env i =
           | Word_int | Word_val -> "lg"
           | Single -> "ley"
           | Double -> "ldy" in
-        emit_load_store loadinstr addr i.arg 0 i.res.(0);
-        if chunk = Single then
+        emit_load_store loadinstr addressing_mode i.arg 0 i.res.(0);
+        if memory_chunk = Single then
           `	ldebr	{emit_reg i.res.(0)}, {emit_reg i.res.(0)}\n`
 
     | Lop(Istore(Single, addr, _)) ->
@@ -394,7 +389,7 @@ let emit_instr env i =
           | Double -> "stdy" in
         emit_load_store storeinstr addr i.arg 1 i.arg.(0)
 
-    | Lop(Ialloc { bytes = n; dbginfo; mode = Alloc_heap }) ->
+    | Lop(Ialloc { bytes = n; dbginfo }) ->
         let lbl_after_alloc = new_label() in
         let lbl_call_gc = new_label() in
         let lbl_frame =
@@ -410,10 +405,6 @@ let emit_instr env i =
         `	brcl    4, {emit_label lbl_call_gc}\n`;  (* less than *)
         `{emit_label lbl_after_alloc}:`;
         `	la      {emit_reg i.res.(0)}, 8(%r11)\n`
-
-    | Lop(Ialloc { mode = Alloc_local } | Ibeginregion | Iendregion) ->
-       Misc.fatal_error "Local allocations not supported on this architecture"
-
     | Lop(Ipoll { return_label }) ->
         let offset = Domainstate.(idx_of_field Domain_young_limit) * 8 in
           `	clg	%r11, {emit_int offset}(%r10)\n`;
@@ -476,6 +467,14 @@ let emit_instr env i =
         `	{emit_string comp}	{emit_reg i.arg.(0)}, {emit_reg i.arg.(1)}\n`;
         `	lghi	{emit_reg i.res.(0)}, 1\n`;
         `	brc	{emit_int mask}, {emit_label lbl}\n`;
+        `	lghi	{emit_reg i.res.(0)}, 0\n`;
+        `{emit_label lbl}:\n`
+    | Lop(Icompf cmp) ->
+        let lbl = new_label() in
+        `	cdbr	{emit_reg i.arg.(0)}, {emit_reg i.arg.(1)}\n`;
+        `	lghi	{emit_reg i.res.(0)}, 1\n`;
+        let mask = branch_for_float_comparison cmp in
+        `	brc	  {emit_int mask}, {emit_label lbl}\n`;
         `	lghi	{emit_reg i.res.(0)}, 0\n`;
         `{emit_label lbl}:\n`
     | Lop(Iintop (Icheckbound)) ->
@@ -544,8 +543,9 @@ let emit_instr env i =
         assert (i.arg.(2).loc = i.res.(0).loc);
         let instr = name_for_specific sop in
         `	{emit_string instr}	{emit_reg i.res.(0)}, {emit_reg i.arg.(0)}, {emit_reg i.arg.(1)}\n`
-    | Lop (Iprobe _ |Iprobe_is_enabled _) ->
-      Misc.fatal_error ("Probes not supported.")
+    | Lop (Idls_get) ->
+        (* Here to maintain build *)
+        assert false
     | Lreloadretaddr ->
         let n = frame_size env in
         `	lg	%r14, {emit_int(n - size_addr)}(%r15)\n`
@@ -734,12 +734,12 @@ let begin_assembly() =
   reset_debug_info();
   `	.file	\"\"\n`;  (* PR#7037 *)
   (* Emit the beginning of the segments *)
-  let lbl_begin = Cmm_helpers.make_symbol "data_begin" in
+  let lbl_begin = Compilenv.make_symbol (Some "data_begin") in
   emit_string data_space;
   `	.align	8\n`;
   declare_global_data lbl_begin;
   `{emit_symbol lbl_begin}:\n`;
-  let lbl_begin = Cmm_helpers.make_symbol "code_begin" in
+  let lbl_begin = Compilenv.make_symbol (Some "code_begin") in
   emit_string code_space;
   declare_global_data lbl_begin;
   `{emit_symbol lbl_begin}:\n`
@@ -747,13 +747,13 @@ let begin_assembly() =
 let end_assembly() =
   (* Emit the end of the segments *)
   emit_string code_space;
-  let lbl_end = Cmm_helpers.make_symbol "code_end" in
+  let lbl_end = Compilenv.make_symbol (Some "code_end") in
   declare_global_data lbl_end;
   `{emit_symbol lbl_end}:\n`;
   `	.long	0\n`;
   emit_string data_space;
   `	.align	8\n`;
-  let lbl_end = Cmm_helpers.make_symbol "data_end" in
+  let lbl_end = Compilenv.make_symbol (Some "data_end") in
   declare_global_data lbl_end;
   `	.quad	0\n`;  (* PR#6329 *)
   `{emit_symbol lbl_end}:\n`;
@@ -761,7 +761,7 @@ let end_assembly() =
   (* Emit the frame descriptors *)
   emit_string data_space;  (* not rodata because relocations inside *)
   `	.align	8\n`;
-  let lbl = Cmm_helpers.make_symbol "frametable" in
+  let lbl = Compilenv.make_symbol (Some "frametable") in
   declare_global_data lbl;
   `{emit_symbol lbl}:\n`;
   emit_frames

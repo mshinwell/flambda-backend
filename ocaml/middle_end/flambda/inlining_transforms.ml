@@ -32,25 +32,23 @@ let new_var name =
     user-specified function as an [Flambda.named] value that projects the
     variable from its closure. *)
 let fold_over_projections_of_vars_bound_by_closure ~closure_id_being_applied
-      ~lhs_of_application ~bound_variables
-      ~(free_vars : Flambda.specialised_to Variable.Map.t) ~init ~f =
+      ~lhs_of_application ~bound_variables ~init ~f =
   Variable.Set.fold (fun var acc ->
       let expr : Flambda.named =
         Project_var {
           closure = lhs_of_application;
           closure_id = closure_id_being_applied;
           var = Var_within_closure.wrap var;
-          kind = (Variable.Map.find var free_vars).kind;
         }
       in
       f ~acc ~var ~expr)
     bound_variables
     init
 
-let set_inlined_attribute_on_all_apply body inlined specialise probe =
+let set_inline_attribute_on_all_apply body inline specialise =
   Flambda_iterators.map_toplevel_expr (function
-    | Apply apply -> Apply { apply with inlined; specialise; probe }
-    | expr -> expr)
+      | Apply apply -> Apply { apply with inline; specialise }
+      | expr -> expr)
     body
 
 (** Assign fresh names for a function's parameters and rewrite the body to
@@ -92,15 +90,13 @@ let copy_of_function's_body_with_freshened_params env
     introduced by the corresponding set of closures. *)
 let inline_by_copying_function_body ~env ~r
       ~lhs_of_application
-      ~(inlined_requested : Lambda.inlined_attribute)
+      ~(inline_requested : Lambda.inline_attribute)
       ~(specialise_requested : Lambda.specialise_attribute)
-      ~(probe_requested : Lambda.probe)
       ~closure_id_being_applied
       ~(function_decl : A.function_declaration)
       ~(function_body : A.function_body)
       ~fun_vars
-      ~(free_vars : Flambda.specialised_to Variable.Map.t)
-      ~args ~dbg ~reg_close ~mode:_ ~simplify =
+      ~args ~dbg ~simplify =
   assert (E.mem env lhs_of_application);
   assert (List.for_all (E.mem env) args);
   let r =
@@ -113,28 +109,22 @@ let inline_by_copying_function_body ~env ~r
   in
   let body =
     let default_inline =
-      Lambda.equal_inlined_attribute inlined_requested Default_inlined
+      Lambda.equal_inline_attribute inline_requested Default_inline
     in
     let default_specialise =
       Lambda.equal_specialise_attribute specialise_requested Default_specialise
     in
     if function_body.stub
-    && ((not default_inline) || (not default_specialise) ||
-        Option.is_some probe_requested) then
+    && ((not default_inline) || (not default_specialise)) then
       (* When the function inlined function is a stub, the annotation
          is reported to the function applications inside the stub.
          This allows reporting the annotation to the application the
          original programmer really intended: the stub is not visible
          in the source. *)
-      set_inlined_attribute_on_all_apply body
-        inlined_requested specialise_requested probe_requested
+      set_inline_attribute_on_all_apply body
+        inline_requested specialise_requested
     else
       body
-  in
-  let body =
-    match reg_close with
-    | Lambda.Rc_close_at_apply -> Flambda.Exclave body
-    | Lambda.Rc_normal | Lambda.Rc_nontail -> body
   in
   let bindings_for_params_to_args =
     (* Bind the function's parameters to the arguments from the call site. *)
@@ -153,7 +143,6 @@ let inline_by_copying_function_body ~env ~r
     fold_over_projections_of_vars_bound_by_closure ~closure_id_being_applied
       ~lhs_of_application ~bound_variables ~init:bindings_for_params_to_args
       ~f:(fun ~acc:body ~var ~expr -> Flambda.create_let var expr body)
-      ~free_vars
   in
   (* Add bindings for variables corresponding to the functions introduced by
      the whole set of closures.  Each such variable will be bound to a closure;
@@ -235,7 +224,6 @@ let bind_free_vars ~lhs_of_application ~closure_id_being_applied
            closure = lhs_of_application;
            closure_id = closure_id_being_applied;
            var = Var_within_closure.wrap free_var;
-           kind = spec.kind;
          }
        in
        let let_bindings = (var_clos, expr) :: state.let_bindings in
@@ -299,8 +287,6 @@ let register_arguments ~specialised_args ~invariant_params
 (* Add an old parameter to [old_inside_to_new_inside]. If it appears in
    [old_params_to_new_outside] then also add it to the new specialised args. *)
 let add_param ~specialised_args ~state ~param =
-  let alloc_mode = Parameter.alloc_mode param in
-  let kind = Parameter.kind param in
   let param = Parameter.var param in
   let new_param = Variable.rename param in
   let old_inside_to_new_inside =
@@ -322,7 +308,7 @@ let add_param ~specialised_args ~state ~param =
         | None -> state.new_specialised_args_with_old_projections
         | Some new_outside_var ->
             let new_spec : Flambda.specialised_to =
-              { var = new_outside_var; projection = None; kind }
+              { var = new_outside_var; projection = None }
             in
             Variable.Map.add new_param new_spec
               state.new_specialised_args_with_old_projections
@@ -332,7 +318,7 @@ let add_param ~specialised_args ~state ~param =
     { state with old_inside_to_new_inside;
                  new_specialised_args_with_old_projections }
   in
-  state, Parameter.wrap new_param alloc_mode kind
+  state, Parameter.wrap new_param
 
 (* Add a let binding for an old fun_var, add it to the new free variables, and
    add it to [old_inside_to_new_inside] *)
@@ -349,7 +335,7 @@ let add_fun_var ~lhs_of_application ~closure_id_being_applied ~state ~fun_var =
     in
     let let_bindings = (outside_var, expr) :: state.let_bindings in
     let spec : Flambda.specialised_to =
-      { var = outside_var; projection = None; kind = Lambda.layout_function }
+      { var = outside_var; projection = None; }
     in
     let new_free_vars_with_old_projections =
       Variable.Map.add inside_var spec state.new_free_vars_with_old_projections
@@ -544,9 +530,7 @@ let rewrite_function ~lhs_of_application ~closure_id_being_applied
   in
   let new_function_decl =
     Flambda.create_function_declaration
-      ~params ~alloc_mode:function_decl.alloc_mode ~region:function_decl.region
-      ~body
-      ~return_layout:function_decl.return_layout
+      ~params ~body
       ~stub:function_body.stub
       ~dbg:function_body.dbg
       ~inline:function_body.inline
@@ -598,18 +582,12 @@ let update_projections ~state projections =
       { spec_to with projection })
     projections
 
-(* CR-soon mshinwell: Somewhere there should be a description about
-   the specialisation of probe handlers.  This file is probably a
-   reasonable place, with a short comment citing this file to be added
-   in [Translcore] where [Always_specialise] is set. *)
-
 let inline_by_copying_function_declaration
     ~(env : Inline_and_simplify_aux.Env.t)
     ~(r : Inline_and_simplify_aux.Result.t)
     ~(function_decls : A.function_declarations)
     ~(lhs_of_application : Variable.t)
-    ~(inlined_requested : Lambda.inlined_attribute)
-    ~(probe_requested: Lambda.probe)
+    ~(inline_requested : Lambda.inline_attribute)
     ~(closure_id_being_applied : Closure_id.t)
     ~(function_decl : A.function_declaration)
     ~(args : Variable.t list)
@@ -619,8 +597,6 @@ let inline_by_copying_function_declaration
     ~(free_vars : Flambda.specialised_to Variable.Map.t)
     ~(direct_call_surrogates : Closure_id.t Closure_id.Map.t)
     ~(dbg : Debuginfo.t)
-    ~(reg_close : Lambda.region_close)
-    ~(mode : Lambda.alloc_mode)
     ~(simplify : Inlining_decision_intf.simplify) =
   let state = empty_state in
   let state =
@@ -679,10 +655,7 @@ let inline_by_copying_function_declaration
       in
       let apply : Flambda.apply =
         { func = closure_var; args; kind = Direct closure_id; dbg;
-          reg_close; mode; result_layout = function_decl.return_layout;
-          inlined = inlined_requested; specialise = Default_specialise;
-          probe = probe_requested;
-        }
+          inline = inline_requested; specialise = Default_specialise; }
       in
       let body =
         Flambda.create_let

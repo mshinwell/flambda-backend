@@ -16,8 +16,6 @@
 (* Loading and installation of user-defined printer functions *)
 
 open Misc
-open Longident
-open Layouts
 open Types
 
 (* Error report *)
@@ -73,16 +71,14 @@ let loadfile ppf name =
    the debuggee. *)
 
 let rec eval_address = function
-  | Env.Aunit cu ->
-    let bytecode_or_asm_symbol =
-      Ident.name (cu |> Compilation_unit.to_global_ident_for_bytecode)
-    in
+  | Env.Aident id ->
+    assert (Ident.persistent id);
+    let bytecode_or_asm_symbol = Ident.name id in
     begin match Dynlink.unsafe_get_global_value ~bytecode_or_asm_symbol with
     | None ->
       raise (Symtable.Error (Symtable.Undefined_global bytecode_or_asm_symbol))
     | Some obj -> obj
     end
-  | Env.Alocal _ -> assert false
   | Env.Adot(addr, pos) -> Obj.field (eval_address addr) pos
 
 let eval_value_path env path =
@@ -93,40 +89,22 @@ let eval_value_path env path =
 
 (* Install, remove a printer (as in toplevel/topdirs) *)
 
-(* since 4.00, "topdirs.cmi" is not in the same directory as the standard
-  library, so we load it beforehand as it cannot be found in the search path. *)
-let init () =
-  let topdirs =
-    Filename.concat !Parameters.topdirs_path "topdirs.cmi" in
-  let topdirs_unit = "Topdirs" |> Compilation_unit.of_string in
-  ignore (Env.read_signature topdirs_unit topdirs)
-
-let match_printer_type desc typename =
-  let printer_type =
-    match
-      Env.find_type_by_name
-        (Ldot(Lident "Topdirs", typename)) Env.initial_safe_string
-    with
-    | path, _ -> path
-    | exception Not_found ->
-        raise (Error(Unbound_identifier(Ldot(Lident "Topdirs", typename))))
-  in
-  Ctype.begin_def();
-  let ty_arg = Ctype.newvar Layout.any in
-  Ctype.unify Env.initial_safe_string
-    (Ctype.newconstr printer_type [ty_arg])
-    (Ctype.instance desc.val_type);
-  Ctype.end_def();
-  Ctype.generalize ty_arg;
-  ty_arg
+let match_printer_type desc make_printer_type =
+  Ctype.with_local_level ~post:Ctype.generalize begin fun () ->
+    let ty_arg = Ctype.newvar() in
+    Ctype.unify Env.empty
+      (make_printer_type ty_arg)
+      (Ctype.instance desc.val_type);
+    ty_arg
+  end
 
 let find_printer_type lid =
   match Env.find_value_by_name lid Env.empty with
   | (path, desc) -> begin
-      match match_printer_type desc "printer_type_new" with
+      match match_printer_type desc Topprinters.printer_type_new with
       | ty_arg -> (ty_arg, path, false)
       | exception Ctype.Unify _ -> begin
-          match match_printer_type desc "printer_type_old" with
+          match match_printer_type desc Topprinters.printer_type_old with
           | ty_arg -> (ty_arg, path, true)
           | exception Ctype.Unify _ -> raise(Error(Wrong_type lid))
         end

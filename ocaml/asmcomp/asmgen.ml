@@ -25,7 +25,7 @@ open Cmm
 
 type error =
   | Assembler_error of string
-  | Mismatched_for_pack of Compilation_unit.Prefix.t
+  | Mismatched_for_pack of string option
   | Asm_generation of string * Emitaux.error
 
 exception Error of error
@@ -58,15 +58,17 @@ let should_save_before_emit () =
   should_save_ir_after Compiler_pass.Scheduling && (not !start_from_emit)
 
 let linear_unit_info =
-  { Linear_format.unit = Compilation_unit.dummy;
+  { Linear_format.unit_name = "";
     items = [];
+    for_pack = None;
   }
 
 let reset () =
   start_from_emit := false;
   if should_save_before_emit () then begin
-    linear_unit_info.unit <- Compilation_unit.get_current_or_dummy ();
+    linear_unit_info.unit_name <- Compilenv.current_unit_name ();
     linear_unit_info.items <- [];
+    linear_unit_info.for_pack <- !Clflags.for_package;
   end
 
 let save_data dl =
@@ -111,9 +113,9 @@ let rec regalloc ~ppf_dump round fd =
   let num_stack_slots =
     if !use_linscan then begin
       (* Linear Scan *)
-      Interval.build_intervals fd;
-      if !dump_interval then Printmach.intervals ppf_dump ();
-      Linscan.allocate_registers()
+      let intervals = Interval.build_intervals fd in
+      if !dump_interval then Printmach.intervals ppf_dump intervals;
+      Linscan.allocate_registers intervals
     end else begin
       (* Graph Coloring *)
       Interf.build_graph fd;
@@ -210,6 +212,11 @@ let compile_unit ~output_prefix ~asm_filename ~keep_asm ~obj_filename gen =
   let create_asm = should_emit () &&
                    (keep_asm || not !Emitaux.binary_backend_available) in
   Emitaux.create_asm_file := create_asm;
+  let remove_asm_file () =
+    (* if [should_emit ()] is [false] then no assembly is generated,
+       so the (empty) temporary file should be deleted. *)
+    if not create_asm || not keep_asm then remove_file asm_filename
+  in
   Misc.try_finally
     ~exceptionally:(fun () -> remove_file obj_filename)
     (fun () ->
@@ -220,8 +227,7 @@ let compile_unit ~output_prefix ~asm_filename ~keep_asm ~obj_filename gen =
             write_linear output_prefix)
          ~always:(fun () ->
              if create_asm then close_out !Emitaux.output_channel)
-         ~exceptionally:(fun () ->
-             if create_asm && not keep_asm then remove_file asm_filename);
+         ~exceptionally:remove_asm_file;
        if should_emit () then begin
          let assemble_result =
            Profile.record "assemble"
@@ -230,7 +236,7 @@ let compile_unit ~output_prefix ~asm_filename ~keep_asm ~obj_filename gen =
          if assemble_result <> 0
          then raise(Error(Assembler_error asm_filename));
        end;
-       if create_asm && not keep_asm then remove_file asm_filename
+       remove_asm_file ()
     )
 
 let end_gen_implementation ?toplevel ~ppf_dump
@@ -272,8 +278,7 @@ let compile_implementation ?toplevel ~backend ~prefixname ~middle_end
     ~asm_filename:(asm_filename prefixname) ~keep_asm:!keep_asm_file
     ~obj_filename:(prefixname ^ ext_obj)
     (fun () ->
-      Compilation_unit.Set.iter Compilenv.require_global
-        program.required_globals;
+      Ident.Set.iter Compilenv.require_global program.required_globals;
       let clambda_with_constants =
         middle_end ~backend ~prefixname ~ppf_dump program
       in
@@ -282,11 +287,10 @@ let compile_implementation ?toplevel ~backend ~prefixname ~middle_end
 let linear_gen_implementation filename =
   let open Linear_format in
   let linear_unit_info, _ = restore filename in
-  let current_package = Compilation_unit.Prefix.from_clflags () in
-  let saved_package =
-    Compilation_unit.for_pack_prefix linear_unit_info.unit in
-  if not (Compilation_unit.Prefix.equal current_package saved_package)
-  then raise(Error(Mismatched_for_pack saved_package));
+  (match !Clflags.for_package, linear_unit_info.for_pack with
+   | None, None -> ()
+   | Some expected, Some saved when String.equal expected saved -> ()
+   | _, saved -> raise(Error(Mismatched_for_pack saved)));
   let emit_item = function
     | Data dl -> emit_data dl
     | Func f -> emit_fundecl f
@@ -310,15 +314,13 @@ let report_error ppf = function
       fprintf ppf "Assembler error, input left in file %a"
         Location.print_filename file
   | Mismatched_for_pack saved ->
-    let msg prefix =
-      if Compilation_unit.Prefix.is_empty prefix
-      then "without -for-pack"
-      else
-        Format.asprintf "with -for-pack %a" Compilation_unit.Prefix.print prefix
+    let msg = function
+       | None -> "without -for-pack"
+       | Some s -> "with -for-pack "^s
      in
      fprintf ppf
        "This input file cannot be compiled %s: it was generated %s."
-       (msg (Compilation_unit.Prefix.from_clflags ())) (msg saved)
+       (msg !Clflags.for_package) (msg saved)
   | Asm_generation(fn, err) ->
      fprintf ppf
        "Error producing assembly code for function %s: %a"

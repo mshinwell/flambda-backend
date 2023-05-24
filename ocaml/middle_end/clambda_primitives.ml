@@ -13,7 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-type mutable_flag = Lambda.mutable_flag
+type mutable_flag = Asttypes.mutable_flag
 
 type immediate_or_pointer = Lambda.immediate_or_pointer
 
@@ -30,19 +30,22 @@ type memory_access_size =
   | Thirty_two
   | Sixty_four
 
-type alloc_mode = Lambda.alloc_mode
-
 type primitive =
   | Pread_symbol of string
   (* Operations on heap blocks *)
-  | Pmakeblock of int * mutable_flag * block_shape * alloc_mode
-  | Pfield of int * layout
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pfield of int * immediate_or_pointer * mutable_flag
   | Pfield_computed
   | Psetfield of int * immediate_or_pointer * initialization_or_assignment
   | Psetfield_computed of immediate_or_pointer * initialization_or_assignment
-  | Pfloatfield of int * alloc_mode
+  | Pfloatfield of int
   | Psetfloatfield of int * initialization_or_assignment
   | Pduprecord of Types.record_representation * int
+  (* Context switches *)
+  | Prunstack
+  | Pperform
+  | Presume
+  | Preperform
   (* External call *)
   | Pccall of Primitive.description
   (* Exceptions *)
@@ -59,16 +62,15 @@ type primitive =
   | Poffsetint of int
   | Poffsetref of int
   (* Float operations *)
-  | Pintoffloat | Pfloatofint of alloc_mode
-  | Pnegfloat of alloc_mode | Pabsfloat of alloc_mode
-  | Paddfloat of alloc_mode | Psubfloat of alloc_mode
-  | Pmulfloat of alloc_mode | Pdivfloat of alloc_mode
+  | Pintoffloat | Pfloatofint
+  | Pnegfloat | Pabsfloat
+  | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
   | Pfloatcomp of float_comparison
   (* String operations *)
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   (* Array operations *)
-  | Pmakearray of array_kind * mutable_flag * alloc_mode
+  | Pmakearray of array_kind * mutable_flag
   | Pduparray of array_kind * mutable_flag
   (** For [Pduparray], the argument must be an immutable array.
       The arguments of [Pduparray] give the kind and mutability of the
@@ -83,22 +85,21 @@ type primitive =
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
   (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
-  | Pbintofint of boxed_integer * alloc_mode
+  | Pbintofint of boxed_integer
   | Pintofbint of boxed_integer
   | Pcvtbint of boxed_integer (*source*) * boxed_integer (*destination*)
-                * alloc_mode
-  | Pnegbint of boxed_integer * alloc_mode
-  | Paddbint of boxed_integer * alloc_mode
-  | Psubbint of boxed_integer * alloc_mode
-  | Pmulbint of boxed_integer * alloc_mode
-  | Pdivbint of { size : boxed_integer; is_safe : is_safe; mode: alloc_mode }
-  | Pmodbint of { size : boxed_integer; is_safe : is_safe; mode: alloc_mode }
-  | Pandbint of boxed_integer * alloc_mode
-  | Porbint of boxed_integer * alloc_mode
-  | Pxorbint of boxed_integer * alloc_mode
-  | Plslbint of boxed_integer * alloc_mode
-  | Plsrbint of boxed_integer * alloc_mode
-  | Pasrbint of boxed_integer * alloc_mode
+  | Pnegbint of boxed_integer
+  | Paddbint of boxed_integer
+  | Psubbint of boxed_integer
+  | Pmulbint of boxed_integer
+  | Pdivbint of { size : boxed_integer; is_safe : is_safe }
+  | Pmodbint of { size : boxed_integer; is_safe : is_safe }
+  | Pandbint of boxed_integer
+  | Porbint of boxed_integer
+  | Pxorbint of boxed_integer
+  | Plslbint of boxed_integer
+  | Plsrbint of boxed_integer
+  | Pasrbint of boxed_integer
   | Pbintcomp of boxed_integer * integer_comparison
   (* Operations on big arrays: (unsafe, #dimensions, kind, layout) *)
   | Pbigarrayref of bool * int * bigarray_kind * bigarray_layout
@@ -106,26 +107,27 @@ type primitive =
   (* size of the nth dimension of a big array *)
   | Pbigarraydim of int
   (* load/set 16,32,64 bits from a string: (unsafe)*)
-  | Pstring_load of (memory_access_size * is_safe * alloc_mode)
-  | Pbytes_load of (memory_access_size * is_safe * alloc_mode)
+  | Pstring_load of (memory_access_size * is_safe)
+  | Pbytes_load of (memory_access_size * is_safe)
   | Pbytes_set of (memory_access_size * is_safe)
   (* load/set 16,32,64 bits from a
      (char, int8_unsigned_elt, c_layout) Bigarray.Array1.t : (unsafe) *)
-  | Pbigstring_load of (memory_access_size * is_safe * alloc_mode)
+  | Pbigstring_load of (memory_access_size * is_safe)
   | Pbigstring_set of (memory_access_size * is_safe)
   (* byte swap *)
   | Pbswap16
-  | Pbbswap of boxed_integer * alloc_mode
+  | Pbbswap of boxed_integer
   (* Integer to external pointer *)
   | Pint_as_pointer
+  (* Atomic operations *)
+  | Patomic_load of {immediate_or_pointer : immediate_or_pointer}
+  | Patomic_exchange
+  | Patomic_cas
+  | Patomic_fetch_add
   (* Inhibition of optimisation *)
   | Popaque
-  (* Probes *)
-  | Pprobe_is_enabled of { name : string }
-  | Punbox_float
-  | Pbox_float of alloc_mode
-  | Punbox_int of boxed_integer
-  | Pbox_int of boxed_integer * alloc_mode
+  (* Fetch domain-local state *)
+  | Pdls_get
 
 and integer_comparison = Lambda.integer_comparison =
     Ceq | Cne | Clt | Cgt | Cle | Cge
@@ -139,18 +141,6 @@ and array_kind = Lambda.array_kind =
 and value_kind = Lambda.value_kind =
   (* CR mshinwell: Pfloatval should be renamed to Pboxedfloatval *)
     Pgenval | Pfloatval | Pboxedintval of boxed_integer | Pintval
-  | Pvariant of {
-      consts : int list;
-      non_consts : (int * value_kind list) list;
-    }
-  | Parrayval of array_kind
-
-and layout = Lambda.layout =
-  | Ptop
-  | Pvalue of value_kind
-  | Punboxed_float
-  | Punboxed_int of boxed_integer
-  | Pbottom
 
 and block_shape = Lambda.block_shape
 and boxed_integer = Primitive.boxed_integer =
@@ -176,9 +166,3 @@ and raise_kind = Lambda.raise_kind =
   | Raise_notrace
 
 let equal (x: primitive) (y: primitive) = x = y
-
-let result_layout (p : primitive) =
-  match p with
-  | Punbox_float -> Lambda.Punboxed_float
-  | Punbox_int bi -> Lambda.Punboxed_int bi
-  | _ -> Lambda.layout_any_value

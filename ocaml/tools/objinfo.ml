@@ -19,7 +19,6 @@
    and on bytecode executables. *)
 
 open Printf
-open Misc
 open Cmo_format
 
 (* Command line options to prevent printing approximation,
@@ -32,57 +31,29 @@ let shape = ref false
 
 module Magic_number = Misc.Magic_number
 
-let input_stringlist ic len =
-  let get_string_list sect len =
-    let rec fold s e acc =
-      if e != len then
-        if sect.[e] = '\000' then
-          fold (e+1) (e+1) (String.sub sect s (e-s) :: acc)
-        else fold s (e+1) acc
-      else acc
-    in fold 0 0 []
-  in
-  let sect = really_input_string ic len in
-  get_string_list sect len
-
 let dummy_crc = String.make 32 '-'
 let null_crc = String.make 32 '0'
 
 let string_of_crc crc = if !no_crc then null_crc else Digest.to_hex crc
 
-let print_name_crc name crco =
+let print_name_crc (name, crco) =
   let crc =
     match crco with
       None -> dummy_crc
     | Some crc -> string_of_crc crc
   in
-    printf "\t%s\t%a\n" crc Compilation_unit.Name.output name
-
-(* CR-someday mshinwell: consider moving to [Import_info.print] *)
-
-let print_intf_import import =
-  let name = Import_info.name import in
-  let crco = Import_info.crc import in
-  print_name_crc name crco
-
-let print_impl_import import =
-  let unit = Import_info.cu import in
-  let crco = Import_info.crc import in
-  print_name_crc (Compilation_unit.name unit) crco
+    printf "\t%s\t%s\n" crc name
 
 let print_line name =
   printf "\t%s\n" name
 
-let print_name_line cu =
-  printf "\t%a\n" Compilation_unit.Name.output (Compilation_unit.name cu)
-
 let print_required_global id =
-  printf "\t%a\n" Compilation_unit.output id
+  printf "\t%s\n" (Ident.name id)
 
 let print_cmo_infos cu =
-  printf "Unit name: %a\n" Compilation_unit.output cu.cu_name;
+  printf "Unit name: %s\n" cu.cu_name;
   print_string "Interfaces imported:\n";
-  Array.iter print_intf_import cu.cu_imports;
+  List.iter print_name_crc cu.cu_imports;
   print_string "Required globals:\n";
   List.iter print_required_global cu.cu_required_globals;
   printf "Uses unsafe features: ";
@@ -111,15 +82,15 @@ let print_cma_infos (lib : Cmo_format.library) =
   List.iter print_cmo_infos lib.lib_units
 
 let print_cmi_infos name crcs =
-  printf "Unit name: %a\n" Compilation_unit.output name;
+  printf "Unit name: %s\n" name;
   printf "Interfaces imported:\n";
-  Array.iter print_intf_import crcs
+  List.iter print_name_crc crcs
 
 let print_cmt_infos cmt =
   let open Cmt_format in
-  printf "Cmt unit name: %a\n" Compilation_unit.output cmt.cmt_modname;
+  printf "Cmt unit name: %s\n" cmt.cmt_modname;
   print_string "Cmt interfaces imported:\n";
-  Array.iter print_intf_import cmt.cmt_imports;
+  List.iter print_name_crc cmt.cmt_imports;
   printf "Source file: %s\n"
          (match cmt.cmt_sourcefile with None -> "(none)" | Some f -> f);
   printf "Compilation flags:";
@@ -138,25 +109,15 @@ let print_cmt_infos cmt =
     | Some shape -> Format.printf "\n%a" Shape.print shape)
   end
 
-let print_cms_infos cms =
-  let open Cms_format in
-  printf "Cms unit name: %a\n" Compilation_unit.output cms.cms_modname;
-  printf "Source file: %s\n"
-    (match cms.cms_sourcefile with None -> "(none)" | Some f -> f)
-
-let linkage_name comp_unit =
-  Symbol.for_compilation_unit comp_unit
-  |> Symbol.linkage_name_for_ocamlobjinfo
-
 let print_general_infos name crc defines cmi cmx =
   printf "Name: %s\n" name;
   printf "CRC of implementation: %s\n" (string_of_crc crc);
   printf "Globals defined:\n";
-  List.iter print_line (List.map linkage_name defines);
+  List.iter print_line defines;
   printf "Interfaces imported:\n";
-  Array.iter print_intf_import cmi;
+  List.iter print_name_crc cmi;
   printf "Implementations imported:\n";
-  Array.iter print_impl_import cmx
+  List.iter print_name_crc cmx
 
 let print_global_table table =
   printf "Globals defined:\n";
@@ -167,34 +128,9 @@ let print_global_table table =
 open Cmx_format
 open Cmxs_format
 
-(* Redefined here to avoid depending on [Cmm_helpers]. *)
-let machtype_identifier t =
-  let char_of_component = function
-    | Val -> 'V' | Int -> 'I' | Float -> 'F' | Addr -> 'A'
-  in
-  String.of_seq (Seq.map char_of_component (Array.to_seq t))
-
-let unique_arity_identifier arity =
-  if List.for_all (function [|Val|] -> true | _ -> false) arity then
-    Int.to_string (List.length arity)
-  else
-    String.concat "_" (List.map machtype_identifier arity)
-
-let return_arity_identifier t =
-  match t with
-  | [|Val|] -> ""
-  | _ -> "_R" ^ machtype_identifier t
-
 let print_cmx_infos (ui, crc) =
-  (* ocamlobjinfo has historically printed the name of the unit without
-     the pack prefix. *)
-  let comp_unit_without_pack_prefix =
-    Compilation_unit.create Compilation_unit.Prefix.empty
-      (Compilation_unit.name ui.ui_unit)
-  in
   print_general_infos
-    (linkage_name comp_unit_without_pack_prefix)
-    crc ui.ui_defines ui.ui_imports_cmi ui.ui_imports_cmx;
+    ui.ui_name crc ui.ui_defines ui.ui_imports_cmi ui.ui_imports_cmx;
   begin match ui.ui_export_info with
   | Clambda approx ->
     if not !no_approx then begin
@@ -208,8 +144,16 @@ let print_cmx_infos (ui, crc) =
     else
       printf "Flambda unit\n";
     if not !no_approx then begin
-      Compilation_unit.set_current (Some ui.ui_unit);
-      let root_symbols = List.map Symbol.for_compilation_unit ui.ui_defines in
+      let cu =
+        Compilation_unit.create (Ident.create_persistent ui.ui_name)
+          (Linkage_name.create "__dummy__")
+      in
+      Compilation_unit.set_current cu;
+      let root_symbols =
+        List.map (fun s ->
+            Symbol.of_global_linkage cu (Linkage_name.create ("caml"^s)))
+          ui.ui_defines
+      in
       Format.printf "approximations@ %a@.@."
         Export_info.print_approx (export, root_symbols)
     end;
@@ -217,28 +161,16 @@ let print_cmx_infos (ui, crc) =
       Format.printf "functions@ %a@.@."
         Export_info.print_functions export
   end;
-  let pr_afuns _ fns =
-    let mode = function Lambda.Alloc_heap -> "" | Lambda.Alloc_local -> "L" in
-    List.iter (fun (arity,result,m) ->
-        printf " %s%s%s"
-          (unique_arity_identifier arity)
-          (return_arity_identifier result)
-          (mode m)) fns in
-  let pr_cfuns _ fns =
-    List.iter (function
-        | (Lambda.Curried {nlocal}, arity, result) ->
-            printf " %s%sL%d"
-              (unique_arity_identifier arity)
-              (return_arity_identifier result)
-              nlocal
-        | (Lambda.Tupled, arity, result) ->
-            printf " -%s%s"
-              (unique_arity_identifier arity)
-              (return_arity_identifier result)) fns in
-  printf "Currying functions:%a\n" pr_cfuns ui.ui_curry_fun;
-  printf "Apply functions:%a\n" pr_afuns ui.ui_apply_fun;
-  printf "Send functions:%a\n" pr_afuns ui.ui_send_fun;
-  printf "Force link: %s\n" (if ui.ui_force_link then "YES" else "no")
+  let pr_funs _ fns =
+    List.iter (fun arity -> printf " %d" arity) fns in
+  printf "Currying functions:%a\n" pr_funs ui.ui_curry_fun;
+  printf "Apply functions:%a\n" pr_funs ui.ui_apply_fun;
+  printf "Send functions:%a\n" pr_funs ui.ui_send_fun;
+  printf "Force link: %s\n" (if ui.ui_force_link then "YES" else "no");
+  printf "For pack: %s\n"
+    (match ui.ui_for_pack with
+     | None -> "no"
+     | Some pack -> "YES: " ^ pack)
 
 let print_cmxa_infos (lib : Cmx_format.library_infos) =
   printf "Extra C object files:";
@@ -252,7 +184,7 @@ let print_cmxs_infos header =
   List.iter
     (fun ui ->
        print_general_infos
-         (ui.dynu_name |> Compilation_unit.full_path_as_string)
+         ui.dynu_name
          ui.dynu_crc
          ui.dynu_defines
          ui.dynu_imports_cmi
@@ -261,6 +193,12 @@ let print_cmxs_infos header =
 
 let p_title title = printf "%s:\n" title
 
+let p_section title = function
+  | [] -> ()
+  | l ->
+      p_title title;
+      List.iter print_name_crc l
+
 let p_list title print = function
   | [] -> ()
   | l ->
@@ -268,40 +206,38 @@ let p_list title print = function
       List.iter print l
 
 let dump_byte ic =
-  Bytesections.read_toc ic;
-  let toc = Bytesections.toc () in
-  let toc = List.sort Stdlib.compare toc in
+  let toc = Bytesections.read_toc ic in
+  let all = Bytesections.all toc in
   List.iter
-    (fun (section, _) ->
+    (fun {Bytesections.name = section; len; _} ->
        try
-         let len = Bytesections.seek_section ic section in
          if len > 0 then match section with
-           | "CRCS" ->
-               p_list
-                 "Imported units"
-                 print_intf_import
-                 ((input_value ic : Import_info.t array) |> Array.to_list)
-           | "DLLS" ->
-               p_list
-                 "Used DLLs"
-                 print_line
-                 (input_stringlist ic len)
-           | "DLPT" ->
-               p_list
-                 "Additional DLL paths"
-                 print_line
-                 (input_stringlist ic len)
-           | "PRIM" ->
-               p_list
-                 "Primitives used"
-                 print_line
-                 (input_stringlist ic len)
-           | "SYMB" ->
-               print_global_table (input_value ic)
+           | CRCS ->
+               let imported_units : (string * Digest.t option) list =
+                 Bytesections.read_section_struct toc ic section in
+               p_section "Imported units" imported_units
+           | DLLS ->
+               let dlls =
+                 Bytesections.read_section_string toc ic section
+                 |> Misc.split_null_terminated in
+               p_list "Used DLLs" print_line dlls
+           | DLPT ->
+               let dll_paths =
+                 Bytesections.read_section_string toc ic section
+                 |> Misc.split_null_terminated in
+               p_list "Additional DLL paths" print_line dll_paths
+           | PRIM ->
+               let prims =
+                 Bytesections.read_section_string toc ic section
+                 |> Misc.split_null_terminated in
+               p_list "Primitives used" print_line prims
+           | SYMB ->
+               let symb = Bytesections.read_section_struct toc ic section in
+               print_global_table symb
            | _ -> ()
        with _ -> ()
     )
-    toc
+    all
 
 let find_dyn_offset filename =
   match Binutils.read filename with
@@ -335,7 +271,7 @@ let dump_obj_by_kind filename ic obj_kind =
     | Cmo ->
        let cu_pos = input_binary_int ic in
        seek_in ic cu_pos;
-       let cu = (input_value ic : compilation_unit_descr) in
+       let cu = (input_value ic : compilation_unit) in
        close_in ic;
        print_cmo_infos cu
     | Cma ->
@@ -356,10 +292,6 @@ let dump_obj_by_kind filename ic obj_kind =
          | None -> ()
          | Some cmt -> print_cmt_infos cmt
        end
-    | Cms ->
-      close_in ic;
-      let cms = Cms_format.read filename in
-      print_cms_infos cms
     | Cmx _config ->
        let ui = (input_value ic : unit_infos) in
        let crc = Digest.input ic in
@@ -460,7 +392,7 @@ let arg_list = [
 let arg_usage =
    Printf.sprintf "%s [OPTIONS] FILES : give information on files" Sys.argv.(0)
 
-let main() =
+let main () =
   Arg.parse_expand arg_list dump_obj arg_usage;
   exit 0
 

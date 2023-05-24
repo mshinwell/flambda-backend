@@ -6,9 +6,6 @@
    * native
      ocamlopt_flags = "-O3"
      compiler_directory_suffix = ".O3"
-   * native
-     ocamlopt_flags = "-Oclassic"
-     compiler_directory_suffix = ".Oclassic"
 *)
 
 (* A test for inlined stack backtraces *)

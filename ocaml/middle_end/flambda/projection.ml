@@ -34,7 +34,6 @@ type project_var = {
   closure : Variable.t;
   closure_id : Closure_id.t;
   var : Var_within_closure.t;
-  kind : Lambda.layout;
 }
 
 let compare_project_var

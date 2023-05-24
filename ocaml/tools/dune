@@ -12,12 +12,6 @@
 ;*                                                                        *
 ;**************************************************************************
 
-(executable
-  (name objinfo)
-  (modes byte native)
-  (modules objinfo)
-  (libraries ocamlcommon ocamlbytecomp ocamloptcomp))
-
 (executables
  (names   make_opcodes cvt_emit)
  (modules make_opcodes cvt_emit))
@@ -29,61 +23,3 @@
 (ocamllex
  (modules cvt_emit)
  (mode    fallback))
-
-(executable
-  (name ocamldep)
-  (modes byte native)
-  (modules ocamldep)
-  (libraries ocamlcommon ocamlbytecomp))
-
-(install
-  (files
-    (ocamldep.bc as ocamldep.byte)
-    (ocamldep.exe as ocamldep.opt)
-  )
-  (section bin)
-  (package ocaml))
-
-(executable
-  (name cmpbyt)
-  (modes byte)
-  (modules cmpbyt)
-  (libraries ocamlcommon ocamlbytecomp))
-
-(executable
-  (name ocamlmklib)
-  (modes byte native)
-  (modules ocamlmklib)
-  (libraries ocamlcommon ocamlbytecomp))
-
-(install
-  (files
-    (ocamlmklib.bc as ocamlmklib.byte)
-    (ocamlmklib.exe as ocamlmklib.opt)
-  )
-  (section bin)
-  (package ocaml))
-
-(executable
-  (name ocamlmktop)
-  (modes byte native)
-  (modules ocamlmktop)
-  (libraries ocamlcommon ocamlbytecomp))
-
-(install
-  (files
-    (ocamlmktop.bc as ocamlmktop.byte)
-    (ocamlmktop.exe as ocamlmktop.opt)
-  )
-  (section bin)
-  (package ocaml))
-
-(install
-  (files
-    eventlog_metadata
-  )
-  (section lib)
-  (package ocaml))
-
-
-; ocamlcp, ocamloptp and ocamlprof are not currently supported.

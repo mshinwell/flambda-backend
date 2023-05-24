@@ -14,7 +14,6 @@
 (**************************************************************************)
 
 external raise : exn -> 'a = "%raise"
-external with_async_exns : (unit -> 'a) -> 'a = "caml_with_async_exns"
 
 external not : bool -> bool = "%boolnot"
 

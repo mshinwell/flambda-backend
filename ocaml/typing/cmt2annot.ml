@@ -23,7 +23,7 @@ let variables_iterator scope =
   let super = default_iterator in
   let pat sub (type k) (p : k general_pattern) =
     begin match p.pat_desc with
-    | Tpat_var (id, _, _) | Tpat_alias (_, id, _, _) ->
+    | Tpat_var (id, _) | Tpat_alias (_, id, _) ->
         Stypes.record (Stypes.An_ident (p.pat_loc,
                                         Ident.name id,
                                         Annot.Idef scope))
@@ -72,7 +72,7 @@ let rec iterator ~scope rebuild_env =
 
   and expr sub exp =
     begin match exp.exp_desc with
-    | Texp_ident (path, _, _, _) ->
+    | Texp_ident (path, _, _) ->
         let full_name = Path.name ~paren:Oprint.parenthesized_ident path in
         let env =
           if rebuild_env then
@@ -83,7 +83,7 @@ let rec iterator ~scope rebuild_env =
         let annot =
           try
             let desc = Env.find_value path env in
-            let dloc = desc.Subst.Lazy.val_loc in
+            let dloc = desc.Types.val_loc in
             if dloc.Location.loc_ghost then Annot.Iref_external
             else Annot.Iref_internal dloc
           with Not_found ->
@@ -95,7 +95,7 @@ let rec iterator ~scope rebuild_env =
         bind_bindings exp.exp_loc bindings
     | Texp_let (Nonrecursive, bindings, body) ->
         bind_bindings body.exp_loc bindings
-    | Texp_match (_, _, f1, _) ->
+    | Texp_match (_, f1, _) ->
         bind_cases f1
     | Texp_function { cases = f; }
     | Texp_try (_, f) ->

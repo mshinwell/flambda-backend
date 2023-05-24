@@ -26,14 +26,10 @@ let request_signal () = Atomic.incr signals_requested
 let () =
   let (rd, wr) = Unix.pipe () in
   Sys.catch_break true;
-  begin match
-    Sys.with_async_exns (fun () ->
-      request_signal ();
-      Unix.read rd (Bytes.make 1 'a') 0 1)
-  with
+  request_signal ();
+  begin match Unix.read rd (Bytes.make 1 'a') 0 1 with
   | _ -> assert false
-  | exception Sys.Break ->
-    print_endline "break: ok" end;
+  | exception Sys.Break -> print_endline "break: ok" end;
   Sys.catch_break false;
   Unix.close rd;
   Unix.close wr
@@ -75,23 +71,19 @@ let () =
   let before = Sys.opaque_identity (ref (mklist ())) in
   let during = Atomic.make (Sys.opaque_identity (mklist ())) in
   let siglist = ref [] in
-  let test_body () =
-    (* Allocate [test_body]'s closure here, to avoid disturbing the
-       test in the context of [with_async_exns] below. *)
-    request_signal ();
-    while true do
-      poke_stdout ();
-      Atomic.set during (mklist ())
-    done
-  in
   Sys.set_signal Sys.sigint (Signal_handle (fun _ ->
     Gc.full_major (); poke_stdout (); Gc.compact ();
     siglist := mklist ();
     raise Sys.Break));
-  begin match Sys.with_async_exns test_body with
+  request_signal ();
+  begin match
+    while true do
+      poke_stdout ();
+      Atomic.set during (mklist ())
+    done
+  with
   | () -> assert false
-  | exception Sys.Break -> ()
-  end;
+  | exception Sys.Break -> () end;
   let expected = Sys.opaque_identity (mklist ()) in
   assert (!before = expected);
   assert (Atomic.get during = expected);

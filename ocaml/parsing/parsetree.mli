@@ -211,13 +211,6 @@ and object_field_desc =
 and pattern =
     {
      ppat_desc: pattern_desc;
-     (** (Jane Street specific; delete when upstreaming.)
-         Consider using [Jane_syntax.Pattern.of_ast] before matching on
-         this field directly, as the former will detect extension nodes
-         correctly. Our syntax extensions are encoded as
-         [Ppat_tuple [Ppat_extension _; _]]; if your pattern match avoids
-         matching that pattern, it is OK to skip [of_ast]. *)
-
      ppat_loc: Location.t;
      ppat_loc_stack: location_stack;
      ppat_attributes: attributes;  (** [... [\@id1] [\@id2]] *)
@@ -284,13 +277,6 @@ and pattern_desc =
 and expression =
     {
      pexp_desc: expression_desc;
-     (** (Jane Street specific; delete when upstreaming.)
-         Consider using [Jane_syntax.Expression.of_ast] before matching on
-         this field directly, as the former will detect extension nodes
-         correctly. Our syntax extensions are encoded as
-         [Pexp_apply(Pexp_extension _, _)]; if your pattern match avoids
-         matching that pattern, it is OK to skip [of_ast]. *)
-
      pexp_loc: Location.t;
      pexp_loc_stack: location_stack;
      pexp_attributes: attributes;  (** [... [\@id1] [\@id2]] *)
@@ -816,14 +802,6 @@ and class_declaration = class_expr class_infos
 and module_type =
     {
      pmty_desc: module_type_desc;
-     (** (Jane Street specific; delete when upstreaming.)
-         Consider using [Jane_syntax.Module_type.of_ast] before matching on
-         this field directly, as the former will detect extension nodes
-         correctly. Our syntax extensions are encoded as
-         [Pmty_functor(Named(_, Pmty_extension _), _)];
-         if your pattern match avoids
-         matching that pattern, it is OK to skip [of_ast]. *)
-
      pmty_loc: Location.t;
      pmty_attributes: attributes;  (** [... [\@id1] [\@id2]] *)
     }
@@ -982,7 +960,8 @@ and module_expr_desc =
   | Pmod_structure of structure  (** [struct ... end] *)
   | Pmod_functor of functor_parameter * module_expr
       (** [functor(X : MT1) -> ME] *)
-  | Pmod_apply of module_expr * module_expr  (** [ME1(ME2)] *)
+  | Pmod_apply of module_expr * module_expr (** [ME1(ME2)] *)
+  | Pmod_apply_unit of module_expr (** [ME1()] *)
   | Pmod_constraint of module_expr * module_type  (** [(ME : MT)] *)
   | Pmod_unpack of expression  (** [(val E)] *)
   | Pmod_extension of extension  (** [[%id]] *)
@@ -1026,13 +1005,22 @@ and structure_item_desc =
   | Pstr_attribute of attribute  (** [[\@\@\@id]] *)
   | Pstr_extension of extension * attributes  (** [[%%id]] *)
 
+and poly_constraint = {
+  locally_abstract_univars:string loc list;
+  typ:core_type
+}
+(** - [{locally_abstract_univars = [x1; ...; xN]; typ }] represents
+        [type x1 ... xN. typ]
+*)
+
 and value_binding =
   {
     pvb_pat: pattern;
     pvb_expr: expression;
+    pvb_constraint: poly_constraint option;
     pvb_attributes: attributes;
     pvb_loc: Location.t;
-  }
+  }(** [let pat : type_constraint = exp] *)
 
 and module_binding =
     {

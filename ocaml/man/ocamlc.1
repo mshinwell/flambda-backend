@@ -203,6 +203,9 @@ excluding the filename.
 .B \-absname
 Show absolute filenames in error messages.
 .TP
+.B \-no-absname
+Do not try to show absolute filenames in error messages.
+.TP
 .B \-annot
 Deprecated since 4.11. Please use
 .BR \-bin-annot
@@ -388,6 +391,9 @@ required in order to be able to debug the program with
 and to produce stack backtraces when
 the program terminates on an uncaught exception.
 .TP
+.B \-no-g
+Do not record debugging information (default).
+.TP
 .B \-i
 Cause the compiler to print all defined names (with their inferred
 types or their definitions) when compiling an implementation (.ml
@@ -397,6 +403,10 @@ compiler. Also, since the output follows the syntax of interfaces, it
 can help in writing an explicit interface (.mli file) for a file: just
 redirect the standard output of the compiler to a .mli file, and edit
 that file to remove all declarations of unexported names.
+.TP
+.B \-cmi-file \ filename
+Type-check the source implementation to be compiled against the
+specified interface file (by-passes the normal lookup for .mli and .cmi files).
 .TP
 .BI \-I \ directory
 Add the given directory to the list of directories searched for
@@ -616,11 +626,19 @@ default mode with equivalent types, but different binary signatures,
 and this may slow down type checking; yet it is a good idea to
 use it once before publishing source code.
 .TP
+.B \-no\-principal
+Do not check principality of type inference.
+This is the default.
+.TP
 .B \-rectypes
 Allow arbitrary recursive types during type-checking.  By default,
 only recursive types where the recursion goes through an object type
 are supported. Note that once you have created an interface using this
 flag, you must use it again for all dependencies.
+.TP
+.B \-no\-rectypes
+Do no allow arbitrary recursive types during type-checking.
+This is the default.
 .TP
 .BI \-runtime\-variant \ suffix
 Add
@@ -632,24 +650,34 @@ then the
 .B d
 suffix is supported and gives a debug version of the runtime.
 .TP
-.BI \-stop\-after \ pass
-Stop compilation after the given compilation pass. The currently
-supported passes are:
-.BR parsing ,
-.BR typing .
-.TP
 .B \-safe\-string
 Enforce the separation between types
 .BR string \ and\  bytes ,
 thereby making strings read-only. This is the default.
+.TP
+.B \-safer\-matching
+Do not use type information to optimize pattern-matching.
+This allows to detect match failures even if a pattern-matching was
+wrongly assumed to be exhaustive. This only impacts GADT and
+polymorphic variant compilation.
 .TP
 .B \-short\-paths
 When a type is visible under several module-paths, use the shortest
 one when printing the type's name in inferred interfaces and error and
 warning messages.
 .TP
+.BI \-stop\-after \ pass
+Stop compilation after the given compilation pass. The currently
+supported passes are:
+.BR parsing ,
+.BR typing .
+.TP
 .B \-strict\-sequence
 Force the left-hand part of each sequence to have type unit.
+.TP
+.B \-no\-strict\-sequence
+Left-hand part of a sequence need not have type unit.
+This is the default.
 .TP
 .B \-unboxed\-types
 When a type is unboxable (i.e. a record with a single argument or a
@@ -1099,6 +1127,11 @@ Unused @tail_mod_cons attribute
 A tail call is turned into a non-tail call by the @tail_mod_cons
 transformation.
 
+.B 73 [generative-application-expects-unit]
+.br
+A generative functor is applied to an empty structure (struct end) rather than
+to ().
+
 
 The letters stand for the following sets of warnings.  Any letter not
 mentioned here corresponds to the empty set.
@@ -1182,8 +1215,8 @@ compiling your program with later versions of OCaml when they add new
 warnings or modify existing warnings.
 
 The default setting is
-.B \-warn\-error \-a+31
-(only warning 31 is fatal).
+.B \-warn\-error \-a
+(no warning is fatal).
 .TP
 .B \-warn\-help
 Show the description of all available warning numbers.

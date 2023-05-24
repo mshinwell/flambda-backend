@@ -1,4 +1,3 @@
-# 1 "stack.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,10 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
 
 type 'a t = { mutable c : 'a list; mutable len : int; }
 
@@ -39,6 +34,11 @@ let pop_opt s =
   match s.c with
   | hd::tl -> s.c <- tl; s.len <- s.len - 1; Some hd
   | []     -> None
+
+let drop s =
+  match s.c with
+  | _hd::tl -> s.c <- tl; s.len <- s.len - 1
+  | [] -> raise Empty
 
 let top s =
   match s.c with

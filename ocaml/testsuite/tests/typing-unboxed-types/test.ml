@@ -92,9 +92,9 @@ Error: This type cannot be unboxed because
 |}];;
 
 (* let rec must be rejected *)
-type t10 = A of t10 [@@ocaml.unboxed] [@@value];;
+type t10 = A of t10 [@@ocaml.unboxed];;
 [%%expect{|
-type t10 = A of t10 [@@value] [@@unboxed]
+type t10 = A of t10 [@@unboxed]
 |}];;
 let rec x = A x;;
 [%%expect{|
@@ -126,30 +126,6 @@ Error: Signature mismatch:
          type t = A of string
        Their internal representations differ:
        the first declaration uses unboxed representation.
-|}];;
-
-module M' : sig
-  type t = A of string [@ocaml.unboxed]
-end = struct
-  type t = A of string [@@ocaml.unboxed]
-end;;
-[%%expect{|
-Lines 3-5, characters 6-3:
-3 | ......struct
-4 |   type t = A of string [@@ocaml.unboxed]
-5 | end..
-Error: Signature mismatch:
-       Modules do not match:
-         sig type t = A of string [@@unboxed] end
-       is not included in
-         sig type t = A of string end
-       Type declarations do not match:
-         type t = A of string [@@unboxed]
-       is not included in
-         type t = A of string
-       Their internal representations differ:
-       the first declaration uses unboxed representation.
-       Hint: the second declaration has [@unboxed]. Did you mean [@@unboxed]?
 |}];;
 
 module N : sig
@@ -280,10 +256,11 @@ in assert (f x = L 3.14);;
 - : unit = ()
 |}];;
 
+
 (* Check for a potential infinite loop in the typing algorithm. *)
-type 'a t12 = M of 'a t12 [@@ocaml.unboxed] [@@value];;
+type 'a t12 = M of 'a t12 [@@ocaml.unboxed];;
 [%%expect{|
-type 'a t12 = M of 'a t12 [@@value] [@@unboxed]
+type 'a t12 = M of 'a t12 [@@unboxed]
 |}];;
 let f (a : int t12 array) = a.(0);;
 [%%expect{|

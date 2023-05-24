@@ -26,25 +26,20 @@ module Env : sig
 
   val empty : t
 
-  val add_var : t -> Ident.t -> Variable.t -> Lambda.layout -> t
-  val add_vars : t -> Ident.t list -> (Variable.t * Lambda.layout) list -> t
+  val add_var : t -> Ident.t -> Variable.t -> t
+  val add_vars : t -> Ident.t list -> Variable.t list -> t
 
-  val find_var : t -> Ident.t -> Variable.t * Lambda.layout
-  val find_var_exn : t -> Ident.t -> Variable.t * Lambda.layout
+  val find_var : t -> Ident.t -> Variable.t
+  val find_var_exn : t -> Ident.t -> Variable.t
 
-  val add_mutable_var :
-    t -> Ident.t -> Mutable_variable.t -> Lambda.layout -> t
-  val find_mutable_var_exn :
-    t -> Ident.t -> Mutable_variable.t * Lambda.layout
+  val add_mutable_var : t -> Ident.t -> Mutable_variable.t -> t
+  val find_mutable_var_exn : t -> Ident.t -> Mutable_variable.t
 
   val add_static_exception : t -> int -> Static_exception.t -> t
   val find_static_exception : t -> int -> Static_exception.t
 
   val add_global : t -> int -> Symbol.t -> t
   val find_global : t -> int -> Symbol.t
-
-  val at_toplevel : t -> bool
-  val not_at_toplevel : t -> t
 end
 
 (** Used to represent information about a set of function declarations
@@ -58,10 +53,7 @@ module Function_decls : sig
        : let_rec_ident:Ident.t option
       -> closure_bound_var:Variable.t
       -> kind:Lambda.function_kind
-      -> mode:Lambda.alloc_mode
-      -> region:bool
-      -> params:(Ident.t * Lambda.layout) list
-      -> return_layout:Lambda.layout
+      -> params:Ident.t list
       -> body:Lambda.lambda
       -> attr:Lambda.function_attribute
       -> loc:Lambda.scoped_location
@@ -70,10 +62,7 @@ module Function_decls : sig
     val let_rec_ident : t -> Ident.t
     val closure_bound_var : t -> Variable.t
     val kind : t -> Lambda.function_kind
-    val mode : t -> Lambda.alloc_mode
-    val region : t -> bool
-    val params : t -> (Ident.t * Lambda.layout) list
-    val return_layout : t -> Lambda.layout
+    val params : t -> Ident.t list
     val body : t -> Lambda.lambda
     val inline : t -> Lambda.inline_attribute
     val specialise : t -> Lambda.specialise_attribute

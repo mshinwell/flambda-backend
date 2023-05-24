@@ -1,4 +1,3 @@
-# 1 "camlinternalMod.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,10 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
 
 type shape =
   | Function
@@ -61,7 +56,7 @@ and init_mod_block loc comps =
   done;
   modu
 
-let [@inline never] init_mod loc shape =
+let init_mod loc shape =
   match shape with
   | Module comps ->
      Obj.repr (init_mod_block loc comps)
@@ -88,7 +83,7 @@ and update_mod_block comps o n =
     update_mod_field o i comps.(i) (Obj.field n i)
   done
 
-let [@inline never] update_mod shape o n =
+let update_mod shape o n =
   match shape with
   | Module comps ->
      update_mod_block comps o n

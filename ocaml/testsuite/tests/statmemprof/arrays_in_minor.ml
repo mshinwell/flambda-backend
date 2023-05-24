@@ -1,5 +1,7 @@
 (* TEST
    flags = "-g"
+   * skip
+   reason = "port stat-mem-prof : https://github.com/ocaml/ocaml/pull/8634"
 *)
 
 open Gc.Memprof
@@ -13,28 +15,14 @@ let clear_roots () =
   Array.fill roots 0 !roots_pos [||];
   roots_pos := 0
 
-let[@inline never] rec allocate_arrays_inner i hi keep =
-  if i > hi then ()
-  else begin
-    add_root (Array.make i 0);
-    allocate_arrays_inner (i + 3) hi keep
-  end
-
 let[@inline never] allocate_arrays lo hi cnt keep =
   assert (0 < lo && hi <= 250);  (* Fits in minor heap. *)
   for j = 0 to cnt-1 do
-    allocate_arrays_inner lo hi keep;
+    for i = lo to hi do
+      add_root (Array.make i 0)
+    done;
     if not keep then clear_roots ()
   done
-
-let allocate_arrays_total lo hi cnt =
-  let tot = ref 0 in
-  let i = ref lo in
-  while !i <= hi do
-    tot := !tot + (!i + 1);
-    i := !i + 3;
-  done;
-  cnt * !tot
 
 let check_nosample () =
   Printf.printf "check_nosample\n%!";
@@ -155,7 +143,7 @@ let check_distrib lo hi cnt rate =
      distribution. We compute a 1e-8 confidence interval for !smp
      using quantiles of the normal distribution, and check that we are
      in this confidence interval. *)
-  let tot_alloc = allocate_arrays_total lo hi cnt in
+  let tot_alloc = cnt*(lo+hi+2)*(hi-lo+1)/2 in
   assert (float tot_alloc *. rate > 100. &&
           float tot_alloc *. (1. -. rate) > 100.);
   let mean = float tot_alloc *. rate in

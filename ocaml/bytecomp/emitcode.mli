@@ -18,8 +18,8 @@
 open Cmo_format
 open Instruct
 
-val to_file: out_channel -> Compilation_unit.t -> string ->
-  required_globals:Compilation_unit.Set.t -> instruction list -> unit
+val to_file: out_channel -> string -> string ->
+  required_globals:Ident.Set.t -> instruction list -> unit
         (* Arguments:
              channel on output file
              name of compilation unit implemented
@@ -38,14 +38,17 @@ val to_memory:
              relocation information
              debug events *)
 val to_packed_file:
-  out_channel -> instruction list -> (reloc_info * int) list
+  out_channel -> instruction list ->
+    int * (reloc_info * int) list * debug_event list * Misc.Stdlib.String.Set.t
         (* Arguments:
              channel on output file
              list of instructions to emit
            Result:
-             relocation information (reversed) *)
-
-val reset: unit -> unit
+             size of the emitted code
+             relocation information
+             debug events
+             debug directory
+             *)
 
 val marshal_to_channel_with_possibly_32bit_compat :
   filename:string -> kind:string -> out_channel -> 'a -> unit

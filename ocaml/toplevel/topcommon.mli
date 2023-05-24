@@ -29,13 +29,17 @@ open Format
 
 (* Set the load paths, before running anything *)
 
-val set_paths : unit -> unit
+val set_paths : ?auto_include:Load_path.auto_include_callback -> unit -> unit
+
+(* Add directories listed in OCAMLTOP_INCLUDE_PATH to the end of the search
+   path *)
+
+val update_search_path_from_env : unit -> unit
 
 (* Management and helpers for the execution *)
 
 val toplevel_env : Env.t ref
         (* Typing environment for the toplevel *)
-val toplevel_sig : Types.signature ref
 val initialize_toplevel_env : unit -> unit
         (* Initialize the typing environment for the toplevel *)
 val preprocess_phrase :
@@ -75,8 +79,6 @@ val print_out_phrase :
 exception Undefined_global of string
 
 module type EVAL_BASE = sig
-
-  val eval_compilation_unit: Compilation_unit.t -> Obj.t
 
   (* Return the value referred to by a base ident
      @raise [Undefined_global] if not found *)
@@ -211,6 +213,11 @@ val override_sys_argv : string array -> unit
    This is called by [run_script] so that [Sys.argv] represents
    "script.ml args..." instead of the full command line:
    "ocamlrun unix.cma ... script.ml args...". *)
+
+(** [is_command_like_name s] is [true] if [s] is an implicit basename with no
+    file extension and which doesn't begin with a hyphen. Basically, if it looks
+    like a sub-command name (e.g. ocaml help). *)
+val is_command_like_name : string -> bool
 
 (**/**)
 

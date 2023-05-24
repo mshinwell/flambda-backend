@@ -1,4 +1,3 @@
-# 1 "float.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -15,22 +14,16 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
-[@@@ocaml.nolabels]
-
-external neg : (float[@local_opt]) -> (float[@local_opt]) = "%negfloat"
-external add : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%addfloat"
-external sub : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%subfloat"
-external mul : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%mulfloat"
-external div : (float[@local_opt]) -> (float[@local_opt]) -> (float[@local_opt]) = "%divfloat"
+external neg : float -> float = "%negfloat"
+external add : float -> float -> float = "%addfloat"
+external sub : float -> float -> float = "%subfloat"
+external mul : float -> float -> float = "%mulfloat"
+external div : float -> float -> float = "%divfloat"
 external rem : float -> float -> float = "caml_fmod_float" "fmod"
   [@@unboxed] [@@noalloc]
 external fma : float -> float -> float -> float = "caml_fma_float" "caml_fma"
   [@@unboxed] [@@noalloc]
-external abs : (float[@local_opt]) -> (float[@local_opt]) = "%absfloat"
+external abs : float -> float = "%absfloat"
 
 let zero = 0.
 let one = 1.
@@ -51,7 +44,7 @@ let pi = 0x1.921fb54442d18p+1
 let max_float = Stdlib.max_float
 let min_float = Stdlib.min_float
 let epsilon = Stdlib.epsilon_float
-external of_int : int -> (float[@local_opt]) = "%floatofint"
+external of_int : int -> float = "%floatofint"
 external to_int : float -> int = "%intoffloat"
 external of_string : string -> float = "caml_float_of_string"
 let of_string_opt = Stdlib.float_of_string_opt
@@ -171,8 +164,9 @@ let[@inline] min_max_num (x: float) (y: float) =
   else if is_nan y then (x,x)
   else if y > x || (not(sign_bit y) && sign_bit x) then (x,y) else (y,x)
 
-external seeded_hash_param : int -> int -> int -> float -> int
-                           = "caml_hash" [@@noalloc]
+external seeded_hash_param :
+  int -> int -> int -> 'a -> int = "caml_hash" [@@noalloc]
+let seeded_hash seed x = seeded_hash_param 10 100 seed x
 let hash x = seeded_hash_param 10 100 0 x
 
 module Array = struct
@@ -292,6 +286,12 @@ module Array = struct
     done;
     r
 
+  (* duplicated from array.ml *)
+  let map_inplace f a =
+    for i = 0 to length a - 1 do
+      unsafe_set a i (f (unsafe_get a i))
+    done
+
   let map2 f a b =
     let la = length a in
     let lb = length b in
@@ -316,6 +316,12 @@ module Array = struct
       unsafe_set r i (f i (unsafe_get a i))
     done;
     r
+
+  (* duplicated from array.ml *)
+  let mapi_inplace f a =
+    for i = 0 to length a - 1 do
+      unsafe_set a i (f i (unsafe_get a i))
+    done
 
   (* duplicated from array.ml *)
   let fold_left f x a =
@@ -368,6 +374,51 @@ module Array = struct
       if i = n then false
       else if x = (unsafe_get a i) then true
       else loop (i + 1)
+    in
+    loop 0
+
+  (* duplicated from array.ml *)
+  let find_opt p a =
+    let n = length a in
+    let rec loop i =
+      if i = n then None
+      else
+        let x = unsafe_get a i in
+        if p x then Some x
+        else loop (i + 1)
+    in
+    loop 0
+
+  (* duplicated from array.ml *)
+  let find_index p a =
+    let n = length a in
+    let rec loop i =
+      if i = n then None
+      else if p (unsafe_get a i) then Some i
+      else loop (i + 1) in
+    loop 0
+
+  (* duplicated from array.ml *)
+  let find_map f a =
+    let n = length a in
+    let rec loop i =
+      if i = n then None
+      else
+        match f (unsafe_get a i) with
+        | None -> loop (i + 1)
+        | Some _ as r -> r
+    in
+    loop 0
+
+  (* duplicated from array.ml *)
+  let find_mapi f a =
+    let n = length a in
+    let rec loop i =
+      if i = n then None
+      else
+        match f i (unsafe_get a i) with
+        | None -> loop (i + 1)
+        | Some _ as r -> r
     in
     loop 0
 

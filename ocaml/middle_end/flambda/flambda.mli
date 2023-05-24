@@ -36,19 +36,14 @@ type apply = {
      lhs_of_application -> callee *)
   func : Variable.t;
   args : Variable.t list;
-  result_layout : Lambda.layout;
   kind : call_kind;
   dbg : Debuginfo.t;
-  reg_close : Lambda.region_close;
-  mode : Lambda.alloc_mode;
-  inlined : Lambda.inlined_attribute;
+  inline : Lambda.inline_attribute;
   (** Instructions from the source code as to whether the callee should
       be inlined. *)
   specialise : Lambda.specialise_attribute;
   (** Instructions from the source code as to whether the callee should
       be specialised. *)
-  probe : Lambda.probe;
-  (** Instruction from the source as to whether the call is a probe *)
 }
 
 (** The update of a mutable variable.  Mutable variables are distinct from
@@ -65,9 +60,6 @@ type send = {
   obj : Variable.t;
   args : Variable.t list;
   dbg : Debuginfo.t;
-  reg_close : Lambda.region_close;
-  mode : Lambda.alloc_mode;
-  result_layout : Lambda.layout;
 }
 
 (** For details on these types, see projection.mli. *)
@@ -89,7 +81,6 @@ type specialised_to = {
       [specialised_args] respectively) in the same set of closures.
       As such, this field describes a relation of projections between
       either the [free_vars] or the [specialised_args]. *)
-  kind : Lambda.layout;
 }
 
 (** Flambda terms are partitioned in a pseudo-ANF manner; many terms are
@@ -107,18 +98,15 @@ type t =
   | Apply of apply
   | Send of send
   | Assign of assign
-  | If_then_else of Variable.t * t * t * Lambda.layout
+  | If_then_else of Variable.t * t * t
   | Switch of Variable.t * switch
   | String_switch of Variable.t * (string * t) list * t option
-                     * Lambda.layout
   (** Restrictions on [Lambda.Lstringswitch] also apply to [String_switch]. *)
   | Static_raise of Static_exception.t * Variable.t list
-  | Static_catch of Static_exception.t * ( Variable.t * Lambda.layout ) list * t * t * Lambda.layout
-  | Try_with of t * Variable.t * t * Lambda.layout
+  | Static_catch of Static_exception.t * Variable.t list * t * t
+  | Try_with of t * Variable.t * t
   | While of t * t
   | For of for_loop
-  | Region of t
-  | Exclave of t
   | Proved_unreachable
 
 (** Values of type [named] will always be [let]-bound to a [Variable.t]. *)
@@ -190,7 +178,7 @@ and let_expr = private {
 and let_mutable = {
   var : Mutable_variable.t;
   initial_value : Variable.t;
-  contents_kind : Lambda.layout;
+  contents_kind : Lambda.value_kind;
   body : t;
 }
 
@@ -290,8 +278,6 @@ and set_of_closures = private {
       functions (which will be inlined at direct call sites, but will
       penalise indirect call sites).
       [direct_call_surrogates] may not be transitively closed. *)
-  alloc_mode : Lambda.alloc_mode;
-  (** Whether these closures are allocated on the heap or locally. *)
 }
 
 and function_declarations = private {
@@ -315,9 +301,6 @@ and function_declarations = private {
 and function_declaration = private {
   closure_origin: Closure_origin.t;
   params : Parameter.t list;
-  return_layout : Lambda.layout;
-  alloc_mode : Lambda.alloc_mode;
-  region : bool;
   body : t;
   (* CR-soon mshinwell: inconsistent naming free_variables/free_vars here and
      above *)
@@ -353,7 +336,6 @@ and switch = {
   numblocks : Numbers.Int.Set.t; (** Number of tag block cases *)
   blocks : (int * t) list; (** Tag block cases *)
   failaction : t option; (** Action to take if none matched *)
-  kind : Lambda.layout
 }
 
 (** Equivalent to the similar type in [Lambda]. *)
@@ -567,12 +549,9 @@ end
     symbols occurring in the specified [body]. *)
 val create_function_declaration
    : params:Parameter.t list
-  -> alloc_mode:Lambda.alloc_mode
-  -> region:bool
   -> body:t
   -> stub:bool
   -> dbg:Debuginfo.t
-  -> return_layout:Lambda.layout
   -> inline:Lambda.inline_attribute
   -> specialise:Lambda.specialise_attribute
   -> is_a_functor:bool
@@ -581,8 +560,9 @@ val create_function_declaration
   -> function_declaration
 
 (** Create a function declaration based on another function declaration *)
-val update_function_declaration_body
+val update_function_declaration
   : function_declaration
+  -> params:Parameter.t list
   -> body:t
   -> function_declaration
 
@@ -603,6 +583,14 @@ val create_function_declarations_with_origin
 (** Change only the code of a function declaration. *)
 val update_body_of_function_declaration
    : function_declaration
+  -> body:expr
+  -> function_declaration
+
+(** Change only the code and parameters of a function declaration. *)
+(* CR-soon mshinwell: rename this to match new update function above *)
+val update_function_decl's_params_and_body
+   : function_declaration
+  -> params:Parameter.t list
   -> body:expr
   -> function_declaration
 

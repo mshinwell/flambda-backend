@@ -91,15 +91,7 @@ let transl_label_init_general f =
   let expr, size = f () in
   let expr =
     Hashtbl.fold
-      (fun c id expr ->
-         let layout = Lambda.structured_constant_layout c in
-         let const =
-           Lprim (Popaque layout, [Lconst c], Debuginfo.Scoped_location.Loc_unknown)
-         in
-         (* CR ncourant: this *should* not be too precise for the moment,
-            but we should take care, or fix the underlying cause that led
-            us to using [Popaque]. *)
-         Llet(Alias, layout, id, const, expr))
+      (fun c id expr -> Llet(Alias, Pgenval, id, Lconst c, expr))
       consts expr
   in
   (*let expr =
@@ -112,7 +104,7 @@ let transl_label_init_general f =
   expr, size
 
 let transl_label_init_flambda f =
-  assert(Config.flambda || Config.flambda2);
+  assert(Config.flambda);
   let method_cache_id = Ident.create_local "method_cache" in
   method_cache := Lvar method_cache_id;
   (* Calling f (usually Translmod.transl_struct) requires the
@@ -122,7 +114,7 @@ let transl_label_init_flambda f =
   let expr =
     if !method_count = 0 then expr
     else
-      Llet (Strict, Lambda.layout_array Pgenarray, method_cache_id,
+      Llet (Strict, Pgenval, method_cache_id,
         Lprim (Pccall prim_makearray,
                [int !method_count; int 0],
                Loc_unknown),
@@ -131,9 +123,10 @@ let transl_label_init_flambda f =
   transl_label_init_general (fun () -> expr, size)
 
 let transl_store_label_init glob size f arg =
-  assert(not (Config.flambda || Config.flambda2));
+  assert(not Config.flambda);
   assert(!Clflags.native_code);
-  method_cache := Lprim(mod_field ~read_semantics:Reads_vary size,
+  method_cache := Lprim(Pfield (size, Pointer, Mutable),
+                        (* XXX KC: conservative *)
                         [Lprim(Pgetglobal glob, [], Loc_unknown)],
                         Loc_unknown);
   let expr = f arg in
@@ -141,7 +134,7 @@ let transl_store_label_init glob size f arg =
     if !method_count = 0 then (size, expr) else
     (size+1,
      Lsequence(
-     Lprim(mod_setfield size,
+     Lprim(Psetfield(size, Pointer, Root_initialization),
            [Lprim(Pgetglobal glob, [], Loc_unknown);
             Lprim (Pccall prim_makearray,
                    [int !method_count; int 0],
@@ -185,13 +178,10 @@ let oo_wrap env req f x =
          let lambda =
            List.fold_left
              (fun lambda id ->
-                let cl =
-                  Lprim(Pmakeblock(0, Mutable, None, alloc_heap),
-                        [lambda_unit; lambda_unit; lambda_unit],
-                        Loc_unknown)
-                in
-                Llet(StrictOpt, Lambda.layout_class, id,
-                     Lprim (Popaque Lambda.layout_class, [cl], Loc_unknown),
+                Llet(StrictOpt, Pgenval, id,
+                     Lprim(Pmakeblock(0, Mutable, None),
+                           [lambda_unit; lambda_unit; lambda_unit],
+                           Loc_unknown),
                      lambda))
              lambda !classes
          in

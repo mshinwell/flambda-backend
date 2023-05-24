@@ -1,4 +1,3 @@
-# 1 "obj.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,10 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
 (* Operations on internal representations of values *)
 
 type t
@@ -26,22 +21,14 @@ type raw_data = nativeint
 
 external repr : 'a -> t = "%identity"
 external obj : t -> 'a = "%identity"
-external magic : 'a -> 'b = "%obj_magic"
+external magic : 'a -> 'b = "%identity"
 external is_int : t -> bool = "%obj_is_int"
 let [@inline always] is_block a = not (is_int a)
 external tag : t -> int = "caml_obj_tag" [@@noalloc]
-(* For Flambda 2 there is a strict distinction between arrays and other
-   blocks.  %obj_size and %obj_field may only be used on blocks.  As such
-   they are protected here using [Sys.opaque_identity], since this
-   restriction is likely not respected by callees of this module. *)
 external size : t -> int = "%obj_size"
-let [@inline always] size t = size (Sys.opaque_identity t)
 external reachable_words : t -> int = "caml_obj_reachable_words"
 external field : t -> int -> t = "%obj_field"
-let [@inline always] field t index = field (Sys.opaque_identity t) index
 external set_field : t -> int -> t -> unit = "%obj_set_field"
-let [@inline always] set_field t index new_value =
-  set_field (Sys.opaque_identity t) index new_value
 external floatarray_get : floatarray -> int -> float = "caml_floatarray_get"
 external floatarray_set :
     floatarray -> int -> float -> unit = "caml_floatarray_set"
@@ -53,14 +40,15 @@ external set_raw_field : t -> int -> raw_data -> unit
                                           = "caml_obj_set_raw_field"
 
 external new_block : int -> int -> t = "caml_obj_block"
-
-external dup : t -> t = "%obj_dup"
+external dup : t -> t = "caml_obj_dup"
 external add_offset : t -> Int32.t -> t = "caml_obj_add_offset"
 external with_tag : int -> t -> t = "caml_obj_with_tag"
 
 let first_non_constant_constructor_tag = 0
-let last_non_constant_constructor_tag = 245
+let last_non_constant_constructor_tag = 243
 
+let forcing_tag = 244
+let cont_tag = 245
 let lazy_tag = 246
 let closure_tag = 247
 let object_tag = 248
@@ -74,7 +62,6 @@ let string_tag = 252
 let double_tag = 253
 let double_array_tag = 254
 let custom_tag = 255
-let final_tag = custom_tag
 
 
 let int_tag = 1000
@@ -131,10 +118,6 @@ struct
     (obj (field (repr slot) 1) : int)
 end
 
-let extension_constructor = Extension_constructor.of_val
-let extension_name = Extension_constructor.name
-let extension_id = Extension_constructor.id
-
 module Ephemeron = struct
   type obj_t = t
 
@@ -144,7 +127,7 @@ module Ephemeron = struct
   let additional_values = 2
   let max_ephe_length = Sys.max_array_length - additional_values
 
-  external create : int -> t = "caml_ephe_create";;
+  external create : int -> t = "caml_ephe_create"
   let create l =
     if not (0 <= l && l <= max_ephe_length) then
       invalid_arg "Obj.Ephemeron.create";

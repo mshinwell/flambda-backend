@@ -163,6 +163,7 @@ let capture_everything buf ppf ~f =
                      ~f:(fun () -> Compiler_messages.capture ppf ~f)
 
 let exec_phrase ppf phrase =
+  Location.reset ();
   if !Clflags.dump_parsetree then Printast. top_phrase ppf phrase;
   if !Clflags.dump_source    then Pprintast.top_phrase ppf phrase;
   Toploop.execute_phrase true ppf phrase
@@ -234,7 +235,7 @@ let eval_expect_file _fname ~file_contents =
         acc &&
         let snap = Btype.snapshot () in
         try
-          Sys.with_async_exns (fun () -> exec_phrase ppf phrase)
+          exec_phrase ppf phrase
         with exn ->
           let bt = Printexc.get_raw_backtrace () in
           begin try Location.report_exception ppf exn
@@ -334,7 +335,7 @@ let main fname =
         Clflags.no_std_include := true;
         Compenv.last_include_dirs := [Filename.concat dir "stdlib"]
   end;
-  Compmisc.init_path ();
+  Compmisc.init_path ~auto_include:Load_path.no_auto_include ();
   Toploop.initialize_toplevel_env ();
   (* We are in interactive mode and should record directive error on stdout *)
   Sys.interactive := true;

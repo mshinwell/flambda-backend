@@ -96,9 +96,6 @@ let handle_extension ext =
     ()
 
 let rec add_type bv ty =
-  match Jane_syntax.Core_type.of_ast ty with
-  | Some jty -> add_type_jst bv jty
-  | None ->
   match ty.ptyp_desc with
     Ptyp_any -> ()
   | Ptyp_var _ -> ()
@@ -121,9 +118,6 @@ let rec add_type bv ty =
   | Ptyp_poly(_, t) -> add_type bv t
   | Ptyp_package pt -> add_package_type bv pt
   | Ptyp_extension e -> handle_extension e
-
-and add_type_jst _bv : Jane_syntax.Core_type.t -> _ = function
-  | _ -> .
 
 and add_package_type bv (lid, l) =
   add bv lid;
@@ -172,9 +166,6 @@ let add_type_exception bv te =
 let pattern_bv = ref String.Map.empty
 
 let rec add_pattern bv pat =
-  match Jane_syntax.Pattern.of_ast pat with
-  | Some jpat -> add_pattern_jane_syntax bv jpat
-  | None      ->
   match pat.ppat_desc with
     Ppat_any -> ()
   | Ppat_var _ -> ()
@@ -201,9 +192,6 @@ let rec add_pattern bv pat =
   | Ppat_open ( m, p) -> let bv = open_module bv m.txt in add_pattern bv p
   | Ppat_exception p -> add_pattern bv p
   | Ppat_extension e -> handle_extension e
-and add_pattern_jane_syntax bv : Jane_syntax.Pattern.t -> _ = function
-  | Jpat_immutable_array (Iapat_immutable_array pl) ->
-      List.iter (add_pattern bv) pl
 
 let add_pattern bv pat =
   pattern_bv := bv;
@@ -211,9 +199,6 @@ let add_pattern bv pat =
   !pattern_bv
 
 let rec add_expr bv exp =
-  match Jane_syntax.Expression.of_ast exp with
-  | Some jexp -> add_expr_jane_syntax bv jexp
-  | None ->
   match exp.pexp_desc with
     Pexp_ident l -> add bv l
   | Pexp_constant _ -> ()
@@ -286,47 +271,6 @@ let rec add_expr bv exp =
   | Pexp_extension e -> handle_extension e
   | Pexp_unreachable -> ()
 
-and add_expr_jane_syntax bv : Jane_syntax.Expression.t -> _ = function
-  | Jexp_comprehension cexp -> add_comprehension_expr bv cexp
-  | Jexp_immutable_array iaexp -> add_immutable_array_expr bv iaexp
-
-and add_comprehension_expr bv : Jane_syntax.Comprehensions.expression -> _ =
-  function
-  | Cexp_list_comprehension comp -> add_comprehension bv comp
-  | Cexp_array_comprehension (_, comp) -> add_comprehension bv comp
-
-and add_comprehension bv
-      ({ body; clauses } : Jane_syntax.Comprehensions.comprehension) =
-  let bv = List.fold_left add_comprehension_clause bv clauses in
-  add_expr bv body
-
-and add_comprehension_clause bv : Jane_syntax.Comprehensions.clause -> _ =
-  function
-    (* fold_left here is a little suspicious, because the different
-       clauses should be interpreted in parallel. But this treatment
-       echoes the treatment in [Pexp_let] (in [add_bindings]). *)
-  | For cbs -> List.fold_left add_comprehension_clause_binding bv cbs
-  | When expr -> add_expr bv expr; bv
-
-and add_comprehension_clause_binding bv
-      ({ pattern; iterator; attributes = _ } :
-         Jane_syntax.Comprehensions.clause_binding) =
-  let bv = add_pattern bv pattern in
-  add_comprehension_iterator bv iterator;
-  bv
-
-and add_comprehension_iterator bv : Jane_syntax.Comprehensions.iterator -> _ =
-  function
-  | Range { start; stop; direction = _ } ->
-    add_expr bv start;
-    add_expr bv stop
-  | In expr ->
-    add_expr bv expr
-
-and add_immutable_array_expr bv : Jane_syntax.Immutable_arrays.expression -> _ =
-  function
-  | Iaexp_immutable_array exprs -> List.iter (add_expr bv) exprs
-
 and add_cases bv cases =
   List.iter (add_case bv) cases
 
@@ -338,7 +282,11 @@ and add_case bv {pc_lhs; pc_guard; pc_rhs} =
 and add_bindings recf bv pel =
   let bv' = List.fold_left (fun bv x -> add_pattern bv x.pvb_pat) bv pel in
   let bv = if recf = Recursive then bv' else bv in
-  List.iter (fun x -> add_expr bv x.pvb_expr) pel;
+  let add_one_binding { pvb_pat= _ ; pvb_loc= _ ; pvb_constraint; pvb_expr } =
+    add_expr bv pvb_expr;
+    Option.iter (fun ct -> add_type bv ct.typ) pvb_constraint
+  in
+  List.iter add_one_binding pel;
   bv'
 
 and add_binding_op bv bv' pbop =
@@ -346,9 +294,6 @@ and add_binding_op bv bv' pbop =
   add_pattern bv' pbop.pbop_pat
 
 and add_modtype bv mty =
-  match Jane_syntax.Module_type.of_ast mty with
-  | Some jmty -> add_modtype_jane_syntax bv jmty
-  | None ->
   match mty.pmty_desc with
     Pmty_ident l -> add bv l
   | Pmty_alias l -> add_module_path bv l
@@ -379,11 +324,6 @@ and add_modtype bv mty =
   | Pmty_typeof m -> add_module_expr bv m
   | Pmty_extension e -> handle_extension e
 
-and add_modtype_jane_syntax bv : Jane_syntax.Module_type.t -> _ = function
-  | Jmty_strengthen { mty; mod_id } ->
-     add_modtype bv mty;
-     add_module_path bv mod_id
-
 and add_module_alias bv l =
   (* If we are in delayed dependencies mode, we delay the dependencies
        induced by "Lident s" *)
@@ -396,9 +336,6 @@ and add_module_alias bv l =
     | _ -> add_module_path bv l; bound (* cannot delay *)
 
 and add_modtype_binding bv mty =
-  match Jane_syntax.Module_type.of_ast mty with
-  | Some jmty -> add_modtype_jane_syntax_binding bv jmty
-  | None ->
   match mty.pmty_desc with
     Pmty_alias l ->
       add_module_alias bv l
@@ -409,37 +346,13 @@ and add_modtype_binding bv mty =
   | _ ->
       add_modtype bv mty; bound
 
-and add_modtype_jane_syntax_binding bv : Jane_syntax.Module_type.t -> _ =
-  function
-  | Jmty_strengthen { mty; mod_id } ->
-     (* treat like a [with] constraint *)
-     add_modtype bv mty;
-     add_module_path bv mod_id;
-     bound
-
 and add_signature bv sg =
   ignore (add_signature_binding bv sg)
 
 and add_signature_binding bv sg =
   snd (List.fold_left add_sig_item (bv, String.Map.empty) sg)
 
-(* When we merge [include functor] upstream this can get re-inlined *)
-and add_include_description (bv, m) incl =
-  let Node (s, m') = add_modtype_binding bv incl.pincl_mod in
-  add_names s;
-  let add = String.Map.fold String.Map.add m' in
-  (add bv, add m)
-
-and add_sig_item_jst bvm : Jane_syntax.Signature_item.t -> _ = function
-  | Jsig_include_functor (Ifsig_include_functor incl) ->
-      (* It seems to be correct to treat [include functor] the same as
-         [include], but it's possible we could do something cleverer. *)
-      add_include_description bvm incl
-
 and add_sig_item (bv, m) item =
-  match Jane_syntax.Signature_item.of_ast item with
-  | Some jitem -> add_sig_item_jst (bv, m) jitem
-  | None ->
   match item.psig_desc with
     Psig_value vd ->
       add_type bv vd.pval_type; (bv, m)
@@ -482,7 +395,10 @@ and add_sig_item (bv, m) item =
   | Psig_open od ->
       (open_description bv od, m)
   | Psig_include incl ->
-      add_include_description (bv, m) incl
+      let Node (s, m') = add_modtype_binding bv incl.pincl_mod in
+      add_names s;
+      let add = String.Map.fold String.Map.add m' in
+      (add bv, add m)
   | Psig_class cdl ->
       List.iter (add_class_description bv) cdl; (bv, m)
   | Psig_class_type cdtl ->
@@ -524,8 +440,11 @@ and add_module_expr bv modl =
           | Some name -> String.Map.add name bound bv
       in
       add_module_expr bv modl
-  | Pmod_apply(mod1, mod2) ->
-      add_module_expr bv mod1; add_module_expr bv mod2
+  | Pmod_apply (mod1, mod2) ->
+      add_module_expr bv mod1;
+      add_module_expr bv mod2
+  | Pmod_apply_unit mod1 ->
+      add_module_expr bv mod1
   | Pmod_constraint(modl, mty) ->
       add_module_expr bv modl; add_modtype bv mty
   | Pmod_unpack(e) ->
@@ -569,28 +488,7 @@ and add_structure bv item_list =
 and add_structure_binding bv item_list =
   List.fold_left add_struct_item (bv, String.Map.empty) item_list
 
-(* When we merge [include functor] upstream this can get re-inlined *)
-and add_include_declaration (bv, m) incl =
-  let Node (s, m') as n = add_module_binding bv incl.pincl_mod in
-  if !Clflags.transparent_modules then
-    add_names s
-  else
-    (* If we are not in the delayed dependency mode, we need to
-       collect all delayed dependencies imported by the include statement *)
-    add_names (collect_free n);
-  let add = String.Map.fold String.Map.add m' in
-  (add bv, add m)
-
-and add_struct_item_jst bvm : Jane_syntax.Structure_item.t -> _ = function
-  | Jstr_include_functor (Ifstr_include_functor incl) ->
-      (* It seems to be correct to treat [include functor] the same as
-         [include], but it's possible we could do something cleverer. *)
-      add_include_declaration bvm incl
-
 and add_struct_item (bv, m) item : _ String.Map.t * _ String.Map.t =
-  match Jane_syntax.Structure_item.of_ast item with
-  | Some jitem -> add_struct_item_jst (bv, m) jitem
-  | None ->
   match item.pstr_desc with
     Pstr_eval (e, _attrs) ->
       add_expr bv e; (bv, m)
@@ -640,7 +538,15 @@ and add_struct_item (bv, m) item : _ String.Map.t * _ String.Map.t =
   | Pstr_class_type cdtl ->
       List.iter (add_class_type_declaration bv) cdtl; (bv, m)
   | Pstr_include incl ->
-      add_include_declaration (bv, m) incl
+      let Node (s, m') as n = add_module_binding bv incl.pincl_mod in
+      if !Clflags.transparent_modules then
+        add_names s
+      else
+        (* If we are not in the delayed dependency mode, we need to
+           collect all delayed dependencies imported by the include statement *)
+        add_names (collect_free n);
+      let add = String.Map.fold String.Map.add m' in
+      (add bv, add m)
   | Pstr_attribute _ -> (bv, m)
   | Pstr_extension (e, _) ->
       handle_extension e;

@@ -19,20 +19,12 @@
 type effects = No_effects | Only_generative_effects | Arbitrary_effects
 type coeffects = No_coeffects | Has_coeffects
 
-let coeffects_of : Lambda.alloc_mode -> coeffects = function
-  | Alloc_heap ->
-     No_coeffects
-  | Alloc_local ->
-     (* Ensure that local allocations are not reordered wrt. regions *)
-     Has_coeffects
-
 let for_primitive (prim : Clambda_primitives.primitive) =
   match prim with
-  | Pmakeblock (_, _, _, m)
-  | Pmakearray (_, Mutable, m) -> Only_generative_effects, coeffects_of m
-  | Pmakearray (_, (Immutable | Immutable_unique), m) ->
-     No_effects, coeffects_of m
-  | Pduparray (_, (Immutable | Immutable_unique)) ->
+  | Pmakeblock _
+  | Pmakearray (_, Mutable) -> Only_generative_effects, No_coeffects
+  | Pmakearray (_, Immutable) -> No_effects, No_coeffects
+  | Pduparray (_, Immutable) ->
       No_effects, No_coeffects  (* Pduparray (_, Immutable) is allowed only on
                                    immutable arrays. *)
   | Pduparray (_, Mutable) | Pduprecord _ ->
@@ -42,8 +34,9 @@ let for_primitive (prim : Clambda_primitives.primitive) =
                | "caml_nativeint_format" | "caml_int64_format" ) } ->
       No_effects, No_coeffects
   | Pccall _ -> Arbitrary_effects, Has_coeffects
-  | Pprobe_is_enabled _ -> No_effects, Has_coeffects
   | Praise _ -> Arbitrary_effects, No_coeffects
+  | Prunstack | Pperform | Presume | Preperform ->
+      Arbitrary_effects, Has_coeffects
   | Pnot
   | Pnegint
   | Paddint
@@ -70,36 +63,33 @@ let for_primitive (prim : Clambda_primitives.primitive) =
       Arbitrary_effects, No_coeffects
   | Poffsetint _ -> No_effects, No_coeffects
   | Poffsetref _ -> Arbitrary_effects, Has_coeffects
-  | Punbox_float | Punbox_int _
   | Pintoffloat
+  | Pfloatofint
+  | Pnegfloat
+  | Pabsfloat
+  | Paddfloat
+  | Psubfloat
+  | Pmulfloat
+  | Pdivfloat
   | Pfloatcomp _ -> No_effects, No_coeffects
-  | Pbox_float m | Pbox_int (_, m)
-  | Pfloatofint m
-  | Pnegfloat m
-  | Pabsfloat m
-  | Paddfloat m
-  | Psubfloat m
-  | Pmulfloat m
-  | Pdivfloat m -> No_effects, coeffects_of m
   | Pstringlength | Pbyteslength
-  | Parraylength _ ->
-      No_effects, Has_coeffects  (* That old chestnut: [Obj.truncate]. *)
+  | Parraylength _ -> No_effects, No_coeffects
   | Pisint
   | Pisout
+  | Pbintofint _
   | Pintofbint _
+  | Pcvtbint _
+  | Pnegbint _
+  | Paddbint _
+  | Psubbint _
+  | Pmulbint _
+  | Pandbint _
+  | Porbint _
+  | Pxorbint _
+  | Plslbint _
+  | Plsrbint _
+  | Pasrbint _
   | Pbintcomp _ -> No_effects, No_coeffects
-  | Pbintofint (_,m)
-  | Pcvtbint (_,_,m)
-  | Pnegbint (_,m)
-  | Paddbint (_,m)
-  | Psubbint (_,m)
-  | Pmulbint (_,m)
-  | Pandbint (_,m)
-  | Porbint (_,m)
-  | Pxorbint (_,m)
-  | Plslbint (_,m)
-  | Plsrbint (_,m)
-  | Pasrbint (_,m) -> No_effects, coeffects_of m
   | Pbigarraydim _ ->
       No_effects, Has_coeffects  (* Some people resize bigarrays in place. *)
   | Pread_symbol _
@@ -109,23 +99,27 @@ let for_primitive (prim : Clambda_primitives.primitive) =
   | Parrayrefu _
   | Pstringrefu
   | Pbytesrefu
-  | Pstring_load (_, Unsafe, _)
-  | Pbytes_load (_, Unsafe, _)
+  | Pstring_load (_, Unsafe)
+  | Pbytes_load (_, Unsafe)
   | Pbigarrayref (true, _, _, _)
-  | Pbigstring_load (_, Unsafe, _) ->
+  | Pbigstring_load (_, Unsafe) ->
       No_effects, Has_coeffects
   | Parrayrefs _
   | Pstringrefs
   | Pbytesrefs
-  | Pstring_load (_, Safe, _)
-  | Pbytes_load (_, Safe, _)
+  | Pstring_load (_, Safe)
+  | Pbytes_load (_, Safe)
   | Pbigarrayref (false, _, _, _)
-  | Pbigstring_load (_, Safe, _) ->
+  | Pbigstring_load (_, Safe) ->
       (* May trigger a bounds check exception. *)
       Arbitrary_effects, Has_coeffects
   | Psetfield _
   | Psetfield_computed _
   | Psetfloatfield _
+  | Patomic_load _
+  | Patomic_exchange
+  | Patomic_cas
+  | Patomic_fetch_add
   | Parraysetu _
   | Parraysets _
   | Pbytessetu
@@ -136,13 +130,16 @@ let for_primitive (prim : Clambda_primitives.primitive) =
       (* Whether or not some of these are "unsafe" is irrelevant; they always
          have an effect. *)
       Arbitrary_effects, No_coeffects
-  | Pbswap16 -> No_effects, No_coeffects
-  | Pbbswap (_,m) -> No_effects, coeffects_of m
+  | Pbswap16
+  | Pbbswap _ -> No_effects, No_coeffects
   | Pint_as_pointer -> No_effects, No_coeffects
   | Popaque -> Arbitrary_effects, Has_coeffects
   | Psequand
   | Psequor ->
       (* Removed by [Closure_conversion] in the flambda pipeline. *)
+      No_effects, No_coeffects
+  | Pdls_get ->
+      (* only read *)
       No_effects, No_coeffects
 
 type return_type =
@@ -151,122 +148,16 @@ type return_type =
 
 let return_type_of_primitive (prim:Clambda_primitives.primitive) =
   match prim with
-  | Pfloatofint _
-  | Pnegfloat _
-  | Pabsfloat _
-  | Paddfloat _
-  | Psubfloat _
-  | Pmulfloat _
-  | Pdivfloat _
+  | Pfloatofint
+  | Pnegfloat
+  | Pabsfloat
+  | Paddfloat
+  | Psubfloat
+  | Pmulfloat
+  | Pdivfloat
   | Pfloatfield _
   | Parrayrefu Pfloatarray
   | Parrayrefs Pfloatarray ->
       Float
   | _ ->
       Other
-
-let is_local_alloc = function
-  | Lambda.Alloc_local -> true
-  | Lambda.Alloc_heap -> false
-
-let may_locally_allocate (prim:Clambda_primitives.primitive) : bool =
-  match prim with
-  | Pmakeblock (_, _, _, m)
-  | Pmakearray (_, _, m) -> is_local_alloc m
-  | Pduparray (_, _)
-  | Pduprecord (_,_) -> false
-  | Pccall { prim_name =
-               ( "caml_format_float" | "caml_format_int" | "caml_int32_format"
-               | "caml_nativeint_format" | "caml_int64_format" ) } -> false
-  | Pccall _ ->
-     (* TODO: Track which C calls may locally allocate more precisely *)
-     true
-  | Praise _ -> false
-  | Pnot
-  | Pnegint
-  | Paddint
-  | Psubint
-  | Pmulint
-  | Pandint
-  | Pdivint _
-  | Pmodint _
-  | Porint
-  | Pxorint
-  | Plslint
-  | Plsrint
-  | Pasrint
-  | Pintcomp _ -> false
-  | Pcompare_ints | Pcompare_floats | Pcompare_bints _
-    -> false
-  | Poffsetint _ -> false
-  | Poffsetref _ -> false
-  | Punbox_float | Punbox_int _
-  | Pintoffloat
-  | Pfloatcomp _ -> false
-  | Pbox_float m | Pbox_int (_, m)
-  | Pfloatofint m
-  | Pnegfloat m
-  | Pabsfloat m
-  | Paddfloat m
-  | Psubfloat m
-  | Pmulfloat m
-  | Pdivfloat m -> is_local_alloc m
-  | Pstringlength | Pbyteslength
-  | Parraylength _ -> false
-  | Pisint
-  | Pisout
-  | Pintofbint _
-  | Pbintcomp _ -> false
-  | Pdivbint { mode = m }
-  | Pmodbint { mode = m }
-  | Pbintofint (_,m)
-  | Pcvtbint (_,_,m)
-  | Pnegbint (_,m)
-  | Paddbint (_,m)
-  | Psubbint (_,m)
-  | Pmulbint (_,m)
-  | Pandbint (_,m)
-  | Porbint (_,m)
-  | Pxorbint (_,m)
-  | Plslbint (_,m)
-  | Plsrbint (_,m)
-  | Pasrbint (_,m) -> is_local_alloc m
-  | Pbigarraydim _ -> false
-  | Pread_symbol _
-  | Pfield _
-  | Pfield_computed
-  | Parrayrefu _
-  | Pstringrefu
-  | Pbytesrefu
-  | Pstring_load (_, Unsafe, _)
-  | Pbytes_load (_, Unsafe, _)
-  | Pbigarrayref (true, _, _, _)
-  | Pbigstring_load (_, Unsafe, _) ->
-      false
-  | Pfloatfield (_, m) -> is_local_alloc m
-  | Pstring_load (_, Safe, m)
-  | Pbytes_load (_, Safe, m)
-  | Pbigstring_load (_, Safe, m) -> is_local_alloc m
-  | Parrayrefs _
-  | Pstringrefs
-  | Pbytesrefs
-  | Pbigarrayref (false, _, _, _) -> false
-  | Psetfield _
-  | Psetfield_computed _
-  | Psetfloatfield _
-  | Parraysetu _
-  | Parraysets _
-  | Pbytessetu
-  | Pbytessets
-  | Pbytes_set _
-  | Pbigarrayset _
-  | Pbigstring_set _ ->
-      false
-  | Pbswap16 -> false
-  | Pbbswap (_,m) -> is_local_alloc m
-  | Pint_as_pointer -> false
-  | Popaque -> false
-  | Psequand
-  | Psequor ->
-      false
-  | Pprobe_is_enabled _ -> false

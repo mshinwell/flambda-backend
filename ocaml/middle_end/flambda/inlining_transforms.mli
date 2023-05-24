@@ -68,18 +68,14 @@ val inline_by_copying_function_body
    : env:Inline_and_simplify_aux.Env.t
   -> r:Inline_and_simplify_aux.Result.t
   -> lhs_of_application:Variable.t
-  -> inlined_requested:Lambda.inlined_attribute
+  -> inline_requested:Lambda.inline_attribute
   -> specialise_requested:Lambda.specialise_attribute
-  -> probe_requested:Lambda.probe
   -> closure_id_being_applied:Closure_id.t
   -> function_decl:Simple_value_approx.function_declaration
   -> function_body:Simple_value_approx.function_body
   -> fun_vars:Variable.Set.t
-  -> free_vars:Flambda.specialised_to Variable.Map.t
   -> args:Variable.t list
   -> dbg:Debuginfo.t
-  -> reg_close:Lambda.region_close
-  -> mode:Lambda.alloc_mode
   -> simplify:Inlining_decision_intf.simplify
   -> Flambda.t * Inline_and_simplify_aux.Result.t
 
@@ -95,8 +91,7 @@ val inline_by_copying_function_declaration
   -> r:Inline_and_simplify_aux.Result.t
   -> function_decls:Simple_value_approx.function_declarations
   -> lhs_of_application:Variable.t
-  -> inlined_requested:Lambda.inlined_attribute
-  -> probe_requested:Lambda.probe
+  -> inline_requested:Lambda.inline_attribute
   -> closure_id_being_applied:Closure_id.t
   -> function_decl:Simple_value_approx.function_declaration
   -> args:Variable.t list
@@ -106,7 +101,5 @@ val inline_by_copying_function_declaration
   -> free_vars:Flambda.specialised_to Variable.Map.t
   -> direct_call_surrogates:Closure_id.t Closure_id.Map.t
   -> dbg:Debuginfo.t
-  -> reg_close:Lambda.region_close
-  -> mode:Lambda.alloc_mode
   -> simplify:Inlining_decision_intf.simplify
   -> (Flambda.t * Inline_and_simplify_aux.Result.t) option

@@ -49,10 +49,9 @@ let ignore_set_of_closures_origin (_ : Set_of_closures_origin.t) = ()
 let ignore_closure_id (_ : Closure_id.t) = ()
 let ignore_var_within_closure (_ : Var_within_closure.t) = ()
 let ignore_tag (_ : Tag.t) = ()
-let ignore_inlined_attribute (_ : Lambda.inlined_attribute) = ()
+let ignore_inline_attribute (_ : Lambda.inline_attribute) = ()
 let ignore_specialise_attribute (_ : Lambda.specialise_attribute) = ()
-let ignore_probe (_ : Lambda.probe) = ()
-let ignore_layout (_ : Lambda.layout) = ()
+let ignore_value_kind (_ : Lambda.value_kind) = ()
 
 exception Binding_occurrence_not_from_current_compilation_unit of Variable.t
 exception Mutable_binding_occurrence_not_from_current_compilation_unit of
@@ -158,7 +157,7 @@ let variable_and_symbol_invariants (program : Flambda.program) =
       loop (add_binding_occurrence env var) body
     | Let_mutable { var = mut_var; initial_value = var;
                     body; contents_kind } ->
-      ignore_layout contents_kind;
+      ignore_value_kind contents_kind;
       check_variable_is_bound env var;
       loop (add_mutable_binding_occurrence env mut_var) body
     | Let_rec (defs, body) ->
@@ -177,62 +176,50 @@ let variable_and_symbol_invariants (program : Flambda.program) =
       check_variable_is_bound env from_value;
       check_variable_is_bound env to_value;
       loop (add_binding_occurrence env bound_var) body
-    | Static_catch (static_exn, vars, body, handler, kind) ->
+    | Static_catch (static_exn, vars, body, handler) ->
       ignore_static_exception static_exn;
-      ignore_layout kind;
       loop env body;
-      loop (add_binding_occurrences env (List.map fst vars)) handler
-    | Try_with (body, var, handler, kind) ->
+      loop (add_binding_occurrences env vars) handler
+    | Try_with (body, var, handler) ->
       loop env body;
-      ignore_layout kind;
       loop (add_binding_occurrence env var) handler
     (* Everything else: *)
     | Var var -> check_variable_is_bound env var
-    | Apply { func; args; kind; dbg; inlined; specialise; probe;
-              reg_close = (Rc_close_at_apply|Rc_normal|Rc_nontail);
-              mode = (Alloc_heap|Alloc_local); result_layout } ->
+    | Apply { func; args; kind; dbg; inline; specialise; } ->
       check_variable_is_bound env func;
       check_variables_are_bound env args;
       ignore_call_kind kind;
       ignore_debuginfo dbg;
-      ignore_inlined_attribute inlined;
-      ignore_specialise_attribute specialise;
-      ignore_probe probe;
-      ignore_layout result_layout
+      ignore_inline_attribute inline;
+      ignore_specialise_attribute specialise
     | Assign { being_assigned; new_value; } ->
       check_mutable_variable_is_bound env being_assigned;
       check_variable_is_bound env new_value
-    | Send { kind; meth; obj; args; dbg;
-             reg_close = (Rc_normal | Rc_close_at_apply | Rc_nontail);
-             mode = (Alloc_heap | Alloc_local); result_layout; } ->
+    | Send { kind; meth; obj; args; dbg; } ->
       ignore_meth_kind kind;
       check_variable_is_bound env meth;
       check_variable_is_bound env obj;
       check_variables_are_bound env args;
-      ignore_debuginfo dbg;
-      ignore_layout result_layout
-    | If_then_else (cond, ifso, ifnot, kind) ->
+      ignore_debuginfo dbg
+    | If_then_else (cond, ifso, ifnot) ->
       check_variable_is_bound env cond;
-      ignore_layout kind;
       loop env ifso;
       loop env ifnot
-    | Switch (arg, { numconsts; consts; numblocks; blocks; failaction; kind }) ->
+    | Switch (arg, { numconsts; consts; numblocks; blocks; failaction; }) ->
       check_variable_is_bound env arg;
       ignore_int_set numconsts;
       ignore_int_set numblocks;
-      ignore_layout kind;
       List.iter (fun (n, e) ->
           ignore_int n;
           loop env e)
         (consts @ blocks);
       Option.iter (loop env) failaction
-    | String_switch (arg, cases, e_opt, kind) ->
+    | String_switch (arg, cases, e_opt) ->
       check_variable_is_bound env arg;
       List.iter (fun (label, case) ->
           ignore_string label;
           loop env case)
         cases;
-      ignore_layout kind;
       Option.iter (loop env) e_opt
     | Static_raise (static_exn, es) ->
       ignore_static_exception static_exn;
@@ -240,10 +227,6 @@ let variable_and_symbol_invariants (program : Flambda.program) =
     | While (e1, e2) ->
       loop env e1;
       loop env e2
-    | Region e ->
-      loop env e
-    | Exclave e ->
-      loop env e
     | Proved_unreachable -> ()
   and loop_named env (named : Flambda.named) =
     match named with
@@ -264,11 +247,10 @@ let variable_and_symbol_invariants (program : Flambda.program) =
       check_variable_is_bound env closure;
       ignore_closure_id start_from;
       ignore_closure_id move_to;
-    | Project_var { closure; closure_id; var; kind } ->
+    | Project_var { closure; closure_id; var; } ->
       check_variable_is_bound env closure;
       ignore_closure_id closure_id;
-      ignore_var_within_closure var;
-      ignore_layout kind
+      ignore_var_within_closure var
     | Prim (prim, args, dbg) ->
       ignore_primitive prim;
       check_variables_are_bound env args;
@@ -277,7 +259,7 @@ let variable_and_symbol_invariants (program : Flambda.program) =
       loop env expr
   and loop_set_of_closures env
       ({ Flambda.function_decls; free_vars; specialised_args;
-          direct_call_surrogates = _; alloc_mode = _ } as set_of_closures) =
+          direct_call_surrogates = _; } as set_of_closures) =
       (* CR-soon mshinwell: check [direct_call_surrogates] *)
     let { Flambda. is_classic_mode;
           set_of_closures_id; set_of_closures_origin; funs; } =
@@ -566,7 +548,7 @@ let used_closure_ids (program:Flambda.program) =
     | Move_within_set_of_closures { closure = _; start_from; move_to; } ->
       used := Closure_id.Set.add start_from !used;
       used := Closure_id.Set.add move_to !used
-    | Project_var { closure = _; closure_id; var = _; kind = _ } ->
+    | Project_var { closure = _; closure_id; var = _ } ->
       used := Closure_id.Set.add closure_id !used
     | Set_of_closures _ | Symbol _ | Const _ | Allocated_const _
     | Prim _ | Expr _ | Read_mutable _ | Read_symbol_field _ -> ()
@@ -580,7 +562,7 @@ let used_vars_within_closures (flam:Flambda.program) =
   let used = ref Var_within_closure.Set.empty in
   let f (flam : Flambda.named) =
     match flam with
-    | Project_var { closure = _; closure_id = _; var; kind = _ } ->
+    | Project_var { closure = _; closure_id = _; var; } ->
       used := Var_within_closure.Set.add var !used
     | _ -> ()
   in
@@ -630,7 +612,7 @@ let every_static_exception_is_caught flam =
   in
   let rec loop env (flam : Flambda.t) =
     match flam with
-    | Static_catch (i, _, body, handler, _kind) ->
+    | Static_catch (i, _, body, handler) ->
       let env = Static_exception.Set.add i env in
       loop env handler;
       loop env body
@@ -645,7 +627,7 @@ let every_static_exception_is_caught_at_a_single_position flam =
   let caught = ref Static_exception.Set.empty in
   let f (flam : Flambda.t) =
     match flam with
-    | Static_catch (i, _, _body, _handler, _kind) ->
+    | Static_catch (i, _, _body, _handler) ->
       if Static_exception.Set.mem i !caught then
         raise (Static_exception_caught_in_multiple_places i);
       caught := Static_exception.Set.add i !caught

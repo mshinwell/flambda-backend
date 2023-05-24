@@ -81,9 +81,7 @@ let rec accumulate ~substitution ~copied_lets ~extracted_lets
     let extracted =
       let renamed = Variable.rename var in
       match named with
-      | Prim (Pmakeblock (tag, (Immutable | Immutable_unique),
-                          _value_kind, Alloc_heap),
-              args, _dbg) ->
+      | Prim (Pmakeblock (tag, Asttypes.Immutable, _value_kind), args, _dbg) ->
         let tag = Tag.create_exn tag in
         let args =
           List.map (fun v ->
@@ -129,8 +127,7 @@ let rec accumulate ~substitution ~copied_lets ~extracted_lets
         Flambda_utils.toplevel_substitution def_substitution
           (Let_rec (renamed_defs,
                     Flambda_utils.name_expr ~name
-                      (Prim (Pmakeblock (0, Immutable, None,
-                                         Lambda.alloc_heap),
+                      (Prim (Pmakeblock (0, Immutable, None),
                              List.map fst renamed_defs,
                              Debuginfo.none))))
       in
@@ -177,11 +174,11 @@ let rebuild (used_variables:Variable.Set.t) (accumulated:accumulated) =
     List.map (fun decl ->
         match decl with
         | Block (var, _, _) | Expr (var, _) ->
-          Symbol_utils.Flambda.for_variable (Variable.rename var), decl
+          Symbol.of_variable (Variable.rename var), decl
         | Exprs _ ->
           let name = Internal_variable_names.lifted_let_rec_block in
           let var = Variable.create name in
-          Symbol_utils.Flambda.for_variable var, decl)
+          Symbol.of_variable var, decl)
       accumulated.extracted_lets
   in
   let extracted_definitions =

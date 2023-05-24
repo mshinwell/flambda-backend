@@ -1,4 +1,3 @@
-# 1 "int.mli"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -13,8 +12,6 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-open! Stdlib
 
 (** Integer values.
 
@@ -38,28 +35,28 @@ val one : int
 val minus_one : int
 (** [minus_one] is the integer [-1]. *)
 
-external neg : (int[@local_opt]) -> int = "%negint"
+external neg : int -> int = "%negint"
 (** [neg x] is [~-x]. *)
 
-external add : (int[@local_opt]) -> (int[@local_opt]) -> int = "%addint"
+external add : int -> int -> int = "%addint"
 (** [add x y] is the addition [x + y]. *)
 
-external sub : (int[@local_opt]) -> (int[@local_opt]) -> int = "%subint"
+external sub : int -> int -> int = "%subint"
 (** [sub x y] is the subtraction [x - y]. *)
 
-external mul : (int[@local_opt]) -> (int[@local_opt]) -> int = "%mulint"
+external mul : int -> int -> int = "%mulint"
 (** [mul x y] is the multiplication [x * y]. *)
 
-external div : (int[@local_opt]) -> (int[@local_opt]) -> int = "%divint"
+external div : int -> int -> int = "%divint"
 (** [div x y] is the division [x / y]. See {!Stdlib.( / )} for details. *)
 
-external rem : (int[@local_opt]) -> (int[@local_opt]) -> int = "%modint"
+external rem : int -> int -> int = "%modint"
 (** [rem x y] is the remainder [x mod y]. See {!Stdlib.( mod )} for details. *)
 
-external succ : (int[@local_opt]) -> int = "%succint"
+external succ : int -> int = "%succint"
 (** [succ x] is [add x 1]. *)
 
-external pred : (int[@local_opt]) -> int = "%predint"
+external pred : int -> int = "%predint"
 (** [pred x] is [sub x 1]. *)
 
 val abs : int -> int
@@ -75,29 +72,29 @@ val min_int : int
 (** [min_int] is the smallest representable integer,
     [-2{^[Sys.int_size - 1]}]. *)
 
-external logand : (int[@local_opt]) -> (int[@local_opt]) -> int = "%andint"
+external logand : int -> int -> int = "%andint"
 (** [logand x y] is the bitwise logical and of [x] and [y]. *)
 
-external logor : (int[@local_opt]) -> (int[@local_opt]) -> int = "%orint"
+external logor : int -> int -> int = "%orint"
 (** [logor x y] is the bitwise logical or of [x] and [y]. *)
 
-external logxor : (int[@local_opt]) -> (int[@local_opt]) -> int = "%xorint"
+external logxor : int -> int -> int = "%xorint"
 (** [logxor x y] is the bitwise logical exclusive or of [x] and [y]. *)
 
 val lognot : int -> int
 (** [lognot x] is the bitwise logical negation of [x]. *)
 
-external shift_left : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lslint"
+external shift_left : int -> int -> int = "%lslint"
 (** [shift_left x n] shifts [x] to the left by [n] bits. The result
     is unspecified if [n < 0] or [n > ]{!Sys.int_size}. *)
 
-external shift_right : (int[@local_opt]) -> (int[@local_opt]) -> int = "%asrint"
+external shift_right : int -> int -> int = "%asrint"
 (** [shift_right x n] shifts [x] to the right by [n] bits. This is an
     arithmetic shift: the sign bit of [x] is replicated and inserted
     in the vacated bits. The result is unspecified if [n < 0] or
     [n > ]{!Sys.int_size}. *)
 
-external shift_right_logical : (int[@local_opt]) -> (int[@local_opt]) -> int = "%lsrint"
+external shift_right_logical : int -> int -> int = "%lsrint"
 (** [shift_right x n] shifts [x] to the right by [n] bits. This is a
     logical shift: zeroes are inserted in the vacated bits regardless
     of the sign of [x]. The result is unspecified if [n < 0] or
@@ -113,20 +110,20 @@ val compare : int -> int -> int
 
 val min : int -> int -> int
 (** Return the smaller of the two arguments.
-    @since 4.13.0
+    @since 4.13
 *)
 
 val max : int -> int -> int
 (** Return the greater of the two arguments.
-    @since 4.13.0
+    @since 4.13
  *)
 
 (** {1:convert Converting} *)
 
-external to_float : (int[@local_opt]) -> (float[@local_opt]) = "%floatofint"
+external to_float : int -> float = "%floatofint"
 (** [to_float x] is [x] as a floating point number. *)
 
-external of_float : (float[@local_opt]) -> int = "%intoffloat"
+external of_float : float -> int = "%intoffloat"
 (** [of_float x] truncates [x] to an integer. The result is
     unspecified if the argument is [nan] or falls outside the range of
     representable integers. *)
@@ -155,3 +152,17 @@ val of_string : string -> int option
 
 val to_string : int -> string
 (** [to_string x] is the written representation of [x] in decimal. *)
+
+val seeded_hash : int -> int -> int
+(** A seeded hash function for ints, with the same output value as
+    {!Hashtbl.seeded_hash}. This function allows this module to be passed as
+    argument to the functor {!Hashtbl.MakeSeeded}.
+
+    @since 5.1 *)
+
+val hash : int -> int
+(** An unseeded hash function for ints, with the same output value as
+    {!Hashtbl.hash}. This function allows this module to be passed as argument
+    to the functor {!Hashtbl.Make}.
+
+    @since 5.1 *)

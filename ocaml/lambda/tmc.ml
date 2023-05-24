@@ -36,7 +36,6 @@ type ambiguous_arguments = {
 
 type error =
   | Ambiguous_constructor_arguments of ambiguous_arguments
-  | Tmc_without_region
 
 exception Error of Location.t * error
 
@@ -62,7 +61,7 @@ and offset = Offset of lambda
 let offset_code (Offset t) = t
 
 let add_dst_params ({var; offset} : Ident.t destination) params =
-  (var, Lambda.layout_block) :: (offset, Lambda.layout_int) :: params
+  (var, Pgenval) :: (offset, Pintval) :: params
 
 let add_dst_args ({var; offset} : offset destination) args =
   Lvar var :: offset_code offset :: args
@@ -78,7 +77,7 @@ module Constr : sig
      a placeholder. *)
   type t = {
     tag : int;
-    flag: Lambda.mutable_flag;
+    flag: Asttypes.mutable_flag;
     shape : block_shape;
     before: lambda list;
     after: lambda list;
@@ -111,7 +110,7 @@ module Constr : sig
 end = struct
   type t = {
     tag : int;
-    flag: Lambda.mutable_flag;
+    flag: Asttypes.mutable_flag;
     shape : block_shape;
     before: lambda list;
     after: lambda list;
@@ -120,7 +119,7 @@ end = struct
 
   let apply constr t =
     let block_args = List.append constr.before @@ t :: constr.after in
-    Lprim (Pmakeblock (constr.tag, constr.flag, constr.shape, alloc_heap),
+    Lprim (Pmakeblock (constr.tag, constr.flag, constr.shape),
            block_args, constr.loc)
 
   let tmc_placeholder =
@@ -134,7 +133,7 @@ end = struct
     let placeholder_pos = List.length constr.before in
     let placeholder_pos_lam = Lconst (Const_base (Const_int placeholder_pos)) in
     let block_var = Ident.create_local "block" in
-    Llet (Strict, Lambda.layout_block, block_var, k_with_placeholder,
+    Llet (Strict, Pgenval, block_var, k_with_placeholder,
           body {
             var = block_var;
             offset = Offset placeholder_pos_lam ;
@@ -165,7 +164,7 @@ end = struct
       List.fold_right (fun binding body ->
           match binding with
           | None -> body
-          | Some (v, lam) -> Llet(Strict, Lambda.layout_field, v, lam, body)
+          | Some (v, lam) -> Llet(Strict, Pgenval, v, lam, body)
         ) bindings body in
     fun ~block_id constr body ->
     bind_list ~block_id ~arg_offset:0 constr.before @@ fun vbefore ->
@@ -558,12 +557,7 @@ let llets lk vk bindings body =
   ) bindings body
 
 let find_candidate = function
-  | Lfunction lfun when lfun.attr.tmc_candidate ->
-     (* TMC does not make sense for local-returning functions *)
-     if not lfun.region then
-       raise (Error (Debuginfo.Scoped_location.to_location lfun.loc,
-                     Tmc_without_region));
-     Some lfun
+  | Lfunction lfun when lfun.attr.tmc_candidate -> Some lfun
   | _ -> None
 
 let declare_binding ctx (var, def) =
@@ -601,10 +595,10 @@ let rec choice ctx t =
         let l1 = traverse ctx l1 in
         let+ l2 = choice ctx ~tail l2 in
         Lsequence (l1, l2)
-    | Lifthenelse (l1, l2, l3, kind) ->
+    | Lifthenelse (l1, l2, l3) ->
         let l1 = traverse ctx l1 in
         let+ (l2, l3) = choice_pair ctx ~tail (l2, l3) in
-        Lifthenelse (l1, l2, l3, kind)
+        Lifthenelse (l1, l2, l3)
     | Lmutlet (vk, var, def, body) ->
         (* mutable bindings are not TMC-specialized *)
         let def = traverse ctx def in
@@ -618,7 +612,7 @@ let rec choice ctx t =
         let ctx, bindings = traverse_letrec ctx bindings in
         let+ body = choice ctx ~tail body in
         Lletrec(bindings, body)
-    | Lswitch (l1, sw, loc, kind) ->
+    | Lswitch (l1, sw, loc) ->
         (* decompose *)
         let consts_lhs, consts_rhs = List.split sw.sw_consts in
         let blocks_lhs, blocks_rhs = List.split sw.sw_blocks in
@@ -631,8 +625,8 @@ let rec choice ctx t =
         let sw_consts = List.combine consts_lhs consts_rhs in
         let sw_blocks = List.combine blocks_lhs blocks_rhs in
         let sw = { sw with sw_consts; sw_blocks; sw_failaction; } in
-        Lswitch (l1, sw, loc, kind)
-    | Lstringswitch (l1, cases, fail, loc, kind) ->
+        Lswitch (l1, sw, loc)
+    | Lstringswitch (l1, cases, fail, loc) ->
         (* decompose *)
         let cases_lhs, cases_rhs = List.split cases in
         (* transform *)
@@ -641,36 +635,30 @@ let rec choice ctx t =
         and+ fail = choice_option ctx ~tail fail in
         (* rebuild *)
         let cases = List.combine cases_lhs cases_rhs in
-        Lstringswitch (l1, cases, fail, loc, kind)
+        Lstringswitch (l1, cases, fail, loc)
     | Lstaticraise (id, ls) ->
         let ls = traverse_list ctx ls in
         Choice.lambda (Lstaticraise (id, ls))
-    | Ltrywith (l1, id, l2, kind) ->
+    | Ltrywith (l1, id, l2) ->
         (* in [try l1 with id -> l2], the term [l1] is
            not in tail-call position (after it returns
            we need to remove the exception handler),
            so it is not transformed here *)
         let l1 = traverse ctx l1 in
         let+ l2 = choice ctx ~tail l2 in
-        Ltrywith (l1, id, l2, kind)
-    | Lstaticcatch (l1, ids, l2, kind) ->
+        Ltrywith (l1, id, l2)
+    | Lstaticcatch (l1, ids, l2) ->
         (* In [static-catch l1 with ids -> l2],
            the term [l1] is in fact in tail-position *)
         let+ l1 = choice ctx ~tail l1
         and+ l2 = choice ctx ~tail l2 in
-        Lstaticcatch (l1, ids, l2, kind)
+        Lstaticcatch (l1, ids, l2)
     | Levent (lam, lev) ->
         let+ lam = choice ctx ~tail lam in
         Levent (lam, lev)
     | Lifused (x, lam) ->
         let+ lam = choice ctx ~tail lam in
         Lifused (x, lam)
-    | Lregion (lam, layout) ->
-        let+ lam = choice ctx ~tail lam in
-        Lregion (lam, layout)
-    | Lexclave lam ->
-        let+ lam = choice ctx ~tail lam in
-        Lexclave lam
 
   and choice_apply ctx ~tail apply =
     let exception No_tmc in
@@ -713,9 +701,6 @@ let rec choice ctx t =
             then Tailcall_expectation true
             else Default_tailcall
           in
-          (* This application is in tail position of a region=true function
-             (or Tmc_without_region would have occurred), so it must be Heap *)
-          assert (Lambda.is_heap_mode apply.ap_mode);
           {
             Choice.dps = Dps.make (fun ~tail ~dst ->
               Lapply { apply with
@@ -749,11 +734,11 @@ let rec choice ctx t =
         direct = (fun () -> Lapply apply_no_bailout);
       }
 
-  and choice_makeblock ctx ~tail:_ (tag, flag, shape, mode) blockargs loc =
+  and choice_makeblock ctx ~tail:_ (tag, flag, shape) blockargs loc =
     let choices = List.map (choice ctx ~tail:false) blockargs in
     match Choice.find_nonambiguous_tmc_call choices with
     | Choice.No_tmc_call args ->
-        Choice.lambda @@ Lprim (Pmakeblock (tag, flag, shape, mode), args, loc)
+        Choice.lambda @@ Lprim (Pmakeblock (tag, flag, shape), args, loc)
     | Choice.Ambiguous { explicit; subterms = ambiguous_subterms } ->
         (* An ambiguous term should not lead to an error if it not
            used in TMC position. Consider for example:
@@ -790,7 +775,7 @@ let rec choice ctx t =
         *)
         let term_choice =
           let+ args = Choice.list choices in
-          Lprim (Pmakeblock(tag, flag, shape, mode), args, loc)
+          Lprim (Pmakeblock(tag, flag, shape), args, loc)
         in
         { term_choice with
           Choice.dps = Dps.make (fun ~tail:_ ~dst:_ ->
@@ -841,16 +826,16 @@ let rec choice ctx t =
   and choice_prim ctx ~tail prim primargs loc =
     match prim with
     (* The important case is the construction case *)
-    | Pmakeblock (tag, flag, shape, mode) ->
-        choice_makeblock ctx ~tail (tag, flag, shape, mode) primargs loc
+    | Pmakeblock (tag, flag, shape) ->
+        choice_makeblock ctx ~tail (tag, flag, shape) primargs loc
 
     (* Some primitives have arguments in tail-position *)
-    | Popaque layout ->
+    | Popaque ->
         let l1 = match primargs with
           |  [l1] -> l1
           | _ -> invalid_arg "choice_prim" in
         let+ l1 = choice ctx ~tail l1 in
-        Lprim (Popaque layout, [l1], loc)
+        Lprim (Popaque, [l1], loc)
     | (Psequand | Psequor) as shortcutop ->
         let l1, l2 = match primargs with
           |  [l1; l2] -> l1, l2
@@ -861,9 +846,8 @@ let rec choice ctx t =
 
     (* in common cases we just return *)
     | Pbytes_to_string | Pbytes_of_string
-    | Parray_to_iarray | Parray_of_iarray
-    | Pgetglobal _ | Psetglobal _ | Pgetpredef _
-    | Pfield _ | Pfield_computed _
+    | Pgetglobal _ | Psetglobal _
+    | Pfield _ | Pfield_computed
     | Psetfield _ | Psetfield_computed _
     | Pfloatfield _ | Psetfloatfield _
     | Pccall _
@@ -874,31 +858,28 @@ let rec choice ctx t =
     | Plslint | Plsrint | Pasrint
     | Pintcomp _
     | Poffsetint _ | Poffsetref _
-    | Pintoffloat | Pfloatofint _
-    | Pnegfloat _ | Pabsfloat _
-    | Paddfloat _ | Psubfloat _ | Pmulfloat _ | Pdivfloat _
+    | Pintoffloat | Pfloatofint
+    | Pnegfloat | Pabsfloat
+    | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
     | Pfloatcomp _
     | Pstringlength | Pstringrefu  | Pstringrefs
     | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
     | Parraylength _ | Parrayrefu _ | Parraysetu _ | Parrayrefs _ | Parraysets _
-    | Pisint _ | Pisout
+    | Pisint | Pisout
     | Pignore
     | Pcompare_ints | Pcompare_floats | Pcompare_bints _
-    | Punbox_float | Pbox_float _
-    | Punbox_int _ | Pbox_int _
+
+    (* we don't handle effect or DLS primitives *)
+    | Prunstack | Pperform | Presume | Preperform | Pdls_get
+
+    (* we don't handle atomic primitives *)
+    | Patomic_exchange | Patomic_cas | Patomic_fetch_add | Patomic_load _
 
     (* we don't handle array indices as destinations yet *)
     | (Pmakearray _ | Pduparray _)
 
     (* we don't handle { foo with x = ...; y = recursive-call } *)
     | Pduprecord _
-
-    (* we don't handle all-float records *)
-    | Pmakefloatblock _
-
-    | Pobj_dup
-    | Pobj_magic _
-    | Pprobe_is_enabled _
 
     (* operations returning boxed values could be considered
        constructions someday *)
@@ -943,7 +924,7 @@ and traverse ctx = function
       let ctx, bindings = traverse_letrec ctx bindings in
       Lletrec (bindings, traverse ctx body)
   | lam ->
-      shallow_map ~tail:(traverse ctx) ~non_tail:(traverse ctx) lam
+      shallow_map (traverse ctx) lam
 
 and traverse_let outer_ctx var def =
   let inner_ctx = declare_binding outer_ctx (var, def) in
@@ -966,9 +947,9 @@ and traverse_binding outer_ctx inner_ctx (var, def) =
       (Debuginfo.Scoped_location.to_location lfun.loc)
       Warnings.Unused_tmc_attribute;
   let direct =
-    let { kind; params; return; body = _; attr; loc; mode; region } = lfun in
+    let { kind; params; return; body = _; attr; loc } = lfun in
     let body = Choice.direct fun_choice in
-    lfunction ~kind ~params ~return ~body ~attr ~loc ~mode ~region in
+    lfunction ~kind ~params ~return ~body ~attr ~loc in
   let dps =
     let dst_param = {
       var = Ident.create_local "dst";
@@ -976,27 +957,15 @@ and traverse_binding outer_ctx inner_ctx (var, def) =
       loc = lfun.loc;
     } in
     let dst = { dst_param with offset = Offset (Lvar dst_param.offset) } in
-    let params = add_dst_params dst_param lfun.params in
-    let kind =
-      match lfun.mode, lfun.kind with
-      | Alloc_heap, Tupled ->
-         (* Support of Tupled function: see [choice_apply]. *)
-         Curried {nlocal=0}
-      | Alloc_local, (Tupled | Curried _) ->
-         Curried {nlocal=List.length params}
-      | Alloc_heap, (Curried _ as k) ->
-         (* Prepending arguments does not affect nlocal *)
-         k
-    in
     Lambda.duplicate @@ lfunction
-      ~kind
-      ~params
+      ~kind:
+        (* Support of Tupled function: see [choice_apply]. *)
+        Curried
+      ~params:(add_dst_params dst_param lfun.params)
       ~return:lfun.return
       ~body:(Choice.dps ~tail:true ~dst:dst fun_choice)
       ~attr:lfun.attr
       ~loc:lfun.loc
-      ~mode:lfun.mode
-      ~region:true
   in
   let dps_var = special.dps_id in
   [(var, direct); (dps_var, dps)]
@@ -1056,10 +1025,6 @@ let () =
             |> List.map sub
           in
           Some (Location.errorf ~loc ~sub:submgs "%t" print_msg)
-      | Error (loc, Tmc_without_region) ->
-          Some (Location.errorf ~loc
-                  "[@tail_mod_cons]: Functions cannot be both local-returning \
-                   and [@tail_mod_cons]")
       | _ ->
         None
     )

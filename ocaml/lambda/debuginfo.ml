@@ -24,23 +24,17 @@ module Scoped_location = struct
     | Sc_module_definition
     | Sc_class_definition
     | Sc_method_definition
-    | Sc_partial_or_eta_wrapper
-    | Sc_lazy
 
   type scopes =
     | Empty
-    | Cons of {item: scope_item; str: string; str_fun: string; name : string; prev: scopes}
-
-  let str = function
-    | Empty -> ""
-    | Cons r -> r.str
+    | Cons of {item: scope_item; str: string; str_fun: string}
 
   let str_fun = function
     | Empty -> "(fun)"
     | Cons r -> r.str_fun
 
-  let cons scopes item str name =
-    Cons {item; str; str_fun = str ^ ".(fun)"; name; prev = scopes}
+  let cons item str =
+    Cons {item; str; str_fun = str ^ ".(fun)"}
 
   let empty_scopes = Empty
 
@@ -51,32 +45,24 @@ module Scoped_location = struct
        | 'a'..'z' | 'A'..'Z' | '_' | '0'..'9' -> s
        | _ -> "(" ^ s ^ ")"
 
-  let dot ?(sep = ".") ?no_parens scopes s =
-    let s =
-      match no_parens with
-      | None -> add_parens_if_symbolic s
-      | Some () -> s
-    in
+  let dot ?(sep = ".") scopes s =
+    let s = add_parens_if_symbolic s in
     match scopes with
     | Empty -> s
     | Cons {str; _} -> str ^ sep ^ s
 
   let enter_anonymous_function ~scopes =
     let str = str_fun scopes in
-    Cons {item = Sc_anonymous_function; str; str_fun = str; name = ""; prev = scopes}
+    Cons {item = Sc_anonymous_function; str; str_fun = str}
 
   let enter_value_definition ~scopes id =
-    cons scopes Sc_value_definition (dot scopes (Ident.name id)) (Ident.name id)
-
-  let enter_compilation_unit ~scopes cu =
-    let name = Compilation_unit.name_as_string cu in
-    cons scopes Sc_module_definition (dot scopes name) name
+    cons Sc_value_definition (dot scopes (Ident.name id))
 
   let enter_module_definition ~scopes id =
-    cons scopes Sc_module_definition (dot scopes (Ident.name id)) (Ident.name id)
+    cons Sc_module_definition (dot scopes (Ident.name id))
 
   let enter_class_definition ~scopes id =
-    cons scopes Sc_class_definition (dot scopes (Ident.name id)) (Ident.name id)
+    cons Sc_class_definition (dot scopes (Ident.name id))
 
   let enter_method_definition ~scopes (s : Asttypes.label) =
     let str =
@@ -84,27 +70,11 @@ module Scoped_location = struct
       | Cons {item = Sc_class_definition; _} -> dot ~sep:"#" scopes s
       | _ -> dot scopes s
     in
-    cons scopes Sc_method_definition str s
-
-  let enter_lazy ~scopes = cons scopes Sc_lazy (str scopes) ""
-  
-  let enter_partial_or_eta_wrapper ~scopes =
-    cons scopes Sc_partial_or_eta_wrapper (dot ~no_parens:() scopes "(partial)") ""
+    cons Sc_method_definition str
 
   let string_of_scopes = function
     | Empty -> "<unknown>"
     | Cons {str; _} -> str
-
-  let string_of_scopes =
-    let module StringSet = Set.Make (String) in
-    let repr = ref StringSet.empty in
-    fun scopes ->
-      let res = string_of_scopes scopes in
-      match StringSet.find_opt res !repr with
-      | Some x -> x
-      | None ->
-        repr := StringSet.add res !repr;
-        res
 
   type t =
     | Loc_unknown
@@ -125,11 +95,6 @@ module Scoped_location = struct
   let string_of_scoped_location = function
     | Loc_unknown -> "??"
     | Loc_known { loc = _; scopes } -> string_of_scopes scopes
-
-  let map_scopes f t =
-    match t with
-    | Loc_unknown -> Loc_unknown
-    | Loc_known { loc; scopes } -> Loc_known { loc; scopes = f ~scopes }
 end
 
 type item = {

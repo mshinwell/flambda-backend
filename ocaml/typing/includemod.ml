@@ -19,6 +19,27 @@ open Misc
 open Typedtree
 open Types
 
+type symptom =
+    Missing_field of Ident.t * Location.t * string (* kind *)
+  | Value_descriptions of Ident.t * value_description * value_description
+                          * Includecore.value_mismatch
+  | Type_declarations of Ident.t * type_declaration
+        * type_declaration * Includecore.type_mismatch
+  | Extension_constructors of Ident.t * extension_constructor
+        * extension_constructor * Includecore.extension_constructor_mismatch
+  | Module_types of module_type * module_type
+  | Modtype_infos of Ident.t * modtype_declaration * modtype_declaration
+  | Modtype_permutation of Types.module_type * Typedtree.module_coercion
+  | Interface_mismatch of string * string
+  | Class_type_declarations of
+      Ident.t * class_type_declaration * class_type_declaration *
+      Ctype.class_match_failure list
+  | Class_declarations of
+      Ident.t * class_declaration * class_declaration *
+      Ctype.class_match_failure list
+  | Unbound_module_path of Path.t
+  | Invalid_module_alias of Path.t
+
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -32,6 +53,9 @@ module Error = struct
     | Anonymous
     | Named of Path.t
     | Unit
+    | Empty_struct
+     (** For backward compatibility's sake, an empty struct can be implicitly
+         converted to an unit module  *)
 
   type ('a,'b) diff = {got:'a; expected:'a; symptom:'b}
   type 'a core_diff =('a,unit) diff
@@ -82,6 +106,8 @@ module Error = struct
     env: Env.t;
     missings: signature_item list;
     incompatibles: (Ident.t * sigitem_symptom) list;
+    oks: (int * module_coercion) list;
+    leftovers: (signature_item * signature_item * int) list;
   }
   and sigitem_symptom =
     | Core of core_sigitem_symptom
@@ -100,7 +126,6 @@ module Error = struct
   type all =
     | In_Compilation_unit of (string, signature_symptom) diff
     | In_Signature of signature_symptom
-    | In_Include_functor_signature of signature_symptom
     | In_Module_type of module_type_diff
     | In_Module_type_substitution of
         Ident.t * (Types.module_type,module_type_declaration_symptom) diff
@@ -143,7 +168,7 @@ let value_descriptions ~loc env ~mark subst id vd1 vd2 =
 
 (* Inclusion between type declarations *)
 
-let type_declarations ~loc env ~mark subst id decl1 decl2 =
+let type_declarations ~loc env ~mark ?old_env:_ subst id decl1 decl2 =
   let mark = mark_positive mark in
   if mark then
     Env.mark_type_used decl1.type_uid;
@@ -168,14 +193,14 @@ let extension_constructors ~loc env ~mark  subst id ext1 ext2 =
 
 (* Inclusion between class declarations *)
 
-let class_type_declarations ~loc env subst decl1 decl2 =
+let class_type_declarations ~loc ~old_env:_ env  subst decl1 decl2 =
   let decl2 = Subst.cltype_declaration subst decl2 in
   match Includeclass.class_type_declarations ~loc env decl1 decl2 with
     []     -> Ok Tcoerce_none
   | reason ->
       Error Error.(Core(Class_type_declarations(diff decl1 decl2 reason)))
 
-let class_declarations env subst decl1 decl2 =
+let class_declarations ~old_env:_ env  subst decl1 decl2 =
   let decl2 = Subst.class_declaration subst decl2 in
   match Includeclass.class_declarations env decl1 decl2 with
     []     -> Ok Tcoerce_none
@@ -189,13 +214,11 @@ let expand_modtype_path env path =
      | exception Not_found -> None
      | x -> Some x
 
-let expand_modtype_path_lazy env path =
-  match Env.find_modtype_expansion_lazy path env with
-    | exception Not_found -> None
-    | x -> Some x
-
 let expand_module_alias ~strengthen env path =
-  match Mtype.find_type_of_module ~strengthen ~aliasable:true env path with
+  match
+    if strengthen then Env.find_strengthened_module ~aliasable:true path env
+    else (Env.find_module path env).md_type
+  with
   | x -> Ok x
   | exception Not_found -> Error (Error.Unbound_module_path path)
 
@@ -235,9 +258,7 @@ module FieldMap = Map.Make(struct
     let compare = Stdlib.compare
   end)
 
-let item_ident_name =
-  let open Subst.Lazy in
-  function
+let item_ident_name = function
     Sig_value(id, d, _) -> (id, d.val_loc, field_desc Field_value id)
   | Sig_type(id, d, _, _) -> (id, d.type_loc, field_desc Field_type  id )
   | Sig_typext(id, d, _, _) ->
@@ -253,9 +274,7 @@ let item_ident_name =
   | Sig_class_type(id, d, _, _) ->
       (id, d.clty_loc, field_desc Field_classtype id)
 
-let is_runtime_component =
-  let open Subst.Lazy in
-  function
+let is_runtime_component = function
   | Sig_value(_,{val_kind = Val_prim _}, _)
   | Sig_type(_,_,_,_)
   | Sig_module(_,Mp_absent,_,_,_)
@@ -265,18 +284,6 @@ let is_runtime_component =
   | Sig_typext(_,_,_,_)
   | Sig_module(_,Mp_present,_,_,_)
   | Sig_class(_,_,_,_) -> true
-
-let item_visibility =
-  let open Subst.Lazy in
-  function
-  | Sig_value (_, _, vis)
-  | Sig_type (_, _, _, vis)
-  | Sig_typext (_, _, _, vis)
-  | Sig_module (_, _, _, _, vis)
-  | Sig_modtype (_, _, vis)
-  | Sig_class (_, _, _, vis)
-  | Sig_class_type (_, _, _, vis) -> vis
-
 
 (* Print a coercion *)
 
@@ -336,78 +343,6 @@ let simplify_structure_coercion cc id_pos_list =
   then Tcoerce_none
   else Tcoerce_structure (cc, id_pos_list)
 
-
-(* Build a table of the components of sig1, along with their positions.
-   The table is indexed by kind and name of component *)
-let build_component_table pos_rep sg =
-  let rec build_table nb_exported pos tbl = function
-    [] -> nb_exported, pos, tbl
-  | item :: rem ->
-      let pos, nextpos =
-        if is_runtime_component item then pos, pos + 1
-        else -1, pos
-      in
-      match item_visibility item with
-      | Hidden ->
-          (* do not pair private items. *)
-          build_table nb_exported nextpos tbl rem
-      | Exported ->
-          let (id, _loc, name) = item_ident_name item in
-          build_table (nb_exported + 1) nextpos
-            (FieldMap.add name (id, item, pos_rep pos id) tbl) rem
-  in
-  build_table 0 0 FieldMap.empty sg
-
-
-(* Pair each component of sig2 with a component of sig1,
-   identifying the names along the way.
-   Return a coercion list indicating, for all run-time components
-   of sig2, the position of the matching run-time components of sig1
-   and the coercion to be applied to it. *)
-let pair_components subst sig1_comps sig2 =
-  let open Subst.Lazy in
-  let rec pair subst paired unpaired = function
-    | [] ->
-      paired, unpaired, subst
-  | item2 :: rem ->
-      let (id2, _loc, name2) = item_ident_name item2 in
-      let name2, report =
-        match item2, name2 with
-          Sig_type (_, {type_manifest=None}, _, _), {name=s; kind=Field_type}
-          when Btype.is_row_name s ->
-            (* Do not report in case of failure,
-               as the main type will generate an error *)
-            { kind=Field_type; name=String.sub s 0 (String.length s - 4) },
-            false
-        | _ -> name2, true
-      in
-      begin match FieldMap.find name2 sig1_comps with
-      | (id1, item1, pos1) ->
-        let new_subst =
-          match item2 with
-            Sig_type _ ->
-              Subst.add_type id2 (Path.Pident id1) subst
-          | Sig_module _ ->
-              Subst.add_module id2 (Path.Pident id1) subst
-          | Sig_modtype _ ->
-              Subst.add_modtype id2 (Mty_ident (Path.Pident id1)) subst
-          | Sig_value _ | Sig_typext _
-          | Sig_class _ | Sig_class_type _ ->
-              subst
-        in
-        pair new_subst
-          ((item1, item2, pos1) :: paired) unpaired rem
-      | exception Not_found ->
-        let unpaired =
-          if report then
-            item2 :: unpaired
-          else unpaired in
-        pair subst paired unpaired rem
-      end
-  in
-  pair subst [] [] sig2
-
-
 let retrieve_functor_params env mty =
   let rec retrieve_functor_params before env =
     function
@@ -443,12 +378,12 @@ let mark_error_as_unrecoverable r =
 
 
 module Sign_diff = struct
-  type 'a t = {
-    runtime_coercions: ('a * Typedtree.module_coercion) list;
+  type t = {
+    runtime_coercions: (int * Typedtree.module_coercion) list;
     shape_map: Shape.Map.t;
     deep_modifications:bool;
     errors: (Ident.t * Error.sigitem_symptom) list;
-    leftovers: ((Types.signature_item as 'it) * 'it * 'a) list
+    leftovers: ((Types.signature_item as 'it) * 'it * int) list
   }
 
   let empty = {
@@ -491,14 +426,10 @@ let rec modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape =
   match try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape with
   | Ok _ as ok -> ok
   | Error reason ->
-    let mty1 = Subst.Lazy.force_modtype mty1 in
-    let mty2 =
-      Subst.Lazy.force_modtype (Subst.Lazy.modtype Make_local subst mty2)
-    in
+    let mty2 = Subst.modtype Make_local subst mty2 in
     Error Error.(diff mty1 mty2 reason)
 
 and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
-  let open Subst.Lazy in
   match mty1, mty2 with
   | (Mty_alias p1, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
@@ -513,12 +444,11 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | exception Env.Error (Env.Missing_module (_, _, path)) ->
           Error Error.(Mt_core(Unbound_module_path path))
       | p1 ->
-          begin match (Env.find_module_lazy p1 env).md_type with
-          | exception Not_found ->
-              Error (Error.Mt_core (Error.Unbound_module_path p1))
-          | mty1 ->
-              match strengthened_modtypes ~in_eq ~loc ~aliasable:true env
-                      ~mark subst mty1 p1 mty2 orig_shape
+          begin match expand_module_alias ~strengthen:false env p1 with
+          | Error e -> Error (Error.Mt_core e)
+          | Ok mty1 ->
+              match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
+                      subst mty1 p1 mty2 orig_shape
               with
               | Ok _ as x -> x
               | Error reason -> Error (Error.After_alias_expansion reason)
@@ -529,29 +459,27 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       if Path.same p1 p2 then Ok (Tcoerce_none, orig_shape)
       else
-        begin match expand_modtype_path_lazy env p1, expand_modtype_path_lazy env p2 with
+        begin match expand_modtype_path env p1, expand_modtype_path env p2 with
         | Some mty1, Some mty2 ->
             try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
         | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
         end
   | (Mty_ident p1, _) ->
       let p1 = Env.normalize_modtype_path env p1 in
-      begin match expand_modtype_path_lazy env p1 with
+      begin match expand_modtype_path env p1 with
       | Some p1 ->
           try_modtypes ~in_eq ~loc env ~mark subst p1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
   | (_, Mty_ident p2) ->
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-      begin match expand_modtype_path_lazy env p2 with
+      begin match expand_modtype_path env p2 with
       | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
       | None ->
           begin match mty1 with
           | Mty_functor _ ->
-              let params1 =
-                retrieve_functor_params env (Subst.Lazy.force_modtype mty1)
-              in
-              let d = Error.sdiff params1 ([], Subst.Lazy.force_modtype mty2) in
+              let params1 = retrieve_functor_params env mty1 in
+              let d = Error.sdiff params1 ([],mty2) in
               Error Error.(Functor (Params d))
           | _ -> Error Error.(Mt_core Not_an_identifier)
           end
@@ -602,33 +530,21 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           let got_params, got_res = res.got in
           let expected_params, expected_res = res.expected in
           let d = Error.sdiff
-              (force_functor_parameter param1::got_params, got_res)
-              (force_functor_parameter param2::expected_params, expected_res)
-          in
+              (param1::got_params, got_res)
+              (param2::expected_params, expected_res) in
           Error Error.(Functor (Params d))
       | Error _, _ ->
-          let params1, res1 =
-            retrieve_functor_params env (Subst.Lazy.force_modtype res1)
-          in
-          let params2, res2 =
-            retrieve_functor_params env (Subst.Lazy.force_modtype res2)
-          in
-          let d = Error.sdiff
-            (force_functor_parameter param1::params1, res1)
-            (force_functor_parameter param2::params2, res2)
-          in
+          let params1, res1 = retrieve_functor_params env res1 in
+          let params2, res2 = retrieve_functor_params env res2 in
+          let d = Error.sdiff (param1::params1, res1) (param2::params2, res2) in
           Error Error.(Functor (Params d))
       | Ok _, Error res ->
           Error Error.(Functor (Result res))
       end
   | Mty_functor _, _
   | _, Mty_functor _ ->
-      let params1 =
-        retrieve_functor_params env (Subst.Lazy.force_modtype mty1)
-      in
-      let params2 =
-        retrieve_functor_params env (Subst.Lazy.force_modtype mty2)
-      in
+      let params1 = retrieve_functor_params env mty1 in
+      let params2 = retrieve_functor_params env mty2 in
       let d = Error.sdiff params1 params2 in
       Error Error.(Functor (Params d))
   | _, Mty_alias _ ->
@@ -637,12 +553,11 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
 (* Functor parameters *)
 
 and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
-  let open Subst.Lazy in
   match param1, param2 with
   | Unit, Unit ->
       Ok Tcoerce_none, env, subst
   | Named (name1, arg1), Named (name2, arg2) ->
-      let arg2' = Subst.Lazy.modtype Keep subst arg2 in
+      let arg2' = Subst.modtype Keep subst arg2 in
       let cc_arg =
         match
           modtypes ~in_eq ~loc env ~mark Subst.identity arg2' arg1
@@ -651,34 +566,35 @@ and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
         | Ok (cc, _) -> Ok cc
         | Error err -> Error (Error.Mismatch err)
       in
-      let env, subst =
-        match name1, name2 with
-        | Some id1, Some id2 ->
-            Env.add_module_lazy ~update_summary:false id1 Mp_present arg2' env,
-            Subst.add_module id2 (Path.Pident id1) subst
-        | None, Some id2 ->
-            let id1 = Ident.rename id2 in
-            Env.add_module_lazy ~update_summary:false id1 Mp_present arg2' env,
-            Subst.add_module id2 (Path.Pident id1) subst
-        | Some id1, None ->
-            Env.add_module_lazy ~update_summary:false id1 Mp_present arg2' env, subst
-        | None, None ->
-            env, subst
-      in
+      let env, subst = equate_one_functor_param subst env arg2' name1 name2 in
       cc_arg, env, subst
   | _, _ ->
-      let param1 = force_functor_parameter param1 in
-      let param2 = force_functor_parameter param2 in
       Error (Error.Incompatible_params (param1, param2)), env, subst
+
+and equate_one_functor_param subst env arg2' name1 name2  =
+  match name1, name2 with
+  | Some id1, Some id2 ->
+  (* two matching abstract parameters: we add one identifier to the
+     environment and record the equality between the two identifiers
+     in the substitution *)
+      Env.add_module id1 Mp_present arg2' env,
+      Subst.add_module id2 (Path.Pident id1) subst
+  | None, Some id2 ->
+      let id1 = Ident.rename id2 in
+      Env.add_module id1 Mp_present arg2' env,
+      Subst.add_module id2 (Path.Pident id1) subst
+  | Some id1, None ->
+      Env.add_module id1 Mp_present arg2' env, subst
+  | None, None ->
+      env, subst
 
 and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
     subst mty1 path1 mty2 shape =
-  let open Subst.Lazy in
   match mty1, mty2 with
   | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
-      let mty1 = Mtype.strengthen_lazy ~aliasable env mty1 path1 in
+      let mty1 = Mtype.strengthen ~aliasable env mty1 path1 in
       modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
 
 and strengthened_module_decl ~loc ~aliasable env ~mark
@@ -687,20 +603,15 @@ and strengthened_module_decl ~loc ~aliasable env ~mark
   | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
-      let md1 = Subst.Lazy.of_module_decl md1 in
-      let md1 = Mtype.strengthen_lazy_decl ~aliasable env md1 path1 in
-      let mty2 = Subst.Lazy.of_modtype md2.md_type in
-      modtypes ~in_eq:false ~loc env ~mark subst md1.md_type mty2 shape
+      let md1 = Mtype.strengthen_decl ~aliasable env md1 path1 in
+      modtypes ~in_eq:false ~loc env ~mark subst md1.md_type md2.md_type shape
 
 (* Inclusion between signatures *)
 
-and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
-  let open Subst.Lazy in
+and signatures  ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
   (* Environment used to check inclusion of components *)
-  let sig1 = force_signature_once sig1 in
-  let sig2 = force_signature_once sig2 in
   let new_env =
-    Env.add_signature_lazy sig1 (Env.in_signature true env) in
+    Env.add_signature sig1 (Env.in_signature true env) in
   (* Keep ids for module aliases *)
   let (id_pos_list,_) =
     List.fold_left
@@ -709,8 +620,26 @@ and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
             ((id,pos,Tcoerce_none)::l , pos+1)
         | item -> (l, if is_runtime_component item then pos+1 else pos))
       ([], 0) sig1 in
+  (* Build a table of the components of sig1, along with their positions.
+     The table is indexed by kind and name of component *)
+  let rec build_component_table nb_exported pos tbl = function
+      [] -> nb_exported, pos, tbl
+    | item :: rem ->
+        let pos, nextpos =
+          if is_runtime_component item then pos, pos + 1
+          else -1, pos
+        in
+        match item_visibility item with
+        | Hidden ->
+            (* do not pair private items. *)
+            build_component_table nb_exported nextpos tbl rem
+        | Exported ->
+            let (id, _loc, name) = item_ident_name item in
+            build_component_table (nb_exported + 1) nextpos
+              (FieldMap.add name (id, item, pos) tbl) rem
+  in
   let exported_len1, runtime_len1, comps1 =
-    build_component_table (fun pos _name -> pos) sig1
+    build_component_table 0 0 FieldMap.empty sig1
   in
   let exported_len2, runtime_len2 =
     List.fold_left (fun (el, rl) i ->
@@ -719,37 +648,81 @@ and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
       el, rl
     ) (0, 0) sig2
   in
-  (* Do the pairing and checking, and return the final coercion *)
-  let paired, unpaired, subst = pair_components subst comps1 sig2 in
-  let d =
-    signature_components ~in_eq ~loc ~mark new_env subst mod_shape
-      Shape.Map.empty
-      (List.rev paired)
-  in
-  let open Sign_diff in
-  match unpaired, d.errors, d.runtime_coercions, d.leftovers with
-    | [], [], cc, [] ->
-        let shape =
-          if not d.deep_modifications && exported_len1 = exported_len2
-          then mod_shape
-          else Shape.str ?uid:mod_shape.Shape.uid d.shape_map
+  (* Pair each component of sig2 with a component of sig1,
+     identifying the names along the way.
+     Return a coercion list indicating, for all run-time components
+     of sig2, the position of the matching run-time components of sig1
+     and the coercion to be applied to it. *)
+  let rec pair_components subst paired unpaired = function
+      [] ->
+        let open Sign_diff in
+        let d =
+          signature_components ~in_eq ~loc env ~mark new_env subst mod_shape
+            Shape.Map.empty
+            (List.rev paired)
         in
-        if runtime_len1 = runtime_len2 then (* see PR#5098 *)
-          Ok (simplify_structure_coercion cc id_pos_list, shape)
-        else
-          Ok (Tcoerce_structure (cc, id_pos_list), shape)
-    | missings, incompatibles, _, _leftovers ->
-        Error {
-          Error.env=new_env;
-          missings = List.map force_signature_item missings;
-          incompatibles;
-        }
+        begin match unpaired, d.errors, d.runtime_coercions, d.leftovers with
+            | [], [], cc, [] ->
+                let shape =
+                  if not d.deep_modifications && exported_len1 = exported_len2
+                  then mod_shape
+                  else Shape.str ?uid:mod_shape.Shape.uid d.shape_map
+                in
+                if runtime_len1 = runtime_len2 then (* see PR#5098 *)
+                  Ok (simplify_structure_coercion cc id_pos_list, shape)
+                else
+                  Ok (Tcoerce_structure (cc, id_pos_list), shape)
+            | missings, incompatibles, runtime_coercions, leftovers ->
+                Error {
+                  Error.env=new_env;
+                  missings;
+                  incompatibles;
+                  oks=runtime_coercions;
+                  leftovers;
+                }
+        end
+    | item2 :: rem ->
+        let (id2, _loc, name2) = item_ident_name item2 in
+        let name2, report =
+          match item2, name2 with
+            Sig_type (_, {type_manifest=None}, _, _), {name=s; kind=Field_type}
+            when Btype.is_row_name s ->
+              (* Do not report in case of failure,
+                 as the main type will generate an error *)
+              { kind=Field_type; name=String.sub s 0 (String.length s - 4) },
+              false
+          | _ -> name2, true
+        in
+        begin match FieldMap.find name2 comps1 with
+        | (id1, item1, pos1) ->
+          let new_subst =
+            match item2 with
+              Sig_type _ ->
+                Subst.add_type id2 (Path.Pident id1) subst
+            | Sig_module _ ->
+                Subst.add_module id2 (Path.Pident id1) subst
+            | Sig_modtype _ ->
+                Subst.add_modtype id2 (Mty_ident (Path.Pident id1)) subst
+            | Sig_value _ | Sig_typext _
+            | Sig_class _ | Sig_class_type _ ->
+                subst
+          in
+          pair_components new_subst
+            ((item1, item2, pos1) :: paired) unpaired rem
+        | exception Not_found ->
+          let unpaired =
+            if report then
+              item2 :: unpaired
+            else unpaired in
+          pair_components subst paired unpaired rem
+        end in
+  (* Do the pairing and checking, and return the final coercion *)
+  pair_components subst [] [] sig2
 
 (* Inclusion between signature components *)
-and signature_components :
-  'a. in_eq:_ -> loc:_ -> mark:_ -> _ -> _ -> _ -> _ -> (_ * _ * 'a) list -> 'a Sign_diff.t =
-  fun ~in_eq ~loc ~mark env subst orig_shape shape_map paired ->
-  let open Subst.Lazy in
+
+and signature_components  ~in_eq ~loc old_env ~mark env subst
+    orig_shape shape_map paired =
   match paired with
   | [] -> Sign_diff.{ empty with shape_map }
   | (sigi1, sigi2, pos) :: rem ->
@@ -758,9 +731,7 @@ and signature_components :
         match sigi1, sigi2 with
         | Sig_value(id1, valdecl1, _) ,Sig_value(_id2, valdecl2, _) ->
             let item =
-              value_descriptions ~loc env ~mark subst id1
-                (Subst.Lazy.force_value_description valdecl1)
-                (Subst.Lazy.force_value_description valdecl2)
+              value_descriptions ~loc env ~mark subst id1 valdecl1 valdecl2
             in
             let item = mark_error_as_recoverable item in
             let present_at_runtime = match valdecl2.val_kind with
@@ -771,7 +742,7 @@ and signature_components :
             id1, item, shape_map, present_at_runtime
         | Sig_type(id1, tydec1, _, _), Sig_type(_id2, tydec2, _, _) ->
             let item =
-              type_declarations ~loc env ~mark subst id1 tydec1 tydec2
+              type_declarations ~loc ~old_env env ~mark subst id1 tydec1 tydec2
             in
             let item = mark_error_as_unrecoverable item in
             let shape_map = Shape.Map.add_type_proj shape_map id1 orig_shape in
@@ -829,7 +800,7 @@ and signature_components :
             id1, item, shape_map, false
         | Sig_class(id1, decl1, _, _), Sig_class(_id2, decl2, _, _) ->
             let item =
-              class_declarations env subst decl1 decl2
+              class_declarations ~old_env env subst decl1 decl2
             in
             let shape_map =
               Shape.Map.add_class_proj shape_map id1 orig_shape
@@ -838,7 +809,7 @@ and signature_components :
             id1, item, shape_map, true
         | Sig_class_type(id1, info1, _, _), Sig_class_type(_id2, info2, _, _) ->
             let item =
-              class_type_declarations ~loc env subst info1 info2
+              class_type_declarations ~loc ~old_env env subst info1 info2
             in
             let item = mark_error_as_unrecoverable item in
             let shape_map =
@@ -865,22 +836,13 @@ and signature_components :
       in
       let rest =
         if continue then
-          signature_components ~in_eq ~loc ~mark env subst
+          signature_components ~in_eq ~loc old_env ~mark env subst
             orig_shape shape_map rem
-        else
-          let rem = List.map
-            (fun (x,y,z) ->
-                Subst.Lazy.force_signature_item x,
-                Subst.Lazy.force_signature_item y,
-                z)
-            rem
-          in
-          Sign_diff.{ empty with leftovers=rem }
+        else Sign_diff.{ empty with leftovers=rem }
        in
        Sign_diff.merge first rest
 
 and module_declarations  ~in_eq ~loc env ~mark  subst id1 md1 md2 orig_shape =
-  let open Subst.Lazy in
   Builtin_attributes.check_alerts_inclusion
     ~def:md1.md_loc
     ~use:md2.md_loc
@@ -896,14 +858,13 @@ and module_declarations  ~in_eq ~loc env ~mark  subst id1 md1 md2 orig_shape =
 (* Inclusion between module type specifications *)
 
 and modtype_infos ~in_eq ~loc env ~mark subst id info1 info2 =
-  let open Subst.Lazy in
   Builtin_attributes.check_alerts_inclusion
     ~def:info1.mtd_loc
     ~use:info2.mtd_loc
     loc
     info1.mtd_attributes info2.mtd_attributes
     (Ident.name id);
-  let info2 = Subst.Lazy.modtype_decl Keep subst info2 in
+  let info2 = Subst.modtype_declaration Keep subst info2 in
   let r =
     match (info1.mtd_type, info2.mtd_type) with
       (None, None) -> Ok Tcoerce_none
@@ -915,10 +876,7 @@ and modtype_infos ~in_eq ~loc env ~mark subst id info1 info2 =
         check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 in
   match r with
   | Ok _ as ok -> ok
-  | Error e ->
-      let info1 = Subst.Lazy.force_modtype_decl info1 in
-      let info2 = Subst.Lazy.force_modtype_decl info2 in
-      Error Error.(Module_type_declaration (diff info1 info2 e))
+  | Error e -> Error Error.(Module_type_declaration (diff info1 info2 e))
 
 and check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 =
   let c1 =
@@ -948,46 +906,18 @@ and check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 =
   | Error less_than, Some Error greater_than ->
       Error Error.(Incomparable {less_than; greater_than})
 
-let include_functor_signatures ~loc env ~mark subst sig1 sig2 mod_shape =
-  let _, _, comps1 = build_component_table (fun _pos name -> name) sig1 in
-  let paired, unpaired, subst = pair_components subst comps1 sig2 in
-  let d = signature_components ~in_eq:false ~loc ~mark env subst mod_shape
-            Shape.Map.empty
-            (List.rev paired)
-  in
-  let open Sign_diff in
-  match unpaired, d.errors, d.leftovers with
-  | [], [], [] ->
-     Ok d.runtime_coercions
-  | missings, incompatibles, _leftovers ->
-    let missings = List.map Subst.Lazy.force_signature_item missings in
-     Error Error.{ env; missings; incompatibles }
+
+(* Simplified inclusion check between module types (for Env) *)
 
 let can_alias env path =
   let rec no_apply = function
     | Path.Pident _ -> true
-    | Path.Pdot(p, _) -> no_apply p
+    | Path.Pdot(p, _) | Path.Pextra_ty (p, _) -> no_apply p
     | Path.Papply _ -> false
   in
   no_apply path && not (Env.is_functor_arg path env)
 
 
-let signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
-  let sig1 = Subst.Lazy.of_signature sig1 in
-  let sig2 = Subst.Lazy.of_signature sig2 in
-  signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape
-
-let modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape =
-  let mty1 = Subst.Lazy.of_modtype mty1 in
-  let mty2 = Subst.Lazy.of_modtype mty2 in
-  modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
-
-let strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
-  subst mty1 path1 mty2 shape =
-  let mty1 = Subst.Lazy.of_modtype mty1 in
-  let mty2 = Subst.Lazy.of_modtype mty2 in
-  strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark subst mty1
-    path1 mty2 shape
 
 type explanation = Env.t * Error.all
 exception Error of explanation
@@ -1107,44 +1037,42 @@ module Functor_inclusion_diff = struct
     | None -> state, [||]
     | Some (res, expansion) -> { state with res }, expansion
 
-  let update (d:Diff.change) st = match d with
+  (* Whenever we have a named parameter that doesn't match it anonymous
+     counterpart, we add it to the typing environment because it may
+     contain useful abbreviations, but without adding any equations  *)
+  let bind id arg state =
+    let arg' = Subst.modtype Keep state.subst arg in
+    let env = Env.add_module id Mp_present arg' state.env in
+    { state with env }
+
+  let rec update (d:Diff.change) st =
+    match d with
     | Insert (Unit | Named (None,_))
     | Delete (Unit | Named (None,_))
     | Keep (Unit,_,_)
-    | Keep (_,Unit,_)
-    | Change (_,(Unit | Named (None,_)), _) ->
+    | Keep (_,Unit,_) ->
+        (* No named abstract parameters: we keep the same environment *)
         st, [||]
-    | Insert (Named (Some id, arg))
-    | Delete (Named (Some id, arg))
-    | Change (Unit, Named (Some id, arg), _) ->
-        let arg' = Subst.modtype Keep st.subst arg in
-        let env = Env.add_module id Mp_present arg' st.env in
-        expand_params { st with env }
-    | Keep (Named (name1, _), Named (name2, arg2), _)
-    | Change (Named (name1, _), Named (name2, arg2), _) -> begin
-        let arg' = Subst.modtype Keep st.subst arg2 in
-        match name1, name2 with
-        | Some id1, Some id2 ->
-            let env = Env.add_module id1 Mp_present arg' st.env in
-            let subst = Subst.add_module id2 (Path.Pident id1) st.subst in
-            expand_params { st with env; subst }
-        | None, Some id2 ->
-            let env = Env.add_module id2 Mp_present arg' st.env in
-            { st with env }, [||]
-        | Some id1, None ->
-            let env = Env.add_module id1 Mp_present arg' st.env in
-            expand_params { st with env }
-        | None, None ->
-            st, [||]
-      end
+    | Insert (Named (Some id, arg)) | Delete (Named (Some id, arg)) ->
+        (* one named parameter to bind *)
+        st |> bind id arg |> expand_params
+    | Change (delete, insert, _) ->
+        (* Change should be delete + insert: we add both abstract parameters
+           to the environment without equating them. *)
+        let st, _expansion = update (Diffing.Delete delete) st in
+        update (Diffing.Insert insert) st
+    | Keep (Named (name1, _), Named (name2, arg2), _) ->
+        let arg = Subst.modtype Keep st.subst arg2 in
+        let env, subst =
+          equate_one_functor_param st.subst st.env arg name1 name2
+        in
+        expand_params { st with env; subst }
 
   let diff env (l1,res1) (l2,_) =
     let module Compute = Diff.Left_variadic(struct
         let test st mty1 mty2 =
           let loc = Location.none in
           let res, _, _ =
-            let mty1 = Subst.Lazy.of_functor_parameter mty1 in
-            let mty2 = Subst.Lazy.of_functor_parameter mty2 in
             functor_param ~in_eq:false ~loc st.env ~mark:Mark_neither
               st.subst mty1 mty2
           in
@@ -1183,56 +1111,50 @@ module Functor_app_diff = struct
         begin
           let desc1 : Error.functor_arg_descr = fst param1 in
           match desc1, I.param_name param2 with
-          | (Unit | Anonymous) , None
+          | (Unit | Empty_struct | Anonymous) , None
             -> 0
           | Named (Path.Pident n1), Some n2
             when String.equal (Ident.name n1) (Ident.name n2)
             -> 0
           | Named _, Some _ -> 1
-          | Named _,  None | (Unit | Anonymous), Some _ -> 1
+          | Named _,  None | (Unit | Empty_struct | Anonymous), Some _ -> 1
         end
 
   let update (d: Diff.change) (st:Defs.state) =
     let open Error in
     match d with
-    | Insert _
-    | Delete _
-    | Keep ((Unit,_),_,_)
-    | Keep (_,Unit,_)
-    | Change (_,(Unit | Named (None,_)), _ )
-    | Change ((Unit,_), Named (Some _, _), _) ->
+    | Insert (Unit|Named(None,_))
+    | Delete _ (* delete is a concrete argument, not an abstract parameter*)
+    | Keep ((Unit,_),_,_) (* Keep(Unit,_) implies Keep(Unit,Unit) *)
+    | Keep (_,(Unit|Named(None,_)),_)
+    | Change (_,(Unit|Named (None,_)), _ ) ->
+        (* no abstract parameters to add, nor any equations *)
         st, [||]
-    | Keep ((Named arg,  _mty) , Named (param_name, _param), _)
-    | Change ((Named arg, _mty), Named (param_name, _param), _) ->
-        begin match param_name with
-        | Some param ->
-            let res =
-              Option.map (fun res ->
-                  let scope = Ctype.create_scope () in
-                  let subst = Subst.add_module param arg Subst.identity in
-                  Subst.modtype (Rescope scope) subst res
-                )
-                st.res
-            in
-            let subst = Subst.add_module param arg st.subst in
-            I.expand_params { st with subst; res }
-        | None ->
-            st, [||]
-        end
-    | Keep ((Anonymous, mty) , Named (param_name, _param), _)
-    | Change ((Anonymous, mty), Named (param_name, _param), _) -> begin
-        begin match param_name with
-        | Some param ->
-            let mty' = Subst.modtype Keep st.subst mty in
-            let env =
-              Env.add_module ~arg:true param Mp_present mty' st.env in
-            let res =
-              Option.map (Mtype.nondep_supertype env [param]) st.res in
-            I.expand_params { st with env; res}
-        | None ->
-            st, [||]
-        end
-      end
+    | Insert(Named(Some param, param_ty))
+    | Change(_, Named(Some param, param_ty), _ ) ->
+        (* Change is Delete + Insert: we add the Inserted parameter to the
+           environnement to track equalities with external components that the
+           parameter might add. *)
+        let mty = Subst.modtype Keep st.subst param_ty in
+        let env = Env.add_module ~arg:true param Mp_present mty st.env in
+        I.expand_params { st with env }
+    | Keep ((Named arg,  _mty) , Named (Some param, _param), _) ->
+        let res =
+          Option.map (fun res ->
+              let scope = Ctype.create_scope () in
+              let subst = Subst.add_module param arg Subst.identity in
+              Subst.modtype (Rescope scope) subst res
+            )
+            st.res
+        in
+        let subst = Subst.add_module param arg st.subst in
+        I.expand_params { st with subst; res }
+    | Keep (((Anonymous|Empty_struct), mty),
+            Named (Some param, _param), _) ->
+        let mty' = Subst.modtype Keep st.subst mty in
+        let env = Env.add_module ~arg:true param Mp_present mty' st.env in
+        let res = Option.map (Mtype.nondep_supertype env [param]) st.res in
+        I.expand_params { st with env; res}
 
   let diff env ~f ~args =
     let params, res = retrieve_functor_params env f in
@@ -1241,10 +1163,10 @@ module Functor_app_diff = struct
         let test (state:Defs.state) (arg,arg_mty) param =
           let loc = Location.none in
           let res = match (arg:Error.functor_arg_descr), param with
-            | Unit, Unit -> Ok Tcoerce_none
+            | (Unit|Empty_struct), Unit -> Ok Tcoerce_none
             | Unit, Named _ | (Anonymous | Named _), Unit ->
                 Result.Error (Error.Incompatible_params(arg,param))
-            | ( Anonymous | Named _ ) , Named (_, param) ->
+            | ( Anonymous | Named _ | Empty_struct ), Named (_, param) ->
                 match
                   modtypes ~in_eq:false ~loc state.env ~mark:Mark_neither
                     state.subst arg_mty param Shape.dummy_mod
@@ -1288,15 +1210,6 @@ let signatures env ~mark sig1 sig2 =
   | Ok (cc, _) -> cc
   | Error reason -> raise (Error(env,Error.(In_Signature reason)))
 
-let include_functor_signatures env ~mark sig1 sig2 =
-  let sig1 = List.map Subst.Lazy.of_signature_item sig1 in
-  let sig2 = List.map Subst.Lazy.of_signature_item sig2 in
-  match include_functor_signatures ~loc:Location.none env ~mark
-          Subst.identity sig1 sig2 Shape.dummy_mod
-  with
-  | Ok cc -> cc
-  | Error reason -> raise (Error(env,Error.(In_Include_functor_signature reason)))
-
 let type_declarations ~loc env ~mark id decl1 decl2 =
   match type_declarations ~loc env ~mark Subst.identity id decl1 decl2 with
   | Ok _ -> ()
@@ -1314,18 +1227,13 @@ let strengthened_module_decl ~loc ~aliasable env ~mark md1 path1 md2 =
 let expand_module_alias ~strengthen env path =
   match expand_module_alias ~strengthen env path with
   | Ok x -> x
-  | Result.Error e -> raise (Error(env,In_Expansion e))
+  | Result.Error _ ->
+      raise (Error(env,In_Expansion(Error.Unbound_module_path path)))
 
 let check_modtype_equiv ~loc env id mty1 mty2 =
-  let mty1' = Subst.Lazy.of_modtype mty1 in
-  let mty2' = Subst.Lazy.of_modtype mty2 in
-  match check_modtype_equiv ~in_eq:false ~loc env ~mark:Mark_both mty1' mty2' with
+  match check_modtype_equiv ~in_eq:false ~loc env ~mark:Mark_both mty1 mty2 with
   | Ok _ -> ()
   | Error e ->
       raise (Error(env,
                    Error.(In_Module_type_substitution (id,diff mty1 mty2 e)))
             )
-
-let item_ident_name item = item_ident_name (Subst.Lazy.of_signature_item item)
-let is_runtime_component item =
-  is_runtime_component (Subst.Lazy.of_signature_item item)

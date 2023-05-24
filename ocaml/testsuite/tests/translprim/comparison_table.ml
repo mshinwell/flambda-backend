@@ -2,15 +2,7 @@
    * setup-ocamlc.byte-build-env
    ** ocamlc.byte
       flags = "-dlambda -dno-unique-ids"
-   *** stack-allocation
-   **** check-ocamlc.byte-output
-        compiler_reference =
-          "${test_source_directory}/comparison_table.stack.reference"
-   *** no-stack-allocation
-   **** check-ocamlc.byte-output
-        compiler_reference =
-          "${test_source_directory}/comparison_table.heap.reference"
-
+   *** check-ocamlc.byte-output
 *)
 
 external cmp : 'a -> 'a -> int = "%compare";;

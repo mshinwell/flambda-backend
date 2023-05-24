@@ -1,4 +1,3 @@
-# 1 "arrayLabels.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,12 +13,6 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
 (* Module [ArrayLabels]: labelled Array module *)
-
-[@@@ocaml.nolabels]
 
 include Array

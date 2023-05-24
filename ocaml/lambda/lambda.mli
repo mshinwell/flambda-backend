@@ -17,9 +17,6 @@
 
 open Asttypes
 
-(* Overriding Asttypes.mutable_flag *)
-type mutable_flag = Immutable | Immutable_unique | Mutable
-
 type compile_time_constant =
   | Big_endian
   | Word_size
@@ -34,27 +31,8 @@ type immediate_or_pointer =
   | Immediate
   | Pointer
 
-type alloc_mode = private
-  | Alloc_heap
-  | Alloc_local
-
-type modify_mode = private
-  | Modify_heap
-  | Modify_maybe_stack
-
-val alloc_heap : alloc_mode
-
-(* Actually [Alloc_heap] if [Config.stack_allocation] is [false] *)
-val alloc_local : alloc_mode
-
-val modify_heap : modify_mode
-
-val modify_maybe_stack : modify_mode
-
 type initialization_or_assignment =
-  (* [Assignment Alloc_local] is a mutation of a block that may be heap or local.
-     [Assignment Alloc_heap] is a mutation of a block that's definitely heap. *)
-  | Assignment of modify_mode
+  | Assignment
   (* Initialization of in heap values, like [caml_initialize] C primitive.  The
      field should not have been read before and initialization should happen
      only once. *)
@@ -67,34 +45,27 @@ type is_safe =
   | Safe
   | Unsafe
 
-type field_read_semantics =
-  | Reads_agree
-  | Reads_vary
-
-(* Tail calls can close their enclosing region early *)
-type region_close =
-  | Rc_normal         (* do not close region, may TCO if in tail position *)
-  | Rc_nontail        (* do not close region, must not TCO *)
-  | Rc_close_at_apply (* close region and tail call *)
-
 type primitive =
   | Pbytes_to_string
   | Pbytes_of_string
   | Pignore
     (* Globals *)
-  | Pgetglobal of Compilation_unit.t
-  | Psetglobal of Compilation_unit.t
-  | Pgetpredef of Ident.t
+  | Pgetglobal of Ident.t
+  | Psetglobal of Ident.t
   (* Operations on heap blocks *)
-  | Pmakeblock of int * mutable_flag * block_shape * alloc_mode
-  | Pmakefloatblock of mutable_flag * alloc_mode
-  | Pfield of int * field_read_semantics
-  | Pfield_computed of field_read_semantics
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pfield of int * immediate_or_pointer * mutable_flag
+  | Pfield_computed
   | Psetfield of int * immediate_or_pointer * initialization_or_assignment
   | Psetfield_computed of immediate_or_pointer * initialization_or_assignment
-  | Pfloatfield of int * field_read_semantics * alloc_mode
+  | Pfloatfield of int
   | Psetfloatfield of int * initialization_or_assignment
   | Pduprecord of Types.record_representation * int
+  (* Context switches *)
+  | Prunstack
+  | Pperform
+  | Presume
+  | Preperform
   (* External call *)
   | Pccall of Primitive.description
   (* Exceptions *)
@@ -112,16 +83,15 @@ type primitive =
   | Poffsetint of int
   | Poffsetref of int
   (* Float operations *)
-  | Pintoffloat | Pfloatofint of alloc_mode
-  | Pnegfloat of alloc_mode | Pabsfloat of alloc_mode
-  | Paddfloat of alloc_mode | Psubfloat of alloc_mode
-  | Pmulfloat of alloc_mode | Pdivfloat of alloc_mode
+  | Pintoffloat | Pfloatofint
+  | Pnegfloat | Pabsfloat
+  | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
   | Pfloatcomp of float_comparison
   (* String operations *)
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   (* Array operations *)
-  | Pmakearray of array_kind * mutable_flag * alloc_mode
+  | Pmakearray of array_kind * mutable_flag
   | Pduparray of array_kind * mutable_flag
   (** For [Pduparray], the argument must be an immutable array.
       The arguments of [Pduparray] give the kind and mutability of the
@@ -132,26 +102,25 @@ type primitive =
   | Parrayrefs of array_kind
   | Parraysets of array_kind
   (* Test if the argument is a block or an immediate integer *)
-  | Pisint of { variant_only : bool }
+  | Pisint
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
   (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
-  | Pbintofint of boxed_integer * alloc_mode
+  | Pbintofint of boxed_integer
   | Pintofbint of boxed_integer
   | Pcvtbint of boxed_integer (*source*) * boxed_integer (*destination*)
-                * alloc_mode
-  | Pnegbint of boxed_integer * alloc_mode
-  | Paddbint of boxed_integer * alloc_mode
-  | Psubbint of boxed_integer * alloc_mode
-  | Pmulbint of boxed_integer * alloc_mode
-  | Pdivbint of { size : boxed_integer; is_safe : is_safe; mode: alloc_mode }
-  | Pmodbint of { size : boxed_integer; is_safe : is_safe; mode: alloc_mode }
-  | Pandbint of boxed_integer * alloc_mode
-  | Porbint of boxed_integer * alloc_mode
-  | Pxorbint of boxed_integer * alloc_mode
-  | Plslbint of boxed_integer * alloc_mode
-  | Plsrbint of boxed_integer * alloc_mode
-  | Pasrbint of boxed_integer * alloc_mode
+  | Pnegbint of boxed_integer
+  | Paddbint of boxed_integer
+  | Psubbint of boxed_integer
+  | Pmulbint of boxed_integer
+  | Pdivbint of { size : boxed_integer; is_safe : is_safe }
+  | Pmodbint of { size : boxed_integer; is_safe : is_safe }
+  | Pandbint of boxed_integer
+  | Porbint of boxed_integer
+  | Pxorbint of boxed_integer
+  | Plslbint of boxed_integer
+  | Plsrbint of boxed_integer
+  | Pasrbint of boxed_integer
   | Pbintcomp of boxed_integer * integer_comparison
   (* Operations on Bigarrays: (unsafe, #dimensions, kind, layout) *)
   | Pbigarrayref of bool * int * bigarray_kind * bigarray_layout
@@ -160,19 +129,19 @@ type primitive =
   | Pbigarraydim of int
   (* load/set 16,32,64 bits from a string: (unsafe)*)
   | Pstring_load_16 of bool
-  | Pstring_load_32 of bool * alloc_mode
-  | Pstring_load_64 of bool * alloc_mode
+  | Pstring_load_32 of bool
+  | Pstring_load_64 of bool
   | Pbytes_load_16 of bool
-  | Pbytes_load_32 of bool * alloc_mode
-  | Pbytes_load_64 of bool * alloc_mode
+  | Pbytes_load_32 of bool
+  | Pbytes_load_64 of bool
   | Pbytes_set_16 of bool
   | Pbytes_set_32 of bool
   | Pbytes_set_64 of bool
   (* load/set 16,32,64 bits from a
      (char, int8_unsigned_elt, c_layout) Bigarray.Array1.t : (unsafe) *)
   | Pbigstring_load_16 of bool
-  | Pbigstring_load_32 of bool * alloc_mode
-  | Pbigstring_load_64 of bool * alloc_mode
+  | Pbigstring_load_32 of bool
+  | Pbigstring_load_64 of bool
   | Pbigstring_set_16 of bool
   | Pbigstring_set_32 of bool
   | Pbigstring_set_64 of bool
@@ -180,25 +149,18 @@ type primitive =
   | Pctconst of compile_time_constant
   (* byte swap *)
   | Pbswap16
-  | Pbbswap of boxed_integer * alloc_mode
+  | Pbbswap of boxed_integer
   (* Integer to external pointer *)
   | Pint_as_pointer
+  (* Atomic operations *)
+  | Patomic_load of {immediate_or_pointer : immediate_or_pointer}
+  | Patomic_exchange
+  | Patomic_cas
+  | Patomic_fetch_add
   (* Inhibition of optimisation *)
-  | Popaque of layout
-  (* Statically-defined probes *)
-  | Pprobe_is_enabled of { name: string }
-  (* Primitives for [Obj] *)
-  | Pobj_dup
-  | Pobj_magic of layout
-  | Punbox_float
-  | Pbox_float of alloc_mode
-  | Punbox_int of boxed_integer
-  | Pbox_int of boxed_integer * alloc_mode
-  (* Jane Street extensions *)
-  | Parray_to_iarray (* Unsafely reinterpret a mutable array as an immutable
-                        one; O(1) *)
-  | Parray_of_iarray (* Unsafely reinterpret an immutable array as a mutable
-                        one; O(1) *)
+  | Popaque
+  (* Fetching domain-local state *)
+  | Pdls_get
 
 and integer_comparison =
     Ceq | Cne | Clt | Cgt | Cle | Cge
@@ -211,23 +173,6 @@ and array_kind =
 
 and value_kind =
     Pgenval | Pfloatval | Pboxedintval of boxed_integer | Pintval
-  | Pvariant of {
-      consts : int list;
-      non_consts : (int * value_kind list) list;
-      (** [non_consts] must be non-empty.  For constant variants [Pintval]
-          must be used.  This causes a small loss of precision but it is not
-          expected to be significant. *)
-    }
-  | Parrayval of array_kind
-
-(* Because we check for and error on void in the translation to lambda, we don't
-   need a constructor for it here. *)
-and layout =
-  | Ptop
-  | Pvalue of value_kind
-  | Punboxed_float
-  | Punboxed_int of boxed_integer
-  | Pbottom
 
 and block_shape =
   value_kind list option
@@ -258,20 +203,13 @@ val equal_primitive : primitive -> primitive -> bool
 
 val equal_value_kind : value_kind -> value_kind -> bool
 
-val equal_layout : layout -> layout -> bool
-
-val compatible_layout : layout -> layout -> bool
-
 val equal_boxed_integer : boxed_integer -> boxed_integer -> bool
-
-val must_be_value : layout -> value_kind
 
 type structured_constant =
     Const_base of constant
   | Const_block of int * structured_constant list
   | Const_float_array of string list
   | Const_immstring of string
-  | Const_float_block of string list
 
 type tailcall_attribute =
   | Tailcall_expectation of bool
@@ -279,27 +217,14 @@ type tailcall_attribute =
        [@tailcall false] has [false] *)
   | Default_tailcall (* no [@tailcall] attribute *)
 
-(* Function declaration inlining annotations *)
 type inline_attribute =
   | Always_inline (* [@inline] or [@inline always] *)
   | Never_inline (* [@inline never] *)
-  | Available_inline (* [@inline available] *)
+  | Hint_inline (* [@inline hint] *)
   | Unroll of int (* [@unroll x] *)
   | Default_inline (* no [@inline] attribute *)
 
-(* Call site inlining annotations *)
-type inlined_attribute =
-  | Always_inlined (* [@inlined] or [@inlined always] *)
-  | Never_inlined (* [@inlined never] *)
-  | Hint_inlined (* [@inlined hint] *)
-  | Unroll of int (* [@unroll x] *)
-  | Default_inlined (* no [@inlined] attribute *)
-
 val equal_inline_attribute : inline_attribute -> inline_attribute -> bool
-val equal_inlined_attribute : inlined_attribute -> inlined_attribute -> bool
-
-type probe_desc = { name: string; enabled_at_init: bool; }
-type probe = probe_desc option
 
 type specialise_attribute =
   | Always_specialise (* [@specialise] or [@specialise always] *)
@@ -316,38 +241,11 @@ type local_attribute =
   | Never_local (* [@local never] *)
   | Default_local (* [@local maybe] or no [@local] attribute *)
 
-type property =
-  | Zero_alloc
-
 type poll_attribute =
   | Error_poll (* [@poll error] *)
   | Default_poll (* no [@poll] attribute *)
 
-type check_attribute =
-  | Default_check
-  | Ignore_assert_all of property
-  | Check of { property: property;
-               strict: bool;
-               (* [strict=true] property holds on all paths.
-                  [strict=false] if the function returns normally,
-                  then the property holds (but property violations on
-                  exceptional returns or divering loops are ignored).
-                  This definition may not be applicable to new properties. *)
-               assume: bool;
-               (* [assume=true] assume without checking that the
-                  property holds *)
-               loc: Location.t;
-             }
-
-type loop_attribute =
-  | Always_loop (* [@loop] or [@loop always] *)
-  | Never_loop (* [@loop never] *)
-  | Default_loop (* no [@loop] attribute *)
-
-type function_kind = Curried of {nlocal: int} | Tupled
-(* [nlocal] determines how many arguments may be partially applied
-   before the resulting closure must be locally allocated.
-   See [lfunction] for details *)
+type function_kind = Curried | Tupled
 
 type let_kind = Strict | Alias | StrictOpt
 (* Meaning of kinds for let x = e in e':
@@ -366,20 +264,15 @@ val equal_meth_kind : meth_kind -> meth_kind -> bool
 
 type shared_code = (int * int) list     (* stack size -> code label *)
 
-type static_label = int
-
 type function_attribute = {
   inline : inline_attribute;
   specialise : specialise_attribute;
   local: local_attribute;
-  check : check_attribute;
   poll: poll_attribute;
-  loop: loop_attribute;
   is_a_functor: bool;
   stub: bool;
   tmc_candidate: bool;
 }
-
 
 type scoped_location = Debuginfo.Scoped_location.t
 
@@ -389,69 +282,44 @@ type lambda =
   | Lconst of structured_constant
   | Lapply of lambda_apply
   | Lfunction of lfunction
-  | Llet of let_kind * layout * Ident.t * lambda * lambda
-  | Lmutlet of layout * Ident.t * lambda * lambda
+  | Llet of let_kind * value_kind * Ident.t * lambda * lambda
+  | Lmutlet of value_kind * Ident.t * lambda * lambda
   | Lletrec of (Ident.t * lambda) list * lambda
   | Lprim of primitive * lambda list * scoped_location
-  | Lswitch of lambda * lambda_switch * scoped_location * layout
+  | Lswitch of lambda * lambda_switch * scoped_location
 (* switch on strings, clauses are sorted by string order,
    strings are pairwise distinct *)
   | Lstringswitch of
-      lambda * (string * lambda) list * lambda option * scoped_location * layout
-  | Lstaticraise of static_label * lambda list
-  | Lstaticcatch of lambda * (static_label * (Ident.t * layout) list) * lambda * layout
-  | Ltrywith of lambda * Ident.t * lambda * layout
-(* Lifthenelse (e, t, f, layout) evaluates t if e evaluates to 0, and evaluates f if
-   e evaluates to any other value; layout must be the layout of [t] and [f] *)
-  | Lifthenelse of lambda * lambda * lambda * layout
+      lambda * (string * lambda) list * lambda option * scoped_location
+  | Lstaticraise of int * lambda list
+  | Lstaticcatch of lambda * (int * (Ident.t * value_kind) list) * lambda
+  | Ltrywith of lambda * Ident.t * lambda
+(* Lifthenelse (e, t, f) evaluates t if e evaluates to 0, and
+   evaluates f if e evaluates to any other value *)
+  | Lifthenelse of lambda * lambda * lambda
   | Lsequence of lambda * lambda
-  | Lwhile of lambda_while
-  | Lfor of lambda_for
+  | Lwhile of lambda * lambda
+  | Lfor of Ident.t * lambda * lambda * direction_flag * lambda
   | Lassign of Ident.t * lambda
-  | Lsend of meth_kind * lambda * lambda * lambda list
-             * region_close * alloc_mode * scoped_location * layout
+  | Lsend of meth_kind * lambda * lambda * lambda list * scoped_location
   | Levent of lambda * lambda_event
   | Lifused of Ident.t * lambda
-  | Lregion of lambda * layout
-  | Lexclave of lambda
 
 and lfunction = private
   { kind: function_kind;
-    params: (Ident.t * layout) list;
-    return: layout;
+    params: (Ident.t * value_kind) list;
+    return: value_kind;
     body: lambda;
     attr: function_attribute; (* specified with [@inline] attribute *)
-    loc : scoped_location;
-    mode : alloc_mode;     (* alloc mode of the closure itself *)
-    region : bool;         (* false if this function may locally
-                              allocate in the caller's region *)
-  }
-
-and lambda_while =
-  { wh_cond : lambda;
-    wh_body : lambda;
-  }
-
-and lambda_for =
-  { for_id : Ident.t;
-    for_from : lambda;
-    for_to : lambda;
-    for_dir : direction_flag;
-    for_body : lambda;
-  }
+    loc : scoped_location; }
 
 and lambda_apply =
   { ap_func : lambda;
     ap_args : lambda list;
-    ap_result_layout : layout;
-    ap_region_close : region_close;
-    ap_mode : alloc_mode;
     ap_loc : scoped_location;
     ap_tailcall : tailcall_attribute;
-    ap_inlined : inlined_attribute; (* [@inlined] attribute in code *)
-    ap_specialised : specialise_attribute;
-    ap_probe : probe;
-  }
+    ap_inlined : inline_attribute; (* specified with the [@inlined] attribute *)
+    ap_specialised : specialise_attribute; }
 
 and lambda_switch =
   { sw_numconsts: int;                  (* Number of integer cases *)
@@ -473,16 +341,15 @@ and lambda_event_kind =
   | Lev_pseudo
 
 type program =
-  { compilation_unit : Compilation_unit.t;
+  { module_ident : Ident.t;
     main_module_block_size : int;
-    required_globals : Compilation_unit.Set.t;
-                                        (* Modules whose initializer side effects
-                                           must occur before [code]. *)
+    required_globals : Ident.Set.t;    (* Modules whose initializer side effects
+                                          must occur before [code]. *)
     code : lambda }
 (* Lambda code for the middle-end.
    * In the closure case the code is a sequence of assignments to a
      preallocated block of size [main_module_block_size] using
-     (Setfield(Getpredef(compilation_unit))). The size is used to preallocate
+     (Setfield(Getglobal(module_ident))). The size is used to preallocate
      the block.
    * In the flambda case the code is an expression returning a block
      value of size [main_module_block_size]. The size is used to build
@@ -497,46 +364,16 @@ val make_key: lambda -> lambda option
 val const_unit: structured_constant
 val const_int : int -> structured_constant
 val lambda_unit: lambda
-
-val layout_unit : layout
-val layout_int : layout
-val layout_array : array_kind -> layout
-val layout_block : layout
-val layout_list : layout
-val layout_exception : layout
-val layout_function : layout
-val layout_object : layout
-val layout_class : layout
-val layout_module : layout
-val layout_functor : layout
-val layout_module_field : layout
-val layout_string : layout
-val layout_float : layout
-val layout_boxedint : boxed_integer -> layout
-(* A layout that is Pgenval because it is the field of a block *)
-val layout_field : layout
-val layout_lazy : layout
-val layout_lazy_contents : layout
-(* A layout that is Pgenval because we are missing layout polymorphism *)
-val layout_any_value : layout
-(* A layout that is Pgenval because it is bound by a letrec *)
-val layout_letrec : layout
-
-val layout_top : layout
-val layout_bottom : layout
-
-val name_lambda: let_kind -> lambda -> layout -> (Ident.t -> lambda) -> lambda
-val name_lambda_list: (lambda * layout) list -> (lambda list -> lambda) -> lambda
+val name_lambda: let_kind -> lambda -> (Ident.t -> lambda) -> lambda
+val name_lambda_list: lambda list -> (lambda list -> lambda) -> lambda
 
 val lfunction :
   kind:function_kind ->
-  params:(Ident.t * layout) list ->
-  return:layout ->
+  params:(Ident.t * value_kind) list ->
+  return:value_kind ->
   body:lambda ->
   attr:function_attribute -> (* specified with [@inline] attribute *)
   loc:scoped_location ->
-  mode:alloc_mode ->
-  region:bool ->
   lambda
 
 
@@ -571,7 +408,7 @@ val transl_class_path: scoped_location -> Env.t -> Path.t -> lambda
 val make_sequence: ('a -> lambda) -> 'a list -> lambda
 
 val subst:
-  (Ident.t -> Subst.Lazy.value_description -> Env.t -> Env.t) ->
+  (Ident.t -> Types.value_description -> Env.t -> Env.t) ->
   ?freshen_bound_variables:bool ->
   lambda Ident.Map.t -> lambda -> lambda
 (** [subst update_env ?freshen_bound_variables s lt]
@@ -598,14 +435,12 @@ val map : (lambda -> lambda) -> lambda -> lambda
   (** Bottom-up rewriting, applying the function on
       each node from the leaves to the root. *)
 
-val shallow_map  :
-  tail:(lambda -> lambda) ->
-  non_tail:(lambda -> lambda) ->
-  lambda -> lambda
+val shallow_map  : (lambda -> lambda) -> lambda -> lambda
   (** Rewrite each immediate sub-term with the function. *)
 
-val bind_with_layout:
-  let_kind -> (Ident.t * layout) -> lambda -> lambda -> lambda
+val bind : let_kind -> Ident.t -> lambda -> lambda -> lambda
+val bind_with_value_kind:
+  let_kind -> (Ident.t * value_kind) -> lambda -> lambda -> lambda
 
 val negate_integer_comparison : integer_comparison -> integer_comparison
 val swap_integer_comparison : integer_comparison -> integer_comparison
@@ -616,6 +451,7 @@ val swap_float_comparison : float_comparison -> float_comparison
 val default_function_attribute : function_attribute
 val default_stub_attribute : function_attribute
 
+val function_is_curried : lfunction -> bool
 val find_exact_application :
   function_kind -> arity:int -> lambda list -> lambda list option
 
@@ -625,23 +461,12 @@ val max_arity : unit -> int
       This is unlimited ([max_int]) for bytecode, but limited
       (currently to 126) for native code. *)
 
-val join_mode : alloc_mode -> alloc_mode -> alloc_mode
-val sub_mode : alloc_mode -> alloc_mode -> bool
-val eq_mode : alloc_mode -> alloc_mode -> bool
-val is_local_mode : alloc_mode -> bool
-val is_heap_mode : alloc_mode -> bool
-
-val primitive_may_allocate : primitive -> alloc_mode option
-  (** Whether and where a primitive may allocate.
-      [Some Alloc_local] permits both options: that is, primitives that
-      may allocate on both the GC heap and locally report this value. *)
-
 (***********************)
 (* For static failures *)
 (***********************)
 
 (* Get a new static failure ident *)
-val next_raise_count : unit -> static_label
+val next_raise_count : unit -> int
 
 val staticfail : lambda (* Anticipated static failure *)
 
@@ -657,16 +482,3 @@ val merge_inline_attributes
   -> inline_attribute option
 
 val reset: unit -> unit
-
-(** Helpers for module block accesses.
-    Module accesses are always immutable, except in translobj where the
-    method cache is stored in a mutable module field.
-*)
-val mod_field: ?read_semantics: field_read_semantics -> int -> primitive
-val mod_setfield: int -> primitive
-
-val structured_constant_layout : structured_constant -> layout
-
-val primitive_result_layout : primitive -> layout
-
-val compute_expr_layout : (Ident.t -> layout option) -> lambda -> layout

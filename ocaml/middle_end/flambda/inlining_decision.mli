@@ -32,13 +32,9 @@ val for_call_site
   -> args:Variable.t list
   -> args_approxs:Simple_value_approx.t list
   -> dbg:Debuginfo.t
-  -> reg_close:Lambda.region_close
-  -> mode:Lambda.alloc_mode
   -> simplify:Inlining_decision_intf.simplify
-  -> inlined_requested:Lambda.inlined_attribute
+  -> inline_requested:Lambda.inline_attribute
   -> specialise_requested:Lambda.specialise_attribute
-  -> probe_requested:Lambda.probe
-  -> result_layout:Lambda.layout
   -> Flambda.t * Inline_and_simplify_aux.Result.t
 
 (** When a function declaration is encountered by [for_call_site], the body

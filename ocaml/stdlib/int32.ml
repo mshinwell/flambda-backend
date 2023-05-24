@@ -1,4 +1,3 @@
-# 1 "int32.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -14,26 +13,22 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open! Stdlib
-
-[@@@ocaml.flambda_o3]
-
 (* Module [Int32]: 32-bit integers *)
 
-external neg : (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_neg"
-external add : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_add"
-external sub : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_sub"
-external mul : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_mul"
-external div : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_div"
-external rem : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_mod"
-external logand : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_and"
-external logor : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_or"
-external logxor : (int32[@local_opt]) -> (int32[@local_opt]) -> (int32[@local_opt]) = "%int32_xor"
-external shift_left : (int32[@local_opt]) -> int -> (int32[@local_opt]) = "%int32_lsl"
-external shift_right : (int32[@local_opt]) -> int -> (int32[@local_opt]) = "%int32_asr"
-external shift_right_logical : (int32[@local_opt]) -> int -> (int32[@local_opt]) = "%int32_lsr"
-external of_int : int -> (int32[@local_opt]) = "%int32_of_int"
-external to_int : (int32[@local_opt]) -> int = "%int32_to_int"
+external neg : int32 -> int32 = "%int32_neg"
+external add : int32 -> int32 -> int32 = "%int32_add"
+external sub : int32 -> int32 -> int32 = "%int32_sub"
+external mul : int32 -> int32 -> int32 = "%int32_mul"
+external div : int32 -> int32 -> int32 = "%int32_div"
+external rem : int32 -> int32 -> int32 = "%int32_mod"
+external logand : int32 -> int32 -> int32 = "%int32_and"
+external logor : int32 -> int32 -> int32 = "%int32_or"
+external logxor : int32 -> int32 -> int32 = "%int32_xor"
+external shift_left : int32 -> int -> int32 = "%int32_lsl"
+external shift_right : int32 -> int -> int32 = "%int32_asr"
+external shift_right_logical : int32 -> int -> int32 = "%int32_lsr"
+external of_int : int -> int32 = "%int32_of_int"
+external to_int : int32 -> int = "%int32_to_int"
 external of_float : float -> int32
   = "caml_int32_of_float" "caml_int32_of_float_unboxed"
   [@@unboxed] [@@noalloc]
@@ -107,3 +102,8 @@ let unsigned_div n d =
 
 let unsigned_rem n d =
   sub n (mul (unsigned_div n d) d)
+
+external seeded_hash_param :
+  int -> int -> int -> 'a -> int = "caml_hash" [@@noalloc]
+let seeded_hash seed x = seeded_hash_param 10 100 seed x
+let hash x = seeded_hash_param 10 100 0 x

@@ -41,7 +41,6 @@ type token =
   | OF
   | OBJECT
   | NONREC
-  | NONLOCAL
   | NEW
   | MUTABLE
   | MODULE
@@ -51,7 +50,6 @@ type token =
   | METHOD
   | MATCH
   | LPAREN
-  | LOCAL
   | LIDENT of (string)
   | LETOP of (string)
   | LET
@@ -61,7 +59,6 @@ type token =
   | LBRACKETPERCENT
   | LBRACKETLESS
   | LBRACKETGREATER
-  | LBRACKETCOLON
   | LBRACKETBAR
   | LBRACKETATATAT
   | LBRACKETATAT
@@ -87,7 +84,6 @@ type token =
   | GREATERRBRACKET
   | GREATERRBRACE
   | GREATER
-  | GLOBAL
   | FUNCTOR
   | FUNCTION
   | FUN
@@ -111,7 +107,6 @@ type token =
   | CONSTRAINT
   | COMMENT of (string * Location.t)
   | COMMA
-  | COLONRBRACKET
   | COLONGREATER
   | COLONEQUAL
   | COLONCOLON

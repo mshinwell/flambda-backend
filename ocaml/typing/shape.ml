@@ -44,15 +44,12 @@ module Uid = struct
 
   let mk  ~current_unit =
       incr id;
-      let comp_unit =
-        match current_unit with
-        | Some cu -> cu |> Compilation_unit.full_path_as_string
-        | None -> ""
-      in
-      Item { comp_unit; id = !id }
+      Item { comp_unit = current_unit; id = !id }
 
   let of_compilation_unit_id id =
-    Compilation_unit (id |> Compilation_unit.full_path_as_string)
+    if not (Ident.persistent id) then
+      Misc.fatal_errorf "Types.Uid.of_compilation_unit_id %S" (Ident.name id);
+    Compilation_unit (Ident.name id)
 
   let of_predef_id id =
     if not (Ident.is_predef id) then
@@ -146,8 +143,20 @@ let print fmt =
     | Var id ->
         Format.fprintf fmt "%a%a" Ident.print id print_uid_opt uid
     | Abs (id, t) ->
+        let rec collect_idents = function
+          | { uid = None; desc = Abs(id, t) } ->
+            let (ids, body) = collect_idents t in
+            id :: ids, body
+          | body ->
+            ([], body)
+        in
+        let (other_idents, body) = collect_idents t in
+        let pp_idents fmt idents =
+          let pp_sep fmt () = Format.fprintf fmt ",@ " in
+          Format.pp_print_list ~pp_sep Ident.print fmt idents
+        in
         Format.fprintf fmt "Abs@[%a@,(@[%a,@ @[%a@]@])@]"
-          print_uid_opt uid Ident.print id aux t
+          print_uid_opt uid pp_idents (id :: other_idents) aux body
     | App (t1, t2) ->
         Format.fprintf fmt "@[%a(@,%a)%a@]" aux t1 aux t2
           print_uid_opt uid
@@ -169,7 +178,7 @@ let print fmt =
     | Struct map ->
         let print_map fmt =
           Item.Map.iter (fun item t ->
-              Format.fprintf fmt "@[<hv 4>%a ->@ %a;@]@,"
+              Format.fprintf fmt "@[<hv 2>%a ->@ %a;@]@,"
                 Item.print item
                 aux t
             )
@@ -463,11 +472,16 @@ let of_path ~find_shape ~namespace =
     | Pident id -> find_shape ns id
     | Pdot (path, name) -> proj (aux Module path) (name, ns)
     | Papply (p1, p2) -> app (aux Module p1) ~arg:(aux Module p2)
+    | Pextra_ty (path, extra) -> begin
+        match extra with
+          Pcstr_ty _ -> aux Type path
+        | Pext_ty -> aux Extension_constructor path
+      end
   in
   aux namespace
 
 let for_persistent_unit s =
-  { uid = Some (Compilation_unit s);
+  { uid = Some (Uid.of_compilation_unit_id (Ident.create_persistent s));
     desc = Comp_unit s }
 
 let leaf_for_unpack = { uid = None; desc = Leaf }

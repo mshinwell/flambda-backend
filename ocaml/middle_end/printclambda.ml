@@ -15,51 +15,25 @@
 
 
 open Format
+open Asttypes
 open Clambda
 
 module V = Backend_var
 module VP = Backend_var.With_provenance
 
 let mutable_flag = function
-  | Lambda.Mutable-> "[mut]"
-  | Lambda.Immutable | Lambda.Immutable_unique -> ""
+  | Mutable-> "[mut]"
+  | Immutable -> ""
 
-let rec value_kind0 ppf kind =
+let value_kind =
   let open Lambda in
-  match kind with
-  | Pgenval -> Format.pp_print_string ppf ""
-  | Pintval -> Format.pp_print_string ppf ":int"
-  | Pfloatval -> Format.pp_print_string ppf ":float"
-  | Parrayval Pgenarray -> Format.pp_print_string ppf ":genarray"
-  | Parrayval Pintarray -> Format.pp_print_string ppf ":intarray"
-  | Parrayval Pfloatarray -> Format.pp_print_string ppf ":floatarray"
-  | Parrayval Paddrarray -> Format.pp_print_string ppf ":addrarray"
-  | Pboxedintval Pnativeint -> Format.pp_print_string ppf ":nativeint"
-  | Pboxedintval Pint32 -> Format.pp_print_string ppf ":int32"
-  | Pboxedintval Pint64 -> Format.pp_print_string ppf ":int64"
-  | Pvariant { consts; non_consts } ->
-    Format.fprintf ppf "@[<hov 1>[(consts (%a))@ (non_consts (%a))]@]"
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space Format.pp_print_int)
-      consts
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          (fun ppf (tag, fields) ->
-            fprintf ppf "@[<hov 1>[%d:@ %a]@]" tag
-              (Format.pp_print_list
-                ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-                value_kind0)
-              fields))
-      non_consts
-
-let value_kind kind = Format.asprintf "%a" value_kind0 kind
-let layout (layout : Lambda.layout) =
-  match layout with
-  | Pvalue kind -> value_kind kind
-  | Ptop -> ":top"
-  | Pbottom -> ":bottom"
-  | Punboxed_float -> ":unboxed_float"
-  | Punboxed_int Pint32 -> ":unboxed_int32"
-  | Punboxed_int Pint64 -> ":unboxed_int64"
-  | Punboxed_int Pnativeint -> ":unboxed_nativeint"
+  function
+  | Pgenval -> ""
+  | Pintval -> ":int"
+  | Pfloatval -> ":float"
+  | Pboxedintval Pnativeint -> ":nativeint"
+  | Pboxedintval Pint32 -> ":int32"
+  | Pboxedintval Pint64 -> ":int64"
 
 let rec structured_constant ppf = function
   | Uconst_float x -> fprintf ppf "%F" x
@@ -86,23 +60,15 @@ let rec structured_constant ppf = function
 
 and one_fun ppf f =
   let idents ppf =
-    let rec iter params layouts =
-      match params, layouts with
-      | [], [] -> ()
-      | [param], [] ->
-        fprintf ppf "@ %a%a"
-          VP.print param Printlambda.layout Lambda.layout_function
-      | param :: params, layout :: layouts ->
-        fprintf ppf "@ %a%a"
-          VP.print param Printlambda.layout layout;
-        iter params layouts
-      | _ -> Misc.fatal_error "arity inconsistent with params"
-    in
-    iter f.params f.arity.params_layout
+    List.iter
+      (fun (x, k) ->
+         fprintf ppf "@ %a%a"
+           VP.print x
+           Printlambda.value_kind k
+      )
   in
-  fprintf ppf "(fun@ %s%s@ %d@ @[<2>%t@]@ @[<2>%a@])"
-    f.label (layout f.arity.return_layout) (List.length f.arity.params_layout)
-    idents lam f.body
+  fprintf ppf "(fun@ %s%s@ %d@ @[<2>%a@]@ @[<2>%a@])"
+    f.label (value_kind f.return) f.arity idents f.params lam f.body
 
 and phantom_defining_expr ppf = function
   | Uphantom_const const -> uconstant ppf const
@@ -130,48 +96,36 @@ and uconstant ppf = function
   | Uconst_ref (s, None) -> fprintf ppf "%S"s
   | Uconst_int i -> fprintf ppf "%i" i
 
-and apply_kind ppf : apply_kind -> unit = function
-  | (Rc_normal | Rc_nontail) , Alloc_heap -> fprintf ppf "apply"
-  | Rc_close_at_apply, Alloc_heap -> fprintf ppf "apply[end_region]"
-  | (Rc_normal | Rc_nontail), Alloc_local -> fprintf ppf "apply[L]"
-  | Rc_close_at_apply, Alloc_local -> fprintf ppf "apply[end_region][L]"
-
 and lam ppf = function
   | Uvar id ->
       V.print ppf id
   | Uconst c -> uconstant ppf c
-  | Udirect_apply(f, largs, probe, _, kind, _) ->
+  | Udirect_apply(f, largs, _) ->
       let lams ppf largs =
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
-      let pr ppf (probe : Lambda.probe) =
-        match probe with
-        | None -> ()
-        | Some {name} -> fprintf ppf " (probe %s)" name
-      in
-      fprintf ppf "@[<2>(%a*@ %s %a%a)@]" apply_kind kind f lams largs pr probe
-  | Ugeneric_apply(lfun, largs, _, _, kind, _) ->
+      fprintf ppf "@[<2>(apply*@ %s %a)@]" f lams largs
+  | Ugeneric_apply(lfun, largs, _) ->
       let lams ppf largs =
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
-      fprintf ppf "@[<2>(%a@ %a%a)@]" apply_kind kind lam lfun lams largs
-  | Uclosure { functions ; not_scanned_slots ; scanned_slots } ->
+      fprintf ppf "@[<2>(apply@ %a%a)@]" lam lfun lams largs
+  | Uclosure(clos, fv) ->
       let funs ppf =
         List.iter (fprintf ppf "@ @[<2>%a@]" one_fun) in
       let lams ppf =
         List.iter (fprintf ppf "@ %a" lam) in
-      fprintf ppf "@[<2>(closure@ %a (%a) %a)@]" funs functions
-        lams not_scanned_slots lams scanned_slots
+      fprintf ppf "@[<2>(closure@ %a %a)@]" funs clos lams fv
   | Uoffset(l,i) -> fprintf ppf "@[<2>(offset %a %d)@]" lam l i
   | Ulet(mut, kind, id, arg, body) ->
       let rec letbody ul = match ul with
         | Ulet(mut, kind, id, arg, body) ->
             fprintf ppf "@ @[<2>%a%s%s@ %a@]"
               VP.print id
-              (mutable_flag mut) (layout kind) lam arg;
+              (mutable_flag mut) (value_kind kind) lam arg;
             letbody body
         | _ -> ul in
       fprintf ppf "@[<2>(let@ @[<hv 1>(@[<2>%a%s%s@ %a@]"
         VP.print id (mutable_flag mut)
-          (layout kind) lam arg;
+          (value_kind kind) lam arg;
       let expr = letbody body in
       fprintf ppf ")@]@ %a)@]" lam expr
   | Uphantom_let (id, defining_expr, body) ->
@@ -204,7 +158,7 @@ and lam ppf = function
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
       fprintf ppf "@[<2>(%a%a)@]"
         Printclambda_primitives.primitive prim lams largs
-  | Uswitch(larg, sw, _dbg, _kind) ->
+  | Uswitch(larg, sw, _dbg) ->
       let print_case tag index i ppf =
         for j = 0 to Array.length index - 1 do
           if index.(j) = i then fprintf ppf "case %s %i:" tag j
@@ -220,7 +174,7 @@ and lam ppf = function
       fprintf ppf
        "@[<v 0>@[<2>(switch@ %a@ @]%a)@]"
         lam larg switch sw
-  | Ustringswitch(larg,sw,d, _kind) ->
+  | Ustringswitch(larg,sw,d) ->
       let switch ppf sw =
         let spc = ref false in
         List.iter
@@ -236,13 +190,12 @@ and lam ppf = function
         | None -> ()
         end in
       fprintf ppf
-        "@[<1>(switch %a@ @[<v 0>%a@])@]"
-        lam larg switch sw
+        "@[<1>(switch %a@ @[<v 0>%a@])@]" lam larg switch sw
   | Ustaticfail (i, ls)  ->
       let lams ppf largs =
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
       fprintf ppf "@[<2>(exit@ %d%a)@]" i lams ls;
-  | Ucatch(i, vars, lbody, lhandler, _kind) ->
+  | Ucatch(i, vars, lbody, lhandler) ->
       fprintf ppf "@[<2>(catch@ %a@;<1 -1>with (%d%a)@ %a)@]"
         lam lbody i
         (fun ppf vars ->
@@ -250,16 +203,16 @@ and lam ppf = function
              (fun (x, k) ->
                 fprintf ppf " %a%a"
                  VP.print x
-                 Printlambda.layout k
+                 Printlambda.value_kind k
              )
              vars
         )
         vars
         lam lhandler
-  | Utrywith(lbody, param, lhandler, _kind) ->
+  | Utrywith(lbody, param, lhandler) ->
       fprintf ppf "@[<2>(try@ %a@;<1 -1>with %a@ %a)@]"
         lam lbody VP.print param lam lhandler
-  | Uifthenelse(lcond, lif, lelse, _kind) ->
+  | Uifthenelse(lcond, lif, lelse) ->
       fprintf ppf "@[<2>(if@ %a@ %a@ %a)@]" lam lcond lam lif lam lelse
   | Usequence(l1, l2) ->
       fprintf ppf "@[<2>(seq@ %a@ %a)@]" lam l1 sequence l2
@@ -272,26 +225,16 @@ and lam ppf = function
        lam hi lam body
   | Uassign(id, expr) ->
       fprintf ppf "@[<2>(assign@ %a@ %a)@]" V.print id lam expr
-  | Usend (k, met, obj, largs, _, _, (pos,_) , _) ->
-      let form =
-        match pos with
-        | Rc_normal | Rc_nontail -> "send"
-        | Rc_close_at_apply -> "send[end_region]"
-      in
+  | Usend (k, met, obj, largs, _) ->
       let args ppf largs =
         List.iter (fun l -> fprintf ppf "@ %a" lam l) largs in
       let kind =
         if k = Lambda.Self then "self"
         else if k = Lambda.Cached then "cache"
         else "" in
-      fprintf ppf "@[<2>(%s%s@ %a@ %a%a)@]"
-        form kind lam obj lam met args largs
+      fprintf ppf "@[<2>(send%s@ %a@ %a%a)@]" kind lam obj lam met args largs
   | Uunreachable ->
       fprintf ppf "unreachable"
-  | Uregion e ->
-      fprintf ppf "@[<2>(region@ %a)@]" lam e
-  | Uexclave e ->
-      fprintf ppf "@[<2>(exclave@ %a)@]" lam e
 
 and sequence ppf ulam = match ulam with
   | Usequence(l1, l2) ->
@@ -303,15 +246,9 @@ let clambda ppf ulam =
 
 
 let rec approx ppf = function
-    Value_closure(_, fundesc, a) ->
-      Format.fprintf ppf "@[<2>function %s"
-        fundesc.fun_label;
-      let n = List.length fundesc.fun_arity.params_layout in
-      begin match fundesc.fun_arity.function_kind with
-      | Tupled -> Format.fprintf ppf "@ arity -%i" n
-      | Curried {nlocal=0} -> Format.fprintf ppf "@ arity %i" n
-      | Curried {nlocal=k} -> Format.fprintf ppf "@ arity %i(%i L)" n k
-      end;
+    Value_closure(fundesc, a) ->
+      Format.fprintf ppf "@[<2>function %s@ arity %i"
+        fundesc.fun_label fundesc.fun_arity;
       if fundesc.fun_closed then begin
         Format.fprintf ppf "@ (closed)"
       end;
@@ -319,7 +256,7 @@ let rec approx ppf = function
         Format.fprintf ppf "@ (inline)"
       end;
       Format.fprintf ppf "@ -> @ %a@]" approx a
-  | Value_tuple (_,a) ->
+  | Value_tuple a ->
       let tuple ppf a =
         for i = 0 to Array.length a - 1 do
           if i > 0 then Format.fprintf ppf ";@ ";

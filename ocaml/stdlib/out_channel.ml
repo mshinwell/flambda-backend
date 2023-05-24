@@ -12,7 +12,7 @@
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-open! Stdlib
+
 type t = out_channel
 
 type open_flag = Stdlib.open_flag =
@@ -64,3 +64,5 @@ let set_binary_mode = Stdlib.set_binary_mode_out
 external set_buffered : t -> bool -> unit = "caml_ml_set_buffered"
 
 external is_buffered : t -> bool = "caml_ml_is_buffered"
+
+external isatty : t -> bool = "caml_sys_isatty"
