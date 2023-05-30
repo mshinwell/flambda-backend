@@ -226,28 +226,32 @@ void caml_flambda2_invalid (value message)
   abort ();
 }
 
+/* Functions used by caml_curry_generic */
+
 /* See diagram below */
 #define VARARGS_BUFFER_HEADER_SIZE 4
 
 /* Helper function for fishing parameters out of closures and assembling
-   them into memory blocks for a variadic call in caml_curry_generic */
+   them into memory blocks for a variadic call in caml_curry_generic.
 
+   This function is called recursively, starting with the newest closure
+   created by caml_curry_generic and working its way back to the oldest
+   closure.  It returns the actual closure for the function ultimately
+   being called. */
 static value extricate_parameters (value closure, uintnat* buffer,
-  /* Total number unarized params: */
-  uintnat num_int, uintnat num_float,
+  /* Total number of unarized params to be passed in registers: */
+  uintnat num_int_in_regs, uintnat num_float_in_regs,
+  /* Nonzero if the closure argument will be passed in a register: */
+  int closure_arg_passed_in_reg,
   /* Number of unarized params written to [buffer]: */
   uintnat* num_int_written, uintnat* num_float_written,
   uintnat* num_stack_written,
-  /* Number of unarized params seen during the [extricate_parameters] recursion
-     on the way to the earliest closure: */
-  uintnat num_passed_over,
   /* Function pointer of the actual closure for the function being called.
      The closure itself is the return value. */
   uintnat* func_ptr)
 {
   uintnat startenv;
   uintnat num_unarized_params_this_closure;
-  uintnat total_num_unarized_params;
   value parent_closure;
   value actual_closure;
   uintnat num_complex_params_seen_this_closure;
@@ -256,18 +260,13 @@ static value extricate_parameters (value closure, uintnat* buffer,
   uintnat* clos_field_non_scannable;
   value* clos_field_scannable;
 
-  total_num_unarized_params = num_int + num_float;
-  CAMLassert(num_passed_over <= total_num_unarized_params);
-
-  /* XXX or check the num-params field, which increments by 1 in each
-     linked closure */
-
   startenv = Start_env_closinfo(Closinfo_val(closure));
   /* caml_generic_curry closures are always of arity 1 */
   CAMLassert(Arity_closinfo(Closinfo_val(closure)) == 1);
-  CAMLassert(Wosize_val(closure)) >= 2);
+  CAMLassert(Wosize_val(closure) >= 2);
+  num_complex_params_seen_this_closure = (uintnat) Field(closure, startenv - 2);
 
-  if (num_passed_over < total_num_unarized_params) {
+  if (num_complex_params_seen_this_closure > 0) {
     num_unarized_params_this_closure = Wosize_val(closure)
       - 1 /* code pointer */
       - 1 /* arity */
@@ -275,7 +274,6 @@ static value extricate_parameters (value closure, uintnat* buffer,
       - 1 /* layout */
       - 1 /* parent closure link */
       ;
-    num_passed_over += num_unarized_params_this_closure;
 
     parent_closure = Field(closure, startenv);
     CAMLassert(Is_block(parent_closure));
@@ -283,8 +281,10 @@ static value extricate_parameters (value closure, uintnat* buffer,
     CAMLassert(Tag_val(parent_closure) == Closure_tag);
 
     actual_closure = extricate_parameters(parent_closure, buffer,
-      num_int, num_float, num_int_written, num_float_written,
-      num_stack_written, num_passed_over, func_ptr);
+      num_int_in_regs, num_float_in_regs,
+      closure_arg_passed_in_reg,
+      num_int_written, num_float_written,
+      num_stack_written, func_ptr);
   }
   else {
     /* At this point we've either reached the base case of the recursion,
@@ -297,20 +297,21 @@ static value extricate_parameters (value closure, uintnat* buffer,
     CAMLassert(Tag_val(actual_closure) == Closure_tag
       || Tag_val(actual_closure) == Infix_tag);
     CAMLassert(Arity_closinfo(Closinfo_val(actual_closure)) > 1);
-    CAMLassert(Wosize_val(actual_closure)) >= 3);
+    CAMLassert(Wosize_val(actual_closure) >= 3);
 
     /* Extract the full application code pointer. */
     *func_ptr = (uintnat) Field(actual_closure, 2);
   }
 
-  num_complex_params_seen_this_closure = (uintnat) Field(closure, startenv - 2);
   layout = (uintnat*) Field(closure, startenv - 1);
 
   /* For example, when caml_curry_generic creates a closure with the num-seen
      value equal to 1, that means such closure corresponds to the first
      complex parameter.  (Recall that caml_curry_generic applications are
      always done one complex parameter at a time.) */
-  layout_this_complex_param = layout[num_complex_params_seen_this_closure - 1];
+  layout_this_complex_param =
+    (uintnat*) (((unsigned char*) layout)
+      + layout[num_complex_params_seen_this_closure - 1]);
 
   /* Traverse the zero-terminated array for the current complex parameter
      and copy the corresponding stored unarized arguments into the buffer. */
@@ -319,18 +320,50 @@ static value extricate_parameters (value closure, uintnat* buffer,
 
   buffer += VARARGS_BUFFER_HEADER_SIZE;
   while (*layout_this_complex_param != NULL) {
+    uintnat float_index = num_int_in_regs + (closure_arg_passed_in_reg ? 1 : 0)
+      + *num_float_written;
+
+    uintnat stack_index = num_int_in_regs + (closure_arg_passed_in_reg ? 1 : 0)
+      + num_float_in_regs;
+
+    int room_in_int_regs =
+      *num_int_written
+        < (closure_arg_passed_in_reg ? num_int_in_regs - 1 : num_int_in_regs);
+
     switch (*layout_this_complex_param++) {
-      case 1: /* scannable */
-        buffer[*num_int_written++] = *clos_field_scannable++;
+      case 1: { /* scannable */
+        value v = *clos_field_scannable++;
+        if (room_in_int_regs) {
+          buffer[*num_int_written] = (uintnat) v;
+        } else {
+          buffer[stack_index] = v;
+          num_stack_written++;
+        }
+        *num_int_written += 1;
         break;
+      }
 
       case 2: /* non-scannable int */
-        buffer[*num_int_written++] = *clos_field_non_scannable++;
+        uintnat v = *clos_field_non_scannable++;
+        if (room_in_int_regs) {
+          buffer[*num_int_written] = v;
+        } else {
+          buffer[stack_index] = v;
+          num_stack_written++;
+        }
+        *num_int_written += 1;
         break;
 
       case 3: /* float */
-        buffer[num_int + 1 /* closure arg */ + *num_float_written++] =
-          *clos_field_non_scannable++;
+        uintnat f = *clos_field_non_scannable++;
+        if (num_float_written < num_float_in_regs) {
+          buffer[float_index] = f;
+        }
+        else {
+          buffer[stack_index] = f;
+          num_stack_written++;
+        }
+        *num_float_written += 1;
         break;
 
       default:
@@ -342,69 +375,100 @@ static value extricate_parameters (value closure, uintnat* buffer,
   return actual_closure;
 }
 
-/* XXX needs to know the number of int and float regs */
-/* XXX need separate area, in correct order, for stack/DS args */
-uintnat* caml_curry_generic_helper (value callee_closure, val num_int_regs,
-  val num_float_regs)
+/* This function is called by the generated code for caml_curry_generic.
+   It accepts a linked list of closures which contain all of the arguments
+   making up a full function application.  The head of the linked list
+   contains the arguments for the most recent partial application.
+
+   It returns a buffer containing the function pointer and all of the
+   unarized arguments for the function being called.  The caller is
+   responsible for calling [free] on the buffer.
+
+   The buffer is laid out as follows:
+
+   -----------------------------------------------------------------------
+   function pointer to be called
+   num of unarized int register arguments
+     (potentially including the closure argument)
+   num of unarized float register arguments
+   num of unarized stack and/or domainstate arguments (int or float)
+     (potentially including the closure argument)
+   -----------------------------------------------------------------------
+   unarized int arguments (potentially including the closure argument)
+   ...
+   -----------------------------------------------------------------------
+   unarized float arguments
+   ...
+   -----------------------------------------------------------------------
+   unarized stack/domainstate args (potentially including the closure arg)
+   (these args may be ints or floats freely intermixed)
+   ...
+   -----------------------------------------------------------------------
+
+   The closure arg is always the last argument in the int area, or the
+   last stack/domainstate argument.
+
+   The caller is responsible for calling [free] on the buffer.
+*/
+uintnat* caml_curry_generic_helper (value callee_closure, value v_num_int_regs,
+  value v_num_float_regs)
 {
   uintnat startenv;
   uintnat* layout;
-  uintnat num_int, num_float, num_stack;
+  uintnat num_int_in_regs, num_float_in_regs, num_stack;
   uintnat num_int_written, num_float_written, num_stack_written;
   uintnat complex_param_index;
   uintnat* buffer;
   uintnat func_ptr;
   value actual_closure;
   int closure_arg_passed_in_reg;
-
-  /* Format of returned buffer, by word:
-
-     -----------------------------------------------------------------------
-     function pointer to be called
-     num of unarized int register arguments
-       (potentially including the closure argument)
-     num of unarized float register arguments
-     num of unarized stack/domainstate arguments (int or float)
-       (potentially including the closure argument)
-     -----------------------------------------------------------------------
-     unarized int arguments (potentially including the closure argument)
-     ...
-     -----------------------------------------------------------------------
-     unarized float arguments
-     ...
-     -----------------------------------------------------------------------
-     unarized stack/domainstate args (potentially including the closure arg)
-     (these args may be ints or floats freely intermixed)
-     ...
-     -----------------------------------------------------------------------
-
-     The closure arg is always the last argument in the int area, or the
-     last stack/domainstate argument.
-
-     The caller is responsible for calling [free] on the buffer.
-  */
+  uintnat total_complex_params;
+  uintnat num_available_int_regs = Long_val(v_num_int_regs);
+  uintnat num_available_float_regs = Long_val(v_num_float_regs);
 
   startenv = Start_env_closinfo(Closinfo_val(callee_closure));
-  layout = Field(callee_closure, startenv - 1);
+  layout = (uintnat*) Field(callee_closure, startenv - 1);
+  total_complex_params = (uintnat) Field(callee_closure, startenv - 2);
 
   /* These counters do not include the actual closure argument */
-  num_int = 0;
-  num_float = 0;
-  num_stack = 0; /* stack or domainstate */
+  num_int_in_regs = 0;
+  num_float_in_regs = 0;
+  num_stack = 0; /* stack and/or domainstate; ints and floats intermixed */
 
-  complex_param_index = 0;
+  /* First count the total number of int reg, float reg and stack/domainstate
+     slots required to accommodate all of the arguments. */
+  for (complex_param_index = 0; complex_param_index < total_complex_params;
+       complex_param_index++) {
+    uintnat* layout_this_complex_param =
+      (uintnat*) (((unsigned char*) layout) + layout[complex_param_index]);
 
-  /* XXX use the num-seen value for the bound */
-  while (layout[complex_param_index] != NULL) {
+    while (*layout_this_complex_param != NULL) {
+      switch (*layout_this_complex_param++) {
+        case 1: /* scannable */
+        case 2: /* non-scannable int */
+          if (num_int_in_regs < num_available_int_regs) num_int_in_regs++;
+          else num_stack++;
+          break;
 
+        case 3: /* float */
+          if (num_float_in_regs < num_available_float_regs) num_float_in_regs++;
+          else num_stack++;
+          break;
+
+        default:
+          CAMLassert(0);
+          abort();
+      }
+    }
   }
 
   /* The actual closure argument goes in the last int register, but that
      might be in the stack/domainstate area. */
-  closure_arg_passed_in_reg = (num_int < num_int_regs) ? 1 : 0;
+  closure_arg_passed_in_reg =
+    (num_int_in_regs < num_available_int_regs) ? 1 : 0;
 
   buffer = (uintnat*) malloc(sizeof(uintnat)
-    * (num_int + num_float + num_stack
+    * (num_int_in_regs + num_float_in_regs + num_stack
        + VARARGS_BUFFER_HEADER_SIZE + 1 /* closure arg */));
   if (buffer == NULL) {
     caml_fatal_out_of_memory ();
@@ -424,20 +488,25 @@ uintnat* caml_curry_generic_helper (value callee_closure, val num_int_regs,
      partial applications).
   */
   actual_closure = extricate_parameters(Field(callee_closure, startenv),
-    buffer, num_int, num_float, &num_int_written, &num_float_written,
-    &num_stack_written, 0, &func_ptr);
+    buffer, num_int_in_regs, num_float_in_regs, closure_arg_passed_in_reg,
+    &num_int_written, &num_float_written,
+    &num_stack_written, &func_ptr);
 
   buffer[0] = func_ptr;
-  buffer[1] = num_int + 1;  /* + 1 for [actual_closure] */
-  buffer[2] = num_float;
-  buffer[3] = num_stack;
+  buffer[2] = num_float_in_regs;
 
   if (closure_arg_passed_in_reg) {
-    buffer[VARARGS_BUFFER_HEADER_SIZE + num_int] = (uintnat) actual_closure;
+    buffer[VARARGS_BUFFER_HEADER_SIZE + num_int_in_regs]
+      = (uintnat) actual_closure;
+    buffer[1] = num_int_in_regs + 1;
+    buffer[3] = num_stack;
   }
   else {
-    buffer[VARARGS_BUFFER_HEADER_SIZE + num_int + num_float + num_stack - 1]
+    buffer[VARARGS_BUFFER_HEADER_SIZE + num_int_in_regs + num_float_in_regs
+        + num_stack - 1]
       = (uintnat) actual_closure;
+    buffer[1] = num_int_in_regs;
+    buffer[3] = num_stack + 1;
   }
 
   return buffer;
