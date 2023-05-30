@@ -10,22 +10,12 @@
     layout_this_param/55
       (+ layout/60 (* num_complex_params_already_applied/59 8)))
    (catch
-     (catch rec (exit 6 0 0) with(6 num_scannable_in_loop/66: int
-       num_non_scannable_in_loop/67: int)
-       (let
-         layout_field/68
-           (load int
-             (+ layout_this_param/55
-               (* (+ num_scannable_in_loop/66 num_non_scannable_in_loop/67)
-                 8)))
-         (if (!= layout_field/68 0)
-           (exit 6
-             (if (>= layout_field/68 2) num_scannable_in_loop/66
-               (+ num_scannable_in_loop/66 1))
-             (if (< layout_field/68 2) num_non_scannable_in_loop/67
-               (+ num_non_scannable_in_loop/67 1)))
-           (exit 7 num_scannable_in_loop/66 num_non_scannable_in_loop/67))))
-   with(7 num_scannable/61: int num_non_scannable/62: int)
+     (exit 6
+       (extcall "caml_num_scannable_unarized_params" callee_closure/30
+         num_complex_params_already_applied/59 int,int->int)
+       (extcall "caml_num_non_scannable_unarized_params" callee_closure/30
+         num_complex_params_already_applied/59 int,int->int))
+   with(6 num_scannable/61: int num_non_scannable/62: int)
      (let
        (closure_size/63 (+ (+ num_scannable/61 num_non_scannable/62) 4)
         temp_closure/50 (extcall "malloc" (* closure_size/63 8) int->int))
@@ -105,7 +95,7 @@
              (store int(init) (+ real_closure/57 8)
                (or 108086391056891905 (<< startenv/65 1)))
              (store int(init) (+ real_closure/57 (* (- startenv/65 2) 8))
-               num_complex_params_already_applied/59)
+               (+ num_complex_params_already_applied/59 1))
              (store int(init) (+ real_closure/57 (* (- startenv/65 1) 8))
                layout/60)
              (store int(init) (+ real_closure/57 (* startenv/65 8))
@@ -118,7 +108,14 @@
                    (extcall "caml_remove_global_root"
                      (+ temp_closure/50 (* counter/64 8)) int->int)
                    (exit 4 (+ counter/64 1)))))
-           with(5) (extcall "free" temp_closure/50 int->int) real_closure/57)))))))
+           with(5) (extcall "free" temp_closure/50 int->int)
+             (if
+               (!= (+ num_complex_params_already_applied/59 1)
+                 (extcall "caml_total_num_complex_params" real_closure/57
+                   int->int))
+               real_closure/57
+               (extcall "caml_curry_generic_helper" real_closure/57 9 10
+                 int,int,int->val)))))))))
 
 (function caml_apply2 (arg/16: val arg/17: val clos/18: val)
  (if (== (>>s (load_mut val (+a clos/18 8)) 56) 2)
@@ -293,20 +290,28 @@
  int 0)
 Undefined symbols for architecture x86_64:
   "_caml_alloc_small", referenced from:
-      _caml_curry_generic in camlstartupf7a551.o
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_c_call", referenced from:
-      _caml_curry_generic in camlstartupf7a551.o
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_call_gc", referenced from:
-      anon in camlstartupf7a551.o
+      anon in camlstartup26b482.o
       anon in h.o
+  "_caml_curry_generic_helper", referenced from:
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_globals_inited", referenced from:
-      _caml_program in camlstartupf7a551.o
+      _caml_program in camlstartup26b482.o
+  "_caml_num_non_scannable_unarized_params", referenced from:
+      _caml_curry_generic in camlstartup26b482.o
+  "_caml_num_scannable_unarized_params", referenced from:
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_register_global_root", referenced from:
-      _caml_curry_generic in camlstartupf7a551.o
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_remove_global_root", referenced from:
-      _caml_curry_generic in camlstartupf7a551.o
+      _caml_curry_generic in camlstartup26b482.o
   "_caml_system__frametable", referenced from:
-      _caml_frametable in camlstartupf7a551.o
+      _caml_frametable in camlstartup26b482.o
+  "_caml_total_num_complex_params", referenced from:
+      _caml_curry_generic in camlstartup26b482.o
   "_main", referenced from:
      implicit entry/start for main executable
 ld: symbol(s) not found for architecture x86_64

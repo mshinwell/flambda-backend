@@ -3347,7 +3347,11 @@ let generic_curry_function () =
                                       Cconst_int (Arch.size_addr, dbg) ],
                                     dbg ) ],
                               dbg );
-                          num_complex_params_already_applied ],
+                          Cop
+                            ( Caddi,
+                              [ num_complex_params_already_applied;
+                                Cconst_int (1, dbg) ],
+                              dbg ) ],
                         dbg ),
                     Csequence
                       ( (* Layout *)
@@ -3392,6 +3396,50 @@ let generic_curry_function () =
   let num_scannable = Ident.create_local "num_scannable" in
   let num_non_scannable = Ident.create_local "num_non_scannable" in
   let closure_size = Ident.create_local "closure_size" in
+  let return_closure_or_apply_function =
+    Cifthenelse
+      ( Cop
+          ( Ccmpi Cne,
+            [ Cop
+                ( Caddi,
+                  [ Cvar num_complex_params_already_applied_var;
+                    Cconst_int (1, dbg) ],
+                  dbg );
+              Cop
+                ( Cextcall
+                    { func = "caml_total_num_complex_params";
+                      ty = typ_int;
+                      ty_args = [XInt];
+                      alloc = true;
+                      builtin = false;
+                      returns = true;
+                      effects = Arbitrary_effects;
+                      coeffects = Has_coeffects
+                    },
+                  [Cvar real_closure],
+                  dbg ) ],
+            dbg ),
+        dbg,
+        Cvar real_closure,
+        dbg,
+        Cop
+          ( Cextcall
+              { func = "caml_curry_generic_helper";
+                ty = typ_val;
+                ty_args = [XInt; XInt; XInt];
+                alloc = true;
+                builtin = false;
+                returns = true;
+                effects = Arbitrary_effects;
+                coeffects = Has_coeffects
+              },
+            [ Cvar real_closure;
+              Cconst_int (num_param_regs ~is_float:false, dbg);
+              Cconst_int (num_param_regs ~is_float:true, dbg) ],
+            dbg ),
+        dbg,
+        Any )
+  in
   let alloc_temp_closure_and_write_to_it =
     Clet
       ( VP.create closure_size,
@@ -3435,7 +3483,7 @@ let generic_curry_function () =
                                     Csequence
                                       ( free_temp_closure
                                           ~temp_closure:(Cvar temp_closure),
-                                        Cvar real_closure ),
+                                        return_closure_or_apply_function ),
                                     dbg ) ],
                                 deregister_closure
                                   ~num_non_scannable:(Cvar num_non_scannable)
@@ -3487,94 +3535,37 @@ let generic_curry_function () =
                     Any ),
                 Any ) ) )
   in
-  let compute_size_loop_k = Lambda.next_raise_count () in
   let after_compute_size_loop_k = Lambda.next_raise_count () in
-  let num_scannable_in_loop = Ident.create_local "num_scannable_in_loop" in
-  let num_non_scannable_in_loop =
-    Ident.create_local "num_non_scannable_in_loop"
-  in
-  let layout_field_var = Ident.create_local "layout_field" in
   let compute_size_loop =
-    Ccatch
-      ( Recursive,
-        [ ( compute_size_loop_k,
-            [ VP.create num_scannable_in_loop, typ_int;
-              VP.create num_non_scannable_in_loop, typ_int ],
-            Clet
-              ( VP.create layout_field_var,
-                (* XXX maybe use another loop parameter to keep the pointer
-                   in *)
-                Cop
-                  ( Cload (Word_int, Immutable),
-                    [ Cop
-                        ( Caddi,
-                          [ Cvar layout_this_param_var;
-                            Cop
-                              ( Cmuli,
-                                [ Cop
-                                    ( Caddi,
-                                      [ Cvar num_scannable_in_loop;
-                                        Cvar num_non_scannable_in_loop ],
-                                      dbg );
-                                  Cconst_int (Arch.size_addr, dbg) ],
-                                dbg ) ],
-                          dbg ) ],
-                    dbg ),
-                Cifthenelse
-                  ( Cop
-                      (* zero => end of current param *)
-                      ( Ccmpi Cne,
-                        [Cvar layout_field_var; Cconst_int (0, dbg)],
-                        dbg ),
-                    dbg,
-                    (* 1 => scannable, 2 => non-scannable, 3 => float *)
-                    Cexit
-                      ( Lbl compute_size_loop_k,
-                        [ Cifthenelse
-                            ( Cop
-                                ( Ccmpi Cge,
-                                  [Cvar layout_field_var; Cconst_int (2, dbg)],
-                                  dbg ),
-                              dbg,
-                              Cvar num_scannable_in_loop,
-                              dbg,
-                              Cop
-                                ( Caddi,
-                                  [ Cvar num_scannable_in_loop;
-                                    Cconst_int (1, dbg) ],
-                                  dbg ),
-                              dbg,
-                              Any );
-                          Cifthenelse
-                            ( Cop
-                                ( Ccmpi Clt,
-                                  [Cvar layout_field_var; Cconst_int (2, dbg)],
-                                  dbg ),
-                              dbg,
-                              Cvar num_non_scannable_in_loop,
-                              dbg,
-                              Cop
-                                ( Caddi,
-                                  [ Cvar num_non_scannable_in_loop;
-                                    Cconst_int (1, dbg) ],
-                                  dbg ),
-                              dbg,
-                              Any ) ],
-                        [] ),
-                    dbg,
-                    Cexit
-                      ( Lbl after_compute_size_loop_k,
-                        [ Cvar num_scannable_in_loop;
-                          Cvar num_non_scannable_in_loop ],
-                        [] ),
-                    dbg,
-                    Any ) ),
-            dbg ) ],
-        Cexit
-          ( Lbl compute_size_loop_k,
-            [Cconst_int (0, dbg); Cconst_int (0, dbg)],
-            [] ),
-        Any )
+    Cexit
+      ( Lbl after_compute_size_loop_k,
+        [ Cop
+            ( Cextcall
+                { func = "caml_num_scannable_unarized_params";
+                  ty = typ_int;
+                  ty_args = [XInt; XInt];
+                  alloc = false;
+                  builtin = false;
+                  returns = true;
+                  effects = Arbitrary_effects;
+                  coeffects = Has_coeffects
+                },
+              [callee's_closure; Cvar num_complex_params_already_applied_var],
+              dbg );
+          Cop
+            ( Cextcall
+                { func = "caml_num_non_scannable_unarized_params";
+                  ty = typ_int;
+                  ty_args = [XInt; XInt];
+                  alloc = false;
+                  builtin = false;
+                  returns = true;
+                  effects = Arbitrary_effects;
+                  coeffects = Has_coeffects
+                },
+              [callee's_closure; Cvar num_complex_params_already_applied_var],
+              dbg ) ],
+        [] )
   in
   let body =
     Clet
