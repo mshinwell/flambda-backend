@@ -228,6 +228,9 @@ void caml_flambda2_invalid (value message)
 
 /* Functions used by caml_curry_generic */
 
+
+/* Nathanaelle: start reading from here */
+
 /* See diagram below */
 #define VARARGS_BUFFER_HEADER_SIZE 4
 

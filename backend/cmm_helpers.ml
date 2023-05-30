@@ -2985,7 +2985,7 @@ let generic_curry_function () =
           Cconst_int (10, dbg) ],
         dbg )
   in
-  let get_num_params_already_applied ~startenv =
+  let get_num_complex_params_already_applied ~startenv =
     Cop
       ( Cload (Word_int, Immutable),
         [Cop (Csubi, [startenv; Cconst_int (Arch.size_addr * 2, dbg)], dbg)],
@@ -3284,7 +3284,7 @@ let generic_curry_function () =
         Any )
   in
   let initialize_code_pointer_and_arity_etc ~num_non_scannable
-      ~num_params_already_applied ~layout ~callee's_closure =
+      ~num_complex_params_already_applied ~layout ~callee's_closure =
     let startenv_var = Ident.create_local "startenv" in
     let startenv = Cvar startenv_var in
     let arity_and_is_last_closinfo =
@@ -3347,7 +3347,7 @@ let generic_curry_function () =
                                       Cconst_int (Arch.size_addr, dbg) ],
                                     dbg ) ],
                               dbg );
-                          num_params_already_applied ],
+                          num_complex_params_already_applied ],
                         dbg ),
                     Csequence
                       ( (* Layout *)
@@ -3385,8 +3385,8 @@ let generic_curry_function () =
   in
   let startenv_var = Ident.create_local "startenv" in
   let startenv = Cvar startenv_var in
-  let num_params_already_applied_var =
-    Ident.create_local "num_params_already_applied"
+  let num_complex_params_already_applied_var =
+    Ident.create_local "num_complex_params_already_applied"
   in
   let layout_var = Ident.create_local "layout" in
   let num_scannable = Ident.create_local "num_scannable" in
@@ -3425,8 +3425,8 @@ let generic_curry_function () =
                               ( blit_to_closure,
                                 initialize_code_pointer_and_arity_etc
                                   ~num_non_scannable:(Cvar num_non_scannable)
-                                  ~num_params_already_applied:
-                                    (Cvar num_params_already_applied_var)
+                                  ~num_complex_params_already_applied:
+                                    (Cvar num_complex_params_already_applied_var)
                                   ~layout:(Cvar layout_var) ~callee's_closure ),
                             Ccatch
                               ( Nonrecursive,
@@ -3587,8 +3587,8 @@ let generic_curry_function () =
                param of each complex param. *)
             get_layout ~startenv,
             Clet
-              ( VP.create num_params_already_applied_var,
-                get_num_params_already_applied ~startenv,
+              ( VP.create num_complex_params_already_applied_var,
+                get_num_complex_params_already_applied ~startenv,
                 Clet
                   ( VP.create layout_this_param_var,
                     Cop
@@ -3596,7 +3596,7 @@ let generic_curry_function () =
                         [ Cvar layout_var;
                           Cop
                             ( Cmuli,
-                              [ Cvar num_params_already_applied_var;
+                              [ Cvar num_complex_params_already_applied_var;
                                 Cconst_int (Arch.size_addr, dbg) ],
                               dbg ) ],
                         dbg ),

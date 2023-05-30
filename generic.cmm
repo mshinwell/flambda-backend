@@ -1,0 +1,315 @@
+(function caml_curry_generic
+     (callee_closure/30: val i0/31: addr i1/32: addr i2/33: addr i3/34: addr
+      i4/35: addr i5/36: addr i6/37: addr i7/38: addr i8/39: addr
+      f0/40: float f1/41: float f2/42: float f3/43: float f4/44: float
+      f5/45: float f6/46: float f7/47: float f8/48: float f9/49: float)
+ (let
+   (startenv/58 (>>u (<< (load int (+ callee_closure/30 8)) 9) 10)
+    layout/60 (load int (- startenv/58 8))
+    num_complex_params_already_applied/59 (load int (- startenv/58 16))
+    layout_this_param/55
+      (+ layout/60 (* num_complex_params_already_applied/59 8)))
+   (catch
+     (catch rec (exit 6 0 0) with(6 num_scannable_in_loop/66: int
+       num_non_scannable_in_loop/67: int)
+       (let
+         layout_field/68
+           (load int
+             (+ layout_this_param/55
+               (* (+ num_scannable_in_loop/66 num_non_scannable_in_loop/67)
+                 8)))
+         (if (!= layout_field/68 0)
+           (exit 6
+             (if (>= layout_field/68 2) num_scannable_in_loop/66
+               (+ num_scannable_in_loop/66 1))
+             (if (< layout_field/68 2) num_non_scannable_in_loop/67
+               (+ num_non_scannable_in_loop/67 1)))
+           (exit 7 num_scannable_in_loop/66 num_non_scannable_in_loop/67))))
+   with(7 num_scannable/61: int num_non_scannable/62: int)
+     (let
+       (closure_size/63 (+ (+ num_scannable/61 num_non_scannable/62) 4)
+        temp_closure/50 (extcall "malloc" (* closure_size/63 8) int->int))
+       (catch
+         (catch rec
+           (exit 2 0 0 temp_closure/50
+             (+ temp_closure/50 (* (+ num_non_scannable/62 3) 8)))
+         with(2 int_reg_num/51: int float_reg_num/52: int
+           non_scannable_ptr/53: int scannable_ptr/54: int)
+           (let
+             layout_field/56
+               (load int
+                 (+ layout_this_param/55
+                   (* (+ int_reg_num/51 float_reg_num/52) 8)))
+             (if (== layout_field/56 0) (exit 3)
+               (if (!= layout_field/56 3)
+                 (if (== layout_field/56 1)
+                   (seq
+                     (if (>= int_reg_num/51 9)
+                       (move_incoming_param 0 int_reg_num/51
+                         scannable_ptr/54)
+                       (switch int_reg_num/51 
+                       case 0: (store int(init) scannable_ptr/54 i0/31)
+                       case 1: (store int(init) scannable_ptr/54 i1/32)
+                       case 2: (store int(init) scannable_ptr/54 i2/33)
+                       case 3: (store int(init) scannable_ptr/54 i3/34)
+                       case 4: (store int(init) scannable_ptr/54 i4/35)
+                       case 5: (store int(init) scannable_ptr/54 i5/36)
+                       case 6: (store int(init) scannable_ptr/54 i6/37)
+                       case 7: (store int(init) scannable_ptr/54 i7/38)
+                       case 8: (store int(init) scannable_ptr/54 i8/39)))
+                     (extcall "caml_register_global_root" scannable_ptr/54
+                       int->int)
+                     (exit 2 (+ int_reg_num/51 1) float_reg_num/52
+                       non_scannable_ptr/53 (+ scannable_ptr/54 8)))
+                   (seq
+                     (if (>= int_reg_num/51 9)
+                       (move_incoming_param 0 int_reg_num/51
+                         non_scannable_ptr/53)
+                       (switch int_reg_num/51 
+                       case 0: (store int(init) non_scannable_ptr/53 i0/31)
+                       case 1: (store int(init) non_scannable_ptr/53 i1/32)
+                       case 2: (store int(init) non_scannable_ptr/53 i2/33)
+                       case 3: (store int(init) non_scannable_ptr/53 i3/34)
+                       case 4: (store int(init) non_scannable_ptr/53 i4/35)
+                       case 5: (store int(init) non_scannable_ptr/53 i5/36)
+                       case 6: (store int(init) non_scannable_ptr/53 i6/37)
+                       case 7: (store int(init) non_scannable_ptr/53 i7/38)
+                       case 8: (store int(init) non_scannable_ptr/53 i8/39)))
+                     (exit 2 (+ int_reg_num/51 1) float_reg_num/52
+                       (+ non_scannable_ptr/53 8) scannable_ptr/54)))
+                 (seq
+                   (if (>= float_reg_num/52 10)
+                     (move_incoming_param 1 float_reg_num/52
+                       non_scannable_ptr/53)
+                     (switch float_reg_num/52 
+                     case 0: (store float64(init) non_scannable_ptr/53 f0/40)
+                     case 1: (store float64(init) non_scannable_ptr/53 f1/41)
+                     case 2: (store float64(init) non_scannable_ptr/53 f2/42)
+                     case 3: (store float64(init) non_scannable_ptr/53 f3/43)
+                     case 4: (store float64(init) non_scannable_ptr/53 f4/44)
+                     case 5: (store float64(init) non_scannable_ptr/53 f5/45)
+                     case 6: (store float64(init) non_scannable_ptr/53 f6/46)
+                     case 7: (store float64(init) non_scannable_ptr/53 f7/47)
+                     case 8: (store float64(init) non_scannable_ptr/53 f8/48)
+                     case 9: (store float64(init) non_scannable_ptr/53 f9/49)))
+                   (exit 2 int_reg_num/51 (+ float_reg_num/52 1)
+                     (+ non_scannable_ptr/53 8) scannable_ptr/54))))))
+       with(3)
+         (let
+           real_closure/57
+             (extcall "caml_alloc_small" closure_size/63 247 int,int->val)
+           (extcall "memcpy" (+ real_closure/57 16) temp_closure/50 1000
+             int,int,int->int)
+           (let startenv/65 (+ num_non_scannable/62 4)
+             (store int(init) real_closure/57 G:"caml_curry_generic")
+             (store int(init) (+ real_closure/57 8)
+               (or 108086391056891905 (<< startenv/65 1)))
+             (store int(init) (+ real_closure/57 (* (- startenv/65 2) 8))
+               num_complex_params_already_applied/59)
+             (store int(init) (+ real_closure/57 (* (- startenv/65 1) 8))
+               layout/60)
+             (store int(init) (+ real_closure/57 (* startenv/65 8))
+               callee_closure/30))
+           (catch
+             (catch rec (exit 4 (+ num_non_scannable/62 2)) with(4
+               counter/64: int)
+               (if (>= counter/64 closure_size/63) (exit 5)
+                 (seq
+                   (extcall "caml_remove_global_root"
+                     (+ temp_closure/50 (* counter/64 8)) int->int)
+                   (exit 4 (+ counter/64 1)))))
+           with(5) (extcall "free" temp_closure/50 int->int) real_closure/57)))))))
+
+(function caml_apply2 (arg/16: val arg/17: val clos/18: val)
+ (if (== (>>s (load_mut val (+a clos/18 8)) 56) 2)
+   (app (load_mut val (+a clos/18 16)) arg/16 arg/17 clos/18 val)
+   (let
+     (region/19 (beginregion)
+      clos/20 (app (load_mut val clos/18) arg/16 clos/18 val))
+     (if (== region/19 (beginregion))
+       (app (load_mut val clos/20) arg/17 clos/20 val)
+       (let result/21 (app (load_mut val clos/20) arg/17 clos/20 val)
+         (endregion region/19) result/21)))))
+
+(function caml_apply3 (arg/22: val arg/23: val arg/24: val clos/25: val)
+ (if (== (>>s (load_mut val (+a clos/25 8)) 56) 3)
+   (app (load_mut val (+a clos/25 16)) arg/22 arg/23 arg/24 clos/25 val)
+   (let
+     (region/26 (beginregion)
+      clos/27 (app (load_mut val clos/25) arg/22 clos/25 val)
+      clos/28 (app (load_mut val clos/27) arg/23 clos/27 val))
+     (if (== region/26 (beginregion))
+       (app (load_mut val clos/28) arg/24 clos/28 val)
+       (let result/29 (app (load_mut val clos/28) arg/24 clos/28 val)
+         (endregion region/26) result/29)))))
+
+(data
+ int 3064
+ global "caml_exn_Out_of_memory":
+ addr L:"caml_startup__1"
+ int -1
+ int 3068
+ "caml_startup__1":
+ string "Out_of_memory"
+ skip 2
+ byte 2)
+(data
+ int 3064
+ global "caml_exn_Sys_error":
+ addr L:"caml_startup__2"
+ int -3
+ int 3068
+ "caml_startup__2":
+ string "Sys_error"
+ skip 6
+ byte 6)
+(data
+ int 3064
+ global "caml_exn_Failure":
+ addr L:"caml_startup__3"
+ int -5
+ int 2044
+ "caml_startup__3":
+ string "Failure"
+ skip 0
+ byte 0)
+(data
+ int 3064
+ global "caml_exn_Invalid_argument":
+ addr L:"caml_startup__4"
+ int -7
+ int 4092
+ "caml_startup__4":
+ string "Invalid_argument"
+ skip 7
+ byte 7)
+(data
+ int 3064
+ global "caml_exn_End_of_file":
+ addr L:"caml_startup__5"
+ int -9
+ int 3068
+ "caml_startup__5":
+ string "End_of_file"
+ skip 4
+ byte 4)
+(data
+ int 3064
+ global "caml_exn_Division_by_zero":
+ addr L:"caml_startup__6"
+ int -11
+ int 4092
+ "caml_startup__6":
+ string "Division_by_zero"
+ skip 7
+ byte 7)
+(data
+ int 3064
+ global "caml_exn_Not_found":
+ addr L:"caml_startup__7"
+ int -13
+ int 3068
+ "caml_startup__7":
+ string "Not_found"
+ skip 6
+ byte 6)
+(data
+ int 3064
+ global "caml_exn_Match_failure":
+ addr L:"caml_startup__8"
+ int -15
+ int 3068
+ "caml_startup__8":
+ string "Match_failure"
+ skip 2
+ byte 2)
+(data
+ int 3064
+ global "caml_exn_Stack_overflow":
+ addr L:"caml_startup__9"
+ int -17
+ int 3068
+ "caml_startup__9":
+ string "Stack_overflow"
+ skip 1
+ byte 1)
+(data
+ int 3064
+ global "caml_exn_Sys_blocked_io":
+ addr L:"caml_startup__10"
+ int -19
+ int 3068
+ "caml_startup__10":
+ string "Sys_blocked_io"
+ skip 1
+ byte 1)
+(data
+ int 3064
+ global "caml_exn_Assert_failure":
+ addr L:"caml_startup__11"
+ int -21
+ int 3068
+ "caml_startup__11":
+ string "Assert_failure"
+ skip 1
+ byte 1)
+(data
+ int 3064
+ global "caml_exn_Undefined_recursive_module":
+ addr L:"caml_startup__12"
+ int -23
+ int 5116
+ "caml_startup__12":
+ string "Undefined_recursive_module"
+ skip 5
+ byte 5)
+(data global "caml_globals": addr G:"camlH__gc_roots" int 0)
+(data
+ int 11260
+ global "caml_globals_map":
+ string "Ñï¶æ   9   
+   $   †¿!Hê0§Ë›„D<ìπäG`˚çê0’Ñ¬TOY®a¶œîÇö/ó†∞%camlH!yôÿ@@"
+ skip 2
+ byte 2)
+(data
+ global "caml_data_segments":
+ addr G:"caml_startup__data_begin"
+ addr G:"caml_startup__data_end"
+ addr G:"camlH__data_begin"
+ addr G:"camlH__data_end"
+ int 0)
+(data
+ global "caml_code_segments":
+ addr G:"caml_startup__code_begin"
+ addr G:"caml_startup__code_end"
+ addr G:"camlH__code_begin"
+ addr G:"camlH__code_end"
+ int 0)
+(data
+ global "caml_frametable":
+ addr G:"caml_startup__frametable"
+ addr G:"caml_system__frametable"
+ addr G:"camlH__frametable"
+ int 0)
+Undefined symbols for architecture x86_64:
+  "_caml_alloc_small", referenced from:
+      _caml_curry_generic in camlstartupf7a551.o
+  "_caml_c_call", referenced from:
+      _caml_curry_generic in camlstartupf7a551.o
+  "_caml_call_gc", referenced from:
+      anon in camlstartupf7a551.o
+      anon in h.o
+  "_caml_globals_inited", referenced from:
+      _caml_program in camlstartupf7a551.o
+  "_caml_register_global_root", referenced from:
+      _caml_curry_generic in camlstartupf7a551.o
+  "_caml_remove_global_root", referenced from:
+      _caml_curry_generic in camlstartupf7a551.o
+  "_caml_system__frametable", referenced from:
+      _caml_frametable in camlstartupf7a551.o
+  "_main", referenced from:
+     implicit entry/start for main executable
+ld: symbol(s) not found for architecture x86_64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+File "caml_startup", line 1:
+Error: Error during linking (exit code 1)
