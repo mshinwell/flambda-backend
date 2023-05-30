@@ -241,9 +241,11 @@ void caml_flambda2_invalid (value message)
 static value extricate_parameters (value closure, uintnat* buffer,
   /* Total number of unarized params to be passed in registers: */
   uintnat num_int_in_regs, uintnat num_float_in_regs,
-  /* Nonzero if the closure argument will be passed in a register: */
+  /* 1 if the closure argument will be passed in a register, otherwise 0: */
   int closure_arg_passed_in_reg,
-  /* Number of unarized params written to [buffer]: */
+  /* Number of unarized params written to [buffer]; note that
+     [num_int_written] and [num_float_written] include all such arguments,
+     not just the ones in registers: */
   uintnat* num_int_written, uintnat* num_float_written,
   uintnat* num_stack_written,
   /* Function pointer of the actual closure for the function being called.
@@ -251,10 +253,9 @@ static value extricate_parameters (value closure, uintnat* buffer,
   uintnat* func_ptr)
 {
   uintnat startenv;
-  uintnat num_unarized_params_this_closure;
   value parent_closure;
   value actual_closure;
-  uintnat num_complex_params_seen_this_closure;
+  uintnat num_complex_params_in_earlier_closures;
   uintnat* layout;
   uintnat* layout_this_complex_param;
   uintnat* clos_field_non_scannable;
@@ -264,16 +265,16 @@ static value extricate_parameters (value closure, uintnat* buffer,
   /* caml_generic_curry closures are always of arity 1 */
   CAMLassert(Arity_closinfo(Closinfo_val(closure)) == 1);
   CAMLassert(Wosize_val(closure) >= 2);
-  num_complex_params_seen_this_closure = (uintnat) Field(closure, startenv - 2);
 
-  if (num_complex_params_seen_this_closure > 0) {
-    num_unarized_params_this_closure = Wosize_val(closure)
-      - 1 /* code pointer */
-      - 1 /* arity */
-      - 1 /* num complex params applied thus far */
-      - 1 /* layout */
-      - 1 /* parent closure link */
-      ;
+  /* For example, when caml_curry_generic creates a closure with the num-seen
+     value equal to 1, that means such closure corresponds to the first
+     complex parameter.  (Recall that caml_curry_generic applications are
+     always done one complex parameter at a time.) */
+  num_complex_params_in_earlier_closures =
+    (uintnat) Field(closure, startenv - 2);
+
+  if (num_complex_params_in_earlier_closures > 0) {
+    /* This is the recursive case: move to the previous (earlier) closure. */
 
     parent_closure = Field(closure, startenv);
     CAMLassert(Is_block(parent_closure));
@@ -305,66 +306,66 @@ static value extricate_parameters (value closure, uintnat* buffer,
 
   layout = (uintnat*) Field(closure, startenv - 1);
 
-  /* For example, when caml_curry_generic creates a closure with the num-seen
-     value equal to 1, that means such closure corresponds to the first
-     complex parameter.  (Recall that caml_curry_generic applications are
-     always done one complex parameter at a time.) */
   layout_this_complex_param =
     (uintnat*) (((unsigned char*) layout)
-      + layout[num_complex_params_seen_this_closure - 1]);
+      + layout[num_complex_params_in_earlier_closures - 1]);
 
   /* Traverse the zero-terminated array for the current complex parameter
      and copy the corresponding stored unarized arguments into the buffer. */
   clos_field_non_scannable = (uintnat*) &Field(closure, 2);
   clos_field_scannable = &Field(closure, startenv + 1 /* skip closure link */);
 
+  /* Recall: only one complex parameter's arguments are in any one of the
+     closures in the list. */
   buffer += VARARGS_BUFFER_HEADER_SIZE;
   while (*layout_this_complex_param != NULL) {
-    uintnat float_index = num_int_in_regs + (closure_arg_passed_in_reg ? 1 : 0)
-      + *num_float_written;
-
-    uintnat stack_index = num_int_in_regs + (closure_arg_passed_in_reg ? 1 : 0)
-      + num_float_in_regs;
+    uintnat int_index = *num_int_written;
+    uintnat float_base = num_int_in_regs + closure_arg_passed_in_reg;
+    uintnat float_index = float_base + *num_float_written;
+    uintnat stack_index = float_base + num_float_in_regs + *num_stack_written;
 
     int room_in_int_regs =
-      *num_int_written
-        < (closure_arg_passed_in_reg ? num_int_in_regs - 1 : num_int_in_regs);
+      *num_int_written < (num_int_in_regs - closure_arg_passed_in_reg);
+
+    int room_in_float_regs = *num_float_written < num_float_in_regs;
 
     switch (*layout_this_complex_param++) {
       case 1: { /* scannable */
         value v = *clos_field_scannable++;
         if (room_in_int_regs) {
-          buffer[*num_int_written] = (uintnat) v;
+          buffer[int_index] = (uintnat) v;
         } else {
-          buffer[stack_index] = v;
-          num_stack_written++;
+          buffer[stack_index] = (uintnat) v;
+          *num_stack_written += 1;
         }
         *num_int_written += 1;
         break;
       }
 
-      case 2: /* non-scannable int */
+      case 2: { /* non-scannable int */
         uintnat v = *clos_field_non_scannable++;
         if (room_in_int_regs) {
-          buffer[*num_int_written] = v;
+          buffer[int_index] = v;
         } else {
           buffer[stack_index] = v;
-          num_stack_written++;
+          *num_stack_written += 1;
         }
         *num_int_written += 1;
         break;
+      }
 
-      case 3: /* float */
+      case 3: { /* float */
         uintnat f = *clos_field_non_scannable++;
-        if (num_float_written < num_float_in_regs) {
+        if (room_in_float_regs) {
           buffer[float_index] = f;
         }
         else {
           buffer[stack_index] = f;
-          num_stack_written++;
+          *num_stack_written += 1;
         }
         *num_float_written += 1;
         break;
+      }
 
       default:
         CAMLassert(0);
