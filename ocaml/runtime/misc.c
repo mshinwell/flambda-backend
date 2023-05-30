@@ -247,7 +247,7 @@ void caml_flambda2_invalid (value message)
 #define Unarized_param_layout(layout, param_index) \
   ((uintnat*) (((unsigned char*) layout) + layout[param_index]))
 
-value caml_total_num_complex_params(value closure)
+static uintnat total_num_complex_params(value closure)
 {
   /* Return the number of complex parameters of the underlying closure
      involved in a chain of partial applications.  [closure] may either be
@@ -261,7 +261,7 @@ value caml_total_num_complex_params(value closure)
     CAMLassert(Is_a_closure(closure));
   }
 
-  return Val_long(Arity_closinfo(Closinfo_val(closure)));
+  return Arity_closinfo(Closinfo_val(closure));
 }
 
 value caml_num_scannable_unarized_params(value closure,
@@ -325,8 +325,6 @@ value caml_num_non_scannable_unarized_params(value closure,
 
   return Val_long(num_non_scannable_params);
 }
-
-/* Nathanaelle: start reading from here */
 
 /* See diagram below */
 #define VARARGS_BUFFER_HEADER_SIZE 4
@@ -478,8 +476,11 @@ static value extricate_parameters (value closure, uintnat* buffer,
   return actual_closure;
 }
 
-/* This function is called by the generated code for caml_curry_generic.
-   It accepts a linked list of closures which contain all of the arguments
+/* Assembly stub for doing variadic calls according to the calling
+   convention below */
+extern value caml_variadic_call(uintnat* buffer);
+
+/* This accepts a linked list of closures which contain all of the arguments
    making up a full function application.  The head of the linked list
    contains the arguments for the most recent partial application.
 
@@ -513,8 +514,8 @@ static value extricate_parameters (value closure, uintnat* buffer,
 
    The caller is responsible for calling [free] on the buffer.
 */
-uintnat* caml_curry_generic_helper (value callee_closure, value v_num_int_regs,
-  value v_num_float_regs)
+static uintnat* perform_full_application (value callee_closure,
+  value v_num_int_regs, value v_num_float_regs)
 {
   uintnat startenv;
   uintnat* layout;
@@ -615,5 +616,60 @@ uintnat* caml_curry_generic_helper (value callee_closure, value v_num_int_regs,
     buffer[3] = num_stack + 1;
   }
 
-  return buffer;
+  return caml_variadic_call(buffer);
+}
+
+extern value caml_curry_generic(void /* actually anything */);
+
+/* This is the continuation of the logic of [caml_curry_generic], except
+   written in C since it's easier to maintain, and does not vary based on
+   platform-specific details from [Proc]. */
+value caml_curry_generic_helper(value callee_closure,
+  value v_num_int_regs, value v_num_float_regs,
+  uintnat* temp_closure,
+  /* XXX need to be careful with tagging here */
+  value num_scannable, value num_non_scannable, uintnat* layout,
+  uintnat num_complex_params_already_applied)
+{
+  value real_closure;
+  int field;
+  int closure_size;
+
+  closure_size =
+    4 /* code pointer + arity + layout + num-seen-params */
+    + Long_val(num_non_scannable)
+    + 1 /* [callee_closure] */
+    + Long_val(num_scannable);
+
+  real_closure = caml_alloc_small(closure_size, Closure_tag);
+
+  /* XXX need to make sure there is a gap in the temp closure for
+     [callee_closure] */
+  memcpy(&Field(real_closure, 4), (void*) temp_closure,
+    sizeof(value) * (Long_val(num_scannable) + Long_val(num_non_scannable)));
+  Field(real_closure, 4 /* as above */ + Long_val(num_non_scannable))
+    = callee_closure;
+
+  Field(real_closure, 0) = (value) caml_curry_generic;
+  Field(real_closure, 1) = Make_closinfo(
+    1 /* arity */,
+    Long_val(num_non_scannable) + 4 /* startenv; 4 as above */,
+    1 /* is_last */);
+  Field(real_closure, 2) = layout;
+  num_complex_params_already_applied++;
+  Field(real_closure, 3) = (value) num_complex_params_already_applied;
+
+  for (field = 4 /* as above */ + Long_val(num_non_scannable) + 1;
+       field < closure_size; field++) {
+    caml_remove_global_root(&temp_closure[field]);
+  }
+  free(temp_closure);
+
+  if (total_num_complex_params(real_closure)
+    == num_complex_params_already_applied) {
+    return perform_full_application(callee_closure,
+      v_num_int_regs, v_num_float_regs);
+  }
+
+  return real_closure;
 }
