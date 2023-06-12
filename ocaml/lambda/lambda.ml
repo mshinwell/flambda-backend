@@ -266,6 +266,7 @@ and layout =
   | Pvalue of value_kind
   | Punboxed_float
   | Punboxed_int of boxed_integer
+  | Punboxed_vector of boxed_vector 
   | Pbottom
 
 and block_shape =
@@ -276,6 +277,9 @@ and array_kind =
 
 and boxed_integer = Primitive.boxed_integer =
     Pnativeint | Pint32 | Pint64
+
+and boxed_vector = Primitive.boxed_vector = 
+  | Pvec128
 
 and bigarray_kind =
     Pbigarray_unknown
@@ -297,6 +301,8 @@ and raise_kind =
   | Raise_notrace
 
 let equal_boxed_integer = Primitive.equal_boxed_integer
+
+let equal_boxed_vector = Primitive.equal_boxed_vector
 
 let equal_primitive =
   (* Should be implemented like [equal_value_kind] of [equal_boxed_integer],
@@ -342,9 +348,10 @@ let compatible_layout x y =
   | Punboxed_float, Punboxed_float -> true
   | Punboxed_int bi1, Punboxed_int bi2 ->
       equal_boxed_integer bi1 bi2
+  | Punboxed_vector bi1, Punboxed_vector bi2 -> equal_boxed_vector bi1 bi2 
   | Ptop, Ptop -> true
   | Ptop, _ | _, Ptop -> false
-  | (Pvalue _ | Punboxed_float | Punboxed_int _), _ -> false
+  | (Pvalue _ | Punboxed_float | Punboxed_int _ | Punboxed_vector _), _ -> false
 
 let must_be_value layout =
   match layout with

@@ -414,6 +414,8 @@ let close_c_call acc env ~loc ~let_bound_var
       Some (P.Box_number (Naked_int32, Alloc_mode.For_allocations.heap))
     | _, Unboxed_integer Pint64 ->
       Some (P.Box_number (Naked_int64, Alloc_mode.For_allocations.heap))
+    | _, Unboxed_vector Pvec128 ->
+      Some (P.Box_number (Naked_vec128, Alloc_mode.For_allocations.heap))
     | _, Untagged_int -> Some P.Tag_immediate
   in
   let return_continuation, needs_wrapper =
@@ -436,6 +438,7 @@ let close_c_call acc env ~loc ~let_bound_var
     | Unboxed_integer Pint32 -> K.naked_int32
     | Unboxed_integer Pint64 -> K.naked_int64
     | Untagged_int -> K.naked_immediate
+    | Unboxed_vector Pvec128 -> K.naked_vec128
   in
   let param_arity =
     List.map kind_of_primitive_native_repr prim_native_repr_args
