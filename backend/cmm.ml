@@ -251,6 +251,7 @@ type expression =
     Cconst_int of int * Debuginfo.t
   | Cconst_natint of nativeint * Debuginfo.t
   | Cconst_float of float * Debuginfo.t
+  | Cconst_vec128 of int64 * int64 * Debuginfo.t
   | Cconst_symbol of symbol * Debuginfo.t
   | Cvar of Backend_var.t
   | Clet of Backend_var.With_provenance.t * expression * expression
@@ -350,6 +351,7 @@ let iter_shallow_tail f = function
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float _
+  | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _
   | Cassign _
@@ -392,6 +394,7 @@ let map_shallow_tail ?kind f = function
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float _
+  | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _
   | Cassign _
@@ -448,6 +451,7 @@ let iter_shallow f = function
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float _
+  | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _ ->
       ()
@@ -485,6 +489,7 @@ let map_shallow f = function
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float _
+  | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _
     as c ->
