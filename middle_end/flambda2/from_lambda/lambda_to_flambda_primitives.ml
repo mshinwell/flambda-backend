@@ -618,6 +618,20 @@ let bbswap bi si mode arg ~current_region : H.expr_primitive =
            ( Int_arith (si, Swap_byte_endianness),
              Prim (Unary (Unbox_number bi, arg)) )) )
 
+let opaque layout arg middle_end_only : H.expr_primitive list =
+  let kinds =
+    Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout])
+  in
+  if List.compare_lengths kinds arg <> 0
+  then
+    Misc.fatal_error
+      "Popaque/Pobj_magic layout does not have the same length as unarized argument";
+  List.map2
+    (fun arg_component kind : H.expr_primitive ->
+       let kind = K.With_subkind.kind kind in
+       Unary (Opaque_identity { middle_end_only; kind }, arg_component))
+    arg kinds
+
 (* Primitive conversion *)
 let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     (dbg : Debuginfo.t) ~current_region : H.expr_primitive list =
@@ -705,31 +719,9 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
                   List.map unbox_float args ),
               Variadic (Make_array (Values, mutability, mode), args) ) ]))
   | Popaque layout, [arg] ->
-    let kinds =
-      Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout])
-    in
-    if List.compare_lengths kinds arg <> 0
-    then
-      Misc.fatal_error
-        "Popaque layout does not have the same length as unarized argument";
-    List.map2
-      (fun arg_component kind : H.expr_primitive ->
-        let kind = K.With_subkind.kind kind in
-        Unary (Opaque_identity { middle_end_only = false; kind }, arg_component))
-      arg kinds
+    opaque layout arg false
   | Pobj_magic layout, [arg] ->
-    let kinds =
-      Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout])
-    in
-    if List.compare_lengths kinds arg <> 0
-    then
-      Misc.fatal_error
-        "Pobj_magic layout does not have the same length as unarized argument";
-    List.map2
-      (fun arg_component kind : H.expr_primitive ->
-        let kind = K.With_subkind.kind kind in
-        Unary (Opaque_identity { middle_end_only = true; kind }, arg_component))
-      arg kinds
+    opaque layout arg true
   | Pduprecord (repr, num_fields), [[arg]] ->
     let kind : P.Duplicate_block_kind.t =
       match repr with
