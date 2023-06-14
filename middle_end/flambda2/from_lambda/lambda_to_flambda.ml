@@ -1010,8 +1010,6 @@ let primitive_result_kind (prim : Lambda.primitive) :
     Flambda_kind.With_subkind.boxed_int64
   | Pccall { prim_native_repr_res = _, Unboxed_vector Pvec128; _ } ->
     (* CR mslater: (SIMD) load/store vectors *)
-    (* | Pstring_load_128 _ | Pbytes_load_128 _ | Pbigstring_load_128 _ |
-       Pbigarrayref (_, _, Pbigarray_vec128, _) *)
     Flambda_kind.With_subkind.boxed_vec128
   | Pnegint | Paddint | Psubint | Pmulint | Pandint | Porint | Pxorint | Plslint
   | Plsrint | Pasrint | Pmodint _ | Pdivint _ | Pignore | Psequand | Psequor
