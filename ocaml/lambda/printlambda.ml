@@ -99,9 +99,6 @@ let variant_kind print_contents ppf ~consts ~non_consts =
       ))
     non_consts
 
-let unboxed_product_debug () =
-  match Sys.getenv "DEBUG" with exception Not_found -> false | _ -> true
-
 let rec value_kind ppf = function
   | Pgenval -> ()
   | Pintval -> fprintf ppf "[int]"
@@ -111,10 +108,8 @@ let rec value_kind ppf = function
   | Pvariant { consts; non_consts; } ->
     variant_kind value_kind' ppf ~consts ~non_consts
 
-(* CR mshinwell: we need to work out how to fix these printers properly *)
-
 and value_kind' ppf = function
-  | Pgenval -> fprintf ppf (if unboxed_product_debug () then "[val]" else "*")
+  | Pgenval -> fprintf ppf "*"
   | Pintval -> fprintf ppf "[int]"
   | Pfloatval -> fprintf ppf "[float]"
   | Parrayval elt_kind -> fprintf ppf "[%sarray]" (array_kind elt_kind)
@@ -122,18 +117,19 @@ and value_kind' ppf = function
   | Pvariant { consts; non_consts; } ->
     variant_kind value_kind' ppf ~consts ~non_consts
 
-let rec layout ppf layout_ =
+let rec layout is_top ppf layout_ =
   match layout_ with
-  | Pvalue k ->
-    (if unboxed_product_debug () then value_kind' else value_kind) ppf k
+  | Pvalue k -> (if is_top then value_kind else value_kind') ppf k
   | Ptop -> fprintf ppf "[top]"
   | Pbottom -> fprintf ppf "[bottom]"
   | Punboxed_float -> fprintf ppf "[unboxed_float]"
   | Punboxed_int bi -> fprintf ppf "[unboxed_%s]" (boxed_integer_name bi)
   | Punboxed_product layouts ->
-    fprintf ppf "[%a]"
-      (pp_print_list ~pp_sep:(fun ppf () -> pp_print_string ppf " * ") layout)
+    fprintf ppf "@[<hov 1>[%a]@]"
+      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ",@ ") (layout false))
       layouts
+
+let layout ppf layout_ = layout true ppf layout_
 
 let return_kind ppf (mode, kind) =
   let smode = alloc_mode mode in
@@ -326,10 +322,10 @@ let primitive ppf = function
   | Pduprecord (rep, size) -> fprintf ppf "duprecord %a %i" record_rep rep size
   | Pmake_unboxed_product layouts ->
       fprintf ppf "make_unboxed_product [%a]"
-        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") layout) layouts
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") layout) layouts
   | Punboxed_product_field (n, layouts) ->
       fprintf ppf "unboxed_product_field %d [%a]" n
-        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") layout) layouts
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") layout) layouts
   | Pccall p -> fprintf ppf "%s" p.prim_name
   | Praise k -> fprintf ppf "%s" (Lambda.raise_kind k)
   | Psequand -> fprintf ppf "&&"
