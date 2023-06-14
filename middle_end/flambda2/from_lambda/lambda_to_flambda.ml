@@ -17,9 +17,6 @@
 (* "Use CPS". -- A. Kennedy, "Compiling with Continuations Continued", ICFP
    2007. *)
 
-let unboxed_product_debug () =
-  match Sys.getenv "DEBUG" with exception Not_found -> false | _ -> true
-
 module L = Lambda
 module CC = Closure_conversion
 module P = Flambda_primitive
@@ -273,15 +270,6 @@ end = struct
   let mutables_in_scope t = Ident.Map.keys t.current_values_of_mutables_in_scope
 
   let register_unboxed_product t ~unboxed_product ~before_unarization ~fields =
-    if unboxed_product_debug ()
-    then
-      Format.eprintf "register_unboxed_product %a: fields: %a\n%!" Ident.print
-        unboxed_product
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space
-           (fun ppf (id, kind) ->
-             Format.fprintf ppf "%a :: %a" Ident.print id
-               Flambda_kind.With_subkind.print kind))
-        fields;
     { t with
       unboxed_product_components_in_scope =
         Ident.Map.add unboxed_product
@@ -360,12 +348,6 @@ end = struct
       Ident.Map.data handler_env.current_values_of_mutables_in_scope
       @ extra_params_for_unboxed_products
     in
-    if unboxed_product_debug ()
-    then
-      Format.eprintf "Adding continuation %a with extra params: %a\n%!"
-        Continuation.print cont
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-        (List.map fst extra_params);
     { body_env; handler_env; extra_params }
 
   let add_static_exn_continuation t static_exn cont =
@@ -453,11 +435,6 @@ end = struct
             | _, fields -> Array.to_list fields)
           unboxed_products
     in
-    if unboxed_product_debug ()
-    then
-      Format.eprintf "Extra args for %a are: %a\n%!" Continuation.print cont
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-        (List.map fst (for_mutables @ for_unboxed_products));
     for_mutables @ for_unboxed_products
 
   let extra_args_for_continuation t cont =
@@ -902,7 +879,6 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   let { Env.body_env; handler_env; extra_params } =
     Env.add_continuation env cont ~push_to_try_stack:is_exn_handler Nonrecursive
   in
-  let orig_params = params in
   let handler_env, params_rev =
     List.fold_left
       (fun (handler_env, params_rev) (id, visible, layout) ->
@@ -937,17 +913,6 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
       (handler_env, []) params
   in
   let params = List.rev params_rev in
-  if List.compare_lengths params orig_params <> 0
-  then
-    if unboxed_product_debug ()
-    then
-      Format.eprintf
-        "Continuation %a has unboxed arities: orig_params %a, params %a\n%!"
-        Continuation.print cont
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-        (List.map (fun (id, _, _) -> id) orig_params)
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-        (List.map (fun (id, _, _) -> id) params);
   let extra_params =
     List.map (fun (id, kind) -> id, IR.User_visible, kind) extra_params
   in
@@ -1204,13 +1169,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
   match lam with
   | Lvar id -> (
     assert (not (Env.is_mutable env id));
-    if unboxed_product_debug ()
-    then
-      Format.eprintf "checking for unboxed product fields of %a\n%!" Ident.print
-        id;
     match Env.get_unboxed_product_fields env id with
     | None ->
-      if unboxed_product_debug () then Format.eprintf "...no unboxed fields\n%!";
       let kind =
         match CCenv.find_simple_to_substitute_exn ccenv id with
         | exception Not_found -> snd (CCenv.find_var ccenv id)
@@ -1221,11 +1181,6 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       in
       apply_cps_cont k acc env ccenv id arity_component
     | Some (before_unarization, fields) ->
-      if unboxed_product_debug ()
-      then
-        Format.eprintf "...got unboxed fields: (%a)\n%!"
-          (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-          fields;
       let fields = List.map (fun id -> IR.Var id) fields in
       apply_cps_cont_simple k acc env ccenv fields before_unarization)
   | Lmutvar id ->
@@ -1311,8 +1266,6 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         id,
         Lprim (prim, args, loc),
         body ) -> (
-    if unboxed_product_debug ()
-    then Format.eprintf "Handling let-binding: %a\n%!" Printlambda.lambda lam;
     match transform_primitive env prim args loc with
     | Primitive (prim, args, loc) ->
       (* This case avoids extraneous continuations. *)
@@ -1947,11 +1900,6 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
         | [] -> []
         | [kind] -> [param, kind]
         | _ :: _ ->
-          if unboxed_product_debug ()
-          then
-            Format.eprintf
-              "splitting unboxed product for function parameter %a\n%!"
-              Ident.print param;
           let fields =
             List.mapi
               (fun n kind ->
@@ -1972,15 +1920,6 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
           fields)
       (List.combine params unarized_per_param)
   in
-  if unboxed_product_debug ()
-  then
-    if List.compare_lengths params unarized_per_param <> 0
-    then
-      Format.eprintf "flattened param list for %a:@ %a\n%!" Ident.print fid
-        (Format.pp_print_list (fun ppf (id, kind) ->
-             Format.fprintf ppf "%a :: %a" Ident.print id
-               Flambda_kind.With_subkind.print kind))
-        params;
   let unboxed_products = !unboxed_products in
   let removed_params = Ident.Map.keys unboxed_products in
   let return =
@@ -1993,11 +1932,6 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
     let new_env =
       Ident.Map.fold
         (fun unboxed_product (before_unarization, fields) new_env ->
-          if unboxed_product_debug ()
-          then
-            Format.eprintf
-              "registering unboxed product for function parameter %a\n%!"
-              Ident.print unboxed_product;
           Env.register_unboxed_product new_env ~unboxed_product
             ~before_unarization ~fields)
         unboxed_products new_env
