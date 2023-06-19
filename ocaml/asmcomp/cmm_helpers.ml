@@ -920,6 +920,7 @@ module Extended_machtype = struct
       typ_any_int
     | Pvalue Pintval -> typ_tagged_int
     | Pvalue _ -> typ_val
+    | Punboxed_product _ -> failwith "TODO"
 end
 
 let machtype_of_layout layout =
