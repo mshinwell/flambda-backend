@@ -12,6 +12,10 @@ type decomposition =
   | Atom of { offset : int; layout : atom }
   | Product of decomposition array
 
+val equal_decomposition : decomposition -> decomposition -> bool
+
+val print_decomposition : Format.formatter -> decomposition -> unit
+
 val decompose_free_vars :
   base_offset:int ->
   free_vars:('a * Clambda_primitives.layout) list ->

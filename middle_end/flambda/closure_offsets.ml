@@ -21,9 +21,8 @@ type layout_atom = Clambda_layout.atom
 type decomposition = Clambda_layout.decomposition
 type parts = decomposition
 
-let equal_parts (p1 : parts) p2 = p1 = p2
-let print_parts ppf _p =
-  Format.fprintf ppf "TODO offset parts"
+let equal_parts = Clambda_layout.equal_decomposition
+let print_parts = Clambda_layout.print_decomposition
 
 type result = {
   function_offsets : int Closure_id.Map.t;

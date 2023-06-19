@@ -33,6 +33,25 @@ type decomposition =
   | Atom of { offset : int; layout : atom }
   | Product of decomposition array
 
+
+let print_atom ppf = function
+  | Value -> Format.fprintf ppf "val"
+  | Value_int -> Format.fprintf ppf "int"
+  | Unboxed_float -> Format.fprintf ppf "#float"
+  | Unboxed_int Pint32 -> Format.fprintf ppf "unboxed_int32"
+  | Unboxed_int Pint64 -> Format.fprintf ppf "unboxed_int64"
+  | Unboxed_int Pnativeint -> Format.fprintf ppf "unboxed_nativeint"
+
+let equal_decomposition = (=)
+let rec print_decomposition ppf dec =
+  match dec with
+  | Atom { offset; layout } ->
+    Format.fprintf ppf "(%d: %a)" offset print_atom layout
+  | Product a ->
+    Format.fprintf ppf "@[<hov 2>[%a]@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space print_decomposition)
+      (Array.to_list a)
+
 let rec decompose (layout : Lambda.layout) : _ decomposition' =
   match layout with
   | Ptop ->
