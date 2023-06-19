@@ -2014,8 +2014,8 @@ let close_let_rec acc env ~function_declarations
       named ~body
 
 let wrap_partial_application acc env apply_continuation (apply : IR.apply)
-    approx ~provided ~provided_arity ~missing_arity ~arity ~num_trailing_local_params
-    ~contains_no_escaping_local_allocs =
+    approx ~provided ~provided_arity ~missing_arity ~arity
+    ~num_trailing_local_params ~contains_no_escaping_local_allocs =
   (* In case of partial application, creates a wrapping function from scratch to
      allow inlining and lifting *)
   let wrapper_id = Ident.create_local ("partial_" ^ Ident.name apply.func) in
@@ -2292,7 +2292,11 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
             Flambda_arity.partially_apply non_unarized_arity
               ~num_non_unarized_params_provided:args_l
           in
-          Partial_app { provided = args; provided_arity = apply.args_arity; missing_arity }
+          Partial_app
+            { provided = args;
+              provided_arity = apply.args_arity;
+              missing_arity
+            }
         else
           let full, remaining = cut (List.length arity) args in
           let remaining_arity =
@@ -2322,8 +2326,8 @@ let close_apply acc env (apply : IR.apply) : Expr_with_acc.t =
              Inlining_helpers.(
                inlined_attribute_on_partial_application_msg Inlined))
       | Never_inlined | Hint_inlined | Default_inlined -> ());
-      wrap_partial_application acc env apply.continuation apply approx ~provided ~provided_arity
-        ~missing_arity ~arity ~num_trailing_local_params
+      wrap_partial_application acc env apply.continuation apply approx ~provided
+        ~provided_arity ~missing_arity ~arity ~num_trailing_local_params
         ~contains_no_escaping_local_allocs
     | Over_app { full; provided_arity; remaining; remaining_arity } ->
       let full_args_call apply_continuation ~region acc =

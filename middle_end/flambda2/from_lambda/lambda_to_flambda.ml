@@ -1381,8 +1381,8 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             in
             let dbg = Debuginfo.from_location loc in
             CC.close_raise acc ccenv ~raise_kind
-              ~arg:(List.hd (List.hd args)) ~dbg
-              exn_continuation)
+              ~arg:(List.hd (List.hd args))
+              ~dbg exn_continuation)
           k_exn
       | [] | _ :: _ ->
         Misc.fatal_errorf "Wrong number of arguments for Lraise: %a"
