@@ -712,7 +712,7 @@ and to_clambda_set_of_closures t env
         | Punboxed_int _ -> true
         | Pvalue Pintval -> true
         | Pvalue _ -> false
-        | Punboxed_product _ -> Misc.fatal_error "TBD")
+        | Punboxed_product _ -> Misc.fatal_error "TODO")
       free_vars
   in
   let to_closure_args free_vars =

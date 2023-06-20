@@ -921,10 +921,12 @@ method emit_expr_aux (env:environment) exp :
          ret (self#insert_op_debug env Iopaque dbg rs rs)
       end
   | Cop(Ctuple_field(field, fields_layout), [arg], dbg) ->
-    begin match self#emit_expr env arg with
+      begin match self#emit_expr env arg with
         None -> None
       | Some loc_exp ->
-        let flat_size a = Array.fold_left (fun acc t -> acc + Array.length t) 0 a in
+        let flat_size a =
+          Array.fold_left (fun acc t -> acc + Array.length t) 0 a
+        in
         assert(Array.length loc_exp = flat_size fields_layout);
         let before = Array.sub fields_layout 0 field in
         let size_before = flat_size before in
@@ -932,7 +934,7 @@ method emit_expr_aux (env:environment) exp :
           Array.sub loc_exp size_before (Array.length fields_layout.(field))
         in
         ret field_slice
-    end
+      end
   | Cop(op, args, dbg) ->
       begin match self#emit_parts_list env args with
         None -> None

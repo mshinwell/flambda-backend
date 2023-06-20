@@ -534,7 +534,7 @@ module With_subkind = struct
     | Parrayval Paddrarray -> value_array
     | Parrayval Pgenarray -> generic_array
 
-  let unsafe_from_lambda (layout : Lambda.layout) =
+  let from_lambda_values_and_unboxed_numbers_only (layout : Lambda.layout) =
     match layout with
     | Pvalue vk -> from_lambda_value_kind vk
     | Punboxed_float -> naked_float
@@ -542,7 +542,9 @@ module With_subkind = struct
     | Punboxed_int Pint64 -> naked_int64
     | Punboxed_int Pnativeint -> naked_nativeint
     | Punboxed_product _ | Ptop | Pbottom ->
-      Misc.fatal_errorf "Flambda_kind.unsafe_from_lambda: cannot convert %a"
+      Misc.fatal_errorf
+        "Flambda_kind.from_lambda_values_and_unboxed_numbers_only: cannot \
+         convert %a"
         Printlambda.layout layout
 
   include Container_types.Make (struct

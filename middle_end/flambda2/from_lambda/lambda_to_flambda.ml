@@ -1230,7 +1230,10 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv ->
-        let kind = Flambda_kind.With_subkind.unsafe_from_lambda value_kind in
+        let kind =
+          Flambda_kind.With_subkind.from_lambda_values_and_unboxed_numbers_only
+            value_kind
+        in
         let env, new_id = Env.register_mutable_variable env id kind in
         let body acc ccenv = cps acc env ccenv body k k_exn in
         CC.close_let acc ccenv
@@ -1285,7 +1288,10 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             | Ptop | Pbottom ->
               Misc.fatal_error "Cannot bind layout [Ptop] or [Pbottom]"
             | Pvalue _ | Punboxed_int _ | Punboxed_float ->
-              env, [id, Flambda_kind.With_subkind.unsafe_from_lambda layout]
+              ( env,
+                [ ( id,
+                    Flambda_kind.With_subkind
+                    .from_lambda_values_and_unboxed_numbers_only layout ) ] )
             | Punboxed_product layouts ->
               let arity_component =
                 Flambda_arity.Component_for_creation.Unboxed_product
@@ -1866,7 +1872,7 @@ and cps_function_bindings env (bindings : (Ident.t * L.lambda) list) =
 and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
     ({ kind; params; return; body; attr; loc; mode; region } : L.lfunction) :
     Function_decl.t =
-  let num_trailing_local_params =
+  let num_trailing_complex_local_params =
     match kind with Curried { nlocal } -> nlocal | Tupled -> 0
   in
   let body_cont = Continuation.create ~sort:Return () in
@@ -1941,7 +1947,7 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
   Function_decl.create ~let_rec_ident:(Some fid) ~function_slot ~kind ~params
     ~params_arity ~removed_params ~return ~return_continuation:body_cont
     ~exn_continuation ~my_region ~body ~attr ~loc ~free_idents_of_body recursive
-    ~closure_alloc_mode:mode ~num_trailing_local_params
+    ~closure_alloc_mode:mode ~num_trailing_complex_local_params
     ~contains_no_escaping_local_allocs:region
 
 and cps_switch acc env ccenv (switch : L.lambda_switch) ~condition_dbg

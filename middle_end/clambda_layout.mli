@@ -1,3 +1,17 @@
+(**************************************************************************)
+(*                                                                        *)
+(*                                 OCaml                                  *)
+(*                                                                        *)
+(*                        Pierre Chambart, OCamlPro                       *)
+(*                                                                        *)
+(*   Copyright 2023 OCamlPro SAS                                          *)
+(*                                                                        *)
+(*   All rights reserved.  This file is distributed under the terms of    *)
+(*   the GNU Lesser General Public License version 2.1, with the          *)
+(*   special exception on linking described in the file LICENSE.          *)
+(*                                                                        *)
+(**************************************************************************)
+
 type atom =
   | Value
   | Value_int
@@ -5,11 +19,17 @@ type atom =
   | Unboxed_int of Lambda.boxed_integer
 
 val fold_left_layout :
-  ('acc -> Clambda.ulambda -> atom -> 'acc) -> 'acc -> Clambda.ulambda ->
-  Clambda_primitives.layout -> 'acc
+  ('acc -> Clambda.ulambda -> atom -> 'acc) ->
+  'acc ->
+  Clambda.ulambda ->
+  Clambda_primitives.layout ->
+  'acc
 
 type decomposition =
-  | Atom of { offset : int; layout : atom }
+  | Atom of
+      { offset : int;
+        layout : atom
+      }
   | Product of decomposition array
 
 val equal_decomposition : decomposition -> decomposition -> bool

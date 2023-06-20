@@ -239,8 +239,8 @@ let rewrite_exn_continuation rewrite id exn_cont =
           (original_params_arity rewrite))
   then
     Misc.fatal_errorf
-      "Arity of exception\n\
-      \     continuation %a does not match@ [original_params]  (%a)"
+      "Arity of exception continuation %a does not match@ [original_params] \
+       (%a)"
       Exn_continuation.print exn_cont Bound_parameters.print
       rewrite.original_params;
   assert (Flambda_arity.cardinal_unarized exn_cont_arity >= 1);
