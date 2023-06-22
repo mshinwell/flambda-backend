@@ -477,6 +477,8 @@ let primitive ppf = function
 
   | Parray_to_iarray -> fprintf ppf "array_to_iarray"
   | Parray_of_iarray -> fprintf ppf "array_of_iarray"
+  | Pbegin_uninterruptable -> fprintf ppf "begin_uninterruptable"
+  | Pend_uninterruptable -> fprintf ppf "end_uninterruptable"
 
 let name_of_primitive = function
   | Pbytes_of_string -> "Pbytes_of_string"
@@ -591,6 +593,8 @@ let name_of_primitive = function
   | Pbox_int _ -> "Pbox_int"
   | Parray_of_iarray -> "Parray_of_iarray"
   | Parray_to_iarray -> "Parray_to_iarray"
+  | Pbegin_uninterruptable -> "Pbegin_uninterruptable"
+  | Pend_uninterruptable -> "Pend_uninterruptable"
 
 let check_attribute ppf check =
   let check_property = function

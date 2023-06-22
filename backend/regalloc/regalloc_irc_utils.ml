@@ -133,6 +133,8 @@ let is_move_basic : Cfg.basic -> bool =
     | Opaque -> false
     | Begin_region -> false
     | End_region -> false
+    | Begin_uninterruptable -> false
+    | End_uninterruptable -> false
     | Specific _ -> false
     | Name_for_debugger _ -> false)
   | Reloadretaddr | Pushtrap _ | Poptrap | Prologue -> false

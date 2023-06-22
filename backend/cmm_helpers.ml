@@ -4377,3 +4377,7 @@ let kind_of_layout (layout : Lambda.layout) =
   | Pvalue (Pgenval | Pintval | Pvariant _ | Parrayval _)
   | Ptop | Pbottom | Punboxed_float | Punboxed_int _ ->
     Any
+
+let begin_uninterruptable ~dbg = Cop (Cbegin_uninterruptable, [], dbg)
+
+let end_uninterruptable ~dbg e = Cop (Cend_uninterruptable, [e], dbg)

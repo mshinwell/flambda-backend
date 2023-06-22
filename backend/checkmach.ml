@@ -944,7 +944,7 @@ end = struct
       assert (not (Mach.operation_can_raise op));
       next
     | Istackoffset _ | Iprobe_is_enabled _ | Iopaque | Ibeginregion | Iendregion
-    | Iintop_atomic _ ->
+    | Ibegin_uninterruptable | Iend_uninterruptable | Iintop_atomic _ ->
       assert (not (Mach.operation_can_raise op));
       next
     | Istore _ ->

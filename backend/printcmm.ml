@@ -238,6 +238,8 @@ let operation d = function
   | Copaque -> "opaque"
   | Cbeginregion -> "beginregion"
   | Cendregion -> "endregion"
+  | Cbegin_uninterruptable -> "begin_uninterruptable"
+  | Cend_uninterruptable -> "end_uninterruptable"
 
 
 let rec expr ppf = function

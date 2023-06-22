@@ -272,6 +272,8 @@ let dump_op ppf = function
   | Begin_region -> Format.fprintf ppf "beginregion"
   | End_region -> Format.fprintf ppf "endregion"
   | Name_for_debugger _ -> Format.fprintf ppf "name_for_debugger"
+  | Begin_uninterruptable -> Format.fprintf ppf "begin_uninterruptable"
+  | End_uninterruptable -> Format.fprintf ppf "end_uninterruptable"
 
 let dump_basic ppf (basic : basic) =
   let open Format in
@@ -477,6 +479,8 @@ let is_pure_operation : operation -> bool = function
     assert (not (Arch.operation_can_raise s));
     Arch.operation_is_pure s
   | Name_for_debugger _ -> true
+  | Begin_uninterruptable -> false
+  | End_uninterruptable -> false
 
 let is_pure_basic : basic -> bool = function
   | Op op -> is_pure_operation op
@@ -516,7 +520,8 @@ let is_noop_move instr =
       | Store _ | Intop _ | Intop_imm _ | Intop_atomic _ | Negf | Absf | Addf
       | Subf | Mulf | Divf | Compf _ | Floatofint | Intoffloat | Opaque
       | Valueofint | Intofvalue | Probe_is_enabled _ | Specific _
-      | Name_for_debugger _ | Begin_region | End_region )
+      | Name_for_debugger _ | Begin_region | End_region | Begin_uninterruptable
+      | End_uninterruptable )
   | Reloadretaddr | Pushtrap _ | Poptrap | Prologue ->
     false
 
