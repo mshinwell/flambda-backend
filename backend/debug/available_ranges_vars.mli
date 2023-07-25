@@ -62,7 +62,7 @@ end
 include
   Compute_ranges_intf.S
     with module Index := Backend_var
-    with module Key := Reg_with_debug_info.For_compute_ranges
+    with module Key := Compute_ranges_key.Available_regs
     with module Subrange_state := Subrange_state
     with module Subrange_info := Subrange_info
     with module Range_info := Range_info

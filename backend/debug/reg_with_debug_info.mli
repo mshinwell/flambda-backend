@@ -112,3 +112,5 @@ end
 
 val print :
   print_reg:(Format.formatter -> Reg.t -> unit) -> Format.formatter -> t -> unit
+
+val compare : t -> t -> int
