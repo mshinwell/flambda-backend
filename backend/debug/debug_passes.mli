@@ -27,5 +27,4 @@ type result = private
     available_ranges_vars : Available_ranges_all_vars.t
   }
 
-val passes_for_fundecl_and_emit :
-  emit:(Linear.fundecl -> unit) -> Linear.fundecl -> result
+val passes_for_fundecl : Linear.fundecl -> result

@@ -2043,7 +2043,7 @@ let end_assembly () =
   end;
 
   let asm =
-    if !Emitaux.create_asm_file then
+    if !X86_proc.create_asm_file then
       Some
         (
          (if X86_proc.masm then X86_masm.generate_asm

@@ -268,11 +268,15 @@
   linear_format
   cfg_format
   ;; asmcomp/debug/
-  reg_availability_set
-  compute_ranges_intf
+  available_ranges_vars
+  available_ranges_all_vars
   available_regs
-  reg_with_debug_info
+  coalesce_labels
   compute_ranges
+  compute_ranges_intf
+  debug_passes
+  reg_availability_set
+  reg_with_debug_info
   ;; asmcomp/debug/dwarf/dwarf_ocaml
   ;; This code has a lot of dependencies into ocamloptcomp, so we just
   ;; build it as part of that library.

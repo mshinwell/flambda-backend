@@ -415,7 +415,6 @@ let reset () =
   frame_descriptors := []
 
 let binary_backend_available = ref false
-let create_asm_file = ref true
 
 let reduce_heap_size ~reset =
   let _minor, _promoted, major_words = Gc.counters () in
@@ -495,8 +494,12 @@ module Dwarf_helpers = struct
           fun_end_label;
         }
       in
-      Dwarf.dwarf_for_fundecl dwarf fundecl;
+      let () =
+        Debug_passes.passes_for_fundecl ~end_of_function_label fundecl
+        |> Dwarf.dwarf_for_fundecl dwarf
+      in
       Some label
+
 end
 
 let report_error ppf = function

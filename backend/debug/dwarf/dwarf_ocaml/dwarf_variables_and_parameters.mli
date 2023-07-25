@@ -14,6 +14,9 @@
 
 (** Handling of DWARF descriptions of variables and function parameters. *)
 
+open! Dwarf_low
+open! Dwarf_high
+
 val normal_type_for_var :
   ?reference:Proto_die.reference ->
   parent:Proto_die.t option ->

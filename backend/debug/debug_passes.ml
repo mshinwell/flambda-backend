@@ -40,11 +40,10 @@ let passes_for_fundecl (fundecl : L.fundecl) =
   in
   available_ranges_vars, lexical_block_ranges, fundecl
 
-let passes_for_fundecl_and_emit ~emit (fundecl : L.fundecl) =
+let passes_for_fundecl (fundecl : L.fundecl) =
   let available_ranges_vars, fundecl =
     if Clflags.debug_thing Debug_dwarf_vars
     then passes_for_fundecl fundecl
     else Available_ranges_all_vars.empty, fundecl
   in
-  emit fundecl;
   { fundecl; available_ranges_vars }
