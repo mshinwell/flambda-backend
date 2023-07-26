@@ -22,12 +22,7 @@ module Vars = struct
      may be multiple registers with different stamps assigned to the same
      location. As such, we quotient register sets by the equivalence relation
      that identifies two registers iff they have the same name and location. *)
-  module Key = struct
-    include RD.For_compute_ranges
-
-    let all_parents _t = []
-  end
-
+  module Key = Compute_ranges_key.Available_regs
   module Index = V
 
   module Subrange_state : sig
@@ -43,11 +38,11 @@ module Vars = struct
       let stack_offset =
         match insn.desc with
         | Lop (Istackoffset delta) -> t.stack_offset + delta
-        | Lpushtrap -> t.stack_offset + Proc.trap_frame_size_in_bytes
+        | Lpushtrap _ -> t.stack_offset + Proc.trap_frame_size_in_bytes
         | Lpoptrap -> t.stack_offset - Proc.trap_frame_size_in_bytes
         | Lend | Lprologue | Lop _ | Lreloadretaddr | Lreturn | Llabel _
-        | Lbranch _ | Lcondbranch _ | Lcondbranch3 _ | Lswitch _ | Lsetuptrap _
-        | Lraise _ ->
+        | Lbranch _ | Lcondbranch _ | Lcondbranch3 _ | Lswitch _ | Lentertrap
+        | Lraise _ | Ladjust_stack_offset _ ->
           t.stack_offset
       in
       { stack_offset }

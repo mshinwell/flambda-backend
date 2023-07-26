@@ -28,11 +28,11 @@ module Subrange : sig
 
   val info : t -> Subrange_info.t
 
-  val start_pos : t -> Linearize.label
+  val start_pos : t -> Linear.label
 
   val start_pos_offset : t -> int
 
-  val end_pos : t -> Linearize.label
+  val end_pos : t -> Linear.label
 
   val end_pos_offset : t -> int
 end
@@ -56,7 +56,7 @@ module Range : sig
 
   val info : t -> Range_info.t
 
-  val extremities : t -> (Linearize.label * Linearize.label) option
+  val extremities : t -> (Linear.label * Linear.label) option
 
   val fold : t -> init:'a -> f:('a -> Subrange.t -> 'a) -> 'a
 end
@@ -66,7 +66,7 @@ type t
 val empty : t
 
 val create :
-  available_ranges_vars:Available_ranges_vars.t -> Linearize.fundecl -> t
+  available_ranges_vars:Available_ranges_vars.t -> Linear.fundecl -> t
 
 val iter : t -> f:(Backend_var.t -> Range.t -> unit) -> unit
 
