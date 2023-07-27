@@ -26,8 +26,7 @@ val normal_type_for_var :
 
 val dwarf :
   Dwarf_state.t ->
-  Linearize.fundecl ->
+  Linear.fundecl ->
   function_proto_die:Proto_die.t ->
-  scope_proto_dies:Proto_die.t Debuginfo.Block.Map.t ->
   Available_ranges_all_vars.t ->
   unit

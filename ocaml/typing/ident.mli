@@ -56,7 +56,9 @@ val is_global: t -> bool
 val is_global_or_predef: t -> bool
 val is_predef: t -> bool
 val is_instance: t -> bool
+val is_optional_parameter: t -> string option
 
+val stamp: t -> int
 val scope: t -> int
 
 val lowest_scope : int

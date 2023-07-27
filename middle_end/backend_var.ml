@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2018 Jane Street Group LLC                                 *)
+(*   Copyright 2018--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -17,6 +17,25 @@
 include Ident
 
 type backend_var = t
+
+let name_for_debugger t =
+  match is_optional_parameter t with
+  | None -> name t
+  | Some name -> name
+
+let unique_name_for_debugger t =
+  let name =
+    match is_optional_parameter t with
+    | None -> name t
+    | Some name -> name
+  in
+  Printf.sprintf "%s/%d" name (stamp t)
+
+let is_internal t =
+  let name = name t in
+  String.length name >= 1
+    && String.get name 0 = '*'
+    && String.get name (String.length name - 1) = '*'
 
 module Provenance = struct
   type t = {

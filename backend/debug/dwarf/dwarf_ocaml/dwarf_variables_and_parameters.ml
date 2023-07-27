@@ -12,11 +12,13 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open! Dwarf_low
+open! Dwarf_high
 module ARV = Available_ranges_all_vars
 module DAH = Dwarf_attribute_helpers
 module DS = Dwarf_state
 module L = Linear
-module SLDL = Dwarf_high.Simple_location_description_lang
+module SLDL = Simple_location_description_lang
 module V = Backend_var
 
 type var_uniqueness =
@@ -316,7 +318,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
   let is_static =
     match provenance with
     | None -> false
-    | Some provenance -> V.Provenance.is_static provenance
+    | Some provenance -> false (* XXX V.Provenance.is_static provenance *)
   in
   let phantom_defining_expr = ARV.Range_info.phantom_defining_expr range_info in
   let (parent_proto_die : Proto_die.t), hidden =
@@ -397,7 +399,8 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
                 in
                 dwarf_4_location_list_entries, location_list))
       in
-      match !Clflags.gdwarf_version with
+      match Dwarf_version.five with
+      (* XXX !Clflags.gdwarf_version *)
       | Four ->
         let location_list_entries = dwarf_4_location_list_entries in
         let location_list =
@@ -521,7 +524,7 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
             (match provenance with
             | None -> ()
             | Some provenance ->
-              if V.Provenance.is_static provenance
+              if false (* XXX V.Provenance.is_static provenance *)
               then
                 Misc.fatal_errorf
                   "Variable %a marked as static, but it is not bound by a \
@@ -553,9 +556,9 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
               (* The startup file is generated from Cmm code and is therefore
                  not expected to link back to any .cmt file via identifier names
                  and stamps. *)
-              Compilation_unit.equal
-                (Compilation_unit.get_current_exn ())
-                Compilation_unit.startup
+              false
+              (* XXX Compilation_unit.equal (Compilation_unit.get_current_exn
+                 ()) Compilation_unit.startup *)
             in
             if (not hidden) && not in_startup_file
             then

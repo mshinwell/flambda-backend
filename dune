@@ -286,6 +286,7 @@
   dwarf_compilation_unit
   dwarf_concrete_instances
   dwarf_state
+  dwarf_variables_and_parameters
   ;; driver/
   opterrors
   optcompile

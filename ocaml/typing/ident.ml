@@ -154,6 +154,15 @@ let is_instance = function
   | Instance _ -> true
   | _ -> false
 
+let is_optional_parameter t =
+  match t with
+  | Local { name; _ }
+  | Scoped { name; _ } ->
+    if String.length name > 5 && String.equal (String.sub name 0 5) "*opt*"
+    then Some (String.sub name 5 (String.length name - 5))
+    else None
+  | Global _ | Predef _ | Instance _ -> None
+
 let split_instance = function
   | Instance (f, args) -> Some (f, args)
   | _ -> None
