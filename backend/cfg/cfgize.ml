@@ -212,10 +212,12 @@ let basic_or_terminator_of_operation :
         (fun label_after -> Specific_can_raise { op; label_after })
     else Basic (Op (Specific op))
   | Iopaque -> Basic (Op Opaque)
-  | Iname_for_debugger _ ->
-    Misc.fatal_error
-      "Cfgize.basic_or_terminator_of_operation: \"the Iname_for_debugger\" \
-       instruction is currently not supported "
+  | Iname_for_debugger
+      { ident; which_parameter; provenance; is_assignment; regs } ->
+    Basic
+      (Op
+         (Name_for_debugger
+            { ident; which_parameter; provenance; is_assignment; regs }))
   | Iprobe { name; handler_code_sym; enabled_at_init } ->
     With_next_label
       (fun label_after ->
@@ -311,7 +313,9 @@ let make_instruction : type a. State.t -> desc:a -> a Cfg.instruction =
     id;
     fdo;
     irc_work_list = Unknown_list;
-    ls_order = -1
+    ls_order = -1;
+    available_before = None;
+    available_across = None
   }
 
 let copy_instruction :
@@ -323,8 +327,8 @@ let copy_instruction :
         live;
         desc = _;
         next = _;
-        available_before = _;
-        available_across = _
+        available_before;
+        available_across
       } =
     instr
   in
@@ -340,7 +344,9 @@ let copy_instruction :
     id;
     fdo;
     irc_work_list = Unknown_list;
-    ls_order = -1
+    ls_order = -1;
+    available_before = Some available_before;
+    available_across
   }
 
 let copy_instruction_no_reg :
@@ -352,8 +358,8 @@ let copy_instruction_no_reg :
         live;
         desc = _;
         next = _;
-        available_before = _;
-        available_across = _
+        available_before;
+        available_across
       } =
     instr
   in
@@ -371,7 +377,9 @@ let copy_instruction_no_reg :
     id;
     fdo;
     irc_work_list = Unknown_list;
-    ls_order = -1
+    ls_order = -1;
+    available_before = Some available_before;
+    available_across
   }
 
 let rec get_end : Mach.instruction -> Mach.instruction =
@@ -770,6 +778,7 @@ let fundecl :
     State.make ~fun_name ~tailrec_label ~contains_calls:fun_contains_calls
       cfg.blocks
   in
+  (* XXX run [add_blocks] here but only for Iname_for_debugger instructions *)
   State.add_block state ~label:(Cfg.entry_label cfg)
     ~block:
       { start = Cfg.entry_label cfg;
@@ -778,8 +787,7 @@ let fundecl :
           | false -> DLL.make_empty ()
           | true ->
             (* Note: the prologue must come after all `Iname_for_debugger`
-               instructions (this is currently not a concern because we do not
-               support such instructions). *)
+               instructions *)
             let instr = make_instruction state ~desc:Cfg.Prologue in
             instr.dbg <- fun_body.dbg;
             instr.fdo <- Fdo_info.none;

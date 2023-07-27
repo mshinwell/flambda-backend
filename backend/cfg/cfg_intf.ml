@@ -94,7 +94,8 @@ module S = struct
         { ident : Ident.t;
           which_parameter : int option;
           provenance : Backend_var.Provenance.t option;
-          is_assignment : bool
+          is_assignment : bool;
+          regs : Reg.t array
         }
 
   type bool_test =
@@ -144,7 +145,9 @@ module S = struct
       mutable stack_offset : int;
       id : int;
       mutable irc_work_list : irc_work_list;
-      mutable ls_order : int
+      mutable ls_order : int;
+      mutable available_before : Reg_availability_set.t option;
+      mutable available_across : Reg_availability_set.t option
     }
 
   (* [basic] instruction cannot raise *)

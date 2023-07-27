@@ -226,13 +226,13 @@ let operation' ?(print_reg = reg) op arg ppf res =
   | Ivalueofint -> fprintf ppf "valueofint %a" reg arg.(0)
   | Iintofvalue -> fprintf ppf "intofvalue %a" reg arg.(0)
   | Iopaque -> fprintf ppf "opaque %a" reg arg.(0)
-  | Iname_for_debugger { ident; which_parameter; } ->
-    fprintf ppf "name_for_debugger %a%s=%a"
+  | Iname_for_debugger { ident; which_parameter; regs = r } ->
+    fprintf ppf "%a holds the value of %a%s"
+      regs r
       V.print ident
       (match which_parameter with
         | None -> ""
         | Some index -> sprintf "[P%d]" index)
-      reg arg.(0)
   | Ibeginregion -> fprintf ppf "beginregion"
   | Iendregion -> fprintf ppf "endregion %a" reg arg.(0)
   | Ispecific op ->
@@ -254,8 +254,7 @@ let rec instr ppf i =
     fprintf ppf "@[<1>{%a" regsetaddr i.live;
     if Array.length i.arg > 0 then fprintf ppf "@ +@ %a" regs i.arg;
     fprintf ppf "}@]@,";
-    (* CR-someday mshinwell: to use for gdb work
-    if !Clflags.dump_avail then begin
+    if (* XXX use dump_avail *) !Clflags.dump_live then begin
       let module RAS = Reg_availability_set in
       fprintf ppf "@[<1>AB={%a}" (RAS.print ~print_reg:reg) i.available_before;
       begin match i.available_across with
@@ -264,7 +263,7 @@ let rec instr ppf i =
         fprintf ppf ",AA={%a}" (RAS.print ~print_reg:reg) available_across
       end;
       fprintf ppf "@]@,"
-    end *)
+    end
   end;
   begin match i.desc with
   | Iend -> ()

@@ -129,7 +129,7 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
         Some (ok Reg_with_debug_info.Set.empty), unreachable
       | Iop
           (Iname_for_debugger
-            { ident; which_parameter; provenance; is_assignment }) ->
+            { ident; which_parameter; provenance; is_assignment; regs }) ->
         (* First forget about any existing debug info to do with [ident] if the
            naming corresponds to an assignment operation. *)
         let forgetting_ident =
@@ -147,11 +147,11 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
               avail_before
         in
         let avail_after = ref forgetting_ident in
-        let num_parts_of_value = Array.length instr.arg in
+        let num_parts_of_value = Array.length regs in
         (* Add debug info about [ident], but only for registers that are known
            to be available. *)
         for part_of_value = 0 to num_parts_of_value - 1 do
-          let reg = instr.arg.(part_of_value) in
+          let reg = regs.(part_of_value) in
           if RD.Set.mem_reg forgetting_ident reg
           then
             let regd =
@@ -370,7 +370,7 @@ and join branches ~avail_before =
   None, avail_after
 
 let fundecl (f : M.fundecl) =
-  if false (* !Clflags.debug && !Clflags.debug_runavail *)
+  if !Clflags.debug (* && !Dwarf_flags.foo XXX *)
   then (
     assert (Hashtbl.length avail_at_exit = 0);
     avail_at_raise := RAS.Unreachable;

@@ -318,9 +318,10 @@ let maybe_emit_naming_op env ~bound_name seq regs =
         provenance;
         which_parameter = None;
         is_assignment = false;
+        regs = regs;
       }
     in
-    seq#insert_debug env (Iop naming_op) Debuginfo.none regs [| |]
+    seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
 
 (* "Join" two instruction sequences, making sure they return their results
    in the same registers. *)
@@ -934,9 +935,10 @@ method emit_expr_aux (env:environment) exp ~bound_name :
               provenance;
               which_parameter = None;
               is_assignment = true;
+              regs = r1;
             }
           in
-          self#insert_debug env (Iop naming_op) Debuginfo.none r1 [| |];
+          self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
           self#insert_moves env r1 rv; ret [||]
       end
   | Ctuple [] ->
@@ -980,9 +982,10 @@ method emit_expr_aux (env:environment) exp ~bound_name :
                   provenance;
                   which_parameter = None;
                   is_assignment = false;
+                  regs = regs;
                 }
               in
-              self#insert_debug env (Iop naming_op) Debuginfo.none regs [| |]
+              self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
           in
           let ty = oper_result_type op in
           let unclosed_regions =
@@ -1148,9 +1151,10 @@ method emit_expr_aux (env:environment) exp ~bound_name :
                     provenance;
                     which_parameter = None;
                     is_assignment = false;
+                    regs = r;
                   }
                 in
-                seq#insert_debug env (Iop naming_op) Debuginfo.none r [| |])
+                seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |])
               ids_and_rs)
         in
         ((nfail, trap_stack), (r, s))
@@ -1261,9 +1265,10 @@ method emit_expr_aux (env:environment) exp ~bound_name :
                   provenance;
                   which_parameter = None;
                   is_assignment = false;
+                  regs = rv;
                 }
               in
-              seq#insert_debug env (Iop naming_op) Debuginfo.none rv [| |])
+              seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |])
         in
         let r = join env r1 s1 r2 s2 ~bound_name in
         self#insert env
@@ -1331,7 +1336,7 @@ method private emit_sequence ?at_start (env:environment) exp ~bound_name
   (r, s)
 
 method private bind_let (env:environment) v r1 =
-  let result =
+  let env =
     if all_regs_anonymous r1 then begin
       name_regs v r1;
       env_add v r1 env
@@ -1348,10 +1353,11 @@ method private bind_let (env:environment) v r1 =
       which_parameter = None;
       provenance = VP.provenance v;
       is_assignment = false;
+      regs = r1;
     }
   in
-  self#insert_debug env (Iop naming_op) Debuginfo.none r1 [| |];
-  result
+  self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
+  env
 
 method private bind_let_mut (env:environment) v k r1 =
   let rv = self#regs_for k in
@@ -1363,9 +1369,10 @@ method private bind_let_mut (env:environment) v k r1 =
       which_parameter = None;
       provenance = VP.provenance v;
       is_assignment = false;
+      regs = r1;
     }
   in
-  self#insert_debug env (Iop naming_op) Debuginfo.none r1 [| |];
+  self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
   env_add ~mut:Mutable v rv env
 
 (* The following two functions, [emit_parts] and [emit_parts_list], force
@@ -1681,11 +1688,12 @@ method emit_tail (env:environment) exp =
                     ident = var;
                     provenance;
                     which_parameter = None;
-                   is_assignment = false;
+                    is_assignment = false;
+                    regs = r;
                   }
                 in
                seq#insert_debug new_env (Iop naming_op) Debuginfo.none
-                 r [| |])
+                 [| |] [| |])
                ids_and_rs)
         in
         nfail, trap_stack, seq
@@ -1739,10 +1747,11 @@ method emit_tail (env:environment) exp =
                   provenance;
                   which_parameter = None;
                   is_assignment = false;
+                  regs = rv;
                 }
               in
               seq#insert_debug env_handler (Iop naming_op)
-                Debuginfo.none rv [| |])
+                Debuginfo.none [| |] [| |])
         in
         self#insert env
           (Itrywith(s1, kind,
@@ -1826,18 +1835,19 @@ method emit_fundecl ~future_funcnames f =
   List.iteri (fun param_index (var, _ty) ->
       let provenance = VP.provenance var in
       let var = VP.var var in
+      let num_regs_for_arg = num_regs_per_arg.(param_index) in
+      let hard_regs_for_arg =
+        Array.init num_regs_for_arg (fun index ->
+          loc_arg.(!loc_arg_index + index))
+      in
       let naming_op =
         Iname_for_debugger {
           ident = var;
           provenance;
           which_parameter = Some param_index;
           is_assignment = false;
+          regs = hard_regs_for_arg;
         }
-      in
-      let num_regs_for_arg = num_regs_per_arg.(param_index) in
-      let hard_regs_for_arg =
-        Array.init num_regs_for_arg (fun index ->
-          loc_arg.(!loc_arg_index + index))
       in
       loc_arg_index := !loc_arg_index + num_regs_for_arg;
       self#insert_debug env (Iop naming_op) Debuginfo.none
