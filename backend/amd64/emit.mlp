@@ -481,8 +481,10 @@ let emit_jump_tables () =
 (* Record function info for dwarf and emit label if needed. *)
 let emit_dwarf_for_fundecl fundecl =
   match Emitaux.Dwarf_helpers.record_dwarf_for_fundecl fundecl with
-  | None -> ()
-  | Some label -> def_label label
+  | None -> fundecl
+  | Some (label, fundecl) ->
+      def_label label;
+      fundecl
 
 let build_asm_directives () : (module Asm_targets.Asm_directives_intf.S) = (
     module Asm_targets.Asm_directives.Make(struct
@@ -1472,6 +1474,7 @@ let emit_function_type_and_size fun_name =
 (* Emission of a function declaration *)
 
 let fundecl fundecl =
+  let fundecl = emit_dwarf_for_fundecl fundecl in
   function_name := fundecl.fun_name;
   fastcode_flag := fundecl.fun_fast;
   tailrec_entry_point := fundecl.fun_tailrec_entry_point_label;
@@ -1516,7 +1519,6 @@ let fundecl fundecl =
       cfi_adjust_cfa_offset (-n);
     end;
   end;
-  emit_dwarf_for_fundecl fundecl;
   cfi_endproc ();
   emit_function_type_and_size fundecl.fun_name
 

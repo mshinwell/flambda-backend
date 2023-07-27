@@ -488,11 +488,11 @@ module Dwarf_helpers = struct
       let fun_end_label =
         Asm_targets.Asm_label.create_int Text label
       in
-      let () =
+      let result, fundecl =
         Debug_passes.passes_for_fundecl fundecl ~fun_end_label
-        |> Dwarf.dwarf_for_fundecl dwarf
       in
-      Some label
+      Dwarf.dwarf_for_fundecl dwarf result;
+      Some (label, fundecl)
 
 end
 

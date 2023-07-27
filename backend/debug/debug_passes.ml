@@ -40,7 +40,7 @@ let passes_for_fundecl (fundecl : L.fundecl) =
   available_ranges_vars, fundecl
 
 let passes_for_fundecl (fundecl : L.fundecl) ~fun_end_label =
-  let available_ranges_vars, fundecl =
+  let available_ranges_vars, linear_fundecl =
     if !Clflags.debug
        (* XXX *)
        (* Clflags.debug_thing Debug_dwarf_vars *)
@@ -50,4 +50,4 @@ let passes_for_fundecl (fundecl : L.fundecl) ~fun_end_label =
   let fundecl : Dwarf_concrete_instances.fundecl =
     { fun_name = fundecl.fun_name; fun_dbg = fundecl.fun_dbg; fun_end_label }
   in
-  { fundecl; available_ranges_vars }
+  { fundecl; available_ranges_vars }, linear_fundecl

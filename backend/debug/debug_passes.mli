@@ -28,4 +28,6 @@ type result = private
   }
 
 val passes_for_fundecl :
-  Linear.fundecl -> fun_end_label:Asm_targets.Asm_label.t -> result
+  Linear.fundecl ->
+  fun_end_label:Asm_targets.Asm_label.t ->
+  result * Linear.fundecl
