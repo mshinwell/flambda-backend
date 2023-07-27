@@ -482,6 +482,7 @@ let add_spills env regset i =
      spill between a move into a register and the operation naming that
      register.  (Such a situation would cause the spilled register to be
      unnamed). *)
+  (* XXX this maybe needs implementing for Cfg regalloc *)
   let rec add_spills i =
     match i.desc with
     | Iop (Iname_for_debugger _) ->

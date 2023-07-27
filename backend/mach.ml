@@ -79,7 +79,8 @@ type operation =
   | Ispecific of Arch.specific_operation
   | Ipoll of { return_label: Cmm.label option }
   | Iname_for_debugger of { ident : Backend_var.t; which_parameter : int option;
-      provenance : Backend_var.Provenance.t option; is_assignment : bool; }
+      provenance : Backend_var.Provenance.t option; is_assignment : bool;
+      regs : Reg.t array }
   | Iprobe of { name: string; handler_code_sym: string; enabled_at_init: bool; }
   | Iprobe_is_enabled of { name: string }
   | Ibeginregion | Iendregion

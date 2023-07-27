@@ -70,14 +70,11 @@ let exnhandler before_handler =
   Reg.Set.remove Proc.loc_exn_bucket before_handler
 
 let fundecl f =
-  let (_initially_live, _) =
+  let (initially_live, _) =
     Analyzer.analyze ~exnhandler ~transfer f.fun_body in
-  ()
-  (* XXX it isn't clear why this used to pass on gdb-names-gpr
   (* Sanity check: only function parameters can be live at entrypoint *)
   let wrong_live = Reg.Set.diff initially_live (Reg.set_of_array f.fun_args) in
   if not (Reg.Set.is_empty wrong_live) then begin
     Misc.fatal_errorf "@[Liveness.fundecl:@\n%a@]"
       Printmach.regset wrong_live
   end
-  *)

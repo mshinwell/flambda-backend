@@ -212,11 +212,12 @@ let basic_or_terminator_of_operation :
         (fun label_after -> Specific_can_raise { op; label_after })
     else Basic (Op (Specific op))
   | Iopaque -> Basic (Op Opaque)
-  | Iname_for_debugger { ident; which_parameter; provenance; is_assignment } ->
+  | Iname_for_debugger
+      { ident; which_parameter; provenance; is_assignment; regs } ->
     Basic
       (Op
          (Name_for_debugger
-            { ident; which_parameter; provenance; is_assignment }))
+            { ident; which_parameter; provenance; is_assignment; regs }))
   | Iprobe { name; handler_code_sym; enabled_at_init } ->
     With_next_label
       (fun label_after ->
@@ -771,6 +772,7 @@ let fundecl :
     State.make ~fun_name ~tailrec_label ~contains_calls:fun_contains_calls
       cfg.blocks
   in
+  (* XXX run [add_blocks] here but only for Iname_for_debugger instructions *)
   State.add_block state ~label:(Cfg.entry_label cfg)
     ~block:
       { start = Cfg.entry_label cfg;
