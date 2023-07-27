@@ -44,9 +44,9 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
   in
   { state; asm_directives; emitted = false; get_file_id }
 
-let dwarf_for_fundecl t fundecl =
+let dwarf_for_fundecl t (result : Debug_passes.result) =
   Dwarf_concrete_instances.for_fundecl ~get_file_id:t.get_file_id t.state
-    fundecl
+    result.fundecl
 
 let emit t =
   if t.emitted

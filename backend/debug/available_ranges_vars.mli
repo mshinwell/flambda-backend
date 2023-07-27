@@ -38,7 +38,12 @@ end
 module Subrange_info : sig
   type t
 
-  val create : Reg_with_debug_info.t -> Subrange_state.t -> t
+  val create :
+    Reg_with_debug_info.t ->
+    Subrange_state.t ->
+    fun_contains_calls:bool ->
+    fun_num_stack_slots:int array ->
+    t
 
   val reg : t -> Reg.t
 

@@ -32,10 +32,8 @@ module Range_info = struct
   let provenance t =
     match t with Var range_info -> ARV.Range_info.provenance range_info
 
-  let debuginfo t =
-    match provenance t with
-    | None -> Debuginfo.none
-    | Some provenance -> Backend_var.Provenance.debuginfo provenance
+  (* XXX let debuginfo t = match provenance t with | None -> Debuginfo.none |
+     Some provenance -> Backend_var.Provenance.debuginfo provenance *)
 
   let is_parameter t =
     match t with Var range_info -> ARV.Range_info.is_parameter range_info
@@ -81,8 +79,8 @@ module Range = struct
   let info t =
     match t with Var range -> Range_info.create_var (ARV.Range.info range)
 
-  let extremities t =
-    match t with Var range -> Some (ARV.Range.extremities range)
+  (* XXX let extremities t = match t with Var range -> Some
+     (ARV.Range.extremities range) *)
 
   let fold t ~init ~f =
     match t with
@@ -95,8 +93,8 @@ type t = { available_ranges_vars : Available_ranges_vars.t }
 
 let empty = { available_ranges_vars = Available_ranges_vars.empty }
 
-let create ~available_ranges_vars (fundecl : L.fundecl) =
-  let vars = ARV.all_indexes available_ranges_vars in
+let create ~available_ranges_vars =
+  (* XXX let available_ranges_vars = ARV.all_indexes available_ranges_vars in *)
   { available_ranges_vars }
 
 let iter t ~f =

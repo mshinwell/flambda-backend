@@ -480,7 +480,7 @@ module Dwarf_helpers = struct
 
   let emit_dwarf () = Option.iter Dwarf.emit !dwarf
 
-  let record_dwarf_for_fundecl ~fun_name fun_dbg =
+  let record_dwarf_for_fundecl fundecl =
     match !dwarf with
     | None -> None
     | Some dwarf ->
@@ -488,14 +488,8 @@ module Dwarf_helpers = struct
       let fun_end_label =
         Asm_targets.Asm_label.create_int Text label
       in
-      let fundecl : Dwarf_concrete_instances.fundecl =
-        { fun_name;
-          fun_dbg;
-          fun_end_label;
-        }
-      in
       let () =
-        Debug_passes.passes_for_fundecl ~end_of_function_label fundecl
+        Debug_passes.passes_for_fundecl fundecl ~fun_end_label
         |> Dwarf.dwarf_for_fundecl dwarf
       in
       Some label
@@ -511,4 +505,3 @@ let report_error ppf = function
   | Inconsistent_probe_init (name, dbg) ->
     Format.fprintf ppf "Inconsistent use of ~enabled_at_init in [%%probe %s ..] at %a"
       name Debuginfo.print_compact dbg
-

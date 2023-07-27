@@ -42,7 +42,7 @@ module Range_info : sig
 
   val provenance : t -> Backend_var.Provenance.t option
 
-  val debuginfo : t -> Debuginfo.t
+  (* val debuginfo : t -> Debuginfo.t *)
 
   val is_parameter : t -> Is_parameter.t
 
@@ -56,7 +56,7 @@ module Range : sig
 
   val info : t -> Range_info.t
 
-  val extremities : t -> (Linear.label * Linear.label) option
+  (* val extremities : t -> (Linear.label * Linear.label) option *)
 
   val fold : t -> init:'a -> f:('a -> Subrange.t -> 'a) -> 'a
 end
@@ -65,8 +65,7 @@ type t
 
 val empty : t
 
-val create :
-  available_ranges_vars:Available_ranges_vars.t -> Linear.fundecl -> t
+val create : available_ranges_vars:Available_ranges_vars.t -> t
 
 val iter : t -> f:(Backend_var.t -> Range.t -> unit) -> unit
 

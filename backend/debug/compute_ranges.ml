@@ -197,7 +197,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     | Close_subrange_one_byte_after
 
   (* CR mshinwell: Move to [Clflags] *)
-  let check_invariants = ref true
+  let _check_invariants = ref true
 
   let actions_at_instruction ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) =
@@ -205,7 +205,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     let available_across = S.available_across insn in
     let opt_available_across_prev_insn =
       match prev_insn with
-      | None -> KS.empty
+      | None -> KS.of_list []
       | Some prev_insn -> S.available_across prev_insn
     in
     let case_1b =
@@ -270,12 +270,12 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       if S.must_restart_ranges_upon_any_change ()
          && match actions with [] -> false | _ :: _ -> true
       then KS.inter opt_available_across_prev_insn available_before
-      else KS.empty
+      else KS.of_list []
     in
     actions, must_restart
 
-  let rec process_instruction t (fundecl : L.fundecl)
-      ~(first_insn : L.instruction) ~(insn : L.instruction)
+  let rec process_instruction t (fundecl : L.fundecl) ~fun_contains_calls
+      ~fun_num_stack_slots ~(first_insn : L.instruction) ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) ~currently_open_subranges
       ~subrange_state =
     let used_label = ref None in
@@ -325,7 +325,10 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
               range
           in
           let label, _label_insn = get_label () in
-          let subrange_info = Subrange_info.create key subrange_state in
+          let subrange_info =
+            Subrange_info.create key subrange_state ~fun_contains_calls
+              ~fun_num_stack_slots
+          in
           let subrange =
             Subrange.create ~start_insn ~start_pos ~start_pos_offset
               ~end_pos:label ~end_pos_offset ~subrange_info
@@ -394,28 +397,16 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
           prev_insn.next <- label_insn;
           first_insn)
     in
-    (if !check_invariants
-    then
-      let currently_open_subranges =
-        KS.of_list
-          (List.map
-             (fun (key, _datum) -> key)
-             (KM.bindings currently_open_subranges))
-      in
-      let should_be_open = S.available_across insn in
-      let not_open_but_should_be =
-        KS.diff should_be_open currently_open_subranges
-      in
-      if not (KS.is_empty not_open_but_should_be)
-      then
-        Misc.fatal_errorf
-          "%s: ranges for %a are not open across the following instruction:\n\
-           %a\n\
-           available_across:@ %a\n\
-           currently_open_subranges: %a" fundecl.fun_name KS.print
-          not_open_but_should_be Printlinear.instr
-          { insn with L.next = L.end_instr }
-          KS.print should_be_open KS.print currently_open_subranges);
+    (* XXX avoid KS.is_empty (if !check_invariants then let
+       currently_open_subranges = KS.of_list (List.map (fun (key, _datum) ->
+       key) (KM.bindings currently_open_subranges)) in let should_be_open =
+       S.available_across insn in let not_open_but_should_be = KS.diff
+       should_be_open currently_open_subranges in if not (KS.is_empty
+       not_open_but_should_be) then Misc.fatal_errorf "%s: ranges for %a are not
+       open across the following instruction:\n\ %a\n\ available_across:@ %a\n\
+       currently_open_subranges: %a" fundecl.fun_name KS.print
+       not_open_but_should_be Printlinear.instr { insn with L.next = L.end_instr
+       } KS.print should_be_open KS.print currently_open_subranges); *)
     match insn.desc with
     | Lend -> first_insn
     | Lprologue | Lop _ | Lreloadretaddr | Lreturn | Llabel _ | Lbranch _
@@ -424,12 +415,15 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       let subrange_state =
         Subrange_state.advance_over_instruction subrange_state insn
       in
-      process_instruction t fundecl ~first_insn ~insn:insn.next
-        ~prev_insn:(Some insn) ~currently_open_subranges ~subrange_state
+      process_instruction t fundecl ~fun_contains_calls ~fun_num_stack_slots
+        ~first_insn ~insn:insn.next ~prev_insn:(Some insn)
+        ~currently_open_subranges ~subrange_state
 
-  let process_instructions t fundecl ~first_insn =
+  let process_instructions t fundecl ~fun_contains_calls ~fun_num_stack_slots
+      ~first_insn =
     let subrange_state = Subrange_state.create () in
-    process_instruction t fundecl ~first_insn ~insn:first_insn ~prev_insn:None
+    process_instruction t fundecl ~fun_contains_calls ~fun_num_stack_slots
+      ~first_insn ~insn:first_insn ~prev_insn:None
       ~currently_open_subranges:KM.empty ~subrange_state
 
   let all_indexes t =
@@ -440,7 +434,10 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
   let create (fundecl : L.fundecl) =
     let t = { ranges = S.Index.Tbl.create 42 } in
     let first_insn =
-      process_instructions t fundecl ~first_insn:fundecl.fun_body
+      process_instructions t fundecl
+        ~fun_contains_calls:fundecl.fun_contains_calls
+        ~fun_num_stack_slots:fundecl.fun_num_stack_slots
+        ~first_insn:fundecl.fun_body
     in
     let fundecl : L.fundecl = { fundecl with fun_body = first_insn } in
     t, fundecl

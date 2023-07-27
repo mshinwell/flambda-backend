@@ -23,8 +23,9 @@
 *)
 
 type result = private
-  { fundecl : Linear.fundecl;
+  { fundecl : Dwarf_concrete_instances.fundecl;
     available_ranges_vars : Available_ranges_all_vars.t
   }
 
-val passes_for_fundecl : Linear.fundecl -> result
+val passes_for_fundecl :
+  Linear.fundecl -> fun_end_label:Asm_targets.Asm_label.t -> result

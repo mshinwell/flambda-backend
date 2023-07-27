@@ -15,7 +15,7 @@
 module L = Linear
 
 type result =
-  { fundecl : L.fundecl;
+  { fundecl : Dwarf_concrete_instances.fundecl;
     available_ranges_vars : Available_ranges_all_vars.t
   }
 
@@ -36,14 +36,18 @@ let passes_for_fundecl (fundecl : L.fundecl) =
      lexical_block_ranges, fundecl in *)
   let available_ranges_vars =
     Available_ranges_all_vars.create ~available_ranges_vars
-      ~available_ranges_phantom_vars fundecl
   in
-  available_ranges_vars, lexical_block_ranges, fundecl
+  available_ranges_vars, fundecl
 
-let passes_for_fundecl (fundecl : L.fundecl) =
+let passes_for_fundecl (fundecl : L.fundecl) ~fun_end_label =
   let available_ranges_vars, fundecl =
-    if Clflags.debug_thing Debug_dwarf_vars
+    if !Clflags.debug
+       (* XXX *)
+       (* Clflags.debug_thing Debug_dwarf_vars *)
     then passes_for_fundecl fundecl
     else Available_ranges_all_vars.empty, fundecl
+  in
+  let fundecl : Dwarf_concrete_instances.fundecl =
+    { fun_name = fundecl.fun_name; fun_dbg = fundecl.fun_dbg; fun_end_label }
   in
   { fundecl; available_ranges_vars }

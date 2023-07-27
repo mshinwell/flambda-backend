@@ -95,18 +95,12 @@ module type S_functor = sig
 
     type key = t
 
-    module Raw_set : sig
-      include Set.S with type elt = t
-
-      val print : Format.formatter -> t -> unit
-    end
+    module Raw_set : Set.S with type elt = t
 
     module Set : sig
       type t =
         | Ok of Raw_set.t
         | Unreachable
-
-      val is_empty : t -> bool
 
       val of_list : key list -> t
 
@@ -116,7 +110,10 @@ module type S_functor = sig
 
       val diff : t -> t -> t
 
+      (** This should return the initial value in the [Unreachable] case *)
       val fold : (key -> 'a -> 'a) -> t -> 'a -> 'a
+
+      val print : Format.formatter -> t -> unit
     end
 
     module Map : Map.S with type key = t
@@ -198,7 +195,28 @@ module type S = sig
   module Key : sig
     type t
 
-    module Set : Set.S with type elt = t
+    type key = t
+
+    module Raw_set : Set.S with type elt = t
+
+    module Set : sig
+      type t =
+        | Ok of Raw_set.t
+        | Unreachable
+
+      val of_list : key list -> t
+
+      val union : t -> t -> t
+
+      val inter : t -> t -> t
+
+      val diff : t -> t -> t
+
+      (** This should return the initial value in the [Unreachable] case *)
+      val fold : (key -> 'a -> 'a) -> t -> 'a -> 'a
+
+      val print : Format.formatter -> t -> unit
+    end
 
     module Map : Map.S with type key = t
   end
