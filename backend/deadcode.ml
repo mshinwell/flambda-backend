@@ -41,6 +41,12 @@ let rec deadcode i =
   | Iend | Ireturn _ | Iop(Itailcall_ind) | Iop(Itailcall_imm _) | Iraise _ ->
       let regs = Reg.add_set_array i.live i.arg in
       { i; regs; exits = Int.Set.empty; }
+  | Iop (Iname_for_debugger _) ->
+      let s = deadcode i.next in
+      { i = {i with next = s.i};
+        regs = Reg.add_set_array i.live i.arg;
+        exits = s.exits;
+      }
   | Iop op ->
       let s = deadcode i.next in
       if operation_is_pure op                  (* no side effects *)
