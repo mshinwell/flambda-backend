@@ -83,7 +83,7 @@ type operation =
   | Ispecific of Arch.specific_operation
   | Ipoll of { return_label: Cmm.label option }
   | Iname_for_debugger of { ident : Backend_var.t; which_parameter : int option;
-      provenance : unit option; is_assignment : bool; }
+      provenance : Backend_var.Provenance.t option; is_assignment : bool; }
     (** [Iname_for_debugger] has the following semantics:
         (a) The argument register(s) is/are deemed to contain the value of the
             given identifier.
