@@ -124,8 +124,8 @@ let reg_location_description reg ~offset_from_cfa_in_bytes ~need_rvalue :
   | None -> None
   | Some simple_loc_desc -> Some (Simple simple_loc_desc)
 
-let single_location_description state (_fundecl : L.fundecl) ~parent ~subrange
-    ~proto_dies_for_vars ~need_rvalue =
+let single_location_description state ~parent ~subrange ~proto_dies_for_vars
+    ~need_rvalue =
   let location_description =
     match ARV.Subrange.info subrange with
     | Non_phantom { reg; offset_from_cfa_in_bytes } ->
@@ -149,7 +149,7 @@ let location_list_entry state ~subrange single_location_description :
   let start_pos_offset = ARV.Subrange.start_pos_offset subrange in
   let end_pos = Asm_label.create_int Text (ARV.Subrange.end_pos subrange) in
   let end_pos_offset = ARV.Subrange.end_pos_offset subrange in
-  match Dwarf_version.five (* XXX !Clflags.gdwarf_version *) with
+  match Dwarf_version.four (* XXX !Clflags.gdwarf_version *) with
   | Four ->
     let location_list_entry =
       Dwarf_4_location_list_entry.create_location_list_entry
@@ -183,9 +183,9 @@ let location_list_entry state ~subrange single_location_description :
       (Location_list_entry.create location_list_entry
          ~start_of_code_symbol:(DS.start_of_code_symbol state))
 
-let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
-    ~proto_dies_for_vars ~need_rvalue (var : Backend_var.t) ~phantom:_ ~hidden
-    ~ident_for_type ~range =
+let dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
+    ~need_rvalue (var : Backend_var.t) ~phantom:_ ~hidden ~ident_for_type ~range
+    =
   let range_info = ARV.Range.info range in
   let provenance = ARV.Range_info.provenance range_info in
   let var_is_a_parameter_of_fundecl_itself =
@@ -250,7 +250,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
           ~init:([], Location_list.create ())
           ~f:(fun (dwarf_4_location_list_entries, location_list) subrange ->
             let single_location_description =
-              single_location_description state fundecl
+              single_location_description state
                 ~parent:(Some function_proto_die) ~subrange ~proto_dies_for_vars
                 ~need_rvalue
             in
@@ -272,7 +272,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
                 in
                 dwarf_4_location_list_entries, location_list))
       in
-      match Dwarf_version.five with
+      match Dwarf_version.four with
       (* XXX !Clflags.gdwarf_version *)
       | Four ->
         let location_list_entries = dwarf_4_location_list_entries in
@@ -373,6 +373,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
 let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
     ~f =
   ARV.iter available_ranges_vars ~f:(fun var range ->
+      Format.eprintf "processing range for %a\n%!" Ident.print var;
       let should_process =
         not rvalues_only
         (* XXX || V.Set.mem var (DS.rvalue_dies_required_for state) *)
@@ -409,34 +410,27 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
            appear in .cmt files but did not come from the source code. *)
         let hidden = Backend_var.is_internal var in
         let ident_for_type =
-          match provenance with
-          | None ->
-            (* In this case the variable won't be given a name in the DWARF, so
-               as not to appear in the debugger; but we still need to emit a DIE
-               for it, as it may be referenced as part of some chain of phantom
-               lets. *)
-            let in_startup_file =
-              (* The startup file is generated from Cmm code and is therefore
-                 not expected to link back to any .cmt file via identifier names
-                 and stamps. *)
-              false
-              (* XXX Compilation_unit.equal (Compilation_unit.get_current_exn
-                 ()) Compilation_unit.startup *)
-            in
-            if (not hidden) && not in_startup_file
-            then
-              Misc.fatal_errorf
-                "Variable %a is not hidden, but has no provenance\n%!"
-                Backend_var.print var;
-            None
-          | Some provenance -> Some (Compilation_unit.get_current_exn (), var)
-          (* XXX to be replaced by a new approach based on "uid"s *)
-          (* Backend_var.Provenance.ident_for_type provenance*)
+          Some (Compilation_unit.get_current_exn (), var)
+          (* XXX match provenance with | None -> (* In this case the variable
+             won't be given a name in the DWARF, so as not to appear in the
+             debugger; but we still need to emit a DIE for it, as it may be
+             referenced as part of some chain of phantom lets. *) let
+             in_startup_file = (* The startup file is generated from Cmm code
+             and is therefore not expected to link back to any .cmt file via
+             identifier names and stamps. *) false (* XXX Compilation_unit.equal
+             (Compilation_unit.get_current_exn ()) Compilation_unit.startup *)
+             in if (not hidden) && not in_startup_file then Misc.fatal_errorf
+             "Variable %a is not hidden, but has no provenance\n%!"
+             Backend_var.print var; None | Some provenance -> Some
+             (Compilation_unit.get_current_exn (), var) (* XXX to be replaced by
+             a new approach based on "uid"s *) (*
+             Backend_var.Provenance.ident_for_type provenance*) *)
         in
         f var ~phantom ~hidden ~ident_for_type ~range)
 
-let dwarf state fundecl ~function_proto_die available_ranges_vars =
+let dwarf state ~function_proto_die available_ranges_vars =
   let proto_dies_for_vars = Backend_var.Tbl.create 42 in
+  Format.eprintf "Dwarf_variables_and_parameters\n%!";
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:false
     ~f:(fun var ~phantom ~hidden:_ ~ident_for_type:_ ~range:_ ->
@@ -456,10 +450,10 @@ let dwarf state fundecl ~function_proto_die available_ranges_vars =
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:false
     ~f:
-      (dwarf_for_variable state fundecl ~function_proto_die ~proto_dies_for_vars
+      (dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
          ~need_rvalue:false);
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:true
     ~f:
-      (dwarf_for_variable state fundecl ~function_proto_die ~proto_dies_for_vars
+      (dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
          ~need_rvalue:true)

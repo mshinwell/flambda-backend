@@ -219,6 +219,8 @@ module type S = sig
     end
 
     module Map : Map.S with type key = t
+
+    val print : Format.formatter -> t -> unit
   end
 
   (** Corresponds to [Subrange_state] in the [S_functor] module type. *)

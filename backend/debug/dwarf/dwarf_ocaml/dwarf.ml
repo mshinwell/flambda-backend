@@ -45,17 +45,20 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
        (Compilation_unit.get_current_exn ()) (Linkage_name.create
        "code_begin")) *)
   in
+  let debug_loc_table = Debug_loc_table.create () in
+  let debug_ranges_table = Debug_ranges_table.create () in
   let address_table = Address_table.create () in
   let location_list_table = Location_list_table.create () in
   let state =
     DS.create ~compilation_unit_header_label ~compilation_unit_proto_die
-      ~start_of_code_symbol address_table location_list_table
+      ~start_of_code_symbol debug_loc_table debug_ranges_table address_table
+      location_list_table
   in
   { state; asm_directives; emitted = false; get_file_id }
 
 let dwarf_for_fundecl t (result : Debug_passes.result) =
   Dwarf_concrete_instances.for_fundecl ~get_file_id:t.get_file_id t.state
-    result.fundecl
+    result.fundecl result.available_ranges_vars
 
 let emit t =
   if t.emitted
@@ -67,5 +70,9 @@ let emit t =
   Dwarf_world.emit ~asm_directives:t.asm_directives
     ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.state)
     ~compilation_unit_header_label:(DS.compilation_unit_header_label t.state)
+    ~debug_loc_table:(DS.debug_loc_table t.state)
+    ~debug_ranges_table:(DS.debug_ranges_table t.state)
+    ~address_table:(DS.address_table t.state)
+    ~location_list_table:(DS.location_list_table t.state)
 
 let emit t = Profile.record "emit_dwarf" emit t

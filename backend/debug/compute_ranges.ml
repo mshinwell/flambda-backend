@@ -304,13 +304,18 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     let open_subrange key ~start_pos_offset ~currently_open_subranges =
       (* If the range is later discarded, the inserted label may actually be
          useless, but this doesn't matter. It does not generate any code. *)
+      Format.eprintf "opening subrange for %a\n%!" S.Key.print key;
       let label, label_insn = get_label () in
       KM.add key (label, start_pos_offset, label_insn) currently_open_subranges
     in
     let close_subrange key ~end_pos_offset ~currently_open_subranges =
       match KM.find key currently_open_subranges with
       | exception Not_found ->
-        Misc.fatal_errorf "No subrange is open for key %a" S.Key.print key
+        Format.eprintf "!! No subrange is open for key %a" S.Key.print key;
+        (* Misc.fatal_errorf "No subrange is open for key %a" S.Key.print
+           key; *)
+        (* XXX XXX *)
+        currently_open_subranges
       | start_pos, start_pos_offset, start_insn -> (
         let currently_open_subranges = KM.remove key currently_open_subranges in
         match Range_info.create fundecl key ~start_insn with
@@ -371,6 +376,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     let currently_open_subranges =
       match insn.desc with
       | Lend ->
+        Format.eprintf "closing subranges for last insn\n%!";
         let currently_open_subranges =
           KM.fold
             (fun key _ currently_open_subranges ->
