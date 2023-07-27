@@ -4,15 +4,13 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2014--2019 Jane Street Group LLC                           *)
+(*   Copyright 2014--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-[@@@ocaml.warning "+a-4-30-40-41-42"]
 
 (** This file defines types that are used to specify the interface of
     [Compute_ranges]. The description of [Compute_ranges] is:
@@ -47,7 +45,12 @@ module type S_subrange_info = sig
 
   type subrange_state
 
-  val create : key -> subrange_state -> t
+  val create :
+    key ->
+    subrange_state ->
+    fun_contains_calls:bool ->
+    fun_num_stack_slots:int array ->
+    t
 end
 
 (** The type of caller-defined information associated with ranges. *)
@@ -90,10 +93,30 @@ module type S_functor = sig
     (** The type of identifiers that define ranges. *)
     type t
 
-    module Set : sig
+    type key = t
+
+    module Raw_set : sig
       include Set.S with type elt = t
 
       val print : Format.formatter -> t -> unit
+    end
+
+    module Set : sig
+      type t =
+        | Ok of Raw_set.t
+        | Unreachable
+
+      val is_empty : t -> bool
+
+      val of_list : key list -> t
+
+      val union : t -> t -> t
+
+      val inter : t -> t -> t
+
+      val diff : t -> t -> t
+
+      val fold : (key -> 'a -> 'a) -> t -> 'a -> 'a
     end
 
     module Map : Map.S with type key = t

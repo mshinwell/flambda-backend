@@ -65,16 +65,19 @@ module Vars = struct
         offset_from_cfa_in_bytes : int option
       }
 
-    let create reg subrange_state =
+    let create reg subrange_state ~fun_contains_calls ~fun_num_stack_slots =
       let reg = RD.reg reg in
       let stack_offset = Subrange_state.stack_offset subrange_state in
       let offset_from_cfa_in_bytes =
         match reg.loc with
         | Stack loc ->
-          let frame_size = Proc.frame_size ~stack_offset in
+          let frame_size =
+            Proc.frame_size ~stack_offset ~fun_contains_calls
+              ~fun_num_stack_slots
+          in
           let slot_offset =
             Proc.slot_offset loc ~reg_class:(Proc.register_class reg)
-              ~stack_offset
+              ~stack_offset ~fun_contains_calls ~fun_num_stack_slots
           in
           Some (frame_size - slot_offset)
         | Reg _ | Unknown -> None
@@ -108,17 +111,15 @@ module Vars = struct
     let create _fundecl reg ~start_insn:_ =
       match RD.debug_info reg with
       | None -> None
-      | Some debug_info -> (
-        match RD.Debug_info.holds_value_of debug_info with
-        | Const_int _ | Const_naked_float _ | Const_symbol _ -> None
-        | Var var ->
-          let provenance = RD.Debug_info.provenance debug_info in
-          (* Format.eprintf "Reg being created with var %a, provenance %a\n%!"
-             V.print var (Misc.Stdlib.Option.print V.Provenance.print)
-             provenance; *)
-          let is_parameter = RD.Debug_info.is_parameter debug_info in
-          let t = { provenance; is_parameter } in
-          Some (var, t))
+      | Some debug_info ->
+        let var = RD.Debug_info.holds_value_of debug_info in
+        let provenance = RD.Debug_info.provenance debug_info in
+        (* Format.eprintf "Reg being created with var %a, provenance %a\n%!"
+           V.print var (Misc.Stdlib.Option.print V.Provenance.print)
+           provenance; *)
+        let is_parameter = RD.Debug_info.is_parameter debug_info in
+        let t = { provenance; is_parameter } in
+        Some (var, t)
 
     let provenance t = t.provenance
 
@@ -136,10 +137,12 @@ module Vars = struct
     Reg_availability_set.canonicalise avail
 
   let available_before (insn : L.instruction) =
-    availability_set_to_key_set (Insn_debuginfo.available_before insn.dbg)
+    match insn.available_before with
+    | None -> Reg_availability_set.Unreachable
+    | Some before -> availability_set_to_key_set before
 
   let available_across (insn : L.instruction) =
-    match Insn_debuginfo.available_across insn.dbg with
+    match insn.available_across with
     | None -> available_before insn
     | Some across -> availability_set_to_key_set across
 

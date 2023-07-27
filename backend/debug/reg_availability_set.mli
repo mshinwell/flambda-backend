@@ -18,8 +18,17 @@ type t =
   | Ok of Reg_with_debug_info.Set.t
   | Unreachable
 
-(** Intersection of availabilities. *)
+val is_empty : t -> bool
+
+val of_list : Reg_with_debug_info.t list -> t
+
+val union : t -> t -> t
+
 val inter : t -> t -> t
+
+val diff : t -> t -> t
+
+val fold : (Reg_with_debug_info.t -> 'a -> 'a) -> t -> 'a -> 'a
 
 (** Return a subset of the given availability set which contains no registers
     that are not associated with debug info (and holding values of

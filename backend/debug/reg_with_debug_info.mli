@@ -32,6 +32,8 @@ module Debug_info : sig
   val which_parameter : t -> int option
 
   val provenance : t -> Backend_var.Provenance.t option
+
+  val is_parameter : t -> Is_parameter.t
 end
 
 type t
