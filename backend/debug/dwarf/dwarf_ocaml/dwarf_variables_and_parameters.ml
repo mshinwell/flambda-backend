@@ -12,6 +12,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+open! Asm_targets
 open! Dwarf_low
 open! Dwarf_high
 module ARV = Available_ranges_all_vars
@@ -20,41 +21,6 @@ module DS = Dwarf_state
 module L = Linear
 module SLDL = Simple_location_description_lang
 module V = Backend_var
-
-type var_uniqueness =
-  { name_is_unique : bool;
-    position_is_unique_given_name_is_unique : bool
-  }
-
-module Var_name_and_code_range = struct
-  type t = string * Debuginfo.Code_range.t option
-
-  include Identifiable.Make (struct
-    type nonrec t = t
-
-    let compare (name1, range_opt1) (name2, range_opt2) =
-      let c = String.compare name1 name2 in
-      if c <> 0
-      then c
-      else
-        match range_opt1, range_opt2 with
-        | None, None -> 0
-        | None, Some _ -> -1
-        | Some _, None -> 1
-        | Some range1, Some range2 -> Debuginfo.Code_range.compare range1 range2
-
-    let equal t1 t2 = compare t1 t2 = 0
-
-    let hash (name, range_opt) =
-      match range_opt with
-      | None -> Hashtbl.hash (name, None)
-      | Some range -> Hashtbl.hash (name, Some (Debuginfo.Code_range.hash range))
-
-    let print _ _ = Misc.fatal_error "Not yet implemented"
-
-    let output _ _ = Misc.fatal_error "Not yet implemented"
-  end)
-end
 
 type is_variable_phantom = Non_phantom
 
@@ -66,78 +32,6 @@ type proto_dies_for_var =
   }
 
 let arch_size_addr = Targetint.of_int_exn Arch.size_addr
-
-(* Note: this function only works for static (toplevel) variables because we
-   assume they all occur in a single compilation unit (namely the startup
-   one). *)
-let calculate_var_uniqueness ~available_ranges_vars =
-  let module String = Misc.Stdlib.String in
-  let by_name = String.Tbl.create 42 in
-  let by_position = Var_name_and_code_range.Tbl.create 42 in
-  let update_uniqueness var pos ~module_path =
-    let name = Backend_var.name_for_debugger var in
-    let name =
-      match module_path with
-      | None -> name
-      | Some module_path -> Format.asprintf "%a.%s" Path.print module_path name
-    in
-    (match String.Tbl.find by_name name with
-    | exception Not_found ->
-      String.Tbl.add by_name name (Backend_var.Set.singleton var)
-    | vars -> String.Tbl.replace by_name name (Backend_var.Set.add var vars));
-    match Var_name_and_code_range.Tbl.find by_position (name, pos) with
-    | exception Not_found ->
-      Var_name_and_code_range.Tbl.add by_position (name, pos)
-        (Backend_var.Set.singleton var)
-    | vars ->
-      Var_name_and_code_range.Tbl.replace by_position (name, pos)
-        (Backend_var.Set.add var vars)
-  in
-  let result = Backend_var.Tbl.create 42 in
-  ARV.iter available_ranges_vars ~f:(fun var range ->
-      let range_info = ARV.Range.info range in
-      let provenance = ARV.Range_info.provenance range_info in
-      let module_path =
-        (* The startup function may contain phantom let bindings for static
-           identifiers that have various different (sub)module paths. *)
-        match provenance with
-        | None -> None
-        | Some provenance ->
-          if not (V.Provenance.is_static provenance)
-          then None
-          else Some (V.Provenance.module_path provenance)
-      in
-      let dbg = ARV.Range_info.debuginfo range_info in
-      let pos = Debuginfo.position dbg in
-      update_uniqueness var pos ~module_path;
-      Backend_var.Tbl.replace result var
-        { name_is_unique = false;
-          position_is_unique_given_name_is_unique = false
-        });
-  String.Tbl.iter
-    (fun _name vars ->
-      match Backend_var.Set.get_singleton vars with
-      | None -> ()
-      | Some var ->
-        let var_uniqueness = Backend_var.Tbl.find result var in
-        Backend_var.Tbl.replace result var
-          { var_uniqueness with name_is_unique = true })
-    by_name;
-  (* Note that [by_position] isn't of type [_ Debuginfo.Code_range.Map.t]. The
-     reason that the [Backend_var.t] is included in the key is because we need
-     to make a judgement as to whether two variables have the same position
-     _given also that they have the same name_. (See the computations in
-     [dwarf_for_variable], below.) *)
-  Var_name_and_code_range.Tbl.iter
-    (fun _var_and_pos vars ->
-      match Backend_var.Set.get_singleton vars with
-      | None -> ()
-      | Some var ->
-        let var_uniqueness = Backend_var.Tbl.find result var in
-        Backend_var.Tbl.replace result var
-          { var_uniqueness with position_is_unique_given_name_is_unique = true })
-    by_position;
-  result
 
 let proto_dies_for_variable var ~proto_dies_for_vars =
   match Backend_var.Tbl.find proto_dies_for_vars var with
@@ -306,8 +200,8 @@ let location_list_entry state ~subrange single_location_description :
          ~start_of_code_symbol:(DS.start_of_code_symbol state))
 
 let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
-    ~scope_proto_dies ~uniqueness_by_var ~proto_dies_for_vars ~need_rvalue
-    (var : Backend_var.t) ~phantom:_ ~hidden ~ident_for_type ~range =
+    ~scope_proto_dies ~proto_dies_for_vars ~need_rvalue (var : Backend_var.t)
+    ~phantom:_ ~hidden ~ident_for_type ~range =
   let range_info = ARV.Range.info range in
   let provenance = ARV.Range_info.provenance range_info in
   let var_is_a_parameter_of_fundecl_itself =
@@ -341,18 +235,15 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
       | None ->
         (* Any variable without provenance gets hidden. *)
         function_proto_die, true
-      | Some provenance -> (
-        let dbg = Backend_var.Provenance.debuginfo provenance in
-        let block_die =
-          Dwarf_lexical_blocks_and_inlined_frames.find_scope_die_from_debuginfo
-            dbg ~function_proto_die ~scope_proto_dies
-        in
-        match block_die with
-        | Some block_die -> block_die, hidden
-        | None ->
-          (* There are be no instructions marked with the block in which [var]
-             was defined. For the moment, just hide [var]. *)
-          function_proto_die, true)
+      | Some _provenance -> function_proto_die, false
+    (* old code: (
+
+       let dbg = Backend_var.Provenance.debuginfo provenance in let block_die =
+       Dwarf_lexical_blocks_and_inlined_frames.find_scope_die_from_debuginfo dbg
+       ~function_proto_die ~scope_proto_dies in match block_die with | Some
+       block_die -> block_die, hidden | None -> (* There are be no instructions
+       marked with the block in which [var] was defined. For the moment, just
+       hide [var]. *) function_proto_die, true) *)
   in
   let location_attribute_value, location_list_in_debug_loc_table =
     if is_static
@@ -433,12 +324,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
     | None -> []
     | Some reference ->
       let name_is_unique, position_is_unique_given_name_is_unique =
-        match Backend_var.Tbl.find uniqueness_by_var var with
-        | exception Not_found ->
-          Misc.fatal_errorf "No uniqueness information for %a" Backend_var.print
-            var
-        | { name_is_unique; position_is_unique_given_name_is_unique } ->
-          name_is_unique, position_is_unique_given_name_is_unique
+        true, true (* CR mshinwell: to improve in future *)
       in
       let name_for_var =
         if name_is_unique
@@ -566,15 +452,15 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
                 "Variable %a is not hidden, but has no provenance\n%!"
                 Backend_var.print var;
             None
-          | Some provenance ->
-            Some (Backend_var.Provenance.ident_for_type provenance)
+          | Some provenance -> Some (Compilation_unit.get_current_exn (), var)
+          (* XXX to be replaced by a new approach based on "uid"s *)
+          (* Backend_var.Provenance.ident_for_type provenance*)
         in
         f var ~phantom ~hidden ~ident_for_type ~range)
 
 let dwarf state fundecl ~function_proto_die ~scope_proto_dies
     available_ranges_vars =
   let proto_dies_for_vars = Backend_var.Tbl.create 42 in
-  let uniqueness_by_var = calculate_var_uniqueness ~available_ranges_vars in
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:false
     ~f:(fun var ~phantom ~hidden:_ ~ident_for_type:_ ~range:_ ->
@@ -595,9 +481,9 @@ let dwarf state fundecl ~function_proto_die ~scope_proto_dies
     ~rvalues_only:false
     ~f:
       (dwarf_for_variable state fundecl ~function_proto_die ~scope_proto_dies
-         ~uniqueness_by_var ~proto_dies_for_vars ~need_rvalue:false);
+         ~proto_dies_for_vars ~need_rvalue:false);
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:true
     ~f:
       (dwarf_for_variable state fundecl ~function_proto_die ~scope_proto_dies
-         ~uniqueness_by_var ~proto_dies_for_vars ~need_rvalue:true)
+         ~proto_dies_for_vars ~need_rvalue:true)
