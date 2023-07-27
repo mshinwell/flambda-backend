@@ -208,8 +208,8 @@ let operation_is_pure = function
   | Icsel _
   | Ifloatofint | Iintoffloat
   | Iconst_int _ | Iconst_float _ | Iconst_symbol _ | Iconst_vec128 _
-  | Iload (_, _, _) | Iname_for_debugger _
-    -> true
+  | Iload (_, _, _) -> true
+  | Iname_for_debugger _ -> false
 
 
 let operation_can_raise op =

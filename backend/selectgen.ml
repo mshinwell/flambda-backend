@@ -1331,7 +1331,7 @@ method private emit_sequence ?at_start (env:environment) exp ~bound_name
   (r, s)
 
 method private bind_let (env:environment) v r1 =
-  let result =
+  let env =
     if all_regs_anonymous r1 then begin
       name_regs v r1;
       env_add v r1 env
@@ -1351,7 +1351,7 @@ method private bind_let (env:environment) v r1 =
     }
   in
   self#insert_debug env (Iop naming_op) Debuginfo.none r1 [| |];
-  result
+  env
 
 method private bind_let_mut (env:environment) v k r1 =
   let rv = self#regs_for k in
