@@ -23,7 +23,13 @@ type t =
 
 let of_list rds = Ok (RD.Set.of_list rds)
 
-let union t1 t2 = assert false
+(* XXX determine whether more elaborate implementations are needed (except for
+   inter) *)
+
+let union t1 t2 =
+  match t1, t2 with
+  | Ok avail1, Ok avail2 -> Ok (RD.Set.union avail1 avail2)
+  | Unreachable, _ | _, Unreachable -> Unreachable
 
 let inter t1 t2 =
   match t1, t2 with
@@ -61,7 +67,11 @@ let inter t1 t2 =
     in
     Ok result
 
-let diff t1 t2 = assert false
+let diff t1 t2 =
+  match t1, t2 with
+  | Unreachable, (Ok _ | Unreachable) -> Unreachable
+  | Ok avail1, Ok avail2 -> Ok (RD.Set.diff avail1 avail2)
+  | Ok _, Unreachable -> Ok RD.Set.empty
 
 let fold f t init =
   match t with

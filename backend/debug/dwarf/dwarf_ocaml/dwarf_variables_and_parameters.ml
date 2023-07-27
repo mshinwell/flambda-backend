@@ -76,56 +76,40 @@ let type_die_reference_for_var var ~proto_dies_for_vars =
 (* CR mshinwell: Add proper type for [ident_for_type] *)
 let construct_type_of_value_description state ~parent ident_for_type
     is_parameter ~proto_dies_for_vars ~reference =
-  let normal_case () =
-    let (_ : Proto_die.t) =
-      normal_type_for_var ~reference ~parent ident_for_type is_parameter
-    in
-    ()
+  (* XXX let normal_case () = *)
+  let (_ : Proto_die.t) =
+    normal_type_for_var ~reference ~parent ident_for_type is_parameter
   in
-  let name_attribute =
-    match ident_for_type with
-    | None -> []
-    | Some (compilation_unit, var) ->
-      let name =
-        Dwarf_name_laundry.base_type_die_name_for_var compilation_unit var
-          is_parameter
-      in
-      [DAH.create_name name]
-  in
-  match phantom_defining_expr with Non_phantom -> normal_case ()
+  ()
+(* in let name_attribute = match ident_for_type with | None -> [] | Some
+   (compilation_unit, var) -> let name =
+   Dwarf_name_laundry.base_type_die_name_for_var compilation_unit var
+   is_parameter in [DAH.create_name name] in normal_case () *)
 
 let is_variable_phantom var ~proto_dies_for_vars =
   match proto_dies_for_variable var ~proto_dies_for_vars with
   | None -> None
   | Some { is_variable_phantom; _ } -> Some is_variable_phantom
 
-let die_location_of_variable_lvalue state var ~proto_dies_for_vars =
-  (* We may need to reference the locations of other values in order to describe
-     the location of some particular value. This is done by using the "call"
-     functionality of DWARF location descriptions. (DWARF-4 specification
-     section 2.5.1.5, page 24.) This avoids any need to transitively resolve
-     phantom lets (to constants, symbols or non-phantom variables) in the
-     compiler. *)
-  match proto_dies_for_variable var ~proto_dies_for_vars with
-  | None -> None
-  | Some { value_die_lvalue; _ } ->
-    let location =
-      SLDL.Lvalue.location_from_another_die ~die_label:value_die_lvalue
-        ~compilation_unit_header_label:(DS.compilation_unit_header_label state)
-    in
-    Some location
+(* let die_location_of_variable_lvalue state var ~proto_dies_for_vars = (* We
+   may need to reference the locations of other values in order to describe the
+   location of some particular value. This is done by using the "call"
+   functionality of DWARF location descriptions. (DWARF-4 specification section
+   2.5.1.5, page 24.) This avoids any need to transitively resolve phantom lets
+   (to constants, symbols or non-phantom variables) in the compiler. *) match
+   proto_dies_for_variable var ~proto_dies_for_vars with | None -> None | Some {
+   value_die_lvalue; _ } -> let location = SLDL.Lvalue.location_from_another_die
+   ~die_label:value_die_lvalue
+   ~compilation_unit_header_label:(DS.compilation_unit_header_label state) in
+   Some location
 
-let die_location_of_variable_rvalue state var ~proto_dies_for_vars =
-  match proto_dies_for_variable var ~proto_dies_for_vars with
-  | None -> None
-  | Some { value_die_rvalue; _ } ->
-    DS.set_rvalue_dies_required_for state
-      (V.Set.add var (DS.rvalue_dies_required_for state));
-    let location =
-      SLDL.Rvalue.location_from_another_die ~die_label:value_die_rvalue
-        ~compilation_unit_header_label:(DS.compilation_unit_header_label state)
-    in
-    Some location
+   let die_location_of_variable_rvalue state var ~proto_dies_for_vars = match
+   proto_dies_for_variable var ~proto_dies_for_vars with | None -> None | Some {
+   value_die_rvalue; _ } -> DS.set_rvalue_dies_required_for state (V.Set.add var
+   (DS.rvalue_dies_required_for state)); let location =
+   SLDL.Rvalue.location_from_another_die ~die_label:value_die_rvalue
+   ~compilation_unit_header_label:(DS.compilation_unit_header_label state) in
+   Some location *)
 
 type location_description =
   | Simple of Simple_location_description.t
@@ -165,7 +149,7 @@ let location_list_entry state ~subrange single_location_description :
   let start_pos_offset = ARV.Subrange.start_pos_offset subrange in
   let end_pos = Asm_label.create_int Text (ARV.Subrange.end_pos subrange) in
   let end_pos_offset = ARV.Subrange.end_pos_offset subrange in
-  match !Clflags.gdwarf_version with
+  match Dwarf_version.five (* XXX !Clflags.gdwarf_version *) with
   | Four ->
     let location_list_entry =
       Dwarf_4_location_list_entry.create_location_list_entry
@@ -200,8 +184,8 @@ let location_list_entry state ~subrange single_location_description :
          ~start_of_code_symbol:(DS.start_of_code_symbol state))
 
 let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
-    ~scope_proto_dies ~proto_dies_for_vars ~need_rvalue (var : Backend_var.t)
-    ~phantom:_ ~hidden ~ident_for_type ~range =
+    ~proto_dies_for_vars ~need_rvalue (var : Backend_var.t) ~phantom:_ ~hidden
+    ~ident_for_type ~range =
   let range_info = ARV.Range.info range in
   let provenance = ARV.Range_info.provenance range_info in
   let var_is_a_parameter_of_fundecl_itself =
@@ -217,14 +201,12 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
   let phantom_defining_expr = ARV.Range_info.phantom_defining_expr range_info in
   let (parent_proto_die : Proto_die.t), hidden =
     if var_is_a_parameter_of_fundecl_itself
-    then function_proto_die, hidden
-    else if is_static
     then
-      match provenance with
-      | None -> DS.compilation_unit_proto_die state, hidden
-      | Some provenance ->
-        let module_path = V.Provenance.module_path provenance in
-        Dwarf_modules.dwarf state ~module_path, hidden
+      function_proto_die, hidden
+      (* XXX else if is_static then match provenance with | None ->
+         DS.compilation_unit_proto_die state, hidden | Some provenance -> let
+         module_path = V.Provenance.module_path provenance in
+         Dwarf_modules.dwarf state ~module_path, hidden *)
     else
       (* Local variables need to be children of "lexical blocks", which in turn
          are children of the function. It is important to generate accurate
@@ -306,18 +288,15 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
         [DAH.create_location location_list_index], None
   in
   let is_parameter =
-    let is_parameter_from_provenance =
-      match provenance with
-      | None -> Is_parameter.local
-      | Some provenance -> Backend_var.Provenance.is_parameter provenance
-    in
-    (* The two inputs here correspond to: 1. The normal case of parameters of
-       function declarations, which are identified in [Selectgen]. 2. Parameters
-       of inlined functions, which have to be tagged much earlier, on
-       [let]-bindings when inlining is performed. *)
-    Is_parameter.join
-      (ARV.Range_info.is_parameter range_info)
-      is_parameter_from_provenance
+    ARV.Range_info.is_parameter range_info
+    (* XXX let is_parameter_from_provenance = match provenance with | None ->
+       Is_parameter.local | Some provenance ->
+       Backend_var.Provenance.is_parameter provenance in (* The two inputs here
+       correspond to: 1. The normal case of parameters of function declarations,
+       which are identified in [Selectgen]. 2. Parameters of inlined functions,
+       which have to be tagged much earlier, on [let]-bindings when inlining is
+       performed. *) Is_parameter.join (ARV.Range_info.is_parameter range_info)
+       is_parameter_from_provenance *)
   in
   let type_and_name_attributes =
     match type_die_reference_for_var var ~proto_dies_for_vars with
@@ -333,14 +312,12 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
         then
           match provenance with
           | None -> Backend_var.unique_name_for_debugger var
-          | Some provenance -> (
-            let dbg = Backend_var.Provenance.debuginfo provenance in
-            match Debuginfo.position dbg with
-            | None -> Backend_var.unique_name_for_debugger var
-            | Some position ->
-              Format.asprintf "%s[%a]"
-                (Backend_var.name_for_debugger var)
-                Debuginfo.Code_range.print_compact_without_dirname position)
+          | Some _provenance -> Backend_var.unique_name_for_debugger var
+          (* XXX let dbg = Backend_var.Provenance.debuginfo provenance in match
+             Debuginfo.position dbg with | None ->
+             Backend_var.unique_name_for_debugger var | Some position ->
+             Format.asprintf "%s[%a]" (Backend_var.name_for_debugger var)
+             Debuginfo.Code_range.print_compact_without_dirname position *)
         else Backend_var.unique_name_for_debugger var
       in
       (* CR-someday mshinwell: This should be tidied up. It's only correct by
@@ -351,8 +328,7 @@ let dwarf_for_variable state (fundecl : L.fundecl) ~function_proto_die
         then
           construct_type_of_value_description state
             ~parent:(Some (DS.compilation_unit_proto_die state))
-            ident_for_type is_parameter ~phantom_defining_expr
-            ~proto_dies_for_vars ~reference;
+            ident_for_type is_parameter ~proto_dies_for_vars ~reference;
         [DAH.create_type_from_reference ~proto_die_reference:reference]
       in
       let name_attribute =
@@ -398,7 +374,8 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
     ~f =
   ARV.iter available_ranges_vars ~f:(fun var range ->
       let should_process =
-        (not rvalues_only) || V.Set.mem var (DS.rvalue_dies_required_for state)
+        not rvalues_only
+        (* XXX || V.Set.mem var (DS.rvalue_dies_required_for state) *)
       in
       if should_process
       then
@@ -458,8 +435,7 @@ let iterate_over_variable_like_things state ~available_ranges_vars ~rvalues_only
         in
         f var ~phantom ~hidden ~ident_for_type ~range)
 
-let dwarf state fundecl ~function_proto_die ~scope_proto_dies
-    available_ranges_vars =
+let dwarf state fundecl ~function_proto_die available_ranges_vars =
   let proto_dies_for_vars = Backend_var.Tbl.create 42 in
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:false
@@ -474,16 +450,16 @@ let dwarf state fundecl ~function_proto_die ~scope_proto_dies
           value_die_rvalue;
           type_die
         });
-  DS.set_rvalue_dies_required_for state V.Set.empty;
+  (* XXX DS.set_rvalue_dies_required_for state V.Set.empty; *)
   (* CR-someday mshinwell: Consider changing [need_rvalue] to use a variant type
      "lvalue or rvalue". *)
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:false
     ~f:
-      (dwarf_for_variable state fundecl ~function_proto_die ~scope_proto_dies
-         ~proto_dies_for_vars ~need_rvalue:false);
+      (dwarf_for_variable state fundecl ~function_proto_die ~proto_dies_for_vars
+         ~need_rvalue:false);
   iterate_over_variable_like_things state ~available_ranges_vars
     ~rvalues_only:true
     ~f:
-      (dwarf_for_variable state fundecl ~function_proto_die ~scope_proto_dies
-         ~proto_dies_for_vars ~need_rvalue:true)
+      (dwarf_for_variable state fundecl ~function_proto_die ~proto_dies_for_vars
+         ~need_rvalue:true)

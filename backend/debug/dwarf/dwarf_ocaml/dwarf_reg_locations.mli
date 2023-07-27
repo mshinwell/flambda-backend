@@ -12,33 +12,20 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open Asm_targets
-open Dwarf_low
-open Dwarf_high
+(** Construction of DWARF location descriptions for registers. *)
 
-type t =
-  { compilation_unit_header_label : Asm_label.t;
-    compilation_unit_proto_die : Proto_die.t;
-    start_of_code_symbol : Asm_symbol.t;
-    address_table : Address_table.t;
-    location_list_table : Location_list_table.t
-  }
+open! Dwarf_low
 
-let create ~compilation_unit_header_label ~compilation_unit_proto_die
-    ~start_of_code_symbol address_table location_list_table =
-  { compilation_unit_header_label;
-    compilation_unit_proto_die;
-    start_of_code_symbol;
-    address_table;
-    location_list_table
-  }
+val reg_location_description :
+  Reg.t ->
+  offset_from_cfa_in_bytes:int option ->
+  need_rvalue:bool ->
+  Simple_location_description.t option
 
-let compilation_unit_header_label t = t.compilation_unit_header_label
-
-let compilation_unit_proto_die t = t.compilation_unit_proto_die
-
-let start_of_code_symbol t = t.start_of_code_symbol
-
-let address_table t = t.address_table
-
-let location_list_table t = t.location_list_table
+val offset_from_cfa_in_bytes :
+  Reg.t ->
+  Reg.stack_location ->
+  stack_offset:int ->
+  fun_contains_calls:bool ->
+  fun_num_stack_slots:int array ->
+  int option

@@ -39,8 +39,17 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
       ~code_begin ~code_end
   in
   let compilation_unit_header_label = Asm_label.create (DWARF Debug_info) in
+  let start_of_code_symbol =
+    Cmm_helpers.make_symbol "code_begin" |> Asm_symbol.create
+    (* Dwarf_name_laundry.mangle_symbol Text (Symbol.of_global_linkage
+       (Compilation_unit.get_current_exn ()) (Linkage_name.create
+       "code_begin")) *)
+  in
+  let address_table = Address_table.create () in
+  let location_list_table = Location_list_table.create () in
   let state =
     DS.create ~compilation_unit_header_label ~compilation_unit_proto_die
+      ~start_of_code_symbol address_table location_list_table
   in
   { state; asm_directives; emitted = false; get_file_id }
 
