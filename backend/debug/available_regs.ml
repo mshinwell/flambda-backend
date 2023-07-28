@@ -351,6 +351,9 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
             (available_regs handler ~avail_before:avail_before_handler)
         in
         current_trap_stack := saved_trap_stack;
+        (match kind with
+        | Regular -> ()
+        | Delayed nfail -> Hashtbl.remove avail_at_exit nfail);
         None, avail_after
       | Iraise _ ->
         let avail_before = ok avail_before in
