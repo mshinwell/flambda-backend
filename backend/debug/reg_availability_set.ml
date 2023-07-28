@@ -21,10 +21,20 @@ type t =
   | Ok of RD.Set.t
   | Unreachable
 
-let inter regs1 regs2 =
-  match regs1, regs2 with
-  | Unreachable, _ -> regs2
-  | _, Unreachable -> regs1
+let of_list rds = Ok (RD.Set.of_list rds)
+
+(* XXX determine whether more elaborate implementations are needed (except for
+   inter) *)
+
+let union t1 t2 =
+  match t1, t2 with
+  | Ok avail1, Ok avail2 -> Ok (RD.Set.union avail1 avail2)
+  | Unreachable, _ | _, Unreachable -> Unreachable
+
+let inter t1 t2 =
+  match t1, t2 with
+  | Unreachable, _ -> t2
+  | _, Unreachable -> t1
   | Ok avail1, Ok avail2 ->
     let result =
       RD.Set.fold
@@ -57,11 +67,16 @@ let inter regs1 regs2 =
     in
     Ok result
 
-let equal t1 t2 =
+let diff t1 t2 =
   match t1, t2 with
-  | Unreachable, Unreachable -> true
-  | Unreachable, Ok _ | Ok _, Unreachable -> false
-  | Ok regs1, Ok regs2 -> RD.Set.equal regs1 regs2
+  | Unreachable, (Ok _ | Unreachable) -> Unreachable
+  | Ok avail1, Ok avail2 -> Ok (RD.Set.diff avail1 avail2)
+  | Ok _, Unreachable -> Ok RD.Set.empty
+
+let fold f t init =
+  match t with
+  | Unreachable -> init
+  | Ok availability -> RD.Set.fold f availability init
 
 let canonicalise availability =
   match availability with
@@ -99,6 +114,12 @@ let canonicalise availability =
         regs_by_ident RD.Set.empty
     in
     Ok result
+
+let equal t1 t2 =
+  match t1, t2 with
+  | Unreachable, Unreachable -> true
+  | Unreachable, Ok _ | Ok _, Unreachable -> false
+  | Ok regs1, Ok regs2 -> RD.Set.equal regs1 regs2
 
 let print ~print_reg ppf = function
   | Unreachable -> Format.fprintf ppf "<unreachable>"

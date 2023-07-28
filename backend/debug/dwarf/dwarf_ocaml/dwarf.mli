@@ -32,7 +32,7 @@ val create :
   code_end:Asm_symbol.t ->
   t
 
-val dwarf_for_fundecl : t -> Dwarf_concrete_instances.fundecl -> unit
+val dwarf_for_fundecl : t -> Debug_passes.result -> unit
 
 (** Write the DWARF information to the assembly file. This should only be called
     once all (in)constants and function declarations have been passed to the

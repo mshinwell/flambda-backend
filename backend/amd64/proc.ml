@@ -637,6 +637,9 @@ let max_register_pressure =
 
 (* Layout of the stack frame *)
 
+let initial_stack_offset = 0
+let trap_frame_size_in_bytes = 16
+
 let frame_required ~fun_contains_calls ~fun_num_stack_slots =
   fp || fun_contains_calls ||
   fun_num_stack_slots.(0) > 0 ||
@@ -645,6 +648,30 @@ let frame_required ~fun_contains_calls ~fun_num_stack_slots =
 
 let prologue_required ~fun_contains_calls ~fun_num_stack_slots =
   frame_required ~fun_contains_calls ~fun_num_stack_slots
+
+(* returned size includes return address *)
+let frame_size ~stack_offset ~fun_contains_calls ~fun_num_stack_slots =
+  if frame_required ~fun_contains_calls ~fun_num_stack_slots then begin
+    let sz =
+      (stack_offset + 8 * (fun_num_stack_slots.(0) + fun_num_stack_slots.(1))
+      + 8
+      + (if fp then 8 else 0))
+    in Misc.align sz 16
+  end else
+    stack_offset + 8
+
+let slot_offset loc ~reg_class ~stack_offset ~fun_contains_calls
+      ~fun_num_stack_slots =
+  match loc with
+  | Incoming n ->
+      frame_size ~stack_offset ~fun_contains_calls ~fun_num_stack_slots + n
+  | Local n ->
+      if reg_class = 0
+      then stack_offset + n * 8
+      else stack_offset + (fun_num_stack_slots.(0) + n) * 8
+  | Outgoing n -> n
+  | Domainstate _ -> 0 (*
+      Misc.fatal_error "Cannot yet handle Domainstate slots" (* XXX *) *)
 
 (* Calling the assembler *)
 

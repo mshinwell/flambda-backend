@@ -1,0 +1,123 @@
+(**************************************************************************)
+(*                                                                        *)
+(*                                 OCaml                                  *)
+(*                                                                        *)
+(*                  Mark Shinwell, Jane Street Europe                     *)
+(*                                                                        *)
+(*   Copyright 2016--2023 Jane Street Group LLC                           *)
+(*                                                                        *)
+(*   All rights reserved.  This file is distributed under the terms of    *)
+(*   the GNU Lesser General Public License version 2.1, with the          *)
+(*   special exception on linking described in the file LICENSE.          *)
+(*                                                                        *)
+(**************************************************************************)
+
+module Int = Numbers.Int
+module L = Linear
+
+let rewrite_label env label =
+  match Int.Map.find label env with
+  | exception Not_found -> label
+  | label -> label
+
+(* Since there may be both forward references and labels that require coalescing
+   (possibly where one of a group to be coalesced was forward referenced), we do
+   this in two passes. *)
+
+let rec coalesce env (insn : L.instruction) ~last_insn_was_label =
+  match insn.desc with
+  | Lend -> env, insn
+  | _ ->
+    let env, desc, this_insn_is_label =
+      match insn.desc with
+      | Llabel { label; section_name = _ } -> (
+        match last_insn_was_label with
+        | Some rewritten_existing_label ->
+          (* This label immediately follows another, so delete it. References to
+             it will be rewritten to the previous label. *)
+          let env = Int.Map.add label rewritten_existing_label env in
+          env, None, last_insn_was_label
+        | None ->
+          let rewritten_label = Cmm.new_label () in
+          let env = Int.Map.add label rewritten_label env in
+          env, Some insn.desc, Some rewritten_label)
+      | Lpushtrap { lbl_handler } ->
+        let rewritten_label = Cmm.new_label () in
+        let env = Int.Map.add lbl_handler rewritten_label env in
+        env, Some insn.desc, Some rewritten_label
+      | Lprologue | Lop _ | Lreloadretaddr | Lreturn | Lpoptrap | Lraise _
+      | Lbranch _ | Lcondbranch _ | Lcondbranch3 _ | Lswitch _ | Lentertrap
+      | Ladjust_stack_offset _ ->
+        env, Some insn.desc, None
+      | Lend -> assert false
+    in
+    let env, next =
+      coalesce env insn.next ~last_insn_was_label:this_insn_is_label
+    in
+    let insn =
+      match desc with None -> next | Some desc -> { insn with desc; next }
+    in
+    env, insn
+
+let rec renumber env (insn : L.instruction) =
+  match insn.desc with
+  | Lend -> insn
+  | _ ->
+    let desc : L.instruction_desc =
+      match insn.desc with
+      | Lprologue -> insn.desc
+      | Lop op ->
+        (* CR mshinwell: This may not actually be needed, but we should explain
+           why in the .mli. *)
+        let op : Mach.operation =
+          match op with
+          | Imove | Ispill | Ireload | Iconst_int _ | Iconst_float _
+          | Iconst_symbol _ | Icall_ind | Icall_imm _ | Itailcall_ind
+          | Itailcall_imm _ | Iextcall _ | Istackoffset _ | Iload _ | Istore _
+          | Ivalueofint | Iintofvalue | Iopaque | Ibeginregion | Iendregion
+          | Iconst_vec128 _ | Iintop_atomic _ | Icompf _ | Icsel _ | Iprobe _
+          | Iprobe_is_enabled _ | Ialloc _ ->
+            op
+          | Ipoll { return_label } ->
+            let return_label = Option.map (rewrite_label env) return_label in
+            Ipoll { return_label }
+          | Iintop _ | Iintop_imm _ | Inegf | Iabsf | Iaddf | Isubf | Imulf
+          | Idivf | Ifloatofint | Iintoffloat | Ispecific _
+          (* For the moment we assume [Ispecific] operations do not contain
+             labels. *)
+          | Iname_for_debugger { ident = _; provenance = _; is_assignment = _ }
+            ->
+            op
+        in
+        Lop op
+      | Lreloadretaddr | Lreturn | Lpushtrap _ | Lpoptrap | Lraise _ ->
+        insn.desc
+      | Llabel { label; section_name } ->
+        Llabel { label = rewrite_label env label; section_name }
+      | Lbranch label -> Lbranch (rewrite_label env label)
+      | Lcondbranch (test, label) -> Lcondbranch (test, rewrite_label env label)
+      | Lcondbranch3 (label1_opt, label2_opt, label3_opt) ->
+        Lcondbranch3
+          ( Option.map (rewrite_label env) label1_opt,
+            Option.map (rewrite_label env) label2_opt,
+            Option.map (rewrite_label env) label3_opt )
+      | Lswitch labels -> Lswitch (Array.map (rewrite_label env) labels)
+      | Lentertrap -> Lentertrap
+      | Ladjust_stack_offset _ -> insn.desc
+      | Lend -> assert false
+    in
+    let next = renumber env insn.next in
+    { insn with L.desc; next }
+
+let fundecl (decl : L.fundecl) : int Int.Map.t * L.fundecl =
+  (* Printlinear.fundecl Format.std_formatter decl; Format.printf "\n%!"; *)
+  let env, fun_body =
+    coalesce Int.Map.empty decl.fun_body ~last_insn_was_label:None
+  in
+  let fun_body = renumber env fun_body in
+  let fun_tailrec_entry_point_label =
+    Option.map (rewrite_label env) decl.fun_tailrec_entry_point_label
+  in
+  let decl = { decl with fun_body; fun_tailrec_entry_point_label } in
+  (* Printlinear.fundecl Format.std_formatter decl;\ Format.printf "\n%!"; *)
+  env, decl

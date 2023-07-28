@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2016--2023 Jane Street Group LLC                           *)
+(*   Copyright 2013--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -12,18 +12,20 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Helper for emitting the various DWARF sections required for full debugging
-    information. *)
+(** Construction of DWARF location descriptions for registers. *)
 
-open Asm_targets
-open Dwarf_low
+open! Dwarf_low
 
-val emit :
-  asm_directives:(module Asm_directives.S) ->
-  compilation_unit_proto_die:Proto_die.t ->
-  compilation_unit_header_label:Asm_label.t ->
-  debug_loc_table:Debug_loc_table.t ->
-  debug_ranges_table:Debug_ranges_table.t ->
-  address_table:Address_table.t ->
-  location_list_table:Location_list_table.t ->
-  unit
+val reg_location_description :
+  Reg.t ->
+  offset_from_cfa_in_bytes:int option ->
+  need_rvalue:bool ->
+  Simple_location_description.t option
+
+val offset_from_cfa_in_bytes :
+  Reg.t ->
+  Reg.stack_location ->
+  stack_offset:int ->
+  fun_contains_calls:bool ->
+  fun_num_stack_slots:int array ->
+  int option

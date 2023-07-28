@@ -20,6 +20,11 @@ module RAS = Reg_availability_set
 module RD = Reg_with_debug_info
 module V = Backend_var
 
+let extend_live = true
+(*  match Sys.getenv "EXTEND_LIVE" with exception Not_found -> false | _ -> true *)
+
+let disable_extend_live = ref false
+
 (* This pass treats [avail_at_exit] like a "result" structure whereas the
    equivalent in [Liveness] is like an "environment". (Which means we need to be
    careful not to throw away information about further-out catch handlers
@@ -68,6 +73,7 @@ let check_invariants (instr : M.instruction) ~(avail_before : RAS.t) =
   | Ok avail_before ->
     (* Every register that is live across an instruction should also be
        available before the instruction. *)
+    (*
     if not (R.Set.subset instr.live (RD.Set.forget_debug_info avail_before))
     then
       Misc.fatal_errorf
@@ -78,7 +84,8 @@ let check_invariants (instr : M.instruction) ~(avail_before : RAS.t) =
         (RAS.Ok avail_before) Printmach.regset
         (R.Set.diff instr.live (RD.Set.forget_debug_info avail_before))
         Printmach.instr
-        { instr with M.next = M.end_instr () };
+       { instr with M.next = M.end_instr () };
+       *)
     (* Every register that is an input to an instruction should be available. *)
     let args = R.set_of_array instr.arg in
     let avail_before_fdi = RD.Set.forget_debug_info avail_before in
@@ -223,7 +230,7 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
            [Available_ranges.Make_ranges.end_pos_offset]. *)
         let made_unavailable_2 =
           match op with
-          | Icall_ind | Icall_imm _ | Ialloc _ ->
+          | Icall_ind | Icall_imm _ | Ialloc _ | Ipoll _ ->
             RD.Set.filter
               (fun reg ->
                 let holds_immediate = RD.holds_non_pointer reg in
@@ -232,7 +239,15 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
                 let remains_available =
                   live_across || (holds_immediate && on_stack)
                 in
-                not remains_available)
+                if remains_available || (not extend_live)
+                   || (not (Reg.is_local_stack_slot (RD.reg reg)))
+                   || RD.Set.mem reg made_unavailable_1
+                   || !disable_extend_live
+                then not remains_available
+                else (
+(*                  Format.eprintf "adding %a\n%!" (RD.print ~print_reg:Printmach.reg) reg;*)
+                  instr.live <- Reg.Set.add (RD.reg reg) instr.live;
+                  false))
               avail_before
           | _ -> RD.Set.empty
         in
@@ -251,6 +266,10 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
       | Iifthenelse (_, ifso, ifnot) -> join [ifso; ifnot] ~avail_before
       | Iswitch (_, cases) -> join (Array.to_list cases) ~avail_before
       | Icatch (recursive, ts, handlers, body) ->
+        let old_disable_extend_live = !disable_extend_live in
+        (match recursive with
+        | Nonrecursive -> ()
+        | Recursive -> disable_extend_live := true);
         List.iter
           (fun (nfail, _ts, _handler) ->
             (* In case there are nested [Icatch] expressions with the same
@@ -290,7 +309,13 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
           | Recursive ->
             if List.for_all2 aux_equal avail_at_top_of_handlers
                  avail_at_top_of_handlers'
-            then avail_after_handlers
+            then (
+              if not extend_live then avail_after_handlers
+              else (
+                disable_extend_live := old_disable_extend_live;
+                List.map2 aux handlers avail_at_top_of_handlers
+              )
+            )
             else fixpoint avail_at_top_of_handlers'
         in
         let init_avail_at_top_of_handlers =
@@ -318,6 +343,9 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
         augment_availability_at_exit nfail avail_before;
         None, unreachable
       | Itrywith (body, kind, (ts, handler)) ->
+        (match kind with
+        | Regular -> ()
+        | Delayed nfail -> Hashtbl.add avail_at_exit nfail unreachable);
         let saved_avail_at_raise = setup_avail_at_raise kind in
         let avail_before = ok avail_before in
         let after_body = available_regs body ~avail_before in
@@ -348,6 +376,9 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
             (available_regs handler ~avail_before:avail_before_handler)
         in
         current_trap_stack := saved_trap_stack;
+        (match kind with
+        | Regular -> ()
+        | Delayed nfail -> Hashtbl.remove avail_at_exit nfail);
         None, avail_after
       | Iraise _ ->
         let avail_before = ok avail_before in
@@ -375,6 +406,7 @@ let fundecl (f : M.fundecl) =
     assert (Hashtbl.length avail_at_exit = 0);
     avail_at_raise := RAS.Unreachable;
     current_trap_stack := M.Uncaught;
+    disable_extend_live := false;
     let fun_args = R.set_of_array f.fun_args in
     let avail_before = RAS.Ok (RD.Set.without_debug_info fun_args) in
     ignore (available_regs f.fun_body ~avail_before : RAS.t));

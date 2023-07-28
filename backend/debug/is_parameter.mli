@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2016--2023 Jane Street Group LLC                           *)
+(*   Copyright 2014--2018 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -12,18 +12,18 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Helper for emitting the various DWARF sections required for full debugging
-    information. *)
+[@@@ocaml.warning "+a-4-30-40-41-42"]
 
-open Asm_targets
-open Dwarf_low
+(** Whether a variable is a local or a function parameter. *)
 
-val emit :
-  asm_directives:(module Asm_directives.S) ->
-  compilation_unit_proto_die:Proto_die.t ->
-  compilation_unit_header_label:Asm_label.t ->
-  debug_loc_table:Debug_loc_table.t ->
-  debug_ranges_table:Debug_ranges_table.t ->
-  address_table:Address_table.t ->
-  location_list_table:Location_list_table.t ->
-  unit
+type t = private
+  | Local
+  | Parameter of { index : int; }
+
+val local : t
+
+val parameter : index:int -> t
+
+val join : t -> t -> t
+
+include Identifiable.S with type t := t

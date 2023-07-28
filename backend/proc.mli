@@ -72,10 +72,28 @@ val is_destruction_point : Cfg_intf.S.terminator -> bool
 val regs_are_volatile: Reg.t array -> bool
 
 (* Info for laying out the stack frame *)
+
+val initial_stack_offset : int
+val trap_frame_size_in_bytes : int
+
 val frame_required :
   fun_contains_calls:bool ->
-  fun_num_stack_slots: int array ->
+  fun_num_stack_slots:int array ->
   bool
+
+val frame_size :
+  stack_offset:int ->
+  fun_contains_calls:bool ->
+  fun_num_stack_slots:int array ->
+  int
+
+val slot_offset :
+  Reg.stack_location ->
+  reg_class:int ->
+  stack_offset:int ->
+  fun_contains_calls:bool ->
+  fun_num_stack_slots:int array ->
+  int
 
 (* Function prologues *)
 val prologue_required :

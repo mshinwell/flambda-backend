@@ -19,4 +19,8 @@ type fundecl =
   }
 
 val for_fundecl :
-  get_file_id:(string -> int) -> Dwarf_state.t -> fundecl -> unit
+  get_file_id:(string -> int) ->
+  Dwarf_state.t ->
+  fundecl ->
+  Available_ranges_all_vars.t ->
+  unit

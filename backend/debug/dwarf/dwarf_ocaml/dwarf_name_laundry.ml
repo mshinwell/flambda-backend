@@ -2,9 +2,9 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*                  Mark Shinwell, Jane Street Europe                     *)
+(*            Mark Shinwell and Thomas Refis, Jane Street Europe          *)
 (*                                                                        *)
-(*   Copyright 2016--2023 Jane Street Group LLC                           *)
+(*   Copyright 2013--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
@@ -12,18 +12,23 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Helper for emitting the various DWARF sections required for full debugging
-    information. *)
+open! Asm_targets
 
-open Asm_targets
-open Dwarf_low
-
-val emit :
-  asm_directives:(module Asm_directives.S) ->
-  compilation_unit_proto_die:Proto_die.t ->
-  compilation_unit_header_label:Asm_label.t ->
-  debug_loc_table:Debug_loc_table.t ->
-  debug_ranges_table:Debug_ranges_table.t ->
-  address_table:Address_table.t ->
-  location_list_table:Location_list_table.t ->
-  unit
+(* CR mshinwell: remove this for the new scheme *)
+let base_type_die_name_for_var compilation_unit var
+    (is_parameter : Is_parameter.t) =
+  let var_name = Backend_var.name var in
+  assert (
+    try
+      ignore (String.index var_name ' ');
+      false
+    with Not_found -> true);
+  let stamp = Backend_var.stamp var in
+  let is_parameter =
+    match is_parameter with
+    | Local -> ""
+    | Parameter { index } -> Printf.sprintf " %d" index
+  in
+  Printf.sprintf "__ocaml %s %s %d%s"
+    (Compilation_unit.full_path_as_string compilation_unit)
+    var_name stamp is_parameter

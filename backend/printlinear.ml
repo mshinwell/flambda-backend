@@ -33,7 +33,8 @@ let instr' ?(print_reg = Printmach.reg) ppf i =
   let test = Printmach.test' ~print_reg in
   let operation = Printmach.operation' ~print_reg in
   begin match i.desc with
-  | Lend -> ()
+  | Lend ->
+      fprintf ppf "end"
   | Lprologue ->
       fprintf ppf "prologue"
   | Lop op ->
