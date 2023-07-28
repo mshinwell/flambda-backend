@@ -17,6 +17,8 @@
 open! Int_replace_polymorphic_compare
 module L = Linear
 
+let debug = true
+
 module Make (S : Compute_ranges_intf.S_functor) = struct
   module Subrange_state = S.Subrange_state
   module Subrange_info = S.Subrange_info
@@ -37,6 +39,15 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
         end_pos_offset : int;
         subrange_info : Subrange_info.t
       }
+
+    let print ppf
+        { start_pos; start_pos_offset; end_pos; end_pos_offset; subrange_info }
+        =
+      Format.fprintf ppf
+        "@[<hov 1>((start_pos@ L%d)@ (start_pos_offset@ %d)@ (end_pos@ L%d)@ \
+         (end_pos_offset@ %d)@ (subrange_info@ %a))@]"
+        start_pos start_pos_offset end_pos end_pos_offset Subrange_info.print
+        subrange_info
 
     let create ~(start_insn : L.instruction) ~start_pos ~start_pos_offset
         ~end_pos ~end_pos_offset ~subrange_info =
@@ -71,6 +82,17 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
         mutable min_pos_and_offset : (L.label * int) option;
         range_info : Range_info.t
       }
+
+    let print ppf { subranges; min_pos_and_offset; range_info } =
+      Format.fprintf ppf
+        "@[<hov 1>((subranges@ %a)@ (min_pos_and_offset@ %a) (range_info@ \
+         %a))@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space Subrange.print)
+        subranges
+        (Misc.Stdlib.Option.print (fun ppf (pos, offset) ->
+             Format.fprintf ppf "@[<hov 1>((pos@ L%d)@ (offset@ %d))@]" pos
+               offset))
+        min_pos_and_offset Range_info.print range_info
 
     let create range_info =
       { subranges = []; min_pos_and_offset = None; range_info }
@@ -122,6 +144,14 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
   end
 
   type t = { ranges : Range.t S.Index.Tbl.t }
+
+  let print ppf { ranges } =
+    Format.fprintf ppf "@[<hov 1>(ranges@ %a)@]"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+         (fun ppf (index, range) ->
+           Format.fprintf ppf "@[<hov 1>(%a@ %a)@]" S.Index.print index
+             Range.print range))
+      (S.Index.Tbl.to_list ranges)
 
   module KM = S.Key.Map
   module KS = S.Key.Set
@@ -196,6 +226,16 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     | Close_subrange
     | Close_subrange_one_byte_after
 
+  let print_action ppf action =
+    match action with
+    | Open_one_byte_subrange -> Format.fprintf ppf "Open_one_byte_subrange"
+    | Open_subrange -> Format.fprintf ppf "Open_subrange"
+    | Open_subrange_one_byte_after ->
+      Format.fprintf ppf "Open_subrange_one_byte_after"
+    | Close_subrange -> Format.fprintf ppf "Close_subrange"
+    | Close_subrange_one_byte_after ->
+      Format.fprintf ppf "Close_subrange_one_byte_after"
+
   (* CR mshinwell: Move to [Clflags] *)
   let _check_invariants = ref true
 
@@ -203,11 +243,23 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       ~(prev_insn : L.instruction option) =
     let available_before = S.available_before insn in
     let available_across = S.available_across insn in
+    if debug
+    then
+      Format.eprintf "canonicalised available_before: %a\n" KS.print
+        available_before;
+    if debug
+    then
+      Format.eprintf "canonicalised available_across: %a\n" KS.print
+        available_across;
     let opt_available_across_prev_insn =
       match prev_insn with
       | None -> KS.of_list []
       | Some prev_insn -> S.available_across prev_insn
     in
+    if debug
+    then
+      Format.eprintf "canonicalised opt_available_across_prev_insn: %a\n"
+        KS.print opt_available_across_prev_insn;
     let case_1b =
       KS.diff available_across
         (KS.union opt_available_across_prev_insn available_before)
@@ -278,6 +330,8 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       ~fun_num_stack_slots ~(first_insn : L.instruction) ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) ~currently_open_subranges
       ~subrange_state =
+    if debug
+    then Format.eprintf "process_instruction:@ %a\n" Printlinear.instr insn;
     let used_label = ref None in
     let get_label () =
       match !used_label with
@@ -309,6 +363,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       KM.add key (label, start_pos_offset, label_insn) currently_open_subranges
     in
     let close_subrange key ~end_pos_offset ~currently_open_subranges =
+      if debug then Format.eprintf "close_subrange for key %a" S.Key.print key;
       match KM.find key currently_open_subranges with
       | exception Not_found ->
         Format.eprintf "!! No subrange is open for key %a" S.Key.print key;
@@ -353,9 +408,14 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
         must_restart currently_open_subranges
     in
     (* Apply actions *)
+    let no_actions = List.compare_length_with actions 0 = 0 in
+    if debug && no_actions then Format.eprintf "no actions to apply\n%!";
+    if debug && not no_actions then Format.eprintf "applying actions:\n%!";
     let currently_open_subranges =
       List.fold_left
         (fun currently_open_subranges (key, (action : action)) ->
+          Format.eprintf "action for key %a: %a\n" S.Key.print key print_action
+            action;
           match action with
           | Open_one_byte_subrange ->
             let currently_open_subranges =
@@ -372,6 +432,8 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
             close_subrange key ~end_pos_offset:1 ~currently_open_subranges)
         currently_open_subranges actions
     in
+    if debug && not no_actions
+    then Format.eprintf "finished applying actions.\n%!";
     (* Close all subranges if at last instruction *)
     let currently_open_subranges =
       match insn.desc with
@@ -438,6 +500,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
   let empty = { ranges = S.Index.Tbl.create 1 }
 
   let create (fundecl : L.fundecl) =
+    if debug then Format.eprintf "Compute_ranges for %s\n" fundecl.fun_name;
     let t = { ranges = S.Index.Tbl.create 42 } in
     let first_insn =
       process_instructions t fundecl

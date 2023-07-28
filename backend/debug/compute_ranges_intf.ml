@@ -51,6 +51,8 @@ module type S_subrange_info = sig
     fun_contains_calls:bool ->
     fun_num_stack_slots:int array ->
     t
+
+  val print : Format.formatter -> t -> unit
 end
 
 (** The type of caller-defined information associated with ranges. *)
@@ -63,6 +65,8 @@ module type S_range_info = sig
 
   val create :
     L.fundecl -> key -> start_insn:L.instruction -> (index * t) option
+
+  val print : Format.formatter -> t -> unit
 end
 
 (** This module type specifies what the caller has to provide in order to
@@ -286,6 +290,8 @@ module type S = sig
 
   (** The type holding information on computed ranges. *)
   type t
+
+  val print : Format.formatter -> t -> unit
 
   (** A value of type [t] that holds no range information. *)
   val empty : t

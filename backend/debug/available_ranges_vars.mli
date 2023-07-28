@@ -48,6 +48,8 @@ module Subrange_info : sig
   val reg : t -> Reg.t
 
   val offset_from_cfa_in_bytes : t -> int option
+
+  val print : Format.formatter -> t -> unit
 end
 
 module Range_info : sig
@@ -62,6 +64,8 @@ module Range_info : sig
   val provenance : t -> Backend_var.Provenance.t option
 
   val is_parameter : t -> Is_parameter.t
+
+  val print : Format.formatter -> t -> unit
 end
 
 include

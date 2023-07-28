@@ -65,6 +65,12 @@ module Vars = struct
         offset_from_cfa_in_bytes : int option
       }
 
+    let print ppf { reg; offset_from_cfa_in_bytes } =
+      Format.fprintf ppf "@[<hov 1>((reg %a)@ (offset_from_cfa_in_bytes %a))@]"
+        Printmach.reg reg
+        (Misc.Stdlib.Option.print Format.pp_print_int)
+        offset_from_cfa_in_bytes
+
     let create reg subrange_state ~fun_contains_calls ~fun_num_stack_slots =
       let reg = RD.reg reg in
       let stack_offset = Subrange_state.stack_offset subrange_state in
@@ -107,6 +113,11 @@ module Vars = struct
       { provenance : V.Provenance.t option;
         is_parameter : Is_parameter.t
       }
+
+    let print ppf { provenance; is_parameter } =
+      Format.fprintf ppf "@[<hov 1>((provenance %a)@ (is_parameter %a))@]"
+        (Misc.Stdlib.Option.print V.Provenance.print)
+        provenance Is_parameter.print is_parameter
 
     let create _fundecl reg ~start_insn:_ =
       match RD.debug_info reg with
