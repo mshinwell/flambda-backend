@@ -284,9 +284,11 @@ let exported_offsets t = t.offsets
 
 let gen_variable v =
   let user_visible = Variable.user_visible v in
-  let name = Variable.unique_name v in
+  let name = Variable.name v in
   let v = Backend_var.create_local name in
   let provenance =
+    (* XXX this doesn't work because we don't have BV.With_provenance.t at the
+       use sites *)
     if not user_visible
     then None
     else
