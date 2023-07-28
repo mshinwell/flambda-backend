@@ -283,10 +283,18 @@ let exported_offsets t = t.offsets
 (* Variables *)
 
 let gen_variable v =
+  let user_visible = Variable.user_visible v in
   let name = Variable.unique_name v in
   let v = Backend_var.create_local name in
-  (* CR mshinwell: Fix [provenance] *)
-  Backend_var.With_provenance.create ?provenance:None v
+  let provenance =
+    if not user_visible
+    then None
+    else
+      Some
+        (Backend_var.Provenance.create ~module_path:(Path.Pident v (* XXX *))
+           ~location:Debuginfo.none ~original_ident:v)
+  in
+  Backend_var.With_provenance.create ?provenance v
 
 let add_bound_param env v v' =
   let v'' = Backend_var.With_provenance.var v' in
