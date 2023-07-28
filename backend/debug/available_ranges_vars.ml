@@ -148,14 +148,12 @@ module Vars = struct
     Reg_availability_set.canonicalise avail
 
   let available_before (insn : L.instruction) =
-    match insn.available_before with
-    | None -> Reg_availability_set.Unreachable
-    | Some before -> availability_set_to_key_set before
+    Option.map availability_set_to_key_set insn.available_before
 
   let available_across (insn : L.instruction) =
     match insn.available_across with
     | None -> available_before insn
-    | Some across -> availability_set_to_key_set across
+    | Some across -> Some (availability_set_to_key_set across)
 
   let must_restart_ranges_upon_any_change () =
     (* Work at OCamlPro suggested that lldb requires ranges to be completely

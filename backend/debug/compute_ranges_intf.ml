@@ -165,12 +165,12 @@ module type S_functor = sig
 
   (** How to retrieve from an instruction those keys that are available
       immediately before the instruction starts executing. *)
-  val available_before : L.instruction -> Key.Set.t
+  val available_before : L.instruction -> Key.Set.t option
 
   (** How to retrieve from an instruction those keys that are available between
       the points at which the instruction reads its arguments and writes its
       results. *)
-  val available_across : L.instruction -> Key.Set.t
+  val available_across : L.instruction -> Key.Set.t option
 
   (** This [must_restart_ranges_upon_any_change] boolean exists because some
       consumers of the range information may require that two subranges are
