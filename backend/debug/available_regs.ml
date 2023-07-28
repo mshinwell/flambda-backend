@@ -318,6 +318,9 @@ let rec available_regs (instr : M.instruction) ~(avail_before : RAS.t) : RAS.t =
         augment_availability_at_exit nfail avail_before;
         None, unreachable
       | Itrywith (body, kind, (ts, handler)) ->
+        (match kind with
+        | Regular -> ()
+        | Delayed nfail -> Hashtbl.add avail_at_exit nfail unreachable);
         let saved_avail_at_raise = setup_avail_at_raise kind in
         let avail_before = ok avail_before in
         let after_body = available_regs body ~avail_before in
