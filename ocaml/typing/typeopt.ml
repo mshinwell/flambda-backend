@@ -557,7 +557,7 @@ let layout env loc sort ty =
   match Layouts.Sort.get_default_value sort with
   | Value -> Lambda.Pvalue (value_kind env loc ty)
   | Float64 when Language_extension.(is_at_least Layouts Alpha) ->
-    Lambda.Punboxed_float
+      Lambda.Punboxed_float
   | Float64 -> raise (Error (loc, Non_value_sort (Sort.float64,ty)))
   | Void -> raise (Error (loc, Non_value_sort (Sort.void,ty)))
 
@@ -630,7 +630,7 @@ let value_kind_union (k1 : Lambda.value_kind) (k2 : Lambda.value_kind) =
   if Lambda.equal_value_kind k1 k2 then k1
   else Pgenval
 
-let layout_union l1 l2 =
+let rec layout_union l1 l2 =
   match l1, l2 with
   | Pbottom, l
   | l, Pbottom -> l
@@ -641,7 +641,11 @@ let layout_union l1 l2 =
       if equal_boxed_integer bi1 bi2 then l1 else Ptop
   | Punboxed_vector vi1, Punboxed_vector vi2 ->
       Lambda.join_boxed_vector_layout vi1 vi2
-  | (Ptop | Pvalue _ | Punboxed_float | Punboxed_int _ | Punboxed_vector _), _ ->
+  | Punboxed_product layouts1, Punboxed_product layouts2 ->
+      if List.compare_lengths layouts1 layouts2 <> 0 then Ptop
+      else Punboxed_product (List.map2 layout_union layouts1 layouts2)
+  | (Ptop | Pvalue _ | Punboxed_float | Punboxed_int _ | Punboxed_vector _ | Punboxed_product _),
+    _ ->
       Ptop
 
 (* Error report *)
