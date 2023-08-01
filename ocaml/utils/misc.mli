@@ -892,3 +892,5 @@ end
 type filepath = string
 
 type alerts = string Stdlib.String.Map.t
+
+val remove_double_underscores : string -> string

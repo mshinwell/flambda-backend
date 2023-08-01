@@ -32,6 +32,8 @@ module Scoped_location : sig
 
   val string_of_scopes : scopes -> string
 
+  val compilation_unit : scopes -> Compilation_unit.t option
+
   val empty_scopes : scopes
   val enter_anonymous_function : scopes:scopes -> assume_zero_alloc:Assume_info.t
     -> scopes
@@ -60,7 +62,7 @@ module Scoped_location : sig
   val map_scopes : (scopes:scopes -> scopes) -> t -> t
 end
 
-type item = private {
+type item = {
   dinfo_file: string;
   dinfo_line: int;
   dinfo_char_start: int;
@@ -69,6 +71,8 @@ type item = private {
   dinfo_end_bol: int;
   dinfo_end_line: int;
   dinfo_scopes: Scoped_location.scopes;
+  dinfo_uid: string option;
+  dinfo_function_symbol: string option;
 }
 
 type t
@@ -87,6 +91,12 @@ type alloc_dbginfo = alloc_dbginfo_item list
 val none : t
 
 val is_none : t -> bool
+
+val of_items : item list -> t
+
+val to_items : t -> item list
+
+val with_function_symbol_on_first_item : t -> function_symbol:string option -> t
 
 val to_string : t -> string
 
