@@ -110,6 +110,7 @@ module Scoped_location = struct
       ~assume_zero_alloc:ZA.Assume_info.none
 
   let enter_lazy ~scopes = cons scopes Sc_lazy (str scopes) ""
+
                              ~assume_zero_alloc:ZA.Assume_info.none
 
   let enter_partial_or_eta_wrapper ~scopes =
@@ -149,6 +150,22 @@ module Scoped_location = struct
         repr := StringSet.add res !repr;
         res
 
+  let rec outermost_scope scopes =
+    match scopes with
+    | Empty -> None
+    | Cons { prev = Empty; _ } -> Some scopes
+    | Cons { prev } -> outermost_scope prev
+
+  let compilation_unit scopes =
+    match outermost_scope scopes with
+    | None -> None
+    | Some scopes ->
+      (* CR mshinwell: this won't work with -pack *)
+      match scopes with
+      | Cons { item = Sc_module_definition; str; _ } ->
+        Some (Compilation_unit.of_string str)
+      | _ -> None
+
   type t =
     | Loc_unknown
     | Loc_known of
@@ -184,6 +201,8 @@ type item = {
   dinfo_end_bol: int;
   dinfo_end_line: int;
   dinfo_scopes: Scoped_location.scopes;
+  dinfo_uid: string option;
+  dinfo_function_symbol: string option;
 }
 
 module Dbg = struct
@@ -256,6 +275,10 @@ type alloc_dbginfo = alloc_dbginfo_item list
 
 let none = { dbg = []; assume_zero_alloc = ZA.Assume_info.none }
 
+let of_items items = { dbg = items; assume_zero_alloc = ZA.Assume_info.none }
+
+let to_items t = t.dbg
+
 let to_string { dbg; assume_zero_alloc; } =
   let s = Dbg.to_string dbg in
   let a = ZA.Assume_info.to_string assume_zero_alloc in
@@ -278,7 +301,9 @@ let item_from_location ~scopes loc =
     dinfo_end_line =
       if valid_endpos then loc.loc_end.pos_lnum
       else loc.loc_start.pos_lnum;
-    dinfo_scopes = scopes
+    dinfo_scopes = scopes;
+    dinfo_uid = None;
+    dinfo_function_symbol = None;
   }
 
 let from_location = function
@@ -326,7 +351,15 @@ let rec print_compact ppf t =
       item.dinfo_line;
     if item.dinfo_char_start >= 0 then begin
       Format.fprintf ppf ",%i--%i" item.dinfo_char_start item.dinfo_char_end
-    end
+    end;
+    (match item.dinfo_uid with
+    | None -> ()
+    | Some uid -> Format.fprintf ppf "[%s]" uid);
+    (match item.dinfo_function_symbol with
+    | None -> ()
+    | Some function_symbol -> Format.fprintf ppf "[FS=%s]" function_symbol) (*;
+    Format.fprintf ppf "$%s$"
+      (Scoped_location.string_of_scopes item.dinfo_scopes) *)
   in
   match t with
   | [] -> ()

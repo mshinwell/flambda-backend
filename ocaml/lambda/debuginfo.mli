@@ -34,6 +34,8 @@ module Scoped_location : sig
 
   val string_of_scopes : scopes -> string
 
+  val compilation_unit : scopes -> Compilation_unit.t option
+
   val empty_scopes : scopes
   val enter_anonymous_function :
     scopes:scopes -> assume_zero_alloc:ZA.Assume_info.t -> scopes
@@ -62,7 +64,7 @@ module Scoped_location : sig
   val map_scopes : (scopes:scopes -> scopes) -> t -> t
 end
 
-type item = private {
+type item = {
   dinfo_file: string;
   dinfo_line: int;
   dinfo_char_start: int;
@@ -71,6 +73,12 @@ type item = private {
   dinfo_end_bol: int;
   dinfo_end_line: int;
   dinfo_scopes: Scoped_location.scopes;
+  (** See the [Inlined_debuginfo] module in Flambda 2 for an explanation
+      of the uid and function symbol fields.  (They are used for generation
+      of DWARF inlined frame information.)  These fields should only be
+      set to [Some] by Flambda 2. *)
+  dinfo_uid: string option;
+  dinfo_function_symbol: string option;
 }
 
 type t
@@ -89,6 +97,10 @@ type alloc_dbginfo = alloc_dbginfo_item list
 val none : t
 
 val is_none : t -> bool
+
+val of_items : item list -> t
+
+val to_items : t -> item list
 
 val to_string : t -> string
 
