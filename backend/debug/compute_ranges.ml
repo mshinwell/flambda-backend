@@ -4,15 +4,13 @@
 (*                                                                        *)
 (*                  Mark Shinwell, Jane Street Europe                     *)
 (*                                                                        *)
-(*   Copyright 2014--2019 Jane Street Group LLC                           *)
+(*   Copyright 2014--2023 Jane Street Group LLC                           *)
 (*                                                                        *)
 (*   All rights reserved.  This file is distributed under the terms of    *)
 (*   the GNU Lesser General Public License version 2.1, with the          *)
 (*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
-
-[@@@ocaml.warning "+a-4-30-40-41-42"]
 
 open! Int_replace_polymorphic_compare
 module L = Linear
@@ -173,7 +171,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
      There are eight cases, referenced in the code below.
 
      1. First four cases: [key] is currently unavailable, i.e. it is not a
-     member of (roughly speaking) [S.available_across prev_insn].
+     member of [known_available_after_prev_insn].
 
      (a) [key] is not in [S.available_before insn] and neither is it in
      [S.available_across insn]. There is nothing to do.
@@ -198,7 +196,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
      position being the first machine instruction of [insn] and left open.
 
      2. Second four cases: [key] is already available, i.e. a member of
-     [S.available_across prev_insn].
+     [known_available_after_prev_insn].
 
      (a) [key] is not in [S.available_before insn] and neither is it in
      [S.available_across insn]. The range endpoint is given as the address of
@@ -240,7 +238,77 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       Format.fprintf ppf "Close_subrange_one_byte_after"
 
   (* CR mshinwell: Move to [Clflags] *)
-  let _check_invariants = ref true
+  let check_invariants = ref true
+
+  let actions_at_instruction0 ~(insn : L.instruction)
+      ~(prev_insn : L.instruction option) ~known_available_after_prev_insn
+      ~available_before ~available_across =
+    let case_1b =
+      KS.diff available_across
+        (KS.union known_available_after_prev_insn available_before)
+    in
+    let case_1c =
+      KS.diff available_before
+        (KS.union known_available_after_prev_insn available_across)
+    in
+    let case_1d =
+      KS.diff
+        (KS.inter available_before available_across)
+        known_available_after_prev_insn
+    in
+    let case_2a =
+      KS.diff known_available_after_prev_insn
+        (KS.union available_before available_across)
+    in
+    let case_2b =
+      KS.inter known_available_after_prev_insn
+        (KS.diff available_across available_before)
+    in
+    let case_2c =
+      KS.diff
+        (KS.inter known_available_after_prev_insn available_before)
+        available_across
+    in
+    let handle case action result =
+      (* We use [K.all_parents] here to circumvent a potential performance
+         problem. In the case of lexical blocks, there may be long chains of
+         blocks and their parents, yet the innermost block determines the rest
+         of the chain. As such [S] (which comes from lexical_block_ranges.ml)
+         only needs to use the innermost blocks in the "available before" sets,
+         keeping things fast---but we still populate ranges for all parent
+         blocks, thus avoiding any post-processing, by using [K.all_parents]
+         here. *)
+      KS.fold
+        (fun key result ->
+          List.fold_left
+            (fun result key -> (key, action) :: result)
+            result
+            (key :: S.Key.all_parents key))
+        case result
+    in
+    let actions =
+      (* Ranges must be closed before they are opened---otherwise, when a
+         variable moves between registers at a range boundary, we might end up
+         with no open range for that variable. Note that the pipeline below
+         constructs the [actions] list in reverse order---later functions in the
+         pipeline produce actions nearer the head of the list. *)
+      []
+      |> handle case_1b Open_subrange_one_byte_after
+      |> handle case_1c Open_one_byte_subrange
+      |> handle case_1d Open_subrange
+      |> handle case_2a Close_subrange
+      |> handle case_2b Open_subrange_one_byte_after
+      |> handle case_2b Close_subrange
+      |> handle case_2c Close_subrange_one_byte_after
+    in
+    let must_restart =
+      KS.of_list []
+      (* CR mshinwell: it's unclear that we need this for lldb any more *)
+      (* if S.must_restart_ranges_upon_any_change () && match actions with [] ->
+         false | _ :: _ -> true then KS.inter opt_available_across_prev_insn
+         available_before else KS.of_list [] *)
+    in
+    actions, must_restart
 
   let actions_at_instruction ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) ~known_available_after_prev_insn =
@@ -256,11 +324,6 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       Format.eprintf "canonicalised available_across:@ %a\n"
         (Misc.Stdlib.Option.print KS.print)
         available_across;
-    let opt_available_across_prev_insn =
-      match prev_insn with
-      | None -> None
-      | Some prev_insn -> S.available_across prev_insn
-    in
     match available_before with
     | None ->
       (* If availability information isn't known for the current instruction,
@@ -272,79 +335,8 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       match available_across with
       | None -> [], KS.of_list []
       | Some available_across ->
-        if debug
-        then
-          Format.eprintf "canonicalised opt_available_across_prev_insn:@ %a\n"
-            (Misc.Stdlib.Option.print KS.print)
-            opt_available_across_prev_insn;
-        let case_1b =
-          KS.diff available_across
-            (KS.union known_available_after_prev_insn available_before)
-        in
-        let case_1c =
-          KS.diff available_before
-            (KS.union known_available_after_prev_insn available_across)
-        in
-        let case_1d =
-          KS.diff
-            (KS.inter available_before available_across)
-            known_available_after_prev_insn
-        in
-        let case_2a =
-          KS.diff known_available_after_prev_insn
-            (KS.union available_before available_across)
-        in
-        let case_2b =
-          KS.inter known_available_after_prev_insn
-            (KS.diff available_across available_before)
-        in
-        let case_2c =
-          KS.diff
-            (KS.inter known_available_after_prev_insn available_before)
-            available_across
-        in
-        let handle case action result =
-          (* We use [K.all_parents] here to circumvent a potential performance
-             problem. In the case of lexical blocks, there may be long chains of
-             blocks and their parents, yet the innermost block determines the
-             rest of the chain. As such [S] (which comes from
-             lexical_block_ranges.ml) only needs to use the innermost blocks in
-             the "available before" sets, keeping things fast---but we still
-             populate ranges for all parent blocks, thus avoiding any
-             post-processing, by using [K.all_parents] here. *)
-          KS.fold
-            (fun key result ->
-              List.fold_left
-                (fun result key -> (key, action) :: result)
-                result
-                (key :: S.Key.all_parents key))
-            case result
-        in
-        let actions =
-          (* Ranges must be closed before they are opened---otherwise, when a
-             variable moves between registers at a range boundary, we might end
-             up with no open range for that variable. Note that the pipeline
-             below constructs the [actions] list in reverse order---later
-             functions in the pipeline produce actions nearer the head of the
-             list. *)
-          []
-          |> handle case_1b Open_subrange_one_byte_after
-          |> handle case_1c Open_one_byte_subrange
-          |> handle case_1d Open_subrange
-          |> handle case_2a Close_subrange
-          |> handle case_2b Open_subrange_one_byte_after
-          |> handle case_2b Close_subrange
-          |> handle case_2c Close_subrange_one_byte_after
-        in
-        let must_restart =
-          KS.of_list []
-          (* XXX *)
-          (* if S.must_restart_ranges_upon_any_change () && match actions with
-             [] -> false | _ :: _ -> true then KS.inter
-             opt_available_across_prev_insn available_before else KS.of_list
-             [] *)
-        in
-        actions, must_restart)
+        actions_at_instruction0 ~insn ~prev_insn
+          ~known_available_after_prev_insn ~available_before ~available_across)
 
   let rec process_instruction t (fundecl : L.fundecl) ~fun_contains_calls
       ~fun_num_stack_slots ~(first_insn : L.instruction) ~(insn : L.instruction)
@@ -388,12 +380,8 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       if debug then Format.eprintf "close_subrange for key %a\n" S.Key.print key;
       match KM.find key currently_open_subranges with
       | exception Not_found ->
-        if debug
-        then Format.eprintf "!! No subrange is open for key %a" S.Key.print key;
-        (* Misc.fatal_errorf "No subrange is open for key %a" S.Key.print
-           key; *)
-        (* XXX XXX *)
-        currently_open_subranges
+        Misc.fatal_errorf "No subrange is open for key %a" S.Key.print key
+          currently_open_subranges
       | start_pos, start_pos_offset, start_insn -> (
         let currently_open_subranges = KM.remove key currently_open_subranges in
         match Range_info.create fundecl key ~start_insn with
@@ -500,16 +488,32 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
           prev_insn.next <- label_insn;
           first_insn)
     in
-    (* XXX avoid KS.is_empty (if !check_invariants then let
-       currently_open_subranges = KS.of_list (List.map (fun (key, _datum) ->
-       key) (KM.bindings currently_open_subranges)) in let should_be_open =
-       S.available_across insn in let not_open_but_should_be = KS.diff
-       should_be_open currently_open_subranges in if not (KS.is_empty
-       not_open_but_should_be) then Misc.fatal_errorf "%s: ranges for %a are not
-       open across the following instruction:\n\ %a\n\ available_across:@ %a\n\
-       currently_open_subranges: %a" fundecl.fun_name KS.print
-       not_open_but_should_be Printlinear.instr { insn with L.next = L.end_instr
-       } KS.print should_be_open KS.print currently_open_subranges); *)
+    (if !check_invariants
+    then
+      let currently_open_subranges =
+        KS.of_list
+          (List.map
+             (fun (key, _datum) -> key)
+             (KM.bindings currently_open_subranges))
+      in
+      match S.available_across insn with
+      | None | Some Unreachable -> ()
+      | Some (Ok _ as should_be_open) -> (
+        match KS.diff should_be_open currently_open_subranges with
+        | Unreachable -> assert false
+        | Ok not_open_but_should_be as not_open_but_should_be' ->
+          (* Avoid having [KS.is_empty], which seems a bit tricky to think
+             about, just for this check. *)
+          if not (S.Key.Raw_set.is_empty not_open_but_should_be)
+          then
+            Misc.fatal_errorf
+              "%s: ranges for %a not open across the following instruction:\n\
+               %a\n\
+               available_across:@ %a\n\
+               currently_open_subranges: %a" fundecl.fun_name KS.print
+              not_open_but_should_be' Printlinear.instr
+              { insn with L.next = L.end_instr }
+              KS.print should_be_open KS.print currently_open_subranges));
     match insn.desc with
     | Lend -> first_insn
     | Lprologue | Lop _ | Lreloadretaddr | Lreturn | Llabel _ | Lbranch _
