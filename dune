@@ -271,7 +271,6 @@
   available_ranges_vars
   available_ranges_all_vars
   available_regs
-  coalesce_labels
   compute_ranges
   compute_ranges_intf
   compute_ranges_key
