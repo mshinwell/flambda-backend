@@ -1166,7 +1166,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       k_exn
   | Llet ((Strict | Alias | StrictOpt), layout, id, defining_expr, body) ->
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[id, IR.User_visible, layout]
+      ~params:[id, is_user_visible env id, layout]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv -> cps acc env ccenv body k k_exn)
@@ -1259,7 +1259,9 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         let params =
           List.map
             (fun (arg, kind) ->
-              arg, IR.User_visible, Flambda_kind.With_subkind.from_lambda kind)
+              ( arg,
+                is_user_visible env arg,
+                Flambda_kind.With_subkind.from_lambda kind ))
             (args @ extra_params)
         in
         let handler acc ccenv =
@@ -1337,7 +1339,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
             let env = Env.entering_try_region env region in
             let_cont_nonrecursive_with_extra_params acc env ccenv
               ~is_exn_handler:true
-              ~params:[id, User_visible, Lambda.layout_block]
+              ~params:[id, is_user_visible env id, Lambda.layout_block]
               ~body:(fun acc env ccenv handler_continuation ->
                 let_cont_nonrecursive_with_extra_params acc env ccenv
                   ~is_exn_handler:false
