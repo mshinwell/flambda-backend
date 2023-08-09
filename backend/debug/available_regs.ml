@@ -306,8 +306,7 @@ let rec available_regs (instr : M.instruction) ~all_regs_that_might_be_named
           (* If a result register will never be named, we can forget about it
              for the purposes of this analysis. *)
           let res =
-            Reg.set_of_array instr.res
-            |> Reg.Set.inter all_regs_that_might_be_named
+            Reg.inter_set_array all_regs_that_might_be_named instr.res
           in
           RD.Set.union (RD.Set.without_debug_info res) avail_across
         in
