@@ -214,15 +214,24 @@ let rec available_regs (instr : M.instruction) ~all_regs_that_might_be_named
               match RD.Set.find_reg_exn avail_before arg_reg with
               | exception Not_found ->
                 (* Note that [arg_reg] might not be in
-                   [all_regs_that_might_be_named]. *)
-                RD.create_without_debug_info ~reg:result_reg
+                   [all_regs_that_might_be_named]. In that case we shouldn't
+                   propagate anything. *)
+                None
               | arg_reg ->
-                RD.create_copying_debug_info ~reg:result_reg
-                  ~debug_info_from:arg_reg)
+                Some
+                  (RD.create_copying_debug_info ~reg:result_reg
+                     ~debug_info_from:arg_reg))
             instr.arg instr.res
         in
         let avail_across = RD.Set.diff avail_before made_unavailable in
-        let avail_after = RD.Set.union avail_across (RD.Set.of_array results) in
+        let avail_after =
+          Array.fold_left
+            (fun avail_after reg_opt ->
+              match reg_opt with
+              | None -> avail_after
+              | Some reg -> RD.Set.add reg avail_after)
+            avail_across results
+        in
         Some (ok avail_across), ok avail_after
       | Iop
           (( Icall_ind | Icall_imm _ | Ialloc _ | Ipoll _ | Iprobe _
