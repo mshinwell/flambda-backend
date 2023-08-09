@@ -1377,16 +1377,19 @@ method private bind_let_mut (env:environment) v k r1 =
   let rv = self#regs_for k in
   name_regs v rv;
   self#insert_moves env r1 rv;
-  let naming_op =
-    Iname_for_debugger {
-      ident = VP.var v;
-      which_parameter = None;
-      provenance = VP.provenance v;
-      is_assignment = false;
-      regs = r1;
-    }
-  in
-  self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
+  let provenance = VP.provenance v in
+  (if Option.is_some provenance then (
+    let naming_op =
+      Iname_for_debugger {
+        ident = VP.var v;
+        which_parameter = None;
+        provenance = VP.provenance v;
+        is_assignment = false;
+        regs = r1;
+      }
+    in
+    self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+  ));
   env_add ~mut:Mutable v rv env
 
 (* The following two functions, [emit_parts] and [emit_parts_list], force
@@ -1696,19 +1699,21 @@ method emit_tail (env:environment) exp =
           self#emit_tail_sequence new_env e2 ~at_start:(fun seq ->
             List.iter (fun ((var, _typ), r) ->
                 let provenance = VP.provenance var in
-                let var = VP.var var in
-                let naming_op =
-                  Iname_for_debugger {
-                    ident = var;
-                    provenance;
-                    which_parameter = None;
-                    is_assignment = false;
-                    regs = r;
-                  }
-                in
-               seq#insert_debug new_env (Iop naming_op) Debuginfo.none
-                 [| |] [| |])
-               ids_and_rs)
+                if Option.is_some provenance then (
+                  let var = VP.var var in
+                  let naming_op =
+                    Iname_for_debugger {
+                      ident = var;
+                      provenance;
+                      which_parameter = None;
+                      is_assignment = false;
+                      regs = r;
+                    }
+                  in
+                  seq#insert_debug new_env (Iop naming_op) Debuginfo.none
+                    [| |] [| |]
+                ))
+                ids_and_rs)
         in
         nfail, trap_stack, seq, is_cold
       in
@@ -1754,18 +1759,20 @@ method emit_tail (env:environment) exp =
           self#emit_tail_sequence env_handler e2
             ~at_start:(fun seq ->
               let provenance = VP.provenance v in
-              let var = VP.var v in
-              let naming_op =
-                Iname_for_debugger {
-                  ident = var;
-                  provenance;
-                  which_parameter = None;
-                  is_assignment = false;
-                  regs = rv;
-                }
-              in
-              seq#insert_debug env_handler (Iop naming_op)
-                Debuginfo.none [| |] [| |])
+              if Option.is_some provenance then (
+                let var = VP.var v in
+                let naming_op =
+                  Iname_for_debugger {
+                    ident = var;
+                    provenance;
+                    which_parameter = None;
+                    is_assignment = false;
+                    regs = rv;
+                  }
+                in
+                seq#insert_debug env_handler (Iop naming_op)
+                  Debuginfo.none [| |] [| |]
+              ))
         in
         self#insert env
           (Itrywith(s1, kind,
@@ -1854,18 +1861,19 @@ method emit_fundecl ~future_funcnames f =
         Array.init num_regs_for_arg (fun index ->
           loc_arg.(!loc_arg_index + index))
       in
-      let naming_op =
-        Iname_for_debugger {
-          ident = var;
-          provenance;
-          which_parameter = Some param_index;
-          is_assignment = false;
-          regs = hard_regs_for_arg;
-        }
-      in
       loc_arg_index := !loc_arg_index + num_regs_for_arg;
-      self#insert_debug env (Iop naming_op) Debuginfo.none
-        hard_regs_for_arg [| |])
+      if Option.is_some provenance then (
+        let naming_op =
+          Iname_for_debugger {
+            ident = var;
+            provenance;
+            which_parameter = Some param_index;
+            is_assignment = false;
+            regs = hard_regs_for_arg;
+          }
+        in
+        self#insert_debug env (Iop naming_op) Debuginfo.none
+          hard_regs_for_arg [| |]))
     f.Cmm.fun_args;
   self#insert_moves env loc_arg rarg;
   let polled_body =
