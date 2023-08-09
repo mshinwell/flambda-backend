@@ -789,6 +789,16 @@ let rec_catch_for_for_loop env ident start stop (dir : Asttypes.direction_flag)
   in
   env, lam
 
+let is_user_visible env id : IR.user_visible =
+  if Ident.stamp id >= Env.ident_stamp_upon_starting env
+  then Not_user_visible
+  else
+    let name = Ident.name id in
+    let len = String.length name in
+    if len > 0 && Char.equal name.[0] '*'
+    then Not_user_visible
+    else User_visible
+
 let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
     ~params
     ~(body : Acc.t -> Env.t -> CCenv.t -> Continuation.t -> Expr_with_acc.t)
@@ -807,7 +817,7 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   let extra_params =
     List.map
       (fun (id, kind) ->
-        id, IR.User_visible, Flambda_kind.With_subkind.from_lambda kind)
+        id, is_user_visible env id, Flambda_kind.With_subkind.from_lambda kind)
       extra_params
   in
   let handler acc ccenv = handler acc handler_env ccenv in
@@ -1024,16 +1034,6 @@ let name_if_not_var acc ccenv name simple kind body =
     CC.close_let acc ccenv
       [id, kind]
       Not_user_visible (IR.Simple simple) ~body:(body id)
-
-let is_user_visible env id : IR.user_visible =
-  if Ident.stamp id >= Env.ident_stamp_upon_starting env
-  then Not_user_visible
-  else
-    let name = Ident.name id in
-    let len = String.length name in
-    if len > 0 && Char.equal name.[0] '*'
-    then Not_user_visible
-    else User_visible
 
 let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     (k_exn : Continuation.t) : Expr_with_acc.t =
