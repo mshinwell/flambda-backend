@@ -382,8 +382,9 @@ module Variable = struct
       if Compilation_unit.equal cu (Compilation_unit.get_current_exn ())
       then Format.fprintf ppf "%s/%d" (name t) (name_stamp t)
       else
-        Format.fprintf ppf "%a.%s/%d" Compilation_unit.print cu (name t)
+        Format.fprintf ppf "%a.%s/%d%s" Compilation_unit.print cu (name t)
           (name_stamp t)
+          (if user_visible t then "UV" else "N")
   end
 
   include T0
