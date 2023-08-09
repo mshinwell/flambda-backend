@@ -214,13 +214,17 @@ let rec available_regs (instr : M.instruction) ~all_regs_that_might_be_named
               match RD.Set.find_reg_exn avail_before arg_reg with
               | exception Not_found ->
                 (* Note that [arg_reg] might not be in
-                   [all_regs_that_might_be_named]. In that case we shouldn't
-                   propagate anything. *)
+                   [all_regs_that_might_be_named], meaning it wouldn't be found
+                   in [avail_before]. In that case we shouldn't propagate
+                   anything. *)
                 None
               | arg_reg ->
-                Some
-                  (RD.create_copying_debug_info ~reg:result_reg
-                     ~debug_info_from:arg_reg))
+                if Reg.Set.mem (RD.reg arg_reg) all_regs_that_might_be_named
+                then
+                  Some
+                    (RD.create_copying_debug_info ~reg:result_reg
+                       ~debug_info_from:arg_reg)
+                else None)
             instr.arg instr.res
         in
         let avail_across = RD.Set.diff avail_before made_unavailable in
