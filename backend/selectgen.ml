@@ -311,17 +311,19 @@ let maybe_emit_naming_op env ~bound_name seq regs =
   | None -> ()
   | Some bound_name ->
     let provenance = VP.provenance bound_name in
-    let bound_name = VP.var bound_name in
-    let naming_op =
-      Iname_for_debugger {
-        ident = bound_name;
-        provenance;
-        which_parameter = None;
-        is_assignment = false;
-        regs = regs;
-      }
-    in
-    seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+    if Option.is_some provenance then (
+      let bound_name = VP.var bound_name in
+      let naming_op =
+        Iname_for_debugger {
+          ident = bound_name;
+          provenance;
+          which_parameter = None;
+          is_assignment = false;
+          regs = regs;
+        }
+      in
+      seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+    )
 
 (* "Join" two instruction sequences, making sure they return their results
    in the same registers. *)
@@ -928,18 +930,21 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           Misc.fatal_error ("Selection.emit_expr: unbound var " ^ V.name v) in
       begin match self#emit_expr env e1 ~bound_name:None with
         None -> None
-      | Some r1 ->
-          let naming_op =
-            Iname_for_debugger {
-              ident = v;
-              provenance;
-              which_parameter = None;
-              is_assignment = true;
-              regs = r1;
-            }
-          in
-          self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
+      | Some r1 -> (
+          if Option.is_some provenance then (
+            let naming_op =
+              Iname_for_debugger {
+                ident = v;
+                provenance;
+                which_parameter = None;
+                is_assignment = true;
+                regs = r1;
+              }
+            in
+            self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+          );
           self#insert_moves env r1 rv; ret [||]
+        )
       end
   | Ctuple [] ->
       ret [||]
@@ -975,17 +980,19 @@ method emit_expr_aux (env:environment) exp ~bound_name :
             | None -> ()
             | Some bound_name ->
               let provenance = VP.provenance bound_name in
-              let bound_name = VP.var bound_name in
-              let naming_op =
-                Iname_for_debugger {
-                  ident = bound_name;
-                  provenance;
-                  which_parameter = None;
-                  is_assignment = false;
-                  regs = regs;
-                }
-              in
-              self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+              if Option.is_some provenance then (
+                let bound_name = VP.var bound_name in
+                let naming_op =
+                  Iname_for_debugger {
+                    ident = bound_name;
+                    provenance;
+                    which_parameter = None;
+                    is_assignment = false;
+                    regs = regs;
+                  }
+                in
+                self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+              )
           in
           let ty = oper_result_type op in
           let unclosed_regions =
@@ -1144,17 +1151,19 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           self#emit_sequence new_env e2 ~bound_name:None ~at_start:(fun seq ->
             List.iter (fun ((var, _typ), r) ->
                 let provenance = VP.provenance var in
-                let var = VP.var var in
-                let naming_op =
-                  Iname_for_debugger {
-                    ident = var;
-                    provenance;
-                    which_parameter = None;
-                    is_assignment = false;
-                    regs = r;
-                  }
-                in
-                seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |])
+                if Option.is_some provenance then (
+                  let var = VP.var var in
+                  let naming_op =
+                    Iname_for_debugger {
+                      ident = var;
+                      provenance;
+                      which_parameter = None;
+                      is_assignment = false;
+                      regs = r;
+                    }
+                  in
+                  seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+                ))
               ids_and_rs)
         in
         ((nfail, trap_stack, is_cold), (r, s))
@@ -1258,17 +1267,19 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           self#emit_sequence env_handler e2 ~bound_name
             ~at_start:(fun seq ->
               let provenance = VP.provenance v in
-              let var = VP.var v in
-              let naming_op =
-                Iname_for_debugger {
-                  ident = var;
-                  provenance;
-                  which_parameter = None;
-                  is_assignment = false;
-                  regs = rv;
-                }
-              in
-              seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |])
+              if Option.is_some provenance then (
+                let var = VP.var v in
+                let naming_op =
+                  Iname_for_debugger {
+                    ident = var;
+                    provenance;
+                    which_parameter = None;
+                    is_assignment = false;
+                    regs = rv;
+                  }
+                in
+                seq#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+              ))
         in
         let r = join env r1 s1 r2 s2 ~bound_name in
         self#insert env
