@@ -219,7 +219,7 @@ let rec available_regs (instr : M.instruction) ~all_regs_that_might_be_named
                    anything. *)
                 None
               | arg_reg ->
-                if Reg.Set.mem (RD.reg arg_reg) all_regs_that_might_be_named
+                if Option.is_some (RD.debug_info arg_reg)
                 then
                   Some
                     (RD.create_copying_debug_info ~reg:result_reg
