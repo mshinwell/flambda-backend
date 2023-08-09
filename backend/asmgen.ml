@@ -185,6 +185,8 @@ let emit_fundecl f =
       raise (Error (Asm_generation(fundecl.Linear.fun_name, e))))
     f
 
+let skip_available_regs = ref false
+
 let rec regalloc ~ppf_dump round fd =
   if round > 50 then
     fatal_error(fd.Mach.fun_name ^
@@ -204,6 +206,10 @@ let rec regalloc ~ppf_dump round fd =
       Coloring.allocate_registers()
     end
   in
+  (* Skip DWARF variable range generation for complicated functions to
+     avoid high compilation speed penalties *)
+  let total_num_stack_slots = Array.fold_left (+) 0 num_stack_slots in
+  if total_num_stack_slots > 50 then skip_available_regs := true;
   dump_if ppf_dump dump_regalloc "After register allocation" fd;
   let (newfd, redo_regalloc) = Reload.fundecl fd num_stack_slots in
   dump_if ppf_dump dump_reload "After insertion of reloading code" newfd;
@@ -266,6 +272,7 @@ let register_allocator fd : register_allocator =
 let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
   Proc.init ();
   Reg.reset();
+  skip_available_regs := false;
   fd_cmm
   ++ Profile.record ~accumulate:true "cmm_invariants" (cmm_invariants ppf_dump)
   ++ Profile.record ~accumulate:true "selection"
@@ -333,7 +340,10 @@ let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
         ++ pass_dump_if ppf_dump dump_split "After live range splitting"
         ++ Profile.record ~accumulate:true "liveness" liveness
         ++ Profile.record ~accumulate:true "regalloc" (regalloc ~ppf_dump 1)
-        ++ Profile.record ~accumulate:true "available_regs" Available_regs.fundecl
+        ++ Profile.record ~accumulate:true "available_regs"
+          (fun fundecl ->
+            if !skip_available_regs then fundecl
+            else Available_regs.fundecl fundecl)
         ++ pass_dump_if ppf_dump Flambda_backend_flags.davail
              "Register availability analysis"
         ++ Profile.record ~accumulate:true "mach to linear" (fun (fd : Mach.fundecl) ->
