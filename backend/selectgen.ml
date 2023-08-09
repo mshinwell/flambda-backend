@@ -1358,16 +1358,19 @@ method private bind_let (env:environment) v r1 =
       env_add v rv env
     end
   in
-  let naming_op =
-    Iname_for_debugger {
-      ident = VP.var v;
-      which_parameter = None;
-      provenance = VP.provenance v;
-      is_assignment = false;
-      regs = r1;
-    }
-  in
-  self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |];
+  let provenance = VP.provenance v in
+  (if Option.is_some provenance then (
+    let naming_op =
+      Iname_for_debugger {
+        ident = VP.var v;
+        which_parameter = None;
+        provenance;
+        is_assignment = false;
+        regs = r1;
+      }
+    in
+    self#insert_debug env (Iop naming_op) Debuginfo.none [| |] [| |]
+  ));
   env
 
 method private bind_let_mut (env:environment) v k r1 =
