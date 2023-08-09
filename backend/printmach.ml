@@ -269,7 +269,7 @@ let rec instr ppf i =
     then (
       if Option.equal RAS.equal (Some i.available_before) i.available_across
       then
-        fprintf ppf "@[<1>AB=AA={%a}@," (RAS.print ~print_reg:reg)
+        fprintf ppf "@[<1>AB=AA={%a}@]@," (RAS.print ~print_reg:reg)
           i.available_before
       else (
         fprintf ppf "@[<1>AB={%a}" (RAS.print ~print_reg:reg)
