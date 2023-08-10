@@ -728,7 +728,7 @@ module Analyser =
               a default value. In this case, we look for the good parameter pattern *)
            let (parameter, next_tt_class_exp) =
              match pat.Typedtree.pat_desc with
-               Typedtree.Tpat_var (ident, _, _) when String.starts_with Name.from_ident ident ~prefix:"*opt*" ->
+               Typedtree.Tpat_var (ident, _, _) when String.starts_with (Name.from_ident ident) ~prefix:"*opt*" ->
                  (
                   (* there must be a Tcl_let just after *)
                   match tt_class_expr2.Typedtree.cl_desc with
