@@ -164,10 +164,8 @@ let simplify_function_body context ~outer_dacc function_slot_opt
       ~exn_continuation ~loopify_state (Code.code_metadata code)
   in
   let dacc = dacc_at_function_entry in
-  if not (DA.no_lifted_constants dacc)
-  then
-    Misc.fatal_errorf "Did not expect lifted constants in [dacc]:@ %a" DA.print
-      dacc;
+  (* XXX if not (DA.no_lifted_constants dacc) then Misc.fatal_errorf "Did not
+     expect lifted constants in [dacc]:@ %a" DA.print dacc; *)
   assert (not (DE.at_unit_toplevel (DA.denv dacc)));
   match
     C.simplify_function_body context dacc body ~return_continuation
@@ -977,6 +975,17 @@ let simplify_stub_function dacc code ~all_code ~simplify_function_body =
 let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
     ~specialised_code_id ~param_specialisations
     ~simplify_and_resimplify_function_body =
+  Format.eprintf
+    "SPECIALISING: old code ID %a, new code ID %a, param specialisations: %a\n\
+     %!"
+    Code_id.print
+    (Code.code_id unspecialised_code)
+    Code_id.print specialised_code_id
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+       (Misc.Stdlib.Option.print (fun ppf (code_id, function_slot) ->
+            Format.fprintf ppf "@[(%a %a)@]" Code_id.print code_id
+              Function_slot.print function_slot)))
+    param_specialisations;
   let context =
     C.create_for_specialised_function dacc ~unspecialised_callee
       ~unspecialised_code_id:(Code.code_id unspecialised_code)

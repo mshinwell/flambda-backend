@@ -74,10 +74,16 @@ let rec fold_left f acc specialise_me =
         let acc = f acc x in
         fold_left f acc next
 
-let rec ints n = (); fun () ->
-  Cons (n, ints (n + 1))
+let rec ints n =
+  ();
+  let ints2 () = Cons (n, (ints [@unrolled 1]) (n + 1)) in
+  ();
+  ints2
 
-let t = fold_left (+) 0 (ints 0)
+let seq = (ints [@unrolled 1]) 0
+
+let t =
+  fold_left (+) 0 seq
 
 (*
 

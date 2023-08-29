@@ -177,6 +177,7 @@ let arg_is_closure dacc arg =
       match ty with
       | None -> None
       | Some ty -> (
+        Format.eprintf "...%a : %a\n%!" Name.print name T.print ty;
         match T.prove_single_closures_entry typing_env ty with
         | Unknown -> None
         | Proved (func_slot, _alloc_mode, _closures_entry, func_type) ->
@@ -190,6 +191,9 @@ type specialisation_result =
 let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
     ~apply_alloc_mode ~simplify_and_resimplify_function_body =
   let specialised_code_id = Code_id.rename (Code.code_id unspecialised_code) in
+  Format.eprintf "candidate apply for specialise_function:\n@ %a\n%!"
+    Apply.print apply;
+  Format.eprintf "dacc for specialise_function:\n@ %a\n%!" DA.print dacc;
   let param_specialisations =
     List.map2
       (fun arg (attr : Specialise_attribute.t) ->
@@ -199,19 +203,23 @@ let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
       (Apply.args apply)
       (Code_metadata.param_specialisations callee's_code_metadata)
   in
-  let dacc =
-    Simplify_set_of_closures.simplify_specialised_function dacc
-      ~unspecialised_callee:(Apply.callee apply) ~unspecialised_code
-      ~specialised_code_id ~param_specialisations
-      ~simplify_and_resimplify_function_body:
-        (simplify_and_resimplify_function_body ~must_resimplify:true)
-  in
-  let new_call_kind =
-    Call_kind.direct_function_call specialised_code_id apply_alloc_mode
-  in
-  let new_apply = Apply.with_call_kind apply new_call_kind in
-  (* Resimplify the application to allow it to be inlined out. *)
-  Resimplify_expr (dacc, Expr.create_apply new_apply)
+  (* XXX if [param_specialisations] is [None] then it shouldn't do anything *)
+  if List.for_all Option.is_none param_specialisations
+  then Rebuild_apply (dacc, apply)
+  else
+    let dacc =
+      Simplify_set_of_closures.simplify_specialised_function dacc
+        ~unspecialised_callee:(Apply.callee apply) ~unspecialised_code
+        ~specialised_code_id ~param_specialisations
+        ~simplify_and_resimplify_function_body:
+          (simplify_and_resimplify_function_body ~must_resimplify:true)
+    in
+    let new_call_kind =
+      Call_kind.direct_function_call specialised_code_id apply_alloc_mode
+    in
+    let new_apply = Apply.with_call_kind apply new_call_kind in
+    (* Resimplify the application to allow it to be inlined out. *)
+    Resimplify_expr (dacc, Expr.create_apply new_apply)
 
 let specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
     apply ~apply_alloc_mode ~simplify_and_resimplify_function_body =
