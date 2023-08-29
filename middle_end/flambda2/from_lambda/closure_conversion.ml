@@ -1749,7 +1749,14 @@ let close_functions acc external_env ~current_region function_declarations =
           | Tupled -> true
         in
         let param_specialisations =
-          List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+          List.map
+            (fun (p : Function_decl.param) ->
+              match Ident.name p.name with
+              | "specialise_me" -> Specialise_attribute.Specialise_code
+              | _ -> Specialise_attribute.No_specialisation)
+            params
+          (* XXX List.map (fun _ -> Specialise_attribute.No_specialisation)
+             param_modes *)
         in
         let metadata =
           Code_metadata.create code_id ~params_arity
