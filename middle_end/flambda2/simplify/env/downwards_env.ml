@@ -46,7 +46,8 @@ type t =
     all_code : Code.t Code_id.Map.t;
     inlining_history_tracker : Inlining_history.Tracker.t;
     loopify_state : Loopify_state.t;
-    are_specialising : (Code_id.t * Code_id.t option list) Code_id.Map.t
+    are_specialising :
+      (Code_id.t * (Code_id.t * Function_slot.t) option list) Code_id.Map.t
   }
 
 let print_debuginfo ppf dbg =
@@ -102,7 +103,10 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
         "@[<hov 1>((code_id %a)@ (param_specialisations (%a)))@]"
         Code_id.print code_id
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          (Misc.Stdlib.Option.print Code_id.print))
+          (Misc.Stdlib.Option.print (fun ppf (code_id, function_slot) ->
+            Format.fprintf ppf "@[(%a %a)@]"
+              Code_id.print code_id
+              Function_slot.print function_slot)))
         param_specialisations
     ))
     are_specialising

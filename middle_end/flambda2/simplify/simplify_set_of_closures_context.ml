@@ -23,7 +23,9 @@ type t =
     closure_bound_names_inside_functions_all_sets :
       Bound_name.t Function_slot.Map.t list;
     old_to_new_code_ids_all_sets : Code_id.t Code_id.Map.t;
-    previously_free_depth_variables : Variable.Set.t
+    previously_free_depth_variables : Variable.Set.t;
+    augment_environment :
+      DE.t -> params:Bound_parameters.t -> my_closure:Variable.t -> DE.t
   }
 
 let function_decl_type ?new_code_id ~rec_info old_code_id =
@@ -48,7 +50,53 @@ let create_for_stub dacc ~all_code ~simplify_function_body =
     dacc_inside_functions;
     closure_bound_names_inside_functions_all_sets = [];
     old_to_new_code_ids_all_sets = Code_id.Map.empty;
-    previously_free_depth_variables = Variable.Set.empty
+    previously_free_depth_variables = Variable.Set.empty;
+    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv)
+  }
+
+let create_for_specialised_function dacc ~unspecialised_callee
+    ~unspecialised_code_id ~specialised_code_id ~param_specialisations
+    ~closure_bound_names_inside_functions_all_sets ~simplify_function_body =
+  let denv_inside_functions =
+    let denv = DA.denv dacc in
+    let all_code = DE.all_code denv in
+    let denv = DE.enter_set_of_closures denv in
+    Code_id.Map.fold
+      (fun code_id code denv -> DE.define_code denv ~code_id ~code)
+      all_code denv
+  in
+  let augment_environment denv ~params ~my_closure =
+    let denv =
+      DE.add_equation_on_variable denv my_closure
+        (T.alias_type_of K.value unspecialised_callee)
+    in
+    List.fold_left2
+      (fun denv param spec_opt ->
+        match spec_opt with
+        | None -> denv
+        | Some (_code_id, func_slot) ->
+          let all_function_slots =
+            Function_slot.Map.singleton func_slot unspecialised_callee
+          in
+          let closure_ty =
+            T.closure_with_at_least_these_function_slots
+              ~this_function_slot:func_slot all_function_slots
+          in
+          DE.add_equation_on_variable denv param closure_ty)
+      denv
+      (Bound_parameters.vars params)
+      param_specialisations
+  in
+  let old_to_new_code_ids_all_sets =
+    Code_id.Map.singleton unspecialised_code_id specialised_code_id
+  in
+  { dacc_prior_to_sets = dacc;
+    simplify_function_body;
+    dacc_inside_functions = DA.with_denv dacc denv_inside_functions;
+    closure_bound_names_inside_functions_all_sets;
+    old_to_new_code_ids_all_sets;
+    previously_free_depth_variables = Variable.Set.empty;
+    augment_environment
   }
 
 let simplify_function_body t = t.simplify_function_body
@@ -340,5 +388,8 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
     closure_bound_names_inside_functions_all_sets;
     old_to_new_code_ids_all_sets;
     simplify_function_body;
-    previously_free_depth_variables = free_depth_variables
+    previously_free_depth_variables = free_depth_variables;
+    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv)
   }
+
+let get_augment_environment t = t.augment_environment

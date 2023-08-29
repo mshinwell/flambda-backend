@@ -38,6 +38,7 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
     |> DE.set_inlining_history_tracker
          (Inlining_history.Tracker.inside_function absolute_history)
   in
+  let denv = (C.get_augment_environment context) denv ~params ~my_closure in
   let denv =
     match function_slot_opt with
     | None ->
@@ -972,3 +973,33 @@ let simplify_stub_function dacc code ~all_code ~simplify_function_body =
     | Some (_, code_constant) -> code_constant
   in
   code, outer_dacc
+
+let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
+    ~specialised_code_id ~param_specialisations
+    ~simplify_and_resimplify_function_body =
+  let context =
+    C.create_for_specialised_function dacc ~unspecialised_callee
+      ~unspecialised_code_id:(Code.code_id unspecialised_code)
+      ~specialised_code_id ~param_specialisations
+      ~closure_bound_names_inside_functions_all_sets:[] (* XXX *)
+      ~simplify_function_body:simplify_and_resimplify_function_body
+  in
+  let closure_bound_names_inside_function = Function_slot.Map.empty (* XXX *) in
+  let { code_id = _; code; outer_dacc; should_resimplify = _ } =
+    simplify_function0 context ~outer_dacc:dacc None
+      (Code.code_id unspecialised_code)
+      unspecialised_code ~closure_bound_names_inside_function
+  in
+  let new_code_const =
+    match code with
+    | None ->
+      Misc.fatal_errorf
+        "No code received from simplification of unspecialised function %a"
+        Code_id.print
+        (Code.code_id unspecialised_code)
+    | Some (_, code_constant) -> code_constant
+  in
+  let outer_dacc =
+    introduce_code outer_dacc specialised_code_id new_code_const
+  in
+  outer_dacc

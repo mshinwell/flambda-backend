@@ -109,7 +109,9 @@ let rec simplify_expr dacc expr ~down_to_up =
     Simplify_let_cont_expr.simplify_let_cont ~simplify_expr dacc let_cont
       ~down_to_up
   | Apply apply ->
-    Simplify_apply_expr.simplify_apply ~simplify_expr dacc apply ~down_to_up
+    Simplify_apply_expr.simplify_apply ~simplify_expr
+      ~simplify_and_resimplify_function_body:simplify_function_body dacc apply
+      ~down_to_up
   | Apply_cont apply_cont ->
     Simplify_apply_cont_expr.simplify_apply_cont dacc apply_cont ~down_to_up
   | Switch switch ->
@@ -123,9 +125,9 @@ let rec simplify_expr dacc expr ~down_to_up =
     down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
         EB.rebuild_invalid uacc (Message message) ~after_rebuild)
 
-and simplify_function_body dacc expr ~return_continuation ~return_arity
-    ~exn_continuation ~(loopify_state : Loopify_state.t) ~params
-    ~implicit_params ~must_resimplify =
+and simplify_function_body ~must_resimplify dacc expr ~return_continuation
+    ~return_arity ~exn_continuation ~(loopify_state : Loopify_state.t) ~params
+    ~implicit_params =
   match loopify_state with
   | Do_not_loopify ->
     simplify_toplevel_common dacc

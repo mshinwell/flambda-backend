@@ -51,11 +51,13 @@ val simplify_expr : Flambda.Expr.t Simplify_common.expr_simplifier
 val simplify_toplevel : Simplify_common.simplify_toplevel
 
 val simplify_function_body :
+  must_resimplify:bool ->
   Downwards_acc.t ->
   Flambda.Expr.t ->
+  return_continuation:Continuation.t ->
   return_arity:Flambda_arity.t ->
-  exn_continuation:Exn_continuation.t ->
+  exn_continuation:Continuation.t ->
   loopify_state:Loopify_state.t ->
   params:Bound_parameters.t ->
   implicit_params:Bound_parameters.t ->
-  unit
+  Rebuilt_expr.t * Upwards_acc.t

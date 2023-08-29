@@ -179,9 +179,9 @@ let arg_is_closure dacc arg =
       | Some ty -> (
         match T.prove_single_closures_entry typing_env ty with
         | Unknown -> None
-        | Proved (_func_slot, _alloc_mode, _closures_entry, func_type) ->
+        | Proved (func_slot, _alloc_mode, _closures_entry, func_type) ->
           let code_id = T.Function_type.code_id func_type in
-          Some code_id))
+          Some (code_id, func_slot)))
 
 type specialisation_result =
   | Rebuild_apply of DA.t * Apply.t
@@ -201,8 +201,10 @@ let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
   in
   let dacc =
     Simplify_set_of_closures.simplify_specialised_function dacc
-      ~unspecialised_code ~specialised_code_id ~param_specialisations
-      ~simplify_and_resimplify_function_body
+      ~unspecialised_callee:(Apply.callee apply) ~unspecialised_code
+      ~specialised_code_id ~param_specialisations
+      ~simplify_and_resimplify_function_body:
+        (simplify_and_resimplify_function_body ~must_resimplify:true)
   in
   let new_call_kind =
     Call_kind.direct_function_call specialised_code_id apply_alloc_mode
@@ -224,10 +226,11 @@ let specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
         (fun arg specialisation ->
           match specialisation with
           | None -> true
-          | Some required_code_id -> (
+          | Some (required_code_id, _func_slot) -> (
             match arg_is_closure dacc arg with
             | None -> false
-            | Some code_id -> Code_id.equal code_id required_code_id))
+            | Some (code_id, _func_slot') ->
+              Code_id.equal code_id required_code_id))
         (Apply.args apply) param_specialisations
     in
     let new_apply =

@@ -37,6 +37,17 @@ val create_for_stub :
   simplify_function_body:Simplify_common.simplify_function_body ->
   t
 
+val create_for_specialised_function :
+  DA.t ->
+  unspecialised_callee:Simple.t ->
+  unspecialised_code_id:Code_id.t ->
+  specialised_code_id:Code_id.t ->
+  param_specialisations:(Code_id.t * Function_slot.t) option list ->
+  closure_bound_names_inside_functions_all_sets:
+    Bound_name.t Function_slot.Map.t list ->
+  simplify_function_body:Simplify_common.simplify_function_body ->
+  t
+
 val dacc_inside_functions : t -> DA.t
 
 val dacc_prior_to_sets : t -> DA.t
@@ -60,3 +71,6 @@ val function_decl_type :
   rec_info:T.t ->
   Code_id.t ->
   Function_type.t Or_unknown_or_bottom.t
+
+val get_augment_environment :
+  t -> DE.t -> params:Bound_parameters.t -> my_closure:Variable.t -> DE.t

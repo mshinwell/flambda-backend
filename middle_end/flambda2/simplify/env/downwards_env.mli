@@ -213,10 +213,10 @@ val with_are_specialising :
   t ->
   unspecialised_code_id:Code_id.t ->
   specialised_code_id:Code_id.t ->
-  param_specialisations:Code_id.t option list ->
+  param_specialisations:(Code_id.t * Function_slot.t) option list ->
   t
 
 val are_specialising :
   t ->
   unspecialised_code_id:Code_id.t ->
-  (Code_id.t * Code_id.t option list) option
+  (Code_id.t * (Code_id.t * Function_slot.t) option list) option

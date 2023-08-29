@@ -54,7 +54,8 @@ val simplify_stub_function :
 val simplify_specialised_function :
   Downwards_acc.t ->
   unspecialised_code:Code.t ->
+  unspecialised_callee:Simple.t ->
   specialised_code_id:Code_id.t ->
-  param_specialisations:Code_id.t option list ->
+  param_specialisations:(Code_id.t * Function_slot.t) option list ->
   simplify_and_resimplify_function_body:Simplify_common.simplify_function_body ->
   Downwards_acc.t
