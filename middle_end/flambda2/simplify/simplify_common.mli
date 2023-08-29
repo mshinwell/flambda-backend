@@ -80,6 +80,7 @@ type simplify_toplevel =
   exn_continuation:Continuation.t ->
   Rebuilt_expr.t * Upwards_acc.t
 
+(* Note this omits [must_resimplify] *)
 type simplify_function_body =
   Downwards_acc.t ->
   Expr.t ->

@@ -49,3 +49,13 @@ val simplify_expr : Flambda.Expr.t Simplify_common.expr_simplifier
     setting up of the [Data_flow] module and the return/exception
     continuations. *)
 val simplify_toplevel : Simplify_common.simplify_toplevel
+
+val simplify_function_body :
+  Downwards_acc.t ->
+  Flambda.Expr.t ->
+  return_arity:Flambda_arity.t ->
+  exn_continuation:Exn_continuation.t ->
+  loopify_state:Loopify_state.t ->
+  params:Bound_parameters.t ->
+  implicit_params:Bound_parameters.t ->
+  unit

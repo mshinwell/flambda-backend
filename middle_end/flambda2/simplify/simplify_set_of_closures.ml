@@ -146,8 +146,13 @@ let simplify_function_body context ~outer_dacc function_slot_opt
     ~closure_bound_names_inside_function ~inlining_arguments ~absolute_history
     code_id code ~return_continuation ~exn_continuation params ~body ~my_closure
     ~is_my_closure_used:_ ~my_region ~my_depth ~free_names_of_body:_ =
+  let may_specialise =
+    Code_metadata.can_be_specialised (Code.code_metadata code)
+  in
   let loopify_state =
-    if Loopify_attribute.should_loopify (Code.loopify code)
+    if may_specialise
+    then Loopify_state.do_not_loopify
+    else if Loopify_attribute.should_loopify (Code.loopify code)
     then Loopify_state.loopify (Continuation.create ~name:"self" ())
     else Loopify_state.do_not_loopify
   in

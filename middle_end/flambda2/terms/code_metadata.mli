@@ -132,3 +132,5 @@ val ids_for_export : t -> Ids_for_export.t
 val approx_equal : t -> t -> bool
 
 val map_result_types : t -> f:(Flambda2_types.t -> Flambda2_types.t) -> t
+
+val can_be_specialised : t -> bool

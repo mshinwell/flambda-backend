@@ -17,7 +17,7 @@
 open! Simplify_import
 
 let simplify_toplevel_common dacc simplify ~params ~implicit_params
-    ~return_continuation ~return_arity ~exn_continuation =
+    ~return_continuation ~return_arity ~exn_continuation ~must_resimplify =
   (* The usage analysis needs a continuation whose handler holds the toplevel
      code of the function. Since such a continuation does not exist, we create a
      dummy one here. *)
@@ -74,7 +74,8 @@ let simplify_toplevel_common dacc simplify ~params ~implicit_params
           UA.create ~flow_result ~compute_slot_offsets:true uenv dacc
         in
         let uacc =
-          if Flow.Analysis.did_perform_mutable_unboxing flow_result
+          if must_resimplify
+             || Flow.Analysis.did_perform_mutable_unboxing flow_result
           then UA.set_resimplify uacc
           else uacc
         in
@@ -113,8 +114,9 @@ let rec simplify_expr dacc expr ~down_to_up =
     Simplify_apply_cont_expr.simplify_apply_cont dacc apply_cont ~down_to_up
   | Switch switch ->
     Simplify_switch_expr.simplify_switch
-      ~simplify_let:Simplify_let_expr.simplify_let ~simplify_function_body dacc
-      switch ~down_to_up
+      ~simplify_let:Simplify_let_expr.simplify_let
+      ~simplify_function_body:(simplify_function_body ~must_resimplify:false)
+      dacc switch ~down_to_up
   | Invalid { message } ->
     (* CR mshinwell: Make sure that a program can be simplified to just
        [Invalid]. *)
@@ -123,13 +125,13 @@ let rec simplify_expr dacc expr ~down_to_up =
 
 and simplify_function_body dacc expr ~return_continuation ~return_arity
     ~exn_continuation ~(loopify_state : Loopify_state.t) ~params
-    ~implicit_params =
+    ~implicit_params ~must_resimplify =
   match loopify_state with
   | Do_not_loopify ->
     simplify_toplevel_common dacc
       (fun dacc -> simplify_expr dacc expr)
       ~params ~implicit_params ~return_continuation ~return_arity
-      ~exn_continuation
+      ~exn_continuation ~must_resimplify
   | Loopify cont ->
     let call_self_cont_expr =
       let args = Bound_parameters.simples params in
@@ -147,11 +149,12 @@ and simplify_function_body dacc expr ~return_continuation ~return_arity
           dacc
           (call_self_cont_expr, handlers))
       ~params ~implicit_params ~return_continuation ~return_arity
-      ~exn_continuation
+      ~exn_continuation ~must_resimplify
 
 and[@inline always] simplify_let dacc let_expr ~down_to_up =
-  Simplify_let_expr.simplify_let ~simplify_expr ~simplify_function_body dacc
-    let_expr ~down_to_up
+  Simplify_let_expr.simplify_let ~simplify_expr
+    ~simplify_function_body:(simplify_function_body ~must_resimplify:false)
+    dacc let_expr ~down_to_up
 
 let simplify_toplevel dacc expr ~return_continuation ~return_arity
     ~exn_continuation =
@@ -160,4 +163,4 @@ let simplify_toplevel dacc expr ~return_continuation ~return_arity
   simplify_toplevel_common dacc
     (fun dacc -> simplify_expr dacc expr)
     ~params ~implicit_params ~return_continuation ~return_arity
-    ~exn_continuation
+    ~exn_continuation ~must_resimplify:false

@@ -168,13 +168,52 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
   in
   after_rebuild expr uacc
 
+let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
+    ~apply_alloc_mode ~simplify_expr ~simplify_and_resimplify_function_body
+    ~down_to_up =
+  let specialised_code_id = Code_id.rename (Code.code_id unspecialised_code) in
+  let typing_env = DA.typing_env dacc in
+  let param_specialisations =
+    List.map2
+      (fun arg (attr : Specialise_attribute.t) ->
+        match attr with
+        | No_specialisation -> None
+        | Specialise_code ->
+          Simple.pattern_match arg
+            ~const:(fun _ -> None)
+            ~name:(fun name ~coercion:_ ->
+              let ty = TE.find_or_missing typing_env name in
+              match ty with
+              | None -> None
+              | Some ty -> (
+                match T.prove_single_closures_entry typing_env ty with
+                | Unknown -> None
+                | Proved (_func_slot, _alloc_mode, _closures_entry, func_type)
+                  ->
+                  let code_id = T.Function_type.code_id func_type in
+                  Some code_id)))
+      (Apply.args apply)
+      (Code_metadata.param_specialisations callee's_code_metadata)
+  in
+  let dacc =
+    Simplify_set_of_closures.simplify_specialised_function dacc
+      ~unspecialised_code ~specialised_code_id ~param_specialisations
+      ~simplify_and_resimplify_function_body
+  in
+  let new_call_kind =
+    Call_kind.direct_function_call specialised_code_id apply_alloc_mode
+  in
+  let new_apply = Apply.with_call_kind apply new_call_kind in
+  simplify_expr dacc (Expr.create_apply new_apply) ~down_to_up
+
 type inlining_decision =
   | Do_not_inline of { erase_attribute : bool }
   | Inline of DA.t * Expr.t
 
 let simplify_direct_full_application ~simplify_expr dacc apply function_type
     ~params_arity ~result_arity ~(result_types : _ Or_unknown_or_bottom.t)
-    ~down_to_up ~coming_from_indirect ~callee's_code_metadata =
+    ~down_to_up ~coming_from_indirect ~callee's_code_metadata
+    ~simplify_and_resimplify_function_body ~apply_alloc_mode =
   let inlined =
     let decision =
       Call_site_inlining_decision.make_decision dacc ~simplify_expr ~apply
@@ -203,9 +242,27 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       in
       Inline (dacc, inlined)
   in
-  match inlined with
-  | Inline (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
-  | Do_not_inline { erase_attribute } -> (
+  let specialised =
+    if not (Code_metadata.can_be_specialised callee's_code_metadata)
+    then None
+    else
+      let unspecialised_code_id =
+        Code_metadata.code_id callee's_code_metadata
+      in
+      let unspecialised_code =
+        DE.find_code_exn (DA.denv dacc) unspecialised_code_id
+      in
+      match Code_or_metadata.view unspecialised_code with
+      | Metadata_only _ -> None
+      | Code_present code -> Some code
+  in
+  match specialised, inlined with
+  | Some unspecialised_code, (Inline _ | Do_not_inline _) ->
+    specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
+      ~apply_alloc_mode ~simplify_expr ~simplify_and_resimplify_function_body
+      ~down_to_up
+  | None, Inline (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
+  | None, Do_not_inline { erase_attribute } -> (
     let apply =
       let inlined : Inlined_attribute.t =
         if erase_attribute
@@ -216,10 +273,10 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       in
       Apply.with_inlined_attribute apply inlined
     in
-    match loopify_decision_for_call dacc apply with
-    | Loopify self_cont ->
+    match specialised, loopify_decision_for_call dacc apply with
+    | None, Loopify self_cont ->
       simplify_self_tail_call dacc apply self_cont ~down_to_up
-    | Do_not_loopify ->
+    | Some _, Loopify _ | _, Do_not_loopify ->
       let dacc, use_id, result_continuation =
         let result_continuation = Apply.continuation apply in
         match result_continuation, result_types with
@@ -682,7 +739,8 @@ let simplify_direct_function_call ~simplify_expr dacc apply
     ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
     ~callee's_function_slot ~result_arity ~result_types ~recursive
     ~must_be_detupled ~closure_alloc_mode_from_type ~apply_alloc_mode
-    ~current_region function_decl ~down_to_up =
+    ~current_region function_decl ~simplify_and_resimplify_function_body
+    ~down_to_up =
   (match Apply.probe apply, Apply.inlined apply with
   | None, _ | Some _, Never_inlined -> ()
   | Some _, (Hint_inlined | Unroll _ | Default_inlined | Always_inlined _) ->
@@ -758,7 +816,8 @@ let simplify_direct_function_call ~simplify_expr dacc apply
             Apply.print apply;
         simplify_direct_full_application ~simplify_expr dacc apply function_decl
           ~params_arity ~result_arity ~result_types ~down_to_up
-          ~coming_from_indirect ~callee's_code_metadata)
+          ~coming_from_indirect ~callee's_code_metadata
+          ~simplify_and_resimplify_function_body ~apply_alloc_mode)
       else if provided_num_args > num_params
       then (
         (* See comment above. *)
@@ -864,7 +923,8 @@ let simplify_function_call_where_callee's_type_unavailable dacc apply
          ~use_id ~exn_cont_use_id)
 
 let simplify_function_call ~simplify_expr dacc apply ~callee_ty
-    (call : Call_kind.Function_call.t) ~apply_alloc_mode ~down_to_up =
+    (call : Call_kind.Function_call.t) ~apply_alloc_mode
+    ~simplify_and_resimplify_function_body ~down_to_up =
   (* Function declarations and params and body might not have the same calling
      convention. Currently the only case when it happens is for tupled
      functions. For such functions, the function_declaration declares a
@@ -925,7 +985,8 @@ let simplify_function_call ~simplify_expr dacc apply ~callee_ty
       ~result_types:(Code_metadata.result_types callee's_code_metadata)
       ~recursive:(Code_metadata.recursive callee's_code_metadata)
       ~must_be_detupled ~closure_alloc_mode_from_type ~current_region
-      ~apply_alloc_mode func_decl_type ~down_to_up
+      ~apply_alloc_mode func_decl_type ~simplify_and_resimplify_function_body
+      ~down_to_up
   | Need_meet -> type_unavailable ()
   | Invalid ->
     let rebuild uacc ~after_rebuild =
@@ -1125,12 +1186,13 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~arg_types ~down_to_up
     in
     down_to_up dacc ~rebuild
 
-let simplify_apply ~simplify_expr dacc apply ~down_to_up =
+let simplify_apply ~simplify_expr ~simplify_and_resimplify_function_body dacc
+    apply ~down_to_up =
   let dacc, callee_ty, apply, arg_types = simplify_apply_shared dacc apply in
   match Apply.call_kind apply with
   | Function { function_call; alloc_mode = apply_alloc_mode } ->
     simplify_function_call ~simplify_expr dacc apply ~callee_ty function_call
-      ~apply_alloc_mode ~down_to_up
+      ~apply_alloc_mode ~simplify_and_resimplify_function_body ~down_to_up
   | Method { kind; obj; alloc_mode = _ } ->
     simplify_method_call dacc apply ~callee_ty ~kind ~obj ~arg_types ~down_to_up
   | C_call { alloc = _; is_c_builtin = _ } ->

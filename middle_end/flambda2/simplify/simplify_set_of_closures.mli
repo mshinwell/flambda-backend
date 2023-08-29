@@ -50,3 +50,11 @@ val simplify_stub_function :
   all_code:Code.t Code_id.Map.t ->
   simplify_function_body:Simplify_common.simplify_function_body ->
   Rebuilt_static_const.t * Downwards_acc.t
+
+val simplify_specialised_function :
+  Downwards_acc.t ->
+  unspecialised_code:Code.t ->
+  specialised_code_id:Code_id.t ->
+  param_specialisations:Code_id.t option list ->
+  simplify_and_resimplify_function_body:Simplify_common.simplify_function_body ->
+  Downwards_acc.t

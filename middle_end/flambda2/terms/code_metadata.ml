@@ -578,3 +578,10 @@ let map_result_types ({ result_types; _ } as t) ~f =
       Or_unknown_or_bottom.map result_types
         ~f:(Result_types.map_result_types ~f)
   }
+
+let can_be_specialised t =
+  (match recursive t with Non_recursive -> false | Recursive -> true)
+  && List.exists
+       (fun (attr : Specialise_attribute.t) ->
+         match attr with No_specialisation -> false | Specialise_code -> true)
+       (param_specialisations t)

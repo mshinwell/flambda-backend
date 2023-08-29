@@ -18,4 +18,6 @@ open! Flambda
 
 val simplify_apply :
   simplify_expr:Expr.t Simplify_common.expr_simplifier ->
+  simplify_and_resimplify_function_body:
+    (must_resimplify:bool -> Simplify_common.simplify_function_body) ->
   Apply.t Simplify_common.expr_simplifier
