@@ -168,30 +168,34 @@ let rebuild_non_inlined_direct_full_application apply ~use_id ~exn_cont_use_id
   in
   after_rebuild expr uacc
 
-let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
-    ~apply_alloc_mode ~simplify_expr ~simplify_and_resimplify_function_body
-    ~down_to_up =
-  let specialised_code_id = Code_id.rename (Code.code_id unspecialised_code) in
+let arg_is_closure dacc arg =
   let typing_env = DA.typing_env dacc in
+  Simple.pattern_match arg
+    ~const:(fun _ -> None)
+    ~name:(fun name ~coercion:_ ->
+      let ty = TE.find_or_missing typing_env name in
+      match ty with
+      | None -> None
+      | Some ty -> (
+        match T.prove_single_closures_entry typing_env ty with
+        | Unknown -> None
+        | Proved (_func_slot, _alloc_mode, _closures_entry, func_type) ->
+          let code_id = T.Function_type.code_id func_type in
+          Some code_id))
+
+type specialisation_result =
+  | Rebuild_apply of DA.t * Apply.t
+  | Resimplify_expr of DA.t * Expr.t
+
+let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
+    ~apply_alloc_mode ~simplify_and_resimplify_function_body =
+  let specialised_code_id = Code_id.rename (Code.code_id unspecialised_code) in
   let param_specialisations =
     List.map2
       (fun arg (attr : Specialise_attribute.t) ->
         match attr with
         | No_specialisation -> None
-        | Specialise_code ->
-          Simple.pattern_match arg
-            ~const:(fun _ -> None)
-            ~name:(fun name ~coercion:_ ->
-              let ty = TE.find_or_missing typing_env name in
-              match ty with
-              | None -> None
-              | Some ty -> (
-                match T.prove_single_closures_entry typing_env ty with
-                | Unknown -> None
-                | Proved (_func_slot, _alloc_mode, _closures_entry, func_type)
-                  ->
-                  let code_id = T.Function_type.code_id func_type in
-                  Some code_id)))
+        | Specialise_code -> arg_is_closure dacc arg)
       (Apply.args apply)
       (Code_metadata.param_specialisations callee's_code_metadata)
   in
@@ -204,7 +208,38 @@ let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
     Call_kind.direct_function_call specialised_code_id apply_alloc_mode
   in
   let new_apply = Apply.with_call_kind apply new_call_kind in
-  simplify_expr dacc (Expr.create_apply new_apply) ~down_to_up
+  (* Resimplify the application to allow it to be inlined out. *)
+  Resimplify_expr (dacc, Expr.create_apply new_apply)
+
+let specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
+    apply ~apply_alloc_mode ~simplify_and_resimplify_function_body =
+  let unspecialised_code_id = Code.code_id unspecialised_code in
+  match DE.are_specialising (DA.denv dacc) ~unspecialised_code_id with
+  | None ->
+    specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
+      ~apply_alloc_mode ~simplify_and_resimplify_function_body
+  | Some (specialised_code_id, param_specialisations) ->
+    let can_specialise_call =
+      List.for_all2
+        (fun arg specialisation ->
+          match specialisation with
+          | None -> true
+          | Some required_code_id -> (
+            match arg_is_closure dacc arg with
+            | None -> false
+            | Some code_id -> Code_id.equal code_id required_code_id))
+        (Apply.args apply) param_specialisations
+    in
+    let new_apply =
+      if not can_specialise_call
+      then apply
+      else
+        let new_call_kind =
+          Call_kind.direct_function_call specialised_code_id apply_alloc_mode
+        in
+        Apply.with_call_kind apply new_call_kind
+    in
+    Rebuild_apply (dacc, new_apply)
 
 type inlining_decision =
   | Do_not_inline of { erase_attribute : bool }
@@ -256,13 +291,7 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       | Metadata_only _ -> None
       | Code_present code -> Some code
   in
-  match specialised, inlined with
-  | Some unspecialised_code, (Inline _ | Do_not_inline _) ->
-    specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
-      ~apply_alloc_mode ~simplify_expr ~simplify_and_resimplify_function_body
-      ~down_to_up
-  | None, Inline (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
-  | None, Do_not_inline { erase_attribute } -> (
+  let non_inlined_case dacc ~erase_attribute apply =
     let apply =
       let inlined : Inlined_attribute.t =
         if erase_attribute
@@ -372,7 +401,20 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       down_to_up dacc
         ~rebuild:
           (rebuild_non_inlined_direct_full_application apply ~use_id
-             ~exn_cont_use_id ~result_arity ~coming_from_indirect))
+             ~exn_cont_use_id ~result_arity ~coming_from_indirect)
+  in
+  match specialised, inlined with
+  | Some unspecialised_code, (Inline _ | Do_not_inline _) -> (
+    match
+      specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
+        apply ~apply_alloc_mode ~simplify_and_resimplify_function_body
+    with
+    | Rebuild_apply (dacc, apply) ->
+      non_inlined_case dacc ~erase_attribute:true apply
+    | Resimplify_expr (dacc, expr) -> simplify_expr dacc expr ~down_to_up)
+  | None, Inline (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
+  | None, Do_not_inline { erase_attribute } ->
+    non_inlined_case dacc ~erase_attribute apply
 
 (* CR mshinwell: need to work out what to do for local alloc transformations
    when there are zero args. *)

@@ -208,3 +208,15 @@ val loopify_state : t -> Loopify_state.t
 val set_loopify_state : Loopify_state.t -> t -> t
 
 val with_code_age_relation : Code_age_relation.t -> t -> t
+
+val with_are_specialising :
+  t ->
+  unspecialised_code_id:Code_id.t ->
+  specialised_code_id:Code_id.t ->
+  param_specialisations:Code_id.t option list ->
+  t
+
+val are_specialising :
+  t ->
+  unspecialised_code_id:Code_id.t ->
+  (Code_id.t * Code_id.t option list) option

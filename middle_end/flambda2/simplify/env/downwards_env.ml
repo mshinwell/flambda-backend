@@ -45,7 +45,8 @@ type t =
     get_imported_code : unit -> Exported_code.t;
     all_code : Code.t Code_id.Map.t;
     inlining_history_tracker : Inlining_history.Tracker.t;
-    loopify_state : Loopify_state.t
+    loopify_state : Loopify_state.t;
+    are_specialising : (Code_id.t * Code_id.t option list) Code_id.Map.t
   }
 
 let print_debuginfo ppf dbg =
@@ -61,7 +62,7 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
                 do_not_rebuild_terms; closure_info;
                 unit_toplevel_return_continuation; all_code;
                 get_imported_code = _; inlining_history_tracker = _;
-                loopify_state
+                loopify_state; are_specialising
               } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(round@ %d)@]@ \
@@ -78,7 +79,8 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
       @[<hov 1>(do_not_rebuild_terms@ %b)@]@ \
       @[<hov 1>(closure_info@ %a)@]@ \
       @[<hov 1>(all_code@ %a)@]@ \
-      @[<hov 1>(loopify_state@ %a)@]\
+      @[<hov 1>(loopify_state@ %a)@]@ \
+      @[<hov 1>(are_specialising@ %a)@]\
       )@]"
     round
     TE.print typing_env
@@ -95,6 +97,15 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
     Closure_info.print closure_info
     (Code_id.Map.print Code.print) all_code
     Loopify_state.print loopify_state
+    (Code_id.Map.print (fun ppf (code_id, param_specialisations) ->
+      Format.fprintf ppf
+        "@[<hov 1>((code_id %a)@ (param_specialisations (%a)))@]"
+        Code_id.print code_id
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space
+          (Misc.Stdlib.Option.print Code_id.print))
+        param_specialisations
+    ))
+    are_specialising
 
 let create ~round ~(resolver : resolver)
     ~(get_imported_names : get_imported_names)
@@ -124,7 +135,8 @@ let create ~round ~(resolver : resolver)
     get_imported_code;
     inlining_history_tracker =
       Inlining_history.Tracker.empty (Compilation_unit.get_current_exn ());
-    loopify_state = Loopify_state.do_not_loopify
+    loopify_state = Loopify_state.do_not_loopify;
+    are_specialising = Code_id.Map.empty
   }
 
 let all_code t = t.all_code
@@ -184,7 +196,8 @@ let enter_set_of_closures
       get_imported_code;
       all_code;
       inlining_history_tracker;
-      loopify_state = _
+      loopify_state = _;
+      are_specialising = _
     } =
   { round;
     typing_env = TE.closure_env typing_env;
@@ -202,7 +215,8 @@ let enter_set_of_closures
     get_imported_code;
     all_code;
     inlining_history_tracker;
-    loopify_state = Loopify_state.do_not_loopify
+    loopify_state = Loopify_state.do_not_loopify;
+    are_specialising = Code_id.Map.empty
   }
 
 let define_variable t var kind =
@@ -549,3 +563,15 @@ let with_code_age_relation code_age_relation t =
   { t with
     typing_env = TE.with_code_age_relation t.typing_env code_age_relation
   }
+
+let with_are_specialising t ~unspecialised_code_id ~specialised_code_id
+    ~param_specialisations =
+  { t with
+    are_specialising =
+      Code_id.Map.add unspecialised_code_id
+        (specialised_code_id, param_specialisations)
+        t.are_specialising
+  }
+
+let are_specialising t ~unspecialised_code_id =
+  Code_id.Map.find_opt unspecialised_code_id t.are_specialising
