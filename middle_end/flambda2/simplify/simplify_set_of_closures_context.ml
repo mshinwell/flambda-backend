@@ -67,6 +67,10 @@ let create_for_specialised_function dacc ~unspecialised_callee
   in
   let augment_environment denv ~params ~my_closure =
     let denv =
+      DE.with_are_specialising denv ~unspecialised_code_id ~specialised_code_id
+        ~param_specialisations
+    in
+    let denv =
       DE.add_equation_on_variable denv my_closure
         (T.alias_type_of K.value unspecialised_callee)
     in

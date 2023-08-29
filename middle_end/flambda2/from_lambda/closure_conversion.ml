@@ -1610,7 +1610,14 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot decl
       else Default_loopify_and_not_tailrec
   in
   let param_specialisations =
-    List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+    List.map
+      (fun p ->
+        let name = Variable.name p in
+        Format.eprintf "%s\n%!" name;
+        if String.starts_with ~prefix:"specialise_me" name
+        then Specialise_attribute.Specialise_code
+        else Specialise_attribute.No_specialisation)
+      (Bound_parameters.vars params)
   in
   let code =
     Code.create code_id ~params_and_body
@@ -1751,9 +1758,11 @@ let close_functions acc external_env ~current_region function_declarations =
         let param_specialisations =
           List.map
             (fun (p : Function_decl.param) ->
-              match Ident.name p.name with
-              | "specialise_me" -> Specialise_attribute.Specialise_code
-              | _ -> Specialise_attribute.No_specialisation)
+              let name = Ident.name p.name in
+              Format.eprintf "%s\n%!" name;
+              if String.starts_with ~prefix:"specialise_me" name
+              then Specialise_attribute.Specialise_code
+              else Specialise_attribute.No_specialisation)
             params
           (* XXX List.map (fun _ -> Specialise_attribute.No_specialisation)
              param_modes *)
