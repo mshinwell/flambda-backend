@@ -559,6 +559,11 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
       |> Inlining_history.Tracker.fundecl
            ~function_relative_history:Inlining_history.Relative.empty ~dbg ~name
     in
+    let remaining_params_specialisations =
+      List.map
+        (fun _ -> Specialise_attribute.No_specialisation)
+        remaining_params_alloc_modes
+    in
     let code_id = Code_id.create ~name (Compilation_unit.get_current_exn ()) in
     (* We could create better result types by combining the types for the first
        arguments with the result types from the called function. However given
@@ -570,11 +575,12 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
         Code.create code_id ~params_and_body
           ~free_names_of_params_and_body:free_names ~newer_version_of:None
           ~params_arity:(Bound_parameters.arity remaining_params)
-          ~param_modes:remaining_params_alloc_modes ~first_complex_local_param
-          ~result_arity ~result_types:Unknown ~contains_no_escaping_local_allocs
-          ~stub:true ~inline:Default_inline ~poll_attribute:Default
-          ~check:Check_attribute.Default_check ~is_a_functor:false ~recursive
-          ~cost_metrics:cost_metrics_of_body
+          ~param_modes:remaining_params_alloc_modes
+          ~param_specialisations:remaining_params_specialisations
+          ~first_complex_local_param ~result_arity ~result_types:Unknown
+          ~contains_no_escaping_local_allocs ~stub:true ~inline:Default_inline
+          ~poll_attribute:Default ~check:Check_attribute.Default_check
+          ~is_a_functor:false ~recursive ~cost_metrics:cost_metrics_of_body
           ~inlining_arguments:(DE.inlining_arguments (DA.denv dacc))
           ~dbg ~is_tupled:false
           ~is_my_closure_used:

@@ -892,10 +892,13 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
             (fun _ -> Alloc_mode.For_types.heap)
             (Flambda_arity.to_list params_arity)
         in
+        let param_specialisations =
+          List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+        in
         let code =
           (* CR mshinwell: [inlining_decision] should maybe be set properly *)
           Code.create code_id ~params_and_body ~free_names_of_params_and_body
-            ~newer_version_of ~params_arity ~param_modes
+            ~newer_version_of ~params_arity ~param_modes ~param_specialisations
             ~first_complex_local_param:(Flambda_arity.cardinal params_arity)
             ~result_arity ~result_types:Unknown
             ~contains_no_escaping_local_allocs:false ~stub:false ~inline

@@ -35,6 +35,8 @@ module type Code_metadata_accessors_result_type = sig
 
   val param_modes : 'a t -> Alloc_mode.For_types.t list
 
+  val param_specialisations : 'a t -> Specialise_attribute.t list
+
   (* Zero-indexed position of the first local param, to be able to determine the
      allocation modes of partial applications. If there is no local parameter,
      equal to the number of (complex) parameters. *)
@@ -87,6 +89,7 @@ type 'a create_type =
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.t ->
   param_modes:Alloc_mode.For_types.t list ->
+  param_specialisations:Specialise_attribute.t list ->
   first_complex_local_param:int ->
   result_arity:Flambda_arity.t ->
   result_types:Result_types.t Or_unknown_or_bottom.t ->

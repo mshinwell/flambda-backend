@@ -19,6 +19,7 @@ type t =
     newer_version_of : Code_id.t option;
     params_arity : Flambda_arity.t;
     param_modes : Alloc_mode.For_types.t list;
+    param_specialisations : Specialise_attribute.t list;
     first_complex_local_param : int;
     (* Note: first_complex_local_param cannot be computed from param_modes,
        because it might be 0 if the closure itself has to be allocated locally,
@@ -61,6 +62,8 @@ module Code_metadata_accessors (X : Metadata_view_type) = struct
   let params_arity t = (metadata t).params_arity
 
   let param_modes t = (metadata t).param_modes
+
+  let param_specialisations t = (metadata t).param_specialisations
 
   let first_complex_local_param t = (metadata t).first_complex_local_param
 
@@ -125,6 +128,7 @@ type 'a create_type =
   newer_version_of:Code_id.t option ->
   params_arity:Flambda_arity.t ->
   param_modes:Alloc_mode.For_types.t list ->
+  param_specialisations:Specialise_attribute.t list ->
   first_complex_local_param:int ->
   result_arity:Flambda_arity.t ->
   result_types:Result_types.t Or_unknown_or_bottom.t ->
@@ -147,11 +151,12 @@ type 'a create_type =
   'a
 
 let createk k code_id ~newer_version_of ~params_arity ~param_modes
-    ~first_complex_local_param ~result_arity ~result_types
-    ~contains_no_escaping_local_allocs ~stub ~(inline : Inline_attribute.t)
-    ~check ~poll_attribute ~is_a_functor ~recursive ~cost_metrics
-    ~inlining_arguments ~dbg ~is_tupled ~is_my_closure_used ~inlining_decision
-    ~absolute_history ~relative_history ~loopify =
+    ~param_specialisations ~first_complex_local_param ~result_arity
+    ~result_types ~contains_no_escaping_local_allocs ~stub
+    ~(inline : Inline_attribute.t) ~check ~poll_attribute ~is_a_functor
+    ~recursive ~cost_metrics ~inlining_arguments ~dbg ~is_tupled
+    ~is_my_closure_used ~inlining_decision ~absolute_history ~relative_history
+    ~loopify =
   (match stub, inline with
   | true, (Available_inline | Never_inline | Default_inline)
   | ( false,
@@ -179,6 +184,7 @@ let createk k code_id ~newer_version_of ~params_arity ~param_modes
       newer_version_of;
       params_arity;
       param_modes;
+      param_specialisations;
       first_complex_local_param;
       result_arity;
       result_types;
@@ -228,7 +234,7 @@ let [@ocamlformat "disable"] print_inlining_paths ppf
 
 let [@ocamlformat "disable"] print ppf
        { code_id = _; newer_version_of; stub; inline; check; poll_attribute;
-         is_a_functor; params_arity; param_modes;
+         is_a_functor; params_arity; param_modes; param_specialisations;
          first_complex_local_param; result_arity;
          result_types; contains_no_escaping_local_allocs;
          recursive; cost_metrics; inlining_arguments;
@@ -244,6 +250,7 @@ let [@ocamlformat "disable"] print ppf
       @[<hov 1>%t(is_a_functor@ %b)%t@]@ \
       @[<hov 1>%t(params_arity@ %t%a%t)%t@]@ \
       @[<hov 1>%t(param_modes@ %t(%a)%t)%t@]@ \
+      @[<hov 1>%t(param_specialisations@ %t(%a)%t)%t@]@ \
       @[<hov 1>(first_complex_local_param@ %d)@]@ \
       @[<hov 1>%t(result_arity@ %t%a%t)%t@]@ \
       @[<hov 1>(result_types@ @[<hov 1>(%a)@])@]@ \
@@ -305,6 +312,22 @@ let [@ocamlformat "disable"] print ppf
     then Flambda_colours.elide
     else Flambda_colours.none)
     Flambda_colours.pop
+    (if List.for_all
+      (fun (attr : Specialise_attribute.t) ->
+        match attr with No_specialisation -> true | Specialise_code -> false)
+      param_specialisations
+    then Flambda_colours.elide
+    else Flambda_colours.none)
+    Flambda_colours.pop
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+      Specialise_attribute.print) param_specialisations
+    (if List.for_all
+      (fun (attr : Specialise_attribute.t) ->
+        match attr with No_specialisation -> true | Specialise_code -> false)
+      param_specialisations
+    then Flambda_colours.elide
+    else Flambda_colours.none)
+    Flambda_colours.pop
     first_complex_local_param
     (if Flambda_arity.is_singleton_value result_arity
     then Flambda_colours.elide
@@ -342,6 +365,7 @@ let free_names
       newer_version_of;
       params_arity = _;
       param_modes = _;
+      param_specialisations = _;
       first_complex_local_param = _;
       result_arity = _;
       result_types;
@@ -383,6 +407,7 @@ let apply_renaming
        newer_version_of;
        params_arity = _;
        param_modes = _;
+       param_specialisations = _;
        first_complex_local_param = _;
        result_arity = _;
        result_types;
@@ -435,6 +460,7 @@ let ids_for_export
       newer_version_of;
       params_arity = _;
       param_modes = _;
+      param_specialisations = _;
       first_complex_local_param = _;
       result_arity = _;
       result_types;
@@ -473,6 +499,7 @@ let approx_equal
       newer_version_of = newer_version_of1;
       params_arity = params_arity1;
       param_modes = param_modes1;
+      param_specialisations = param_specialisations1;
       first_complex_local_param = first_complex_local_param1;
       result_arity = result_arity1;
       result_types = _;
@@ -497,6 +524,7 @@ let approx_equal
       newer_version_of = newer_version_of2;
       params_arity = params_arity2;
       param_modes = param_modes2;
+      param_specialisations = param_specialisations2;
       first_complex_local_param = first_complex_local_param2;
       result_arity = result_arity2;
       result_types = _;
@@ -521,6 +549,8 @@ let approx_equal
   && (Option.equal Code_id.equal) newer_version_of1 newer_version_of2
   && Flambda_arity.equal_ignoring_subkinds params_arity1 params_arity2
   && List.equal Alloc_mode.For_types.equal param_modes1 param_modes2
+  && List.equal Specialise_attribute.equal param_specialisations1
+       param_specialisations2
   && Int.equal first_complex_local_param1 first_complex_local_param2
   && Flambda_arity.equal_ignoring_subkinds result_arity1 result_arity2
   && Bool.equal contains_no_escaping_local_allocs1

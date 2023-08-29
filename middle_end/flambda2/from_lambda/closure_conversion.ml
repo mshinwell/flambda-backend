@@ -1609,10 +1609,13 @@ let close_one_function acc ~code_id ~external_env ~by_function_slot decl
       then Default_loopify_and_tailrec
       else Default_loopify_and_not_tailrec
   in
+  let param_specialisations =
+    List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+  in
   let code =
     Code.create code_id ~params_and_body
       ~free_names_of_params_and_body:(Acc.free_names acc) ~params_arity
-      ~param_modes
+      ~param_modes ~param_specialisations
       ~first_complex_local_param:(Function_decl.first_complex_local_param decl)
       ~result_arity:return ~result_types:Unknown
       ~contains_no_escaping_local_allocs:
@@ -1745,11 +1748,15 @@ let close_functions acc external_env ~current_region function_declarations =
           | Curried _ -> false
           | Tupled -> true
         in
+        let param_specialisations =
+          List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+        in
         let metadata =
           Code_metadata.create code_id ~params_arity
             ~first_complex_local_param:
               (Function_decl.first_complex_local_param decl)
-            ~param_modes ~result_arity ~result_types:Unknown
+            ~param_modes ~param_specialisations ~result_arity
+            ~result_types:Unknown
             ~contains_no_escaping_local_allocs:
               (Function_decl.contains_no_escaping_local_allocs decl)
             ~stub:(Function_decl.stub decl) ~inline:Never_inline ~check

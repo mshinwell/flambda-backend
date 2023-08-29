@@ -425,6 +425,7 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
       code_id ~params_and_body ~free_names_of_params_and_body:free_names_of_code
       ~newer_version_of ~params_arity:(Code.params_arity code)
       ~param_modes:(Code.param_modes code)
+      ~param_specialisations:(Code.param_specialisations code)
       ~first_complex_local_param:(Code.first_complex_local_param code)
       ~result_arity ~result_types
       ~contains_no_escaping_local_allocs:
