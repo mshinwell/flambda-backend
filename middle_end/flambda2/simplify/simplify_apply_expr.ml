@@ -344,7 +344,8 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       Inline (dacc, inlined)
   in
   let specialised =
-    if (not (Code_metadata.can_be_specialised callee's_code_metadata))
+    if DE.specialisation_disabled (DA.denv dacc)
+       || (not (Code_metadata.can_be_specialised callee's_code_metadata))
        || not
             (Are_rebuilding_terms.are_rebuilding
                (DE.are_rebuilding_terms (DA.denv dacc)))

@@ -220,3 +220,7 @@ val are_specialising :
   t ->
   unspecialised_code_id:Code_id.t ->
   (Code_id.t * (Code_id.t * Function_slot.t) option list) option
+
+val disable_specialisation : t -> t
+
+val specialisation_disabled : t -> bool

@@ -47,7 +47,8 @@ type t =
     inlining_history_tracker : Inlining_history.Tracker.t;
     loopify_state : Loopify_state.t;
     are_specialising :
-      (Code_id.t * (Code_id.t * Function_slot.t) option list) Code_id.Map.t
+      (Code_id.t * (Code_id.t * Function_slot.t) option list) Code_id.Map.t;
+    specialisation_disabled : bool
   }
 
 let print_debuginfo ppf dbg =
@@ -63,7 +64,7 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
                 do_not_rebuild_terms; closure_info;
                 unit_toplevel_return_continuation; all_code;
                 get_imported_code = _; inlining_history_tracker = _;
-                loopify_state; are_specialising
+                loopify_state; are_specialising; specialisation_disabled
               } =
   Format.fprintf ppf "@[<hov 1>(\
       @[<hov 1>(round@ %d)@]@ \
@@ -81,7 +82,8 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
       @[<hov 1>(closure_info@ %a)@]@ \
       @[<hov 1>(all_code@ %a)@]@ \
       @[<hov 1>(loopify_state@ %a)@]@ \
-      @[<hov 1>(are_specialising@ %a)@]\
+      @[<hov 1>(are_specialising@ %a)@]@ \
+      @[<hov 1>(specialisation_disabled@ %b)@]\
       )@]"
     round
     TE.print typing_env
@@ -110,6 +112,7 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
         param_specialisations
     ))
     are_specialising
+    specialisation_disabled
 
 let create ~round ~(resolver : resolver)
     ~(get_imported_names : get_imported_names)
@@ -140,7 +143,8 @@ let create ~round ~(resolver : resolver)
     inlining_history_tracker =
       Inlining_history.Tracker.empty (Compilation_unit.get_current_exn ());
     loopify_state = Loopify_state.do_not_loopify;
-    are_specialising = Code_id.Map.empty
+    are_specialising = Code_id.Map.empty;
+    specialisation_disabled = false
   }
 
 let all_code t = t.all_code
@@ -201,7 +205,8 @@ let enter_set_of_closures
       all_code;
       inlining_history_tracker;
       loopify_state = _;
-      are_specialising = _
+      are_specialising = _;
+      specialisation_disabled
     } =
   { round;
     typing_env = TE.closure_env typing_env;
@@ -220,7 +225,8 @@ let enter_set_of_closures
     all_code;
     inlining_history_tracker;
     loopify_state = Loopify_state.do_not_loopify;
-    are_specialising = Code_id.Map.empty
+    are_specialising = Code_id.Map.empty;
+    specialisation_disabled
   }
 
 let define_variable t var kind =
@@ -579,3 +585,7 @@ let with_are_specialising t ~unspecialised_code_id ~specialised_code_id
 
 let are_specialising t ~unspecialised_code_id =
   Code_id.Map.find_opt unspecialised_code_id t.are_specialising
+
+let disable_specialisation t = { t with specialisation_disabled = true }
+
+let specialisation_disabled t = t.specialisation_disabled

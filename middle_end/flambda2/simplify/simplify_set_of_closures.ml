@@ -161,6 +161,7 @@ let simplify_function_body context ~outer_dacc function_slot_opt
     then Loopify_state.loopify (Continuation.create ~name:"self" ())
     else Loopify_state.do_not_loopify
   in
+  Format.eprintf "...loopify_state %a\n%!" Loopify_state.print loopify_state;
   let dacc_at_function_entry =
     dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
       ~my_depth function_slot_opt ~closure_bound_names_inside_function
@@ -505,6 +506,11 @@ let simplify_function context ~outer_dacc function_slot code_id
             Format.eprintf "%a\n%!" Code.print new_code;
             let context = C.clear_augment_environment context in
             (* XXX *)
+            let outer_dacc =
+              DA.map_denv outer_dacc ~f:DE.disable_specialisation
+            in
+            (* XXX *)
+            (* XXX why wasn't this code introduced? *)
             let outer_dacc = introduce_code outer_dacc code_id new_code_const in
             run context ~outer_dacc ~code:new_code (count + 1))
           else
