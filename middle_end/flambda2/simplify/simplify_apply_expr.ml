@@ -193,7 +193,7 @@ let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
   let specialised_code_id = Code_id.rename (Code.code_id unspecialised_code) in
   Format.eprintf "candidate apply for specialise_function:\n@ %a\n%!"
     Apply.print apply;
-  Format.eprintf "dacc for specialise_function:\n@ %a\n%!" DA.print dacc;
+  (* Format.eprintf "dacc for specialise_function:\n@ %a\n%!" DA.print dacc; *)
   let param_specialisations =
     List.map2
       (fun arg (attr : Specialise_attribute.t) ->
@@ -203,32 +203,60 @@ let specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
       (Apply.args apply)
       (Code_metadata.param_specialisations callee's_code_metadata)
   in
-  (* XXX if [param_specialisations] is [None] then it shouldn't do anything *)
   if List.for_all Option.is_none param_specialisations
   then Rebuild_apply (dacc, apply)
   else
-    let dacc =
+    let code_const, dacc =
       Simplify_set_of_closures.simplify_specialised_function dacc
         ~unspecialised_callee:(Apply.callee apply) ~unspecialised_code
         ~specialised_code_id ~param_specialisations
         ~simplify_and_resimplify_function_body:
           (simplify_and_resimplify_function_body ~must_resimplify:true)
     in
+    let bound_static =
+      Bound_static.singleton (Bound_static.Pattern.code specialised_code_id)
+    in
+    let code =
+      match Rebuilt_static_const.to_const code_const with
+      | Some code -> code
+      | None ->
+        Misc.fatal_error "Should always be rebuilding terms when specializing"
+    in
+    let static_consts = Static_const_group.create [code] in
     let new_call_kind =
       Call_kind.direct_function_call specialised_code_id apply_alloc_mode
     in
     let new_apply = Apply.with_call_kind apply new_call_kind in
-    (* Resimplify the application to allow it to be inlined out. *)
-    Resimplify_expr (dacc, Expr.create_apply new_apply)
+    let expr =
+      (* Since we are only generating a "let code" binding and not a "let
+         symbol", it doesn't matter if we are not at toplevel.
+
+         We will resimplify the application to allow it to be inlined out. *)
+      Let.create
+        (Bound_pattern.static bound_static)
+        (Named.create_static_consts static_consts)
+        ~body:(Expr.create_apply new_apply)
+        ~free_names_of_body:Unknown
+      |> Expr.create_let
+    in
+    Resimplify_expr (dacc, expr)
+
+(* XXX decide on semantics for specialisation of recursive calls within the
+   original definition *)
 
 let specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
     apply ~apply_alloc_mode ~simplify_and_resimplify_function_body =
+  Format.eprintf "*** SPECIALISE_FUNCTION_CALL:@ %a\n%!" Apply.print apply;
   let unspecialised_code_id = Code.code_id unspecialised_code in
   match DE.are_specialising (DA.denv dacc) ~unspecialised_code_id with
   | None ->
+    Format.eprintf "...DE.are_specialising %a returned None\n%!" Code_id.print
+      unspecialised_code_id;
     specialise_function dacc ~unspecialised_code ~callee's_code_metadata apply
       ~apply_alloc_mode ~simplify_and_resimplify_function_body
   | Some (specialised_code_id, param_specialisations) ->
+    Format.eprintf "...DE.are_specialising %a returned Some %a\n%!"
+      Code_id.print unspecialised_code_id Code_id.print specialised_code_id;
     let can_specialise_call =
       List.for_all2
         (fun arg specialisation ->
@@ -238,7 +266,27 @@ let specialise_function_call dacc ~unspecialised_code ~callee's_code_metadata
             match arg_is_closure dacc arg with
             | None -> false
             | Some (code_id, _func_slot') ->
-              Code_id.equal code_id required_code_id))
+              let result =
+                (* XXX XXX *)
+                (* Code_id.equal code_id required_code_id *)
+                let required_code_id_ancestor =
+                  DE.find_code_exn (DA.denv dacc) required_code_id
+                  |> Code_or_metadata.code_metadata
+                  |> Code_metadata.newer_version_of
+                  |> Option.value ~default:required_code_id
+                in
+                let code_id_ancestor =
+                  DE.find_code_exn (DA.denv dacc) code_id
+                  |> Code_or_metadata.code_metadata
+                  |> Code_metadata.newer_version_of
+                  |> Option.value ~default:required_code_id
+                in
+                Code_id.equal code_id_ancestor required_code_id_ancestor
+              in
+              Format.eprintf
+                "Comparing code IDs %a and (required) %a, result=%b\n%!"
+                Code_id.print code_id Code_id.print required_code_id result;
+              result))
         (Apply.args apply) param_specialisations
     in
     let new_apply =
@@ -289,7 +337,10 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
       Inline (dacc, inlined)
   in
   let specialised =
-    if not (Code_metadata.can_be_specialised callee's_code_metadata)
+    if (not (Code_metadata.can_be_specialised callee's_code_metadata))
+       || not
+            (Are_rebuilding_terms.are_rebuilding
+               (DE.are_rebuilding_terms (DA.denv dacc)))
     then None
     else
       let unspecialised_code_id =
@@ -421,8 +472,11 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
         apply ~apply_alloc_mode ~simplify_and_resimplify_function_body
     with
     | Rebuild_apply (dacc, apply) ->
+      Format.eprintf "*** Rebuild_apply case:@ %a\n%!" Apply.print apply;
       non_inlined_case dacc ~erase_attribute:true apply
-    | Resimplify_expr (dacc, expr) -> simplify_expr dacc expr ~down_to_up)
+    | Resimplify_expr (dacc, expr) ->
+      Format.eprintf "*** Resimplify_expr case:@ %a\n%!" Expr.print expr;
+      simplify_expr dacc expr ~down_to_up)
   | None, Inline (dacc, inlined) -> simplify_expr dacc inlined ~down_to_up
   | None, Do_not_inline { erase_attribute } ->
     non_inlined_case dacc ~erase_attribute apply

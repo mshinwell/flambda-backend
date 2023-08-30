@@ -38,7 +38,6 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
     |> DE.set_inlining_history_tracker
          (Inlining_history.Tracker.inside_function absolute_history)
   in
-  let denv = (C.get_augment_environment context) denv ~params ~my_closure in
   let denv =
     match function_slot_opt with
     | None ->
@@ -72,6 +71,7 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
     let my_depth = Bound_var.create my_depth Name_mode.normal in
     DE.add_variable denv my_depth (T.unknown K.rec_info)
   in
+  let denv = (C.get_augment_environment context) denv ~params ~my_closure in
   let denv =
     LCS.add_to_denv ~maybe_already_defined:() denv
       (DA.get_lifted_constants outer_dacc)
@@ -80,6 +80,8 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
     |> DE.set_loopify_state loopify_state
     |> DE.increment_continuation_scope
   in
+  if C.erase_specialisation_attributes context
+  then Format.eprintf "denv for specialising:\n@ %a\n%!" DE.print denv;
   let dacc = DA.with_denv dacc denv in
   let code_ids_to_remember = DA.code_ids_to_remember outer_dacc in
   let code_ids_to_never_delete = DA.code_ids_to_never_delete outer_dacc in
@@ -164,8 +166,9 @@ let simplify_function_body context ~outer_dacc function_slot_opt
       ~exn_continuation ~loopify_state (Code.code_metadata code)
   in
   let dacc = dacc_at_function_entry in
-  (* XXX if not (DA.no_lifted_constants dacc) then Misc.fatal_errorf "Did not
-     expect lifted constants in [dacc]:@ %a" DA.print dacc; *)
+  (* XXX check this, but can probably be skipped for specialisation if not
+     (DA.no_lifted_constants dacc) then Misc.fatal_errorf "Did not expect lifted
+     constants in [dacc]:@ %a" DA.print dacc; *)
   assert (not (DE.at_unit_toplevel (DA.denv dacc)));
   match
     C.simplify_function_body context dacc body ~return_continuation
@@ -361,6 +364,7 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
            ~absolute_history code_id code)
   in
   let should_resimplify = UA.resimplify uacc_after_upwards_traversal in
+  Format.eprintf "SHOULD RESIMPLIFY? %b\n%!" should_resimplify;
   let outer_dacc, lifted_consts_this_function =
     extract_accumulators_from_function outer_dacc ~dacc_after_body
       ~uacc_after_upwards_traversal
@@ -420,16 +424,27 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
       Always_loopify
     | Never_loopify -> Never_loopify
     | Already_loopified -> Already_loopified
-    | Default_loopify_and_tailrec -> Already_loopified
+    | Default_loopify_and_tailrec ->
+      if Code_metadata.can_be_specialised (Code.code_metadata code)
+         || C.erase_specialisation_attributes context
+      then (
+        Format.eprintf "ALLOWING LOOPIFY\n%!";
+        Default_loopify_and_tailrec)
+      else Already_loopified
     | Default_loopify_and_not_tailrec -> Never_loopify
+  in
+  let param_modes = Code.param_modes code in
+  let param_specialisations =
+    if C.erase_specialisation_attributes context
+    then List.map (fun _ -> Specialise_attribute.No_specialisation) param_modes
+    else Code.param_specialisations code
   in
   let code_const, new_code =
     Rebuilt_static_const.create_code
       (DA.are_rebuilding_terms dacc_after_body)
       code_id ~params_and_body ~free_names_of_params_and_body:free_names_of_code
-      ~newer_version_of ~params_arity:(Code.params_arity code)
-      ~param_modes:(Code.param_modes code)
-      ~param_specialisations:(Code.param_specialisations code)
+      ~newer_version_of ~params_arity:(Code.params_arity code) ~param_modes
+      ~param_specialisations
       ~first_complex_local_param:(Code.first_complex_local_param code)
       ~result_arity ~result_types
       ~contains_no_escaping_local_allocs:
@@ -467,8 +482,8 @@ let simplify_function context ~outer_dacc function_slot code_id
     | Code_present code when not (Code.stub code) ->
       let rec run ~outer_dacc ~code count =
         let { code_id; code = new_code; outer_dacc; should_resimplify } =
-          simplify_function0 context ~outer_dacc (Some function_slot) code_id
-            code ~closure_bound_names_inside_function
+          simplify_function0 context ~outer_dacc function_slot code_id code
+            ~closure_bound_names_inside_function
         in
         match new_code with
         | None -> code_id, outer_dacc
@@ -527,7 +542,7 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
       (fun (result_code_ids_to_never_delete_this_set, fun_types, outer_dacc)
            function_slot old_code_id ->
         let code_id, outer_dacc, code_ids_to_never_delete_this_set =
-          simplify_function context ~outer_dacc function_slot old_code_id
+          simplify_function context ~outer_dacc (Some function_slot) old_code_id
             ~closure_bound_names_inside_function:closure_bound_names_inside
         in
         let function_type =
@@ -986,7 +1001,7 @@ let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
             Format.fprintf ppf "@[(%a %a)@]" Code_id.print code_id
               Function_slot.print function_slot)))
     param_specialisations;
-  let context =
+  let context, intermediate_code_id =
     C.create_for_specialised_function dacc ~unspecialised_callee
       ~unspecialised_code_id:(Code.code_id unspecialised_code)
       ~specialised_code_id ~param_specialisations
@@ -994,21 +1009,24 @@ let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
       ~simplify_function_body:simplify_and_resimplify_function_body
   in
   let closure_bound_names_inside_function = Function_slot.Map.empty (* XXX *) in
-  let { code_id = _; code; outer_dacc; should_resimplify = _ } =
-    simplify_function0 context ~outer_dacc:dacc None
-      (Code.code_id unspecialised_code)
-      unspecialised_code ~closure_bound_names_inside_function
+  let unspecialised_code_id = Code.code_id unspecialised_code in
+  let code_id, dacc, _ =
+    simplify_function context ~outer_dacc:dacc None unspecialised_code_id
+      ~closure_bound_names_inside_function
   in
+  if not (Code_id.equal code_id specialised_code_id)
+  then
+    Misc.fatal_errorf
+      "Expected specialised code to have ID %a (unspecialised code ID %a, \
+       intermediate code ID %a)"
+      Code_id.print specialised_code_id Code_id.print unspecialised_code_id
+      Code_id.print intermediate_code_id;
+  let new_code = DE.find_code_exn (DA.denv dacc) specialised_code_id in
+  if not (Code_or_metadata.code_present new_code)
+  then
+    Misc.fatal_errorf "No [Code.t] present for specialised code %a"
+      Code_id.print specialised_code_id;
   let new_code_const =
-    match code with
-    | None ->
-      Misc.fatal_errorf
-        "No code received from simplification of unspecialised function %a"
-        Code_id.print
-        (Code.code_id unspecialised_code)
-    | Some (_, code_constant) -> code_constant
+    Rebuilt_static_const.create_code' (Code_or_metadata.get_code new_code)
   in
-  let outer_dacc =
-    introduce_code outer_dacc specialised_code_id new_code_const
-  in
-  outer_dacc
+  new_code_const, dacc

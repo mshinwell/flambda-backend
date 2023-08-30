@@ -1,4 +1,3 @@
-# 1 "seq.ml"
 (**************************************************************************)
 (*                                                                        *)
 (*                                 OCaml                                  *)
@@ -79,6 +78,11 @@ let rec ints n =
   let ints2 () = Cons (n, (ints [@unrolled 1]) (n + 1)) in
   ();
   ints2
+
+  (*
+let rec ints n () =
+  Cons (n, (ints [@unrolled 1]) (n + 1))
+  *)
 
 let seq = (ints [@unrolled 1]) 0
 

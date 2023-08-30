@@ -478,6 +478,12 @@ val exactly_this_closure :
   Alloc_mode.For_types.t ->
   flambda_type
 
+val closure_with_exactly_these_function_slots :
+  function_types:Function_type.t Or_unknown_or_bottom.t Function_slot.Map.t ->
+  this_function_slot:Function_slot.t ->
+  Simple.t Function_slot.Map.t ->
+  flambda_type
+
 val closure_with_at_least_these_function_slots :
   this_function_slot:Function_slot.t ->
   Simple.t Function_slot.Map.t ->

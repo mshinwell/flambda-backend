@@ -25,7 +25,8 @@ type t =
     old_to_new_code_ids_all_sets : Code_id.t Code_id.Map.t;
     previously_free_depth_variables : Variable.Set.t;
     augment_environment :
-      DE.t -> params:Bound_parameters.t -> my_closure:Variable.t -> DE.t
+      DE.t -> params:Bound_parameters.t -> my_closure:Variable.t -> DE.t;
+    erase_specialisation_attributes : bool
   }
 
 let function_decl_type ?new_code_id ~rec_info old_code_id =
@@ -51,7 +52,8 @@ let create_for_stub dacc ~all_code ~simplify_function_body =
     closure_bound_names_inside_functions_all_sets = [];
     old_to_new_code_ids_all_sets = Code_id.Map.empty;
     previously_free_depth_variables = Variable.Set.empty;
-    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv)
+    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv);
+    erase_specialisation_attributes = false
   }
 
 let create_for_specialised_function dacc ~unspecialised_callee
@@ -66,6 +68,8 @@ let create_for_specialised_function dacc ~unspecialised_callee
       all_code denv
   in
   let augment_environment denv ~params ~my_closure =
+    Format.eprintf "augment_environment for unspecialised code ID %a\n%!"
+      Code_id.print unspecialised_code_id;
     let denv =
       DE.with_are_specialising denv ~unspecialised_code_id ~specialised_code_id
         ~param_specialisations
@@ -78,12 +82,18 @@ let create_for_specialised_function dacc ~unspecialised_callee
       (fun denv param spec_opt ->
         match spec_opt with
         | None -> denv
-        | Some (_code_id, func_slot) ->
+        | Some (code_id, func_slot) ->
           let all_function_slots =
-            Function_slot.Map.singleton func_slot unspecialised_callee
+            Function_slot.Map.singleton func_slot (Simple.var param)
+          in
+          let function_types =
+            Function_slot.Map.singleton func_slot
+              (Or_unknown_or_bottom.Ok
+                 (T.Function_type.create code_id
+                    ~rec_info:(T.this_rec_info Rec_info_expr.initial)))
           in
           let closure_ty =
-            T.closure_with_at_least_these_function_slots
+            T.closure_with_exactly_these_function_slots ~function_types
               ~this_function_slot:func_slot all_function_slots
           in
           DE.add_equation_on_variable denv param closure_ty)
@@ -91,17 +101,24 @@ let create_for_specialised_function dacc ~unspecialised_callee
       (Bound_parameters.vars params)
       param_specialisations
   in
+  let intermediate_code_id = Code_id.rename unspecialised_code_id in
   let old_to_new_code_ids_all_sets =
-    Code_id.Map.singleton unspecialised_code_id specialised_code_id
+    Code_id.Map.of_list
+      [ unspecialised_code_id, intermediate_code_id;
+        intermediate_code_id, specialised_code_id ]
   in
-  { dacc_prior_to_sets = dacc;
-    simplify_function_body;
-    dacc_inside_functions = DA.with_denv dacc denv_inside_functions;
-    closure_bound_names_inside_functions_all_sets;
-    old_to_new_code_ids_all_sets;
-    previously_free_depth_variables = Variable.Set.empty;
-    augment_environment
-  }
+  let t =
+    { dacc_prior_to_sets = dacc;
+      simplify_function_body;
+      dacc_inside_functions = DA.with_denv dacc denv_inside_functions;
+      closure_bound_names_inside_functions_all_sets;
+      old_to_new_code_ids_all_sets;
+      previously_free_depth_variables = Variable.Set.empty;
+      augment_environment;
+      erase_specialisation_attributes = true
+    }
+  in
+  t, intermediate_code_id
 
 let simplify_function_body t = t.simplify_function_body
 
@@ -393,7 +410,10 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
     old_to_new_code_ids_all_sets;
     simplify_function_body;
     previously_free_depth_variables = free_depth_variables;
-    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv)
+    augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv);
+    erase_specialisation_attributes = false
   }
 
 let get_augment_environment t = t.augment_environment
+
+let erase_specialisation_attributes t = t.erase_specialisation_attributes

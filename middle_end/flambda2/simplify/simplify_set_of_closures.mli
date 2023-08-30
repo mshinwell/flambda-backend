@@ -58,4 +58,4 @@ val simplify_specialised_function :
   specialised_code_id:Code_id.t ->
   param_specialisations:(Code_id.t * Function_slot.t) option list ->
   simplify_and_resimplify_function_body:Simplify_common.simplify_function_body ->
-  Downwards_acc.t
+  Rebuilt_static_const.t * Downwards_acc.t
