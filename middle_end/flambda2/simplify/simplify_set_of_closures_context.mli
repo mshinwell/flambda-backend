@@ -46,7 +46,7 @@ val create_for_specialised_function :
   closure_bound_names_inside_functions_all_sets:
     Bound_name.t Function_slot.Map.t list ->
   simplify_function_body:Simplify_common.simplify_function_body ->
-  t * Code_id.t
+  t
 
 val dacc_inside_functions : t -> DA.t
 
@@ -76,3 +76,5 @@ val get_augment_environment :
   t -> DE.t -> params:Bound_parameters.t -> my_closure:Variable.t -> DE.t
 
 val erase_specialisation_attributes : t -> bool
+
+val clear_augment_environment : t -> t

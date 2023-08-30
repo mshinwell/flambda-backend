@@ -58,7 +58,11 @@ let loopify_decision_for_call dacc apply =
     let[@inline always] canon simple =
       Simple.without_coercion (TE.get_canonical_simple_exn tenv simple)
     in
-    if Simple.equal (canon (Simple.var my_closure)) (canon (Apply.callee apply))
+    let my_closure_canonical = canon (Simple.var my_closure) in
+    let callee_canonical = canon (Apply.callee apply) in
+    Format.eprintf "LOOPIFY: my_closure %a =? callee_canonical %a\n%!"
+      Simple.print my_closure_canonical Simple.print callee_canonical;
+    if Simple.equal my_closure_canonical callee_canonical
        && (match Apply.continuation apply with
           | Never_returns ->
             (* If we never return, then this call is a tail-call *)
@@ -69,7 +73,10 @@ let loopify_decision_for_call dacc apply =
             (Apply.exn_continuation apply)
             (Exn_continuation.create ~exn_handler:exn_continuation
                ~extra_args:[])
-    then DE.loopify_state denv
+    then (
+      Format.eprintf "LOOPIFY: condition passed, loopify state %a\n%!"
+        Loopify_state.print (DE.loopify_state denv);
+      DE.loopify_state denv)
     else Loopify_state.do_not_loopify
 
 let simplify_self_tail_call dacc apply self_cont ~down_to_up =
@@ -857,19 +864,22 @@ let simplify_direct_function_call ~simplify_expr dacc apply
       Apply.print apply);
   let coming_from_indirect = Option.is_none callee's_code_id_from_call_kind in
   let callee's_code_id : _ Or_bottom.t =
-    match callee's_code_id_from_call_kind with
-    | None -> Ok callee's_code_id_from_type
-    | Some callee's_code_id_from_call_kind ->
-      let typing_env = DA.typing_env dacc in
-      Code_age_relation.meet
-        (TE.code_age_relation typing_env)
-        ~resolver:(TE.code_age_relation_resolver typing_env)
-        callee's_code_id_from_call_kind callee's_code_id_from_type
+    Ok callee's_code_id_from_type
+    (* match callee's_code_id_from_call_kind with | None -> Ok
+       callee's_code_id_from_type | Some callee's_code_id_from_call_kind -> Ok
+       callee's_code_id_from_call_kind *)
+    (* XXX match callee's_code_id_from_call_kind with | None -> Ok
+       callee's_code_id_from_type | Some callee's_code_id_from_call_kind -> let
+       typing_env = DA.typing_env dacc in Code_age_relation.meet
+       (TE.code_age_relation typing_env)
+       ~resolver:(TE.code_age_relation_resolver typing_env)
+       callee's_code_id_from_call_kind callee's_code_id_from_type *)
   in
   match callee's_code_id with
   | Bottom ->
     down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
         let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in
+        Format.eprintf "DENV FOR INVALID APPLY:\n%a%!" DE.print (DA.denv dacc);
         EB.rebuild_invalid uacc (Closure_type_was_invalid apply) ~after_rebuild)
   | Ok callee's_code_id ->
     let call_kind =

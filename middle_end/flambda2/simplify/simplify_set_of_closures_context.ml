@@ -101,11 +101,8 @@ let create_for_specialised_function dacc ~unspecialised_callee
       (Bound_parameters.vars params)
       param_specialisations
   in
-  let intermediate_code_id = Code_id.rename unspecialised_code_id in
   let old_to_new_code_ids_all_sets =
-    Code_id.Map.of_list
-      [ unspecialised_code_id, intermediate_code_id;
-        intermediate_code_id, specialised_code_id ]
+    Code_id.Map.of_list [unspecialised_code_id, specialised_code_id]
   in
   let t =
     { dacc_prior_to_sets = dacc;
@@ -118,7 +115,7 @@ let create_for_specialised_function dacc ~unspecialised_callee
       erase_specialisation_attributes = true
     }
   in
-  t, intermediate_code_id
+  t
 
 let simplify_function_body t = t.simplify_function_body
 
@@ -417,3 +414,6 @@ let create ~dacc_prior_to_sets ~simplify_function_body ~all_sets_of_closures
 let get_augment_environment t = t.augment_environment
 
 let erase_specialisation_attributes t = t.erase_specialisation_attributes
+
+let clear_augment_environment t =
+  { t with augment_environment = (fun denv ~params:_ ~my_closure:_ -> denv) }

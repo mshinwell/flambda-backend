@@ -152,6 +152,8 @@ let simplify_function_body context ~outer_dacc function_slot_opt
   let may_specialise =
     Code_metadata.can_be_specialised (Code.code_metadata code)
   in
+  Format.eprintf "code ID %a may_specialise %b\n%!" Code_id.print code_id
+    may_specialise;
   let loopify_state =
     if may_specialise
     then Loopify_state.do_not_loopify
@@ -364,7 +366,6 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
            ~absolute_history code_id code)
   in
   let should_resimplify = UA.resimplify uacc_after_upwards_traversal in
-  Format.eprintf "SHOULD RESIMPLIFY? %b\n%!" should_resimplify;
   let outer_dacc, lifted_consts_this_function =
     extract_accumulators_from_function outer_dacc ~dacc_after_body
       ~uacc_after_upwards_traversal
@@ -378,6 +379,8 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
     | new_code_id -> new_code_id, Some old_code_id
     | exception Not_found -> old_code_id, None
   in
+  Format.eprintf "SHOULD RESIMPLIFY? %b (old %a, new %a)\n%!" should_resimplify
+    Code_id.print old_code_id Code_id.print code_id;
   let inlining_decision =
     let decision =
       Function_decl_inlining_decision.make_decision ~inlining_arguments
@@ -480,7 +483,7 @@ let simplify_function context ~outer_dacc function_slot code_id
   let code_id, outer_dacc =
     match Code_or_metadata.view code_or_metadata with
     | Code_present code when not (Code.stub code) ->
-      let rec run ~outer_dacc ~code count =
+      let rec run context ~outer_dacc ~code count =
         let { code_id; code = new_code; outer_dacc; should_resimplify } =
           simplify_function0 context ~outer_dacc function_slot code_id code
             ~closure_bound_names_inside_function
@@ -492,16 +495,23 @@ let simplify_function context ~outer_dacc function_slot code_id
           let outer_dacc = introduce_code outer_dacc code_id new_code_const in
           code_id, outer_dacc
         | Some (Rebuilding new_code, new_code_const) ->
-          let max_function_simplify_run =
+          let _max_function_simplify_run =
             Flambda_features.Expert.max_function_simplify_run ()
           in
-          if should_resimplify && count < max_function_simplify_run
-          then run ~outer_dacc ~code:new_code (count + 1)
+          if should_resimplify && count < 1 (* XXX max_function_simplify_run *)
+          then (
+            Format.eprintf "******* STARTING RESIMPLIFY %a ********\n%!"
+              Code_id.print code_id;
+            Format.eprintf "%a\n%!" Code.print new_code;
+            let context = C.clear_augment_environment context in
+            (* XXX *)
+            let outer_dacc = introduce_code outer_dacc code_id new_code_const in
+            run context ~outer_dacc ~code:new_code (count + 1))
           else
             let outer_dacc = introduce_code outer_dacc code_id new_code_const in
             code_id, outer_dacc
       in
-      run ~outer_dacc ~code 0
+      run context ~outer_dacc ~code 0
     | Code_present _ | Metadata_only _ ->
       (* No new code ID is created in this case: there is no function body to be
          simplified and all other code metadata will remain the same. *)
@@ -1001,7 +1011,7 @@ let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
             Format.fprintf ppf "@[(%a %a)@]" Code_id.print code_id
               Function_slot.print function_slot)))
     param_specialisations;
-  let context, intermediate_code_id =
+  let context =
     C.create_for_specialised_function dacc ~unspecialised_callee
       ~unspecialised_code_id:(Code.code_id unspecialised_code)
       ~specialised_code_id ~param_specialisations
@@ -1017,10 +1027,10 @@ let simplify_specialised_function dacc ~unspecialised_code ~unspecialised_callee
   if not (Code_id.equal code_id specialised_code_id)
   then
     Misc.fatal_errorf
-      "Expected specialised code to have ID %a (unspecialised code ID %a, \
-       intermediate code ID %a)"
-      Code_id.print specialised_code_id Code_id.print unspecialised_code_id
-      Code_id.print intermediate_code_id;
+      "Expected specialised code to have ID %a instead of %a (unspecialised \
+       code ID %a)"
+      Code_id.print specialised_code_id Code_id.print code_id Code_id.print
+      unspecialised_code_id;
   let new_code = DE.find_code_exn (DA.denv dacc) specialised_code_id in
   if not (Code_or_metadata.code_present new_code)
   then
