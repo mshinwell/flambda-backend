@@ -82,6 +82,7 @@ class virtual selector_generic : object
   method effects_of : Cmm.expression -> Effect_and_coeffect.t
     (* Can be overridden to reflect special extcalls known to be pure *)
   method select_operation :
+    environment ->
     Cmm.operation ->
     Cmm.expression list ->
     Debuginfo.t ->

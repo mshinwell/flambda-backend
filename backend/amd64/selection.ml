@@ -273,13 +273,13 @@ method! select_store is_assign addr exp =
     ->
       super#select_store is_assign addr exp
 
-method! select_operation op args dbg =
+method! select_operation env op args dbg =
   match op with
   (* Recognize the LEA instruction *)
     Caddi | Caddv | Cadda | Csubi ->
       begin match self#select_addressing Word_int (Cop(op, args, dbg)) with
         (Iindexed _, _)
-      | (Iindexed2 0, _) -> super#select_operation op args dbg
+      | (Iindexed2 0, _) -> super#select_operation env op args dbg
       | ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr,
          arg) -> (Ispecific(Ilea addr), [arg])
       end
@@ -350,7 +350,7 @@ method! select_operation op args dbg =
       | "caml_memory_fence", ([|Val|] | [| |]) ->
          Ispecific Imfence, args
       | _ ->
-        super#select_operation op args dbg
+        super#select_operation env op args dbg
       end
   (* Recognize store instructions *)
   | Cstore ((Word_int|Word_val as chunk), _init) ->
@@ -360,7 +360,7 @@ method! select_operation op args dbg =
           let (addr, arg) = self#select_addressing chunk loc in
           (Ispecific(Ioffset_loc(n, addr)), [arg])
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   | Cbswap { bitwidth } ->
     let bitwidth = select_bitwidth bitwidth in
@@ -370,7 +370,7 @@ method! select_operation op args dbg =
       begin match args with
         [Cop(Clsl, [k; Cconst_int (32, _)], _); Cconst_int (32, _)] ->
           (Ispecific Isextend32, [k])
-        | _ -> super#select_operation op args dbg
+        | _ -> super#select_operation env op args dbg
       end
   (* Recognize zero extension *)
   | Cand ->
@@ -380,7 +380,7 @@ method! select_operation op args dbg =
     | [Cconst_int (0xffff_ffff, _); arg]
     | [Cconst_natint (0xffff_ffffn, _); arg] ->
       Ispecific Izextend32, [arg]
-    | _ -> super#select_operation op args dbg
+    | _ -> super#select_operation env op args dbg
     end
   | Cprefetch { is_write; locality; } ->
       (* Emit prefetch for read hint when prefetchw is not supported.
@@ -399,7 +399,7 @@ method! select_operation op args dbg =
         self#select_addressing Word_int (one_arg "prefetch" args)
       in
       Ispecific (Iprefetch { is_write; addr; locality; }), [eloc]
-  | _ -> super#select_operation op args dbg
+  | _ -> super#select_operation env op args dbg
 
 (* Recognize float arithmetic with mem *)
 

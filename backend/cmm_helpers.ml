@@ -1195,13 +1195,51 @@ let call_cached_method obj tag cache pos args args_type result (apos, mode) dbg
 let make_alloc_generic ~mode set_fn dbg tag wordsize args =
   (* allocs of size 0 must be statically allocated else the Gc will bug *)
   assert (List.compare_length_with args 0 > 0);
-  if Lambda.is_local_mode mode || wordsize <= Config.max_young_wosize
+  if Lambda.is_local_mode mode
   then
-    let hdr =
-      match mode with
-      | Lambda.Alloc_local -> local_block_header tag wordsize
-      | Lambda.Alloc_heap -> block_header tag wordsize
+    let hdr = local_block_header tag wordsize in
+    Cop (Calloc mode, Cconst_natint (hdr, dbg) :: args, dbg)
+  else if wordsize >= 5 && wordsize <= Config.max_young_wosize
+  then
+    let id = V.create_local "*alloc*" in
+    let rec fill_fields idx = function
+      | [] -> Cvar id
+      | e1 :: el ->
+        Csequence
+          ( Cop
+              ( Cstore (Word_int, Initialization),
+                [ Cop
+                    ( Caddi,
+                      [Cvar id; Cconst_int (idx * Arch.size_addr, dbg)],
+                      dbg );
+                  e1 ],
+                dbg ),
+            fill_fields (idx + 2) el )
     in
+    let hdr = Cconst_natint (block_header tag wordsize, dbg) in
+    Clet
+      ( VP.create id,
+        Cop (Calloc_heap_uninit { words = wordsize }, [hdr], dbg),
+        Csequence
+          ( Cop
+              ( Cextcall
+                  { func = "memset";
+                    ty = typ_int;
+                    alloc = false;
+                    builtin = false;
+                    returns = true;
+                    effects = Arbitrary_effects;
+                    coeffects = No_coeffects;
+                    ty_args = []
+                  },
+                [ Cop (Caddi, [Cvar id; Cconst_int (Arch.size_addr, dbg)], dbg);
+                  Cconst_int (0xff, dbg);
+                  Cconst_int (wordsize * Arch.size_addr, dbg) ],
+                dbg ),
+            fill_fields 1 args ) )
+  else if wordsize <= Config.max_young_wosize
+  then
+    let hdr = block_header tag wordsize in
     Cop (Calloc mode, Cconst_natint (hdr, dbg) :: args, dbg)
   else
     let id = V.create_local "*alloc*" in

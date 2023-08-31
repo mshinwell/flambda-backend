@@ -111,7 +111,7 @@ method select_addressing chunk = function
   | arg ->
       (Iindexed 0, arg)
 
-method! select_operation op args dbg =
+method! select_operation env op args dbg =
   match op with
   (* Integer addition *)
   | Caddi | Caddv | Cadda ->
@@ -133,10 +133,10 @@ method! select_operation op args dbg =
           | (Iintop Imul, [arg3; arg4]) ->
               (Ispecific Imuladd, [arg3; arg4; arg1])
           | _ ->
-              super#select_operation op args dbg
+              super#select_operation env op args dbg
           end
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   (* Integer subtraction *)
   | Csubi ->
@@ -154,10 +154,10 @@ method! select_operation op args dbg =
           | (Iintop Imul, [arg3; arg4]) ->
               (Ispecific Imulsub, [arg3; arg4; arg1])
           | _ ->
-              super#select_operation op args dbg
+              super#select_operation env op args dbg
           end
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   (* Checkbounds *)
   | Ccheckbound ->
@@ -166,7 +166,7 @@ method! select_operation op args dbg =
           (Ispecific(Ishiftcheckbound { shift = n; }),
             [arg1; arg2])
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   (* Recognize sign extension *)
   | Casr ->
@@ -174,13 +174,13 @@ method! select_operation op args dbg =
         [Cop(Clsl, [k; Cconst_int (n, _)], _); Cconst_int (n', _)]
         when n' = n && 0 < n && n < 64 ->
           (Ispecific (Isignext (64 - n)), [k])
-        | _ -> super#select_operation op args dbg
+        | _ -> super#select_operation env op args dbg
       end
   (* Recognize floating-point negate and multiply *)
   | Cnegf ->
       begin match args with
       | [Cop(Cmulf, args, _)] -> (Ispecific Inegmulf, args)
-      | _ -> super#select_operation op args dbg
+      | _ -> super#select_operation env op args dbg
       end
   (* Recognize floating-point multiply and add/sub *)
   | Caddf ->
@@ -188,7 +188,7 @@ method! select_operation op args dbg =
       | [arg; Cop(Cmulf, args, _)] | [Cop(Cmulf, args, _); arg] ->
           (Ispecific Imuladdf, arg :: args)
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   | Csubf ->
       begin match args with
@@ -197,7 +197,7 @@ method! select_operation op args dbg =
       | [Cop(Cmulf, args, _); arg] ->
           (Ispecific Inegmulsubf, arg :: args)
       | _ ->
-          super#select_operation op args dbg
+          super#select_operation env op args dbg
       end
   (* Recognize floating-point square root *)
   | Cextcall { func = "sqrt" } ->
@@ -208,7 +208,7 @@ method! select_operation op args dbg =
       (Ispecific(Ibswap { bitwidth }), args)
   (* Other operations are regular *)
   | _ ->
-      super#select_operation op args dbg
+      super#select_operation env op args dbg
 
 method! insert_move_extcall_arg env ty_arg src dst =
   if macosx && ty_arg = XInt32 && is_stack_slot dst

@@ -205,7 +205,7 @@ let oper_result_type = function
       | Onetwentyeight -> typ_vec128
       | _ -> typ_int
       end
-  | Calloc _ -> typ_val
+  | Calloc _ | Calloc_heap_uninit _ -> typ_val
   | Cstore (_c, _) -> typ_void
   | Cprefetch _ -> typ_void
   | Catomic _ -> typ_int
@@ -520,7 +520,7 @@ method is_simple_expr = function
       | Cextcall { effects = No_effects; coeffects = No_coeffects; } ->
         List.for_all self#is_simple_expr args
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc _ | Cstore _
+      | Capply _ | Cextcall _ | Calloc _ | Calloc_heap_uninit _ | Cstore _
       | Craise _ | Ccheckbound | Catomic _
       | Cprobe _ | Cprobe_is_enabled _ | Copaque -> false
       | Cprefetch _ | Cbeginregion | Cendregion -> false (* avoid reordering *)
@@ -569,7 +569,7 @@ method effects_of exp =
       | Cextcall { effects = e; coeffects = ce; } ->
         EC.create (select_effects e) (select_coeffects ce)
       | Capply _ | Cprobe _ | Copaque -> EC.arbitrary
-      | Calloc Alloc_heap -> EC.none
+      | Calloc Alloc_heap | Calloc_heap_uninit _ -> EC.none
       | Calloc Alloc_local -> EC.coeffect_only Coeffect.Arbitrary
       | Cstore _ -> EC.effect_only Effect.Arbitrary
       | Cbeginregion | Cendregion -> EC.arbitrary
@@ -651,7 +651,7 @@ method mark_instr = function
 
 (* Default instruction selection for operators *)
 
-method select_operation op args _dbg =
+method select_operation env op args _dbg =
   match (op, args) with
   | (Capply _, Cconst_symbol (func, _dbg) :: rem) ->
     (Icall_imm { func; }, rem)
@@ -679,7 +679,15 @@ method select_operation op args _dbg =
         (Istore(chunk, addr, is_assign), [arg2; eloc])
         (* Inversion addr/datum in Istore *)
       end
-  | (Calloc mode, _) -> (Ialloc {bytes = 0; dbginfo = []; mode}), args
+  | (Calloc mode, _) ->
+      let bytes = size_expr env (Ctuple args) in
+      assert (bytes mod Arch.size_addr = 0);
+      (Ialloc {bytes; dbginfo = []; mode}),
+      args
+  | (Calloc_heap_uninit { words }, _) ->
+      (Ialloc {bytes = words * Arch.size_addr; dbginfo = [];
+        mode = Lambda.alloc_heap}),
+      []
   | (Caddi, _) -> self#select_arith_comm Iadd args
   | (Csubi, _) -> self#select_arith Isub args
   | (Cmuli, _) -> self#select_arith_comm Imul args
@@ -1000,7 +1008,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
             | Capply (_, Rc_close_at_apply) -> List.tl env.regions
             | _ -> env.regions
           in
-          let (new_op, new_args) = self#select_operation op simple_args dbg in
+          let (new_op, new_args) = self#select_operation env op simple_args dbg in
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in
@@ -1046,10 +1054,8 @@ method emit_expr_aux (env:environment) exp ~bound_name :
               set_traps_for_raise env;
               assert (Region_stack.equal unclosed_regions env.regions);
               if returns then ret rd else None
-          | Ialloc { bytes = _; mode } ->
+          | Ialloc { bytes; mode } ->
               let rd = self#regs_for typ_val in
-              let bytes = size_expr env (Ctuple new_args) in
-              assert (bytes mod Arch.size_addr = 0);
               let alloc_words = bytes / Arch.size_addr in
               let op =
                 Ialloc { bytes;
@@ -1591,7 +1597,7 @@ method emit_tail (env:environment) exp =
       begin match self#emit_parts_list env args with
         None -> ()
       | Some(simple_args, env) ->
-          let (new_op, new_args) = self#select_operation op simple_args dbg in
+          let (new_op, new_args) = self#select_operation env op simple_args dbg in
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in
