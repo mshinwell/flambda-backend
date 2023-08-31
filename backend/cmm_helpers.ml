@@ -1214,29 +1214,32 @@ let make_alloc_generic ~mode set_fn dbg tag wordsize args =
                       dbg );
                   e1 ],
                 dbg ),
-            fill_fields (idx + 2) el )
+            fill_fields (idx + 1) el )
     in
     let hdr = Cconst_natint (block_header tag wordsize, dbg) in
+    let memset =
+      Cop
+        ( Cextcall
+            { func = "memset";
+              ty = typ_int;
+              alloc = false;
+              builtin = false;
+              returns = true;
+              effects = Arbitrary_effects;
+              coeffects = No_coeffects;
+              ty_args = []
+            },
+          [ Cop (Caddi, [Cvar id; Cconst_int (Arch.size_addr, dbg)], dbg);
+            Cconst_int (0xff, dbg);
+            Cconst_int (wordsize * Arch.size_addr, dbg) ],
+          dbg )
+    in
     Clet
       ( VP.create id,
         Cop (Calloc_heap_uninit { words = wordsize }, [hdr], dbg),
-        Csequence
-          ( Cop
-              ( Cextcall
-                  { func = "memset";
-                    ty = typ_int;
-                    alloc = false;
-                    builtin = false;
-                    returns = true;
-                    effects = Arbitrary_effects;
-                    coeffects = No_coeffects;
-                    ty_args = []
-                  },
-                [ Cop (Caddi, [Cvar id; Cconst_int (Arch.size_addr, dbg)], dbg);
-                  Cconst_int (0xff, dbg);
-                  Cconst_int (wordsize * Arch.size_addr, dbg) ],
-                dbg ),
-            fill_fields 1 args ) )
+        if tag >= Obj.no_scan_tag
+        then fill_fields 1 args
+        else Csequence (memset, fill_fields 1 args) )
   else if wordsize <= Config.max_young_wosize
   then
     let hdr = block_header tag wordsize in

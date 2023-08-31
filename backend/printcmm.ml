@@ -187,7 +187,7 @@ let operation d = function
   | Calloc Alloc_heap -> "alloc" ^ location d
   | Calloc Alloc_local -> "alloc_local" ^ location d
   | Calloc_heap_uninit { words } ->
-    Printf.sprintf "alloc_heap_uninit %d" words
+    Printf.sprintf "(alloc_heap_uninit %d)" words
   | Cstore (c, init) ->
     let init =
       match init with
