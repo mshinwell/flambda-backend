@@ -736,7 +736,10 @@ let consider_inlining_effectful_expressions p =
      that the Cmm translation for such primitive both respects right-to-left
      evaluation order and does not duplicate any arguments. *)
   match[@ocaml.warning "-4"] (p : P.t) with
-  | Variadic ((Make_block _ | Make_array _), _) -> Some true
+  | Variadic ((Make_block _ | Make_array _), _) ->
+    (* XXX: this seems wrong unless the block is on the major heap or we are
+       using the new initialisation method scheme *)
+    Some true
   | Nullary _ | Unary _ | Binary _ | Ternary _ -> None
 
 let prim_simple env res dbg p =
