@@ -276,16 +276,18 @@ method! select_store is_assign addr exp =
 method! select_operation op args dbg =
   match op with
   (* Recognize the LEA instruction *)
+  (* XXX
     Caddi | Caddv | Cadda | Csubi ->
       begin match
         self#select_addressing Word_int
-          (Cop(op, args, Op_debuginfo.create dbg))
+          (Cop(op, args, dbg))
       with
         (Iindexed _, _)
       | (Iindexed2 0, _) -> super#select_operation op args dbg
       | ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr,
          arg) -> (Ispecific(Ilea addr), [arg])
       end
+      *)
   (* Recognize float arithmetic with memory. *)
   | Caddf ->
       self#select_floatarith true Iaddf Ifloatadd args

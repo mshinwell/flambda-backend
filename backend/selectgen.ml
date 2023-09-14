@@ -974,6 +974,39 @@ method emit_expr_aux (env:environment) exp ~bound_name :
          ret (self#insert_op_debug env Iopaque dbg rs rs)
       end
   | Cop(op, args, dbg) ->
+      let phantom_args = Op_debuginfo.phantom_args dbg in
+      let[@inline] name_phantom_args regs =
+        (* CR mshinwell: this doesn't work for args split across regs, we
+           might need to adjust [regs_for] or something instead *)
+        Format.eprintf "name_phantom_args %d/%d, op: %s\n%!"
+          (List.length phantom_args) (Array.length regs)
+          (Printcmm.operation Debuginfo.none op);
+        if List.length phantom_args = Array.length regs then (
+          let regs = Array.to_list regs in
+          List.iter2 (fun phantom_arg reg ->
+              match phantom_arg with
+              | None -> ()
+              | Some (phantom_arg : VP.t) ->
+                  Format.eprintf "considering phantom for %a\n%!" VP.print phantom_arg;
+                  let provenance = VP.provenance phantom_arg in
+                  if Option.is_some provenance then (
+                    let naming_op =
+                      Iname_for_debugger {
+                        ident = VP.var phantom_arg;
+                        provenance;
+                        which_parameter = None;
+                        is_assignment = false;
+                        regs = [| reg |]
+                      }
+                    in
+                    Format.eprintf "inserting phantom for %a\n%!" VP.print phantom_arg;
+                    self#insert_debug env (Iop naming_op) Debuginfo.none
+                      [| |] [| |]
+                  ))
+            phantom_args regs
+        )
+      in
+      let dbg' = dbg in
       let dbg = Op_debuginfo.dbg dbg in
       begin match self#emit_parts_list env args with
         None -> None
@@ -1003,10 +1036,11 @@ method emit_expr_aux (env:environment) exp ~bound_name :
             | Capply (_, Rc_close_at_apply) -> List.tl env.regions
             | _ -> env.regions
           in
-          let (new_op, new_args) = self#select_operation op simple_args dbg in
+          let (new_op, new_args) = self#select_operation op simple_args dbg' in
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in
+              name_phantom_args r1;
               let rarg = Array.sub r1 1 (Array.length r1 - 1) in
               let rd = self#regs_for ty in
               self#insert_endregions_until env ~suffix:unclosed_regions env.regions;
@@ -1026,6 +1060,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
               Some (rd, unclosed_regions)
           | Icall_imm _ ->
               let r1 = self#emit_tuple env new_args in
+              name_phantom_args r1;
               let rd = self#regs_for ty in
               self#insert_endregions_until env ~suffix:unclosed_regions env.regions;
               let (loc_arg, stack_ofs_args) = Proc.loc_arguments (Reg.typv r1) in
@@ -1040,6 +1075,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           | Iextcall { ty_args; returns; _} ->
               let (loc_arg, stack_ofs) =
                 self#emit_extcall_args env ty_args new_args in
+              name_phantom_args loc_arg;
               let rd = self#regs_for ty in
               let loc_res =
                 self#insert_op_debug env new_op dbg
@@ -1067,6 +1103,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
               ret rd
           | Iprobe _ ->
               let r1 = self#emit_tuple env new_args in
+              name_phantom_args r1;
               let rd = self#regs_for ty in
               let rd = self#insert_op_debug env new_op dbg r1 rd in
               set_traps_for_raise env;
@@ -1075,6 +1112,18 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           | op ->
               let r1 = self#emit_tuple env new_args in
               let rd = self#regs_for ty in
+              (*
+              (* XXX need proper return from [select_operation] saying
+                 what to do here *)
+              let rs =
+                match op with
+                | Ispecific _ ->
+                  Format.eprintf "hit Ispecific\n%!";
+                  Array.concat [r1; rd]
+                | _ -> r1
+              in
+              *)
+              name_phantom_args r1;
               assert (Region_stack.equal unclosed_regions env.regions);
               add_naming_op_for_bound_name rd;
               ret (self#insert_op_debug env op dbg r1 rd)
@@ -1589,13 +1638,13 @@ method emit_tail (env:environment) exp =
   | Cphantom_let (_var, _defining_expr, body) ->
       self#emit_tail env body
   | Cop((Capply(ty, ((Rc_close_at_apply | Rc_normal) as pos))) as op,
-        args, dbg)
+        args, dbg')
        when self#tail_call_possible env pos ->
-      let dbg = Op_debuginfo.dbg dbg in
+      let dbg = Op_debuginfo.dbg dbg' in
       begin match self#emit_parts_list env args with
         None -> ()
       | Some(simple_args, env) ->
-          let (new_op, new_args) = self#select_operation op simple_args dbg in
+          let (new_op, new_args) = self#select_operation op simple_args dbg' in
           match new_op with
             Icall_ind ->
               let r1 = self#emit_tuple env new_args in

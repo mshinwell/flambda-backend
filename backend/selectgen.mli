@@ -84,7 +84,7 @@ class virtual selector_generic : object
   method select_operation :
     Cmm.operation ->
     Cmm.expression list ->
-    Debuginfo.t ->
+    Cmm.Op_debuginfo.t ->
     Mach.operation * Cmm.expression list
     (* Can be overridden to deal with special arithmetic instructions *)
   method select_condition : Cmm.expression -> Mach.test * Cmm.expression
