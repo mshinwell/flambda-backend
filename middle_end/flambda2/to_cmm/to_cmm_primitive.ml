@@ -741,7 +741,7 @@ let consider_inlining_effectful_expressions p =
   | Variadic ((Make_block _ | Make_array _), _) -> Some true
   | Nullary _ | Unary _ | Binary _ | Ternary _ -> None
 
-let prim_simple env res ~result_simple dbg p =
+let prim_simple env res dbg p =
   let consider_inlining_effectful_expressions =
     consider_inlining_effectful_expressions p
   in
@@ -765,12 +765,12 @@ let prim_simple env res ~result_simple dbg p =
   | Nullary prim ->
     let free_vars = Backend_var.Set.empty in
     let extra, res, expr = nullary_primitive env res dbg prim in
-    Env.simple result_simple expr free_vars, extra, env, res, Ece.pure
+    Env.simple expr free_vars, extra, env, res, Ece.pure
   | Unary (unary, x) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
     (* XXX mshinwell: add simple param to unary_primitive *)
     let extra, res, expr = unary_primitive env res dbg unary x.cmm in
-    Env.simple result_simple expr x.free_vars, extra, env, res, x.effs
+    Env.simple expr x.free_vars, extra, env, res, x.effs
   | Binary (binary, x, y) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
     let To_cmm_env.{ env; res; expr = y } = arg env res y in
@@ -779,7 +779,7 @@ let prim_simple env res ~result_simple dbg p =
     let expr =
       binary_primitive env dbg binary x.phantom y.phantom x.cmm y.cmm
     in
-    Env.simple result_simple expr free_vars, None, env, res, effs
+    Env.simple expr free_vars, None, env, res, effs
   | Ternary (ternary, x, y, z) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
     let To_cmm_env.{ env; res; expr = y } = arg env res y in
@@ -792,14 +792,14 @@ let prim_simple env res ~result_simple dbg p =
     let effs = Ece.join (Ece.join x.effs y.effs) z.effs in
     (* XXX mshinwell: add simple params to ternary_primitive *)
     let expr = ternary_primitive env dbg ternary x.cmm y.cmm z.cmm in
-    Env.simple result_simple expr free_vars, None, env, res, effs
+    Env.simple expr free_vars, None, env, res, effs
   | Variadic (((Make_block _ | Make_array _) as variadic), l) ->
     let args, free_vars, env, res, effs =
       arg_list ?consider_inlining_effectful_expressions ~dbg env res l
     in
     (* XXX mshinwell: add simple params to variadic_primitive *)
     let expr = variadic_primitive env dbg variadic args in
-    Env.simple result_simple expr free_vars, None, env, res, effs
+    Env.simple expr free_vars, None, env, res, effs
 
 let prim_complex env res dbg p =
   let consider_inlining_effectful_expressions =

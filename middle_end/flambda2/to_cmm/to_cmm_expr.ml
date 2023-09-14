@@ -43,7 +43,7 @@ let bind_var_to_simple ~dbg_with_inlined:dbg env res v
           { env;
             res;
             expr =
-              { simple = _;
+              { phantom = _;
                 cmm = defining_expr;
                 free_vars = free_vars_of_defining_expr;
                 effs = effects_and_coeffects_of_defining_expr
@@ -87,7 +87,11 @@ let translate_apply0 ~dbg_with_inlined:dbg env res apply =
         { env;
           res;
           expr =
-            { simple = _; cmm = callee; free_vars = callee_free_vars; effs = _ }
+            { phantom = _;
+              cmm = callee;
+              free_vars = callee_free_vars;
+              effs = _
+            }
         } =
     C.simple ~dbg env res callee_simple
   in
@@ -216,7 +220,7 @@ let translate_apply0 ~dbg_with_inlined:dbg env res apply =
           { env;
             res;
             expr =
-              { simple = _; cmm = obj; free_vars = obj_free_vars; effs = _ }
+              { phantom = _; cmm = obj; free_vars = obj_free_vars; effs = _ }
           } =
       C.simple ~dbg env res obj
     in
@@ -255,7 +259,7 @@ let translate_apply env res apply =
             { env;
               res;
               expr =
-                { simple = _; cmm = arg; free_vars = arg_free_vars; effs = _ }
+                { phantom = _; cmm = arg; free_vars = arg_free_vars; effs = _ }
             } =
         C.simple ~dbg env res arg
       in
@@ -295,7 +299,7 @@ let translate_raise ~dbg_with_inlined:dbg env res apply exn_handler args =
           { env;
             res;
             expr =
-              { simple = _; cmm = exn; free_vars = exn_free_vars; effs = _ }
+              { phantom = _; cmm = exn; free_vars = exn_free_vars; effs = _ }
           } =
       C.simple ~dbg env res exn
     in
@@ -394,9 +398,7 @@ and let_prim env res ~num_normal_occurrences_of_bound_vars v p dbg body =
   in
   let simple_case (inline : Env.simple Env.inline) =
     let defining_expr, extra, env, res, args_effs =
-      To_cmm_primitive.prim_simple env res
-        ~result_simple:(Simple.var (Bound_var.var v))
-        dbg p
+      To_cmm_primitive.prim_simple env res dbg p
     in
     let effects_and_coeffects_of_defining_expr =
       Ece.join args_effs effects_and_coeffects_of_prim
@@ -480,7 +482,7 @@ and let_expr0 env res let_expr (bound_pattern : Bound_pattern.t)
     in
     match update_opt with
     | None -> expr env res body
-    | Some { simple = _; cmm; free_vars; effs = _ } ->
+    | Some { phantom = _; cmm; free_vars; effs = _ } ->
       let wrap, env, res =
         Env.flush_delayed_lets ~mode:Branching_point env res
       in
@@ -875,7 +877,7 @@ and switch env res switch =
         { env;
           res;
           expr =
-            { simple = _;
+            { phantom = _;
               cmm = untagged_scrutinee_cmm;
               free_vars = scrutinee_free_vars;
               effs = _

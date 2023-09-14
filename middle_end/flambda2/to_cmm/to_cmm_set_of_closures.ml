@@ -284,7 +284,7 @@ module Dynamic = Make_layout_filler (struct
      left-to-right order, so that the first translated field is actually
      evaluated last. *)
   let simple ~dbg env res simple =
-    let To_cmm_env.{ env; res; expr = { simple = _; cmm; free_vars; effs } } =
+    let To_cmm_env.{ env; res; expr = { cmm; free_vars; effs } } =
       C.simple ~dbg env res simple
     in
     `Data [cmm], free_vars, env, res, effs
@@ -588,12 +588,12 @@ let let_dynamic_set_of_closures0 env res ~body ~bound_vars set
       ~mode:(Alloc_mode.For_allocations.to_lambda closure_alloc_mode)
       dbg tag l
   in
-  let soc_var' = Variable.create "*set_of_closures*" in
   let soc_var =
-    Bound_var.create soc_var' Shape.Uid.internal_not_actually_unique
-      Name_mode.normal
+    Bound_var.create
+      (Variable.create "*set_of_closures*")
+      Shape.Uid.internal_not_actually_unique Name_mode.normal
   in
-  let defining_expr = Env.simple (Simple.var soc_var') csoc free_vars in
+  let defining_expr = Env.simple csoc free_vars in
   let env, res =
     Env.bind_variable_to_primitive env res soc_var ~inline:Env.Do_not_inline
       ~defining_expr ~effects_and_coeffects_of_defining_expr:effs
@@ -604,7 +604,7 @@ let let_dynamic_set_of_closures0 env res ~body ~bound_vars set
         { env;
           res;
           expr =
-            { simple = _;
+            { phantom = _;
               cmm = soc_cmm_var;
               free_vars = s_free_vars;
               effs = peff

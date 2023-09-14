@@ -19,7 +19,6 @@ val trans_prim : To_cmm_env.t To_cmm_env.trans_prim
 val prim_simple :
   To_cmm_env.t ->
   To_cmm_result.t ->
-  result_simple:Simple.t ->
   Debuginfo.t ->
   Flambda_primitive.t ->
   To_cmm_env.simple To_cmm_env.bound_expr
