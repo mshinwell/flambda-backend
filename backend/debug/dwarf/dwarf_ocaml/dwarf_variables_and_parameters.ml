@@ -138,8 +138,6 @@ let dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
     (var : Backend_var.t) ~ident_for_type ~range =
   let range_info = ARV.Range.info range in
   let provenance = ARV.Range_info.provenance range_info in
-  (* CR tnowak to mshinwell: the parent_proto_die here seems to be
-     DW_TAG_subprogram instead of DW_TAG_compile_unit, which seems wrong. *)
   let (parent_proto_die : Proto_die.t), hidden =
     match provenance with
     | None ->

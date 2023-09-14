@@ -325,24 +325,20 @@ let create_tuple_die ~reference ~parent_proto_die ~name ~fields =
 
 let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
     ~parent_proto_die ~fallback_die
-    ~(cache : Proto_die.reference Type_shape.Type_shape.Tbl.t)
-    ~(current_compilation_unit : string option) =
+    ~(cache : Proto_die.reference Type_shape.Type_shape.Tbl.t) =
   match Type_shape.Type_shape.Tbl.find_opt cache type_shape with
   | Some reference -> reference
   | None ->
     let reference = Proto_die.create_reference () in
     Type_shape.Type_shape.Tbl.add cache type_shape reference;
-    let name =
-      Type_shape.type_name type_shape ~load_decls_from_cms
-        ~current_compilation_unit
-    in
+    let name = Type_shape.type_name type_shape ~load_decls_from_cms in
     let successfully_created =
       match type_shape with
       | Ts_other | Ts_var _ -> false
       | Ts_predef (Array, [element_type_shape]) ->
         let child_die =
           type_shape_to_die element_type_shape ~parent_proto_die ~fallback_die
-            ~cache ~current_compilation_unit
+            ~cache
         in
         create_array_die ~reference ~parent_proto_die ~child_die ~name;
         true
@@ -360,10 +356,9 @@ let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
       | Ts_constr ((type_uid, type_path), shapes) -> (
         match
           Type_shape.find_in_type_decls type_uid type_path ~load_decls_from_cms
-            ~current_compilation_unit
         with
-        | None, _ | Some { definition = Tds_other; _ }, _ -> false
-        | Some type_decl_shape, current_compilation_unit -> (
+        | None | Some { definition = Tds_other; _ } -> false
+        | Some type_decl_shape -> (
           let type_decl_shape =
             Type_shape.Type_decl_shape.replace_tvar type_decl_shape shapes
           in
@@ -372,7 +367,7 @@ let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
           | Tds_alias alias_shape ->
             let alias_die =
               type_shape_to_die alias_shape ~parent_proto_die ~fallback_die
-                ~cache ~current_compilation_unit
+                ~cache
             in
             create_typedef_die ~reference ~parent_proto_die ~child_die:alias_die
               ~name;
@@ -380,8 +375,7 @@ let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
           | Tds_record fields ->
             let fields =
               map_snd
-                (type_shape_to_die ~parent_proto_die ~fallback_die ~cache
-                   ~current_compilation_unit)
+                (type_shape_to_die ~parent_proto_die ~fallback_die ~cache)
                 fields
             in
             create_record_die ~reference ~parent_proto_die ~name ~fields;
@@ -396,8 +390,7 @@ let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
               let complex_constructors =
                 map_snd
                   (map_snd
-                     (type_shape_to_die ~parent_proto_die ~fallback_die ~cache
-                        ~current_compilation_unit))
+                     (type_shape_to_die ~parent_proto_die ~fallback_die ~cache))
                   complex_constructors
               in
               create_complex_variant_die ~reference ~parent_proto_die ~name
@@ -406,8 +399,7 @@ let rec type_shape_to_die (type_shape : Type_shape.Type_shape.t)
       | Ts_tuple fields ->
         let fields =
           List.map
-            (type_shape_to_die ~parent_proto_die ~fallback_die ~cache
-               ~current_compilation_unit)
+            (type_shape_to_die ~parent_proto_die ~fallback_die ~cache)
             fields
         in
         create_tuple_die ~reference ~parent_proto_die ~name ~fields;
@@ -425,4 +417,3 @@ let variable_to_die state var_uid ~parent_proto_die =
     (* CR tnowak: make cache global instead of local for each variable *)
     let cache = Type_shape.Type_shape.Tbl.create 42 in
     type_shape_to_die type_shape ~parent_proto_die ~fallback_die ~cache
-      ~current_compilation_unit:None
