@@ -21,7 +21,8 @@ module Ece = Effects_and_coeffects
 type free_vars = Backend_var.Set.t
 
 type expr_with_info =
-  { cmm : Cmm.expression;
+  { phantom : Backend_var.With_provenance.t option;
+    cmm : Cmm.expression;
     effs : Effects_and_coeffects.t;
     free_vars : free_vars
   }
@@ -56,7 +57,11 @@ type 'env trans_prim =
     binary :
       ( 'env,
         P.binary_primitive,
-        Cmm.expression -> Cmm.expression -> prim_res )
+        Backend_var.With_provenance.t option ->
+        Backend_var.With_provenance.t option ->
+        Cmm.expression ->
+        Cmm.expression ->
+        prim_res )
       prim_helper;
     ternary :
       ( 'env,
@@ -184,7 +189,8 @@ let print_cmm_expr_with_free_vars ppf (cmm_expr, free_vars) =
 
 let [@ocamlformat "disable"] print_bound_expr (type a) ppf (b : a bound_expr) =
   match b with
-  | Simple { cmm_expr; free_vars; } | Split { cmm_expr; free_vars; } ->
+  | Simple { cmm_expr; free_vars; }
+  | Split { cmm_expr; free_vars; } ->
     print_cmm_expr_with_free_vars ppf (cmm_expr, free_vars)
   | Splittable_prim { prim; args; dbg; } ->
     Format.fprintf ppf "@[<hov 1>(\
@@ -194,7 +200,8 @@ let [@ocamlformat "disable"] print_bound_expr (type a) ppf (b : a bound_expr) =
       )@]"
       Debuginfo.print_compact dbg
       Flambda_primitive.Without_args.print prim
-      (Format.pp_print_list (fun ppf { cmm; effs = _; free_vars; } ->
+      (Format.pp_print_list
+        (fun ppf { phantom = _; cmm; effs = _; free_vars; } ->
            print_cmm_expr_with_free_vars ppf (cmm, free_vars))) args
 
 let [@ocamlformat "disable"] print_binding (type a) ppf
@@ -438,8 +445,13 @@ let create_binding (type a) effs var ~(inline : a inline)
      must_inline_and_duplicate (since it basically replaces a variable by either
      another variable, a constant, or a symbol). *)
   match bound_expr with
-  | (Split { cmm_expr; free_vars } | Simple { cmm_expr; free_vars })
-    when is_cmm_simple cmm_expr ->
+  | Split { cmm_expr; free_vars } when is_cmm_simple cmm_expr ->
+    (* trivial/simple cmm expression (as decided by [is_cmm_simple]) do not have
+       effects and coeffects *)
+    let effs = Ece.pure_can_be_duplicated in
+    create_binding_aux effs var ~inline:Must_inline_and_duplicate
+      (Split { cmm_expr; free_vars })
+  | Simple { cmm_expr; free_vars } when is_cmm_simple cmm_expr ->
     (* trivial/simple cmm expression (as decided by [is_cmm_simple]) do not have
        effects and coeffects *)
     let effs = Ece.pure_can_be_duplicated in
@@ -464,7 +476,11 @@ let new_bindings_for_splitting order args =
   let (new_bindings, _, free_vars_of_new_cmm_args), new_cmm_args =
     List.fold_left_map
       (fun (new_bindings, order, free_vars)
-           { cmm = cmm_arg; effs = arg_effs; free_vars = arg_free_vars } ->
+           { phantom = _;
+             cmm = cmm_arg;
+             effs = arg_effs;
+             free_vars = arg_free_vars
+           } ->
         (* CR gbury: here, instead of using [is_cmm_simple], we could instead
            look at [arg_effs] and not create a new binding if it has
            `pure_can_be_duplicated` effects (or any ece that allows
@@ -504,17 +520,20 @@ let new_bindings_for_splitting order args =
   in
   new_bindings, new_cmm_args, free_vars_of_new_cmm_args
 
-let rebuild_prim ~dbg ~env ~res prim args =
+let rebuild_prim ~dbg ~env ~res prim arg_simples args =
   let extra_info, res, cmm =
-    match (prim, args : Flambda_primitive.Without_args.t * _) with
-    | Nullary nullary, [] -> env.trans_prim.nullary env res dbg nullary
-    | Unary unary, [x] -> env.trans_prim.unary env res dbg unary x
-    | Binary binary, [x; y] -> env.trans_prim.binary env res dbg binary x y
-    | Ternary ternary, [x; y; z] ->
+    match
+      (prim, arg_simples, args : Flambda_primitive.Without_args.t * _ * _)
+    with
+    | Nullary nullary, [], [] -> env.trans_prim.nullary env res dbg nullary
+    | Unary unary, [_], [x] -> env.trans_prim.unary env res dbg unary x
+    | Binary binary, [x_simple; y_simple], [x; y] ->
+      env.trans_prim.binary env res dbg binary x_simple y_simple x y
+    | Ternary ternary, [_; _; _], [x; y; z] ->
       env.trans_prim.ternary env res dbg ternary x y z
-    | Variadic variadic, args ->
+    | Variadic variadic, _, args ->
       env.trans_prim.variadic env res dbg variadic args
-    | (Nullary _ | Unary _ | Binary _ | Ternary _), _ ->
+    | (Nullary _ | Unary _ | Binary _ | Ternary _), _, _ ->
       Misc.fatal_errorf
         "Mismatched arity when splitting a binding in to_cmm_env:@\n%a@\n%a"
         Flambda_primitive.Without_args.print prim
@@ -549,10 +568,17 @@ let split_complex_binding ~env ~res (binding : complex binding) =
        over-approximation since some primitives may drop some of their
        arguments, but that should be extremely rare, and should not affect code
        generation much. *)
+    let phantoms =
+      List.map
+        (fun (expr_with_info : expr_with_info) -> expr_with_info.phantom)
+        args
+    in
     let new_bindings, new_cmm_args, free_vars_of_new_cmm_args =
       new_bindings_for_splitting binding.order args
     in
-    let new_cmm_expr, res = rebuild_prim ~dbg ~env ~res prim new_cmm_args in
+    let new_cmm_expr, res =
+      rebuild_prim ~dbg ~env ~res prim phantoms new_cmm_args
+    in
     let prim_effects =
       Flambda_primitive.Without_args.effects_and_coeffects prim
     in
@@ -706,29 +732,46 @@ let bind_variable_to_primitive = bind_variable_with_decision
 (* Variable lookup (for potential inlining) *)
 
 let will_inline_simple env res
-    { effs; bound_expr = Simple { cmm_expr; free_vars }; _ } =
-  { env; res; expr = { cmm = cmm_expr; free_vars; effs } }
+    { effs; bound_expr = Simple { cmm_expr; free_vars }; cmm_var; _ } =
+  { env;
+    res;
+    expr = { phantom = Some cmm_var; cmm = cmm_expr; free_vars; effs }
+  }
 
-let will_inline_complex env res { effs; bound_expr; _ } =
+let will_inline_complex env res { effs; bound_expr; cmm_var; _ } =
   match bound_expr with
   | Split { cmm_expr; free_vars } ->
-    { env; res; expr = { cmm = cmm_expr; free_vars; effs } }
+    { env;
+      res;
+      expr = { phantom = Some cmm_var; cmm = cmm_expr; free_vars; effs }
+    }
   | Splittable_prim { dbg; prim; args } ->
     let free_vars, cmm_args =
       List.fold_left_map
-        (fun free_vars { cmm = cmm_arg; effs = _; free_vars = arg_free_vars } ->
+        (fun free_vars
+             { phantom = _; cmm = cmm_arg; effs = _; free_vars = arg_free_vars } ->
           Backend_var.Set.union free_vars arg_free_vars, cmm_arg)
         Backend_var.Set.empty args
     in
-    let cmm_expr, res = rebuild_prim ~dbg ~env ~res prim cmm_args in
-    { env; res; expr = { cmm = cmm_expr; free_vars; effs } }
+    let phantoms =
+      List.map
+        (fun (expr_with_info : expr_with_info) -> expr_with_info.phantom)
+        args
+    in
+    let cmm_expr, res = rebuild_prim ~dbg ~env ~res prim phantoms cmm_args in
+    { env; res; expr = { phantom = None; cmm = cmm_expr; free_vars; effs } }
 
 let will_not_inline_simple env res { cmm_var; bound_expr = Simple _; _ } =
   let var = Backend_var.With_provenance.var cmm_var in
   let free_vars = Backend_var.Set.singleton var in
   { env;
     res;
-    expr = { cmm = C.var var; free_vars; effs = Ece.pure_can_be_duplicated }
+    expr =
+      { phantom = None;
+        cmm = C.var var;
+        free_vars;
+        effs = Ece.pure_can_be_duplicated
+      }
   }
 
 let split_and_inline env res var binding =
@@ -784,8 +827,11 @@ let inline_variable ?consider_inlining_effectful_expressions env res var =
     | cmm, free_vars ->
       (* the env.vars map only contain bindings to expressions of the form
          [Cmm.Cvar _], hence the effects. *)
-      { env; res; expr = { cmm; free_vars; effs = Ece.pure_can_be_duplicated } }
-    )
+      { env;
+        res;
+        expr =
+          { phantom = None; cmm; free_vars; effs = Ece.pure_can_be_duplicated }
+      })
   | Binding binding -> (
     match binding.inline with
     | Do_not_inline -> will_not_inline_simple env res binding
@@ -840,7 +886,7 @@ let make_alias env res var alias_of =
    bind the new variable with a `must_inline` inline status *)
 let split_binding_and_rebind ~num_occurrences_of_var env res ~var ~alias_of
     binding =
-  let { env; res; expr = { cmm; free_vars; effs } } =
+  let { env; res; expr = { phantom = _; cmm; free_vars; effs } } =
     split_and_inline env res alias_of binding
   in
   let defining_expr : _ bound_expr = Split { cmm_expr = cmm; free_vars } in
@@ -878,7 +924,7 @@ let add_alias env res ~var ~alias_of ~num_normal_occurrences_of_bound_vars =
   | (exception Not_found)
   | Binding { inline = Do_not_inline | May_inline_once; _ } ->
     (* generic case, we just inline the var/binding, and rebind it *)
-    let { env; res; expr = { cmm; free_vars; effs } } =
+    let { env; res; expr = { phantom = _; cmm; free_vars; effs } } =
       inline_variable env res alias_of
     in
     bind_variable env res var ~defining_expr:cmm

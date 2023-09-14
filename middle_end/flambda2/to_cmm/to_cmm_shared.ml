@@ -119,7 +119,8 @@ let name0 ?consider_inlining_effectful_expressions env res name =
         { env;
           res;
           expr =
-            { cmm = symbol ~dbg:Debuginfo.none sym;
+            { phantom = None;
+              cmm = symbol ~dbg:Debuginfo.none sym;
               free_vars = Backend_var.Set.empty;
               effs = Ece.pure_can_be_duplicated
             }
@@ -151,7 +152,8 @@ let simple ?consider_inlining_effectful_expressions ~dbg env res s =
         { env;
           res;
           expr =
-            { cmm = const ~dbg c;
+            { phantom = None;
+              cmm = const ~dbg c;
               free_vars = Backend_var.Set.empty;
               effs = Ece.pure_can_be_duplicated
             }
@@ -191,7 +193,7 @@ let simple_list ?consider_inlining_effectful_expressions ~dbg env res l =
   (* Note that [To_cmm_primitive] relies on this function translating the
      [Simple] at the head of the list first. *)
   let aux (list, acc_free_vars, env, res, acc_effs) x =
-    let To_cmm_env.{ env; res; expr = { cmm; free_vars; effs } } =
+    let To_cmm_env.{ env; res; expr = { phantom = _; cmm; free_vars; effs } } =
       simple ?consider_inlining_effectful_expressions ~dbg env res x
     in
     let free_vars = Backend_var.Set.union acc_free_vars free_vars in
@@ -247,19 +249,19 @@ let invalid res ~message =
   call_expr, res
 
 let make_update env res dbg kind ~symbol var ~index ~prev_updates =
-  let To_cmm_env.{ env; res; expr = { cmm; free_vars; effs } } =
+  let To_cmm_env.{ env; res; expr = { phantom = _; cmm; free_vars; effs } } =
     To_cmm_env.inline_variable env res var
   in
   let addr = field_address symbol index dbg in
   let cmm = store ~dbg kind Initialization ~addr ~new_value:cmm in
   let update =
     match prev_updates with
-    | None -> To_cmm_env.{ cmm; free_vars; effs }
+    | None -> To_cmm_env.{ phantom = None; cmm; free_vars; effs }
     | Some (prev : To_cmm_env.expr_with_info) ->
       let cmm = sequence prev.cmm cmm in
       let free_vars = Backend_var.Set.union prev.free_vars free_vars in
       let effs = Ece.join prev.effs effs in
-      To_cmm_env.{ cmm; free_vars; effs }
+      To_cmm_env.{ phantom = None; cmm; free_vars; effs }
   in
   env, res, Some update
 

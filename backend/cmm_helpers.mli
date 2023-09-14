@@ -681,7 +681,14 @@ val setfloatfield :
   int -> Lambda.initialization_or_assignment -> binary_primitive
 
 (** Operations on OCaml integers *)
-val add_int_caml : binary_primitive
+val add_int_caml :
+  (* XXX binary_primitive *)
+  Backend_var.With_provenance.t option ->
+  Backend_var.With_provenance.t option ->
+  expression ->
+  expression ->
+  Debuginfo.t ->
+  expression
 
 val sub_int_caml : binary_primitive
 

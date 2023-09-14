@@ -1101,7 +1101,7 @@ and transl_prim_2 env p arg1 arg2 dbg =
         dbg' (Cconst_int (1, dbg))
   (* Integer operations *)
   | Paddint ->
-      add_int_caml (transl env arg1) (transl env arg2) dbg
+      add_int_caml None None (transl env arg1) (transl env arg2) dbg
   | Psubint ->
       sub_int_caml (transl env arg1) (transl env arg2) dbg
   | Pmulint ->

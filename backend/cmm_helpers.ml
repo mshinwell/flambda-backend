@@ -3630,13 +3630,14 @@ let setfloatfield n init arg1 arg2 dbg =
            arg2 ],
          Op_debuginfo.create dbg ))
 
-let add_int_caml arg1 arg2 dbg = decr_int (add_int arg1 arg2 dbg) dbg
+let add_int_caml _phantom1 _phantom2 arg1 arg2 dbg =
+  decr_int (add_int arg1 arg2 dbg) dbg
 
 (* Unary primitive delayed to reuse add_int_caml *)
 let offsetint n arg dbg =
   if Misc.no_overflow_lsl n 1
   then add_const arg (n lsl 1) dbg
-  else add_int_caml arg (int_const dbg n) dbg
+  else add_int_caml None None arg (int_const dbg n) dbg
 
 let sub_int_caml arg1 arg2 dbg = incr_int (sub_int arg1 arg2 dbg) dbg
 

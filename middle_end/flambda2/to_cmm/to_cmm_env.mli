@@ -23,7 +23,11 @@ type free_vars = Backend_var.Set.t
 
 (** A cmm expression along with extra information *)
 type expr_with_info =
-  { cmm : Cmm.expression;
+  { phantom : Backend_var.With_provenance.t option;
+        (** If [cmm] came from substituting out a bound variable, whose
+            binding no longer exists, [phantom] gives information about what
+            that bound variable was. *)
+    cmm : Cmm.expression;
     effs : Effects_and_coeffects.t;
     free_vars : free_vars
   }
@@ -61,7 +65,11 @@ type 'env trans_prim =
     binary :
       ( 'env,
         Flambda_primitive.binary_primitive,
-        Cmm.expression -> Cmm.expression -> prim_res )
+        Backend_var.With_provenance.t option ->
+        Backend_var.With_provenance.t option ->
+        Cmm.expression ->
+        Cmm.expression ->
+        prim_res )
       prim_helper;
     ternary :
       ( 'env,

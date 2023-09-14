@@ -313,11 +313,11 @@ let phys_equal _env dbg op x y =
   | Neq -> C.neq ~dbg x y
 
 let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
-    (op : P.binary_int_arith_op) x y =
+    (op : P.binary_int_arith_op) x_phantom y_phantom x y =
   match kind with
   | Tagged_immediate -> (
     match op with
-    | Add -> C.add_int_caml x y dbg
+    | Add -> C.add_int_caml x_phantom y_phantom x y dbg
     | Sub -> C.sub_int_caml x y dbg
     | Mul -> C.mul_int_caml x y dbg
     | Div -> C.div_int_caml Unsafe x y dbg
@@ -635,7 +635,7 @@ let unary_primitive env res dbg f arg =
   | Begin_try_region -> None, res, C.beginregion ~dbg
   | End_region -> None, res, C.return_unit dbg (C.endregion ~dbg arg)
 
-let binary_primitive env dbg f x y =
+let binary_primitive env dbg f x_var y_var x y =
   match (f : P.binary_primitive) with
   | Block_load (kind, mut) -> block_load ~dbg kind mut ~block:x ~index:y
   | Array_load (kind, _mut) -> array_load ~dbg kind ~arr:x ~index:y
@@ -644,7 +644,8 @@ let binary_primitive env dbg f x y =
   | Bigarray_load (_dimensions, kind, _layout) ->
     bigarray_load ~dbg kind ~bigarray:x ~index:y
   | Phys_equal op -> phys_equal env dbg op x y
-  | Int_arith (kind, op) -> binary_int_arith_primitive env dbg kind op x y
+  | Int_arith (kind, op) ->
+    binary_int_arith_primitive env dbg kind op x_var y_var x y
   | Int_shift (kind, op) -> binary_int_shift_primitive env dbg kind op x y
   | Int_comp (kind, Yielding_bool cmp) ->
     binary_int_comp_primitive env dbg kind cmp x y
@@ -706,8 +707,8 @@ let trans_prim : To_cmm_env.t To_cmm_env.trans_prim =
   { nullary = nullary_primitive;
     unary = unary_primitive;
     binary =
-      (fun env res dbg prim x y ->
-        let cmm = binary_primitive env dbg prim x y in
+      (fun env res dbg prim x_phantom y_phantom x y ->
+        let cmm = binary_primitive env dbg prim x_phantom y_phantom x y in
         None, res, cmm);
     ternary =
       (fun env res dbg prim x y z ->
@@ -740,7 +741,7 @@ let consider_inlining_effectful_expressions p =
   | Variadic ((Make_block _ | Make_array _), _) -> Some true
   | Nullary _ | Unary _ | Binary _ | Ternary _ -> None
 
-let prim_simple env res dbg p =
+let prim_simple env res ~result_simple dbg p =
   let consider_inlining_effectful_expressions =
     consider_inlining_effectful_expressions p
   in
@@ -764,18 +765,21 @@ let prim_simple env res dbg p =
   | Nullary prim ->
     let free_vars = Backend_var.Set.empty in
     let extra, res, expr = nullary_primitive env res dbg prim in
-    Env.simple expr free_vars, extra, env, res, Ece.pure
+    Env.simple result_simple expr free_vars, extra, env, res, Ece.pure
   | Unary (unary, x) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
+    (* XXX mshinwell: add simple param to unary_primitive *)
     let extra, res, expr = unary_primitive env res dbg unary x.cmm in
-    Env.simple expr x.free_vars, extra, env, res, x.effs
+    Env.simple result_simple expr x.free_vars, extra, env, res, x.effs
   | Binary (binary, x, y) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
     let To_cmm_env.{ env; res; expr = y } = arg env res y in
     let free_vars = Backend_var.Set.union x.free_vars y.free_vars in
     let effs = Ece.join x.effs y.effs in
-    let expr = binary_primitive env dbg binary x.cmm y.cmm in
-    Env.simple expr free_vars, None, env, res, effs
+    let expr =
+      binary_primitive env dbg binary x.phantom y.phantom x.cmm y.cmm
+    in
+    Env.simple result_simple expr free_vars, None, env, res, effs
   | Ternary (ternary, x, y, z) ->
     let To_cmm_env.{ env; res; expr = x } = arg env res x in
     let To_cmm_env.{ env; res; expr = y } = arg env res y in
@@ -786,14 +790,16 @@ let prim_simple env res dbg p =
         z.free_vars
     in
     let effs = Ece.join (Ece.join x.effs y.effs) z.effs in
+    (* XXX mshinwell: add simple params to ternary_primitive *)
     let expr = ternary_primitive env dbg ternary x.cmm y.cmm z.cmm in
-    Env.simple expr free_vars, None, env, res, effs
+    Env.simple result_simple expr free_vars, None, env, res, effs
   | Variadic (((Make_block _ | Make_array _) as variadic), l) ->
     let args, free_vars, env, res, effs =
       arg_list ?consider_inlining_effectful_expressions ~dbg env res l
     in
+    (* XXX mshinwell: add simple params to variadic_primitive *)
     let expr = variadic_primitive env dbg variadic args in
-    Env.simple expr free_vars, None, env, res, effs
+    Env.simple result_simple expr free_vars, None, env, res, effs
 
 let prim_complex env res dbg p =
   let consider_inlining_effectful_expressions =
