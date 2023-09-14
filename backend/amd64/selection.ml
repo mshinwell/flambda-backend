@@ -277,7 +277,10 @@ method! select_operation op args dbg =
   match op with
   (* Recognize the LEA instruction *)
     Caddi | Caddv | Cadda | Csubi ->
-      begin match self#select_addressing Word_int (Cop(op, args, dbg)) with
+      begin match
+        self#select_addressing Word_int
+          (Cop(op, args, Op_debuginfo.create dbg))
+      with
         (Iindexed _, _)
       | (Iindexed2 0, _) -> super#select_operation op args dbg
       | ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr,

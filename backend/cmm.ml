@@ -254,6 +254,15 @@ type vec128_bits = { low : int64; high: int64 }
 
 let global_symbol sym_name = { sym_name; sym_global = Global }
 
+module Op_debuginfo = struct
+  type t = {
+    dbg : Debuginfo.t
+  }
+
+  let create dbg = { dbg }
+  let dbg t = t.dbg
+end
+
 type expression =
     Cconst_int of int * Debuginfo.t
   | Cconst_natint of nativeint * Debuginfo.t
@@ -268,7 +277,7 @@ type expression =
       * phantom_defining_expr option * expression
   | Cassign of Backend_var.t * expression
   | Ctuple of expression list
-  | Cop of operation * expression list * Debuginfo.t
+  | Cop of operation * expression list * Op_debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t * kind_for_unboxing

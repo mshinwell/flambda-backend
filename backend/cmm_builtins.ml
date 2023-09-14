@@ -49,9 +49,9 @@ let if_operation_supported_bi bi op ~f =
   then None
   else if_operation_supported op ~f
 
-let int_of_value arg dbg = Cop (Cintofvalue, [arg], dbg)
+let int_of_value arg dbg = Cop (Cintofvalue, [arg], Op_debuginfo.create dbg)
 
-let value_of_int arg dbg = Cop (Cvalueofint, [arg], dbg)
+let value_of_int arg dbg = Cop (Cvalueofint, [arg], Op_debuginfo.create dbg)
 
 (* Untagging of a negative value shifts in an extra bit. The following code
    clears the shifted sign bit of an untagged int. This straightline code is
@@ -59,14 +59,16 @@ let value_of_int arg dbg = Cop (Cvalueofint, [arg], dbg)
    argument is negative. *)
 let clear_sign_bit arg dbg =
   let mask = Nativeint.lognot (Nativeint.shift_left 1n ((size_int * 8) - 1)) in
-  Cop (Cand, [arg; Cconst_natint (mask, dbg)], dbg)
+  Cop (Cand, [arg; Cconst_natint (mask, dbg)], Op_debuginfo.create dbg)
 
 let clz ~arg_is_non_zero bi arg dbg =
   let op = Cclz { arg_is_non_zero } in
   if_operation_supported_bi bi op ~f:(fun () ->
-      let res = Cop (op, [make_unsigned_int bi arg dbg], dbg) in
+      let res =
+        Cop (op, [make_unsigned_int bi arg dbg], Op_debuginfo.create dbg)
+      in
       if bi = Primitive.Pint32 && size_int = 8
-      then Cop (Caddi, [res; Cconst_int (-32, dbg)], dbg)
+      then Cop (Caddi, [res; Cconst_int (-32, dbg)], Op_debuginfo.create dbg)
       else res)
 
 let ctz ~arg_is_non_zero bi arg dbg =
@@ -80,27 +82,36 @@ let ctz ~arg_is_non_zero bi arg dbg =
     if_operation_supported_bi bi op ~f:(fun () ->
         (* Set bit 32 *)
         let mask = Nativeint.shift_left 1n 32 in
-        Cop (op, [Cop (Cor, [arg; Cconst_natint (mask, dbg)], dbg)], dbg))
+        Cop
+          ( op,
+            [ Cop
+                (Cor, [arg; Cconst_natint (mask, dbg)], Op_debuginfo.create dbg)
+            ],
+            Op_debuginfo.create dbg ))
   else
     let op = Cctz { arg_is_non_zero } in
-    if_operation_supported_bi bi op ~f:(fun () -> Cop (op, [arg], dbg))
+    if_operation_supported_bi bi op ~f:(fun () ->
+        Cop (op, [arg], Op_debuginfo.create dbg))
 
 let popcnt bi arg dbg =
   if_operation_supported_bi bi Cpopcnt ~f:(fun () ->
-      Cop (Cpopcnt, [make_unsigned_int bi arg dbg], dbg))
+      Cop (Cpopcnt, [make_unsigned_int bi arg dbg], Op_debuginfo.create dbg))
 
 let mulhi bi ~signed args dbg =
   let op = Cmulhi { signed } in
-  if_operation_supported_bi bi op ~f:(fun () -> Cop (op, args, dbg))
+  if_operation_supported_bi bi op ~f:(fun () ->
+      Cop (op, args, Op_debuginfo.create dbg))
 
 let ext_pointer_load chunk name args dbg =
   let p = int_as_pointer (one_arg name args) dbg in
-  Some (Cop (Cload (chunk, Mutable), [p], dbg))
+  Some (Cop (Cload (chunk, Mutable), [p], Op_debuginfo.create dbg))
 
 let ext_pointer_store chunk name args dbg =
   let arg1, arg2 = two_args name args in
   let p = int_as_pointer arg1 dbg in
-  Some (return_unit dbg (Cop (Cstore (chunk, Assignment), [p; arg2], dbg)))
+  Some
+    (return_unit dbg
+       (Cop (Cstore (chunk, Assignment), [p; arg2], Op_debuginfo.create dbg)))
 
 let bigstring_prefetch ~is_write locality args dbg =
   let op = Cprefetch { is_write; locality } in
@@ -110,23 +121,28 @@ let bigstring_prefetch ~is_write locality args dbg =
       bind "index" arg2 (fun idx ->
           bind "ba" arg1 (fun ba ->
               bind "ba_data"
-                (Cop (Cload (Word_int, Mutable), [field_address ba 1 dbg], dbg))
+                (Cop
+                   ( Cload (Word_int, Mutable),
+                     [field_address ba 1 dbg],
+                     Op_debuginfo.create dbg ))
                 (fun ba_data ->
                   (* pointer to element "idx" of "ba" of type (char,
                      int8_unsigned_elt, c_layout) Bigarray.Array1.t is simply
                      offset "idx" from "ba_data" *)
-                  return_unit dbg (Cop (op, [add_int ba_data idx dbg], dbg))))))
+                  return_unit dbg
+                    (Cop (op, [add_int ba_data idx dbg], Op_debuginfo.create dbg))))))
 
 let prefetch ~is_write locality arg dbg =
   let op = Cprefetch { is_write; locality } in
   if_operation_supported op ~f:(fun () ->
-      return_unit dbg (Cop (op, [arg], dbg)))
+      return_unit dbg (Cop (op, [arg], Op_debuginfo.create dbg)))
 
 let prefetch_offset ~is_write locality (arg1, arg2) dbg =
   (* [arg2], the index, is already untagged. *)
   let op = Cprefetch { is_write; locality } in
   if_operation_supported op ~f:(fun () ->
-      return_unit dbg (Cop (op, [add_int arg1 arg2 dbg], dbg)))
+      return_unit dbg
+        (Cop (op, [add_int arg1 arg2 dbg], Op_debuginfo.create dbg)))
 
 let ext_pointer_prefetch ~is_write locality arg dbg =
   prefetch ~is_write locality (int_as_pointer arg dbg) dbg
@@ -137,7 +153,10 @@ let native_pointer_cas size (arg1, arg2, arg3) dbg =
       bind "set_to" arg3 (fun set_to ->
           bind "compare_with" arg2 (fun compare_with ->
               bind "dst" arg1 (fun dst ->
-                  tag_int (Cop (op, [compare_with; set_to; dst], dbg)) dbg))))
+                  tag_int
+                    (Cop
+                       (op, [compare_with; set_to; dst], Op_debuginfo.create dbg))
+                    dbg))))
 
 let ext_pointer_cas size (arg1, arg2, arg3) dbg =
   native_pointer_cas size (int_as_pointer arg1 dbg, arg2, arg3) dbg
@@ -153,18 +172,22 @@ let bigstring_cas size (arg1, arg2, arg3, arg4) dbg =
                         (Cop
                            ( Cload (Word_int, Mutable),
                              [field_address bs 1 dbg],
-                             dbg ))
+                             Op_debuginfo.create dbg ))
                         (fun bs_data ->
                           bind "dst" (add_int bs_data idx dbg) (fun dst ->
                               tag_int
-                                (Cop (op, [compare_with; set_to; dst], dbg))
+                                (Cop
+                                   ( op,
+                                     [compare_with; set_to; dst],
+                                     Op_debuginfo.create dbg ))
                                 dbg)))))))
 
 let native_pointer_atomic_add size (arg1, arg2) dbg =
   let op = Catomic { op = Fetch_and_add; size } in
   if_operation_supported op ~f:(fun () ->
       bind "src" arg2 (fun src ->
-          bind "dst" arg1 (fun dst -> Cop (op, [src; dst], dbg))))
+          bind "dst" arg1 (fun dst ->
+              Cop (op, [src; dst], Op_debuginfo.create dbg))))
 
 let native_pointer_atomic_sub size (arg1, arg2) dbg =
   native_pointer_atomic_add size (arg1, neg_int arg2 dbg) dbg
@@ -183,10 +206,12 @@ let bigstring_atomic_add size (arg1, arg2, arg3) dbg =
               bind "bs" arg1 (fun bs ->
                   bind "bs_data"
                     (Cop
-                       (Cload (Word_int, Mutable), [field_address bs 1 dbg], dbg))
+                       ( Cload (Word_int, Mutable),
+                         [field_address bs 1 dbg],
+                         Op_debuginfo.create dbg ))
                     (fun bs_data ->
                       bind "dst" (add_int bs_data idx dbg) (fun dst ->
-                          Cop (op, [src; dst], dbg)))))))
+                          Cop (op, [src; dst], Op_debuginfo.create dbg)))))))
 
 let bigstring_atomic_sub size (arg1, arg2, arg3) dbg =
   bigstring_atomic_add size (arg1, arg2, neg_int arg3 dbg) dbg
@@ -208,12 +233,16 @@ let transl_builtin name args dbg typ_res =
        keeping the tag is it guarantees that, on x86-64, the input to the BSR
        instruction is nonzero. *)
     let op = Cclz { arg_is_non_zero = true } in
-    if_operation_supported op ~f:(fun () -> Cop (op, args, dbg))
+    if_operation_supported op ~f:(fun () ->
+        Cop (op, args, Op_debuginfo.create dbg))
   | "caml_int_clz_untagged_to_untagged" ->
     let op = Cclz { arg_is_non_zero = false } in
     if_operation_supported op ~f:(fun () ->
         let arg = clear_sign_bit (one_arg name args) dbg in
-        Cop (Caddi, [Cop (op, [arg], dbg); Cconst_int (-1, dbg)], dbg))
+        Cop
+          ( Caddi,
+            [Cop (op, [arg], Op_debuginfo.create dbg); Cconst_int (-1, dbg)],
+            Op_debuginfo.create dbg ))
   | "caml_int64_clz_unboxed_to_untagged" ->
     clz ~arg_is_non_zero:false Pint64 (one_arg name args) dbg
   | "caml_int32_clz_unboxed_to_untagged" ->
@@ -230,13 +259,16 @@ let transl_builtin name args dbg typ_res =
     if_operation_supported Cpopcnt ~f:(fun () ->
         (* Having the argument tagged saves a shift, but there is one extra
            "set" bit, which is accounted for by the (-1) below. *)
-        Cop (Caddi, [Cop (Cpopcnt, args, dbg); Cconst_int (-1, dbg)], dbg))
+        Cop
+          ( Caddi,
+            [Cop (Cpopcnt, args, Op_debuginfo.create dbg); Cconst_int (-1, dbg)],
+            Op_debuginfo.create dbg ))
   | "caml_int_popcnt_untagged_to_untagged" ->
     (* This code is expected to be faster than [popcnt(tagged_x) - 1] when the
        untagged argument is already available from a previous computation. *)
     if_operation_supported Cpopcnt ~f:(fun () ->
         let arg = clear_sign_bit (one_arg name args) dbg in
-        Cop (Cpopcnt, [arg], dbg))
+        Cop (Cpopcnt, [arg], Op_debuginfo.create dbg))
   | "caml_int64_popcnt_unboxed_to_untagged" ->
     popcnt Pint64 (one_arg name args) dbg
   | "caml_int32_popcnt_unboxed_to_untagged" ->
@@ -268,9 +300,12 @@ let transl_builtin name args dbg typ_res =
           Cop
             ( Clsl,
               [Cconst_int (1, dbg); Cconst_int ((size_int * 8) - 1, dbg)],
-              dbg )
+              Op_debuginfo.create dbg )
         in
-        Cop (op, [Cop (Cor, [one_arg name args; c], dbg)], dbg))
+        Cop
+          ( op,
+            [Cop (Cor, [one_arg name args; c], Op_debuginfo.create dbg)],
+            Op_debuginfo.create dbg ))
   | "caml_int32_ctz_unboxed_to_untagged" ->
     ctz ~arg_is_non_zero:false Pint32 (one_arg name args) dbg
   | "caml_int64_ctz_unboxed_to_untagged" ->
@@ -295,7 +330,7 @@ let transl_builtin name args dbg typ_res =
     let op = Ccsel typ_res in
     let cond, ifso, ifnot = three_args name args in
     if_operation_supported op ~f:(fun () ->
-        Cop (op, [test_bool dbg cond; ifso; ifnot], dbg))
+        Cop (op, [test_bool dbg cond; ifso; ifnot], Op_debuginfo.create dbg))
   (* Native_pointer: handled as unboxed nativeint *)
   | "caml_ext_pointer_as_native_pointer" ->
     Some (int_as_pointer (one_arg name args) dbg)
@@ -305,49 +340,75 @@ let transl_builtin name args dbg typ_res =
     Some (value_of_int (one_arg name args) dbg)
   | "caml_native_pointer_load_immediate"
   | "caml_native_pointer_load_unboxed_nativeint" ->
-    Some (Cop (Cload (Word_int, Mutable), args, dbg))
+    Some (Cop (Cload (Word_int, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_immediate"
   | "caml_native_pointer_store_unboxed_nativeint" ->
-    Some (return_unit dbg (Cop (Cstore (Word_int, Assignment), args, dbg)))
+    Some
+      (return_unit dbg
+         (Cop (Cstore (Word_int, Assignment), args, Op_debuginfo.create dbg)))
   | "caml_native_pointer_load_unboxed_int64" when size_int = 8 ->
-    Some (Cop (Cload (Word_int, Mutable), args, dbg))
+    Some (Cop (Cload (Word_int, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_unboxed_int64" when size_int = 8 ->
-    Some (return_unit dbg (Cop (Cstore (Word_int, Assignment), args, dbg)))
+    Some
+      (return_unit dbg
+         (Cop (Cstore (Word_int, Assignment), args, Op_debuginfo.create dbg)))
   | "caml_native_pointer_load_signed_int32"
   | "caml_native_pointer_load_unboxed_int32" ->
-    Some (Cop (Cload (Thirtytwo_signed, Mutable), args, dbg))
+    Some
+      (Cop (Cload (Thirtytwo_signed, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_signed_int32"
   | "caml_native_pointer_store_unboxed_int32" ->
     Some
-      (return_unit dbg (Cop (Cstore (Thirtytwo_signed, Assignment), args, dbg)))
+      (return_unit dbg
+         (Cop
+            ( Cstore (Thirtytwo_signed, Assignment),
+              args,
+              Op_debuginfo.create dbg )))
   | "caml_native_pointer_load_unsigned_int32" ->
-    Some (Cop (Cload (Thirtytwo_unsigned, Mutable), args, dbg))
+    Some
+      (Cop (Cload (Thirtytwo_unsigned, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_unsigned_int32" ->
     Some
       (return_unit dbg
-         (Cop (Cstore (Thirtytwo_unsigned, Assignment), args, dbg)))
+         (Cop
+            ( Cstore (Thirtytwo_unsigned, Assignment),
+              args,
+              Op_debuginfo.create dbg )))
   | "caml_native_pointer_load_unboxed_float" ->
-    Some (Cop (Cload (Double, Mutable), args, dbg))
+    Some (Cop (Cload (Double, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_unboxed_float" ->
-    Some (return_unit dbg (Cop (Cstore (Double, Assignment), args, dbg)))
+    Some
+      (return_unit dbg
+         (Cop (Cstore (Double, Assignment), args, Op_debuginfo.create dbg)))
   | "caml_native_pointer_load_unsigned_int8" ->
-    Some (Cop (Cload (Byte_unsigned, Mutable), args, dbg))
+    Some (Cop (Cload (Byte_unsigned, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_load_signed_int8" ->
-    Some (Cop (Cload (Byte_signed, Mutable), args, dbg))
+    Some (Cop (Cload (Byte_signed, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_load_unsigned_int16" ->
-    Some (Cop (Cload (Sixteen_unsigned, Mutable), args, dbg))
+    Some
+      (Cop (Cload (Sixteen_unsigned, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_load_signed_int16" ->
-    Some (Cop (Cload (Sixteen_signed, Mutable), args, dbg))
+    Some (Cop (Cload (Sixteen_signed, Mutable), args, Op_debuginfo.create dbg))
   | "caml_native_pointer_store_unsigned_int8" ->
-    Some (return_unit dbg (Cop (Cstore (Byte_unsigned, Assignment), args, dbg)))
+    Some
+      (return_unit dbg
+         (Cop (Cstore (Byte_unsigned, Assignment), args, Op_debuginfo.create dbg)))
   | "caml_native_pointer_store_signed_int8" ->
-    Some (return_unit dbg (Cop (Cstore (Byte_signed, Assignment), args, dbg)))
+    Some
+      (return_unit dbg
+         (Cop (Cstore (Byte_signed, Assignment), args, Op_debuginfo.create dbg)))
   | "caml_native_pointer_store_unsigned_int16" ->
     Some
-      (return_unit dbg (Cop (Cstore (Sixteen_unsigned, Assignment), args, dbg)))
+      (return_unit dbg
+         (Cop
+            ( Cstore (Sixteen_unsigned, Assignment),
+              args,
+              Op_debuginfo.create dbg )))
   | "caml_native_pointer_store_signed_int16" ->
     Some
-      (return_unit dbg (Cop (Cstore (Sixteen_signed, Assignment), args, dbg)))
+      (return_unit dbg
+         (Cop
+            (Cstore (Sixteen_signed, Assignment), args, Op_debuginfo.create dbg)))
   (* Ext_pointer: handled as tagged int *)
   | "caml_ext_pointer_load_immediate"
   | "caml_ext_pointer_load_unboxed_nativeint" ->
@@ -547,7 +608,7 @@ let cextcall (prim : Primitive.description) args dbg ret ty_args returns =
             ty_args
           },
         args,
-        dbg )
+        Op_debuginfo.create dbg )
   in
   if prim.prim_c_builtin
   then
@@ -571,7 +632,7 @@ let extcall ~dbg ~returns ~alloc ~is_c_builtin ~ty_args name typ_res args =
             coeffects = Has_coeffects
           },
         args,
-        dbg )
+        Op_debuginfo.create dbg )
   in
   if is_c_builtin
   then

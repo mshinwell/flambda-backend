@@ -519,7 +519,9 @@ let nullary_primitive _env res dbg prim =
     (* CR gbury: we should never manually build cmm expression in this file. We
        should instead always use smart constructors defined in `cmm_helpers` or
        `to_cmm_shared.ml` *)
-    let expr = Cmm.Cop (Cprobe_is_enabled { name }, [], dbg) in
+    let expr =
+      Cmm.Cop (Cprobe_is_enabled { name }, [], Cmm.Op_debuginfo.create dbg)
+    in
     None, res, expr
   | Begin_region -> None, res, C.beginregion ~dbg
   | Enter_inlined_apply _ ->

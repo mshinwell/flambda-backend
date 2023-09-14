@@ -409,8 +409,10 @@ let machtype_of_sort (s : Layouts.Sort.const) =
 let rec is_unboxed_number_cmm = function
     | Cop(Calloc mode, [Cconst_natint (hdr, _); _], dbg)
       when Nativeint.equal hdr float_header ->
+      let dbg = Op_debuginfo.dbg dbg in
       Boxed (Boxed_float (mode, dbg), false)
     | Cop(Calloc mode, [Cconst_natint (hdr, _); Cconst_symbol (ops, _); _], dbg) ->
+      let dbg = Op_debuginfo.dbg dbg in
       if Nativeint.equal hdr boxedintnat_header
       && String.equal ops.sym_name caml_nativeint_ops
       then
@@ -552,7 +554,8 @@ let rec transl env e =
   | Udirect_apply(handler_code_sym, args, Some { name; enabled_at_init }, _, _, dbg) ->
       let args = List.map (transl env) args in
       return_unit dbg
-        (Cop(Cprobe { name; handler_code_sym; enabled_at_init }, args, dbg))
+        (Cop(Cprobe { name; handler_code_sym; enabled_at_init }, args,
+         Op_debuginfo.create dbg))
   | Udirect_apply(lbl, args, None, result_layout, kind, dbg) ->
     let args = List.map (transl env) args in
     let sym =
@@ -685,9 +688,10 @@ let rec transl env e =
           let dim_ofs = 4 + n in
           tag_int (Cop(Cload (Word_int, Mutable),
             [field_address (transl env b) dim_ofs dbg],
-                       dbg)) dbg
+                       Op_debuginfo.create dbg)) dbg
       | (Pprobe_is_enabled {name}, []) ->
-          tag_int (Cop(Cprobe_is_enabled {name}, [], dbg)) dbg
+          tag_int (Cop(Cprobe_is_enabled {name}, [], Op_debuginfo.create dbg))
+            dbg
       | (p, [arg]) ->
           transl_prim_1 env p arg dbg
       | (p, [arg1; arg2]) ->
@@ -744,7 +748,7 @@ let rec transl env e =
       else
         bind "switch" (transl env arg) (fun arg ->
           Cifthenelse(
-          Cop(Cand, [arg; Cconst_int (1, dbg)], dbg),
+          Cop(Cand, [arg; Cconst_int (1, dbg)], Op_debuginfo.create dbg),
           dbg,
           transl_switch dbg (kind_of_layout kind) env
             (untag_int arg dbg) s.us_index_consts s.us_actions_consts,
@@ -810,7 +814,8 @@ let rec transl env e =
               ccatch
                 (raise_num, [],
                  Cifthenelse
-                   (Cop(Ccmpi tst, [Cvar (VP.var id); high], dbg),
+                   (Cop(Ccmpi tst, [Cvar (VP.var id); high],
+                     Op_debuginfo.create dbg),
                     dbg,
                     Cexit (Lbl raise_num, [], []),
                     dbg,
@@ -821,10 +826,10 @@ let rec transl env e =
                           Csequence
                             (Cassign(VP.var id,
                                Cop(inc, [Cvar (VP.var id); Cconst_int (2, dbg)],
-                                 dbg)),
+                                 Op_debuginfo.create dbg)),
                              Cifthenelse
                                (Cop(Ccmpi Ceq, [Cvar (VP.var id_prev); high],
-                                  dbg),
+                                  Op_debuginfo.create dbg),
                                 dbg, Cexit (Lbl raise_num,[],[]),
                                 dbg, Ctuple [],
                                 dbg, Any)))))
@@ -843,7 +848,8 @@ let rec transl env e =
       end
   | Uunreachable ->
       let dbg = Debuginfo.none in
-      Cop(Cload (Word_int, Mutable), [Cconst_int (0, dbg)], dbg)
+      Cop(Cload (Word_int, Mutable), [Cconst_int (0, dbg)],
+        Op_debuginfo.create dbg)
   | Uregion e ->
       region (transl env e)
   | Uexclave e ->
@@ -912,7 +918,8 @@ and transl_make_array dbg env kind mode args =
                      effects = Arbitrary_effects;
                      coeffects = Has_coeffects;
                      ty = typ_val; alloc = true; ty_args = []},
-          [make_alloc ~mode dbg 0 (List.map (transl env) args)], dbg)
+          [make_alloc ~mode dbg 0 (List.map (transl env) args)],
+            Op_debuginfo.create dbg)
   | Paddrarray | Pintarray ->
       make_alloc ~mode dbg 0 (List.map (transl env) args)
   | Pfloatarray ->
@@ -998,13 +1005,17 @@ and transl_prim_1 env p arg dbg =
   | Pbox_float m ->
       box_float dbg m (transl env arg)
   | Pfloatofint m ->
-      box_float dbg m (Cop(Cfloatofint, [untag_int(transl env arg) dbg], dbg))
+      box_float dbg m (Cop(Cfloatofint, [untag_int(transl env arg) dbg],
+        Op_debuginfo.create dbg))
   | Pintoffloat ->
-     tag_int(Cop(Cintoffloat, [transl_unbox_float dbg env arg], dbg)) dbg
+     tag_int(Cop(Cintoffloat, [transl_unbox_float dbg env arg],
+       Op_debuginfo.create dbg)) dbg
   | Pnegfloat m ->
-      box_float dbg m (Cop(Cnegf, [transl_unbox_float dbg env arg], dbg))
+      box_float dbg m (Cop(Cnegf, [transl_unbox_float dbg env arg],
+        Op_debuginfo.create dbg))
   | Pabsfloat m ->
-      box_float dbg m (Cop(Cabsf, [transl_unbox_float dbg env arg], dbg))
+      box_float dbg m (Cop(Cabsf, [transl_unbox_float dbg env arg],
+        Op_debuginfo.create dbg))
   (* String operations *)
   | Pstringlength | Pbyteslength ->
       tag_int(string_length (transl env arg) dbg) dbg
@@ -1019,7 +1030,8 @@ and transl_prim_1 env p arg dbg =
         dbg (Cconst_int (3, dbg))
   (* Test integer/block *)
   | Pisint ->
-      tag_int(Cop(Cand, [transl env arg; Cconst_int (1, dbg)], dbg)) dbg
+      tag_int(Cop(Cand, [transl env arg; Cconst_int (1, dbg)],
+        Op_debuginfo.create dbg)) dbg
   (* Boxed integers *)
   | Pbintofint (bi, m) ->
       box_int dbg bi m (untag_int (transl env arg) dbg)
@@ -1030,7 +1042,7 @@ and transl_prim_1 env p arg dbg =
   | Pnegbint (bi, m) ->
       box_int dbg bi m
         (Cop(Csubi, [Cconst_int (0, dbg); transl_unbox_int dbg env bi arg],
-          dbg))
+          Op_debuginfo.create dbg))
   | Pbbswap (bi, m) ->
       box_int dbg bi m (bbswap bi (transl_unbox_int dbg env bi arg) dbg)
   | Pbswap16 ->
@@ -1130,27 +1142,27 @@ and transl_prim_2 env p arg1 arg2 dbg =
       box_float dbg m (Cop(Caddf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
-                    dbg))
+                    Op_debuginfo.create dbg ))
   | Psubfloat m ->
       box_float dbg m (Cop(Csubf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
-                    dbg))
+                    Op_debuginfo.create dbg ))
   | Pmulfloat m ->
       box_float dbg m (Cop(Cmulf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
-                    dbg))
+                    Op_debuginfo.create dbg ))
   | Pdivfloat m ->
       box_float dbg m (Cop(Cdivf,
                     [transl_unbox_float dbg env arg1;
                      transl_unbox_float dbg env arg2],
-                    dbg))
+                    Op_debuginfo.create dbg ))
   | Pfloatcomp cmp ->
       tag_int(Cop(Ccmpf cmp,
                   [transl_unbox_float dbg env arg1;
                    transl_unbox_float dbg env arg2],
-                  dbg)) dbg
+                  Op_debuginfo.create dbg )) dbg
 
   (* String operations *)
   | Pstringrefu | Pbytesrefu ->
@@ -1219,7 +1231,8 @@ and transl_prim_2 env p arg1 arg2 dbg =
   | Pbintcomp(bi, cmp) ->
       tag_int (Cop(Ccmpi cmp,
                      [transl_unbox_int dbg env bi arg1;
-                      transl_unbox_int dbg env bi arg2], dbg)) dbg
+                      transl_unbox_int dbg env bi arg2],
+                      Op_debuginfo.create dbg)) dbg
   | Pnot | Pnegint | Pintoffloat | Pfloatofint _ | Pnegfloat _
   | Pabsfloat _ | Pstringlength | Pbyteslength | Pbytessetu | Pbytessets
   | Pisint | Pbswap16 | Pint_as_pointer _ | Popaque | Pread_symbol _
@@ -1546,7 +1559,7 @@ and transl_letrec env bindings cont =
                    effects = Arbitrary_effects;
                    coeffects = Has_coeffects;
                    ty_args = [] },
-        args, dbg) in
+        args, Op_debuginfo.create dbg) in
   let rec init_blocks = function
     | [] -> fill_nonrec bsz
     | (_, _,
@@ -1583,7 +1596,7 @@ and transl_letrec env bindings cont =
                          effects = Arbitrary_effects;
                          coeffects = Has_coeffects;
                          alloc = false; ty_args = [] },
-              [Cvar (VP.var id); transl env exp], dbg) in
+              [Cvar (VP.var id); transl env exp], Op_debuginfo.create dbg) in
         Csequence(op, fill_blocks rem)
     | (_id, _exp, RHS_nonrec) :: rem ->
         fill_blocks rem

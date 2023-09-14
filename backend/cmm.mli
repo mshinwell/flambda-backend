@@ -263,6 +263,13 @@ type vec128_bits = { low : int64; high: int64 }
 
 val global_symbol : string -> symbol
 
+module Op_debuginfo : sig
+  type t
+
+  val create : Debuginfo.t -> t
+  val dbg : t -> Debuginfo.t
+end
+
 (** Every basic block should have a corresponding [Debuginfo.t] for its
     beginning. *)
 type expression =
@@ -280,7 +287,7 @@ type expression =
   (* Cassign must refer to a variable bound by Clet_mut *)
   | Cassign of Backend_var.t * expression
   | Ctuple of expression list
-  | Cop of operation * expression list * Debuginfo.t
+  | Cop of operation * expression list * Op_debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t * kind_for_unboxing

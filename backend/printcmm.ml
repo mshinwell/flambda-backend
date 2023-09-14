@@ -302,6 +302,7 @@ let rec expr ppf = function
         el in
       fprintf ppf "@[<1>[%a]@]" tuple el
   | Cop(op, el, dbg) ->
+      let dbg = Op_debuginfo.dbg dbg in
       with_location_mapping ~label:"Cop" ~dbg ppf (fun () ->
       fprintf ppf "@[<2>(%s" (operation dbg op);
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;

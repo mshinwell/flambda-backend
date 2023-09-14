@@ -955,6 +955,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           ret (self#emit_tuple ext_env simple_list)
       end
   | Cop(Craise k, [arg], dbg) ->
+      let dbg = Op_debuginfo.dbg dbg in
       begin match self#emit_expr env arg ~bound_name:None with
         None -> None
       | Some r1 ->
@@ -965,6 +966,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           None
       end
   | Cop(Copaque, args, dbg) ->
+      let dbg = Op_debuginfo.dbg dbg in
       begin match self#emit_parts_list env args with
         None -> None
       | Some (simple_args, env) ->
@@ -972,6 +974,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
          ret (self#insert_op_debug env Iopaque dbg rs rs)
       end
   | Cop(op, args, dbg) ->
+      let dbg = Op_debuginfo.dbg dbg in
       begin match self#emit_parts_list env args with
         None -> None
       | Some(simple_args, env) ->
@@ -1301,7 +1304,7 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           let unreachable =
             Cmm.(Cop ((Cload (Word_int, Mutable)),
                       [Cconst_int (0, Debuginfo.none)],
-                      Debuginfo.none))
+                      Op_debuginfo.create Debuginfo.none))
           in
           with_handler env unreachable
           (* Misc.fatal_errorf "Selection.emit_expr: \
@@ -1588,6 +1591,7 @@ method emit_tail (env:environment) exp =
   | Cop((Capply(ty, ((Rc_close_at_apply | Rc_normal) as pos))) as op,
         args, dbg)
        when self#tail_call_possible env pos ->
+      let dbg = Op_debuginfo.dbg dbg in
       begin match self#emit_parts_list env args with
         None -> ()
       | Some(simple_args, env) ->
@@ -1792,7 +1796,7 @@ method emit_tail (env:environment) exp =
           let unreachable =
             Cmm.(Cop ((Cload (Word_int, Mutable)),
                       [Cconst_int (0, Debuginfo.none)],
-                      Debuginfo.none))
+                      Op_debuginfo.create Debuginfo.none))
           in
           with_handler env unreachable
         (* Misc.fatal_errorf "Selection.emit_expr: \

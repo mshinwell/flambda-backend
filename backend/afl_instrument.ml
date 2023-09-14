@@ -41,7 +41,7 @@ let rec with_afl_logging b dbg =
     let cur_location = Random.int afl_map_size in
     let cur_pos = V.create_local "pos" in
     let afl_area = V.create_local "shared_mem" in
-    let op oper args = Cop (oper, args, dbg) in
+    let op oper args = Cop (oper, args, Op_debuginfo.create dbg) in
     Clet(VP.create afl_area,
       op (Cload (Word_int, Asttypes.Mutable)) [afl_area_ptr dbg],
       Clet(VP.create cur_pos, op Cxor [op (Cload (Word_int, Asttypes.Mutable))
@@ -114,6 +114,6 @@ let instrument_initialiser c dbg =
                         coeffects = Has_coeffects;
                         ty = typ_int; alloc = false; ty_args = []; },
              [Cconst_int (0, dbg ())],
-             dbg ()),
+             Op_debuginfo.create (dbg ())),
         c))
     (dbg ())
