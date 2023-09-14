@@ -284,7 +284,7 @@ module Dynamic = Make_layout_filler (struct
      left-to-right order, so that the first translated field is actually
      evaluated last. *)
   let simple ~dbg env res simple =
-    let To_cmm_env.{ env; res; expr = { cmm; free_vars; effs } } =
+    let To_cmm_env.{ env; res; expr = { phantom = _; cmm; free_vars; effs } } =
       C.simple ~dbg env res simple
     in
     `Data [cmm], free_vars, env, res, effs

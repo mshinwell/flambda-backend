@@ -116,7 +116,13 @@ val ignore_low_bit_int : expression -> expression
 val ignore_high_bit_int : expression -> expression
 
 (** Arithmetical operations on integers *)
-val add_int : expression -> expression -> Debuginfo.t -> expression
+val add_int :
+  ?phantom1:Backend_var.With_provenance.t ->
+  ?phantom2:Backend_var.With_provenance.t ->
+  expression ->
+  expression ->
+  Debuginfo.t ->
+  expression
 
 val sub_int : expression -> expression -> Debuginfo.t -> expression
 

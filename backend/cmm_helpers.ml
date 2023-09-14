@@ -231,14 +231,17 @@ let incr_int c dbg = add_const c 1 dbg
 
 let decr_int c dbg = add_const c (-1) dbg
 
-let rec add_int c1 c2 dbg =
+let create_op_dbg ?phantom1 ?phantom2 dbg =
+  Op_debuginfo.create_with_phantom_args dbg ~phantom_args:[phantom1; phantom2]
+
+let rec add_int ?phantom1 ?phantom2 c1 c2 dbg =
   match c1, c2 with
   | Cconst_int (n, _), c | c, Cconst_int (n, _) -> add_const c n dbg
   | Cop (Caddi, [c1; Cconst_int (n1, _)], _), c2 ->
-    add_const (add_int c1 c2 dbg) n1 dbg
+    add_const (add_int ?phantom1 ?phantom2 c1 c2 dbg) n1 dbg
   | c1, Cop (Caddi, [c2; Cconst_int (n2, _)], _) ->
-    add_const (add_int c1 c2 dbg) n2 dbg
-  | _, _ -> Cop (Caddi, [c1; c2], Op_debuginfo.create dbg)
+    add_const (add_int ?phantom1 ?phantom2 c1 c2 dbg) n2 dbg
+  | _, _ -> Cop (Caddi, [c1; c2], create_op_dbg ?phantom1 ?phantom2 dbg)
 
 let rec sub_int c1 c2 dbg =
   match c1, c2 with
@@ -3630,8 +3633,8 @@ let setfloatfield n init arg1 arg2 dbg =
            arg2 ],
          Op_debuginfo.create dbg ))
 
-let add_int_caml _phantom1 _phantom2 arg1 arg2 dbg =
-  decr_int (add_int arg1 arg2 dbg) dbg
+let add_int_caml phantom1 phantom2 arg1 arg2 dbg =
+  decr_int (add_int ?phantom1 ?phantom2 arg1 arg2 dbg) dbg
 
 (* Unary primitive delayed to reuse add_int_caml *)
 let offsetint n arg dbg =

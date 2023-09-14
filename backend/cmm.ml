@@ -255,12 +255,17 @@ type vec128_bits = { low : int64; high: int64 }
 let global_symbol sym_name = { sym_name; sym_global = Global }
 
 module Op_debuginfo = struct
-  type t = {
-    dbg : Debuginfo.t
+  type t =
+  {
+    dbg : Debuginfo.t;
+    phantom_args : Backend_var.With_provenance.t option list;
   }
 
-  let create dbg = { dbg }
+  let create dbg = { dbg; phantom_args = [] }
+  let create_with_phantom_args dbg ~phantom_args = { dbg; phantom_args }
+
   let dbg t = t.dbg
+  let phantom_args t = t.phantom_args
 end
 
 type expression =

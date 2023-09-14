@@ -335,7 +335,7 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
       C.sign_extend_32 dbg (f (C.low_32 dbg x) (C.low_32 dbg y) dbg)
     in
     match op with
-    | Add -> sign_extend_32_can_delay_overflow C.add_int
+    | Add -> sign_extend_32_can_delay_overflow (fun c1 c2 -> C.add_int c1 c2)
     | Sub -> sign_extend_32_can_delay_overflow C.sub_int
     | Mul -> sign_extend_32_can_delay_overflow C.mul_int
     | Xor -> sign_extend_32_can_delay_overflow C.xor_int
@@ -367,7 +367,7 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
       C.sign_extend_63 dbg (f (C.low_63 dbg x) (C.low_63 dbg y) dbg)
     in
     match op with
-    | Add -> sign_extend_63_can_delay_overflow C.add_int
+    | Add -> sign_extend_63_can_delay_overflow (fun c1 c2 -> C.add_int c1 c2)
     | Sub -> sign_extend_63_can_delay_overflow C.sub_int
     | Mul -> sign_extend_63_can_delay_overflow C.mul_int
     | Xor -> sign_extend_63_can_delay_overflow C.xor_int
@@ -384,7 +384,7 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
       | Naked_int32 | Naked_immediate | Tagged_immediate -> assert false
     in
     match op with
-    | Add -> C.add_int x y dbg
+    | Add -> C.add_int ?phantom1:x_phantom ?phantom2:y_phantom x y dbg
     | Sub -> C.sub_int x y dbg
     | Mul -> C.mul_int x y dbg
     | And -> C.and_int x y dbg

@@ -302,6 +302,7 @@ let rec expr ppf = function
         el in
       fprintf ppf "@[<1>[%a]@]" tuple el
   | Cop(op, el, dbg) ->
+      let phantom_args = Op_debuginfo.phantom_args dbg in
       let dbg = Op_debuginfo.dbg dbg in
       with_location_mapping ~label:"Cop" ~dbg ppf (fun () ->
       fprintf ppf "@[<2>(%s" (operation dbg op);
@@ -313,6 +314,13 @@ let rec expr ppf = function
         fprintf ppf "@ %a" extcall_signature (ty, ty_args)
       | _ -> ()
       end;
+      (match phantom_args with
+      | [] -> ()
+      | args ->
+        fprintf ppf "@[[p.a.: %a]@]"
+          (pp_print_list ~pp_sep:pp_print_space
+            (Misc.Stdlib.Option.print VP.print)) args
+      );
       fprintf ppf ")@]")
   | Csequence(e1, e2) ->
       fprintf ppf "@[<2>(seq@ %a@ %a)@]" sequence e1 sequence e2

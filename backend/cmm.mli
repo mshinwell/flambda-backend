@@ -267,7 +267,11 @@ module Op_debuginfo : sig
   type t
 
   val create : Debuginfo.t -> t
+  val create_with_phantom_args : Debuginfo.t
+    -> phantom_args:Backend_var.With_provenance.t option list -> t
+
   val dbg : t -> Debuginfo.t
+  val phantom_args : t -> Backend_var.With_provenance.t option list
 end
 
 (** Every basic block should have a corresponding [Debuginfo.t] for its
