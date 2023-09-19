@@ -974,7 +974,10 @@ method emit_expr_aux (env:environment) exp ~bound_name :
          ret (self#insert_op_debug env Iopaque dbg rs rs)
       end
   | Cop(op, args, dbg) ->
+      Format.eprintf "Cop case: %a\n%!" Printcmm.expression exp;
       let phantom_args = Op_debuginfo.phantom_args dbg in
+      Format.eprintf "...num_phantom_args %d\n%!"
+        (List.length phantom_args);
       let[@inline] name_phantom_args regs =
         (* CR mshinwell: this doesn't work for args split across regs, we
            might need to adjust [regs_for] or something instead *)
@@ -1112,17 +1115,6 @@ method emit_expr_aux (env:environment) exp ~bound_name :
           | op ->
               let r1 = self#emit_tuple env new_args in
               let rd = self#regs_for ty in
-              (*
-              (* XXX need proper return from [select_operation] saying
-                 what to do here *)
-              let rs =
-                match op with
-                | Ispecific _ ->
-                  Format.eprintf "hit Ispecific\n%!";
-                  Array.concat [r1; rd]
-                | _ -> r1
-              in
-              *)
               name_phantom_args r1;
               assert (Region_stack.equal unclosed_regions env.regions);
               add_naming_op_for_bound_name rd;

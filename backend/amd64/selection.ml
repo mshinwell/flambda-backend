@@ -37,6 +37,7 @@ let rec select_addr exp =
       (Asymbol s, 0)
   | Cop((Caddi | Caddv | Cadda), [arg; Cconst_int (m, _)], _)
   | Cop((Caddi | Caddv | Cadda), [Cconst_int (m, _); arg], _) ->
+    Format.eprintf "** top case m=%d\n%!" m;
       let (a, n) = select_addr arg in
       if Misc.no_overflow_add n m then a, n + m else default
   | Cop(Csubi, [arg; Cconst_int (m, _)], _) ->
@@ -61,10 +62,11 @@ let rec select_addr exp =
       | ((Asymbol _ | Aadd (_, _) | Ascale (_,_) | Ascaledadd (_, _, _)), _)
         -> default
       end
-  | Cop((Caddi | Caddv | Cadda), [arg1; arg2], _) ->
+  | Cop((Caddi | Caddv | Cadda), [arg1; arg2], dbg) ->
       begin match (select_addr arg1, select_addr arg2) with
           ((Alinear e1, n1), (Alinear e2, n2))
           when Misc.no_overflow_add n1 n2 ->
+            Format.eprintf "Aadd case 1 %d/%d\n%!" n1 n2;
               (Aadd(e1, e2), n1 + n2)
         | (((Alinear e1, n1), (Ascale(e2, scale), n2)) |
            ((Ascale(e2, scale), n2), (Alinear e1, n1)))
@@ -250,8 +252,8 @@ method select_addressing _chunk exp =
         (Ibased(s.sym_name, glob, d), Ctuple [])
     | Alinear e ->
         (Iindexed d, e)
-    | Aadd(e1, e2) ->
-        (Iindexed2 d, Ctuple[e1; e2])
+    | Aadd(e1, e2 (*, dbg*)) ->
+        (Iindexed2 d, Ctuple[e1; e2](*, dbg*))
     | Ascale(e, scale) ->
         (Iscaled(scale, d), e)
     | Ascaledadd(e1, e2, scale) ->
@@ -275,8 +277,8 @@ method! select_store is_assign addr exp =
 
 method! select_operation op args dbg =
   match op with
+  (*
   (* Recognize the LEA instruction *)
-  (* XXX
     Caddi | Caddv | Cadda | Csubi ->
       begin match
         self#select_addressing Word_int
@@ -285,9 +287,10 @@ method! select_operation op args dbg =
         (Iindexed _, _)
       | (Iindexed2 0, _) -> super#select_operation op args dbg
       | ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr,
-         arg) -> (Ispecific(Ilea addr), [arg])
-      end
-      *)
+         arg) ->
+          Format.eprintf "LEA expr = %a\n%!" Printcmm.expression arg;
+          (Ispecific(Ilea addr), [arg])
+      end *)
   (* Recognize float arithmetic with memory. *)
   | Caddf ->
       self#select_floatarith true Iaddf Ifloatadd args
