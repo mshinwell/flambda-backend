@@ -543,7 +543,7 @@ let close_c_call acc env ~loc ~let_bound_ids_with_kinds
           ~inlining_state:(Inlining_state.default ~round:0)
           ~probe:None ~position:Normal
           ~relative_history:(Env.relative_history_from_scoped ~loc env)
-          ~region:current_region
+          ~region:(Some current_region)
       in
       Expr_with_acc.create_apply acc apply
   in
@@ -1184,7 +1184,7 @@ let close_exact_or_unknown_apply acc env
       ~inlining_state:(Inlining_state.default ~round:0)
       ~probe ~position
       ~relative_history:(Env.relative_history_from_scoped ~loc env)
-      ~region:current_region
+      ~region:(Some current_region)
   in
   if Flambda_features.classic_mode ()
   then
@@ -2185,7 +2185,7 @@ let wrap_over_application acc env full_call (apply : IR.apply) ~remaining
         ~inlining_state:(Inlining_state.default ~round:0)
         ~probe ~position
         ~relative_history:(Env.relative_history_from_scoped ~loc:apply.loc env)
-        ~region:apply_region
+        ~region:(Some apply_region)
     in
     match needs_region with
     | None -> Expr_with_acc.create_apply acc over_application

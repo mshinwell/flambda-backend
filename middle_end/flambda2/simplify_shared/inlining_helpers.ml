@@ -31,10 +31,13 @@ let make_inlined_body ~callee ~region_inlined_into ~params ~args ~my_closure
     Renaming.add_continuation renaming exn_continuation apply_exn_continuation
   in
   let renaming =
-    (* Unlike for parameters, we know that the argument for the [my_region]
-       parameter is fresh for [body], so we can use a permutation without fear
-       of swapping out existing occurrences of such argument within [body]. *)
-    Renaming.add_variable renaming my_region region_inlined_into
+    match region_inlined_into with
+    | None -> renaming
+    | Some region_inlined_into ->
+      (* Unlike for parameters, we know that the argument for the [my_region]
+         parameter is fresh for [body], so we can use a permutation without fear
+         of swapping out existing occurrences of such argument within [body]. *)
+      Renaming.add_variable renaming my_region region_inlined_into
   in
   let body =
     bind_params ~params:(my_closure :: params) ~args:(callee :: args) ~body

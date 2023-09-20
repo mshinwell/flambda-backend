@@ -799,7 +799,7 @@ apply_expr:
           inlined;
           inlining_state;
           arities;
-          region;
+          region = Some region;
      } }
 ;
 

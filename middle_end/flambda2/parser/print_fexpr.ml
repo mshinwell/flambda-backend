@@ -760,7 +760,9 @@ let rec expr scope ppf = function
       inlined pp_inlining_state () func_name_with_optional_arities
       (func, arities)
       (simple_args ~space:Before ~omit_if_empty:true)
-      args region r result_continuation ret exn_continuation ek
+      args
+      (Misc.Stdlib.Option.print region)
+      r result_continuation ret exn_continuation ek
 
 and let_expr scope ppf : let_ -> unit = function
   | { bindings = first :: rest; body; value_slots = ces } ->

@@ -421,7 +421,7 @@ type apply =
     arities : function_arities option;
     inlined : inlined_attribute option;
     inlining_state : inlining_state option;
-    region : region
+    region : region option
   }
 
 type size = int

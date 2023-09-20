@@ -1054,7 +1054,11 @@ and apply_expr env (app : Apply_expr.t) : Fexpr.expr =
       | Never_inlined -> Some Never_inlined
   in
   let inlining_state = inlining_state (Apply_expr.inlining_state app) in
-  let region = Env.find_region_exn env (Apply_expr.region app) in
+  let region =
+    match Apply_expr.region app with
+    | None -> None
+    | Some region -> Some (Env.find_region_exn env region)
+  in
   Apply
     { func;
       continuation;

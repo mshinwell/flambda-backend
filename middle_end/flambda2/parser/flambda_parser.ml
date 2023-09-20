@@ -1260,7 +1260,7 @@ module Tables = struct
           inlined;
           inlining_state;
           arities;
-          region;
+          region = Some region;
      } )
 # 1266 "flambda_parser_in.ml"
          in

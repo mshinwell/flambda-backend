@@ -150,7 +150,7 @@ let split_direct_over_application apply
       ~inlining_state:(Apply.inlining_state apply)
       ~probe:(Apply.probe apply) ~position:(Apply.position apply)
       ~relative_history:(Apply.relative_history apply)
-      ~region
+      ~region:(Some region)
   in
   let perform_over_application_free_names =
     Apply.free_names perform_over_application

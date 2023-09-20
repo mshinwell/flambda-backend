@@ -82,7 +82,7 @@ type t =
     probe : Probe.t;
     position : Position.t;
     relative_history : Inlining_history.Relative.t;
-    region : Variable.t
+    region : Variable.t option
   }
 
 let [@ocamlformat "disable"] print_inlining_paths ppf relative_history =
@@ -112,7 +112,7 @@ let [@ocamlformat "disable"] print ppf
     Result_continuation.print continuation
     Exn_continuation.print exn_continuation
     Flambda_colours.variable
-    Variable.print region
+    (Misc.Stdlib.Option.print Variable.print) region
     Flambda_colours.pop
     Simple.List.print args
     Flambda_arity.print args_arity
@@ -232,7 +232,10 @@ let free_names_without_exn_continuation
       Result_continuation.free_names continuation;
       Simple.List.free_names args;
       Call_kind.free_names call_kind;
-      Name_occurrences.singleton_variable region Name_mode.normal ]
+      (match region with
+      | None -> Name_occurrences.empty
+      | Some region ->
+        Name_occurrences.singleton_variable region Name_mode.normal) ]
 
 let free_names_except_callee
     { callee = _;
@@ -255,7 +258,10 @@ let free_names_except_callee
       Exn_continuation.free_names exn_continuation;
       Simple.List.free_names args;
       Call_kind.free_names call_kind;
-      Name_occurrences.singleton_variable region Name_mode.normal ]
+      (match region with
+      | None -> Name_occurrences.empty
+      | Some region ->
+        Name_occurrences.singleton_variable region Name_mode.normal) ]
 
 let free_names t =
   Name_occurrences.union
@@ -287,7 +293,7 @@ let apply_renaming
   let callee' = Simple.apply_renaming callee renaming in
   let args' = Simple.List.apply_renaming args renaming in
   let call_kind' = Call_kind.apply_renaming call_kind renaming in
-  let region' = Renaming.apply_variable renaming region in
+  let region' = Option.map (Renaming.apply_variable renaming) region in
   if continuation == continuation'
      && exn_continuation == exn_continuation'
      && callee == callee' && args == args' && call_kind == call_kind'
@@ -337,11 +343,14 @@ let ids_for_export
     Result_continuation.ids_for_export continuation
   in
   let exn_continuation_ids = Exn_continuation.ids_for_export exn_continuation in
-  Ids_for_export.add_variable
-    (Ids_for_export.union
-       (Ids_for_export.union callee_and_args_ids call_kind_ids)
-       (Ids_for_export.union result_continuation_ids exn_continuation_ids))
-    region
+  let ids =
+    Ids_for_export.union
+      (Ids_for_export.union callee_and_args_ids call_kind_ids)
+      (Ids_for_export.union result_continuation_ids exn_continuation_ids)
+  in
+  match region with
+  | None -> ids
+  | Some region -> Ids_for_export.add_variable ids region
 
 let with_continuation t continuation = { t with continuation }
 
