@@ -546,40 +546,54 @@ and let_cont_not_inlined env res k handler body =
   (* CR gbury: "split" the environment according to which variables the handler
      and the body uses, to allow for inlining to proceed within each
      expression. *)
+  let orig_env = env in
+  let orig_res = res in
+  let orig_handler = handler in
   let wrap, env, res = Env.flush_delayed_lets ~mode:Branching_point env res in
   let is_exn_handler = Continuation_handler.is_exn_handler handler in
   let is_cold = Continuation_handler.is_cold handler in
-  let vars, arity, handler, free_vars_of_handler, res =
+  let vars, arity, handler, handler_flambda, free_vars_of_handler, res =
     continuation_handler env res handler
   in
-  let catch_id, env =
-    Env.add_jump_cont env k ~param_types:(List.map snd vars)
+  let is_goto_to_return_cont =
+    match Expr.descr handler_flambda with
+    | Apply_cont apply ->
+      Continuation.equal
+        (Apply_cont.continuation apply)
+        (Env.return_continuation env)
+    | Let _ | Let_cont _ | Apply _ | Switch _ | Invalid _ -> false
   in
-  let cmm, free_vars, res =
-    (* Exception continuations are translated specially -- these will be reached
-       via the raising of exceptions, whereas other continuations are reached
-       using a normal jump. *)
-    if is_exn_handler
-    then
-      let_cont_exn_handler env res k body vars handler free_vars_of_handler
-        ~catch_id arity
-    else
-      (* CR mshinwell: fix debuginfo *)
-      (* CR gbury: once we get proper debuginfo here, remember to apply
-         Env.add_inlined_debuginfo to it *)
-      let dbg = Debuginfo.none in
-      let body, free_vars_of_body, res = expr env res body in
-      let free_vars =
-        Backend_var.Set.union free_vars_of_body
-          (C.remove_vars_with_machtype free_vars_of_handler vars)
-      in
-      ( C.create_ccatch ~rec_flag:false ~body
-          ~handlers:[C.handler ~dbg catch_id vars handler is_cold],
-        free_vars,
-        res )
-  in
-  let cmm, free_vars = wrap cmm free_vars in
-  cmm, free_vars, res
+  if is_goto_to_return_cont
+  then let_cont_inlined orig_env orig_res k orig_handler body
+  else
+    let catch_id, env =
+      Env.add_jump_cont env k ~param_types:(List.map snd vars)
+    in
+    let cmm, free_vars, res =
+      (* Exception continuations are translated specially -- these will be
+         reached via the raising of exceptions, whereas other continuations are
+         reached using a normal jump. *)
+      if is_exn_handler
+      then
+        let_cont_exn_handler env res k body vars handler free_vars_of_handler
+          ~catch_id arity
+      else
+        (* CR mshinwell: fix debuginfo *)
+        (* CR gbury: once we get proper debuginfo here, remember to apply
+           Env.add_inlined_debuginfo to it *)
+        let dbg = Debuginfo.none in
+        let body, free_vars_of_body, res = expr env res body in
+        let free_vars =
+          Backend_var.Set.union free_vars_of_body
+            (C.remove_vars_with_machtype free_vars_of_handler vars)
+        in
+        ( C.create_ccatch ~rec_flag:false ~body
+            ~handlers:[C.handler ~dbg catch_id vars handler is_cold],
+          free_vars,
+          res )
+    in
+    let cmm, free_vars = wrap cmm free_vars in
+    cmm, free_vars, res
 
 (* Exception continuations are translated using delayed Ctrywith blocks. The
    exception handler parts of these blocks are identified by the [catch_id]s.
@@ -676,7 +690,7 @@ and let_cont_rec env res invariant_params conts body =
   let conts_to_handlers, res =
     Continuation.Map.fold
       (fun k handler (conts_to_handlers, res) ->
-        let vars, _arity, handler, free_vars_of_handler, res =
+        let vars, _arity, handler, _handler_flambda, free_vars_of_handler, res =
           continuation_handler env res handler
         in
         ( Continuation.Map.add k
@@ -713,7 +727,7 @@ and continuation_handler env res handler =
       let arity = Bound_parameters.arity params in
       let env, vars = C.bound_parameters env params in
       let expr, free_vars_of_handler, res = expr env res handler in
-      vars, arity, expr, free_vars_of_handler, res)
+      vars, arity, expr, handler, free_vars_of_handler, res)
 
 and apply_expr env res apply =
   let call, free_vars, env, res, effs = translate_apply env res apply in
