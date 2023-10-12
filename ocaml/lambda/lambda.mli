@@ -251,6 +251,8 @@ and float_comparison =
 
 and array_kind =
     Pgenarray | Paddrarray | Pintarray | Pfloatarray
+  | Punboxedfloatarray
+  | Punboxedintarray of unboxed_integer
 
 (** When accessing a flat float array, we need to know the mode which we should
     box the resulting float at. *)
@@ -259,6 +261,8 @@ and array_ref_kind =
   | Paddrarray_ref
   | Pintarray_ref
   | Pfloatarray_ref of alloc_mode
+  | Punboxedfloatarray_ref
+  | Punboxedintarray_ref of unboxed_integer
 
 (** When updating an array that might contain pointers, we need to know what
     mode they're at; otherwise, access is uniform. *)
@@ -267,6 +271,8 @@ and array_set_kind =
   | Paddrarray_set of modify_mode
   | Pintarray_set
   | Pfloatarray_set
+  | Punboxedfloatarray_set
+  | Punboxedintarray_set of unboxed_integer
 
 and value_kind =
     Pgenval | Pfloatval | Pboxedintval of boxed_integer | Pintval
@@ -296,6 +302,8 @@ and block_shape =
 
 and boxed_integer = Primitive.boxed_integer =
     Pnativeint | Pint32 | Pint64
+
+and unboxed_integer = boxed_integer
 
 and vec128_type =
   | Unknown128
