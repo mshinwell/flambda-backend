@@ -134,6 +134,7 @@ regen-flambda2-test-dune-rules: $(dune_config_targets)
 build_upstream: ocaml/config.status
 	rsync -a ocaml/ _build_upstream
 	(cd _build_upstream && \
+	    ./configure && \
 	    $(MAKE) world.opt && \
 	    $(MAKE) ocamlnat)
 
