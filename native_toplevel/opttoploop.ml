@@ -281,10 +281,7 @@ let default_load ppf (program : Lambda.program) =
     if Config.flambda2 then
       Direct_to_cmm (Flambda2.lambda_to_cmm ~keep_symbol_tables:true)
     else
-      let middle_end =
-        if Config.flambda then Flambda_middle_end.lambda_to_clambda
-        else Closure_middle_end.lambda_to_clambda
-      in
+      let middle_end = Flambda_middle_end.lambda_to_clambda in
       Via_clambda { middle_end; backend }
   in
   Asmgen.compile_implementation

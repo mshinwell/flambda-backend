@@ -80,10 +80,7 @@ let implementation unix ~backend ~(flambda2 : flambda2) ~start_from ~source_file
     let pipeline : Asmgen.pipeline =
       if Config.flambda2 then Direct_to_cmm (flambda2 ~keep_symbol_tables)
       else
-        let middle_end =
-          if Config.flambda then Flambda_middle_end.lambda_to_clambda
-          else Closure_middle_end.lambda_to_clambda
-        in
+        let middle_end = Flambda_middle_end.lambda_to_clambda in
         Via_clambda { middle_end; backend; }
     in
     if not (Config.flambda || Config.flambda2) then Clflags.set_oclassic ();

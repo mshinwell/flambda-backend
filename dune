@@ -45,8 +45,6 @@
 
 (copy_files# middle_end/*.ml{,i})
 
-(copy_files# middle_end/closure/*.ml{,i})
-
 (copy_files# middle_end/flambda/*.ml{,i})
 
 (copy_files# middle_end/flambda/base_types/*.ml{,i})
@@ -98,9 +96,6 @@
   semantics_of_primitives
   symbol_utils
   variable
-  ;; middle_end/closure/
-  closure
-  closure_middle_end
   ;; middle_end/flambda/base_types/
   closure_element
   closure_id
