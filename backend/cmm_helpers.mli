@@ -15,6 +15,12 @@
 
 open Cmm
 
+type arity =
+  { function_kind : Lambda.function_kind;
+    params_layout : Lambda.layout list;
+    return_layout : Lambda.layout
+  }
+
 (** [bind name arg fn] is equivalent to [let name = arg in fn name], or simply
     [fn arg] if [arg] is simple enough *)
 val bind : string -> expression -> (expression -> expression) -> expression
@@ -60,8 +66,7 @@ val boxedint64_header : nativeint
 val boxedintnat_header : nativeint
 
 (** Closure info for a closure of given arity and distance to environment *)
-val closure_info :
-  arity:Clambda.arity -> startenv:int -> is_last:bool -> nativeint
+val closure_info : arity:arity -> startenv:int -> is_last:bool -> nativeint
 
 val closure_info' :
   arity:Lambda.function_kind * 'a list ->
@@ -73,11 +78,7 @@ val closure_info' :
 val alloc_infix_header : int -> Debuginfo.t -> expression
 
 val alloc_closure_info :
-  arity:Clambda.arity ->
-  startenv:int ->
-  is_last:bool ->
-  Debuginfo.t ->
-  expression
+  arity:arity -> startenv:int -> is_last:bool -> Debuginfo.t -> expression
 
 (** Integers *)
 
@@ -161,21 +162,6 @@ val safe_mod_bi :
   expression ->
   Primitive.boxed_integer ->
   Debuginfo.t ->
-  expression
-
-(** If-Then-Else expression
-
-    [mk_if_then_else dbg kind cond ifso_dbg ifso ifnot_dbg ifnot] associates
-    [dbg] to the global if-then-else expression, [ifso_dbg] to the then branch
-    [ifso], and [ifnot_dbg] to the else branch [ifnot] *)
-val mk_if_then_else :
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  expression ->
-  Debuginfo.t ->
-  expression ->
-  Debuginfo.t ->
-  expression ->
   expression
 
 (** Boolean negation *)
@@ -435,29 +421,6 @@ val lookup_tag : expression -> expression -> Debuginfo.t -> expression
     a tagged integer *)
 val lookup_label : expression -> expression -> Debuginfo.t -> expression
 
-(** Lookup and call a method using the method cache. Arguments:
-
-    - obj : the object from which to lookup
-
-    - tag : the hash of the method name, as a tagged integer
-
-    - cache : the method cache array
-
-    - pos : the position of the cache entry in the cache array
-
-    - args : the additional arguments to the method call *)
-val call_cached_method :
-  expression ->
-  expression ->
-  expression ->
-  expression ->
-  expression list ->
-  Extended_machtype.t list ->
-  Extended_machtype.t ->
-  Clambda.apply_kind ->
-  Debuginfo.t ->
-  expression
-
 (** Allocations *)
 
 (** Allocate a block of regular values with the given tag *)
@@ -467,27 +430,6 @@ val make_alloc :
 (** Allocate a block of unboxed floats with the given tag *)
 val make_float_alloc :
   mode:Lambda.alloc_mode -> Debuginfo.t -> int -> expression list -> expression
-
-(** Bounds checking *)
-
-(** Generate a [Ccheckbound] term *)
-val make_checkbound : Debuginfo.t -> expression list -> expression
-
-(** [check_bound_and_alignment
-        ~skip_if_unsafe access_size dbg ~address ~length ~offset k]
-    Prefixes expression [k] with a check that accessing [access_size] bits at
-    [data + offset] is valid, unless [skip_if_unsafe] is [Unsafe].
-    An access is valid if it is within the bound specified by [length], and
-    the resulting address is sufficiently aligned. *)
-val check_bound_and_alignment :
-  Lambda.is_safe ->
-  Clambda_primitives.memory_access_size ->
-  Debuginfo.t ->
-  address:expression ->
-  length:expression ->
-  offset:expression ->
-  expression ->
-  expression
 
 (** Sys.opaque_identity *)
 val opaque : expression -> Debuginfo.t -> expression
@@ -622,37 +564,7 @@ val aligned_load_128 : expression -> expression -> Debuginfo.t -> expression
 val aligned_set_128 :
   expression -> expression -> expression -> Debuginfo.t -> expression
 
-(** Raw memory accesses *)
-
-(** [unaligned_set size ptr idx newval dbg] *)
-val unaligned_set :
-  Clambda_primitives.memory_access_size ->
-  expression ->
-  expression ->
-  expression ->
-  Debuginfo.t ->
-  expression
-
-(** [unaligned_load size ptr idx dbg] *)
-val unaligned_load :
-  Clambda_primitives.memory_access_size ->
-  expression ->
-  expression ->
-  Debuginfo.t ->
-  expression
-
-(** [box_sized size dbg exp] *)
-val box_sized :
-  Clambda_primitives.memory_access_size ->
-  Lambda.alloc_mode ->
-  Debuginfo.t ->
-  expression ->
-  expression
-
 (** Primitives *)
-
-val simplif_primitive :
-  Clambda_primitives.primitive -> Clambda_primitives.primitive
 
 type unary_primitive = expression -> Debuginfo.t -> expression
 
@@ -724,34 +636,6 @@ val asr_int_caml : binary_primitive
 
 val int_comp_caml : Lambda.integer_comparison -> binary_primitive
 
-(** Strings, Bytes and Bigstrings *)
-
-(** Regular string/bytes access. Args: string/bytes, index *)
-val stringref_unsafe : binary_primitive
-
-val stringref_safe : binary_primitive
-
-(** Load by chunk from string/bytes, bigstring. Args: string, index *)
-val string_load :
-  Clambda_primitives.memory_access_size ->
-  Lambda.is_safe ->
-  Lambda.alloc_mode ->
-  binary_primitive
-
-val bigstring_load :
-  Clambda_primitives.memory_access_size ->
-  Lambda.is_safe ->
-  Lambda.alloc_mode ->
-  binary_primitive
-
-(** Arrays *)
-
-(** Array access. Args: array, index *)
-val arrayref_unsafe : Lambda.array_ref_kind -> binary_primitive
-
-(** Array access. Args: array, index *)
-val arrayref_safe : Lambda.array_ref_kind -> binary_primitive
-
 type ternary_primitive =
   expression -> expression -> expression -> Debuginfo.t -> expression
 
@@ -761,36 +645,6 @@ val setfield_computed :
   Lambda.immediate_or_pointer ->
   Lambda.initialization_or_assignment ->
   ternary_primitive
-
-(** Set the byte at the given offset to the given value. Args: bytes, index,
-    value *)
-val bytesset_unsafe : ternary_primitive
-
-val bytesset_safe : ternary_primitive
-
-(** Set the element at the given index in the given array to the given value.
-
-    WARNING: if [kind] is [Pfloatarray], then [value] is expected to be an
-    _unboxed_ float. Otherwise, it is expected to be a regular caml value,
-    including in the case where the array contains floats.
-
-    Args: array, index, value *)
-val arrayset_unsafe : Lambda.array_set_kind -> ternary_primitive
-
-(** As [arrayset_unsafe], but performs bounds-checking. *)
-val arrayset_safe : Lambda.array_set_kind -> ternary_primitive
-
-(** Set a chunk of data in the given bytes or bigstring structure. See also
-    [string_load] and [bigstring_load].
-
-    Note: [value] is expected to be an unboxed number of the given size.
-
-    Args: pointer, index, value *)
-val bytes_set :
-  Clambda_primitives.memory_access_size -> Lambda.is_safe -> ternary_primitive
-
-val bigstring_set :
-  Clambda_primitives.memory_access_size -> Lambda.is_safe -> ternary_primitive
 
 (** Switch *)
 
@@ -843,30 +697,6 @@ val strmatch_compile :
 (** Adds a constant offset to a pointer (for infix access) *)
 val ptr_offset : expression -> int -> Debuginfo.t -> expression
 
-(** Direct application of a function via a symbol *)
-val direct_apply :
-  symbol ->
-  machtype ->
-  expression list ->
-  Clambda.apply_kind ->
-  Debuginfo.t ->
-  expression
-
-(** Generic application of a function to one or several arguments. The
-    mutable_flag argument annotates the loading of the code pointer from the
-    closure. The Cmmgen code uses a mutable load by default, with a special case
-    when the load is from (the first function of) the currently defined
-    closure. *)
-val generic_apply :
-  Asttypes.mutable_flag ->
-  expression ->
-  expression list ->
-  Extended_machtype.t list ->
-  Extended_machtype.t ->
-  Clambda.apply_kind ->
-  Debuginfo.t ->
-  expression
-
 (** Method call : [send kind met obj args dbg]
 
     - [met] is a method identifier, which can be a hashed variant or an index in
@@ -884,7 +714,7 @@ val send :
   expression list ->
   Extended_machtype.t list ->
   Extended_machtype.t ->
-  Clambda.apply_kind ->
+  Lambda.region_close * Lambda.alloc_mode ->
   Debuginfo.t ->
   expression
 
@@ -955,18 +785,6 @@ val emit_vec128_constant :
 
 val emit_float_array_constant :
   symbol -> float list -> data_item list -> data_item list
-
-val fundecls_size : Clambda.ufunction list -> int
-
-val emit_constant_closure :
-  symbol ->
-  Clambda.ufunction list ->
-  data_item list ->
-  data_item list ->
-  data_item list
-
-val emit_preallocated_blocks :
-  Clambda.preallocated_block list -> phrase list -> phrase list
 
 (** {1} Helper functions and values used by Flambda 2. *)
 
@@ -1327,3 +1145,5 @@ val atomic_compare_and_set :
   old_value:expression ->
   new_value:expression ->
   expression
+
+val emit_gc_roots_table : symbols:symbol list -> phrase list -> phrase list
