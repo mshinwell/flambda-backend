@@ -1002,14 +1002,15 @@ let addr_array_initialize arr ofs newval dbg =
 
 (* Get the field of a block given a possibly inconstant index *)
 
-let get_field_computed imm_or_ptr mut ~block ~index dbg =
-  let kind =
+let get_field_computed imm_or_ptr mutability ~block ~index dbg =
+  let memory_chunk =
     match imm_or_ptr with
     | Lambda.Immediate -> Word_int
     | Lambda.Pointer -> Word_val
   in
   let field_address = array_indexing log2_size_addr block index dbg in
-  Cop (Cload (kind, mut), [field_address], dbg)
+  Cop
+    (Cload { memory_chunk; mutability; is_atomic = false }, [field_address], dbg)
 
 (* String length *)
 
@@ -1494,8 +1495,18 @@ let sign_extend_32 dbg e =
    *      dbg )
    *)
   match low_32 dbg e with
-  | Cop (Cload ((Thirtytwo_unsigned | Thirtytwo_signed), mut), args, dbg) ->
-    Cop (Cload (Thirtytwo_signed, mut), args, dbg)
+  | Cop
+      ( Cload
+          { memory_chunk = Thirtytwo_unsigned | Thirtytwo_signed;
+            mutability;
+            is_atomic
+          },
+        args,
+        dbg ) ->
+    Cop
+      ( Cload { memory_chunk = Thirtytwo_signed; mutability; is_atomic },
+        args,
+        dbg )
   | e ->
     Cop
       ( Casr,
@@ -1515,8 +1526,18 @@ let sign_extend_63 dbg e =
 let zero_extend_32 dbg e =
   (* CR mshinwell for gbury: same question as above *)
   match low_32 dbg e with
-  | Cop (Cload ((Thirtytwo_signed | Thirtytwo_unsigned), mut), args, dbg) ->
-    Cop (Cload (Thirtytwo_unsigned, mut), args, dbg)
+  | Cop
+      ( Cload
+          { memory_chunk = Thirtytwo_signed | Thirtytwo_unsigned;
+            mutability;
+            is_atomic
+          },
+        args,
+        dbg ) ->
+    Cop
+      ( Cload { memory_chunk = Thirtytwo_unsigned; mutability; is_atomic },
+        args,
+        dbg )
   | e -> Cop (Cand, [e; natint_const_untagged dbg 0xFFFFFFFFn], dbg)
 
 let zero_extend_63 dbg e =
@@ -4065,7 +4086,8 @@ let probe ~dbg ~name ~handler_code_linkage_name ~enabled_at_init ~args =
       args,
       dbg )
 
-let load ~dbg kind mut ~addr = Cop (Cload (kind, mut), [addr], dbg)
+let load ~dbg memory_chunk mutability ~addr =
+  Cop (Cload { memory_chunk; mutability; is_atomic = false }, [addr], dbg)
 
 let store ~dbg kind init ~addr ~new_value =
   Cop (Cstore (kind, init), [addr; new_value], dbg)

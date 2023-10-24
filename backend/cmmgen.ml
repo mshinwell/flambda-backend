@@ -625,7 +625,7 @@ let rec transl env e =
   (* Primitives *)
   | Uprim(prim, args, dbg) ->
       begin match (simplif_primitive prim, args) with
-      | (Pmake_unboxed_product layouts, args) ->
+      | (Pmake_unboxed_product _layouts, args) ->
           Ctuple (List.map (transl env) args)
       | (Pread_symbol sym, []) ->
           Cconst_symbol (global_symbol sym, dbg)
@@ -1272,11 +1272,35 @@ and transl_prim_2 env p arg1 arg2 dbg =
                      [transl_unbox_int dbg env bi arg1;
                       transl_unbox_int dbg env bi arg2], dbg)) dbg
   | Patomic_exchange ->
-     Cop (Cextcall ("caml_atomic_exchange", typ_val, [], false),
-          [transl env arg1; transl env arg2], dbg)
+      (* Cextcall { func;
+                     builtin = false;
+                     returns = true;
+                     effects = Arbitrary_effects;
+                     coeffects = Has_coeffects;
+                     ty = typ_val; alloc = true; ty_args = []}, *)
+     Cop (Cextcall {
+         func = "caml_atomic_exchange";
+         builtin = false;
+         returns = true;
+         effects = Arbitrary_effects;
+         coeffects = Has_coeffects;
+         ty = typ_val;
+         ty_args = [];
+         alloc = false
+       },
+       [transl env arg1; transl env arg2], dbg)
   | Patomic_fetch_add ->
-     Cop (Cextcall ("caml_atomic_fetch_add", typ_int, [], false),
-          [transl env arg1; transl env arg2], dbg)
+     Cop (Cextcall {
+        func = "caml_atomic_fetch_add";
+         builtin = false;
+         returns = true;
+         effects = Arbitrary_effects;
+         coeffects = Has_coeffects;
+         ty = typ_int;
+         ty_args = [];
+         alloc = false
+       },
+       [transl env arg1; transl env arg2], dbg)
   | Prunstack | Pperform | Presume | Preperform | Pdls_get
   | Patomic_cas | Patomic_load _
   | Pnot | Pnegint | Pintoffloat | Pfloatofint _ | Pnegfloat _
@@ -1336,8 +1360,17 @@ and transl_prim_3 env p arg1 arg2 arg3 dbg =
         (transl_unbox_sized size dbg env arg3) dbg
 
   | Patomic_cas ->
-     Cop (Cextcall ("caml_atomic_cas", typ_int, [], false),
-          [transl env arg1; transl env arg2; transl env arg3], dbg)
+     Cop (Cextcall {
+        func = "caml_atomic_cas";
+         builtin = false;
+         returns = true;
+         effects = Arbitrary_effects;
+         coeffects = Has_coeffects;
+         ty = typ_int;
+         ty_args = [];
+         alloc = false
+       },
+       [transl env arg1; transl env arg2; transl env arg3], dbg)
 
   (* Effects *)
   | Presume ->
