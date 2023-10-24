@@ -2327,7 +2327,7 @@ let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
                   ( Ccmpi Ceq,
                     [ Cop
                         ( Casr,
-                          [ get_field_codepointer mut clos 1 dbg;
+                          [ get_field_gen mut clos 1 dbg;
                             Cconst_int (pos_arity_in_closinfo, dbg) ],
                           dbg );
                       Cconst_int (List.length extended_args_type, dbg) ],
@@ -2335,7 +2335,7 @@ let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
                 dbg,
                 Cop
                   ( Capply (ty, pos),
-                    (get_field_gen mut clos 2 dbg :: args) @ [clos],
+                    (get_field_codepointer mut clos 2 dbg :: args) @ [clos],
                     dbg ),
                 dbg,
                 really_call_caml_apply clos args,
@@ -2349,7 +2349,7 @@ let generic_apply mut clos args args_type result (pos, mode) dbg =
     bind "fun" clos (fun clos ->
         Cop
           ( Capply (Extended_machtype.to_machtype result, pos),
-            [get_field_gen mut clos 0 dbg; arg; clos],
+            [get_field_codepointer mut clos 0 dbg; arg; clos],
             dbg ))
   | _ -> call_caml_apply result args_type mut clos args pos mode dbg
 
