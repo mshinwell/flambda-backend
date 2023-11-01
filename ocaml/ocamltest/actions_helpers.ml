@@ -184,13 +184,6 @@ let run_cmd
       Run_command.log = log
     }
   in
-  let really_dump_file s fn =
-    Printf.eprintf "### begin %s ###\n" s;
-    Sys.dump_file stderr fn;
-    Printf.eprintf "### end %s ###\n" s
-  in
-  if stdout_filename <> "" then really_dump_file "stdout" stdout_filename;
-  if stderr_filename <> "" then really_dump_file "stderr" stderr_filename;
   let dump_file s fn =
     if not (Sys.file_is_empty fn) then begin
       Printf.fprintf log "### begin %s ###\n" s;
@@ -225,10 +218,10 @@ let run
     begin if arguments="" then "without any argument"
     else "with arguments " ^ arguments
     end in
-    let output = Environments.safe_lookup Builtin_variables.output env in
     let env =
       if redirect_output
       then begin
+        let output = Environments.safe_lookup Builtin_variables.output env in
         let env =
           Environments.add_if_undefined Builtin_variables.stdout output env
         in
@@ -239,10 +232,6 @@ let run
       exit_status_of_variable env Builtin_variables.exit_status
     in
     let exit_status = run_cmd log env commandline in
-    if output <> "" then (
-      Format.eprintf "output file %s:\n" output;
-      Sys.dump_file stderr output
-    );
     if exit_status=expected_exit_status
     then (Result.pass, env)
     else begin
@@ -273,8 +262,6 @@ let run_script log env =
     Builtin_variables.script
     None
     log scriptenv in
-  Format.eprintf "response file (%s):\n" response_file;
-  Sys.dump_file stderr response_file;
   let final_value =
     if Result.is_pass result then begin
       match Modifier_parser.modifiers_of_file response_file with
@@ -321,18 +308,8 @@ let run_hook hook_name log input_env =
     timeout = timeout;
     log = log;
   } in let exit_status = run settings in
-  Format.eprintf "response file (%s):\n" response_file;
-  Sys.dump_file stderr response_file;
-  let output_filename = Environments.safe_lookup (Variables.make ("output", "output")) input_env in
-  if output_filename <> "" then (
-    (*Format.eprintf "output (1): %s" output_filename;
-    Sys.dump_file stderr output_filename; *)
-    let dirname = Filename.dirname output_filename in
-    let file = dirname ^ "/readline.output" in
-    if Sys.file_exists file then Sys.dump_file stderr file
-  );
   let final_value = match exit_status with
-    | _ ->
+    | 0 ->
       begin match Modifier_parser.modifiers_of_file response_file with
       | modifiers ->
         let modified_env = Environments.apply_modifiers hookenv modifiers in
@@ -345,13 +322,12 @@ let run_hook hook_name log input_env =
         in
         (Result.fail_with_reason reason, hookenv)
       end
-      (*
     | _ ->
       Printf.fprintf log "Hook returned %d" exit_status;
       let reason = String.trim (Sys.string_of_file response_file) in
       if exit_status=125
       then (Result.skip_with_reason reason, hookenv)
-      else (Result.fail_with_reason reason, hookenv) *)
+      else (Result.fail_with_reason reason, hookenv)
   in
   Sys.force_remove response_file;
   final_value
@@ -367,8 +343,6 @@ let check_output kind_of_output output_variable reference_variable log
   let output_filename = Environments.safe_lookup output_variable env in
   Printf.fprintf log "Comparing %s output %s to reference %s\n%!"
     kind_of_output output_filename reference_filename;
-  Format.eprintf "output (in check_output): %s" output_filename;
-  Sys.dump_file stderr output_filename;
   let files =
   {
     Filecompare.filetype = Filecompare.Text;

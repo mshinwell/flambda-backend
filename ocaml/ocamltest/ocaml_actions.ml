@@ -415,7 +415,6 @@ let setup_compiler_build_env (compiler : Ocaml_compilers.compiler) log env =
     let env = match prog_output_var with
       | None -> env
       | Some outputvar ->
-        Format.eprintf "adding outputvar=%s\n" (Variables.name_of_variable outputvar);
         Environments.add_if_undefined outputvar prog_output_file env
     in
     (r, env)
