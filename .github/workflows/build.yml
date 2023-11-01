@@ -109,9 +109,7 @@ jobs:
 
     - name: Install AFL (for Linux workers)
       if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get install afl++
-        sudo echo core >/proc/sys/kernel/core_pattern
+      run: sudo apt-get install afl++
 
     - name: Install AFL and coreutils (for macOS workers)
       if: matrix.os == 'macos-latest'
@@ -201,11 +199,16 @@ jobs:
           --with-dune=$GITHUB_WORKSPACE/ocaml-414/_install/bin/dune \
           ${{ matrix.config }}
 
+    # We set AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES because we can't write
+    # to /proc/sys/core_pattern on the Github CI machines even as root.
+    # (It's possible we might be able to make the equivalent change on the
+    # macOS worker but we haven't tried.)
     - name: Build, install and test Flambda backend
       working-directory: flambda_backend
       run: |
         if [ $run_testsuite = true ]; then target=ci; else target=compiler; fi
         export PATH=$GITHUB_WORKSPACE/ocaml-414/_install/bin:$PATH
+        export AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
         if [ $build_upstream = true ]; then make -j$J build_and_test_upstream; else make $target; fi
       env:
         BUILD_OCAMLPARAM: ${{ matrix.build_ocamlparam }}
