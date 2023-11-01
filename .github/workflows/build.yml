@@ -109,7 +109,9 @@ jobs:
 
     - name: Install AFL (for Linux workers)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get install afl++
+      run: |
+        sudo apt-get install afl++
+        sudo echo core >/proc/sys/kernel/core_pattern
 
     - name: Install AFL and coreutils (for macOS workers)
       if: matrix.os == 'macos-latest'
