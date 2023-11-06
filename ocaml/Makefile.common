@@ -99,6 +99,12 @@ IN_COREBOOT_CYCLE ?= false
 OCAMLRUN ?= $(ROOTDIR)/boot/ocamlrun$(EXE)
 NEW_OCAMLRUN ?= $(ROOTDIR)/@runtime_dir@/ocamlrun$(EXE)
 
+ifeq "@runtime5@" "yes"
+  RUNTIME_DIR_SUFFIX=
+else
+  RUNTIME_DIR_SUFFIX=4
+endif
+
 # Standard library flags
 STDLIBFLAGS ?= -nostdlib -I $(ROOTDIR)/stdlib
 BOOT_STDLIBFLAGS ?= -nostdlib -I $(ROOTDIR)/boot

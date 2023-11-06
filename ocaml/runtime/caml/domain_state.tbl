@@ -154,3 +154,9 @@ DOMAIN_STATE(struct caml_exception_context*, external_raise)
 
 DOMAIN_STATE(extra_params_area, extra_params)
 /* This member must occur last, because it is an array, not a scalar */
+
+/* Local allocations */
+DOMAIN_STATE(struct caml_local_arenas*, local_arenas)
+DOMAIN_STATE(intnat, local_sp)
+DOMAIN_STATE(void*, local_top)
+DOMAIN_STATE(intnat, local_limit)
