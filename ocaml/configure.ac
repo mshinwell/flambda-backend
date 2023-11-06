@@ -94,7 +94,7 @@ AC_ARG_ENABLE([runtime5],
 
 ## Output variables
 
-AC_SUBST([runtime5])
+AC_SUBST([enable_runtime5])
 AC_SUBST([runtime_dir])
 AC_SUBST([CONFIGURE_ARGS])
 AC_SUBST([native_compiler])

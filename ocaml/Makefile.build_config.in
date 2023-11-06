@@ -29,6 +29,14 @@ INSTALL ?= @INSTALL@ -p
 INSTALL_DATA ?= @INSTALL_DATA@
 INSTALL_PROG ?= @INSTALL_PROGRAM@
 
+# Selection of OCaml 4.x or 5.x runtime
+ifeq "@enable_runtime5@" "yes"
+  RUNTIME_SUFFIX=
+else
+  RUNTIME_SUFFIX=4
+endif
+RUNTIME_DIR=runtime$(RUNTIME_SUFFIX)
+
 # Whether to build certain libraries and tools
 
 build_ocamldebug = @build_ocamldebug@
@@ -52,7 +60,7 @@ COMPUTE_DEPS=@compute_deps@
 
 # Build-system flags to use to compile C files
 OC_CFLAGS=@oc_cflags@
-OC_CPPFLAGS=-I$(ROOTDIR)/@runtime_dir@ @oc_cppflags@
+OC_CPPFLAGS=-I$(ROOTDIR)/$(RUNTIME_DIR) @oc_cppflags@
 
 # The following variable defines flags to be passed to the C preprocessor
 # when compiling C files to be linked with native code. This includes
@@ -148,7 +156,7 @@ OC_NATIVE_LINKFLAGS = -g
 LN = @ln@
 
 # Platform-dependent assembler files to use to build the runtime
-runtime_ASM_OBJECTS = $(addprefix @runtime_dir@/,@runtime_asm_objects@)
+runtime_ASM_OBJECTS = $(addprefix $(RUNTIME_DIR)/,@runtime_asm_objects@)
 
 # Platform-dependent module for ocamlyacc
 ocamlyacc_WSTR_MODULE = @ocamlyacc_wstr_module@

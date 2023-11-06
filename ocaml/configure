@@ -858,7 +858,7 @@ default_build_target
 native_compiler
 CONFIGURE_ARGS
 runtime_dir
-runtime5
+enable_runtime5
 target_alias
 host_alias
 build_alias

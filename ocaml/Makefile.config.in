@@ -242,6 +242,7 @@ INTEL_JCC_BUG_CFLAGS=@intel_jcc_bug_cflags@
 STACK_ALLOCATION=@stack_allocation@
 POLL_INSERTION=@poll_insertion@
 DUNE=@dune@
+RUNTIME5=@runtime5@
 
 # Deprecated variables
 
