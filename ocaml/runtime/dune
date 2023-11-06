@@ -43,6 +43,7 @@
    ../.depend.menhir
    ../config.status
    (glob_files caml/*.h)
+   (glob_files *.h)
    caml/domain_state.tbl
    primitives
    (glob_files *.S)
