@@ -857,6 +857,8 @@ VERSION
 default_build_target
 native_compiler
 CONFIGURE_ARGS
+runtime_dir
+runtime5
 target_alias
 host_alias
 build_alias
@@ -899,6 +901,7 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
+enable_runtime5
 with_dune
 enable_debug_runtime
 enable_debugger
@@ -1589,6 +1592,7 @@ Optional Features:
   --disable-option-checking  ignore unrecognized --enable/--with options
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --enable-runtime5       Use the OCaml 5 runtime
   --disable-debug-runtime do not build runtime with debugging support
   --enable-debugger       build the debugger [default=auto]
   --disable-dependency-generation
@@ -3226,7 +3230,18 @@ ocamltest_unix_include=""
 ## Directory containing auxiliary scripts used during build
 
 
+## Runtime selection
+# Check whether --enable-runtime5 was given.
+if test ${enable_runtime5+y}
+then :
+  enableval=$enable_runtime5; runtime5=yes runtime_dir=runtime
+  runtime5=no runtime_dir=runtime4
+fi
+
+
 ## Output variables
+
+
 
 
 
@@ -3399,11 +3414,11 @@ ac_config_headers="$ac_config_headers runtime/caml/s.h"
 
 ac_config_headers="$ac_config_headers runtime/caml/version.h"
 
-ac_config_headers="$ac_config_headers runtime4/caml/m.h"
+ac_config_headers="$ac_config_headers ${runtime_dir}/caml/m.h"
 
-ac_config_headers="$ac_config_headers runtime4/caml/s.h"
+ac_config_headers="$ac_config_headers ${runtime_dir}/caml/s.h"
 
-ac_config_headers="$ac_config_headers runtime4/caml/version.h"
+ac_config_headers="$ac_config_headers ${runtime_dir}/caml/version.h"
 
 ac_config_files="$ac_config_files compilerlibs/META"
 
@@ -21227,9 +21242,9 @@ do
     "runtime/caml/m.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime/caml/m.h" ;;
     "runtime/caml/s.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime/caml/s.h" ;;
     "runtime/caml/version.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime/caml/version.h" ;;
-    "runtime4/caml/m.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime4/caml/m.h" ;;
-    "runtime4/caml/s.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime4/caml/s.h" ;;
-    "runtime4/caml/version.h") CONFIG_HEADERS="$CONFIG_HEADERS runtime4/caml/version.h" ;;
+    "${runtime_dir}/caml/m.h") CONFIG_HEADERS="$CONFIG_HEADERS ${runtime_dir}/caml/m.h" ;;
+    "${runtime_dir}/caml/s.h") CONFIG_HEADERS="$CONFIG_HEADERS ${runtime_dir}/caml/s.h" ;;
+    "${runtime_dir}/caml/version.h") CONFIG_HEADERS="$CONFIG_HEADERS ${runtime_dir}/caml/version.h" ;;
     "compilerlibs/META") CONFIG_FILES="$CONFIG_FILES compilerlibs/META" ;;
     "otherlibs/dynlink/META") CONFIG_FILES="$CONFIG_FILES otherlibs/dynlink/META" ;;
     "otherlibs/runtime_events/META") CONFIG_FILES="$CONFIG_FILES otherlibs/runtime_events/META" ;;

@@ -36,6 +36,12 @@ AC_ARG_ENABLE([middle-end],
     [*], [AC_MSG_ERROR([Bad middle end (not closure, flambda or flambda2)])])],
   [AC_MSG_ERROR([--enable-middle-end=closure|flambda|flambda2 must be provided])])
 
+AC_ARG_ENABLE([runtime5],
+  [AS_HELP_STRING([--enable-runtime5],
+    [Use the OCaml 5 runtime])],
+  [runtime5=yes runtime5_arg=--enable-runtime5],
+  [runtime5=no runtime5_arg=])
+
 AC_ARG_ENABLE([coverage],
   [AS_HELP_STRING([--enable-coverage],
     [Run compiler tests instrumented to output coverage data using bisect_ppx
@@ -53,6 +59,7 @@ AC_ARG_ENABLE([legacy-library-layout],
 
 AC_SUBST([prefix])
 AC_SUBST([middle_end])
+AC_SUBST([runtime5])
 AC_SUBST([dune])
 AC_SUBST([coverage])
 AC_SUBST([legacy_layout])
@@ -62,7 +69,7 @@ AC_SUBST([legacy_layout])
 AC_DISABLE_OPTION_CHECKING
 
 AX_SUBDIRS_CONFIGURE([ocaml],
-  [$middle_end_arg,-C,--disable-ocamldoc,--disable-stdlib-manpages,--enable-ocamltest],
+  [$middle_end_arg,$runtime5_arg,-C,--disable-ocamldoc,--disable-stdlib-manpages,--enable-ocamltest],
   [],
   [],
   [])

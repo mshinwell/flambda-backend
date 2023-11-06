@@ -84,8 +84,17 @@ AC_CONFIG_SRCDIR([runtime/interp.c])
 ## Directory containing auxiliary scripts used during build
 AC_CONFIG_AUX_DIR([build-aux])
 
+## Runtime selection
+AC_ARG_ENABLE([runtime5],
+  [AS_HELP_STRING([--enable-runtime5],
+    [Use the OCaml 5 runtime])],
+  [runtime5=yes runtime_dir=runtime]
+  [runtime5=no runtime_dir=runtime4])
+
 ## Output variables
 
+AC_SUBST([runtime5])
+AC_SUBST([runtime_dir])
 AC_SUBST([CONFIGURE_ARGS])
 AC_SUBST([native_compiler])
 AC_SUBST([default_build_target])
@@ -238,9 +247,9 @@ AC_CONFIG_FILES([tools/eventlog_metadata])
 AC_CONFIG_HEADERS([runtime/caml/m.h])
 AC_CONFIG_HEADERS([runtime/caml/s.h])
 AC_CONFIG_HEADERS([runtime/caml/version.h])
-AC_CONFIG_HEADERS([runtime4/caml/m.h])
-AC_CONFIG_HEADERS([runtime4/caml/s.h])
-AC_CONFIG_HEADERS([runtime4/caml/version.h])
+AC_CONFIG_HEADERS([${runtime_dir}/caml/m.h])
+AC_CONFIG_HEADERS([${runtime_dir}/caml/s.h])
+AC_CONFIG_HEADERS([${runtime_dir}/caml/version.h])
 AC_CONFIG_FILES([compilerlibs/META])
 AC_CONFIG_FILES([otherlibs/dynlink/META])
 AC_CONFIG_FILES([otherlibs/runtime_events/META])
