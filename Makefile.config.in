@@ -3,3 +3,5 @@ dune = @dune@
 middle_end = @middle_end@
 coverage = @coverage@
 legacy_layout = @legacy_layout@
+runtime5 = @runtime5@
+runtime_dir = @runtime_dir@

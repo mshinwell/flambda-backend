@@ -84,7 +84,8 @@ AC_CONFIG_SRCDIR([runtime/interp.c])
 ## Directory containing auxiliary scripts used during build
 AC_CONFIG_AUX_DIR([build-aux])
 
-## Runtime selection
+# Runtime selection
+
 AC_ARG_ENABLE([runtime5],
   [AS_HELP_STRING([--enable-runtime5],
     [Use the OCaml 5 runtime])],
@@ -244,12 +245,16 @@ AC_CONFIG_FILES([manual/src/html_processing/src/common.ml])
 AC_CONFIG_FILES([ocamltest/ocamltest_config.ml])
 AC_CONFIG_FILES([utils/config.generated.ml])
 AC_CONFIG_FILES([tools/eventlog_metadata])
-AC_CONFIG_HEADERS([runtime/caml/m.h])
-AC_CONFIG_HEADERS([runtime/caml/s.h])
-AC_CONFIG_HEADERS([runtime/caml/version.h])
-AC_CONFIG_HEADERS([${runtime_dir}/caml/m.h])
-AC_CONFIG_HEADERS([${runtime_dir}/caml/s.h])
-AC_CONFIG_HEADERS([${runtime_dir}/caml/version.h])
+AS_IF([test "x$enable_runtime5" = "xyes"],
+  [ AC_CONFIG_HEADERS([runtime/caml/m.h])
+    AC_CONFIG_HEADERS([runtime/caml/s.h])
+    AC_CONFIG_HEADERS([runtime/caml/version.h])
+  ],
+  [ AC_CONFIG_HEADERS([runtime4/caml/m.h])
+    AC_CONFIG_HEADERS([runtime4/caml/s.h])
+    AC_CONFIG_HEADERS([runtime4/caml/version.h])
+  ]
+)
 AC_CONFIG_FILES([compilerlibs/META])
 AC_CONFIG_FILES([otherlibs/dynlink/META])
 AC_CONFIG_FILES([otherlibs/runtime_events/META])

@@ -1,6 +1,6 @@
 AC_PREREQ([2.69])
 AC_INIT([The Flambda backend for OCaml],
-        5.1.1+jst-runtime4,
+        5.1.1+jst,
         [mshinwell@janestreet.com],
         [flambda_backend],
         [http://github.com/ocaml-flambda/flambda_backend])
@@ -39,8 +39,8 @@ AC_ARG_ENABLE([middle-end],
 AC_ARG_ENABLE([runtime5],
   [AS_HELP_STRING([--enable-runtime5],
     [Use the OCaml 5 runtime])],
-  [runtime5=yes runtime5_arg=--enable-runtime5],
-  [runtime5=no runtime5_arg=])
+  [runtime5=yes runtime5_arg=--enable-runtime5 runtime_dir=runtime],
+  [runtime5=no runtime5_arg= runtime_dir=runtime4])
 
 AC_ARG_ENABLE([coverage],
   [AS_HELP_STRING([--enable-coverage],
@@ -60,6 +60,7 @@ AC_ARG_ENABLE([legacy-library-layout],
 AC_SUBST([prefix])
 AC_SUBST([middle_end])
 AC_SUBST([runtime5])
+AC_SUBST([runtime_dir])
 AC_SUBST([dune])
 AC_SUBST([coverage])
 AC_SUBST([legacy_layout])
