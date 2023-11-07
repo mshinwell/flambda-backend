@@ -27,7 +27,7 @@
    (chdir ..  (run %{dep:gen_primitives.sh})))))
 
 (rule
- (targets libasmrun.a libasmrund.a libasmruni.a libasmrun_pic.a libasmrunnnp.a
+ (targets libasmrun.a libasmrund.a libasmruni.a libasmrun_pic.a
     libasmrun_shared.so libcamlrun.a libcamlrund.a libcamlruni.a libcamlrun_pic.a
     libcamlrun_shared.so ocamlrun ocamlrund ocamlruni ld.conf
     sak)
@@ -54,8 +54,8 @@
    (progn
      (bash "touch .depend") ; hack.
      (bash "cd .. && make V=1 'SAK_LINK=cc -o $(1) $(2)' COMPUTE_DEPS=false runtime/sak")
-     (bash "cd .. && make V=1 -j8 runtime/libasmrun.a runtime/libasmrund.a runtime/libasmruni.a runtime/libasmrun_pic.a runtime/libasmrunnnp.a
-    runtime/libasmrun_shared.so runtime/libcamlrun.a runtime/libcamlrund.a runtime/runtime/libcamlruni.a runtime/libcamlrun_pic.a
+     (bash "cd .. && make V=1 -j8 runtime/libasmrun.a runtime/libasmrund.a runtime/libasmruni.a runtime/libasmrun_pic.a \
+    runtime/libasmrun_shared.so runtime/libcamlrun.a runtime/libcamlrund.a runtime/libcamlruni.a runtime/libcamlrun_pic.a \
     runtime/libcamlrun_shared.so runtime/ocamlrun runtime/ocamlrund runtime/ocamlruni runtime/ld.conf COMPUTE_DEPS=false")
      (bash "rm .depend")))))
 
@@ -87,7 +87,6 @@
     libasmrund.a
     libasmruni.a
     libasmrun_pic.a
-    libasmrunnnp.a
     libasmrun_shared.so
   )
   (section lib)
