@@ -175,6 +175,7 @@ alloc_size_class_stack_noexc(mlsize_t wosize, int cache_bucket, value hval,
   hand->parent = NULL;
   stack->sp = (value*)hand;
   stack->exception_ptr = NULL;
+  stack->async_exception_ptr = NULL;
   stack->id = id;
 #ifdef DEBUG
   stack->magic = 42;
@@ -298,6 +299,8 @@ void caml_scan_stack(
 
     f(fdata, Stack_handle_value(stack), &Stack_handle_value(stack));
     f(fdata, Stack_handle_exception(stack), &Stack_handle_exception(stack));
+    /* There is no need to scan from Stack_handle_async_exception for the
+       same reason as in the comment in caml_try_realloc_stack, below. */
     f(fdata, Stack_handle_effect(stack), &Stack_handle_effect(stack));
 
     stack = Stack_parent(stack);
@@ -536,6 +539,9 @@ int caml_try_realloc_stack(asize_t required_space)
   new_stack->sp = Stack_high(new_stack) - stack_used;
   Stack_parent(new_stack) = Stack_parent(old_stack);
 #ifdef NATIVE_CODE
+  /* There's no need to rewrite from Caml_state->async_exn_handler because
+     every asynchronous exception trap frame is also a normal exception
+     trap frame. */
   caml_rewrite_exception_stack(old_stack, (value**)&Caml_state->exn_handler,
                               new_stack);
 #ifdef WITH_FRAME_POINTERS
