@@ -772,8 +772,8 @@ Caml_inline mlsize_t extern_closure_up_to_env(struct caml_extern_state* s,
     if (Arity_closinfo(info) != 0 && Arity_closinfo(info) != 1) {
       extern_code_pointer(s, (char *) Field(v, i++));
     }
-  } while (i < startenv);
-  CAMLassert(i == startenv);
+  } while (!Is_last_closinfo(info));
+  CAMLassert(i <= startenv);
   return startenv;
 }
 
