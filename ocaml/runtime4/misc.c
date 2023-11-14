@@ -276,15 +276,15 @@ CAMLprim value caml_atomic_fetch_add(value ref, value incr)
 
 CAMLprim value caml_lazy_update_to_forward(value v)
 {
-  caml_failwith("Called caml_lazy_update_to_forward in runtime4: not implemented.");
+  caml_failwith("Called caml_lazy_update_to_forward in runtime4: not supported.");
 }
 
 CAMLprim value caml_lazy_reset_to_lazy(value v)
 {
-  caml_failwith("Called caml_lazy_reset_to_lazy in runtime4: not implemented.");
+  caml_failwith("Called caml_lazy_reset_to_lazy in runtime4: not supported.");
 }
 
 CAMLprim value caml_lazy_update_to_forcing(value v)
 {
-  caml_failwith("Called caml_lazy_update_to_forcing in runtime4: not implemented.");
+  caml_failwith("Called caml_lazy_update_to_forcing in runtime4: not supported.");
 }
