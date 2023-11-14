@@ -14,7 +14,7 @@
 
 type !'a t
 
-(* BACKPORT BEGIN
+(* BACKPORT BEGIN switch to primtiives
 external make : 'a -> 'a t = "%makemutable"
 external get : 'a t -> 'a = "%atomic_load"
 external exchange : 'a t -> 'a -> 'a = "%atomic_exchange"

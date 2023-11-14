@@ -257,9 +257,8 @@ CAMLprim value caml_atomic_cas(value ref, value oldv, value newv)
 
 CAMLprim value caml_atomic_exchange(value ref, value v)
 {
-  value ret;
-  ret = Field(ref, 0);
-  Field(ref, 0) = v;
+  value ret = Field(ref, 0);
+  caml_modify(Op_val(ref), v);
   return ret;
 }
 

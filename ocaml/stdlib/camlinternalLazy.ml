@@ -179,3 +179,11 @@ let force_gen ~only_val l =
   if runtime5 then Lazy5.force_gen ~only_val l
   else if only_val then Lazy4.force_val l
   else Lazy4.force l
+
+let force l =
+  if runtime5 then Lazy5.force_gen ~only_val:false l
+  else Lazy4.force l
+
+let force_val l =
+  if runtime5 then Lazy5.force_gen ~only_val:true l
+  else Lazy4.force_val l
