@@ -1006,9 +1006,9 @@ let make_alloc_generic ~mode set_fn dbg tag wordsize args =
     | e1::el -> Csequence(set_fn (Cvar id) (Cconst_int (idx, dbg)) e1 dbg,
                           fill_fields (idx + 2) el) in
     Clet(VP.create id,
-         Cop(Cextcall(if Config.runtime5
-                      then "caml_alloc_shr_check_gc"
-                      else "caml_alloc", typ_val, [], true),
+         Cop(Cextcall((if Config.runtime5
+                       then "caml_alloc_shr_check_gc"
+                       else "caml_alloc"), typ_val, [], true),
                  [Cconst_int (wordsize, dbg); Cconst_int (tag, dbg)], dbg),
          fill_fields 1 args)
   end
