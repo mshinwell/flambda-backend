@@ -243,7 +243,7 @@ CAMLprim value caml_atomic_load(value ref)
   return Field(ref, 0);
 }
 
-CAMLprim value caml_atomic_cas (value ref, value oldv, value newv)
+CAMLprim value caml_atomic_cas(value ref, value oldv, value newv)
 {
   value* p = Op_val(ref);
   if (*p == oldv) {
@@ -252,4 +252,22 @@ CAMLprim value caml_atomic_cas (value ref, value oldv, value newv)
   } else {
     return Val_int(0);
   }
+}
+
+CAMLprim value caml_atomic_exchange(value ref, value v)
+{
+  value ret;
+  ret = Field(ref, 0);
+  Field(ref, 0) = v;
+  return ret;
+}
+
+CAMLprim value caml_atomic_fetch_add(value ref, value incr)
+{
+  value ret;
+  value* p = Op_val(ref);
+  CAMLassert(Is_long(*p));
+  ret = *p;
+  *p = Val_long(Long_val(ret) + Long_val(incr));
+  return ret;
 }
