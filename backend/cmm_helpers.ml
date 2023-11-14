@@ -851,8 +851,8 @@ let get_tag ptr dbg =
     (* Same comment as [get_header] above *)
     Cop
       ((if Config.runtime5
-        then mk_load_immut Word_int
-        else mk_load_mut Word_int),
+        then mk_load_immut Byte_unsigned
+        else mk_load_mut Byte_unsigned),
         [Cop (Cadda, [ptr; Cconst_int (tag_offset, dbg)], dbg)],
         dbg )
 
