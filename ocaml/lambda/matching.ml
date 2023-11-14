@@ -2064,6 +2064,7 @@ module Lazy5 = struct
       inline_lazy_force_cond arg pos loc
 end
 
+(* CR ocaml 5 runtime: delete the old implementation *)
 (* This is the OCaml 4 implementation of lazy with a tweak to the
    Pfield occurrence in lazy_forward_field (to add "Pointer"). *)
 module Lazy4 = struct
