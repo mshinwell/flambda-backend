@@ -177,12 +177,5 @@ let force_lazy_block =
 
 let force_gen ~only_val l =
   if runtime5 then Lazy5.force_gen ~only_val l
-  else failwith "Lazy.force_gen is not implemented in runtime4."
-
-let force l =
-  if runtime5 then failwith "Lazy.force is not implemented in runtime5."
+  else if only_val then Lazy4.force_val l
   else Lazy4.force l
-
-let force_val l =
-  if runtime5 then failwith "Lazy.force_val is not implemented in runtime5."
-  else Lazy4.force_val l
