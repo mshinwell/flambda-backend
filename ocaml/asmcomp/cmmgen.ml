@@ -119,9 +119,9 @@ let mut_from_env env ptr =
 (* Minimum of two [mutable_flag] values, assuming [Immutable < Mutable]. *)
 let min_mut x y =
   match x,y with
-  | Immutable, _
-  | _, Immutable -> Immutable
-  | Mutable, Mutable -> Mutable
+  | Asttypes.Immutable, _
+  | _, Asttypes.Immutable -> Asttypes.Immutable
+  | Asttypes.Mutable, Asttypes.Mutable -> Asttypes.Mutable
 
 let mut_from_lambda = function
   | Lambda.Immutable -> Asttypes.Immutable

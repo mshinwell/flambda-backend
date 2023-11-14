@@ -826,9 +826,7 @@ let get_header ptr dbg =
      data race on headers. This saves performance with ThreadSanitizer
      instrumentation by avoiding to instrument header loads. *)
   Cop
-    ((if Config.runtime5
-      then mk_load_immut Word_int
-      else mk_load_mut Word_int),
+    ( (if Config.runtime5 then mk_load_immut Word_int else mk_load_mut Word_int),
       [Cop (Cadda, [ptr; Cconst_int (-size_int, dbg)], dbg)],
       dbg )
 
@@ -850,7 +848,7 @@ let get_tag ptr dbg =
     (* If byte loads are efficient *)
     (* Same comment as [get_header] above *)
     Cop
-      ((if Config.runtime5
+      ( (if Config.runtime5
         then mk_load_immut Byte_unsigned
         else mk_load_mut Byte_unsigned),
         [Cop (Cadda, [ptr; Cconst_int (tag_offset, dbg)], dbg)],
@@ -1235,8 +1233,9 @@ let make_alloc_generic ~mode set_fn dbg tag wordsize args =
         Cop
           ( Cextcall
               { func =
-                  if Config.runtime5
-                  then "caml_alloc_shr_check_gc" else "caml_alloc";
+                  (if Config.runtime5
+                  then "caml_alloc_shr_check_gc"
+                  else "caml_alloc");
                 ty = typ_val;
                 alloc = true;
                 builtin = false;
