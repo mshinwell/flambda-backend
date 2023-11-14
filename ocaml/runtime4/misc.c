@@ -30,6 +30,7 @@ __declspec(noreturn) void __cdecl abort(void);
 #include <stdarg.h>
 #include "caml/alloc.h"
 #include "caml/config.h"
+#include "caml/fail.h"
 #include "caml/misc.h"
 #include "caml/memory.h"
 #include "caml/osdeps.h"
@@ -270,4 +271,21 @@ CAMLprim value caml_atomic_fetch_add(value ref, value incr)
   ret = *p;
   *p = Val_long(Long_val(ret) + Long_val(incr));
   return ret;
+}
+
+/* Fake lazy operations - stdlib compatiblity with the 5 lazy implementation. */
+
+CAMLprim value caml_lazy_update_to_forward(value v)
+{
+  caml_failwith("Called caml_lazy_update_to_forward in runtime4: not implemented.");
+}
+
+CAMLprim value caml_lazy_reset_to_lazy(value v)
+{
+  caml_failwith("Called caml_lazy_reset_to_lazy in runtime4: not implemented.");
+}
+
+CAMLprim value caml_lazy_update_to_forcing(value v)
+{
+  caml_failwith("Called caml_lazy_update_to_forcing in runtime4: not implemented.");
 }
