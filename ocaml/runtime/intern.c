@@ -526,7 +526,7 @@ static void intern_rec(struct caml_intern_state* s,
 #endif
       case CODE_UNBOXED_INT64:
 #ifdef ARCH_SIXTYFOUR
-        v = (intnat) (read64u());
+        v = (intnat) (read64u(s));
         break;
 #else
         intern_cleanup();
