@@ -400,11 +400,6 @@ CAMLexport value caml_callbackN (value closure, int narg, value args[])
   return raise_if_exception(callbackN(closure, narg, args));
 }
 
-CAMLprim value caml_with_async_exns(value body_callback)
-{
-  caml_failwith("Called caml_with_async_exns in runtime5: not implemented.");
-}
-
 #endif
 
 /* Naming of OCaml values */

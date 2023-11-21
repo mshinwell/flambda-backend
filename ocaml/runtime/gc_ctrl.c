@@ -236,7 +236,8 @@ CAMLprim value caml_gc_minor(value v)
   caml_minor_collection ();
   value exn = caml_process_pending_actions_exn();
   CAML_EV_END(EV_EXPLICIT_GC_MINOR);
-  return caml_raise_async_if_exception(exn, "");
+  caml_raise_async_if_exception(exn, "");
+  return exn;
 }
 
 static value gc_major_exn(void)
@@ -254,7 +255,9 @@ CAMLprim value caml_gc_major(value v)
 {
   Caml_check_caml_state();
   CAMLassert (v == Val_unit);
-  return caml_raise_async_if_exception(gc_major_exn(), "");
+  value res = gc_major_exn ();
+  caml_raise_async_if_exception(res, "");
+  return res;
 }
 
 static value gc_full_major_exn(void)
@@ -280,7 +283,9 @@ CAMLprim value caml_gc_full_major(value v)
 {
   Caml_check_caml_state();
   CAMLassert (v == Val_unit);
-  return caml_raise_async_if_exception(gc_full_major_exn(), "");
+  value exn = gc_full_major_exn();
+  caml_raise_async_if_exception(exn, "");
+  return exn;
 }
 
 CAMLprim value caml_gc_major_slice (value v)
@@ -290,7 +295,8 @@ CAMLprim value caml_gc_major_slice (value v)
   caml_major_collection_slice(Long_val(v));
   value exn = caml_process_pending_actions_exn();
   CAML_EV_END(EV_EXPLICIT_GC_MAJOR_SLICE);
-  return caml_raise_async_if_exception(exn, "");
+  caml_raise_async_if_exception(exn, "");
+  return exn;
 }
 
 CAMLprim value caml_gc_compaction(value v)
@@ -314,7 +320,8 @@ CAMLprim value caml_gc_stat(value v)
   res = caml_gc_quick_stat(Val_unit);
  out:
   CAML_EV_END(EV_EXPLICIT_GC_STAT);
-  return caml_raise_async_if_exception(res, "");
+  caml_raise_async_if_exception(res, "");
+  return res;
 }
 
 CAMLprim value caml_get_minor_free (value v)
