@@ -298,8 +298,6 @@ void caml_scan_stack(
 
     f(fdata, Stack_handle_value(stack), &Stack_handle_value(stack));
     f(fdata, Stack_handle_exception(stack), &Stack_handle_exception(stack));
-    /* There is no need to scan from Stack_handle_async_exception for the
-       same reason as in the comment in caml_try_realloc_stack, below. */
     f(fdata, Stack_handle_effect(stack), &Stack_handle_effect(stack));
 
     stack = Stack_parent(stack);
@@ -313,7 +311,8 @@ void caml_maybe_expand_stack (void)
     (value*)stk->sp - Stack_base(stk);
   uintnat stack_needed =
     Stack_threshold / sizeof(value)
-    + 8 /* for words pushed by caml_start_program */;
+    + 10 /* for words pushed by caml_start_program */;
+  /* XXX does this "8" need updating?  Provisionally changed to 10 */
 
   if (stack_available < stack_needed)
     if (!caml_try_realloc_stack (stack_needed))
@@ -558,6 +557,8 @@ int caml_try_realloc_stack(asize_t required_space)
         link->stack = new_stack;
         link->sp = (void*)((char*)Stack_high(new_stack) -
                            ((char*)Stack_high(old_stack) - (char*)link->sp));
+        // XXX we presumably need to update the async exn trap frame pointers
+        // at some point, since they point into an OCaml stack?
       }
     }
   }
