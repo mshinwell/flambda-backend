@@ -357,8 +357,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
        [caml_callbackN_exn0].  When that function reraises such an exception
        then [Caml_state->trapsp] will correctly be pointing at the most
        recent prior trap. */
-    domain_state->trapsp =
-      Stack_high(domain_state->current_stack) - initial_trap_sp_off;
+    domain_state->trap_sp_off = initial_trap_sp_off;
 
     goto raise_notrace;
   }

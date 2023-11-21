@@ -58,9 +58,9 @@ CAMLexport void caml_raise_async(value v)
   if (Caml_state->external_raise_async == NULL)
     caml_fatal_uncaught_exception(v);
 
-  Caml_state->exn_bucket = v;
+  *Caml_state->external_raise->exn_bucket = v;
   Caml_state->raising_async_exn = 1;
-  siglongjmp(Caml_state->external_raise_async->buf, 1);
+  siglongjmp(Caml_state->external_raise_async->jmp->buf, 1);
 }
 
 CAMLexport void caml_raise_constant(value tag)
