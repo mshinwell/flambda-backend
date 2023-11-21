@@ -753,11 +753,13 @@ CAMLprim value caml_thread_yield(value unit)
      with saving errno.)
   */
 
-  caml_raise_async_if_exception(caml_process_pending_signals_exn());
+  value res = caml_process_pending_signals_exn();
+  caml_raise_async_if_exception(res, "");
   save_runtime_state();
   st_thread_yield(m);
   restore_runtime_state(This_thread);
-  caml_raise_async_if_exception(caml_process_pending_signals_exn());
+  res = caml_process_pending_signals_exn();
+  caml_raise_async_if_exception(res, "");
 
   return Val_unit;
 }

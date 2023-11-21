@@ -123,14 +123,9 @@
 #endif
 
 
-#ifdef DEBUG
 #define CHECK_STACK_ALIGNMENT \
         test $0xf, %rsp; jz 9f; int3; 9:
 #define IF_DEBUG(...) __VA_ARGS__
-#else
-#define CHECK_STACK_ALIGNMENT
-#define IF_DEBUG(...)
-#endif
 
 /* struct stack_info */
 #define Stack_sp                 0
@@ -156,7 +151,7 @@
 #define Cstack_sp                 8
 #define Cstack_prev              16
 #define Cstack_async_exn_handler 24
-#define SIZEOF_C_STACK_LINK      32
+#define SIZEOF_C_STACK_LINK      40
 #endif
 
 /******************************************************************************/
@@ -244,6 +239,7 @@
         movq    %r10, Cstack_stack(%r11);                  \
     /* Switch to C stack */                                \
         movq    %r11, %rsp;                                \
+        CHECK_STACK_ALIGNMENT; \
         SWITCH_OCAML_TO_C_CFI
 
 /* Switch from C to OCaml stack.  Clobbers %r11. */

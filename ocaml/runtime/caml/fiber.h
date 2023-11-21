@@ -115,6 +115,7 @@ struct c_stack_link {
   /* OCaml return address */
   void* sp;
   struct c_stack_link* prev;
+  char* async_exn_handler;
 };
 
 /* `gc_regs` and `gc_regs_buckets`.
