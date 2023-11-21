@@ -175,7 +175,6 @@ alloc_size_class_stack_noexc(mlsize_t wosize, int cache_bucket, value hval,
   hand->parent = NULL;
   stack->sp = (value*)hand;
   stack->exception_ptr = NULL;
-  stack->async_exception_ptr = NULL;
   stack->id = id;
 #ifdef DEBUG
   stack->magic = 42;

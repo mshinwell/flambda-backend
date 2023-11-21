@@ -31,7 +31,6 @@ struct stack_info;
 struct stack_handler {
   value handle_value;
   value handle_exn;
-  value handle_async_exn;
   value handle_effect;
   struct stack_info* parent; /* parent OCaml stack if any */
 };
@@ -45,12 +44,9 @@ struct stack_info {
 #ifdef NATIVE_CODE
   void* sp;            /* stack pointer of the OCaml stack when suspended */
   void* exception_ptr; /* exception pointer of OCaml stack when suspended */
-  void* async_exception_ptr;
-    /* async exception pointer of OCaml stack when suspended */
 #else
   value* sp;
   value* exception_ptr;
-  value* async_exception_ptr;
 #endif
   struct stack_handler* handler; /* effect handling state for the fiber */
 
@@ -74,7 +70,6 @@ CAML_STATIC_ASSERT(sizeof(struct stack_info) ==
 
 #define Stack_handle_value(stk) (stk)->handler->handle_value
 #define Stack_handle_exception(stk) (stk)->handler->handle_exn
-#define Stack_handle_async_exception(stk) (stk)->handler->handle_async_exn
 #define Stack_handle_effect(stk) (stk)->handler->handle_effect
 #define Stack_parent(stk) (stk)->handler->parent
 
@@ -120,8 +115,6 @@ struct c_stack_link {
   /* OCaml return address */
   void* sp;
   struct c_stack_link* prev;
-  /* Saved async exception trap frame pointer */
-  void* async_exn_handler;
 };
 
 /* `gc_regs` and `gc_regs_buckets`.
