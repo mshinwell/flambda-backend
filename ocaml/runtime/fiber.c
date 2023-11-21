@@ -557,8 +557,14 @@ int caml_try_realloc_stack(asize_t required_space)
         link->stack = new_stack;
         link->sp = (void*)((char*)Stack_high(new_stack) -
                            ((char*)Stack_high(old_stack) - (char*)link->sp));
-        // XXX we presumably need to update the async exn trap frame pointers
-        // at some point, since they point into an OCaml stack?
+      }
+      if (link->async_exn_handler >= Stack_threshold_ptr(old_stack)
+          && link->async_exn_handler <= Stack_high(old_stack)) {
+        /* The asynchronous exception trap frame in the current c_stack_link
+           lies on the stack being reallocated.  Repoint the trap frame to the
+           new stack. */
+        link->async_exn_handler +=
+          (char*) Stack_high(new_stack) - (char*) Stack_high(old_stack);
       }
     }
   }
