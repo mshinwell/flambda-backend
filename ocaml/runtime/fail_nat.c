@@ -78,6 +78,8 @@ void caml_raise(value v)
   /* Run callbacks here, so that a signal handler that arrived during
      a blocking call has a chance to interrupt the raising of EINTR */
   v = caml_process_pending_actions_with_root(v);
+  if (Is_exception_result(v))
+    v = Extract_exception(v);
 
   exception_pointer = (char*)Caml_state->c_stack;
 
