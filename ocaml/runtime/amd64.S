@@ -261,6 +261,12 @@
         CFI_DEF_CFA_OFFSET(16);                \
         POP_EXN_HANDLER
 
+/* As for RESTORE_EXN_HANDLER_OCAML, but for async exns. */
+#define RESTORE_ASYNC_EXN_HANDLER_OCAML              \
+        movq    Caml_state(async_exn_handler), %rsp; \
+        CFI_DEF_CFA_OFFSET(16);                      \
+        POP_EXN_HANDLER
+
 /* Switch between OCaml stacks. Clobbers %r12.
    Expects old stack in %rsi and target stack in %r10.
    Leaves old stack in %rsi and target stack in %r10. */
@@ -801,7 +807,7 @@ CFI_STARTPROC
 LBL(caml_raise_async_exn):
         testq   $1, Caml_state(backtrace_active)
         jne   LBL(116a)
-        RESTORE_EXN_HANDLER_OCAML
+        RESTORE_ASYNC_EXN_HANDLER_OCAML
         ret
 LBL(116a):
         movq    $0, Caml_state(backtrace_pos)
@@ -820,7 +826,7 @@ LBL(116a):
                                   /* arg 4: sp of handler */
         C_call  (GCALL(caml_stash_backtrace))
         movq    %r12, %rax        /* Recover exception bucket */
-        RESTORE_EXN_HANDLER_OCAML
+        RESTORE_ASYNC_EXN_HANDLER_OCAML
         ret
 CFI_ENDPROC
 ENDFUNCTION(G(caml_raise_async_exn))

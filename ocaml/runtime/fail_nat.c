@@ -118,8 +118,15 @@ CAMLno_asan void caml_raise_async(value v)
     caml_fatal_uncaught_exception(v);
   }
 
+  /* XXX in runtime4 we had this (similarly for caml_raise above):
+  if (Caml_state->async_exception_pointer == NULL)
+    caml_fatal_uncaught_exception(v);
+  */
+
   unwind_local_roots(limit_of_current_c_stack_chunk);
-  caml_raise_async_exception(Caml_state, v);
+  Caml_state->exn_handler = Caml_state->async_exn_handler;
+  Caml_state->raising_async_exn = 1;
+  caml_raise_exception(Caml_state, v);
 }
 
 CAMLno_asan
