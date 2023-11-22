@@ -381,8 +381,9 @@ value caml_process_pending_actions_with_root_exn(value root)
 
 value caml_process_pending_actions_with_root(value root)
 {
-  value res = caml_process_pending_actions_with_root_exn(root);
-  return caml_raise_async_if_exception(res, "");
+  return caml_raise_async_if_exception(
+    caml_process_pending_actions_with_root_exn(root),
+    "");
 }
 
 CAMLexport value caml_process_pending_actions_exn(void)

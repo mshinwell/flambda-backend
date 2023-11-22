@@ -151,6 +151,7 @@
 #define Cstack_sp                 8
 #define Cstack_prev              16
 #define Cstack_async_exn_handler 24
+/* 8 bytes are left empty to ensure the stack is 16-aligned */
 #define SIZEOF_C_STACK_LINK      40
 #endif
 

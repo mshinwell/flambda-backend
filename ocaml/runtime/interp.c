@@ -355,8 +355,8 @@ value caml_interprete(code_t prog, asize_t prog_size)
        [caml_interprete].  This will cause the [raise_notrace] code below to
        return asynchronous exceptions to the caller, typically in
        [caml_callbackN_exn0].  When that function reraises such an exception
-       then [Caml_state->trapsp] will correctly be pointing at the most
-       recent prior trap. */
+       then [trap_sp_off] will correctly be pointing at the most recent prior
+       trap. */
     domain_state->trap_sp_off = initial_trap_sp_off;
 
     goto raise_notrace;
@@ -1011,7 +1011,6 @@ value caml_interprete(code_t prog, asize_t prog_size)
         } else {
           struct stack_info* old_stack = domain_state->current_stack;
           struct stack_info* parent_stack = Stack_parent(old_stack);
-          /* XXX mshinwell: does this need to use Stack_handle_async_exception? */
           value hexn = Stack_handle_exception(old_stack);
           old_stack->sp = sp;
           domain_state->current_stack = parent_stack;
