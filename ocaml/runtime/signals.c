@@ -223,12 +223,13 @@ static void check_async_exn(value res, const char *msg)
   caml_fatal_uncaught_exception_with_message(exn, msg);
 }
 
-void caml_raise_async_if_exception(value res, const char* where)
+value caml_raise_async_if_exception(value res, const char* where)
 {
   if (Is_exception_result(res)) {
     check_async_exn(res, where);
     caml_raise_async(res);
   }
+  return res;
 }
 
 /* Execute a signal handler immediately */
@@ -381,8 +382,7 @@ value caml_process_pending_actions_with_root_exn(value root)
 value caml_process_pending_actions_with_root(value root)
 {
   value res = caml_process_pending_actions_with_root_exn(root);
-  caml_raise_async_if_exception(res, "");
-  return res;
+  return caml_raise_async_if_exception(res, "");
 }
 
 CAMLexport value caml_process_pending_actions_exn(void)
@@ -703,6 +703,6 @@ CAMLprim value caml_install_signal_handler(value signal_number, value action)
     caml_modify(&Field(caml_signal_handlers, sig), Field(action, 0));
     caml_plat_unlock(&signal_install_mutex);
   }
-  caml_raise_async_if_exception(caml_process_pending_signals_exn(), "");
+  (void) caml_raise_async_if_exception(caml_process_pending_signals_exn(), "");
   CAMLreturn (res);
 }
