@@ -57,10 +57,14 @@ CAMLnoreturn_start
   extern void caml_raise_exception (caml_domain_state* state, value bucket)
 CAMLnoreturn_end;
 
-static void unwind_local_roots(char *exception_pointer)
+CAMLnoreturn_start
+  extern void caml_raise_async_exception (caml_domain_state* state, value bucket)
+CAMLnoreturn_end;
+
+static void unwind_local_roots(char *limit_of_current_c_stack_chunk)
 {
   while (Caml_state->local_roots != NULL &&
-         (char *)Caml_state->local_roots < exception_pointer)
+         (char *)Caml_state->local_roots < limit_of_current_c_stack_chunk)
   {
     Caml_state->local_roots = Caml_state->local_roots->next;
   }
@@ -69,7 +73,7 @@ static void unwind_local_roots(char *exception_pointer)
 void caml_raise(value v)
 {
   Caml_check_caml_state();
-  char* exception_pointer;
+  char* limit_of_current_c_stack_chunk;
 
   Unlock_exn();
 
@@ -81,14 +85,14 @@ void caml_raise(value v)
   if (Is_exception_result(v))
     v = Extract_exception(v);
 
-  exception_pointer = (char*)Caml_state->c_stack;
+  limit_of_current_c_stack_chunk = (char*)Caml_state->c_stack;
 
-  if (exception_pointer == NULL) {
+  if (limit_of_current_c_stack_chunk == NULL) {
     caml_terminate_signals();
     caml_fatal_uncaught_exception(v);
   }
 
-  unwind_local_roots(Caml_state->exn_handler);
+  unwind_local_roots(limit_of_current_c_stack_chunk);
   caml_raise_exception(Caml_state, v);
 }
 
@@ -96,20 +100,26 @@ void caml_raise(value v)
    segv_handler in signals_nat.c). */
 CAMLno_asan void caml_raise_async(value v)
 {
+  Caml_check_caml_state();
+  char* limit_of_current_c_stack_chunk;
+
   Unlock_exn();
+
   CAMLassert(!Is_exception_result(v));
 
   /* Do not run callbacks here: we are already raising an async exn,
      so no need to check for another one, and avoiding polling here
      removes the risk of recursion in caml_raise */
 
-  if (Caml_state->async_exn_handler == NULL)
-    caml_fatal_uncaught_exception(v);
+  limit_of_current_c_stack_chunk = (char*)Caml_state->c_stack;
 
-  unwind_local_roots(Caml_state->async_exn_handler);
-  Caml_state->exn_handler = Caml_state->async_exn_handler;
-  Caml_state->raising_async_exn = 1;
-  caml_raise_exception(Caml_state, v);
+  if (limit_of_current_c_stack_chunk == NULL) {
+    caml_terminate_signals();
+    caml_fatal_uncaught_exception(v);
+  }
+
+  unwind_local_roots(limit_of_current_c_stack_chunk);
+  caml_raise_async_exception(Caml_state, v);
 }
 
 CAMLno_asan

@@ -795,6 +795,36 @@ LBL(117):
 CFI_ENDPROC
 ENDFUNCTION(G(caml_raise_exn))
 
+FUNCTION(G(caml_raise_async_exn))
+CFI_STARTPROC
+        ENTER_FUNCTION
+LBL(caml_raise_async_exn):
+        testq   $1, Caml_state(backtrace_active)
+        jne   LBL(116a)
+        RESTORE_EXN_HANDLER_OCAML
+        ret
+LBL(116a):
+        movq    $0, Caml_state(backtrace_pos)
+        movq    %rsp, %r10        /* Save OCaml stack pointer */
+        movq    %rax, %r12        /* Save exception bucket */
+        movq    Caml_state(c_stack), %rsp
+        movq    %rax, C_ARG_1     /* arg 1: exception bucket */
+#ifdef WITH_FRAME_POINTERS
+        movq    8(%r10), C_ARG_2   /* arg 2: pc of raise */
+        leaq    16(%r10), C_ARG_3  /* arg 3: sp at raise */
+#else
+        movq    (%r10), C_ARG_2   /* arg 2: pc of raise */
+        leaq    8(%r10), C_ARG_3  /* arg 3: sp at raise */
+#endif
+        movq    Caml_state(async_exn_handler), C_ARG_4
+                                  /* arg 4: sp of handler */
+        C_call  (GCALL(caml_stash_backtrace))
+        movq    %r12, %rax        /* Recover exception bucket */
+        RESTORE_EXN_HANDLER_OCAML
+        ret
+CFI_ENDPROC
+ENDFUNCTION(G(caml_raise_async_exn))
+
 FUNCTION(G(caml_reraise_exn))
 CFI_STARTPROC
         ENTER_FUNCTION
@@ -820,6 +850,22 @@ CFI_STARTPROC
         jmp LBL(caml_raise_exn)
 CFI_ENDPROC
 ENDFUNCTION(G(caml_raise_exception))
+
+/* Raise an async exception from C */
+
+FUNCTION(G(caml_raise_async_exception))
+CFI_STARTPROC
+        ENTER_FUNCTION
+        movq    C_ARG_1, %r14                /* Caml_state */
+        movq    C_ARG_2, %rax
+    /* Load young_ptr into %r15 */
+        movq    Caml_state(young_ptr), %r15
+    /* Discard the C stack pointer and reset to ocaml stack */
+        movq    Caml_state(current_stack), %r10
+        movq    Stack_sp(%r10), %rsp         /* FIXME: CFI */
+        jmp LBL(caml_raise_async_exn)
+CFI_ENDPROC
+ENDFUNCTION(G(caml_raise_async_exception))
 
 /******************************************************************************/
 /* Callback from C to OCaml */
