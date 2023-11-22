@@ -54,14 +54,23 @@ CAMLexport void caml_raise(value v)
 
 CAMLexport void caml_raise_async(value v)
 {
+  Caml_check_caml_state();
   Unlock_exn();
   CAMLassert(!Is_exception_result(v));
 
-  if (Caml_state->external_raise_async == NULL)
-    caml_fatal_uncaught_exception(v);
+  v = caml_process_pending_actions_with_root(v);
+  if (Is_exception_result(v))
+    v = Extract_exception(v);
 
-  *Caml_state->external_raise->exn_bucket = v;
-  Caml_state->raising_async_exn = 1;
+  if (Caml_state->external_raise_async == NULL) {
+    caml_terminate_signals();
+    caml_fatal_uncaught_exception(v);
+  }
+  *Caml_state->external_raise_async->exn_bucket = v;
+
+  Caml_state->local_roots = Caml_state->external_raise_async->local_roots;
+
+  fprintf(stderr,"siglongjmp inside caml_raise_async\n");
   siglongjmp(Caml_state->external_raise_async->jmp->buf, 1);
 }
 

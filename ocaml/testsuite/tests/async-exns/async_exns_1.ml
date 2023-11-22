@@ -134,7 +134,7 @@ let () =
     )
   with
   | Sys.Break -> Printf.printf "4a. OK\n%!"
-  | _ -> assert false
+  | e -> Printf.eprintf "WRONG: %s" (Printexc.to_string e); assert false
 
 (* Same but for a 2-parameter callback *)
 

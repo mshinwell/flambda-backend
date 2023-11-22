@@ -357,9 +357,9 @@ value caml_interprete(code_t prog, asize_t prog_size)
        [caml_callbackN_exn0].  When that function reraises such an exception
        then [trap_sp_off] will correctly be pointing at the most recent prior
        trap. */
-    domain_state->trap_sp_off = initial_trap_sp_off;
+    domain_state->trap_sp_off = 1; // initial_trap_sp_off;
 
-    goto raise_notrace;
+    goto raise_notrace_ignoring_parent_stacks;
   }
   domain_state->external_raise_async = &exception_ctx_async;
 
@@ -1002,6 +1002,8 @@ value caml_interprete(code_t prog, asize_t prog_size)
     raise_notrace:
       if (domain_state->trap_sp_off > 0) {
         if (Stack_parent(domain_state->current_stack) == NULL) {
+    raise_notrace_ignoring_parent_stacks:
+          fprintf(stderr, "raise_notrace_i_p_s, ds->trap_sp_off %d\n", (int) domain_state->trap_sp_off);
           domain_state->external_raise = initial_external_raise;
           domain_state->external_raise_async = initial_external_raise_async;
           domain_state->trap_sp_off = initial_trap_sp_off;
@@ -1028,6 +1030,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
           goto check_stacks;
         }
       } else {
+        fprintf(stderr, "raise_notrace normal case\n");
         sp =
            Stack_high(domain_state->current_stack) + domain_state->trap_sp_off;
         pc = Trap_pc(sp);
