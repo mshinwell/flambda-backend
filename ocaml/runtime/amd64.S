@@ -717,7 +717,7 @@ LBL(caml_start_program):
             /* %rsp + 16 contains the C_STACK_SP */                   \
           DW_OP_breg + DW_REG_rsp, 16 /* exn handler */, DW_OP_deref, \
           DW_OP_plus_uconst,                                          \
-             24  /* struct c_stack_link */ +                          \
+             SIZEOF_C_STACK_LINK  /* struct c_stack_link */ +         \
              6*8 /* callee save regs */ +                             \
              8   /* ret addr */
 #endif
