@@ -58,10 +58,6 @@ CAMLexport void caml_raise_async(value v)
   Unlock_exn();
   CAMLassert(!Is_exception_result(v));
 
-  v = caml_process_pending_actions_with_root(v);
-  if (Is_exception_result(v))
-    v = Extract_exception(v);
-
   if (Caml_state->external_raise_async == NULL) {
     caml_terminate_signals();
     caml_fatal_uncaught_exception(v);
@@ -70,7 +66,7 @@ CAMLexport void caml_raise_async(value v)
 
   Caml_state->local_roots = Caml_state->external_raise_async->local_roots;
 
-  fprintf(stderr,"siglongjmp inside caml_raise_async\n");
+  Caml_state->raising_async_exn = 1;
   siglongjmp(Caml_state->external_raise_async->jmp->buf, 1);
 }
 
