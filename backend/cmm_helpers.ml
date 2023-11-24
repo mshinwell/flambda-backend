@@ -3217,13 +3217,13 @@ let arraylength kind arg dbg =
                 Any ))
     in
     Cop (Cor, [len; Cconst_int (1, dbg)], dbg)
-  | Paddrarray | Pintarray | Punboxedfloatarray ->
+  | Paddrarray | Pintarray ->
     (* Note we only support 64 bit targets now, so this is ok for
        Punboxedfloatarray *)
     Cop (Cor, [addr_array_length_shifted hdr dbg; Cconst_int (1, dbg)], dbg)
   | Punboxedintarray Pint64 | Punboxedintarray Pnativeint ->
     unboxed_int64_or_nativeint_array_length arg dbg
-  | Pfloatarray ->
+  | Pfloatarray | Punboxedfloatarray ->
     Cop (Cor, [float_array_length_shifted hdr dbg; Cconst_int (1, dbg)], dbg)
   | Punboxedintarray Pint32 -> unboxed_int32_array_length arg dbg
 
@@ -3625,6 +3625,10 @@ let arrayset_unsafe skind arg1 arg2 arg3 dbg =
     | Paddrarray_set mode -> addr_array_set mode arg1 arg2 arg3 dbg
     | Pintarray_set -> int_array_set arg1 arg2 arg3 dbg
     | Pfloatarray_set | Punboxedfloatarray_set ->
+      (* floatarrays and unboxed floatarrays have the same representation, and
+         the same convention for sets (i.e. take the new value as unboxed
+         float); and only differ in their `get`: floatarrays return boxed
+         floats, and unboxed floatarrays return boxed floats. *)
       float_array_set arg1 arg2 arg3 dbg
     | Punboxedintarray_set (Pint64 | Pnativeint) ->
       unboxed_int64_or_nativeint_array_set arg1 ~index:arg2 ~new_value:arg3 dbg
@@ -4496,9 +4500,34 @@ let kind_of_layout (layout : Lambda.layout) =
   | Punboxed_product _ ->
     Any
 
-let allocate_unboxed_int32_array ~num_elements (mode : Lambda.alloc_mode) dbg =
+let make_unboxed_int32_array_payload dbg unboxed_int32_list =
+  let rec aux acc = function
+    | [] -> true, List.rev acc
+    | a :: [] ->
+      let i =
+        (* CR gbury: check/test that this is correct *)
+        if big_endian
+        then Cop (Clsl, [a; Cconst_int (32, dbg)], dbg)
+        else sign_extend_32 dbg a
+      in
+      false, List.rev (i :: acc)
+    | a :: b :: r ->
+      let i =
+        (* CR gbury: check/test that this is correct *)
+        if big_endian
+        then Cop (Cor, [Cop (Clsl, [a; Cconst_int (32, dbg)], dbg); b], dbg)
+        else Cop (Cor, [a; Cop (Clsl, [b; Cconst_int (32, dbg)], dbg)], dbg)
+      in
+      aux (i :: acc) r
+  in
+  aux [] unboxed_int32_list
+
+let allocate_unboxed_int32_array ~elements (mode : Lambda.alloc_mode) dbg =
+  let even_num_of_elts, payload =
+    make_unboxed_int32_array_payload dbg elements
+  in
   let header =
-    let size = 1 (* custom_ops field *) + ((num_elements + 1) / 2) in
+    let size = 1 (* custom_ops field *) + List.length payload in
     match mode with
     | Alloc_heap -> custom_header ~size
     | Alloc_local -> custom_local_header ~size
@@ -4506,21 +4535,21 @@ let allocate_unboxed_int32_array ~num_elements (mode : Lambda.alloc_mode) dbg =
   let custom_ops =
     (* For odd-length unboxed int32 arrays there are 32 bits spare at the end of
        the block *)
-    if num_elements mod 2 = 0
+    if even_num_of_elts
     then custom_ops_unboxed_int32_even_array
     else custom_ops_unboxed_int32_odd_array
   in
-  Cop (Calloc mode, [Cconst_natint (header, dbg); custom_ops], dbg)
+  Cop (Calloc mode, Cconst_natint (header, dbg) :: custom_ops :: payload, dbg)
 
-let allocate_unboxed_int64_or_nativeint_array custom_ops ~num_elements
+let allocate_unboxed_int64_or_nativeint_array custom_ops ~elements
     (mode : Lambda.alloc_mode) dbg =
   let header =
-    let size = 1 (* custom_ops field *) + num_elements in
+    let size = 1 (* custom_ops field *) + List.length elements in
     match mode with
     | Alloc_heap -> custom_header ~size
     | Alloc_local -> custom_local_header ~size
   in
-  Cop (Calloc mode, [Cconst_natint (header, dbg); custom_ops], dbg)
+  Cop (Calloc mode, Cconst_natint (header, dbg) :: custom_ops :: elements, dbg)
 
 let allocate_unboxed_int64_array =
   allocate_unboxed_int64_or_nativeint_array custom_ops_unboxed_int64_array

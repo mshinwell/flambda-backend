@@ -84,7 +84,7 @@ val create_immutable_nativeint_array :
 val create_immutable_value_array :
   Are_rebuilding_terms.t -> Field_of_static_block.t list -> t
 
-val create_empty_array : Are_rebuilding_terms.t -> t
+val create_empty_array : Are_rebuilding_terms.t -> Empty_array_kind.t -> t
 
 val create_mutable_string : Are_rebuilding_terms.t -> initial_value:string -> t
 

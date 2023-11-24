@@ -324,7 +324,7 @@ let rec unknown_with_subkind ?(alloc_mode = Alloc_mode.For_types.unknown ())
       ~field_kind:Flambda_kind.naked_float
       ~fields:(List.init num_fields (fun _ -> TG.any_naked_float))
       alloc_mode
-  | Float_array | Unboxed_float_array ->
+  | Float_array ->
     TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.naked_float)
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_int32_array ->

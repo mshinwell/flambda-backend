@@ -560,8 +560,8 @@ let prove_is_immediates_array env t : unit proof_of_property =
     | Tagged_immediate -> Proved ()
     | Anything | Boxed_float | Boxed_int32 | Boxed_int64 | Boxed_nativeint
     | Boxed_vec128 | Variant _ | Float_block _ | Float_array | Immediate_array
-    | Value_array | Generic_array | Unboxed_float_array | Unboxed_int32_array
-    | Unboxed_int64_array | Unboxed_nativeint_array ->
+    | Value_array | Generic_array | Unboxed_int32_array | Unboxed_int64_array
+    | Unboxed_nativeint_array ->
       Unknown)
   | Value
       (Ok

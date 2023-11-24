@@ -58,6 +58,26 @@ module Block_kind = struct
     match t with Values _ -> K.value | Naked_floats -> K.naked_float
 end
 
+module Init_or_assign = struct
+  type t =
+    | Initialization
+    | Assignment of Alloc_mode.For_assignments.t
+
+  let [@ocamlformat "disable"] print ppf t =
+    let fprintf = Format.fprintf in
+    match t with
+    | Initialization -> fprintf ppf "Init"
+    | Assignment Heap -> fprintf ppf "Assign Heap"
+    | Assignment Local -> fprintf ppf "Assign Local"
+
+  let compare = Stdlib.compare
+
+  let to_lambda t : Lambda.initialization_or_assignment =
+    match t with
+    | Initialization -> Heap_initialization
+    | Assignment mode -> Assignment (Alloc_mode.For_assignments.to_lambda mode)
+end
+
 module Array_kind = struct
   type t =
     | Immediates
@@ -78,17 +98,13 @@ module Array_kind = struct
 
   let compare = Stdlib.compare
 
-  let element_kind_for_set t =
+  let element_kind_for_primitive t =
     match t with
     | Immediates | Values -> K.value
     | Naked_floats -> K.naked_float
     | Naked_int32s -> K.naked_int32
     | Naked_int64s -> K.naked_int64
     | Naked_nativeints -> K.naked_nativeint
-
-  let element_kind_for_creation = element_kind_for_set
-
-  let element_kind_for_load = element_kind_for_set
 
   let element_kind t =
     match t with
@@ -98,26 +114,13 @@ module Array_kind = struct
     | Naked_int32s -> Flambda_kind.With_subkind.naked_int32
     | Naked_int64s -> Flambda_kind.With_subkind.naked_int64
     | Naked_nativeints -> Flambda_kind.With_subkind.naked_nativeint
-end
 
-module Init_or_assign = struct
-  type t =
-    | Initialization
-    | Assignment of Alloc_mode.For_assignments.t
-
-  let [@ocamlformat "disable"] print ppf t =
-    let fprintf = Format.fprintf in
+  let for_empty_array t : Empty_array_kind.t =
     match t with
-    | Initialization -> fprintf ppf "Init"
-    | Assignment Heap -> fprintf ppf "Assign Heap"
-    | Assignment Local -> fprintf ppf "Assign Local"
-
-  let compare = Stdlib.compare
-
-  let to_lambda t : Lambda.initialization_or_assignment =
-    match t with
-    | Initialization -> Heap_initialization
-    | Assignment mode -> Assignment (Alloc_mode.For_assignments.to_lambda mode)
+    | Immediates | Values | Naked_floats -> Values_or_immediates_or_naked_floats
+    | Naked_int32s -> Naked_int32s
+    | Naked_int64s -> Naked_int64s
+    | Naked_nativeints -> Naked_nativeints
 end
 
 module Array_set_kind = struct
@@ -1397,7 +1400,8 @@ let result_kind_of_binary_primitive p : result_kind =
   match p with
   | Block_load (block_access_kind, _) ->
     Singleton (Block_access_kind.element_kind_for_load block_access_kind)
-  | Array_load (kind, _) -> Singleton (Array_kind.element_kind_for_load kind)
+  | Array_load (kind, _) ->
+    Singleton (Array_kind.element_kind_for_primitive kind)
   | String_or_bigstring_load (_, (Eight | Sixteen)) ->
     Singleton K.naked_immediate
   | String_or_bigstring_load (_, Thirty_two) -> Singleton K.naked_int32
@@ -1488,7 +1492,7 @@ let compare_ternary_primitive p1 p2 =
   | Block_set (kind1, init_or_assign1), Block_set (kind2, init_or_assign2) ->
     let c = Block_access_kind.compare kind1 kind2 in
     if c <> 0 then c else Init_or_assign.compare init_or_assign1 init_or_assign2
-  | Array_set kind1, Array_set kind2 -> Array_kind.compare kind1 kind2
+  | Array_set kind1, Array_set kind2 -> Array_set_kind.compare kind1 kind2
   | ( Bytes_or_bigstring_set (kind1, width1),
       Bytes_or_bigstring_set (kind2, width2) ) ->
     let c = Stdlib.compare kind1 kind2 in
@@ -1639,7 +1643,7 @@ let args_kind_of_variadic_primitive p : arg_kinds =
   | Make_block (kind, _, _) ->
     Variadic_all_of_kind (Block_kind.element_kind kind)
   | Make_array (kind, _, _) ->
-    Variadic_all_of_kind (Array_kind.element_kind_for_creation kind)
+    Variadic_all_of_kind (Array_kind.element_kind_for_primitive kind)
 
 let result_kind_of_variadic_primitive p : result_kind =
   match p with Make_block _ | Make_array _ -> Singleton K.value

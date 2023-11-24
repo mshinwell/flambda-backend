@@ -190,7 +190,7 @@ module Array_set_kind = struct
     | Immediates
     | Values of P.Init_or_assign.t
     | Naked_floats
-    | Naked_floats_to_be_boxed
+    | Naked_floats_to_be_unboxed
     | Naked_int32s
     | Naked_int64s
     | Naked_nativeints
@@ -205,7 +205,7 @@ let convert_intermediate_array_set_kind (kind : Array_set_kind.t) :
   match kind with
   | Immediates -> Immediates
   | Values init_or_assign -> Values init_or_assign
-  | Naked_floats | Naked_floats_to_be_boxed -> Naked_floats
+  | Naked_floats | Naked_floats_to_be_unboxed -> Naked_floats
   | Naked_int32s -> Naked_int32s
   | Naked_int64s -> Naked_int64s
   | Naked_nativeints -> Naked_nativeints
@@ -222,7 +222,7 @@ let convert_array_set_kind (kind : L.array_set_kind) : converted_array_set_kind
     Array_set_kind
       (Values (Assignment (Alloc_mode.For_assignments.from_lambda mode)))
   | Pintarray_set -> Array_set_kind Immediates
-  | Pfloatarray_set -> Array_set_kind Naked_floats_to_be_boxed
+  | Pfloatarray_set -> Array_set_kind Naked_floats_to_be_unboxed
   | Punboxedfloatarray_set -> Array_set_kind Naked_floats
   | Punboxedintarray_set Pint32 -> Array_set_kind Naked_int32s
   | Punboxedintarray_set Pint64 -> Array_set_kind Naked_int64s
@@ -234,7 +234,7 @@ let convert_array_set_kind_for_length array_set_kind : P.Array_kind_for_length.t
   | Float_array_opt_dynamic_set _ -> Float_array_opt_dynamic
   | Array_set_kind (Values _) -> Array_kind Values
   | Array_set_kind Immediates -> Array_kind Immediates
-  | Array_set_kind (Naked_floats | Naked_floats_to_be_boxed) ->
+  | Array_set_kind (Naked_floats | Naked_floats_to_be_unboxed) ->
     Array_kind Naked_floats
   | Array_set_kind Naked_int32s -> Array_kind Naked_int32s
   | Array_set_kind Naked_int64s -> Array_kind Naked_int64s
@@ -686,7 +686,7 @@ let array_set_unsafe ~array ~index ~new_value
     | Immediates | Values _ | Naked_floats | Naked_int32s | Naked_int64s
     | Naked_nativeints ->
       new_value
-    | Naked_floats_to_be_boxed -> unbox_float new_value
+    | Naked_floats_to_be_unboxed -> unbox_float new_value
   in
   let array_set_kind = convert_intermediate_array_set_kind array_set_kind in
   Ternary (Array_set array_set_kind, array, index, new_value)
@@ -712,7 +712,7 @@ let[@inline always] match_on_array_set_kind ~array array_ref_kind f :
        too much *)
     If_then_else
       ( Unary (Is_flat_float_array, array),
-        f Array_set_kind.Naked_floats_to_be_boxed,
+        f Array_set_kind.Naked_floats_to_be_unboxed,
         f (Array_set_kind.Values (Assignment mode)) )
 
 (* Safe arith (div/mod by zero) *)

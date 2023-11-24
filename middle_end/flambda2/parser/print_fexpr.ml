@@ -291,6 +291,16 @@ let array_kind ~space ppf (ak : array_kind) =
   in
   pp_option ~space Format.pp_print_string ppf str
 
+let empty_array_kind ~space ppf (ak : empty_array_kind) =
+  let str =
+    match ak with
+    | Values_or_immediates_or_naked_floats -> None
+    | Naked_int32s -> Some "int32"
+    | Naked_int64s -> Some "int64"
+    | Naked_nativeints -> Some "nativeint"
+  in
+  pp_option ~space Format.pp_print_string ppf str
+
 let alloc_mode_for_allocations_opt ppf (alloc : alloc_mode_for_allocations)
     ~space =
   match alloc with
@@ -345,7 +355,8 @@ let static_data ppf : static_data -> unit = function
     Format.fprintf ppf "Value_array [|%a|]"
       (pp_semi_list field_of_block)
       elements
-  | Empty_array -> Format.fprintf ppf "Empty_array"
+  | Empty_array kind ->
+    Format.fprintf ppf "Empty_array%a" (empty_array_kind ~space:Before) kind
   | Mutable_string { initial_value = s } ->
     Format.fprintf ppf "mutable \"%s\"" (s |> String.escaped)
   | Immutable_string s -> Format.fprintf ppf "\"%s\"" (s |> String.escaped)

@@ -934,11 +934,11 @@ and transl_make_array dbg env kind mode args =
       make_float_alloc ~mode dbg Obj.double_array_tag
         (List.map (transl env) args)
   | Punboxedintarray Pint32 ->
-      allocate_unboxed_int32_array ~num_elements:(List.length args) mode dbg
+      allocate_unboxed_int32_array ~elements:(List.map (transl env) args) mode dbg
   | Punboxedintarray Pint64 ->
-      allocate_unboxed_int64_array ~num_elements:(List.length args) mode dbg
+      allocate_unboxed_int64_array ~elements:(List.map (transl env) args) mode dbg
   | Punboxedintarray Pnativeint ->
-      allocate_unboxed_nativeint_array ~num_elements:(List.length args) mode dbg
+      allocate_unboxed_nativeint_array ~elements:(List.map (transl env) args) mode dbg
 
 and transl_ccall env prim args dbg =
   let transl_arg native_repr arg =

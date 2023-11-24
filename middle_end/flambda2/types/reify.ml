@@ -36,7 +36,7 @@ type to_lift =
   | Immutable_int64_array of { fields : Int64.t list }
   | Immutable_nativeint_array of { fields : Targetint_32_64.t list }
   | Immutable_value_array of { fields : Simple.t list }
-  | Empty_array
+  | Empty_array of Empty_array_kind.t
 
 type reification_result =
   | Lift of to_lift
@@ -377,14 +377,23 @@ let reify ~allowed_if_free_vars_defined_in ~var_is_defined_at_toplevel
           (Array
             { contents = Unknown | Known Mutable;
               length;
-              element_kind = _;
+              element_kind;
               alloc_mode = _
             })) -> (
       match Provers.meet_equals_single_tagged_immediate env length with
-      | Known_result length ->
-        if Targetint_31_63.equal length Targetint_31_63.zero
-        then Lift Empty_array
-        else try_canonical_simple ()
+      | Known_result length -> (
+        if not (Targetint_31_63.equal length Targetint_31_63.zero)
+        then try_canonical_simple ()
+        else
+          match element_kind with
+          (* Lift Empty_array *)
+          | Ok element_kind ->
+            let array_kind =
+              Empty_array_kind.of_element_kind
+                (Flambda_kind.With_subkind.kind element_kind)
+            in
+            Lift (Empty_array array_kind)
+          | Unknown | Bottom -> try_canonical_simple ())
       | Need_meet -> try_canonical_simple ()
       | Invalid -> Invalid)
     | Value
@@ -396,7 +405,15 @@ let reify ~allowed_if_free_vars_defined_in ~var_is_defined_at_toplevel
               element_kind
             })) -> (
       match fields with
-      | [] -> Lift Empty_array
+      | [] -> (
+        match element_kind with
+        | Ok element_kind ->
+          let array_kind =
+            Empty_array_kind.of_element_kind
+              (Flambda_kind.With_subkind.kind element_kind)
+          in
+          Lift (Empty_array array_kind)
+        | Unknown | Bottom -> try_canonical_simple ())
       | _ :: _ -> (
         match element_kind with
         | Unknown -> try_canonical_simple ()

@@ -781,7 +781,7 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
         | Immutable_value_array elements ->
           static_const
             (SC.immutable_value_array (List.map (field_of_block env) elements))
-        | Empty_array -> static_const SC.empty_array
+        | Empty_array array_kind -> static_const (SC.empty_array array_kind)
         | Mutable_string { initial_value = s } ->
           static_const (SC.mutable_string ~initial_value:s)
         | Immutable_string s -> static_const (SC.immutable_string s))

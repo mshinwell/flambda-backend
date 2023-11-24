@@ -39,10 +39,10 @@ module Array_kind : sig
     | Immediates  (** An array consisting only of immediate values. *)
     | Values
         (** An array consisting of elements of kind [value]. With the float
-            array optimisation enabled, such elements must never be [float]s. *)
+        array optimisation enabled, such elements must never be [float]s. *)
     | Naked_floats
         (** An array consisting of naked floats, represented using
-            [Double_array_tag]. *)
+        [Double_array_tag]. *)
     | Naked_int32s
     | Naked_int64s
     | Naked_nativeints
@@ -52,6 +52,8 @@ module Array_kind : sig
   val compare : t -> t -> int
 
   val element_kind : t -> Flambda_kind.With_subkind.t
+
+  val for_empty_array : t -> Empty_array_kind.t
 end
 
 module Array_kind_for_length : sig
@@ -73,10 +75,10 @@ module Array_set_kind : sig
     | Immediates  (** An array consisting only of immediate values. *)
     | Values of Init_or_assign.t
         (** An array consisting of elements of kind [value]. With the float
-            array optimisation enabled, such elements must never be [float]s. *)
+        array optimisation enabled, such elements must never be [float]s. *)
     | Naked_floats
         (** An array consisting of naked floats, represented using
-            [Double_array_tag]. *)
+        [Double_array_tag]. *)
     | Naked_int32s
     | Naked_int64s
     | Naked_nativeints

@@ -140,8 +140,11 @@ let block_load (kind : Flambda_primitive.Block_access_kind.t) =
 let array_load (kind : Flambda_primitive.Array_kind.t) =
   match kind with
   | Immediates -> 1 (* cadda + load *)
-  | Naked_floats | Naked_int32s | Naked_int64s | Naked_nativeints -> 1
-  | Values -> 1
+  | Naked_floats | Values -> 1
+  | Naked_int32s | Naked_int64s | Naked_nativeints ->
+    (* more computation is needed because of the representation using a custom
+       block *)
+    2
 
 let block_set (kind : Flambda_primitive.Block_access_kind.t)
     (init : Flambda_primitive.Init_or_assign.t) =

@@ -76,6 +76,8 @@ type mutability = Mutability.t =
   | Immutable
   | Immutable_unique
 
+type empty_array_kind = Empty_array_kind.t
+
 type 'a or_variable =
   | Const of 'a
   | Var of variable
@@ -94,7 +96,7 @@ type static_data =
   | Immutable_float_block of float or_variable list
   | Immutable_float_array of float or_variable list
   | Immutable_value_array of field_of_block list
-  | Empty_array
+  | Empty_array of empty_array_kind
   | Mutable_string of { initial_value : string }
   | Immutable_string of string
 

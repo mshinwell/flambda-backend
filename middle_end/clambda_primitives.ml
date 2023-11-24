@@ -145,6 +145,10 @@ and float_comparison = Lambda.float_comparison =
 and array_kind = Lambda.array_kind =
     Pgenarray | Paddrarray | Pintarray | Pfloatarray
   | Punboxedfloatarray | Punboxedintarray of boxed_integer
+  (* CR gbury: the difference between a floatarray and an unboxed floatarray
+     is only that get/set operations take or return boxed floats or unboxed
+     floats. This is pertinent for closure/flambda1, but will probably become
+     unneeded once there is only flambda2. *)
 
 and array_ref_kind = Lambda.array_ref_kind =
   | Pgenarray_ref of alloc_mode

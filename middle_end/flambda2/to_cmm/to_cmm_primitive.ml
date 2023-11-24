@@ -124,12 +124,10 @@ let make_array ~dbg kind alloc_mode args =
   | Immediates | Values -> C.make_alloc ~mode dbg 0 args
   | Naked_floats ->
     C.make_float_alloc ~mode dbg (Tag.to_int Tag.double_array_tag) args
-  | Naked_int32s ->
-    C.allocate_unboxed_int32_array ~num_elements:(List.length args) mode dbg
-  | Naked_int64s ->
-    C.allocate_unboxed_int64_array ~num_elements:(List.length args) mode dbg
+  | Naked_int32s -> C.allocate_unboxed_int32_array ~elements:args mode dbg
+  | Naked_int64s -> C.allocate_unboxed_int64_array ~elements:args mode dbg
   | Naked_nativeints ->
-    C.allocate_unboxed_nativeint_array ~num_elements:(List.length args) mode dbg
+    C.allocate_unboxed_nativeint_array ~elements:args mode dbg
 
 let array_length ~dbg arr (kind : P.Array_kind.t) =
   assert (C.wordsize_shift = C.numfloat_shift);
