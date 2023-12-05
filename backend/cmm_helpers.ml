@@ -3625,10 +3625,10 @@ let arrayset_unsafe skind arg1 arg2 arg3 dbg =
     | Paddrarray_set mode -> addr_array_set mode arg1 arg2 arg3 dbg
     | Pintarray_set -> int_array_set arg1 arg2 arg3 dbg
     | Pfloatarray_set | Punboxedfloatarray_set ->
-      (* floatarrays and unboxed floatarrays have the same representation, and
-         the same convention for sets (i.e. take the new value as unboxed
-         float); and only differ in their `get`: floatarrays return boxed
-         floats, and unboxed floatarrays return boxed floats. *)
+      (* [arrayset] and [arrayset_unsafe] take as argument an unboxed float for
+         the value to set, no matter the array kind; whereas [arrayref] and
+         [arrayref_unsafe] return either a boxed or unboxed float depending on
+         the array kind. *)
       float_array_set arg1 arg2 arg3 dbg
     | Punboxedintarray_set (Pint64 | Pnativeint) ->
       unboxed_int64_or_nativeint_array_set arg1 ~index:arg2 ~new_value:arg3 dbg
