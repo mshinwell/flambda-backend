@@ -96,7 +96,6 @@
   cmm_builtins
   cmm_invariants
   cmm
-  cmmgen
   cmmgen_state
   coloring
   comballoc
