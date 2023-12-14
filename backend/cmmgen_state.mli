@@ -32,11 +32,10 @@ val get_and_clear_data_items : unit -> Cmm.data_item list
 
 val add_structured_constant : Cmm.symbol -> Clambda.ustructured_constant -> unit
 
-val set_local_structured_constants : Clambda.preallocated_constant list -> unit
+val clear_local_structured_constants : unit -> unit
 
 val add_global_structured_constant : string -> Clambda.ustructured_constant -> unit
 
 val get_structured_constant : string -> (Cmm.is_global * Clambda.ustructured_constant) option
 
-(* Also looks up using Compilenv.structured_constant_of_symbol *)
 val structured_constant_of_sym : string -> Clambda.ustructured_constant option

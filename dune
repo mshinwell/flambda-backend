@@ -76,11 +76,7 @@
   ;; middle_end/
   backend_var
   clambda
-  clambda_primitives
-  clambda_layout
   compilenv
-  printclambda
-  printclambda_primitives
   ;; asmcomp/
   afl_instrument
   arch

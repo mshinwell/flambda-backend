@@ -42,7 +42,7 @@ let flush_cmm_helpers_state res =
       res, C.cdata (C.define_symbol sym @ l) :: acc
   in
   (* reset the structured constants, just in case *)
-  Cmmgen_state.set_local_structured_constants [];
+  Cmmgen_state.clear_local_structured_constants ();
   match Cmmgen_state.get_and_clear_data_items () with
   | [] ->
     let cst_map = Cmmgen_state.get_and_clear_constants () in

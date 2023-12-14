@@ -57,13 +57,8 @@ let add_structured_constant (sym : Cmm.symbol) cst =
   if not (Hashtbl.mem state.structured_constants sym.sym_name) then
     Hashtbl.replace state.structured_constants sym.sym_name (sym.sym_global, cst)
 
-let set_local_structured_constants l =
-  Hashtbl.clear state.structured_constants;
-  List.iter
-    (fun (c : Clambda.preallocated_constant) ->
-       Hashtbl.add state.structured_constants c.symbol (Cmm.Local, c.definition)
-    )
-    l
+let clear_local_structured_constants () =
+  Hashtbl.clear state.structured_constants
 
 let add_global_structured_constant sym cst =
   if not (Hashtbl.mem state.structured_constants sym) then
@@ -73,7 +68,4 @@ let get_structured_constant s =
   Hashtbl.find_opt state.structured_constants s
 
 let structured_constant_of_sym s =
-  match Compilenv.structured_constant_of_symbol s with
-  | None ->
-    Option.map snd (Hashtbl.find_opt state.structured_constants s)
-  | Some _ as r -> r
+  Option.map snd (Hashtbl.find_opt state.structured_constants s)

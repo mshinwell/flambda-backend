@@ -41,30 +41,7 @@ let global_infos_table =
 let reset_info_tables () =
   CU.Name.Tbl.reset global_infos_table
 
-module CstMap =
-  Map.Make(struct
-    type t = Clambda.ustructured_constant
-    let compare = Clambda.compare_structured_constants
-    (* PR#6442: it is incorrect to use Stdlib.compare on values of type t
-       because it compares "0.0" and "-0.0" equal. *)
-  end)
-
-module SymMap = Misc.Stdlib.String.Map
 module String = Misc.Stdlib.String
-
-type structured_constants =
-  {
-    strcst_shared: string CstMap.t;
-    strcst_all: Clambda.ustructured_constant SymMap.t;
-  }
-
-let structured_constants_empty  =
-  {
-    strcst_shared = CstMap.empty;
-    strcst_all = SymMap.empty;
-  }
-
-let structured_constants = ref structured_constants_empty
 
 let exported_constants = Hashtbl.create 17
 
@@ -98,7 +75,6 @@ let reset compilation_unit =
   current_unit.ui_force_link <- !Clflags.link_everything;
   Checks.reset current_unit.ui_checks;
   Hashtbl.clear exported_constants;
-  structured_constants := structured_constants_empty;
   current_unit.ui_export_info <- default_ui_export_info
 
 let current_unit_infos () =
@@ -295,64 +271,10 @@ let save_unit_info filename =
   current_unit.ui_imports_cmi <- Env.imports();
   write_unit_info current_unit filename
 
-let snapshot () = !structured_constants
-let backtrack s = structured_constants := s
-
 let new_const_symbol () =
   Symbol.for_new_const_in_current_unit ()
   |> Symbol.linkage_name
   |> Linkage_name.to_string
-
-let new_structured_constant cst ~shared =
-  let {strcst_shared; strcst_all} = !structured_constants in
-  if shared then
-    try
-      CstMap.find cst strcst_shared
-    with Not_found ->
-      let lbl = new_const_symbol() in
-      structured_constants :=
-        {
-          strcst_shared = CstMap.add cst lbl strcst_shared;
-          strcst_all = SymMap.add lbl cst strcst_all;
-        };
-      lbl
-  else
-    let lbl = new_const_symbol() in
-    structured_constants :=
-      {
-        strcst_shared;
-        strcst_all = SymMap.add lbl cst strcst_all;
-      };
-    lbl
-
-let add_exported_constant s =
-  Hashtbl.replace exported_constants s ()
-
-let clear_structured_constants () =
-  structured_constants := structured_constants_empty
-
-let structured_constant_of_symbol s =
-  SymMap.find_opt s (!structured_constants).strcst_all
-
-let structured_constants () =
-  let provenance : Clambda.usymbol_provenance =
-    { original_idents = [];
-      module_path =
-        (* CR-someday lmaurer: Properly construct a [Path.t] from the module name
-           with its pack prefix. *)
-        Path.Pident (Ident.create_persistent (Compilation_unit.Name.to_string (
-          Compilation_unit.name (Compilation_unit.get_current_exn ()))));
-    }
-  in
-  SymMap.bindings (!structured_constants).strcst_all
-  |> List.map
-    (fun (symbol, definition) ->
-       {
-         Clambda.symbol;
-         exported = Hashtbl.mem exported_constants symbol;
-         definition;
-         provenance = Some provenance;
-        })
 
 let require_global global_ident =
   ignore (get_global_info global_ident : Cmx_format.unit_infos option)

@@ -31,7 +31,7 @@ val current_unit_infos: unit -> unit_infos
         (* Return the infos for the unit being compiled *)
 
 val get_global_export_info : Compilation_unit.t -> Cmx_format.export_info option
-        (* Middle-end-agnostic means of getting the export info found in the
+        (* Means of getting the export info found in the
            .cmx file of the given unit. *)
 
 val get_unit_export_info
@@ -57,26 +57,6 @@ val cache_checks : Checks.t -> unit
         (* [cache_checks c] adds [c] to [cached_checks] *)
 
 val new_const_symbol : unit -> string
-
-val new_structured_constant:
-  Clambda.ustructured_constant ->
-  shared:bool -> (* can be shared with another structurally equal constant *)
-  string
-val structured_constants:
-  unit -> Clambda.preallocated_constant list
-val clear_structured_constants: unit -> unit
-
-val structured_constant_of_symbol:
-  string -> Clambda.ustructured_constant option
-
-val add_exported_constant: string -> unit
-        (* clambda-only *)
-type structured_constants
-        (* clambda-only *)
-val snapshot: unit -> structured_constants
-        (* clambda-only *)
-val backtrack: structured_constants -> unit
-        (* clambda-only *)
 
 val read_unit_info: string -> unit_infos * Digest.t
         (* Read infos and MD5 from a [.cmx] file. *)

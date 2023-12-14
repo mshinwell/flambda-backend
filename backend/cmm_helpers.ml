@@ -1296,9 +1296,6 @@ let make_checkbound dbg = function
     Cop (Ccheckbound, [a1; Cconst_int ((m lsl n) + (1 lsl n) - 1, dbg)], dbg)
   | args -> Cop (Ccheckbound, args, dbg)
 
-let make_checkalign dbg bytes_pow2 args =
-  Cop (Ccheckalign { bytes_pow2 }, args, dbg)
-
 (* Record application and currying functions *)
 
 let apply_function_name arity result (mode : Lambda.alloc_mode) =
@@ -1610,9 +1607,6 @@ let box_int_gen dbg (bi : Primitive.boxed_integer) mode arg =
         Cconst_symbol (operations_boxed_int bi, dbg);
         arg' ],
       dbg )
-
-let box_vec128_gen dbg mode arg =
-  Cop (Calloc mode, [alloc_boxedvec128_header mode dbg; arg], dbg)
 
 let alloc_matches_boxed_int bi ~hdr ~ops =
   match (bi : Primitive.boxed_integer), hdr, ops with
@@ -1990,90 +1984,7 @@ let aligned_set_128 ptr idx newval dbg =
       [add_int ptr idx dbg; newval],
       dbg )
 
-let max_or_zero a dbg =
-  bind "size" a (fun a ->
-      (* equivalent to:
-
-         Cifthenelse(Cop(Ccmpi Cle, [a; cconst_int 0]), cconst_int 0, a)
-
-         if a is positive, sign is 0 hence sign_negation is full of 1 so
-         sign_negation&a = a
-
-         if a is negative, sign is full of 1 hence sign_negation is 0 so
-         sign_negation&a = 0 *)
-      let sign = Cop (Casr, [a; Cconst_int ((size_int * 8) - 1, dbg)], dbg) in
-      let sign_negation = Cop (Cxor, [sign; Cconst_int (-1, dbg)], dbg) in
-      Cop (Cand, [sign_negation; a], dbg))
-
-let check_bound_and_alignment unsafe access_size dbg ~address ~length ~offset k
-    =
-  match (unsafe : Lambda.is_safe) with
-  | Unsafe -> k
-  | Safe ->
-    let access_length, access_align =
-      match (access_size : Clambda_primitives.memory_access_size) with
-      | Sixteen -> 1, 0
-      | Thirty_two -> 3, 0
-      | Sixty_four -> 7, 0
-      | One_twenty_eight { aligned = false } -> 15, 0
-      | One_twenty_eight { aligned = true } -> 15, 16
-    in
-    let check_align =
-      match access_align with
-      | 0 -> k
-      | align ->
-        Csequence (make_checkalign dbg align [add_int address offset dbg], k)
-    in
-    let valid_length = sub_int length (Cconst_int (access_length, dbg)) dbg in
-    Csequence
-      (make_checkbound dbg [max_or_zero valid_length dbg; offset], check_align)
-
 let opaque e dbg = Cop (Copaque, [e], dbg)
-
-(* The alignment of 128-bit stores is determined by [size], and may be
-   aligned. *)
-let unaligned_set size ptr idx newval dbg =
-  match (size : Clambda_primitives.memory_access_size) with
-  | Sixteen -> unaligned_set_16 ptr idx newval dbg
-  | Thirty_two -> unaligned_set_32 ptr idx newval dbg
-  | Sixty_four -> unaligned_set_64 ptr idx newval dbg
-  | One_twenty_eight { aligned = false } -> unaligned_set_128 ptr idx newval dbg
-  | One_twenty_eight { aligned = true } -> aligned_set_128 ptr idx newval dbg
-
-(* The alignment of 128-bit loads is determined by [size], and may be
-   aligned. *)
-let unaligned_load size ptr idx dbg =
-  match (size : Clambda_primitives.memory_access_size) with
-  | Sixteen -> unaligned_load_16 ptr idx dbg
-  | Thirty_two -> unaligned_load_32 ptr idx dbg
-  | Sixty_four -> unaligned_load_64 ptr idx dbg
-  | One_twenty_eight { aligned = false } -> unaligned_load_128 ptr idx dbg
-  | One_twenty_eight { aligned = true } -> aligned_load_128 ptr idx dbg
-
-let box_sized size mode dbg exp =
-  match (size : Clambda_primitives.memory_access_size) with
-  | Sixteen -> tag_int exp dbg
-  | Thirty_two -> box_int_gen dbg Pint32 mode exp
-  | Sixty_four -> box_int_gen dbg Pint64 mode exp
-  | One_twenty_eight _ -> box_vec128_gen dbg mode exp
-
-(* Simplification of some primitives into C calls *)
-
-let default_prim name =
-  Primitive.simple_on_values ~name ~arity:0 (*ignored*) ~alloc:true
-
-let simplif_primitive p : Clambda_primitives.primitive =
-  match (p : Clambda_primitives.primitive) with
-  | Pduprecord _ -> Pccall (default_prim "caml_obj_dup")
-  | Pbigarrayref (_unsafe, n, Pbigarray_unknown, _layout) ->
-    Pccall (default_prim ("caml_ba_get_" ^ string_of_int n))
-  | Pbigarrayset (_unsafe, n, Pbigarray_unknown, _layout) ->
-    Pccall (default_prim ("caml_ba_set_" ^ string_of_int n))
-  | Pbigarrayref (_unsafe, n, _kind, Pbigarray_unknown_layout) ->
-    Pccall (default_prim ("caml_ba_get_" ^ string_of_int n))
-  | Pbigarrayset (_unsafe, n, _kind, Pbigarray_unknown_layout) ->
-    Pccall (default_prim ("caml_ba_set_" ^ string_of_int n))
-  | p -> p
 
 (* Build switchers both for constants and blocks *)
 
@@ -2334,9 +2245,6 @@ let ptr_offset ptr offset dbg =
   if offset = 0
   then ptr
   else Cop (Caddv, [ptr; Cconst_int (offset * size_addr, dbg)], dbg)
-
-let direct_apply lbl ty args (pos, _mode) dbg =
-  Cop (Capply (ty, pos), Cconst_symbol (lbl, dbg) :: args, dbg)
 
 let split_arity_for_apply arity args =
   (* Decides whether a caml_applyN needs to be split. If N <= max_arity, then
@@ -3337,6 +3245,7 @@ let stringref_safe arg1 arg2 dbg =
                  Cop (mk_load_mut Byte_unsigned, [add_int str idx dbg], dbg) ))))
     dbg
 
+(**
 let string_load size unsafe mode arg1 arg2 dbg =
   box_sized size mode dbg
     (bind "index" (untag_int arg2 dbg) (fun idx ->
@@ -3355,6 +3264,7 @@ let bigstring_load size unsafe mode arg1 arg2 dbg =
                  check_bound_and_alignment unsafe size dbg ~address:ba_data
                    ~length:(bigstring_length ba dbg) ~offset:idx
                    (unaligned_load size ba_data idx dbg)))))
+                   *)
 
 let arrayref_unsafe rkind arg1 arg2 dbg =
   match (rkind : Lambda.array_ref_kind) with
@@ -3559,28 +3469,18 @@ let arrayset_safe skind arg1 arg2 arg3 dbg =
                             dbg;
                           idx ],
                       float_array_set arr idx newval dbg )))))
+(* let bytes_set size unsafe arg1 arg2 arg3 dbg = return_unit dbg (bind "newval"
+   arg3 (fun newval -> bind "index" (untag_int arg2 dbg) (fun idx -> bind "str"
+   arg1 (fun str -> check_bound_and_alignment unsafe size dbg ~address:str
+   ~length:(string_length str dbg) ~offset:idx (unaligned_set size str idx
+   newval dbg)))))
 
-let bytes_set size unsafe arg1 arg2 arg3 dbg =
-  return_unit dbg
-    (bind "newval" arg3 (fun newval ->
-         bind "index" (untag_int arg2 dbg) (fun idx ->
-             bind "str" arg1 (fun str ->
-                 check_bound_and_alignment unsafe size dbg ~address:str
-                   ~length:(string_length str dbg) ~offset:idx
-                   (unaligned_set size str idx newval dbg)))))
-
-let bigstring_set size unsafe arg1 arg2 arg3 dbg =
-  return_unit dbg
-    (bind "newval" arg3 (fun newval ->
-         bind "index" (untag_int arg2 dbg) (fun idx ->
-             bind "ba" arg1 (fun ba ->
-                 bind "ba_data"
-                   (Cop (mk_load_mut Word_int, [field_address ba 1 dbg], dbg))
-                   (fun ba_data ->
-                     check_bound_and_alignment unsafe size dbg ~address:ba_data
-                       ~length:(bigstring_length ba dbg) ~offset:idx
-                       (unaligned_set size ba_data idx newval dbg))))))
-
+   let bigstring_set size unsafe arg1 arg2 arg3 dbg = return_unit dbg (bind
+   "newval" arg3 (fun newval -> bind "index" (untag_int arg2 dbg) (fun idx ->
+   bind "ba" arg1 (fun ba -> bind "ba_data" (Cop (mk_load_mut Word_int,
+   [field_address ba 1 dbg], dbg)) (fun ba_data -> check_bound_and_alignment
+   unsafe size dbg ~address:ba_data ~length:(bigstring_length ba dbg)
+   ~offset:idx (unaligned_set size ba_data idx newval dbg)))))) *)
 (* Symbols *)
 
 let cdefine_symbol sym = [Cdefine_symbol sym]
@@ -3823,96 +3723,51 @@ let plugin_header units =
       : Cmxs_format.dynheader)
 
 (* To compile "let rec" over values *)
+(* let fundecls_size fundecls = let sz = ref (-1) in List.iter (fun (f :
+   Clambda.ufunction) -> let indirect_call_code_pointer_size = match f.arity
+   with | { function_kind = Curried _; params_layout = [] | [_]; _ } -> 0 (*
+   arity 1 does not need an indirect call handler. arity 0 cannot be indirect
+   called *) | _ -> 1 (* For other arities there is an indirect call handler.
 
-let fundecls_size fundecls =
-  let sz = ref (-1) in
-  List.iter
-    (fun (f : Clambda.ufunction) ->
-      let indirect_call_code_pointer_size =
-        match f.arity with
-        | { function_kind = Curried _; params_layout = [] | [_]; _ } ->
-          0
-          (* arity 1 does not need an indirect call handler. arity 0 cannot be
-             indirect called *)
-        | _ -> 1
-        (* For other arities there is an indirect call handler.
+   if arity >= 2 it is caml_curry...
 
-           if arity >= 2 it is caml_curry...
-
-           if arity < 0 it is caml_tuplify... *)
-      in
-      sz := !sz + 1 + 2 + indirect_call_code_pointer_size)
-    fundecls;
-  !sz
-
+   if arity < 0 it is caml_tuplify... *) in sz := !sz + 1 + 2 +
+   indirect_call_code_pointer_size) fundecls; !sz *)
 (* Emit constant closures *)
-
-let emit_constant_closure symb fundecls clos_vars cont =
-  let closure_symbol (f : Clambda.ufunction) =
-    if Config.flambda
-    then
-      cdefine_symbol
-        { sym_name = f.label ^ "_closure"; sym_global = symb.sym_global }
-    else []
-  in
-  match (fundecls : Clambda.ufunction list) with
-  | [] ->
-    (* This should probably not happen: dead code has normally been eliminated
-       and a closure cannot be accessed without going through a
-       [Project_closure], which depends on the function. *)
-    assert (clos_vars = []);
-    cdefine_symbol symb @ clos_vars @ cont
-  | f1 :: remainder -> (
-    let startenv = fundecls_size fundecls in
-    let rec emit_others pos = function
-      | [] -> clos_vars @ cont
-      | (f2 : Clambda.ufunction) :: rem -> (
-        let is_last = match rem with [] -> true | _ :: _ -> false in
-        match f2.arity with
-        | { function_kind = Curried _; params_layout = [] | [_]; _ } as arity ->
-          (Cint (infix_header pos) :: closure_symbol f2)
-          @ Csymbol_address
-              { sym_name = f2.label; sym_global = symb.sym_global }
-            :: Cint (closure_info ~arity ~startenv:(startenv - pos) ~is_last)
-            :: emit_others (pos + 3) rem
-        | arity ->
-          (* See note in the apply function code about the conversion from
-             tagged integer to value machtypes. *)
-          let params_machtypes =
-            List.map machtype_of_layout_changing_tagged_int_to_val
-              arity.params_layout
-          in
-          let return_machtype =
-            machtype_of_layout_changing_tagged_int_to_val arity.return_layout
-          in
-          (Cint (infix_header pos) :: closure_symbol f2)
-          @ Csymbol_address
-              (curry_function_sym arity.function_kind params_machtypes
-                 return_machtype)
-            :: Cint (closure_info ~arity ~startenv:(startenv - pos) ~is_last)
-            :: Csymbol_address
-                 { sym_name = f2.label; sym_global = symb.sym_global }
-            :: emit_others (pos + 4) rem)
-    in
-    let is_last = match remainder with [] -> true | _ :: _ -> false in
-    Cint (black_closure_header (fundecls_size fundecls + List.length clos_vars))
-    :: cdefine_symbol symb
-    @ closure_symbol f1
-    @
-    match f1.arity with
-    | { function_kind = Curried _; params_layout = [] | [_]; _ } as arity ->
-      Csymbol_address { sym_name = f1.label; sym_global = symb.sym_global }
-      :: Cint (closure_info ~arity ~startenv ~is_last)
-      :: emit_others 3 remainder
-    | arity ->
-      Csymbol_address
-        (curry_function_sym arity.function_kind
-           (List.map machtype_of_layout_changing_tagged_int_to_val
-              arity.params_layout)
-           (machtype_of_layout_changing_tagged_int_to_val arity.return_layout))
-      :: Cint (closure_info ~arity ~startenv ~is_last)
-      :: Csymbol_address { sym_name = f1.label; sym_global = symb.sym_global }
-      :: emit_others 4 remainder)
+(* let emit_constant_closure symb fundecls clos_vars cont = let closure_symbol
+   (f : Clambda.ufunction) = if Config.flambda then cdefine_symbol { sym_name =
+   f.label ^ "_closure"; sym_global = symb.sym_global } else [] in match
+   (fundecls : Clambda.ufunction list) with | [] -> (* This should probably not
+   happen: dead code has normally been eliminated and a closure cannot be
+   accessed without going through a [Project_closure], which depends on the
+   function. *) assert (clos_vars = []); cdefine_symbol symb @ clos_vars @ cont
+   | f1 :: remainder -> ( let startenv = fundecls_size fundecls in let rec
+   emit_others pos = function | [] -> clos_vars @ cont | (f2 :
+   Clambda.ufunction) :: rem -> ( let is_last = match rem with [] -> true | _ ::
+   _ -> false in match f2.arity with | { function_kind = Curried _;
+   params_layout = [] | [_]; _ } as arity -> (Cint (infix_header pos) ::
+   closure_symbol f2) @ Csymbol_address { sym_name = f2.label; sym_global =
+   symb.sym_global } :: Cint (closure_info ~arity ~startenv:(startenv - pos)
+   ~is_last) :: emit_others (pos + 3) rem | arity -> (* See note in the apply
+   function code about the conversion from tagged integer to value machtypes. *)
+   let params_machtypes = List.map machtype_of_layout_changing_tagged_int_to_val
+   arity.params_layout in let return_machtype =
+   machtype_of_layout_changing_tagged_int_to_val arity.return_layout in (Cint
+   (infix_header pos) :: closure_symbol f2) @ Csymbol_address
+   (curry_function_sym arity.function_kind params_machtypes return_machtype) ::
+   Cint (closure_info ~arity ~startenv:(startenv - pos) ~is_last) ::
+   Csymbol_address { sym_name = f2.label; sym_global = symb.sym_global } ::
+   emit_others (pos + 4) rem) in let is_last = match remainder with [] -> true |
+   _ :: _ -> false in Cint (black_closure_header (fundecls_size fundecls +
+   List.length clos_vars)) :: cdefine_symbol symb @ closure_symbol f1 @ match
+   f1.arity with | { function_kind = Curried _; params_layout = [] | [_]; _ } as
+   arity -> Csymbol_address { sym_name = f1.label; sym_global = symb.sym_global
+   } :: Cint (closure_info ~arity ~startenv ~is_last) :: emit_others 3 remainder
+   | arity -> Csymbol_address (curry_function_sym arity.function_kind (List.map
+   machtype_of_layout_changing_tagged_int_to_val arity.params_layout)
+   (machtype_of_layout_changing_tagged_int_to_val arity.return_layout)) :: Cint
+   (closure_info ~arity ~startenv ~is_last) :: Csymbol_address { sym_name =
+   f1.label; sym_global = symb.sym_global } :: emit_others 4 remainder) *)
 
 (* Build the NULL terminated array of gc roots *)
 
@@ -3923,41 +3778,6 @@ let emit_gc_roots_table ~symbols cont =
      :: List.map (fun s -> Csymbol_address s) symbols
     @ [Cint 0n])
   :: cont
-
-(* Build preallocated blocks (used for Flambda [Initialize_symbol] constructs,
-   and Clambda global module) *)
-
-let preallocate_block cont { Clambda.symbol; exported; tag; fields } =
-  let mksym sym_name =
-    { sym_name; sym_global = (if exported then Global else Local) }
-  in
-  let space =
-    (* These words will be registered as roots and as such must contain valid
-       values, in case we are in no-naked-pointers mode. Likewise the block
-       header must be black, below (see [caml_darken]), since the overall record
-       may be referenced. *)
-    List.map
-      (fun field ->
-        match field with
-        | None -> Cint (Nativeint.of_int 1 (* Val_unit *))
-        | Some (Clambda.Uconst_field_int n) -> cint_const n
-        | Some (Clambda.Uconst_field_ref label) -> Csymbol_address (mksym label))
-      fields
-  in
-  let data =
-    emit_block (mksym symbol) (block_header tag (List.length fields)) space
-  in
-  Cdata data :: cont
-
-let emit_preallocated_blocks preallocated_blocks cont =
-  let symbols =
-    List.map
-      (fun ({ Clambda.symbol; exported } : Clambda.preallocated_block) ->
-        { sym_name = symbol; sym_global = (if exported then Global else Local) })
-      preallocated_blocks
-  in
-  let c1 = emit_gc_roots_table ~symbols cont in
-  List.fold_left preallocate_block c1 preallocated_blocks
 
 (* Helper functions and values used by Flambda 2. *)
 
