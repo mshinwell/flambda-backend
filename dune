@@ -64,12 +64,9 @@
  (instrumentation
   (backend bisect_ppx))
  (modules_without_implementation
-  backend_intf
   branch_relaxation_intf
   cmx_format
   cmxs_format
-  inlining_decision_intf
-  simplify_boxed_integer_ops_intf
   x86_ast)
  (modules
   ;; To match the Makefiles, ocamloptcomp needs to include ocamlmiddleend.
@@ -77,8 +74,6 @@
   cmx_format
   cmxs_format
   ;; middle_end/
-  backend_intf
-  backend_var
   backend_var
   clambda
   clambda_primitives
@@ -86,7 +81,6 @@
   compilenv
   printclambda
   printclambda_primitives
-  variable
   ;; asmcomp/
   afl_instrument
   arch

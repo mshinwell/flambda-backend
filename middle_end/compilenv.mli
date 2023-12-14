@@ -21,14 +21,6 @@
 
 open Cmx_format
 
-(* CR-soon mshinwell: this is a bit ugly
-   mshinwell: deferred CR, this has been addressed in the export info
-   improvement feature.
-*)
-val imported_sets_of_closures_table
-  : Simple_value_approx.function_declarations option Set_of_closures_id.Tbl.t
-        (* flambda-only *)
-
 val reset : Compilation_unit.t -> unit
         (* Reset the environment and record the name of the unit being
            compiled (including any associated -for-pack prefix). *)
@@ -37,26 +29,6 @@ val reset_info_tables: unit -> unit
 
 val current_unit_infos: unit -> unit_infos
         (* Return the infos for the unit being compiled *)
-
-val global_approx: Compilation_unit.t -> Clambda.value_approximation
-        (* Return the approximation for the given global identifier
-           clambda-only *)
-val set_global_approx: Clambda.value_approximation -> unit
-        (* Record the approximation of the unit being compiled
-           clambda-only *)
-val record_global_approx_toplevel: unit -> unit
-        (* Record the current approximation for the current toplevel phrase
-           clambda-only *)
-
-val set_export_info: Export_info.t -> unit
-        (* Record the information of the unit being compiled
-           flambda-only *)
-val approx_env: unit -> Export_info.t
-        (* Returns all the information loaded from external compilation units
-           flambda-only *)
-val approx_for_global: Compilation_unit.t -> Export_info.t option
-        (* Loads the exported information declaring the compilation_unit
-           flambda-only *)
 
 val get_global_export_info : Compilation_unit.t -> Cmx_format.export_info option
         (* Middle-end-agnostic means of getting the export info found in the
