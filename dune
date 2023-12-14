@@ -75,7 +75,6 @@
   cmxs_format
   ;; middle_end/
   backend_var
-  clambda
   compilenv
   ;; asmcomp/
   afl_instrument

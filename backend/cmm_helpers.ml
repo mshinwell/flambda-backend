@@ -20,6 +20,12 @@ module VP = Backend_var.With_provenance
 open Cmm
 open Arch
 
+type arity =
+  { function_kind : Lambda.function_kind;
+    params_layout : Lambda.layout list;
+    return_layout : Lambda.layout
+  }
+
 (* Local binding of complex expressions *)
 
 let bind name arg fn =
@@ -151,7 +157,7 @@ let closure_info' ~arity ~startenv ~is_last =
   in
   pack_closure_info ~arity ~startenv ~is_last
 
-let closure_info ~(arity : Clambda.arity) ~startenv ~is_last =
+let closure_info ~(arity : arity) ~startenv ~is_last =
   closure_info'
     ~arity:(arity.function_kind, arity.params_layout)
     ~startenv ~is_last
@@ -717,7 +723,7 @@ let rec unbox_float dbg =
       c
     | Cconst_symbol (s, _dbg) as cmm -> (
       match Cmmgen_state.structured_constant_of_sym s.sym_name with
-      | Some (Uconst_float x) -> Cconst_float (x, dbg) (* or keep _dbg? *)
+      | Some (Const_float x) -> Cconst_float (x, dbg) (* or keep _dbg? *)
       | _ -> Cop (mk_load_immut Double, [cmm], dbg))
     | Cregion e as cmm -> (
       (* It is valid to push unboxing inside a Cregion except when the extra
@@ -749,7 +755,7 @@ let rec unbox_vec128 dbg =
       c
     | Cconst_symbol (s, _dbg) as cmm -> (
       match Cmmgen_state.structured_constant_of_sym s.sym_name with
-      | Some (Uconst_vec128 { low; high }) ->
+      | Some (Const_vec128 { low; high }) ->
         Cconst_vec128 ({ low; high }, dbg) (* or keep _dbg? *)
       | _ -> Cop (mk_load_immut Onetwentyeight_unaligned, [cmm], dbg))
     | Cregion e as cmm -> (
@@ -1653,11 +1659,11 @@ let rec unbox_int dbg bi =
       contents
     | Cconst_symbol (s, _dbg) as cmm -> (
       match Cmmgen_state.structured_constant_of_sym s.sym_name, bi with
-      | Some (Uconst_nativeint n), Primitive.Pnativeint ->
+      | Some (Const_nativeint n), Primitive.Pnativeint ->
         natint_const_untagged dbg n
-      | Some (Uconst_int32 n), Primitive.Pint32 ->
+      | Some (Const_int32 n), Primitive.Pint32 ->
         natint_const_untagged dbg (Nativeint.of_int32 n)
-      | Some (Uconst_int64 n), Primitive.Pint64 ->
+      | Some (Const_int64 n), Primitive.Pint64 ->
         natint_const_untagged dbg (Int64.to_nativeint n)
       | _ -> default cmm)
     | Cregion e as cmm -> (

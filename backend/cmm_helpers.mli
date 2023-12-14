@@ -15,6 +15,12 @@
 
 open Cmm
 
+type arity =
+  { function_kind : Lambda.function_kind;
+    params_layout : Lambda.layout list;
+    return_layout : Lambda.layout
+  }
+
 (** [bind name arg fn] is equivalent to [let name = arg in fn name], or simply
     [fn arg] if [arg] is simple enough *)
 val bind : string -> expression -> (expression -> expression) -> expression
@@ -60,8 +66,7 @@ val boxedint64_header : nativeint
 val boxedintnat_header : nativeint
 
 (** Closure info for a closure of given arity and distance to environment *)
-val closure_info :
-  arity:Clambda.arity -> startenv:int -> is_last:bool -> nativeint
+val closure_info : arity:arity -> startenv:int -> is_last:bool -> nativeint
 
 val closure_info' :
   arity:Lambda.function_kind * 'a list ->
@@ -73,11 +78,7 @@ val closure_info' :
 val alloc_infix_header : int -> Debuginfo.t -> expression
 
 val alloc_closure_info :
-  arity:Clambda.arity ->
-  startenv:int ->
-  is_last:bool ->
-  Debuginfo.t ->
-  expression
+  arity:arity -> startenv:int -> is_last:bool -> Debuginfo.t -> expression
 
 (** Integers *)
 
