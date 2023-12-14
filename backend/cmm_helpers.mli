@@ -164,21 +164,6 @@ val safe_mod_bi :
   Debuginfo.t ->
   expression
 
-(** If-Then-Else expression
-
-    [mk_if_then_else dbg kind cond ifso_dbg ifso ifnot_dbg ifnot] associates
-    [dbg] to the global if-then-else expression, [ifso_dbg] to the then branch
-    [ifso], and [ifnot_dbg] to the else branch [ifnot] *)
-val mk_if_then_else :
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  expression ->
-  Debuginfo.t ->
-  expression ->
-  Debuginfo.t ->
-  expression ->
-  expression
-
 (** Boolean negation *)
 val mk_not : Debuginfo.t -> expression -> expression
 
@@ -651,21 +636,6 @@ val asr_int_caml : binary_primitive
 
 val int_comp_caml : Lambda.integer_comparison -> binary_primitive
 
-(** Strings, Bytes and Bigstrings *)
-
-(** Regular string/bytes access. Args: string/bytes, index *)
-val stringref_unsafe : binary_primitive
-
-val stringref_safe : binary_primitive
-
-(** Arrays *)
-
-(** Array access. Args: array, index *)
-val arrayref_unsafe : Lambda.array_ref_kind -> binary_primitive
-
-(** Array access. Args: array, index *)
-val arrayref_safe : Lambda.array_ref_kind -> binary_primitive
-
 type ternary_primitive =
   expression -> expression -> expression -> Debuginfo.t -> expression
 
@@ -675,24 +645,6 @@ val setfield_computed :
   Lambda.immediate_or_pointer ->
   Lambda.initialization_or_assignment ->
   ternary_primitive
-
-(** Set the byte at the given offset to the given value. Args: bytes, index,
-    value *)
-val bytesset_unsafe : ternary_primitive
-
-val bytesset_safe : ternary_primitive
-
-(** Set the element at the given index in the given array to the given value.
-
-    WARNING: if [kind] is [Pfloatarray], then [value] is expected to be an
-    _unboxed_ float. Otherwise, it is expected to be a regular caml value,
-    including in the case where the array contains floats.
-
-    Args: array, index, value *)
-val arrayset_unsafe : Lambda.array_set_kind -> ternary_primitive
-
-(** As [arrayset_unsafe], but performs bounds-checking. *)
-val arrayset_safe : Lambda.array_set_kind -> ternary_primitive
 
 (** Switch *)
 
