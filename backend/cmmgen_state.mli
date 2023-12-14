@@ -26,19 +26,9 @@ val add_constant : Misc.Stdlib.String.t -> constant -> unit
 
 val add_data_items : Cmm.data_item list -> unit
 
-val add_function : Clambda.ufunction -> unit
-
 val get_and_clear_constants : unit -> constant Misc.Stdlib.String.Map.t
 
 val get_and_clear_data_items : unit -> Cmm.data_item list
-
-val next_function : unit -> Clambda.ufunction option
-
-val no_more_functions : unit -> bool
-
-val is_local_function : Clambda.function_label -> bool
-
-val clear_function_names : unit -> unit
 
 val add_structured_constant : Cmm.symbol -> Clambda.ustructured_constant -> unit
 
