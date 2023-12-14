@@ -20,7 +20,6 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 type constant =
-  | Const_closure of Cmm.is_global * Clambda.ufunction list * Clambda.uconstant list
   | Const_table of Cmm.is_global * Cmm.data_item list
 
 val add_constant : Misc.Stdlib.String.t -> constant -> unit

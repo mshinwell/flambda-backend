@@ -40,10 +40,6 @@ let flush_cmm_helpers_state res =
     | Const_table (global, l) ->
       let res, sym = R.raw_symbol res ~global name in
       res, C.cdata (C.define_symbol sym @ l) :: acc
-    | Const_closure _ ->
-      Misc.fatal_errorf
-        "There shouldn't be any closures in Cmmgen_state during Flambda 2 to \
-         Cmm translation"
   in
   (* reset the structured constants, just in case *)
   Cmmgen_state.set_local_structured_constants [];
