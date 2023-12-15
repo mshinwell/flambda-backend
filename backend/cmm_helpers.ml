@@ -35,16 +35,6 @@ let bind name arg fn =
     let id = V.create_local name in
     Clet (VP.create id, arg, fn (Cvar id))
 
-let bind_load name arg fn =
-  match arg with Cop (Cload _, [Cvar _], _) -> fn arg | _ -> bind name arg fn
-
-let bind_nonvar name arg fn =
-  match arg with
-  | Cconst_int _ | Cconst_natint _ | Cconst_symbol _ -> fn arg
-  | _ ->
-    let id = V.create_local name in
-    Clet (VP.create id, arg, fn (Cvar id))
-
 let bind_list name args fn =
   let rec aux bound_args = function
     | [] -> fn bound_args
@@ -181,9 +171,6 @@ let alloc_closure_header ~mode sz dbg =
 
 let alloc_infix_header ofs dbg = Cconst_natint (infix_header ofs, dbg)
 
-let alloc_closure_info ~arity ~startenv ~is_last dbg =
-  Cconst_natint (closure_info ~arity ~startenv ~is_last, dbg)
-
 let alloc_boxedint32_header mode dbg =
   match mode with
   | Lambda.Alloc_heap -> Cconst_natint (boxedint32_header, dbg)
@@ -219,9 +206,6 @@ let natint_const_untagged dbg n =
 
 let cint_const n =
   Cint (Nativeint.add (Nativeint.shift_left (Nativeint.of_int n) 1) 1n)
-
-let targetint_const n =
-  Targetint.add (Targetint.shift_left (Targetint.of_int n) 1) Targetint.one
 
 let add_no_overflow n x c dbg =
   let d = n + x in
@@ -312,12 +296,6 @@ let ignore_low_bit_int = function
     when n > 0 ->
     c
   | Cop (Cor, [c; Cconst_int (1, _)], _) -> c
-  | c -> c
-
-(* removes the 1-bit sign-extension left by untag_int (tag_int c) *)
-let ignore_high_bit_int = function
-  | Cop (Casr, [Cop (Clsl, [c; Cconst_int (1, _)], _); Cconst_int (1, _)], _) ->
-    c
   | c -> c
 
 let lsr_int c1 c2 dbg =
@@ -787,36 +765,6 @@ let complex_im c dbg =
 
 let return_unit dbg c = Csequence (c, Cconst_int (1, dbg))
 
-let rec remove_unit = function
-  | Cconst_int (1, _) -> Ctuple []
-  | Csequence (c, Cconst_int (1, _)) -> c
-  | Csequence (c1, c2) -> Csequence (c1, remove_unit c2)
-  | Cifthenelse (cond, ifso_dbg, ifso, ifnot_dbg, ifnot, dbg, kind) ->
-    Cifthenelse
-      (cond, ifso_dbg, remove_unit ifso, ifnot_dbg, remove_unit ifnot, dbg, kind)
-  | Cswitch (sel, index, cases, dbg, kind) ->
-    Cswitch
-      ( sel,
-        index,
-        Array.map (fun (case, dbg) -> remove_unit case, dbg) cases,
-        dbg,
-        kind )
-  | Ccatch (rec_flag, handlers, body, kind) ->
-    let map_h (n, ids, handler, dbg, is_cold) =
-      n, ids, remove_unit handler, dbg, is_cold
-    in
-    Ccatch (rec_flag, List.map map_h handlers, remove_unit body, kind)
-  | Ctrywith (body, kind, exn, handler, dbg, value_kind) ->
-    Ctrywith (remove_unit body, kind, exn, remove_unit handler, dbg, value_kind)
-  | Clet (id, c1, c2) -> Clet (id, c1, remove_unit c2)
-  | Cop (Capply (_mty, pos), args, dbg) ->
-    Cop (Capply (typ_void, pos), args, dbg)
-  | Cop (Cextcall c, args, dbg) ->
-    Cop (Cextcall { c with ty = typ_void }, args, dbg)
-  | Cexit (_, _, _) as c -> c
-  | Ctuple [] as c -> c
-  | c -> Csequence (c, Ctuple [])
-
 let field_address ptr n dbg =
   if n = 0 then ptr else Cop (Cadda, [ptr; Cconst_int (n * size_addr, dbg)], dbg)
 
@@ -889,9 +837,6 @@ let is_addr_array_hdr hdr dbg =
     ( Ccmpi Cne,
       [Cop (Cand, [hdr; Cconst_int (255, dbg)], dbg); floatarray_tag dbg],
       dbg )
-
-let is_addr_array_ptr ptr dbg =
-  Cop (Ccmpi Cne, [get_tag ptr dbg; floatarray_tag dbg], dbg)
 
 let addr_array_length_shifted hdr dbg =
   Cop (Clsr, [hdr; Cconst_int (wordsize_shift, dbg)], dbg)
@@ -1060,9 +1005,6 @@ let string_length exp dbg =
                     [Cop (Cadda, [str; Cvar tmp_var], dbg)],
                     dbg ) ],
               dbg ) ))
-
-let bigstring_length ba dbg =
-  Cop (mk_load_mut Word_int, [field_address ba 5 dbg], dbg)
 
 let bigstring_get_alignment ba idx align dbg =
   bind "ba_data"
@@ -1288,14 +1230,6 @@ let make_float_alloc ~mode dbg tag args =
     (List.length args * size_float / size_addr)
     args
 
-(* Bounds checking *)
-
-let make_checkbound dbg = function
-  | [Cop (Clsr, [a1; Cconst_int (n, _)], _); Cconst_int (m, _)] when m lsl n > n
-    ->
-    Cop (Ccheckbound, [a1; Cconst_int ((m lsl n) + (1 lsl n) - 1, dbg)], dbg)
-  | args -> Cop (Ccheckbound, args, dbg)
-
 (* Record application and currying functions *)
 
 let apply_function_name arity result (mode : Lambda.alloc_mode) =
@@ -1355,64 +1289,6 @@ let bigarray_elt_size_in_bytes : Lambda.bigarray_kind -> int = function
   | Pbigarray_complex32 -> 8
   | Pbigarray_complex64 -> 16
 
-(* Produces a pointer to the element of the bigarray [b] on the position [args].
-   [args] is given as a list of tagged int expressions, one per array
-   dimension. *)
-let bigarray_indexing unsafe elt_kind layout b args dbg =
-  let check_ba_bound bound idx v =
-    Csequence (make_checkbound dbg [bound; idx], v)
-  in
-  (* Validates the given multidimensional offset against the array bounds and
-     transforms it into a one dimensional offset. The offsets are expressions
-     evaluating to tagged int. *)
-  let rec ba_indexing dim_ofs delta_ofs = function
-    | [] -> assert false
-    | [arg] ->
-      if unsafe
-      then arg
-      else
-        bind "idx" arg (fun idx ->
-            (* Load the untagged int bound for the given dimension *)
-            let bound =
-              Cop (mk_load_mut Word_int, [field_address b dim_ofs dbg], dbg)
-            in
-            let idxn = untag_int idx dbg in
-            check_ba_bound bound idxn idx)
-    | arg1 :: argl ->
-      (* The remainder of the list is transformed into a one dimensional
-         offset *)
-      let rem = ba_indexing (dim_ofs + delta_ofs) delta_ofs argl in
-      (* Load the untagged int bound for the given dimension *)
-      let bound =
-        Cop (mk_load_mut Word_int, [field_address b dim_ofs dbg], dbg)
-      in
-      if unsafe
-      then add_int (mul_int (decr_int rem dbg) bound dbg) arg1 dbg
-      else
-        bind "idx" arg1 (fun idx ->
-            bind "bound" bound (fun bound ->
-                let idxn = untag_int idx dbg in
-                (* [offset = rem * (tag_int bound) + idx] *)
-                let offset =
-                  add_int (mul_int (decr_int rem dbg) bound dbg) idx dbg
-                in
-                check_ba_bound bound idxn offset))
-  in
-  (* The offset as an expression evaluating to int *)
-  let offset =
-    match (layout : Lambda.bigarray_layout) with
-    | Pbigarray_unknown_layout -> assert false
-    | Pbigarray_c_layout ->
-      ba_indexing (4 + List.length args) (-1) (List.rev args)
-    | Pbigarray_fortran_layout ->
-      ba_indexing 5 1
-        (List.map (fun idx -> sub_int idx (Cconst_int (2, dbg)) dbg) args)
-  and elt_size = bigarray_elt_size_in_bytes elt_kind in
-  (* [array_indexing] can simplify the given expressions *)
-  array_indexing ~typ:Addr (Misc.log2 elt_size)
-    (Cop (mk_load_mut Word_int, [field_address b 1 dbg], dbg))
-    offset dbg
-
 let bigarray_word_kind : Lambda.bigarray_kind -> memory_chunk = function
   | Pbigarray_unknown -> assert false
   | Pbigarray_float32 -> Single
@@ -1427,54 +1303,6 @@ let bigarray_word_kind : Lambda.bigarray_kind -> memory_chunk = function
   | Pbigarray_native_int -> Word_int
   | Pbigarray_complex32 -> Single
   | Pbigarray_complex64 -> Double
-
-let bigarray_get unsafe elt_kind layout b args dbg =
-  bind "ba" b (fun b ->
-      match (elt_kind : Lambda.bigarray_kind) with
-      | Pbigarray_complex32 | Pbigarray_complex64 ->
-        let kind = bigarray_word_kind elt_kind in
-        let sz = bigarray_elt_size_in_bytes elt_kind / 2 in
-        bind "addr" (bigarray_indexing unsafe elt_kind layout b args dbg)
-          (fun addr ->
-            bind "reval"
-              (Cop (mk_load_mut kind, [addr], dbg))
-              (fun reval ->
-                bind "imval"
-                  (Cop
-                     ( mk_load_mut kind,
-                       [Cop (Cadda, [addr; Cconst_int (sz, dbg)], dbg)],
-                       dbg ))
-                  (fun imval -> box_complex dbg reval imval)))
-      | _ ->
-        Cop
-          ( mk_load_mut (bigarray_word_kind elt_kind),
-            [bigarray_indexing unsafe elt_kind layout b args dbg],
-            dbg ))
-
-let bigarray_set unsafe elt_kind layout b args newval dbg =
-  bind "ba" b (fun b ->
-      match (elt_kind : Lambda.bigarray_kind) with
-      | Pbigarray_complex32 | Pbigarray_complex64 ->
-        let kind = bigarray_word_kind elt_kind in
-        let sz = bigarray_elt_size_in_bytes elt_kind / 2 in
-        bind "newval" newval (fun newv ->
-            bind "addr" (bigarray_indexing unsafe elt_kind layout b args dbg)
-              (fun addr ->
-                Csequence
-                  ( Cop
-                      ( Cstore (kind, Assignment),
-                        [addr; complex_re newv dbg],
-                        dbg ),
-                    Cop
-                      ( Cstore (kind, Assignment),
-                        [ Cop (Cadda, [addr; Cconst_int (sz, dbg)], dbg);
-                          complex_im newv dbg ],
-                        dbg ) )))
-      | _ ->
-        Cop
-          ( Cstore (bigarray_word_kind elt_kind, Assignment),
-            [bigarray_indexing unsafe elt_kind layout b args dbg; newval],
-            dbg ))
 
 (* the three functions below assume 64-bit words *)
 let () = assert (size_int = 8)
@@ -1986,10 +1814,6 @@ let aligned_set_128 ptr idx newval dbg =
 
 let opaque e dbg = Cop (Copaque, [e], dbg)
 
-(* Build switchers both for constants and blocks *)
-
-let transl_isout h arg dbg = tag_int (Cop (Ccmpa Clt, [h; arg], dbg)) dbg
-
 (* Build an actual switch (ie jump table) *)
 
 let make_switch arg cases actions dbg kind =
@@ -2146,65 +1970,7 @@ module StoreExpForSwitch = Switch.CtxStore (struct
     | _, _ -> Stdlib.compare index index'
 end)
 
-(* For string switches, we can use a generic store *)
-module StoreExp = Switch.Store (struct
-  type t = expression
-
-  type key = int
-
-  let make_key = function Cexit (Lbl i, [], []) -> Some i | _ -> None
-
-  let compare_key = Stdlib.compare
-end)
-
 module SwitcherBlocks = Switch.Make (SArgBlocks)
-
-(* Int switcher, arg in [low..high], cases is list of individual cases, and is
-   sorted by first component *)
-
-let transl_int_switch dbg value_kind arg low high cases default =
-  match cases with
-  | [] -> assert false
-  | _ :: _ ->
-    let store = StoreExp.mk_store () in
-    assert (store.Switch.act_store () default = 0);
-    let cases =
-      List.map (fun (i, act) -> i, store.Switch.act_store () act) cases
-    in
-    let rec inters plow phigh pact = function
-      | [] ->
-        if phigh = high
-        then [plow, phigh, pact]
-        else [plow, phigh, pact; phigh + 1, high, 0]
-      | (i, act) :: rem ->
-        if i = phigh + 1
-        then
-          if pact = act
-          then inters plow i pact rem
-          else (plow, phigh, pact) :: inters i i act rem
-        else if (* insert default *)
-                pact = 0
-        then
-          if act = 0
-          then inters plow i 0 rem
-          else (plow, i - 1, pact) :: inters i i act rem
-        else
-          (* pact <> 0 *)
-          (plow, phigh, pact)
-          ::
-          (if act = 0
-          then inters (phigh + 1) i 0 rem
-          else (phigh + 1, i - 1, 0) :: inters i i act rem)
-    in
-    let inters =
-      match cases with
-      | [] -> assert false
-      | (k0, act0) :: rem ->
-        if k0 = low then inters k0 k0 act0 rem else inters low (k0 - 1) 0 cases
-    in
-    bind "switcher" arg (fun a ->
-        SwitcherBlocks.zyva dbg value_kind (low, high) a (Array.of_list inters)
-          store)
 
 let transl_switch_clambda loc value_kind arg index cases =
   let store = StoreExpForSwitch.mk_store () in
@@ -2232,19 +1998,6 @@ let transl_switch_clambda loc value_kind arg index cases =
         SwitcherBlocks.zyva loc value_kind
           (0, n_index - 1)
           a (Array.of_list inters) store)
-
-let strmatch_compile =
-  let module S = Strmatch.Make (struct
-    let string_block_length ptr = get_size ptr Debuginfo.none
-
-    let transl_switch = transl_int_switch
-  end) in
-  S.compile
-
-let ptr_offset ptr offset dbg =
-  if offset = 0
-  then ptr
-  else Cop (Caddv, [ptr; Cconst_int (offset * size_addr, dbg)], dbg)
 
 let split_arity_for_apply arity args =
   (* Decides whether a caml_applyN needs to be split. If N <= max_arity, then
@@ -2974,14 +2727,6 @@ let curry_function (kind, arity, return) =
 
 type unary_primitive = expression -> Debuginfo.t -> expression
 
-let floatfield n ptr dbg =
-  Cop
-    ( mk_load_mut Double,
-      [ (if n = 0
-        then ptr
-        else Cop (Cadda, [ptr; Cconst_int (n * size_float, dbg)], dbg)) ],
-      dbg )
-
 let int_as_pointer arg dbg = Cop (Caddi, [arg; Cconst_int (-1, dbg)], dbg)
 (* always a pointer outside the heap *)
 
@@ -2991,18 +2736,6 @@ let raise_prim raise_kind arg dbg =
   else Cop (Craise Lambda.Raise_notrace, [arg], dbg)
 
 let negint arg dbg = Cop (Csubi, [Cconst_int (2, dbg); arg], dbg)
-
-(* [offsetint] moved down to reuse add_int_caml *)
-
-let offsetref n arg dbg =
-  return_unit dbg
-    (bind "ref" arg (fun arg ->
-         Cop
-           ( Cstore (Word_int, Assignment),
-             [ arg;
-               add_const (Cop (mk_load_mut Word_int, [arg], dbg)) (n lsl 1) dbg
-             ],
-             dbg )))
 
 let arraylength kind arg dbg =
   let hdr = get_header_masked arg dbg in
@@ -3156,28 +2889,7 @@ let setfield n ptr init arg1 arg2 dbg =
            dbg ))
   | Simple init -> return_unit dbg (set_field arg1 n arg2 init dbg)
 
-let setfloatfield n init arg1 arg2 dbg =
-  let init =
-    match init with
-    | Lambda.Assignment _ -> Assignment
-    | Lambda.Heap_initialization | Lambda.Root_initialization -> Initialization
-  in
-  return_unit dbg
-    (Cop
-       ( Cstore (Double, init),
-         [ (if n = 0
-           then arg1
-           else Cop (Cadda, [arg1; Cconst_int (n * size_float, dbg)], dbg));
-           arg2 ],
-         dbg ))
-
 let add_int_caml arg1 arg2 dbg = decr_int (add_int arg1 arg2 dbg) dbg
-
-(* Unary primitive delayed to reuse add_int_caml *)
-let offsetint n arg dbg =
-  if Misc.no_overflow_lsl n 1
-  then add_const arg (n lsl 1) dbg
-  else add_int_caml arg (int_const dbg n) dbg
 
 let sub_int_caml arg1 arg2 dbg = incr_int (sub_int arg1 arg2 dbg) dbg
 
@@ -3224,9 +2936,6 @@ let lsr_int_caml arg1 arg2 dbg =
 
 let asr_int_caml arg1 arg2 dbg =
   Cop (Cor, [asr_int arg1 (untag_int arg2 dbg) dbg; Cconst_int (1, dbg)], dbg)
-
-let int_comp_caml cmp arg1 arg2 dbg =
-  tag_int (Cop (Ccmpi cmp, [arg1; arg2], dbg)) dbg
 
 type ternary_primitive =
   expression -> expression -> expression -> Debuginfo.t -> expression

@@ -133,7 +133,6 @@
   spill
   split
   string_table
-  strmatch
   symbol_entry
   symbol_table
   x86_ast
