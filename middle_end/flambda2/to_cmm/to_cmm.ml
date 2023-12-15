@@ -26,8 +26,8 @@ module R = To_cmm_result
    integers that may have a result outside of the range. *)
 
 module C = struct
-  include Cmm_helpers
   include To_cmm_shared
+  include C
 end
 
 (* Get constant definitions from Cmmgen_state. (The To_cmm translation uses

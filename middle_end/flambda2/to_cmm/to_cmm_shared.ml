@@ -16,6 +16,11 @@ open! Cmm_helpers
 open! Cmm_builtins
 module Ece = Effects_and_coeffects
 
+module C = struct
+  include Cmm_helpers
+  include Cmm_builtins
+end
+
 let remove_var_with_provenance free_vars var =
   let v = Backend_var.With_provenance.var var in
   Backend_var.Set.remove v free_vars

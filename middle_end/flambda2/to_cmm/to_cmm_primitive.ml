@@ -23,10 +23,10 @@ module P = Flambda_primitive
    is known that the sign extension can be elided. *)
 
 (* Cmm helpers *)
+
 module C = struct
-  include Cmm_helpers
-  include Cmm_builtins
   include To_cmm_shared
+  include C
 end
 
 (* Closure offsets *)

@@ -16,6 +16,16 @@
     this module, unlike the ones in [Cmm_helpers], depend on Flambda 2 data
     types. *)
 
+module C : sig
+  include module type of struct
+    include Cmm_helpers
+  end
+
+  include module type of struct
+    include Cmm_builtins
+  end
+end
+
 val remove_var_with_provenance :
   To_cmm_env.free_vars -> Backend_var.With_provenance.t -> To_cmm_env.free_vars
 

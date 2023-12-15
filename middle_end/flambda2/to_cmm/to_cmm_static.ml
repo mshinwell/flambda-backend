@@ -15,8 +15,8 @@
 open! Flambda.Import
 
 module C = struct
-  include Cmm_helpers
   include To_cmm_shared
+  include C
 end
 
 module SC = Static_const

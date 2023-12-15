@@ -20,9 +20,8 @@ module Ece = Effects_and_coeffects
 module K = Flambda_kind
 
 module C = struct
-  include Cmm_helpers
-  include Cmm_builtins
   include To_cmm_shared
+  include C
 end
 
 (* Note about flushing of environments: this module treats the delayed bindings
