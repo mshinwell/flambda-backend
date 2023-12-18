@@ -1171,6 +1171,20 @@ let simplify_c_call ~simplify_expr dacc apply ~callee_ty ~arg_types ~down_to_up
     in
     down_to_up dacc
       ~rebuild:(rebuild_c_call apply ~use_id ~exn_cont_use_id ~return_arity)
+  | Forget_approx ->
+    let dacc =
+      DA.map_denv ~f:(fun denv ->
+          DE.map_typing_env ~f:TE.closure_env
+            (DE.with_cse denv Common_subexpression_elimination.empty)
+        ) dacc
+    in
+    let cont =
+      match Apply.continuation apply with
+      | Never_returns -> assert false
+      | Return k -> k
+    in
+    let apply_cont = Apply_cont_expr.create cont ~args:[Simple.const_unit] ~dbg:Debuginfo.none in
+    Simplify_apply_cont_expr.simplify_apply_cont dacc apply_cont ~down_to_up
   | Invalid ->
     let rebuild uacc ~after_rebuild =
       let uacc = UA.notify_removed ~operation:Removed_operations.call uacc in

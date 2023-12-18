@@ -19,6 +19,7 @@ module RO = Removed_operations
 type t =
   | Unchanged of { return_types : Flambda2_types.t list Or_unknown.t }
   | Specialised of DA.t * Expr.t * Removed_operations.t
+  | Forget_approx
   | Invalid
 
 (* Helpers *)
@@ -192,6 +193,7 @@ let simplify_returning_extcall ~dbg ~cont ~exn_cont:_ dacc fun_name args
       ~boxed_int_prim:(fun kind -> Int_comp (kind, Yielding_bool (Gt Signed)))
   | "caml_make_vect", [_; _], [len_ty; init_value_ty] ->
     simplify_caml_make_vect dacc ~len_ty ~init_value_ty
+  | "caml_flambda2_forget_approx", _, _ -> Forget_approx
   | _ -> Unchanged { return_types = Unknown }
 
 (* Exported simplification function *)

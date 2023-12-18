@@ -18,6 +18,7 @@
 type t =
   | Unchanged of { return_types : Flambda2_types.t list Or_unknown.t }
   | Specialised of Downwards_acc.t * Flambda.Expr.t * Removed_operations.t
+  | Forget_approx
   | Invalid
 
 val simplify_extcall :
