@@ -349,7 +349,7 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
     ~callee's_code_id ~callee's_code_metadata ~callee's_function_slot
     ~param_arity ~param_modes ~args_arity ~result_arity ~recursive ~down_to_up
     ~coming_from_indirect
-    ~closure_alloc_mode_from_type:(_ : Alloc_mode.For_types.t) ~apply_alloc_mode
+    ~(closure_alloc_mode_from_type : Alloc_mode.For_types.t) ~apply_alloc_mode
     ~first_complex_local_param =
   (* Partial-applications are converted in full applications. Let's assume that
      [foo] takes 6 arguments. Then [foo a b c] gets transformed into:
@@ -437,6 +437,17 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
           callee's_code_metadata
       | Local _ -> apply_alloc_mode, 0
   in
+  (match closure_alloc_mode_from_type with
+  | Heap_or_local -> ()
+  | Heap -> ()
+  | Local -> (
+    match (new_closure_alloc_mode : Alloc_mode.For_allocations.t) with
+    | Local _ -> ()
+    | Heap ->
+      Misc.fatal_errorf
+        "New closure alloc mode cannot be [Heap] when existing closure alloc \
+         mode is [Local]: direct partial application:@ %a"
+        Apply.print apply));
   let result_mode = Code_metadata.result_mode callee's_code_metadata in
   let wrapper_taking_remaining_args, dacc, code_id, code =
     let return_continuation = Continuation.create () in
