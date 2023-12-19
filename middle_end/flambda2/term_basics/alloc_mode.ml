@@ -15,29 +15,22 @@
 module For_types = struct
   type t =
     | Heap
-    | Local
     | Heap_or_local
 
   let print ppf t =
     match t with
     | Heap -> Format.pp_print_string ppf "Heap"
-    | Local -> Format.pp_print_string ppf "Local"
     | Heap_or_local -> Format.pp_print_string ppf "Heap_or_local"
 
   let compare t1 t2 =
     match t1, t2 with
-    | Heap, Heap | Local, Local | Heap_or_local, Heap_or_local -> 0
-    | Heap, (Local | Heap_or_local) -> -1
-    | (Local | Heap_or_local), Heap -> 1
-    | Local, Heap_or_local -> -1
-    | Heap_or_local, Local -> 1
+    | Heap, Heap | Heap_or_local, Heap_or_local -> 0
+    | Heap, Heap_or_local -> -1
+    | Heap_or_local, Heap -> 1
 
   let equal t1 t2 = compare t1 t2 = 0
 
   let heap = Heap
-
-  let local () =
-    if not (Flambda_features.stack_allocation_enabled ()) then Heap else Local
 
   let unknown () =
     if not (Flambda_features.stack_allocation_enabled ())
@@ -52,7 +45,7 @@ module For_types = struct
   let to_lambda t =
     match t with
     | Heap -> Lambda.alloc_heap
-    | Local | Heap_or_local ->
+    | Heap_or_local ->
       assert (Flambda_features.stack_allocation_enabled ());
       Lambda.alloc_local
 end
@@ -83,7 +76,7 @@ module For_allocations = struct
     then Local { region }
     else Heap
 
-  let as_type t : For_types.t = match t with Heap -> Heap | Local _ -> Local
+  let as_type t : For_types.t = match t with Heap -> Heap | Local _ -> Heap_or_local
 
   let from_lambda (mode : Lambda.alloc_mode) ~current_region =
     if not (Flambda_features.stack_allocation_enabled ())

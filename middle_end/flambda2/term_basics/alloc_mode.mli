@@ -16,7 +16,6 @@ module For_types : sig
   (** Constraints on the location of allocated values *)
   type t = private
     | Heap  (** Normal allocation on the OCaml heap. *)
-    | Local  (** Allocation on the local allocation stack. *)
     | Heap_or_local  (** Allocation with unknown location *)
 
   val print : Format.formatter -> t -> unit
@@ -26,9 +25,6 @@ module For_types : sig
   val equal : t -> t -> bool
 
   val heap : t
-
-  (** Returns [Heap] if stack allocation is disabled! *)
-  val local : unit -> t
 
   (** Returns [Heap] if stack allocation is disabled! *)
   val unknown : unit -> t

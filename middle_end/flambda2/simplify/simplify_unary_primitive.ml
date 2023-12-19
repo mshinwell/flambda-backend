@@ -129,7 +129,7 @@ let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
        certain and it is [Heap]. (As per [Flambda_primitive] we don't currently
        CSE local allocations.) *)
     match alloc_mode with
-    | Unknown | Proved (Local | Heap_or_local) -> dacc
+    | Unknown | Proved Heap_or_local -> dacc
     | Proved Heap ->
       DA.map_denv dacc ~f:(fun denv ->
           DE.add_cse denv
@@ -540,7 +540,7 @@ let simplify_obj_dup dbg dacc ~original_term ~arg ~arg_ty ~result_var =
      addition to boxed numbers. *)
   match T.prove_is_a_boxed_or_tagged_number typing_env arg_ty with
   | Proved (Tagged_immediate | Boxed (Heap, _, _)) -> elide_primitive ()
-  | Proved (Boxed ((Heap_or_local | Local), boxable_number, contents_ty)) ->
+  | Proved (Boxed (Heap_or_local, boxable_number, contents_ty)) ->
     let extra_bindings, contents, contents_ty, dacc =
       match
         TE.get_alias_then_canonical_simple_exn ~min_name_mode:NM.normal
@@ -596,7 +596,7 @@ let simplify_obj_dup dbg dacc ~original_term ~arg ~arg_ty ~result_var =
   | Unknown -> (
     match T.prove_strings typing_env arg_ty with
     | Proved (Heap, _) -> elide_primitive ()
-    | Proved ((Heap_or_local | Local), _) | Unknown ->
+    | Proved (Heap_or_local, _) | Unknown ->
       SPR.create_unknown dacc ~result_var K.value ~original_term)
 
 let simplify_get_header ~original_prim dacc ~original_term ~arg:_ ~arg_ty:_

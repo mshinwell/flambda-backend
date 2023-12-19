@@ -498,7 +498,7 @@ let prove_unique_tag_and_size env t :
 let prove_unique_fully_constructed_immutable_heap_block env t :
     _ proof_of_property =
   match prove_unique_tag_and_size0 env t with
-  | Unknown | Proved (_, _, (Heap_or_local | Local)) -> Unknown
+  | Unknown | Proved (_, _, Heap_or_local) -> Unknown
   | Proved (tag_and_size, product, Heap) -> (
     let result =
       List.fold_left
@@ -880,7 +880,7 @@ let never_holds_locally_allocated_values env var : _ proof_of_property =
         else
           match blocks.alloc_mode with
           | Heap -> Proved ()
-          | Local | Heap_or_local -> Unknown))
+          | Heap_or_local -> Unknown))
     | Value (Ok (Boxed_float (_, alloc_mode)))
     | Value (Ok (Boxed_int32 (_, alloc_mode)))
     | Value (Ok (Boxed_int64 (_, alloc_mode)))
@@ -891,7 +891,7 @@ let never_holds_locally_allocated_values env var : _ proof_of_property =
     | Value (Ok (Array { alloc_mode; _ })) -> (
       match alloc_mode with
       | Heap -> Proved ()
-      | Local | Heap_or_local -> Unknown)
+      | Heap_or_local -> Unknown)
     | Value (Ok (String _)) -> Proved ()
     | Value Unknown -> Unknown
     | Value Bottom -> Unknown
