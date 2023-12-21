@@ -158,18 +158,24 @@ and float_comparison = Lambda.float_comparison =
 
 and array_kind = Lambda.array_kind =
     Pgenarray | Paddrarray | Pintarray | Pfloatarray
+  | Punboxedfloatarray
+  | Punboxedintarray of unboxed_integer
 
 and array_ref_kind = Lambda.array_ref_kind =
   | Pgenarray_ref of alloc_mode
   | Paddrarray_ref
   | Pintarray_ref
   | Pfloatarray_ref of alloc_mode
+  | Punboxedfloatarray_ref
+  | Punboxedintarray_ref of unboxed_integer
 
 and array_set_kind = Lambda.array_set_kind =
   | Pgenarray_set of modify_mode
   | Paddrarray_set of modify_mode
   | Pintarray_set
   | Pfloatarray_set
+  | Punboxedfloatarray_set
+  | Punboxedintarray_set of unboxed_integer
 
 and value_kind = Lambda.value_kind =
   (* CR mshinwell: Pfloatval should be renamed to Pboxedfloatval *)
@@ -194,6 +200,8 @@ and block_shape = Lambda.block_shape
 
 and boxed_integer = Lambda.boxed_integer =
     Pnativeint | Pint32 | Pint64
+
+and unboxed_integer = boxed_integer
 
 and vec128_type = Lambda.vec128_type =
   | Unknown128
