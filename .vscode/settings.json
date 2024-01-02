@@ -8,5 +8,6 @@
                 "smmintrin.h": "c",
                 "tmmintrin.h": "c",
                 "pmmintrin.h": "c"
-        }
+        },
+        "cmake.configureOnOpen": false
 }
