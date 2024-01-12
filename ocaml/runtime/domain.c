@@ -1699,8 +1699,9 @@ void caml_handle_gc_interrupt(void)
     caml_handle_incoming_interrupts();
     CAML_EV_END(EV_INTERRUPT_REMOTE);
   }
-
-  caml_poll_gc_work();
+  else {
+    caml_poll_gc_work();
+  }
 }
 
 CAMLexport int caml_bt_is_in_blocking_section(void)
