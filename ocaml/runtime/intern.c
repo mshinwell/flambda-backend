@@ -713,7 +713,7 @@ static value intern_end(struct caml_intern_state* s, value res)
   intern_cleanup(s);
 
   /* Give gc a chance to run, and run memprof callbacks */
-  caml_process_pending_actions();
+  caml_process_pending_actions(0);
 
   CAMLreturn(res);
 }

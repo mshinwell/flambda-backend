@@ -121,7 +121,7 @@ static void check_pending(struct channel *channel)
        as their locks may or may not be taken depending on the
        usage pattern in the C code. */
     if (channel->flags & CHANNEL_FLAG_MANAGED_BY_GC) Unlock(channel);
-    caml_process_pending_actions();
+    caml_process_pending_actions(0);
     if (channel->flags & CHANNEL_FLAG_MANAGED_BY_GC) Lock(channel);
   }
 }

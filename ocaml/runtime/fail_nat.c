@@ -82,7 +82,7 @@ void caml_raise(value v)
 
   /* Run callbacks here, so that a signal handler that arrived during
      a blocking call has a chance to interrupt the raising of EINTR */
-  v = caml_process_pending_actions_with_root(v);
+  v = caml_process_pending_actions_with_root(v,0);
 
   limit_of_current_c_stack_chunk = (char*)Caml_state->c_stack;
 

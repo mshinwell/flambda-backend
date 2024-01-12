@@ -845,8 +845,8 @@ void caml_alloc_small_dispatch (caml_domain_state * dom_st,
        request. Take the opportunity to do what has been requested. */
     if (flags & CAML_FROM_CAML)
       /* In the case of allocations performed from OCaml, execute
-         asynchronous callbacks. */
-      (void) caml_raise_async_if_exception(caml_do_pending_actions_exn(),
+         asynchronous callbacks and then empty the minor heap. */
+      (void) caml_raise_async_if_exception(caml_do_pending_actions_exn(0),
         "minor GC");
     else {
       caml_handle_gc_interrupt();

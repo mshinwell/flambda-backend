@@ -166,7 +166,7 @@ CAMLexport void caml_enter_blocking_section(void)
     if (Caml_state->in_minor_collection)
       caml_fatal_error("caml_enter_blocking_section from inside minor GC");
     /* Process all pending signals now */
-    caml_process_pending_actions();
+    caml_process_pending_actions(1);
     caml_enter_blocking_section_hook ();
     /* Check again if a signal arrived in the meanwhile. If none,
        done; otherwise, try again. Since we do not hold the domain
@@ -345,14 +345,14 @@ CAMLexport int caml_check_pending_actions(void)
   return Caml_check_gc_interrupt(Caml_state) || Caml_state->action_pending;
 }
 
-value caml_do_pending_actions_exn(void)
+value caml_do_pending_actions_exn(int skip_gc_interrupt)
 {
   Caml_state->action_pending = 0;
 
   /* 1. Non-delayable actions that do not run OCaml code. */
 
   /* Do any pending STW interrupt, minor collection or major slice */
-  caml_handle_gc_interrupt();
+  if (!skip_gc_interrupt) caml_handle_gc_interrupt();
   /* [young_limit] has now been reset. */
 
   /* 2. Delayable actions that may raise OCaml exceptions. */
@@ -384,32 +384,34 @@ exception:
   return exn;
 }
 
-value caml_process_pending_actions_with_root_exn(value root)
+value caml_process_pending_actions_with_root_exn(value root,
+  int skip_gc_interrupt)
 {
   if (caml_check_pending_actions()) {
     CAMLparam1(root);
-    value exn = caml_do_pending_actions_exn();
+    value exn = caml_do_pending_actions_exn(skip_gc_interrupt);
     if (Is_exception_result(exn)) CAMLreturn(exn);
     CAMLdrop;
   }
   return root;
 }
 
-value caml_process_pending_actions_with_root(value root)
+value caml_process_pending_actions_with_root(value root, int skip_gc_interrupt)
 {
   return caml_raise_async_if_exception(
-    caml_process_pending_actions_with_root_exn(root),
+    caml_process_pending_actions_with_root_exn(root, skip_gc_interrupt),
     "");
 }
 
-CAMLexport value caml_process_pending_actions_exn(void)
+CAMLexport value caml_process_pending_actions_exn(int skip_gc_interrupt)
 {
-  return caml_process_pending_actions_with_root_exn(Val_unit);
+  return caml_process_pending_actions_with_root_exn(Val_unit,
+    skip_gc_interrupt);
 }
 
-CAMLexport void caml_process_pending_actions(void)
+CAMLexport void caml_process_pending_actions(int skip_gc_interrupt)
 {
-  caml_process_pending_actions_with_root(Val_unit);
+  caml_process_pending_actions_with_root(Val_unit, skip_gc_interrupt);
 }
 
 /* OS-independent numbering of signals */

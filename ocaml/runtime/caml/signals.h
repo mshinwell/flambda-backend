@@ -31,13 +31,13 @@ CAMLextern void caml_enter_blocking_section (void);
 CAMLextern void caml_enter_blocking_section_no_pending (void);
 CAMLextern void caml_leave_blocking_section (void);
 
-CAMLextern void caml_process_pending_actions (void);
+CAMLextern void caml_process_pending_actions (int skip_gc_interrupt);
 /* Checks for pending actions and executes them. This includes pending
    minor and major collections, thread switching, signal handlers,
    finalisers, and Memprof callbacks. Assumes that the runtime lock is
    held. Can raise exceptions asynchronously into OCaml code. */
 
-CAMLextern value caml_process_pending_actions_exn (void);
+CAMLextern value caml_process_pending_actions_exn (int skip_gc_interrupt);
 /* Same as [caml_process_pending_actions], but returns the encoded
    exception (if any) instead of raising it directly (otherwise
    returns [Val_unit]). */
@@ -69,9 +69,11 @@ value caml_execute_signal_exn(int signal_number, int in_signal_handler);
 CAMLextern void caml_record_signal(int signal_number);
 CAMLextern value caml_process_pending_signals_exn(void);
 void caml_set_action_pending(caml_domain_state *);
-value caml_do_pending_actions_exn(void);
-value caml_process_pending_actions_with_root (value extra_root); // raises
-value caml_process_pending_actions_with_root_exn (value extra_root);
+value caml_do_pending_actions_exn(int skip_gc_interrupt);
+value caml_process_pending_actions_with_root (value extra_root,
+  int skip_gc_interrupt); // raises
+value caml_process_pending_actions_with_root_exn (value extra_root,
+  int skip_gc_interrupt);
 
 void caml_init_signal_handling(void);
 void caml_init_signals(void);

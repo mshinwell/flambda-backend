@@ -235,7 +235,7 @@ CAMLprim value caml_gc_minor(value v)
   CAML_EV_BEGIN(EV_EXPLICIT_GC_MINOR);
   CAMLassert (v == Val_unit);
   caml_minor_collection ();
-  value exn = caml_process_pending_actions_exn();
+  value exn = caml_process_pending_actions_exn(0);
   CAML_EV_END(EV_EXPLICIT_GC_MINOR);
   return caml_raise_async_if_exception(exn, "");
 }
@@ -246,7 +246,7 @@ static value gc_major_exn(int force_compaction)
   caml_gc_log ("Major GC cycle requested");
   caml_empty_minor_heaps_once();
   caml_finish_major_cycle(force_compaction);
-  value exn = caml_process_pending_actions_exn();
+  value exn = caml_process_pending_actions_exn(0);
   CAML_EV_END(EV_EXPLICIT_GC_MAJOR);
   return exn;
 }
@@ -269,7 +269,7 @@ static value gc_full_major_exn(int force_compaction)
   for (i = 0; i < 3; i++) {
     caml_empty_minor_heaps_once();
     caml_finish_major_cycle(force_compaction && i == 2);
-    exn = caml_process_pending_actions_exn();
+    exn = caml_process_pending_actions_exn(0);
     if (Is_exception_result(exn)) break;
   }
   ++ Caml_state->stat_forced_major_collections;
@@ -289,7 +289,7 @@ CAMLprim value caml_gc_major_slice (value v)
   CAML_EV_BEGIN(EV_EXPLICIT_GC_MAJOR_SLICE);
   CAMLassert (Is_long (v));
   caml_major_collection_slice(Long_val(v));
-  value exn = caml_process_pending_actions_exn();
+  value exn = caml_process_pending_actions_exn(0);
   CAML_EV_END(EV_EXPLICIT_GC_MAJOR_SLICE);
   return caml_raise_async_if_exception(exn, "");
 }

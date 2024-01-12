@@ -37,7 +37,7 @@ CAMLexport void caml_raise(value v)
   Unlock_exn();
   CAMLassert(!Is_exception_result(v));
 
-  v = caml_process_pending_actions_with_root(v);
+  v = caml_process_pending_actions_with_root(v,1);
 
   if (Caml_state->external_raise == NULL) {
     caml_terminate_signals();

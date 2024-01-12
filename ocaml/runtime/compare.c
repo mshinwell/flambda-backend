@@ -109,7 +109,7 @@ static void run_pending_actions(struct compare_stack* stk,
     (sp - stk->stack)
     * sizeof(struct compare_item) / sizeof(value);
   Begin_roots_block(roots_start, roots_length);
-  exn = caml_do_pending_actions_exn();
+  exn = caml_do_pending_actions_exn(1);
   End_roots();
   if (Is_exception_result(exn)) {
     exn = Extract_exception(exn);

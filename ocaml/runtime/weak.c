@@ -64,7 +64,7 @@ CAMLprim value caml_ephe_create (value len)
   for (i = CAML_EPHE_DATA_OFFSET; i < size; i++)
     Field(res, i) = caml_ephe_none;
   /* run memprof callbacks */
-  return caml_process_pending_actions_with_root(res);
+  return caml_process_pending_actions_with_root(res,1);
 }
 
 CAMLprim value caml_weak_create (value len)
@@ -260,7 +260,7 @@ static value ephe_get_field (value e, mlsize_t offset)
     Field(res, 0) = elt;
   }
   /* run GC and memprof callbacks */
-  caml_process_pending_actions();
+  caml_process_pending_actions(0);
   CAMLreturn (res);
 }
 
@@ -366,7 +366,7 @@ some:
   res = caml_alloc_some(copy + infix_offs);
 out:
   /* run GC and memprof callbacks */
-  caml_process_pending_actions();
+  caml_process_pending_actions(0);
   CAMLreturn(res);
 }
 
