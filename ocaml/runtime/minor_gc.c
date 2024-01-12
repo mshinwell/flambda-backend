@@ -197,43 +197,38 @@ header_t caml_get_header_val(value v) {
   return get_header_val(v);
 }
 
-
-static int try_update_object_header(value v, volatile value *p, value result,
-                                    mlsize_t infix_offset) {
+static __attribute__((noinline)) int
+try_update_object_header_multi_domain(value v, volatile value *p,
+  value result, mlsize_t infix_offset)
+{
   int success = 0;
 
-  if( caml_domain_alone() ) {
-    *Hp_val (v) = 0;
-    Field(v, 0) = result;
-    success = 1;
+  header_t hd = atomic_load(Hp_atomic_val(v));
+  if( hd == 0 ) {
+    /* in this case this has been updated by another domain, throw away result
+        and return the one in the object */
+    result = Field(v, 0);
+  } else if( Is_update_in_progress(hd) ) {
+    /* here we've caught a domain in the process of moving a minor heap object
+        we need to wait for it to finish */
+    spin_on_header(v);
+    /* Also throw away result and use the one from the other domain */
+    result = Field(v, 0);
   } else {
-    header_t hd = atomic_load(Hp_atomic_val(v));
-    if( hd == 0 ) {
-      /* in this case this has been updated by another domain, throw away result
-         and return the one in the object */
-      result = Field(v, 0);
-    } else if( Is_update_in_progress(hd) ) {
-      /* here we've caught a domain in the process of moving a minor heap object
-         we need to wait for it to finish */
-      spin_on_header(v);
-      /* Also throw away result and use the one from the other domain */
-      result = Field(v, 0);
+    /* Here the header is neither zero nor an in-progress update */
+    header_t desired_hd = In_progress_update_val;
+    if( atomic_compare_exchange_strong(Hp_atomic_val(v), &hd, desired_hd) ) {
+      /* Success. Now we can write the forwarding pointer. */
+      atomic_store_relaxed(Op_atomic_val(v), result);
+      /* And update header ('release' ensures after update of fwd pointer) */
+      atomic_store_release(Hp_atomic_val(v), 0);
+      /* Let the caller know we were responsible for the update */
+      success = 1;
     } else {
-      /* Here the header is neither zero nor an in-progress update */
-      header_t desired_hd = In_progress_update_val;
-      if( atomic_compare_exchange_strong(Hp_atomic_val(v), &hd, desired_hd) ) {
-        /* Success. Now we can write the forwarding pointer. */
-        atomic_store_relaxed(Op_atomic_val(v), result);
-        /* And update header ('release' ensures after update of fwd pointer) */
-        atomic_store_release(Hp_atomic_val(v), 0);
-        /* Let the caller know we were responsible for the update */
-        success = 1;
-      } else {
-        /* Updated by another domain. Spin for that update to complete and
-           then throw away the result and use the one from the other domain. */
-        spin_on_header(v);
-        result = Field(v, 0);
-      }
+      /* Updated by another domain. Spin for that update to complete and
+          then throw away the result and use the one from the other domain. */
+      spin_on_header(v);
+      result = Field(v, 0);
     }
   }
 
@@ -241,13 +236,28 @@ static int try_update_object_header(value v, volatile value *p, value result,
   return success;
 }
 
+Caml_inline int try_update_object_header(value v, volatile value *p,
+  value result, mlsize_t infix_offset, int alone)
+{
+  if (alone) {
+    *Hp_val (v) = 0;
+    Field(v, 0) = result;
+    *p = result + infix_offset;
+    return 1;
+  }
+
+  return try_update_object_header_multi_domain(v, p, result, infix_offset);
+}
+
+static void oldify_one_maybe_alone (void* st_v, value v, volatile value *p);
+
 /* oldify_one is a no-op outside the minor heap. */
 static scanning_action_flags oldify_scanning_flags =
   SCANNING_ONLY_YOUNG_VALUES;
 
 /* Note that the tests on the tag depend on the fact that Infix_tag,
    Forward_tag, and No_scan_tag are contiguous. */
-static void oldify_one (void* st_v, value v, volatile value *p)
+static void oldify_one (void* st_v, value v, volatile value *p, int alone)
 {
   struct oldify_state* st = st_v;
   value result;
@@ -265,7 +275,7 @@ static void oldify_one (void* st_v, value v, volatile value *p)
 
   infix_offset = 0;
   do {
-    hd = get_header_val(v);
+    hd = alone ? Hd_val(v) : get_header_val(v);
     if (hd == 0) {
       /* already forwarded, another domain is likely working on this. */
       *p = Field(v, 0) + infix_offset;
@@ -285,11 +295,11 @@ static void oldify_one (void* st_v, value v, volatile value *p)
     value stack_value = Field(v, 0);
     CAMLassert(Wosize_hd(hd) == 1 && infix_offset == 0);
     result = alloc_shared(st->domain, 1, Cont_tag, Reserved_hd(hd));
-    if( try_update_object_header(v, p, result, 0) ) {
+    if( try_update_object_header(v, p, result, 0, alone) ) {
       struct stack_info* stk = Ptr_val(stack_value);
       Field(result, 0) = Val_ptr(stk);
       if (stk != NULL) {
-        caml_scan_stack(&oldify_one, oldify_scanning_flags, st,
+        caml_scan_stack(&oldify_one_maybe_alone, oldify_scanning_flags, st,
                         stk, 0, NULL);
       }
     }
@@ -308,7 +318,7 @@ static void oldify_one (void* st_v, value v, volatile value *p)
     st->live_bytes += Bhsize_hd(hd);
     result = alloc_shared(st->domain, sz, tag, Reserved_hd(hd));
     field0 = Field(v, 0);
-    if( try_update_object_header(v, p, result, infix_offset) ) {
+    if( try_update_object_header(v, p, result, infix_offset, alone) ) {
       if (sz > 1){
         Field(result, 0) = field0;
         Field(result, 1) = st->todo_list;
@@ -341,7 +351,7 @@ static void oldify_one (void* st_v, value v, volatile value *p)
       Field(result, i) = Field(v, i);
     }
     CAMLassert (infix_offset == 0);
-    if( !try_update_object_header(v, p, result, 0) ) {
+    if( !try_update_object_header(v, p, result, 0, alone) ) {
       /* Conflict */
       *Hp_val(result) = Make_header(sz, No_scan_tag,
                                     caml_global_heap_state.MARKED);
@@ -370,7 +380,7 @@ static void oldify_one (void* st_v, value v, volatile value *p)
       CAMLassert (Wosize_hd (hd) == 1);
       st->live_bytes += Bhsize_hd(hd);
       result = alloc_shared(st->domain, 1, Forward_tag, Reserved_hd(hd));
-      if( try_update_object_header(v, p, result, 0) ) {
+      if( try_update_object_header(v, p, result, 0, alone) ) {
         p = Op_val (result);
         v = f;
         goto tail_call;
@@ -388,11 +398,17 @@ static void oldify_one (void* st_v, value v, volatile value *p)
   }
 }
 
+static void oldify_one_maybe_alone (void* st_v, value v, volatile value *p)
+{
+  oldify_one(st_v, v, p, caml_domain_alone());
+}
+
 /* Finish the work that was put off by [oldify_one].
    Note that [oldify_one] itself is called by oldify_mopup, so we
    have to be careful to remove the first entry from the list before
    oldifying its fields. */
-static void oldify_mopup (struct oldify_state* st, int do_ephemerons)
+static void oldify_mopup (struct oldify_state* st, int do_ephemerons,
+  int alone)
 {
   value v, new_v, f;
   mlsize_t i;
@@ -414,13 +430,13 @@ again:
     f = Field(new_v, 0);
     CAMLassert (!Is_debug_tag(f));
     if (Is_block (f) && Is_young(f)) {
-      oldify_one (st, f, Op_val (new_v));
+      oldify_one (st, f, Op_val (new_v), alone);
     }
     for (i = 1; i < Wosize_val (new_v); i++){
       f = Field(v, i);
       CAMLassert (!Is_debug_tag(f));
       if (Is_block (f) && Is_young(f)) {
-        oldify_one (st, f, Op_val (new_v) + i);
+        oldify_one (st, f, Op_val (new_v) + i, alone);
       } else {
         Field(new_v, i) = f;
       }
@@ -445,7 +461,7 @@ again:
         if (get_header_val(v) == 0) { /* Value copied to major heap */
           *data = Field(v, 0) + offs;
         } else {
-          oldify_one(st, *data, data);
+          oldify_one(st, *data, data, alone);
           redo = 1; /* oldify_todo_list can still be 0 */
         }
       }
@@ -488,6 +504,7 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   intnat c, curr_idx;
   int remembered_roots = 0;
   scan_roots_hook scan_roots_hook;
+  int alone = 1;
 
   st.domain = domain;
 
@@ -499,7 +516,7 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
   if( participating[0] == Caml_state ) {
     CAML_EV_BEGIN(EV_MINOR_GLOBAL_ROOTS);
-    caml_scan_global_young_roots(oldify_one, &st);
+    caml_scan_global_young_roots(oldify_one_maybe_alone, &st);
     CAML_EV_END(EV_MINOR_GLOBAL_ROOTS);
   }
 
@@ -508,6 +525,8 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   if( participating_count > 1 ) {
     int participating_idx = -1;
     CAMLassert(domain == Caml_state);
+
+    alone = 0;
 
     for( int i = 0; i < participating_count ; i++ ) {
       if( participating[i] == domain ) {
@@ -558,7 +577,7 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
       for( r = ref_start ; r < foreign_major_ref->ptr && r < ref_end ; r++ )
       {
-        oldify_one (&st, **r, *r);
+        oldify_one (&st, **r, *r, 0);
         remembered_roots++;
       }
 
@@ -571,7 +590,7 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
     for( r = self_minor_tables->major_ref.base ;
       r < self_minor_tables->major_ref.ptr ; r++ )
     {
-      oldify_one (&st, **r, *r);
+      oldify_one (&st, **r, *r, 1);
       remembered_roots++;
     }
   }
@@ -590,12 +609,12 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
   CAML_EV_BEGIN(EV_MINOR_FINALIZERS_OLDIFY);
   /* promote the finalizers unconditionally as we want to avoid barriers */
-  caml_final_do_young_roots (&oldify_one, oldify_scanning_flags, &st,
+  caml_final_do_young_roots (&oldify_one_maybe_alone, oldify_scanning_flags, &st,
                              domain, 0);
   CAML_EV_END(EV_MINOR_FINALIZERS_OLDIFY);
 
   CAML_EV_BEGIN(EV_MINOR_REMEMBERED_SET_PROMOTE);
-  oldify_mopup (&st, 1); /* ephemerons promoted here */
+  oldify_mopup (&st, 1, alone); /* ephemerons promoted here */
   CAML_EV_END(EV_MINOR_REMEMBERED_SET_PROMOTE);
   CAML_EV_END(EV_MINOR_REMEMBERED_SET);
   caml_gc_log("promoted %d roots, %" ARCH_INTNAT_PRINTF_FORMAT "u bytes",
@@ -615,16 +634,16 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
   CAML_EV_BEGIN(EV_MINOR_LOCAL_ROOTS);
   caml_do_local_roots(
-    &oldify_one, oldify_scanning_flags, &st,
+    &oldify_one_maybe_alone, oldify_scanning_flags, &st,
     domain->local_roots, domain->current_stack, domain->gc_regs,
     caml_get_local_arenas(domain));
 
   scan_roots_hook = atomic_load(&caml_scan_roots_hook);
   if (scan_roots_hook != NULL)
-    (*scan_roots_hook)(&oldify_one, oldify_scanning_flags, &st, domain);
+    (*scan_roots_hook)(&oldify_one_maybe_alone, oldify_scanning_flags, &st, domain);
 
   CAML_EV_BEGIN(EV_MINOR_LOCAL_ROOTS_PROMOTE);
-  oldify_mopup (&st, 0);
+  oldify_mopup (&st, 0, alone);
   CAML_EV_END(EV_MINOR_LOCAL_ROOTS_PROMOTE);
   CAML_EV_END(EV_MINOR_LOCAL_ROOTS);
 
