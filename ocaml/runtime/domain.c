@@ -1673,7 +1673,8 @@ void caml_poll_gc_work(void)
   }
 
   if (d->requested_global_major_slice) {
-    if (caml_try_run_on_all_domains_async(
+    if (caml_domain_alone ()
+        || caml_try_run_on_all_domains_async(
           &global_major_slice_callback, NULL, NULL)){
       d->requested_global_major_slice = 0;
     }
