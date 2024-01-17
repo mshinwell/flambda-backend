@@ -436,7 +436,7 @@ static value make_vect_gen(value len, value init, int local)
     }
   }
   /* Give the GC a chance to run, and run memprof callbacks */
-  if (!local) caml_process_pending_actions ();
+  /* if (!local) caml_process_pending_actions (); */
   CAMLreturn (res);
 }
 
