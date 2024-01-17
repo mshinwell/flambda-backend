@@ -1636,20 +1636,20 @@ void caml_poll_gc_work(void)
       (uintnat)d->young_trigger) {
 
     if (d->young_trigger == d->young_start) {
+      /* We have used all of our minor heap arena. Request a major slice on
+         this domain. */
+      advance_global_major_slice_epoch (d);
       /* Trigger minor GC */
       d->requested_minor_gc = 1;
     } else {
       CAMLassert (d->young_trigger ==
                   d->young_start + (d->young_end - d->young_start) / 2);
-      /* We have used half of our minor heap arena. Request a major slice on
-         this domain. */
-      advance_global_major_slice_epoch (d);
       /* Advance the [young_trigger] to [young_start] so that the allocation
          fails when the minor heap is full. */
       d->young_trigger = d->young_start;
     }
   } else if (d->requested_minor_gc) {
-    /* This domain has _not_ used up half of its minor heap arena, but a minor
+    /* This domain has _not_ used up all of its minor heap arena, but a minor
        collection has been requested. Schedule a major collection slice so as
        to not lag behind. */
     advance_global_major_slice_epoch (d);
