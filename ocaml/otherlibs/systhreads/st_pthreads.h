@@ -155,9 +155,11 @@ static void st_masterlock_acquire(st_masterlock *m)
 {
   pthread_mutex_lock(&m->lock);
   while (m->busy) {
-    atomic_fetch_add(&m->waiters, +1);
+    // atomic_fetch_add(&m->waiters, +1);
+    m->waiters++;
     custom_condvar_wait(&m->is_free, &m->lock);
-    atomic_fetch_add(&m->waiters, -1);
+    // atomic_fetch_add(&m->waiters, -1);
+    m->waiters--;
   }
   m->busy = 1;
   // CR ocaml 5 domains: we assume no backup thread
@@ -204,7 +206,8 @@ Caml_inline void st_thread_yield(st_masterlock * m)
   }
 
   m->busy = 0;
-  atomic_fetch_add(&m->waiters, +1);
+//  atomic_fetch_add(&m->waiters, +1);
+  m->waiters++;
   custom_condvar_signal(&m->is_free);
   /* releasing the domain lock but not triggering bt messaging
      messaging the bt should not be required because yield assumes
@@ -222,7 +225,8 @@ Caml_inline void st_thread_yield(st_masterlock * m)
   } while (m->busy);
 
   m->busy = 1;
-  atomic_fetch_add(&m->waiters, -1);
+//  atomic_fetch_add(&m->waiters, -1);
+  m->waiters--;
 
   // CR ocaml 5 domains
   // caml_acquire_domain_lock();
@@ -299,10 +303,12 @@ static void * caml_thread_tick(void * arg)
   caml_init_domain_self(*domain_id);
   caml_domain_state *domain = Caml_state;
 
-  while(! atomic_load_acquire(&Tick_thread_stop)) {
+//  while(! atomic_load_acquire(&Tick_thread_stop)) {
+  while(!Tick_thread_stop) {
     st_msleep(Thread_timeout);
 
-    atomic_store_release(&domain->requested_external_interrupt, 1);
+//    atomic_store_release(&domain->requested_external_interrupt, 1);
+    domain->requested_external_interrupt = 1;
     caml_interrupt_self();
   }
   return NULL;

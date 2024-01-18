@@ -572,10 +572,17 @@ void caml_thread_interrupt_hook(void)
   if (caml_bt_is_self()) return;
 
   uintnat is_on = 1;
+
+/*
   atomic_uintnat* req_external_interrupt =
     &Caml_state->requested_external_interrupt;
 
   if (atomic_compare_exchange_strong(req_external_interrupt, &is_on, 0)) {
+    caml_thread_yield(Val_unit);
+  }
+*/
+
+  if (Caml_state->requested_external_interrupt) {
     caml_thread_yield(Val_unit);
   }
 
