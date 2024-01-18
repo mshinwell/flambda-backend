@@ -583,6 +583,7 @@ void caml_thread_interrupt_hook(void)
 */
 
   if (Caml_state->requested_external_interrupt) {
+    Caml_state->requested_external_interrupt = 0;
     caml_thread_yield(Val_unit);
   }
 
