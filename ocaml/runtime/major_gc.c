@@ -772,6 +772,8 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
     return Whsize_wosize(block_wsz - offset);
   }
 
+  caml_prefetch((void*)(Op_val(block) + 1));
+
   mark_stack_push_range(stk,
                         Op_val(block) + i,
                         Op_val(block) + block_wsz);
