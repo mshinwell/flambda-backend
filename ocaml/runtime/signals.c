@@ -168,9 +168,10 @@ CAMLexport void caml_enter_blocking_section(void)
     if (Caml_state->in_minor_collection)
       caml_fatal_error("caml_enter_blocking_section from inside minor GC");
 
-    /* Process all pending signals now */
-    value exn = caml_process_pending_signals_exn();
-    check_async_exn(exn, "signal handler");
+    /* Process any external interrupt now, so systhreads can yield */
+    if (atomic_load_acquire(&domain->requested_external_interrupt)) {
+      caml_domain_external_interrupt_hook();
+    }
 
     caml_enter_blocking_section_hook ();
     /* Check again if a signal arrived in the meanwhile. If none,
