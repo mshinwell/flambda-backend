@@ -169,10 +169,15 @@ CAMLexport void caml_enter_blocking_section(void)
       caml_fatal_error("caml_enter_blocking_section from inside minor GC");
 
     /* Process any external interrupt now, so systhreads can yield */
-    if (atomic_load_acquire(&domain->requested_external_interrupt)) {
+    if (atomic_load_relaxed(&domain->requested_external_interrupt)) {
       caml_domain_external_interrupt_hook();
     }
 
+    if (!caml_check_pending_signals ()) break;
+
+    caml_process_pending_actions();
+
+  #if 0
     caml_enter_blocking_section_hook ();
     /* Check again if a signal arrived in the meanwhile. If none,
        done; otherwise, try again. Since we do not hold the domain
@@ -180,6 +185,7 @@ CAMLexport void caml_enter_blocking_section(void)
        [Caml_check_gc_interrupt]. */
     if (!caml_check_pending_signals ()) break;
     caml_leave_blocking_section_hook ();
+  #endif
   }
 }
 
