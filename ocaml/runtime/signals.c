@@ -154,6 +154,8 @@ static void caml_leave_blocking_section_default(void)
   caml_acquire_domain_lock();
 }
 
+static void check_async_exn(value res, const char *msg);
+
 CAMLexport void (*caml_enter_blocking_section_hook)(void) =
    caml_enter_blocking_section_default;
 CAMLexport void (*caml_leave_blocking_section_hook)(void) =
@@ -165,8 +167,11 @@ CAMLexport void caml_enter_blocking_section(void)
   while (1){
     if (Caml_state->in_minor_collection)
       caml_fatal_error("caml_enter_blocking_section from inside minor GC");
+
     /* Process all pending signals now */
-    caml_process_pending_actions();
+    value exn = caml_process_pending_signals_exn();
+    check_async_exn(exn, "signal handler");
+
     caml_enter_blocking_section_hook ();
     /* Check again if a signal arrived in the meanwhile. If none,
        done; otherwise, try again. Since we do not hold the domain
