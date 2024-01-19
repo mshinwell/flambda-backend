@@ -52,7 +52,7 @@
 #include "threads.h"
 
 /* Max computation time before rescheduling, in milliseconds */
-#define Thread_timeout 50
+#define Thread_timeout 100
 
 /* OS-specific code */
 #ifdef _WIN32
