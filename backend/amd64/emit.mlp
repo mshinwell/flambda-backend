@@ -1830,9 +1830,12 @@ let fundecl fundecl =
         if contains_nontail_calls || max_frame_size >= stack_threshold_size then begin
           let overflow = new_label () and ret = new_label () in
           let threshold_offset = Domainstate.stack_ctx_words * 8 + stack_threshold_size in
-          I.lea (mem64 NONE (-(max_frame_size + threshold_offset)) RSP) r10;
-          I.cmp (domain_field Domainstate.Domain_current_stack) r10;
-          I.jb (label overflow);
+          for i = 0 to 2 do
+            ignore i;
+            I.lea (mem64 NONE (-(max_frame_size + threshold_offset)) RSP) r10;
+            I.cmp (domain_field Domainstate.Domain_current_stack) r10;
+            I.jb (label overflow)
+          done;
           def_label ret;
           Some (overflow, ret)
         end else None
