@@ -123,9 +123,14 @@ struct caml_thread_struct {
 typedef struct caml_thread_struct* caml_thread_t;
 
 /* Thread-local key for accessing the current thread's [caml_thread_t] */
+#if 0
 st_tlskey caml_thread_key;
-
 #define This_thread ((caml_thread_t) st_tls_get(caml_thread_key))
+#endif
+
+__thread caml_thread_t caml_thread_key;
+
+#define This_thread caml_thread_key
 
 /* overall table for threads across domains */
 struct caml_thread_table {
@@ -558,7 +563,8 @@ static void caml_thread_domain_initialize_hook(void)
   new_thread->prev = new_thread;
   new_thread->backtrace_last_exn = Val_unit;
 
-  st_tls_set(caml_thread_key, new_thread);
+//  st_tls_set(caml_thread_key, new_thread);
+  caml_thread_key = new_thread;
 
   Active_thread = new_thread;
 
@@ -596,7 +602,7 @@ CAMLprim value caml_thread_initialize(value unit)
                   "while several domains are running.");
 
   /* Initialize the key to the [caml_thread_t] structure */
-  st_tls_newkey(&caml_thread_key);
+  // st_tls_newkey(&caml_thread_key);
 
   /* First initialise the systhread chain on this domain */
   caml_thread_domain_initialize_hook();
@@ -662,7 +668,8 @@ static void * caml_thread_start(void * v)
 
   caml_init_domain_self(dom_id);
 
-  st_tls_set(caml_thread_key, th);
+  // st_tls_set(caml_thread_key, th);
+  caml_thread_key = th;
   struct caml_locking_scheme *s = atomic_load(&Locking_scheme(dom_id));
   if (s -> thread_start != NULL)
     s->thread_start(s->context, Thread_type_caml);
@@ -825,7 +832,8 @@ CAMLexport int caml_c_thread_register(void)
     Active_thread->next = th;
   }
   /* Associate the thread descriptor with the thread */
-  st_tls_set(caml_thread_key, (void *) th);
+  // st_tls_set(caml_thread_key, (void *) th);
+  caml_thread_key = th;
   /* Allocate the thread descriptor on the heap */
   th->descr = caml_thread_new_descriptor(Val_unit);  /* no closure */
 
@@ -852,7 +860,8 @@ CAMLexport int caml_c_thread_unregister(void)
   /* Wait until the runtime is available */
   thread_lock_acquire(Dom_c_threads);
   /*  Forget the thread descriptor */
-  st_tls_set(caml_thread_key, NULL);
+  //st_tls_set(caml_thread_key, NULL);
+  caml_thread_key = NULL;
   /* Remove thread info block from list of threads, and free it */
   caml_thread_remove_and_free(th);
   /* Release the runtime */
@@ -867,7 +876,7 @@ CAMLexport int caml_c_thread_unregister(void)
 
 CAMLprim value caml_thread_self(value unit)
 {
-  return Active_thread->descr;
+  return This_thread->descr;
 }
 
 /* Return the identifier of a thread */
