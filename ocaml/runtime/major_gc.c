@@ -550,7 +550,7 @@ static void update_major_slice_work(intnat howmuch) {
   if (heap_words > 0) {
     double alloc_ratio =
       total_cycle_work
-      * 3.0 * (100 + caml_percent_free)
+      * (100 + caml_percent_free)
       / heap_words / caml_percent_free / 2.0;
     alloc_work = (intnat) (my_alloc_count * alloc_ratio);
   } else {
