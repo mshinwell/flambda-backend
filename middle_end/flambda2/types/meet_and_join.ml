@@ -352,7 +352,8 @@ let meet_alloc_mode env (alloc_mode1 : Alloc_mode.For_types.t)
 let join_alloc_mode (alloc_mode1 : Alloc_mode.For_types.t)
     (alloc_mode2 : Alloc_mode.For_types.t) : Alloc_mode.For_types.t =
   match alloc_mode1, alloc_mode2 with
-  | (Heap_or_local | Local), _ | _, (Heap_or_local | Local) -> Alloc_mode.For_types.unknown ()
+  | (Heap_or_local | Local), _ | _, (Heap_or_local | Local) ->
+    Alloc_mode.For_types.unknown ()
   | Heap, Heap -> Alloc_mode.For_types.heap
 
 let[@inline always] meet_unknown meet_contents ~contents_is_bottom env
@@ -817,12 +818,10 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
     map_result
       ~f:TG.Head_of_kind_naked_immediate.create_naked_immediates_non_empty
       (set_meet (module I.Set) env is1 is2 ~of_set:Fun.id)
-  | Is_int ty1, Is_int ty2 ->
-    map_result ~f:TG.Head_of_kind_naked_immediate.create_is_int
-      (meet env ty1 ty2)
-  | Get_tag ty1, Get_tag ty2 ->
-    map_result ~f:TG.Head_of_kind_naked_immediate.create_get_tag
-      (meet env ty1 ty2)
+    (* | Is_int ty1, Is_int ty2 -> map_result
+       ~f:TG.Head_of_kind_naked_immediate.create_is_int (meet env ty1 ty2) |
+       Get_tag ty1, Get_tag ty2 -> map_result
+       ~f:TG.Head_of_kind_naked_immediate.create_get_tag (meet env ty1 ty2) *)
   | Is_int is_int_ty, Naked_immediates immediates ->
     is_int_immediate ~is_int_ty ~immediates ~is_int_side:Left
   | Naked_immediates immediates, Is_int is_int_ty ->
