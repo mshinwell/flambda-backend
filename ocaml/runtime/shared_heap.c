@@ -569,7 +569,7 @@ static intnat prefetch_pool(pool** pool, sizeclass sz, int half)
 
   header_t* start = POOL_FIRST_BLOCK(*pool, sz);
   header_t* end = POOL_END(*pool);
-  uintnat half_in_words = half ? ((uintnat) (start - end)) / 2 : 0;
+  uintnat half_in_words = half ? ((uintnat) (end - start)) / 2 : 0;
 
   header_t* p = start + half_in_words;
 
@@ -589,7 +589,7 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
     sizeclass sz = local->next_to_sweep;
     pool* avail_pool = local->unswept_avail_pools[sz];
     pool* full_pool = local->unswept_full_pools[sz];
-    intnat avail_work = prefetch_pool(&avail_pool, sz, 0);
+    intnat avail_work = prefetch_pool(&avail_pool, sz, 1);
     work -= avail_work;
     if (work > 0) {
       (void) prefetch_pool(&full_pool, sz, 0);
