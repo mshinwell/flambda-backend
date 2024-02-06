@@ -561,14 +561,14 @@ static intnat large_alloc_sweep(struct caml_heap_state* local) {
 
 static void verify_swept(struct caml_heap_state*);
 
-Caml_inline int prefetch_pool(pool** pool, sizeclass sz, int half)
+Caml_inline int prefetch_pool(pool* pool, sizeclass sz, int half)
 {
-  if (*pool == NULL) {
+  if (pool == NULL) {
     return 0;
   }
 
-  header_t* start = POOL_FIRST_BLOCK(*pool, sz);
-  header_t* end = POOL_END(*pool);
+  header_t* start = POOL_FIRST_BLOCK(pool, sz);
+  header_t* end = POOL_END(pool);
   uintnat half_in_words = half ? ((uintnat) (end - start)) / 2 : 0;
 
   header_t* p = start + half_in_words;
@@ -578,24 +578,23 @@ Caml_inline int prefetch_pool(pool** pool, sizeclass sz, int half)
     p += 64 / sizeof(header_t);
   }
 
-  *pool = (*pool)->next;
-
   return (intnat) (end - start);
 }
 
-Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work)
+Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
+  sizeclass sz)
 {
   if (work > 0) {
-    sizeclass sz = local->next_to_sweep;
     pool* avail_pool = local->unswept_avail_pools[sz];
-    pool* full_pool = local->unswept_full_pools[sz];
-    intnat avail_work = prefetch_pool(&avail_pool, sz, 0);
+    intnat avail_work = prefetch_pool(avail_pool, sz, 0);
     work -= avail_work;
 //    work -= (POOL_END(avail_pool) - POOL_FIRST_BLOCK(avail_pool, sz));
-    intnat full_work = 0;
     if (work > 0) {
-      full_work = prefetch_pool(&full_pool, sz, 0);
-      work -= full_work;
+      pool* full_pool = local->unswept_full_pools[sz];
+//      intnat full_work = 0;
+//      full_work = prefetch_pool(&full_pool, sz, 0);
+      (void) prefetch_pool(full_pool, sz, 0);
+//      work -= full_work;
     }
     /*
     if (work > 0) {
@@ -639,9 +638,10 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
 
   /* Sweep local pools */
   while (work > 0 && local->next_to_sweep < NUM_SIZECLASSES) {
-    prefetch_pools(local, work);
-
     sizeclass sz = local->next_to_sweep;
+
+    prefetch_pools(local, work, sz);
+
     intnat full_sweep_work = 0;
     intnat avail_sweep_work =
       pool_sweep(local, &local->unswept_avail_pools[sz], sz, 1);
