@@ -584,10 +584,11 @@ static intnat prefetch_pool(pool** pool, sizeclass sz)
 static void prefetch_pools(struct caml_heap_state* local, intnat work)
 {
   sizeclass sz = local->next_to_sweep;
+  sizeclass max_sz = sz + 1;
   pool* avail_pool = local->unswept_avail_pools[sz];
   pool* full_pool = local->unswept_full_pools[sz];
 
-  while (work > 0 && sz < NUM_SIZECLASSES) {
+  while (work > 0 && sz < NUM_SIZECLASSES && sz <= max_sz) {
     intnat full_work = 0;
     intnat avail_work = prefetch_pool(&avail_pool, sz);
     work -= avail_work;
