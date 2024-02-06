@@ -561,7 +561,7 @@ static intnat large_alloc_sweep(struct caml_heap_state* local) {
 
 static void verify_swept(struct caml_heap_state*);
 
-static intnat prefetch_pool(pool** pool, sizeclass sz, int half)
+Caml_inline int prefetch_pool(pool** pool, sizeclass sz, int half)
 {
   if (*pool == NULL) {
     return 0;
@@ -583,7 +583,7 @@ static intnat prefetch_pool(pool** pool, sizeclass sz, int half)
   return (intnat) (end - start);
 }
 
-static void prefetch_pools(struct caml_heap_state* local, intnat work)
+Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work)
 {
   if (work > 0) {
     sizeclass sz = local->next_to_sweep;
