@@ -589,8 +589,9 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
     sizeclass sz = local->next_to_sweep;
     pool* avail_pool = local->unswept_avail_pools[sz];
     pool* full_pool = local->unswept_full_pools[sz];
-    intnat avail_work = prefetch_pool(&avail_pool, sz, 1);
-    work -= avail_work;
+//    intnat avail_work = prefetch_pool(&avail_pool, sz, 1);
+//    work -= avail_work;
+    work -= (POOL_END(avail_pool) - POOL_FIRST_BLOCK(avail_pool, sz));
     if (work > 0) {
       (void) prefetch_pool(&full_pool, sz, 0);
     }
