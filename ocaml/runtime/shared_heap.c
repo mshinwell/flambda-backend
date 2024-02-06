@@ -597,6 +597,7 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
       full_work = prefetch_pool(&full_pool, sz, 0);
       work -= full_work;
     }
+    /*
     if (work > 0) {
       if (avail_work == 0 && full_work == 0) {
         sz++;
@@ -606,7 +607,7 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
         avail_pool = avail_pool->next;
         (void) prefetch_pool(&avail_pool, sz, 0);
       }
-    }
+    }*/
   }
 
 /*
