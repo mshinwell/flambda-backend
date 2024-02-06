@@ -561,7 +561,7 @@ static intnat large_alloc_sweep(struct caml_heap_state* local) {
 
 static void verify_swept(struct caml_heap_state*);
 
-static intnat prefetch_pool(pool** pool, sizeclass sz)
+static intnat prefetch_pool(pool** pool, sizeclass sz, int half)
 {
   if (*pool == NULL) {
     return 0;
@@ -569,7 +569,9 @@ static intnat prefetch_pool(pool** pool, sizeclass sz)
 
   header_t* start = POOL_FIRST_BLOCK(*pool, sz);
   header_t* end = POOL_END(*pool);
-  header_t* p = start;
+  uintnat half_in_words = half ? ((uintnat) (start - end)) / 2 : 0;
+
+  header_t* p = start + half_in_words;
 
   while (p < end) {
     caml_prefetch(p);
@@ -587,10 +589,10 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
     sizeclass sz = local->next_to_sweep;
     pool* avail_pool = local->unswept_avail_pools[sz];
     pool* full_pool = local->unswept_full_pools[sz];
-    intnat avail_work = prefetch_pool(&avail_pool, sz);
+    intnat avail_work = prefetch_pool(&avail_pool, sz, 1);
     work -= avail_work;
     if (work > 0) {
-      (void) prefetch_pool(&full_pool, sz);
+      (void) prefetch_pool(&full_pool, sz, 0);
     }
   }
 
