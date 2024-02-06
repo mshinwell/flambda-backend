@@ -622,10 +622,11 @@ static void prefetch_pools(struct caml_heap_state* local, intnat work)
 }
 
 intnat caml_sweep(struct caml_heap_state* local, intnat work) {
-  prefetch_pools(local, work);
 
   /* Sweep local pools */
   while (work > 0 && local->next_to_sweep < NUM_SIZECLASSES) {
+    prefetch_pools(local, work);
+
     sizeclass sz = local->next_to_sweep;
     intnat full_sweep_work = 0;
     intnat avail_sweep_work =
