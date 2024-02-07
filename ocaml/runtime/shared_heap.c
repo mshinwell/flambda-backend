@@ -611,14 +611,15 @@ Caml_inline int prefetch_pool2(pool* pool, sizeclass sz, int half)
 }
 
 Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
-  sizeclass sz)
+  sizeclass sz, int phase)
 {
   if (work > 0) {
     pool* avail_pool = local->unswept_avail_pools[sz];
-    intnat avail_work = prefetch_pool(avail_pool, sz, 0);
+    intnat avail_work =
+      phase == 0 ? prefetch_pool(avail_pool, sz, 0) : 0;
     work -= avail_work;
 //    work -= (POOL_END(avail_pool) - POOL_FIRST_BLOCK(avail_pool, sz));
-    if (work > 0) {
+    if (work > 0 && phase != 0) {
       pool* full_pool = local->unswept_full_pools[sz];
 //      intnat full_work = 0;
 //      full_work = prefetch_pool(&full_pool, sz, 0);
@@ -669,7 +670,7 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
   while (work > 0 && local->next_to_sweep < NUM_SIZECLASSES) {
     sizeclass sz = local->next_to_sweep;
 
-    prefetch_pools(local, work, sz);
+    prefetch_pools(local, work, sz, 0);
 
     intnat full_sweep_work = 0;
     intnat avail_sweep_work =
@@ -677,6 +678,7 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
     work -= avail_sweep_work;
 
     if (work > 0) {
+      prefetch_pools(local, work, sz, 1);
       full_sweep_work = pool_sweep(local,
                                    &local->unswept_full_pools[sz],
                                    sz, 1);
