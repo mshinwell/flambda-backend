@@ -914,19 +914,6 @@ let simplify_non_lifted_set_of_closures0 dacc bound_vars ~closure_bound_vars
     in
     Simplify_named_result.create dacc bindings
 
-(* let identity_binding = match is_identity_on with | None -> [] | Some
-   is_identity_on -> Name.Map.fold (fun name simple identity_binding -> let var
-   = match Name.must_be_var_opt name with | Some var -> var | None -> assert
-   false (* see above *) in { Expr_builder.let_bound = Bound_pattern.singleton
-   (Bound_var.create var NM.normal); simplified_defining_expr =
-   Simplified_named.create (Named.create_simple simple); original_defining_expr
-   = None } :: identity_binding) is_identity_on [] in let bound_vars = match
-   identity_binding with | [] -> bound_vars | _ :: _ -> Bound_pattern.rename
-   bound_vars in Simplify_named_result.create dacc ([ { Expr_builder.let_bound =
-   bound_vars; simplified_defining_expr = defining_expr; original_defining_expr
-   = Some (Named.create_set_of_closures set_of_closures) } ] @
-   identity_binding) *)
-
 type lifting_decision_result =
   { can_lift : bool;
     value_slots : Simple.t Value_slot.Map.t;
