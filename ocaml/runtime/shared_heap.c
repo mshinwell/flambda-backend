@@ -478,8 +478,17 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     mlsize_t wh = wsize_sizeclass[sz];
     int all_used = 1;
     struct heap_stats* s = &local->stats;
+    intnat counter = 0;
 
     while (p + wh <= end) {
+      if (counter % (64 / sizeof(header_t)) == 0) {
+        header_t* prefetch = p + (4096 / sizeof(header_t));
+        if (prefetch < end) {
+          caml_prefetch(prefetch);
+        }
+      }
+      counter++;
+
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
       if (hd == 0) {
         /* already on freelist */
