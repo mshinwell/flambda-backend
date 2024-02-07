@@ -569,7 +569,8 @@ Caml_inline intnat prefetch_pool(pool* pool, sizeclass sz, int first_half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  intnat half_in_words = (intnat) ((end - start) * 3 / 4);
+  // * 3 / 4 instead of / 2 is a fair bit worse for misses
+  intnat half_in_words = (intnat) ((end - start) * 1 / 4);
   intnat work = end - start;
 
   if (first_half) end -= half_in_words;
