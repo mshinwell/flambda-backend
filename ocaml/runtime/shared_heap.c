@@ -289,7 +289,8 @@ Caml_inline void pool_initialize(pool* r,
 static intnat pool_sweep(struct caml_heap_state* local,
                          pool**,
                          sizeclass sz ,
-                         int release_to_global_pool);
+                         int release_to_global_pool,
+                         pool*);
 
 /* Adopt pool from the pool_freelist avail and full pools
    to satisfy an allocation */
@@ -347,7 +348,7 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
 
   if( !r && adopted_pool ) {
     Caml_state->major_work_done_between_slices +=
-      pool_sweep(local, &local->full_pools[sz], sz, 0);
+      pool_sweep(local, &local->full_pools[sz], sz, 0, NULL);
     r = local->avail_pools[sz];
   }
   return r;
@@ -363,8 +364,13 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
 
   /* Otherwise, try to sweep until we find one */
   while (!local->avail_pools[sz] && local->unswept_avail_pools[sz]) {
+    pool* likely_next_pool = NULL;
+    if (local->unswept_avail_pools[sz]->next != NULL) {
+      likely_next_pool = local->unswept_avail_pools[sz]->next;
+    }
     Caml_state->major_work_done_between_slices +=
-      pool_sweep(local, &local->unswept_avail_pools[sz], sz, 0);
+      pool_sweep(local, &local->unswept_avail_pools[sz], sz, 0,
+        likely_next_pool);
   }
 
   r = local->avail_pools[sz];
@@ -466,7 +472,8 @@ value* caml_shared_try_alloc(struct caml_heap_state* local, mlsize_t wosize,
 /* Sweeping */
 
 static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
-                         sizeclass sz, int release_to_global_pool) {
+                         sizeclass sz, int release_to_global_pool,
+                         pool* likely_next_pool) {
   intnat work = 0;
   pool* a = *plist;
   if (!a) return 0;
@@ -475,11 +482,27 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
   {
     header_t* p = POOL_FIRST_BLOCK(a, sz);
     header_t* end = POOL_END(a);
+    header_t* halfway = p + ((end - p) / 2);
     mlsize_t wh = wsize_sizeclass[sz];
     int all_used = 1;
     struct heap_stats* s = &local->stats;
 
+    header_t* likely_next_start =
+      likely_next_pool != NULL ? POOL_FIRST_BLOCK(likely_next_pool, sz) : NULL;
+    header_t* likely_next_end =
+      likely_next_pool != NULL ? POOL_END(likely_next_pool) : NULL;
+    header_t* likely_next_prefetch = likely_next_start;
+    header_t* likely_next_stop =
+      likely_next_start + ((likely_next_end - likely_next_start) / 2);
+
     while (p + wh <= end) {
+      if (likely_next_prefetch != NULL && p >= halfway) {
+        if (likely_next_prefetch < likely_next_stop) {
+          caml_prefetch(likely_next_prefetch);
+        }
+        likely_next_prefetch += 64 / sizeof(header_t);
+      }
+
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
       if (hd == 0) {
         /* already on freelist */
@@ -567,13 +590,29 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
     sizeclass sz = local->next_to_sweep;
     intnat full_sweep_work = 0;
     intnat avail_sweep_work =
-      pool_sweep(local, &local->unswept_avail_pools[sz], sz, 1);
+      pool_sweep(local, &local->unswept_avail_pools[sz], sz,
+        1, local->unswept_full_pools[sz]);
     work -= avail_sweep_work;
 
     if (work > 0) {
+      pool* likely_next_pool;
+
+      if (local->unswept_avail_pools[sz] != NULL) {
+        likely_next_pool = local->unswept_avail_pools[sz];
+      }
+      else {
+        if (sz < NUM_SIZECLASSES - 1) {
+          likely_next_pool = local->unswept_avail_pools[sz + 1];
+        }
+        else {
+          likely_next_pool = NULL;
+        }
+      }
+
       full_sweep_work = pool_sweep(local,
                                    &local->unswept_full_pools[sz],
-                                   sz, 1);
+                                   sz, 1,
+                                   likely_next_pool);
 
       work -= full_sweep_work;
     }
