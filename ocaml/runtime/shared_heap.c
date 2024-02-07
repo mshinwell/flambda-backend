@@ -561,7 +561,7 @@ static intnat large_alloc_sweep(struct caml_heap_state* local) {
 
 static void verify_swept(struct caml_heap_state*);
 
-Caml_inline int prefetch_pool(pool* pool, sizeclass sz, int half)
+Caml_inline intnat prefetch_pool(pool* pool, sizeclass sz, int first_half)
 {
   if (pool == NULL) {
     return 0;
@@ -569,19 +569,23 @@ Caml_inline int prefetch_pool(pool* pool, sizeclass sz, int half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  uintnat half_in_words = half ? ((uintnat) (end - start)) / 2 : 0;
+  intnat half_in_words = (intnat) ((end - start) / 2);
+  intnat work = end - start;
 
-  header_t* p = start + half_in_words;
+  if (first_half) end -= half_in_words;
+  else start += half_in_words;
+
+  header_t* p = start;
 
   while (p < end) {
     caml_prefetch(p);
     p += 64 / sizeof(header_t);
   }
 
-  return (intnat) (end - start);
+  return work;
 }
 
-Caml_inline int prefetch_pool2(pool* pool, sizeclass sz, int half)
+Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
 {
   if (pool == NULL) {
     return 0;
@@ -589,16 +593,20 @@ Caml_inline int prefetch_pool2(pool* pool, sizeclass sz, int half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  uintnat half_in_words = half ? ((uintnat) (end - start)) / 2 : 0;
+  intnat half_in_words = (intnat) ((end - start) / 2);
+  intnat work = end - start;
 
-  header_t* p = start + half_in_words;
+  if (first_half) end -= half_in_words;
+  else start += half_in_words;
+
+  header_t* p = start;
 
   while (p < end) {
     caml_prefetch(p);
     p += 64 / sizeof(header_t);
   }
 
-  return (intnat) (end - start);
+  return work;
 }
 
 Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
@@ -613,7 +621,7 @@ Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
       pool* full_pool = local->unswept_full_pools[sz];
 //      intnat full_work = 0;
 //      full_work = prefetch_pool(&full_pool, sz, 0);
-      (void) prefetch_pool2(full_pool, sz, 0);
+      (void) prefetch_pool2(full_pool, sz, 1);
 //      work -= full_work;
     }
     /*
