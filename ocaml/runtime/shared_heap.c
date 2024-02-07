@@ -606,7 +606,7 @@ Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
 {
   if (work > 0) {
     pool* avail_pool = local->unswept_avail_pools[sz];
-    intnat avail_work = prefetch_pool(avail_pool, sz, 0);
+    (void) prefetch_pool(avail_pool, sz, 0);
 //    work -= avail_work;
 //    work -= (POOL_END(avail_pool) - POOL_FIRST_BLOCK(avail_pool, sz));
 //    if (work > 0) {
@@ -615,7 +615,7 @@ Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
 //      full_work = prefetch_pool(&full_pool, sz, 0);
 //      (void) prefetch_pool2(full_pool, sz, 0);
 //      work -= full_work;
-    }
+//    }
     /*
     if (work > 0) {
       if (avail_work == 0 && full_work == 0) {
