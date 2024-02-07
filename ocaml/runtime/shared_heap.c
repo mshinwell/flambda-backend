@@ -487,8 +487,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     int all_used = 1;
     struct heap_stats* s = &local->stats;
 
-//    trigger = end - (wh * 50);
-//    if (trigger < p) trigger = p;
+    trigger = end - (wh * 10);
+    if (trigger < p) trigger = p;
     trigger = p;
 
     header_t* likely_next_start =
