@@ -477,7 +477,11 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     header_t* end = POOL_END(a);
     mlsize_t wh = wsize_sizeclass[sz];
     int all_used = 1;
-    struct heap_stats* s = &local->stats;
+//    struct heap_stats* s = &local->stats;
+    intnat pool_live_blocks = local->stats.pool_live_blocks;
+    intnat pool_live_words = local->stats.pool_live_words;
+    intnat swept_words = local->owner->swept_words;
+    intnat pool_frag_words = local->stats.pool_frag_words;
 
     while (p + wh <= end) {
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
@@ -506,10 +510,10 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         a->next_obj = (value*)p;
         all_used = 0;
         /* update stats */
-        s->pool_live_blocks--;
-        s->pool_live_words -= Whsize_hd(hd);
-        local->owner->swept_words += Whsize_hd(hd);
-        s->pool_frag_words -= (wh - Whsize_hd(hd));
+        pool_live_blocks--;
+        pool_live_words -= Whsize_hd(hd);
+        swept_words += Whsize_hd(hd);
+        pool_frag_words -= (wh - Whsize_hd(hd));
       } else {
         /* still live, the pool can't be released to the global freelist */
         release_to_global_pool = 0;
@@ -517,6 +521,11 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       p += wh;
       work += wh;
     }
+
+    local->stats.pool_live_blocks = pool_live_blocks;
+    local->stats.pool_live_words = pool_live_words;
+    local->owner->swept_words = swept_words;
+    local->stats.pool_frag_words = pool_frag_words;
 
     if (release_to_global_pool) {
       pool_release(local, a, sz);
