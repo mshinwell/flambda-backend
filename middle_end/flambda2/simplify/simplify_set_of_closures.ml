@@ -230,7 +230,13 @@ let simplify_function_body context ~outer_dacc function_slot_opt
   with
   | body, uacc ->
     let is_identity_on =
-      detect_identity_on (UA.are_rebuilding_terms uacc) body ~my_closure ~params
+      let code_metadata = Code.code_metadata code in
+      if Code_metadata.is_tupled code_metadata
+      then None
+      else
+        detect_identity_on
+          (UA.are_rebuilding_terms uacc)
+          body ~my_closure ~params
     in
     let dacc_after_body = UA.creation_dacc uacc in
     let return_cont_uses =
