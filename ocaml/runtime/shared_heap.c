@@ -569,18 +569,19 @@ Caml_inline intnat prefetch_pool(pool* pool, sizeclass sz, int first_half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  // * 3 / 4 instead of / 2 is a fair bit worse for misses
-  intnat half_in_words = (intnat) ((end - start) / 2);
+//  intnat half_in_words = (intnat) ((end - start) / 2);
   intnat work = end - start;
 
-  if (first_half) end -= half_in_words;
-  else start += half_in_words;
+//  if (first_half) end -= half_in_words;
+//  else start += half_in_words;
+
+//  start += ((intnat) (end - start)) * 3
 
   header_t* p = start;
 
   while (p < end) {
     caml_prefetch(p);
-    p += 32 / sizeof(header_t);
+    p += 64 / sizeof(header_t);
   }
 
   return work;
@@ -594,8 +595,6 @@ Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  // Having: * 2 / 3 here is much worse for misses, when first_half = 1 for the
-  // full pools.
   intnat half_in_words = (intnat) ((end - start) / 2);
   intnat work = end - start;
 
@@ -606,7 +605,7 @@ Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
 
   while (p < end) {
     caml_prefetch(p);
-    p += 32 / sizeof(header_t);
+    p += 64 / sizeof(header_t);
   }
 
   return work;
