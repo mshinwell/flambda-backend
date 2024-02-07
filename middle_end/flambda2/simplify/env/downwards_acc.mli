@@ -91,6 +91,8 @@ val with_used_value_slots : t -> used_value_slots:Name_occurrences.t -> t
 
 val add_code_ids_to_remember : t -> Code_id.Set.t -> t
 
+val forget_code_ids_to_remember : t -> Code_id.Set.t -> t
+
 val code_ids_to_remember : t -> Code_id.Set.t
 
 val with_code_ids_to_remember : t -> code_ids_to_remember:Code_id.Set.t -> t

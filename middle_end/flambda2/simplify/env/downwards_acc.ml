@@ -184,6 +184,14 @@ let add_code_ids_to_remember t code_ids =
       code_ids_to_remember = Code_id.Set.union code_ids t.code_ids_to_remember
     }
 
+let forget_code_ids_to_remember t code_ids =
+  if DE.at_unit_toplevel t.denv
+  then t
+  else
+    { t with
+      code_ids_to_remember = Code_id.Set.diff code_ids t.code_ids_to_remember
+    }
+
 let code_ids_to_remember t = t.code_ids_to_remember
 
 let with_code_ids_to_remember t ~code_ids_to_remember =

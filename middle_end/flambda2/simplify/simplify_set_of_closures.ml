@@ -130,6 +130,15 @@ let extract_accumulators_from_function outer_dacc ~dacc_after_body
   in
   outer_dacc, lifted_consts_this_function
 
+[@@@ocaml.warning "-37"]
+
+type is_identity_on =
+  | Symbol of Symbol.t
+  | Value_slot of Value_slot.t
+(* CR mshinwell: For the [Symbol] case it seems like we might have to make a new
+   lifted constant for the closure of a function being applied directly with an
+   erased callee *)
+
 type simplify_function_body_result =
   { params : Bound_parameters.t;
     params_and_body : Rebuilt_expr.Function_params_and_body.t;
@@ -139,8 +148,52 @@ type simplify_function_body_result =
     return_cont_uses : Continuation_uses.t option;
     is_my_closure_used : bool;
     recursive : Recursive.t;
-    uacc_after_upwards_traversal : UA.t
+    uacc_after_upwards_traversal : UA.t;
+    is_identity_on : is_identity_on option
   }
+
+let detect_identity_on are_rebuilding body ~params ~my_closure =
+  let params_match_args apply_expr =
+    let params = List.map BP.simple (Bound_parameters.to_list params) in
+    let args = Apply.args apply_expr in
+    Simple.List.equal params args
+  in
+  if Are_rebuilding_terms.do_not_rebuild_terms are_rebuilding
+  then None
+  else
+    match Expr.descr (RE.to_expr body are_rebuilding) with
+    | Let_cont _ | Apply_cont _ | Switch _ | Invalid _ -> None
+    | Apply _apply_expr -> (* CR mshinwell: see above *) None
+    | Let let_expr -> (
+      let value_slot =
+        match[@ocaml.warning "-fragile-match"] Let.defining_expr let_expr with
+        | Prim
+            ( Unary
+                (Project_value_slot { project_from = _; value_slot }, closure),
+              _dbg )
+          when Simple.equal closure (Simple.var my_closure) ->
+          Some value_slot
+        | _ -> None
+      in
+      match value_slot with
+      | None -> None
+      | Some value_slot ->
+        Let.pattern_match let_expr ~f:(fun bound_pat ~body ->
+            match Bound_pattern.must_be_singleton_opt bound_pat with
+            | None -> None
+            | Some bound_var -> (
+              let bound_simple = Simple.var (BV.var bound_var) in
+              match Expr.descr body with
+              | Let _ | Let_cont _ | Apply_cont _ | Switch _ | Invalid _ -> None
+              | Apply apply_expr -> (
+                let callee = Apply.callee apply_expr in
+                match callee with
+                | None -> None
+                | Some callee ->
+                  if (not (Simple.equal callee bound_simple))
+                     || not (params_match_args apply_expr)
+                  then None
+                  else Some (Value_slot value_slot)))))
 
 let simplify_function_body context ~outer_dacc function_slot_opt
     ~closure_bound_names_inside_function ~inlining_arguments ~absolute_history
@@ -176,6 +229,9 @@ let simplify_function_body context ~outer_dacc function_slot_opt
       ~loopify_state ~params
   with
   | body, uacc ->
+    let is_identity_on =
+      detect_identity_on (UA.are_rebuilding_terms uacc) body ~my_closure ~params
+    in
     let dacc_after_body = UA.creation_dacc uacc in
     let return_cont_uses =
       CUE.get_continuation_uses
@@ -235,7 +291,8 @@ let simplify_function_body context ~outer_dacc function_slot_opt
       return_cont_uses;
       is_my_closure_used;
       recursive;
-      uacc_after_upwards_traversal = uacc
+      uacc_after_upwards_traversal = uacc;
+      is_identity_on
     }
   | exception Misc.Fatal_error ->
     let bt = Printexc.get_raw_backtrace () in
@@ -310,7 +367,8 @@ type simplify_function_result =
   { code_id : Code_id.t;
     code : (rebuilt_code * Rebuilt_static_const.t) option;
     outer_dacc : DA.t;
-    should_resimplify : bool
+    should_resimplify : bool;
+    is_identity_on : is_identity_on option
   }
 
 let simplify_function0 context ~outer_dacc function_slot_opt code_id code
@@ -357,7 +415,8 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
         return_cont_uses;
         is_my_closure_used;
         recursive;
-        uacc_after_upwards_traversal
+        uacc_after_upwards_traversal;
+        is_identity_on
       } =
     Function_params_and_body.pattern_match
       (Code.params_and_body code)
@@ -456,7 +515,12 @@ let simplify_function0 context ~outer_dacc function_slot_opt code_id code
       assert (Are_rebuilding_terms.are_rebuilding are_rebuilding);
       Rebuilding new_code
   in
-  { code_id; code = Some (code, code_const); outer_dacc; should_resimplify }
+  { code_id;
+    code = Some (code, code_const);
+    outer_dacc;
+    should_resimplify;
+    is_identity_on
+  }
 
 let introduce_code dacc code_id code_const =
   let code = LC.create_code code_id code_const in
@@ -468,20 +532,25 @@ let simplify_function context ~outer_dacc function_slot code_id
   let code_or_metadata =
     DE.find_code_exn (DA.denv (C.dacc_prior_to_sets context)) code_id
   in
-  let code_id, outer_dacc =
+  let code_id, outer_dacc, is_identity_on =
     match Code_or_metadata.view code_or_metadata with
     | Code_present code when not (Code.stub code) ->
       let rec run ~outer_dacc ~code count =
-        let { code_id; code = new_code; outer_dacc; should_resimplify } =
+        let { code_id;
+              code = new_code;
+              outer_dacc;
+              should_resimplify;
+              is_identity_on
+            } =
           simplify_function0 context ~outer_dacc (Some function_slot) code_id
             code ~closure_bound_names_inside_function
         in
         match new_code with
-        | None -> code_id, outer_dacc
+        | None -> code_id, outer_dacc, is_identity_on
         | Some (Not_rebuilding, new_code_const) ->
           (* Not rebuilding: there is no code to resimplify *)
           let outer_dacc = introduce_code outer_dacc code_id new_code_const in
-          code_id, outer_dacc
+          code_id, outer_dacc, None
         | Some (Rebuilding new_code, new_code_const) ->
           let max_function_simplify_run =
             Flambda_features.Expert.max_function_simplify_run ()
@@ -495,13 +564,13 @@ let simplify_function context ~outer_dacc function_slot code_id
           then run ~outer_dacc ~code:new_code (count + 1)
           else
             let outer_dacc = introduce_code outer_dacc code_id new_code_const in
-            code_id, outer_dacc
+            code_id, outer_dacc, is_identity_on
       in
       run ~outer_dacc ~code 0
     | Code_present _ | Metadata_only _ ->
       (* No new code ID is created in this case: there is no function body to be
          simplified and all other code metadata will remain the same. *)
-      code_id, outer_dacc
+      code_id, outer_dacc, None
   in
   let code_ids_to_never_delete_this_set =
     let code_metadata = Code_or_metadata.code_metadata code_or_metadata in
@@ -514,11 +583,12 @@ let simplify_function context ~outer_dacc function_slot code_id
     in
     if never_delete then Code_id.Set.singleton code_id else Code_id.Set.empty
   in
-  code_id, outer_dacc, code_ids_to_never_delete_this_set
+  code_id, outer_dacc, code_ids_to_never_delete_this_set, is_identity_on
 
 type simplify_set_of_closures0_result =
   { set_of_closures : Flambda.Set_of_closures.t;
-    dacc : Downwards_acc.t
+    dacc : Downwards_acc.t;
+    is_identity_on : Simple.t option Name.Map.t
   }
 
 let simplify_set_of_closures0 outer_dacc context set_of_closures
@@ -533,12 +603,20 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
   then
     Misc.fatal_errorf "Did not expect lifted constants in [dacc]:@ %a" DA.print
       dacc;
-  let ( (code_ids_to_never_delete_this_set, fun_types, outer_dacc),
+  let ( ( code_ids_to_never_delete_this_set,
+          fun_types,
+          outer_dacc,
+          is_identity_on ),
         all_function_decls_in_set ) =
     Function_slot.Lmap.fold_left_map
-      (fun (result_code_ids_to_never_delete_this_set, fun_types, outer_dacc)
-           function_slot old_code_id ->
-        let code_id, outer_dacc, code_ids_to_never_delete_this_set =
+      (fun ( result_code_ids_to_never_delete_this_set,
+             fun_types,
+             outer_dacc,
+             is_identity_on' ) function_slot old_code_id ->
+        let ( code_id,
+              outer_dacc,
+              code_ids_to_never_delete_this_set,
+              is_identity_on ) =
           simplify_function context ~outer_dacc function_slot old_code_id
             ~closure_bound_names_inside_function:closure_bound_names_inside
         in
@@ -557,8 +635,27 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
           Code_id.Set.union code_ids_to_never_delete_this_set
             result_code_ids_to_never_delete_this_set
         in
-        (code_ids_to_never_delete_this_set, fun_types, outer_dacc), code_id)
-      (Code_id.Set.empty, Function_slot.Map.empty, outer_dacc)
+        let is_identity_on' =
+          let bound_name =
+            Function_slot.Map.find function_slot closure_bound_names
+            |> Bound_name.name
+          in
+          let is_identity_on =
+            match is_identity_on with
+            | None -> None
+            | Some (Symbol sym) -> Some (Simple.symbol sym)
+            | Some (Value_slot slot) ->
+              let simple = Value_slot.Map.find slot value_slots in
+              Some simple
+          in
+          Name.Map.add bound_name is_identity_on is_identity_on'
+        in
+        ( ( code_ids_to_never_delete_this_set,
+            fun_types,
+            outer_dacc,
+            is_identity_on' ),
+          code_id ))
+      (Code_id.Set.empty, Function_slot.Map.empty, outer_dacc, Name.Map.empty)
       all_function_decls_in_set
   in
   let code_ids_to_remember_this_set =
@@ -613,7 +710,7 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
     |> Set_of_closures.create ~value_slots
          (Set_of_closures.alloc_mode set_of_closures)
   in
-  { set_of_closures; dacc }
+  { set_of_closures; dacc; is_identity_on }
 
 let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
     ~closure_bound_vars set_of_closures ~value_slots ~symbol_projections
@@ -668,7 +765,8 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
   let closure_bound_names_inside =
     C.closure_bound_names_inside_functions_exactly_one_set context
   in
-  let { set_of_closures; dacc } =
+  let { set_of_closures; dacc; is_identity_on = _ } =
+    (* CR mshinwell: use [is_identity_on] *)
     simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
       ~closure_bound_names_inside ~value_slots ~value_slot_types
   in
@@ -733,7 +831,7 @@ let simplify_non_lifted_set_of_closures0 dacc bound_vars ~closure_bound_vars
   let closure_bound_names_inside =
     C.closure_bound_names_inside_functions_exactly_one_set context
   in
-  let { set_of_closures; dacc } =
+  let { set_of_closures; dacc; is_identity_on } =
     simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
       ~closure_bound_names_inside ~value_slots ~value_slot_types
   in
@@ -754,12 +852,74 @@ let simplify_non_lifted_set_of_closures0 dacc bound_vars ~closure_bound_vars
       (Named.create_set_of_closures set_of_closures)
       ~free_names:(Named.free_names named)
   in
-  Simplify_named_result.create dacc
-    [ { Expr_builder.let_bound = bound_vars;
-        simplified_defining_expr = defining_expr;
-        original_defining_expr =
-          Some (Named.create_set_of_closures set_of_closures)
-      } ]
+  let is_identity_on =
+    Name.Map.fold
+      (fun name simple_opt is_identity_on ->
+        match is_identity_on with
+        | None -> None
+        | Some is_identity_on -> (
+          match simple_opt with
+          | None -> None
+          | Some simple ->
+            (* CR mshinwell: for the moment restrict to variables on the LHS *)
+            if Name.is_symbol name
+            then None
+            else Some (Name.Map.add name simple is_identity_on)))
+      is_identity_on (Some Name.Map.empty)
+  in
+  match is_identity_on with
+  | None ->
+    Simplify_named_result.create dacc
+      [ { Expr_builder.let_bound = bound_vars;
+          simplified_defining_expr = defining_expr;
+          original_defining_expr =
+            Some (Named.create_set_of_closures set_of_closures)
+        } ]
+  | Some is_identity_on ->
+    let dacc =
+      (* CR mshinwell: should note that code has been removed for benefit *)
+      C.dacc_prior_to_sets context
+      (* let code_ids = Set_of_closures.function_decls set_of_closures |>
+         Function_declarations.funs |> Function_slot.Map.data |>
+         Code_id.Set.of_list in DA.forget_code_ids_to_remember dacc code_ids *)
+    in
+    let dacc, bindings =
+      Name.Map.fold
+        (fun name simple (dacc, bindings) ->
+          let var =
+            match Name.must_be_var_opt name with
+            | Some var -> var
+            | None -> assert false (* see above *)
+          in
+          let bound_var = Bound_var.create var NM.normal in
+          let dacc =
+            DA.add_variable dacc bound_var (T.alias_type_of K.value simple)
+          in
+          let bindings =
+            { Expr_builder.let_bound = Bound_pattern.singleton bound_var;
+              simplified_defining_expr =
+                Simplified_named.create (Named.create_simple simple);
+              original_defining_expr = None
+            }
+            :: bindings
+          in
+          dacc, bindings)
+        is_identity_on (dacc, [])
+    in
+    Simplify_named_result.create dacc bindings
+
+(* let identity_binding = match is_identity_on with | None -> [] | Some
+   is_identity_on -> Name.Map.fold (fun name simple identity_binding -> let var
+   = match Name.must_be_var_opt name with | Some var -> var | None -> assert
+   false (* see above *) in { Expr_builder.let_bound = Bound_pattern.singleton
+   (Bound_var.create var NM.normal); simplified_defining_expr =
+   Simplified_named.create (Named.create_simple simple); original_defining_expr
+   = None } :: identity_binding) is_identity_on [] in let bound_vars = match
+   identity_binding with | [] -> bound_vars | _ :: _ -> Bound_pattern.rename
+   bound_vars in Simplify_named_result.create dacc ([ { Expr_builder.let_bound =
+   bound_vars; simplified_defining_expr = defining_expr; original_defining_expr
+   = Some (Named.create_set_of_closures set_of_closures) } ] @
+   identity_binding) *)
 
 type lifting_decision_result =
   { can_lift : bool;
@@ -896,7 +1056,7 @@ let simplify_lifted_set_of_closures0 dacc context ~closure_symbols
     Function_slot.Lmap.map Bound_name.create_symbol closure_symbols
     |> Function_slot.Lmap.bindings |> Function_slot.Map.of_list
   in
-  let { set_of_closures; dacc } =
+  let { set_of_closures; dacc; is_identity_on = _ } =
     simplify_set_of_closures0 dacc context set_of_closures ~closure_bound_names
       ~closure_bound_names_inside ~value_slots ~value_slot_types
   in
@@ -973,7 +1133,12 @@ let simplify_stub_function dacc code ~all_code ~simplify_function_body =
     (* Unused, the type of the value slot is going to be unknown *)
     Function_slot.Map.empty
   in
-  let { code_id = _; code; outer_dacc; should_resimplify = _ } =
+  let { code_id = _;
+        code;
+        outer_dacc;
+        should_resimplify = _;
+        is_identity_on = _
+      } =
     simplify_function0 context ~outer_dacc:dacc None (Code.code_id code) code
       ~closure_bound_names_inside_function
   in
