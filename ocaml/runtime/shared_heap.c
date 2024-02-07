@@ -482,10 +482,13 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
   {
     header_t* p = POOL_FIRST_BLOCK(a, sz);
     header_t* end = POOL_END(a);
-    header_t* halfway = p + ((end - p) / 2);
+    header_t* trigger;
     mlsize_t wh = wsize_sizeclass[sz];
     int all_used = 1;
     struct heap_stats* s = &local->stats;
+
+    trigger = end - (wh * 50);
+    if (trigger < p) trigger = p;
 
     header_t* likely_next_start =
       likely_next_pool != NULL ? POOL_FIRST_BLOCK(likely_next_pool, sz) : NULL;
@@ -496,7 +499,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       likely_next_start + ((likely_next_end - likely_next_start) / 2);
 
     while (p + wh <= end) {
-      if (likely_next_prefetch != NULL && p >= halfway) {
+      if (likely_next_prefetch != NULL && p >= trigger) {
         if (likely_next_prefetch < likely_next_stop) {
           caml_prefetch(likely_next_prefetch);
         }
