@@ -569,11 +569,13 @@ Caml_inline intnat prefetch_pool(pool* pool, sizeclass sz, int first_half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  intnat half_in_words = (intnat) ((end - start) / 2);
+//  intnat half_in_words = (intnat) ((end - start) / 2);
   intnat work = end - start;
 
+/*
   if (first_half) end -= half_in_words;
   else start += half_in_words;
+  */
 
   header_t* p = start;
 
@@ -593,11 +595,12 @@ Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
 
   header_t* start = POOL_FIRST_BLOCK(pool, sz);
   header_t* end = POOL_END(pool);
-  intnat half_in_words = (intnat) ((end - start) / 2);
+//   intnat half_in_words = (intnat) ((end - start) / 2);
   intnat work = end - start;
-
+/*
   if (first_half) end -= half_in_words;
   else start += half_in_words;
+  */
 
   header_t* p = start;
 
