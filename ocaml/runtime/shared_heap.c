@@ -609,6 +609,30 @@ Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
   return work;
 }
 
+Caml_inline intnat prefetch_pool3(pool* pool, sizeclass sz, int first_half)
+{
+  if (pool == NULL) {
+    return 0;
+  }
+
+  header_t* start = POOL_FIRST_BLOCK(pool, sz);
+  header_t* end = POOL_END(pool);
+  intnat half_in_words = (intnat) ((end - start) / 2);
+  intnat work = end - start;
+
+  if (first_half) end -= half_in_words;
+  else start += half_in_words;
+
+  header_t* p = start;
+
+  while (p < end) {
+    caml_prefetch(p);
+    p += 64 / sizeof(header_t);
+  }
+
+  return work;
+}
+
 Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
   sizeclass sz)
 {
@@ -621,8 +645,13 @@ Caml_inline void prefetch_pools(struct caml_heap_state* local, intnat work,
       pool* full_pool = local->unswept_full_pools[sz];
 //      intnat full_work = 0;
 //      full_work = prefetch_pool(&full_pool, sz, 0);
-      (void) prefetch_pool2(full_pool, sz, 1);
+      intnat full_work = prefetch_pool2(full_pool, sz, 1);
 //      work -= full_work;
+      if (avail_work + full_work == 0) {
+        sz++;
+      }
+      avail_pool = avail_pool->next;
+      (void) prefetch_pool3(avail_pool, sz, 1);
     }
     /*
     if (work > 0) {
