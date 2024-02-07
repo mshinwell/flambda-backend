@@ -580,7 +580,7 @@ Caml_inline intnat prefetch_pool(pool* pool, sizeclass sz, int first_half)
 
   while (p < end) {
     caml_prefetch(p);
-    p += 128 / sizeof(header_t);
+    p += 32 / sizeof(header_t);
   }
 
   return work;
@@ -606,7 +606,7 @@ Caml_inline intnat prefetch_pool2(pool* pool, sizeclass sz, int first_half)
 
   while (p < end) {
     caml_prefetch(p);
-    p += 128 / sizeof(header_t);
+    p += 32 / sizeof(header_t);
   }
 
   return work;
