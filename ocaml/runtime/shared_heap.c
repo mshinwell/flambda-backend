@@ -488,7 +488,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     int all_used = 1;
     struct heap_stats* s = &local->stats;
 
-    trigger = end - (wh * 100);
+    trigger = end - ((end - p) / 3);
     if (trigger < p) trigger = p;
 //    trigger = p;
 
@@ -505,8 +505,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       if (likely_next_prefetch != NULL && p >= trigger) {
         if (likely_next_prefetch < likely_next_stop) {
           caml_prefetch(likely_next_prefetch);
+          likely_next_prefetch += 64 / sizeof(header_t);
         }
-        likely_next_prefetch += 64 / sizeof(header_t);
       }
 
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
@@ -553,6 +553,11 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       pool** list = all_used ? &local->full_pools[sz] : &local->avail_pools[sz];
       a->next = *list;
       *list = a;
+    }
+
+    while (likely_next_prefetch < likely_next_stop) {
+      caml_prefetch(likely_next_prefetch);
+      likely_next_prefetch += 64 / sizeof(header_t);
     }
   }
 
