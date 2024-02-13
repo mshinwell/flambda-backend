@@ -73,6 +73,7 @@ static void init_startup_params(void)
   params.print_magic = 0;
   params.print_config = 0;
   params.event_trace = 0;
+  params.late_marking = 0;
 }
 
 static void scanmult (char_os *opt, uintnat *var)
@@ -115,6 +116,7 @@ void caml_parse_ocamlrunparam(void)
       case 'v': scanmult (opt, (uintnat *)&caml_verb_gc); break;
       case 'V': scanmult (opt, &params.verify_heap); break;
       case 'W': scanmult (opt, &caml_runtime_warnings); break;
+      case 'K': scanmult (opt, &params.late_marking); break;
       case 'X': scanmult (opt, &caml_skip_arch_extension_check); break;
       case ',': continue;
       }
