@@ -1864,9 +1864,9 @@ let fundecl fundecl =
   let handle_overflow_and_max_frame_size =
     (* CR mshinwell: this should be conditionalized on a specific
        "stack checks enabled" config option, so we can backport to 4.x *)
-    if (not Config.runtime5) || !Clflags.no_stack_checks then None
+    if (not Config.runtime5) (* || !Clflags.no_stack_checks *) then None
     else (
-      if !Clflags.runtime_variant = "d" then
+      if !Clflags.runtime_variant = "d" && not !Clflags.no_stack_checks then
         emit_call (Cmm.global_symbol "caml_assert_stack_invariants");
       let { max_frame_size; contains_nontail_calls} =
         preproc_stack_check
@@ -1876,9 +1876,15 @@ let fundecl fundecl =
         if contains_nontail_calls || max_frame_size >= stack_threshold_size then begin
           let overflow = new_label () and ret = new_label () in
           let threshold_offset = Domainstate.stack_ctx_words * 8 + stack_threshold_size in
-          I.lea (mem64 NONE (-(max_frame_size + threshold_offset)) RSP) r10;
-          I.cmp (domain_field Domainstate.Domain_current_stack) r10;
-          I.jb (label overflow);
+          if !Clflags.no_stack_checks then (
+            I.nops 8;
+            I.nops 4;
+            I.nops 6
+          ) else (
+            I.lea (mem64 NONE (-(max_frame_size + threshold_offset)) RSP) r10;
+            I.cmp (domain_field Domainstate.Domain_current_stack) r10;
+            I.jb32 (label overflow)
+          );
           def_label ret;
           Some (overflow, ret)
         end else None

@@ -120,6 +120,7 @@ let i1_call_jmp b s = function
   | x -> i1 b s x
 
 let print_instr b = function
+  | JB32 _ | NOPS _ -> assert false
   | ADD (arg1, arg2) -> i2 b "add" arg1 arg2
   | ADDSD (arg1, arg2) -> i2 b "addsd" arg1 arg2
   | AND (arg1, arg2) -> i2 b "and" arg1 arg2

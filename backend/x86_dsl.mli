@@ -145,6 +145,7 @@ module I : sig
   val ja: arg -> unit
   val jae: arg -> unit
   val jb: arg -> unit
+  val jb32: arg -> unit
   val jbe: arg -> unit
   val je: arg -> unit
   val jg: arg -> unit
@@ -169,6 +170,7 @@ module I : sig
   val mulsd: arg -> arg -> unit
   val neg : arg -> unit
   val nop: unit -> unit
+  val nops : int -> unit
   val or_: arg -> arg -> unit
   val pause: unit -> unit
   val pop: arg -> unit

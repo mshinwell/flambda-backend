@@ -151,6 +151,13 @@ let print_instr b = function
   | MUL arg -> i1_s b "mul" arg
   | INC arg -> i1_s b "inc" arg
   | J (c, arg) -> i1_call_jmp b ("j" ^ string_of_condition c) arg
+  | JB32 a ->
+    bprintf b "\t.byte 0x0f\n";
+    bprintf b "\t.byte 0x82\n";
+    let sym =
+      match a with Sym s -> s | _ -> assert false
+    in
+    bprintf b "\t.long (%s - . - 4)\n" sym
   | JMP arg -> i1_call_jmp b "jmp" arg
   | LEA (arg1, arg2) -> i2_s b "lea" arg1 arg2
   | LOCK_CMPXCHG (arg1, arg2) -> i2_sx b "lock cmpxchg" arg1 arg2
@@ -177,6 +184,7 @@ let print_instr b = function
   | MULSD (arg1, arg2) -> i2 b "mulsd" arg1 arg2
   | NEG arg -> i1 b "neg" arg
   | NOP -> i0 b "nop"
+  | NOPS n -> i0 b (Printf.sprintf ".nops %d" n)
   | OR (arg1, arg2) -> i2_s b "or" arg1 arg2
   | PAUSE -> i0 b "pause"
   | POP  arg -> i1_s b "pop" arg

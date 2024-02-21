@@ -136,6 +136,7 @@ type instruction =
   | MUL of arg
   | INC of arg
   | J of condition * arg
+  | JB32 of arg
   | JMP of arg
   | LEA of arg * arg
   | LOCK_CMPXCHG of arg * arg
@@ -157,6 +158,7 @@ type instruction =
   | MULSD of arg * arg
   | NEG of arg
   | NOP
+  | NOPS of int
   | OR of arg * arg
   | PAUSE
   | POP of arg
