@@ -3,7 +3,7 @@ File "test.ml", lines 60-63, characters 20-16:
 61 |     match t with
 62 |     | A i -> B i
 63 |     | B i -> A i
-Warning 210 [unboxing-impossible]: This [@unboxed] attribute cannot be used.
+Warning 210 [unboxing-impossible]: This [@unboxable] attribute cannot be used.
 The type of this value does not allow unboxing.
 
 File "test.ml", lines 60-63, characters 20-16:
@@ -11,5 +11,5 @@ File "test.ml", lines 60-63, characters 20-16:
 61 |     match t with
 62 |     | A i -> B i
 63 |     | B i -> A i
-Warning 210 [unboxing-impossible]: This [@unboxed] attribute cannot be used.
+Warning 210 [unboxing-impossible]: This [@unboxable] attribute cannot be used.
 The type of this value does not allow unboxing.
