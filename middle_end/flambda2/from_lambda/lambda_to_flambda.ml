@@ -1576,7 +1576,19 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
           Flambda_kind.With_subkind.any_value
       in
       let unboxed_return =
-        if true (* attr.unbox_return *) then unboxing_kind return else None
+        if true (* attr.unbox_return *)
+        then
+          match unboxing_kind return with
+          | None -> None
+          | Some unboxing_kind ->
+            let num_return_values =
+              Function_decl.num_params_for_unboxing_kind unboxing_kind
+            in
+            (* XXX if this does need to be limited to the number of physical
+               regs, we'll need to pass this in from Proc via flambda2.ml. For
+               the moment just use 5 for testing *)
+            if num_return_values > 5 then None else Some unboxing_kind
+        else None
       in
       let unboxed_param (param : Lambda.lparam) =
         if true (* param.attributes.unbox_param *)
@@ -1594,8 +1606,24 @@ and cps_function env ~fid ~(recursive : Recursive.t) ?precomputed_free_idents
                  Misc.fatal_error "Trying to unbox an unboxed product.")
              params unarized_per_param)
       in
-      Unboxed_calling_convention
-        (unboxed_params, unboxed_return, unboxed_function_slot)
+      let non_unboxed_params_length =
+        List.length (List.concat unarized_per_param)
+      in
+      let unboxed_params_length =
+        List.fold_left
+          (fun length unboxed_param ->
+            match unboxed_param with
+            | None -> length
+            | Some unboxing_kind ->
+              length + Function_decl.num_params_for_unboxing_kind unboxing_kind)
+          0 unboxed_params
+      in
+      (* XXX just use 100 instead of 127 for testing, to be conservative *)
+      if non_unboxed_params_length + unboxed_params_length > 100
+      then Normal_calling_convention
+      else
+        Unboxed_calling_convention
+          (unboxed_params, unboxed_return, unboxed_function_slot)
   in
   let body_cont =
     match calling_convention with
