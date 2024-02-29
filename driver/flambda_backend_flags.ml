@@ -404,4 +404,4 @@ let cached_generic_functions_path =
   ref (Filename.concat Config.standard_library ("cached-generic-functions" ^ Config.ext_lib))
 
 let () =
-  if Clflags.is_flambda2 () then set_o2 ()
+  if Clflags.is_flambda2 () then set_o3 ()
