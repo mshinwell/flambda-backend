@@ -1,4 +1,7 @@
-(* TEST_BELOW *)
+(* TEST
+   * flambda2
+   ** native
+*)
 
 (* About testing for allocations.
 
@@ -48,7 +51,7 @@ module Nativeints = struct
   let g t y = let x = Nativeint.add t Nativeint.one in f x y = Nativeint.zero [@@inline never]
 end
 
-(* Check unboability of tuples *)
+(* Check unboxability of tuples *)
 module Tuples = struct
   let[@unboxable] f ((x, y)[@unboxable]) = (y, x) [@@inline never]
   let g (a : int) (b : int) = let x, y = f (a, b) in x = b && y = a [@@inline never]
@@ -63,7 +66,7 @@ module Variants = struct
     | B i -> A i
   [@@inline never]
 
-  let g i j =
+  let _g i j =
     (match f (A i) with
     | B i' -> i = i'
     | A _ -> false) &&
@@ -80,10 +83,6 @@ let () =
   test_allocs "int64s" Int64s.g 0L (- 1L);
   test_allocs "nativeints" Nativeints.g 0n (- 1n);
   test_allocs "tuples" Tuples.g 13 42;
-  test_allocs "variants" Variants.g 13 42;
+  (* CR mshinwell: enable once variant support added *)
+  (* test_allocs "variants" Variants.g 13 42; *)
   ()
-
-(* TEST
-   * flambda2
-   ** native
-*)
