@@ -125,12 +125,12 @@ let any_block =
   TG.create_variant ~is_unique:false
     ~immediates:(Known TG.bottom_naked_immediate) ~blocks:Unknown
 
-let blocks_with_these_tags tags alloc_mode : _ Or_unknown.t =
+let blocks_with_these_tags shape tags alloc_mode : _ Or_unknown.t =
   if not (Tag.Set.for_all Tag.is_structured_block tags)
   then Unknown
   else
     let blocks =
-      TG.Row_like_for_blocks.create_blocks_with_these_tags tags alloc_mode
+      TG.Row_like_for_blocks.create_blocks_with_these_tags shape tags alloc_mode
     in
     Known
       (TG.create_variant ~is_unique:false

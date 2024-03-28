@@ -134,7 +134,10 @@ and function_slot_indexed_product = private
 and value_slot_indexed_product = private
   { value_slot_components_by_index : t Value_slot.Map.t }
 
-and int_indexed_product = private { fields : t array }
+and int_indexed_product = private
+  { fields : t array;
+    shape : Block_shape.t
+  }
 
 and function_type = private
   { code_id : Code_id.t;
@@ -333,11 +336,13 @@ module Product : sig
   module Int_indexed : sig
     type t = int_indexed_product
 
-    val create_top : unit -> t
+    val create_top : Block_shape.t -> t
 
-    val create_from_list : flambda_type list -> t
+    val create_from_list : Block_shape.t -> flambda_type list -> t
 
-    val create_from_array : flambda_type array -> t
+    val create_from_array : Block_shape.t -> flambda_type array -> t
+
+    val block_shape : t -> Block_shape.t
 
     val width : t -> Targetint_31_63.t
 
@@ -404,7 +409,8 @@ module Row_like_for_blocks : sig
     Alloc_mode.For_types.t ->
     t
 
-  val create_blocks_with_these_tags : Tag.Set.t -> Alloc_mode.For_types.t -> t
+  val create_blocks_with_these_tags :
+    Block_shape.t -> Tag.Set.t -> Alloc_mode.For_types.t -> t
 
   val create_exactly_multiple :
     field_tys_by_tag:flambda_type list Tag.Map.t -> Alloc_mode.For_types.t -> t

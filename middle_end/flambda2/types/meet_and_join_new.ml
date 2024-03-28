@@ -1189,7 +1189,7 @@ and meet_product_value_slot_indexed env
     (Value_slot_map_meet.meet ~meet_data:meet env components_by_index1
        components_by_index2)
 
-and meet_int_indexed_product env (prod1 : TG.Product.Int_indexed.t)
+and meet_int_indexed_product env shape (prod1 : TG.Product.Int_indexed.t)
     (prod2 : TG.Product.Int_indexed.t) : _ meet_result =
   if not (K.equal prod1.kind prod2.kind)
   then Bottom
@@ -1197,8 +1197,7 @@ and meet_int_indexed_product env (prod1 : TG.Product.Int_indexed.t)
     let fields1 = prod1.fields in
     let fields2 = prod2.fields in
     let length = max (Array.length fields1) (Array.length fields2) in
-    map_result
-      ~f:(TG.Product.Int_indexed.create_from_array prod1.kind)
+    map_result ~f:TG.Product.Int_indexed.create_from_array
       (meet_array_of_types env fields1 fields2 ~length)
 
 and meet_array_of_types env fields1 fields2 ~length =
@@ -1813,10 +1812,10 @@ and join_value_slot_indexed_product env
   in
   TG.Product.Value_slot_indexed.create value_slot_components_by_index
 
-and join_int_indexed_product env
-    ({ fields = fields1; kind = kind1 } : TG.Product.Int_indexed.t)
-    ({ fields = fields2; kind = kind2 } : TG.Product.Int_indexed.t) :
-    TG.Product.Int_indexed.t =
+and join_int_indexed_product env shape
+    ({ fields = fields1 } : TG.Product.Int_indexed.t)
+    ({ fields = fields2 } : TG.Product.Int_indexed.t) : TG.Product.Int_indexed.t
+    =
   if not (K.equal kind1 kind2)
   then
     Misc.fatal_errorf

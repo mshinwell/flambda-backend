@@ -342,7 +342,10 @@ and function_slot_indexed_product =
 and value_slot_indexed_product =
   { value_slot_components_by_index : t Value_slot.Map.t }
 
-and int_indexed_product = { fields : t array }
+and int_indexed_product =
+  { fields : t array;
+    shape : Block_shape.t
+  }
 
 and function_type =
   { code_id : Code_id.t;
@@ -549,7 +552,7 @@ and free_names_value_slot_indexed_product ~follow_value_slots
         value_slot)
     value_slot_components_by_index Name_occurrences.empty
 
-and free_names_int_indexed_product ~follow_value_slots { fields } =
+and free_names_int_indexed_product ~follow_value_slots { fields; shape = _ } =
   Array.fold_left
     (fun free_names_acc t ->
       Name_occurrences.union (free_names0 ~follow_value_slots t) free_names_acc)
@@ -849,12 +852,12 @@ and apply_renaming_value_slot_indexed_product { value_slot_components_by_index }
   in
   { value_slot_components_by_index }
 
-and apply_renaming_int_indexed_product { fields } renaming =
+and apply_renaming_int_indexed_product { fields; shape } renaming =
   let fields = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
     fields.(i) <- apply_renaming fields.(i) renaming
   done;
-  { fields }
+  { fields; shape }
 
 and apply_renaming_function_type ({ code_id; rec_info } as function_type)
     renaming =
@@ -1080,8 +1083,8 @@ and print_value_slot_indexed_product ppf { value_slot_components_by_index } =
     (Value_slot.Map.print print)
     value_slot_components_by_index
 
-and print_int_indexed_product ppf { fields } =
-  Format.fprintf ppf "@[<hov 1>(%a)@]"
+and print_int_indexed_product ppf { fields; shape } =
+  Format.fprintf ppf "@[<hov 1>((shape %a)@ %a)@]" Block_shape.print shape
     (Format.pp_print_list ~pp_sep:Format.pp_print_space print)
     (Array.to_list fields)
 
@@ -1255,7 +1258,7 @@ and ids_for_export_value_slot_indexed_product { value_slot_components_by_index }
     (fun _ t ids -> Ids_for_export.union ids (ids_for_export t))
     value_slot_components_by_index Ids_for_export.empty
 
-and ids_for_export_int_indexed_product { fields } =
+and ids_for_export_int_indexed_product { fields; shape = _ } =
   Array.fold_left
     (fun ids field -> Ids_for_export.union ids (ids_for_export field))
     Ids_for_export.empty fields
@@ -1977,14 +1980,14 @@ and remove_unused_value_slots_and_shortcut_aliases_value_slot_indexed_product
   { value_slot_components_by_index }
 
 and remove_unused_value_slots_and_shortcut_aliases_int_indexed_product
-    { fields } ~used_value_slots ~canonicalise =
+    { fields; shape } ~used_value_slots ~canonicalise =
   let fields = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
     fields.(i)
       <- remove_unused_value_slots_and_shortcut_aliases fields.(i)
            ~used_value_slots ~canonicalise
   done;
-  { fields }
+  { fields; shape }
 
 and remove_unused_value_slots_and_shortcut_aliases_function_type
     ({ code_id; rec_info } as function_type) ~used_value_slots ~canonicalise =
@@ -2387,7 +2390,8 @@ and project_value_slot_indexed_product ~to_project ~expand
   then product
   else { value_slot_components_by_index = value_slot_components_by_index' }
 
-and project_int_indexed_product ~to_project ~expand ({ fields } as product) =
+and project_int_indexed_product ~to_project ~expand
+    ({ fields; shape } as product) =
   let changed = ref false in
   let fields' = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
@@ -2398,7 +2402,7 @@ and project_int_indexed_product ~to_project ~expand ({ fields } as product) =
       changed := true;
       fields'.(i) <- field')
   done;
-  if !changed then { fields = fields' } else product
+  if !changed then { fields = fields'; shape } else product
 
 and project_function_type ~to_project ~expand
     ({ code_id; rec_info } as function_type) =
@@ -2526,11 +2530,13 @@ module Product = struct
   module Int_indexed = struct
     type t = int_indexed_product
 
-    let create_from_list tys = { fields = Array.of_list tys }
+    let block_shape t = t.shape
 
-    let create_from_array fields = { fields }
+    let create_from_list shape tys = { shape; fields = Array.of_list tys }
 
-    let create_top () = { fields = [||] }
+    let create_from_array shape fields = { shape; fields }
+
+    let create_top shape = { shape; fields = [||] }
 
     let width t = Targetint_31_63.of_int (Array.length t.fields)
 
@@ -2671,9 +2677,9 @@ module Row_like_for_blocks = struct
           Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
             field_kind)
     in
-    let product = { fields = Array.of_list field_tys } in
     let size = Targetint_31_63.of_int (List.length field_tys) in
     let shape = Block_shape.create_non_mixed_block field_kind ~size in
+    let product = { shape; fields = Array.of_list field_tys } in
     match open_or_closed with
     | Open _ -> (
       match tag with
@@ -2685,8 +2691,8 @@ module Row_like_for_blocks = struct
       | Unknown -> assert false)
   (* see above *)
 
-  let create_blocks_with_these_tags tags alloc_mode =
-    let maps_to = Product.Int_indexed.create_top () in
+  let create_blocks_with_these_tags shape tags alloc_mode =
+    let maps_to = Product.Int_indexed.create_top shape in
     let case =
       { maps_to;
         index = At_least Block_shape.empty;
@@ -2708,9 +2714,9 @@ module Row_like_for_blocks = struct
             | field_ty :: _ -> kind field_ty
           in
           check_field_tys ~field_kind ~field_tys;
-          let maps_to = { fields = Array.of_list field_tys } in
           let size = Targetint_31_63.of_int (List.length field_tys) in
           let shape = Block_shape.create_non_mixed_block field_kind ~size in
+          let maps_to = { shape; fields = Array.of_list field_tys } in
           { maps_to;
             index = Known shape;
             env_extension = { equations = Name.Map.empty }
@@ -2760,7 +2766,7 @@ module Row_like_for_blocks = struct
         | Known index ->
           Some ((tag, Block_shape.size index), maps_to, alloc_mode)))
 
-  let project_int_indexed_product { fields } index : _ Or_unknown.t =
+  let project_int_indexed_product { fields; shape = _ } index : _ Or_unknown.t =
     if Array.length fields <= index then Unknown else Known fields.(index)
 
   let get_field t index : _ Or_unknown_or_bottom.t =
