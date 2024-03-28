@@ -17,16 +17,26 @@
 (** The grammar of Flambda types plus the basic creation functions upon them
     that do not require an environment. *)
 
-module Block_size : sig
+module Block_shape : sig
   type t
+
+  val print : Format.formatter -> t -> unit
+
+  val empty : t
+
+  val create_non_mixed_block : Flambda_kind.t -> size:Targetint_31_63.t -> t
+
+  val size : t -> Targetint_31_63.t
+
+  val is_bottom : t -> bool
 
   val equal : t -> t -> bool
 
   val subset : t -> t -> bool
 
-  val union : t -> t -> t
+  val join : t -> t -> t
 
-  val inter : t -> t -> t
+  val meet : t -> t -> t
 end
 
 type t = private
@@ -99,8 +109,8 @@ and ('index, 'maps_to) row_like_case = private
   }
 
 and row_like_for_blocks = private
-  { known_tags : (Block_size.t, int_indexed_product) row_like_case Tag.Map.t;
-    other_tags : (Block_size.t, int_indexed_product) row_like_case Or_bottom.t;
+  { known_tags : (Block_shape.t, int_indexed_product) row_like_case Tag.Map.t;
+    other_tags : (Block_shape.t, int_indexed_product) row_like_case Or_bottom.t;
     alloc_mode : Alloc_mode.For_types.t
   }
 
@@ -124,10 +134,7 @@ and function_slot_indexed_product = private
 and value_slot_indexed_product = private
   { value_slot_components_by_index : t Value_slot.Map.t }
 
-and int_indexed_product = private
-  { fields : t array;
-    kind : Flambda_kind.t
-  }
+and int_indexed_product = private { fields : t array }
 
 and function_type = private
   { code_id : Code_id.t;
@@ -326,13 +333,11 @@ module Product : sig
   module Int_indexed : sig
     type t = int_indexed_product
 
-    val create_top : Flambda_kind.t -> t
+    val create_top : unit -> t
 
-    val create_from_list : Flambda_kind.t -> flambda_type list -> t
+    val create_from_list : flambda_type list -> t
 
-    val create_from_array : Flambda_kind.t -> flambda_type array -> t
-
-    val field_kind : t -> Flambda_kind.t
+    val create_from_array : flambda_type array -> t
 
     val width : t -> Targetint_31_63.t
 
@@ -399,15 +404,14 @@ module Row_like_for_blocks : sig
     Alloc_mode.For_types.t ->
     t
 
-  val create_blocks_with_these_tags :
-    field_kind:Flambda_kind.t -> Tag.Set.t -> Alloc_mode.For_types.t -> t
+  val create_blocks_with_these_tags : Tag.Set.t -> Alloc_mode.For_types.t -> t
 
   val create_exactly_multiple :
     field_tys_by_tag:flambda_type list Tag.Map.t -> Alloc_mode.For_types.t -> t
 
   val create_raw :
-    known_tags:(Block_size.t, int_indexed_product) row_like_case Tag.Map.t ->
-    other_tags:(Block_size.t, int_indexed_product) row_like_case Or_bottom.t ->
+    known_tags:(Block_shape.t, int_indexed_product) row_like_case Tag.Map.t ->
+    other_tags:(Block_shape.t, int_indexed_product) row_like_case Or_bottom.t ->
     alloc_mode:Alloc_mode.For_types.t ->
     t
 

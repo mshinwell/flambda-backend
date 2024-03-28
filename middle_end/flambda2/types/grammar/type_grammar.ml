@@ -24,17 +24,186 @@ module TD = Type_descr
 open Or_bottom.Let_syntax
 open Or_unknown.Let_syntax
 
-module Block_size = struct
-  include Targetint_31_63
+module Block_field_shape : sig
+  type t
+
+  val print : Format.formatter -> t -> unit
+
+  val create : Flambda_kind.t -> relaxed_kind_constraint:bool -> t
+
+  val create_unknown_like : t -> t
+
+  val is_bottom : t -> bool
+
+  val equal : t -> t -> bool
+
+  val meet : t -> t -> t
+
+  val join : t -> t -> t
+end = struct
+  type t =
+    | Strict of Flambda_kind.t
+    | Relaxed of Flambda_kind.Set.t Or_unknown.t
+
+  let is_bottom t =
+    match t with
+    | Strict _ | Relaxed Unknown -> false
+    | Relaxed (Known kinds) -> Flambda_kind.Set.is_empty kinds
+
+  let print ppf t =
+    match t with
+    | Strict kind -> Format.fprintf ppf "(Strict %a)" Flambda_kind.print kind
+    | Relaxed kinds ->
+      Format.fprintf ppf "(Relaxed %a)"
+        (Or_unknown.print Flambda_kind.Set.print)
+        kinds
+
+  let create kind ~relaxed_kind_constraint =
+    if relaxed_kind_constraint
+    then Relaxed (Known (Flambda_kind.Set.singleton kind))
+    else Strict kind
+
+  let create_unknown_like t =
+    match t with Strict _ -> t | Relaxed _ -> Relaxed Unknown
+
+  let equal t1 t2 =
+    match t1, t2 with
+    | Strict kind1, Strict kind2 -> Flambda_kind.equal kind1 kind2
+    | Relaxed kinds1, Relaxed kinds2 -> (
+      match kinds1, kinds2 with
+      | Known kinds1, Known kinds2 -> Flambda_kind.Set.equal kinds1 kinds2
+      | Unknown, Unknown -> true
+      | Known _, Unknown | Unknown, Known _ -> false)
+    | Strict _, Relaxed _ | Relaxed _, Strict _ -> false
+
+  let meet t1 t2 =
+    match t1, t2 with
+    | Strict kind1, Strict kind2 ->
+      if not (Flambda_kind.equal kind1 kind2)
+      then
+        Misc.fatal_errorf
+          "Block_field_shape.meet: incompatible shapes %a and %a" print t1 print
+          t2;
+      t1
+    | Relaxed kinds1, Relaxed kinds2 -> (
+      match kinds1, kinds2 with
+      | Known kinds1, Known kinds2 ->
+        let kinds = Flambda_kind.Set.inter kinds1 kinds2 in
+        Relaxed (Known kinds)
+      | _, Unknown -> t1
+      | Unknown, _ -> t2)
+    | Strict _, Relaxed _ | Relaxed _, Strict _ ->
+      (* XXX can this happen? *)
+      Misc.fatal_errorf "Block_field_shape.join: incompatible shapes %a and %a"
+        print t1 print t2
+
+  let join t1 t2 =
+    match t1, t2 with
+    | Strict kind1, Strict kind2 ->
+      if not (Flambda_kind.equal kind1 kind2)
+      then
+        Misc.fatal_errorf
+          "Block_field_shape.join: incompatible shapes %a and %a" print t1 print
+          t2;
+      t1
+    | Relaxed kinds1, Relaxed kinds2 -> (
+      match kinds1, kinds2 with
+      | Known kinds1, Known kinds2 ->
+        let kinds = Flambda_kind.Set.union kinds1 kinds2 in
+        Relaxed (Known kinds)
+      | _, Unknown -> t2
+      | Unknown, _ -> t1)
+    | Strict _, Relaxed _ | Relaxed _, Strict _ ->
+      (* XXX can this happen? *)
+      Misc.fatal_errorf "Block_field_shape.join: incompatible shapes %a and %a"
+        print t1 print t2
+end
+
+module Block_shape : sig
+  type t
+
+  val print : Format.formatter -> t -> unit
+
+  val empty : t
+
+  val create_non_mixed_block : Flambda_kind.t -> size:Targetint_31_63.t -> t
+
+  val size : t -> Targetint_31_63.t
+
+  val is_bottom : t -> bool
+
+  (* XXX "permitted kinds for field" *)
+
+  val equal : t -> t -> bool
+
+  val subset : t -> t -> bool
+
+  val join : t -> t -> t
+
+  val meet : t -> t -> t
+end = struct
+  type t = Block_field_shape.t array
+
+  let print ppf t =
+    Format.fprintf ppf "@[<hov 1>[| ";
+    Array.iter
+      (fun shape -> Format.fprintf ppf "%a;@ " Block_field_shape.print shape)
+      t;
+    Format.fprintf ppf "|]"
+
+  let empty = [||]
+
+  let create_non_mixed_block kind ~size =
+    let size = Targetint_31_63.to_int_exn size in
+    let shape = Block_field_shape.create kind ~relaxed_kind_constraint:false in
+    Array.init size (fun _ -> shape)
+
+  let size t = Targetint_31_63.of_int (Array.length t)
+
+  let is_bottom t = Array.exists Block_field_shape.is_bottom t
 
   (** [subset t1 t2] is true if [t1] is a subset of [t2] *)
-  let subset t1 t2 = Stdlib.( <= ) (compare t1 t2) 0
+  let subset t1 t2 =
+    let t1_size = Array.length t1 in
+    if t1_size > Array.length t2
+    then false
+    else
+      let rec check index =
+        if index >= t1_size
+        then true
+        else
+          let shape = Block_field_shape.meet t1.(index) t2.(index) in
+          if Block_field_shape.is_bottom shape then false else check (index + 1)
+      in
+      check 0
 
-  (* An integer [i] represents all the values smaller than i, hence a smaller
-     number is included in a bigger *)
-  let union t1 t2 = Targetint_31_63.max t1 t2
+  let equal t1 t2 =
+    let t1_size = Array.length t1 in
+    let t2_size = Array.length t2 in
+    if t1_size <> t2_size
+    then false
+    else Array.for_all2 Block_field_shape.equal t1 t2
 
-  let inter t1 t2 = Targetint_31_63.min t1 t2
+  let join t1 t2 =
+    let t1_size = Array.length t1 in
+    let t2_size = Array.length t2 in
+    let size = max t1_size t2_size in
+    Array.init size (fun index ->
+        if index < t1_size && index < t2_size
+        then Block_field_shape.join t1.(index) t2.(index)
+        else if index < t1_size
+        then
+          (* [t2] is shorter than [t1], we are now past the end of [t2] *)
+          Block_field_shape.create_unknown_like t1.(index)
+        else
+          (* [t1] is shorter than [t2], we are now past the end of [t1] *)
+          Block_field_shape.create_unknown_like t2.(index))
+
+  let meet t1 t2 =
+    let t1_size = Array.length t1 in
+    let t2_size = Array.length t2 in
+    let size = min t1_size t2_size in
+    Array.init size (fun index -> Block_field_shape.meet t1.(index) t2.(index))
 end
 
 (* The grammar of Flambda types. *)
@@ -140,8 +309,8 @@ and ('index, 'maps_to) row_like_case =
   }
 
 and row_like_for_blocks =
-  { known_tags : (Block_size.t, int_indexed_product) row_like_case Tag.Map.t;
-    other_tags : (Block_size.t, int_indexed_product) row_like_case Or_bottom.t;
+  { known_tags : (Block_shape.t, int_indexed_product) row_like_case Tag.Map.t;
+    other_tags : (Block_shape.t, int_indexed_product) row_like_case Or_bottom.t;
     alloc_mode : Alloc_mode.For_types.t
   }
 
@@ -173,10 +342,7 @@ and function_slot_indexed_product =
 and value_slot_indexed_product =
   { value_slot_components_by_index : t Value_slot.Map.t }
 
-and int_indexed_product =
-  { fields : t array;
-    kind : Flambda_kind.t
-  }
+and int_indexed_product = { fields : t array }
 
 and function_type =
   { code_id : Code_id.t;
@@ -383,7 +549,7 @@ and free_names_value_slot_indexed_product ~follow_value_slots
         value_slot)
     value_slot_components_by_index Name_occurrences.empty
 
-and free_names_int_indexed_product ~follow_value_slots { fields; kind = _ } =
+and free_names_int_indexed_product ~follow_value_slots { fields } =
   Array.fold_left
     (fun free_names_acc t ->
       Name_occurrences.union (free_names0 ~follow_value_slots t) free_names_acc)
@@ -683,12 +849,12 @@ and apply_renaming_value_slot_indexed_product { value_slot_components_by_index }
   in
   { value_slot_components_by_index }
 
-and apply_renaming_int_indexed_product { fields; kind } renaming =
+and apply_renaming_int_indexed_product { fields } renaming =
   let fields = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
     fields.(i) <- apply_renaming fields.(i) renaming
   done;
-  { fields; kind }
+  { fields }
 
 and apply_renaming_function_type ({ code_id; rec_info } as function_type)
     renaming =
@@ -880,7 +1046,7 @@ and print_row_like :
       (Or_bottom.print print) other
 
 and print_row_like_for_blocks ppf { known_tags; other_tags; alloc_mode } =
-  print_row_like ~print_index:Block_size.print
+  print_row_like ~print_index:Block_shape.print
     ~print_maps_to:print_int_indexed_product ~print_known_map:Tag.Map.print
     ~is_empty_map_known:Tag.Map.is_empty ~known:known_tags ~other:other_tags
     alloc_mode ppf
@@ -914,8 +1080,8 @@ and print_value_slot_indexed_product ppf { value_slot_components_by_index } =
     (Value_slot.Map.print print)
     value_slot_components_by_index
 
-and print_int_indexed_product ppf { fields; kind } =
-  Format.fprintf ppf "@[<hov 1>((kind %a)@ %a)@]" K.print kind
+and print_int_indexed_product ppf { fields } =
+  Format.fprintf ppf "@[<hov 1>(%a)@]"
     (Format.pp_print_list ~pp_sep:Format.pp_print_space print)
     (Array.to_list fields)
 
@@ -1089,7 +1255,7 @@ and ids_for_export_value_slot_indexed_product { value_slot_components_by_index }
     (fun _ t ids -> Ids_for_export.union ids (ids_for_export t))
     value_slot_components_by_index Ids_for_export.empty
 
-and ids_for_export_int_indexed_product { fields; kind = _ } =
+and ids_for_export_int_indexed_product { fields } =
   Array.fold_left
     (fun ids field -> Ids_for_export.union ids (ids_for_export field))
     Ids_for_export.empty fields
@@ -1811,14 +1977,14 @@ and remove_unused_value_slots_and_shortcut_aliases_value_slot_indexed_product
   { value_slot_components_by_index }
 
 and remove_unused_value_slots_and_shortcut_aliases_int_indexed_product
-    { fields; kind } ~used_value_slots ~canonicalise =
+    { fields } ~used_value_slots ~canonicalise =
   let fields = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
     fields.(i)
       <- remove_unused_value_slots_and_shortcut_aliases fields.(i)
            ~used_value_slots ~canonicalise
   done;
-  { fields; kind }
+  { fields }
 
 and remove_unused_value_slots_and_shortcut_aliases_function_type
     ({ code_id; rec_info } as function_type) ~used_value_slots ~canonicalise =
@@ -2221,8 +2387,7 @@ and project_value_slot_indexed_product ~to_project ~expand
   then product
   else { value_slot_components_by_index = value_slot_components_by_index' }
 
-and project_int_indexed_product ~to_project ~expand
-    ({ fields; kind } as product) =
+and project_int_indexed_product ~to_project ~expand ({ fields } as product) =
   let changed = ref false in
   let fields' = Array.copy fields in
   for i = 0 to Array.length fields - 1 do
@@ -2233,7 +2398,7 @@ and project_int_indexed_product ~to_project ~expand
       changed := true;
       fields'.(i) <- field')
   done;
-  if !changed then { fields = fields'; kind } else product
+  if !changed then { fields = fields' } else product
 
 and project_function_type ~to_project ~expand
     ({ code_id; rec_info } as function_type) =
@@ -2361,13 +2526,11 @@ module Product = struct
   module Int_indexed = struct
     type t = int_indexed_product
 
-    let field_kind t = t.kind
+    let create_from_list tys = { fields = Array.of_list tys }
 
-    let create_from_list kind tys = { kind; fields = Array.of_list tys }
+    let create_from_array fields = { fields }
 
-    let create_from_array kind fields = { kind; fields }
-
-    let create_top kind = { kind; fields = [||] }
+    let create_top () = { fields = [||] }
 
     let width t = Targetint_31_63.of_int (Array.length t.fields)
 
@@ -2508,24 +2671,25 @@ module Row_like_for_blocks = struct
           Misc.fatal_errorf "Bad kind %a for fields" Flambda_kind.print
             field_kind)
     in
-    let product = { kind = field_kind; fields = Array.of_list field_tys } in
+    let product = { fields = Array.of_list field_tys } in
     let size = Targetint_31_63.of_int (List.length field_tys) in
+    let shape = Block_shape.create_non_mixed_block field_kind ~size in
     match open_or_closed with
     | Open _ -> (
       match tag with
-      | Known tag -> create_at_least tag size product alloc_mode
-      | Unknown -> create_at_least_unknown_tag size product alloc_mode)
+      | Known tag -> create_at_least tag shape product alloc_mode
+      | Unknown -> create_at_least_unknown_tag shape product alloc_mode)
     | Closed _ -> (
       match tag with
-      | Known tag -> create_exactly tag size product alloc_mode
+      | Known tag -> create_exactly tag shape product alloc_mode
       | Unknown -> assert false)
   (* see above *)
 
-  let create_blocks_with_these_tags ~field_kind tags alloc_mode =
-    let maps_to = Product.Int_indexed.create_top field_kind in
+  let create_blocks_with_these_tags tags alloc_mode =
+    let maps_to = Product.Int_indexed.create_top () in
     let case =
       { maps_to;
-        index = At_least Targetint_31_63.zero;
+        index = At_least Block_shape.empty;
         env_extension = { equations = Name.Map.empty }
       }
     in
@@ -2544,12 +2708,11 @@ module Row_like_for_blocks = struct
             | field_ty :: _ -> kind field_ty
           in
           check_field_tys ~field_kind ~field_tys;
-          let maps_to =
-            { kind = field_kind; fields = Array.of_list field_tys }
-          in
+          let maps_to = { fields = Array.of_list field_tys } in
           let size = Targetint_31_63.of_int (List.length field_tys) in
+          let shape = Block_shape.create_non_mixed_block field_kind ~size in
           { maps_to;
-            index = Known size;
+            index = Known shape;
             env_extension = { equations = Name.Map.empty }
           })
         field_tys_by_tag
@@ -2575,10 +2738,10 @@ module Row_like_for_blocks = struct
         Tag.Map.map
           (fun index ->
             match index with
-            | Known index -> index
+            | Known index -> Block_shape.size index
             | At_least index ->
               any_unknown := true;
-              index)
+              Block_shape.size index)
           tags_and_indexes
       in
       if !any_unknown then Unknown else Known by_tag
@@ -2594,9 +2757,10 @@ module Row_like_for_blocks = struct
            already part of the environment *)
         match index with
         | At_least _ -> None
-        | Known index -> Some ((tag, index), maps_to, alloc_mode)))
+        | Known index ->
+          Some ((tag, Block_shape.size index), maps_to, alloc_mode)))
 
-  let project_int_indexed_product { fields; kind = _ } index : _ Or_unknown.t =
+  let project_int_indexed_product { fields } index : _ Or_unknown.t =
     if Array.length fields <= index then Unknown else Known fields.(index)
 
   let get_field t index : _ Or_unknown_or_bottom.t =

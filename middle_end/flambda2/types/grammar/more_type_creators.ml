@@ -130,8 +130,7 @@ let blocks_with_these_tags tags alloc_mode : _ Or_unknown.t =
   then Unknown
   else
     let blocks =
-      TG.Row_like_for_blocks.create_blocks_with_these_tags ~field_kind:K.value
-        tags alloc_mode
+      TG.Row_like_for_blocks.create_blocks_with_these_tags tags alloc_mode
     in
     Known
       (TG.create_variant ~is_unique:false

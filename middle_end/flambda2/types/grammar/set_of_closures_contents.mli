@@ -34,6 +34,8 @@ val closures : t -> Function_slot.Set.t
 
 val value_slots : t -> Value_slot.Set.t
 
+val is_bottom : t -> bool
+
 include Contains_names.S with type t := t
 
 val remove_unused_value_slots : t -> used_value_slots:Value_slot.Set.t -> t

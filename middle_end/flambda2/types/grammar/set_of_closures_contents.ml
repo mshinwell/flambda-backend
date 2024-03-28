@@ -63,6 +63,10 @@ let inter { closures = closures1; value_slots = value_slots1 }
   let value_slots = Value_slot.Set.inter value_slots1 value_slots2 in
   { closures; value_slots }
 
+(* XXX still needed? *)
+let is_bottom { closures; value_slots } =
+  Function_slot.Set.is_empty closures && Value_slot.Set.is_empty value_slots
+
 let apply_renaming { closures; value_slots } renaming =
   let value_slots =
     Value_slot.Set.filter

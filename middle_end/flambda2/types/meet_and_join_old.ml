@@ -603,7 +603,7 @@ and meet_row_like :
         (Meet_env.t -> 'maps_to -> 'maps_to -> ('maps_to * TEE.t) Or_bottom.t) ->
       equal_index:('index -> 'index -> bool) ->
       subset_index:('index -> 'index -> bool) ->
-      union_index:('index -> 'index -> 'index) ->
+      join_index:('index -> 'index -> 'index) ->
       is_empty_map_known:('known -> bool) ->
       get_singleton_map_known:
         ('known -> ('row_tag * ('index, 'maps_to) TG.Row_like_case.t) option) ->
@@ -622,7 +622,7 @@ and meet_row_like :
       other2:('index, 'maps_to) TG.Row_like_case.t Or_bottom.t ->
       ('known * ('index, 'maps_to) TG.Row_like_case.t Or_bottom.t * TEE.t)
       Or_bottom.t =
- fun ~meet_maps_to ~equal_index ~subset_index ~union_index ~is_empty_map_known
+ fun ~meet_maps_to ~equal_index ~subset_index ~join_index ~is_empty_map_known
      ~get_singleton_map_known ~merge_map_known meet_env ~known1 ~known2 ~other1
      ~other2 ->
   let env_extension = ref None in
@@ -678,7 +678,7 @@ and meet_row_like :
         Ok (TG.Row_like_index.known known)
       else Bottom
     | At_least i1', At_least i2' ->
-      Ok (TG.Row_like_index.at_least (union_index i1' i2'))
+      Ok (TG.Row_like_index.at_least (join_index i1' i2'))
   in
   let meet_case (case1 : ('index, 'maps_to) TG.Row_like_case.t)
       (case2 : ('index, 'maps_to) TG.Row_like_case.t) =
@@ -745,8 +745,8 @@ and meet_row_like_for_blocks env
     =
   let<* known_tags, other_tags, env_extension =
     meet_row_like ~meet_maps_to:meet_int_indexed_product
-      ~equal_index:TG.Block_size.equal ~subset_index:TG.Block_size.subset
-      ~union_index:TG.Block_size.union ~is_empty_map_known:Tag.Map.is_empty
+      ~equal_index:TG.Block_shape.equal ~subset_index:TG.Block_shape.subset
+      ~join_index:TG.Block_shape.join ~is_empty_map_known:Tag.Map.is_empty
       ~get_singleton_map_known:Tag.Map.get_singleton
       ~merge_map_known:Tag.Map.merge env ~known1 ~known2 ~other1 ~other2
   in
@@ -764,7 +764,7 @@ and meet_row_like_for_closures env
     meet_row_like ~meet_maps_to:meet_closures_entry
       ~equal_index:Set_of_closures_contents.equal
       ~subset_index:Set_of_closures_contents.subset
-      ~union_index:Set_of_closures_contents.union
+      ~join_index:Set_of_closures_contents.union
       ~is_empty_map_known:Function_slot.Map.is_empty
       ~get_singleton_map_known:Function_slot.Map.get_singleton
       ~merge_map_known:Function_slot.Map.merge env ~known1 ~known2 ~other1
@@ -1352,7 +1352,7 @@ and join_row_like :
       join_maps_to:(Join_env.t -> 'maps_to -> 'maps_to -> 'maps_to) ->
       maps_to_field_kind:('maps_to -> K.t) option ->
       equal_index:('index -> 'index -> bool) ->
-      inter_index:('index -> 'index -> 'index) ->
+      meet_index:('index -> 'index -> 'index) ->
       merge_map_known:
         (('row_tag ->
          ('index, 'maps_to) TG.Row_like_case.t option ->
@@ -1367,8 +1367,8 @@ and join_row_like :
       other1:('index, 'maps_to) TG.Row_like_case.t Or_bottom.t ->
       other2:('index, 'maps_to) TG.Row_like_case.t Or_bottom.t ->
       'known * ('index, 'maps_to) TG.Row_like_case.t Or_bottom.t =
- fun ~join_maps_to ~maps_to_field_kind ~equal_index ~inter_index
-     ~merge_map_known join_env ~known1 ~known2 ~other1 ~other2 ->
+ fun ~join_maps_to ~maps_to_field_kind ~equal_index ~meet_index ~merge_map_known
+     join_env ~known1 ~known2 ~other1 ~other2 ->
   let join_index (i1 : 'index TG.row_like_index) (i2 : 'index TG.row_like_index)
       : 'index TG.row_like_index =
     match i1, i2 with
@@ -1378,11 +1378,11 @@ and join_row_like :
       else
         (* We can't represent exactly the union, This is the best
            approximation *)
-        TG.Row_like_index.at_least (inter_index i1' i2')
+        TG.Row_like_index.at_least (meet_index i1' i2')
     | Known i1', At_least i2'
     | At_least i1', Known i2'
     | At_least i1', At_least i2' ->
-      TG.Row_like_index.at_least (inter_index i1' i2')
+      TG.Row_like_index.at_least (meet_index i1' i2')
   in
   let matching_kinds (case1 : ('index, 'maps_to) TG.Row_like_case.t)
       (case2 : ('index, 'maps_to) TG.Row_like_case.t) =
@@ -1403,8 +1403,8 @@ and join_row_like :
     TG.Row_like_case.create ~maps_to ~index ~env_extension
   in
   let join_knowns case1 case2 : ('index, 'maps_to) TG.Row_like_case.t option =
-    (* We assume that if tags are equals, the products will contains values of
-       the same kinds. *)
+    (* We assume that if tags are equal, the products will contain values of the
+       same kinds. *)
     match case1, case2 with
     | None, None -> None
     | Some case1, None -> (
@@ -1489,7 +1489,7 @@ and join_row_like_for_blocks env
   let known_tags, other_tags =
     join_row_like ~join_maps_to:join_int_indexed_product
       ~maps_to_field_kind:(Some TG.Product.Int_indexed.field_kind)
-      ~equal_index:TG.Block_size.equal ~inter_index:TG.Block_size.inter
+      ~equal_index:TG.Block_shape.equal ~meet_index:TG.Block_shape.meet
       ~merge_map_known:Tag.Map.merge env ~known1 ~known2 ~other1 ~other2
   in
   let alloc_mode = join_alloc_mode alloc_mode1 alloc_mode2 in
@@ -1503,7 +1503,7 @@ and join_row_like_for_closures env
   let known_closures, other_closures =
     join_row_like ~join_maps_to:join_closures_entry ~maps_to_field_kind:None
       ~equal_index:Set_of_closures_contents.equal
-      ~inter_index:Set_of_closures_contents.inter
+      ~meet_index:Set_of_closures_contents.inter
       ~merge_map_known:Function_slot.Map.merge env ~known1 ~known2 ~other1
       ~other2
   in
