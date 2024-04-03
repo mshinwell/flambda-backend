@@ -252,6 +252,12 @@ module Make (A : Asm_directives_intf.Arg) : Asm_directives_intf.S = struct
     let lab = D.const_label (Asm_label.encode lab) in
     const_machine_width lab
 
+  let label_plus_offset ?comment:comment' lab ~offset_in_bytes =
+    let offset_in_bytes = Targetint.to_int64 offset_in_bytes in
+    Option.iter D.comment comment';
+    let lab = D.const_label (Asm_label.encode lab) in
+    const_machine_width (D.const_add lab (D.const_int64 offset_in_bytes))
+
   let symbol_plus_offset symbol ~offset_in_bytes =
     let offset_in_bytes = Targetint.to_int64 offset_in_bytes in
     const_machine_width
@@ -298,6 +304,22 @@ module Make (A : Asm_directives_intf.Arg) : Asm_directives_intf.S = struct
   let between_labels_64_bit ?comment:_ ~upper:_ ~lower:_ () =
     (* CR poechsel: use the arguments *)
     A.emit_line "between_labels_64_bit"
+
+  let between_labels_64_bit_with_offsets ?comment:comment' ~upper ~upper_offset
+      ~lower ~lower_offset () =
+    Option.iter D.comment comment';
+    let upper_offset = Targetint.to_int64 upper_offset in
+    let lower_offset = Targetint.to_int64 lower_offset in
+    let expr =
+      D.const_sub
+        (D.const_add
+           (D.const_label (Asm_label.encode upper))
+           (D.const_int64 upper_offset))
+        (D.const_add
+           (D.const_label (Asm_label.encode lower))
+           (D.const_int64 lower_offset))
+    in
+    const_machine_width (force_assembly_time_constant expr)
 
   let between_symbol_in_current_unit_and_label_offset ?comment:comment' ~upper
       ~lower ~offset_upper () =

@@ -120,6 +120,17 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
 
     let fold t ~init ~f = List.fold_left f init t.subranges
 
+    type get_singleton =
+      | No_ranges
+      | One_subrange of Subrange.t
+      | More_than_one_subrange
+
+    let get_singleton t =
+      match t.subranges with
+      | [] -> No_ranges
+      | [subrange] -> One_subrange subrange
+      | _ :: _ :: _ -> More_than_one_subrange
+
     let no_subranges t = match t.subranges with [] -> true | _ -> false
 
     let rewrite_labels_and_remove_empty_subranges t ~env =

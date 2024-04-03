@@ -36,14 +36,21 @@ let create_low_pc address_label =
   AV.create spec
     (V.code_address_from_label ~comment:"low PC value" address_label)
 
-let create_high_pc_offset offset =
-  match Targetint.repr offset with
-  | Int32 offset ->
-    let spec = AS.create High_pc Data4 in
-    AV.create spec (V.int32 ~comment:"high PC value as offset" offset)
-  | Int64 offset ->
-    let spec = AS.create High_pc Data8 in
-    AV.create spec (V.int64 ~comment:"high PC value as offset" offset)
+let create_low_pc_with_offset address_label ~offset_in_bytes =
+  let spec = AS.create Low_pc Addr in
+  AV.create spec
+    (V.code_address_from_label_plus_offset ~comment:"low PC value" address_label
+       ~offset_in_bytes)
+
+let create_high_pc_offset ~low_pc ~low_pc_offset_in_bytes ~high_pc
+    ~high_pc_offset_in_bytes =
+  assert (Targetint.size = 64);
+  let spec = AS.create High_pc Data8 in
+  AV.create spec
+    (V.distance_between_labels_64_bit_with_offsets ~upper:high_pc
+       ~upper_offset:high_pc_offset_in_bytes ~lower:low_pc
+       ~lower_offset:low_pc_offset_in_bytes ~comment:"high PC value as offset"
+       ())
 
 let create_high_pc ~low_pc high_pc =
   match Dwarf_arch_sizes.size_addr with
