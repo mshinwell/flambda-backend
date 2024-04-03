@@ -90,10 +90,7 @@ val any_block : Type_grammar.t
 
 (* Note this is only for blocks (variants, tuples, etc), not arrays! *)
 val blocks_with_these_tags :
-  Type_grammar.Block_shape.t ->
-  Tag.Set.t ->
-  Alloc_mode.For_types.t ->
-  Type_grammar.t Or_unknown.t
+  Tag.Set.t -> Alloc_mode.For_types.t -> Type_grammar.t Or_unknown.t
 
 val immutable_block :
   is_unique:bool ->
