@@ -139,7 +139,6 @@ let die_for_inlined_frame state parent fundecl range range_list_attributes block
   in
   let abstract_instance_symbol = Some abstract_instance_symbol in
   let _entry_pc =
-    (* XXX this doesn't relocate correctly on macos ARM *)
     (* CR-someday mshinwell: The "entry PC" is supposed to be the address of the
        "temporally first" instruction of the inlined function. We assume here
        that we don't do transformations which might cause the first instruction
@@ -152,6 +151,7 @@ let die_for_inlined_frame state parent fundecl range range_list_attributes block
     match IF.Range.estimate_lowest_address range with
     | None -> []
     | Some (lowest_address, offset) ->
+      (* XXX this addition is wrong *)
       [DAH.create_entry_pc (Asm_label.create_int Text (lowest_address + offset))]
   in
   (* let low_pc = match IF.Range.estimate_lowest_address range with | None -> []
