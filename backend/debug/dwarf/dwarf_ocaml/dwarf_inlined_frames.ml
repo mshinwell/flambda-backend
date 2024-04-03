@@ -235,7 +235,9 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
                     (Contiguous
                       { start_pos; start_pos_offset; end_pos; end_pos_offset })
                   ->
-                  let start_pos_offset = Targetint.of_int start_pos_offset in
+                  let start_pos_offset =
+                    Targetint.of_int (start_pos_offset - 4)
+                  in
                   let end_pos_offset = Targetint.of_int end_pos_offset in
                   let low_pc =
                     DAH.create_low_pc_with_offset start_pos
