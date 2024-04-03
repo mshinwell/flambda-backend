@@ -17,3 +17,20 @@ let[@inline never] foo a =
 let () =
   let _, _ = opaque_identity (foo 42) in
   ()
+
+let[@inline] f1 x = x + 1
+
+let[@inline never] foo1 a =
+  let x1 = a + 42 in
+  let x1 = opaque_identity x1 in
+  let x2 = f1 a in
+  let _x2 = opaque_identity x2 in
+  let x1 = opaque_identity x1 in
+  let x2 = f1 a in
+  let x2 = opaque_identity x2 in
+  let x3 = a + 100 in
+  x1, x2 + x3
+
+let () =
+  let _, _ = opaque_identity (foo1 42) in
+  ()
