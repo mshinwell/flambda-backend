@@ -1,0 +1,1 @@
+as -o test_exn_asm.o test_exn_asm.s && gcc -c -o test_exn_stubs.o -I ./_install/lib/ocaml test_exn_stubs.c && ./_install/bin/ocamlopt -o test_exn -S test_exn_asm.o test_exn_stubs.o test_exn.ml && ./test_exn
