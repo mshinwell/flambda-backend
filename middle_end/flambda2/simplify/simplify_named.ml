@@ -69,23 +69,25 @@ let create_lifted_constant (dacc, lifted_constants)
 let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
     ~simplify_function_body : Simplify_named_result.t Or_invalid.t =
   match named with
-  | Simple simple ->
+  | Simple simple -> (
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
     let min_name_mode = Bound_var.name_mode bound_var in
     let ty = S.simplify_simple dacc simple ~min_name_mode in
     let new_simple = T.get_alias_exn ty in
-    let dacc = DA.add_variable dacc bound_var ty in
-    let defining_expr =
-      if simple == new_simple
-      then Simplified_named.create named
-      else Simplified_named.create (Named.create_simple new_simple)
-    in
-    Ok
-      (Simplify_named_result.create dacc
-         [ { Expr_builder.let_bound = bound_pattern;
-             simplified_defining_expr = defining_expr;
-             original_defining_expr = Some named
-           } ])
+    match DA.add_variable dacc bound_var ty with
+    | Bottom -> Invalid
+    | Ok dacc ->
+      let defining_expr =
+        if simple == new_simple
+        then Simplified_named.create named
+        else Simplified_named.create (Named.create_simple new_simple)
+      in
+      Ok
+        (Simplify_named_result.create dacc
+           [ { Expr_builder.let_bound = bound_pattern;
+               simplified_defining_expr = defining_expr;
+               original_defining_expr = Some named
+             } ]))
   | Prim (prim, dbg) -> (
     let bound_var = Bound_pattern.must_be_singleton bound_pattern in
     let dbg = DE.add_inlined_debuginfo (DA.denv dacc) dbg in
@@ -181,7 +183,7 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
     (* We don't need to return any bindings; [Simplify_expr.simplify_let] will
        create the "let symbol" binding when it sees the lifted constant. *)
     Ok (Simplify_named_result.create dacc [])
-  | Rec_info rec_info_expr ->
+  | Rec_info rec_info_expr -> (
     (* We could simplify away things like [let depth x = y in ...], but those
        don't actually happen (as of this writing). We could also do CSE,
        though. *)
@@ -190,18 +192,20 @@ let simplify_named0 dacc (bound_pattern : Bound_pattern.t) (named : Named.t)
       Simplify_rec_info_expr.simplify_rec_info_expr dacc rec_info_expr
     in
     let ty = T.this_rec_info rec_info_expr in
-    let dacc = DA.add_variable dacc bound_var ty in
-    let defining_expr =
-      if rec_info_expr == new_rec_info_expr
-      then Simplified_named.create named
-      else Simplified_named.create (Named.create_rec_info new_rec_info_expr)
-    in
-    Ok
-      (Simplify_named_result.create dacc
-         [ { Expr_builder.let_bound = bound_pattern;
-             simplified_defining_expr = defining_expr;
-             original_defining_expr = Some named
-           } ])
+    match DA.add_variable dacc bound_var ty with
+    | Bottom -> Invalid
+    | Ok dacc ->
+      let defining_expr =
+        if rec_info_expr == new_rec_info_expr
+        then Simplified_named.create named
+        else Simplified_named.create (Named.create_rec_info new_rec_info_expr)
+      in
+      Ok
+        (Simplify_named_result.create dacc
+           [ { Expr_builder.let_bound = bound_pattern;
+               simplified_defining_expr = defining_expr;
+               original_defining_expr = Some named
+             } ]))
 
 let removed_operations ~(original : Named.t) (result : _ Or_invalid.t) =
   let zero = Removed_operations.zero in

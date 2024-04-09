@@ -59,7 +59,9 @@ val with_code_age_relation : t -> code_age_relation:Code_age_relation.t -> t
 
 val typing_env : t -> Flambda2_types.Typing_env.t
 
-val add_variable : t -> Bound_var.t -> Flambda2_types.t -> t
+val add_variable : t -> Bound_var.t -> Flambda2_types.t -> t Or_bottom.t
+
+val add_variable_unknown : t -> Bound_var.t -> Flambda_kind.With_subkind.t -> t
 
 val no_lifted_constants : t -> bool
 

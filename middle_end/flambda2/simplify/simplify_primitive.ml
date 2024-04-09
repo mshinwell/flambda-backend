@@ -50,7 +50,7 @@ let try_cse dacc dbg ~original_prim ~min_name_mode ~result_var : cse_result =
       let dacc = DA.merge_debuginfo_rewrite dacc ~bound_to:replace_with dbg in
       let named = Named.create_simple replace_with in
       let ty = T.alias_type_of (P.result_kind' original_prim) replace_with in
-      let dacc = DA.add_variable dacc result_var ty in
+      let new_dacc = DA.add_variable dacc result_var ty in
       let result =
         let cost_metrics =
           Cost_metrics.notify_removed
@@ -61,8 +61,11 @@ let try_cse dacc dbg ~original_prim ~min_name_mode ~result_var : cse_result =
           Simplified_named.create named
           |> Simplified_named.update_cost_metrics cost_metrics
         in
-        Simplify_primitive_result.create_simplified simplified_named
-          ~try_reify:true dacc
+        match new_dacc with
+        | Bottom -> Simplify_primitive_result.create_invalid dacc
+        | Ok dacc ->
+          Simplify_primitive_result.create_simplified simplified_named
+            ~try_reify:true dacc
       in
       Applied result
     | None ->

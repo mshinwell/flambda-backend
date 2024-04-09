@@ -254,8 +254,13 @@ let add_variable0 t var ty ~at_unit_toplevel =
   in
   { t with typing_env; variables_defined_at_toplevel }
 
-let add_variable t var ty =
-  add_variable0 t var ty ~at_unit_toplevel:t.at_unit_toplevel
+let add_variable t var ty : _ Or_bottom.t =
+  Ok (add_variable0 t var ty ~at_unit_toplevel:t.at_unit_toplevel)
+
+let add_variable_unknown t var kind_with_subkind =
+  add_variable0 t var
+    (T.unknown_with_subkind kind_with_subkind)
+    ~at_unit_toplevel:t.at_unit_toplevel
 
 let add_equation_on_variable t var ty =
   let typing_env = TE.add_equation t.typing_env (Name.var var) ty in

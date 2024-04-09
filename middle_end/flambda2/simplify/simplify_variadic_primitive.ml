@@ -49,7 +49,7 @@ let simplify_make_block ~original_prim ~field_kind tag ~shape
   in
   match result with
   | Bottom -> SPR.create_invalid dacc
-  | Ok env_extension ->
+  | Ok env_extension -> (
     let dacc =
       DA.map_denv dacc ~f:(fun denv ->
           DE.map_typing_env denv ~f:(fun typing_env ->
@@ -70,19 +70,21 @@ let simplify_make_block ~original_prim ~field_kind tag ~shape
         T.immutable_block ~is_unique:true tag ~field_kind alloc_mode ~fields
       | Mutable -> T.mutable_block alloc_mode
     in
-    let dacc = DA.add_variable dacc result_var ty in
-    let dacc =
-      match mutable_or_immutable with
-      | Immutable_unique | Mutable -> dacc
-      | Immutable -> (
-        match P.Eligible_for_cse.create original_prim with
-        | None -> dacc
-        | Some prim ->
-          DA.map_denv dacc ~f:(fun denv ->
-              DE.add_cse denv prim
-                ~bound_to:(Simple.var (Bound_var.var result_var))))
-    in
-    SPR.create original_term ~try_reify:true dacc
+    match DA.add_variable dacc result_var ty with
+    | Bottom -> SPR.create_invalid dacc
+    | Ok dacc ->
+      let dacc =
+        match mutable_or_immutable with
+        | Immutable_unique | Mutable -> dacc
+        | Immutable -> (
+          match P.Eligible_for_cse.create original_prim with
+          | None -> dacc
+          | Some prim ->
+            DA.map_denv dacc ~f:(fun denv ->
+                DE.add_cse denv prim
+                  ~bound_to:(Simple.var (Bound_var.var result_var))))
+      in
+      SPR.create original_term ~try_reify:true dacc)
 
 let simplify_make_block_of_floats ~original_prim ~mutable_or_immutable
     alloc_mode dacc ~original_term dbg ~args_with_tys ~result_var =

@@ -74,7 +74,9 @@ val define_variable : t -> Bound_var.t -> Flambda_kind.t -> t
 
 val add_name : t -> Bound_name.t -> Flambda2_types.t -> t
 
-val add_variable : t -> Bound_var.t -> Flambda2_types.t -> t
+val add_variable : t -> Bound_var.t -> Flambda2_types.t -> t Or_bottom.t
+
+val add_variable_unknown : t -> Bound_var.t -> Flambda_kind.With_subkind.t -> t
 
 val add_equation_on_variable : t -> Variable.t -> Flambda2_types.t -> t
 

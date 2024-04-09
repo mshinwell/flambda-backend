@@ -130,12 +130,15 @@ end = struct
     let proof2 = N.prover_rhs typing_env arg2_ty in
     let kind = N.result_kind in
     let[@inline always] result_unknown () =
-      let dacc = DA.add_variable dacc result_var (N.unknown op) in
-      SPR.create original_term ~try_reify:false dacc
+      (* CR mshinwell: N.unknown should return a kind *)
+      match DA.add_variable dacc result_var (N.unknown op) with
+      | Bottom -> SPR.create_invalid dacc
+      | Ok dacc -> SPR.create original_term ~try_reify:false dacc
     in
     let[@inline always] result_invalid () =
-      let dacc = DA.add_variable dacc result_var (T.bottom kind) in
-      SPR.create_invalid dacc
+      match DA.add_variable dacc result_var (T.bottom kind) with
+      | Bottom -> SPR.create_invalid dacc
+      | Ok dacc -> SPR.create_invalid dacc
     in
     let check_possible_results ~possible_results =
       if PR.Set.is_empty possible_results
@@ -164,12 +167,14 @@ end = struct
             | Some (Simple simple) -> T.alias_type_of kind simple
             | Some (Exactly _) | Some (Prim _) | None -> N.unknown op
         in
-        let dacc = DA.add_variable dacc result_var ty in
-        match T.get_alias_exn ty with
-        | exception Not_found -> SPR.create named ~try_reify:false dacc
-        | simple ->
-          let named = Named.create_simple simple in
-          SPR.create named ~try_reify:false dacc
+        match DA.add_variable dacc result_var ty with
+        | Bottom -> SPR.create_invalid dacc
+        | Ok dacc -> (
+          match T.get_alias_exn ty with
+          | exception Not_found -> SPR.create named ~try_reify:false dacc
+          | simple ->
+            let named = Named.create_simple simple in
+            SPR.create named ~try_reify:false dacc)
     in
     let only_one_side_known op nums ~folder ~other_side =
       let possible_results =
@@ -799,21 +804,24 @@ let simplify_phys_equal (op : P.equality_comparison) dacc ~original_term _dbg
      know that [simplify_simple] always returns alias types, so we let the
      prover do the matching. *)
   match T.prove_physical_equality typing_env arg1_ty arg2_ty with
-  | Proved bool ->
+  | Proved bool -> (
     let result = match op with Eq -> bool | Neq -> not bool in
-    let dacc =
+    match
       DA.add_variable dacc result_var
         (T.this_naked_immediate (Targetint_31_63.bool result))
-    in
-    SPR.create
-      (Named.create_simple (Simple.untagged_const_bool result))
-      ~try_reify:false dacc
-  | Unknown ->
-    let dacc =
+    with
+    | Bottom -> SPR.create_invalid dacc
+    | Ok dacc ->
+      SPR.create
+        (Named.create_simple (Simple.untagged_const_bool result))
+        ~try_reify:false dacc)
+  | Unknown -> (
+    match
       DA.add_variable dacc result_var
         (T.these_naked_immediates Targetint_31_63.all_bools)
-    in
-    SPR.create original_term ~try_reify:false dacc
+    with
+    | Bottom -> SPR.create_invalid dacc
+    | Ok dacc -> SPR.create original_term ~try_reify:false dacc)
 
 let[@inline always] simplify_immutable_block_load0
     (access_kind : P.Block_access_kind.t) ~min_name_mode dacc ~original_term
@@ -830,11 +838,13 @@ let[@inline always] simplify_immutable_block_load0
         ~field_kind:result_kind block_ty index
     with
     | Invalid -> SPR.create_invalid dacc
-    | Known_result simple ->
-      let dacc =
+    | Known_result simple -> (
+      match
         DA.add_variable dacc result_var (T.alias_type_of result_kind simple)
-      in
-      SPR.create (Named.create_simple simple) ~try_reify:false dacc
+      with
+      | Bottom -> SPR.create_invalid dacc
+      | Ok dacc -> SPR.create (Named.create_simple simple) ~try_reify:false dacc
+      )
     | Need_meet -> (
       let n = Targetint_31_63.add index Targetint_31_63.one in
       (* CR-someday mshinwell: We should be able to use the size in the
@@ -952,10 +962,12 @@ let simplify_array_load (array_kind : P.Array_kind.t)
   in
   (* CR-someday mshinwell: should do a meet on the new value too *)
   match array_kind with
-  | Bottom ->
+  | Bottom -> (
     let ty = T.bottom result_kind in
-    let dacc = DA.add_variable dacc result_var ty in
-    SPR.create_invalid dacc
+    (* CR mshinwell: bit weird *)
+    match DA.add_variable dacc result_var ty with
+    | Bottom -> SPR.create_invalid dacc
+    | Ok dacc -> SPR.create_invalid dacc)
   | Ok array_kind ->
     (* CR mshinwell: Add proper support for immutable arrays here (probably not
        required at present since they only go into [Duplicate_array]
@@ -970,8 +982,10 @@ let simplify_array_load (array_kind : P.Array_kind.t)
       Binary (Array_load (array_kind, accessor_width, mutability), arg1, arg2)
     in
     let named = Named.create_prim prim dbg in
-    let ty = T.unknown (P.result_kind' prim) in
-    let dacc = DA.add_variable dacc result_var ty in
+    let dacc =
+      DA.add_variable_unknown dacc result_var
+        (KS.anything (P.result_kind' prim))
+    in
     SPR.create named ~try_reify:false dacc
 
 let simplify_string_or_bigstring_load _string_like_value _string_accessor_width

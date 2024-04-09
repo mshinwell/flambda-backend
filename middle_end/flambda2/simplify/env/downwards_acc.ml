@@ -117,7 +117,14 @@ let with_code_age_relation t ~code_age_relation =
 
 let typing_env t = DE.typing_env (denv t)
 
-let add_variable t var ty = with_denv t (DE.add_variable (denv t) var ty)
+let add_variable t var ty : _ Or_bottom.t =
+  match DE.add_variable (denv t) var ty with
+  | Ok denv -> Ok (with_denv t denv)
+  | Bottom -> Bottom
+
+let add_variable_unknown t var kind_with_subkind =
+  let denv = DE.add_variable_unknown (denv t) var kind_with_subkind in
+  with_denv t denv
 
 let get_typing_env_no_more_than_one_use t k =
   CUE.get_typing_env_no_more_than_one_use t.continuation_uses_env k

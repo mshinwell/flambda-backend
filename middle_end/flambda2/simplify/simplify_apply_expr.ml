@@ -298,9 +298,9 @@ let simplify_direct_full_application ~simplify_expr dacc apply function_type
               let denv =
                 List.fold_left2
                   (fun denv kind result ->
-                    DE.add_variable denv
+                    DE.add_variable_unknown denv
                       (VB.create (BP.var result) NM.in_types)
-                      (T.unknown_with_subkind kind))
+                      kind)
                   denv result_arity results
               in
               let denv = DE.extend_typing_environment denv env_extension in

@@ -43,9 +43,9 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
     | None ->
       (* This happens in the stub case, where we are only simplifying code, not
          a set of closures. *)
-      DE.add_variable denv
+      DE.add_variable_unknown denv
         (Bound_var.create my_closure NM.normal)
-        (T.unknown K.value)
+        KS.any_value
     | Some function_slot -> (
       match
         Function_slot.Map.find function_slot closure_bound_names_inside_function
@@ -57,19 +57,23 @@ let dacc_inside_function context ~outer_dacc ~params ~my_closure ~my_region
           Function_slot.print function_slot
           (Function_slot.Map.print Bound_name.print)
           closure_bound_names_inside_function
-      | name ->
+      | name -> (
         let name = Bound_name.name name in
-        DE.add_variable denv
-          (Bound_var.create my_closure NM.normal)
-          (T.alias_type_of K.value (Simple.name name)))
+        match
+          DE.add_variable denv
+            (Bound_var.create my_closure NM.normal)
+            (T.alias_type_of K.value (Simple.name name))
+        with
+        | Bottom -> Misc.fatal_error "TODO" (* XXX *)
+        | Ok denv -> denv))
   in
   let denv =
     let my_region = Bound_var.create my_region Name_mode.normal in
-    DE.add_variable denv my_region (T.unknown K.region)
+    DE.add_variable_unknown denv my_region (KS.anything K.region)
   in
   let denv =
     let my_depth = Bound_var.create my_depth Name_mode.normal in
-    DE.add_variable denv my_depth (T.unknown K.rec_info)
+    DE.add_variable_unknown denv my_depth (KS.anything K.rec_info)
   in
   let denv =
     LCS.add_to_denv ~maybe_already_defined:() denv
@@ -617,6 +621,7 @@ let simplify_set_of_closures0 outer_dacc context set_of_closures
   in
   { set_of_closures; dacc }
 
+(* XXX: this should presumably return "_ Or_bottom.t" *)
 let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
     ~closure_bound_vars set_of_closures ~value_slots ~symbol_projections
     ~simplify_function_body =
@@ -710,7 +715,9 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
           let denv =
             let simple = Simple.symbol closure_symbol in
             let typ = T.alias_type_of K.value simple in
-            DE.add_variable denv bound_var typ
+            match DE.add_variable denv bound_var typ with
+            | Bottom -> Misc.fatal_error "TBD" (* XXX *)
+            | Ok denv -> denv
           in
           let binding = bound_var, closure_symbol in
           denv, binding)

@@ -52,9 +52,11 @@ let simplify_projection dacc ~original_term ~deconstructing ~shape ~result_var
     ~result_kind =
   let env = DA.typing_env dacc in
   match T.meet_shape env deconstructing ~shape ~result_var ~result_kind with
-  | Bottom ->
-    let dacc = DA.add_variable dacc result_var (T.bottom result_kind) in
-    Simplify_primitive_result.create_invalid dacc
+  | Bottom -> (
+    (* CR mshinwell: bit wierd *)
+    match DA.add_variable dacc result_var (T.bottom result_kind) with
+    | Bottom -> Simplify_primitive_result.create_invalid dacc
+    | Ok dacc -> Simplify_primitive_result.create_invalid dacc)
   | Ok env_extension ->
     let dacc =
       DA.map_denv dacc ~f:(fun denv ->
