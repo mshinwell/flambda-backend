@@ -27,7 +27,10 @@ let abstract_instance_proto_die_symbol ~fun_symbol =
 
 let empty_die_counter = ref 0
 
-let add_empty state ~parent ~demangled_name =
+let encode_name demangled_name loc =
+  Format.asprintf "%s.%a" demangled_name Location.print_loc loc
+
+let add_empty state ~parent loc ~demangled_name =
   let abstract_instance_proto_die =
     (* DWARF-5 specification section 3.3.8.1, page 82. *)
     Proto_die.create ~parent:(Some parent) ~tag:Subprogram ~attribute_values:[]
@@ -43,11 +46,11 @@ let add_empty state ~parent ~demangled_name =
     abstract_instance_proto_die_symbol;
   Misc.Stdlib.String.Tbl.add
     (DS.function_abstract_instances state)
-    demangled_name
+    (encode_name demangled_name loc)
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
-let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
+let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
     ~location_attributes =
   let attributes =
     [ DAH.create_name (Asm_symbol.encode fun_symbol);
@@ -71,7 +74,7 @@ let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
     match
       Misc.Stdlib.String.Tbl.find
         (DS.function_abstract_instances state)
-        demangled_name
+        (encode_name demangled_name loc)
     with
     | proto_die, _symbol ->
       (* See below in [find] *)
@@ -89,20 +92,22 @@ let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
      processing of inlined frames. *)
   Misc.Stdlib.String.Tbl.add (* or replace *)
     (DS.function_abstract_instances state)
-    demangled_name
+    (encode_name demangled_name loc)
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
 let find state ~function_proto_die (dbg : Debuginfo.t) =
-  let demangled_name, dbg_comp_unit =
+  let demangled_name, dbg_comp_unit, loc, item =
     match List.rev dbg with
     | [] -> Misc.fatal_error "Empty Debuginfo.t"
-    | { dinfo_scopes; _ } :: _ -> (
+    | ({ dinfo_scopes; _ } as item) :: _ -> (
       let module S = Debuginfo.Scoped_location in
       let demangled_name = S.string_of_scopes dinfo_scopes in
       let compilation_unit = S.compilation_unit dinfo_scopes in
+      let dbg = [item] in
+      let loc = Debuginfo.to_location dbg in
       match compilation_unit with
-      | Some compilation_unit -> demangled_name, compilation_unit
+      | Some compilation_unit -> demangled_name, compilation_unit, loc, item
       | None ->
         Misc.fatal_errorf "No compilation unit extracted from: %a"
           Debuginfo.print_compact dbg)
@@ -114,17 +119,19 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
      || not (DS.can_reference_dies_across_units state)
   then (
+    Format.eprintf "looking in function_abstract_instances for %s\n%!"
+      (encode_name demangled_name loc);
     match
       Misc.Stdlib.String.Tbl.find
         (DS.function_abstract_instances state)
-        demangled_name
+        (encode_name demangled_name loc)
     with
     | existing_instance -> existing_instance
     | exception Not_found ->
       (* Fabricate an empty abstract instance DIE to fill in later. *)
       Format.eprintf "making empty absint DIE for %a" Debuginfo.print_compact
-        dbg;
-      add_empty state ~parent:function_proto_die ~demangled_name)
+        [item];
+      add_empty state ~parent:function_proto_die loc ~demangled_name)
   else
     (* CR mshinwell: use Dwarf_name_laundry.abstract_instance_root_die_name *)
     Misc.fatal_errorf

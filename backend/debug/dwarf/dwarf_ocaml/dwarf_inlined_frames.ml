@@ -286,6 +286,7 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
               in
               let proto_die =
                 die_for_inlined_frame state parent fundecl range
+                  (* XXX should [block] be a singleton here? *)
                   range_list_attributes block
               in
               let scope_proto_dies =
