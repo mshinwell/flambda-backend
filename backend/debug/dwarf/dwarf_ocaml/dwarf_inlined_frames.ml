@@ -212,16 +212,24 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
   let all_blocks = IF.all_indexes lexical_block_ranges in
   let scope_proto_dies, _all_summaries =
     IF.Inlined_frames.Index.Set.fold
-      (fun block (scope_proto_dies, all_summaries) ->
-        Format.eprintf ">> %a\n%!" Debuginfo.print_compact block;
-        let rec create_up_to_root block scope_proto_dies all_summaries =
+      (fun block_with_parents (scope_proto_dies, all_summaries) ->
+        let block =
+          match block_with_parents with
+          | [] ->
+            Misc.fatal_errorf "Empty debuginfo in function %s" fundecl.fun_name
+          | block :: _ -> [block]
+        in
+        Format.eprintf ">> %a (with parents: %a)\n%!" Debuginfo.print_compact
+          block Debuginfo.print_compact block_with_parents;
+        let rec create_up_to_root block_with_parents scope_proto_dies
+            all_summaries =
           Format.eprintf "... %a\n%!" Debuginfo.print_compact block;
           match K.Map.find block scope_proto_dies with
           | proto_die ->
             Format.eprintf "block already has a proto DIE\n%!";
             proto_die, scope_proto_dies, all_summaries
           | exception Not_found -> (
-            match K.parent block with
+            match K.parent block_with_parents with
             | None ->
               Format.eprintf "no parent\n%!";
               function_proto_die, scope_proto_dies, all_summaries
@@ -286,7 +294,6 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
               in
               let proto_die =
                 die_for_inlined_frame state parent fundecl range
-                  (* XXX should [block] be a singleton here? *)
                   range_list_attributes block
               in
               let scope_proto_dies =
@@ -295,7 +302,7 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
               proto_die, scope_proto_dies, all_summaries)
         in
         let _proto_die, scope_proto_dies, all_summaries =
-          create_up_to_root block scope_proto_dies all_summaries
+          create_up_to_root block_with_parents scope_proto_dies all_summaries
         in
         scope_proto_dies, all_summaries)
       all_blocks

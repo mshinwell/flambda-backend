@@ -25,8 +25,6 @@ let attributes fun_name =
 let abstract_instance_proto_die_symbol ~fun_symbol =
   Asm_symbol.create (Asm_symbol.to_raw_string fun_symbol ^ "_absinst")
 
-let empty_die_counter = ref 0
-
 let encode_name demangled_name loc =
   Format.asprintf "%s.%a" demangled_name Location.print_loc loc
 
@@ -36,9 +34,8 @@ let add_empty state ~parent loc ~demangled_name =
     Proto_die.create ~parent:(Some parent) ~tag:Subprogram ~attribute_values:[]
       ()
   in
-  let counter = !empty_die_counter in
-  incr empty_die_counter;
-  let fun_symbol = Printf.sprintf "empty_die%d" counter |> Asm_symbol.create in
+  let encoded_name = encode_name demangled_name loc in
+  let fun_symbol = encoded_name |> Asm_symbol.create in
   let abstract_instance_proto_die_symbol =
     abstract_instance_proto_die_symbol ~fun_symbol
   in
@@ -68,6 +65,8 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
         DAH.create_inline Inlined ]
   in
   let abstract_instance_proto_die_symbol =
+    let encoded_name = encode_name demangled_name loc in
+    let fun_symbol = encoded_name |> Asm_symbol.create in
     abstract_instance_proto_die_symbol ~fun_symbol
   in
   let abstract_instance_proto_die =
@@ -99,8 +98,7 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
 let find state ~function_proto_die (dbg : Debuginfo.t) =
   let demangled_name, dbg_comp_unit, loc, item =
     match List.rev dbg with
-    | [] -> Misc.fatal_error "Empty Debuginfo.t"
-    | ({ dinfo_scopes; _ } as item) :: _ -> (
+    | [({ dinfo_scopes; _ } as item)] -> (
       let module S = Debuginfo.Scoped_location in
       let demangled_name = S.string_of_scopes dinfo_scopes in
       let compilation_unit = S.compilation_unit dinfo_scopes in
@@ -111,6 +109,10 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
       | None ->
         Misc.fatal_errorf "No compilation unit extracted from: %a"
           Debuginfo.print_compact dbg)
+    | [] -> Misc.fatal_error "Empty Debuginfo.t"
+    | _ :: _ ->
+      Misc.fatal_errorf "Non-singleton Debuginfo.t: %a" Debuginfo.print_compact
+        dbg
   in
   (* CR mshinwell: think more about fabrication of DIEs for other units in the
      event that cross-unit references are not permitted *)
