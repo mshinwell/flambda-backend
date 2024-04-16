@@ -85,6 +85,8 @@ extern void caml_install_invalid_parameter_handler(void);
 
 #endif
 
+extern void caml_init_nat_signals(void);
+
 value caml_startup_common(char_os **argv, int pooling)
 {
   char_os * exe_name, * proc_self_exe;
@@ -110,6 +112,7 @@ value caml_startup_common(char_os **argv, int pooling)
 #endif
   caml_init_custom_operations();
   caml_init_os_params();
+  caml_init_nat_signals();
   caml_init_gc ();
 
   /* runtime_events's init can cause a stop-the-world pause, so it must be done
