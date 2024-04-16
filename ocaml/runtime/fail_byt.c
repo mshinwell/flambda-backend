@@ -65,7 +65,6 @@ CAMLexport void caml_raise_async(value v)
      handler lives.  (Note that we cannot cross a C stack chunk, since
      installation of such a chunk via the callback mechanism always involves
      the installation of an async exn handler.) */
-  /* XXX check accuracy of the last sentence above for bytecode */
   while (Caml_state->current_stack
          != Caml_state->external_raise_async->current_stack) {
     struct stack_info* current_stack = Caml_state->current_stack;
