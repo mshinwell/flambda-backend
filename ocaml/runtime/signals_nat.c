@@ -85,3 +85,86 @@ void caml_garbage_collection(void)
                               nallocs, alloc_len);
   }
 }
+
+#define DECLARE_SIGNAL_HANDLER(name) \
+  static void name(int sig, siginfo_t * info, ucontext_t * context)
+
+#define SET_SIGACT(sigact,name)                                       \
+  sigact.sa_sigaction = (void (*)(int,siginfo_t *,void *)) (name);    \
+  sigact.sa_flags = SA_SIGINFO
+
+#include <unistd.h>
+#include <sys/ucontext.h>
+
+CAMLextern void caml_call_gc_for_safepoint(void);
+
+static void safepoint_triggered(ucontext_t* context)
+{
+  value gc_regs_bucket = Caml_state->gc_regs_buckets[0];
+  Caml_state->gc_regs = gc_regs_bucket;
+
+  greg_t* regs = (greg_t*) &Field(gc_regs_bucket, 0);
+  regs[REG_RAX] = context->uc_mcontext.gregs[REG_RAX];
+  regs[REG_RBX] = context->uc_mcontext.gregs[REG_RBX];
+  regs[REG_RDI] = context->uc_mcontext.gregs[REG_RDI];
+  regs[REG_RSI] = context->uc_mcontext.gregs[REG_RSI];
+  regs[REG_RDX] = context->uc_mcontext.gregs[REG_RDX];
+  regs[REG_RCX] = context->uc_mcontext.gregs[REG_RCX];
+  regs[REG_R8] = context->uc_mcontext.gregs[REG_R8];
+  regs[REG_R9] = context->uc_mcontext.gregs[REG_R9];
+  regs[REG_R12] = context->uc_mcontext.gregs[REG_R12];
+  regs[REG_R13] = context->uc_mcontext.gregs[REG_R13];
+  regs[REG_R10] = context->uc_mcontext.gregs[REG_R10];
+  regs[REG_R11] = context->uc_mcontext.gregs[REG_R11];
+  regs[REG_RBP] = context->uc_mcontext.gregs[REG_RBP];
+
+  Caml_state->young_ptr = context->uc_mcontext.gregs[REG_R15];
+
+  /* [caml_call_gc_for_safepoint] does the stack switching */
+  caml_call_gc_for_safepoint();
+
+  context->uc_mcontext.gregs[REG_RAX] = regs[REG_RAX];
+  context->uc_mcontext.gregs[REG_RBX] = regs[REG_RBX];
+  context->uc_mcontext.gregs[REG_RDI] = regs[REG_RDI];
+  context->uc_mcontext.gregs[REG_RSI] = regs[REG_RSI];
+  context->uc_mcontext.gregs[REG_RDX] = regs[REG_RDX];
+  context->uc_mcontext.gregs[REG_RCX] = regs[REG_RCX];
+  context->uc_mcontext.gregs[REG_R8] = regs[REG_R8];
+  context->uc_mcontext.gregs[REG_R9] = regs[REG_R9];
+  context->uc_mcontext.gregs[REG_R12] = regs[REG_R12];
+  context->uc_mcontext.gregs[REG_R13] = regs[REG_R13];
+  context->uc_mcontext.gregs[REG_R10] = regs[REG_R10];
+  context->uc_mcontext.gregs[REG_R11] = regs[REG_R11];
+  context->uc_mcontext.gregs[REG_RBP] = regs[REG_RBP];
+
+  Caml_state->young_ptr = context->uc_mcontext.gregs[REG_R15];
+}
+
+DECLARE_SIGNAL_HANDLER(segv_handler)
+{
+  struct sigaction act;
+  char* fault_addr = info->si_addr;
+
+  char* trigger_low = Caml_state->safepoints_trigger_page;
+  char* trigger_high = trigger_low + getpagesize();
+
+  if (fault_addr >= trigger_low && fault_addr < trigger_high) {
+    safepoint_triggered (context);
+    /* This will return back to the instruction after the polling point. */
+  } else {
+    act.sa_handler = SIG_DFL;
+    act.sa_flags = 0;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGSEGV, &act, NULL);
+  }
+}
+
+void caml_init_nat_signals(void)
+{
+  struct sigaction act;
+  SET_SIGACT(act, segv_handler);
+  act.sa_flags |= SA_NODEFER;
+  act.sa_flags &= ~SA_ONSTACK;
+  sigemptyset(&act.sa_mask);
+  sigaction(SIGSEGV, &act, NULL);
+}

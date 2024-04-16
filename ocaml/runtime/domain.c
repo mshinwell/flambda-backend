@@ -35,6 +35,7 @@
 #include <sys/cpuset.h>
 typedef cpuset_t cpu_set_t;
 #endif
+#include <sys/mman.h>
 #ifdef _WIN32
 #include <sysinfoapi.h>
 #endif
@@ -578,11 +579,16 @@ static void domain_create(uintnat initial_minor_heap_wsize) {
   */
   if (d->state == NULL) {
     /* FIXME: Never freed. Not clear when to. */
-    domain_state = (caml_domain_state*)
-      caml_stat_calloc_noexc(1, sizeof(caml_domain_state));
-    if (domain_state == NULL)
+    char* block = (char*)
+      caml_stat_alloc_aligned_to_page_size(1, sizeof(caml_domain_state));
+    if (block == NULL)
       goto domain_init_complete;
-    d->state = domain_state;
+
+    int page_size = getpagesize ();
+    CAMLassert((intnat) block % page_size == 0);
+
+    d->state = (caml_domain_state*) (block + page_size);
+    d->state->safepoints_trigger_page = block;
   } else {
     domain_state = d->state;
   }
@@ -1975,4 +1981,20 @@ CAMLprim value caml_recommended_domain_count(value unused)
     n = Max_domains;
 
   return (Val_long(n));
+}
+
+void caml_force_safepoint_trigger(void)
+{
+  int page_size = getpagesize();
+  (void) mprotect(Caml_state->safepoints_trigger_page,
+    page_size, PROT_NONE);
+  // CR mshinwell: what should we do if it fails (nonzero return)?
+  // (same below)
+}
+
+void caml_reset_safepoint_trigger(void)
+{
+  int page_size = getpagesize();
+  (void) mprotect(Caml_state->safepoints_trigger_page,
+    page_size, PROT_WRITE);
 }

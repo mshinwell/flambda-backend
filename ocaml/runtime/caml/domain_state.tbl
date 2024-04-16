@@ -160,6 +160,8 @@ DOMAIN_STATE(int, inside_stw_handler)
    this is used for several debug assertions inside of methods
    that can only be called from either in or outside this state. */
 
+DOMAIN_STATE(char*, safepoints_trigger_page)
+
 DOMAIN_STATE(intnat, trap_sp_off)
 DOMAIN_STATE(intnat, trap_barrier_off)
 DOMAIN_STATE(int64_t, trap_barrier_block)
