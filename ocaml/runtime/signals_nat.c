@@ -17,6 +17,10 @@
 
 /* Signal handling, code specific to the native-code compiler */
 
+#include <unistd.h>
+#define __USE_GNU
+#include <sys/ucontext.h>
+
 #include <signal.h>
 #include <errno.h>
 #include <stdio.h>
@@ -84,4 +88,65 @@ void caml_garbage_collection(void)
     caml_alloc_small_dispatch(dom_st, allocsz, CAML_DO_TRACK | CAML_FROM_CAML,
                               nallocs, alloc_len);
   }
+}
+
+#define DECLARE_SIGNAL_HANDLER(name) \
+  static void name(int sig, siginfo_t * info, ucontext_t * context)
+
+#define SET_SIGACT(sigact,name)                                       \
+  sigact.sa_sigaction = (void (*)(int,siginfo_t *,void *)) (name);    \
+  sigact.sa_flags = SA_SIGINFO
+
+CAMLextern void caml_call_gc(void);
+CAMLextern void caml_call_gc_16_alignment(void);
+
+static void safepoint_triggered(ucontext_t* context)
+{
+  // Make caml_call_gc return to the instruction after the faulting one,
+  // i.e. directly after the safepoint.
+  void* return_addr = (void*) (context->uc_mcontext.gregs[REG_RIP] + 4);
+  uintnat stack_ptr = (uintnat) context->uc_mcontext.gregs[REG_RSP];
+  stack_ptr -= 8;
+  context->uc_mcontext.gregs[REG_RSP] = stack_ptr;
+  *(void**) stack_ptr = return_addr;
+
+  // Make this signal handler return to caml_call_gc.  There are two
+  // versions depending on what the current stack alignment is (we need
+  // to match the normal situation for a call, where the stack pointer is
+  // 0 mod 16 at the call site).  This logic means that the backend doesn't
+  // need to worry about the positioning of polling instructions.
+  if (stack_ptr % 16 != 0) {
+    context->uc_mcontext.gregs[REG_RIP] = (greg_t) &caml_call_gc;
+  }
+  else {
+    context->uc_mcontext.gregs[REG_RIP] = (greg_t) &caml_call_gc_16_alignment;
+  }
+}
+
+DECLARE_SIGNAL_HANDLER(segv_handler)
+{
+  struct sigaction act;
+  char* fault_addr = info->si_addr;
+
+  char* trigger_low = Caml_state->safepoints_trigger_page;
+  char* trigger_high = trigger_low + getpagesize();
+
+  if (fault_addr >= trigger_low && fault_addr < trigger_high) {
+    safepoint_triggered (context);
+    // This will return to one of the caml_call_gc veneers (see above).
+  } else {
+    act.sa_handler = SIG_DFL;
+    act.sa_flags = 0;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGSEGV, &act, NULL);
+  }
+}
+
+void caml_init_nat_signals(void)
+{
+  struct sigaction act;
+  SET_SIGACT(act, segv_handler);
+  act.sa_flags |= SA_ONSTACK;
+  sigemptyset(&act.sa_mask);
+  sigaction(SIGSEGV, &act, NULL);
 }

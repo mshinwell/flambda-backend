@@ -1434,27 +1434,27 @@ let emit_instr ~first ~fallthrough i =
           lr_dbg = i.dbg;
           lr_return_lbl = lbl_after_alloc } :: !local_realloc_sites
   | Lop(Ipoll { return_label }) ->
-      I.cmp (domain_field Domainstate.Domain_young_limit) r15;
-      let gc_call_label = new_label () in
-      let lbl_after_poll = match return_label with
-                  | None -> new_label()
-                  | Some(lbl) -> lbl in
-      let lbl_frame =
-        record_frame_label i.live (Dbg_alloc [])
+      (* Prefer a load since it should have less impact on the CPU.
+         To do a load, we need to find a spare register.  The liveness
+         information is accurate here since we are at a safe point. *)
+      let spare_reg =
+        (* CR mshinwell: think about interaction with [Available_regs] *)
+        Reg.Set.filter (fun reg ->
+            not (Reg.Set.exists (fun live_reg ->
+              Reg.same_loc reg live_reg) i.live))
+          (Proc.precolored_regs ())
+        |> Reg.Set.min_elt_opt
       in
-      begin match return_label with
-      | None -> I.jbe (label gc_call_label)
-      | Some return_label -> I.ja (label return_label)
-      end;
-      call_gc_sites :=
-        { gc_lbl = gc_call_label;
-          gc_return_lbl = lbl_after_poll;
-          gc_dbg = i.dbg;
-          gc_frame = lbl_frame; } :: !call_gc_sites;
-      begin match return_label with
-      | None -> def_label lbl_after_poll
-      | Some _ -> I.jmp (label gc_call_label)
-      end
+      let trigger_word = mem64 QWORD (-8) R14 in
+      (match spare_reg with
+      | None -> I.mov (int 0) trigger_word
+      | Some r -> I.mov trigger_word (reg r));
+      record_frame i.live (Dbg_alloc []);
+      (* The load or store will cause a segfault when the safe points
+         trigger has been enabled by the runtime.  When the runtime code
+         returns, it will do so to this point, the instruction immediately
+         after the faulting one. *)
+      Option.iter def_label return_label
   | Lop(Iintop(Icomp cmp)) ->
       I.cmp (arg i 1) (arg i 0);
       I.set (cond cmp) al;
