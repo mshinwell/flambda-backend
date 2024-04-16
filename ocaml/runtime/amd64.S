@@ -545,19 +545,6 @@ LBL(caml_call_gc):
 CFI_ENDPROC
 ENDFUNCTION(G(caml_call_gc))
 
-FUNCTION(G(caml_call_gc_for_safepoint))
-CFI_STARTPROC
-        CFI_SIGNAL_FRAME
-        ENTER_FUNCTION
-LBL(caml_call_gc):
-        SWITCH_OCAML_TO_C
-        C_call (GCALL(caml_garbage_collection))
-        SWITCH_C_TO_OCAML
-        LEAVE_FUNCTION
-        ret
-CFI_ENDPROC
-ENDFUNCTION(G(caml_call_gc))
-
 FUNCTION(G(caml_alloc1))
 CFI_STARTPROC
         ENTER_FUNCTION

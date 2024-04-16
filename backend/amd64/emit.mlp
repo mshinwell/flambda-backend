@@ -1434,6 +1434,7 @@ let emit_instr ~first ~fallthrough i =
           lr_dbg = i.dbg;
           lr_return_lbl = lbl_after_alloc } :: !local_realloc_sites
   | Lop(Ipoll { return_label }) ->
+      (* XXX use a load if there is a free reg *)
       I.mov (int 0) (mem64 QWORD (-8) R14);
       record_frame i.live (Dbg_alloc []);
       def_label return_label

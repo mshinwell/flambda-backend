@@ -100,44 +100,14 @@ CAMLextern void caml_call_gc_for_safepoint(void);
 
 static void safepoint_triggered(ucontext_t* context)
 {
-  value gc_regs_bucket = Caml_state->gc_regs_buckets[0];
-  Caml_state->gc_regs = gc_regs_bucket;
+  // Make caml_call_gc return to the instruction after the faulting one,
+  // i.e. directly after the safepoint.
+  void* return_addr = context->uc_mcontext.gregs[REG_RIP];
+  context->uc_mcontext.gregs[REG_RSP] -= 8;
+  *(void**)context->uc_mcontext.gregs[REG_RSP] = return_addr;
 
-  greg_t* regs = (greg_t*) &Field(gc_regs_bucket, 0);
-  regs[REG_RAX] = context->uc_mcontext.gregs[REG_RAX];
-  regs[REG_RBX] = context->uc_mcontext.gregs[REG_RBX];
-  regs[REG_RDI] = context->uc_mcontext.gregs[REG_RDI];
-  regs[REG_RSI] = context->uc_mcontext.gregs[REG_RSI];
-  regs[REG_RDX] = context->uc_mcontext.gregs[REG_RDX];
-  regs[REG_RCX] = context->uc_mcontext.gregs[REG_RCX];
-  regs[REG_R8] = context->uc_mcontext.gregs[REG_R8];
-  regs[REG_R9] = context->uc_mcontext.gregs[REG_R9];
-  regs[REG_R12] = context->uc_mcontext.gregs[REG_R12];
-  regs[REG_R13] = context->uc_mcontext.gregs[REG_R13];
-  regs[REG_R10] = context->uc_mcontext.gregs[REG_R10];
-  regs[REG_R11] = context->uc_mcontext.gregs[REG_R11];
-  regs[REG_RBP] = context->uc_mcontext.gregs[REG_RBP];
-
-  Caml_state->young_ptr = context->uc_mcontext.gregs[REG_R15];
-
-  /* [caml_call_gc_for_safepoint] does the stack switching */
-  caml_call_gc_for_safepoint();
-
-  context->uc_mcontext.gregs[REG_RAX] = regs[REG_RAX];
-  context->uc_mcontext.gregs[REG_RBX] = regs[REG_RBX];
-  context->uc_mcontext.gregs[REG_RDI] = regs[REG_RDI];
-  context->uc_mcontext.gregs[REG_RSI] = regs[REG_RSI];
-  context->uc_mcontext.gregs[REG_RDX] = regs[REG_RDX];
-  context->uc_mcontext.gregs[REG_RCX] = regs[REG_RCX];
-  context->uc_mcontext.gregs[REG_R8] = regs[REG_R8];
-  context->uc_mcontext.gregs[REG_R9] = regs[REG_R9];
-  context->uc_mcontext.gregs[REG_R12] = regs[REG_R12];
-  context->uc_mcontext.gregs[REG_R13] = regs[REG_R13];
-  context->uc_mcontext.gregs[REG_R10] = regs[REG_R10];
-  context->uc_mcontext.gregs[REG_R11] = regs[REG_R11];
-  context->uc_mcontext.gregs[REG_RBP] = regs[REG_RBP];
-
-  Caml_state->young_ptr = context->uc_mcontext.gregs[REG_R15];
+  // Make this signal handler return to caml_call_gc.
+  context->uc_mcontext.gregs[REG_RIP] = (void*) caml_call_gc;
 }
 
 DECLARE_SIGNAL_HANDLER(segv_handler)
@@ -163,8 +133,7 @@ void caml_init_nat_signals(void)
 {
   struct sigaction act;
   SET_SIGACT(act, segv_handler);
-  act.sa_flags |= SA_NODEFER;
-  act.sa_flags &= ~SA_ONSTACK;
+  act.sa_flags |= SA_ONSTACK | SA_NODEFER;
   sigemptyset(&act.sa_mask);
   sigaction(SIGSEGV, &act, NULL);
 }
