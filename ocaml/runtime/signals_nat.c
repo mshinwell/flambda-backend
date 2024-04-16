@@ -103,6 +103,9 @@ static void safepoint_triggered(ucontext_t* context)
   // Make caml_call_gc return to the instruction after the faulting one,
   // i.e. directly after the safepoint.
   void* return_addr = context->uc_mcontext.gregs[REG_RIP];
+
+  // XXX check alignment.  Maybe different at the top of functions from
+  // in a loop?
   context->uc_mcontext.gregs[REG_RSP] -= 8;
   *(void**)context->uc_mcontext.gregs[REG_RSP] = return_addr;
 

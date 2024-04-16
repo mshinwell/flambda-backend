@@ -366,6 +366,8 @@ static void caml_wait_interrupt_serviced(struct interruptor* target)
         return;
     }
   }
+
+// XXX  caml_force_safepoint_trigger ();
 }
 
 asize_t caml_norm_minor_heap_size (intnat wsize)
