@@ -299,6 +299,8 @@ CAMLnoreturn_end;
 
 value caml_make_unhandled_effect_exn (value effect);
 
+CAMLextern void caml_unwind_stacks_until_exception_handler (char* trap_pointer);
+
 #endif /* CAML_INTERNALS */
 
 #endif /* CAML_FIBER_H */
