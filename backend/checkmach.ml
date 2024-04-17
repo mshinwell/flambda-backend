@@ -922,7 +922,9 @@ end = struct
         | None -> S.transform_specific w s
       in
       transform t ~next ~exn ~effect "Arch.specific_operation" dbg
-    | Idls_get -> Misc.fatal_error "Idls_get not supported"
+    | Idls_get ->
+      assert (not (Mach.operation_can_raise op));
+      next
 
   module D = Dataflow.Backward ((Value : Dataflow.DOMAIN))
 

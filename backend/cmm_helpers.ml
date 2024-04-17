@@ -3895,3 +3895,5 @@ let reperform ~dbg ~eff ~cont ~last_fiber =
         cont;
         last_fiber ],
       dbg )
+
+let dls_get ~dbg = Cop (Cdls_get, [], dbg)
