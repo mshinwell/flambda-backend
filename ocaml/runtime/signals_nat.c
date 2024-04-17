@@ -123,6 +123,8 @@ static void safepoint_triggered(ucontext_t* context)
   }
 }
 
+// CR mshinwell: need to conditionalize on target machine / OS etc
+
 DECLARE_SIGNAL_HANDLER(segv_handler)
 {
   struct sigaction act;
