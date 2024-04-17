@@ -348,7 +348,25 @@ int caml_send_interrupt(struct interruptor* target)
   return 1;
 }
 
-static void caml_wait_interrupt_serviced(struct interruptor* target)
+static void force_safepoint_trigger(caml_domain_state* domain)
+{
+  int page_size = getpagesize();
+  (void) mprotect(domain->safepoints_trigger_page, page_size, PROT_NONE);
+  /* If this fails, which seems very unlikely, we have to wait until the
+     domain hits an allocation point or similar (not a safe point). */
+}
+
+static void reset_safepoint_trigger(caml_domain_state* domain)
+{
+  int page_size = getpagesize();
+  (void) mprotect(domain->safepoints_trigger_page, page_size,
+    PROT_READ | PROT_WRITE);
+  /* If this fails, which seems very unlikely, the domain will keep
+     entering the runtime at safe points. */
+}
+
+static void caml_wait_interrupt_serviced(caml_domain_state* domain,
+  struct interruptor* target)
 {
   int i;
 
@@ -360,14 +378,27 @@ static void caml_wait_interrupt_serviced(struct interruptor* target)
     cpu_relax();
   }
 
+  /* Wait for the domain to pick up the interrupt via an allocation point
+     or similar (but not a safe point).  If this hasn't happened after a
+     number of spins, make the domain stop at the next safe point (a more
+     expensive operation). */
   {
-    SPIN_WAIT {
+    SPIN_WAIT_BOUNDED(1000000) {
       if (!atomic_load_acquire(&target->interrupt_pending))
         return;
     }
   }
 
-// XXX  caml_force_safepoint_trigger ();
+  force_safepoint_trigger(domain);
+
+  {
+    SPIN_WAIT {
+      if (!atomic_load_acquire(&target->interrupt_pending)) {
+        reset_safepoint_trigger(domain);
+        return;
+      }
+    }
+  }
 }
 
 asize_t caml_norm_minor_heap_size (intnat wsize)
@@ -1983,20 +2014,4 @@ CAMLprim value caml_recommended_domain_count(value unused)
     n = Max_domains;
 
   return (Val_long(n));
-}
-
-void caml_force_safepoint_trigger(void)
-{
-  int page_size = getpagesize();
-  (void) mprotect(Caml_state->safepoints_trigger_page,
-    page_size, PROT_NONE);
-  // CR mshinwell: what should we do if it fails (nonzero return)?
-  // (same below)
-}
-
-void caml_reset_safepoint_trigger(void)
-{
-  int page_size = getpagesize();
-  (void) mprotect(Caml_state->safepoints_trigger_page,
-    page_size, PROT_WRITE);
 }

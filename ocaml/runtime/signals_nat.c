@@ -103,14 +103,22 @@ static void safepoint_triggered(ucontext_t* context)
   // Make caml_call_gc return to the instruction after the faulting one,
   // i.e. directly after the safepoint.
   void* return_addr = context->uc_mcontext.gregs[REG_RIP];
+  uintnat stack_ptr = (uintnat) context->uc_mcontext.gregs[REG_RSP];
+  stack_ptr -= 8;
+  context->uc_mcontext.gregs[REG_RSP] = stack_ptr;
+  *(void**) stack_ptr = return_addr;
 
-  // XXX check alignment.  Maybe different at the top of functions from
-  // in a loop?
-  context->uc_mcontext.gregs[REG_RSP] -= 8;
-  *(void**)context->uc_mcontext.gregs[REG_RSP] = return_addr;
-
-  // Make this signal handler return to caml_call_gc.
-  context->uc_mcontext.gregs[REG_RIP] = (void*) caml_call_gc;
+  // Make this signal handler return to caml_call_gc.  There are two
+  // versions depending on what the current stack alignment is (we need
+  // to match the normal situation for a call, where the stack pointer is
+  // 0 mod 16 at the call site).  This logic means that the backend doesn't
+  // need to worry about the positioning of polling instructions.
+  if (stack_ptr % 16 != 0) {
+    context->uc_mcontext.gregs[REG_RIP] = (void*) caml_call_gc;
+  }
+  else {
+    context->uc_mcontext.gregs[REG_RIP] = (void*) caml_call_gc_16_alignment;
+  }
 }
 
 DECLARE_SIGNAL_HANDLER(segv_handler)
@@ -123,7 +131,7 @@ DECLARE_SIGNAL_HANDLER(segv_handler)
 
   if (fault_addr >= trigger_low && fault_addr < trigger_high) {
     safepoint_triggered (context);
-    /* This will return back to the instruction after the polling point. */
+    // This will return to one of the caml_call_gc veneers (see above).
   } else {
     act.sa_handler = SIG_DFL;
     act.sa_flags = 0;
