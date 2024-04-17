@@ -1446,6 +1446,9 @@ let emit_instr ~first ~fallthrough i =
         |> Reg.Set.min_elt_opt
       in
       let trigger_word = mem64 QWORD (-8) R14 in
+      (* CR mshinwell: is -1 better? *)
+      (* CR mshinwell: check instruction sequence length matches segfault
+         handler *)
       (match spare_reg with
       | None -> I.mov (int 0) trigger_word
       | Some r -> I.mov trigger_word (reg r));
