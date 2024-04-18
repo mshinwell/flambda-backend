@@ -17,7 +17,7 @@ let[@inline never] foo a =
 let () =
   let _, _ = opaque_identity (foo 42) in
   ()
-
+(*
 let[@inline] f1 x = x + 1
 
 let[@inline never] foo1 a =
@@ -34,3 +34,4 @@ let[@inline never] foo1 a =
 let () =
   let _, _ = opaque_identity (foo1 42) in
   ()
+*)

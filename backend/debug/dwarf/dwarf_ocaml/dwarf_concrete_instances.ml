@@ -72,6 +72,7 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
   in
   let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
     (* Add the abstract instance root for this function *)
+    Format.eprintf "*** Adding absint root for %s\n%!" fundecl.fun_name;
     Dwarf_abstract_instances.add_root state ~function_proto_die:parent
       (* XXX mislabelled arg *) loc ~demangled_name:linkage_name start_sym
       ~location_attributes

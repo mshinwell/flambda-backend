@@ -25,8 +25,12 @@ let attributes fun_name =
 let abstract_instance_proto_die_symbol ~fun_symbol =
   Asm_symbol.create (Asm_symbol.to_raw_string fun_symbol ^ "_absinst")
 
-let encode_name demangled_name loc =
-  Format.asprintf "%s.%a" demangled_name Location.print_loc loc
+let encode_name demangled_name (loc : Location.t) =
+  (* XXX this isn't sufficient, we should find a way of recovering the code ID
+     from the Debuginfo.t. The column numbers are missed out at present to give
+     a higher chance of matches. *)
+  let file, line, _chr = Location.get_pos_info loc.loc_start in
+  Format.asprintf "%s.%s.%d" demangled_name file line
 
 let add_empty state ~parent loc ~demangled_name =
   let abstract_instance_proto_die =
@@ -69,11 +73,13 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
     let fun_symbol = encoded_name |> Asm_symbol.create in
     abstract_instance_proto_die_symbol ~fun_symbol
   in
+  let mangled_name = encode_name demangled_name loc in
+  Format.eprintf "add_root: mangled_name=%s\n" mangled_name;
   let abstract_instance_proto_die =
     match
       Misc.Stdlib.String.Tbl.find
         (DS.function_abstract_instances state)
-        (encode_name demangled_name loc)
+        mangled_name
     with
     | proto_die, _symbol ->
       (* See below in [find] *)
@@ -121,18 +127,20 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
      || not (DS.can_reference_dies_across_units state)
   then (
+    let mangled_name = encode_name demangled_name loc in
     Format.eprintf "looking in function_abstract_instances for %s\n%!"
-      (encode_name demangled_name loc);
+      mangled_name;
     match
       Misc.Stdlib.String.Tbl.find
         (DS.function_abstract_instances state)
-        (encode_name demangled_name loc)
+        mangled_name
     with
-    | existing_instance -> existing_instance
+    | existing_instance ->
+      Format.eprintf "...successfully found existing absint DIE\n%!";
+      existing_instance
     | exception Not_found ->
       (* Fabricate an empty abstract instance DIE to fill in later. *)
-      Format.eprintf "making empty absint DIE for %a" Debuginfo.print_compact
-        [item];
+      Format.eprintf "...making empty absint DIE for %s\n" mangled_name;
       add_empty state ~parent:function_proto_die loc ~demangled_name)
   else
     (* CR mshinwell: use Dwarf_name_laundry.abstract_instance_root_die_name *)

@@ -214,17 +214,19 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
     IF.Inlined_frames.Index.Set.fold
       (fun block_with_parents (scope_proto_dies, all_summaries) ->
         let block =
-          match block_with_parents with
+          match List.rev block_with_parents with
           | [] ->
             Misc.fatal_errorf "Empty debuginfo in function %s" fundecl.fun_name
           | block :: _ -> [block]
         in
-        Format.eprintf ">> %a (with parents: %a)\n%!" Debuginfo.print_compact
-          block Debuginfo.print_compact block_with_parents;
+        Format.eprintf ">> %a (parents are: %a)\n%!" Debuginfo.print_compact
+          block
+          (Misc.Stdlib.Option.print Debuginfo.print_compact)
+          (K.parent block_with_parents);
         let rec create_up_to_root block_with_parents scope_proto_dies
             all_summaries =
           Format.eprintf "... %a\n%!" Debuginfo.print_compact block;
-          match K.Map.find block scope_proto_dies with
+          match K.Map.find block_with_parents scope_proto_dies with
           | proto_die ->
             Format.eprintf "block already has a proto DIE\n%!";
             proto_die, scope_proto_dies, all_summaries
@@ -239,9 +241,10 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
                 create_up_to_root parent scope_proto_dies all_summaries
               in
               let () =
-                Format.eprintf "looking for block: %a\n%!" K.print block
+                Format.eprintf "finding ranges for block: %a\n%!" K.print
+                  block_with_parents
               in
-              let range = IF.find lexical_block_ranges block in
+              let range = IF.find lexical_block_ranges block_with_parents in
               let range_list_attributes, all_summaries =
                 match create_range_list_and_summarise state fundecl range with
                 | None -> [], all_summaries
