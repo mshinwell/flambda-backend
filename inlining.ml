@@ -1,7 +1,11 @@
 external ( + ) : int -> int -> int = "%addint"
 external opaque_identity : 'a -> 'a = "%opaque"
 
-let[@inline] f x = x + 1
+let[@inline] f0 x = x + 1
+
+let[@inline] f x =
+  let c = Sys.opaque_identity (f0 x) in
+  c - 7 * 10
 
 let[@inline never] foo a =
   let x1 = a + 42 in
