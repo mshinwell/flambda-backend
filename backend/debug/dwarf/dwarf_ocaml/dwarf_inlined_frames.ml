@@ -175,6 +175,7 @@ let die_for_inlined_frame state parent fundecl range range_list_attributes block
       (* If the abstract instance DIE cannot be referenced, reconstitute as many
          of its attributes as we can and put them directly into the DIE for the
          inlined frame, making use of DWARF-5 spec page 85, line 30 onwards. *)
+      (* XXX unclear this is correct - look where [fundecl] comes from below *)
       Dwarf_abstract_instances.attributes fundecl.L.fun_name
     | Some abstract_instance_symbol ->
       (* This appears to be the source of a bogus error from "dwarfdump
@@ -208,6 +209,87 @@ let die_for_inlined_frame state parent fundecl range range_list_attributes block
           DAH.create_call_column block.dinfo_char_start ])
     ()
 
+let rec create_up_to_root fundecl state block (block_with_parents : Debuginfo.t)
+    scope_proto_dies all_summaries function_proto_die lexical_block_ranges =
+  Format.eprintf "... %a\n%!" Debuginfo.print_compact block;
+  match K.Map.find block_with_parents scope_proto_dies with
+  | proto_die ->
+    Format.eprintf "block already has a proto DIE\n%!";
+    proto_die, scope_proto_dies, all_summaries
+  | exception Not_found -> (
+    let parent =
+      Option.map Debuginfo.of_items
+        (K.parent (Debuginfo.to_items block_with_parents))
+    in
+    match parent with
+    | None ->
+      Format.eprintf "no parent\n%!";
+      function_proto_die, scope_proto_dies, all_summaries
+    | Some parent ->
+      let parent, scope_proto_dies, all_summaries =
+        Format.eprintf "parent is: %a\n%!" K.print parent;
+        create_up_to_root fundecl state block parent scope_proto_dies
+          all_summaries function_proto_die lexical_block_ranges
+      in
+      let () =
+        Format.eprintf "finding ranges for block: %a\n%!" K.print
+          block_with_parents
+      in
+      let range = IF.find lexical_block_ranges block_with_parents in
+      let range_list_attributes, all_summaries =
+        match create_range_list_and_summarise state fundecl range with
+        | None -> [], all_summaries
+        | Some
+            (Contiguous
+              { start_pos; start_pos_offset; end_pos; end_pos_offset }) ->
+          let start_pos_offset = Targetint.of_int start_pos_offset in
+          let end_pos_offset = Targetint.of_int end_pos_offset in
+          let low_pc =
+            DAH.create_low_pc_with_offset start_pos
+              ~offset_in_bytes:start_pos_offset
+          in
+          let high_pc =
+            DAH.create_high_pc_offset ~low_pc:start_pos
+              ~low_pc_offset_in_bytes:start_pos_offset ~high_pc:end_pos
+              ~high_pc_offset_in_bytes:end_pos_offset
+          in
+          [low_pc; high_pc], all_summaries
+        | Some
+            (Discontiguous (dwarf_4_range_list_entries, _range_list, summary))
+          -> (
+          match All_summaries.Map.find summary all_summaries with
+          | exception Not_found ->
+            let range_list_attributes =
+              match !Dwarf_flags.gdwarf_version with
+              | Four ->
+                let range_list =
+                  Dwarf_4_range_list.create
+                    ~range_list_entries:dwarf_4_range_list_entries
+                in
+                let range_list_attribute =
+                  Debug_ranges_table.insert
+                    (DS.debug_ranges_table state)
+                    ~range_list
+                in
+                [range_list_attribute]
+              | Five -> Misc.fatal_error "not yet implemented"
+              (* let range_list_index = Range_list_table.add
+                 (DS.range_list_table state) range_list in DAH.create_ranges
+                 range_list_index *)
+            in
+            let all_summaries =
+              All_summaries.Map.add summary range_list_attributes all_summaries
+            in
+            range_list_attributes, all_summaries
+          | range_list_attributes -> range_list_attributes, all_summaries)
+      in
+      let proto_die =
+        die_for_inlined_frame state parent fundecl range range_list_attributes
+          block
+      in
+      let scope_proto_dies = K.Map.add block proto_die scope_proto_dies in
+      proto_die, scope_proto_dies, all_summaries)
+
 let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
   let all_blocks = IF.all_indexes lexical_block_ranges in
   let scope_proto_dies, _all_summaries =
@@ -228,93 +310,10 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
           block
           (Misc.Stdlib.Option.print Debuginfo.print_compact)
           parent;
-        let rec create_up_to_root (block_with_parents : Debuginfo.t)
-            scope_proto_dies all_summaries =
-          Format.eprintf "... %a\n%!" Debuginfo.print_compact block;
-          match K.Map.find block_with_parents scope_proto_dies with
-          | proto_die ->
-            Format.eprintf "block already has a proto DIE\n%!";
-            proto_die, scope_proto_dies, all_summaries
-          | exception Not_found -> (
-            let parent =
-              Option.map Debuginfo.of_items
-                (K.parent (Debuginfo.to_items block_with_parents))
-            in
-            match parent with
-            | None ->
-              Format.eprintf "no parent\n%!";
-              function_proto_die, scope_proto_dies, all_summaries
-            | Some parent ->
-              let parent, scope_proto_dies, all_summaries =
-                Format.eprintf "parent is: %a\n%!" K.print parent;
-                create_up_to_root parent scope_proto_dies all_summaries
-              in
-              let () =
-                Format.eprintf "finding ranges for block: %a\n%!" K.print
-                  block_with_parents
-              in
-              let range = IF.find lexical_block_ranges block_with_parents in
-              let range_list_attributes, all_summaries =
-                match create_range_list_and_summarise state fundecl range with
-                | None -> [], all_summaries
-                | Some
-                    (Contiguous
-                      { start_pos; start_pos_offset; end_pos; end_pos_offset })
-                  ->
-                  let start_pos_offset = Targetint.of_int start_pos_offset in
-                  let end_pos_offset = Targetint.of_int end_pos_offset in
-                  let low_pc =
-                    DAH.create_low_pc_with_offset start_pos
-                      ~offset_in_bytes:start_pos_offset
-                  in
-                  let high_pc =
-                    DAH.create_high_pc_offset ~low_pc:start_pos
-                      ~low_pc_offset_in_bytes:start_pos_offset ~high_pc:end_pos
-                      ~high_pc_offset_in_bytes:end_pos_offset
-                  in
-                  [low_pc; high_pc], all_summaries
-                | Some
-                    (Discontiguous
-                      (dwarf_4_range_list_entries, _range_list, summary)) -> (
-                  match All_summaries.Map.find summary all_summaries with
-                  | exception Not_found ->
-                    let range_list_attributes =
-                      match !Dwarf_flags.gdwarf_version with
-                      | Four ->
-                        let range_list =
-                          Dwarf_4_range_list.create
-                            ~range_list_entries:dwarf_4_range_list_entries
-                        in
-                        let range_list_attribute =
-                          Debug_ranges_table.insert
-                            (DS.debug_ranges_table state)
-                            ~range_list
-                        in
-                        [range_list_attribute]
-                      | Five -> Misc.fatal_error "not yet implemented"
-                      (* let range_list_index = Range_list_table.add
-                         (DS.range_list_table state) range_list in
-                         DAH.create_ranges range_list_index *)
-                    in
-                    let all_summaries =
-                      All_summaries.Map.add summary range_list_attributes
-                        all_summaries
-                    in
-                    range_list_attributes, all_summaries
-                  | range_list_attributes ->
-                    range_list_attributes, all_summaries)
-              in
-              let proto_die =
-                die_for_inlined_frame state parent fundecl range
-                  range_list_attributes block
-              in
-              let scope_proto_dies =
-                K.Map.add block proto_die scope_proto_dies
-              in
-              proto_die, scope_proto_dies, all_summaries)
-        in
         let _proto_die, scope_proto_dies, all_summaries =
-          create_up_to_root block_with_parents scope_proto_dies all_summaries
+          create_up_to_root fundecl state block block_with_parents
+            scope_proto_dies all_summaries function_proto_die
+            lexical_block_ranges
         in
         scope_proto_dies, all_summaries)
       all_blocks

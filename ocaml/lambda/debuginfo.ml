@@ -365,9 +365,9 @@ let rec print_compact ppf t =
     | Some uid -> Format.fprintf ppf "[%s]" uid);
     (match item.dinfo_function_symbol with
     | None -> ()
-    | Some function_symbol -> Format.fprintf ppf "[FS=%s]" function_symbol);
+    | Some function_symbol -> Format.fprintf ppf "[FS=%s]" function_symbol) (*;
     Format.fprintf ppf "$%s$"
-      (Scoped_location.string_of_scopes item.dinfo_scopes)
+      (Scoped_location.string_of_scopes item.dinfo_scopes) *)
   in
   match t with
   | [] -> ()
