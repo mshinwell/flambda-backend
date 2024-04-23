@@ -250,56 +250,68 @@ let create_range_list_attributes_and_summarise state fundecl range all_summaries
       range_list_attributes, all_summaries
     | range_list_attributes -> range_list_attributes, all_summaries)
 
-let rec create_up_to_root fundecl state (blocks_outermost_first : Debuginfo.t)
-    scope_proto_dies all_summaries parent_die lexical_block_ranges =
-  Format.eprintf ">> create_up_to_root: %a\n%!" Debuginfo.print_compact
-    blocks_outermost_first;
+let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
+    ~(blocks_outermost_first : Debuginfo.t) scope_proto_dies all_summaries
+    parent_die lexical_block_ranges =
+  Format.eprintf ">> create_up_to_root: %a || %a\n%!" Debuginfo.print_compact
+    (Debuginfo.of_items prefix)
+    Debuginfo.print_compact blocks_outermost_first;
   match Debuginfo.to_items blocks_outermost_first with
   | [] ->
     (* We have now gone past the deepest inlined frame. *)
     scope_proto_dies, all_summaries
-  | block :: blocks_outermost_first' -> (
-    let block = Debuginfo.of_items [block] in
+  | block_item :: blocks_outermost_first' ->
+    let block = Debuginfo.of_items [block_item] in
     Format.eprintf "...the current block is %a\n%!" Debuginfo.print_compact
       block;
-    match K.Map.find block scope_proto_dies with
-    | proto_die ->
-      (* XXX check that the map is comparing the uid, otherwise this might
-         conflate blocks wrongly *)
-      Format.eprintf "block already has a proto DIE (ref %a)\n%!"
-        Asm_label.print
-        (Proto_die.reference proto_die);
-      scope_proto_dies, all_summaries
-    | exception Not_found ->
-      Format.eprintf "New DIE will be needed, parent DIE ref is %a\n%!"
-        Asm_label.print
-        (Proto_die.reference parent_die);
-      let () =
+    let inlined_subroutine_die, scope_proto_dies, all_summaries =
+      match K.Map.find block scope_proto_dies with
+      | existing_die ->
+        (* XXX check that the map is comparing the uid, otherwise this might
+           conflate blocks wrongly *)
+        Format.eprintf "block already has a proto DIE (ref %a)\n%!"
+          Asm_label.print
+          (Proto_die.reference existing_die);
+        existing_die, scope_proto_dies, all_summaries
+      | exception Not_found ->
+        Format.eprintf "New DIE will be needed, parent DIE ref is %a\n%!"
+          Asm_label.print
+          (Proto_die.reference parent_die);
+        let range_key =
+          Debuginfo.of_items (prefix @ Debuginfo.to_items blocks_outermost_first)
+        in
+        let () =
+          Format.eprintf
+            "finding ranges for key (current block + all parents): %a\n%!"
+            K.print range_key
+        in
+        let range = IF.find lexical_block_ranges range_key in
+        let range_list_attributes, all_summaries =
+          create_range_list_attributes_and_summarise state fundecl range
+            all_summaries
+        in
+        let inlined_subroutine_die =
+          die_for_inlined_frame state parent_die fundecl range
+            range_list_attributes block
+        in
         Format.eprintf
-          "finding ranges for key (current block + all parents): %a\n%!" K.print
-          blocks_outermost_first
-      in
-      let range = IF.find lexical_block_ranges blocks_outermost_first in
-      let range_list_attributes, all_summaries =
-        create_range_list_attributes_and_summarise state fundecl range
-          all_summaries
-      in
-      let inlined_subroutine_die =
-        die_for_inlined_frame state parent_die fundecl range
-          range_list_attributes block
-      in
-      Format.eprintf "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
-        Debuginfo.print_compact block Asm_label.print
-        (Proto_die.reference inlined_subroutine_die);
-      let scope_proto_dies =
-        K.Map.add blocks_outermost_first inlined_subroutine_die scope_proto_dies
-      in
-      create_up_to_root fundecl state
-        (Debuginfo.of_items blocks_outermost_first')
-        scope_proto_dies all_summaries inlined_subroutine_die
-        lexical_block_ranges)
+          "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
+          Debuginfo.print_compact block Asm_label.print
+          (Proto_die.reference inlined_subroutine_die);
+        let scope_proto_dies =
+          K.Map.add blocks_outermost_first inlined_subroutine_die
+            scope_proto_dies
+        in
+        inlined_subroutine_die, scope_proto_dies, all_summaries
+    in
+    create_up_to_root fundecl state ~prefix:(prefix @ [block_item])
+      ~blocks_outermost_first:(Debuginfo.of_items blocks_outermost_first')
+      scope_proto_dies all_summaries inlined_subroutine_die lexical_block_ranges
 
 let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
+  Format.eprintf "\n\nDwarf_inlined_frames.dwarf: function proto DIE is %a\n%!"
+    Asm_label.print
+    (Proto_die.reference function_proto_die);
   let all_blocks = IF.all_indexes lexical_block_ranges in
   let scope_proto_dies, _all_summaries =
     IF.Inlined_frames.Index.Set.fold
@@ -310,20 +322,20 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
         (* The head of [block_with_parents] always corresponds to [fundecl] and
            thus will be associated with [function_proto_die]. As such we don't
            need to create any DW_TAG_inlined_subroutine DIEs for it. *)
-        let parents_outermost_first =
+        let first_item, parents_outermost_first =
           (* "Outermost" = less deep inlining *)
           let block_with_parents = Debuginfo.to_items block_with_parents in
           match block_with_parents with
           | [] ->
             Misc.fatal_errorf "Empty debuginfo in function %s" fundecl.fun_name
-          | _ :: parents -> Debuginfo.of_items parents
+          | first_item :: parents -> first_item, Debuginfo.of_items parents
         in
         Format.eprintf "Having removed fundecl item: %a\n%!"
           Debuginfo.print_compact parents_outermost_first;
         let scope_proto_dies, all_summaries =
-          create_up_to_root fundecl state parents_outermost_first
-            scope_proto_dies all_summaries function_proto_die
-            lexical_block_ranges
+          create_up_to_root fundecl state ~prefix:[first_item]
+            ~blocks_outermost_first:parents_outermost_first scope_proto_dies
+            all_summaries function_proto_die lexical_block_ranges
         in
         scope_proto_dies, all_summaries)
       all_blocks
