@@ -39,6 +39,8 @@ type t =
     location_list_in_debug_loc_table : Dwarf_4_location_list.t option
   }
 
+let equal t1 t2 = t1 == t2
+
 let attribute_values_map attribute_values =
   List.fold_left
     (fun map attribute_value ->
@@ -99,6 +101,10 @@ let add_or_replace_attribute_value t attribute_value =
       attribute_value t.attribute_values
   in
   t.attribute_values <- attribute_values
+
+let replace_all_attribute_values t attribute_values =
+  let attribute_values = attribute_values_map attribute_values in
+  { t with attribute_values }
 
 let set_name t name = t.name <- Some name
 
