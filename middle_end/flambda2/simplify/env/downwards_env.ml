@@ -475,13 +475,22 @@ let add_inlined_debuginfo t dbg =
   else
     let dbg =
       (* uids of the function being inlined get freshened *)
-      List.map
-        (fun (item : Debuginfo.item) ->
+      List.mapi
+        (fun n ({ dinfo_function_symbol; _ } as item : Debuginfo.item) ->
+          let dinfo_function_symbol =
+            (* XXX see note about hack below *)
+            if n = 0
+            then
+              match Debuginfo.to_items t.inlined_debuginfo with
+              | { dinfo_function_symbol; _ } :: _ -> dinfo_function_symbol
+              | [] -> assert false (* see above *)
+            else dinfo_function_symbol
+          in
           let dinfo_uid =
             Hashtbl.hash (t.inlined_debuginfo, dbg, !inlining_counter)
             |> string_of_int
           in
-          { item with dinfo_uid = Some dinfo_uid })
+          { item with dinfo_uid = Some dinfo_uid; dinfo_function_symbol })
         (Debuginfo.to_items dbg)
     in
     Debuginfo.inline t.inlined_debuginfo (Debuginfo.of_items dbg)
@@ -566,6 +575,7 @@ let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
     let function_symbol =
       Code.code_id called_code |> Code_id.linkage_name |> Linkage_name.to_string
     in
+    (* XXX this is a hack, we should have a separate field for this *)
     Debuginfo.with_function_symbol_on_first_item (Apply.dbg apply)
       ~function_symbol
   in
