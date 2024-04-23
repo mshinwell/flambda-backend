@@ -258,17 +258,16 @@ let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
     Debuginfo.print_compact blocks_outermost_first;
   match Debuginfo.to_items blocks_outermost_first with
   | [] ->
+    Format.eprintf "Deepest inlined frame reached\n%!";
     (* We have now gone past the deepest inlined frame. *)
     scope_proto_dies, all_summaries
-  | block_item :: blocks_outermost_first' ->
+  | block_item :: deeper_blocks ->
     let block = Debuginfo.of_items [block_item] in
     Format.eprintf "...the current block is %a\n%!" Debuginfo.print_compact
       block;
     let inlined_subroutine_die, scope_proto_dies, all_summaries =
       match K.Map.find block scope_proto_dies with
       | existing_die ->
-        (* XXX check that the map is comparing the uid, otherwise this might
-           conflate blocks wrongly *)
         Format.eprintf "block already has a proto DIE (ref %a)\n%!"
           Asm_label.print
           (Proto_die.reference existing_die);
@@ -305,7 +304,7 @@ let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
         inlined_subroutine_die, scope_proto_dies, all_summaries
     in
     create_up_to_root fundecl state ~prefix:(prefix @ [block_item])
-      ~blocks_outermost_first:(Debuginfo.of_items blocks_outermost_first')
+      ~blocks_outermost_first:(Debuginfo.of_items deeper_blocks)
       scope_proto_dies all_summaries inlined_subroutine_die lexical_block_ranges
 
 let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =

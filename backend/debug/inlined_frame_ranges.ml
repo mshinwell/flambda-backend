@@ -21,7 +21,29 @@ module Inlined_frames = struct
 
       let print = Debuginfo.print_compact
 
-      let compare = Stdlib.compare
+      let compare t1 t2 =
+        let items1 = Debuginfo.to_items t1 in
+        let items2 = Debuginfo.to_items t2 in
+        let rec loop (items1 : Debuginfo.item list)
+            (items2 : Debuginfo.item list) =
+          match items1, items2 with
+          | [], [] -> 0
+          | [], _ :: _ -> -1
+          | _ :: _, [] -> 1
+          | i1 :: items1, i2 :: items2 ->
+            let c =
+              Stdlib.compare
+                (i1.dinfo_uid, i1.dinfo_function_symbol)
+                (i2.dinfo_uid, i2.dinfo_function_symbol)
+            in
+            (* XXX think further about the None cases *)
+            (* let c = if Option.is_some i1.dinfo_uid && Option.is_some
+               i2.dinfo_uid then Stdlib.compare (i1.dinfo_uid,
+               i1.dinfo_function_symbol) (i2.dinfo_uid,
+               i2.dinfo_function_symbol) else Stdlib.compare i1 i2 in *)
+            if c <> 0 then c else loop items1 items2
+        in
+        loop items1 items2
 
       let equal t1 t2 = compare t1 t2 = 0
 

@@ -28,10 +28,38 @@ type get_imported_names = unit -> Name.Set.t
 
 type get_imported_code = unit -> Exported_code.t
 
+module Inlined_debuginfo = struct
+  type t =
+    { dbg : Debuginfo.t;
+      function_symbol : Linkage_name.t;
+      uid : string
+    }
+
+  let print_debuginfo ppf dbg =
+    if Debuginfo.is_none dbg
+    then Format.pp_print_string ppf "None"
+    else Debuginfo.print_compact ppf dbg
+
+  let print ppf { dbg; function_symbol; uid } =
+    Format.fprintf ppf
+      "@[<hov 1>(@[<hov 1>(dbg@ %a)@]@ @[<hov 1>(function_symbol@ %a)@]@ \
+       @[<hov 1>(uid@ %a)@])@]"
+      print_debuginfo dbg Linkage_name.print function_symbol
+      Format.pp_print_string uid
+
+  let none =
+    { dbg = Debuginfo.none;
+      function_symbol = Linkage_name.of_string "";
+      uid = ""
+    }
+
+  let is_none t = Debuginfo.compare t.dbg Debuginfo.none = 0
+end
+
 type t =
   { round : int;
     typing_env : TE.t;
-    inlined_debuginfo : Debuginfo.t;
+    inlined_debuginfo : Inlined_debuginfo.t;
     can_inline : bool;
     inlining_state : Inlining_state.t;
     propagating_float_consts : bool;
@@ -48,11 +76,6 @@ type t =
     inlining_history_tracker : Inlining_history.Tracker.t;
     loopify_state : Loopify_state.t
   }
-
-let print_debuginfo ppf dbg =
-  if Debuginfo.is_none dbg
-  then Format.pp_print_string ppf "None"
-  else Debuginfo.print_compact ppf dbg
 
 let [@ocamlformat "disable"] print ppf { round; typing_env;
                 inlined_debuginfo; can_inline;
@@ -84,7 +107,7 @@ let [@ocamlformat "disable"] print ppf { round; typing_env;
       )@]"
     round
     TE.print typing_env
-    print_debuginfo inlined_debuginfo
+    Inlined_debuginfo.print inlined_debuginfo
     can_inline
     Inlining_state.print inlining_state
     propagating_float_consts
@@ -112,7 +135,7 @@ let create ~round ~(resolver : resolver)
   in
   { round;
     typing_env;
-    inlined_debuginfo = Debuginfo.none;
+    inlined_debuginfo = Inlined_debuginfo.none;
     can_inline = true;
     inlining_state = Inlining_state.default ~round;
     propagating_float_consts;
@@ -193,7 +216,7 @@ let enter_set_of_closures
     } =
   { round;
     typing_env = TE.closure_env typing_env;
-    inlined_debuginfo = Debuginfo.none;
+    inlined_debuginfo = Inlined_debuginfo.none;
     can_inline;
     inlining_state;
     propagating_float_consts;
@@ -463,38 +486,32 @@ let define_code t ~code_id ~code =
 
 let inlining_counter = ref 0
 
-let set_inlined_debuginfo t dbg =
-  incr inlining_counter;
-  { t with inlined_debuginfo = dbg }
-
-let get_inlined_debuginfo t = t.inlined_debuginfo
+let set_inlined_debuginfo t ~from =
+  { t with inlined_debuginfo = from.inlined_debuginfo }
 
 let add_inlined_debuginfo t dbg =
-  if Debuginfo.is_none t.inlined_debuginfo
+  if Inlined_debuginfo.is_none t.inlined_debuginfo
   then dbg
   else
     let dbg =
-      (* uids of the function being inlined get freshened *)
+      (* uids of _all_ [Debuginfo.t] values in the body of the function being
+         inlined get freshened (consistently, for any given inlining) *)
       List.mapi
         (fun n ({ dinfo_function_symbol; _ } as item : Debuginfo.item) ->
           let dinfo_function_symbol =
-            (* XXX see note about hack below *)
             if n = 0
             then
-              match Debuginfo.to_items t.inlined_debuginfo with
-              | { dinfo_function_symbol; _ } :: _ -> dinfo_function_symbol
-              | [] -> assert false (* see above *)
+              Some (Linkage_name.to_string t.inlined_debuginfo.function_symbol)
             else dinfo_function_symbol
           in
-          let dinfo_uid =
-            Hashtbl.hash (t.inlined_debuginfo, dbg, !inlining_counter)
-            |> string_of_int
-          in
-          { item with dinfo_uid = Some dinfo_uid; dinfo_function_symbol })
+          { item with
+            dinfo_uid = Some t.inlined_debuginfo.uid;
+            dinfo_function_symbol
+          })
         (Debuginfo.to_items dbg)
     in
     let inlined_debuginfo =
-      Debuginfo.with_function_symbol_on_first_item t.inlined_debuginfo
+      Debuginfo.with_function_symbol_on_first_item t.inlined_debuginfo.dbg
         ~function_symbol:None
     in
     Debuginfo.inline inlined_debuginfo (Debuginfo.of_items dbg)
@@ -575,14 +592,14 @@ let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
         in
         Inlining_state.increment_depth t.inlining_state ~by)
   in
-  let inlined_debuginfo =
-    let function_symbol =
-      Code.code_id called_code |> Code_id.linkage_name |> Linkage_name.to_string
-    in
-    (* XXX this is a hack, we should have a separate field for this *)
-    Debuginfo.with_function_symbol_on_first_item (Apply.dbg apply)
-      ~function_symbol:(Some function_symbol)
+  let function_symbol = Code.code_id called_code |> Code_id.linkage_name in
+  let dbg = Apply.dbg apply in
+  let uid =
+    incr inlining_counter;
+    (* XXX hmm.... *)
+    Hashtbl.hash (dbg, function_symbol, !inlining_counter) |> string_of_int
   in
+  let inlined_debuginfo = { Inlined_debuginfo.dbg; function_symbol; uid } in
   { t with
     inlined_debuginfo;
     inlining_state;
