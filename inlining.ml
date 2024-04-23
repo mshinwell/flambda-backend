@@ -10,9 +10,10 @@ let[@inline] f x =
 let[@inline never] foo a =
 (*  let x1 = a + 42 in
   let x1 = opaque_identity x1 in *)
+  let x1 = (List.length [@inlined]) (Sys.opaque_identity []) in
   let x2 = f a in
  (* let x2 = opaque_identity x2 in *)
-  x2, x2
+  x1, x2
   (*
   let x1 = opaque_identity x1 in
   let x2 = f a in
