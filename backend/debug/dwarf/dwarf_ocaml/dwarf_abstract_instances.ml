@@ -77,10 +77,6 @@ let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
   in
   Proto_die.set_name abstract_instance_proto_die
     abstract_instance_proto_die_symbol;
-  (* CR mshinwell maybe this should actually use the symbol name as the key, but
-     then the following problem arises: we would need to be able to get the code
-     ID or symbol name from the [Debuginfo.t] scopes info, e.g. during
-     processing of inlined frames. *)
   Asm_symbol.Tbl.add (* or replace *)
     (DS.function_abstract_instances state)
     fun_symbol
