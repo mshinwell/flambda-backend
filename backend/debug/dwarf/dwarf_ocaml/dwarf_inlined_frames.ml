@@ -280,10 +280,13 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
           Debuginfo.print_compact parents_outermost_first;
         let compilation_unit_proto_die = DS.compilation_unit_proto_die state in
         let scope_proto_dies, all_summaries =
-          create_up_to_root fundecl state ~compilation_unit_proto_die
-            ~prefix:[first_item] ~blocks_outermost_first:parents_outermost_first
-            scope_proto_dies all_summaries ~parent_die:function_proto_die
-            lexical_block_ranges
+          (* XXX hack for error in printf.ml in Base *)
+          try
+            create_up_to_root fundecl state ~compilation_unit_proto_die
+              ~prefix:[first_item]
+              ~blocks_outermost_first:parents_outermost_first scope_proto_dies
+              all_summaries ~parent_die:function_proto_die lexical_block_ranges
+          with Not_found -> scope_proto_dies, all_summaries
         in
         scope_proto_dies, all_summaries)
       all_blocks
