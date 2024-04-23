@@ -125,9 +125,6 @@ let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
   let abstract_instance_symbol =
     Dwarf_abstract_instances.find state ~compilation_unit_proto_die block
   in
-  (* Note that with Flambda, this DIE may not be in the scope of the referenced
-     abstract instance DIE, as inline expansions may be made out of the scope of
-     the function declaration. *)
   let abstract_instance =
     match abstract_instance_symbol with
     | Ok abstract_instance_symbol ->
