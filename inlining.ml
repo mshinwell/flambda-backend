@@ -8,11 +8,11 @@ let[@inline] f x =
   c - 7 * 10
 
 let[@inline never] foo a =
-  let x1 = a + 42 in
-  let x1 = opaque_identity x1 in
+(*  let x1 = a + 42 in
+  let x1 = opaque_identity x1 in *)
   let x2 = f a in
-  let x2 = opaque_identity x2 in
-  x1, x2
+ (* let x2 = opaque_identity x2 in *)
+  x2, x2
   (*
   let x1 = opaque_identity x1 in
   let x2 = f a in
