@@ -251,7 +251,9 @@ let of_string str =
       (* See [Name.check_as_path_component]; this allows ".cinaps" as a
          compilation unit *)
       Prefix.empty, Name.of_string str
-    | Some _ -> Misc.fatal_errorf "[of_string] does not parse qualified names"
+    | Some _ ->
+      (* XXX this is breaking again *)
+      Misc.fatal_errorf "[of_string] does not parse qualified names"
   in
   create for_pack_prefix name
 
