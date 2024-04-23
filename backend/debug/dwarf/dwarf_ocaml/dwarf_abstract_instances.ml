@@ -102,13 +102,13 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
 let find state ~function_proto_die (dbg : Debuginfo.t) =
-  let demangled_name, dbg_comp_unit, loc, item =
-    match List.rev dbg with
+  let demangled_name, dbg_comp_unit, loc, _item =
+    match List.rev (Debuginfo.to_items dbg) with
     | [({ dinfo_scopes; _ } as item)] -> (
       let module S = Debuginfo.Scoped_location in
       let demangled_name = S.string_of_scopes dinfo_scopes in
       let compilation_unit = S.compilation_unit dinfo_scopes in
-      let dbg = [item] in
+      let dbg = Debuginfo.of_items [item] in
       let loc = Debuginfo.to_location dbg in
       match compilation_unit with
       | Some compilation_unit -> demangled_name, compilation_unit, loc, item

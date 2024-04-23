@@ -22,12 +22,12 @@ module K = IF.Inlined_frames.Key
 module L = Linear
 module String = Misc.Stdlib.String
 
-let find_scope_die_from_debuginfo (dbg : Debuginfo.t) ~function_proto_die
+let _find_scope_die_from_debuginfo (dbg : Debuginfo.t) ~function_proto_die:_
     ~scope_proto_dies =
-  match dbg with
+  match Debuginfo.to_items dbg with
   | [] -> None
   | { dinfo_uid = None; _ } :: _ -> None
-  | { dinfo_uid = Some dinfo_uid; _ } :: _ -> (
+  | { dinfo_uid = Some _; _ } :: _ -> (
     match K.Map.find dbg scope_proto_dies with
     | exception Not_found -> None
     | proto_die -> Some proto_die)
@@ -50,7 +50,7 @@ type ranges =
   | Discontiguous of
       Dwarf_4_range_list_entry.t list * Range_list.t * Address_index.Pair.Set.t
 
-let create_contiguous_range_list_and_summarise state (_fundecl : L.fundecl)
+let create_contiguous_range_list_and_summarise _state (_fundecl : L.fundecl)
     subrange =
   let start_pos = IF.Subrange.start_pos subrange in
   let start_pos_offset =
@@ -197,7 +197,7 @@ let die_for_inlined_frame state parent fundecl range range_list_attributes block
          do not attempt to work around it. *)
       [DAH.create_abstract_origin ~die_symbol:abstract_instance_symbol]
   in
-  let block : Debuginfo.item = List.hd block in
+  let block : Debuginfo.item = List.hd (Debuginfo.to_items block) in
   (* let code_range = Debuginfo.Call_site.position call_site in let file_name =
      Debuginfo.Code_range.file code_range in *)
   Proto_die.create ~parent:(Some parent) ~tag:Inlined_subroutine
@@ -212,26 +212,31 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
   let all_blocks = IF.all_indexes lexical_block_ranges in
   let scope_proto_dies, _all_summaries =
     IF.Inlined_frames.Index.Set.fold
-      (fun block_with_parents (scope_proto_dies, all_summaries) ->
+      (fun (block_with_parents : Debuginfo.t) (scope_proto_dies, all_summaries) ->
         let block =
+          let block_with_parents = Debuginfo.to_items block_with_parents in
           match List.rev block_with_parents with
           | [] ->
             Misc.fatal_errorf "Empty debuginfo in function %s" fundecl.fun_name
-          | block :: _ -> [block]
+          | block :: _ -> Debuginfo.of_items [block]
+        in
+        let parent =
+          Option.map Debuginfo.of_items
+            (K.parent (Debuginfo.to_items block_with_parents))
         in
         Format.eprintf ">> %a (parents are: %a)\n%!" Debuginfo.print_compact
           block
           (Misc.Stdlib.Option.print Debuginfo.print_compact)
-          (K.parent block_with_parents);
-        let rec create_up_to_root block_with_parents scope_proto_dies
-            all_summaries =
+          parent;
+        let rec create_up_to_root (block_with_parents : Debuginfo.t)
+            scope_proto_dies all_summaries =
           Format.eprintf "... %a\n%!" Debuginfo.print_compact block;
           match K.Map.find block_with_parents scope_proto_dies with
           | proto_die ->
             Format.eprintf "block already has a proto DIE\n%!";
             proto_die, scope_proto_dies, all_summaries
           | exception Not_found -> (
-            match K.parent block_with_parents with
+            match parent with
             | None ->
               Format.eprintf "no parent\n%!";
               function_proto_die, scope_proto_dies, all_summaries
@@ -266,7 +271,7 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
                   [low_pc; high_pc], all_summaries
                 | Some
                     (Discontiguous
-                      (dwarf_4_range_list_entries, range_list, summary)) -> (
+                      (dwarf_4_range_list_entries, _range_list, summary)) -> (
                   match All_summaries.Map.find summary all_summaries with
                   | exception Not_found ->
                     let range_list_attributes =

@@ -274,6 +274,10 @@ type alloc_dbginfo = alloc_dbginfo_item list
 
 let none = { dbg = []; assume_zero_alloc = ZA.Assume_info.none }
 
+let of_items items = { dbg = items; assume_zero_alloc = ZA.Assume_info.none }
+
+let to_items t = t.dbg
+
 let to_string { dbg; assume_zero_alloc; } =
   let s = Dbg.to_string dbg in
   let a = ZA.Assume_info.to_string assume_zero_alloc in

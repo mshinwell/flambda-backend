@@ -56,8 +56,8 @@ module Inlined_frames = struct
 
       let diff t1 t2 =
         match t1, t2 with
-        | Unreachable, t -> Unreachable
-        | t, Unreachable -> Ok Raw_set.empty
+        | Unreachable, _ -> Unreachable
+        | _, Unreachable -> Ok Raw_set.empty
         | Ok s1, Ok s2 -> Ok (Raw_set.diff s1 s2)
 
       let fold f t init =
@@ -117,19 +117,22 @@ module Inlined_frames = struct
   end
 
   let available_before (insn : L.instruction) =
-    let get_parents dbg =
+    let get_parents (dbg : Debuginfo.item list) : Debuginfo.t list =
       match List.rev dbg with
       | [] | [_] -> []
       | _ :: parents ->
-        let rec loop t =
-          match t with [] -> [] | _ :: tl -> List.rev t :: loop tl
+        let rec loop (t : Debuginfo.item list) =
+          match t with
+          | [] -> []
+          | _ :: tl -> Debuginfo.of_items (List.rev t) :: loop tl
         in
         loop parents
     in
-    match insn.dbg with
+    let insn_dbg = Debuginfo.to_items insn.dbg in
+    match insn_dbg with
     | [] -> None
     | _ :: _ ->
-      Some (Key.Set.Ok (Key.Raw_set.of_list (insn.dbg :: get_parents insn.dbg)))
+      Some (Key.Set.Ok (Key.Raw_set.of_list (insn.dbg :: get_parents insn_dbg)))
 
   let available_across insn =
     (* A single [Linear] instruction never spans inlined frames. *)

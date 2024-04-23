@@ -93,6 +93,10 @@ val none : t
 
 val is_none : t -> bool
 
+val of_items : item list -> t
+
+val to_items : t -> item list
+
 val to_string : t -> string
 
 val from_location : Scoped_location.t -> t

@@ -482,9 +482,9 @@ let add_inlined_debuginfo t dbg =
             |> string_of_int
           in
           { item with dinfo_uid = Some dinfo_uid })
-        dbg
+        (Debuginfo.to_items dbg)
     in
-    Debuginfo.inline t.inlined_debuginfo dbg
+    Debuginfo.inline t.inlined_debuginfo (Debuginfo.of_items dbg)
 
 let cse t = t.cse
 
