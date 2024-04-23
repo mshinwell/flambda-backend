@@ -32,9 +32,6 @@
 open! Dwarf_low
 open! Dwarf_high
 
-(* val find_scope_die_from_debuginfo : Debuginfo.t ->
-   function_proto_die:Proto_die.t -> Proto_die.t option *)
-
 val dwarf :
   Dwarf_state.t ->
   Linear.fundecl ->
