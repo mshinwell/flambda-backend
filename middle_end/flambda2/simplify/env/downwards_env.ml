@@ -476,7 +476,7 @@ let add_inlined_debuginfo t dbg =
     let dbg =
       (* uids of the function being inlined get freshened *)
       List.map
-        (fun ({ Debuginfo.dinfo_uid = _; _ } as item) ->
+        (fun (item : Debuginfo.item) ->
           let dinfo_uid =
             Hashtbl.hash (t.inlined_debuginfo, dbg, !inlining_counter)
             |> string_of_int
@@ -562,8 +562,15 @@ let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
         in
         Inlining_state.increment_depth t.inlining_state ~by)
   in
+  let inlined_debuginfo =
+    let function_symbol =
+      Code.code_id called_code |> Code_id.linkage_name |> Linkage_name.to_string
+    in
+    Debuginfo.with_function_symbol_on_first_item (Apply.dbg apply)
+      ~function_symbol
+  in
   { t with
-    inlined_debuginfo = Apply.dbg apply;
+    inlined_debuginfo;
     inlining_state;
     inlining_history_tracker =
       Inlining_history.Tracker.enter_inlined_apply

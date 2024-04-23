@@ -236,6 +236,10 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
             Format.eprintf "block already has a proto DIE\n%!";
             proto_die, scope_proto_dies, all_summaries
           | exception Not_found -> (
+            let parent =
+              Option.map Debuginfo.of_items
+                (K.parent (Debuginfo.to_items block_with_parents))
+            in
             match parent with
             | None ->
               Format.eprintf "no parent\n%!";

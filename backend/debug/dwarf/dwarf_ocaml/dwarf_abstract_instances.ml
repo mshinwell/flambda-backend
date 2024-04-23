@@ -25,33 +25,24 @@ let attributes fun_name =
 let abstract_instance_proto_die_symbol ~fun_symbol =
   Asm_symbol.create (Asm_symbol.to_raw_string fun_symbol ^ "_absinst")
 
-let encode_name demangled_name (loc : Location.t) =
-  (* XXX this isn't sufficient, we should find a way of recovering the code ID
-     from the Debuginfo.t. The column numbers are missed out at present to give
-     a higher chance of matches. *)
-  let file, line, _chr = Location.get_pos_info loc.loc_start in
-  Format.asprintf "%s.%s.%d" demangled_name file line
-
-let add_empty state ~parent loc ~demangled_name =
+let add_empty state ~parent ~fun_symbol =
   let abstract_instance_proto_die =
     (* DWARF-5 specification section 3.3.8.1, page 82. *)
     Proto_die.create ~parent:(Some parent) ~tag:Subprogram ~attribute_values:[]
       ()
   in
-  let encoded_name = encode_name demangled_name loc in
-  let fun_symbol = encoded_name |> Asm_symbol.create in
   let abstract_instance_proto_die_symbol =
     abstract_instance_proto_die_symbol ~fun_symbol
   in
   Proto_die.set_name abstract_instance_proto_die
     abstract_instance_proto_die_symbol;
-  Misc.Stdlib.String.Tbl.add
+  Asm_symbol.Tbl.add
     (DS.function_abstract_instances state)
-    (encode_name demangled_name loc)
+    fun_symbol
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
-let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
+let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
     ~location_attributes =
   let attributes =
     [ DAH.create_name (Asm_symbol.encode fun_symbol);
@@ -69,17 +60,12 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
         DAH.create_inline Inlined ]
   in
   let abstract_instance_proto_die_symbol =
-    let encoded_name = encode_name demangled_name loc in
-    let fun_symbol = encoded_name |> Asm_symbol.create in
     abstract_instance_proto_die_symbol ~fun_symbol
   in
-  let mangled_name = encode_name demangled_name loc in
-  Format.eprintf "add_root: mangled_name=%s\n" mangled_name;
+  Format.eprintf "add_root: fun_symbol=%a\n" Asm_symbol.print fun_symbol;
   let abstract_instance_proto_die =
     match
-      Misc.Stdlib.String.Tbl.find
-        (DS.function_abstract_instances state)
-        mangled_name
+      Asm_symbol.Tbl.find (DS.function_abstract_instances state) fun_symbol
     with
     | proto_die, _symbol ->
       (* See below in [find] *)
@@ -95,23 +81,30 @@ let add_root state ~function_proto_die:parent loc ~demangled_name fun_symbol
      then the following problem arises: we would need to be able to get the code
      ID or symbol name from the [Debuginfo.t] scopes info, e.g. during
      processing of inlined frames. *)
-  Misc.Stdlib.String.Tbl.add (* or replace *)
+  Asm_symbol.Tbl.add (* or replace *)
     (DS.function_abstract_instances state)
-    (encode_name demangled_name loc)
+    fun_symbol
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
 let find state ~function_proto_die (dbg : Debuginfo.t) =
-  let demangled_name, dbg_comp_unit, loc, _item =
+  let orig_dbg = dbg in
+  let fun_symbol, dbg_comp_unit, _item =
     match List.rev (Debuginfo.to_items dbg) with
-    | [({ dinfo_scopes; _ } as item)] -> (
+    | [({ dinfo_scopes; dinfo_function_symbol; _ } as item)] -> (
       let module S = Debuginfo.Scoped_location in
-      let demangled_name = S.string_of_scopes dinfo_scopes in
       let compilation_unit = S.compilation_unit dinfo_scopes in
       let dbg = Debuginfo.of_items [item] in
-      let loc = Debuginfo.to_location dbg in
+      let function_symbol =
+        match dinfo_function_symbol with
+        | Some dinfo_function_symbol -> Asm_symbol.create dinfo_function_symbol
+        | None ->
+          Misc.fatal_errorf
+            "No function symbol in Debuginfo.t: orig_dbg=%a dbg=%a"
+            Debuginfo.print_compact orig_dbg Debuginfo.print_compact dbg
+      in
       match compilation_unit with
-      | Some compilation_unit -> demangled_name, compilation_unit, loc, item
+      | Some compilation_unit -> function_symbol, compilation_unit, item
       | None ->
         Misc.fatal_errorf "No compilation unit extracted from: %a"
           Debuginfo.print_compact dbg)
@@ -127,21 +120,19 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
      || not (DS.can_reference_dies_across_units state)
   then (
-    let mangled_name = encode_name demangled_name loc in
-    Format.eprintf "looking in function_abstract_instances for %s\n%!"
-      mangled_name;
+    Format.eprintf "looking in function_abstract_instances for %a\n%!"
+      Asm_symbol.print fun_symbol;
     match
-      Misc.Stdlib.String.Tbl.find
-        (DS.function_abstract_instances state)
-        mangled_name
+      Asm_symbol.Tbl.find (DS.function_abstract_instances state) fun_symbol
     with
     | existing_instance ->
       Format.eprintf "...successfully found existing absint DIE\n%!";
       existing_instance
     | exception Not_found ->
       (* Fabricate an empty abstract instance DIE to fill in later. *)
-      Format.eprintf "...making empty absint DIE for %s\n" mangled_name;
-      add_empty state ~parent:function_proto_die loc ~demangled_name)
+      Format.eprintf "...making empty absint DIE for %a\n" Asm_symbol.print
+        fun_symbol;
+      add_empty state ~parent:function_proto_die ~fun_symbol)
   else
     (* CR mshinwell: use Dwarf_name_laundry.abstract_instance_root_die_name *)
     Misc.fatal_errorf

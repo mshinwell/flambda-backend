@@ -25,8 +25,7 @@ type t =
     debug_ranges_table : Debug_ranges_table.t;
     address_table : Address_table.t;
     location_list_table : Location_list_table.t;
-    function_abstract_instances :
-      (Proto_die.t * Asm_symbol.t) Misc.Stdlib.String.Tbl.t;
+    function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t;
     get_file_num : string -> int
   }
 
@@ -41,7 +40,7 @@ let create ~compilation_unit_header_label ~compilation_unit_proto_die
     debug_ranges_table;
     address_table;
     location_list_table;
-    function_abstract_instances = Misc.Stdlib.String.Tbl.create 42;
+    function_abstract_instances = Asm_symbol.Tbl.create 42;
     get_file_num
   }
 

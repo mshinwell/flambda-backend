@@ -74,6 +74,7 @@ type item = {
   dinfo_end_line: int;
   dinfo_scopes: Scoped_location.scopes;
   dinfo_uid: string option;
+  dinfo_function_symbol: string option;
 }
 
 type t
@@ -96,6 +97,8 @@ val is_none : t -> bool
 val of_items : item list -> t
 
 val to_items : t -> item list
+
+val with_function_symbol_on_first_item : t -> function_symbol:string -> t
 
 val to_string : t -> string
 

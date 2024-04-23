@@ -24,7 +24,6 @@ val attributes : string -> Dwarf_attribute_values.Attribute_value.t list
 val add_root :
   Dwarf_state.t ->
   function_proto_die:Proto_die.t ->
-  Location.t ->
   demangled_name:string ->
   Asm_symbol.t ->
   location_attributes:Dwarf_attribute_values.Attribute_value.t list ->

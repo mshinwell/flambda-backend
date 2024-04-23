@@ -202,6 +202,7 @@ type item = {
   dinfo_end_line: int;
   dinfo_scopes: Scoped_location.scopes;
   dinfo_uid: string option;
+  dinfo_function_symbol: string option;
 }
 
 module Dbg = struct
@@ -278,6 +279,14 @@ let of_items items = { dbg = items; assume_zero_alloc = ZA.Assume_info.none }
 
 let to_items t = t.dbg
 
+let with_function_symbol_on_first_item t ~function_symbol =
+  match t.dbg with
+  | [] -> t
+  | d :: ds ->
+    { t with
+      dbg = { d with dinfo_function_symbol = Some function_symbol } :: ds
+    }
+
 let to_string { dbg; assume_zero_alloc; } =
   let s = Dbg.to_string dbg in
   let a = ZA.Assume_info.to_string assume_zero_alloc in
@@ -301,7 +310,8 @@ let item_from_location ~scopes loc =
       if valid_endpos then loc.loc_end.pos_lnum
       else loc.loc_start.pos_lnum;
     dinfo_scopes = scopes;
-    dinfo_uid = None
+    dinfo_uid = None;
+    dinfo_function_symbol = None;
   }
 
 let from_location = function
@@ -353,6 +363,9 @@ let rec print_compact ppf t =
     (match item.dinfo_uid with
     | None -> ()
     | Some uid -> Format.fprintf ppf "[%s]" uid);
+    (match item.dinfo_function_symbol with
+    | None -> ()
+    | Some function_symbol -> Format.fprintf ppf "[FS=%s]" function_symbol);
     Format.fprintf ppf "$%s$"
       (Scoped_location.string_of_scopes item.dinfo_scopes)
   in
