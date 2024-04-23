@@ -29,10 +29,17 @@ val add_root :
   location_attributes:Dwarf_attribute_values.Attribute_value.t list ->
   Proto_die.t * Asm_symbol.t
 
+type find_result = private
+  | Ok of Asm_symbol.t
+  | External_unit of
+      { demangled_name : string;
+        fun_symbol : Asm_symbol.t
+      }
+
 val find :
   Dwarf_state.t ->
   compilation_unit_proto_die:Proto_die.t ->
   Debuginfo.t ->
-  Proto_die.t * Asm_symbol.t
+  find_result
 (* val find_maybe_in_another_unit_or_add : Dwarf_state.t ->
    function_proto_die:Proto_die.t -> Linear.fundecl -> Asm_symbol.t option *)

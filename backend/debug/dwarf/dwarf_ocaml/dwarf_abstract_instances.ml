@@ -86,6 +86,13 @@ let add_root state ~parent ~demangled_name fun_symbol ~location_attributes =
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
+type find_result =
+  | Ok of Asm_symbol.t
+  | External_unit of
+      { demangled_name : string;
+        fun_symbol : Asm_symbol.t
+      }
+
 let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
   let orig_dbg = dbg in
   let demangled_name, fun_symbol, dbg_comp_unit, _item =
@@ -104,6 +111,7 @@ let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
       in
       let demangled_name =
         Debuginfo.Scoped_location.string_of_scopes dinfo_scopes
+        |> Misc.remove_double_underscores
       in
       match compilation_unit with
       | Some compilation_unit ->
@@ -119,7 +127,6 @@ let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
   Format.eprintf "found comp unit %a\n%!" Compilation_unit.print dbg_comp_unit;
   let this_comp_unit = Compilation_unit.get_current_exn () in
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
-     || not (DS.can_reference_dies_across_units state)
   then (
     Format.eprintf "looking in function_abstract_instances for %a\n%!"
       Asm_symbol.print fun_symbol;
@@ -128,7 +135,7 @@ let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
     with
     | existing_instance ->
       Format.eprintf "...successfully found existing absint DIE\n%!";
-      existing_instance
+      Ok (snd existing_instance)
     | exception Not_found ->
       (* Fabricate an empty abstract instance DIE to fill in later. *)
       Format.eprintf "...making empty absint DIE for %a\n" Asm_symbol.print
@@ -136,9 +143,11 @@ let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
       (* The empty abstract instances are parented to the compilation unit as
          they might be referenced by other DIEs in a completely different scope
          within the current unit. *)
-      add_empty state ~compilation_unit_proto_die ~fun_symbol ~demangled_name)
+      let _, die_symbol =
+        add_empty state ~compilation_unit_proto_die ~fun_symbol ~demangled_name
+      in
+      Ok die_symbol)
   else
-    (* CR mshinwell: use Dwarf_name_laundry.abstract_instance_root_die_name *)
-    Misc.fatal_errorf
-      "Abstract instance DIE references across units not supported yet: %a"
-      Debuginfo.print_compact dbg
+    (* abstract_instance_proto_die_symbol ~fun_symbol *)
+    (* See the call site of this function *)
+    External_unit { demangled_name; fun_symbol }

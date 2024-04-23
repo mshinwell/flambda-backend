@@ -62,6 +62,6 @@ let location_list_table t = t.location_list_table
 
 let function_abstract_instances t = t.function_abstract_instances
 
-let can_reference_dies_across_units _t = false (* XXX *)
+let can_reference_dies_across_units _t = true
 
 let get_file_num t filename = t.get_file_num filename

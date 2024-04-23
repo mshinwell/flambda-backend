@@ -19,27 +19,6 @@ open Dwarf_high
 module DAH = Dwarf_attribute_helpers
 module L = Linear
 
-let remove_double_underscores s =
-  let len = String.length s in
-  let buf = Buffer.create len in
-  let skip = ref false in
-  let rec loop i =
-    if i < len
-    then (
-      let c = String.get s i in
-      if c = '.' then skip := true;
-      if (not !skip) && c = '_' && i + 1 < len && String.get s (i + 1) = '_'
-      then (
-        Buffer.add_char buf '.';
-        skip := true;
-        loop (i + 2))
-      else (
-        Buffer.add_char buf c;
-        loop (i + 1)))
-  in
-  loop 0;
-  Buffer.contents buf
-
 let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
     available_ranges_vars inlined_frame_ranges =
   let parent = Dwarf_state.compilation_unit_proto_die state in
@@ -49,7 +28,7 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
     match Debuginfo.Dbg.to_list (Debuginfo.get_dbg fundecl.fun_dbg) with
     | [item] ->
       Debuginfo.Scoped_location.string_of_scopes item.dinfo_scopes
-      |> remove_double_underscores
+      |> Misc.remove_double_underscores
     (* XXX Not sure what to do in the cases below *)
     | [] | _ :: _ -> fun_name
   in
