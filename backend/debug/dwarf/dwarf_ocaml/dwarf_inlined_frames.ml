@@ -22,14 +22,6 @@ module K = IF.Inlined_frames.Key
 module L = Linear
 module String = Misc.Stdlib.String
 
-let magic_offset () =
-  (* CR mshinwell: wtf? *)
-  match Target_system.architecture () with
-  | X86_64 -> 8
-  | AArch64 -> 4
-  | ARM | IA32 | POWER | Z | Riscv ->
-    Misc.fatal_error "Architecture not supported"
-
 type ranges =
   | Contiguous of
       { start_pos : Asm_label.t;
@@ -43,9 +35,7 @@ type ranges =
 let create_contiguous_range_list_and_summarise _state (_fundecl : L.fundecl)
     subrange =
   let start_pos = IF.Subrange.start_pos subrange in
-  let start_pos_offset =
-    IF.Subrange.start_pos_offset subrange - magic_offset ()
-  in
+  let start_pos_offset = IF.Subrange.start_pos_offset subrange in
   let end_pos = IF.Subrange.end_pos subrange in
   let end_pos_offset = IF.Subrange.end_pos_offset subrange in
   Contiguous
@@ -62,9 +52,7 @@ let create_discontiguous_range_list_and_summarise state (_fundecl : L.fundecl)
       ~init:([], Range_list.create (), Address_index.Pair.Set.empty)
       ~f:(fun (dwarf_4_range_list_entries, range_list, summary) subrange ->
         let start_pos = IF.Subrange.start_pos subrange in
-        let start_pos_offset =
-          IF.Subrange.start_pos_offset subrange - magic_offset ()
-        in
+        let start_pos_offset = IF.Subrange.start_pos_offset subrange in
         let end_pos = IF.Subrange.end_pos subrange in
         let end_pos_offset = IF.Subrange.end_pos_offset subrange in
         let start_inclusive =
