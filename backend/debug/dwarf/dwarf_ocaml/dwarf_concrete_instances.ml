@@ -77,9 +77,7 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
       ~demangled_name:linkage_name start_sym ~location_attributes
   in
   let attribute_values =
-    [ (* these come from the AIR: DAH.create_name fun_name;
-         DAH.create_linkage_name ~linkage_name; *)
-      DAH.create_low_pc_from_symbol start_sym;
+    [ DAH.create_low_pc_from_symbol start_sym;
       DAH.create_high_pc ~low_pc:start_sym fun_end_label;
       (* CR mshinwell: Probably no need to set this at the moment since the low
          PC value should be assumed, which is correct. *)
