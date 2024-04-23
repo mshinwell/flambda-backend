@@ -131,11 +131,11 @@ module All_summaries = Identifiable.Make (struct
 end)
 
 (* XXX fundecl -> fundecl_being_inlined *)
-let die_for_inlined_frame state parent fundecl range range_list_attributes block
-    =
+let die_for_inlined_frame state ~compilation_unit_proto_die ~parent fundecl
+    range range_list_attributes block =
   let _, abstract_instance_symbol =
     Dwarf_abstract_instances.find (* find_maybe_in_another_unit_or_add *) state
-      ~function_proto_die:parent block
+      ~compilation_unit_proto_die block
   in
   let abstract_instance_symbol = Some abstract_instance_symbol in
   let _entry_pc =
@@ -238,9 +238,9 @@ let create_range_list_attributes_and_summarise state fundecl range all_summaries
       range_list_attributes, all_summaries
     | range_list_attributes -> range_list_attributes, all_summaries)
 
-let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
-    ~(blocks_outermost_first : Debuginfo.t) scope_proto_dies all_summaries
-    parent_die lexical_block_ranges =
+let rec create_up_to_root fundecl state ~compilation_unit_proto_die
+    ~(prefix : Debuginfo.item list) ~(blocks_outermost_first : Debuginfo.t)
+    scope_proto_dies all_summaries ~parent_die lexical_block_ranges =
   Format.eprintf ">> create_up_to_root: %a || %a\n%!" Debuginfo.print_compact
     (Debuginfo.of_items prefix)
     Debuginfo.print_compact blocks_outermost_first;
@@ -278,8 +278,8 @@ let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
             all_summaries
         in
         let inlined_subroutine_die =
-          die_for_inlined_frame state parent_die fundecl range
-            range_list_attributes block
+          die_for_inlined_frame state ~compilation_unit_proto_die
+            ~parent:parent_die fundecl range range_list_attributes block
         in
         Format.eprintf
           "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
@@ -291,9 +291,11 @@ let rec create_up_to_root fundecl state ~(prefix : Debuginfo.item list)
         in
         inlined_subroutine_die, scope_proto_dies, all_summaries
     in
-    create_up_to_root fundecl state ~prefix:(prefix @ [block_item])
+    create_up_to_root fundecl state ~compilation_unit_proto_die
+      ~prefix:(prefix @ [block_item])
       ~blocks_outermost_first:(Debuginfo.of_items deeper_blocks)
-      scope_proto_dies all_summaries inlined_subroutine_die lexical_block_ranges
+      scope_proto_dies all_summaries ~parent_die:inlined_subroutine_die
+      lexical_block_ranges
 
 let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
   Format.eprintf "\n\nDwarf_inlined_frames.dwarf: function proto DIE is %a\n%!"
@@ -319,10 +321,12 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
         in
         Format.eprintf "Having removed fundecl item: %a\n%!"
           Debuginfo.print_compact parents_outermost_first;
+        let compilation_unit_proto_die = DS.compilation_unit_proto_die state in
         let scope_proto_dies, all_summaries =
-          create_up_to_root fundecl state ~prefix:[first_item]
-            ~blocks_outermost_first:parents_outermost_first scope_proto_dies
-            all_summaries function_proto_die lexical_block_ranges
+          create_up_to_root fundecl state ~compilation_unit_proto_die
+            ~prefix:[first_item] ~blocks_outermost_first:parents_outermost_first
+            scope_proto_dies all_summaries ~parent_die:function_proto_die
+            lexical_block_ranges
         in
         scope_proto_dies, all_summaries)
       all_blocks

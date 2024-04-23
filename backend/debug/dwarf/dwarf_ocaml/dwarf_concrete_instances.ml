@@ -73,8 +73,8 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
   let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
     (* Add the abstract instance root for this function *)
     Format.eprintf "*** Adding absint root for %s\n%!" fundecl.fun_name;
-    Dwarf_abstract_instances.add_root state ~function_proto_die:parent
-      ~demangled_name:linkage_name start_sym ~location_attributes
+    Dwarf_abstract_instances.add_root state ~parent ~demangled_name:linkage_name
+      start_sym ~location_attributes
   in
   let attribute_values =
     [ DAH.create_low_pc_from_symbol start_sym;

@@ -23,7 +23,7 @@ val attributes : string -> Dwarf_attribute_values.Attribute_value.t list
 (** Add an abstract instance root. *)
 val add_root :
   Dwarf_state.t ->
-  function_proto_die:Proto_die.t ->
+  parent:Proto_die.t ->
   demangled_name:string ->
   Asm_symbol.t ->
   location_attributes:Dwarf_attribute_values.Attribute_value.t list ->
@@ -31,7 +31,7 @@ val add_root :
 
 val find :
   Dwarf_state.t ->
-  function_proto_die:Proto_die.t ->
+  compilation_unit_proto_die:Proto_die.t ->
   Debuginfo.t ->
   Proto_die.t * Asm_symbol.t
 (* val find_maybe_in_another_unit_or_add : Dwarf_state.t ->

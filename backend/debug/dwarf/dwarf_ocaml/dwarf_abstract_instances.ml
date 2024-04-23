@@ -25,10 +25,14 @@ let attributes fun_name =
 let abstract_instance_proto_die_symbol ~fun_symbol =
   Asm_symbol.create (Asm_symbol.to_raw_string fun_symbol ^ "_absinst")
 
-let add_empty state ~parent ~fun_symbol =
+let add_empty state ~compilation_unit_proto_die ~fun_symbol ~demangled_name =
   let abstract_instance_proto_die =
     (* DWARF-5 specification section 3.3.8.1, page 82. *)
-    Proto_die.create ~parent:(Some parent) ~tag:Subprogram ~attribute_values:[]
+    Proto_die.create ~parent:(Some compilation_unit_proto_die) ~tag:Subprogram
+      ~attribute_values:
+        [ DAH.create_name (Asm_symbol.encode fun_symbol);
+          DAH.create_linkage_name ~linkage_name:demangled_name;
+          DAH.create_external ~is_visible_externally:true ]
       ()
   in
   let abstract_instance_proto_die_symbol =
@@ -42,8 +46,7 @@ let add_empty state ~parent ~fun_symbol =
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
-let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
-    ~location_attributes =
+let add_root state ~parent ~demangled_name fun_symbol ~location_attributes =
   let attributes =
     [ DAH.create_name (Asm_symbol.encode fun_symbol);
       DAH.create_linkage_name ~linkage_name:demangled_name;
@@ -83,9 +86,9 @@ let add_root state ~function_proto_die:parent ~demangled_name fun_symbol
     (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
   abstract_instance_proto_die, abstract_instance_proto_die_symbol
 
-let find state ~function_proto_die (dbg : Debuginfo.t) =
+let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
   let orig_dbg = dbg in
-  let fun_symbol, dbg_comp_unit, _item =
+  let demangled_name, fun_symbol, dbg_comp_unit, _item =
     match List.rev (Debuginfo.to_items dbg) with
     | [({ dinfo_scopes; dinfo_function_symbol; _ } as item)] -> (
       let module S = Debuginfo.Scoped_location in
@@ -99,8 +102,12 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
             "No function symbol in Debuginfo.t: orig_dbg=%a dbg=%a"
             Debuginfo.print_compact orig_dbg Debuginfo.print_compact dbg
       in
+      let demangled_name =
+        Debuginfo.Scoped_location.string_of_scopes dinfo_scopes
+      in
       match compilation_unit with
-      | Some compilation_unit -> function_symbol, compilation_unit, item
+      | Some compilation_unit ->
+        demangled_name, function_symbol, compilation_unit, item
       | None ->
         Misc.fatal_errorf "No compilation unit extracted from: %a"
           Debuginfo.print_compact dbg)
@@ -109,8 +116,6 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
       Misc.fatal_errorf "Non-singleton Debuginfo.t: %a" Debuginfo.print_compact
         dbg
   in
-  (* CR mshinwell: think more about fabrication of DIEs for other units in the
-     event that cross-unit references are not permitted *)
   Format.eprintf "found comp unit %a\n%!" Compilation_unit.print dbg_comp_unit;
   let this_comp_unit = Compilation_unit.get_current_exn () in
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
@@ -128,7 +133,10 @@ let find state ~function_proto_die (dbg : Debuginfo.t) =
       (* Fabricate an empty abstract instance DIE to fill in later. *)
       Format.eprintf "...making empty absint DIE for %a\n" Asm_symbol.print
         fun_symbol;
-      add_empty state ~parent:function_proto_die ~fun_symbol)
+      (* The empty abstract instances are parented to the compilation unit as
+         they might be referenced by other DIEs in a completely different scope
+         within the current unit. *)
+      add_empty state ~compilation_unit_proto_die ~fun_symbol ~demangled_name)
   else
     (* CR mshinwell: use Dwarf_name_laundry.abstract_instance_root_die_name *)
     Misc.fatal_errorf
