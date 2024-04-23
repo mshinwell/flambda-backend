@@ -493,7 +493,11 @@ let add_inlined_debuginfo t dbg =
           { item with dinfo_uid = Some dinfo_uid; dinfo_function_symbol })
         (Debuginfo.to_items dbg)
     in
-    Debuginfo.inline t.inlined_debuginfo (Debuginfo.of_items dbg)
+    let inlined_debuginfo =
+      Debuginfo.with_function_symbol_on_first_item t.inlined_debuginfo
+        ~function_symbol:None
+    in
+    Debuginfo.inline inlined_debuginfo (Debuginfo.of_items dbg)
 
 let cse t = t.cse
 
@@ -577,7 +581,7 @@ let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
     in
     (* XXX this is a hack, we should have a separate field for this *)
     Debuginfo.with_function_symbol_on_first_item (Apply.dbg apply)
-      ~function_symbol
+      ~function_symbol:(Some function_symbol)
   in
   { t with
     inlined_debuginfo;

@@ -98,7 +98,7 @@ val of_items : item list -> t
 
 val to_items : t -> item list
 
-val with_function_symbol_on_first_item : t -> function_symbol:string -> t
+val with_function_symbol_on_first_item : t -> function_symbol:string option -> t
 
 val to_string : t -> string
 

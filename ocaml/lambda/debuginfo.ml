@@ -284,7 +284,7 @@ let with_function_symbol_on_first_item t ~function_symbol =
   | [] -> t
   | d :: ds ->
     { t with
-      dbg = { d with dinfo_function_symbol = Some function_symbol } :: ds
+      dbg = { d with dinfo_function_symbol = function_symbol } :: ds
     }
 
 let to_string { dbg; assume_zero_alloc; } =
