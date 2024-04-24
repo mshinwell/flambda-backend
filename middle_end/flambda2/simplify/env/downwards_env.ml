@@ -28,34 +28,6 @@ type get_imported_names = unit -> Name.Set.t
 
 type get_imported_code = unit -> Exported_code.t
 
-module Inlined_debuginfo = struct
-  type t =
-    { dbg : Debuginfo.t;
-      function_symbol : Linkage_name.t;
-      uid : string
-    }
-
-  let print_debuginfo ppf dbg =
-    if Debuginfo.is_none dbg
-    then Format.pp_print_string ppf "None"
-    else Debuginfo.print_compact ppf dbg
-
-  let print ppf { dbg; function_symbol; uid } =
-    Format.fprintf ppf
-      "@[<hov 1>(@[<hov 1>(dbg@ %a)@]@ @[<hov 1>(function_symbol@ %a)@]@ \
-       @[<hov 1>(uid@ %a)@])@]"
-      print_debuginfo dbg Linkage_name.print function_symbol
-      Format.pp_print_string uid
-
-  let none =
-    { dbg = Debuginfo.none;
-      function_symbol = Linkage_name.of_string "";
-      uid = ""
-    }
-
-  let is_none t = Debuginfo.compare t.dbg Debuginfo.none = 0
-end
-
 type t =
   { round : int;
     typing_env : TE.t;
@@ -484,38 +456,6 @@ let define_code t ~code_id ~code =
   let all_code = Code_id.Map.add code_id code t.all_code in
   { t with typing_env; all_code }
 
-let inlining_counter = ref 0
-
-let set_inlined_debuginfo t ~from =
-  { t with inlined_debuginfo = from.inlined_debuginfo }
-
-let add_inlined_debuginfo t dbg =
-  if Inlined_debuginfo.is_none t.inlined_debuginfo
-  then dbg
-  else
-    let dbg =
-      (* uids of _all_ [Debuginfo.t] values in the body of the function being
-         inlined get freshened (consistently, for any given inlining) *)
-      List.mapi
-        (fun n ({ dinfo_function_symbol; _ } as item : Debuginfo.item) ->
-          let dinfo_function_symbol =
-            if n = 0
-            then
-              Some (Linkage_name.to_string t.inlined_debuginfo.function_symbol)
-            else dinfo_function_symbol
-          in
-          { item with
-            dinfo_uid = Some t.inlined_debuginfo.uid;
-            dinfo_function_symbol
-          })
-        (Debuginfo.to_items dbg)
-    in
-    let inlined_debuginfo =
-      Debuginfo.with_function_symbol_on_first_item t.inlined_debuginfo.dbg
-        ~function_symbol:None
-    in
-    Debuginfo.inline inlined_debuginfo (Debuginfo.of_items dbg)
-
 let cse t = t.cse
 
 let comparison_results t = t.comparison_results
@@ -568,6 +508,12 @@ let set_inlining_arguments arguments t =
     inlining_state = Inlining_state.with_arguments arguments t.inlining_state
   }
 
+let set_inlined_debuginfo t ~from =
+  { t with inlined_debuginfo = from.inlined_debuginfo }
+
+let add_inlined_debuginfo t dbg =
+  Inlined_debuginfo.rewrite t.inlined_debuginfo dbg
+
 let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
   let arguments =
     Inlining_state.arguments t.inlining_state
@@ -592,14 +538,10 @@ let enter_inlined_apply ~called_code ~apply ~was_inline_always t =
         in
         Inlining_state.increment_depth t.inlining_state ~by)
   in
-  let function_symbol = Code.code_id called_code |> Code_id.linkage_name in
-  let dbg = Apply.dbg apply in
-  let uid =
-    incr inlining_counter;
-    (* XXX hmm.... *)
-    Hashtbl.hash (dbg, function_symbol, !inlining_counter) |> string_of_int
+  let inlined_debuginfo =
+    Inlined_debuginfo.create ~called_code_id:(Code.code_id called_code)
+      ~apply_dbg:(Apply.dbg apply)
   in
-  let inlined_debuginfo = { Inlined_debuginfo.dbg; function_symbol; uid } in
   { t with
     inlined_debuginfo;
     inlining_state;
