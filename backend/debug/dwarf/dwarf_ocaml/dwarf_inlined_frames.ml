@@ -159,9 +159,14 @@ let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
   Proto_die.create ~parent:(Some parent) ~tag:Inlined_subroutine
     ~attribute_values:
       (abstract_instance @ range_list_attributes
-      @ [ DAH.create_call_file (Dwarf_state.get_file_num state block.dinfo_file);
-          DAH.create_call_line block.dinfo_line;
-          DAH.create_call_column block.dinfo_char_start ])
+      @ [DAH.create_call_file (Dwarf_state.get_file_num state block.dinfo_file)]
+      @ (if block.dinfo_line >= 0
+        then [DAH.create_call_line block.dinfo_line]
+        else [])
+      @
+      if block.dinfo_char_start >= 0
+      then [DAH.create_call_column block.dinfo_char_start]
+      else [])
     ()
 
 let create_range_list_attributes_and_summarise state fundecl range all_summaries
