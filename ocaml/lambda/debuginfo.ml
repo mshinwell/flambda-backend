@@ -284,18 +284,6 @@ let with_function_symbol_on_first_item t ~function_symbol =
       dbg = { d with dinfo_function_symbol = function_symbol } :: ds
     }
 
-let of_items items = { dbg = items; assume_zero_alloc = Assume_info.none }
-
-let to_items t = t.dbg
-
-let with_function_symbol_on_first_item t ~function_symbol =
-  match t.dbg with
-  | [] -> t
-  | d :: ds ->
-    { t with
-      dbg = { d with dinfo_function_symbol = function_symbol } :: ds
-    }
-
 let to_string { dbg; assume_zero_alloc; } =
   let s = Dbg.to_string dbg in
   let a = Assume_info.to_string assume_zero_alloc in
