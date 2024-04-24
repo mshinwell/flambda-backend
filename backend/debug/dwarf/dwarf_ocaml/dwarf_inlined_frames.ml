@@ -107,7 +107,7 @@ let create_discontiguous_range_list_and_summarise state (_fundecl : L.fundecl)
                   (Asm_label.create_int Text end_pos)
                 ~first_address_when_not_in_scope_offset:(Some end_pos_offset)
             in
-            Format.eprintf "range_list_entry: start=%d end=%d+%d\n%!" start_pos
+            DS.Debug.log "range_list_entry: start=%d end=%d+%d\n%!" start_pos
               end_pos end_pos_offset;
             range_list_entry :: dwarf_4_range_list_entries
           | Five -> dwarf_4_range_list_entries
@@ -209,34 +209,33 @@ let create_range_list_attributes_and_summarise state fundecl range all_summaries
 let rec create_up_to_root fundecl state ~compilation_unit_proto_die
     ~(prefix : Debuginfo.item list) ~(blocks_outermost_first : Debuginfo.t)
     scope_proto_dies all_summaries ~parent_die lexical_block_ranges =
-  Format.eprintf ">> create_up_to_root: %a || %a\n%!" Debuginfo.print_compact
+  DS.Debug.log ">> create_up_to_root: %a || %a\n%!" Debuginfo.print_compact
     (Debuginfo.of_items prefix)
     Debuginfo.print_compact blocks_outermost_first;
   match Debuginfo.to_items blocks_outermost_first with
   | [] ->
-    Format.eprintf "Deepest inlined frame reached\n%!";
+    DS.Debug.log "Deepest inlined frame reached\n%!";
     (* We have now gone past the deepest inlined frame. *)
     scope_proto_dies, all_summaries
   | block_item :: deeper_blocks ->
     let block = Debuginfo.of_items [block_item] in
-    Format.eprintf "...the current block is %a\n%!" Debuginfo.print_compact
-      block;
+    DS.Debug.log "...the current block is %a\n%!" Debuginfo.print_compact block;
     let inlined_subroutine_die, scope_proto_dies, all_summaries =
       match K.Map.find block scope_proto_dies with
       | existing_die ->
-        Format.eprintf "block already has a proto DIE (ref %a)\n%!"
+        DS.Debug.log "block already has a proto DIE (ref %a)\n%!"
           Asm_label.print
           (Proto_die.reference existing_die);
         existing_die, scope_proto_dies, all_summaries
       | exception Not_found ->
-        Format.eprintf "New DIE will be needed, parent DIE ref is %a\n%!"
+        DS.Debug.log "New DIE will be needed, parent DIE ref is %a\n%!"
           Asm_label.print
           (Proto_die.reference parent_die);
         let range_key =
           Debuginfo.of_items (prefix @ Debuginfo.to_items blocks_outermost_first)
         in
         let () =
-          Format.eprintf
+          DS.Debug.log
             "finding ranges for key (current block + all parents): %a\n%!"
             K.print range_key
         in
@@ -249,8 +248,7 @@ let rec create_up_to_root fundecl state ~compilation_unit_proto_die
           die_for_inlined_frame state ~compilation_unit_proto_die
             ~parent:parent_die range_list_attributes block
         in
-        Format.eprintf
-          "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
+        DS.Debug.log "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
           Debuginfo.print_compact block Asm_label.print
           (Proto_die.reference inlined_subroutine_die);
         let scope_proto_dies =
@@ -266,16 +264,15 @@ let rec create_up_to_root fundecl state ~compilation_unit_proto_die
       lexical_block_ranges
 
 let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
-  Format.eprintf "\n\nDwarf_inlined_frames.dwarf: function proto DIE is %a\n%!"
+  DS.Debug.log "\n\nDwarf_inlined_frames.dwarf: function proto DIE is %a\n%!"
     Asm_label.print
     (Proto_die.reference function_proto_die);
   let all_blocks = IF.all_indexes lexical_block_ranges in
   let scope_proto_dies, _all_summaries =
     IF.Inlined_frames.Index.Set.fold
       (fun (block_with_parents : Debuginfo.t) (scope_proto_dies, all_summaries) ->
-        Format.eprintf "--------------------------------------------------\n";
-        Format.eprintf "START: %a\n%!" Debuginfo.print_compact
-          block_with_parents;
+        DS.Debug.log "--------------------------------------------------\n";
+        DS.Debug.log "START: %a\n%!" Debuginfo.print_compact block_with_parents;
         (* The head of [block_with_parents] always corresponds to [fundecl] and
            thus will be associated with [function_proto_die]. As such we don't
            need to create any DW_TAG_inlined_subroutine DIEs for it. *)
@@ -287,7 +284,7 @@ let dwarf state (fundecl : L.fundecl) lexical_block_ranges ~function_proto_die =
             Misc.fatal_errorf "Empty debuginfo in function %s" fundecl.fun_name
           | first_item :: parents -> first_item, Debuginfo.of_items parents
         in
-        Format.eprintf "Having removed fundecl item: %a\n%!"
+        DS.Debug.log "Having removed fundecl item: %a\n%!"
           Debuginfo.print_compact parents_outermost_first;
         let compilation_unit_proto_die = DS.compilation_unit_proto_die state in
         let scope_proto_dies, all_summaries =

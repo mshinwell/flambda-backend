@@ -79,7 +79,7 @@ let add_root state ~parent ~demangled_name fun_symbol ~location_attributes =
   let abstract_instance_proto_die_symbol =
     abstract_instance_proto_die_symbol ~fun_symbol
   in
-  Format.eprintf "add_root: fun_symbol=%a\n" Asm_symbol.print fun_symbol;
+  DS.Debug.log "add_root: fun_symbol=%a\n" Asm_symbol.print fun_symbol;
   let abstract_instance_proto_die =
     match
       Asm_symbol.Tbl.find (DS.function_abstract_instances state) fun_symbol
@@ -138,21 +138,21 @@ let find state ~compilation_unit_proto_die (dbg : Debuginfo.t) =
       Misc.fatal_errorf "Non-singleton Debuginfo.t: %a" Debuginfo.print_compact
         dbg
   in
-  Format.eprintf "found comp unit %a\n%!" Compilation_unit.print dbg_comp_unit;
+  DS.Debug.log "found comp unit %a\n%!" Compilation_unit.print dbg_comp_unit;
   let this_comp_unit = Compilation_unit.get_current_exn () in
   if Compilation_unit.equal dbg_comp_unit this_comp_unit
   then (
-    Format.eprintf "looking in function_abstract_instances for %a\n%!"
+    DS.Debug.log "looking in function_abstract_instances for %a\n%!"
       Asm_symbol.print fun_symbol;
     match
       Asm_symbol.Tbl.find (DS.function_abstract_instances state) fun_symbol
     with
     | existing_instance ->
-      Format.eprintf "...successfully found existing absint DIE\n%!";
+      DS.Debug.log "...successfully found existing absint DIE\n%!";
       Ok (snd existing_instance)
     | exception Not_found ->
       (* Fabricate an empty abstract instance DIE to fill in later. *)
-      Format.eprintf "...making empty absint DIE for %a\n" Asm_symbol.print
+      DS.Debug.log "...making empty absint DIE for %a\n" Asm_symbol.print
         fun_symbol;
       (* The empty abstract instances are parented to the compilation unit as
          they might be referenced by other DIEs in a completely different scope

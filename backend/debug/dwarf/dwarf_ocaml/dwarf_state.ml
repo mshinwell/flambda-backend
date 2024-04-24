@@ -65,3 +65,10 @@ let function_abstract_instances t = t.function_abstract_instances
 let can_reference_dies_across_units _t = true
 
 let get_file_num t filename = t.get_file_num filename
+
+module Debug = struct
+  let log f =
+    match Sys.getenv "DWARF_DEBUG" with
+    | exception Not_found -> Format.ifprintf Format.err_formatter f
+    | _ -> Format.eprintf f
+end

@@ -54,3 +54,7 @@ val function_abstract_instances :
 val can_reference_dies_across_units : t -> bool
 
 val get_file_num : t -> string -> int
+
+module Debug : sig
+  val log : ('a, Format.formatter, unit) format -> 'a
+end

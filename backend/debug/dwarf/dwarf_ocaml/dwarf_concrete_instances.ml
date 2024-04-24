@@ -17,6 +17,7 @@
 open Asm_targets
 open Dwarf_high
 module DAH = Dwarf_attribute_helpers
+module DS = Dwarf_state
 module L = Linear
 
 let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
@@ -51,7 +52,7 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
   in
   let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
     (* Add the abstract instance root for this function *)
-    Format.eprintf "*** Adding absint root for %s\n%!" fundecl.fun_name;
+    DS.Debug.log "*** Adding absint root for %s\n%!" fundecl.fun_name;
     Dwarf_abstract_instances.add_root state ~parent ~demangled_name:linkage_name
       start_sym ~location_attributes
   in
