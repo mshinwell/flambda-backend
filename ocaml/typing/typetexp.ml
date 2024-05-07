@@ -712,6 +712,7 @@ and transl_type_aux env ~row_context ~aliased ~policy mode styp =
         (List.map (fun t -> (None, t)) stl)
     in
     ctyp desc typ
+  | Ptyp_unboxed_tuple _stl -> Misc.fatal_error "CJC: unimplemented"
   | Ptyp_constr(lid, stl) ->
       let (path, decl) = Env.lookup_type ~loc:lid.loc lid.txt env in
       let stl =
@@ -1464,7 +1465,9 @@ let report_error env ppf = function
           dprintf "But it was inferred to have %t"
             (fun ppf -> match Jkind.get inferred_jkind with
             | Const c -> fprintf ppf "layout %s" (Jkind.string_of_const c)
-            | Var _ -> fprintf ppf "a representable layout")))
+            | Var _ -> fprintf ppf "a representable layout"
+            | Product _ -> fprintf ppf "a product layout"
+            (* CR ccasinghino: print actual product *))))
         inferred_jkind
   | Multiple_constraints_on_type s ->
       fprintf ppf "Multiple constraints for type %a" longident s
