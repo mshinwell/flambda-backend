@@ -239,6 +239,9 @@ let rec core_type i ppf x =
   | Ttyp_tuple l ->
       line i ppf "Ttyp_tuple\n";
       list i labeled_core_type ppf l;
+  | Ttyp_unboxed_tuple l ->
+      line i ppf "Ttyp_unboxed_tuple\n";
+      list i labeled_core_type ppf l;
   | Ttyp_constr (li, _, l) ->
       line i ppf "Ttyp_constr %a\n" fmt_path li;
       list i core_type ppf l;

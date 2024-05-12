@@ -629,6 +629,7 @@ let typ sub {ctyp_loc; ctyp_desc; ctyp_env; ctyp_attributes; _} =
       sub.typ sub ct1;
       sub.typ sub ct2
   | Ttyp_tuple list -> List.iter (fun (_, t) -> sub.typ sub t) list
+  | Ttyp_unboxed_tuple list -> List.iter (fun (_, t) -> sub.typ sub t) list
   | Ttyp_constr (_, lid, list) ->
       iter_loc sub lid;
       List.iter (sub.typ sub) list

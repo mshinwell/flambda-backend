@@ -783,6 +783,7 @@ let generalize_structure ty =
 (* Generalize the spine of a function, if the level >= !current_level *)
 
 let rec generalize_spine ty =
+  (* CR ccasinghino: unboxed tuples? *)
   let level = get_level ty in
   if level < !current_level || level = generic_level then () else
   match get_desc ty with
@@ -5134,6 +5135,9 @@ let rec eqtype rename type_pairs subst env t1 t2 =
           | (Ttuple labeled_tl1, Ttuple labeled_tl2) ->
               eqtype_labeled_list rename type_pairs subst env labeled_tl1
                 labeled_tl2
+          | (Tunboxed_tuple labeled_tl1, Tunboxed_tuple labeled_tl2) ->
+              eqtype_labeled_list rename type_pairs subst env labeled_tl1
+                labeled_tl2
           | (Tconstr (p1, tl1, _), Tconstr (p2, tl2, _))
                 when Path.same p1 p2 ->
               eqtype_list rename type_pairs subst env tl1 tl2
@@ -5962,6 +5966,8 @@ let rec subtype_rec env trace t1 t2 cstrs =
           u1 u2
           cstrs
     | (Ttuple tl1, Ttuple tl2) ->
+        subtype_labeled_list env trace tl1 tl2 cstrs
+    | (Tunboxed_tuple tl1, Tunboxed_tuple tl2) ->
         subtype_labeled_list env trace tl1 tl2 cstrs
     | (Tconstr(p1, [], _), Tconstr(p2, [], _)) when Path.same p1 p2 ->
         cstrs

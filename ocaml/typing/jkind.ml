@@ -2225,7 +2225,7 @@ let rec sort_to_legacy_desc : Sort.t -> desc = function
   | Product sorts -> Product (List.map sort_to_legacy_desc sorts)
 
 let rec layout_to_legacy_desc : Layout.t -> desc = function
-  | Sort s -> sort_to_legacy_desc s
+  | Sort s -> sort_to_legacy_desc (Sort.get s)
   | Non_null_value -> Const Non_null_value
   | Any -> Const Any
   | Product layouts -> Product (List.map layout_to_legacy_desc layouts)

@@ -1041,6 +1041,9 @@ let core_type sub ct =
         Jane_syntax.Labeled_tuples.typ_of ~loc
           (List.map (fun (lbl, t) -> lbl, sub.typ sub t) list)
         |> add_jane_syntax_attributes
+    | Ttyp_unboxed_tuple list ->
+        Ptyp_unboxed_tuple
+          (List.map (fun (lbl, t) -> lbl, sub.typ sub t) list)
     | Ttyp_constr (_path, lid, list) ->
         Ptyp_constr (map_loc sub lid,
           List.map (sub.typ sub) list)

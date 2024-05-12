@@ -105,7 +105,8 @@ let with_additional_action (config : additional_action_config) s =
         let bits32 = Jkind.of_const Bits32 ~why:reason in
         let bits64 = Jkind.of_const Bits64 ~why:reason in
         let non_null_value = Jkind.of_const Non_null_value ~why:reason in
-        let product _ks = assert false (* Jkind. (Product ks) ~why:reason *) in
+        (* CR ccasinghino: reason *)
+        let product ks = Jkind.product ks ~why:Jkind.Unboxed_tuple in
         let rec prepare_const (c : Jkind.const) : Jkind.t =
           match c with
           | Any -> any
