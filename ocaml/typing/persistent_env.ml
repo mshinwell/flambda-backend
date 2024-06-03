@@ -374,8 +374,14 @@ let acknowledge_pers_struct penv modname import val_of_pers_sig =
             | Val_ivar _
             | Val_self _
             | Val_anc _ -> false)
-        | Sig_typext _
-        | Sig_module _
+        | Sig_typext _ -> true
+        | Sig_module (_, _, { md_type; _ }, _, _) -> (
+            match md_type with
+            | Mty_ident _ -> false
+            | Mty_signature _ -> true
+            | Mty_functor _ -> true
+            | Mty_alias _
+            | Mty_strengthen _ -> false)
         | Sig_class _ -> true
         | Sig_type _
         | Sig_modtype _
