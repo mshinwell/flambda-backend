@@ -43,7 +43,10 @@ let run ~cmx_loader ~round ~code_slot_offsets unit =
   let dacc = DA.create denv code_slot_offsets Continuation_uses_env.empty in
   let body, uacc =
     Simplify_expr.simplify_toplevel dacc (FU.body unit) ~return_continuation
-      ~return_arity:(Flambda_arity.create_singletons [K.With_subkind.any_value])
+      ~return_arity:
+        (Flambda_arity.create_singletons
+           (List.init (List.length module_symbols) (fun _ ->
+                K.With_subkind.any_value)))
       ~exn_continuation
   in
   let body = Rebuilt_expr.to_expr body (UA.are_rebuilding_terms uacc) in

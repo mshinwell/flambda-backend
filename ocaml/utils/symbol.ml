@@ -91,7 +91,7 @@ let linkage_name_for_compilation_unit ?index comp_unit =
   let index =
     match index with
     | None -> ""
-    | Some index -> "." ^ Int.to_string index
+    | Some index -> ".." ^ Int.to_string index
   in
   caml_symbol_prefix ^ suffix ^ index
   |> Linkage_name.of_string
