@@ -375,10 +375,10 @@ let acknowledge_pers_struct penv modname import val_of_pers_sig =
             | Val_self _
             | Val_anc _ -> false)
         | Sig_typext _
-        | Sig_module _ -> true
+        | Sig_module _
+        | Sig_class _ -> true
         | Sig_type _
         | Sig_modtype _
-        | Sig_class _
         | Sig_class_type _ -> false)
       (Subst.Lazy.force_signature sign)
     |> List.length
