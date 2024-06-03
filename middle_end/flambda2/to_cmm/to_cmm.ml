@@ -80,8 +80,11 @@ let unit0 ~offsets ~all_code ~reachable_names flambda_unit =
        (which just returns unit) doesn't use any of the parameters. *)
     C.continuation_bound_parameters env
       (Bound_parameters.create
-         [ Bound_parameter.create (Variable.create "*ret*")
-             Flambda_kind.With_subkind.any_value ])
+         (List.init
+            (List.length (Flambda_unit.module_symbols flambda_unit))
+            (fun _ ->
+              Bound_parameter.create (Variable.create "*ret*")
+                Flambda_kind.With_subkind.any_value)))
   in
   let return_cont, env =
     Env.add_jump_cont env
@@ -94,8 +97,11 @@ let unit0 ~offsets ~all_code ~reachable_names flambda_unit =
       (Flambda_unit.toplevel_my_region flambda_unit)
   in
   let r =
-    R.create ~reachable_names
-      ~module_symbol:(Flambda_unit.module_symbol flambda_unit)
+    R.create ~reachable_names (* XXX *)
+      ~module_symbol:
+        (Symbol.create
+           (Compilation_unit.get_current_exn ())
+           (Linkage_name.of_string "foo"))
   in
   let body, body_free_vars, res =
     To_cmm_expr.expr env r (Flambda_unit.body flambda_unit)

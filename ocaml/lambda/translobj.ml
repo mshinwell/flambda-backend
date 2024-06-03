@@ -135,7 +135,8 @@ let transl_store_label_init glob size f arg =
   assert(!Clflags.native_code);
   method_cache := Lprim(mod_field ~read_semantics:Reads_vary size,
                         (* XXX KC: conservative *)
-                        [Lprim(Pgetglobal glob, [], Loc_unknown)],
+                        [Lprim(Pgetglobal { comp_unit = glob;
+                          module_block_size = 0 }, [], Loc_unknown)],
                         Loc_unknown);
   let expr = f arg in
   let (size, expr) =
@@ -143,7 +144,8 @@ let transl_store_label_init glob size f arg =
     (size+1,
      Lsequence(
      Lprim(mod_setfield size,
-           [Lprim(Pgetglobal glob, [], Loc_unknown);
+           [Lprim(Pgetglobal { comp_unit = glob; module_block_size = 0},
+                  [], Loc_unknown);
             Lprim (Pccall prim_makearray,
                    [int !method_count; int 0],
                    Loc_unknown)],

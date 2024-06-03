@@ -1095,5 +1095,6 @@ let conv comp_unit (fexpr : Fexpr.flambda_unit) : Flambda_unit.t =
   let env = bind_all_code_ids env fexpr in
   let body = expr env fexpr.body in
   Flambda_unit.create ~return_continuation ~exn_continuation
-    ~toplevel_my_region:toplevel_region ~body ~module_symbol
+    ~toplevel_my_region:toplevel_region ~body
+    ~module_symbols:[module_symbol] (* XXX *)
     ~used_value_slots:Unknown

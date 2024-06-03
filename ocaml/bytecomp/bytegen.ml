@@ -363,7 +363,7 @@ let array_primitive (index_kind : Lambda.array_index_kind) prefix =
 let comp_primitive stack_info p sz args =
   check_stack stack_info sz;
   match p with
-    Pgetglobal cu ->
+    Pgetglobal { comp_unit = cu; _ } ->
       Kgetglobal (cu |> Compilation_unit.to_global_ident_for_bytecode)
   | Psetglobal cu ->
       Ksetglobal (cu |> Compilation_unit.to_global_ident_for_bytecode)

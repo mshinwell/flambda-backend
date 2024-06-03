@@ -79,6 +79,9 @@ let longident_of_comp_unit cu =
   in
   of_names names_rev
 
+(* Only used for [transl_store*] *)
+let pgetglobal comp_unit = Pgetglobal { comp_unit; module_block_size = 0 }
+
 let global_path cu =
   Some(longident_of_comp_unit cu)
 let functor_path path param =
@@ -891,7 +894,7 @@ let scan_used_globals lam =
   let rec scan lam =
     Lambda.iter_head_constructor scan lam;
     match lam with
-      Lprim ((Pgetglobal cu | Psetglobal cu), _, _) ->
+      Lprim ((Pgetglobal { comp_unit = cu; _ } | Psetglobal cu), _, _) ->
         globals := Compilation_unit.Set.add cu !globals
     | _ -> ()
   in
@@ -1095,7 +1098,7 @@ let transl_store_subst = ref Ident.Map.empty
 let nat_toplevel_name id =
   try match Ident.Map.find id !transl_store_subst with
     | Lprim(Pfield (pos, _, _),
-            [Lprim(Pgetglobal glob, [], _)], _) -> (glob,pos)
+            [Lprim(Pgetglobal { comp_unit = glob; _ }, [], _)], _) -> (glob,pos)
     | _ -> raise Not_found
   with Not_found ->
     fatal_error("Translmod.nat_toplevel_name: " ^ Ident.unique_name id)
@@ -1246,7 +1249,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                If so, keep using the local module value (id) in the remainder of
                the compilation unit (add_ident true returns subst unchanged).
                If not, we can use the value from the global
-               (add_ident true adds id -> Pgetglobal... to subst). *)
+               (add_ident true adds id -> pgetglobal... to subst). *)
             Llet(Strict, Lambda.layout_module, id, Lambda.subst no_env_update subst lam,
                  Lsequence(store_ident (of_location ~scopes loc) id,
                            transl_store ~scopes rootpath
@@ -1406,7 +1409,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
       let (pos, cc) = Ident.find_same id map in
       let init_val = apply_coercion loc Alias cc (Lvar id) in
       Lprim(mod_setfield pos,
-            [Lprim(Pgetglobal glob, [], loc); init_val],
+            [Lprim(pgetglobal glob, [], loc); init_val],
             loc)
     with Not_found ->
       fatal_error("Translmod.store_ident: " ^ Ident.unique_name id)
@@ -1421,7 +1424,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
         Tcoerce_none ->
           Ident.Map.add id
             (Lprim(mod_field pos,
-                   [Lprim(Pgetglobal glob, [], Loc_unknown)],
+                   [Lprim(pgetglobal glob, [], Loc_unknown)],
                    Loc_unknown))
             subst
       | _ ->
@@ -1434,7 +1437,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
 
   and store_primitive (pos, prim) cont =
     Lsequence(Lprim(mod_setfield pos,
-                    [Lprim(Pgetglobal glob, [], Loc_unknown);
+                    [Lprim(pgetglobal glob, [], Loc_unknown);
                      Translprim.transl_primitive Loc_unknown
                        prim.pc_desc prim.pc_env prim.pc_type
                        ~poly_mode:prim.pc_poly_mode
@@ -1447,7 +1450,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
     let path_lam = transl_module_path Loc_unknown env path in
     let init_val = apply_coercion Loc_unknown Strict cc path_lam in
     Lprim(mod_setfield pos,
-          [Lprim(Pgetglobal glob, [], Loc_unknown);
+          [Lprim(pgetglobal glob, [], Loc_unknown);
            init_val],
           Loc_unknown)
   in
@@ -1573,7 +1576,7 @@ let toploop_getvalue id =
   Lapply{
     ap_loc=Loc_unknown;
     ap_func=Lprim(mod_field toploop_getvalue_pos,
-                  [Lprim(Pgetglobal toploop_unit, [], Loc_unknown)],
+                  [Lprim(pgetglobal toploop_unit, [], Loc_unknown)],
                   Loc_unknown);
     ap_args=[Lconst(Const_base(
       Const_string (toplevel_name id, Location.none, None)))];
@@ -1590,7 +1593,7 @@ let toploop_setvalue id lam =
   Lapply{
     ap_loc=Loc_unknown;
     ap_func=Lprim(mod_field toploop_setvalue_pos,
-                  [Lprim(Pgetglobal toploop_unit, [], Loc_unknown)],
+                  [Lprim(pgetglobal toploop_unit, [], Loc_unknown)],
                   Loc_unknown);
     ap_args=
       [Lconst(Const_base(
@@ -1748,7 +1751,7 @@ let transl_toplevel_definition str =
 
 let get_component = function
     None -> Lconst const_unit
-  | Some id -> Lprim(Pgetglobal id, [], Loc_unknown)
+  | Some id -> Lprim(pgetglobal id, [], Loc_unknown)
 
 let transl_package_plain_block component_names coercion =
   let size =
@@ -1795,7 +1798,7 @@ let transl_package_set_fields component_names target_name coercion =
        make_sequence
          (fun pos id ->
            Lprim(mod_setfield pos,
-                 [Lprim(Pgetglobal target_name, [], Loc_unknown);
+                 [Lprim(pgetglobal target_name, [], Loc_unknown);
                   get_component id],
                  Loc_unknown))
          0 component_names)
@@ -1812,7 +1815,7 @@ let transl_package_set_fields component_names target_name coercion =
              make_sequence
                (fun pos _id ->
                  Lprim(mod_setfield pos,
-                       [Lprim(Pgetglobal target_name, [], Loc_unknown);
+                       [Lprim(pgetglobal target_name, [], Loc_unknown);
                         Lprim(mod_field pos, [Lvar blk], Loc_unknown)],
                        Loc_unknown))
                0 pos_cc_list))
@@ -1823,7 +1826,7 @@ let transl_package_set_fields component_names target_name coercion =
        make_sequence
          (fun dst (src, cc) ->
            Lprim(Psetfield(dst, false),
-                 [Lprim(Pgetglobal target_name, []);
+                 [Lprim(pgetglobal target_name, []);
                   apply_coercion Strict cc (get_component id.(src))]))
          0 pos_cc_list)
   *)

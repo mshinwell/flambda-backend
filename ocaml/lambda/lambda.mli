@@ -95,7 +95,7 @@ type primitive =
   | Pbytes_of_string
   | Pignore
   (* Globals *)
-  | Pgetglobal of Compilation_unit.t
+  | Pgetglobal of { comp_unit : Compilation_unit.t; module_block_size : int; }
   | Psetglobal of Compilation_unit.t
   | Pgetpredef of Ident.t
   (* Operations on heap blocks *)

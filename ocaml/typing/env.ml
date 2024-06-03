@@ -174,7 +174,7 @@ let map_summary f = function
   | Env_module_unbound (s, u, r) -> Env_module_unbound (f s, u, r)
 
 type address = Persistent_env.address =
-  | Aunit of Compilation_unit.t
+  | Aunit of { comp_unit : Compilation_unit.t; module_block_size : int }
   | Alocal of Ident.t
   | Adot of address * int
 
@@ -852,7 +852,8 @@ let md md_type =
 (* Print addresses *)
 
 let rec print_address ppf = function
-  | Aunit cu -> Format.fprintf ppf "%s" (Compilation_unit.full_path_as_string cu)
+  | Aunit { comp_unit = cu; module_block_size = _ } ->
+      Format.fprintf ppf "%s" (Compilation_unit.full_path_as_string cu)
   | Alocal id -> Format.fprintf ppf "%s" (Ident.name id)
   | Adot(a, pos) -> Format.fprintf ppf "%a.[%i]" print_address a pos
 
@@ -861,7 +862,7 @@ type address_head =
   | AHlocal of Ident.t
 
 let rec address_head = function
-  | Aunit cu -> AHunit cu
+  | Aunit { comp_unit; module_block_size = _ } -> AHunit comp_unit
   | Alocal id -> AHlocal id
   | Adot (a, _) -> address_head a
 

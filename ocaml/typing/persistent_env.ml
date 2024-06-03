@@ -79,7 +79,11 @@ type import_info =
   | Found of import
 
 type binding =
-  | Static of Compilation_unit.t (* Bound to a static constant *)
+  | Static of {
+      comp_unit : Compilation_unit.t;
+      module_block_size : int;
+    }
+    (* Bound to a static constant *)
 
 (* Data relating to an actual referenceable module, with a signature and a
    representation in memory. *)
@@ -333,17 +337,17 @@ let find_import ~allow_hidden penv ~check modname =
           add_import penv modname;
           acknowledge_import penv ~check modname psig
 
-let make_binding _penv (impl : CU.t option) : binding =
+let make_binding _penv ~module_block_size (impl : CU.t option) : binding =
   let unit =
     match impl with
     | Some unit -> unit
     | None ->
         Misc.fatal_errorf "Can't bind a parameter statically"
   in
-  Static unit
+  Static { comp_unit = unit; module_block_size }
 
 type address =
-  | Aunit of Compilation_unit.t
+  | Aunit of { comp_unit : Compilation_unit.t; module_block_size : int }
   | Alocal of Ident.t
   | Adot of address * int
 
@@ -360,19 +364,40 @@ let acknowledge_pers_struct penv modname import val_of_pers_sig =
   let {persistent_structures; _} = penv in
   let impl = import.imp_impl in
   let sign = import.imp_sign in
+  let module_block_size =
+    List.filter (fun (sign_item : Types.signature_item) ->
+        match sign_item with
+        | Sig_value (_, { val_kind; _ }, _) -> (
+            match val_kind with
+            | Val_reg -> true
+            | Val_prim _
+            | Val_ivar _
+            | Val_self _
+            | Val_anc _ -> false)
+        | Sig_type _
+        | Sig_typext _
+        | Sig_module _
+        | Sig_modtype _
+        | Sig_class _
+        | Sig_class_type _ -> false)
+      (Subst.Lazy.force_signature sign)
+    |> List.length
+  in
   let flags = import.imp_flags in
-  let binding = make_binding penv impl in
+  let binding = make_binding penv ~module_block_size impl in
   let address : address =
     match binding with
-    | Static unit -> Aunit unit
+    | Static { comp_unit; module_block_size } ->
+        Aunit { comp_unit; module_block_size }
   in
   let uid =
     match binding with
-    | Static unit -> Shape.Uid.of_compilation_unit_id unit
+    | Static { comp_unit = unit; _ } -> Shape.Uid.of_compilation_unit_id unit
   in
   let shape =
     match binding with
-    | Static unit -> Shape.for_persistent_unit (CU.full_path_as_string unit)
+    | Static { comp_unit = unit; _ } ->
+        Shape.for_persistent_unit (CU.full_path_as_string unit)
   in
   let pm = val_of_pers_sig sign modname uid ~shape ~address ~flags in
   let ps =

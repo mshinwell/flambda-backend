@@ -48,7 +48,7 @@ type summary =
   | Env_module_unbound of summary * string * module_unbound_reason
 
 type address =
-  | Aunit of Compilation_unit.t
+  | Aunit of { comp_unit : Compilation_unit.t; module_block_size : int }
   | Alocal of Ident.t
   | Adot of address * int
 

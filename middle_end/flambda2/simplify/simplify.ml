@@ -28,7 +28,7 @@ let run ~cmx_loader ~round ~code_slot_offsets unit =
   let return_continuation = FU.return_continuation unit in
   let exn_continuation = FU.exn_continuation unit in
   let toplevel_my_region = FU.toplevel_my_region unit in
-  let module_symbol = FU.module_symbol unit in
+  let module_symbols = FU.module_symbols unit in
   let resolver = Flambda_cmx.load_cmx_file_contents cmx_loader in
   let get_imported_names = Flambda_cmx.get_imported_names cmx_loader in
   let get_imported_code = Flambda_cmx.get_imported_code cmx_loader in
@@ -99,11 +99,11 @@ let run ~cmx_loader ~round ~code_slot_offsets unit =
       Slot_offsets.finalize_offsets slot_offsets ~get_code_metadata ~used_slots
   in
   let reachable_names, cmx =
-    Flambda_cmx.prepare_cmx_file_contents ~final_typing_env ~module_symbol
+    Flambda_cmx.prepare_cmx_file_contents ~final_typing_env ~module_symbols
       ~used_value_slots ~exported_offsets all_code
   in
   let unit =
     FU.create ~return_continuation ~exn_continuation ~toplevel_my_region
-      ~module_symbol ~body ~used_value_slots:(Known used_value_slots)
+      ~module_symbols ~body ~used_value_slots:(Known used_value_slots)
   in
   { cmx; unit; all_code; exported_offsets; reachable_names }

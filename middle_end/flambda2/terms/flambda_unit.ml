@@ -19,17 +19,17 @@ type t =
     exn_continuation : Continuation.t;
     toplevel_my_region : Variable.t;
     body : Flambda.Expr.t;
-    module_symbol : Symbol.t;
+    module_symbols : Symbol.t list;
     used_value_slots : Value_slot.Set.t Or_unknown.t
   }
 
 let create ~return_continuation ~exn_continuation ~toplevel_my_region ~body
-    ~module_symbol ~used_value_slots =
+    ~module_symbols ~used_value_slots =
   { return_continuation;
     exn_continuation;
     toplevel_my_region;
     body;
-    module_symbol;
+    module_symbols;
     used_value_slots
   }
 
@@ -41,23 +41,24 @@ let toplevel_my_region t = t.toplevel_my_region
 
 let body t = t.body
 
-let module_symbol t = t.module_symbol
+let module_symbols t = t.module_symbols
 
 let used_value_slots t = t.used_value_slots
 
 let [@ocamlformat "disable"] print ppf
-      { return_continuation; exn_continuation; toplevel_my_region; body; module_symbol;
-        used_value_slots;
+      { return_continuation; exn_continuation; toplevel_my_region; body;
+        module_symbols; used_value_slots;
       } =
   Format.fprintf ppf "@[<hov 1>(\
-        @[<hov 1>(module_symbol@ %a)@]@ \
+        @[<hov 1>(module_symbols@ %a)@]@ \
         @[<hov 1>(return_continuation@ %a)@]@ \
         @[<hov 1>(exn_continuation@ %a)@]@ \
         @[<hov 1>(toplevel_my_region@ %a)@]@ \
         @[<hov 1>(used_value_slots@ %a)@]@ \
         @[<hov 1>%a@]\
       )@]"
-    Symbol.print module_symbol
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space Symbol.print)
+    module_symbols
     Continuation.print return_continuation
     Continuation.print exn_continuation
     Variable.print toplevel_my_region

@@ -77,7 +77,7 @@ let compilation_unit t = t.compilation_unit
    [Linkage_name]; among other things, we could then define
    [Linkage_name.for_current_unit] *)
 
-let linkage_name_for_compilation_unit comp_unit =
+let linkage_name_for_compilation_unit ?index comp_unit =
   let name = CU.Name.to_string (CU.name comp_unit) in
   let for_pack_prefix = CU.for_pack_prefix comp_unit in
   let suffix =
@@ -88,7 +88,12 @@ let linkage_name_for_compilation_unit comp_unit =
       in
       String.concat (separator ()) (pack_names @ [name])
   in
-  caml_symbol_prefix ^ suffix
+  let index =
+    match index with
+    | None -> ""
+    | Some index -> "." ^ Int.to_string index
+  in
+  caml_symbol_prefix ^ suffix ^ index
   |> Linkage_name.of_string
 
 let for_predef_ident id =
@@ -123,6 +128,15 @@ let for_local_ident id =
 
 let for_compilation_unit compilation_unit =
   let linkage_name = linkage_name_for_compilation_unit compilation_unit in
+  { compilation_unit;
+    linkage_name;
+    hash = Hashtbl.hash linkage_name;
+  }
+
+let for_compilation_unit_unboxed compilation_unit ~field:index =
+  let linkage_name =
+    linkage_name_for_compilation_unit compilation_unit ~index
+  in
   { compilation_unit;
     linkage_name;
     hash = Hashtbl.hash linkage_name;

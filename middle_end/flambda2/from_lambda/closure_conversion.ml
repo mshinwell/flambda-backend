@@ -779,16 +779,56 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
     in
     close_c_call acc env ~loc ~let_bound_ids_with_kinds prim ~args
       exn_continuation dbg ~current_region k
-  | Pgetglobal cu, [] ->
+  | Pgetglobal { comp_unit = cu; module_block_size }, [] ->
     if Compilation_unit.equal cu (Env.current_unit env)
     then
       Misc.fatal_errorf "Pgetglobal %a in the same unit" Compilation_unit.print
         cu;
-    let symbol =
-      Flambda2_import.Symbol.for_compilation_unit cu |> Symbol.create_wrapped
+    let symbols =
+      List.init module_block_size (fun field ->
+          Flambda2_import.Symbol.for_compilation_unit_unboxed cu ~field
+          |> Symbol.create_wrapped |> Simple.symbol)
     in
-    let named = Named.create_simple (Simple.symbol symbol) in
-    k acc [named]
+    let kinds = List.map (fun _ -> K.With_subkind.any_value) symbols in
+    let symbol_fields =
+      List.init module_block_size (fun field ->
+          Variable.create (Printf.sprintf "field%d" field))
+    in
+    let module_block =
+      Variable.create (Compilation_unit.full_path_as_string cu)
+    in
+    let named = Named.create_simple (Simple.var module_block) in
+    let acc, remainder = k acc [named] in
+    let acc, body =
+      Let_with_acc.create acc
+        (Bound_pattern.singleton (VB.create module_block Name_mode.normal))
+        (Named.create_prim
+           (Variadic
+              ( Make_block
+                  ( Values (Tag.Scannable.zero, kinds),
+                    Immutable,
+                    Alloc_mode.For_allocations.heap ),
+                List.map Simple.var symbol_fields ))
+           dbg)
+        ~body:remainder
+    in
+    let block_access : P.Block_access_kind.t =
+      Values
+        { tag = Known Tag.Scannable.zero;
+          size = Known Targetint_31_63.one;
+          field_kind = Any_value
+        }
+    in
+    List.fold_left2
+      (fun (acc, body) var symbol ->
+        Let_with_acc.create acc
+          (Bound_pattern.singleton (VB.create var Name_mode.normal))
+          (Named.create_prim
+             (Binary
+                (Block_load (block_access, Immutable), symbol, Simple.const_zero))
+             dbg)
+          ~body)
+      (acc, body) (List.rev symbol_fields) (List.rev symbols)
   | Pgetpredef id, [] ->
     let symbol =
       Flambda2_import.Symbol.for_predef_ident id |> Symbol.create_wrapped
@@ -3166,7 +3206,7 @@ let bind_code_and_sets_of_closures all_code sets_of_closures acc body =
     (acc, body) components
 
 let wrap_final_module_block acc env ~program ~prog_return_cont
-    ~module_block_size_in_words ~return_cont ~module_symbol =
+    ~module_block_size_in_words ~return_cont ~module_symbols =
   let module_block_var = Variable.create "module_block" in
   let module_block_tag = Tag.Scannable.zero in
   let load_fields_body acc =
@@ -3186,37 +3226,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
           let pos_str = string_of_int pos in
           pos, Variable.create ("field_" ^ pos_str))
     in
-    let acc, body =
-      let static_const : Static_const.t =
-        let field_vars =
-          List.map
-            (fun (_, var) : Field_of_static_block.t ->
-              Dynamically_computed (var, Debuginfo.none))
-            field_vars
-        in
-        Static_const.block module_block_tag Immutable field_vars
-      in
-      let acc, apply_cont =
-        (* Module initialisers return unit, but since that is taken care of
-           during Cmm generation, we can instead "return" [module_symbol] here
-           to ensure that its associated "let symbol" doesn't get deleted. *)
-        Apply_cont_with_acc.create acc return_cont
-          ~args:[Simple.symbol module_symbol]
-          ~dbg:Debuginfo.none
-      in
-      let acc, return = Expr_with_acc.create_apply_cont acc apply_cont in
-      let bound_static =
-        Bound_static.singleton (Bound_static.Pattern.block_like module_symbol)
-      in
-      let named =
-        Named.create_static_consts
-          (Static_const_group.create
-             [Static_const_or_code.create_static_const static_const])
-      in
-      Let_with_acc.create acc
-        (Bound_pattern.static bound_static)
-        named ~body:return
-    in
+    assert (List.compare_lengths module_symbols field_vars = 0);
     let block_access : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
@@ -3224,13 +3234,39 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
           field_kind = Any_value
         }
     in
-    List.fold_left
-      (fun (acc, body) (pos, var) ->
-        let var = VB.create var Name_mode.normal in
-        let pat = Bound_pattern.singleton var in
+    let acc, apply_cont =
+      (* Module initialisers return unit, but since that is taken care of during
+         Cmm generation, we can instead "return" the [module_symbols] here to
+         ensure that its associated "let symbol" doesn't get deleted. *)
+      Apply_cont_with_acc.create acc return_cont
+        ~args:(List.map Simple.symbol module_symbols)
+        ~dbg:Debuginfo.none
+    in
+    let acc, body = Expr_with_acc.create_apply_cont acc apply_cont in
+    List.fold_left2
+      (fun (acc, body) (pos, var) symbol ->
+        let bound_var = VB.create var Name_mode.normal in
+        let pat = Bound_pattern.singleton bound_var in
         let pos = Targetint_31_63.of_int pos in
         let block = module_block_simple in
         let field = Simple.const (Reg_width_const.tagged_immediate pos) in
+        let acc, body =
+          let static_const : Static_const.t =
+            Static_const.block module_block_tag Immutable
+              [Field_of_static_block.Dynamically_computed (var, Debuginfo.none)]
+          in
+          let bound_static =
+            Bound_static.singleton (Bound_static.Pattern.block_like symbol)
+          in
+          let named =
+            Named.create_static_consts
+              (Static_const_group.create
+                 [Static_const_or_code.create_static_const static_const])
+          in
+          Let_with_acc.create acc
+            (Bound_pattern.static bound_static)
+            named ~body
+        in
         match simplify_block_load acc env ~block ~field with
         | Unknown | Not_a_block | Block_but_cannot_simplify _ ->
           let named =
@@ -3242,7 +3278,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
         | Field_contents sim ->
           let named = Named.create_simple sim in
           Let_with_acc.create acc pat named ~body)
-      (acc, body) (List.rev field_vars)
+      (acc, body) (List.rev field_vars) (List.rev module_symbols)
   in
   let load_fields_handler_param =
     [BP.create module_block_var K.With_subkind.any_value]
@@ -3252,7 +3288,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
      in the incoming code. The handler for the continuation receives a tuple
      with fields indexed from zero to [module_block_size_in_words]. The handler
      extracts the fields; the variables bound to such fields are then used to
-     define the module block symbol. *)
+     define the unboxed module block symbols. *)
   let body acc = program acc env in
   Let_cont_with_acc.build_non_recursive acc prog_return_cont
     ~handler_params:load_fields_handler_param ~handler:load_fields_body ~body
@@ -3263,9 +3299,11 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
     ~prog_return_cont ~exn_continuation ~toplevel_my_region :
     mode close_program_result =
   let env = Env.create ~big_endian in
-  let module_symbol =
-    Symbol.create_wrapped
-      (Flambda2_import.Symbol.for_compilation_unit compilation_unit)
+  let module_symbols =
+    List.init module_block_size_in_words (fun field ->
+        Symbol.create_wrapped
+          (Flambda2_import.Symbol.for_compilation_unit_unboxed compilation_unit
+             ~field))
   in
   let return_cont = Continuation.create ~sort:Toplevel_return () in
   let env, toplevel_my_region =
@@ -3275,9 +3313,9 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
   let acc = Acc.create ~cmx_loader in
   let acc, body =
     wrap_final_module_block acc env ~program ~prog_return_cont
-      ~module_block_size_in_words ~return_cont ~module_symbol
+      ~module_block_size_in_words ~return_cont ~module_symbols
   in
-  let module_block_approximation =
+  let _module_block_approximation =
     match Acc.continuation_known_arguments ~cont:prog_return_cont acc with
     (* Module symbol may be rebuilt from a lifted block *)
     | Some [Value_approximation.Value_symbol s] ->
@@ -3307,10 +3345,8 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
       in
       acc
   in
-  let symbols_approximations =
-    Symbol.Map.add module_symbol module_block_approximation
-      (Acc.symbol_approximations acc)
-  in
+  (* XXX let symbols_approximations = Symbol.Map.add module_symbol
+     module_block_approximation (Acc.symbol_approximations acc) in *)
   let acc, body =
     List.fold_left
       (fun (acc, body) (symbol, static_const) ->
@@ -3341,7 +3377,7 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
        offsets constraints accumulation is not needed in "normal" mode. *)
     let unit =
       Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
-        ~toplevel_my_region ~body ~module_symbol ~used_value_slots:Unknown
+        ~toplevel_my_region ~body ~module_symbols ~used_value_slots:Unknown
     in
     { unit; code_slot_offsets; metadata = Normal }
   | Classic ->
@@ -3367,12 +3403,13 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
         ~used_slots
     in
     let reachable_names, cmx =
-      Flambda_cmx.prepare_cmx_from_approx ~approxs:symbols_approximations
-        ~module_symbol ~exported_offsets ~used_value_slots all_code
+      Flambda_cmx.prepare_cmx_from_approx
+        ~approxs:Symbol.Map.empty (* XXX symbols_approximations *)
+        ~module_symbols ~exported_offsets ~used_value_slots all_code
     in
     let unit =
       Flambda_unit.create ~return_continuation:return_cont ~exn_continuation
-        ~toplevel_my_region ~body ~module_symbol
+        ~toplevel_my_region ~body ~module_symbols
         ~used_value_slots:(Known used_value_slots)
     in
     { unit;

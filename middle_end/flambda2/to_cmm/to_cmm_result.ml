@@ -149,16 +149,12 @@ type result =
     functions : Cmm.phrase list
   }
 
-let define_module_symbol_if_missing r =
-  if r.module_symbol_defined
-  then r
-  else
-    let linkage_name =
-      Linkage_name.to_string (Symbol.linkage_name r.module_symbol)
-    in
-    let sym : Cmm.symbol = { sym_name = linkage_name; sym_global = Global } in
-    let l = C.emit_block sym (C.black_block_header 0 0) [] in
-    set_data r l
+let define_module_symbol_if_missing r = r
+(* XXX *)
+(* if r.module_symbol_defined then r else let linkage_name =
+   Linkage_name.to_string (Symbol.linkage_name r.module_symbol) in let sym :
+   Cmm.symbol = { sym_name = linkage_name; sym_global = Global } in let l =
+   C.emit_block sym (C.black_block_header 0 0) [] in set_data r l *)
 
 let add_invalid_message_symbol t symbol ~message =
   { t with

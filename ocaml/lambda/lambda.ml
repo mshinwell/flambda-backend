@@ -138,7 +138,7 @@ type primitive =
   | Pbytes_of_string
   | Pignore
     (* Globals *)
-  | Pgetglobal of Compilation_unit.t
+  | Pgetglobal of { comp_unit : Compilation_unit.t; module_block_size : int; }
   | Psetglobal of Compilation_unit.t
   | Pgetpredef of Ident.t
   (* Operations on heap blocks *)
@@ -1222,7 +1222,8 @@ let rec patch_guarded patch = function
 (* Translate an access path *)
 
 let rec transl_address loc = function
-  | Env.Aunit cu -> Lprim(Pgetglobal cu, [], loc)
+  | Env.Aunit { comp_unit; module_block_size } ->
+      Lprim(Pgetglobal { comp_unit; module_block_size }, [], loc)
   | Env.Alocal id ->
       if Ident.is_predef id
       then Lprim (Pgetpredef id, [], loc)
