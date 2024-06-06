@@ -45,7 +45,7 @@ let get_global_or_predef id =
   with Symtable.Error _ -> raise(Error(Unbound_identifier id))
 
 let rec address path event = function
-  | Env.Aunit cu ->
+  | Env.Aunit { comp_unit = cu; _ } ->
       get_global_or_predef (cu |> Compilation_unit.to_global_ident_for_bytecode)
   | Env.Alocal id ->
       if Ident.is_predef id then get_global_or_predef id

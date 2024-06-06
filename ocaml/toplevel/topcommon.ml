@@ -101,7 +101,7 @@ end
 module MakeEvalPrinter (E: EVAL_BASE) = struct
 
   let rec eval_address = function
-    | Env.Aunit cu -> E.eval_compilation_unit cu
+    | Env.Aunit { comp_unit; _ } -> E.eval_compilation_unit comp_unit
     | Env.Alocal id -> E.eval_ident id
     | Env.Adot(p, pos) -> Obj.field (eval_address p) pos
 

@@ -116,7 +116,8 @@ let close_phrase lam =
     let glb, pos = toplevel_value id in
     let glob =
       Lprim (mod_field pos,
-             [Lprim (Pgetglobal glb, [], Loc_unknown)],
+             [Lprim (Pgetglobal { comp_unit = glb; module_block_size = 0; }, [],
+                                  Loc_unknown)],
              Loc_unknown)
     in
     Llet(Strict, Lambda.layout_module_field, id, glob, l)
@@ -129,7 +130,7 @@ let toplevel_value id =
 (* Return the value referred to by a path *)
 
 let rec eval_address = function
-  | Env.Aunit cu ->
+  | Env.Aunit { comp_unit = cu; _ } ->
       global_symbol cu
   | Env.Alocal id ->
       toplevel_value id
