@@ -324,6 +324,7 @@ AC_SUBST([CMJA_MAGIC_NUMBER], [CMJA__MAGIC_NUMBER])
 AC_SUBST([CFG_MAGIC_NUMBER], [CFG__MAGIC_NUMBER])
 AC_SUBST([LINEAR_MAGIC_NUMBER], [LINEAR__MAGIC_NUMBER])
 AC_SUBST([CC])
+AC_SUBST([ocaml_cc_vendor])
 AC_SUBST([DIFF_FLAGS])
 AC_SUBST([CSC])
 AC_SUBST([CSCFLAGS])
@@ -525,6 +526,7 @@ AC_CONFIG_FILES([stdlib/META])
 AS_IF([test -d manual],
   [AC_CONFIG_FILES([manual/src/version.tex])
   AC_CONFIG_FILES([manual/src/html_processing/src/common.ml])])
+AC_CONFIG_FILES([testsuite/tools/toolchain.ml])
 
 # Definitions related to the version of OCaml
 AC_DEFINE([OCAML_VERSION_MAJOR], [OCAML__VERSION_MAJOR])
@@ -3069,6 +3071,11 @@ AS_CASE([$enable_ocamltest,OCAML__DEVELOPMENT_VERSION],
     ocamltest_target=ocamltest
     ocamltest_opt_target=ocamltest.opt
     ocamltest='ocamltest'
+    AS_IF([$native_compiler],
+      [optional_native_tools="$optional_native_tools \
+testsuite/tools/test_in_prefix.opt"],
+      [optional_bytecode_tools="$optional_bytecode_tools \
+testsuite/tools/test_in_prefix"])
     testsuite_tools='testsuite/tools/codegen testsuite/tools/expect'
     optional_bytecode_tools="$optional_bytecode_tools $testsuite_tools"],
   [build_ocamltest=false
