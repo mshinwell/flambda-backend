@@ -266,7 +266,10 @@ let list_tests dir =
 let () =
   init_tests_to_skip()
 
+external unsetenv : string -> unit = "ocamltest_unsetenv"
+
 let () =
+  unsetenv "COLUMNS";
   let failed = ref false in
   let work_done = ref false in
   let list_tests dir =

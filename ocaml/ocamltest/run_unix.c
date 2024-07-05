@@ -160,6 +160,12 @@ static void update_environment(array local_env)
   }
 }
 
+value ocamltest_unsetenv(value var)
+{
+  (void) unsetenv(String_val(var));
+  return Val_unit;
+}
+
 /*
   This function should return an exitcode that can itself be returned
   to its father through the exit system call.
