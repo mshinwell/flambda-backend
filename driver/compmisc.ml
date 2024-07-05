@@ -28,7 +28,9 @@ let auto_include find_in_dir fn =
    then the directories specified with the -H option (in command line order).
  *)
 
-let init_path ?(auto_include=auto_include) ?(dir="") () =
+let reinit_path ?(auto_include=auto_include)
+                ?(standard_library=Config.standard_library)
+                ?(dir="") () =
   let visible =
     if !Clflags.use_threads then "+threads" :: !Clflags.include_dirs
     else
@@ -42,14 +44,17 @@ let init_path ?(auto_include=auto_include) ?(dir="") () =
        !Compenv.first_include_dirs]
   in
   let visible =
-    List.map (Misc.expand_directory Config.standard_library) visible
+    List.map (Misc.expand_directory standard_library) visible
   in
   let visible =
+    let std_include =
+      if !Clflags.no_std_include then [] else [standard_library]
+    in
     (if !Clflags.no_cwd then [] else [dir])
-    @ List.rev_append visible (Clflags.std_include_dir ())
+    @ List.rev_append visible std_include
   in
   let hidden =
-    List.rev_map (Misc.expand_directory Config.standard_library)
+    List.rev_map (Misc.expand_directory standard_library)
       !Clflags.hidden_include_dirs
   in
   Load_path.init ~auto_include ~visible ~hidden;
@@ -65,6 +70,8 @@ let init_parameters () =
         Env.register_parameter param
     )
     param_names
+
+let init_path = reinit_path ?standard_library:None
 
 (* Return the initial environment in which compilation proceeds. *)
 

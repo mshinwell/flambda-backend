@@ -16,6 +16,8 @@
 val init_path :
   ?auto_include:Load_path.auto_include_callback -> ?dir:string -> unit -> unit
 val init_parameters : unit -> unit
+val reinit_path : ?auto_include:Load_path.auto_include_callback
+    -> ?standard_library:string -> ?dir:string -> unit -> unit
 val initial_env : unit -> Env.t
 
 (* Support for flags that can also be set from an environment variable *)
