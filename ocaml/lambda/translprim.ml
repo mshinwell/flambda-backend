@@ -150,7 +150,7 @@ let extern_repr_of_native_repr:
   | Unboxed_float f, _ -> Unboxed_float f
   | Unboxed_integer i, _ -> Unboxed_integer i
   | Unboxed_vector i, _ -> Unboxed_vector i
-  | Untagged_int, _ -> Untagged_int
+  | Untagged_immediate, _ -> Untagged_int
 
 let sort_of_native_repr ~poly_sort repr =
   match extern_repr_of_native_repr ~poly_sort repr with
@@ -228,6 +228,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%setfield0" ->
        let mode = get_first_arg_mode () in
        Primitive ((Psetfield(0, Pointer, Assignment mode)), 2)
+    | "%setfield1" ->
+       let mode = get_first_arg_mode () in
+       Primitive ((Psetfield(1, Pointer, Assignment mode)), 2);
     | "%makeblock" -> Primitive ((Pmakeblock(0, Immutable, None, mode)), 1)
     | "%makemutable" -> Primitive ((Pmakeblock(0, Mutable, None, mode)), 1)
     | "%raise" -> Raise Raise_regular
@@ -801,7 +804,7 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%perform" ->
       if runtime5 then Primitive (Pperform, 1) else Unsupported Pperform
     | "%resume" ->
-      if runtime5 then Primitive (Presume, 3) else Unsupported Presume
+      if runtime5 then Primitive (Presume, 4) else Unsupported Presume
     | "%dls_get" -> Primitive (Pdls_get, 1)
     | "%unbox_nativeint" -> Primitive(Punbox_int Pnativeint, 1)
     | "%box_nativeint" -> Primitive(Pbox_int (Pnativeint, mode), 1)
@@ -1641,16 +1644,19 @@ let transl_primitive_application loc p env ty ~poly_mode ~poly_sort
 (* Error report *)
 
 open Format
+module Style = Misc.Style
 
 let report_error ppf = function
   | Unknown_builtin_primitive prim_name ->
-      fprintf ppf "Unknown builtin primitive \"%s\"" prim_name
+      fprintf ppf "Unknown builtin primitive %a" Style.inline_code prim_name
   | Wrong_arity_builtin_primitive prim_name ->
-      fprintf ppf "Wrong arity for builtin primitive \"%s\"" prim_name
+      fprintf ppf "Wrong arity for builtin primitive %a"
+        Style.inline_code prim_name
   | Invalid_floatarray_glb ->
       fprintf ppf
         "@[Floatarray primitives can't be used on arrays containing@ \
            unboxed types.@]"
+
 let () =
   Location.register_error_of_exn
     (function

@@ -56,7 +56,7 @@ type out_value =
   | Oval_stuff of string
   | Oval_tuple of (string option * out_value) list
   | Oval_variant of string * out_value option
-
+  | Oval_lazy of out_value
 
 type out_modality_legacy = Ogf_global
 
@@ -115,6 +115,7 @@ and out_jkind =
 
 and out_type_param =
   { oparam_name : string;
+    oparam_non_gen : bool;
     oparam_variance : Asttypes.variance;
     oparam_injectivity : Asttypes.injectivity;
     oparam_jkind : out_jkind option }

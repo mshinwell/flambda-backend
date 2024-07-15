@@ -434,6 +434,7 @@ and boxed_vector =
 
 and bigarray_kind =
     Pbigarray_unknown
+  | Pbigarray_float16
   | Pbigarray_float32 | Pbigarray_float32_t
   | Pbigarray_float64
   | Pbigarray_sint8 | Pbigarray_uint8
@@ -922,6 +923,7 @@ let default_function_attribute = {
   tmc_candidate = false;
   (* Plain functions ([fun] and [function]) set [may_fuse_arity] to [false] so
      that runtime arity matches syntactic arity in more situations.
+
      Many things compile to functions without having a notion of syntactic arity
      that survives typechecking, e.g. functors. Multi-arg functors are compiled
      as nested unary functions, and rely on the arity fusion in simplif to make
@@ -1970,8 +1972,9 @@ let primitive_result_layout (p : primitive) =
   | Pbigarrayref (_, _, kind, _) ->
       begin match kind with
       | Pbigarray_unknown -> layout_any_value
-      | Pbigarray_float32 ->
-        (* float32 bigarrays return 64-bit floats for backward compatibility. *)
+      | Pbigarray_float16 | Pbigarray_float32 ->
+        (* float32 bigarrays return 64-bit floats for backward compatibility.
+           Likewise for float16. *)
         layout_boxed_float Pfloat64
       | Pbigarray_float32_t -> layout_boxed_float Pfloat32
       | Pbigarray_float64 -> layout_boxed_float Pfloat64

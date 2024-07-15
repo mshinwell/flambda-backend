@@ -189,7 +189,10 @@ let output_cmi filename oc cmi =
   Out_channel.seek oc val_pos;
   (* BACKPORT BEGIN *)
   (* CR ocaml 5 compressed-marshal mshinwell:
-     upstream uses [Compression] here *)
+     upstream uses [Compression] here:
+     Compression.output_value oc ((cmi.cmi_name, cmi.cmi_sign) : header);
+
+  *)
   output_value oc
     {
       header_name = cmi.cmi_name;
@@ -219,19 +222,20 @@ let read_cmi filename = read_cmi_lazy filename |> force_cmi_infos
 (* Error report *)
 
 open Format
+module Style = Misc.Style
 
 let report_error ppf = function
   | Not_an_interface filename ->
       fprintf ppf "%a@ is not a compiled interface"
-        Location.print_filename filename
+        (Style.as_inline_code Location.print_filename) filename
   | Wrong_version_interface (filename, older_newer) ->
       fprintf ppf
         "%a@ is not a compiled interface for this version of OCaml.@.\
          It seems to be for %s version of OCaml."
-        Location.print_filename filename older_newer
+        (Style.as_inline_code  Location.print_filename) filename older_newer
   | Corrupted_interface filename ->
       fprintf ppf "Corrupted compiled interface@ %a"
-        Location.print_filename filename
+        (Style.as_inline_code Location.print_filename) filename
 
 let () =
   Location.register_error_of_exn

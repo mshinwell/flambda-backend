@@ -564,6 +564,7 @@ and tag = Ordinary of {src_index: int;  (* Unique name (per type) *)
 and abstract_reason =
     Abstract_def
   | Abstract_rec_check_regularity       (* See Typedecl.transl_type_decl *)
+  | Abstract_existential
 
 (* A mixed product contains a possibly-empty prefix of values followed by a
    non-empty suffix of "flat" elements. Intuitively, a flat element is one that

@@ -245,6 +245,20 @@ let frame_pointers = make
      "frame-pointers available"
      "frame-pointers not available")
 
+let tsan = make
+  ~name:"tsan"
+  ~description:"Pass if thread sanitizer is supported"
+  (Actions_helpers.pass_or_skip (Ocamltest_config.tsan)
+     "tsan available"
+     "tsan not available")
+
+let no_tsan = make
+  ~name:"no-tsan"
+  ~description:"Pass if thread sanitizer is not supported"
+  (Actions_helpers.pass_or_skip (not Ocamltest_config.tsan)
+     "tsan not available"
+     "tsan available")
+
 let probes = make
   ~name:"probes"
   ~description:"Pass if probes are available"
@@ -407,6 +421,8 @@ let _ =
     naked_pointers;
     file_exists;
     copy;
+    tsan;
+    no_tsan;
     probes;
     naked_pointers
   ]

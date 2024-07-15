@@ -360,30 +360,37 @@ let require_global global_ident =
 (* Error report *)
 
 open Format
+module Style = Misc.Style
 
 let report_error ppf = function
   | Not_a_unit_info filename ->
       fprintf ppf "%a@ is not a compilation unit description."
-        Location.print_filename filename
+        (Style.as_inline_code Location.print_filename) filename
   | Corrupted_unit_info filename ->
       fprintf ppf "Corrupted compilation unit description@ %a"
-        Location.print_filename filename
+        (Style.as_inline_code Location.print_filename) filename
   | Illegal_renaming(name, modname, filename) ->
       fprintf ppf "%a@ contains the description for unit\
                    @ %a when %a was expected"
-        Location.print_filename filename
-        CU.print name
-        CU.print modname
+        (Style.as_inline_code Location.print_filename) filename
+        (Style.as_inline_code CU.print) name
+        (Style.as_inline_code CU.print) modname
   | Mismatching_for_pack(filename, pack_1, current_unit, None) ->
-      fprintf ppf "%a@ was built with -for-pack %a, but the \
+      fprintf ppf "%a@ was built with %a, but the \
                    @ current unit %a is not"
-        Location.print_filename filename CU.Prefix.print pack_1
-          CU.Name.print current_unit
+        (Style.as_inline_code Location.print_filename) filename
+        Style.inline_code
+          (Format.asprintf "-for-pack %a" CU.Prefix.print pack_1)
+        (Style.as_inline_code CU.Name.print) current_unit
   | Mismatching_for_pack(filename, pack_1, current_unit, Some pack_2) ->
-      fprintf ppf "%a@ was built with -for-pack %a, but the \
-                   @ current unit %a is built with -for-pack %a"
-        Location.print_filename filename CU.Prefix.print pack_1
-          CU.Name.print current_unit CU.Prefix.print pack_2
+      fprintf ppf "%a@ was built with %a, but the \
+                   @ current unit %a is built with %a"
+        (Style.as_inline_code Location.print_filename) filename
+        Style.inline_code
+          (Format.asprintf "-for-pack %a" CU.Prefix.print pack_1)
+        (Style.as_inline_code CU.Name.print) current_unit
+        Style.inline_code
+          (Format.asprintf "-for-pack %a" CU.Prefix.print pack_2)
 
 let () =
   Location.register_error_of_exn

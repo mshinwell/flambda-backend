@@ -37,6 +37,45 @@
 
 
 
+(* TEST_BELOW
+(* Blank lines added here to preserve locations. *)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 *)
 
 (* Check that a module in the main program whose initializer has not
@@ -53,14 +92,14 @@ let () =
     end
   with
   | Dynlink.Error (Dynlink.Library's_module_initializers_failed exn) ->
-      Printf.eprintf "Error: %s\n%!" (Printexc.to_string exn)
+      Printf.eprintf "Error: %s\n%!" (Printexc.to_string exn);
+      Printexc.print_backtrace stderr
 
 (* TEST
  include dynlink;
  readonly_files = "test10_plugin.ml";
  flags += "-g";
  libraries = "";
- no-flambda;
  shared-libraries;
  {
    setup-ocamlc.byte-build-env;
@@ -80,6 +119,7 @@ let () =
      check-program-output;
    }
  }{
+   no-flambda;
    native-dynlink;
    setup-ocamlopt.byte-build-env;
    {
@@ -87,7 +127,7 @@ let () =
      ocamlopt.byte;
    }{
      program = "test10_plugin.cmxs";
-     flags = "-shared -g";
+     flags = "-shared";
      all_modules = "test10_plugin.ml";
      ocamlopt.byte;
    }{

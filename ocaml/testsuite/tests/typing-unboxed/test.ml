@@ -266,7 +266,7 @@ Error: Signature mismatch:
          external f : int -> int = "f" "f_nat" [@@noalloc]
        is not included in
          external f : int -> int = "f" "f_nat"
-       The first primitive is [@@noalloc] but the second is not
+       The first primitive is "[@@noalloc]" but the second is not
 |}]
 
 (* Bad: attributes in the interface but not in the implementation *)
@@ -429,7 +429,7 @@ Error: Signature mismatch:
          external f : int -> int = "f" "f_nat"
        is not included in
          external f : int -> int = "f" "f_nat" [@@noalloc]
-       The second primitive is [@@noalloc] but the first is not
+       The second primitive is "[@@noalloc]" but the first is not
 |}]
 
 (* Bad: claiming something is a primitive when it isn't *)
@@ -469,7 +469,7 @@ end
 
 [%%expect{|
 Line 1:
-Error: The external function `f' is not available
+Error: The external function "f" is not available
 |}]
 
 (* Bad: mismatched names and native names *)
@@ -625,8 +625,8 @@ Error: Signature mismatch:
          external f : int -> int -> int = "f" "f_nat"
        is not included in
          external f : int -> int = "f" "f_nat"
-       The type int -> int -> int is not compatible with the type int -> int
-       Type int -> int is not compatible with type int
+       The type "int -> int -> int" is not compatible with the type "int -> int"
+       Type "int -> int" is not compatible with type "int"
 |}]
 
 (* Bad: unboxed or untagged with the wrong type *)
@@ -636,7 +636,8 @@ external g : (float [@untagged]) -> float = "g" "g_nat";;
 Line 1, characters 14-19:
 1 | external g : (float [@untagged]) -> float = "g" "g_nat";;
                   ^^^^^
-Error: Don't know how to untag this type. Only int can be untagged.
+Error: Don't know how to untag this type. Only "int"
+       and other immediate types can be untagged.
 |}]
 external h : (int [@unboxed]) -> float = "h" "h_nat";;
 [%%expect{|
@@ -665,7 +666,7 @@ external j : int -> (float [@unboxed]) * float = "j" "j_nat";;
 Line 1, characters 21-26:
 1 | external j : int -> (float [@unboxed]) * float = "j" "j_nat";;
                          ^^^^^
-Error: The attribute '@unboxed' should be attached to
+Error: The attribute "@unboxed" should be attached to
        a direct argument or result of the primitive,
        it should not occur deeply into its type.
 |}]
@@ -685,21 +686,21 @@ external l : float -> float = "l" "l_nat" "float" [@@unboxed];;
 Line 1, characters 0-61:
 1 | external l : float -> float = "l" "l_nat" "float" [@@unboxed];;
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: Cannot use "float" in conjunction with [@unboxed]/[@untagged].
+Error: Cannot use "float" in conjunction with "[@unboxed]"/"[@untagged]".
 |}]
 external m : (float [@unboxed]) -> float = "m" "m_nat" "float";;
 [%%expect{|
 Line 1, characters 0-62:
 1 | external m : (float [@unboxed]) -> float = "m" "m_nat" "float";;
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: Cannot use "float" in conjunction with [@unboxed]/[@untagged].
+Error: Cannot use "float" in conjunction with "[@unboxed]"/"[@untagged]".
 |}]
 external n : float -> float = "n" "noalloc" [@@noalloc];;
 [%%expect{|
 Line 1, characters 0-55:
 1 | external n : float -> float = "n" "noalloc" [@@noalloc];;
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: Cannot use "noalloc" in conjunction with [@@noalloc].
+Error: Cannot use "noalloc" in conjunction with "[@@noalloc]".
 |}]
 
 (* Warnings: unboxed / untagged without any native implementation *)
