@@ -180,6 +180,7 @@
   env
   errortrace
   mode
+  zero_alloc
   jkind_types
   jkind_intf
   typedtree
