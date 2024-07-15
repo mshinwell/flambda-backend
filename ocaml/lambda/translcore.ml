@@ -532,6 +532,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
       | Ordinary _, Variant_unboxed ->
           (match ll with [v] -> v | _ -> assert false)
       | Ordinary {runtime_tag}, Variant_boxed _ ->
+<<<<<<< HEAD
           let constant =
             match List.map extract_constant ll with
             | exception Not_constant -> None
@@ -564,6 +565,51 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
                     Pmakemixedblock(runtime_tag, Immutable, shape, alloc_mode)
               in
               Lprim (makeblock, ll, of_location ~scopes e.exp_loc)
+||||||| 5541c7ce04
+          begin try
+            Lconst(Const_block(runtime_tag, List.map extract_constant ll))
+          with Not_constant ->
+            Lprim(Pmakeblock(runtime_tag, Immutable, Some shape,
+                             transl_alloc_mode (Option.get alloc_mode)),
+                  ll,
+                  of_location ~scopes e.exp_loc)
+=======
+          let constant =
+            match List.map extract_constant ll with
+            | exception Not_constant -> None
+            | constants -> (
+              match cstr.cstr_shape with
+              | Constructor_mixed shape ->
+                  if !Clflags.native_code then
+                    let shape = transl_mixed_product_shape shape in
+                    Some (Const_mixed_block(runtime_tag, shape, constants))
+                  else
+                    (* CR layouts v5.9: Structured constants for mixed blocks should
+                       be supported in bytecode. See symtable.ml for the difficulty.
+                    *)
+                    None
+              | Constructor_uniform_value ->
+                  Some (Const_block(runtime_tag, constants)))
+          in
+          begin match constant with
+          | Some constant -> Lconst constant
+          | None ->
+              let alloc_mode = transl_alloc_mode_r (Option.get alloc_mode) in
+              let makeblock =
+                match cstr.cstr_shape with
+                | Constructor_uniform_value ->
+                    let shape =
+                      List.map (fun (e, sort) ->
+                          Lambda.must_be_value (layout_exp sort e))
+                        args_with_sorts
+                    in
+                    Pmakeblock(runtime_tag, Immutable, Some shape, alloc_mode)
+                | Constructor_mixed shape ->
+                    let shape = Lambda.transl_mixed_product_shape shape in
+                    Pmakemixedblock(runtime_tag, Immutable, shape, alloc_mode)
+              in
+              Lprim (makeblock, ll, of_location ~scopes e.exp_loc)
+>>>>>>> 5b16b0b18902b7768e3a7d54f37465eee5d1ca10
           end
       | Extension (path, _), Variant_extensible ->
           let lam = transl_extension_path
