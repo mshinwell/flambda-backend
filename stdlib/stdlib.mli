@@ -1410,6 +1410,7 @@ module Domain         = Domain
 [@@alert unstable
     "The Domain interface may change in incompatible ways in the future."
 ]
+module Dynarray       = Dynarray
 module Effect         = Effect
 [@@alert unstable
     "The Effect interface may change in incompatible ways in the future."

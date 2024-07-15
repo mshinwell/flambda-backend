@@ -1,6 +1,8 @@
 (* TEST
  flags = "-nopervasives"; (* can't pass -nostdlib because of objects. *)
  expect;
+ flags = "-nopervasives"; (* can't pass -nostdlib because of objects. *)
+ expect;
 *)
 
 (* Signatures *)
@@ -104,11 +106,11 @@ Error: Illegal shadowing of included type t/2 by t/1.
 Line 2, characters 2-11:
 2 |   include S
       ^^^^^^^^^
-  Type t/2 came from this include.
+  Type "t/2" came from this include.
 Line 3, characters 2-24:
 3 |   val ignore : t -> unit
       ^^^^^^^^^^^^^^^^^^^^^^
-  The value ignore has no valid type if t/2 is shadowed.
+  The value "ignore" has no valid type if "t/2" is shadowed.
 |}]
 
 module type Module = sig
@@ -148,11 +150,11 @@ Error: Illegal shadowing of included module M/2 by M/1.
 Line 2, characters 2-11:
 2 |   include S
       ^^^^^^^^^
-  Module M/2 came from this include.
+  Module "M/2" came from this include.
 Line 3, characters 2-26:
 3 |   val ignore : M.t -> unit
       ^^^^^^^^^^^^^^^^^^^^^^^^
-  The value ignore has no valid type if M/2 is shadowed.
+  The value "ignore" has no valid type if "M/2" is shadowed.
 |}]
 
 
@@ -193,11 +195,11 @@ Error: Illegal shadowing of included module type T/2 by T/1.
 Line 2, characters 2-11:
 2 |   include S
       ^^^^^^^^^
-  Module type T/2 came from this include.
+  Module type "T/2" came from this include.
 Line 3, characters 2-39:
 3 |   module F : functor (_ : T) -> sig end
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  The module F has no valid type if T/2 is shadowed.
+  The module "F" has no valid type if "T/2" is shadowed.
 |}]
 
 module type Extension = sig
@@ -214,11 +216,11 @@ Error: Illegal shadowing of included type ext/2 by ext/1.
 Line 2, characters 2-11:
 2 |   include S
       ^^^^^^^^^
-  Type ext/2 came from this include.
+  Type "ext/2" came from this include.
 Line 3, characters 14-16:
 3 |   type ext += C2
                   ^^
-  The extension constructor C2 has no valid type if ext/2 is shadowed.
+  The extension constructor "C2" has no valid type if "ext/2" is shadowed.
 |}]
 
 module type Class = sig

@@ -16,22 +16,18 @@
 open Misc
 
 type info = {
-  source_file : string;
+  target: Unit_info.t;
   module_name : Compilation_unit.t;
-  output_prefix : string;
   env : Env.t;
   ppf_dump : Format.formatter;
   tool_name : string;
   native : bool;
 }
 
-let cmx i = i.output_prefix ^ ".cmx"
-let obj i = i.output_prefix ^ Config.ext_obj
-let cmo i = i.output_prefix ^ ".cmo"
-let annot i = i.output_prefix ^ ".annot"
-
 let with_info ~native ~tool_name ~source_file ~output_prefix ~dump_ext k =
   Compmisc.init_path ();
+  let target = Unit_info.make ~source_file output_prefix in
+  Env.set_unit_name (Unit_info.modname target);
   let module_name = Compenv.module_of_filename source_file output_prefix in
   let for_pack_prefix = Compilation_unit.Prefix.from_clflags () in
   let compilation_unit =
@@ -43,10 +39,10 @@ let with_info ~native ~tool_name ~source_file ~output_prefix ~dump_ext k =
   let dump_file = String.concat "." [output_prefix; dump_ext] in
   Compmisc.with_ppf_dump ~file_prefix:dump_file (fun ppf_dump ->
   k {
+    target;
     module_name = compilation_unit;
     output_prefix;
     env;
-    source_file;
     ppf_dump;
     tool_name;
     native;
@@ -55,7 +51,7 @@ let with_info ~native ~tool_name ~source_file ~output_prefix ~dump_ext k =
 (** Compile a .mli file *)
 
 let parse_intf i =
-  Pparse.parse_interface ~tool_name:i.tool_name i.source_file
+  Pparse.parse_interface ~tool_name:i.tool_name (Unit_info.source_file i.target)
   |> print_if i.ppf_dump Clflags.dump_parsetree Printast.interface
   |> print_if i.ppf_dump Clflags.dump_source Pprintast.signature
 
@@ -71,7 +67,7 @@ let typecheck_intf info ast =
   if !Clflags.print_types then
     Printtyp.wrap_printing_env ~error:false info.env (fun () ->
         Format.(fprintf std_formatter) "%a@."
-          (Printtyp.printed_signature info.source_file)
+          (Printtyp.printed_signature (Unit_info.source_file info.target))
           sg);
   ignore (Includemod.signatures info.env ~mark:Mark_both sg sg);
   Typecore.force_delayed_checks ();
@@ -96,13 +92,12 @@ let emit_signature info ast tsg =
     in
     let alerts = Builtin_attributes.alerts_of_sig ast in
     Env.save_signature ~alerts tsg.Typedtree.sig_type
-      name kind (info.output_prefix ^ ".cmi")
+      (Unit_info.cmi info.target)
   in
-  Typemod.save_signature info.module_name tsg
-    info.output_prefix info.source_file info.env sg
+  Typemod.save_signature info.target tsg info.env sg
 
 let interface ~hook_parse_tree ~hook_typed_tree info =
-  Profile.record_call info.source_file @@ fun () ->
+  Profile.record_call (Unit_info.source_file info.target) @@ fun () ->
   let ast = parse_intf info in
   hook_parse_tree ast;
   if Clflags.(should_stop_after Compiler_pass.Parsing) then () else begin
@@ -117,25 +112,29 @@ let interface ~hook_parse_tree ~hook_typed_tree info =
 (** Frontend for a .ml file *)
 
 let parse_impl i =
-  Pparse.parse_implementation ~tool_name:i.tool_name i.source_file
+  let sourcefile = Unit_info.source_file i.target in
+  Pparse.parse_implementation ~tool_name:i.tool_name sourcefile
   |> print_if i.ppf_dump Clflags.dump_parsetree Printast.implementation
   |> print_if i.ppf_dump Clflags.dump_source Pprintast.structure
 
 let typecheck_impl i parsetree =
   parsetree
   |> Profile.(record typing)
-    (Typemod.type_implementation
-       ~sourcefile:i.source_file i.output_prefix i.module_name i.env)
+    (Typemod.type_implementation ~sourcefile:i.target i.env)
   |> print_if i.ppf_dump Clflags.dump_typedtree
     Printtyped.implementation_with_coercion
   |> print_if i.ppf_dump Clflags.dump_shape
     (fun fmt {Typedtree.shape; _} -> Shape.print fmt shape)
 
 let implementation ~hook_parse_tree ~hook_typed_tree info ~backend =
-  Profile.record_call info.source_file @@ fun () ->
+  Profile.record_call (Unit_info.source_file info.target) @@ fun () ->
   let exceptionally () =
-    let sufs = if info.native then [ cmx; obj ] else [ cmo ] in
-    List.iter (fun suf -> remove_file (suf info)) sufs;
+    let sufs =
+      if info.native then Unit_info.[ cmx; obj ]
+      else Unit_info.[ cmo ] in
+    List.iter
+      (fun suf -> remove_file (Unit_info.Artifact.filename @@ suf info.target))
+      sufs;
   in
   Misc.try_finally ?always:None ~exceptionally (fun () ->
     let parsed = parse_impl info in
@@ -147,6 +146,7 @@ let implementation ~hook_parse_tree ~hook_typed_tree info ~backend =
         backend info typed;
       end;
     end;
+    Builtin_attributes.warn_unused ();
     if not (Clflags.(should_stop_after Compiler_pass.Selection)) then
       Builtin_attributes.warn_unchecked_zero_alloc_attribute ();
     Warnings.check_fatal ();

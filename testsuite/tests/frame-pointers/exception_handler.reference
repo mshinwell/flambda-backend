@@ -23,6 +23,3 @@ camlException_handler.handler_2_7_code
 camlException_handler.nested_3_8_code
 camlException_handler.entry
 caml_program
-caml_start_program
-caml_main/caml_startup
-main

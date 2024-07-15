@@ -44,6 +44,10 @@ typedef pthread_cond_t custom_condvar;
 #define CUSTOM_COND_INITIALIZER PTHREAD_COND_INITIALIZER
 #endif
 
+value caml_ml_mutex_lock(value wrapper);
+value caml_ml_mutex_unlock(value wrapper);
+value caml_ml_condition_broadcast(value wrapper);
+
 #endif /* CAML_INTERNALS */
 
 #endif /* CAML_SYNC_H */
