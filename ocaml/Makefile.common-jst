@@ -390,7 +390,9 @@ hacking: _build/_bootinstall
 hacking-backend: _build/_bootinstall
 	RUNTIME_DIR=$(RUNTIME_DIR) $(dune) build $(ws_boot) -w \
           _build/default/ocaml/.ocamlcommon.objs/byte/zero_alloc.cmi \
-          _build/default/.ocamloptcomp.objs/native/asmpackager.cmx
+          _build/default/.ocamloptcomp.objs/native/asmpackager.cmx \
+          _build/default/.ocamloptcomp.objs/native/asmgen.cmx \
+          _build/default/middle_end/flambda2/.flambda2.objs/native/flambda2.cmx
 
 # The `hacking-emacs-poller` and `hacking-emacs-builder` targets make it
 # possible to run the polling build with Emacs's `M-x compile`.  You should run
