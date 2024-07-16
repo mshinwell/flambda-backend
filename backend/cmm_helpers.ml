@@ -1727,6 +1727,7 @@ let curry_function_sym function_kind arity result =
 
 let bigarray_elt_size_in_bytes : Lambda.bigarray_kind -> int = function
   | Pbigarray_unknown -> assert false
+  | Pbigarray_float16 -> 2
   | Pbigarray_float32 -> 4
   | Pbigarray_float32_t -> 4
   | Pbigarray_float64 -> 8
@@ -1743,6 +1744,7 @@ let bigarray_elt_size_in_bytes : Lambda.bigarray_kind -> int = function
 
 let bigarray_word_kind : Lambda.bigarray_kind -> memory_chunk = function
   | Pbigarray_unknown -> assert false
+  | Pbigarray_float16 -> Sixteen_unsigned
   | Pbigarray_float32 -> Single { reg = Float64 }
   | Pbigarray_float32_t -> Single { reg = Float32 }
   | Pbigarray_float64 -> Double
