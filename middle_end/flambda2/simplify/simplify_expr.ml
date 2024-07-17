@@ -115,11 +115,11 @@ let rec simplify_expr dacc expr ~down_to_up =
     Simplify_switch_expr.simplify_switch
       ~simplify_let:Simplify_let_expr.simplify_let ~simplify_function_body dacc
       switch ~down_to_up
-  | Invalid { message } ->
+  | Invalid { message; result_kind } ->
     (* CR mshinwell: Make sure that a program can be simplified to just
        [Invalid]. *)
     down_to_up dacc ~rebuild:(fun uacc ~after_rebuild ->
-        EB.rebuild_invalid uacc (Message message) ~after_rebuild)
+        EB.rebuild_invalid uacc (Message message) ~result_kind ~after_rebuild)
 
 and simplify_function_body dacc expr ~return_continuation ~return_arity
     ~exn_continuation ~(loopify_state : Loopify_state.t) ~params

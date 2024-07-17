@@ -63,8 +63,10 @@ type expr_descr = private
           frames from the stack, which thus allows for the raising of
           exceptions. *)
   | Switch of Switch_expr.t  (** Conditional control flow. *)
-  | Invalid of { message : string }
-      (** Code proved type-incorrect and therefore unreachable. *)
+  | Invalid of
+      { message : string;
+        result_kind : Flambda_kind.t
+      }  (** Code proved type-incorrect and therefore unreachable. *)
 
 (** The defining expressions of [Let]-bindings. *)
 and named = private
@@ -141,7 +143,7 @@ module Expr : sig
 
   val create_switch : Switch_expr.t -> t
 
-  val create_invalid : Invalid.t -> t
+  val create_invalid : Invalid.t -> result_kind:Flambda_kind.t -> t
 end
 
 module Named : sig

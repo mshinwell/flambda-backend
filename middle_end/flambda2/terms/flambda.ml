@@ -64,7 +64,10 @@ and expr_descr =
   | Apply of Apply.t
   | Apply_cont of Apply_cont.t
   | Switch of Switch.t
-  | Invalid of { message : string }
+  | Invalid of
+      { message : string;
+        result_kind : Flambda_kind.t
+      }
 
 and let_expr_t0 =
   { num_normal_occurrences_of_bound_vars : Num_occurrences.t Variable.Map.t;
@@ -538,9 +541,10 @@ and print ppf (t : expr) =
       name Flambda_colours.pop Apply.print apply
   | Apply_cont apply_cont -> Apply_cont.print ppf apply_cont
   | Switch switch -> Switch.print ppf switch
-  | Invalid { message } ->
-    fprintf ppf "@[(%tinvalid%t@ @[<hov 1>%s@])@]"
-      Flambda_colours.invalid_keyword Flambda_colours.pop message
+  | Invalid { message; result_kind } ->
+    fprintf ppf "@[(%tinvalid%t@ %a@ @[<hov 1>%s@])@]"
+      Flambda_colours.invalid_keyword Flambda_colours.pop Flambda_kind.print
+      result_kind message
 
 and print_continuation_handler (recursive : Recursive.t) invariant_params ppf k
     ({ cont_handler_abst = _; is_exn_handler; is_cold } as t) occurrences ~first
@@ -1529,8 +1533,8 @@ module Expr = struct
 
   let create_switch switch = create (Switch switch)
 
-  let create_invalid reason =
-    create (Invalid { message = Invalid.to_string reason })
+  let create_invalid reason ~result_kind =
+    create (Invalid { message = Invalid.to_string reason; result_kind })
 end
 
 module Let_cont_expr = struct
