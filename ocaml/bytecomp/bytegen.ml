@@ -367,6 +367,10 @@ let array_primitive (index_kind : Lambda.array_index_kind) prefix =
   in
   prefix ^ suffix
 
+let check_array_pat num_elts =
+  if num_elts <> 1 then
+    Misc.fatal_error "Array operations of > 1 element are not supported in bytecode"
+
 let comp_primitive stack_info p sz args =
   check_stack stack_info sz;
   match p with
@@ -462,45 +466,59 @@ let comp_primitive stack_info p sz args =
   (* In bytecode, nothing is ever actually stack-allocated, so we ignore the
      array modes (allocation for [Parrayref{s,u}], modification for
      [Parrayset{s,u}]). *)
-  | Parrayrefs (Pgenarray_ref _, index_kind)
+  | Parrayrefs (Pgenarray_ref _, index_kind, array_pat)
   | Parrayrefs ((Paddrarray_ref | Pintarray_ref | Pfloatarray_ref _
                 | Punboxedfloatarray_ref (Pfloat64 | Pfloat32) | Punboxedintarray_ref _),
-                (Punboxed_int_index _ as index_kind)) ->
+                (Punboxed_int_index _ as index_kind), array_pat) ->
+      check_array_pat array_pat;
       Kccall(array_primitive index_kind "caml_array_get", 2)
-  | Parrayrefs ((Punboxedfloatarray_ref Pfloat64 | Pfloatarray_ref _), Ptagged_int_index) ->
+  | Parrayrefs ((Punboxedfloatarray_ref Pfloat64 | Pfloatarray_ref _), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
       Kccall("caml_floatarray_get", 2)
   | Parrayrefs ((Punboxedfloatarray_ref Pfloat32 | Punboxedintarray_ref _
-                | Paddrarray_ref | Pintarray_ref), Ptagged_int_index) ->
+                | Paddrarray_ref | Pintarray_ref), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
       Kccall("caml_array_get_addr", 2)
-  | Parraysets (Pgenarray_set _, index_kind)
+  | Parraysets (Pgenarray_set _, index_kind, array_pat)
   | Parraysets ((Paddrarray_set _ | Pintarray_set | Pfloatarray_set
                 | Punboxedfloatarray_set (Pfloat64 | Pfloat32) | Punboxedintarray_set _),
-                (Punboxed_int_index _ as index_kind)) ->
+                (Punboxed_int_index _ as index_kind), array_pat) ->
+      check_array_pat array_pat;
       Kccall(array_primitive index_kind "caml_array_set", 3)
   | Parraysets ((Punboxedfloatarray_set Pfloat64 | Pfloatarray_set),
-                Ptagged_int_index) ->
+                Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
       Kccall("caml_floatarray_set", 3)
   | Parraysets ((Punboxedfloatarray_set Pfloat32 | Punboxedintarray_set _
-                | Paddrarray_set _ | Pintarray_set), Ptagged_int_index) ->
-    Kccall("caml_array_set_addr", 3)
-  | Parrayrefu (Pgenarray_ref _, index_kind)
+                | Paddrarray_set _ | Pintarray_set), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
+      Kccall("caml_array_set_addr", 3)
+  | Parrayrefu (Pgenarray_ref _, index_kind, array_pat)
   | Parrayrefu ((Paddrarray_ref | Pintarray_ref | Pfloatarray_ref _
                 | Punboxedfloatarray_ref (Pfloat64 | Pfloat32) | Punboxedintarray_ref _),
-                (Punboxed_int_index _ as index_kind)) ->
+                (Punboxed_int_index _ as index_kind), array_pat) ->
+      check_array_pat array_pat;
       Kccall(array_primitive index_kind "caml_array_unsafe_get", 2)
-  | Parrayrefu ((Punboxedfloatarray_ref Pfloat64 | Pfloatarray_ref _), Ptagged_int_index) ->
-    Kccall("caml_floatarray_unsafe_get", 2)
+  | Parrayrefu ((Punboxedfloatarray_ref Pfloat64 | Pfloatarray_ref _), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
+      Kccall("caml_floatarray_unsafe_get", 2)
   | Parrayrefu ((Punboxedfloatarray_ref Pfloat32 | Punboxedintarray_ref _
-                | Paddrarray_ref | Pintarray_ref), Ptagged_int_index) -> Kgetvectitem
-  | Parraysetu (Pgenarray_set _, index_kind)
+                | Paddrarray_ref | Pintarray_ref), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
+      Kgetvectitem
+  | Parraysetu (Pgenarray_set _, index_kind, array_pat)
   | Parraysetu ((Paddrarray_set _ | Pintarray_set | Pfloatarray_set
                 | Punboxedfloatarray_set (Pfloat64 | Pfloat32) | Punboxedintarray_set _),
-                (Punboxed_int_index _ as index_kind)) ->
+                (Punboxed_int_index _ as index_kind), array_pat) ->
+      check_array_pat array_pat;
       Kccall(array_primitive index_kind "caml_array_unsafe_set", 3)
-  | Parraysetu ((Punboxedfloatarray_set Pfloat64 | Pfloatarray_set), Ptagged_int_index) ->
+  | Parraysetu ((Punboxedfloatarray_set Pfloat64 | Pfloatarray_set), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
       Kccall("caml_floatarray_unsafe_set", 3)
   | Parraysetu ((Punboxedfloatarray_set Pfloat32 | Punboxedintarray_set _
-                | Paddrarray_set _ | Pintarray_set), Ptagged_int_index) -> Ksetvectitem
+                | Paddrarray_set _ | Pintarray_set), Ptagged_int_index, array_pat) ->
+      check_array_pat array_pat;
+      Ksetvectitem
   | Pctconst c ->
      let const_name = match c with
        | Big_endian -> "big_endian"

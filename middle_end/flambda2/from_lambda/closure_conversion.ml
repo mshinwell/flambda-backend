@@ -1040,13 +1040,13 @@ let close_named acc env ~let_bound_ids_with_kinds (named : IR.named)
       Unary (Tag_immediate, Prim (Unary (Get_tag, Simple named)))
     in
     Lambda_to_flambda_primitives_helpers.bind_recs acc None ~register_const0
-      [prim] Debuginfo.none k
+      prim Debuginfo.none k
   | Begin_region { is_try_region } ->
     let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
       Nullary (if is_try_region then Begin_try_region else Begin_region)
     in
     Lambda_to_flambda_primitives_helpers.bind_recs acc None ~register_const0
-      [prim] Debuginfo.none k
+      prim Debuginfo.none k
   | End_region { is_try_region; region } ->
     let named = find_simple_from_id env region in
     let prim : Lambda_to_flambda_primitives_helpers.expr_primitive =
@@ -1054,7 +1054,7 @@ let close_named acc env ~let_bound_ids_with_kinds (named : IR.named)
         ((if is_try_region then End_try_region else End_region), Simple named)
     in
     Lambda_to_flambda_primitives_helpers.bind_recs acc None ~register_const0
-      [prim] Debuginfo.none k
+      prim Debuginfo.none k
   | Prim { prim; args; loc; exn_continuation; region } ->
     close_primitive acc env ~let_bound_ids_with_kinds named prim ~args loc
       exn_continuation

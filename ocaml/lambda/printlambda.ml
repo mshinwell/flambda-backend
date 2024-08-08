@@ -389,6 +389,9 @@ let field_read_semantics ppf sem =
   | Reads_agree -> ()
   | Reads_vary -> fprintf ppf "_mut"
 
+let array_pat ppf num_elts =
+  if num_elts > 1 then fprintf ppf "[%d elts]" num_elts
+
 let primitive ppf = function
   | Pbytes_to_string -> fprintf ppf "bytes_to_string"
   | Pbytes_of_string -> fprintf ppf "bytes_of_string"
@@ -581,18 +584,26 @@ let primitive ppf = function
   | Pduparray (k, Immutable) -> fprintf ppf "duparray_imm[%s]" (array_kind k)
   | Pduparray (k, Immutable_unique) ->
       fprintf ppf "duparray_unique[%s]" (array_kind k)
-  | Parrayrefu (rk, idx) -> fprintf ppf "array.unsafe_get[%a indexed by %a]"
-                              array_ref_kind rk
-                              array_index_kind idx
-  | Parraysetu (sk, idx) -> fprintf ppf "array.unsafe_set[%a indexed by %a]"
-                              array_set_kind sk
-                              array_index_kind idx
-  | Parrayrefs (rk, idx) -> fprintf ppf "array.get[%a indexed by %a]"
-                              array_ref_kind rk
-                              array_index_kind idx
-  | Parraysets (sk, idx) -> fprintf ppf "array.set[%a indexed by %a]"
-                              array_set_kind sk
-                              array_index_kind idx
+  | Parrayrefu (rk, idx, pat) ->
+      fprintf ppf "array.unsafe_get[%a indexed by %a]%a"
+        array_ref_kind rk
+        array_index_kind idx
+        array_pat pat
+  | Parraysetu (sk, idx, pat) ->
+      fprintf ppf "array.unsafe_set[%a indexed by %a]%a"
+        array_set_kind sk
+        array_index_kind idx
+        array_pat pat
+  | Parrayrefs (rk, idx, pat) ->
+      fprintf ppf "array.get[%a indexed by %a]%a"
+        array_ref_kind rk
+        array_index_kind idx
+        array_pat pat
+  | Parraysets (sk, idx, pat) ->
+      fprintf ppf "array.set[%a indexed by %a]%a"
+        array_set_kind sk
+        array_index_kind idx
+        array_pat pat
   | Pctconst c ->
      let const_name = match c with
        | Big_endian -> "big_endian"

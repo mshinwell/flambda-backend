@@ -189,10 +189,10 @@ type primitive =
       The arguments of [Pduparray] give the kind and mutability of the
       array being *produced* by the duplication. *)
   | Parraylength of array_kind
-  | Parrayrefu of array_ref_kind * array_index_kind
-  | Parraysetu of array_set_kind * array_index_kind
-  | Parrayrefs of array_ref_kind * array_index_kind
-  | Parraysets of array_set_kind * array_index_kind
+  | Parrayrefu of array_ref_kind * array_index_kind * array_access_pattern
+  | Parraysetu of array_set_kind * array_index_kind * array_access_pattern
+  | Parrayrefs of array_ref_kind * array_index_kind * array_access_pattern
+  | Parraysets of array_set_kind * array_index_kind * array_access_pattern
   (* Test if the argument is a block or an immediate integer *)
   | Pisint of { variant_only : bool }
   (* Test if the (integer) argument is outside an interval *)
@@ -359,6 +359,9 @@ and array_set_kind =
 and array_index_kind =
   | Ptagged_int_index
   | Punboxed_int_index of unboxed_integer
+
+and array_access_pattern = int
+(** Currently just the number of consecutive fields to load/store. *)
 
 and value_kind =
   | Pgenval
