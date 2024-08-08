@@ -1368,7 +1368,14 @@ let close_let acc env let_bound_ids_with_kinds user_visible defining_expr
     | _, _ ->
       Misc.fatal_errorf
         "CC.close_let: defining_exprs should have the same length as number of \
-         variables"
+         variables:@ ids_with_kinds=(%a)@ defining_exprs=(%a)"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space
+           (fun ppf (id, kind) ->
+             Format.fprintf ppf "%a :: %a" Ident.print id
+               Flambda_kind.With_subkind.print kind))
+        ids_with_kinds
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space Named.print)
+        defining_exprs
   in
   close_named acc env ~let_bound_ids_with_kinds defining_expr
     (cont let_bound_ids_with_kinds env)
