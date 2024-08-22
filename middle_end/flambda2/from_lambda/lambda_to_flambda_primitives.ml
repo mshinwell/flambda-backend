@@ -938,7 +938,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     assert (Targetint.size mod 8 = 0);
     Targetint.size / 8
   in
-  match prim, args with
+  match[@ocaml.warning "-4"] prim, args with
   | Pmakeblock (tag, mutability, shape, mode), _ ->
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
@@ -946,12 +946,53 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     let shape = convert_block_shape shape ~num_fields:(List.length args) in
     let mutability = Mutability.from_lambda mutability in
     [Variadic (Make_block (Values (tag, shape), mutability, mode), args)]
+  | Pmake_unboxed_product [Punboxed_int Pint32; Punboxed_int Pint32], _ -> (
+    match List.flatten args with
+    | [arg0; arg1] ->
+      [ Binary
+          ( Int_arith (Naked_int32, Add),
+            arg0,
+            Prim
+              (Binary
+                 ( Int_shift (Naked_int32, Lsl),
+                   arg1,
+                   Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) ) ]
+    | [] | [_] | _ :: _ :: _ :: _ ->
+      Misc.fatal_errorf
+        "Pmake_unboxed_product: expected 2 flattened arguments, got %d:@ %a"
+        (List.length (List.flatten args))
+        Printlambda.primitive prim)
   | Pmake_unboxed_product layouts, _ ->
     if List.compare_lengths layouts args <> 0
     then
       Misc.fatal_errorf "Pmake_unboxed_product: expected %d arguments, got %d"
         (List.length layouts) (List.length args);
     List.map (fun arg : H.expr_primitive -> Simple arg) (List.flatten orig_args)
+  | Punboxed_product_field (n, [Punboxed_int Pint32; Punboxed_int Pint32]), _
+    -> (
+    match List.flatten args with
+    | [arg] -> (
+      match n with
+      | 0 ->
+        [ Binary
+            ( Int_arith (Naked_int32, And),
+              arg,
+              Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL))
+            ) ]
+      | 1 ->
+        [ Binary
+            ( Int_shift (Naked_int32, Asr),
+              arg,
+              Simple (Simple.const_int (Targetint_31_63.of_int 32)) ) ]
+      | _ ->
+        Misc.fatal_errorf
+          "Bad index for 2-element Punboxed_product_field:@ %d:@ %a" n
+          Printlambda.primitive prim)
+    | [] | _ :: _ :: _ ->
+      Misc.fatal_errorf
+        "Pmake_unboxed_product: expected 1 flattened argument, got %d:@ %a"
+        (List.length (List.flatten args))
+        Printlambda.primitive prim)
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array

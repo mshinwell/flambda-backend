@@ -1928,6 +1928,8 @@ let primitive_result_layout (p : primitive) =
   | Pduparray _ | Pbigarraydim _ | Pobj_dup -> layout_block
   | Pfield _ | Pfield_computed _ -> layout_value_field
   | Punboxed_product_field (field, layouts) -> (Array.of_list layouts).(field)
+  | Pmake_unboxed_product [Punboxed_int Pint32; Punboxed_int Pint32] ->
+    Punboxed_int Pint64
   | Pmake_unboxed_product layouts -> layout_unboxed_product layouts
   | Pfloatfield _ -> layout_boxed_float Pfloat64
   | Pfloatoffloat32 _ -> layout_boxed_float Pfloat64
@@ -1978,7 +1980,7 @@ let primitive_result_layout (p : primitive) =
   | Pstring_load_128 _ | Pbytes_load_128 _
   | Pbigstring_load_128 { boxed = true; _ } ->
       layout_boxed_vector (Pvec128 Int8x16)
-  | Pbigstring_load_32 { boxed = false; _ } 
+  | Pbigstring_load_32 { boxed = false; _ }
   | Pstring_load_32 { boxed = false; _ }
   | Pbytes_load_32 { boxed = false; _ } -> layout_unboxed_int Pint32
   | Pbigstring_load_f32 { boxed = false; _ }
