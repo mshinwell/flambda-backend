@@ -1906,6 +1906,55 @@ let layout_of_mixed_field (kind : mixed_block_read) =
       | Word -> layout_unboxed_nativeint
       | Float_boxed -> layout_boxed_float Pfloat64
 
+let compare_layouts_for_unboxed_product_optimization layout1 layout2 =
+  match layout1, layout2 with
+  | Punboxed_float Pfloat32, Punboxed_float Pfloat32 -> 0
+  | Punboxed_float Pfloat32, _ -> -1
+  | _, Punboxed_float Pfloat32 -> 1
+  | Punboxed_float Pfloat64, Punboxed_float Pfloat64 -> 0
+  | Punboxed_float Pfloat64, _ -> -1
+  | _, Punboxed_float Pfloat64 -> 1
+  | Punboxed_int Pint32, Punboxed_int Pint32 -> 0
+  | Punboxed_int Pint32, _ -> -1
+  | _, Punboxed_int Pint32 -> 1
+  | Punboxed_int Pint64, Punboxed_int Pint64 -> 0
+  | Punboxed_int Pint64, _ -> -1
+  | _, Punboxed_int Pint64 -> 1
+  | _, _ -> Stdlib.compare layout1 layout2
+
+let rec layout_of_optimized_unboxed_product0 layouts =
+  match layouts with
+  (*
+  | Punboxed_float Pfloat32 :: Punboxed_float Pfloat32 ::
+    Punboxed_float Pfloat32 :: Punboxed_float Pfloat32 :: layouts ->
+    Punboxed_vector (Pvec128 Float32x4) ::
+    layout_of_optimized_unboxed_product0 layouts
+  | Punboxed_float Pfloat32 :: Punboxed_float Pfloat32 :: layouts ->
+    Punboxed_float Pfloat64 ::
+    layout_of_optimized_unboxed_product0 layouts
+  | Punboxed_float Pfloat64 :: Punboxed_float Pfloat64 :: layouts ->
+    Punboxed_vector (Pvec128 Float64x2) ::
+    layout_of_optimized_unboxed_product0 layouts
+  | Punboxed_int Pint32 :: Punboxed_int Pint32 ::
+    Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts ->
+    Punboxed_vector (Pvec128 Int32x4) ::
+    layout_of_optimized_unboxed_product0 layouts
+  *)
+  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts ->
+    Punboxed_int Pint64 ::
+    layout_of_optimized_unboxed_product0 layouts
+  (*
+  | Punboxed_int Pint64 :: Punboxed_int Pint64 :: layouts ->
+    Punboxed_vector (Pvec128 Int64x2) ::
+    layout_of_optimized_unboxed_product0 layouts
+  *)
+  | [] -> []
+  | layout::layouts -> layout :: layout_of_optimized_unboxed_product0 layouts
+
+let layout_of_optimized_unboxed_product layouts =
+  layout_of_optimized_unboxed_product0
+    (List.sort compare_layouts_for_unboxed_product_optimization layouts)
+
 let primitive_result_layout (p : primitive) =
   assert !Clflags.native_code;
   match p with
@@ -1928,9 +1977,8 @@ let primitive_result_layout (p : primitive) =
   | Pduparray _ | Pbigarraydim _ | Pobj_dup -> layout_block
   | Pfield _ | Pfield_computed _ -> layout_value_field
   | Punboxed_product_field (field, layouts) -> (Array.of_list layouts).(field)
-  | Pmake_unboxed_product [Punboxed_int Pint32; Punboxed_int Pint32] ->
-    Punboxed_int Pint64
-  | Pmake_unboxed_product layouts -> layout_unboxed_product layouts
+  | Pmake_unboxed_product layouts ->
+    layout_unboxed_product (layout_of_optimized_unboxed_product layouts)
   | Pfloatfield _ -> layout_boxed_float Pfloat64
   | Pfloatoffloat32 _ -> layout_boxed_float Pfloat64
   | Pfloat32offloat _ -> layout_boxed_float Pfloat32

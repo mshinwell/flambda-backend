@@ -926,6 +926,123 @@ let opaque layout arg ~middle_end_only : H.expr_primitive list =
       Unary (Opaque_identity { middle_end_only; kind }, arg_component))
     arg kinds
 
+let sort_layouts_for_optimized_unboxed_product layouts_and_args =
+  let compare (n1, (layout1, _)) (n2, (layout2, _)) =
+    let c =
+      L.compare_layouts_for_unboxed_product_optimization layout1 layout2
+    in
+    if c <> 0 then c else Int.compare n1 n2
+  in
+  List.sort compare layouts_and_args
+
+let sort_layouts_for_optimized_unboxed_product' layouts_and_args =
+  let compare (_, layout1) (_, layout2) =
+    L.compare_layouts_for_unboxed_product_optimization layout1 layout2
+  in
+  List.sort compare layouts_and_args
+
+let rec args_of_optimized_unboxed_product0
+    (layouts_and_args : (L.layout * Simple.t list) list) :
+    H.expr_primitive list list =
+  match[@ocaml.warning "-fragile-match"] layouts_and_args with
+  | (Punboxed_int Pint32, [arg0])
+    :: (Punboxed_int Pint32, [arg1])
+    :: layouts_and_args ->
+    [ Binary
+        ( Int_arith (Naked_int32, Or),
+          Simple arg0,
+          Prim
+            (Binary
+               ( Int_shift (Naked_int32, Lsl),
+                 Simple arg1,
+                 Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) ) ]
+    :: args_of_optimized_unboxed_product0 layouts_and_args
+  | (Punboxed_int Pint32, _) :: (Punboxed_int Pint32, _) :: _ -> assert false
+  | [] -> []
+  | (_layout, args) :: layouts_and_args ->
+    List.map (fun arg : H.expr_primitive -> Simple arg) args
+    :: args_of_optimized_unboxed_product0 layouts_and_args
+
+let args_of_optimized_unboxed_product layouts args =
+  List.combine layouts args
+  |> List.combine (List.init (List.length layouts) Fun.id)
+  |> sort_layouts_for_optimized_unboxed_product
+  |> args_of_optimized_unboxed_product0
+
+let first_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
+    =
+  Binary
+    ( Int_arith (Naked_int32, And),
+      Simple arg,
+      Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL)) )
+
+let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
+    =
+  Binary
+    ( Int_shift (Naked_int32, Asr),
+      Simple arg,
+      Simple (Simple.const_int (Targetint_31_63.of_int 32)) )
+
+let rec projections_of_optimized_unboxed_product0 (layouts : L.layout list)
+    ~(args : Simple.t list list) : H.expr_primitive list list =
+  match[@ocaml.warning "-fragile-match"] layouts, args with
+  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts, [arg] :: args ->
+    :: projections_of_optimized_unboxed_product0 layouts ~args
+  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: _, _ -> assert false
+  | [], [] -> []
+  | [], _ | _, [] -> assert false
+  | _layout :: layouts, arg :: args ->
+    List.map (fun arg : H.expr_primitive -> Simple arg) arg
+    :: projections_of_optimized_unboxed_product0 layouts ~args
+
+let rec layout_of_optimized_unboxed_product0 layouts =
+  match layouts with
+  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts ->
+    Punboxed_int Pint64 :: layout_of_optimized_unboxed_product0 layouts
+  (* | Punboxed_int Pint64 :: Punboxed_int Pint64 :: layouts -> Punboxed_vector
+     (Pvec128 Int64x2) :: layout_of_optimized_unboxed_product0 layouts *)
+  | [] -> []
+  | layout :: layouts -> layout :: layout_of_optimized_unboxed_product0 layouts
+
+let projection_of_optimized_unboxed_product layouts ~args ~index :
+    H.expr_primitive =
+  let numbered_sorted_layouts =
+    List.combine (List.init (List.length layouts) Fun.id) layouts
+    |> sort_layouts_for_optimized_unboxed_product'
+  in
+  let num_projections =  List.length numbered_sorted_layouts in
+  let all_projections = Array.init num_projections (fun _ -> None) in
+  let args = Array.of_list args in
+  let num_args = List.length args in
+let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list) ~current_arg =
+  assert (current_arg >= 0 && current_arg < num_args);
+match[@ocaml.warning "-fragile-match"] numbered_sorted_layouts with
+| [] -> ()
+  | (n1, Punboxed_int Pint32) :: (n2, Punboxed_int Pint32) :: numbered_sorted_layouts ->
+assert (n1 >= 0 && n1 < num_projections);
+assert (n2 >= 0 && n2 < num_projections);
+    all_projections.(n1) <-
+     first_component_of_optimized_int32x2_unboxed_product args.(current_arg);
+all_projections.(n2) <-
+      second_component_of_optimized_int32x2_unboxed_product args.(current_arg);
+
+    find_mappings numbered_sorted_layouts  ~current_arg:(current_arg + 1)
+
+    | _::_ ->
+
+    find_mappings numbered_sorted_layouts  ~current_arg:(current_arg + 1)
+
+in
+find_mappings numbered_sorted_layouts ~current_arg:0;
+assert (index >= 0 && index < Array.length all_projections);
+match all_projections.(index) with
+| Some expr_prim -> expr_prim
+| None -> Misc.fatal_errorf "No projection generated for index %d, layouts (%a), args (%a)"
+index
+
+(Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout) layouts
+Simple.List.print args
+
 (* Primitive conversion *)
 let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     (dbg : Debuginfo.t) ~current_region ~current_ghost_region :
@@ -946,53 +1063,12 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     let shape = convert_block_shape shape ~num_fields:(List.length args) in
     let mutability = Mutability.from_lambda mutability in
     [Variadic (Make_block (Values (tag, shape), mutability, mode), args)]
-  | Pmake_unboxed_product [Punboxed_int Pint32; Punboxed_int Pint32], _ -> (
-    match List.flatten args with
-    | [arg0; arg1] ->
-      [ Binary
-          ( Int_arith (Naked_int32, Add),
-            arg0,
-            Prim
-              (Binary
-                 ( Int_shift (Naked_int32, Lsl),
-                   arg1,
-                   Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) ) ]
-    | [] | [_] | _ :: _ :: _ :: _ ->
-      Misc.fatal_errorf
-        "Pmake_unboxed_product: expected 2 flattened arguments, got %d:@ %a"
-        (List.length (List.flatten args))
-        Printlambda.primitive prim)
   | Pmake_unboxed_product layouts, _ ->
     if List.compare_lengths layouts args <> 0
     then
       Misc.fatal_errorf "Pmake_unboxed_product: expected %d arguments, got %d"
         (List.length layouts) (List.length args);
-    List.map (fun arg : H.expr_primitive -> Simple arg) (List.flatten orig_args)
-  | Punboxed_product_field (n, [Punboxed_int Pint32; Punboxed_int Pint32]), _
-    -> (
-    match List.flatten args with
-    | [arg] -> (
-      match n with
-      | 0 ->
-        [ Binary
-            ( Int_arith (Naked_int32, And),
-              arg,
-              Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL))
-            ) ]
-      | 1 ->
-        [ Binary
-            ( Int_shift (Naked_int32, Asr),
-              arg,
-              Simple (Simple.const_int (Targetint_31_63.of_int 32)) ) ]
-      | _ ->
-        Misc.fatal_errorf
-          "Bad index for 2-element Punboxed_product_field:@ %d:@ %a" n
-          Printlambda.primitive prim)
-    | [] | _ :: _ :: _ ->
-      Misc.fatal_errorf
-        "Pmake_unboxed_product: expected 1 flattened argument, got %d:@ %a"
-        (List.length (List.flatten args))
-        Printlambda.primitive prim)
+    args_of_optimized_unboxed_product layouts orig_args |> List.flatten
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array
@@ -1010,13 +1086,13 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       |> Flambda_arity.create |> Flambda_arity.cardinal_unarized
     in
     let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
-    let projected_args =
-      List.hd orig_args |> Array.of_list
-      |> (fun a ->
-           Array.sub a num_fields_prior_to_projected_fields num_projected_fields)
-      |> Array.to_list
+    let orig_args =
+      projections_of_optimized_unboxed_product layouts ~args:orig_args
     in
-    List.map (fun arg : H.expr_primitive -> Simple arg) projected_args
+    List.hd orig_args |> Array.of_list
+    |> (fun a ->
+         Array.sub a num_fields_prior_to_projected_fields num_projected_fields)
+    |> Array.to_list
   | Pmakefloatblock (mutability, mode), _ ->
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in

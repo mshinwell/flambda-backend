@@ -1042,3 +1042,5 @@ val simple_prim_on_values
 -> arity:int
 -> alloc:bool
 -> external_call_description
+
+val compare_layouts_for_unboxed_product_optimization : layout -> layout -> int
