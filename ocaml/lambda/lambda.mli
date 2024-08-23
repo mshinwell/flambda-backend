@@ -1043,4 +1043,6 @@ val simple_prim_on_values
 -> alloc:bool
 -> external_call_description
 
+val layout_maybe_optimized_unboxed_product : layout -> layout
+
 val compare_layouts_for_unboxed_product_optimization : layout -> layout -> int

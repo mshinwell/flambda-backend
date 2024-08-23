@@ -978,20 +978,35 @@ let args_of_optimized_unboxed_product (layouts : L.layout list)
 
 let first_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
     =
-  Binary
-    ( Int_arith (Naked_int64, And),
-      Simple arg,
-      Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL)) )
+  Unary
+    ( Num_conv { src = Naked_int64; dst = Naked_int32 },
+      Prim
+        (Binary
+           ( Int_arith (Naked_int64, And),
+             Simple arg,
+             Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL))
+           )) )
 
 let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
     =
-  Binary
-    ( Int_shift (Naked_int64, Asr),
-      Simple arg,
-      Simple (Simple.const_int (Targetint_31_63.of_int 32)) )
+  Unary
+    ( Num_conv { src = Naked_int64; dst = Naked_int32 },
+      Prim
+        (Binary
+           ( Int_shift (Naked_int64, Asr),
+             Simple arg,
+             Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) )
 
 let projections_of_optimized_unboxed_product layouts
     ~(args : Simple.t list list) : H.expr_primitive list list =
+  Format.eprintf "Generating projections for layouts (%a), args (%a)"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout)
+    layouts
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
+         Format.fprintf ppf "@[<hov 1>(%a)@]"
+           (Format.pp_print_list ~pp_sep:Format.pp_print_space Simple.print)
+           args))
+    args;
   let numbered_sorted_layouts =
     List.combine (List.init (List.length layouts) Fun.id) layouts
     |> sort_layouts_for_optimized_unboxed_product'
@@ -1002,7 +1017,10 @@ let projections_of_optimized_unboxed_product layouts
   let num_args = Array.length args in
   let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list)
       ~current_arg =
-    assert (current_arg >= 0 && current_arg < num_args);
+    Format.eprintf "current_arg=%d\n%!" current_arg;
+    assert (
+      List.length numbered_sorted_layouts = 0
+      || (current_arg >= 0 && current_arg < num_args));
     match[@ocaml.warning "-fragile-match"] numbered_sorted_layouts with
     | [] -> ()
     | (n1, Punboxed_int Pint32)
@@ -1021,7 +1039,7 @@ let projections_of_optimized_unboxed_product layouts
           "Expected only one argument: current_arg %d, n1 %d, n2 %d "
           current_arg n1 n2);
       find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
-    | (n, _layout) :: _ ->
+    | (n, _layout) :: numbered_sorted_layouts ->
       assert (n >= 0 && n < num_projections);
       all_projections.(n)
         <- Some
@@ -1058,6 +1076,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     assert (Targetint.size mod 8 = 0);
     Targetint.size / 8
   in
+  Format.eprintf "prim: %a\n%!" Printlambda.primitive prim;
   match[@ocaml.warning "-4"] prim, args with
   | Pmakeblock (tag, mutability, shape, mode), _ ->
     let args = List.flatten args in
@@ -1071,7 +1090,13 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     then
       Misc.fatal_errorf "Pmake_unboxed_product: expected %d arguments, got %d"
         (List.length layouts) (List.length args);
-    args_of_optimized_unboxed_product layouts orig_args |> List.flatten
+    let result =
+      args_of_optimized_unboxed_product layouts orig_args |> List.flatten
+    in
+    Format.eprintf "Pmake_unboxed_product result: %a\n%!"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space H.print_expr_primitive)
+      result;
+    result
   | Punboxed_product_field (n, layouts), [_] ->
     let layouts_array = Array.of_list layouts in
     if n < 0 || n >= Array.length layouts_array
@@ -1089,9 +1114,24 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       |> Flambda_arity.create |> Flambda_arity.cardinal_unarized
     in
     let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
+    Format.eprintf "Existing orig_args = %a\n%!"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
+           Format.fprintf ppf "(%a)"
+             (Format.pp_print_list ~pp_sep:Format.pp_print_space Simple.print)
+             args))
+      orig_args;
     let orig_args =
       projections_of_optimized_unboxed_product layouts ~args:orig_args
     in
+    Format.eprintf "New orig_args = %a\n%!"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
+           Format.fprintf ppf "(%a)"
+             (Format.pp_print_list ~pp_sep:Format.pp_print_space
+                H.print_expr_primitive)
+             args))
+      orig_args;
+    Format.eprintf "num_fields_prior = %d, num_projected = %d\n%!"
+      num_fields_prior_to_projected_fields num_projected_fields;
     List.hd orig_args |> Array.of_list
     |> (fun a ->
          Array.sub a num_fields_prior_to_projected_fields num_projected_fields)

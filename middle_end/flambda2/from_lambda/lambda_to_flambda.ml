@@ -465,6 +465,7 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   let handler_env, params_rev =
     List.fold_left
       (fun (handler_env, params_rev) (id, visible, layout) ->
+        let layout = L.layout_maybe_optimized_unboxed_product layout in
         let arity_component =
           Flambda_arity.Component_for_creation.from_lambda layout
         in
@@ -824,6 +825,7 @@ let maybe_insert_let_cont result_var_name layout k acc env ccenv body =
   match k with
   | Tail k -> body acc env ccenv k
   | Non_tail k ->
+    let layout = L.layout_maybe_optimized_unboxed_product layout in
     let arity_component =
       Flambda_arity.Component_for_creation.from_lambda layout
     in
@@ -973,6 +975,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       cps_non_tail_list acc env ccenv args
         (fun acc env ccenv args _arity ->
           let env, ids_with_kinds =
+            let layout = L.layout_maybe_optimized_unboxed_product layout in
             match layout with
             | Ptop | Pbottom ->
               Misc.fatal_error "Cannot bind layout [Ptop] or [Pbottom]"

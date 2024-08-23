@@ -922,7 +922,10 @@ let layout_lazy_contents = Pvalue Pgenval
 let layout_any_value = Pvalue Pgenval
 let layout_letrec = layout_any_value
 let layout_probe_arg = Pvalue Pgenval
-let layout_unboxed_product layouts = Punboxed_product layouts
+let layout_unboxed_product layouts =
+  match layouts with
+  | [layout] -> layout
+  | _ -> Punboxed_product layouts
 
 (* CR ncourant: use [Ptop] or remove this as soon as possible. *)
 let layout_top = layout_any_value
@@ -1954,6 +1957,12 @@ let rec layout_of_optimized_unboxed_product0 layouts =
 let layout_of_optimized_unboxed_product layouts =
   layout_of_optimized_unboxed_product0
     (List.sort compare_layouts_for_unboxed_product_optimization layouts)
+
+let layout_maybe_optimized_unboxed_product layout =
+  match layout with
+  | Punboxed_product layouts ->
+    layout_unboxed_product (layout_of_optimized_unboxed_product layouts)
+  | _ -> layout
 
 let primitive_result_layout (p : primitive) =
   assert !Clflags.native_code;
