@@ -963,10 +963,11 @@ let rec args_of_optimized_unboxed_product0
     List.map (fun arg : H.expr_primitive -> Simple arg) args
     :: args_of_optimized_unboxed_product0 layouts_and_args
 
-let args_of_optimized_unboxed_product layouts args =
+let args_of_optimized_unboxed_product (layouts : L.layout list)
+    (args : Simple.t list list) : H.expr_primitive list list =
   List.combine layouts args
   |> List.combine (List.init (List.length layouts) Fun.id)
-  |> sort_layouts_for_optimized_unboxed_product
+  |> sort_layouts_for_optimized_unboxed_product |> List.map snd
   |> args_of_optimized_unboxed_product0
 
 let first_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
@@ -983,65 +984,61 @@ let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
       Simple arg,
       Simple (Simple.const_int (Targetint_31_63.of_int 32)) )
 
-let rec projections_of_optimized_unboxed_product0 (layouts : L.layout list)
+let projections_of_optimized_unboxed_product layouts
     ~(args : Simple.t list list) : H.expr_primitive list list =
-  match[@ocaml.warning "-fragile-match"] layouts, args with
-  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts, [arg] :: args ->
-    :: projections_of_optimized_unboxed_product0 layouts ~args
-  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: _, _ -> assert false
-  | [], [] -> []
-  | [], _ | _, [] -> assert false
-  | _layout :: layouts, arg :: args ->
-    List.map (fun arg : H.expr_primitive -> Simple arg) arg
-    :: projections_of_optimized_unboxed_product0 layouts ~args
-
-let rec layout_of_optimized_unboxed_product0 layouts =
-  match layouts with
-  | Punboxed_int Pint32 :: Punboxed_int Pint32 :: layouts ->
-    Punboxed_int Pint64 :: layout_of_optimized_unboxed_product0 layouts
-  (* | Punboxed_int Pint64 :: Punboxed_int Pint64 :: layouts -> Punboxed_vector
-     (Pvec128 Int64x2) :: layout_of_optimized_unboxed_product0 layouts *)
-  | [] -> []
-  | layout :: layouts -> layout :: layout_of_optimized_unboxed_product0 layouts
-
-let projection_of_optimized_unboxed_product layouts ~args ~index :
-    H.expr_primitive =
   let numbered_sorted_layouts =
     List.combine (List.init (List.length layouts) Fun.id) layouts
     |> sort_layouts_for_optimized_unboxed_product'
   in
-  let num_projections =  List.length numbered_sorted_layouts in
+  let num_projections = List.length numbered_sorted_layouts in
   let all_projections = Array.init num_projections (fun _ -> None) in
   let args = Array.of_list args in
-  let num_args = List.length args in
-let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list) ~current_arg =
-  assert (current_arg >= 0 && current_arg < num_args);
-match[@ocaml.warning "-fragile-match"] numbered_sorted_layouts with
-| [] -> ()
-  | (n1, Punboxed_int Pint32) :: (n2, Punboxed_int Pint32) :: numbered_sorted_layouts ->
-assert (n1 >= 0 && n1 < num_projections);
-assert (n2 >= 0 && n2 < num_projections);
-    all_projections.(n1) <-
-     first_component_of_optimized_int32x2_unboxed_product args.(current_arg);
-all_projections.(n2) <-
-      second_component_of_optimized_int32x2_unboxed_product args.(current_arg);
-
-    find_mappings numbered_sorted_layouts  ~current_arg:(current_arg + 1)
-
-    | _::_ ->
-
-    find_mappings numbered_sorted_layouts  ~current_arg:(current_arg + 1)
-
-in
-find_mappings numbered_sorted_layouts ~current_arg:0;
-assert (index >= 0 && index < Array.length all_projections);
-match all_projections.(index) with
-| Some expr_prim -> expr_prim
-| None -> Misc.fatal_errorf "No projection generated for index %d, layouts (%a), args (%a)"
-index
-
-(Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout) layouts
-Simple.List.print args
+  let num_args = Array.length args in
+  let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list)
+      ~current_arg =
+    assert (current_arg >= 0 && current_arg < num_args);
+    match[@ocaml.warning "-fragile-match"] numbered_sorted_layouts with
+    | [] -> ()
+    | (n1, Punboxed_int Pint32)
+      :: (n2, Punboxed_int Pint32)
+      :: numbered_sorted_layouts ->
+      assert (n1 >= 0 && n1 < num_projections);
+      assert (n2 >= 0 && n2 < num_projections);
+      (match args.(current_arg) with
+      | [arg] ->
+        all_projections.(n1)
+          <- Some [first_component_of_optimized_int32x2_unboxed_product arg];
+        all_projections.(n2)
+          <- Some [second_component_of_optimized_int32x2_unboxed_product arg]
+      | _ ->
+        Misc.fatal_errorf
+          "Expected only one argument: current_arg %d, n1 %d, n2 %d "
+          current_arg n1 n2);
+      find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
+    | (n, _layout) :: _ ->
+      assert (n >= 0 && n < num_projections);
+      all_projections.(n)
+        <- Some
+             (List.map
+                (fun arg : H.expr_primitive -> Simple arg)
+                args.(current_arg));
+      find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
+  in
+  find_mappings numbered_sorted_layouts ~current_arg:0;
+  for i = 0 to num_projections - 1 do
+    if Option.is_none all_projections.(i)
+    then
+      Misc.fatal_errorf
+        "No projection generated for index %d, layouts (%a), args (%a)" i
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout)
+        layouts
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
+             Format.fprintf ppf "@[<hov 1>(%a)@]"
+               (Format.pp_print_list ~pp_sep:Format.pp_print_space Simple.print)
+               args))
+        (Array.to_list args)
+  done;
+  Array.to_list all_projections |> List.map Option.get
 
 (* Primitive conversion *)
 let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
