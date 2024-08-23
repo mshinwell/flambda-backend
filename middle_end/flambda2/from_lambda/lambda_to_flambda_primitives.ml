@@ -1011,10 +1011,9 @@ let projections_of_optimized_unboxed_product layouts
     List.combine (List.init (List.length layouts) Fun.id) layouts
     |> sort_layouts_for_optimized_unboxed_product'
   in
-  let num_projections = List.length numbered_sorted_layouts in
-  let all_projections = Array.init num_projections (fun _ -> None) in
   let args = Array.of_list args in
   let num_args = Array.length args in
+  let all_projections = Array.init num_args (fun _ -> None) in
   let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list)
       ~current_arg =
     Format.eprintf "current_arg=%d\n%!" current_arg;
@@ -1026,22 +1025,25 @@ let projections_of_optimized_unboxed_product layouts
     | (n1, Punboxed_int Pint32)
       :: (n2, Punboxed_int Pint32)
       :: numbered_sorted_layouts ->
-      assert (n1 >= 0 && n1 < num_projections);
-      assert (n2 >= 0 && n2 < num_projections);
-      (match args.(current_arg) with
-      | [arg] ->
-        all_projections.(n1)
-          <- Some [first_component_of_optimized_int32x2_unboxed_product arg];
-        all_projections.(n2)
-          <- Some [second_component_of_optimized_int32x2_unboxed_product arg]
-      | _ ->
-        Misc.fatal_errorf
-          "Expected only one argument: current_arg %d, n1 %d, n2 %d "
-          current_arg n1 n2);
+      assert (n1 >= 0 && n1 < num_args);
+      assert (n2 >= 0 && n2 < num_args);
+      let must_be_singleton arg_list =
+        match arg_list with
+        | [arg] -> arg
+        | [] | _ :: _ ->
+          Misc.fatal_errorf "Expected singleton: (%a)" Simple.List.print
+            arg_list
+      in
+      all_projections.(current_arg)
+        <- Some
+             [ first_component_of_optimized_int32x2_unboxed_product
+                 (must_be_singleton args.(n1));
+               second_component_of_optimized_int32x2_unboxed_product
+                 (must_be_singleton args.(n2)) ];
       find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
     | (n, _layout) :: numbered_sorted_layouts ->
-      assert (n >= 0 && n < num_projections);
-      all_projections.(n)
+      assert (n >= 0 && n < num_args);
+      all_projections.(current_arg)
         <- Some
              (List.map
                 (fun arg : H.expr_primitive -> Simple arg)
@@ -1049,7 +1051,7 @@ let projections_of_optimized_unboxed_product layouts
       find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
   in
   find_mappings numbered_sorted_layouts ~current_arg:0;
-  for i = 0 to num_projections - 1 do
+  for i = 0 to num_args - 1 do
     if Option.is_none all_projections.(i)
     then
       Misc.fatal_errorf
