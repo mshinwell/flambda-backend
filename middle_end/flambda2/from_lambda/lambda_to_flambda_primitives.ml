@@ -949,13 +949,19 @@ let rec args_of_optimized_unboxed_product0
     :: (Punboxed_int Pint32, [arg1])
     :: layouts_and_args ->
     [ Binary
-        ( Int_arith (Naked_int32, Or),
-          Simple arg0,
+        ( Int_arith (Naked_int64, Or),
+          Prim
+            (Unary
+               (Num_conv { src = Naked_int32; dst = Naked_int64 }, Simple arg0)),
           Prim
             (Binary
-               ( Int_shift (Naked_int32, Lsl),
-                 Simple arg1,
-                 Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) ) ]
+               ( Int_shift (Naked_int64, Lsl),
+                 Prim
+                   (Unary
+                      ( Num_conv { src = Naked_int32; dst = Naked_int64 },
+                        Simple arg1 )),
+                 Simple (Simple.untagged_const_int (Targetint_31_63.of_int 32))
+               )) ) ]
     :: args_of_optimized_unboxed_product0 layouts_and_args
   | (Punboxed_int Pint32, _) :: (Punboxed_int Pint32, _) :: _ -> assert false
   | [] -> []
@@ -973,14 +979,14 @@ let args_of_optimized_unboxed_product (layouts : L.layout list)
 let first_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
     =
   Binary
-    ( Int_arith (Naked_int32, And),
+    ( Int_arith (Naked_int64, And),
       Simple arg,
       Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL)) )
 
 let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
     =
   Binary
-    ( Int_shift (Naked_int32, Asr),
+    ( Int_shift (Naked_int64, Asr),
       Simple arg,
       Simple (Simple.const_int (Targetint_31_63.of_int 32)) )
 
