@@ -984,8 +984,8 @@ let first_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
         (Binary
            ( Int_arith (Naked_int64, And),
              Simple arg,
-             Simple (Simple.const_int (Targetint_31_63.of_int64 0xffff_ffffL))
-           )) )
+             Simple (Simple.const (Reg_width_const.naked_int64 0xffff_ffffL)) ))
+    )
 
 let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
     =
@@ -995,25 +995,23 @@ let second_component_of_optimized_int32x2_unboxed_product arg : H.expr_primitive
         (Binary
            ( Int_shift (Naked_int64, Asr),
              Simple arg,
-             Simple (Simple.const_int (Targetint_31_63.of_int 32)) )) )
+             Simple (Simple.untagged_const_int (Targetint_31_63.of_int 32)) ))
+    )
 
 let projections_of_optimized_unboxed_product layouts
-    ~(args : Simple.t list list) : H.expr_primitive list list =
+    ~(args : Simple.t list list) : H.expr_primitive list =
+  let args = List.hd args in
   Format.eprintf "Generating projections for layouts (%a), args (%a)"
     (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout)
-    layouts
-    (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
-         Format.fprintf ppf "@[<hov 1>(%a)@]"
-           (Format.pp_print_list ~pp_sep:Format.pp_print_space Simple.print)
-           args))
-    args;
+    layouts Simple.List.print args;
   let numbered_sorted_layouts =
     List.combine (List.init (List.length layouts) Fun.id) layouts
     |> sort_layouts_for_optimized_unboxed_product'
   in
+  let num_unoptimized_args = List.length numbered_sorted_layouts in
   let args = Array.of_list args in
   let num_args = Array.length args in
-  let all_projections = Array.init num_args (fun _ -> None) in
+  let all_projections = Array.init num_unoptimized_args (fun _ -> None) in
   let rec find_mappings (numbered_sorted_layouts : (int * L.layout) list)
       ~current_arg =
     Format.eprintf "current_arg=%d\n%!" current_arg;
@@ -1025,44 +1023,35 @@ let projections_of_optimized_unboxed_product layouts
     | (n1, Punboxed_int Pint32)
       :: (n2, Punboxed_int Pint32)
       :: numbered_sorted_layouts ->
-      assert (n1 >= 0 && n1 < num_args);
-      assert (n2 >= 0 && n2 < num_args);
-      let must_be_singleton arg_list =
-        match arg_list with
-        | [arg] -> arg
-        | [] | _ :: _ ->
-          Misc.fatal_errorf "Expected singleton: (%a)" Simple.List.print
-            arg_list
-      in
-      all_projections.(current_arg)
+      Format.eprintf "n1=%d, n2=%d, num_args=%d, num_unopt_args=%d\n%!" n1 n2
+        num_args num_unoptimized_args;
+      assert (n1 >= 0 && n1 < num_unoptimized_args);
+      assert (n2 >= 0 && n2 < num_unoptimized_args);
+      (* let must_be_singleton arg_list = match arg_list with | [arg] -> arg |
+         [] | _ :: _ -> Misc.fatal_errorf "Expected singleton: (%a)"
+         Simple.List.print arg_list in *)
+      all_projections.(n1)
         <- Some
-             [ first_component_of_optimized_int32x2_unboxed_product
-                 (must_be_singleton args.(n1));
-               second_component_of_optimized_int32x2_unboxed_product
-                 (must_be_singleton args.(n2)) ];
-      find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
-    | (n, _layout) :: numbered_sorted_layouts ->
-      assert (n >= 0 && n < num_args);
-      all_projections.(current_arg)
-        <- Some
-             (List.map
-                (fun arg : H.expr_primitive -> Simple arg)
+             (first_component_of_optimized_int32x2_unboxed_product
                 args.(current_arg));
+      all_projections.(n2)
+        <- Some
+             (second_component_of_optimized_int32x2_unboxed_product
+                args.(current_arg));
+      find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 2)
+    | (n, _layout) :: numbered_sorted_layouts ->
+      assert (n >= 0 && n < num_unoptimized_args);
+      all_projections.(n) <- Some (Simple args.(current_arg) : H.expr_primitive);
       find_mappings numbered_sorted_layouts ~current_arg:(current_arg + 1)
   in
   find_mappings numbered_sorted_layouts ~current_arg:0;
-  for i = 0 to num_args - 1 do
+  for i = 0 to num_unoptimized_args - 1 do
     if Option.is_none all_projections.(i)
     then
       Misc.fatal_errorf
         "No projection generated for index %d, layouts (%a), args (%a)" i
         (Format.pp_print_list ~pp_sep:Format.pp_print_space Printlambda.layout)
-        layouts
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
-             Format.fprintf ppf "@[<hov 1>(%a)@]"
-               (Format.pp_print_list ~pp_sep:Format.pp_print_space Simple.print)
-               args))
-        (Array.to_list args)
+        layouts Simple.List.print (Array.to_list args)
   done;
   Array.to_list all_projections |> List.map Option.get
 
@@ -1126,15 +1115,11 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       projections_of_optimized_unboxed_product layouts ~args:orig_args
     in
     Format.eprintf "New orig_args = %a\n%!"
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space (fun ppf args ->
-           Format.fprintf ppf "(%a)"
-             (Format.pp_print_list ~pp_sep:Format.pp_print_space
-                H.print_expr_primitive)
-             args))
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space H.print_expr_primitive)
       orig_args;
     Format.eprintf "num_fields_prior = %d, num_projected = %d\n%!"
       num_fields_prior_to_projected_fields num_projected_fields;
-    List.hd orig_args |> Array.of_list
+    orig_args |> Array.of_list
     |> (fun a ->
          Array.sub a num_fields_prior_to_projected_fields num_projected_fields)
     |> Array.to_list
