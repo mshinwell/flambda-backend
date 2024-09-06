@@ -1574,7 +1574,10 @@ let call_cached_method obj tag cache pos args args_type result (apos, mode) dbg
 
 (* Allocation *)
 
-let memory_chunk_size_in_words_for_mixed_block = function
+let memory_chunk_size_in_words_for_mixed_block chunk =
+  (* CR layouts 5.1: When we pack int32s/float32s more efficiently, this code
+     will need to change. *)
+  match chunk with
   | (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed) as
     memory_chunk ->
     Misc.fatal_errorf
@@ -1699,7 +1702,37 @@ let make_closure_alloc ~mode dbg ~tag args args_memory_chunks =
   make_alloc_generic ~block_kind:Regular_block ~mode dbg tag size args
     args_memory_chunks
 
-let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size args args_memory_chunks =
+module Flat_suffix_element = struct
+  type t =
+    | Tagged_immediate
+    | Naked_float
+    | Naked_float32
+    | Naked_int32
+    | Naked_int64_or_nativeint
+end
+
+let make_mixed_alloc ~mode dbg ~tag ~value_prefix_size
+    ~(flat_suffix : Flat_suffix_element.t array) args =
+  if List.compare_length_with args (value_prefix_size + Array.length flat_suffix)
+     <> 0
+  then
+    Misc.fatal_errorf
+      "make_mixed_alloc: value_prefix_size %d, flat_suffix length %d, args \
+       length %d:@ %a"
+      value_prefix_size (Array.length flat_suffix) (List.length args)
+      Debuginfo.print_compact dbg;
+  let memory_chunk idx _expr =
+    if idx < value_prefix_size
+    then Word_val
+    else
+      match flat_suffix.(idx - value_prefix_size) with
+      | Tagged_immediate -> Word_int
+      | Naked_float -> Double
+      | Naked_float32 -> Single { reg = Float32 }
+      | Naked_int32 -> Thirtytwo_signed
+      | Naked_int64_or_nativeint -> Word_int
+  in
+  let args_memory_chunks = List.mapi memory_chunk args in
   let size = mixed_block_size args_memory_chunks in
   make_alloc_generic
     ~block_kind:(Mixed_block { scannable_prefix = value_prefix_size })
