@@ -4192,7 +4192,7 @@ let dls_get ~dbg = Cop (Cdls_get, [], dbg)
 let perform ~dbg eff =
   let cont =
     make_alloc dbg ~tag:Runtimetags.cont_tag
-      [int_const dbg 0]
+      [int_const dbg 0; int_const dbg 0]
       ~mode:Lambda.alloc_heap
   in
   (* Rc_normal means "allow tailcalls". Preventing them here by using Rc_nontail
