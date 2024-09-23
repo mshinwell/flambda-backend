@@ -1071,13 +1071,18 @@ let simplify_mutable_block_load _access_kind ~original_prim dacc ~original_term
       ~original_term
 
 let simplify_array_load (array_kind : P.Array_kind.t)
-    (accessor_width : P.array_accessor_width) mutability dacc ~original_term:_
-    dbg ~arg1:array ~arg1_ty:array_ty ~arg2:index ~arg2_ty:index_ty ~result_var
-    =
+    (accessor_width : P.Array_load_kind.t) mutability dacc ~original_term:_ dbg
+    ~arg1:array ~arg1_ty:array_ty ~arg2:index ~arg2_ty:index_ty ~result_var =
   let result_kind =
-    match accessor_width with
-    | Scalar -> P.Array_kind.element_kind array_kind |> K.With_subkind.kind
-    | Vec128 -> K.naked_vec128
+    match array_load_kind with
+    | Immediates -> (* CR mshinwell: use the subkind *) K.value
+    | Values -> K.value
+    | Naked_floats -> K.naked_float
+    | Naked_float32s -> K.naked_float32
+    | Naked_int32s -> K.naked_int32
+    | Naked_int64s -> K.naked_int64
+    | Naked_nativeints -> K.naked_nativeint
+    | Naked_vec128s -> K.naked_vec128
   in
   let array_kind =
     Simplify_common.specialise_array_kind dacc array_kind ~array_ty
