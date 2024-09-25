@@ -462,6 +462,24 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
       Primitive
         ((Parraysetu (gen_array_set_kind (get_first_arg_mode ()), Ptagged_int_index)),
         3)
+    | "%unboxed_int64_array_safe_get_reinterpret" ->
+      (* For the [int64# array] reinterpret primitives, the kinds are filled
+         in during [specialize_primitive], below. *)
+      Primitive
+        (Parrayrefs (Punboxedint64array_reinterpret_ref [],
+          Ptagged_int_index), 2)
+    | "%unboxed_int64_array_safe_set_reinterpret" ->
+      Primitive
+        ((Parraysets (Punboxedint64array_reinterpret_set [],
+          Ptagged_int_index)), 3)
+    | "%unboxed_int64_array_unsafe_get_reinterpret" ->
+      Primitive
+        (Parrayrefu (Punboxedint64array_reinterpret_ref [],
+          Ptagged_int_index), 2)
+    | "%unboxed_int64_array_unsafe_set_reinterpret" ->
+      Primitive
+        ((Parraysetu (Punboxedint64array_reinterpret_set [],
+          Ptagged_int_index)), 3)
     | "%array_safe_get_indexed_by_int64#" ->
       Primitive
         ((Parrayrefs (gen_array_ref_kind mode, Punboxed_int_index Pint64)), 2)
@@ -930,6 +948,11 @@ let glb_array_ref_type loc t1 t2 =
   | Punboxedfloatarray_ref _, _
   | _, Punboxedfloatarray _ ->
     Misc.fatal_error "unexpected array kind in glb"
+  | Punboxedint64array_reinterpret_ref kinds, Punboxedintarray Pint64 ->
+    Punboxedint64array_reinterpret_ref kinds
+  | Punboxedint64array_reinterpret_ref _, _ ->
+    Misc.fatal_error "Punboxedint64array_reinterpret_ref is only compatible \
+      with Punboxedintarray Pint64 arrays"
   | (Pgenarray_ref _ | Punboxedintarray_ref Pint32), Punboxedintarray Pint32 ->
     Punboxedintarray_ref Pint32
   | (Pgenarray_ref _ | Punboxedintarray_ref Pint64), Punboxedintarray Pint64 ->
@@ -1003,6 +1026,11 @@ let glb_array_set_type loc t1 t2 =
   | Punboxedfloatarray_set _, _
   | _, Punboxedfloatarray _ ->
     Misc.fatal_error "unexpected array kind in glb"
+  | Punboxedint64array_reinterpret_set kinds, Punboxedintarray Pint64 ->
+    Punboxedint64array_reinterpret_set kinds
+  | Punboxedint64array_reinterpret_set _, _ ->
+    Misc.fatal_error "Punboxedint64array_reinterpret_set is only compatible \
+      with Punboxedintarray Pint64 arrays"
   | (Pgenarray_set _ | Punboxedintarray_set Pint32), Punboxedintarray Pint32 ->
     Punboxedintarray_set Pint32
   | (Pgenarray_set _ | Punboxedintarray_set Pint64), Punboxedintarray Pint64 ->
@@ -1058,17 +1086,49 @@ let glb_array_set_type loc t1 t2 =
   (* Pfloatarray is a minimum *)
   | Pfloatarray_set, Pfloatarray -> Pfloatarray_set
 
+let unboxedint64array_reinterpret_kinds env ty loc what
+  : Lambda.ignorable_product_element_kind list =
+  let[@inline] fail () =
+    Misc.fatal_errorf "Expected unboxed product ignorable kind for \
+        int64# array reinterpret op Parray%s"
+      what
+  in
+  let ignorable_kind =
+    match Ctype.type_legacy_sort ~why:Array_element env ty with
+    | Ok sort ->
+      Typeopt.sort_to_ignorable_product_element_kind
+        ~must_be_64_bit:true
+        (* Only 64-bit-wide sorts (and unboxed products of) may be used
+           for the int64# array reinterpret ops. *)
+        (Debuginfo.Scoped_location.to_location loc)
+        (Jkind.Sort.default_to_value_and_get sort)
+    | Error _ -> fail ()
+  in
+  match ignorable_kind with
+  | Pproduct_ignorable ignorable_kinds -> ignorable_kinds
+  | Pint_ignorable
+  | Punboxedfloat_ignorable _
+  | Punboxedint_ignorable _ -> fail ()
+
 (* Specialize a primitive from available type information. *)
 (* CR layouts v7: This function had a loc argument added just to support the void
-   check error message.  Take it out when we remove that. *)
+   check error message.  Take it out when we remove that.
+   mshinwell: [loc] is now used for the int64# array reinterpret ops.
+*)
 let specialize_primitive env loc ty ~has_constant_constructor prim =
-  let param_tys =
+  let param_tys, result_ty =
     match is_function_type env ty with
-    | None -> []
+    | None -> [], None
     | Some (p1, rhs) ->
       match is_function_type env rhs with
-      | None -> [p1]
-      | Some (p2, _) -> [p1;p2]
+      | None -> [p1], Some rhs
+      | Some (p2, rhs) ->
+        match is_function_type env rhs with
+        | None -> [p1;p2], Some rhs
+        | Some (p3, rhs) ->
+          match is_function_type env rhs with
+          | None -> [p1;p2;p3], Some rhs
+          | Some (p4, rhs) -> [p1;p2;p3;p4], Some rhs
   in
   match prim, param_tys with
   | Primitive (Psetfield(n, Pointer, init), arity), [_; p2] -> begin
@@ -1093,6 +1153,71 @@ let specialize_primitive env loc ty ~has_constant_constructor prim =
       if t = array_type then None
       else Some (Primitive (Parraylength array_type, arity))
     end
+  | Primitive
+      (Parrayrefs (Punboxedint64array_reinterpret_ref [], index_kind),
+        2),
+      [_array_ty; _index_ty] ->
+    let result_ty =
+      match result_ty with
+      | Some result_ty -> result_ty
+      | None ->
+        Misc.fatal_error "No result type for \
+          Parrayrefs Punboxedint64array_reinterpret_ref"
+    in
+    let kinds =
+      unboxedint64array_reinterpret_kinds env result_ty loc "refs"
+    in
+    Some (Primitive
+      (Parrayrefs (Punboxedint64array_reinterpret_ref kinds, index_kind),
+        2))
+  | Primitive
+      (Parraysets (Punboxedint64array_reinterpret_set [], index_kind),
+        3),
+      [_array_ty; _index_ty; new_value_ty] ->
+    let kinds =
+      unboxedint64array_reinterpret_kinds env new_value_ty loc "sets"
+    in
+    Some (Primitive
+      (Parraysets (Punboxedint64array_reinterpret_set kinds, index_kind),
+        3))
+  | Primitive
+      (Parrayrefu (Punboxedint64array_reinterpret_ref [], index_kind),
+        2),
+      [_array_ty; _index_ty] ->
+    let result_ty =
+      match result_ty with
+      | Some result_ty -> result_ty
+      | None ->
+        Misc.fatal_error "No result type for \
+          Parrayrefs Punboxedint64array_reinterpret_ref"
+    in
+    let kinds =
+      unboxedint64array_reinterpret_kinds env result_ty loc "refu"
+    in
+    Some (Primitive
+      (Parrayrefu (Punboxedint64array_reinterpret_ref kinds, index_kind),
+        2))
+  | Primitive
+      (Parraysetu (Punboxedint64array_reinterpret_set [], index_kind),
+        3),
+      [_array_ty; _index_ty; new_value_ty] ->
+    let kinds =
+      unboxedint64array_reinterpret_kinds env new_value_ty loc "setu"
+    in
+    Some (Primitive
+      (Parraysetu (Punboxedint64array_reinterpret_set kinds, index_kind),
+        3))
+  | Primitive
+      ((Parrayrefs (Punboxedint64array_reinterpret_ref _, _)
+       | Parraysets (Punboxedint64array_reinterpret_set _, _)
+       | Parrayrefu (Punboxedint64array_reinterpret_ref _, _)
+       | Parraysetu (Punboxedint64array_reinterpret_set _, _)) as prim,
+      arity), param_tys ->
+    Misc.fatal_errorf "Illegal form for unboxed int64# array reinterpret op:\
+        @ %a@ arity=%d@ num_param_tys=%d"
+      Printlambda.primitive prim
+      arity
+      (List.length param_tys)
   | Primitive (Parrayrefu (rt, index_kind), arity), p1 :: _ -> begin
       let loc = to_location loc in
       let array_ref_type =

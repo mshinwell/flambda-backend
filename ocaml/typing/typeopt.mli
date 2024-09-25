@@ -36,6 +36,10 @@ val array_kind :
 val array_pattern_kind :
   Typedtree.pattern -> Jkind.Sort.t -> Lambda.array_kind
 
+val sort_to_ignorable_product_element_kind :
+  must_be_64_bit:bool ->
+  Warnings.loc -> Jkind.Sort.Const.t -> Lambda.ignorable_product_element_kind
+
 (* If [kind] or [layout] is unknown, attempt to specialize it by examining the
    type parameters of the bigarray. If [kind] or [length] is not unknown, returns
    it unmodified. *)

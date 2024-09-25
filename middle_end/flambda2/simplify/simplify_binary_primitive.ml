@@ -1071,8 +1071,11 @@ let simplify_mutable_block_load _access_kind ~original_prim dacc ~original_term
       ~original_term
 
 let simplify_array_load (array_kind : P.Array_kind.t)
-    (accessor_width : P.Array_load_kind.t) mutability dacc ~original_term:_ dbg
+    (array_load_kind : P.Array_load_kind.t) mutability dacc ~original_term:_ dbg
     ~arg1:array ~arg1_ty:array_ty ~arg2:index ~arg2_ty:index_ty ~result_var =
+  (* CR mshinwell: because of the int64# array unboxed product load+reinterpret
+     operation, we may need to propagate more information if we want to check
+     kinds here *)
   let result_kind =
     match array_load_kind with
     | Immediates -> (* CR mshinwell: use the subkind *) K.value
@@ -1094,14 +1097,8 @@ let simplify_array_load (array_kind : P.Array_kind.t)
     let dacc = DA.add_variable dacc result_var ty in
     SPR.create_invalid dacc
   | Ok array_kind -> (
-    let result_kind' =
-      match accessor_width with
-      | Scalar -> P.Array_kind.element_kind array_kind |> K.With_subkind.kind
-      | Vec128 -> K.naked_vec128
-    in
-    assert (K.equal result_kind result_kind');
     let prim : P.t =
-      Binary (Array_load (array_kind, accessor_width, mutability), array, index)
+      Binary (Array_load (array_kind, array_load_kind, mutability), array, index)
     in
     let[@inline] return_given_type ty ~try_reify =
       let named = Named.create_prim prim dbg in
@@ -1121,7 +1118,9 @@ let simplify_array_load (array_kind : P.Array_kind.t)
       | Unknown | Bottom -> contents_unknown ()
       | Ok elt_kind -> (
         if not (K.equal (K.With_subkind.kind elt_kind) result_kind)
-        then contents_unknown ()
+        then
+          (* CR mshinwell: I think this should try to reinterpret *)
+          contents_unknown ()
         else
           match
             T.prove_equals_tagged_immediates (DA.typing_env dacc) index_ty

@@ -186,20 +186,27 @@ and sort_to_scannable_product_element_kind loc (s : Jkind.Sort.Const.t) =
     raise (Error (loc, Unsupported_sort c))
   | Product sorts -> Pproduct_scannable (scannable_product_array_kind loc sorts)
 
-let rec ignorable_product_array_kind loc sorts =
-  List.map (sort_to_ignorable_product_element_kind loc) sorts
+let rec ignorable_product_array_kind ~must_be_64_bit loc sorts =
+  List.map (sort_to_ignorable_product_element_kind ~must_be_64_bit loc)
+    sorts
 
-and sort_to_ignorable_product_element_kind loc (s : Jkind.Sort.Const.t) =
+and sort_to_ignorable_product_element_kind ~must_be_64_bit loc
+    (s : Jkind.Sort.Const.t) =
+  let[@inline] only_64_bit sort kind =
+    if must_be_64_bit then raise (Error (loc, Unsupported_sort sort))
+    else kind
+  in
   match s with
   | Base Value -> Pint_ignorable
   | Base Float64 -> Punboxedfloat_ignorable Pfloat64
-  | Base Float32 -> Punboxedfloat_ignorable Pfloat32
-  | Base Bits32 -> Punboxedint_ignorable Pint32
+  | Base Float32 -> only_64_bit s (Punboxedfloat_ignorable Pfloat32)
+  | Base Bits32 -> only_64_bit s (Punboxedint_ignorable Pint32)
   | Base Bits64 -> Punboxedint_ignorable Pint64
   | Base Word -> Punboxedint_ignorable Pnativeint
   | Base Void as c ->
     raise (Error (loc, Unsupported_sort c))
-  | Product sorts -> Pproduct_ignorable (ignorable_product_array_kind loc sorts)
+  | Product sorts ->
+    Pproduct_ignorable (ignorable_product_array_kind ~must_be_64_bit loc sorts)
 
 let array_kind_of_elt ~elt_sort env loc ty =
   let elt_sort =
@@ -218,7 +225,8 @@ let array_kind_of_elt ~elt_sort env loc ty =
   | Product sorts ->
     (* XXX need scrape_ty elt_ty? *)
     if is_always_gc_ignorable env ty then
-      Pgcignorableproductarray (ignorable_product_array_kind loc sorts)
+      Pgcignorableproductarray (ignorable_product_array_kind
+        ~must_be_64_bit:false loc sorts)
     else
       Pgcscannableproductarray (scannable_product_array_kind loc sorts)
 

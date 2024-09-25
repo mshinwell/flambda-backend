@@ -559,6 +559,29 @@ let prim_has_valid_reprs ~loc prim =
     | "%apply" ->
       check [is (Same_as_ocaml_repr C.value); any; any]
 
+    | "%unboxed_int64_array_safe_get_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any]
+    | "%unboxed_int64_array_safe_set_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any;
+        is (Same_as_ocaml_repr C.value)]
+    | "%unboxed_int64_array_unsafe_get_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any]
+    | "%unboxed_int64_array_unsafe_set_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any;
+        is (Same_as_ocaml_repr C.value)]
+
     (* This doesn't prevent
 
        {|
@@ -573,6 +596,7 @@ let prim_has_valid_reprs ~loc prim =
             "%array_safe_get"
        |}
     *)
+
     | "%array_safe_get" ->
       check [
         is (Same_as_ocaml_repr C.value);

@@ -20,6 +20,9 @@ let simplify_array_set (array_kind : P.Array_kind.t)
     (array_set_kind : P.Array_set_kind.t) dacc ~original_term dbg ~arg1:array
     ~arg1_ty:array_ty ~arg2:index ~arg2_ty:_ ~arg3:new_value ~arg3_ty:_
     ~result_var =
+  (* CR mshinwell: because of the int64# array unboxed product load+reinterpret
+     operation, we may need to propagate more information if we want to check
+     kinds here *)
   let orig_array_kind = array_kind in
   let array_kind =
     Simplify_common.specialise_array_kind dacc array_kind ~array_ty
@@ -27,12 +30,12 @@ let simplify_array_set (array_kind : P.Array_kind.t)
   match array_kind with
   | Bottom -> SPR.create_invalid dacc
   | Ok array_kind ->
-    let array_set_kind : P.Array_set_kind.t =
+    let () =
       match array_kind with
-      | Immediates -> Immediates
+      | Immediates -> ()
       | Values -> (
         match array_set_kind with
-        | Values init_or_assign -> Values init_or_assign
+        | Values _init_or_assign -> ()
         | Immediates
         (* We don't expect specialisation regressions from Immediates to
            Values. *)
@@ -43,12 +46,9 @@ let simplify_array_set (array_kind : P.Array_kind.t)
              array set kind %a (original array kind %a):@ %a"
             P.Array_kind.print array_kind P.Array_set_kind.print array_set_kind
             P.Array_kind.print orig_array_kind Named.print original_term)
-      | Naked_floats -> Naked_floats
-      | Naked_float32s -> Naked_float32s
-      | Naked_int32s -> Naked_int32s
-      | Naked_int64s -> Naked_int64s
-      | Naked_nativeints -> Naked_nativeints
-      | Unboxed_product _ -> array_set_kind
+      | Naked_floats | Naked_float32s | Naked_int32s | Naked_int64s
+      | Naked_nativeints | Unboxed_product _ ->
+        ()
     in
     let named =
       Named.create_prim
