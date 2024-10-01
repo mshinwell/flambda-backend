@@ -1,3 +1,5 @@
+[@@@ocaml.flambda_o3]
+
 (* Length *)
 
 external[@layout_poly] len : ('a : any) . 'a array -> int = "%array_length"
@@ -75,6 +77,9 @@ let reinterpret_safe_set x =
 external[@layout_poly] make_unboxed_tuple_vect : ('a : any) .
   int -> 'a -> 'a array = "%make_unboxed_tuple_vect"
 
+(* ... with the temporary used to communicate to the C runtime stub
+   being constant, and statically allocated *)
+
 let make_unboxed_tuple_vect_scannable () =
   make_unboxed_tuple_vect 42 #(1, 2.0, "3")
 
@@ -83,3 +88,27 @@ let make_unboxed_tuple_vect_ignorable () =
 
 let _ = make_unboxed_tuple_vect_scannable ()
 let _ = make_unboxed_tuple_vect_ignorable ()
+
+(* ... with the temporary used to communicate to the C runtime stub
+   being inconstant, and statically allocated *)
+
+let[@inline] make_unboxed_tuple_vect_scannable_inconstant () =
+  make_unboxed_tuple_vect 42 #(Sys.opaque_identity 1, 2.0, "3")
+
+let[@inline] make_unboxed_tuple_vect_ignorable_inconstant () =
+  make_unboxed_tuple_vect 42 #(#1.0, (Random.int [@inlined never]) 42, #3L, true)
+
+let _ = make_unboxed_tuple_vect_scannable_inconstant ()
+let _ = make_unboxed_tuple_vect_ignorable_inconstant ()
+
+(* ... with the temporary used to communicate to the C runtime stub
+   being dynamically allocated on the local stack. *)
+
+let[@inline never] make_unboxed_tuple_vect_scannable_dynamic () =
+  make_unboxed_tuple_vect 42 #(Sys.opaque_identity 1, 2.0, "3")
+
+let[@inline never] make_unboxed_tuple_vect_ignorable_dynamic () =
+  make_unboxed_tuple_vect 42 #(#1.0, (Random.int [@inlined never]) 42, #3L, true)
+
+let _ = make_unboxed_tuple_vect_scannable_dynamic ()
+let _ = make_unboxed_tuple_vect_ignorable_dynamic ()

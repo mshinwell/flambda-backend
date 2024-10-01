@@ -92,6 +92,11 @@ val create_immutable_int64_array :
 val create_immutable_nativeint_array :
   Are_rebuilding_terms.t -> Targetint_32_64.t Or_variable.t list -> t
 
+val create_immutable_non_scannable_unboxed_product_array :
+  Are_rebuilding_terms.t ->
+  (Simple.With_debuginfo.t * Flambda_kind.With_subkind.t) list ->
+  t
+
 val create_immutable_value_array :
   Are_rebuilding_terms.t -> Simple.With_debuginfo.t list -> t
 

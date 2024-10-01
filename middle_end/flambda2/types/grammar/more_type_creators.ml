@@ -346,33 +346,34 @@ let rec unknown_with_subkind ?(alloc_mode = Alloc_mode.For_types.unknown ())
       ~fields:(List.init num_fields (fun _ -> TG.any_naked_float))
       alloc_mode
   | Float_array ->
-    TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.naked_float)
+    TG.mutable_array ~element_kinds:(Ok [Flambda_kind.With_subkind.naked_float])
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_float32_array ->
-    TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.naked_float32)
+    TG.mutable_array
+      ~element_kinds:(Ok [Flambda_kind.With_subkind.naked_float32])
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_int32_array ->
-    TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.naked_int32)
+    TG.mutable_array ~element_kinds:(Ok [Flambda_kind.With_subkind.naked_int32])
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_int64_array ->
-    TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.naked_int64)
+    TG.mutable_array ~element_kinds:(Ok [Flambda_kind.With_subkind.naked_int64])
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_nativeint_array ->
     TG.mutable_array
-      ~element_kind:(Ok Flambda_kind.With_subkind.naked_nativeint)
+      ~element_kinds:(Ok [Flambda_kind.With_subkind.naked_nativeint])
       ~length:any_tagged_immediate alloc_mode
   | Unboxed_product_array ->
-    TG.mutable_array ~element_kind:Unknown ~length:any_tagged_immediate
+    TG.mutable_array ~element_kinds:Unknown ~length:any_tagged_immediate
       alloc_mode
   | Immediate_array ->
     TG.mutable_array
-      ~element_kind:(Ok Flambda_kind.With_subkind.tagged_immediate)
+      ~element_kinds:(Ok [Flambda_kind.With_subkind.tagged_immediate])
       ~length:any_tagged_immediate alloc_mode
   | Value_array ->
-    TG.mutable_array ~element_kind:(Ok Flambda_kind.With_subkind.any_value)
+    TG.mutable_array ~element_kinds:(Ok [Flambda_kind.With_subkind.any_value])
       ~length:any_tagged_immediate alloc_mode
   | Generic_array ->
-    TG.mutable_array ~element_kind:Unknown ~length:any_tagged_immediate
+    TG.mutable_array ~element_kinds:Unknown ~length:any_tagged_immediate
       alloc_mode
 
 let unknown_types_from_arity arity =

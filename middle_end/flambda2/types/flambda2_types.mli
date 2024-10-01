@@ -515,19 +515,19 @@ val closure_with_at_least_these_value_slots :
   flambda_type
 
 val array_of_length :
-  element_kind:Flambda_kind.With_subkind.t Or_unknown_or_bottom.t ->
+  element_kinds:Flambda_kind.With_subkind.t list Or_unknown_or_bottom.t ->
   length:flambda_type ->
   Alloc_mode.For_types.t ->
   flambda_type
 
 val mutable_array :
-  element_kind:Flambda_kind.With_subkind.t Or_unknown_or_bottom.t ->
+  element_kinds:Flambda_kind.With_subkind.t list Or_unknown_or_bottom.t ->
   length:flambda_type ->
   Alloc_mode.For_types.t ->
   flambda_type
 
 val immutable_array :
-  element_kind:Flambda_kind.With_subkind.t Or_unknown_or_bottom.t ->
+  element_kinds:Flambda_kind.With_subkind.t list Or_unknown_or_bottom.t ->
   fields:flambda_type list ->
   Alloc_mode.For_types.t ->
   flambda_type
@@ -655,7 +655,7 @@ val prove_is_immediates_array : Typing_env.t -> t -> unit proof_of_property
 val meet_is_immutable_array :
   Typing_env.t ->
   t ->
-  (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
+  (Flambda_kind.With_subkind.t list Or_unknown_or_bottom.t
   * t array
   * Alloc_mode.For_types.t)
   meet_shortcut
@@ -663,7 +663,7 @@ val meet_is_immutable_array :
 val prove_is_immutable_array :
   Typing_env.t ->
   t ->
-  (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
+  (Flambda_kind.With_subkind.t list Or_unknown_or_bottom.t
   * t array
   * Alloc_mode.For_types.t)
   proof_of_property
@@ -776,6 +776,8 @@ type to_lift = private
   | Immutable_int32_array of { fields : Int32.t list }
   | Immutable_int64_array of { fields : Int64.t list }
   | Immutable_nativeint_array of { fields : Targetint_32_64.t list }
+  | Immutable_non_scannable_unboxed_product_array of
+      { fields : (Simple.t * Flambda_kind.With_subkind.t) list }
   | Immutable_value_array of { fields : Simple.t list }
   | Empty_array of Empty_array_kind.t
 

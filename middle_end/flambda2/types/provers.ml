@@ -567,21 +567,24 @@ let meet_is_naked_number_array env t naked_number_kind : bool meet_shortcut =
   match expand_head env t with
   | Value Unknown -> Need_meet
   | Value Bottom -> Invalid
-  | Value (Ok (Array { element_kind = Unknown; _ })) -> Need_meet
-  | Value (Ok (Array { element_kind = Bottom; _ })) ->
+  | Value (Ok (Array { element_kinds = Unknown; _ })) -> Need_meet
+  | Value (Ok (Array { element_kinds = Bottom; _ })) ->
     (* Empty array case. We cannot return Invalid, but any other result is
        correct. We arbitrarily pick [false], as this is what we would get if we
        looked at the tag at runtime. *)
     Known_result false
-  | Value (Ok (Array { element_kind = Ok element_kind; _ })) -> (
-    match K.With_subkind.kind element_kind with
-    | Value -> Known_result false
-    | Naked_number naked_number_kind'
-      when K.Naked_number_kind.equal naked_number_kind naked_number_kind' ->
-      Known_result true
-    | Naked_number _ | Region | Rec_info ->
-      Misc.fatal_errorf "Wrong element kind for array: %a" K.With_subkind.print
-        element_kind)
+  | Value (Ok (Array { element_kinds = Ok element_kinds; _ })) -> (
+    match element_kinds with
+    | [] | _ :: _ :: _ -> Known_result false
+    | [element_kind] -> (
+      match K.With_subkind.kind element_kind with
+      | Value -> Known_result false
+      | Naked_number naked_number_kind'
+        when K.Naked_number_kind.equal naked_number_kind naked_number_kind' ->
+        Known_result true
+      | Naked_number _ | Region | Rec_info ->
+        Misc.fatal_errorf "Wrong element kind for array: %a"
+          K.With_subkind.print element_kind))
   | Value
       (Ok
         ( Boxed_float _ | Boxed_float32 _ | Boxed_int32 _ | Boxed_int64 _
@@ -598,20 +601,23 @@ let meet_is_naked_number_array env t naked_number_kind : bool meet_shortcut =
 let prove_is_immediates_array env t : unit proof_of_property =
   match expand_head env t with
   | Value (Unknown | Bottom) -> Unknown
-  | Value (Ok (Array { element_kind = Unknown; _ })) -> Unknown
-  | Value (Ok (Array { element_kind = Bottom; _ })) ->
+  | Value (Ok (Array { element_kinds = Unknown; _ })) -> Unknown
+  | Value (Ok (Array { element_kinds = Bottom; _ })) ->
     (* Empty array case. We cannot return Invalid, but it's correct to state
        that any value contained in this array must be an immediate. *)
     Proved ()
-  | Value (Ok (Array { element_kind = Ok element_kind; _ })) -> (
-    match K.With_subkind.subkind element_kind with
-    | Tagged_immediate -> Proved ()
-    | Anything | Boxed_float | Boxed_float32 | Boxed_int32 | Boxed_int64
-    | Boxed_nativeint | Boxed_vec128 | Variant _ | Float_block _ | Float_array
-    | Immediate_array | Value_array | Generic_array | Unboxed_float32_array
-    | Unboxed_int32_array | Unboxed_int64_array | Unboxed_nativeint_array
-    | Unboxed_product_array ->
-      Unknown)
+  | Value (Ok (Array { element_kinds = Ok element_kinds; _ })) -> (
+    match element_kinds with
+    | [] | _ :: _ :: _ -> Unknown
+    | [element_kind] -> (
+      match K.With_subkind.subkind element_kind with
+      | Tagged_immediate -> Proved ()
+      | Anything | Boxed_float | Boxed_float32 | Boxed_int32 | Boxed_int64
+      | Boxed_nativeint | Boxed_vec128 | Variant _ | Float_block _ | Float_array
+      | Immediate_array | Value_array | Generic_array | Unboxed_float32_array
+      | Unboxed_int32_array | Unboxed_int64_array | Unboxed_nativeint_array
+      | Unboxed_product_array ->
+        Unknown))
   | Value
       (Ok
         ( Variant _ | Mutable_block _ | Boxed_float _ | Boxed_float32 _
@@ -661,9 +667,9 @@ let prove_is_immutable_array_generic env t : _ generic_proof =
   match expand_head env t with
   | Value Unknown -> Unknown
   | Value Bottom -> Invalid
-  | Value (Ok (Array { element_kind; length = _; contents; alloc_mode })) -> (
+  | Value (Ok (Array { element_kinds; length = _; contents; alloc_mode })) -> (
     match contents with
-    | Known (Immutable { fields }) -> Proved (element_kind, fields, alloc_mode)
+    | Known (Immutable { fields }) -> Proved (element_kinds, fields, alloc_mode)
     | Known Mutable -> Invalid
     | Unknown -> Unknown)
   | Value (Ok _)

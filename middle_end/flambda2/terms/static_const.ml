@@ -38,6 +38,8 @@ type t =
   | Immutable_int32_array of Int32.t Or_variable.t list
   | Immutable_int64_array of Int64.t Or_variable.t list
   | Immutable_nativeint_array of Targetint_32_64.t Or_variable.t list
+  | Immutable_non_scannable_unboxed_product_array of
+      (Simple.With_debuginfo.t * Flambda_kind.With_subkind.t) list
   | Immutable_value_array of Simple.With_debuginfo.t list
   | Empty_array of Empty_array_kind.t
   | Mutable_string of { initial_value : string }
@@ -85,6 +87,11 @@ let immutable_nativeint_array fields =
   match fields with
   | [] -> Empty_array Naked_nativeints
   | _ :: _ -> Immutable_nativeint_array fields
+
+let immutable_non_scannable_unboxed_product_array fields =
+  match fields with
+  | [] -> Empty_array Values_or_immediates_or_naked_floats
+  | _ :: _ -> Immutable_non_scannable_unboxed_product_array fields
 
 let immutable_value_array fields =
   match fields with
@@ -157,7 +164,7 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
         (Or_variable.print Numeric_types.Float_by_bit_pattern.print))
       fields
   | Immutable_float_array fields ->
@@ -165,7 +172,7 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
         (Or_variable.print Numeric_types.Float_by_bit_pattern.print))
       fields
   | Immutable_float32_array fields ->
@@ -173,7 +180,7 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
     (Or_variable.print Numeric_types.Float32_by_bit_pattern.print))
       fields
   | Immutable_int32_array fields ->
@@ -181,7 +188,7 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
         (Or_variable.print (fun ppf n -> Format.fprintf ppf "%ld" n)))
       fields
   | Immutable_int64_array fields ->
@@ -189,7 +196,7 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
         (Or_variable.print (fun ppf n -> Format.fprintf ppf "%Ld" n)))
       fields
   | Immutable_nativeint_array fields ->
@@ -197,9 +204,20 @@ let [@ocamlformat "disable"] print ppf t =
       Flambda_colours.static_part
       Flambda_colours.pop
       (Format.pp_print_list
-        ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
         (Or_variable.print Targetint_32_64.print))
       fields
+  | Immutable_non_scannable_unboxed_product_array fields ->
+    fprintf ppf
+      "@[<hov 1>(%tImmutable_non_scannable_unboxed_product_array%t@ \
+       @[[| %a |]@])@]"
+      Flambda_colours.static_part
+      Flambda_colours.pop
+      (Format.pp_print_list
+        ~pp_sep:(fun ppf () -> Format.fprintf ppf "@; ")
+        Simple.With_debuginfo.print)
+      (* CR mshinwell: print kinds *)
+      (List.map (fun (field, _kind) -> field) fields)
   | Immutable_value_array fields ->
     fprintf ppf "@[<hov 1>(%tImmutable_value_array%t@ (%a))@]"
       Flambda_colours.static_part
@@ -286,6 +304,10 @@ include Container_types.Make (struct
       Misc.Stdlib.List.compare
         (Or_variable.compare Targetint_32_64.compare)
         fields1 fields2
+    | ( Immutable_non_scannable_unboxed_product_array fields1,
+        Immutable_non_scannable_unboxed_product_array fields2 ) ->
+      Misc.Stdlib.List.compare Simple.With_debuginfo.compare
+        (List.map fst fields1) (List.map fst fields2)
     | Immutable_value_array fields1, Immutable_value_array fields2 ->
       Misc.Stdlib.List.compare Simple.With_debuginfo.compare fields1 fields2
     | Empty_array array_kind1, Empty_array array_kind2 ->
@@ -322,6 +344,8 @@ include Container_types.Make (struct
     | _, Immutable_int32_array _ -> 1
     | Immutable_nativeint_array _, _ -> -1
     | _, Immutable_nativeint_array _ -> 1
+    | Immutable_non_scannable_unboxed_product_array _, _ -> -1
+    | _, Immutable_non_scannable_unboxed_product_array _ -> 1
     | Immutable_value_array _, _ -> -1
     | _, Immutable_value_array _ -> 1
     | Empty_array _, _ -> -1
@@ -366,6 +390,8 @@ let free_names t =
   | Immutable_int32_array fields -> free_names_for_numeric_fields fields
   | Immutable_int64_array fields -> free_names_for_numeric_fields fields
   | Immutable_nativeint_array fields -> free_names_for_numeric_fields fields
+  | Immutable_non_scannable_unboxed_product_array fields ->
+    free_names_of_fields (List.map fst fields)
   | Immutable_value_array fields -> free_names_of_fields fields
 
 let apply_renaming_number_array_fields renaming fields =
@@ -430,6 +456,17 @@ let apply_renaming t renaming =
     | Immutable_nativeint_array fields ->
       let fields' = apply_renaming_number_array_fields renaming fields in
       if fields' == fields then t else Immutable_nativeint_array fields'
+    | Immutable_non_scannable_unboxed_product_array fields ->
+      let fields' =
+        Misc.Stdlib.List.map_sharing
+          (fun ((field, kind) as field_and_kind) ->
+            let field' = Simple.With_debuginfo.apply_renaming field renaming in
+            if field == field' then field_and_kind else field', kind)
+          fields
+      in
+      if fields' == fields
+      then t
+      else Immutable_non_scannable_unboxed_product_array fields'
     | Immutable_value_array fields ->
       let fields' =
         Misc.Stdlib.List.map_sharing
@@ -480,6 +517,8 @@ let ids_for_export t =
   | Immutable_int64_array fields -> ids_for_export_number_array_fields fields
   | Immutable_nativeint_array fields ->
     ids_for_export_number_array_fields fields
+  | Immutable_non_scannable_unboxed_product_array fields ->
+    ids_for_export_fields (List.map fst fields)
   | Immutable_value_array fields -> ids_for_export_fields fields
   | Empty_array _ -> Ids_for_export.empty
 
@@ -490,7 +529,8 @@ let is_block t =
   | Immutable_float_array _ | Immutable_float32_array _
   | Immutable_int32_array _ | Immutable_int64_array _
   | Immutable_nativeint_array _ | Immutable_string _ | Mutable_string _
-  | Empty_array _ | Immutable_value_array _ ->
+  | Empty_array _ | Immutable_value_array _
+  | Immutable_non_scannable_unboxed_product_array _ ->
     true
   | Set_of_closures _ -> false
 
@@ -502,7 +542,8 @@ let is_set_of_closures t =
   | Immutable_float_array _ | Immutable_float32_array _
   | Immutable_int32_array _ | Immutable_int64_array _
   | Immutable_nativeint_array _ | Immutable_string _ | Mutable_string _
-  | Empty_array _ | Immutable_value_array _ ->
+  | Empty_array _ | Immutable_value_array _
+  | Immutable_non_scannable_unboxed_product_array _ ->
     false
 
 let is_fully_static t = free_names t |> Name_occurrences.no_variables
@@ -514,7 +555,8 @@ let can_share0 t =
   | Boxed_int64 _ | Boxed_vec128 _ | Boxed_nativeint _ | Immutable_float_block _
   | Immutable_float_array _ | Immutable_float32_array _ | Immutable_string _
   | Empty_array _ | Immutable_int32_array _ | Immutable_int64_array _
-  | Immutable_nativeint_array _ | Immutable_value_array _ ->
+  | Immutable_nativeint_array _ | Immutable_value_array _
+  | Immutable_non_scannable_unboxed_product_array _ ->
     true
   | Block (_, (Mutable | Immutable_unique), _, _) | Mutable_string _ -> false
 
@@ -528,7 +570,8 @@ let must_be_set_of_closures t =
   | Immutable_float_array _ | Immutable_float32_array _
   | Immutable_int32_array _ | Immutable_int64_array _
   | Immutable_nativeint_array _ | Empty_array _ | Immutable_value_array _
-  | Immutable_string _ | Mutable_string _ ->
+  | Immutable_non_scannable_unboxed_product_array _ | Immutable_string _
+  | Mutable_string _ ->
     Misc.fatal_errorf "Not a set of closures:@ %a" print t
 
 let match_against_bound_static_pattern t (pat : Bound_static.Pattern.t)
@@ -556,8 +599,9 @@ let match_against_bound_static_pattern t (pat : Bound_static.Pattern.t)
       | Immutable_float_block _ | Immutable_float_array _
       | Immutable_float32_array _ | Immutable_int32_array _
       | Immutable_int64_array _ | Immutable_nativeint_array _
-      | Immutable_value_array _ | Empty_array _ | Immutable_string _
-      | Mutable_string _ ),
+      | Immutable_value_array _
+      | Immutable_non_scannable_unboxed_product_array _ | Empty_array _
+      | Immutable_string _ | Mutable_string _ ),
       Block_like symbol ) ->
     block_like_callback symbol t
   | Set_of_closures _, (Block_like _ | Code _)
@@ -566,8 +610,9 @@ let match_against_bound_static_pattern t (pat : Bound_static.Pattern.t)
       | Immutable_float_block _ | Immutable_float_array _
       | Immutable_float32_array _ | Immutable_int32_array _
       | Immutable_int64_array _ | Immutable_nativeint_array _
-      | Immutable_value_array _ | Empty_array _ | Immutable_string _
-      | Mutable_string _ ),
+      | Immutable_value_array _
+      | Immutable_non_scannable_unboxed_product_array _ | Empty_array _
+      | Immutable_string _ | Mutable_string _ ),
       (Set_of_closures _ | Code _) ) ->
     Misc.fatal_errorf "Mismatch on variety of [Static_const]:@ %a@ =@ %a"
       Bound_static.Pattern.print pat print t

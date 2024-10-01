@@ -62,6 +62,11 @@ let create_static_const dacc dbg (to_lift : T.to_lift) : RSC.t =
   | Immutable_nativeint_array { fields } ->
     let fields = List.map (fun f -> Or_variable.Const f) fields in
     RSC.create_immutable_nativeint_array art fields
+  | Immutable_non_scannable_unboxed_product_array { fields } ->
+    let fields' = fields in
+    let fields = convert_fields (List.map fst fields) in
+    let fields = List.combine fields (List.map snd fields') in
+    RSC.create_immutable_non_scannable_unboxed_product_array art fields
   | Immutable_value_array { fields } ->
     let fields = convert_fields fields in
     RSC.create_immutable_value_array art fields
