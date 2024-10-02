@@ -161,3 +161,33 @@ let () =
   in
   loop 0
 
+(* All array ops here should be evaluated fully at compile time *)
+let[@inline never] compute () =
+  let i1 = Int64.bits_of_float 1.0 |> int64_u_of_int64 in
+  let i2 = 2L |> int64_u_of_int64 in
+  let i3 = Int64.bits_of_float 3.0 |> int64_u_of_int64 in
+  let arr : int64# iarray = [:
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+  :]
+  in
+  let[@loop never] rec loop i total =
+    if i >= iarray_length arr / 3 - 1 then total
+    else (
+      let #(i1, i2, i3) : #(float# * int64# * float#) = reinterpret_get arr (i * 3) in
+      let f1 = float_u_to_float i1 in
+      let i2 = int64_u_to_int64 i2 in
+      let f3 = float_u_to_float i3 in
+      let total = Float.to_int f1 + Int64.to_int i2 + Float.to_int f3 + total in
+      loop (i + 1) total
+    )
+  in
+  (loop [@unrolled 10]) 0 0
+
+let () =
+  Printf.printf "total %d\n" (compute ())
+
