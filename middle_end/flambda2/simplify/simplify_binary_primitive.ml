@@ -982,14 +982,13 @@ let[@inline always] simplify_immutable_block_load0
                ~field_n_minus_one:result_var')
           ~result_var ~result_kind
       in
-      match result.simplified_named with
-      | Invalid -> result
-      | Ok _ -> (
+      match result with
+      | Simplified { simplified_named = Invalid; _ } -> result
+      | Simplified { dacc; _ } | Resimplify { dacc; _ } -> (
         (* If the type contains enough information to actually build a primitive
            to make the corresponding block, then we add a CSE equation, to try
            to avoid duplicate allocations in the future. This should help with
            cases such as "Some x -> Some x". *)
-        let dacc = result.dacc in
         match
           T.prove_unique_fully_constructed_immutable_heap_block
             (DA.typing_env dacc) block_ty
@@ -1050,7 +1049,8 @@ let simplify_immutable_block_load access_kind ~min_name_mode dacc ~original_term
         match Reg_width_const.descr const with
         | Tagged_immediate index ->
           let kind = P.Block_access_kind.element_subkind_for_load access_kind in
-          Simplify_common.add_symbol_projection result.dacc ~projected_from:arg1
+          Simplify_common.add_symbol_projection (SPR.dacc result)
+            ~projected_from:arg1
             (Symbol_projection.Projection.block_load ~index)
             ~projection_bound_to:result_var ~kind
         | Naked_immediate _ | Naked_float _ | Naked_float32 _ | Naked_int32 _
@@ -1074,11 +1074,16 @@ let simplify_array_load (array_kind : P.Array_kind.t)
     (array_load_kind : P.Array_load_kind.t) mutability dacc ~original_prim
     ~original_term:_ dbg ~arg1:array ~arg1_ty:array_ty ~arg2:index
     ~arg2_ty:index_ty ~result_var =
+  (* Recall: [array_kind] specifies the kind(s) of the array elements
+     themselves; [array_load_kind] specifies to which kind(s) they are to be
+     reinterpreted upon access. *)
   let result_kind = P.result_kind' original_prim in
   let array_kind =
-    (* XXX mshinwell: should the array_load_kind be specialised too? *)
+    (* CR mshinwell: should the array_load_kind be specialised too? *)
     Simplify_common.specialise_array_kind dacc array_kind ~array_ty
   in
+  (* CR mshinwell: This should check that any element kinds specified by
+     [array_ty] match [array_kind]. *)
   (* CR-someday mshinwell: should do a meet on the new value too *)
   match array_kind with
   | Bottom ->

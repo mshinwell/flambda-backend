@@ -20,9 +20,6 @@ let simplify_array_set (array_kind : P.Array_kind.t)
     (array_set_kind : P.Array_set_kind.t) dacc ~original_term dbg ~arg1:array
     ~arg1_ty:array_ty ~arg2:index ~arg2_ty:_ ~arg3:new_value ~arg3_ty:_
     ~result_var =
-  (* CR mshinwell: because of the int64# array unboxed product load+reinterpret
-     operation, we may need to propagate more information if we want to check
-     kinds here *)
   let orig_array_kind = array_kind in
   let array_kind =
     Simplify_common.specialise_array_kind dacc array_kind ~array_ty
@@ -50,6 +47,12 @@ let simplify_array_set (array_kind : P.Array_kind.t)
       | Naked_nativeints | Unboxed_product _ ->
         ()
     in
+    (* CR mshinwell: This should check:
+
+       1. Any element kind(s) in [array_ty] match [array_kind].
+
+       2. The [new_value] matches [array_set_kind]. (For unboxed products this
+       can only be checked if the index is known.) *)
     let named =
       Named.create_prim
         (Ternary

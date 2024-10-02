@@ -83,11 +83,12 @@ let simplify_project_value_slot function_slot value_slot ~min_name_mode dacc
                ~value_slot_var:(Bound_var.var result_var) ~value_slot_kind:kind)
           ~result_var ~result_kind:(K.With_subkind.kind kind)
       in
-      let dacc = DA.add_use_of_value_slot result.dacc value_slot in
+      let dacc = DA.add_use_of_value_slot (SPR.dacc result) value_slot in
       SPR.with_dacc result dacc
   in
   let dacc =
-    Simplify_common.add_symbol_projection result.dacc ~projected_from:closure
+    Simplify_common.add_symbol_projection (SPR.dacc result)
+      ~projected_from:closure
       (Symbol_projection.Projection.project_value_slot function_slot value_slot)
       ~projection_bound_to:result_var ~kind
   in
@@ -131,7 +132,7 @@ let simplify_unbox_number (boxable_number_kind : K.Boxable_number.t) dacc
       ~deconstructing:boxed_number_ty ~shape ~result_var ~result_kind
   in
   let dacc =
-    let dacc = result.dacc in
+    let dacc = SPR.dacc result in
     (* We can only add the inverse CSE equation if we know the alloc mode for
        certain and it is [Heap]. (As per [Flambda_primitive] we don't currently
        CSE local allocations.) *)
@@ -160,7 +161,7 @@ let simplify_untag_immediate dacc ~original_term ~arg ~arg_ty:boxed_number_ty
       ~deconstructing:boxed_number_ty ~shape ~result_var ~result_kind
   in
   let dacc =
-    DA.map_denv result.dacc ~f:(fun denv ->
+    DA.map_denv (SPR.dacc result) ~f:(fun denv ->
         DE.add_cse denv
           (P.Eligible_for_cse.create_exn
              (Unary (Tag_immediate, Simple.var result_var')))
