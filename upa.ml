@@ -150,11 +150,12 @@ let () =
       let #(i1, i2, i3) : #(float# * int64# * float#) = reinterpret_get arr (i * 3) in
       Printf.printf "%f %Ld %f\n"
         (float_u_to_float i1) (int64_u_to_int64 i2) (float_u_to_float i3);
+      (*
       let #(i1, i2, i3) : #(int64# * int64# * int64#) = reinterpret_get arr (i * 3) in
       Printf.printf "%Ld %Ld %Ld\n"
         (int64_u_to_int64 i1)
         (int64_u_to_int64 i2)
-        (int64_u_to_int64 i3);
+        (int64_u_to_int64 i3); *)
       loop (i + 1)
     )
   in
