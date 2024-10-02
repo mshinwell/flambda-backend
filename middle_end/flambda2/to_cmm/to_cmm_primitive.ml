@@ -238,6 +238,18 @@ let array_set_128 ~dbg ~element_width_log2 ~has_custom_ops arr index new_value =
 let array_load ~dbg (array_kind : P.Array_kind.t)
     (load_kind : P.Array_load_kind.t) ~arr ~index =
   (* CR mshinwell: refactor this function in the same way as [block_load] *)
+  let index =
+    match[@ocaml.warning "-fragile-match"] array_kind, load_kind with
+    | Naked_int64s, (Immediates | Naked_floats) ->
+      (* The layouts of these arrays differ: the int64# array has an extra field
+         for the custom operations, which we must skip over when accessing the
+         array like one full of immediates or naked floats. *)
+      C.add_int_caml index (C.int_const dbg 1) dbg
+    | Naked_int64s, Naked_nativeints ->
+      (* The layouts of int64# array and nativeint# array are the same. *)
+      index
+    | _, _ -> index
+  in
   match load_kind with
   | Immediates -> C.int_array_ref arr index dbg
   | Naked_int64s | Naked_nativeints ->
@@ -273,6 +285,14 @@ let addr_array_store init ~arr ~index ~new_value dbg =
 let array_set ~dbg (array_kind : P.Array_kind.t) (set_kind : P.Array_set_kind.t)
     ~arr ~index ~new_value =
   (* CR mshinwell: refactor this function in the same way as [block_load] *)
+  let index =
+    (* See comments in [array_load], above. *)
+    match[@ocaml.warning "-fragile-match"] array_kind, set_kind with
+    | Naked_int64s, (Immediates | Naked_floats) ->
+      C.add_int_caml index (C.int_const dbg 1) dbg
+    | Naked_int64s, Naked_nativeints -> index
+    | _, _ -> index
+  in
   let expr =
     match set_kind with
     | Immediates -> C.int_array_set arr index new_value dbg
@@ -757,7 +777,8 @@ let unary_primitive env res dbg f arg =
   | Reinterpret_64_bit_word reinterpret ->
     let cmm =
       match reinterpret with
-      | Tagged_int63_as_unboxed_int64 -> arg
+      | Tagged_int63_as_unboxed_int64 | Unboxed_int64_as_unboxed_nativeint ->
+        arg
       | Unboxed_int64_as_tagged_int63 -> C.or_int (C.int 1 ~dbg) arg dbg
       | Unboxed_int64_as_unboxed_float64 -> C.int64_as_float ~dbg arg
       | Unboxed_float64_as_unboxed_int64 -> C.float_as_int64 ~dbg arg

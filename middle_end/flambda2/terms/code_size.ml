@@ -365,7 +365,7 @@ let unary_prim_size prim =
   | Boolean_not -> 1
   | Reinterpret_64_bit_word reinterpret -> (
     match reinterpret with
-    | Tagged_int63_as_unboxed_int64 -> 0
+    | Tagged_int63_as_unboxed_int64 | Unboxed_int64_as_unboxed_nativeint -> 0
     | Unboxed_int64_as_tagged_int63 -> (* Needs a logical OR. *) 1
     | Unboxed_int64_as_unboxed_float64 | Unboxed_float64_as_unboxed_int64 ->
       (* Needs a move between register classes. *) 1)

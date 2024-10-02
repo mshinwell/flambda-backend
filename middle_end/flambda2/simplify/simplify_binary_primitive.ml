@@ -1110,7 +1110,7 @@ let simplify_array_load (array_kind : P.Array_kind.t)
     | Proved (elt_kinds, fields, _mode) -> (
       match elt_kinds with
       | Unknown | Bottom -> contents_unknown ()
-      | Ok elt_kinds -> (
+      | Ok _elt_kinds -> (
         match
           T.prove_equals_tagged_immediates (DA.typing_env dacc) index_ty
         with
@@ -1118,20 +1118,40 @@ let simplify_array_load (array_kind : P.Array_kind.t)
         | Proved imms -> (
           match Targetint_31_63.Set.get_singleton imms with
           | None -> contents_unknown ()
-          | Some imm ->
+          | Some imm -> (
             if Targetint_31_63.( < ) imm Targetint_31_63.zero
                || Targetint_31_63.( >= ) imm
                     (Array.length fields |> Targetint_31_63.of_int)
             then SPR.create_invalid dacc
             else
               let index = Targetint_31_63.to_int imm in
-              let num_elt_kinds = List.length elt_kinds in
-              let elt_kind = List.nth elt_kinds (index mod num_elt_kinds) in
-              if not (K.equal (K.With_subkind.kind elt_kind) result_kind)
-              then
-                (* CR mshinwell: I think this should try to reinterpret *)
-                contents_unknown ()
-              else return_given_type fields.(index) ~try_reify:true))))
+              let elt_ty = fields.(index) in
+              match[@ocaml.warning "-fragile-match"]
+                array_kind, array_load_kind
+              with
+              (* CR mshinwell: add case for reinterpreting as Naked_vec128s *)
+              | Naked_int64s, (Immediates | Naked_floats | Naked_nativeints)
+                -> (
+                let name_mode = Bound_var.name_mode result_var in
+                match
+                  T.Typing_env.get_alias_then_canonical_simple_exn
+                    (DA.typing_env dacc) ~min_name_mode:name_mode elt_ty
+                with
+                | exception Not_found ->
+                  return_given_type elt_ty ~try_reify:true
+                | simple ->
+                  let reinterpret_kind : P.Reinterpret_64_bit_word.t =
+                    match array_load_kind with
+                    | Immediates -> Unboxed_int64_as_tagged_int63
+                    | Naked_floats -> Unboxed_int64_as_unboxed_float64
+                    | Naked_nativeints -> Unboxed_int64_as_unboxed_nativeint
+                    | _ -> assert false (* see above *)
+                  in
+                  let prim : P.t =
+                    Unary (Reinterpret_64_bit_word reinterpret_kind, simple)
+                  in
+                  SPR.create_resimplify dacc prim)
+              | _, _ -> return_given_type elt_ty ~try_reify:true)))))
 
 let simplify_string_or_bigstring_load _string_like_value _string_accessor_width
     ~original_prim dacc ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_

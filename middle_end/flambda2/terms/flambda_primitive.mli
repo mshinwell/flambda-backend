@@ -348,6 +348,7 @@ module Reinterpret_64_bit_word : sig
     | Unboxed_int64_as_tagged_int63
     | Unboxed_int64_as_unboxed_float64
     | Unboxed_float64_as_unboxed_int64
+    | Unboxed_int64_as_unboxed_nativeint
 end
 
 (** Primitives taking exactly one argument. *)

@@ -997,6 +997,7 @@ module Reinterpret_64_bit_word = struct
     | Unboxed_int64_as_tagged_int63
     | Unboxed_int64_as_unboxed_float64
     | Unboxed_float64_as_unboxed_int64
+    | Unboxed_int64_as_unboxed_nativeint
 
   let compare = Stdlib.compare
 
@@ -1010,6 +1011,8 @@ module Reinterpret_64_bit_word = struct
       Format.pp_print_string ppf "Unboxed_int64_as_unboxed_float64"
     | Unboxed_float64_as_unboxed_int64 ->
       Format.pp_print_string ppf "Unboxed_float64_as_unboxed_int64"
+    | Unboxed_int64_as_unboxed_nativeint ->
+      Format.pp_print_string ppf "Unboxed_int64_as_unboxed_nativeint"
 end
 
 type unary_primitive =
@@ -1281,7 +1284,8 @@ let arg_kind_of_unary_primitive p =
     | Tagged_int63_as_unboxed_int64 -> K.value
     | Unboxed_int64_as_tagged_int63 -> K.naked_int64
     | Unboxed_int64_as_unboxed_float64 -> K.naked_int64
-    | Unboxed_float64_as_unboxed_int64 -> K.naked_float)
+    | Unboxed_float64_as_unboxed_int64 -> K.naked_float
+    | Unboxed_int64_as_unboxed_nativeint -> K.naked_int64)
   | Float_arith (Float64, _) -> K.naked_float
   | Float_arith (Float32, _) -> K.naked_float32
   | Array_length _ | Bigarray_length _ -> K.value
@@ -1315,7 +1319,8 @@ let result_kind_of_unary_primitive p : result_kind =
     | Tagged_int63_as_unboxed_int64 -> Singleton K.naked_int64
     | Unboxed_int64_as_tagged_int63 -> Singleton K.value
     | Unboxed_int64_as_unboxed_float64 -> Singleton K.naked_float
-    | Unboxed_float64_as_unboxed_int64 -> Singleton K.naked_int64)
+    | Unboxed_float64_as_unboxed_int64 -> Singleton K.naked_int64
+    | Unboxed_int64_as_unboxed_nativeint -> Singleton K.naked_nativeint)
   | Float_arith (Float64, _) -> Singleton K.naked_float
   | Float_arith (Float32, _) -> Singleton K.naked_float32
   | Array_length _ -> Singleton K.value

@@ -526,6 +526,20 @@ Make_simplify_reinterpret_64_bit_word (struct
   let any_dst = T.any_naked_int64
 end)
 
+module Simplify_reinterpret_unboxed_int64_as_unboxed_nativeint =
+Make_simplify_reinterpret_64_bit_word (struct
+  module Src = Int64
+  module Dst = Targetint_32_64
+
+  let prover = T.meet_naked_int64s
+
+  let convert = Targetint_32_64.of_int64
+
+  let these = T.these_naked_nativeints
+
+  let any_dst = T.any_naked_nativeint
+end)
+
 let simplify_reinterpret_64_bit_word (reinterpret : P.Reinterpret_64_bit_word.t)
     dacc ~original_term ~arg ~arg_ty ~result_var =
   match reinterpret with
@@ -540,6 +554,9 @@ let simplify_reinterpret_64_bit_word (reinterpret : P.Reinterpret_64_bit_word.t)
       ~original_term ~arg ~arg_ty ~result_var
   | Tagged_int63_as_unboxed_int64 ->
     Simplify_reinterpret_tagged_int63_as_unboxed_int64.simplify dacc
+      ~original_term ~arg ~arg_ty ~result_var
+  | Unboxed_int64_as_unboxed_nativeint ->
+    Simplify_reinterpret_unboxed_int64_as_unboxed_nativeint.simplify dacc
       ~original_term ~arg ~arg_ty ~result_var
 
 module Make_simplify_float_arith_op (FP : sig

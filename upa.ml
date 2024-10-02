@@ -112,3 +112,51 @@ let[@inline never] make_unboxed_tuple_vect_ignorable_dynamic () =
 
 let _ = make_unboxed_tuple_vect_scannable_dynamic ()
 let _ = make_unboxed_tuple_vect_ignorable_dynamic ()
+
+
+(* Simplification via iarrays *)
+
+external int64_u_of_int64 : (int64[@local_opt]) -> int64# = "%unbox_int64"
+[@@warning "-187"]
+external int64_u_to_int64 : int64# -> (int64[@local_opt]) = "%box_int64"
+[@@warning "-187"]
+external float_u_to_float: float# -> (float[@local_opt]) = "%box_float"
+[@@warning "-187"]
+external[@layout_poly] reinterpret_get
+  : ('a : any) . int64# iarray -> int -> 'a =
+  "%unboxed_int64_array_safe_get_reinterpret"
+external[@layout_poly] reinterpret_set
+  : ('a : any) . int64# iarray -> int -> 'a -> unit =
+  "%unboxed_int64_array_safe_set_reinterpret"
+external[@layout_poly] iarray_length : ('a : any) .
+  local_ 'a iarray -> int = "%array_length"
+
+let () =
+  let i1 = Int64.bits_of_float 1.0 |> int64_u_of_int64 in
+  let i2 = 2L |> int64_u_of_int64 in
+  let i3 = Int64.bits_of_float 3.0 |> int64_u_of_int64 in
+  let arr : int64# iarray = [:
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+    i1; i2; i3;
+  :]
+  in
+  let rec loop i =
+    if i >= iarray_length arr / 3 - 1 then ()
+    else (
+      let #(i1, i2, i3) : #(float# * int64# * float#) = reinterpret_get arr (i * 3) in
+      Printf.printf "%f %Ld %f\n"
+        (float_u_to_float i1) (int64_u_to_int64 i2) (float_u_to_float i3);
+      let #(i1, i2, i3) : #(int64# * int64# * int64#) = reinterpret_get arr (i * 3) in
+      Printf.printf "%Ld %Ld %Ld\n"
+        (int64_u_to_int64 i1)
+        (int64_u_to_int64 i2)
+        (int64_u_to_int64 i3);
+      loop (i + 1)
+    )
+  in
+  loop 0
+
