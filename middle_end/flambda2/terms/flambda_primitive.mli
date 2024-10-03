@@ -78,6 +78,14 @@ module Init_or_assign : sig
   val to_lambda : t -> Lambda.initialization_or_assignment
 end
 
+module Array_index_kind : sig
+  type t =
+    | Tagged_immediate
+    | Naked_int32
+    | Naked_int64
+    | Naked_nativeint
+end
+
 module Array_load_kind : sig
   type t =
     | Immediates  (** An array consisting only of immediate values. *)
@@ -471,7 +479,8 @@ type binary_float_arith_op =
 (** Primitives taking exactly two arguments. *)
 type binary_primitive =
   | Block_load of Block_access_kind.t * Mutability.t
-  | Array_load of Array_kind.t * Array_load_kind.t * Mutability.t
+  | Array_load of
+      Array_kind.t * Array_load_kind.t * Array_index_kind.t * Mutability.t
       (** Unarized or SIMD array load.
 
           The array kind preserves unboxed product information but the load
@@ -494,7 +503,7 @@ type binary_primitive =
 (** Primitives taking exactly three arguments. *)
 type ternary_primitive =
   | Block_set of Block_access_kind.t * Init_or_assign.t
-  | Array_set of Array_kind.t * Array_set_kind.t
+  | Array_set of Array_kind.t * Array_set_kind.t * Array_index_kind.t
       (** Unarized array update, for mutable arrays.  See [Array_load] above
           for more details on the unarization. *)
   | Bytes_or_bigstring_set of bytes_like_value * string_accessor_width

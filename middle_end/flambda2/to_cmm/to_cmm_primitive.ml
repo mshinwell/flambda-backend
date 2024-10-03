@@ -236,8 +236,14 @@ let array_set_128 ~dbg ~element_width_log2 ~has_custom_ops arr index new_value =
   C.unaligned_set_128 arr index new_value dbg
 
 let array_load ~dbg (array_kind : P.Array_kind.t)
-    (load_kind : P.Array_load_kind.t) ~arr ~index =
+    (load_kind : P.Array_load_kind.t) (index_kind : P.Array_index_kind.t) ~arr
+    ~index =
   (* CR mshinwell: refactor this function in the same way as [block_load] *)
+  let index =
+    match index_kind with
+    | Tagged_immediate -> index
+    | Naked_int32 | Naked_int64 | Naked_nativeint -> C.tag_int index dbg
+  in
   let index =
     match[@ocaml.warning "-fragile-match"] array_kind, load_kind with
     | Naked_int64s, (Immediates | Naked_floats) ->
@@ -283,8 +289,13 @@ let addr_array_store init ~arr ~index ~new_value dbg =
   | Initialization -> C.addr_array_initialize arr index new_value dbg
 
 let array_set ~dbg (array_kind : P.Array_kind.t) (set_kind : P.Array_set_kind.t)
-    ~arr ~index ~new_value =
+    (index_kind : P.Array_index_kind.t) ~arr ~index ~new_value =
   (* CR mshinwell: refactor this function in the same way as [block_load] *)
+  let index =
+    match index_kind with
+    | Tagged_immediate -> index
+    | Naked_int32 | Naked_int64 | Naked_nativeint -> C.tag_int index dbg
+  in
   let index =
     (* See comments in [array_load], above. *)
     match[@ocaml.warning "-fragile-match"] array_kind, set_kind with
@@ -867,8 +878,8 @@ let unary_primitive env res dbg f arg =
 let binary_primitive env dbg f x y =
   match (f : P.binary_primitive) with
   | Block_load (kind, mut) -> block_load ~dbg kind mut ~block:x ~index:y
-  | Array_load (array_kind, load_kind, _mut) ->
-    array_load ~dbg array_kind load_kind ~arr:x ~index:y
+  | Array_load (array_kind, load_kind, index_kind, _mut) ->
+    array_load ~dbg array_kind load_kind index_kind ~arr:x ~index:y
   | String_or_bigstring_load (kind, width) ->
     string_like_load ~dbg kind width ~str:x ~index:y
   | Bigarray_load (_dimensions, kind, _layout) ->
@@ -893,8 +904,9 @@ let ternary_primitive _env dbg f x y z =
   match (f : P.ternary_primitive) with
   | Block_set (block_access, init) ->
     block_set ~dbg block_access init ~block:x ~index:y ~new_value:z
-  | Array_set (array_kind, array_set_kind) ->
-    array_set ~dbg array_kind array_set_kind ~arr:x ~index:y ~new_value:z
+  | Array_set (array_kind, array_set_kind, index_kind) ->
+    array_set ~dbg array_kind array_set_kind index_kind ~arr:x ~index:y
+      ~new_value:z
   | Bytes_or_bigstring_set (kind, width) ->
     bytes_or_bigstring_set ~dbg kind width ~bytes:x ~index:y ~new_value:z
   | Bigarray_set (_dimensions, kind, _layout) ->

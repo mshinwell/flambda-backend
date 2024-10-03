@@ -163,6 +163,14 @@ let convert_array_kind_for_length kind : P.Array_kind_for_length.t =
   | Array_kind array_kind -> Array_kind array_kind
   | Float_array_opt_dynamic -> Float_array_opt_dynamic
 
+let convert_array_index_kind (kind : L.array_index_kind) : P.Array_index_kind.t
+    =
+  match kind with
+  | Ptagged_int_index -> Tagged_immediate
+  | Punboxed_int_index Pint32 -> Naked_int32
+  | Punboxed_int_index Pint64 -> Naked_int64
+  | Punboxed_int_index Pnativeint -> Naked_nativeint
+
 module Array_ref_kind = struct
   type t =
     | Immediates
@@ -885,7 +893,10 @@ let array_like_load_128 ~dbg ~size_int ~unsafe ~mode ~current_region array_kind
     array index =
   let primitive =
     box_vec128 mode ~current_region
-      (H.Binary (Array_load (array_kind, Naked_vec128s, Mutable), array, index))
+      (H.Binary
+         ( Array_load (array_kind, Naked_vec128s, Tagged_immediate, Mutable),
+           array,
+           index ))
   in
   if unsafe
   then primitive
@@ -895,7 +906,7 @@ let array_like_load_128 ~dbg ~size_int ~unsafe ~mode ~current_region array_kind
 let array_like_set_128 ~dbg ~size_int ~unsafe array_kind array index new_value =
   let primitive =
     H.Ternary
-      ( Array_set (array_kind, Naked_vec128s),
+      ( Array_set (array_kind, Naked_vec128s, Tagged_immediate),
         array,
         index,
         unbox_vec128 new_value )
@@ -1063,7 +1074,7 @@ let compute_array_indexes ~index ~num_elts =
                Simple (Simple.const_int (Targetint_31_63.of_int offset)) )))
 
 let rec array_load_unsafe ~array ~index array_kind
-    (array_ref_kind : Array_ref_kind.t) ~current_region
+    (array_ref_kind : Array_ref_kind.t) ~index_kind ~current_region
     ~reinterpreting_unboxed_int64_array : H.expr_primitive list =
   let maybe_reinterpreting array_kind : P.Array_kind.t =
     if reinterpreting_unboxed_int64_array then Naked_int64s else array_kind
@@ -1080,26 +1091,38 @@ let rec array_load_unsafe ~array ~index array_kind
   match array_ref_kind with
   | Immediates ->
     [ Binary
-        ( Array_load (maybe_reinterpreting Immediates, Immediates, Mutable),
+        ( Array_load
+            (maybe_reinterpreting Immediates, Immediates, index_kind, Mutable),
           array,
           index ) ]
-  | Values -> [Binary (Array_load (Values, Values, Mutable), array, index)]
+  | Values ->
+    [Binary (Array_load (Values, Values, index_kind, Mutable), array, index)]
   | Naked_floats_to_be_boxed mode ->
     [ box_float mode
         (Binary
            ( Array_load
-               (maybe_reinterpreting Naked_floats, Naked_floats, Mutable),
+               ( maybe_reinterpreting Naked_floats,
+                 Naked_floats,
+                 index_kind,
+                 Mutable ),
              array,
              index ))
         ~current_region ]
   | Naked_floats ->
     [ Binary
-        ( Array_load (maybe_reinterpreting Naked_floats, Naked_floats, Mutable),
+        ( Array_load
+            ( maybe_reinterpreting Naked_floats,
+              Naked_floats,
+              index_kind,
+              Mutable ),
           array,
           index ) ]
   | Naked_float32s ->
     no_reinterpreting ();
-    [Binary (Array_load (Naked_float32s, Naked_float32s, Mutable), array, index)]
+    [ Binary
+        ( Array_load (Naked_float32s, Naked_float32s, index_kind, Mutable),
+          array,
+          index ) ]
   | Naked_int32s ->
     no_reinterpreting ();
     if reinterpreting_unboxed_int64_array
@@ -1108,16 +1131,26 @@ let rec array_load_unsafe ~array ~index array_kind
         "Only 64-bit-wide sorts and unboxed products thereof may be used in \
          int64# array reinterpreting operations (should have been caught by \
          the frontend)";
-    [Binary (Array_load (Naked_int32s, Naked_int32s, Mutable), array, index)]
+    [ Binary
+        ( Array_load (Naked_int32s, Naked_int32s, index_kind, Mutable),
+          array,
+          index ) ]
   | Naked_int64s ->
     [ Binary
-        ( Array_load (maybe_reinterpreting Naked_int64s, Naked_int64s, Mutable),
+        ( Array_load
+            ( maybe_reinterpreting Naked_int64s,
+              Naked_int64s,
+              index_kind,
+              Mutable ),
           array,
           index ) ]
   | Naked_nativeints ->
     [ Binary
         ( Array_load
-            (maybe_reinterpreting Naked_nativeints, Naked_nativeints, Mutable),
+            ( maybe_reinterpreting Naked_nativeints,
+              Naked_nativeints,
+              index_kind,
+              Mutable ),
           array,
           index ) ]
   | Unboxed_product
@@ -1152,17 +1185,18 @@ let rec array_load_unsafe ~array ~index array_kind
     in
     List.concat_map
       (fun (index, array_ref_kind) ->
-        array_load_unsafe ~array ~index array_kind array_ref_kind
+        array_load_unsafe ~array ~index array_kind array_ref_kind ~index_kind
           ~current_region ~reinterpreting_unboxed_int64_array)
       (List.combine indexes unarized)
 
-let array_load_unsafe ~array ~index array_kind array_load_kind ~current_region =
-  array_load_unsafe ~array ~index array_kind array_load_kind ~current_region
-    ~reinterpreting_unboxed_int64_array:false
+let array_load_unsafe ~array ~index array_kind array_load_kind ~index_kind
+    ~current_region =
+  array_load_unsafe ~array ~index array_kind array_load_kind ~index_kind
+    ~current_region ~reinterpreting_unboxed_int64_array:false
   |> H.maybe_create_unboxed_product
 
 let rec array_set_unsafe dbg ~array ~index array_kind
-    (array_set_kind : Array_set_kind.t) ~new_values
+    (array_set_kind : Array_set_kind.t) ~index_kind ~new_values
     ~reinterpreting_unboxed_int64_array : H.expr_primitive list =
   let maybe_reinterpreting array_kind : P.Array_kind.t =
     if reinterpreting_unboxed_int64_array then Naked_int64s else array_kind
@@ -1180,7 +1214,10 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     | [new_value] ->
       let array_kind = maybe_reinterpreting array_kind in
       [ H.Ternary
-          (Array_set (array_kind, array_set_kind), array, index, new_value) ]
+          ( Array_set (array_kind, array_set_kind, index_kind),
+            array,
+            index,
+            new_value ) ]
     | [] | _ :: _ ->
       Misc.fatal_errorf "Wrong arity for array_set_unsafe in normal_case:@ %a"
         Debuginfo.print_compact dbg
@@ -1239,12 +1276,14 @@ let rec array_set_unsafe dbg ~array ~index array_kind
         (List.concat_map
            (fun (index, (array_set_kind, new_value)) ->
              array_set_unsafe dbg ~array ~index array_kind array_set_kind
-               ~new_values:[new_value] ~reinterpreting_unboxed_int64_array)
+               ~index_kind ~new_values:[new_value]
+               ~reinterpreting_unboxed_int64_array)
            (List.combine indexes (List.combine unarized new_values))) ]
 
-let array_set_unsafe dbg ~array ~index array_kind array_set_kind ~new_values =
-  array_set_unsafe dbg ~array ~index array_kind array_set_kind ~new_values
-    ~reinterpreting_unboxed_int64_array:false
+let array_set_unsafe dbg ~array ~index array_kind array_set_kind ~index_kind
+    ~new_values =
+  array_set_unsafe dbg ~array ~index array_kind array_set_kind ~index_kind
+    ~new_values ~reinterpreting_unboxed_int64_array:false
   |> H.maybe_create_unboxed_product
 
 let[@inline always] match_on_array_ref_kind ~array array_ref_kind f :
@@ -1994,29 +2033,29 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
        CSE the two accesses to the array's header word in the [Pgenarray]
        case. *)
     [ match_on_array_ref_kind ~array array_ref_kind
-        (array_load_unsafe ~array
-           ~index:(convert_index_to_tagged_int ~index ~index_kind)
+        (array_load_unsafe ~array ~index
+           ~index_kind:(convert_array_index_kind index_kind)
            ~current_region) ]
   | Parrayrefs (array_ref_kind, index_kind), [[array]; [index]] ->
     let array_length_kind = convert_array_ref_kind_for_length array_ref_kind in
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
         ~size_int
         (match_on_array_ref_kind ~array array_ref_kind
-           (array_load_unsafe ~array
-              ~index:(convert_index_to_tagged_int ~index ~index_kind)
+           (array_load_unsafe ~array ~index
+              ~index_kind:(convert_array_index_kind index_kind)
               ~current_region)) ]
   | Parraysetu (array_set_kind, index_kind), [[array]; [index]; new_values] ->
     [ match_on_array_set_kind ~array array_set_kind
-        (array_set_unsafe dbg ~array
-           ~index:(convert_index_to_tagged_int ~index ~index_kind)
+        (array_set_unsafe dbg ~array ~index
+           ~index_kind:(convert_array_index_kind index_kind)
            ~new_values) ]
   | Parraysets (array_set_kind, index_kind), [[array]; [index]; new_values] ->
     let array_length_kind = convert_array_set_kind_for_length array_set_kind in
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
         ~size_int
         (match_on_array_set_kind ~array array_set_kind
-           (array_set_unsafe dbg ~array
-              ~index:(convert_index_to_tagged_int ~index ~index_kind)
+           (array_set_unsafe dbg ~array ~index
+              ~index_kind:(convert_array_index_kind index_kind)
               ~new_values)) ]
   | Pbytessetu (* unsafe *), [[bytes]; [index]; [new_value]] ->
     [ bytes_like_set ~unsafe:true ~dbg ~size_int ~access_size:Eight Bytes

@@ -150,6 +150,30 @@ module Array_kind = struct
         print t
 end
 
+module Array_index_kind = struct
+  type t =
+    | Tagged_immediate
+    | Naked_int32
+    | Naked_int64
+    | Naked_nativeint
+
+  let compare = Stdlib.compare
+
+  let print ppf t =
+    match t with
+    | Tagged_immediate -> Format.pp_print_string ppf "Tagged_immediate"
+    | Naked_int32 -> Format.pp_print_string ppf "Naked_int32"
+    | Naked_int64 -> Format.pp_print_string ppf "Naked_int64"
+    | Naked_nativeint -> Format.pp_print_string ppf "Naked_nativeint"
+
+  let kind t =
+    match t with
+    | Tagged_immediate -> K.value
+    | Naked_int32 -> K.naked_int32
+    | Naked_int64 -> K.naked_int64
+    | Naked_nativeint -> K.naked_nativeint
+end
+
 module Array_load_kind = struct
   type t =
     | Immediates
@@ -584,8 +608,6 @@ let array_kind = K.value
 let string_or_bytes_kind = K.value
 
 let block_index_kind = K.value
-
-let array_index_kind = K.value
 
 let string_or_bigstring_index_kind = K.naked_immediate
 
@@ -1552,7 +1574,8 @@ let print_binary_float_arith_op ppf width op =
 
 type binary_primitive =
   | Block_load of Block_access_kind.t * Mutability.t
-  | Array_load of Array_kind.t * Array_load_kind.t * Mutability.t
+  | Array_load of
+      Array_kind.t * Array_load_kind.t * Array_index_kind.t * Mutability.t
   | String_or_bigstring_load of string_like_value * string_accessor_width
   | Bigarray_load of num_dimensions * Bigarray_kind.t * Bigarray_layout.t
   | Phys_equal of equality_comparison
@@ -1605,14 +1628,18 @@ let compare_binary_primitive p1 p2 =
   | Block_load (kind1, mut1), Block_load (kind2, mut2) ->
     let c = Block_access_kind.compare kind1 kind2 in
     if c <> 0 then c else Mutability.compare mut1 mut2
-  | Array_load (kind1, load_kind1, mut1), Array_load (kind2, load_kind2, mut2)
-    ->
+  | ( Array_load (kind1, load_kind1, index_kind1, mut1),
+      Array_load (kind2, load_kind2, index_kind2, mut2) ) ->
     let c = Array_kind.compare kind1 kind2 in
     if c <> 0
     then c
     else
       let c = Array_load_kind.compare load_kind1 load_kind2 in
-      if c <> 0 then c else Mutability.compare mut1 mut2
+      if c <> 0
+      then c
+      else
+        let c = Array_index_kind.compare index_kind1 index_kind2 in
+        if c <> 0 then c else Mutability.compare mut1 mut2
   | ( String_or_bigstring_load (string_like1, width1),
       String_or_bigstring_load (string_like2, width2) ) ->
     let c = Stdlib.compare string_like1 string_like2 in
@@ -1660,9 +1687,10 @@ let print_binary_primitive ppf p =
   | Block_load (kind, mut) ->
     fprintf ppf "@[(Block_load@ %a@ %a)@]" Block_access_kind.print kind
       Mutability.print mut
-  | Array_load (kind, load_kind, mut) ->
-    fprintf ppf "@[(Array_load@ %a@ %a@ %a)@]" Array_kind.print kind
-      Array_load_kind.print load_kind Mutability.print mut
+  | Array_load (kind, load_kind, index_kind, mut) ->
+    fprintf ppf "@[(Array_load@ %a@ %a@ %a@ %a)@]" Array_kind.print kind
+      Array_load_kind.print load_kind Array_index_kind.print index_kind
+      Mutability.print mut
   | String_or_bigstring_load (string_like, width) ->
     fprintf ppf "@[(String_load %a %a)@]" print_string_like_value string_like
       print_string_accessor_width width
@@ -1688,7 +1716,8 @@ let print_binary_primitive ppf p =
 let args_kind_of_binary_primitive p =
   match p with
   | Block_load _ -> block_kind, block_index_kind
-  | Array_load _ -> array_kind, array_index_kind
+  | Array_load (_, _, array_index_kind, _) ->
+    array_kind, Array_index_kind.kind array_index_kind
   | String_or_bigstring_load ((String | Bytes), _) ->
     string_or_bytes_kind, string_or_bigstring_index_kind
   | String_or_bigstring_load (Bigstring, _) ->
@@ -1713,7 +1742,7 @@ let result_kind_of_binary_primitive p : result_kind =
   match p with
   | Block_load (block_access_kind, _) ->
     Singleton (Block_access_kind.element_kind_for_load block_access_kind)
-  | Array_load (_array_kind, array_load_kind, _mut) ->
+  | Array_load (_array_kind, array_load_kind, _array_index_kind, _mut) ->
     Singleton
       (Array_load_kind.element_kind array_load_kind |> K.With_subkind.kind)
   | String_or_bigstring_load (_, (Eight | Sixteen)) ->
@@ -1734,7 +1763,7 @@ let result_kind_of_binary_primitive p : result_kind =
 let effects_and_coeffects_of_binary_primitive p : Effects_and_coeffects.t =
   match p with
   | Block_load (_, mut) -> reading_from_a_block mut
-  | Array_load (array_kind, _load_kind, mut) ->
+  | Array_load (array_kind, _load_kind, _array_index_kind, mut) ->
     reading_from_an_array array_kind mut
   | Bigarray_load (_, kind, _) -> reading_from_a_bigarray kind
   | String_or_bigstring_load (String, _) ->
@@ -1794,7 +1823,7 @@ let ids_for_export_binary_primitive p =
 
 type ternary_primitive =
   | Block_set of Block_access_kind.t * Init_or_assign.t
-  | Array_set of Array_kind.t * Array_set_kind.t
+  | Array_set of Array_kind.t * Array_set_kind.t * Array_index_kind.t
   | Bytes_or_bigstring_set of bytes_like_value * string_accessor_width
   | Bigarray_set of num_dimensions * Bigarray_kind.t * Bigarray_layout.t
   | Atomic_compare_and_set
@@ -1818,9 +1847,14 @@ let compare_ternary_primitive p1 p2 =
   | Block_set (kind1, init_or_assign1), Block_set (kind2, init_or_assign2) ->
     let c = Block_access_kind.compare kind1 kind2 in
     if c <> 0 then c else Init_or_assign.compare init_or_assign1 init_or_assign2
-  | Array_set (kind1, set_kind1), Array_set (kind2, set_kind2) ->
+  | ( Array_set (kind1, set_kind1, index_kind1),
+      Array_set (kind2, set_kind2, index_kind2) ) ->
     let c = Array_kind.compare kind1 kind2 in
-    if c <> 0 then c else Array_set_kind.compare set_kind1 set_kind2
+    if c <> 0
+    then c
+    else
+      let c = Array_set_kind.compare set_kind1 set_kind2 in
+      if c <> 0 then c else Array_index_kind.compare index_kind1 index_kind2
   | ( Bytes_or_bigstring_set (kind1, width1),
       Bytes_or_bigstring_set (kind2, width2) ) ->
     let c = Stdlib.compare kind1 kind2 in
@@ -1848,9 +1882,9 @@ let print_ternary_primitive ppf p =
   | Block_set (kind, init) ->
     fprintf ppf "(Block_set %a %a)" Block_access_kind.print kind
       Init_or_assign.print init
-  | Array_set (kind, set_kind) ->
-    fprintf ppf "(Array_set %a %a)" Array_kind.print kind Array_set_kind.print
-      set_kind
+  | Array_set (kind, set_kind, array_index_kind) ->
+    fprintf ppf "(Array_set %a %a %a)" Array_kind.print kind
+      Array_set_kind.print set_kind Array_index_kind.print array_index_kind
   | Bytes_or_bigstring_set (kind, string_accessor_width) ->
     fprintf ppf "(Bytes_set %a %a)" print_bytes_like_value kind
       print_string_accessor_width string_accessor_width
@@ -1866,9 +1900,9 @@ let args_kind_of_ternary_primitive p =
     ( block_kind,
       block_index_kind,
       Block_access_kind.element_kind_for_set access_kind )
-  | Array_set (_kind, array_set_kind) ->
+  | Array_set (_kind, array_set_kind, array_index_kind) ->
     ( array_kind,
-      array_index_kind,
+      Array_index_kind.kind array_index_kind,
       Array_set_kind.element_kind array_set_kind |> K.With_subkind.kind )
   | Bytes_or_bigstring_set (Bytes, (Eight | Sixteen)) ->
     string_or_bytes_kind, bytes_or_bigstring_index_kind, K.naked_immediate

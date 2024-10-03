@@ -584,7 +584,7 @@ let block_access_kind (bk : Flambda_primitive.Block_access_kind.t) :
 
 let binop (op : Flambda_primitive.binary_primitive) : Fexpr.binop =
   match op with
-  | Array_load (ak, width, mut) -> Array_load (ak, width, mut)
+  | Array_load (ak, width, Tagged_immediate, mut) -> Array_load (ak, width, mut)
   | Block_load (access_kind, mutability) ->
     let access_kind = block_access_kind access_kind in
     Block_load (access_kind, mutability)
@@ -601,6 +601,7 @@ let binop (op : Flambda_primitive.binary_primitive) : Fexpr.binop =
   | Float_comp (w, c) -> Infix (Float_comp (w, c))
   | String_or_bigstring_load (slv, saw) -> String_or_bigstring_load (slv, saw)
   | Bigarray_get_alignment align -> Bigarray_get_alignment align
+  | Array_load (_, _, (Naked_int32 | Naked_int64 | Naked_nativeint), _)
   | Bigarray_load _ | Atomic_exchange | Atomic_fetch_and_add ->
     Misc.fatal_errorf "TODO: Binary primitive: %a"
       Flambda_primitive.Without_args.print
@@ -632,12 +633,13 @@ let fexpr_of_array_set_kind env
 
 let ternop env (op : Flambda_primitive.ternary_primitive) : Fexpr.ternop =
   match op with
-  | Array_set (ak, ask) ->
+  | Array_set (ak, ask, Tagged_immediate) ->
     let ak = fexpr_of_array_kind ak in
     let ask = fexpr_of_array_set_kind env ask in
     Array_set (ak, ask)
   | Block_set (bk, ia) -> Block_set (block_access_kind bk, init_or_assign env ia)
   | Bytes_or_bigstring_set (blv, saw) -> Bytes_or_bigstring_set (blv, saw)
+  | Array_set (_, _, (Naked_int32 | Naked_int64 | Naked_nativeint))
   | Bigarray_set _ | Atomic_compare_and_set ->
     Misc.fatal_errorf "TODO: Ternary primitive: %a"
       Flambda_primitive.Without_args.print
