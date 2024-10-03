@@ -423,6 +423,7 @@ and array_ref_kind =
   | Pgcscannableproductarray_ref of scannable_product_element_kind list
   | Pgcignorableproductarray_ref of ignorable_product_element_kind list
   | Punboxedint64array_reinterpret_ref of ignorable_product_element_kind list
+  | Paddrarray_reinterpret_ref of scannable_product_element_kind list
 
 and array_set_kind =
   | Pgenarray_set of modify_mode
@@ -435,6 +436,8 @@ and array_set_kind =
       modify_mode * scannable_product_element_kind list
   | Pgcignorableproductarray_set of ignorable_product_element_kind list
   | Punboxedint64array_reinterpret_set of ignorable_product_element_kind list
+  | Paddrarray_reinterpret_set of
+      modify_mode * scannable_product_element_kind list
 
 and ignorable_product_element_kind =
   | Pint_ignorable
@@ -1782,12 +1785,14 @@ let primitive_may_allocate : primitive -> alloc_mode option = function
                 | Punboxedfloatarray_ref _ | Punboxedintarray_ref _
                 | Pgcscannableproductarray_ref _
                 | Pgcignorableproductarray_ref _
-                | Punboxedint64array_reinterpret_ref _), _)
+                | Punboxedint64array_reinterpret_ref _
+                | Paddrarray_reinterpret_ref _), _)
   | Parrayrefs ((Paddrarray_ref | Pintarray_ref
                 | Punboxedfloatarray_ref _ | Punboxedintarray_ref _
                 | Pgcscannableproductarray_ref _
                 | Pgcignorableproductarray_ref _
-                | Punboxedint64array_reinterpret_ref _), _) -> None
+                | Punboxedint64array_reinterpret_ref _
+                | Paddrarray_reinterpret_ref _), _) -> None
   | Parrayrefu ((Pgenarray_ref m | Pfloatarray_ref m), _)
   | Parrayrefs ((Pgenarray_ref m | Pfloatarray_ref m), _) -> Some m
   | Pisint _ | Pisout -> None
@@ -1941,7 +1946,9 @@ let array_ref_kind_result_layout = function
   | Punboxedfloatarray_ref bf -> layout_unboxed_float bf
   | Pgenarray_ref _ | Paddrarray_ref -> layout_value_field
   | Punboxedintarray_ref i -> layout_unboxed_int i
-  | Pgcscannableproductarray_ref kinds -> layout_of_scannable_kinds kinds
+  | Pgcscannableproductarray_ref kinds
+  | Paddrarray_reinterpret_ref kinds
+    -> layout_of_scannable_kinds kinds
   | Pgcignorableproductarray_ref kinds
   | Punboxedint64array_reinterpret_ref kinds ->
     layout_of_ignorable_kinds kinds

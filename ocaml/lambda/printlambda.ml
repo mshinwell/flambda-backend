@@ -126,6 +126,8 @@ let array_ref_kind ppf k =
   | Punboxedint64array_reinterpret_ref kinds ->
     fprintf ppf "unboxed_int64_reinterpret %s"
       (ignorable_product_element_kinds kinds)
+  | Paddrarray_reinterpret_ref kinds ->
+    fprintf ppf "addr_reinterpret %s" (scannable_product_element_kinds kinds)
 
 let array_index_kind ppf k =
   match k with
@@ -157,6 +159,9 @@ let array_set_kind ppf k =
   | Punboxedint64array_reinterpret_set kinds ->
     fprintf ppf "unboxed_int64_reinterpret %s"
       (ignorable_product_element_kinds kinds)
+  | Paddrarray_reinterpret_set (mode, kinds) ->
+    fprintf ppf "addr_reinterpret%a %s" pp_mode mode
+      (scannable_product_element_kinds kinds)
 
 let alloc_mode_if_local = function
   | Alloc_heap -> ""

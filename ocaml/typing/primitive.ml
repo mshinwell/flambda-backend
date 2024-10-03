@@ -582,6 +582,29 @@ let prim_has_valid_reprs ~loc prim =
         any;
         is (Same_as_ocaml_repr C.value)]
 
+    | "%addr_array_safe_get_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any]
+    | "%addr_array_safe_set_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any;
+        is (Same_as_ocaml_repr C.value)]
+    | "%addr_array_unsafe_get_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any]
+    | "%addr_array_unsafe_set_reinterpret" ->
+      check [
+        is (Same_as_ocaml_repr C.value);
+        is (Same_as_ocaml_repr C.value);
+        any;
+        is (Same_as_ocaml_repr C.value)]
+
     (* This doesn't prevent
 
        {|

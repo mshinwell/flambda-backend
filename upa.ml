@@ -191,3 +191,24 @@ let[@inline never] compute () =
 let () =
   Printf.printf "total %d\n" (compute ())
 
+
+(* Paddrarray reinterpret *)
+
+external[@layout_poly] reinterpret_safe_get
+  : ('a : any) . int array -> int -> 'a =
+  "%addr_array_safe_get_reinterpret"
+
+let arr = [| 74; 97; 110; 101; 32; 83; 116; 114; 101; 101; 116; |]
+
+let () =
+  let #(c1, c2, c3, c4, c5) : #(char * char * char * char * char) =
+    reinterpret_safe_get arr 0
+  in
+  let #(c6, c7, c8, c9, c10, c11) : #(char * char * char * char * char * char) =
+    reinterpret_safe_get arr 5
+  in
+  let s =
+    List.map (fun c -> Printf.sprintf "%c" c)
+      [c1; c2; c3; c4; c5; c6; c7; c8; c9; c10; c11]
+  in
+  print_endline (String.concat "" s)

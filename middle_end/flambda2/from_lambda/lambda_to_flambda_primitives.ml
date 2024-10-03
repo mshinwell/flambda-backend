@@ -171,6 +171,10 @@ let convert_array_index_kind (kind : L.array_index_kind) : P.Array_index_kind.t
   | Punboxed_int_index Pint64 -> Naked_int64
   | Punboxed_int_index Pnativeint -> Naked_nativeint
 
+type reinterpreting_array_ref_kind =
+  | Values
+  | Naked_int64s
+
 module Array_ref_kind = struct
   type t =
     | Immediates
@@ -183,7 +187,7 @@ module Array_ref_kind = struct
     | Naked_nativeints
     | Unboxed_product of
         { kinds : t_no_float_array_opt list;
-          reinterpreting_unboxed_int64_array : bool
+          reinterpreting_array_kind : reinterpreting_array_ref_kind option
         }
 
   and t_no_float_array_opt =
@@ -203,6 +207,15 @@ type converted_array_ref_kind =
 
 let convert_array_ref_kind (kind : L.array_ref_kind) : converted_array_ref_kind
     =
+  let rec convert_gc_scannable_product_element_kind
+      (kind : L.scannable_product_element_kind) :
+      Array_ref_kind.t_no_float_array_opt =
+    match kind with
+    | Pint_scannable -> Immediates
+    | Paddr_scannable -> Values
+    | Pproduct_scannable kinds ->
+      Unboxed_product (List.map convert_gc_scannable_product_element_kind kinds)
+  in
   let rec convert_gc_ignorable_product_element_kind
       (kind : L.ignorable_product_element_kind) :
       Array_ref_kind.t_no_float_array_opt =
@@ -246,19 +259,25 @@ let convert_array_ref_kind (kind : L.array_ref_kind) : converted_array_ref_kind
     Array_ref_kind
       (Unboxed_product
          { kinds = List.map convert_kind kinds;
-           reinterpreting_unboxed_int64_array = false
+           reinterpreting_array_kind = None
          })
   | Pgcignorableproductarray_ref kinds ->
     Array_ref_kind
       (Unboxed_product
          { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
-           reinterpreting_unboxed_int64_array = false
+           reinterpreting_array_kind = None
          })
   | Punboxedint64array_reinterpret_ref kinds ->
     Array_ref_kind
       (Unboxed_product
          { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
-           reinterpreting_unboxed_int64_array = true
+           reinterpreting_array_kind = Some Naked_int64s
+         })
+  | Paddrarray_reinterpret_ref kinds ->
+    Array_ref_kind
+      (Unboxed_product
+         { kinds = List.map convert_gc_scannable_product_element_kind kinds;
+           reinterpreting_array_kind = Some Values
          })
 
 let rec convert_unboxed_product_array_ref_kind
@@ -284,10 +303,13 @@ let convert_array_ref_kind_to_array_kind (array_ref_kind : Array_ref_kind.t) :
   | Naked_int32s -> Naked_int32s
   | Naked_int64s -> Naked_int64s
   | Naked_nativeints -> Naked_nativeints
-  | Unboxed_product { kinds; reinterpreting_unboxed_int64_array = false } ->
+  | Unboxed_product { kinds; reinterpreting_array_kind = None } ->
     Unboxed_product (List.map convert_unboxed_product_array_ref_kind kinds)
-  | Unboxed_product { kinds = _; reinterpreting_unboxed_int64_array = true } ->
+  | Unboxed_product { kinds = _; reinterpreting_array_kind = Some Naked_int64s }
+    ->
     Naked_int64s
+  | Unboxed_product { kinds = _; reinterpreting_array_kind = Some Values } ->
+    Values
 
 let convert_array_ref_kind_for_length array_ref_kind : P.Array_kind_for_length.t
     =
@@ -301,14 +323,22 @@ let convert_array_ref_kind_for_length array_ref_kind : P.Array_kind_for_length.t
   | Array_ref_kind Naked_int32s -> Array_kind Naked_int32s
   | Array_ref_kind Naked_int64s -> Array_kind Naked_int64s
   | Array_ref_kind Naked_nativeints -> Array_kind Naked_nativeints
-  | Array_ref_kind
-      (Unboxed_product { kinds; reinterpreting_unboxed_int64_array = false }) ->
+  | Array_ref_kind (Unboxed_product { kinds; reinterpreting_array_kind = None })
+    ->
     Array_kind
       (Unboxed_product (List.map convert_unboxed_product_array_ref_kind kinds))
   | Array_ref_kind
-      (Unboxed_product { kinds = _; reinterpreting_unboxed_int64_array = true })
-    ->
+      (Unboxed_product
+        { kinds = _; reinterpreting_array_kind = Some Naked_int64s }) ->
     Array_kind Naked_int64s
+  | Array_ref_kind
+      (Unboxed_product { kinds = _; reinterpreting_array_kind = Some Values })
+    ->
+    Array_kind Values
+
+type reinterpreting_array_set_kind =
+  | Values of P.Init_or_assign.t
+  | Naked_int64s
 
 module Array_set_kind = struct
   type t =
@@ -322,7 +352,7 @@ module Array_set_kind = struct
     | Naked_nativeints
     | Unboxed_product of
         { kinds : t_no_float_array_opt list;
-          reinterpreting_unboxed_int64_array : bool
+          reinterpreting_array_kind : reinterpreting_array_set_kind option
         }
 
   and t_no_float_array_opt =
@@ -342,6 +372,17 @@ type converted_array_set_kind =
 
 let convert_array_set_kind (kind : L.array_set_kind) : converted_array_set_kind
     =
+  let rec convert_gc_scannable_product_element_kind mode
+      (kind : L.scannable_product_element_kind) :
+      Array_set_kind.t_no_float_array_opt =
+    match kind with
+    | Pint_scannable -> Immediates
+    | Paddr_scannable ->
+      Values (Assignment (Alloc_mode.For_assignments.from_lambda mode))
+    | Pproduct_scannable kinds ->
+      Unboxed_product
+        (List.map (convert_gc_scannable_product_element_kind mode) kinds)
+  in
   let rec convert_gc_ignorable_product_element_kind
       (kind : L.ignorable_product_element_kind) :
       Array_set_kind.t_no_float_array_opt =
@@ -384,19 +425,29 @@ let convert_array_set_kind (kind : L.array_set_kind) : converted_array_set_kind
     Array_set_kind
       (Unboxed_product
          { kinds = List.map convert_kind kinds;
-           reinterpreting_unboxed_int64_array = false
+           reinterpreting_array_kind = None
          })
   | Pgcignorableproductarray_set kinds ->
     Array_set_kind
       (Unboxed_product
          { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
-           reinterpreting_unboxed_int64_array = false
+           reinterpreting_array_kind = None
          })
   | Punboxedint64array_reinterpret_set kinds ->
     Array_set_kind
       (Unboxed_product
          { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
-           reinterpreting_unboxed_int64_array = true
+           reinterpreting_array_kind = Some Naked_int64s
+         })
+  | Paddrarray_reinterpret_set (mode, kinds) ->
+    Array_set_kind
+      (Unboxed_product
+         { kinds =
+             List.map (convert_gc_scannable_product_element_kind mode) kinds;
+           reinterpreting_array_kind =
+             Some
+               (Values
+                  (Assignment (Alloc_mode.For_assignments.from_lambda mode)))
          })
 
 let rec convert_unboxed_product_array_set_kind
@@ -422,10 +473,14 @@ let convert_array_set_kind_to_array_kind (array_set_kind : Array_set_kind.t) :
   | Naked_int32s -> Naked_int32s
   | Naked_int64s -> Naked_int64s
   | Naked_nativeints -> Naked_nativeints
-  | Unboxed_product { kinds; reinterpreting_unboxed_int64_array = false } ->
+  | Unboxed_product { kinds; reinterpreting_array_kind = None } ->
     Unboxed_product (List.map convert_unboxed_product_array_set_kind kinds)
-  | Unboxed_product { kinds = _; reinterpreting_unboxed_int64_array = true } ->
+  | Unboxed_product { kinds = _; reinterpreting_array_kind = Some Naked_int64s }
+    ->
     Naked_int64s
+  | Unboxed_product { kinds = _; reinterpreting_array_kind = Some (Values _) }
+    ->
+    Values
 
 let convert_array_set_kind_for_length array_set_kind : P.Array_kind_for_length.t
     =
@@ -439,14 +494,18 @@ let convert_array_set_kind_for_length array_set_kind : P.Array_kind_for_length.t
   | Array_set_kind Naked_int32s -> Array_kind Naked_int32s
   | Array_set_kind Naked_int64s -> Array_kind Naked_int64s
   | Array_set_kind Naked_nativeints -> Array_kind Naked_nativeints
-  | Array_set_kind
-      (Unboxed_product { kinds; reinterpreting_unboxed_int64_array = false }) ->
+  | Array_set_kind (Unboxed_product { kinds; reinterpreting_array_kind = None })
+    ->
     Array_kind
       (Unboxed_product (List.map convert_unboxed_product_array_set_kind kinds))
   | Array_set_kind
-      (Unboxed_product { kinds = _; reinterpreting_unboxed_int64_array = true })
-    ->
+      (Unboxed_product
+        { kinds = _; reinterpreting_array_kind = Some Naked_int64s }) ->
     Array_kind Naked_int64s
+  | Array_set_kind
+      (Unboxed_product
+        { kinds = _; reinterpreting_array_kind = Some (Values _) }) ->
+    Array_kind Values
 
 type converted_duplicate_array_kind =
   | Duplicate_array_kind of P.Duplicate_array_kind.t
@@ -1075,33 +1134,59 @@ let compute_array_indexes ~index ~num_elts =
 
 let rec array_load_unsafe ~array ~index array_kind
     (array_ref_kind : Array_ref_kind.t) ~index_kind ~current_region
-    ~reinterpreting_unboxed_int64_array : H.expr_primitive list =
-  let maybe_reinterpreting array_kind : P.Array_kind.t =
-    if reinterpreting_unboxed_int64_array then Naked_int64s else array_kind
+    ~(reinterpreting_array_kind : reinterpreting_array_ref_kind option) :
+    H.expr_primitive list =
+  let maybe_reinterpreting_either array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None | Some Values -> array_kind
+    | Some Naked_int64s -> Naked_int64s
+  in
+  let maybe_reinterpreting_values array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None | Some Values -> array_kind
+    | Some Naked_int64s ->
+      Misc.fatal_error
+        "Cannot use int64# array reinterpreting operations on value arrays"
+  in
+  let maybe_reinterpreting_int64 array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None -> array_kind
+    | Some Naked_int64s -> Naked_int64s
+    | Some Values ->
+      Misc.fatal_error
+        "Cannot use value array reinterpreting operations on non-value arrays"
   in
   let[@inline] no_reinterpreting () =
-    if reinterpreting_unboxed_int64_array
-    then
+    match reinterpreting_array_kind with
+    | None -> ()
+    | Some (Naked_int64s | Values) ->
       Misc.fatal_error
         "Only 64-bit-wide sorts and unboxed products thereof may be used in \
-         int64# array reinterpreting operations (should have been caught by \
-         the frontend)"
+         array reinterpreting operations (should have been caught by the \
+         frontend)"
   in
   (* CR mshinwell: introduce [normal_case] like for [Array_set], below *)
   match array_ref_kind with
   | Immediates ->
     [ Binary
         ( Array_load
-            (maybe_reinterpreting Immediates, Immediates, index_kind, Mutable),
+            ( maybe_reinterpreting_either Immediates,
+              Immediates,
+              index_kind,
+              Mutable ),
           array,
           index ) ]
   | Values ->
-    [Binary (Array_load (Values, Values, index_kind, Mutable), array, index)]
+    [ Binary
+        ( Array_load
+            (maybe_reinterpreting_values Values, Values, index_kind, Mutable),
+          array,
+          index ) ]
   | Naked_floats_to_be_boxed mode ->
     [ box_float mode
         (Binary
            ( Array_load
-               ( maybe_reinterpreting Naked_floats,
+               ( maybe_reinterpreting_int64 Naked_floats,
                  Naked_floats,
                  index_kind,
                  Mutable ),
@@ -1111,7 +1196,7 @@ let rec array_load_unsafe ~array ~index array_kind
   | Naked_floats ->
     [ Binary
         ( Array_load
-            ( maybe_reinterpreting Naked_floats,
+            ( maybe_reinterpreting_int64 Naked_floats,
               Naked_floats,
               index_kind,
               Mutable ),
@@ -1125,12 +1210,6 @@ let rec array_load_unsafe ~array ~index array_kind
           index ) ]
   | Naked_int32s ->
     no_reinterpreting ();
-    if reinterpreting_unboxed_int64_array
-    then
-      Misc.fatal_error
-        "Only 64-bit-wide sorts and unboxed products thereof may be used in \
-         int64# array reinterpreting operations (should have been caught by \
-         the frontend)";
     [ Binary
         ( Array_load (Naked_int32s, Naked_int32s, index_kind, Mutable),
           array,
@@ -1138,7 +1217,7 @@ let rec array_load_unsafe ~array ~index array_kind
   | Naked_int64s ->
     [ Binary
         ( Array_load
-            ( maybe_reinterpreting Naked_int64s,
+            ( maybe_reinterpreting_int64 Naked_int64s,
               Naked_int64s,
               index_kind,
               Mutable ),
@@ -1147,14 +1226,13 @@ let rec array_load_unsafe ~array ~index array_kind
   | Naked_nativeints ->
     [ Binary
         ( Array_load
-            ( maybe_reinterpreting Naked_nativeints,
+            ( maybe_reinterpreting_int64 Naked_nativeints,
               Naked_nativeints,
               index_kind,
               Mutable ),
           array,
           index ) ]
-  | Unboxed_product
-      { kinds = array_ref_kinds; reinterpreting_unboxed_int64_array } ->
+  | Unboxed_product { kinds = array_ref_kinds; reinterpreting_array_kind } ->
     let rec unarize_kind (array_ref_kind : Array_ref_kind.t_no_float_array_opt)
         : Array_ref_kind.t list =
       match array_ref_kind with
@@ -1169,9 +1247,9 @@ let rec array_load_unsafe ~array ~index array_kind
     in
     let unarized = List.concat_map unarize_kind array_ref_kinds in
     let index : H.simple_or_prim =
-      if reinterpreting_unboxed_int64_array
-      then index
-      else
+      match reinterpreting_array_kind with
+      | Some (Values | Naked_int64s) -> index
+      | None ->
         let multiplier =
           List.length array_ref_kinds
           |> Targetint_31_63.of_int |> Simple.const_int
@@ -1185,31 +1263,61 @@ let rec array_load_unsafe ~array ~index array_kind
     in
     List.concat_map
       (fun (index, array_ref_kind) ->
-        array_load_unsafe ~array ~index array_kind array_ref_kind ~index_kind
-          ~current_region ~reinterpreting_unboxed_int64_array)
+        let results =
+          array_load_unsafe ~array ~index array_kind array_ref_kind ~index_kind
+            ~current_region ~reinterpreting_array_kind
+        in
+        match reinterpreting_array_kind with
+        | None | Some Naked_int64s -> results
+        | Some Values ->
+          List.map
+            (fun result : H.expr_primitive ->
+              Unary
+                (* Pareil que l'ortolan à la serviette... *)
+                ( Opaque_identity { middle_end_only = true; kind = K.value },
+                  Prim result ))
+            results)
       (List.combine indexes unarized)
 
 let array_load_unsafe ~array ~index array_kind array_load_kind ~index_kind
     ~current_region =
   array_load_unsafe ~array ~index array_kind array_load_kind ~index_kind
-    ~current_region ~reinterpreting_unboxed_int64_array:false
+    ~current_region ~reinterpreting_array_kind:None
   |> H.maybe_create_unboxed_product
 
 let rec array_set_unsafe dbg ~array ~index array_kind
     (array_set_kind : Array_set_kind.t) ~index_kind ~new_values
-    ~reinterpreting_unboxed_int64_array : H.expr_primitive list =
-  let maybe_reinterpreting array_kind : P.Array_kind.t =
-    if reinterpreting_unboxed_int64_array then Naked_int64s else array_kind
+    ~reinterpreting_array_kind : H.expr_primitive list =
+  let maybe_reinterpreting_either array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None | Some (Values _) -> array_kind
+    | Some Naked_int64s -> Naked_int64s
   in
-  let[@inline] no_reinterpreting () =
-    if reinterpreting_unboxed_int64_array
-    then
+  let maybe_reinterpreting_values array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None | Some (Values _) -> array_kind
+    | Some Naked_int64s ->
+      Misc.fatal_error
+        "Cannot use int64# array reinterpreting operations on value arrays"
+  in
+  let maybe_reinterpreting_int64 array_kind : P.Array_kind.t =
+    match reinterpreting_array_kind with
+    | None -> array_kind
+    | Some Naked_int64s -> Naked_int64s
+    | Some (Values _) ->
+      Misc.fatal_error
+        "Cannot use value array reinterpreting operations on non-value arrays"
+  in
+  let[@inline] no_reinterpreting array_kind =
+    match reinterpreting_array_kind with
+    | None -> array_kind
+    | Some (Naked_int64s | Values _) ->
       Misc.fatal_error
         "Only 64-bit-wide sorts and unboxed products thereof may be used in \
-         int64# array reinterpreting operations (should have been caught by \
-         the frontend)"
+         array reinterpreting operations (should have been caught by the \
+         frontend)"
   in
-  let[@inline] normal_case array_set_kind new_values =
+  let[@inline] normal_case maybe_reinterpreting array_set_kind new_values =
     match new_values with
     | [new_value] ->
       let array_kind = maybe_reinterpreting array_kind in
@@ -1224,20 +1332,20 @@ let rec array_set_unsafe dbg ~array ~index array_kind
   in
   match array_set_kind with
   | Naked_floats_to_be_unboxed ->
-    normal_case Naked_floats (List.map unbox_float new_values)
-  | Immediates -> normal_case Immediates new_values
-  | Values init_or_assign -> normal_case (Values init_or_assign) new_values
-  | Naked_floats -> normal_case Naked_floats new_values
-  | Naked_float32s ->
-    no_reinterpreting ();
-    normal_case Naked_float32s new_values
-  | Naked_int32s ->
-    no_reinterpreting ();
-    normal_case Naked_int32s new_values
-  | Naked_int64s -> normal_case Naked_int64s new_values
-  | Naked_nativeints -> normal_case Naked_nativeints new_values
-  | Unboxed_product
-      { kinds = array_set_kinds; reinterpreting_unboxed_int64_array } ->
+    normal_case maybe_reinterpreting_int64 Naked_floats
+      (List.map unbox_float new_values)
+  | Immediates -> normal_case maybe_reinterpreting_either Immediates new_values
+  | Values init_or_assign ->
+    normal_case maybe_reinterpreting_values (Values init_or_assign) new_values
+  | Naked_floats ->
+    normal_case maybe_reinterpreting_int64 Naked_floats new_values
+  | Naked_float32s -> normal_case no_reinterpreting Naked_float32s new_values
+  | Naked_int32s -> normal_case no_reinterpreting Naked_int32s new_values
+  | Naked_int64s ->
+    normal_case maybe_reinterpreting_int64 Naked_int64s new_values
+  | Naked_nativeints ->
+    normal_case maybe_reinterpreting_int64 Naked_nativeints new_values
+  | Unboxed_product { kinds = array_set_kinds; reinterpreting_array_kind } ->
     let rec unarize_kind (array_set_kind : Array_set_kind.t_no_float_array_opt)
         : Array_set_kind.t list =
       match array_set_kind with
@@ -1252,9 +1360,9 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     in
     let unarized = List.concat_map unarize_kind array_set_kinds in
     let index : H.simple_or_prim =
-      if reinterpreting_unboxed_int64_array
-      then index
-      else
+      match reinterpreting_array_kind with
+      | Some (Values _ | Naked_int64s) -> index
+      | None ->
         let multiplier =
           List.length array_set_kinds
           |> Targetint_31_63.of_int |> Simple.const_int
@@ -1276,14 +1384,13 @@ let rec array_set_unsafe dbg ~array ~index array_kind
         (List.concat_map
            (fun (index, (array_set_kind, new_value)) ->
              array_set_unsafe dbg ~array ~index array_kind array_set_kind
-               ~index_kind ~new_values:[new_value]
-               ~reinterpreting_unboxed_int64_array)
+               ~index_kind ~new_values:[new_value] ~reinterpreting_array_kind)
            (List.combine indexes (List.combine unarized new_values))) ]
 
 let array_set_unsafe dbg ~array ~index array_kind array_set_kind ~index_kind
     ~new_values =
   array_set_unsafe dbg ~array ~index array_kind array_set_kind ~index_kind
-    ~new_values ~reinterpreting_unboxed_int64_array:false
+    ~new_values ~reinterpreting_array_kind:None
   |> H.maybe_create_unboxed_product
 
 let[@inline always] match_on_array_ref_kind ~array array_ref_kind f :
@@ -2423,14 +2530,16 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
             | Pfloatarray_ref _ | Punboxedfloatarray_ref _
             | Punboxedintarray_ref _ | Pgcscannableproductarray_ref _
             | Pgcignorableproductarray_ref _
-            | Punboxedint64array_reinterpret_ref _ ),
+            | Punboxedint64array_reinterpret_ref _
+            | Paddrarray_reinterpret_ref _ ),
             _ )
       | Parrayrefs
           ( ( Pgenarray_ref _ | Paddrarray_ref | Pintarray_ref
             | Pfloatarray_ref _ | Punboxedfloatarray_ref _
             | Punboxedintarray_ref _ | Pgcscannableproductarray_ref _
             | Pgcignorableproductarray_ref _
-            | Punboxedint64array_reinterpret_ref _ ),
+            | Punboxedint64array_reinterpret_ref _
+            | Paddrarray_reinterpret_ref _ ),
             _ )
       | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _ | Patomic_exchange
       | Patomic_fetch_add ),
@@ -2449,14 +2558,16 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
             | Pfloatarray_set | Punboxedfloatarray_set _
             | Punboxedintarray_set _ | Pgcscannableproductarray_set _
             | Pgcignorableproductarray_set _
-            | Punboxedint64array_reinterpret_set _ ),
+            | Punboxedint64array_reinterpret_set _
+            | Paddrarray_reinterpret_set _ ),
             _ )
       | Parraysets
           ( ( Pgenarray_set _ | Paddrarray_set _ | Pintarray_set
             | Pfloatarray_set | Punboxedfloatarray_set _
             | Punboxedintarray_set _ | Pgcscannableproductarray_set _
             | Pgcignorableproductarray_set _
-            | Punboxedint64array_reinterpret_set _ ),
+            | Punboxedint64array_reinterpret_set _
+            | Paddrarray_reinterpret_set _ ),
             _ )
       | Pbytes_set_16 _ | Pbytes_set_32 _ | Pbytes_set_f32 _ | Pbytes_set_64 _
       | Pbytes_set_128 _ | Pbigstring_set_16 _ | Pbigstring_set_32 _
