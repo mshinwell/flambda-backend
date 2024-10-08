@@ -212,3 +212,15 @@ let () =
       [c1; c2; c3; c4; c5; c6; c7; c8; c9; c10; c11]
   in
   print_endline (String.concat "" s)
+
+
+(* Measuring of layouts in words *)
+
+external[@layout_poly] measure_layout : ('a : any) . 'a -> int =
+  "%measure_layout"
+
+let () =
+  Printf.printf "%d\n" (measure_layout #(1., #(#2l, #3.4, #5L), #(1, 2)))
+
+let () =
+  Printf.printf "%d\n" (measure_layout #1.)

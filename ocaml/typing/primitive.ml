@@ -559,6 +559,12 @@ let prim_has_valid_reprs ~loc prim =
     | "%apply" ->
       check [is (Same_as_ocaml_repr C.value); any; any]
 
+    | "%measure_layout" ->
+      check [
+        any;
+        is (Same_as_ocaml_repr C.value);
+      ]
+
     | "%unboxed_int64_array_safe_get_reinterpret" ->
       check [
         is (Same_as_ocaml_repr C.value);

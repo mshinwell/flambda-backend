@@ -1004,8 +1004,8 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
       | Pobj_magic _ | Punbox_float _
       | Pbox_float (_, _)
       | Punbox_int _ | Pbox_int _ | Pmake_unboxed_product _
-      | Punboxed_product_field _ | Pget_header _ | Prunstack | Pperform
-      | Presume | Preperform | Patomic_exchange | Patomic_cas
+      | Punboxed_product_field _ | Pmeasure_layout _ | Pget_header _ | Prunstack
+      | Pperform | Presume | Preperform | Patomic_exchange | Patomic_cas
       | Patomic_fetch_add | Pdls_get | Ppoll | Patomic_load _
       | Preinterpret_tagged_int63_as_unboxed_int64
       | Preinterpret_unboxed_int64_as_tagged_int63 | Pmake_unboxed_tuple_vect _

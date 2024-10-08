@@ -364,7 +364,8 @@ let compute_static_size lam =
     | Punboxed_float32_array_set_128 _
     | Punboxed_int32_array_set_128 _
     | Punboxed_int64_array_set_128 _
-    | Punboxed_nativeint_array_set_128 _ ->
+    | Punboxed_nativeint_array_set_128 _
+    | Pmeasure_layout _ ->
         Constant
 
     | Pmakeufloatblock (_, _)

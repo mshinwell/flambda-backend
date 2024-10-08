@@ -162,6 +162,7 @@ type primitive =
   (* Unboxed products *)
   | Pmake_unboxed_product of layout list
   | Punboxed_product_field of int * layout list
+  | Pmeasure_layout of layout
   (* Context switches *)
   | Prunstack
   | Pperform
@@ -1754,7 +1755,8 @@ let primitive_may_allocate : primitive -> alloc_mode option = function
   | Psetufloatfield _ -> None
   | Psetmixedfield _ -> None
   | Pduprecord _ -> Some alloc_heap
-  | Pmake_unboxed_product _ | Punboxed_product_field _ -> None
+  | Pmake_unboxed_product _ | Punboxed_product_field _
+  | Pmeasure_layout _ -> None
   | Pccall p -> alloc_mode_of_primitive_description p
   | Praise _ -> None
   | Psequor | Psequand | Pnot
@@ -1992,6 +1994,7 @@ let primitive_result_layout (p : primitive) =
   | Pfield _ | Pfield_computed _ -> layout_value_field
   | Punboxed_product_field (field, layouts) -> (Array.of_list layouts).(field)
   | Pmake_unboxed_product layouts -> layout_unboxed_product layouts
+  | Pmeasure_layout _ -> layout_int
   | Pfloatfield _ -> layout_boxed_float Pfloat64
   | Pfloatoffloat32 _ -> layout_boxed_float Pfloat64
   | Pfloat32offloat _ -> layout_boxed_float Pfloat32

@@ -1511,6 +1511,8 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     let mutability = Mutability.from_lambda mutability in
     [Variadic (Make_block (Values (tag, shape), mutability, mode), args)]
   | Pmake_unboxed_product layouts, _ ->
+    (* CR mshinwell: this should check the unarized lengths of [layouts] and
+       [args] (like [Pmeasure_layout] below) *)
     if List.compare_lengths layouts args <> 0
     then
       Misc.fatal_errorf "Pmake_unboxed_product: expected %d arguments, got %d"
@@ -1540,6 +1542,20 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       |> Array.to_list
     in
     List.map (fun arg : H.expr_primitive -> Simple arg) projected_args
+  | Pmeasure_layout layout, args ->
+    let num_unarized =
+      Flambda_arity.create
+        [Flambda_arity.Component_for_creation.from_lambda layout]
+      |> Flambda_arity.unarize |> List.length
+    in
+    let num_args = List.flatten args |> List.length in
+    if num_unarized <> num_args
+    then
+      Misc.fatal_errorf
+        "Pmake_unboxed_product: expected %d unarized arguments to match layout \
+         %a, but got %d"
+        num_unarized Printlambda.layout layout num_args;
+    [Simple (Simple.const_int (Targetint_31_63.of_int num_unarized))]
   | Pmakefloatblock (mutability, mode), _ ->
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in

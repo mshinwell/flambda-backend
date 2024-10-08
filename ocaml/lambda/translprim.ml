@@ -548,6 +548,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
         3)
     | "%make_unboxed_tuple_vect" ->
       Primitive (Pmake_unboxed_tuple_vect (gen_array_kind, mode), 2)
+    | "%measure_layout" ->
+      (* The layout will be filled in later *)
+      Primitive (Pmeasure_layout Pbottom, 1)
     | "%obj_size" -> Primitive ((Parraylength Pgenarray), 1)
     | "%obj_field" -> Primitive ((Parrayrefu (Pgenarray_ref mode, Ptagged_int_index)), 2)
     | "%obj_set_field" ->
@@ -1379,6 +1382,15 @@ let specialize_primitive env loc ty ~has_constant_constructor prim =
       if at = array_type then None
       else Some (Primitive (Pmake_unboxed_tuple_vect (array_type, mode), arity))
     end
+  | Primitive (Pmeasure_layout _, arity), p1 :: _ -> (
+      let layout =
+        (* XXX [why] is wrong *)
+        match Ctype.type_legacy_sort ~why:Array_element env p1 with
+        | Error _ -> Misc.fatal_error "Did not expect type_legacy_sort to fail"
+        | Ok sort -> Typeopt.layout env (to_location loc) sort p1
+      in
+      Some (Primitive (Pmeasure_layout layout, arity))
+    )
   | Primitive (Pbigarrayref(unsafe, n, kind, layout), arity), p1 :: _ -> begin
       let (k, l) = bigarray_specialize_kind_and_layout env ~kind ~layout p1 in
       match k, l with
@@ -1896,6 +1908,7 @@ let lambda_primitive_needs_event_after = function
   | Pgetglobal _ | Pgetpredef _ | Pmakeblock _ | Pmakefloatblock _
   | Pmakeufloatblock _ | Pmakemixedblock _
   | Pmake_unboxed_product _ | Punboxed_product_field _
+  | Pmeasure_layout _
   | Pfield _ | Pfield_computed _ | Psetfield _
   | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Praise _
   | Pufloatfield _ | Psetufloatfield _ | Pmixedfield _ | Psetmixedfield _

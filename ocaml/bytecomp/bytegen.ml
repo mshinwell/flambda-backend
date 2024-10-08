@@ -157,6 +157,7 @@ let preserve_tailcall_for_prim = function
   | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Pduprecord _
   | Pufloatfield _ | Psetufloatfield _ | Pmixedfield _ | Psetmixedfield _
   | Pmake_unboxed_product _ | Punboxed_product_field _
+  | Pmeasure_layout _
   | Pccall _ | Praise _ | Pnot | Pnegint | Paddint | Psubint | Pmulint
   | Pdivint _ | Pmodint _ | Pandint | Porint | Pxorint | Plslint | Plsrint
   | Pasrint | Pintcomp _ | Poffsetint _ | Poffsetref _ | Pintoffloat _
@@ -413,6 +414,18 @@ let comp_primitive stack_info p sz args =
   | Pcompare_bints bi -> comp_bint_primitive bi "compare" args
   | Pfield (n, _ptr, _sem) -> Kgetfield n
   | Punboxed_product_field (n, _layouts) -> Kgetfield n
+  | Pmeasure_layout layout ->
+      let num_components =
+        match layout with
+        | Ptop
+        | Pvalue _
+        | Punboxed_float _
+        | Punboxed_int _
+        | Punboxed_vector _
+        | Pbottom -> 1
+        | Punboxed_product layouts -> List.length layouts
+      in
+      Kconst (Const_base (Const_int num_components))
   | Pfield_computed _sem -> Kgetvectitem
   | Psetfield(n, _ptr, _init) -> Ksetfield n
   | Psetfield_computed(_ptr, _init) -> Ksetvectitem
