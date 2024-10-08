@@ -930,6 +930,7 @@ let simplify_array_load (array_kind : P.Array_kind.t)
     (accessor_width : P.array_accessor_width) mutability dacc ~original_term:_
     dbg ~arg1:array ~arg1_ty:array_ty ~arg2:index ~arg2_ty:index_ty ~result_var
     =
+  Format.eprintf "ARRAY LOAD\n%!";
   let result_kind =
     match accessor_width with
     | Scalar -> P.Array_kind.element_kind array_kind |> K.With_subkind.kind
@@ -965,31 +966,62 @@ let simplify_array_load (array_kind : P.Array_kind.t)
     (* CR mshinwell/vlaviron: if immutable array accesses were consistently
        setting [mutability] to [Immutable], we could restrict the following code
        to immutable loads only and use [T.meet_is_immutable_array] instead. *)
-    match T.prove_is_immutable_array (DA.typing_env dacc) array_ty with
-    | Unknown -> contents_unknown ()
-    | Proved (elt_kind, fields, _mode) -> (
-      match elt_kind with
-      | Unknown | Bottom -> contents_unknown ()
-      | Ok elt_kind -> (
-        if not (K.equal (K.With_subkind.kind elt_kind) result_kind)
-        then contents_unknown ()
-        else
-          match
-            T.prove_equals_tagged_immediates (DA.typing_env dacc) index_ty
-          with
-          | Unknown -> contents_unknown ()
-          | Proved imms -> (
-            match Targetint_31_63.Set.get_singleton imms with
-            | None -> contents_unknown ()
-            | Some imm ->
-              if Targetint_31_63.( < ) imm Targetint_31_63.zero
-                 || Targetint_31_63.( >= ) imm
-                      (Array.length fields |> Targetint_31_63.of_int)
-              then SPR.create_invalid dacc
-              else
-                return_given_type
-                  fields.(Targetint_31_63.to_int imm)
-                  ~try_reify:true))))
+    Format.eprintf "****\n%!";
+    match T.prove_equals_tagged_immediates (DA.typing_env dacc) index_ty with
+    | Unknown -> (
+      match T.prove_is_array (DA.typing_env dacc) array_ty with
+      | Unknown ->
+        Format.eprintf "1\n%!";
+        contents_unknown ()
+      | Proved (elt_kind, _fields, _mode) -> (
+        match elt_kind with
+        | Unknown | Ok _ ->
+          Format.eprintf "2\n%!";
+          contents_unknown ()
+        | Bottom -> SPR.create_invalid dacc))
+    | Proved imms -> (
+      if Targetint_31_63.Set.for_all
+           (fun imm -> Targetint_31_63.( < ) imm Targetint_31_63.zero)
+           imms
+      then SPR.create_invalid dacc
+      else
+        let () =
+          Format.eprintf "array_ty is:@ %a\n%a\n%!" T.print array_ty
+            T.Typing_env.print (DA.typing_env dacc)
+        in
+        match T.prove_is_array (DA.typing_env dacc) array_ty with
+        | Unknown ->
+          Format.eprintf "3\n%!";
+          contents_unknown ()
+        | Proved (elt_kind, Known (Immutable { fields }), _mode) -> (
+          match elt_kind with
+          | Unknown ->
+            Format.eprintf "4\n%!";
+            contents_unknown ()
+          | Bottom ->
+            Format.eprintf "INV\n%!";
+            SPR.create_invalid dacc
+          | Ok elt_kind -> (
+            Format.eprintf "5\n%!";
+            if not (K.equal (K.With_subkind.kind elt_kind) result_kind)
+            then contents_unknown ()
+            else
+              match Targetint_31_63.Set.get_singleton imms with
+              | None -> contents_unknown ()
+              | Some imm ->
+                if Targetint_31_63.( >= ) imm
+                     (Array.length fields |> Targetint_31_63.of_int)
+                then SPR.create_invalid dacc
+                else
+                  return_given_type
+                    fields.(Targetint_31_63.to_int imm)
+                    ~try_reify:true))
+        | Proved (elt_kind, (Unknown | Known Mutable), _mode) -> (
+          (* XXX in this case we may still know the length from the type. The
+             length should be returned by the prover *)
+          match elt_kind with
+          | Unknown | Ok _ -> contents_unknown ()
+          | Bottom -> SPR.create_invalid dacc)))
 
 let simplify_string_or_bigstring_load _string_like_value _string_accessor_width
     ~original_prim dacc ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_

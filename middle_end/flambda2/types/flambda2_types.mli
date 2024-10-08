@@ -21,6 +21,10 @@ type t
 
 type flambda_type = t
 
+type array_contents = private
+  | Immutable of { fields : t array }
+  | Mutable
+
 val print : Format.formatter -> t -> unit
 
 val arity_of_list : t list -> [`Unarized] Flambda_arity.t
@@ -654,19 +658,19 @@ val meet_is_naked_number_array :
 
 val prove_is_immediates_array : Typing_env.t -> t -> unit proof_of_property
 
-val meet_is_immutable_array :
+val meet_is_array :
   Typing_env.t ->
   t ->
   (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
-  * t array
+  * array_contents Or_unknown.t
   * Alloc_mode.For_types.t)
   meet_shortcut
 
-val prove_is_immutable_array :
+val prove_is_array :
   Typing_env.t ->
   t ->
   (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
-  * t array
+  * array_contents Or_unknown.t
   * Alloc_mode.For_types.t)
   proof_of_property
 

@@ -141,19 +141,19 @@ val meet_is_naked_number_array :
   Flambda_kind.Naked_number_kind.t ->
   bool meet_shortcut
 
-val meet_is_immutable_array :
+val meet_is_array :
   Typing_env.t ->
   Type_grammar.t ->
   (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
-  * Type_grammar.t array
+  * Type_grammar.array_contents Or_unknown.t
   * Alloc_mode.For_types.t)
   meet_shortcut
 
-val prove_is_immutable_array :
+val prove_is_array :
   Typing_env.t ->
   Type_grammar.t ->
   (Flambda_kind.With_subkind.t Or_unknown_or_bottom.t
-  * Type_grammar.t array
+  * Type_grammar.array_contents Or_unknown.t
   * Alloc_mode.For_types.t)
   proof_of_property
 

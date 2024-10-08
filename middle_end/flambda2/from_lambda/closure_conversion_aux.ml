@@ -1048,7 +1048,11 @@ module Let_with_acc = struct
     in
     let has_no_effects =
       match (named : Named.t) with
-      | Prim (prim, _) -> Flambda_primitive.at_most_generative_effects prim
+      | Prim (prim, _) ->
+        (* Allow Simplify to produce [Invalid] *)
+        if not (Flambda_features.classic_mode ())
+        then false
+        else Flambda_primitive.at_most_generative_effects prim
       | Simple _ | Static_consts _ | Set_of_closures _ | Rec_info _ -> true
     in
     let keep_bindings_for_simplify =
