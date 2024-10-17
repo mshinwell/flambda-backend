@@ -469,6 +469,109 @@ CAMLprim value caml_make_local_vect(value len, value init)
   return make_vect_gen(len, init, 1);
 }
 
+CAMLprim value caml_makearray_dynamic(value v_init, value v_is_local,
+  value v_is_scannable, value v_non_unarized_length,
+  value v_float_array_opt_can_apply)
+{
+  // Some of this is similar to [caml_make_vect], above.
+
+  mlsize_t num_initializers = Wosize_val(v_init);
+  int is_local = Bool_val(v_is_local);
+  int is_scannable = Bool_val(v_is_scannable);
+  mlsize_t non_unarized_length = Long_val(v_non_unarized_length);
+
+  value res;
+  mlsize_t size, i;
+
+  // N.B. [v_init] may be on the local stack!
+
+#ifdef FLAT_FLOAT_ARRAY
+  int float_array_opt_can_apply = Bool_val(v_float_array_opt_can_apply);
+
+  if (float_array_opt_can_apply && num_initializers != 1) {
+    // This should have been caught in [Lambda_to_flambda].
+    caml_invalid_argument(
+      "%makearray_dynamic: if the float array optimization may apply, "
+      "only a singleton initializer may be provided (this is a compiler bug)");
+  }
+#endif
+
+  if (sizeof(uintnat) != sizeof(double)) {
+    // Just make things easy as regards maximum array lengths for now.
+    // This should have been caught in [Lambda_to_flambda].
+    caml_invalid_argument(
+      "%makearray_dynamic: only supported on 64-bit targets "
+        "(this is a compiler bug)");
+  }
+  CAMLassert(Double_wosize == 1);
+
+  size = non_unarized_length * num_initializers;
+  if (size == 0) {
+    res = Atom(0);
+  } else if (num_initializers < 1) {
+    // This could happen with void layouts.  We don't rule it out in
+    // [Lambda_to_flambda] since it is in fact ok, if the size is zero.
+    caml_invalid_argument(
+      "%makearray_dynamic: the only array that can be initialized with "
+      "nothing is a zero-length array");
+  } else if (size > Max_array_wosize) {
+    caml_invalid_argument(
+      "%makearray_dynamic: array size too large (> Max_array_wosize)");
+#ifdef FLAT_FLOAT_ARRAY
+  } else if (float_array_opt_can_apply
+             && Is_block(Field(v_init, 0))
+             && Tag_val(Field(v_init, 0)) == Double_tag) {
+    double d = Double_val(Field(v_init, 0));
+    res = is_local ?
+      caml_alloc_local(size, Double_array_tag) :
+      caml_alloc(size, Double_array_tag);
+    for (i = 0; i < size; i++) {
+      Store_double_flat_field(res, i, d);
+    }
+#endif
+  } else if (is_local) {
+    res = caml_alloc_local(size, 0);
+    for (i = 0; i < size; i++) {
+      Field(res, i) = Field(v_init, i % num_initializers);
+    }
+  } else if (size <= Max_young_wosize) {
+    res = caml_alloc_small(size, 0);
+    for (i = 0; i < size; i++) {
+      Field(res, i) = Field(v_init, i % num_initializers);
+    }
+  } else {
+    int move_init_to_major = 0;
+    for (mlsize_t i = 0; is_scannable && i < non_unarized_length; i++) {
+      if (Is_block(Field(v_init, i)) && Is_young(Field(v_init, i))) {
+        move_init_to_major = 1;
+      }
+    }
+    if (move_init_to_major) {
+      /* We don't want to create so many major-to-minor references,
+         so the contents of [v_init] are moved to the major heap by doing
+         a minor GC. */
+      CAMLassert(is_scannable);
+      CAML_EV_COUNTER (EV_C_FORCE_MINOR_MAKE_VECT, 1);
+      caml_minor_collection ();
+    }
+    for (mlsize_t i = 0; is_scannable && i < non_unarized_length; i++) {
+      CAMLassert(!(Is_block(Field(v_init, i)) && Is_young(Field(v_init, i))));
+    }
+    res = caml_alloc_shr(size, 0);
+    /* We now know that everything in [v_init] is not in the minor heap, so
+       there is no need to call [caml_initialize].  (Indeed we cannot if
+       [!is_scannable] holds.) */
+    for (i = 0; i < size; i++) {
+      Field(res, i) = Field(v_init, i % num_initializers);
+    }
+  }
+
+  /* Give the GC a chance to run, and run memprof callbacks */
+  if (!is_local) caml_process_pending_actions ();
+
+  return res;
+}
+
 /* [len] is a [value] representing number of floats */
 /* [ int -> float array ] */
 CAMLprim value caml_make_float_vect(value len)

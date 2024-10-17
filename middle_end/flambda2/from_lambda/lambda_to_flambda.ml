@@ -219,6 +219,116 @@ let switch_for_if_then_else ~cond ~ifso ~ifnot ~kind =
   in
   L.Lswitch (cond, switch, try_to_find_location cond, kind)
 
+let makearray_dynamic (lambda_array_kind : L.array_kind)
+    (mode : L.locality_mode) args loc =
+  (* This is analogous to (from stdlib/array.ml):
+   *   external create: int -> 'a -> 'a array = "caml_make_vect"
+   * except that it works on any layout, including unboxed products.
+   *)
+  if not Config.stack_allocation
+  then
+    Misc.fatal_error
+      "Cannot compile Pmakearray_dynamic without stack allocation enabled";
+  (* To keep things simple in the C stub as regards array length, we currently
+     restrict to 64-bit targets. *)
+  if not (Target_system.is_64_bit ())
+  then Misc.fatal_error "Cannot compile Pmakearray_dynamic for 32-bit targets";
+  (* Trick: use the local stack as a way of getting the variable argument list
+     to the C function. *)
+  let length, init =
+    match args with
+    | [length; init] -> length, init
+    | [] | [_] | _ :: _ :: _ ->
+      Misc.fatal_error
+        "%makearray_dynamic takes two arguments: the (non-unarized) length and \
+         the initializer (the latter perhaps of unboxed product layout)"
+  in
+  let must_be_scanned =
+    match lambda_array_kind with
+    | Pgenarray | Paddrarray -> true
+    | Pgcscannableproductarray kinds ->
+      let rec must_be_scanned (kind : L.scannable_product_element_kind) =
+        match kind with
+        | Pint_scannable -> false
+        | Paddr_scannable -> true
+        | Pproduct_scannable kinds -> List.exists must_be_scanned kinds
+      in
+      List.exists must_be_scanned kinds
+    | Pintarray | Pfloatarray | Punboxedfloatarray _ | Punboxedintarray _
+    | Punboxedvectorarray _ | Pgcignorableproductarray _ ->
+      false
+  in
+  let float_array_opt_can_apply =
+    match lambda_array_kind with
+    | Pgenarray ->
+      Lambda_to_flambda_primitives.check_float_array_optimisation_enabled
+        "Pmakearray_dynamic (Pgenarray, _)";
+      true
+    | Pgcscannableproductarray _ ->
+      (* See note in lambda.mli on [Pmakearray_dynamic]. *)
+      false
+    | Paddrarray | Pintarray | Pfloatarray | Punboxedfloatarray _
+    | Punboxedintarray _ | Punboxedvectorarray _ | Pgcignorableproductarray _ ->
+      false
+  in
+  let args_array = Ident.create_local "args_array" in
+  let array_layout = Lambda.layout_array lambda_array_kind in
+  let float_array_opt_can_apply =
+    if float_array_opt_can_apply
+    then L.Lconst (Const_base (Const_int 1))
+    else L.Lconst (Const_base (Const_int 0))
+  in
+  let must_be_scanned =
+    if must_be_scanned
+    then L.Lconst (Const_base (Const_int 1))
+    else L.Lconst (Const_base (Const_int 0))
+  in
+  let is_local =
+    match mode with
+    | Alloc_heap -> L.Lconst (Const_base (Const_int 0))
+    | Alloc_local -> L.Lconst (Const_base (Const_int 1))
+  in
+  let external_call_desc =
+    Primitive.make ~name:"caml_makearray_dynamic"
+      ~alloc:true (* the C stub may raise an exception *)
+      ~c_builtin:false ~effects:Arbitrary_effects ~coeffects:Has_coeffects
+      ~native_name:"caml_makearray_dynamic"
+      ~native_repr_args:
+        [ Prim_global, L.Same_as_ocaml_repr (Base Value);
+          Prim_global, L.Same_as_ocaml_repr (Base Value);
+          Prim_global, L.Same_as_ocaml_repr (Base Value);
+          Prim_global, L.Same_as_ocaml_repr (Base Value);
+          Prim_global, L.Same_as_ocaml_repr (Base Value) ]
+      ~native_repr_res:
+        ( (match mode with
+          | Alloc_heap -> Prim_global
+          | Alloc_local -> Prim_local),
+          L.Same_as_ocaml_repr (Base Value) )
+      ~is_layout_poly:false
+  in
+  (* Note that we don't check the number of unarized arguments against the
+     layout; we trust the front end. If we wanted to do this, it would have to
+     be done slightly later, after unarization. *)
+  Transformed
+    (L.Lregion
+       ( Llet
+           ( Strict,
+             array_layout,
+             args_array,
+             Lprim
+               ( Pmakearray (lambda_array_kind, Immutable, L.alloc_local),
+                 [init] (* will be unarized when this term is CPS converted *),
+                 loc ),
+             Lprim
+               ( Pccall external_call_desc,
+                 [ Lvar args_array;
+                   is_local;
+                   must_be_scanned;
+                   float_array_opt_can_apply;
+                   length ],
+                 loc ) ),
+         array_layout ))
+
 let transform_primitive env (prim : L.primitive) args loc =
   match prim, args with
   | Psequor, [arg1; arg2] ->
@@ -256,6 +366,8 @@ let transform_primitive env (prim : L.primitive) args loc =
                  ~ifnot:(L.Lvar const_false) ~kind:Lambda.layout_int ) ))
   | (Psequand | Psequor), _ ->
     Misc.fatal_error "Psequand / Psequor must have exactly two arguments"
+  | Pmakearray_dynamic (lambda_array_kind, mode), args ->
+    makearray_dynamic lambda_array_kind mode args loc
   | ( (Pbytes_to_string | Pbytes_of_string | Parray_of_iarray | Parray_to_iarray),
       [arg] ) ->
     Transformed arg
