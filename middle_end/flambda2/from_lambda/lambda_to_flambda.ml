@@ -309,6 +309,10 @@ let makearray_dynamic (lambda_array_kind : L.array_kind)
   (* Note that we don't check the number of unarized arguments against the
      layout; we trust the front end. If we wanted to do this, it would have to
      be done slightly later, after unarization. *)
+
+  (* XXX For singleton layouts this isn't yet correct. e.g. for int64# we need
+     to produce the custom block version. Maybe we should redirect to the
+     existing functions in that case, unsure *)
   Transformed
     (L.Lregion
        ( Llet
