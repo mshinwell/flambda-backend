@@ -962,6 +962,7 @@ void caml_empty_minor_heaps_once (void)
   /* To handle the case where multiple domains try to execute a minor gc
      STW section */
   do {
+    caml_gc_log("empty_minor_heaps_once loop");
     caml_try_empty_minor_heap_on_all_domains();
   } while (saved_minor_cycle ==
            atomic_load_relaxed(&caml_minor_cycles_started));

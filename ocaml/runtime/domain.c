@@ -559,6 +559,8 @@ static void domain_create(uintnat initial_minor_heap_wsize,
   struct interruptor* s;
   uintnat stack_wsize = caml_get_init_stack_wsize(-1 /* main thread */);
 
+  caml_gc_log("domain_create");
+
   CAMLassert (domain_self == 0);
 
   /* take the all_domains_lock so that we can alter the STW participant
@@ -593,8 +595,10 @@ static void domain_create(uintnat initial_minor_heap_wsize,
 
   d = next_free_domain();
 
-  if (d == NULL)
+  if (d == NULL) {
+    caml_gc_log("next_free_domain failed");
     goto domain_init_complete;
+  }
 
   s = &d->interruptor;
   CAMLassert(!s->running);
@@ -614,8 +618,10 @@ static void domain_create(uintnat initial_minor_heap_wsize,
     /* FIXME: Never freed. Not clear when to. */
     domain_state = (caml_domain_state*)
       caml_stat_calloc_noexc(1, sizeof(caml_domain_state));
-    if (domain_state == NULL)
+    if (domain_state == NULL) {
+      caml_gc_log("domain_state calloc failed");
       goto domain_init_complete;
+    }
     d->state = domain_state;
   } else {
     domain_state = d->state;
@@ -768,18 +774,25 @@ static void domain_create(uintnat initial_minor_heap_wsize,
   goto domain_init_complete;
 
 alloc_main_stack_failure:
+  caml_gc_log("alloc_main_stack_failure");
 create_stack_cache_failure:
+  caml_gc_log("create_stack_cache_failure");
   caml_remove_generational_global_root(&domain_state->dls_root);
 reallocate_minor_heap_failure:
+  caml_gc_log("reallocate_minor_heap_failure");
   caml_teardown_major_gc();
 init_major_gc_failure:
+  caml_gc_log("init_major_gc_failure");
   caml_teardown_shared_heap(d->state->shared_heap);
 init_shared_heap_failure:
+  caml_gc_log("init_shared_heap_failure");
   caml_free_minor_tables(domain_state->minor_tables);
   domain_state->minor_tables = NULL;
 alloc_minor_tables_failure:
+  caml_gc_log("alloc_minor_tables_failure");
   caml_memprof_delete_domain(domain_state);
 init_memprof_failure:
+  caml_gc_log("init_memprof_failure");
   domain_self = NULL;
 
 
@@ -1605,9 +1618,13 @@ int caml_try_run_on_all_domains_with_spin_work(
      situations. Without this read, [stw_leader] would be protected by
      [all_domains_lock] and could be a non-atomic variable.
   */
+  int trying_lock = 0;
   if (atomic_load_acquire(&stw_leader) ||
-      !caml_plat_try_lock(&all_domains_lock)) {
+      (trying_lock = 1 && !caml_plat_try_lock(&all_domains_lock))) {
     caml_handle_incoming_interrupts();
+    if (trying_lock) caml_gc_log("tried and failed to get lock");
+    else caml_gc_log("did not try to get lock");
+    caml_gc_log("caml_try_run_on_all_domains_with_spin_work exit point 1");
     return 0;
   }
 
@@ -1616,6 +1633,7 @@ int caml_try_run_on_all_domains_with_spin_work(
     if (atomic_load_acquire(&stw_leader)) {
       caml_plat_unlock(&all_domains_lock);
       caml_handle_incoming_interrupts();
+      caml_gc_log("caml_try_run_on_all_domains_with_spin_work exit point 2");
       return 0;
     }
 
@@ -1623,6 +1641,7 @@ int caml_try_run_on_all_domains_with_spin_work(
        of claiming the stw_leader, we should release the lock and wait for
        requests to be unsuspended before trying again */
     if (CAMLunlikely(stw_requests_suspended)) {
+      caml_gc_log("plat_wait on requests_suspended_cond");
       caml_plat_wait(&requests_suspended_cond, &all_domains_lock);
       /* we hold the lock, but we must check for [stw_leader] again */
       continue;
@@ -2014,20 +2033,26 @@ static void domain_terminate (void)
   call_timing_hook(&caml_domain_terminated_hook);
 
   while (!finished) {
+    caml_gc_log("Domain termination loop");
     caml_finish_sweeping();
+    caml_gc_log("Finished sweeping");
 
     caml_empty_minor_heaps_once();
     /* Note: [caml_empty_minor_heaps_once] will also join any ongoing
        STW sections that has sent an interrupt to this domain. */
+    caml_gc_log("empty_minor_heaps_once done");
 
     caml_finish_marking();
+    caml_gc_log("Finished marking");
 
     caml_orphan_ephemerons(domain_state);
     caml_orphan_finalisers(domain_state);
 
     /* take the all_domains_lock to try and exit the STW participant set
        without racing with a STW section being triggered */
+    caml_gc_log("Taking lock");
     caml_plat_lock_blocking(&all_domains_lock);
+    caml_gc_log("Got lock");
 
     /* The interaction of termination and major GC is quite subtle.
 
@@ -2039,6 +2064,11 @@ static void domain_terminate (void)
        [num_domains_to_sweep] (see major_gc.c).
      */
 
+    if (caml_incoming_interrupts_queued()) caml_gc_log("still incoming interrupts");
+    else caml_gc_log("no incoming interrupts");
+    if (domain_state->marking_done) caml_gc_log("marking done"); else caml_gc_log("marking not done");
+    if (domain_state->sweeping_done) caml_gc_log("sweeping done"); else caml_gc_log("sweeping not done");
+
     if (!caml_incoming_interrupts_queued() &&
         domain_state->marking_done &&
         domain_state->sweeping_done) {
@@ -2048,6 +2078,7 @@ static void domain_terminate (void)
       s->running = 0;
 
       /* Remove this domain from stw_domains */
+      caml_gc_log("remove_from_stw_domains");
       remove_from_stw_domains(domain_self);
 
       /* signal the interruptor condition variable
