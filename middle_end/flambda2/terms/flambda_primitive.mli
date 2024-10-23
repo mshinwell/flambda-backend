@@ -71,6 +71,8 @@ module Array_kind_for_length : sig
   type t =
     | Array_kind of Array_kind.t
     | Float_array_opt_dynamic
+
+  val width_in_scalars : t -> int
 end
 
 module Init_or_assign : sig

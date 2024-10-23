@@ -1013,22 +1013,9 @@ let array_access_validity_condition array array_kind index
   [ multiple_word_array_access_validity_condition array ~size_int array_kind
       index_kind ~width_in_scalars ~index ]
 
-let check_array_access ~dbg ~array (array_kind : P.Array_kind_for_length.t)
-    ~index ~index_kind ~size_int primitive : H.expr_primitive =
-  let width_in_scalars =
-    match array_kind with
-    | Array_kind Immediates
-    | Array_kind Values
-    | Array_kind Naked_floats
-    | Array_kind Naked_float32s
-    | Array_kind Naked_int32s
-    | Array_kind Naked_int64s
-    | Array_kind Naked_nativeints
-    | Array_kind Naked_vec128s
-    | Float_array_opt_dynamic ->
-      1
-    | Array_kind (Unboxed_product kinds) -> List.length kinds
-  in
+let check_array_access ~dbg ~array array_kind ~index ~index_kind ~size_int
+    primitive : H.expr_primitive =
+  let width_in_scalars = P.Array_kind_for_length.width_in_scalars array_kind in
   checked_access ~primitive
     ~conditions:
       (array_access_validity_condition array array_kind index ~index_kind
