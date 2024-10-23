@@ -158,6 +158,16 @@ module Array_kind = struct
     | Naked_float32s | Naked_int32s | Naked_int64s | Naked_nativeints
     | Naked_vec128s ->
       true
+
+  let rec width_in_scalars t =
+    match t with
+    | Immediates | Values | Naked_floats | Naked_float32s | Naked_int32s
+    | Naked_int64s | Naked_nativeints | Naked_vec128s ->
+      1
+    | Unboxed_product kinds ->
+      List.fold_left
+        (fun width array_kind -> width + width_in_scalars array_kind)
+        0 kinds
 end
 
 module Array_load_kind = struct
@@ -251,6 +261,11 @@ module Array_kind_for_length = struct
     | Array_kind a -> Array_kind.print ppf a
     | Float_array_opt_dynamic ->
       Format.pp_print_string ppf "Float_array_opt_dynamic"
+
+  let width_in_scalars t =
+    match t with
+    | Float_array_opt_dynamic -> 1
+    | Array_kind array_kind -> Array_kind.width_in_scalars array_kind
 end
 
 module Duplicate_block_kind = struct
