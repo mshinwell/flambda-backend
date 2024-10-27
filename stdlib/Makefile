@@ -95,7 +95,7 @@ HEADERPROGRAM = headernt
 endif
 
 %-launch-info: %.info tmpheader.exe
-	@cat $^ >> $@
+	@cat $^ > $@
 
 .INTERMEDIATE: tmpheader.exe
 tmpheader.exe: $(HEADERPROGRAM).$(O)
