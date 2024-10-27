@@ -13,7 +13,7 @@
 /*                                                                        */
 /**************************************************************************/
 
-/* The launcher for bytecode executables (if #! is not working) */
+/* The launcher for bytecode executables (if #! is not available) */
 
 #define CAML_INTERNALS
 #include "caml/exec.h"
@@ -21,25 +21,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "caml/s.h"
-#ifdef HAS_UNISTD
 #include <unistd.h>
-#endif
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#ifndef MAXPATHLEN
-#define MAXPATHLEN 1024
+/* O_BINARY is defined in Gnulib, but is not POSIX */
+#ifndef O_BINARY
+#define O_BINARY 0
 #endif
 
-#ifndef S_ISREG
-#define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
+/* C11's _Noreturn is deprecated in C23 in favour of attributes */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+  #define NORETURN [[noreturn]]
+#else
+  #define NORETURN _Noreturn
 #endif
 
-#ifndef SEEK_END
-#define SEEK_END 2
-#endif
+typedef int file_descriptor;
 
 #ifndef __CYGWIN__
 
@@ -47,24 +47,23 @@
 
 static char * searchpath(char * name)
 {
-  static char fullname[MAXPATHLEN + 1];
+  static char fullname[PATH_MAX + 1];
   char * path;
-  char * p;
-  char * q;
   struct stat st;
 
-  for (p = name; *p != 0; p++) {
+  for (char *p = name; *p != 0; p++) {
     if (*p == '/') return name;
   }
   path = getenv("PATH");
   if (path == NULL) return name;
   while(1) {
+    char * p;
     for (p = fullname; *path != 0 && *path != ':'; p++, path++)
-      if (p < fullname + MAXPATHLEN) *p = *path;
-    if (p != fullname && p < fullname + MAXPATHLEN)
+      if (p < fullname + PATH_MAX) *p = *path;
+    if (p != fullname && p < fullname + PATH_MAX)
       *p++ = '/';
-    for (q = name; *q != 0; p++, q++)
-      if (p < fullname + MAXPATHLEN) *p = *q;
+    for (char *q = name; *q != 0; p++, q++)
+      if (p < fullname + PATH_MAX) *p = *q;
     *p = 0;
     if (stat(fullname, &st) == 0 && S_ISREG(st.st_mode)) break;
     if (*path == 0) return name;
@@ -89,14 +88,14 @@ static int file_ok(char * name)
 
 static char * searchpath(char * name)
 {
-  char * path, * fullname, * p;
+  char * path, * fullname;
 
   path = getenv("PATH");
   fullname = malloc(strlen(name) + (path == NULL ? 0 : strlen(path)) + 6);
   /* 6 = "/" plus ".exe" plus final "\0" */
   if (fullname == NULL) return name;
   /* Check for absolute path name */
-  for (p = name; *p != 0; p++) {
+  for (char *p = name; *p != 0; p++) {
     if (*p == '/' || *p == '\\') {
       if (file_ok(name)) return name;
       strcpy(fullname, name);
@@ -108,6 +107,7 @@ static char * searchpath(char * name)
   /* Search in path */
   if (path == NULL) return name;
   while(1) {
+    char * p;
     for (p = fullname; *path != 0 && *path != ':'; p++, path++) *p = *path;
     if (p != fullname) *p++ = '/';
     strcpy(p, name);
@@ -122,28 +122,39 @@ static char * searchpath(char * name)
 
 #endif
 
-static unsigned long read_size(char * ptr)
+NORETURN static void exit_with_error(const char *str1,
+                                     const char *str2,
+                                     const char *str3)
 {
-  unsigned char * p = (unsigned char *) ptr;
-  return ((unsigned long) p[0] << 24) + ((unsigned long) p[1] << 16) +
-         ((unsigned long) p[2] << 8) + p[3];
+  if (str1) fputs(str1, stderr);
+  if (str2) fputs(str2, stderr);
+  if (str3) fputs(str3, stderr);
+  fputs("\n", stderr);
+  exit(2);
 }
 
-static char * read_runtime_path(int fd)
+static uint32_t read_size(const char *ptr)
+{
+  const unsigned char *p = (const unsigned char *)ptr;
+  return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
+         ((uint32_t) p[2] << 8) | p[3];
+}
+
+static char * read_runtime_path(file_descriptor fd)
 {
   char buffer[TRAILER_SIZE];
-  static char runtime_path[MAXPATHLEN];
-  int num_sections, i;
+  static char runtime_path[PATH_MAX];
+  int num_sections;
   uint32_t path_size;
   long ofs;
 
-  lseek(fd, (long) -TRAILER_SIZE, SEEK_END);
+  if (lseek(fd, -TRAILER_SIZE, SEEK_END) == -1) return NULL;
   if (read(fd, buffer, TRAILER_SIZE) < TRAILER_SIZE) return NULL;
   num_sections = read_size(buffer);
   ofs = TRAILER_SIZE + num_sections * 8;
-  lseek(fd, -ofs, SEEK_END);
+  if (lseek(fd, -ofs, SEEK_END) == -1) return NULL;
   path_size = 0;
-  for (i = 0; i < num_sections; i++) {
+  for (int i = 0; i < num_sections; i++) {
     if (read(fd, buffer, 8) < 8) return NULL;
     if (buffer[0] == 'R' && buffer[1] == 'N' &&
         buffer[2] == 'T' && buffer[3] == 'M') {
@@ -153,20 +164,11 @@ static char * read_runtime_path(int fd)
       ofs += read_size(buffer + 4);
   }
   if (path_size == 0) return NULL;
-  if (path_size >= MAXPATHLEN) return NULL;
-  lseek(fd, -ofs, SEEK_END);
+  if (path_size >= PATH_MAX) return NULL;
+  if (lseek(fd, -ofs, SEEK_END) == -1) return NULL;
   if (read(fd, runtime_path, path_size) != path_size) return NULL;
   return runtime_path;
 }
-
-static void errwrite(char * msg)
-{
-  fputs(msg, stderr);
-}
-
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
 
 int main(int argc, char ** argv)
 {
@@ -175,15 +177,13 @@ int main(int argc, char ** argv)
 
   truename = searchpath(argv[0]);
   fd = open(truename, O_RDONLY | O_BINARY);
-  if (fd == -1 || (runtime_path = read_runtime_path(fd)) == NULL) {
-    errwrite(truename);
-    errwrite(" not found or is not a bytecode executable file\n");
-    return 2;
-  }
+  if (fd == -1 || (runtime_path = read_runtime_path(fd)) == NULL)
+    exit_with_error(NULL, truename,
+                    " not found or is not a bytecode executable file");
+  close(fd);
+
   argv[0] = truename;
-  execv(runtime_path, argv);
-  errwrite("Cannot exec ");
-  errwrite(runtime_path);
-  errwrite("\n");
-  return 2;
+  execvp(runtime_path, argv);
+
+  exit_with_error("Cannot exec ", runtime_path, NULL);
 }
