@@ -350,7 +350,6 @@ let array_load ~dbg (array_kind : P.Array_kind.t)
   | Values, Naked_vec128s ->
     Misc.fatal_error "Attempted to load a SIMD vector from a value array."
   | Unboxed_product _, Naked_vec128s ->
-    (* CR mshinwell: should this be supported? *)
     Misc.fatal_errorf
       "Loading of SIMD vectors from unboxed product arrays is not currently \
        supported:@ %a"
@@ -431,7 +430,6 @@ let array_set0 ~dbg (array_kind : P.Array_kind.t)
   | Values, Naked_vec128s ->
     Misc.fatal_error "Attempted to store a SIMD vector to a value array."
   | Unboxed_product _, Naked_vec128s ->
-    (* CR mshinwell: should this be supported? *)
     Misc.fatal_errorf
       "Storing of SIMD vectors from unboxed product arrays is not currently \
        supported:@ %a"
