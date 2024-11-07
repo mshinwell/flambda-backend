@@ -1110,8 +1110,9 @@ val unboxed_mutable_float32_unboxed_product_array_set :
 val unboxed_int32_array_ref :
   expression -> expression -> Debuginfo.t -> expression
 
-(** Read an unboxed int32 from a 64-bit field in an array represented as
-    a mixed block (with tag zero), as used for unboxed product arrays.
+(** Read an unboxed int32 from (the least significant bits of) a 64-bit field
+    in an array represented as a mixed block (with tag zero), as used for
+    unboxed product arrays.
 
     The zero-indexed element number is specified as a tagged immediate.
 
