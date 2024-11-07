@@ -1083,7 +1083,7 @@ val unboxed_float32_array_ref :
     a mixed block (with tag zero), as used for unboxed product arrays.
 
     The float32 is expected to be in the least significant bits of the
-    64-bit field.
+    64-bit field.  The most significant 32 bits of such field are ignored.
 
     The zero-indexed element number is specified as a tagged immediate.
 *)
@@ -1096,7 +1096,8 @@ val unboxed_mutable_float32_unboxed_product_array_ref :
     The zero-indexed element number is specified as a tagged immediate.
 
     The float32 will be written to the least significant bits of the
-    64-bit field.  The top 32 bits of the written word are undefined.
+    64-bit field.  The top 32 bits of the written word will be initialized
+    to zero.
 *)
 val unboxed_mutable_float32_unboxed_product_array_set :
   expression ->

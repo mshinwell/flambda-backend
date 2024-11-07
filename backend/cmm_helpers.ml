@@ -1174,10 +1174,16 @@ let unboxed_mutable_float32_unboxed_product_array_set arr ~array_index
   bind "arr" arr (fun arr ->
       bind "index" array_index (fun index ->
           bind "new_value" new_value (fun new_value ->
-              Cop
-                ( Cstore (Single { reg = Float32 }, Assignment),
-                  [array_indexing log2_size_addr arr index dbg; new_value],
-                  dbg ))))
+              Csequence
+                ( Cop
+                    ( Cstore (Word_int, Assignment),
+                      [ array_indexing log2_size_addr arr index dbg;
+                        Cconst_int (0, dbg) ],
+                      dbg ),
+                  Cop
+                    ( Cstore (Single { reg = Float32 }, Assignment),
+                      [array_indexing log2_size_addr arr index dbg; new_value],
+                      dbg ) ))))
 
 let unboxed_float_array_ref (mutability : Asttypes.mutable_flag) ~block:arr
     ~index:ofs dbg =
