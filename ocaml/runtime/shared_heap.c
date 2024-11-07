@@ -202,8 +202,11 @@ static pool* alloc_pool(struct caml_heap_state* local) {
     uintnat new_pools = pool_freelist.active_pools * 15 / 100;
     if (new_pools < 8) new_pools = 8;
 
-    void* mem = caml_mem_map(Bsize_wsize(POOL_WSIZE) * new_pools, 0);
+    uintnat mapping_size =
+        caml_mem_round_up_mapping_size(Bsize_wsize(POOL_WSIZE) * new_pools);
+    new_pools = mapping_size / Bsize_wsize(POOL_WSIZE);
 
+    void* mem = caml_mem_map(mapping_size, 0);
     if (mem) {
       pool_freelist.fresh_pools = new_pools;
       pool_freelist.next_fresh_pool = mem;
