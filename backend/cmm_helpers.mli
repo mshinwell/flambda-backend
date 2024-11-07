@@ -1097,7 +1097,7 @@ val unboxed_mutable_float32_unboxed_product_array_ref :
 
     The float32 will be written to the least significant bits of the
     64-bit field.  The top 32 bits of the written word will be initialized
-    to zero.
+    to zero.  Note that two writes are involved.
 *)
 val unboxed_mutable_float32_unboxed_product_array_set :
   expression ->
