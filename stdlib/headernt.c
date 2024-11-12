@@ -13,14 +13,15 @@
 /*                                                                        */
 /**************************************************************************/
 
+/* The launcher for bytecode executables */
+
 #define CAML_INTERNALS
+#include "caml/exec.h"
 
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
 
 #include <windows.h>
-#include "caml/mlvalues.h"
-#include "caml/exec.h"
 
 #ifndef __MINGW32__
 #pragma comment(linker , "/subsystem:console")
