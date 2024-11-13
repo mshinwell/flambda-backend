@@ -88,17 +88,11 @@ installopt-default:
 	  stdlib.cmxa stdlib.$(A) std_exit.$(O) *.cmx \
 	  "$(INSTALL_LIBDIR)"
 
-ifeq "$(UNIX_OR_WIN32)" "unix"
-HEADERPROGRAM = header
-else # Windows
-HEADERPROGRAM = headernt
-endif
-
 %-launch-info: %.info tmpheader.exe
 	@cat $^ > $@
 
 .INTERMEDIATE: tmpheader.exe
-tmpheader.exe: $(HEADERPROGRAM).$(O)
+tmpheader.exe: header.$(O)
 	$(V_MKEXE)$(call MKEXE_VIA_CC,$@,$^)
 # FIXME This is wrong - mingw could invoke strip; MSVC equivalent?
 ifneq "$(UNIX_OR_WIN32)" "win32"
