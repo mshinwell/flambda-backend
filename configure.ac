@@ -2026,6 +2026,9 @@ AC_CHECK_FUNC([getrusage], [AC_DEFINE([HAS_GETRUSAGE])])
 ## times
 AC_CHECK_FUNC([times], [AC_DEFINE([HAS_TIMES])])
 
+## strlcpy
+AC_CHECK_FUNC([strlcpy], [AC_DEFINE([HAS_STRLCPY], [1])])
+
 ## secure_getenv and __secure_getenv
 
 saved_CPPFLAGS="$CPPFLAGS"

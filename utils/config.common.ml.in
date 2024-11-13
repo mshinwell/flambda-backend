@@ -73,6 +73,7 @@ let oxcaml = true
 let parameterised_modules = true
 
 type launch_method = Executable | Shebang of string option
+type search_method = Absolute | Absolute_then_search | Search
 
 let launch_method =
   match launch_method with

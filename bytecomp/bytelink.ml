@@ -374,6 +374,80 @@ let find_bin_sh () =
   remove_file output_file;
   result
 
+(* Writes the shell script version of the bytecode launcher to outchan *)
+let write_sh_launcher outchan bin_sh bindir search runtime =
+  let open struct type tag = D | A | E end in
+  let l tag fmt =
+    let output s =
+      if tag = D || tag = A && search <> Config.Absolute
+         || tag = E && search = Config.Absolute_then_search then begin
+        output_string outchan (String.trim s);
+        output_char outchan '\n'
+      end
+    in
+    Printf.ksprintf output fmt
+  in
+  let runtime = Filename.quote runtime in
+  let bin = Filename.quote (Filename.concat bindir "") in
+  let exec =
+    if search = Config.Absolute then
+      runtime
+    else
+      {|"$c"|}
+  in
+  let release =
+    Printf.sprintf "%d.%d" Sys.ocaml_release.major Sys.ocaml_release.minor
+  in
+  (* Each of the three search modes requires a slightly different shell script.
+     However, these shell scripts do have one very useful property: the script
+     for Absolute_then_search adds lines to the script for Search which adds
+     lines to the script for Absolute, but none of them change lines (apart from
+     a trivial tweak to the exec line for the Absolute script).
+     The lines below are laid out to reflect this, with the tag letters
+     D(isable) for the lines in the Absolute script, A(lways) for the lines in
+     Search script and E(nable) for the Absolute_then_search script. If a line
+     is emitted, it is first passed to String.trim, which allows indentation and
+     a column-based layout to be used.
+
+     The Absolute script just needs to exec the runtime. The two searching modes
+     do a few more calculations and will ultimately exec the contents of $c
+     (which is why exec_arg above is set to the literal string {v "$c" v}).
+
+     In the script itself:
+     - $r is the name of the runtime ('ocamlrun', 'ocamlrund', etc.)
+     - $d is calculated in the script as $(dirname "$0") - i.e. the directory
+       containing the bytecode executable itself
+     - $c will ultimately be the runtime to exec. If it is empty, then the
+       script displays an error message. In Absolute_then_search, $c will be the
+       first runtime to try (i.e. the runtime in bindir), and the bindir passed
+       must end with a separator (which is ensured by Filename.concat above)
+
+     The script tries up to three options:
+     - exec $c, if it exists (prefer the runtime in bindir)
+     - exec $d/$r, if it exists (prefer a runtime in the same directory
+       as the bytecode executable)
+     - otherwise try $(command -v "$r") (search PATH for the runtime)
+
+     If the script fails to find an interpreter, $c will always be empty
+       (since [command -v] will have returned an empty string) and an
+       error message can be displayed. *)
+  l D   {|#!%s                                                     |} bin_sh;
+  l  A  {|r=%s                                                     |} runtime;
+  l   E {|c=%s"$r"                                                 |} bin;
+  l   E {|if ! test -f "$c"; then                                  |};
+  l  A  {|  d="$(dirname "$0" 2>/dev/null)"                        |};
+  l  A  {|  test -z "$d" || d="${d%%/}/"                           |};
+  l  A  {|  c="$(command -v "$d$r")"                               |};
+  l  A  {|  test -n "$c" || c="$(command -v "$r")"                 |};
+  l   E {|fi                                                       |};
+  l  A  {|if test -z "$c"; then                                    |};
+  l  A  {|  echo 'This program requires an OCaml %s interpreter'>&2|} release;
+  l  A  {|  echo "$r not found either with $0 or in \$PATH">&2     |};
+  l  A  {|else                                                     |};
+  l D   {|  exec %s "$0" "$@"                                      |} exec;
+  l  A  {|fi                                                       |};
+  l  A  {|exit 126                                                 |}
+
 (* Writes the executable header to outchan and writes the RNTM section, if
    needed. Returns a toc_writer (i.e. Bytesections.init_record is always
    called) *)
@@ -390,23 +464,21 @@ let write_header outchan =
     | Config.Shebang sh, bindir ->
         Shebang_bin_sh (Option.value ~default:"sh" sh), bindir
   in
-  let runtime =
+  let runtime, search =
     if String.length !Clflags.use_runtime > 0 then
-      make_absolute !Clflags.use_runtime
+      make_absolute !Clflags.use_runtime, Config.Absolute
     else
       let runtime = "ocamlrun" ^ !Clflags.runtime_variant in
-      (* Historically, the native Windows ports are assumed to be finding
-         ocamlrun using a PATH search. *)
-      if Sys.win32 then
-        runtime
+      if !Clflags.search_method <> Config.Absolute then
+        runtime, !Clflags.search_method
       else
-        Filename.concat bindir runtime
+        Filename.concat bindir runtime, Config.Absolute
   in
   let launcher =
     if launcher = Executable then
       Executable
     else
-      if invalid_for_shebang_line runtime then
+      if search <> Config.Absolute || invalid_for_shebang_line runtime then
         match launcher with
         | Shebang_bin_sh sh ->
             let sh =
@@ -438,14 +510,13 @@ let write_header outchan =
   (* Write the header *)
   match launcher with
   | Shebang_runtime ->
+      assert (search = Config.Absolute);
       (* Use the runtime directly *)
       Printf.fprintf outchan "#!%s\n" runtime;
       Bytesections.init_record outchan
   | Shebang_bin_sh bin_sh ->
-      (* exec the runtime using sh *)
-      Printf.fprintf outchan "\
-        #!%s\n\
-        exec %s \"$0\" \"$@\"\n" bin_sh (Filename.quote runtime);
+      (* Use the shebang launcher *)
+      write_sh_launcher outchan bin_sh bindir search runtime;
       Bytesections.init_record outchan
   | Executable ->
       (* Use the executable stub launcher *)
@@ -461,7 +532,21 @@ let write_header outchan =
       write_exe_launcher data;
       (* The runtime name needs recording in RNTM *)
       let toc_writer = Bytesections.init_record outchan in
-      Printf.fprintf outchan "%s\000" runtime;
+      (* stdlib/header.c determines which mode is needed based on whether the
+         RNTM section contains an embedded NUL character. For Absolute, the path
+         is written verbatim (no extra NUL), otherwise the directory separator
+         just before the basename is effectively turned into a NUL (for Search,
+         there is no dirname, so the string "begins" with a NUL character). *)
+      if search = Absolute then
+        output_string outchan runtime
+      else begin
+        if search = Absolute_then_search then
+          (* Ensure bindir does _not_ end up with a separator *)
+          output_string outchan
+          (Filename.(dirname (concat bindir current_dir_name)));
+        output_char outchan '\000';
+        output_string outchan runtime
+      end;
       Bytesections.record toc_writer RNTM;
       toc_writer
 

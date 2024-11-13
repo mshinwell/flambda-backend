@@ -645,6 +645,15 @@ let mk_launch_method f =
   \          /path/interpreter - use #!, or the given sh-compatible \
   \            interpreter if the interpreter path cannot be used"
 
+let mk_search_method f =
+  "-runtime-search", Arg.Symbol (["disable"; "enable"; "always"], f),
+  Printf.sprintf
+    "  Control the way the bytecode header searches for the interpreter\n\
+    \    The following settings are supported:\n\
+    \      disable  use a fixed absolute path to the runtime\n\
+    \      enable   search for runtime only if not found at the absolute path\n\
+    \      always   always search for the runtime\n\
+    \    The default setting is 'disable'."
 
 let mk_use_runtime f =
   "-use-runtime", Arg.String f,
@@ -1262,6 +1271,7 @@ module type Bytecomp_options = sig
   val _vmthread : unit -> unit
   val _use_runtime : string -> unit
   val _launch_method : string -> unit
+  val _search_method : string -> unit
   val _output_complete_exe : unit -> unit
 
   val _dinstr : unit -> unit
@@ -1513,6 +1523,7 @@ struct
     mk_use_runtime F._use_runtime;
     mk_use_runtime_2 F._use_runtime;
     mk_launch_method F._launch_method;
+    mk_search_method F._search_method;
     mk_v F._v;
     mk_verbose F._verbose;
     mk_verbose_types F._verbose_types;
@@ -2693,6 +2704,15 @@ third-party libraries such as Lwt, but with a different API."
       | _ ->
           Compenv.fatal
             "-launch-method: expect sh, exe or an absolute path for <method>"
+    let _search_method = function
+    | "disable" ->
+        search_method := Config.Absolute
+    | "enable" ->
+        search_method := Config.Absolute_then_search
+    | "always" ->
+        search_method := Config.Search
+    | _ ->
+        assert false
     let _v () = Compenv.print_version_and_library "compiler"
     let _vmthread () = Compenv.fatal vmthread_removed_message
   end
