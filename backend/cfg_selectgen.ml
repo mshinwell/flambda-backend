@@ -186,6 +186,8 @@ module Sub_cfg : sig
 
   val join_tail : from:t list -> to_:t -> t
 
+  val exit_terminator_invariant : t -> unit
+
   val update_exit_terminator : ?arg:Reg.t array -> t -> Cfg.terminator -> unit
 
   val dump : t -> unit
@@ -197,6 +199,9 @@ end = struct
       exit : Cfg.basic_block;
       layout : layout
     }
+
+  let exit_terminator_invariant sub_cfg =
+    assert (sub_cfg.exit.terminator.desc = Cfg.Never)
 
   let make_instr desc arg res dbg =
     { Cfg.desc;
@@ -256,11 +261,11 @@ end = struct
     add_block sub_cfg (make_never_block ~label ())
 
   let add_instruction sub_cfg desc arg res dbg =
-    assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+    exit_terminator_invariant sub_cfg;
     DLL.add_end sub_cfg.exit.body (make_instr desc arg res dbg)
 
   let set_terminator sub_cfg desc arg res dbg =
-    assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+    exit_terminator_invariant sub_cfg;
     sub_cfg.exit.terminator <- make_instr desc arg res dbg
 
   let link_if_needed ~(from : Cfg.basic_block) ~(to_ : Cfg.basic_block) () =
@@ -528,7 +533,7 @@ class virtual selector_generic =
       match self#emit_parts_list env args with
       | None -> None
       | Some (simple_args, env) -> (
-        assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+        Sub_cfg.exit_terminator_invariant sub_cfg;
         let add_naming_op_for_bound_name regs =
           match bound_name with
           | None -> ()
@@ -678,7 +683,7 @@ class virtual selector_generic =
       match self#emit_expr env earg ~bound_name:None with
       | None -> None
       | Some rarg ->
-        assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+        Sub_cfg.exit_terminator_invariant sub_cfg;
         let rif, (sif : 'self) = self#emit_sequence env eif ~bound_name in
         let relse, (selse : 'self) = self#emit_sequence env eelse ~bound_name in
         let r = join env rif sif relse selse ~bound_name in
@@ -698,7 +703,7 @@ class virtual selector_generic =
       match self#emit_expr env esel ~bound_name:None with
       | None -> None
       | Some rsel ->
-        assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+        Sub_cfg.exit_terminator_invariant sub_cfg;
         let sub_cases : (Reg.t array option * 'self) array =
           Array.map
             (fun (case, _dbg) -> self#emit_sequence env case ~bound_name)
@@ -804,7 +809,7 @@ class virtual selector_generic =
       in
       let a = Array.of_list ((r_body, s_body) :: List.map snd l) in
       let r = join_array env a ~bound_name in
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       let s_body : Sub_cfg.t = s_body#extract in
       let s_handlers =
         List.map
@@ -844,7 +849,7 @@ class virtual selector_generic =
           Array.iter (fun reg -> assert (reg.Reg.typ <> Addr)) src;
           self#insert_moves env src tmp_regs;
           self#insert_moves env tmp_regs (Array.concat handler.regs);
-          assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+          Sub_cfg.exit_terminator_invariant sub_cfg;
           List.iter
             (fun trap ->
               let instr_desc =
@@ -878,7 +883,7 @@ class virtual selector_generic =
     method emit_expr_aux_trywith env bound_name e1 exn_cont v e2
         (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       let exn_label = Cmm.new_label () in
       let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
       let r1, s1 = self#emit_sequence env_body e1 ~bound_name in
@@ -972,7 +977,7 @@ class virtual selector_generic =
         self#insert' env Cfg.Return loc [||]
 
     method emit_return (env : environment) exp traps =
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       self#insert_return env (self#emit_expr_aux env exp ~bound_name:None) traps
 
     method emit_tail_apply env ty op args dbg =
@@ -1043,7 +1048,7 @@ class virtual selector_generic =
       match self#emit_expr env earg ~bound_name:None with
       | None -> ()
       | Some rarg ->
-        assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+        Sub_cfg.exit_terminator_invariant sub_cfg;
         let sub_if = self#emit_tail_sequence env eif in
         let sub_else = self#emit_tail_sequence env eelse in
         let term_desc =
@@ -1060,7 +1065,7 @@ class virtual selector_generic =
       match self#emit_expr env esel ~bound_name:None with
       | None -> ()
       | Some rsel ->
-        assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+        Sub_cfg.exit_terminator_invariant sub_cfg;
         let sub_cases =
           Array.map
             (fun (case, _dbg) -> self#emit_tail_sequence env case)
@@ -1100,7 +1105,7 @@ class virtual selector_generic =
             env, Int.Map.add nfail (r, (ids, rs, e2, dbg, is_cold, label)) map)
           (env, Int.Map.empty) handlers
       in
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       let s_body = self#emit_tail_sequence env e1 in
       let translate_one_handler nfail
           (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
@@ -1168,7 +1173,7 @@ class virtual selector_generic =
         build_all_reachable_handlers ~already_built:[] ~not_built:handlers_map
         (* Note: we're dropping unreachable handlers here *)
       in
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       let term_desc = Cfg.Always s_body.Sub_cfg.entry.start in
       Sub_cfg.update_exit_terminator sub_cfg term_desc;
       (* XXX mshinwell: this used to say: Sub_cfg.transfer ~from:s_body
@@ -1182,7 +1187,7 @@ class virtual selector_generic =
     method emit_tail_trywith env e1 exn_cont v e2 (_dbg : Debuginfo.t)
         (_value_kind : Cmm.kind_for_unboxing) =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-      assert (sub_cfg.exit.terminator.desc = Cfg.Never);
+      Sub_cfg.exit_terminator_invariant sub_cfg;
       let exn_label = Cmm.new_label () in
       let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
       let s1 : Sub_cfg.t = self#emit_tail_sequence env_body e1 in
