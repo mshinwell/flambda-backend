@@ -129,6 +129,39 @@ let next_instr_id () : int =
   incr next_instr_id;
   res
 
+(* XXX mshinwell: move the next two functions into Cfg proper? *)
+let make_instr desc arg res dbg =
+  { Cfg.desc;
+    arg;
+    res;
+    dbg;
+    fdo = Fdo_info.none;
+    live = Reg.Set.empty;
+    stack_offset = -1;
+    id = next_instr_id ();
+    irc_work_list = Unknown_list;
+    ls_order = 0;
+    available_before =
+      Some (Reg_availability_set.Ok Reg_with_debug_info.Set.empty);
+    available_across = None
+  }
+
+let make_empty_block ?label terminator : Cfg.basic_block =
+  let start =
+    match label with None -> Cmm.new_label () | Some label -> label
+  in
+  { start;
+    body = DLL.make_empty ();
+    terminator;
+    predecessors = Label.Set.empty;
+    stack_offset = -1;
+    exn = None;
+    can_raise = false;
+    is_trap_handler = false;
+    dead = false;
+    cold = false
+  }
+
 (* XXX mshinwell: I think this could reasonably be moved to its own file now. *)
 (* A "sub" CFG is the counterpart of an instruction list in the original Mach
    selection pass.
@@ -146,12 +179,6 @@ let next_instr_id () : int =
    block. *)
 module Sub_cfg : sig
   type t
-
-  val make_instr :
-    'a -> Reg.t array -> Reg.t array -> Debuginfo.t -> 'a Cfg.instruction
-
-  val make_empty_block :
-    ?label:Label.t -> Cfg.terminator Cfg.instruction -> Cfg.basic_block
 
   val make_never_block : ?label:Label.t -> unit -> Cfg.basic_block
 
@@ -203,38 +230,6 @@ end = struct
 
   let exit_terminator_invariant sub_cfg =
     assert (sub_cfg.exit.terminator.desc = Cfg.Never)
-
-  let make_instr desc arg res dbg =
-    { Cfg.desc;
-      arg;
-      res;
-      dbg;
-      fdo = Fdo_info.none;
-      live = Reg.Set.empty;
-      stack_offset = -1;
-      id = next_instr_id ();
-      irc_work_list = Unknown_list;
-      ls_order = 0;
-      available_before =
-        Some (Reg_availability_set.Ok Reg_with_debug_info.Set.empty);
-      available_across = None
-    }
-
-  let make_empty_block ?label terminator : Cfg.basic_block =
-    let start =
-      match label with None -> Cmm.new_label () | Some label -> label
-    in
-    { start;
-      body = DLL.make_empty ();
-      terminator;
-      predecessors = Label.Set.empty;
-      stack_offset = -1;
-      exn = None;
-      can_raise = false;
-      is_trap_handler = false;
-      dead = false;
-      cold = false
-    }
 
   let make_never_block ?label () : Cfg.basic_block =
     make_empty_block ?label (make_instr Cfg.Never [||] [||] Debuginfo.none)
@@ -1350,17 +1345,16 @@ class virtual selector_generic =
       in
       let layout = DLL.make_empty () in
       let entry_block =
-        Sub_cfg.make_empty_block ~label:(Cfg.entry_label cfg)
-          (Sub_cfg.make_instr (Cfg.Always tailrec_label) [||] [||]
-             Debuginfo.none)
+        make_empty_block ~label:(Cfg.entry_label cfg)
+          (make_instr (Cfg.Always tailrec_label) [||] [||] Debuginfo.none)
       in
       DLL.add_begin entry_block.body
-        (Sub_cfg.make_instr Cfg.Prologue [||] [||] Debuginfo.none);
+        (make_instr Cfg.Prologue [||] [||] Debuginfo.none);
       Cfg.add_block_exn cfg entry_block;
       DLL.add_end layout entry_block.start;
       let tailrec_block =
-        Sub_cfg.make_empty_block ~label:tailrec_label
-          (Sub_cfg.make_instr
+        make_empty_block ~label:tailrec_label
+          (make_instr
              (Cfg.Always (Sub_cfg.start_label body))
              [||] [||] Debuginfo.none)
       in
@@ -1373,7 +1367,7 @@ class virtual selector_generic =
             if block.terminator.desc = Cfg.Return
             then
               DLL.add_end block.body
-                (Sub_cfg.make_instr Cfg.Reloadretaddr [||] [||] Debuginfo.none);
+                (make_instr Cfg.Reloadretaddr [||] [||] Debuginfo.none);
             Cfg.add_block_exn cfg block;
             DLL.add_end layout block.start)
           else assert (DLL.is_empty block.body));
