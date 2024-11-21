@@ -661,9 +661,8 @@ class virtual selector_generic =
         let sub_if = sif#extract in
         let sub_else = selse#extract in
         let term_desc =
-          Cfgize.terminator_of_test cond
+          Cfgize.terminator_of_test cond ~label_true:sub_if.Sub_cfg.entry.start
             ~label_false:sub_else.Sub_cfg.entry.start
-            ~label_true:sub_if.Sub_cfg.entry.start
         in
         sub_cfg.exit.terminator
           <- { sub_cfg.exit.terminator with
