@@ -1090,6 +1090,9 @@ val unboxed_float32_array_ref :
 val unboxed_mutable_float32_unboxed_product_array_ref :
   expression -> array_index:expression -> Debuginfo.t -> expression
 
+(* CR mshinwell/mslater: We could do movss xmm xmm, movsd mem xmm instead of
+   separate writes *)
+
 (** Write an unboxed float32 into a 64-bit field in an array represented as
     a mixed block (with tag zero), as used for unboxed product arrays.
 
