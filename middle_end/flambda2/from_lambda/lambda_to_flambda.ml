@@ -708,10 +708,9 @@ let primitive_can_raise (prim : Lambda.primitive) =
   | Pfloatcomp (_, _)
   | Punboxed_float_comp (_, _)
   | Pstringlength | Pstringrefu | Pbyteslength | Pbytesrefu | Pbytessetu
-  | Pmakearray _ | Pmakearray_dynamic _ | Pduparray _ | Parraylength _
-  | Parrayrefu _ | Parraysetu _ | Pisint _ | Pisout | Pisnull | Pbintofint _
-  | Pintofbint _ | Pcvtbint _ | Pnegbint _ | Paddbint _ | Psubbint _
-  | Pmulbint _
+  | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
+  | Pisint _ | Pisout | Pisnull | Pbintofint _ | Pintofbint _ | Pcvtbint _
+  | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _
   | Pdivbint { is_safe = Unsafe; _ }
   | Pmodbint { is_safe = Unsafe; _ }
   | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _

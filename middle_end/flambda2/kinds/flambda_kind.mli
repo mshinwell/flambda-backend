@@ -297,6 +297,8 @@ module With_subkind : sig
 
   val unboxed_vec128_array : t
 
+  val unboxed_product_array : t
+
   val block : Tag.t -> t list -> t
 
   val float_block : num_fields:int -> t

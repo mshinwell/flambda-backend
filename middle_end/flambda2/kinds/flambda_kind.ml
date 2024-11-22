@@ -776,7 +776,10 @@ module With_subkind = struct
       ));
     { kind; value_subkind; nullable }
 
-  let anything kind = create kind Anything
+  let anything kind =
+    match kind with
+    | Value -> create kind Anything Nullable
+    | Naked_number _ | Region | Rec_info -> create kind Anything Non_nullable
 
   let compatible (t : t) ~(when_used_at : t) =
     equal t.kind when_used_at.kind
@@ -964,7 +967,7 @@ module With_subkind = struct
       | Parrayval (Punboxedintarray Pnativeint) -> Unboxed_nativeint_array
       | Parrayval (Punboxedvectorarray Pvec128) -> Unboxed_vec128_array
       | Parrayval (Pgcscannableproductarray _ | Pgcignorableproductarray _) ->
-        unboxed_product_array
+        Unboxed_product_array
     in
     let nullable : Nullable.t =
       match vk.nullable with
@@ -1031,16 +1034,24 @@ module With_subkind = struct
   end)
 
   let has_useful_subkind_info (t : t) =
-    match t.subkind with
-    | Anything -> false
-    | Boxed_float | Boxed_float32 | Boxed_int32 | Boxed_int64 | Boxed_nativeint
-    | Boxed_vec128 | Tagged_immediate | Variant _ | Float_block _ | Float_array
-    | Immediate_array | Value_array | Generic_array | Unboxed_float32_array
-    | Unboxed_int32_array | Unboxed_int64_array | Unboxed_nativeint_array
-    | Unboxed_vec128_array | Unboxed_product_array ->
-      true
+    match t.kind with
+    | Value -> (
+      match t.value_subkind with
+      | Anything -> (
+        match t.nullable with Nullable -> false | Non_nullable -> true)
+      | Boxed_float | Boxed_float32 | Boxed_int32 | Boxed_int64
+      | Boxed_nativeint | Boxed_vec128 | Tagged_immediate | Variant _
+      | Float_block _ | Float_array | Immediate_array | Value_array
+      | Generic_array | Unboxed_float32_array | Unboxed_int32_array
+      | Unboxed_int64_array | Unboxed_nativeint_array | Unboxed_vec128_array
+      | Unboxed_product_array ->
+        true)
+    | Naked_number _ | Rec_info | Region -> false
 
-  let erase_subkind (t : t) : t = { t with subkind = Anything }
+  let erase_subkind (t : t) : t =
+    match t.kind with
+    | Value -> { t with value_subkind = Anything; nullable = Nullable }
+    | Naked_number _ | Rec_info | Region -> t
 
   let equal_ignoring_subkind t1 t2 = equal (erase_subkind t1) (erase_subkind t2)
 
