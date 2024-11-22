@@ -927,6 +927,10 @@ class virtual selector_generic =
            return, but if we start checking (or joining) the machtypes of the
            different tails we will need to implement something like the
            [emit_expr_aux] version above, that hides the machtype. *)
+        (* XXX mshinwell: I didn't really understand what the "if we start
+           checking" part might be referring to, in terms of potential future
+           changes. Also which [emit_expr_aux] code exactly is being referred to
+           here? *)
         let unreachable =
           Cmm.(
             Cop
@@ -938,9 +942,11 @@ class virtual selector_generic =
                 [Cconst_int (0, Debuginfo.none)],
                 Debuginfo.none ))
         in
+        (* XXX mshinwell: this seems to differ from [Selectgen]: the [raise] is
+           absent as is the [set_trap_stack env Uncaught]. Please check. There
+           is also a comment here in [Selectgen] that we should maybe port
+           over. *)
         with_handler env unreachable
-      (* Misc.fatal_errorf "Selection.emit_expr: \ Unreachable exception handler
-         %d" lbl *)
       | exception Not_found ->
         Misc.fatal_errorf "Selection.emit_expr: Unbound handler %d" exn_cont
 
@@ -962,7 +968,9 @@ class virtual selector_generic =
           (fun trap ->
             let instr_desc =
               match trap with
-              | Cmm.Push _ -> Misc.fatal_error "unexpected push on trap actions"
+              | Cmm.Push _ ->
+                Misc.fatal_error
+                  "unexpected push on trap action for returning from a function"
               | Cmm.Pop _ -> Cfg.Poptrap
             in
             Sub_cfg.add_instruction sub_cfg instr_desc [||] [||] Debuginfo.none)
@@ -1013,6 +1021,9 @@ class virtual selector_generic =
           let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
           let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
           let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+          (* XXX this condition and the next "else if" condition don't seem to
+             match [Selectgen]; please check *)
+          (* XXX mshinwell: note to self - this bit needs re-reading *)
           if stack_ofs = 0
              && func.sym_name = !Select_utils.current_function_name
              && Select_utils.trap_stack_is_empty env
@@ -1269,6 +1280,14 @@ class virtual selector_generic =
           f.Cmm.fun_args rargs Select_utils.env_empty
       in
       tailrec_label <- Cmm.new_label ();
+      (* XXX mshinwell: I moved the following two lines from down below to
+         minimize the diff, is this ok? *)
+      self#emit_tail env f.Cmm.fun_body;
+      let body = self#extract in
+      (* XXX mshinwell: why don't we have an equivalent of the line in Selectgen
+         as follows?
+
+         instr_seq <- Mach.dummy_instr *)
       let loc_arg_index = ref 0 in
       List.iteri
         (fun param_index (var, _ty) ->
@@ -1295,12 +1314,13 @@ class virtual selector_generic =
               hard_regs_for_arg [||])
         f.Cmm.fun_args;
       self#insert_moves env loc_arg rarg;
-      self#emit_tail env f.Cmm.fun_body;
-      let body = self#extract in
       if true then Sub_cfg.dump body;
       (* CR xclerc for xclerc: implement polling insertion. *)
+      (* XXX mshinwell: I think we should do this now *)
       let fun_poll = Lambda.Default_poll in
       let fun_contains_calls =
+        (* XXX mshinwell: can we move this check for "contains calls" to
+           somewhere in the generic Cfg code? *)
         Sub_cfg.exists_basic_blocks body ~f:(fun (block : Cfg.basic_block) ->
             block.is_trap_handler
             || (match block.terminator.desc with
@@ -1321,11 +1341,17 @@ class virtual selector_generic =
                | Call _ -> true
                | Prim { op = External _ } -> true
                | Prim { op = Probe _ } -> true
-               | Specific_can_raise _ -> false)
+               | Specific_can_raise _ ->
+                 (* XXX mshinwell: given these can apparently raise(?), might
+                    they need the same handling as the [Raise] case above, i.e.
+                    potentially returning [true]? *)
+                 false)
             || DLL.exists block.body
                  ~f:(fun (instr : Cfg.basic Cfg.instruction) ->
                    match instr.desc with
                    | Op (Alloc _ | Poll) -> true
+                   (* XXX this should be an exhaustive match. Can we then turn
+                      warning 4 on for this file? *)
                    | _ -> false))
       in
       let cfg =
@@ -1354,6 +1380,7 @@ class virtual selector_generic =
       Cfg.add_block_exn cfg tailrec_block;
       DLL.add_end layout tailrec_block.start;
       Sub_cfg.iter_basic_blocks body ~f:(fun (block : Cfg.basic_block) ->
+          (* XXX mshinwell: remove uses of polymorphic comparison throughout *)
           if block.terminator.desc <> Cfg.Never
           then (
             block.can_raise <- Cfg.can_raise_terminator block.terminator.desc;
