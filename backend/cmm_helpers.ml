@@ -1169,6 +1169,9 @@ let unboxed_mutable_float32_unboxed_product_array_ref arr ~array_index dbg =
               [array_indexing log2_size_addr arr index dbg],
               dbg )))
 
+(* CR mshinwell/mslater: if we're writing zeros to the top 32 bits of float32
+   product fields, should we do the same for mixed block record fields? *)
+
 let unboxed_mutable_float32_unboxed_product_array_set arr ~array_index
     ~new_value dbg =
   bind "arr" arr (fun arr ->
