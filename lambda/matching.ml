@@ -2659,7 +2659,8 @@ module SArg = struct
 
   let make_const i = Lconst (Const_base (Const_int i))
 
-  let make_isout h arg = Lprim (Pisout, [ h; arg ], Loc_unknown)
+  let make_isout h arg =
+    Lprim (Pisout Ptagged_immediate, [ h; arg ], Loc_unknown)
 
   let make_isin h arg = Lprim (Pnot, [ make_isout h arg ], Loc_unknown)
 

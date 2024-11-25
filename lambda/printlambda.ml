@@ -701,6 +701,10 @@ let primitive ppf = function
       fprintf ppf (if variant_only then "isint" else "obj_is_int")
   | Pisnull -> fprintf ppf "isnull"
   | Pisout -> fprintf ppf "isout"
+  | Punsigned_compare Ptagged_immediate ->
+      fprintf ppf "unsigned_compare"
+  | Punsigned_compare (Punboxed_integer ui) ->
+      fprintf ppf "unsigned_compare_%s" (unboxed_integer ui)
   | Pbintofint (bi,m) -> print_boxed_integer "of_int" ppf bi m
   | Pintofbint bi -> print_boxed_integer "to_int" ppf bi alloc_heap
   | Pcvtbint (bi1, bi2, m) -> print_boxed_integer_conversion ppf bi1 bi2 m
@@ -997,6 +1001,7 @@ let name_of_primitive = function
   | Pisint _ -> "Pisint"
   | Pisnull -> "Pisnull"
   | Pisout -> "Pisout"
+  | Punsigned_compare _ -> "Punsigned_compare"
   | Pbintofint _ -> "Pbintofint"
   | Pintofbint _ -> "Pintofbint"
   | Pcvtbint _ -> "Pcvtbint"

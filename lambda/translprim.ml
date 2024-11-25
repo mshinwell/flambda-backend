@@ -887,6 +887,14 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
       Primitive(Preinterpret_tagged_int63_as_unboxed_int64, 1)
     | "%reinterpret_unboxed_int64_as_tagged_int63" ->
       Primitive(Preinterpret_unboxed_int64_as_tagged_int63, 1)
+    | "%unsigned_compare_int" ->
+      Primitive(Pisout Ptagged_immediate, 2)
+    | "%unsigned_compare_int32#" ->
+      Primitive(Pisout (Punboxed_integer Pint32), 2)
+    | "%unsigned_compare_int64#" ->
+      Primitive(Pisout (Punboxed_integer Pint64), 2)
+    | "%unsigned_compare_nativeint#" ->
+      Primitive(Pisout (Punboxed_integer Pnativeint), 2)
     | s when String.length s > 0 && s.[0] = '%' ->
       (match String.Map.find_opt s indexing_primitives with
        | Some prim -> prim ~mode

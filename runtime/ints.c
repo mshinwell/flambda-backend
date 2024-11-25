@@ -876,3 +876,18 @@ CAMLprim value caml_reinterpret_unboxed_int64_as_tagged_int63(value i)
   CAMLassert(Tag_val(i) == Custom_tag);
   return (value) (Int64_val(i) | 1L);
 }
+
+CAMLprim value caml_unsigned_compare_int32(value i1, value i2)
+{
+  return COMPARE_INT((uint32_t) Int32_val(i1), (uint32_t) Int32_val(i2));
+}
+
+CAMLprim value caml_unsigned_compare_int64(value i1, value i2)
+{
+  return COMPARE_INT((uint64_t) Int64_val(i1), (uint64_t) Int64_val(i2));
+}
+
+CAMLprim value caml_unsigned_compare_nativeint(value i1, value i2)
+{
+  return COMPARE_INT((uintnat) Nativeint_val(i1), (uintnat) Nativeint_val(i2));
+}

@@ -203,6 +203,8 @@ type primitive =
   | Pisnull
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
+  (* Unsigned comparison *)
+  | Punsigned_compare of unsigned_compare_kind
   (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
   | Pbintofint of boxed_integer * locality_mode
   | Pintofbint of boxed_integer
@@ -456,6 +458,10 @@ and scannable_product_element_kind =
 and array_index_kind =
   | Ptagged_int_index
   | Punboxed_int_index of unboxed_integer
+
+and unsigned_compare_kind =
+  | Ptagged_immediate
+  | Punboxed_integer of unboxed_integer
 
 and boxed_float = Primitive.boxed_float =
   | Pfloat64
@@ -1817,7 +1823,7 @@ let primitive_may_allocate : primitive -> locality_mode option = function
       | Pgcignorableproductarray_ref _), _, _) -> None
   | Parrayrefu ((Pgenarray_ref m | Pfloatarray_ref m), _, _)
   | Parrayrefs ((Pgenarray_ref m | Pfloatarray_ref m), _, _) -> Some m
-  | Pisint _ | Pisnull | Pisout -> None
+  | Pisint _ | Pisnull | Pisout | Punsigned_compare _ -> None
   | Pintofbint _ -> None
   | Pbintofint (_,m)
   | Pcvtbint (_,_,m)
@@ -1996,7 +2002,8 @@ let primitive_can_raise prim =
   | Punboxed_float_comp (_, _)
   | Pstringlength | Pstringrefu | Pbyteslength | Pbytesrefu | Pbytessetu
   | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
-  | Pisint _ | Pisout | Pisnull | Pbintofint _ | Pintofbint _ | Pcvtbint _
+  | Pisint _ | Pisout | Punsigned_compare _
+  | Pisnull | Pbintofint _ | Pintofbint _ | Pcvtbint _
   | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _
   | Pdivbint { is_safe = Unsafe; _ }
   | Pmodbint { is_safe = Unsafe; _ }
@@ -2208,8 +2215,8 @@ let primitive_result_layout (p : primitive) =
   | Pfloatcomp (_, _) | Punboxed_float_comp (_, _)
   | Pstringlength | Pstringrefu | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytesrefs
-  | Parraylength _ | Pisint _ | Pisnull | Pisout | Pintofbint _
-  | Pbintcomp _ | Punboxed_int_comp _
+  | Parraylength _ | Pisint _ | Pisnull | Pisout | Punsigned_compare _
+  | Pintofbint _ | Pbintcomp _ | Punboxed_int_comp _
   | Pstring_load_16 _ | Pbytes_load_16 _ | Pbigstring_load_16 _
   | Pprobe_is_enabled _ | Pbswap16
     -> layout_int

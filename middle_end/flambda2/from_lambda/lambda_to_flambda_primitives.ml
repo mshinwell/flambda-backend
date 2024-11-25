@@ -79,6 +79,8 @@ let standard_int_of_boxed_integer (bint : L.boxed_integer) : K.Standard_int.t =
   | Pint32 -> Naked_int32
   | Pint64 -> Naked_int64
 
+let standard_int_of_unboxed_integer = standard_int_of_boxed_integer
+
 let standard_int_or_float_of_boxed_integer (bint : L.boxed_integer) :
     K.Standard_int_or_float.t =
   match bint with
@@ -1744,12 +1746,16 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
   | Pisint { variant_only }, [[arg]] ->
     [tag_int (Unary (Is_int { variant_only }, arg))]
   | Pisnull, [[arg]] -> [tag_int (Unary (Is_null, arg))]
-  | Pisout, [[arg1]; [arg2]] ->
+  | Pisout compare_kind, [[arg1]; [arg2]] ->
+    let compare_kind : K.Standard_int.t =
+      match compare_kind with
+      | Ptagged_immediate -> Tagged_immediate
+      | Punboxed_integer ui -> standard_int_of_unboxed_integer ui
+    in
     [ tag_int
         (Binary
-           ( Int_comp (I.Tagged_immediate, Yielding_bool (Lt Unsigned)),
-             arg1,
-             arg2 )) ]
+           (Int_comp (compare_kind, Yielding_bool (Lt Unsigned)), arg1, arg2))
+    ]
   | Pbintofint (bi, mode), [[arg]] ->
     let dst = standard_int_or_float_of_boxed_integer bi in
     [ box_bint bi mode

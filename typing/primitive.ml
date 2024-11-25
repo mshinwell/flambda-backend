@@ -720,6 +720,31 @@ let prim_has_valid_reprs ~loc prim =
     | "%caml_unboxed_nativeint_array_set128u#" ->
       exactly [Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.value; Same_as_ocaml_repr C.vec128; Same_as_ocaml_repr C.value]
 
+    | "%unsigned_compare_int" ->
+      exactly [
+        Same_as_ocaml_repr C.value;
+        Same_as_ocaml_repr C.value;
+        Same_as_ocaml_repr C.value;
+      ]
+    | "%unsigned_compare_int32#" ->
+      exactly [
+        Same_as_ocaml_repr C.bits32;
+        Same_as_ocaml_repr C.bits32;
+        Same_as_ocaml_repr C.value;
+      ]
+    | "%unsigned_compare_int64#" ->
+      exactly [
+        Same_as_ocaml_repr C.bits64;
+        Same_as_ocaml_repr C.bits64;
+        Same_as_ocaml_repr C.value;
+      ]
+    | "%unsigned_compare_nativeint#" ->
+      exactly [
+        Same_as_ocaml_repr C.word;
+        Same_as_ocaml_repr C.word;
+        Same_as_ocaml_repr C.value;
+      ]
+
     | name -> (
         match String.Map.find_opt name stringlike_indexing_primitives with
         | Some reprs -> exactly reprs

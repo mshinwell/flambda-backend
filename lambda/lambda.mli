@@ -198,6 +198,8 @@ type primitive =
   | Pisnull
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
+  (* Unsigned comparison *)
+  | Punsigned_compare of unsigned_compare_kind
   (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
   | Pbintofint of boxed_integer * locality_mode
   | Pintofbint of boxed_integer
@@ -413,6 +415,10 @@ and scannable_product_element_kind =
 and array_index_kind =
   | Ptagged_int_index
   | Punboxed_int_index of unboxed_integer
+
+and unsigned_compare_kind =
+  | Ptagged_immediate
+  | Punboxed_integer of unboxed_integer
 
 (** [Nullable] value kinds allow the special Null value in addition to the
     values of its underlying type. [Non_nullable] only allows values of the
