@@ -749,8 +749,8 @@ AC_ARG_ENABLE([syntax-quotations],
 AC_ARG_WITH([target-bindir],
   [AS_HELP_STRING([--with-target-bindir],
     [location of the runtime binaries on the target system])],
-  [target_bindir=$withval],
-  [target_bindir=''])
+  [TARGET_BINDIR=$withval],
+  [TARGET_BINDIR=''])
 
 AC_ARG_WITH([target-sh],
   [AS_HELP_STRING([--with-target-sh],
@@ -1055,7 +1055,7 @@ AS_IF([test "x$interpval" = "xyes"],
 AC_CONFIG_COMMANDS([shebang],
   [printf '%s\n%s\000\n' "$launch_method" "$ocaml_bindir" \
     > stdlib/runtime.info
-  printf '%s\n%s\000\n' "$target_launch_method" "$target_bindir" \
+  printf '%s\n%s\000\n' "$target_launch_method" "$TARGET_BINDIR" \
     > stdlib/target_runtime.info],
 dnl These declarations are put in a here-document in configure, so the command
 dnl in '$(...)' _is_ evaluated as the content is written to config.status (by
@@ -1065,7 +1065,7 @@ dnl nefarious single quotes which may appear in any of the strings.
   target_launch_method=\
 '$(echo "$target_launch_method" | sed -e "s/'/'\"'\"'/g")'
   ocaml_bindir='$(echo "$ocaml_bindir" | sed -e "s/'/'\"'\"'/g")'
-  target_bindir='$(echo "$target_bindir" | sed -e "s/'/'\"'\"'/g")'])
+  TARGET_BINDIR='$(echo "$TARGET_BINDIR" | sed -e "s/'/'\"'\"'/g")'])
 
 # Are we building a cross-compiler
 
@@ -3317,7 +3317,7 @@ AC_CONFIG_COMMANDS_PRE([
   eval "exec_prefix=\"$exec_prefix\""
   eval "ocaml_bindir=\"$bindir\""
   eval "ocaml_libdir=\"$libdir\""
-  AS_IF([test x"$target_bindir" = 'x'],[target_bindir="$ocaml_bindir"])
+  AS_IF([test x"$TARGET_BINDIR" = 'x'],[TARGET_BINDIR="$ocaml_bindir"])
   AS_IF([test x"$target_launch_method" = 'x'],
     [target_launch_method="$launch_method"])
   prefix="$saved_prefix"
