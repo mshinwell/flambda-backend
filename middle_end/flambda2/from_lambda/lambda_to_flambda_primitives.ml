@@ -854,15 +854,15 @@ let multiple_word_array_access_validity_condition array ~size_int
             Simple.const_int (Targetint_31_63.of_int multiplier) )
         | Punboxed_int_index bint -> (
           match bint with
-          | Pint32 ->
+          | Unboxed_int32 ->
             ( I.Naked_int32,
               Simple.const
                 (Reg_width_const.naked_int32 (Int32.of_int multiplier)) )
-          | Pint64 ->
+          | Unboxed_int64 ->
             ( I.Naked_int64,
               Simple.const
                 (Reg_width_const.naked_int64 (Int64.of_int multiplier)) )
-          | Pnativeint ->
+          | Unboxed_nativeint ->
             ( I.Naked_nativeint,
               Simple.const
                 (Reg_width_const.naked_nativeint
