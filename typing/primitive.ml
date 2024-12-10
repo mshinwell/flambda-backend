@@ -333,13 +333,13 @@ let byte_name p =
   p.prim_name
 
 let unbox_integer = function
-  | Boxed_int32 -> Unboxed_int32
-  | Boxed_nativeint -> Unboxed_nativeint
   | Boxed_int64 -> Unboxed_int64
+  | Boxed_nativeint -> Unboxed_nativeint
+  | Boxed_int32 -> Unboxed_int32
 
 let unbox_float = function
-  | Boxed_float32 -> Unboxed_float32
   | Boxed_float64 -> Unboxed_float64
+  | Boxed_float32 -> Unboxed_float32
 
 let unbox_vector = function
   | Boxed_vec128 -> Unboxed_vec128
