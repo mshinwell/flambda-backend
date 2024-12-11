@@ -176,7 +176,10 @@ module Array_ref_kind = struct
     | Naked_int64s
     | Naked_nativeints
     | Naked_vec128s
-    | Unboxed_product of no_float_array_opt list
+    | Unboxed_product of
+        { kinds : no_float_array_opt list;
+          reinterpreting_unboxed_int64_array : bool
+        }
 
   type t =
     | No_float_array_opt of no_float_array_opt
@@ -189,6 +192,19 @@ type converted_array_ref_kind =
 
 let convert_array_ref_kind (kind : L.array_ref_kind) : converted_array_ref_kind
     =
+  let rec convert_gc_ignorable_product_element_kind
+      (kind : L.ignorable_product_element_kind) :
+      Array_ref_kind.no_float_array_opt =
+    match kind with
+    | Pint_ignorable -> Immediates
+    | Punboxedfloat_ignorable Pfloat32 -> Naked_float32s
+    | Punboxedfloat_ignorable Pfloat64 -> Naked_floats
+    | Punboxedint_ignorable Pint32 -> Naked_int32s
+    | Punboxedint_ignorable Pint64 -> Naked_int64s
+    | Punboxedint_ignorable Pnativeint -> Naked_nativeints
+    | Pproduct_ignorable kinds ->
+      Unboxed_product (List.map convert_gc_ignorable_product_element_kind kinds)
+  in
   match kind with
   | Pgenarray_ref mode ->
     (* CR mshinwell: We can't check this because of the translations of
@@ -224,22 +240,25 @@ let convert_array_ref_kind (kind : L.array_ref_kind) : converted_array_ref_kind
         Unboxed_product (List.map convert_kind kinds)
     in
     Array_ref_kind
-      (No_float_array_opt (Unboxed_product (List.map convert_kind kinds)))
+      (No_float_array_opt
+         (Unboxed_product
+            { kinds = List.map convert_kind kinds;
+              reinterpreting_unboxed_int64_array = false
+            }))
   | Pgcignorableproductarray_ref kinds ->
-    let rec convert_kind (kind : L.ignorable_product_element_kind) :
-        Array_ref_kind.no_float_array_opt =
-      match kind with
-      | Pint_ignorable -> Immediates
-      | Punboxedfloat_ignorable Pfloat32 -> Naked_float32s
-      | Punboxedfloat_ignorable Pfloat64 -> Naked_floats
-      | Punboxedint_ignorable Pint32 -> Naked_int32s
-      | Punboxedint_ignorable Pint64 -> Naked_int64s
-      | Punboxedint_ignorable Pnativeint -> Naked_nativeints
-      | Pproduct_ignorable kinds ->
-        Unboxed_product (List.map convert_kind kinds)
-    in
     Array_ref_kind
-      (No_float_array_opt (Unboxed_product (List.map convert_kind kinds)))
+      (No_float_array_opt
+         (Unboxed_product
+            { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
+              reinterpreting_unboxed_int64_array = false
+            }))
+  | Punboxedint64array_reinterpret_ref kinds ->
+    Array_ref_kind
+      (No_float_array_opt
+         (Unboxed_product
+            { kinds = List.map convert_gc_ignorable_product_element_kind kinds;
+              reinterpreting_unboxed_int64_array = true
+            }))
 
 let rec convert_unboxed_product_array_ref_kind
     (kind : Array_ref_kind.no_float_array_opt) : P.Array_kind.t =
@@ -317,6 +336,19 @@ type converted_array_set_kind =
 
 let convert_array_set_kind (kind : L.array_set_kind) : converted_array_set_kind
     =
+  let rec convert_gc_ignorable_product_element_kind
+      (kind : L.ignorable_product_element_kind) :
+      Array_set_kind.t_no_float_array_opt =
+    match kind with
+    | Pint_ignorable -> Immediates
+    | Punboxedfloat_ignorable Pfloat32 -> Naked_float32s
+    | Punboxedfloat_ignorable Pfloat64 -> Naked_floats
+    | Punboxedint_ignorable Pint32 -> Naked_int32s
+    | Punboxedint_ignorable Pint64 -> Naked_int64s
+    | Punboxedint_ignorable Pnativeint -> Naked_nativeints
+    | Pproduct_ignorable kinds ->
+      Unboxed_product (List.map convert_gc_ignorable_product_element_kind kinds)
+  in
   match kind with
   | Pgenarray_set mode ->
     (* CR mshinwell: see CR in [convert_array_ref_kind] above

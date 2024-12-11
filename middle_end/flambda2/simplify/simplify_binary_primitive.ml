@@ -971,7 +971,9 @@ let simplify_array_load (array_kind : P.Array_kind.t)
       | Unknown | Bottom -> contents_unknown ()
       | Ok elt_kind -> (
         if not (K.equal (K.With_subkind.kind elt_kind) result_kind)
-        then contents_unknown ()
+        then
+          (* CR mshinwell: I think this should try to reinterpret *)
+          contents_unknown ()
         else
           match
             T.prove_equals_tagged_immediates (DA.typing_env dacc) index_ty

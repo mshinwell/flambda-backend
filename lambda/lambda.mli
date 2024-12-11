@@ -381,6 +381,7 @@ and array_ref_kind =
   | Pgcscannableproductarray_ref of scannable_product_element_kind list
   | Pgcignorableproductarray_ref of ignorable_product_element_kind list
   (* Invariant: the product element kind lists have length >= 2 *)
+  | Punboxedint64array_reinterpret_ref of ignorable_product_element_kind list
 
 (** When updating an array that might contain pointers, we need to know what
     mode they're at; otherwise, access is uniform. *)
@@ -396,6 +397,7 @@ and array_set_kind =
       modify_mode * scannable_product_element_kind list
   | Pgcignorableproductarray_set of ignorable_product_element_kind list
   (* Invariant: the product element kind lists have length >= 2 *)
+  | Punboxedint64array_reinterpret_set of ignorable_product_element_kind list
 
 and ignorable_product_element_kind =
   | Pint_ignorable

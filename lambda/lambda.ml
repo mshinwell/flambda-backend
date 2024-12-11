@@ -429,6 +429,7 @@ and array_ref_kind =
   | Punboxedvectorarray_ref of unboxed_vector
   | Pgcscannableproductarray_ref of scannable_product_element_kind list
   | Pgcignorableproductarray_ref of ignorable_product_element_kind list
+  | Punboxedint64array_reinterpret_ref of ignorable_product_element_kind list
 
 and array_set_kind =
   | Pgenarray_set of modify_mode
@@ -441,6 +442,7 @@ and array_set_kind =
   | Pgcscannableproductarray_set of
       modify_mode * scannable_product_element_kind list
   | Pgcignorableproductarray_set of ignorable_product_element_kind list
+  | Punboxedint64array_reinterpret_set of ignorable_product_element_kind list
 
 and ignorable_product_element_kind =
   | Pint_ignorable
@@ -1831,12 +1833,14 @@ let primitive_may_allocate : primitive -> locality_mode option = function
       | Punboxedfloatarray_ref _ | Punboxedintarray_ref _
       | Punboxedvectorarray_ref _
       | Pgcscannableproductarray_ref _
-      | Pgcignorableproductarray_ref _), _, _)
+      | Pgcignorableproductarray_ref _
+      | Punboxedint64array_reinterpret_ref _), _, _)
   | Parrayrefs ((Paddrarray_ref | Pintarray_ref
       | Punboxedfloatarray_ref _ | Punboxedintarray_ref _
       | Punboxedvectorarray_ref _
       | Pgcscannableproductarray_ref _
-      | Pgcignorableproductarray_ref _), _, _) -> None
+      | Pgcignorableproductarray_ref _
+      | Punboxedint64array_reinterpret_ref _), _, _) -> None
   | Parrayrefu ((Pgenarray_ref m | Pfloatarray_ref m), _, _)
   | Parrayrefs ((Pgenarray_ref m | Pfloatarray_ref m), _, _) -> Some m
   | Pisint _ | Pisnull | Pisout -> None
@@ -2164,7 +2168,9 @@ let array_ref_kind_result_layout = function
   | Punboxedintarray_ref i -> layout_unboxed_int i
   | Punboxedvectorarray_ref bv -> layout_unboxed_vector bv
   | Pgcscannableproductarray_ref kinds -> layout_of_scannable_kinds kinds
-  | Pgcignorableproductarray_ref kinds -> layout_of_ignorable_kinds kinds
+  | Pgcignorableproductarray_ref kinds
+  | Punboxedint64array_reinterpret_ref kinds ->
+    layout_of_ignorable_kinds kinds
 
 let layout_of_mixed_field (kind : mixed_block_read) =
   match kind with
