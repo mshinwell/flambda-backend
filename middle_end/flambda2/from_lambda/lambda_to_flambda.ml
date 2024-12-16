@@ -459,35 +459,34 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
       (Singleton
          (Flambda_kind.With_subkind.from_lambda_values_and_unboxed_numbers_only
             (Lambda.structured_constant_layout const)))
+  | Lapply ({ ap_region_close = Rc_nontail; ap_loc; _ } as apply) ->
+    let result = Ident.create_local "nontail_apply_result" in
+    cps acc env ccenv
+      (L.Llet
+         ( Strict,
+           L.layout_any_value,
+           result,
+           Lapply { apply with ap_region_close = Rc_normal },
+           Lprim (Popaque L.layout_any_value, [Lvar result], ap_loc) ))
+      k k_exn
   | Lapply
       { ap_func;
         ap_args;
         ap_result_layout;
-        ap_region_close;
+        ap_region_close = (Rc_normal | Rc_close_at_apply) as ap_region_close;
         ap_mode;
         ap_loc;
         ap_tailcall = _;
         ap_inlined;
         ap_specialised = _;
         ap_probe
-      } -> (
+      } ->
     (* Note that we don't need kind information about [ap_args] since we already
        have it on the corresponding [Simple]s in the environment. *)
-    match ap_region_close, k with
-    | Rc_nontail, Tail k ->
-      let non_tail_cont acc _env ccenv simples _arity : Expr_with_acc.t =
-        compile_staticfail acc env ccenv ~continuation:k ~args:simples
-      in
-      maybe_insert_let_cont "apply_result" ap_result_layout
-        (Non_tail non_tail_cont) acc env ccenv (fun acc env ccenv k ->
-          cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
-            ap_loc ap_inlined ap_probe ap_result_layout k k_exn)
-    | (Rc_normal | Rc_close_at_apply), (Non_tail _ | Tail _)
-    | Rc_nontail, Non_tail _ ->
-      maybe_insert_let_cont "apply_result" ap_result_layout k acc env ccenv
-        (fun acc env ccenv k ->
-          cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
-            ap_loc ap_inlined ap_probe ap_result_layout k k_exn))
+    maybe_insert_let_cont "apply_result" ap_result_layout k acc env ccenv
+      (fun acc env ccenv k ->
+        cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
+          ap_loc ap_inlined ap_probe ap_result_layout k k_exn)
   | Lfunction func ->
     let id = Ident.create_local (name_for_function func) in
     let dbg = Debuginfo.from_location func.loc in
@@ -626,7 +625,13 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
           User_visible (Simple new_value) ~body)
       k_exn
   | Llet ((Strict | Alias | StrictOpt), _layout, id, defining_expr, Lvar id')
-    when Ident.same id id' ->
+    when Ident.same id id'
+         &&
+         match[@ocaml.warning "-fragile-match"] defining_expr with
+         (* Care: don't disturb the [Rc_nontail] conversion for [Lapply],
+            above. *)
+         | Lapply _ -> false
+         | _ -> true ->
     (* Simplif already simplifies such bindings, but we can generate new ones
        when translating primitives (see the Lprim case below). *)
     (* This case must not be moved above the case for let-bound primitives. *)
