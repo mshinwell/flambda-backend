@@ -470,13 +470,24 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         ap_inlined;
         ap_specialised = _;
         ap_probe
-      } ->
+      } -> (
     (* Note that we don't need kind information about [ap_args] since we already
        have it on the corresponding [Simple]s in the environment. *)
-    maybe_insert_let_cont "apply_result" ap_result_layout k acc env ccenv
-      (fun acc env ccenv k ->
-        cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
-          ap_loc ap_inlined ap_probe ap_result_layout k k_exn)
+    match ap_region_close, k with
+    | Rc_nontail, Tail k ->
+      let non_tail_cont acc _env ccenv simples _arity : Expr_with_acc.t =
+        compile_staticfail acc env ccenv ~continuation:k ~args:simples
+      in
+      maybe_insert_let_cont "apply_result" ap_result_layout
+        (Non_tail non_tail_cont) acc env ccenv (fun acc env ccenv k ->
+          cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
+            ap_loc ap_inlined ap_probe ap_result_layout k k_exn)
+    | (Rc_normal | Rc_close_at_apply), (Non_tail _ | Tail _)
+    | Rc_nontail, Non_tail _ ->
+      maybe_insert_let_cont "apply_result" ap_result_layout k acc env ccenv
+        (fun acc env ccenv k ->
+          cps_tail_apply acc env ccenv ap_func ap_args ap_region_close ap_mode
+            ap_loc ap_inlined ap_probe ap_result_layout k k_exn))
   | Lfunction func ->
     let id = Ident.create_local (name_for_function func) in
     let dbg = Debuginfo.from_location func.loc in
