@@ -236,11 +236,20 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
     ~params:(params @ extra_params) ~recursive:Nonrecursive ~body ~handler
 
 let restore_continuation_context acc env ccenv cont ~close_current_region_early
-    body =
+    ~return_kinds_of_nontail_apply_in_tail_position body =
   let[@inline] normal_case env acc ccenv =
     match Env.pop_regions_up_to_context env cont with
-    | None -> body acc ccenv cont
-    | Some region_stack_elt ->
+    | None, _ -> body acc ccenv cont
+    | Some region_stack_elt, popped -> (
+      (* [popped] gives any regions that had to be popped between [cont] and the
+         context, excluding [region_stack_elt]. When we are dealing with an
+         application marked [@nontail] which is in tail position (in fact we do
+         this check all the time, but this is the case where it matters), we
+         need to insert [End_region]s for all regions in [popped], otherwise
+         begin/end region pairs may not be balanced. The algorithm for region
+         deletion in Simplify may produce local stack leaks if this condition is
+         not satisfied. *)
+      (* CR mshinwell: work out how to remove this restriction *)
       let ({ continuation_closing_region; continuation_after_closing_region }
             : Env.region_closure_continuation) =
         Env.region_closure_continuation env region_stack_elt
@@ -252,7 +261,65 @@ let restore_continuation_context acc env ccenv cont ~close_current_region_early
            current continuation %a"
           Continuation.print continuation_after_closing_region
           Continuation.print cont;
-      body acc ccenv continuation_closing_region
+      match
+        ( Env.Region_stack_element.Set.is_empty popped,
+          return_kinds_of_nontail_apply_in_tail_position )
+      with
+      | true, (None | Some _) | false, None ->
+        body acc ccenv continuation_closing_region
+      | false, Some return_kinds ->
+        let wrapper_cont = Continuation.create () in
+        let param_idents =
+          List.mapi
+            (fun i _ -> Ident.create_local (Printf.sprintf "return_val%d" i))
+            return_kinds
+        in
+        let params =
+          List.map2
+            (fun return_value_component kind ->
+              return_value_component, IR.Not_user_visible, kind)
+            param_idents return_kinds
+        in
+        CC.close_let_cont acc ccenv ~name:wrapper_cont ~is_exn_handler:false
+          ~params ~recursive:Nonrecursive
+          ~body:(fun acc ccenv ->
+            (* Call the original application, but divert its return to
+               [wrapper_cont] so we can insert the [End_region]s. *)
+            body acc ccenv wrapper_cont)
+          ~handler:(fun acc ccenv ->
+            (* After the application, insert any intermediate [End_region]s,
+               then jump to the original region closure continuation. That will
+               ensure the final [End_region] is inserted, prior to jumping to
+               the "actual" continuation of the application. *)
+            Env.Region_stack_element.Set.fold
+              (fun region_stack_elt (body : Acc.t -> CCenv.t -> Expr_with_acc.t)
+                   acc ccenv : Expr_with_acc.t ->
+                let region = Env.Region_stack_element.region region_stack_elt in
+                let ghost_region =
+                  Env.Region_stack_element.ghost_region region_stack_elt
+                in
+                CC.close_let acc ccenv
+                  [ ( Ident.create_local "unit",
+                      Flambda_kind.With_subkind.tagged_immediate ) ]
+                  Not_user_visible
+                  (End_region { is_try_region = false; region; ghost = false })
+                  ~body:(fun acc ccenv ->
+                    CC.close_let acc ccenv
+                      [ ( Ident.create_local "unit",
+                          Flambda_kind.With_subkind.tagged_immediate ) ]
+                      Not_user_visible
+                      (End_region
+                         { is_try_region = false;
+                           region = ghost_region;
+                           ghost = true
+                         })
+                      ~body))
+              popped
+              (fun acc ccenv ->
+                CC.close_apply_cont acc ccenv ~dbg:Debuginfo.none
+                  continuation_closing_region None
+                  (List.map (fun id -> IR.Var id) param_idents))
+              acc ccenv))
   in
   (* If we need to close the current region early, that has to be done first.
      Then we redirect the return continuation to the one closing any further
@@ -279,8 +346,12 @@ let restore_continuation_context acc env ccenv cont ~close_current_region_early
 
 let restore_continuation_context_for_switch_arm env cont =
   match Env.pop_regions_up_to_context env cont with
-  | None -> cont
-  | Some region_stack_elt ->
+  | None, _ -> cont
+  | Some region_stack_elt, _ ->
+    (* Switch arms cannot be nontail-marked expressions in the tail position of
+       an [Lregion], so we can ignore the second part of the return value from
+       [pop_regions_up_to_context]. See comment in
+       [restore_continuation_context] above. *)
     let ({ continuation_closing_region; continuation_after_closing_region }
           : Env.region_closure_continuation) =
       Env.region_closure_continuation env region_stack_elt
@@ -296,7 +367,8 @@ let restore_continuation_context_for_switch_arm env cont =
 
 let apply_cont_with_extra_args acc env ccenv ~dbg cont traps args =
   restore_continuation_context acc env ccenv cont
-    ~close_current_region_early:false (fun acc ccenv cont ->
+    ~close_current_region_early:false
+    ~return_kinds_of_nontail_apply_in_tail_position:None (fun acc ccenv cont ->
       let extra_args =
         List.map
           (fun var : IR.simple -> Var var)
@@ -306,10 +378,16 @@ let apply_cont_with_extra_args acc env ccenv ~dbg cont traps args =
 
 let wrap_return_continuation acc env ccenv (apply : IR.apply) =
   let extra_args = Env.extra_args_for_continuation env apply.continuation in
-  let close_current_region_early, region_stack_elt =
+  let close_current_region_early, is_nontail, region_stack_elt =
     match apply.region_close with
-    | Rc_normal | Rc_nontail ->
+    | Rc_normal ->
       ( false,
+        false,
+        Env.Region_stack_element.create ~region:apply.region
+          ~ghost_region:apply.ghost_region )
+    | Rc_nontail ->
+      ( false,
+        true,
         Env.Region_stack_element.create ~region:apply.region
           ~ghost_region:apply.ghost_region )
     | Rc_close_at_apply ->
@@ -320,16 +398,24 @@ let wrap_return_continuation acc env ccenv (apply : IR.apply) =
          application, further regions should be closed if necessary in order to
          bring the current region stack in line with the return continuation's
          region stack. *)
-      true, Env.parent_region env
+      true, false, Env.parent_region env
   in
   let region = Env.Region_stack_element.region region_stack_elt in
   let ghost_region = Env.Region_stack_element.ghost_region region_stack_elt in
+  let return_kinds = Flambda_arity.unarized_components apply.return_arity in
+  let return_kinds_with_extra_args =
+    match extra_args with
+    | [] -> return_kinds
+    | _ :: _ ->
+      return_kinds
+      @ List.map snd
+          (Env.extra_args_for_continuation_with_kinds env apply.continuation)
+  in
   let body acc ccenv continuation =
     match extra_args with
     | [] -> CC.close_apply acc ccenv { apply with continuation; region }
     | _ :: _ ->
       let wrapper_cont = Continuation.create () in
-      let return_kinds = Flambda_arity.unarized_components apply.return_arity in
       let return_value_components =
         List.mapi
           (fun i _ -> Ident.create_local (Printf.sprintf "return_val%d" i))
@@ -360,7 +446,10 @@ let wrap_return_continuation acc env ccenv (apply : IR.apply) =
         ~params ~recursive:Nonrecursive ~body ~handler
   in
   restore_continuation_context acc env ccenv apply.continuation
-    ~close_current_region_early body
+    ~close_current_region_early
+    ~return_kinds_of_nontail_apply_in_tail_position:
+      (if is_nontail then Some return_kinds_with_extra_args else None)
+    body
 
 type non_tail_continuation =
   Acc.t ->

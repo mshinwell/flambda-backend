@@ -344,19 +344,32 @@ let pop_one_region t =
 
 let pop_regions_up_to_context t continuation =
   let initial_stack_context = region_stack_in_cont_scope t continuation in
-  let rec pop to_pop region_stack =
+  let rec pop ((_, popped) as to_pop) region_stack =
     match initial_stack_context, region_stack with
     | [], [] -> to_pop
-    | [], region_stack_elt :: regions -> pop (Some region_stack_elt) regions
+    | [], region_stack_elt :: regions ->
+      pop
+        ( Some region_stack_elt,
+          Region_stack_element.Set.add region_stack_elt popped )
+        regions
     | _initial_stack_top :: _, [] ->
       Misc.fatal_errorf "Unable to restore region stack for %a"
         Continuation.print continuation
     | initial_stack_top :: _, region_stack_elt :: regions ->
       if Region_stack_element.equal initial_stack_top region_stack_elt
       then to_pop
-      else pop (Some region_stack_elt) regions
+      else
+        pop
+          ( Some region_stack_elt,
+            Region_stack_element.Set.add region_stack_elt popped )
+          regions
   in
-  pop None t.region_stack
+  match pop (None, Region_stack_element.Set.empty) t.region_stack with
+  | (None, popped) as result ->
+    assert (Region_stack_element.Set.is_empty popped);
+    result
+  | (Some last' as last), popped ->
+    last, Region_stack_element.Set.remove last' popped
 
 let region_closure_continuation t id =
   try Region_stack_element.Map.find id t.region_closure_continuations

@@ -25,7 +25,7 @@ module Region_stack_element : sig
 
   val ghost_region : t -> Ident.t
 
-  val equal : t -> t -> bool
+  include Container_types.S with type t := t
 end
 
 val create :
@@ -187,7 +187,9 @@ val pop_region :
   (Region_stack_element.t * Region_stack_element.t list) option
 
 val pop_regions_up_to_context :
-  t -> Continuation.t -> Region_stack_element.t option
+  t ->
+  Continuation.t ->
+  Region_stack_element.t option * Region_stack_element.Set.t
 
 type region_closure_continuation = private
   { continuation_closing_region : Continuation.t;
