@@ -48,6 +48,11 @@ CAMLprim value caml_obj_tag(value arg)
   return Val_int (obj_tag(arg));
 }
 
+CAMLprim value caml_obj_size(value arg)
+{
+  return Val_long(Is_block(arg) ? Wosize_val(arg) : 0);
+}
+
 CAMLprim value caml_obj_set_tag (value arg, value new_tag)
 {
   Tag_val (arg) = Int_val (new_tag);

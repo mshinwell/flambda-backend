@@ -31,7 +31,12 @@ external magic : 'a -> 'b = "%obj_magic"
 val is_block : t -> bool
 external is_int : t -> bool = "%obj_is_int"
 external tag : t -> int = "caml_obj_tag" [@@noalloc]
+
+(* CR mshinwell: Work out a proper way of fixing this. *)
+(** Note that [size] may give wrong results for arrays of non-value layouts.
+    For such situations one can bind [caml_obj_size] instead. *)
 val size : t -> int
+
 val reachable_words : t -> int
   (**
      Computes the total size (in words, including the headers) of all
