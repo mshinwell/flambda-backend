@@ -135,7 +135,7 @@ end) : S with type t = Arg.M.t
   let set t idx v = set t idx (of_boxed v)
 
   let make l f = make l (of_boxed f)
-  let init l f = init l (fun i -> of_boxed (f i))
+  let init l f = init l (fun i -> Gc.compact (); of_boxed (let x = f i in Gc.compact (); x))
   let make_matrix sx sy init = make_matrix sx sy (of_boxed init)
   let fill a ofs len v = fill a ofs len (of_boxed v)
   let iter f t = iter (fun v -> f (to_boxed v)) t
@@ -162,7 +162,10 @@ end) : S with type t = Arg.M.t
   let find_mapi f t = find_mapi (fun i v -> f i (to_boxed v)) t
 
   let sort f t = sort (fun a b -> f (to_boxed a) (to_boxed b)) t
-  let stable_sort f t = stable_sort (fun a b -> f (to_boxed a) (to_boxed b)) t
+  let stable_sort f t = stable_sort (fun a b ->
+    Gc.compact ();
+    f (let x = to_boxed a in Gc.compact (); x)
+      (let x = to_boxed b in Gc.compact (); x)) t
   let fast_sort f t = fast_sort (fun a b -> f (to_boxed a) (to_boxed b)) t
 
   let map_to_array f t =
