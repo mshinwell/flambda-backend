@@ -761,6 +761,19 @@ AC_ARG_WITH([target-sh],
     [target_launch_method="$withval"])],
   [target_launch_method=''])
 
+AC_ARG_WITH([stublibs],
+  [AS_HELP_STRING([--with-stublibs],
+    [additional directory for searching for bytecode stub libraries])],
+  [AS_IF([test x"$withval" = 'xno'],
+    [ocaml_additional_stublibs_dir=''],
+    [dnl A user wishing to add "yes" to ld.conf may do so manually - catch
+     dnl --with-stublibs as an error.
+    AS_IF([test x"$withval" = 'xyes'],
+     [AC_MSG_ERROR([--with-stublibs needs an argument])])
+    ocaml_additional_stublibs_dir="$withval"])],
+  [ocaml_additional_stublibs_dir=''])
+
+
 AC_ARG_ENABLE([stdlib-manpages],
   [AS_HELP_STRING([--disable-stdlib-manpages],
     [do not build or install the library man pages])],
@@ -3324,6 +3337,17 @@ AC_CONFIG_COMMANDS_PRE([
     [target_launch_method="$launch_method"])
   prefix="$saved_prefix"
   exec_prefix="$saved_exec_prefix"])
+
+# Create ld.conf
+AC_CONFIG_COMMANDS([runtime/ld.conf],
+  [rm -f runtime/ld.conf
+  test x"$ocaml_additional_stublibs_dir" = 'x' || \
+    echo "$ocaml_additional_stublibs_dir" > runtime/ld.conf
+  echo "$ocaml_libdir/stublibs" >> runtime/ld.conf
+  echo "$ocaml_libdir" >> runtime/ld.conf],
+  [ocaml_additional_stublibs_dir=\
+'$(echo "$ocaml_additional_stublibs_dir" | sed -e "s/'/'\"'\"'/g")'
+  ocaml_libdir='$(echo "$ocaml_libdir" | sed -e "s/'/'\"'\"'/g")'])
 
 # Just before config.status is generated, determine the final values for MKEXE,
 # MKDLL, MKMAINDLL and MKEXE_VIA_CC. The final variables controlling these are:
