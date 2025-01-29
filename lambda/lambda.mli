@@ -104,6 +104,312 @@ type region_close =
     tail call because the outer region needs to end there.)
 *)
 
+type integer_comparison =
+    Ceq | Cne | Clt | Cgt | Cle | Cge
+
+type float_comparison =
+    CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
+
+
+(** [Nullable] value kinds allow the special Null value in addition to the
+    values of its underlying type. [Non_nullable] only allows values of the
+    underlying type. *)
+and nullable =
+  | Nullable
+  | Non_nullable
+
+and value_kind =
+  { raw_kind : value_kind_non_null;
+    nullable : nullable;
+  }
+
+and value_kind_non_null =
+  | Pgenval
+  | Pintval
+  | Pboxedfloatval of boxed_float
+  | Pboxedintval of boxed_integer
+  | Pvariant of {
+      consts : int list;
+      non_consts : (int * constructor_shape) list;
+      (** [non_consts] must be non-empty.  For constant variants [Pintval]
+          must be used.  This causes a small loss of precision but it is not
+          expected to be significant. *)
+    }
+  | Parrayval of array_kind
+  | Pboxedvectorval of boxed_vector
+
+(* Because we check for and error on void in the translation to lambda, we don't
+   need a constructor for it here. *)
+and layout =
+  | Ptop
+  | Pvalue of value_kind
+  | Punboxed_float of unboxed_float
+  | Punboxed_int of unboxed_integer
+  | Punboxed_vector of unboxed_vector
+  | Punboxed_product of layout list
+  | Pbottom
+
+and block_shape =
+  value_kind list option
+
+and flat_element = Types.flat_element =
+  | Imm
+  | Float_boxed
+  | Float64
+  | Float32
+  | Bits8
+  | Bits16
+  | Bits32
+  | Bits64
+  | Vec128
+  | Word
+
+
+and array_kind =
+    Pgenarray | Paddrarray | Pintarray | Pfloatarray
+  | Punboxedfloatarray of Primitive.unboxed_float
+  | Punboxedintarray of Primitive.unboxed_integer
+  | Punboxedvectorarray of Primitive.unboxed_vector
+  | Pgcscannableproductarray of scannable_product_element_kind list
+  | Pgcignorableproductarray of ignorable_product_element_kind list
+
+and ignorable_product_element_kind =
+  | Pint_ignorable
+  | Punboxedfloat_ignorable of Primitive.unboxed_float
+  | Punboxedint_ignorable of Primitive.unboxed_integer
+  | Pproduct_ignorable of ignorable_product_element_kind list
+
+and scannable_product_element_kind =
+  | Pint_scannable
+  | Paddr_scannable
+  | Pproduct_scannable of scannable_product_element_kind list
+
+and constructor_shape =
+  | Constructor_uniform of value_kind list
+  | Constructor_mixed of
+      { value_prefix : value_kind list;
+        flat_suffix : flat_element list;
+      }
+
+and unboxed_float = Primitive.unboxed_float =
+  | Unboxed_float64
+  | Unboxed_float32
+
+and unboxed_integer =
+  | Unboxed_int64
+  | Unboxed_nativeint
+  | Unboxed_immediate
+  | Unboxed_int32
+  | Unboxed_int16
+  | Unboxed_int8
+
+and unboxed_vector = Primitive.unboxed_vector =
+  | Unboxed_vec128
+
+and boxed_float = Primitive.boxed_float =
+  | Boxed_float64
+  | Boxed_float32
+
+and boxed_integer = Primitive.boxed_integer =
+  | Boxed_int64
+  | Boxed_nativeint
+  | Boxed_int32
+
+and boxed_vector = Primitive.boxed_vector =
+  | Boxed_vec128
+
+
+type any_locality_mode = Any_locality_mode
+
+type tagged_immediate = Tagged_immediate
+
+module Maybe_naked :  sig
+  type ('a, 'b) t =
+    | Value of 'a
+    | Naked of 'b
+end
+
+module Scalar : sig
+  module type S := sig
+      type 'a width
+      type nonrec 'a t = ('a width, any_locality_mode width) Maybe_naked.t
+
+      val all : any_locality_mode t list
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val locality_mode : locality_mode t -> locality_mode option
+      val ignore_locality : locality_mode t -> any_locality_mode t
+      val width : any_locality_mode t -> any_locality_mode width
+      val layout : any_locality_mode t -> layout
+      val to_string : any_locality_mode t -> string
+    end
+  module Integral : sig
+    module Taggable : sig
+      module Width : sig
+        type t =
+          | Int8
+          | Int16
+          | Int
+
+        val compare_sizes : t -> t -> int
+        val to_unboxed_integer : t -> unboxed_integer
+        val to_string : t -> string
+      end
+
+      include S with type 'a width := Width.t
+    end
+
+    module Boxable : sig
+      module Width : sig
+        type 'mode t =
+          | Int32 of 'mode
+          | Nativeint of 'mode
+          | Int64 of 'mode
+
+        val map : 'a t -> f:('a -> 'b) -> 'b t
+        val locality_mode' : locality_mode t -> locality_mode
+        val locality_mode : locality_mode t -> locality_mode option
+        val to_boxed_integer : any_locality_mode t -> boxed_integer
+        val to_unboxed_integer : any_locality_mode t -> unboxed_integer
+      end
+
+      include S with type 'a width := 'a Width.t
+    end
+
+    module Width : sig
+      type 'mode t =
+        | Taggable of Taggable.Width.t
+        | Boxable of 'mode Boxable.Width.t
+
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val locality_mode : locality_mode t -> locality_mode option
+      val to_unboxed_integer : any_locality_mode t -> unboxed_integer
+    end
+
+    include S with type 'a width := 'a Width.t
+
+    val tagged_immediate : _ t
+  end
+
+  module Floating : sig
+    module Width : sig
+      type 'mode t =
+        | Float32 of 'mode
+        | Float64 of 'mode
+
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val locality_mode' : locality_mode t -> locality_mode
+      val locality_mode : locality_mode t -> locality_mode option
+      val to_boxed_float : any_locality_mode t -> boxed_float
+      val to_unboxed_float : any_locality_mode t -> unboxed_float
+    end
+
+    include S with type 'a width := 'a Width.t
+  end
+
+  module Width : sig
+    type 'mode t =
+      | Floating of 'mode Floating.Width.t
+      | Integral of 'mode Integral.Width.t
+
+    val map : 'a t -> f:('a -> 'b) -> 'b t
+
+    val locality_mode : locality_mode t -> locality_mode option
+  end
+
+  module Bytecode : sig
+    type nonrec t = Value of any_locality_mode Width.t
+  end
+
+  include S with type 'a width := 'a Width.t
+
+  val integral : 'a Integral.t -> 'a t
+  val floating : 'a Floating.t -> 'a t
+
+  (** helpers: *)
+
+  val tagged_immediate : _ t
+  val to_bytecode : any_locality_mode t -> Bytecode.t
+
+  module Intrinsic : sig
+    type 'mode info =
+      { can_raise : bool;
+        result : 'mode t
+      }
+
+    module Unary : sig
+      type nonrec 'mode t =
+        | Neg of { size : 'mode Integral.t }
+        | Fneg of { size : 'mode Floating.t }
+        | Fabs of { size : 'mode Floating.t }
+        | Succ of { size : 'mode Integral.t }
+        | Pred of { size : 'mode Integral.t }
+        | Bswap of { size : 'mode Integral.t }
+        | Static_cast of
+            { src : any_locality_mode t;
+              dst : 'mode t
+            }
+
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val info : 'a t -> 'a info
+    end
+
+    module Binary : sig
+      type nonrec 'mode t =
+        | Add of { size : 'mode Integral.t }
+        | Fadd of { size : 'mode Floating.t }
+        | Sub of { size : 'mode Integral.t }
+        | Fsub of { size : 'mode Floating.t }
+        | Mul of { size : 'mode Integral.t }
+        | Fmul of { size : 'mode Floating.t }
+        | Div of
+            { size : 'mode Integral.t;
+              is_safe : is_safe
+            }
+        | Fdiv of { size : 'mode Floating.t }
+        | Mod of
+            { size : 'mode Integral.t;
+              is_safe : is_safe
+            }
+        | And of { size : 'mode Integral.t }
+        | Or of { size : 'mode Integral.t }
+        | Xor of { size : 'mode Integral.t }
+        | Lsl of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Asr of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Lsr of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Icmp of
+            { size : any_locality_mode Integral.t;
+              cmp : integer_comparison
+            }
+        | Fcmp of
+            { size : any_locality_mode Floating.t;
+              cmp : float_comparison
+            }
+        | Three_way_compare of { size : any_locality_mode t }
+
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+      val info : 'a t -> 'a info
+    end
+
+    type 'mode t =
+      | Unary of 'mode Unary.t
+      | Binary of 'mode Binary.t
+
+    val map : 'a t -> f:('a -> 'b) -> 'b t
+    val info : 'a t -> 'a info
+    val all : any_locality_mode t list
+    val to_string : any_locality_mode t -> string
+  end
+end
+
 (* CR layouts v5: When we add more blocks of non-scannable values, consider
    whether some of the primitives specific to ufloat records
    ([Pmakeufloatblock], [Pufloatfield], and [Psetufloatfield]) can/should be
@@ -153,31 +459,9 @@ type primitive =
   | Praise of raise_kind
   (* Boolean operations *)
   | Psequand | Psequor | Pnot
-  (* Integer operations *)
-  | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint of is_safe | Pmodint of is_safe
-  | Pandint | Porint | Pxorint
-  | Plslint | Plsrint | Pasrint
-  | Pintcomp of integer_comparison
-  (* Comparisons that return int (not bool like above) for ordering *)
-  | Pcompare_ints
-  | Pcompare_floats of boxed_float
-  | Pcompare_bints of boxed_integer
-  | Poffsetint of int
+  (* Scalar operations *)
+  | Pscalar of locality_mode Scalar.Intrinsic.t
   | Poffsetref of int
-  (* Float operations *)
-  | Pfloatoffloat32 of locality_mode
-  | Pfloat32offloat of locality_mode
-  | Pintoffloat of boxed_float
-  | Pfloatofint of boxed_float * locality_mode
-  | Pnegfloat of boxed_float * locality_mode
-  | Pabsfloat of boxed_float * locality_mode
-  | Paddfloat of boxed_float * locality_mode
-  | Psubfloat of boxed_float * locality_mode
-  | Pmulfloat of boxed_float * locality_mode
-  | Pdivfloat of boxed_float * locality_mode
-  | Pfloatcomp of boxed_float * float_comparison
-  | Punboxed_float_comp of unboxed_float * float_comparison
   (* String operations *)
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
@@ -209,25 +493,6 @@ type primitive =
   | Pisnull
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
-  (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
-  | Pbintofint of boxed_integer * locality_mode
-  | Pintofbint of boxed_integer
-  | Pcvtbint of boxed_integer (*source*) * boxed_integer (*destination*)
-                * locality_mode
-  | Pnegbint of boxed_integer * locality_mode
-  | Paddbint of boxed_integer * locality_mode
-  | Psubbint of boxed_integer * locality_mode
-  | Pmulbint of boxed_integer * locality_mode
-  | Pdivbint of { size : boxed_integer; is_safe : is_safe; mode: locality_mode }
-  | Pmodbint of { size : boxed_integer; is_safe : is_safe; mode: locality_mode }
-  | Pandbint of boxed_integer * locality_mode
-  | Porbint of boxed_integer * locality_mode
-  | Pxorbint of boxed_integer * locality_mode
-  | Plslbint of boxed_integer * locality_mode
-  | Plsrbint of boxed_integer * locality_mode
-  | Pasrbint of boxed_integer * locality_mode
-  | Pbintcomp of boxed_integer * integer_comparison
-  | Punboxed_int_comp of unboxed_integer * integer_comparison
   (* Operations on Bigarrays: (unsafe, #dimensions, kind, layout) *)
   | Pbigarrayref of bool * int * bigarray_kind * bigarray_layout
   | Pbigarrayset of bool * int * bigarray_kind * bigarray_layout
@@ -302,9 +567,6 @@ type primitive =
   | Punboxed_nativeint_array_set_128 of { unsafe : bool; boxed : bool }
   (* Compile time constants *)
   | Pctconst of compile_time_constant
-  (* byte swap *)
-  | Pbswap16
-  | Pbbswap of boxed_integer * locality_mode
   (* Integer to external pointer *)
   | Pint_as_pointer of locality_mode
   (* Atomic operations *)
@@ -325,12 +587,6 @@ type primitive =
   (* Primitives for [Obj] *)
   | Pobj_dup
   | Pobj_magic of layout
-  | Punbox_float of boxed_float
-  | Pbox_float of boxed_float * locality_mode
-  | Puntag_int of unboxed_integer
-  | Ptag_int of unboxed_integer
-  | Punbox_int of boxed_integer
-  | Pbox_int of boxed_integer * locality_mode
   | Punbox_vector of boxed_vector
   | Pbox_vector of boxed_vector * locality_mode
   | Preinterpret_unboxed_int64_as_tagged_int63
@@ -374,21 +630,6 @@ and extern_repr =
 
 and external_call_description = extern_repr Primitive.description_gen
 
-and integer_comparison =
-    Ceq | Cne | Clt | Cgt | Cle | Cge
-
-and float_comparison =
-    CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
-
-and array_kind =
-    Pgenarray | Paddrarray | Pintarray | Pfloatarray
-  | Punboxedfloatarray of unboxed_float
-  | Punboxedintarray of unboxed_integer
-  | Punboxedvectorarray of unboxed_vector
-  | Pgcscannableproductarray of scannable_product_element_kind list
-  | Pgcignorableproductarray of ignorable_product_element_kind list
-  (* Invariant: the product element kind lists have length >= 2 *)
-
 (** When accessing a flat float array, we need to know the mode which we should
     box the resulting float at. *)
 and array_ref_kind =
@@ -396,9 +637,9 @@ and array_ref_kind =
   | Paddrarray_ref
   | Pintarray_ref
   | Pfloatarray_ref of locality_mode
-  | Punboxedfloatarray_ref of unboxed_float
-  | Punboxedintarray_ref of unboxed_integer
-  | Punboxedvectorarray_ref of unboxed_vector
+  | Punboxedfloatarray_ref of Primitive.unboxed_float
+  | Punboxedintarray_ref of Primitive.unboxed_integer
+  | Punboxedvectorarray_ref of Primitive.unboxed_vector
   | Pgcscannableproductarray_ref of scannable_product_element_kind list
   | Pgcignorableproductarray_ref of ignorable_product_element_kind list
   (* Invariant: the product element kind lists have length >= 2 *)
@@ -410,83 +651,17 @@ and array_set_kind =
   | Paddrarray_set of modify_mode
   | Pintarray_set
   | Pfloatarray_set
-  | Punboxedfloatarray_set of unboxed_float
-  | Punboxedintarray_set of unboxed_integer
-  | Punboxedvectorarray_set of unboxed_vector
+  | Punboxedfloatarray_set of Primitive.unboxed_float
+  | Punboxedintarray_set of Primitive.unboxed_integer
+  | Punboxedvectorarray_set of Primitive.unboxed_vector
   | Pgcscannableproductarray_set of
       modify_mode * scannable_product_element_kind list
   | Pgcignorableproductarray_set of ignorable_product_element_kind list
   (* Invariant: the product element kind lists have length >= 2 *)
 
-and ignorable_product_element_kind =
-  | Pint_ignorable
-  | Punboxedfloat_ignorable of unboxed_float
-  | Punboxedint_ignorable of unboxed_integer
-  | Pproduct_ignorable of ignorable_product_element_kind list
-  (* Invariant: the product element kind list has length >= 2 *)
-
-and scannable_product_element_kind =
-  | Pint_scannable
-  | Paddr_scannable
-  | Pproduct_scannable of scannable_product_element_kind list
-  (* Invariant: the product element kind list has length >= 2 *)
-
 and array_index_kind =
   | Ptagged_int_index
   | Punboxed_int_index of unboxed_integer
-
-(** [Nullable] value kinds allow the special Null value in addition to the
-    values of its underlying type. [Non_nullable] only allows values of the
-    underlying type. *)
-and nullable =
-  | Nullable
-  | Non_nullable
-
-and value_kind =
-  { raw_kind : value_kind_non_null;
-    nullable : nullable;
-  }
-
-and value_kind_non_null =
-  | Pgenval
-  | Pintval
-  | Pboxedfloatval of boxed_float
-  | Pboxedintval of boxed_integer
-  | Pvariant of {
-      consts : int list;
-      non_consts : (int * constructor_shape) list;
-      (** [non_consts] must be non-empty.  For constant variants [Pintval]
-          must be used.  This causes a small loss of precision but it is not
-          expected to be significant. *)
-    }
-  | Parrayval of array_kind
-  | Pboxedvectorval of boxed_vector
-
-(* Because we check for and error on void in the translation to lambda, we don't
-   need a constructor for it here. *)
-and layout =
-  | Ptop
-  | Pvalue of value_kind
-  | Punboxed_float of unboxed_float
-  | Punboxed_int of unboxed_integer
-  | Punboxed_vector of unboxed_vector
-  | Punboxed_product of layout list
-  | Pbottom
-
-and block_shape =
-  value_kind list option
-
-and flat_element = Types.flat_element =
-  | Imm
-  | Float_boxed
-  | Float64
-  | Float32
-  | Bits8
-  | Bits16
-  | Bits32
-  | Bits64
-  | Vec128
-  | Word
 
 and flat_element_read = private
   | Flat_read of flat_element (* invariant: not [Float] *)
@@ -503,39 +678,6 @@ and mixed_block_shape =
     (* We use an array just so we can index into the middle. *)
     flat_suffix : flat_element array;
   }
-
-and constructor_shape =
-  | Constructor_uniform of value_kind list
-  | Constructor_mixed of
-      { value_prefix : value_kind list;
-        flat_suffix : flat_element list;
-      }
-
-and unboxed_float = Primitive.unboxed_float =
-  | Unboxed_float64
-  | Unboxed_float32
-
-and unboxed_integer = Primitive.unboxed_integer =
-  | Unboxed_int64
-  | Unboxed_nativeint
-  | Unboxed_int32
-  | Unboxed_int16
-  | Unboxed_int8
-
-and unboxed_vector = Primitive.unboxed_vector =
-  | Unboxed_vec128
-
-and boxed_float = Primitive.boxed_float =
-  | Boxed_float64
-  | Boxed_float32
-
-and boxed_integer = Primitive.boxed_integer =
-  | Boxed_int64
-  | Boxed_nativeint
-  | Boxed_int32
-
-and boxed_vector = Primitive.boxed_vector =
-  | Boxed_vec128
 
 and peek_or_poke =
   | Ppp_tagged_immediate
@@ -1218,3 +1360,9 @@ val primitive_can_raise : primitive -> bool
 val count_initializers_array_kind : array_kind -> int
 val ignorable_product_element_kind_involves_int :
   ignorable_product_element_kind -> bool
+
+val sign_extend_int : lambda -> bits:int -> loc:scoped_location -> lambda
+
+val equal_unboxed_integer : unboxed_integer -> unboxed_integer -> bool
+val unary : locality_mode Scalar.Intrinsic.Unary.t -> lambda -> loc:scoped_location -> lambda
+val binary : locality_mode Scalar.Intrinsic.Binary.t -> lambda -> lambda -> loc:scoped_location -> lambda

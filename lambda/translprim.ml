@@ -345,6 +345,31 @@ let indexing_primitives =
   |> List.to_seq
   |> fun seq -> String.Map.add_seq seq String.Map.empty
 
+let lookup_scalar_intrinsic =
+  let tbl = lazy (
+    let tbl = String.Tbl.create 500 in
+    ListLabels.iter Scalar.Intrinsic.all ~f:(fun intrinsic ->
+      String.Tbl.add
+        tbl
+        ("%" ^ Scalar.Intrinsic.to_string intrinsic)
+        intrinsic);
+    tbl)
+  in
+  fun s ~mode ->
+    match String.Tbl.find_opt (Lazy.force tbl) s with
+    | None -> None
+    | Some intrinsic ->
+      let arity =
+        match intrinsic with
+        | Unary _ -> 1
+        | Binary _ -> 2
+      in
+      let intrinsic =
+        Scalar.Intrinsic.map intrinsic ~f:(fun Any_locality_mode -> mode)
+      in
+      Some (Primitive (Pscalar intrinsic, arity))
+
+
 let lookup_primitive loc ~poly_mode ~poly_sort pos p =
   let runtime5 = Config.runtime5 in
   let mode = to_locality ~poly:poly_mode p.prim_native_repr_res in
@@ -381,6 +406,33 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     let (_, repr) = lambda_prim.prim_native_repr_res in
     Lambda.layout_of_extern_repr repr
   in
+  let int = Scalar.Integral.tagged_immediate in
+  let int8 : _ Scalar.Integral.t = Value (Taggable Int8) in
+  let int16 : _ Scalar.Integral.t = Value (Taggable Int16) in
+  let int32 : _ Scalar.Integral.t = Value (Boxable (Int32 mode)) in
+  let nativeint : _ Scalar.Integral.t = Value (Boxable (Nativeint mode)) in
+  let int64 : _ Scalar.Integral.t = Value (Boxable (Int64 mode)) in
+  let float : _ Scalar.Floating.t = Value (Float64 mode) in
+  let float32 : _ Scalar.Floating.t = Value (Float32 mode) in
+  let unary op : prim = Primitive (Pscalar (Unary op), 1) in
+  let binary op : prim = Primitive (Pscalar (Binary op), 2) in
+  let icmp size cmp =
+    let size = Scalar.Integral.ignore_locality size in
+    binary (Icmp { size; cmp })
+  in
+  let fcmp size cmp =
+    let size = Scalar.Floating.ignore_locality size in
+    binary (Fcmp { size; cmp })
+  in
+  let naked scalar =
+    Maybe_naked.Naked (Scalar.width (Scalar.ignore_locality scalar))
+  in
+  let static_cast ~src ~dst =
+    let src = Scalar.ignore_locality src in
+    unary (Static_cast { src; dst })
+  in
+  let i = Scalar.integral in
+  let f = Scalar.floating in
   let prim = match p.prim_name with
     | "%identity" -> Identity
     | "%bytes_to_string" -> Primitive (Pbytes_to_string, 1)
@@ -423,58 +475,58 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%ostype_cygwin" -> Primitive ((Pctconst Ostype_cygwin), 1)
     | "%runtime5" -> Primitive ((Pctconst Runtime5), 1)
     | "%frame_pointers" -> Frame_pointers
-    | "%negint" -> Primitive (Pnegint, 1)
-    | "%succint" -> Primitive ((Poffsetint 1), 1)
-    | "%predint" -> Primitive ((Poffsetint(-1)), 1)
-    | "%addint" -> Primitive (Paddint, 2)
-    | "%subint" -> Primitive (Psubint, 2)
-    | "%mulint" -> Primitive (Pmulint, 2)
-    | "%divint" -> Primitive ((Pdivint Safe), 2)
-    | "%modint" -> Primitive ((Pmodint Safe), 2)
-    | "%andint" -> Primitive (Pandint, 2)
-    | "%orint" -> Primitive (Porint, 2)
-    | "%xorint" -> Primitive (Pxorint, 2)
-    | "%lslint" -> Primitive (Plslint, 2)
-    | "%lsrint" -> Primitive (Plsrint, 2)
-    | "%asrint" -> Primitive (Pasrint, 2)
-    | "%eq" -> Primitive ((Pintcomp Ceq), 2)
-    | "%noteq" -> Primitive ((Pintcomp Cne), 2)
-    | "%ltint" -> Primitive ((Pintcomp Clt), 2)
-    | "%leint" -> Primitive ((Pintcomp Cle), 2)
-    | "%gtint" -> Primitive ((Pintcomp Cgt), 2)
-    | "%geint" -> Primitive ((Pintcomp Cge), 2)
+    | "%negint" -> unary (Neg {size = int })
+    | "%succint" -> unary (Succ {size = int })
+    | "%predint" -> unary (Pred {size = int })
+    | "%addint" -> binary (Add { size = int })
+    | "%subint" -> binary (Sub { size = int })
+    | "%mulint" -> binary (Mul { size = int })
+    | "%divint" -> binary (Div { size = int ; is_safe = Safe })
+    | "%modint" -> binary (Mod { size = int ; is_safe = Safe })
+    | "%andint" -> binary (And { size = int })
+    | "%orint" -> binary (Or { size = int })
+    | "%xorint" -> binary (Xor { size = int })
+    | "%lslint" -> binary (Lsl { size = int ; rhs = Tagged_immediate })
+    | "%lsrint" -> binary (Lsr { size = int ; rhs = Tagged_immediate })
+    | "%asrint" -> binary (Asr { size = int ; rhs = Tagged_immediate })
+    | "%eq" -> icmp int Ceq
+    | "%noteq" -> icmp int Cne
+    | "%ltint" -> icmp int Clt
+    | "%leint" -> icmp int Cle
+    | "%gtint" -> icmp int Cgt
+    | "%geint" -> icmp int Cge
     | "%incr" -> Primitive ((Poffsetref(1)), 1)
     | "%decr" -> Primitive ((Poffsetref(-1)), 1)
-    | "%floatoffloat32" -> Primitive (Pfloatoffloat32 mode, 1)
-    | "%float32offloat" -> Primitive (Pfloat32offloat mode, 1)
-    | "%intoffloat32" -> Primitive (Pintoffloat Boxed_float32, 1)
-    | "%float32ofint" -> Primitive (Pfloatofint (Boxed_float32, mode), 1)
-    | "%negfloat32" -> Primitive (Pnegfloat (Boxed_float32, mode), 1)
-    | "%absfloat32" -> Primitive (Pabsfloat (Boxed_float32, mode), 1)
-    | "%addfloat32" -> Primitive (Paddfloat (Boxed_float32, mode), 2)
-    | "%subfloat32" -> Primitive (Psubfloat (Boxed_float32, mode), 2)
-    | "%mulfloat32" -> Primitive (Pmulfloat (Boxed_float32, mode), 2)
-    | "%divfloat32" -> Primitive (Pdivfloat (Boxed_float32, mode), 2)
-    | "%eqfloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFeq)), 2)
-    | "%noteqfloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFneq)), 2)
-    | "%ltfloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFlt)), 2)
-    | "%lefloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFle)), 2)
-    | "%gtfloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFgt)), 2)
-    | "%gefloat32" -> Primitive ((Pfloatcomp (Boxed_float32, CFge)), 2)
-    | "%intoffloat" -> Primitive (Pintoffloat Boxed_float64, 1)
-    | "%floatofint" -> Primitive (Pfloatofint (Boxed_float64, mode), 1)
-    | "%negfloat" -> Primitive (Pnegfloat (Boxed_float64, mode), 1)
-    | "%absfloat" -> Primitive (Pabsfloat (Boxed_float64, mode), 1)
-    | "%addfloat" -> Primitive (Paddfloat (Boxed_float64, mode), 2)
-    | "%subfloat" -> Primitive (Psubfloat (Boxed_float64, mode), 2)
-    | "%mulfloat" -> Primitive (Pmulfloat (Boxed_float64, mode), 2)
-    | "%divfloat" -> Primitive (Pdivfloat (Boxed_float64, mode), 2)
-    | "%eqfloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFeq)), 2)
-    | "%noteqfloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFneq)), 2)
-    | "%ltfloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFlt)), 2)
-    | "%lefloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFle)), 2)
-    | "%gtfloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFgt)), 2)
-    | "%gefloat" -> Primitive ((Pfloatcomp (Boxed_float64, CFge)), 2)
+    | "%floatoffloat32" -> static_cast ~dst:(f float) ~src:(f float32)
+    | "%float32offloat" -> static_cast ~dst:(f float32) ~src:(f float)
+    | "%intoffloat32" -> static_cast ~dst:(i int) ~src:(f float32)
+    | "%float32ofint" -> static_cast ~dst:(f float32) ~src:(i int)
+    | "%negfloat32" -> unary (Fneg { size = float32 })
+    | "%absfloat32" -> unary (Fabs { size = float32 })
+    | "%addfloat32" -> binary (Fadd { size = float32 })
+    | "%subfloat32" -> binary (Fsub { size = float32 })
+    | "%mulfloat32" -> binary (Fmul { size = float32 })
+    | "%divfloat32" -> binary (Fdiv { size = float32 })
+    | "%eqfloat32" -> fcmp float32 CFeq
+    | "%noteqfloat32" -> fcmp float32 CFneq
+    | "%ltfloat32" -> fcmp float32 CFlt
+    | "%lefloat32" -> fcmp float32 CFle
+    | "%gtfloat32" -> fcmp float32 CFgt
+    | "%gefloat32" -> fcmp float32 CFge
+    | "%intoffloat" -> static_cast ~dst:(i int) ~src:(f float)
+    | "%floatofint" -> static_cast ~dst:(f float) ~src:(i int)
+    | "%negfloat" -> unary (Fneg { size = float })
+    | "%absfloat" -> unary (Fabs { size = float })
+    | "%addfloat" -> binary (Fadd { size = float })
+    | "%subfloat" -> binary (Fsub { size = float })
+    | "%mulfloat" -> binary (Fmul { size = float })
+    | "%divfloat" -> binary (Fdiv { size = float })
+    | "%eqfloat" -> fcmp float CFeq
+    | "%noteqfloat" -> fcmp float CFneq
+    | "%ltfloat" -> fcmp float CFlt
+    | "%lefloat" -> fcmp float CFle
+    | "%gtfloat" -> fcmp float CFgt
+    | "%gefloat" -> fcmp float CFge
     | "%string_length" -> Primitive (Pstringlength, 1)
     | "%string_safe_get" -> Primitive (Pstringrefs, 2)
     | "%string_safe_set" -> Primitive (Pbytessets, 3)
@@ -586,60 +638,55 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%obj_is_int" -> Primitive (Pisint { variant_only = false }, 1)
     | "%is_null" -> Primitive (Pisnull, 1)
     | "%lazy_force" -> Lazy_force pos
-    | "%nativeint_of_int" -> Primitive ((Pbintofint (Boxed_nativeint, mode)), 1)
-    | "%nativeint_to_int" -> Primitive ((Pintofbint Boxed_nativeint), 1)
-    | "%nativeint_neg" -> Primitive ((Pnegbint (Boxed_nativeint, mode)), 1)
-    | "%nativeint_add" -> Primitive ((Paddbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_sub" -> Primitive ((Psubbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_mul" -> Primitive ((Pmulbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_div" ->
-      Primitive ((Pdivbint { size = Boxed_nativeint; is_safe = Safe; mode }), 2);
-    | "%nativeint_mod" ->
-      Primitive ((Pmodbint { size = Boxed_nativeint; is_safe = Safe; mode }), 2);
-    | "%nativeint_and" -> Primitive ((Pandbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_or" -> Primitive ( (Porbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_xor" -> Primitive ((Pxorbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_lsl" -> Primitive ((Plslbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_lsr" -> Primitive ((Plsrbint (Boxed_nativeint, mode)), 2)
-    | "%nativeint_asr" -> Primitive ((Pasrbint (Boxed_nativeint, mode)), 2)
-    | "%int32_of_int" -> Primitive ((Pbintofint (Boxed_int32, mode)), 1)
-    | "%int32_to_int" -> Primitive ((Pintofbint Boxed_int32), 1)
-    | "%int32_neg" -> Primitive ((Pnegbint (Boxed_int32, mode)), 1)
-    | "%int32_add" -> Primitive ((Paddbint (Boxed_int32, mode)), 2)
-    | "%int32_sub" -> Primitive ((Psubbint (Boxed_int32, mode)), 2)
-    | "%int32_mul" -> Primitive ((Pmulbint (Boxed_int32, mode)), 2)
-    | "%int32_div" ->
-       Primitive ((Pdivbint { size = Boxed_int32; is_safe = Safe; mode }), 2)
-    | "%int32_mod" ->
-       Primitive ((Pmodbint { size = Boxed_int32; is_safe = Safe; mode }), 2)
-    | "%int32_and" -> Primitive ((Pandbint (Boxed_int32, mode)), 2)
-    | "%int32_or" -> Primitive ( (Porbint (Boxed_int32, mode)), 2)
-    | "%int32_xor" -> Primitive ((Pxorbint (Boxed_int32, mode)), 2)
-    | "%int32_lsl" -> Primitive ((Plslbint (Boxed_int32, mode)), 2)
-    | "%int32_lsr" -> Primitive ((Plsrbint (Boxed_int32, mode)), 2)
-    | "%int32_asr" -> Primitive ((Pasrbint (Boxed_int32, mode)), 2)
-    | "%int64_of_int" -> Primitive ((Pbintofint (Boxed_int64, mode)), 1)
-    | "%int64_to_int" -> Primitive ((Pintofbint Boxed_int64), 1)
-    | "%int64_neg" -> Primitive ((Pnegbint (Boxed_int64, mode)), 1)
-    | "%int64_add" -> Primitive ((Paddbint (Boxed_int64, mode)), 2)
-    | "%int64_sub" -> Primitive ((Psubbint (Boxed_int64, mode)), 2)
-    | "%int64_mul" -> Primitive ((Pmulbint (Boxed_int64, mode)), 2)
-    | "%int64_div" ->
-       Primitive ((Pdivbint { size = Boxed_int64; is_safe = Safe; mode }), 2)
-    | "%int64_mod" ->
-       Primitive ((Pmodbint { size = Boxed_int64; is_safe = Safe; mode }), 2)
-    | "%int64_and" -> Primitive ((Pandbint (Boxed_int64, mode)), 2)
-    | "%int64_or" -> Primitive ( (Porbint (Boxed_int64, mode)), 2)
-    | "%int64_xor" -> Primitive ((Pxorbint (Boxed_int64, mode)), 2)
-    | "%int64_lsl" -> Primitive ((Plslbint (Boxed_int64, mode)), 2)
-    | "%int64_lsr" -> Primitive ((Plsrbint (Boxed_int64, mode)), 2)
-    | "%int64_asr" -> Primitive ((Pasrbint (Boxed_int64, mode)), 2)
-    | "%nativeint_of_int32" -> Primitive ((Pcvtbint(Boxed_int32, Boxed_nativeint, mode)), 1)
-    | "%nativeint_to_int32" -> Primitive ((Pcvtbint(Boxed_nativeint, Boxed_int32, mode)), 1)
-    | "%int64_of_int32" -> Primitive ((Pcvtbint(Boxed_int32, Boxed_int64, mode)), 1)
-    | "%int64_to_int32" -> Primitive ((Pcvtbint(Boxed_int64, Boxed_int32, mode)), 1)
-    | "%int64_of_nativeint" -> Primitive ((Pcvtbint(Boxed_nativeint, Boxed_int64, mode)), 1)
-    | "%int64_to_nativeint" -> Primitive ((Pcvtbint(Boxed_int64, Boxed_nativeint, mode)), 1)
+    | "%nativeint_of_int" -> static_cast ~dst:(i nativeint) ~src:(i int)
+    | "%nativeint_to_int" -> static_cast ~src:(i nativeint) ~dst:(i int)
+    | "%nativeint_neg" -> unary (Neg { size = nativeint })
+    | "%nativeint_add" -> binary (Add { size = nativeint })
+    | "%nativeint_sub" -> binary (Sub { size = nativeint })
+    | "%nativeint_mul" -> binary (Mul { size = nativeint })
+    | "%nativeint_div" -> binary (Div { size = nativeint ; is_safe = Safe })
+    | "%nativeint_mod" -> binary (Mod { size = nativeint ; is_safe = Safe })
+    | "%nativeint_and" -> binary (And { size = nativeint })
+    | "%nativeint_or" -> binary (Or { size = nativeint })
+    | "%nativeint_xor" -> binary (Xor { size = nativeint })
+    | "%nativeint_lsl" -> binary (Lsl { size = nativeint ; rhs = Tagged_immediate })
+    | "%nativeint_lsr" -> binary (Lsr { size = nativeint ; rhs = Tagged_immediate })
+    | "%nativeint_asr" -> binary (Asr { size = nativeint ; rhs = Tagged_immediate })
+    | "%int32_of_int" -> static_cast ~dst:(i int32) ~src:(i int)
+    | "%int32_to_int" -> static_cast ~src:(i int32) ~dst:(i int)
+    | "%int32_neg" -> unary (Neg { size = int32 })
+    | "%int32_add" -> binary (Add { size = int32 })
+    | "%int32_sub" -> binary (Sub { size = int32 })
+    | "%int32_mul" -> binary (Mul { size = int32 })
+    | "%int32_div" -> binary (Div { size = int32; is_safe = Safe })
+    | "%int32_mod" -> binary (Mod { size = int32; is_safe = Safe })
+    | "%int32_and" -> binary (And { size = int32 })
+    | "%int32_or" -> binary (Or { size = int32 })
+    | "%int32_xor" -> binary (Xor { size = int32 })
+    | "%int32_lsl" -> binary (Lsl { size = int32; rhs = Tagged_immediate })
+    | "%int32_lsr" -> binary (Lsr { size = int32; rhs = Tagged_immediate })
+    | "%int32_asr" -> binary (Asr { size = int32; rhs = Tagged_immediate })
+    | "%int64_of_int" -> static_cast ~dst:(i int64) ~src:(i int)
+    | "%int64_to_int" -> static_cast ~src:(i int64) ~dst:(i int)
+    | "%int64_neg" -> unary (Neg { size = int64 })
+    | "%int64_add" -> binary (Add { size = int64 })
+    | "%int64_sub" -> binary (Sub { size = int64 })
+    | "%int64_mul" -> binary (Mul { size = int64 })
+    | "%int64_div" -> binary (Div { size = int64; is_safe = Safe })
+    | "%int64_mod" -> binary (Mod { size = int64; is_safe = Safe })
+    | "%int64_and" -> binary (And { size = int64 })
+    | "%int64_or" -> binary (Or { size = int64 })
+    | "%int64_xor" -> binary (Xor { size = int64 })
+    | "%int64_lsl" -> binary (Lsl { size = int64; rhs = Tagged_immediate })
+    | "%int64_lsr" -> binary (Lsr { size = int64; rhs = Tagged_immediate })
+    | "%int64_asr" -> binary (Asr { size = int64; rhs = Tagged_immediate })
+    | "%nativeint_of_int32" -> static_cast ~dst:(i nativeint) ~src:(i int32)
+    | "%nativeint_to_int32" -> static_cast ~src:(i nativeint) ~dst:(i int32)
+    | "%int64_of_int32" -> static_cast ~dst:(i int64) ~src:(i int32)
+    | "%int64_to_int32" -> static_cast ~src:(i int64) ~dst:(i int32)
+    | "%int64_of_nativeint" -> static_cast ~dst:(i int64) ~src:(i nativeint)
+    | "%int64_to_nativeint" -> static_cast ~src:(i int64) ~dst:(i nativeint)
+
     | "%caml_ba_ref_1" ->
       Primitive
         ((Pbigarrayref(false, 1, Pbigarray_unknown, Pbigarray_unknown_layout)),
@@ -867,10 +914,10 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
       Primitive ((Punboxed_nativeint_array_set_128 {unsafe = false; boxed = false}), 3)
     | "%caml_unboxed_nativeint_array_set128u#" ->
       Primitive ((Punboxed_nativeint_array_set_128 {unsafe = true; boxed = false}), 3)
-    | "%bswap16" -> Primitive (Pbswap16, 1)
-    | "%bswap_int32" -> Primitive ((Pbbswap(Boxed_int32, mode)), 1)
-    | "%bswap_int64" -> Primitive ((Pbbswap(Boxed_int64, mode)), 1)
-    | "%bswap_native" -> Primitive ((Pbbswap(Boxed_nativeint, mode)), 1)
+    | "%bswap16" -> unary (Bswap {size = int })
+    | "%bswap_int32" -> unary (Bswap {size = int32 })
+    | "%bswap_int64" -> unary (Bswap {size = int64 })
+    | "%bswap_native" -> unary (Bswap {size = nativeint })
     | "%int_as_pointer" -> Primitive (Pint_as_pointer mode, 1)
     | "%opaque" -> Primitive (Popaque layout, 1)
     | "%sys_argv" -> Sys_argv
@@ -888,10 +935,10 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%obj_magic" -> Primitive(Pobj_magic layout, 1)
     | "%array_to_iarray" -> Primitive (Parray_to_iarray, 1)
     | "%array_of_iarray" -> Primitive (Parray_of_iarray, 1)
-    | "%unbox_float" -> Primitive(Punbox_float Boxed_float64, 1)
-    | "%box_float" -> Primitive(Pbox_float (Boxed_float64, mode), 1)
-    | "%unbox_float32" -> Primitive(Punbox_float Boxed_float32, 1)
-    | "%box_float32" -> Primitive(Pbox_float (Boxed_float32, mode), 1)
+    | "%unbox_float" -> static_cast ~src:(f float) ~dst:(naked (f float))
+    | "%box_float" -> static_cast ~src:(naked (f float)) ~dst:(f float)
+    | "%unbox_float32" -> static_cast ~src:(f float32) ~dst:(naked (f float32))
+    | "%box_float32" -> static_cast ~src:(naked (f float32)) ~dst:(f float32)
     | "%unbox_vec128" -> Primitive(Punbox_vector Boxed_vec128, 1)
     | "%box_vec128" -> Primitive(Pbox_vector (Boxed_vec128, mode), 1)
     | "%get_header" -> Primitive (Pget_header mode, 1)
@@ -919,27 +966,33 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
       if runtime5 then Primitive (Presume, 4) else Unsupported Presume
     | "%dls_get" -> Primitive (Pdls_get, 1)
     | "%poll" -> Primitive (Ppoll, 1)
-    | "%unbox_nativeint" -> Primitive(Punbox_int Boxed_nativeint, 1)
-    | "%box_nativeint" -> Primitive(Pbox_int (Boxed_nativeint, mode), 1)
-    | "%untag_int8" -> Primitive(Puntag_int Unboxed_int8, 1)
-    | "%tag_int8" -> Primitive(Ptag_int Unboxed_int8, 1)
-    | "%untag_int16" -> Primitive(Puntag_int Unboxed_int16, 1)
-    | "%tag_int16" -> Primitive(Ptag_int Unboxed_int16, 1)
-    | "%unbox_int32" -> Primitive(Punbox_int Boxed_int32, 1)
-    | "%box_int32" -> Primitive(Pbox_int (Boxed_int32, mode), 1)
-    | "%unbox_int64" -> Primitive(Punbox_int Boxed_int64, 1)
-    | "%box_int64" -> Primitive(Pbox_int (Boxed_int64, mode), 1)
+    | "%unbox_nativeint" -> static_cast ~src:(i nativeint) ~dst:(naked (i nativeint))
+    | "%box_nativeint" -> static_cast ~src:(naked (i nativeint)) ~dst:(i nativeint)
+    | "%untag_int8" -> static_cast ~src:(i int8) ~dst:(naked (i int8))
+    | "%tag_int8" -> static_cast ~src:(naked (i int8)) ~dst:(i int8)
+    | "%untag_int16" -> static_cast ~src:(i int16) ~dst:(naked (i int16))
+    | "%tag_int16" -> static_cast ~src:(naked (i int16)) ~dst:(i int16)
+    | "%unbox_int32" -> static_cast ~src:(i int32) ~dst:(naked (i int32))
+    | "%box_int32" -> static_cast ~src:(naked (i int32)) ~dst:(i int32)
+    | "%unbox_int64" -> static_cast ~src:(i int64) ~dst:(naked (i int64))
+    | "%box_int64" -> static_cast ~src:(naked (i int64)) ~dst:(i int64)
     | "%reinterpret_tagged_int63_as_unboxed_int64" ->
       Primitive(Preinterpret_tagged_int63_as_unboxed_int64, 1)
     | "%reinterpret_unboxed_int64_as_tagged_int63" ->
       Primitive(Preinterpret_unboxed_int64_as_tagged_int63, 1)
     | "%peek" -> Peek None
     | "%poke" -> Poke None
-    | s when String.length s > 0 && s.[0] = '%' ->
-      (match String.Map.find_opt s indexing_primitives with
-       | Some prim -> prim ~mode
-       | None -> raise (Error (loc, Unknown_builtin_primitive s)))
-    | _ -> External lambda_prim
+    | s ->
+      if String.length s = 0 || s.[0] <> '%' then
+        External lambda_prim
+      else
+        (match String.Map.find_opt s indexing_primitives with
+         | Some prim -> prim ~mode
+         | None ->
+           match lookup_scalar_intrinsic s ~mode with
+           | Some prim -> prim
+           | None ->
+             raise (Error (loc, Unknown_builtin_primitive s)))
   in
   prim
 
@@ -1220,6 +1273,7 @@ let peek_or_poke_layout_from_type ~prim_name error_loc env ty
     | Punboxed_int Unboxed_int64 -> Some Ppp_unboxed_int64
     | Punboxed_int Unboxed_nativeint -> Some Ppp_unboxed_nativeint
     | Pvalue { raw_kind = Pintval ; _ } -> Some Ppp_tagged_immediate
+    | Punboxed_int Unboxed_immediate
     | Ptop
     | Pvalue _
     | Punboxed_vector _
@@ -1508,70 +1562,91 @@ let caml_bytes_compare =
   Lambda.simple_prim_on_values ~name:"caml_bytes_compare" ~arity:2 ~alloc:false
 
 let comparison_primitive comparison comparison_kind =
+  let int : any_locality_mode Scalar.Integral.t = Value (Taggable Int) in
+  let float64 : any_locality_mode Scalar.Floating.t =
+    Value (Float64 Any_locality_mode)
+  in
+  let float32 : any_locality_mode Scalar.Floating.t =
+    Value (Float32 Any_locality_mode)
+  in
+  let int32 : any_locality_mode Scalar.Integral.t =
+    Value (Boxable (Int32 Any_locality_mode))
+  in
+  let nativeint : any_locality_mode Scalar.Integral.t =
+    Value (Boxable (Nativeint Any_locality_mode))
+  in
+  let int64 : any_locality_mode Scalar.Integral.t =
+    Value (Boxable (Int64 Any_locality_mode))
+  in
+  let icmp size cmp = Pscalar (Binary (Icmp { size; cmp })) in
+  let fcmp size cmp = Pscalar (Binary (Fcmp { size; cmp })) in
+  let three_way_compare size =
+    Pscalar (Binary (Three_way_compare { size }))
+  in
   match comparison, comparison_kind with
   | Equal, Compare_generic -> Pccall caml_equal
-  | Equal, Compare_ints -> Pintcomp Ceq
-  | Equal, Compare_floats -> Pfloatcomp (Boxed_float64, CFeq)
-  | Equal, Compare_float32s -> Pfloatcomp (Boxed_float32, CFeq)
+  | Equal, Compare_ints -> icmp int Ceq
+  | Equal, Compare_floats -> fcmp float64 CFeq
+  | Equal, Compare_float32s -> fcmp float32 CFeq
   | Equal, Compare_strings -> Pccall caml_string_equal
   | Equal, Compare_bytes -> Pccall caml_bytes_equal
-  | Equal, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Ceq)
-  | Equal, Compare_int32s -> Pbintcomp(Boxed_int32, Ceq)
-  | Equal, Compare_int64s -> Pbintcomp(Boxed_int64, Ceq)
+  | Equal, Compare_nativeints -> icmp nativeint Ceq
+  | Equal, Compare_int32s -> icmp int32 Ceq
+  | Equal, Compare_int64s -> icmp int64 Ceq
   | Not_equal, Compare_generic -> Pccall caml_notequal
-  | Not_equal, Compare_ints -> Pintcomp Cne
-  | Not_equal, Compare_floats -> Pfloatcomp (Boxed_float64, CFneq)
-  | Not_equal, Compare_float32s -> Pfloatcomp (Boxed_float32, CFneq)
+  | Not_equal, Compare_ints -> icmp int Cne
+  | Not_equal, Compare_floats -> fcmp float64 CFneq
+  | Not_equal, Compare_float32s -> fcmp float32 CFneq
   | Not_equal, Compare_strings -> Pccall caml_string_notequal
   | Not_equal, Compare_bytes -> Pccall caml_bytes_notequal
-  | Not_equal, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Cne)
-  | Not_equal, Compare_int32s -> Pbintcomp(Boxed_int32, Cne)
-  | Not_equal, Compare_int64s -> Pbintcomp(Boxed_int64, Cne)
+  | Not_equal, Compare_nativeints -> icmp nativeint Cne
+  | Not_equal, Compare_int32s -> icmp int32 Cne
+  | Not_equal, Compare_int64s -> icmp int64 Cne
   | Less_equal, Compare_generic -> Pccall caml_lessequal
-  | Less_equal, Compare_ints -> Pintcomp Cle
-  | Less_equal, Compare_floats -> Pfloatcomp (Boxed_float64, CFle)
-  | Less_equal, Compare_float32s -> Pfloatcomp (Boxed_float32, CFle)
+  | Less_equal, Compare_ints -> icmp int Cle
+  | Less_equal, Compare_floats -> fcmp float64 CFle
+  | Less_equal, Compare_float32s -> fcmp float32 CFle
   | Less_equal, Compare_strings -> Pccall caml_string_lessequal
   | Less_equal, Compare_bytes -> Pccall caml_bytes_lessequal
-  | Less_equal, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Cle)
-  | Less_equal, Compare_int32s -> Pbintcomp(Boxed_int32, Cle)
-  | Less_equal, Compare_int64s -> Pbintcomp(Boxed_int64, Cle)
+  | Less_equal, Compare_nativeints -> icmp nativeint Cle
+  | Less_equal, Compare_int32s -> icmp int32 Cle
+  | Less_equal, Compare_int64s -> icmp int64 Cle
   | Less_than, Compare_generic -> Pccall caml_lessthan
-  | Less_than, Compare_ints -> Pintcomp Clt
-  | Less_than, Compare_floats -> Pfloatcomp (Boxed_float64, CFlt)
-  | Less_than, Compare_float32s -> Pfloatcomp (Boxed_float32, CFlt)
+  | Less_than, Compare_ints -> icmp int Clt
+  | Less_than, Compare_floats -> fcmp float64 CFlt
+  | Less_than, Compare_float32s -> fcmp float32 CFlt
   | Less_than, Compare_strings -> Pccall caml_string_lessthan
   | Less_than, Compare_bytes -> Pccall caml_bytes_lessthan
-  | Less_than, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Clt)
-  | Less_than, Compare_int32s -> Pbintcomp(Boxed_int32, Clt)
-  | Less_than, Compare_int64s -> Pbintcomp(Boxed_int64, Clt)
+  | Less_than, Compare_nativeints -> icmp nativeint Clt
+  | Less_than, Compare_int32s -> icmp int32 Clt
+  | Less_than, Compare_int64s -> icmp int64 Clt
   | Greater_equal, Compare_generic -> Pccall caml_greaterequal
-  | Greater_equal, Compare_ints -> Pintcomp Cge
-  | Greater_equal, Compare_floats -> Pfloatcomp (Boxed_float64, CFge)
-  | Greater_equal, Compare_float32s -> Pfloatcomp (Boxed_float32, CFge)
+  | Greater_equal, Compare_ints -> icmp int Cge
+  | Greater_equal, Compare_floats -> fcmp float64 CFge
+  | Greater_equal, Compare_float32s -> fcmp float32 CFge
   | Greater_equal, Compare_strings -> Pccall caml_string_greaterequal
   | Greater_equal, Compare_bytes -> Pccall caml_bytes_greaterequal
-  | Greater_equal, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Cge)
-  | Greater_equal, Compare_int32s -> Pbintcomp(Boxed_int32, Cge)
-  | Greater_equal, Compare_int64s -> Pbintcomp(Boxed_int64, Cge)
+  | Greater_equal, Compare_nativeints -> icmp nativeint Cge
+  | Greater_equal, Compare_int32s -> icmp int32 Cge
+  | Greater_equal, Compare_int64s -> icmp int64 Cge
   | Greater_than, Compare_generic -> Pccall caml_greaterthan
-  | Greater_than, Compare_ints -> Pintcomp Cgt
-  | Greater_than, Compare_floats -> Pfloatcomp (Boxed_float64, CFgt)
-  | Greater_than, Compare_float32s -> Pfloatcomp (Boxed_float32, CFgt)
+  | Greater_than, Compare_ints -> icmp int Cgt
+  | Greater_than, Compare_floats -> fcmp float64 CFgt
+  | Greater_than, Compare_float32s -> fcmp float32 CFgt
   | Greater_than, Compare_strings -> Pccall caml_string_greaterthan
   | Greater_than, Compare_bytes -> Pccall caml_bytes_greaterthan
-  | Greater_than, Compare_nativeints -> Pbintcomp(Boxed_nativeint, Cgt)
-  | Greater_than, Compare_int32s -> Pbintcomp(Boxed_int32, Cgt)
-  | Greater_than, Compare_int64s -> Pbintcomp(Boxed_int64, Cgt)
+  | Greater_than, Compare_nativeints -> icmp nativeint Cgt
+  | Greater_than, Compare_int32s -> icmp int32 Cgt
+  | Greater_than, Compare_int64s -> icmp int64 Cgt
   | Compare, Compare_generic -> Pccall caml_compare
-  | Compare, Compare_ints -> Pcompare_ints
-  | Compare, Compare_floats -> Pcompare_floats Boxed_float64
-  | Compare, Compare_float32s -> Pcompare_floats Boxed_float32
+  | Compare, Compare_ints -> three_way_compare (Scalar.integral int)
+  | Compare, Compare_floats -> three_way_compare (Scalar.floating float64)
+  | Compare, Compare_float32s -> three_way_compare (Scalar.floating float32)
   | Compare, Compare_strings -> Pccall caml_string_compare
   | Compare, Compare_bytes -> Pccall caml_bytes_compare
-  | Compare, Compare_nativeints -> Pcompare_bints Boxed_nativeint
-  | Compare, Compare_int32s -> Pcompare_bints Boxed_int32
-  | Compare, Compare_int64s -> Pcompare_bints Boxed_int64
+  | Compare, Compare_nativeints -> three_way_compare (Scalar.integral nativeint)
+  | Compare, Compare_int32s -> three_way_compare (Scalar.integral int32)
+  | Compare, Compare_int64s -> three_way_compare (Scalar.integral int64)
 
 let lambda_of_loc kind sloc =
   let loc = to_location sloc in
@@ -1878,21 +1953,25 @@ let lambda_primitive_needs_event_after = function
   (* We add an event after any primitive resulting in a C call that
      may raise an exception or allocate. These are places where we may
      collect the call stack. *)
+  | Pscalar op ->
+    let { can_raise; result } : _  Scalar.Intrinsic.info =
+      Scalar.Intrinsic.info op
+    in
+    can_raise ||
+    (match Scalar.to_bytecode (Scalar.ignore_locality result) with
+      | Value (Integral (Taggable (Int | Int16 | Int8)) ) -> false
+      | Value(Integral (Boxable (Int32 Any_locality_mode
+                                | Int64 Any_locality_mode
+                                | Nativeint Any_locality_mode))
+             | Floating (Float32 Any_locality_mode
+                        | Float64 Any_locality_mode)) ->
+        true)
   | Pduprecord _ | Pccall _
-  | Pfloatofint (_, _)
-  | Pfloatoffloat32 _
-  | Pfloat32offloat _
-  | Pnegfloat (_, _) | Pabsfloat (_, _)
-  | Paddfloat (_, _) | Psubfloat (_, _)
-  | Pmulfloat (_, _) | Pdivfloat (_, _)
   | Pstringrefs | Pbytesrefs
   | Pbytessets | Pmakearray (Pgenarray, _, _) | Pduparray _
   | Pmakearray_dynamic (Pgenarray, _, _)
   | Parrayrefu ((Pgenarray_ref _ | Pfloatarray_ref _), _, _)
-  | Parrayrefs _ | Parraysets _ | Pbintofint _ | Pcvtbint _ | Pnegbint _
-  | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _ | Pandbint _
-  | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _
-  | Pbintcomp _ | Punboxed_int_comp _ | Pcompare_bints _
+  | Parrayrefs _ | Parraysets _
   | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _ | Pstring_load_16 _
   | Pstring_load_32 _ | Pstring_load_f32 _ | Pstring_load_64 _ | Pstring_load_128 _
   | Pbytes_load_16 _ | Pbytes_load_32 _ | Pbytes_load_f32 _ | Pbytes_load_64 _
@@ -1910,7 +1989,7 @@ let lambda_primitive_needs_event_after = function
   | Punboxed_int32_array_set_128 _ | Punboxed_int64_array_set_128 _
   | Punboxed_nativeint_array_set_128 _
   | Prunstack | Pperform | Preperform | Presume
-  | Pbbswap _ | Ppoll | Pobj_dup | Pget_header _ -> true
+  | Ppoll | Pobj_dup | Pget_header _ -> true
   (* [Preinterpret_tagged_int63_as_unboxed_int64] has to allocate in
      bytecode, because int64# is actually represented as a boxed value. *)
   | Preinterpret_tagged_int63_as_unboxed_int64 -> true
@@ -1925,11 +2004,8 @@ let lambda_primitive_needs_event_after = function
   | Pfield _ | Pfield_computed _ | Psetfield _
   | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Praise _
   | Pufloatfield _ | Psetufloatfield _ | Pmixedfield _ | Psetmixedfield _
-  | Psequor | Psequand | Pnot | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint _ | Pmodint _ | Pandint | Porint | Pxorint | Plslint | Plsrint
-  | Pasrint | Pintcomp _ | Poffsetint _ | Poffsetref _ | Pintoffloat _
-  | Pcompare_ints | Pcompare_floats _
-  | Pfloatcomp (_, _) | Punboxed_float_comp (_, _)
+  | Poffsetref _
+  | Psequor | Psequand | Pnot
   | Pstringlength | Pstringrefu | Pbyteslength | Pbytesrefu
   | Pbytessetu
   | Pmakearray ((Pintarray | Paddrarray | Pfloatarray | Punboxedfloatarray _
@@ -1945,13 +2021,12 @@ let lambda_primitive_needs_event_after = function
   | Patomic_exchange _ | Patomic_compare_exchange _
   | Patomic_compare_set _ | Patomic_fetch_add | Patomic_add | Patomic_sub
   | Patomic_land | Patomic_lor | Patomic_lxor | Patomic_load _
-  | Pintofbint _ | Pctconst _ | Pbswap16 | Pint_as_pointer _ | Popaque _
+  | Pctconst _ | Pint_as_pointer _ | Popaque _
   | Pdls_get
-  | Pobj_magic _ | Punbox_float _ | Punbox_int _ | Punbox_vector _
+  | Pobj_magic _ | Punbox_vector _
   | Preinterpret_unboxed_int64_as_tagged_int63 | Ppeek _ | Ppoke _
-  | Puntag_int _ | Ptag_int _
   (* These don't allocate in bytecode; they're just identity functions: *)
-  | Pbox_float (_, _) | Pbox_int _ | Pbox_vector (_, _)
+  | Pbox_vector (_, _)
     -> false
 
 (* Determine if a primitive should be surrounded by an "after" debug event *)

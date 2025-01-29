@@ -24,7 +24,16 @@ external to_int16 : int16# -> int16 = "%tag_int16" [@@warning "-187"]
 (** Untag a tagged [int16] *)
 external of_int16 : int16 -> int16# = "%untag_int16" [@@warning "-187"]
 
-let int_size = Int16.int_size
+let size = Int16.size
+
+external of_int : int -> int16# = "%int16#_of_int"
+external to_int : int16# -> int = "%int_of_int16#"
+
+external sub : int16# -> int16# -> int16# = "%sub_int16#"
+
+let[@inline always] to_int t = Int16.to_int (to_int16 t)
+
+let[@inline always] of_int i = of_int16 (Int16.of_int i)
 
 let[@inline always] zero () = of_int16 Int16.zero
 
@@ -36,33 +45,39 @@ let[@inline always] max_int () = of_int16 Int16.max_int
 
 let[@inline always] min_int () = of_int16 Int16.min_int
 
-let[@inline always] neg x = of_int16 (Int16.neg (to_int16 x))
+external add : int16# -> int16# -> int16# = "%add_int16#"
 
-let[@inline always] add x y = of_int16 (Int16.add (to_int16 x) (to_int16 y))
+external sub : int16# -> int16# -> int16# = "%sub_int16#"
 
-let[@inline always] sub x y = of_int16 (Int16.sub (to_int16 x) (to_int16 y))
+external mul : int16# -> int16# -> int16# = "%mul_int16#"
 
-let[@inline always] mul x y = of_int16 (Int16.mul (to_int16 x) (to_int16 y))
+external div : int16# -> int16# -> int16# = "%sdiv_int16#"
 
-let[@inline always] div x y = of_int16 (Int16.div (to_int16 x) (to_int16 y))
+external rem : int16# -> int16# -> int16# = "%srem_int16#"
 
-let[@inline always] rem x y = of_int16 (Int16.rem (to_int16 x) (to_int16 y))
+external ( >= ) : int16# -> int16# -> bool = "%sge_int16#"
 
-let[@inline always] succ x = of_int16 (Int16.succ (to_int16 x))
+let[@inline always] neg x = sub (zero()) x
 
-let[@inline always] pred x = of_int16 (Int16.pred (to_int16 x))
+let[@inline always] succ x = add x (one ())
 
-let[@inline always] abs x = of_int16 (Int16.abs (to_int16 x))
+let[@inline always] pred x = sub x (one ())
 
-let[@inline always] logand x y = of_int16 (Int16.logand (to_int16 x) (to_int16 y))
+let[@inline always] abs x = if x >= zero() then x else neg x
 
-let[@inline always] logor x y = of_int16 (Int16.logor (to_int16 x) (to_int16 y))
+external logand : int16# -> int16# -> int16# = "%and_int16#"
 
-let[@inline always] logxor x y = of_int16 (Int16.logxor (to_int16 x) (to_int16 y))
+external logor : int16# -> int16# -> int16# = "%or_int16#"
 
-let[@inline always] lognot x = of_int16 (Int16.lognot (to_int16 x))
+external logxor : int16# -> int16# -> int16# = "%xor_int16#"
 
-let[@inline always] shift_left x y = of_int16 (Int16.shift_left (to_int16 x) y)
+let[@inline always] lognot x = logxor x (minus_one ())
+
+external shift_left_unboxed : int16# -> int16# -> int16# = "%shl_int16#"
+external shift_right_unboxed : int16# -> int16# -> int16# = "%ashr_int16#"
+external shift_right_logical_unboxed : int16# -> int16# -> int16# = "%lshr_int16#"
+
+let[@inline always] shift_left x y = shift_left_unboxed x (of_int16 y)
 
 let[@inline always] shift_right x y = of_int16 (Int16.shift_right (to_int16 x) y)
 
@@ -81,7 +96,3 @@ let[@inline always] of_float f = of_int16 (Int16.of_float f)
 let[@inline always] to_float t = Int16.to_float (to_int16 t)
 
 let[@inline always] to_string t = Int16.to_string (to_int16 t)
-
-let[@inline always] to_int t = Int16.to_int (to_int16 t)
-
-let[@inline always] of_int i = of_int16 (Int16.of_int i)

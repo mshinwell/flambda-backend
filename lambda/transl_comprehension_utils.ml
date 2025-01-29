@@ -112,31 +112,33 @@ module Lambda_utils = struct
 
   let int_ops ~loc : (module Int_ops) =
     (module struct
-      let binop prim l r = Lprim (prim, [l; r], loc)
+      let binop prim l r = Lprim (Pscalar (Binary prim), [l; r], loc)
 
-      let ( + ) = binop Paddint
+      let size = Scalar.Integral.tagged_immediate
 
-      let ( - ) = binop Psubint
+      let ( + ) = binop (Add { size })
 
-      let ( * ) = binop Pmulint
+      let ( - ) = binop (Sub { size })
 
-      let ( / ) = binop (Pdivint Unsafe)
+      let ( * ) = binop (Mul { size })
 
-      let ( = ) = binop (Pintcomp Ceq)
+      let ( / ) = binop (Div { size; is_safe = Unsafe })
 
-      let ( <> ) = binop (Pintcomp Cne)
+      let ( = ) = binop (Icmp { size; cmp = Ceq })
 
-      let ( < ) = binop (Pintcomp Clt)
+      let ( <> ) = binop (Icmp { size; cmp = Cne })
 
-      let ( > ) = binop (Pintcomp Cgt)
+      let ( < ) = binop (Icmp { size; cmp = Clt })
 
-      let ( <= ) = binop (Pintcomp Cle)
+      let ( > ) = binop (Icmp { size; cmp = Cgt })
 
-      let ( >= ) = binop (Pintcomp Cge)
+      let ( <= ) = binop (Icmp { size; cmp = Clt })
 
-      let ( && ) = binop Psequor
+      let ( >= ) = binop (Icmp { size; cmp = Cgt })
 
-      let ( || ) = binop Psequor
+      let ( && ) l r = Lprim (Psequand, [l; r], loc)
+
+      let ( || ) l r = Lprim (Psequor, [l; r], loc)
 
       let i = Constants.int
 

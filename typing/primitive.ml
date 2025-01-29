@@ -491,6 +491,30 @@ module Repr_check = struct
       prim
 end
 
+let naked_integer_functions =
+  lazy (
+    let module C = Jkind_types.Sort.Const in
+    let tbl = String.Tbl.create 500 in
+    let sizes =
+      [ "int8#", Same_as_ocaml_repr C.bits8
+      ; "int16#",Same_as_ocaml_repr C.bits16
+      ; "int32#", Same_as_ocaml_repr C.bits32
+      ; "nativeint#", Same_as_ocaml_repr C.word
+      ; "int64#", Same_as_ocaml_repr C.bits64 ]
+    in
+    let binops =
+      [ "add"; "sub"; "mul"; "sdiv"; "srem"; "or"; "and"; "xor"; "shl"; "lshr"; "ashr" ]
+    in
+    let cmps = [ "eq"; "ne"; "lt"; "gt"; "le"; "ge" ] in
+    ListLabels.iter sizes ~f:(fun (s1, k1) ->
+      ListLabels.iter binops ~f:(fun binop ->
+        String.Tbl.add tbl (Printf.sprintf "%%%s_%s" binop s1) [k1; k1; k1]);
+      ListLabels.iter sizes ~f:(fun (s2, k2) ->
+        String.Tbl.add tbl (Printf.sprintf "%%%s_of_%s" s1 s2) [k2; k1]);
+      ListLabels.iter cmps ~f:(fun cmp ->
+        String.Tbl.add tbl (Printf.sprintf "%%%s_%s" cmp s1) [k1; k1; Same_as_ocaml_repr C.value]));
+    tbl)
+
 (* Note: [any] here is not the same as jkind [any]. It means we allow any
    [native_repr] for the corresponding argument or return.  It's [Typedecl]'s
    responsibility to check that types in externals are representable or marked
@@ -774,6 +798,9 @@ let prim_has_valid_reprs ~loc prim =
         match String.Map.find_opt name stringlike_indexing_primitives with
         | Some reprs -> exactly reprs
         | None ->
+          match String.Tbl.find_opt (Lazy.force naked_integer_functions) name with
+          | Some reprs -> exactly reprs
+          | None ->
             if is_builtin_prim_name name then no_non_value_repr
               (* These can probably support non-value reprs if the need arises:
                  {|

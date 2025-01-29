@@ -1033,7 +1033,7 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
       | Pisnull | Pisout | Pbintofint _ | Pintofbint _ | Pcvtbint _ | Pnegbint _
       | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _
       | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
-      | Pasrbint _ | Pbintcomp _ | Punboxed_int_comp _ | Pbigarrayref _
+      | Pasrbint _ | Pbintcomp _ | Pnaked_int_cmp _ | Pbigarrayref _
       | Pbigarrayset _ | Pbigarraydim _ | Pstring_load_16 _ | Pstring_load_32 _
       | Pstring_load_f32 _ | Pstring_load_64 _ | Pstring_load_128 _
       | Pbytes_load_16 _ | Pbytes_load_32 _ | Pbytes_load_f32 _
@@ -1062,7 +1062,8 @@ let close_primitive acc env ~let_bound_ids_with_kinds named
       | Patomic_compare_set _ | Patomic_fetch_add | Patomic_add | Patomic_sub
       | Patomic_land | Patomic_lor | Patomic_lxor | Pdls_get | Ppoll
       | Patomic_load _ | Preinterpret_tagged_int63_as_unboxed_int64
-      | Preinterpret_unboxed_int64_as_tagged_int63 | Ppeek _ | Ppoke _ ->
+      | Preinterpret_unboxed_int64_as_tagged_int63 | Ppeek _ | Ppoke _
+      | Pnaked_int_binop _ | Pnaked_int_cast _ ->
         (* Inconsistent with outer match *)
         assert false
     in

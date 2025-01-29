@@ -531,8 +531,8 @@ let integral_of_standard_int : K.Standard_int.t -> C.Scalar_type.Integral.t =
     Untagged (C.Scalar_type.Integer.create_exn ~bit_width ~signedness:Signed)
   in
   function
-  | Naked_int8 -> untagged_int 8
-  | Naked_int16 -> untagged_int 16
+  | Naked_int8 -> untagged_int 32
+  | Naked_int16 -> untagged_int 64
   | Naked_int32 -> untagged_int 32
   | Naked_int64 -> untagged_int 64
   | Naked_nativeint -> Untagged C.Scalar_type.Integer.nativeint

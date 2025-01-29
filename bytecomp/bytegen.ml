@@ -141,14 +141,21 @@ let rec is_tailcall = function
    from the tail call optimization? *)
 
 let preserve_tailcall_for_prim = function
-    Popaque _ | Psequor | Psequand
+   Popaque _ | Psequor | Psequand
   | Pobj_magic _
   | Prunstack | Pperform | Presume | Preperform
-  | Pbox_float (_, _) | Punbox_float _
   | Pbox_vector (_, _) | Punbox_vector _
-  | Ptag_int _ | Puntag_int _
-  | Pbox_int _ | Punbox_int _ ->
+  ->
       true
+  | Pscalar (Unary (Static_cast {src; dst})) ->
+    Scalar.to_bytecode src = Scalar.to_bytecode dst
+  | Pscalar (Unary (Neg _ | Fneg _ | Fabs _ | Bswap _ | Offset _)
+            | Binary (Add _ | Fadd _ | Sub _ | Fsub _ | Mul _ | Fmul _
+                     | Div _ | Fdiv _ | Mod _
+                     | And _ | Or _ | Xor _ | Lsl _ | Lsr _ | Asr _
+                     | Icmp _ | Fcmp _ | Three_way_compare _
+                     )
+            )
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
   | Pget_header _
@@ -160,22 +167,15 @@ let preserve_tailcall_for_prim = function
   | Pufloatfield _ | Psetufloatfield _ | Pmixedfield _ | Psetmixedfield _
   | Pmake_unboxed_product _ | Punboxed_product_field _
   | Parray_element_size_in_bytes _
-  | Pccall _ | Praise _ | Pnot | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint _ | Pmodint _ | Pandint | Porint | Pxorint | Plslint | Plsrint
-  | Pasrint | Pintcomp _ | Poffsetint _ | Poffsetref _ | Pintoffloat _
-  | Pfloatofint (_, _) | Pfloatoffloat32 _ | Pfloat32offloat _
-  | Pnegfloat (_, _) | Pabsfloat (_, _)
-  | Paddfloat (_, _) | Psubfloat (_, _) | Pmulfloat (_, _)
-  | Pdivfloat (_, _) | Pfloatcomp (_, _) | Punboxed_float_comp (_, _)
+  | Pccall _ | Praise _ | Pnot
+  | Poffsetref _
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
   | Pmakearray_dynamic _ | Parrayblit _
   | Parrayrefs _ | Parraysets _ | Pisint _ | Pisnull | Pisout | Pbintofint _ | Pintofbint _
-  | Pcvtbint _ | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _
-  | Pmodbint _ | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
-  | Pasrbint _ | Pbintcomp _ | Punboxed_int_comp _
+
   | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _
   | Pstring_load_16 _ | Pstring_load_32 _ | Pstring_load_f32 _
   | Pstring_load_64 _ | Pstring_load_128 _
@@ -196,13 +196,14 @@ let preserve_tailcall_for_prim = function
   | Punboxed_nativeint_array_set_128 _
   | Pbigstring_set_64 _ | Pbigstring_set_128 _
   | Pprobe_is_enabled _ | Pobj_dup
-  | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer _
+  | Pctconst _ | Pint_as_pointer _
   | Patomic_exchange _ | Patomic_compare_exchange _
   | Patomic_compare_set _ | Patomic_fetch_add | Patomic_add
   | Patomic_sub | Patomic_land | Patomic_lor
   | Patomic_lxor | Patomic_load _
   | Pdls_get | Preinterpret_tagged_int63_as_unboxed_int64
-  | Preinterpret_unboxed_int64_as_tagged_int63 | Ppoll | Ppeek _ | Ppoke _ ->
+  | Preinterpret_unboxed_int64_as_tagged_int63 | Ppoll | Ppeek _ | Ppoke _
+    ->
       false
 
 (* Add a Kpop N instruction in front of a continuation *)
@@ -623,12 +624,12 @@ let comp_primitive stack_info p sz args =
   | Plslbint(bi,_) -> comp_bint_primitive bi "shift_left" args
   | Plsrbint(bi,_) -> comp_bint_primitive bi "shift_right_unsigned" args
   | Pasrbint(bi,_) -> comp_bint_primitive bi "shift_right" args
-  | Pbintcomp(_, Ceq) | Punboxed_int_comp(_, Ceq) -> Kccall("caml_equal", 2)
-  | Pbintcomp(_, Cne) | Punboxed_int_comp(_, Cne) -> Kccall("caml_notequal", 2)
-  | Pbintcomp(_, Clt) | Punboxed_int_comp(_, Clt) -> Kccall("caml_lessthan", 2)
-  | Pbintcomp(_, Cgt) | Punboxed_int_comp(_, Cgt) -> Kccall("caml_greaterthan", 2)
-  | Pbintcomp(_, Cle) | Punboxed_int_comp(_, Cle) -> Kccall("caml_lessequal", 2)
-  | Pbintcomp(_, Cge) | Punboxed_int_comp(_, Cge) -> Kccall("caml_greaterequal", 2)
+  | Pbintcomp(_, Ceq) -> Kccall("caml_equal", 2)
+  | Pbintcomp(_, Cne) -> Kccall("caml_notequal", 2)
+  | Pbintcomp(_, Clt) -> Kccall("caml_lessthan", 2)
+  | Pbintcomp(_, Cgt) -> Kccall("caml_greaterthan", 2)
+  | Pbintcomp(_, Cle) -> Kccall("caml_lessequal", 2)
+  | Pbintcomp(_, Cge) -> Kccall("caml_greaterequal", 2)
   | Pbigarrayref(_, n, Pbigarray_float32_t, _) -> Kccall("caml_ba_float32_get_" ^ Int.to_string n, n + 1)
   | Pbigarrayset(_, n, Pbigarray_float32_t, _) -> Kccall("caml_ba_float32_set_" ^ Int.to_string n, n + 2)
   | Pbigarrayref(_, n, _, _) -> Kccall("caml_ba_get_" ^ Int.to_string n, n + 1)
@@ -746,6 +747,7 @@ let comp_primitive stack_info p sz args =
   | Pprobe_is_enabled _
   | Punbox_float _ | Pbox_float (_, _) | Punbox_int _ | Pbox_int _
   | Ptag_int _ | Puntag_int _
+  | Pnaked_int_cast _ | Pnaked_int_binop _ | Pnaked_int_cmp _
     ->
       fatal_error "Bytegen.comp_primitive"
   | Ppeek _ | Ppoke _ ->
@@ -1145,6 +1147,12 @@ and comp_expr stack_info env exp sz cont =
   | Lprim(Pfloatfield (n, _, _), args, loc) ->
       let cont = add_pseudo_event loc !compunit_name cont in
       comp_args stack_info env args sz (Kgetfloatfield n :: cont)
+  | Lprim(Pnaked_int_cmp { op; size }, args, loc) ->
+    comp_expr stack_info env (Lambda.naked_int_cmp ~op ~size args loc) sz cont
+  | Lprim(Pnaked_int_cast {src;dst}, args, loc) ->
+    comp_expr stack_info env (Lambda.naked_int_cast ~src ~dst args loc) sz cont
+  | Lprim(Pnaked_int_binop {op; size}, args, loc) ->
+    comp_expr stack_info env (Lambda.naked_int_binop ~op ~size args loc) sz cont
   | Lprim(p, args, _) ->
       let nargs = List.length args - 1 in
       comp_args stack_info env args sz

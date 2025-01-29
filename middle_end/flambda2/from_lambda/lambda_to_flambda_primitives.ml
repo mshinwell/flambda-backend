@@ -33,6 +33,8 @@ let convert_integer_comparison_prim (comp : L.integer_comparison) :
 
 let convert_unboxed_integer_comparison_prim (kind : L.unboxed_integer)
     (comp : L.integer_comparison) : P.binary_primitive =
+  (* we enumerate all the possible cases here so that the result is statically
+     allocated (and therefore memoized) *)
   match kind, comp with
   | Unboxed_int8, Ceq -> Int_comp (Naked_int8, Yielding_bool Eq)
   | Unboxed_int8, Cne -> Int_comp (Naked_int8, Yielding_bool Neq)
@@ -68,6 +70,16 @@ let convert_unboxed_integer_comparison_prim (kind : L.unboxed_integer)
     Int_comp (Naked_nativeint, Yielding_bool (Le Signed))
   | Unboxed_nativeint, Cge ->
     Int_comp (Naked_nativeint, Yielding_bool (Ge Signed))
+  | Unboxed_immediate, Ceq -> Int_comp (Naked_immediate, Yielding_bool Eq)
+  | Unboxed_immediate, Cne -> Int_comp (Naked_immediate, Yielding_bool Neq)
+  | Unboxed_immediate, Clt ->
+    Int_comp (Naked_immediate, Yielding_bool (Lt Signed))
+  | Unboxed_immediate, Cgt ->
+    Int_comp (Naked_immediate, Yielding_bool (Gt Signed))
+  | Unboxed_immediate, Cle ->
+    Int_comp (Naked_immediate, Yielding_bool (Le Signed))
+  | Unboxed_immediate, Cge ->
+    Int_comp (Naked_immediate, Yielding_bool (Ge Signed))
 
 let convert_float_comparison (comp : L.float_comparison) : unit P.comparison =
   match comp with
@@ -102,19 +114,24 @@ let standard_int_of_unboxed_integer : L.unboxed_integer -> K.Standard_int.t =
   | Unboxed_int16 -> Naked_int16
   | Unboxed_int32 -> Naked_int32
   | Unboxed_nativeint -> Naked_nativeint
+  | Unboxed_immediate -> Naked_immediate
   | Unboxed_int64 -> Naked_int64
 
 let standard_int_or_float_of_unboxed_integer (ubint : L.unboxed_integer) :
     K.Standard_int_or_float.t =
   match ubint with
+  | Unboxed_immediate -> Naked_immediate
   | Unboxed_nativeint -> Naked_nativeint
   | Unboxed_int8 -> Naked_int8
   | Unboxed_int16 -> Naked_int16
   | Unboxed_int32 -> Naked_int32
   | Unboxed_int64 -> Naked_int64
 
-let standard_int_or_float_of_boxed_integer bint =
-  standard_int_or_float_of_unboxed_integer (Primitive.unboxed_integer bint)
+let standard_int_or_float_of_boxed_integer :
+    L.boxed_integer -> K.Standard_int_or_float.t = function
+  | Boxed_int32 -> Naked_int32
+  | Boxed_int64 -> Naked_int64
+  | Boxed_nativeint -> Naked_nativeint
 
 let standard_int_or_float_of_peek_or_poke (layout : L.peek_or_poke) :
     K.Standard_int_or_float.t =
@@ -1613,9 +1630,9 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
                comp,
              arg1,
              arg2 )) ]
-  | Punboxed_int_comp (kind, comp), [[arg1]; [arg2]] ->
+  | Pnaked_int_cmp { size; op }, [[arg1]; [arg2]] ->
     [ tag_int
-        (Binary (convert_unboxed_integer_comparison_prim kind comp, arg1, arg2))
+        (Binary (convert_unboxed_integer_comparison_prim size op, arg1, arg2))
     ]
   | Pfloatoffloat32 mode, [[arg]] ->
     let src = K.Standard_int_or_float.Naked_float32 in
@@ -2435,6 +2452,45 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
   | Pprobe_is_enabled { name }, [] ->
     [tag_int (Nullary (Probe_is_enabled { name }))]
   | Pobj_dup, [[v]] -> [Unary (Obj_dup, v)]
+  | Pnaked_int_cast { src; dst }, [[v]] ->
+    [ Unary
+        ( Num_conv
+            { src = standard_int_or_float_of_unboxed_integer src;
+              dst = standard_int_or_float_of_unboxed_integer dst
+            },
+          v ) ]
+  | Pnaked_int_binop { op; size }, [[i1]; [i2]] -> (
+    let kind = standard_int_of_unboxed_integer size in
+    let int_arith op : H.expr_primitive list =
+      [Binary (Int_arith (kind, op), i1, i2)]
+    in
+    let int_shift op : H.expr_primitive list =
+      [Binary (Int_shift (kind, op), i1, i2)]
+    in
+    let prohibit_zero_divisor op : H.expr_primitive list =
+      [ Checked
+          { primitive = Binary (Int_arith (kind, op), i1, i2);
+            validity_conditions =
+              [ Binary
+                  ( Int_comp (kind, Yielding_bool Neq),
+                    i2,
+                    Simple (Simple.const_int_of_kind (I.to_kind kind) 0) ) ];
+            failure = Division_by_zero;
+            dbg
+          } ]
+    in
+    match op with
+    | Add -> int_arith Add
+    | Sub -> int_arith Sub
+    | Mul -> int_arith Mul
+    | Sdiv -> prohibit_zero_divisor Div
+    | Srem -> prohibit_zero_divisor Mod
+    | And -> int_arith And
+    | Or -> int_arith Or
+    | Xor -> int_arith Xor
+    | Shl -> int_shift Lsl
+    | Lshr -> int_shift Lsr
+    | Ashr -> int_shift Asr)
   | Pget_header m, [[obj]] -> [get_header obj m ~current_region]
   | Patomic_load { immediate_or_pointer }, [[atomic]] ->
     [ Unary
@@ -2523,7 +2579,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       | Patomic_load _ | Pmixedfield _
       | Preinterpret_unboxed_int64_as_tagged_int63
       | Preinterpret_tagged_int63_as_unboxed_int64
-      | Parray_element_size_in_bytes _ | Ppeek _ ),
+      | Parray_element_size_in_bytes _ | Ppeek _ | Pnaked_int_cast _ ),
       ([] | _ :: _ :: _ | [([] | _ :: _ :: _)]) ) ->
     Misc.fatal_errorf
       "Closure_conversion.convert_primitive: Wrong arity for unary primitive \
@@ -2544,7 +2600,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       | Paddbint _ | Psubbint _ | Pmulbint _ | Pandbint _ | Porbint _
       | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _ | Pfield_computed _
       | Pdivbint _ | Pmodbint _ | Psetfloatfield _ | Psetufloatfield _
-      | Pbintcomp _ | Punboxed_int_comp _ | Psetmixedfield _
+      | Pbintcomp _ | Pnaked_int_cmp _ | Pnaked_int_binop _ | Psetmixedfield _
       | Pbigstring_load_16 _ | Pbigstring_load_32 _ | Pbigstring_load_f32 _
       | Pbigstring_load_64 _ | Pbigstring_load_128 _ | Pfloatarray_load_128 _
       | Pfloat_array_load_128 _ | Pint_array_load_128 _

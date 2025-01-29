@@ -124,6 +124,655 @@ type region_close =
   | Rc_nontail
   | Rc_close_at_apply
 
+
+type integer_comparison =
+    Ceq | Cne | Clt | Cgt | Cle | Cge
+
+let all_integer_comparisons =
+  [ Ceq ; Cne ; Clt ; Cgt ; Cle ; Cge ]
+
+type float_comparison =
+    CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
+
+let all_float_comparisons =
+  [ CFeq ; CFneq ; CFlt ; CFnlt ; CFgt ; CFngt ; CFle ; CFnle ; CFge ; CFnge ]
+
+type unboxed_float = Primitive.unboxed_float =
+  | Unboxed_float64
+  | Unboxed_float32
+
+and unboxed_integer =
+  | Unboxed_int64
+  | Unboxed_nativeint
+  | Unboxed_immediate
+  | Unboxed_int32
+  | Unboxed_int16
+  | Unboxed_int8
+
+and unboxed_vector = Primitive.unboxed_vector =
+  | Unboxed_vec128
+
+and boxed_float = Primitive.boxed_float =
+  | Boxed_float64
+  | Boxed_float32
+
+and boxed_integer = Primitive.boxed_integer =
+  | Boxed_int64
+  | Boxed_nativeint
+  | Boxed_int32
+
+and boxed_vector = Primitive.boxed_vector =
+  | Boxed_vec128
+
+and nullable =
+  | Nullable
+  | Non_nullable
+
+and value_kind =
+  (* CR vlaviron: find a better name for raw_kind *)
+  { raw_kind : value_kind_non_null;
+    nullable : nullable;
+  }
+
+and value_kind_non_null =
+  | Pgenval
+  | Pintval
+  | Pboxedfloatval of boxed_float
+  | Pboxedintval of boxed_integer
+  | Pvariant of {
+      consts : int list;
+      non_consts : (int * constructor_shape) list;
+    }
+  | Parrayval of array_kind
+  | Pboxedvectorval of boxed_vector
+
+and layout =
+  | Ptop
+  | Pvalue of value_kind
+  | Punboxed_float of unboxed_float
+  | Punboxed_int of unboxed_integer
+  | Punboxed_vector of unboxed_vector
+  | Punboxed_product of layout list
+  | Pbottom
+
+and block_shape =
+  value_kind list option
+
+and flat_element = Types.flat_element =
+  | Imm
+  | Float_boxed
+  | Float64
+  | Float32
+  | Bits8
+  | Bits16
+  | Bits32
+  | Bits64
+  | Vec128
+  | Word
+
+and mixed_block_shape = Types.mixed_product_shape =
+  { value_prefix_len : int;
+    flat_suffix : flat_element array;
+  }
+
+and constructor_shape =
+  | Constructor_uniform of value_kind list
+  | Constructor_mixed of
+      { value_prefix : value_kind list;
+        flat_suffix : flat_element list;
+      }
+
+and array_kind =
+    Pgenarray | Paddrarray | Pintarray | Pfloatarray
+  | Punboxedfloatarray of Primitive.unboxed_float
+  | Punboxedintarray of Primitive.unboxed_integer
+  | Punboxedvectorarray of Primitive.unboxed_vector
+  | Pgcscannableproductarray of scannable_product_element_kind list
+  | Pgcignorableproductarray of ignorable_product_element_kind list
+
+and ignorable_product_element_kind =
+  | Pint_ignorable
+  | Punboxedfloat_ignorable of Primitive.unboxed_float
+  | Punboxedint_ignorable of Primitive.unboxed_integer
+  | Pproduct_ignorable of ignorable_product_element_kind list
+
+and scannable_product_element_kind =
+  | Pint_scannable
+  | Paddr_scannable
+  | Pproduct_scannable of scannable_product_element_kind list
+
+let unboxed_integer_of_primitive : Primitive.unboxed_integer -> unboxed_integer = function
+  | Unboxed_int8 -> Unboxed_int8
+  | Unboxed_int16 -> Unboxed_int16
+  | Unboxed_int32 -> Unboxed_int32
+  | Unboxed_int64 -> Unboxed_int64
+  | Unboxed_nativeint -> Unboxed_nativeint
+
+let equal_unboxed_integer
+    (( Unboxed_int8 | Unboxed_int16 | Unboxed_int32 | Unboxed_int64
+     | Unboxed_nativeint | Unboxed_immediate ) as l) r =
+  l = r
+
+type any_locality_mode = Any_locality_mode
+
+type tagged_immediate = Tagged_immediate
+
+let ignore_locality (Alloc_local | Alloc_heap) = Any_locality_mode
+
+module Maybe_naked = struct
+  type ('a, 'b) t =
+    | Value of 'a
+    | Naked of 'b
+
+  module Make1 (M : sig
+    type 'a t
+
+    val all : any_locality_mode t list
+    val map : 'a t -> f:('a -> 'b) -> 'b t
+    val locality_mode : locality_mode t -> locality_mode option
+    val to_string : any_locality_mode t -> string
+  end) =
+  struct
+    type nonrec 'a t = ('a M.t, any_locality_mode M.t) t
+
+    let map (t : _ t) ~f =
+      match t with
+      | Naked (_ : any_locality_mode M.t) as t -> t
+      | Value t -> Value (M.map t ~f)
+
+    let locality_mode : locality_mode t -> locality_mode option = function
+      | Naked (_ : any_locality_mode M.t) -> None
+      | Value t -> M.locality_mode t
+
+    let width (Naked t | Value t : _ t) = t
+
+    let ignore_locality = map ~f:ignore_locality
+    let all = List.concat_map (fun m -> [ Value m; Naked m ]) M.all
+
+    let to_string = function
+      | Value m -> M.to_string m
+      | Naked m -> M.to_string m ^ "#"
+  end
+end
+
+module Scalar = struct
+  module Integral = struct
+    module Taggable = struct
+      module Width = struct
+        type t =
+          | Int8
+          | Int16
+          | Int
+
+        let all = [ Int8; Int16; Int ]
+
+        let compare_sizes x y =
+          (* we know [Int] is at least 31 bits, so it's bigger than the others
+             even though we don't know the speicific value *)
+          let to_int = function Int8 -> 0 | Int16 -> 1 | Int -> 2 in
+          Int.compare (to_int x) (to_int y)
+
+        let to_unboxed_integer = function
+          | Int8 -> Unboxed_int8
+          | Int16 -> Unboxed_int16
+          | Int -> Unboxed_immediate
+
+        let to_string = function
+          | Int8 -> "int8"
+          | Int16 -> "int16"
+          | Int -> "int"
+      end
+
+      include Maybe_naked.Make1 (struct
+          include Width
+          type nonrec 'a t = t
+          let map t ~f:_ = t
+          let locality_mode (Int8 | Int16 | Int) = None
+        end
+        )
+
+      let layout : any_locality_mode t -> layout = function
+        | Naked t -> Punboxed_int (Width.to_unboxed_integer t)
+        | Value (Int8 | Int16 | Int) ->
+          Pvalue { raw_kind = Pintval; nullable = Non_nullable }
+    end
+
+    module Boxable = struct
+      module Width = struct
+        type 'mode t =
+          | Int32 of 'mode
+          | Nativeint of 'mode
+          | Int64 of 'mode
+
+        let all =
+          [ Int32 Any_locality_mode
+          ; Nativeint Any_locality_mode
+          ; Int64 Any_locality_mode ]
+
+        let map t ~f =
+          match t with
+          | Int32 mode -> Int32 (f mode)
+          | Nativeint mode -> Nativeint (f mode)
+          | Int64 mode -> Int64 (f mode)
+
+        let locality_mode' (Int32 mode | Nativeint mode | Int64 mode) :
+            locality_mode = mode
+
+        let locality_mode t = Some (locality_mode' t)
+
+        let to_boxed_integer = function
+          | Int32 Any_locality_mode -> Boxed_int32
+          | Nativeint Any_locality_mode -> Boxed_nativeint
+          | Int64 Any_locality_mode -> Boxed_int64
+
+        let to_unboxed_integer = function
+          | Int32 Any_locality_mode -> Unboxed_int32
+          | Nativeint Any_locality_mode -> Unboxed_nativeint
+          | Int64 Any_locality_mode -> Unboxed_int64
+
+        let to_string = function
+          | Int32 Any_locality_mode -> "int32"
+          | Nativeint Any_locality_mode -> "nativeint"
+          | Int64 Any_locality_mode -> "int64"
+      end
+
+      include Maybe_naked.Make1 (Width)
+
+      let layout : any_locality_mode t -> layout = function
+        | Value t ->
+          Pvalue
+            { raw_kind = Pboxedintval (Width.to_boxed_integer t);
+              nullable = Non_nullable
+            }
+        | Naked t -> Punboxed_int (Width.to_unboxed_integer t)
+    end
+
+    module Width = struct
+      type 'mode t =
+        | Taggable of Taggable.Width.t
+        | Boxable of 'mode Boxable.Width.t
+
+      let all =
+        List.concat
+          [ List.map (fun t -> Taggable t) Taggable.Width.all
+          ; List.map (fun t -> Boxable t) Boxable.Width.all
+          ]
+
+      let map t ~f =
+        match t with
+        | Taggable (Int8 | Int16 | Int) as t -> t
+        | Boxable b -> Boxable (Boxable.Width.map b ~f)
+
+      let locality_mode = function
+        | Taggable (Int8 | Int16 | Int) -> None
+        | Boxable b -> Boxable.Width.locality_mode b
+
+      let to_unboxed_integer = function
+        | Taggable t -> Taggable.Width.to_unboxed_integer t
+        | Boxable b -> Boxable.Width.to_unboxed_integer b
+
+      let to_string = function
+        | Taggable t -> Taggable.Width.to_string t
+        | Boxable b -> Boxable.Width.to_string b
+    end
+
+    include Maybe_naked.Make1 (Width)
+
+    let layout : any_locality_mode t -> layout = function
+      | Value (Taggable t) -> Taggable.layout (Value t)
+      | Naked (Taggable t) -> Taggable.layout (Naked t)
+      | Value (Boxable t) -> Boxable.layout (Value t)
+      | Naked (Boxable t) -> Boxable.layout (Naked t)
+
+    let tagged_immediate : _ t = Value (Taggable Int)
+  end
+
+  module Floating = struct
+    module Width = struct
+      type 'mode t =
+        | Float32 of 'mode
+        | Float64 of 'mode
+
+      let all = [Float32 Any_locality_mode; Float64 Any_locality_mode]
+
+      let map t ~f =
+        match t with
+        | Float32 mode -> Float32 (f mode)
+        | Float64 mode -> Float64 (f mode)
+
+      let locality_mode' (Float32 mode | Float64 mode) : locality_mode = mode
+
+      let locality_mode t = Some (locality_mode' t)
+
+      let to_boxed_float = function
+        | Float32 Any_locality_mode -> Boxed_float32
+        | Float64 Any_locality_mode -> Boxed_float64
+
+      let to_unboxed_float = function
+        | Float32 Any_locality_mode -> Unboxed_float32
+        | Float64 Any_locality_mode -> Unboxed_float64
+
+      let to_string = function
+        | Float32 Any_locality_mode -> "float32"
+        | Float64 Any_locality_mode -> "float"
+    end
+
+    include Maybe_naked.Make1 (Width)
+
+    let layout : any_locality_mode t -> layout = function
+      | Naked t -> Punboxed_float (Width.to_unboxed_float t)
+      | Value t ->
+        Pvalue
+          { raw_kind = Pboxedfloatval (Width.to_boxed_float t);
+            nullable = Non_nullable
+          }
+  end
+
+  module Width = struct
+    type 'mode t =
+      | Floating of 'mode Floating.Width.t
+      | Integral of 'mode Integral.Width.t
+
+    let all =
+      List.concat
+        [ List.map (fun t -> Floating t) Floating.Width.all
+        ; List.map (fun t -> Integral t) Integral.Width.all
+        ]
+
+    let map t ~f =
+      match t with
+      | Floating g -> Floating (Floating.Width.map g ~f)
+      | Integral i -> Integral (Integral.Width.map i ~f)
+
+    let locality_mode = function
+      | Floating f -> Floating.Width.locality_mode f
+      | Integral i -> Integral.Width.locality_mode i
+
+    let to_string = function
+      | Floating f -> Floating.Width.to_string f
+      | Integral i -> Integral.Width.to_string i
+  end
+
+  module Bytecode = struct
+    type nonrec t = Value of any_locality_mode Width.t
+  end
+
+  include Maybe_naked.Make1 (Width)
+
+  let layout : any_locality_mode t -> layout = function
+    | Value (Floating f) -> Floating.layout (Value f)
+    | Naked (Floating f) -> Floating.layout (Naked f)
+    | Value (Integral i) -> Integral.layout (Value i)
+    | Naked (Integral i) -> Integral.layout (Naked i)
+
+  let integral : 'a Integral.t -> 'a t = function
+    | Value i -> Value (Integral i)
+    | Naked i -> Naked (Integral i)
+
+  let floating : 'a Floating.t -> 'a t = function
+    | Value f -> Value (Floating f)
+    | Naked f -> Naked (Floating f)
+
+  let tagged_immediate : _ t = Value (Integral (Taggable Int))
+
+  let to_bytecode t = Bytecode.Value (width t)
+
+  module Intrinsic = struct
+    type 'mode info =
+      { can_raise : bool;
+        result : 'mode t
+      }
+
+    (* CR jvanburen: nullary primitives for 0/1/-1/min/max once we can put
+       unboxed values into structures?
+    *)
+
+    module Unary = struct
+      (* Remember to update [all] right below this if you add a constructor *)
+      type nonrec 'mode t =
+        (* CR jvanburen: Not, Abs, float to/of bits *)
+        | Neg of { size : 'mode Integral.t }
+        | Fneg of { size : 'mode Floating.t }
+        | Fabs of { size : 'mode Floating.t }
+        | Succ of { size : 'mode Integral.t } (** add 1 *)
+        | Pred of { size : 'mode Integral.t } (** subtract 1 *)
+        | Bswap of { size : 'mode Integral.t }
+        | Static_cast of
+            { src : any_locality_mode t;
+              dst : 'mode t
+            }
+
+      let all =
+        List.concat
+          [ List.map (fun size -> Neg {size}) Integral.all
+          ; List.map (fun size -> Fneg {size}) Floating.all
+          ; List.map (fun size -> Fneg {size}) Floating.all
+          ; List.map (fun size -> Bswap {size}) Integral.all
+          ; ListLabels.concat_map all ~f:(fun src ->
+              ListLabels.concat_map all ~f:(fun dst ->
+                if src = dst then [] else [Static_cast {src; dst}]))
+          ]
+
+      let map (type a b) (t : a t) ~(f : a -> b) : b t =
+        match t with
+        | Neg { size } -> Neg { size = Integral.map size ~f }
+        | Fneg { size } -> Fneg { size  = Floating.map size ~f }
+        | Fabs { size } -> Fabs { size = Floating.map size ~f }
+        | Succ { size } -> Succ { size = Integral.map size ~f }
+        | Pred { size } -> Pred { size = Integral.map size ~f }
+        | Bswap { size } -> Bswap { size = Integral.map size ~f }
+        | Static_cast { src; dst } -> Static_cast { src ; dst = map dst ~f }
+
+      let info = function
+        | Neg { size  }
+        | Bswap { size }
+        | Succ { size }
+        | Pred { size }
+          -> { result = integral size; can_raise = false }
+        | Fneg { size }
+        | Fabs { size } ->
+          { result = floating size; can_raise = false }
+        | Static_cast { src = _; dst } -> { result = dst; can_raise = false }
+
+      let to_string t =
+        let i = Integral.to_string in
+        let f = Floating.to_string in
+        match t with
+        | Neg { size } -> i size ^ "_neg"
+        | Fneg { size } -> f size ^ "_neg"
+        | Fabs { size } -> f size ^ "_abs"
+        | Succ { size } -> i size ^ "_succ"
+        | Pred { size } -> i size ^ "_pred"
+        | Bswap { size } -> i size ^ "_bswap"
+        | Static_cast { src; dst } ->
+          Printf.sprintf "%s_of_%s" (to_string dst) (to_string src)
+    end
+
+    module Binary = struct
+      type nonrec 'mode t =
+        (* CR jvanburen: Fmod, Min, Max? *)
+        | Add of { size : 'mode Integral.t }
+        | Fadd of { size : 'mode Floating.t }
+        | Sub of { size : 'mode Integral.t }
+        | Fsub of { size : 'mode Floating.t }
+        | Mul of { size : 'mode Integral.t }
+        | Fmul of { size : 'mode Floating.t }
+        | Div of
+            { size : 'mode Integral.t;
+              is_safe : is_safe
+            }
+        | Fdiv of { size : 'mode Floating.t }
+        | Mod of
+            { size : 'mode Integral.t;
+              is_safe : is_safe
+            }
+        (* bitwise operators: *)
+        | And of { size : 'mode Integral.t }
+        | Or of { size : 'mode Integral.t }
+        | Xor of { size : 'mode Integral.t }
+        (* CR jvanburen: add shift intrinsics that take other widths *)
+        | Lsl of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Asr of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Lsr of
+            { size : 'mode Integral.t;
+              rhs : tagged_immediate
+            }
+        | Icmp of
+            { size : any_locality_mode Integral.t;
+              cmp : integer_comparison
+            }
+        | Fcmp of
+            { size : any_locality_mode Floating.t;
+              cmp : float_comparison
+            }
+        | Three_way_compare of { size : any_locality_mode t }
+
+      let all =
+        List.concat
+          [ List.map (fun size -> Add {size}) Integral.all
+          ; List.map (fun size -> Fadd {size}) Floating.all
+          ; List.map (fun size -> Sub {size}) Integral.all
+          ; List.map (fun size -> Fsub {size}) Floating.all
+          ; List.map (fun size -> Mul {size}) Integral.all
+          ; List.map (fun size -> Fmul {size}) Floating.all
+          ; List.map (fun size -> Div {size; is_safe = Safe}) Integral.all
+          ; List.map (fun size -> Div {size; is_safe = Unsafe}) Integral.all
+          ; List.map (fun size -> Mod {size; is_safe = Safe}) Integral.all
+          ; List.map (fun size -> Mod {size; is_safe = Unsafe}) Integral.all
+          ; List.map (fun size -> And {size}) Integral.all
+          ; List.map (fun size -> Or {size}) Integral.all
+          ; List.map (fun size -> Xor {size}) Integral.all
+          ; List.map (fun size -> Lsl {size; rhs = Tagged_immediate}) Integral.all
+          ; List.map (fun size -> Asr {size; rhs = Tagged_immediate}) Integral.all
+          ; List.map (fun size -> Lsr {size; rhs = Tagged_immediate}) Integral.all
+          ; ListLabels.concat_map all_integer_comparisons ~f:(fun cmp ->
+              List.map (fun size -> Icmp {size; cmp}) Integral.all)
+          ; ListLabels.concat_map all_float_comparisons ~f:(fun cmp ->
+              List.map (fun size -> Fcmp {size; cmp}) Floating.all)
+          ; List.map (fun size -> Three_way_compare {size}) all
+          ]
+
+      let to_string t =
+        let i = Integral.to_string in
+        let f = Floating.to_string in
+        match t with
+        | Add { size } -> i size ^ "_add"
+        | Fadd { size } -> f size ^ "_add"
+        | Sub { size } -> i size ^ "_sub"
+        | Fsub { size } -> f size ^ "_sub"
+        | Mul { size } -> i size ^ "_mul"
+        | Fmul { size } -> f size ^ "_mul"
+        | Div { size; is_safe = Safe } -> i size ^ "_div"
+        | Div { size; is_safe = Unsafe } -> i size ^ "_div_unsafe"
+        | Fdiv { size } -> f size ^ "_div"
+        | Mod { size; is_safe = Safe } -> i size ^ "_mod"
+        | Mod { size; is_safe = Unsafe } -> i size ^ "_mod_unsafe"
+        | And { size } -> i size ^ "_and"
+        | Or { size } -> i size ^ "_or"
+        | Xor { size } -> i size ^ "_xor"
+        | Lsl { size; rhs = Tagged_immediate } -> i size ^ "_lsl"
+        | Asr { size; rhs = Tagged_immediate } -> i size ^ "_asr"
+        | Lsr { size; rhs = Tagged_immediate } -> i size ^ "_lsr"
+        | Icmp { size; cmp = Ceq } -> i size ^ "_equal"
+        | Icmp { size; cmp = Cne } -> i size ^ "_notequal"
+        | Icmp { size; cmp = Cgt } -> i size ^ "_greaterthan"
+        | Icmp { size; cmp = Cge } -> i size ^ "_greaterequal"
+        | Icmp { size; cmp = Clt } -> i size ^ "_lessthan"
+        | Icmp { size; cmp = Cle } -> i size ^ "_lessequal"
+        | Fcmp { size; cmp  = CFeq } -> f size ^ "_ordered_and_equal"
+        | Fcmp { size; cmp  = CFneq } -> f size ^ "_unordered_or_notequal"
+        | Fcmp { size; cmp = CFgt } -> f size ^ "_ordered_and_greaterthan"
+        | Fcmp { size; cmp = CFge } -> f size ^ "_ordered_and_greaterequal"
+        | Fcmp { size; cmp = CFlt } -> f size ^ "_ordered_and_lessthan"
+        | Fcmp { size; cmp = CFle } -> f size ^ "_ordered_and_lessequal"
+        | Fcmp { size; cmp = CFngt } -> f size ^ "_unordered_or_lessequal"
+        | Fcmp { size; cmp = CFnge } -> f size ^ "_unordered_or_lessthan"
+        | Fcmp { size; cmp = CFnlt } -> f size ^ "_unordered_or_greaterequal"
+        | Fcmp { size; cmp = CFnle } -> f size ^ "_unordered_or_greaterthan"
+        | Three_way_compare { size } -> to_string size ^ "_compare"
+
+      let map t ~f =
+        match t with
+        | Add { size } -> Add { size = Integral.map size ~f }
+        | Fadd { size } -> Fadd { size = Floating.map size ~f }
+        | Sub { size } -> Sub { size = Integral.map size ~f }
+        | Fsub { size } -> Fsub { size = Floating.map size ~f }
+        | Mul { size } -> Mul { size = Integral.map size ~f }
+        | Fmul { size } -> Fmul { size = Floating.map size ~f }
+        | Div { size; is_safe } -> Div { size = Integral.map size ~f; is_safe }
+        | Fdiv { size } -> Fdiv { size = Floating.map size ~f }
+        | Mod { size; is_safe } -> Mod { size = Integral.map size ~f; is_safe }
+        | And { size } -> And { size = Integral.map size ~f }
+        | Or { size } -> Or { size = Integral.map size ~f }
+        | Xor { size } -> Xor { size = Integral.map size ~f }
+        | Lsl { size; rhs } -> Lsl { size = Integral.map size ~f; rhs }
+        | Asr { size; rhs } -> Asr { size = Integral.map size ~f; rhs }
+        | Lsr { size; rhs } -> Lsr { size = Integral.map size ~f; rhs }
+        | Icmp { size; cmp } -> Icmp {size; cmp }
+        | Fcmp { size; cmp } -> Fcmp {size; cmp}
+        | Three_way_compare { size } -> Three_way_compare { size }
+
+      let info = function
+        | Add { size }
+        | Sub { size }
+        | Mul { size }
+        | Div { size; is_safe = Unsafe }
+        | Mod { size; is_safe = Unsafe }
+        | And { size }
+        | Or { size }
+        | Xor { size }
+        | Lsl { size; rhs = Tagged_immediate }
+        | Asr { size; rhs = Tagged_immediate }
+        | Lsr { size; rhs = Tagged_immediate } ->
+          { result = integral size; can_raise = false }
+        | Div { size; is_safe = Safe } | Mod { size; is_safe = Safe } ->
+          { result = integral size; can_raise = true }
+        | Fadd { size } | Fsub { size } | Fmul { size } | Fdiv { size } ->
+          { result = floating size; can_raise = false }
+        | Icmp
+            { size = (_ : any_locality_mode Integral.t);
+              cmp = (_ : integer_comparison)
+            }
+        | Fcmp
+            { size = (_ : any_locality_mode Floating.t);
+              cmp = (_ : float_comparison)
+            }
+        | Three_way_compare { size = _ } ->
+          { result = tagged_immediate; can_raise = false }
+    end
+
+    type 'mode t =
+      | Unary of 'mode Unary.t
+      | Binary of 'mode Binary.t
+
+    let map t ~f =
+      match t with
+      | Unary u -> Unary (Unary.map u ~f)
+      | Binary b -> Binary (Binary.map b ~f)
+
+    let info = function
+      | Unary u -> Unary.info u
+      | Binary b -> Binary.info b
+
+    let to_string = function
+      | Unary u -> Unary.to_string u
+      | Binary b -> Binary.to_string b
+
+    let all =
+      List.concat
+        [ List.map (fun u -> Unary u) Unary.all
+        ; List.map (fun b -> Binary b) Binary.all
+        ]
+  end
+end
+
+
 type primitive =
   | Pbytes_to_string
   | Pbytes_of_string
@@ -165,30 +814,9 @@ type primitive =
   | Praise of raise_kind
   (* Boolean operations *)
   | Psequand | Psequor | Pnot
-  (* Integer operations *)
-  | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint of is_safe | Pmodint of is_safe
-  | Pandint | Porint | Pxorint
-  | Plslint | Plsrint | Pasrint
-  | Pintcomp of integer_comparison
-  | Pcompare_ints
-  | Pcompare_floats of boxed_float
-  | Pcompare_bints of boxed_integer
-  | Poffsetint of int
+  (* Scalar operations *)
+  | Pscalar of locality_mode Scalar.Intrinsic.t
   | Poffsetref of int
-  (* Float operations *)
-  | Pfloatoffloat32 of locality_mode
-  | Pfloat32offloat of locality_mode
-  | Pintoffloat of boxed_float
-  | Pfloatofint of boxed_float * locality_mode
-  | Pnegfloat of boxed_float * locality_mode
-  | Pabsfloat of boxed_float * locality_mode
-  | Paddfloat of boxed_float * locality_mode
-  | Psubfloat of boxed_float * locality_mode
-  | Pmulfloat of boxed_float * locality_mode
-  | Pdivfloat of boxed_float * locality_mode
-  | Pfloatcomp of boxed_float * float_comparison
-  | Punboxed_float_comp of unboxed_float * float_comparison
   (* String operations *)
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
@@ -211,25 +839,7 @@ type primitive =
   | Pisnull
   (* Test if the (integer) argument is outside an interval *)
   | Pisout
-  (* Operations on boxed integers (Nativeint.t, Int32.t, Int64.t) *)
-  | Pbintofint of boxed_integer * locality_mode
-  | Pintofbint of boxed_integer
-  | Pcvtbint of boxed_integer (*source*) * boxed_integer (*destination*)
-                * locality_mode
-  | Pnegbint of boxed_integer * locality_mode
-  | Paddbint of boxed_integer * locality_mode
-  | Psubbint of boxed_integer * locality_mode
-  | Pmulbint of boxed_integer * locality_mode
-  | Pdivbint of { size : boxed_integer; is_safe : is_safe; mode: locality_mode }
-  | Pmodbint of { size : boxed_integer; is_safe : is_safe; mode: locality_mode }
-  | Pandbint of boxed_integer * locality_mode
-  | Porbint of boxed_integer * locality_mode
-  | Pxorbint of boxed_integer * locality_mode
-  | Plslbint of boxed_integer * locality_mode
-  | Plsrbint of boxed_integer * locality_mode
-  | Pasrbint of boxed_integer * locality_mode
-  | Pbintcomp of boxed_integer * integer_comparison
-  | Punboxed_int_comp of unboxed_integer * integer_comparison
+
   (* Operations on Bigarrays: (unsafe, #dimensions, kind, layout) *)
   | Pbigarrayref of bool * int * bigarray_kind * bigarray_layout
   | Pbigarrayset of bool * int * bigarray_kind * bigarray_layout
@@ -304,9 +914,6 @@ type primitive =
   | Punboxed_nativeint_array_set_128 of { unsafe : bool; boxed : bool }
   (* Compile time constants *)
   | Pctconst of compile_time_constant
-  (* byte swap *)
-  | Pbswap16
-  | Pbbswap of boxed_integer * locality_mode
   (* Integer to external pointer *)
   | Pint_as_pointer of locality_mode
   (* Atomic operations *)
@@ -327,12 +934,6 @@ type primitive =
   (* Primitives for [Obj] *)
   | Pobj_dup
   | Pobj_magic of layout
-  | Punbox_float of boxed_float
-  | Pbox_float of boxed_float * locality_mode
-  | Puntag_int of unboxed_integer
-  | Ptag_int of unboxed_integer
-  | Punbox_int of boxed_integer
-  | Pbox_int of boxed_integer * locality_mode
   | Punbox_vector of boxed_vector
   | Pbox_vector of boxed_vector * locality_mode
   | Preinterpret_unboxed_int64_as_tagged_int63
@@ -348,6 +949,7 @@ type primitive =
   (* Poll for runtime actions *)
   | Ppoll
 
+
 and extern_repr =
   | Same_as_ocaml_repr of Jkind.Sort.Const.t
   | Unboxed_float of boxed_float
@@ -357,57 +959,6 @@ and extern_repr =
 
 and external_call_description = extern_repr Primitive.description_gen
 
-and integer_comparison =
-    Ceq | Cne | Clt | Cgt | Cle | Cge
-
-and float_comparison =
-    CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
-
-and nullable =
-  | Nullable
-  | Non_nullable
-
-and value_kind =
-  (* CR vlaviron: find a better name for raw_kind *)
-  { raw_kind : value_kind_non_null;
-    nullable : nullable;
-  }
-
-and value_kind_non_null =
-  | Pgenval
-  | Pintval
-  | Pboxedfloatval of boxed_float
-  | Pboxedintval of boxed_integer
-  | Pvariant of {
-      consts : int list;
-      non_consts : (int * constructor_shape) list;
-    }
-  | Parrayval of array_kind
-  | Pboxedvectorval of boxed_vector
-
-and layout =
-  | Ptop
-  | Pvalue of value_kind
-  | Punboxed_float of unboxed_float
-  | Punboxed_int of unboxed_integer
-  | Punboxed_vector of unboxed_vector
-  | Punboxed_product of layout list
-  | Pbottom
-
-and block_shape =
-  value_kind list option
-
-and flat_element = Types.flat_element =
-  | Imm
-  | Float_boxed
-  | Float64
-  | Float32
-  | Bits8
-  | Bits16
-  | Bits32
-  | Bits64
-  | Vec128
-  | Word
 
 and flat_element_read =
   | Flat_read of flat_element (* invariant: not [Float] *)
@@ -419,34 +970,14 @@ and mixed_block_write =
   | Mwrite_value_prefix of immediate_or_pointer
   | Mwrite_flat_suffix of flat_element
 
-and mixed_block_shape = Types.mixed_product_shape =
-  { value_prefix_len : int;
-    flat_suffix : flat_element array;
-  }
-
-and constructor_shape =
-  | Constructor_uniform of value_kind list
-  | Constructor_mixed of
-      { value_prefix : value_kind list;
-        flat_suffix : flat_element list;
-      }
-
-and array_kind =
-    Pgenarray | Paddrarray | Pintarray | Pfloatarray
-  | Punboxedfloatarray of unboxed_float
-  | Punboxedintarray of unboxed_integer
-  | Punboxedvectorarray of unboxed_vector
-  | Pgcscannableproductarray of scannable_product_element_kind list
-  | Pgcignorableproductarray of ignorable_product_element_kind list
-
 and array_ref_kind =
   | Pgenarray_ref of locality_mode
   | Paddrarray_ref
   | Pintarray_ref
   | Pfloatarray_ref of locality_mode
-  | Punboxedfloatarray_ref of unboxed_float
-  | Punboxedintarray_ref of unboxed_integer
-  | Punboxedvectorarray_ref of unboxed_vector
+  | Punboxedfloatarray_ref of Primitive.unboxed_float
+  | Punboxedintarray_ref of Primitive.unboxed_integer
+  | Punboxedvectorarray_ref of Primitive.unboxed_vector
   | Pgcscannableproductarray_ref of scannable_product_element_kind list
   | Pgcignorableproductarray_ref of ignorable_product_element_kind list
 
@@ -455,53 +986,16 @@ and array_set_kind =
   | Paddrarray_set of modify_mode
   | Pintarray_set
   | Pfloatarray_set
-  | Punboxedfloatarray_set of unboxed_float
-  | Punboxedintarray_set of unboxed_integer
-  | Punboxedvectorarray_set of unboxed_vector
+  | Punboxedfloatarray_set of Primitive.unboxed_float
+  | Punboxedintarray_set of Primitive.unboxed_integer
+  | Punboxedvectorarray_set of Primitive.unboxed_vector
   | Pgcscannableproductarray_set of
       modify_mode * scannable_product_element_kind list
   | Pgcignorableproductarray_set of ignorable_product_element_kind list
 
-and ignorable_product_element_kind =
-  | Pint_ignorable
-  | Punboxedfloat_ignorable of unboxed_float
-  | Punboxedint_ignorable of unboxed_integer
-  | Pproduct_ignorable of ignorable_product_element_kind list
-
-and scannable_product_element_kind =
-  | Pint_scannable
-  | Paddr_scannable
-  | Pproduct_scannable of scannable_product_element_kind list
-
 and array_index_kind =
   | Ptagged_int_index
   | Punboxed_int_index of unboxed_integer
-
-and unboxed_float = Primitive.unboxed_float =
-  | Unboxed_float64
-  | Unboxed_float32
-
-and unboxed_integer = Primitive.unboxed_integer =
-  | Unboxed_int64
-  | Unboxed_nativeint
-  | Unboxed_int32
-  | Unboxed_int16
-  | Unboxed_int8
-
-and unboxed_vector = Primitive.unboxed_vector =
-  | Unboxed_vec128
-
-and boxed_float = Primitive.boxed_float =
-  | Boxed_float64
-  | Boxed_float32
-
-and boxed_integer = Primitive.boxed_integer =
-  | Boxed_int64
-  | Boxed_nativeint
-  | Boxed_int32
-
-and boxed_vector = Primitive.boxed_vector =
-  | Boxed_vec128
 
 and peek_or_poke =
   | Ppp_tagged_immediate
@@ -603,7 +1097,7 @@ let rec compatible_layout x y =
   | _, Pbottom -> true
   | Pvalue _, Pvalue _ -> true
   | Punboxed_float f1, Punboxed_float f2 -> Primitive.equal_unboxed_float f1 f2
-  | Punboxed_int bi1, Punboxed_int bi2 -> Primitive.equal_unboxed_integer bi1 bi2
+  | Punboxed_int bi1, Punboxed_int bi2 -> equal_unboxed_integer bi1 bi2
   | Punboxed_vector bi1, Punboxed_vector bi2 -> Primitive.equal_unboxed_vector bi1 bi2
   | Punboxed_product layouts1, Punboxed_product layouts2 ->
       List.compare_lengths layouts1 layouts2 = 0
@@ -1812,6 +2306,7 @@ let locality_mode_of_primitive_description (p : external_call_description) =
 (* Changes to this function may also require changes in Flambda 2 (e.g.
    closure_conversion.ml). *)
 let primitive_may_allocate : primitive -> locality_mode option = function
+  | Pscalar op -> Scalar.locality_mode (Scalar.Intrinsic.info op).result
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
   | Pignore -> None
@@ -1837,22 +2332,7 @@ let primitive_may_allocate : primitive -> locality_mode option = function
   | Pccall p -> locality_mode_of_primitive_description p
   | Praise _ -> None
   | Psequor | Psequand | Pnot
-  | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint _ | Pmodint _
-  | Pandint | Porint | Pxorint
-  | Plslint | Plsrint | Pasrint
-  | Pintcomp _
-  | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
-  | Poffsetint _
   | Poffsetref _ -> None
-  | Pintoffloat _ -> None
-  | Pfloatofint (_, m) -> Some m
-  | Pfloatoffloat32 m -> Some m
-  | Pfloat32offloat m -> Some m
-  | Pnegfloat (_, m) | Pabsfloat (_, m)
-  | Paddfloat (_, m) | Psubfloat (_, m)
-  | Pmulfloat (_, m) | Pdivfloat (_, m) -> Some m
-  | Pfloatcomp (_, _) | Punboxed_float_comp (_, _) -> None
   | Pstringlength | Pstringrefu  | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets -> None
   | Pmakearray (_, _, m) -> Some m
@@ -1874,22 +2354,6 @@ let primitive_may_allocate : primitive -> locality_mode option = function
   | Parrayrefu ((Pgenarray_ref m | Pfloatarray_ref m), _, _)
   | Parrayrefs ((Pgenarray_ref m | Pfloatarray_ref m), _, _) -> Some m
   | Pisint _ | Pisnull | Pisout -> None
-  | Pintofbint _ -> None
-  | Pbintofint (_,m)
-  | Pcvtbint (_,_,m)
-  | Pnegbint (_, m)
-  | Paddbint (_, m)
-  | Psubbint (_, m)
-  | Pmulbint (_, m)
-  | Pdivbint {mode=m}
-  | Pmodbint {mode=m}
-  | Pandbint (_, m)
-  | Porbint (_, m)
-  | Pxorbint (_, m)
-  | Plslbint (_, m)
-  | Plsrbint (_, m)
-  | Pasrbint (_, m) -> Some m
-  | Pbintcomp _ | Punboxed_int_comp _ -> None
   | Pbigarrayset _ | Pbigarraydim _ -> None
   | Pbigarrayref (_, _, _, _) ->
      (* Boxes arising from Bigarray access are always Alloc_heap *)
@@ -1946,16 +2410,13 @@ let primitive_may_allocate : primitive -> locality_mode option = function
   | Punboxed_int32_array_set_128 _ | Punboxed_int64_array_set_128 _
   | Punboxed_nativeint_array_set_128 _ -> None
   | Pctconst _ -> None
-  | Pbswap16 -> None
-  | Pbbswap (_, m) -> Some m
   | Pint_as_pointer m -> Some m
   | Popaque _ -> None
   | Pprobe_is_enabled _ -> None
   | Pobj_dup -> Some alloc_heap
   | Pobj_magic _ -> None
-  | Punbox_float _ | Punbox_int _ | Punbox_vector _ -> None
-  | Ptag_int _ | Puntag_int _ -> None
-  | Pbox_float (_, m) | Pbox_int (_, m) | Pbox_vector (_, m) -> Some m
+  | Punbox_vector _ -> None
+  | Pbox_vector (_, m) -> Some m
   | Prunstack | Presume | Pperform | Preperform
     (* CR mshinwell: check *)
   | Ppoll ->
@@ -1985,7 +2446,8 @@ let primitive_may_allocate : primitive -> locality_mode option = function
 
 let primitive_can_raise prim =
   match prim with
-  | Pccall _ | Praise _ | Parrayrefs _ | Parraysets _ | Pmodint _ | Pdivint _
+  | Pscalar op -> (Scalar.Intrinsic.info op).can_raise
+  | Pccall _ | Praise _ | Parrayrefs _ | Parraysets _
   | Pstringrefs | Pbytesrefs | Pbytessets
   | Pstring_load_16 { unsafe = false; _ }
   | Pstring_load_32 { unsafe = false; _ }
@@ -2028,8 +2490,6 @@ let primitive_can_raise prim =
   | Punboxed_int32_array_set_128 { unsafe = false; _ }
   | Punboxed_int64_array_set_128 { unsafe = false; _ }
   | Punboxed_nativeint_array_set_128 { unsafe = false; _ }
-  | Pdivbint { is_safe = Safe; _ }
-  | Pmodbint { is_safe = Safe; _ }
   | Pbigarrayref (false, _, _, _)
   | Pbigarrayset (false, _, _, _)
   | Parrayblit _ | Pmakearray_dynamic _
@@ -2045,28 +2505,12 @@ let primitive_can_raise prim =
   | Pmakefloatblock _ | Pfield _ | Pfield_computed _ | Psetfield _
   | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Pduprecord _
   | Pmakeufloatblock _ | Pufloatfield _ | Psetufloatfield _ | Psequand | Psequor
-  | Pmixedfield _ | Psetmixedfield _ | Pmakemixedblock _ | Pnot | Pnegint
-  | Paddint | Psubint | Pmulint | Pandint | Porint | Pxorint | Plslint | Plsrint
-  | Pasrint | Pintcomp _ | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
-  | Poffsetint _ | Poffsetref _ | Pintoffloat _
-  | Pfloatofint (_, _)
-  | Pfloatoffloat32 _ | Pfloat32offloat _
-  | Pnegfloat (_, _)
-  | Pabsfloat (_, _)
-  | Paddfloat (_, _)
-  | Psubfloat (_, _)
-  | Pmulfloat (_, _)
-  | Pdivfloat (_, _)
-  | Pfloatcomp (_, _)
-  | Punboxed_float_comp (_, _)
+  | Pmixedfield _ | Psetmixedfield _ | Pmakemixedblock _ | Pnot
+  | Poffsetref _
   | Pstringlength | Pstringrefu | Pbyteslength | Pbytesrefu | Pbytessetu
   | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
-  | Pisint _ | Pisout | Pisnull | Pbintofint _ | Pintofbint _ | Pcvtbint _
-  | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _
-  | Pdivbint { is_safe = Unsafe; _ }
-  | Pmodbint { is_safe = Unsafe; _ }
-  | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _
-  | Pbintcomp _ | Punboxed_int_comp _ | Pbigarraydim _
+  | Pisint _ | Pisout | Pisnull
+  | Pbigarraydim _
   | Pbigarrayref
       ( true,
         _,
@@ -2126,14 +2570,10 @@ let primitive_can_raise prim =
   | Punboxed_int32_array_set_128 { unsafe = true; _ }
   | Punboxed_int64_array_set_128 { unsafe = true; _ }
   | Punboxed_nativeint_array_set_128 { unsafe = true; _ }
-  | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer _ | Popaque _
+  | Pctconst _ | Pint_as_pointer _ | Popaque _
   | Pprobe_is_enabled _ | Pobj_dup | Pobj_magic _
-  | Pbox_float (_, _)
-  | Punbox_float _
   | Pbox_vector (_, _)
-  | Ptag_int _
-  | Puntag_int _
-  | Punbox_vector _ | Punbox_int _ | Pbox_int _ | Pmake_unboxed_product _
+  | Punbox_vector _ | Pmake_unboxed_product _
   | Punboxed_product_field _ | Pget_header _ ->
     false
   | Patomic_exchange _ | Patomic_compare_exchange _
@@ -2204,7 +2644,7 @@ let rec layout_of_ignorable_kinds kinds =
 and layout_of_ignorable_kind = function
   | Pint_ignorable -> layout_int
   | Punboxedfloat_ignorable f -> layout_unboxed_float f
-  | Punboxedint_ignorable i -> layout_unboxed_int i
+  | Punboxedint_ignorable i -> layout_unboxed_int (unboxed_integer_of_primitive i)
   | Pproduct_ignorable kinds -> layout_of_ignorable_kinds kinds
 
 let array_ref_kind_result_layout = function
@@ -2212,7 +2652,7 @@ let array_ref_kind_result_layout = function
   | Pfloatarray_ref _ -> layout_boxed_float Boxed_float64
   | Punboxedfloatarray_ref bf -> layout_unboxed_float bf
   | Pgenarray_ref _ | Paddrarray_ref -> layout_value_field
-  | Punboxedintarray_ref i -> layout_unboxed_int i
+  | Punboxedintarray_ref i -> layout_unboxed_int (unboxed_integer_of_primitive i)
   | Punboxedvectorarray_ref bv -> layout_unboxed_vector bv
   | Pgcscannableproductarray_ref kinds -> layout_of_scannable_kinds kinds
   | Pgcignorableproductarray_ref kinds -> layout_of_ignorable_kinds kinds
@@ -2238,6 +2678,7 @@ let layout_of_mixed_field (kind : mixed_block_read) =
 let primitive_result_layout (p : primitive) =
   assert !Clflags.native_code;
   match p with
+  | Pscalar op -> Scalar.layout (Scalar.map (Scalar.Intrinsic.info op).result ~f:(fun (Alloc_local | Alloc_heap) -> Any_locality_mode))
   | Popaque layout | Pobj_magic layout -> layout
   | Pbytes_to_string | Pbytes_of_string -> layout_string
   | Pignore | Psetfield _ | Psetfield_computed _ | Psetfloatfield _ | Poffsetref _
@@ -2261,46 +2702,21 @@ let primitive_result_layout (p : primitive) =
   | Pmake_unboxed_product layouts -> layout_unboxed_product layouts
   | Parray_element_size_in_bytes _ -> layout_int
   | Pfloatfield _ -> layout_boxed_float Boxed_float64
-  | Pfloatoffloat32 _ -> layout_boxed_float Boxed_float64
-  | Pfloat32offloat _ -> layout_boxed_float Boxed_float32
-  | Pfloatofint (f, _) | Pnegfloat (f, _) | Pabsfloat (f, _)
-  | Paddfloat (f, _) | Psubfloat (f, _) | Pmulfloat (f, _) | Pdivfloat (f, _)
-  | Pbox_float (f, _) -> layout_boxed_float f
   | Pufloatfield _ -> Punboxed_float Unboxed_float64
-  | Punbox_float f -> layout_unboxed_float (Primitive.unboxed_float f)
   | Pbox_vector (v, _) -> layout_boxed_vector v
   | Punbox_vector v -> layout_unboxed_vector (Primitive.unboxed_vector v)
   | Pmixedfield (_, kind, _, _) -> layout_of_mixed_field kind
   | Pccall { prim_native_repr_res = _, repr_res } -> layout_of_extern_repr repr_res
   | Praise _ -> layout_bottom
   | Psequor | Psequand | Pnot
-  | Pnegint | Paddint | Psubint | Pmulint
-  | Pdivint _ | Pmodint _
-  | Pandint | Porint | Pxorint
-  | Plslint | Plsrint | Pasrint
-  | Pintcomp _
-  | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
-  | Poffsetint _ | Pintoffloat _
-  | Pfloatcomp (_, _) | Punboxed_float_comp (_, _)
   | Pstringlength | Pstringrefu | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytesrefs
-  | Parraylength _ | Pisint _ | Pisnull | Pisout | Pintofbint _
-  | Pbintcomp _ | Punboxed_int_comp _
+  | Parraylength _ | Pisint _ | Pisnull | Pisout
   | Pstring_load_16 _ | Pbytes_load_16 _ | Pbigstring_load_16 _
-  | Pprobe_is_enabled _ | Pbswap16
+  | Pprobe_is_enabled _
     -> layout_int
   | Parrayrefu (array_ref_kind, _, _) | Parrayrefs (array_ref_kind, _, _) ->
     array_ref_kind_result_layout array_ref_kind
-  | Pbintofint (bi, _) | Pcvtbint (_,bi,_)
-  | Pnegbint (bi, _) | Paddbint (bi, _) | Psubbint (bi, _)
-  | Pmulbint (bi, _) | Pdivbint {size = bi} | Pmodbint {size = bi}
-  | Pandbint (bi, _) | Porbint (bi, _) | Pxorbint (bi, _)
-  | Plslbint (bi, _) | Plsrbint (bi, _) | Pasrbint (bi, _)
-  | Pbbswap (bi, _) | Pbox_int (bi, _) ->
-    layout_boxed_int bi
-  | Ptag_int _ -> layout_int
-  | Puntag_int i -> layout_unboxed_int i
-  | Punbox_int bi -> Punboxed_int (Primitive.unboxed_integer bi)
   | Pstring_load_32 { boxed = true; _ } | Pbytes_load_32 { boxed = true; _ }
   | Pbigstring_load_32 { boxed = true; _ } ->
     layout_boxed_int Boxed_int32
@@ -2614,3 +3030,21 @@ let rec ignorable_product_element_kind_involves_int
   | Punboxedfloat_ignorable _ | Punboxedint_ignorable _ -> false
   | Pproduct_ignorable kinds ->
     List.exists ignorable_product_element_kind_involves_int kinds
+
+(* Functions for simulating naked int primitives. This is used for bytecode
+   compilation which doesn't support naked int primitives directly *)
+
+let sign_extend_int arg ~bits ~loc =
+  let int_size = Lprim (Pctconst Int_size, [ Lconst const_unit ], loc) in
+  let unused_bits =
+    Lprim (Pscalar (Binary (Sub {size = Value (Taggable Int)})),
+           [int_size; Lconst(const_int bits)], loc) in
+  let left_aligned =
+    Lprim (Pscalar (Binary (Lsl {size = Value ((Taggable Int)); rhs = Tagged_immediate })),
+           [arg; unused_bits], loc)
+  in
+  Lprim (Pscalar (Binary (Asr {size = Value ((Taggable Int)); rhs = Tagged_immediate })), [left_aligned; unused_bits], loc)
+;;
+
+let unary p arg ~loc = Lprim (Pscalar (Unary p), [arg], loc)
+let binary p x y ~loc = Lprim (Pscalar (Binary p), [x; y], loc)
