@@ -149,7 +149,7 @@ let preserve_tailcall_for_prim = function
       true
   | Pscalar (Unary (Static_cast {src; dst})) ->
     Scalar.to_bytecode src = Scalar.to_bytecode dst
-  | Pscalar (Unary (Neg _ | Fneg _ | Fabs _ | Bswap _ | Offset _)
+  | Pscalar (Unary (Neg _ | Fneg _ | Fabs _ | Bswap _)
             | Binary (Add _ | Fadd _ | Sub _ | Fsub _ | Mul _ | Fmul _
                      | Div _ | Fdiv _ | Mod _
                      | And _ | Or _ | Xor _ | Lsl _ | Lsr _ | Asr _

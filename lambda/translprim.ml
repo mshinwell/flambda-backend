@@ -406,7 +406,7 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     let (_, repr) = lambda_prim.prim_native_repr_res in
     Lambda.layout_of_extern_repr repr
   in
-  let int = Scalar.Integral.tagged_immediate in
+  let int : _ Scalar.Integral.t = Value (Taggable Int) in
   let int8 : _ Scalar.Integral.t = Value (Taggable Int8) in
   let int16 : _ Scalar.Integral.t = Value (Taggable Int16) in
   let int32 : _ Scalar.Integral.t = Value (Boxable (Int32 mode)) in

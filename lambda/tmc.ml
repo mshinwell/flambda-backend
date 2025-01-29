@@ -866,6 +866,7 @@ let rec choice ctx t =
         Lprim (Popaque layout, [l1], loc)
 
     (* in common cases we just return *)
+    | Pscalar _
     | Pbytes_to_string | Pbytes_of_string
     | Parray_to_iarray | Parray_of_iarray
     | Pgetglobal _ | Psetglobal _ | Pgetpredef _

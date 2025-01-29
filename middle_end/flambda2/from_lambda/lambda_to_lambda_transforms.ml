@@ -64,18 +64,26 @@ let rec_catch_for_for_loop env loc ident start stop
   let stop_ident = Ident.create_local "for_stop" in
   let first_test : L.lambda =
     match dir with
-    | Upto -> Lprim (Pintcomp Cle, [L.Lvar start_ident; L.Lvar stop_ident], loc)
+    | Upto ->
+      Lprim (L.pintcomp Cle, [L.Lvar start_ident; L.Lvar stop_ident], loc)
     | Downto ->
-      Lprim (Pintcomp Cge, [L.Lvar start_ident; L.Lvar stop_ident], loc)
+      Lprim (L.pintcomp Cge, [L.Lvar start_ident; L.Lvar stop_ident], loc)
   in
   let subsequent_test : L.lambda =
-    Lprim (Pintcomp Cne, [L.Lvar ident; L.Lvar stop_ident], loc)
+    Lprim (L.pintcomp Cne, [L.Lvar ident; L.Lvar stop_ident], loc)
   in
-  let one : L.lambda = Lconst (Const_base (Const_int 1)) in
   let next_value_of_counter =
     match dir with
-    | Upto -> L.Lprim (Paddint, [L.Lvar ident; one], loc)
-    | Downto -> L.Lprim (Psubint, [L.Lvar ident; one], loc)
+    | Upto ->
+      L.Lprim
+        ( Pscalar (Unary (Succ { size = L.Scalar.Integral.int })),
+          [L.Lvar ident],
+          loc )
+    | Downto ->
+      L.Lprim
+        ( Pscalar (Unary (Pred { size = L.Scalar.Integral.int })),
+          [L.Lvar ident],
+          loc )
   in
   let lam : L.lambda =
     (* Care needs to be taken here not to cause overflow if, for an incrementing
@@ -134,10 +142,13 @@ let initialize_array0 env loc ~length array_set_kind width ~(init : L.lambda)
       let length_is_greater_than_zero_and_is_one_mod_two =
         L.Lprim
           ( Psequand,
-            [ Lprim (Pintcomp Cgt, [length; Lconst (L.const_int 0)], loc);
+            [ Lprim (L.pintcomp Cgt, [length; Lconst (L.const_int 0)], loc);
               Lprim
-                ( Pintcomp Cne,
-                  [ Lprim (Pmodint Unsafe, [length; Lconst (L.const_int 2)], loc);
+                ( L.pintcomp Cne,
+                  [ Lprim
+                      ( Pscalar (Binary (And { size = L.Scalar.Integral.int })),
+                        [length; Lconst (L.const_int 1)],
+                        loc );
                     Lconst (L.const_int 0) ],
                   loc ) ],
             loc )
@@ -152,7 +163,8 @@ let initialize_array0 env loc ~length array_set_kind width ~(init : L.lambda)
     let index = Ident.create_local "index" in
     rec_catch_for_for_loop env loc index
       (Lconst (L.const_int 0))
-      (L.Lprim (Psubint, [length; Lconst (L.const_int 1)], loc))
+      (L.Lprim
+         (Pscalar (Unary (Pred { size = L.Scalar.Integral.int })), [length], loc))
       Upto
       (Lprim
          ( Parraysetu (array_set_kind, Ptagged_int_index),
@@ -482,20 +494,22 @@ let arrayblit env ~(src_mutability : L.mutable_flag)
     let dst_start_pos = id "dst_start_pos" in
     let length = id "length" in
     (* CR mshinwell: support indexing by other types apart from [int] *)
+    let paddint = L.Pscalar (Binary (Add { size = L.Scalar.Integral.int })) in
+    let psubint = L.Pscalar (Binary (Sub { size = L.Scalar.Integral.int })) in
     let src_end_pos_exclusive =
-      L.Lprim (Paddint, [Lvar src_start_pos; Lvar length], loc)
+      L.Lprim (paddint, [Lvar src_start_pos; Lvar length], loc)
     in
     let src_end_pos_inclusive =
-      L.Lprim (Psubint, [src_end_pos_exclusive; Lconst (L.const_int 1)], loc)
+      L.Lprim (psubint, [src_end_pos_exclusive; Lconst (L.const_int 1)], loc)
     in
     let dst_start_pos_minus_src_start_pos =
-      L.Lprim (Psubint, [Lvar dst_start_pos; Lvar src_start_pos], loc)
+      L.Lprim (psubint, [Lvar dst_start_pos; Lvar src_start_pos], loc)
     in
     let dst_start_pos_minus_src_start_pos_var =
       Ident.create_local "dst_start_pos_minus_src_start_pos"
     in
     let must_copy_backwards =
-      L.Lprim (Pintcomp Cgt, [Lvar dst_start_pos; Lvar src_start_pos], loc)
+      L.Lprim (L.pintcomp Cgt, [Lvar dst_start_pos; Lvar src_start_pos], loc)
     in
     let make_loop env (direction : Asttypes.direction_flag) =
       let src_index = Ident.create_local "index" in
@@ -509,7 +523,7 @@ let arrayblit env ~(src_mutability : L.mutable_flag)
            ( Parraysetu (dst_array_set_kind, Ptagged_int_index),
              [ Lvar dst;
                Lprim
-                 ( Paddint,
+                 ( paddint,
                    [Lvar src_index; dst_start_pos_minus_src_start_pos],
                    loc );
                Lprim

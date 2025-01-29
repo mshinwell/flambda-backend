@@ -414,6 +414,13 @@ module Scalar = struct
       let to_string = function
         | Taggable t -> Taggable.Width.to_string t
         | Boxable b -> Boxable.Width.to_string b
+
+      let int8 = Taggable Int8
+      let int16 = Taggable Int16
+      let int32 = Boxable (Int32 Any_locality_mode)
+      let int64 = Boxable (Int64 Any_locality_mode)
+      let int = Taggable Int
+      let nativeint = Boxable (Nativeint Any_locality_mode)
     end
 
     include Maybe_naked.Make1 (Width)
@@ -424,7 +431,18 @@ module Scalar = struct
       | Value (Boxable t) -> Boxable.layout (Value t)
       | Naked (Boxable t) -> Boxable.layout (Naked t)
 
-    let tagged_immediate : _ t = Value (Taggable Int)
+    let int8 : _ t = Value Width.int8
+    let int16 : _ t = Value Width.int16
+    let int32 : _ t = Value Width.int32
+    let int64 : _ t = Value Width.int64
+    let int : _ t = Value Width.int
+    let nativeint : _ t = Value Width.nativeint
+    let naked_int8 : _ t = Naked Width.int8
+    let naked_int16 : _ t = Naked Width.int16
+    let naked_int32 : _ t = Naked Width.int32
+    let naked_int64 : _ t = Naked Width.int32
+    let naked_int : _ t = Naked Width.int
+    let naked_nativeint : _ t = Naked Width.nativeint
   end
 
   module Floating = struct
@@ -455,6 +473,9 @@ module Scalar = struct
       let to_string = function
         | Float32 Any_locality_mode -> "float32"
         | Float64 Any_locality_mode -> "float"
+
+      let float32 = Float32 Any_locality_mode
+      let float = Float64 Any_locality_mode
     end
 
     include Maybe_naked.Make1 (Width)
@@ -466,6 +487,11 @@ module Scalar = struct
           { raw_kind = Pboxedfloatval (Width.to_boxed_float t);
             nullable = Non_nullable
           }
+
+    let float32 : _ t = Value Width.float32
+    let float : _ t = Value Width.float
+    let naked_float32 : _ t = Naked Width.float32
+    let naked_float : _ t = Naked Width.float
   end
 
   module Width = struct
@@ -491,6 +517,15 @@ module Scalar = struct
     let to_string = function
       | Floating f -> Floating.Width.to_string f
       | Integral i -> Integral.Width.to_string i
+
+    let float32 = Floating Floating.Width.float32
+    let float = Floating Floating.Width.float
+    let int8 = Integral Integral.Width.int8
+    let int16 = Integral Integral.Width.int16
+    let int = Integral Integral.Width.int
+    let int32 = Integral Integral.Width.int32
+    let int64 = Integral Integral.Width.int64
+    let nativeint = Integral Integral.Width.nativeint
   end
 
   module Bytecode = struct
@@ -513,7 +548,24 @@ module Scalar = struct
     | Value f -> Value (Floating f)
     | Naked f -> Naked (Floating f)
 
-  let tagged_immediate : _ t = Value (Integral (Taggable Int))
+  let int8 : _ t = Value Width.int8
+  let int16 : _ t = Value Width.int16
+  let int : _ t = Value Width.int
+  let int32 : _ t = Value Width.int32
+  let nativeint : _ t = Value Width.nativeint
+  let int64 : _ t = Value Width.int64
+  let float32 : _ t = Value Width.float32
+  let float : _ t = Value Width.float
+  let naked_int8 : _ t = Naked Width.int8
+  let naked_int16 : _ t = Naked Width.int16
+  let naked_int : _ t = Naked Width.int
+  let naked_int32 : _ t = Naked Width.int32
+  let naked_nativeint : _ t = Naked Width.nativeint
+  let naked_int64 : _ t = Naked Width.int64
+  let naked_float32 : _ t = Naked Width.float32
+  let naked_float : _ t = Naked Width.float
+
+
 
   let to_bytecode t = Bytecode.Value (width t)
 
@@ -744,7 +796,7 @@ module Scalar = struct
               cmp = (_ : float_comparison)
             }
         | Three_way_compare { size = _ } ->
-          { result = tagged_immediate; can_raise = false }
+          { result = int; can_raise = false }
     end
 
     type 'mode t =
@@ -3048,3 +3100,4 @@ let sign_extend_int arg ~bits ~loc =
 
 let unary p arg ~loc = Lprim (Pscalar (Unary p), [arg], loc)
 let binary p x y ~loc = Lprim (Pscalar (Binary p), [x; y], loc)
+let pintcomp cmp = Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp}))

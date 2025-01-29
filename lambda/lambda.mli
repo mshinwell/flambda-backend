@@ -242,6 +242,42 @@ module Scalar : sig
       val layout : any_locality_mode t -> layout
       val to_string : any_locality_mode t -> string
     end
+
+  module type Integral_width_constants := sig
+    type 'a t
+
+    val int8 : _ t
+    val int16 : _ t
+    val int32 : any_locality_mode t
+    val int64 : any_locality_mode t
+    val int : _ t
+    val nativeint : any_locality_mode t
+  end
+
+  module type Integral_constants := sig
+    type 'a t
+    include Integral_width_constants with type 'a t := 'a t
+    val naked_int8 : _ t
+    val naked_int16 : _ t
+    val naked_int32 : any_locality_mode t
+    val naked_int64 : any_locality_mode t
+    val naked_int : _ t
+    val naked_nativeint : any_locality_mode t
+  end
+
+  module type Float_width_constants := sig
+      type 'a t
+      val float32 : any_locality_mode t
+      val float : any_locality_mode t
+    end
+
+  module type Float_constants := sig
+      type 'a t
+      include Float_width_constants with type 'a t := 'a t
+      val naked_float32 : any_locality_mode t
+      val naked_float : any_locality_mode t
+    end
+
   module Integral : sig
     module Taggable : sig
       module Width : sig
@@ -283,11 +319,11 @@ module Scalar : sig
       val map : 'a t -> f:('a -> 'b) -> 'b t
       val locality_mode : locality_mode t -> locality_mode option
       val to_unboxed_integer : any_locality_mode t -> unboxed_integer
+      include Integral_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
-
-    val tagged_immediate : _ t
+    include Integral_constants with type 'a t := 'a t
   end
 
   module Floating : sig
@@ -301,9 +337,11 @@ module Scalar : sig
       val locality_mode : locality_mode t -> locality_mode option
       val to_boxed_float : any_locality_mode t -> boxed_float
       val to_unboxed_float : any_locality_mode t -> unboxed_float
+      include Float_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
+    include Float_constants with type 'a t := 'a t
   end
 
   module Width : sig
@@ -314,6 +352,9 @@ module Scalar : sig
     val map : 'a t -> f:('a -> 'b) -> 'b t
 
     val locality_mode : locality_mode t -> locality_mode option
+
+    include Integral_width_constants with type 'a t := 'a t
+    include Float_width_constants with type 'a t := 'a t
   end
 
   module Bytecode : sig
@@ -321,13 +362,11 @@ module Scalar : sig
   end
 
   include S with type 'a width := 'a Width.t
+  include Integral_constants with type 'a t := 'a t
+  include Float_constants with type 'a t := 'a t
 
   val integral : 'a Integral.t -> 'a t
   val floating : 'a Floating.t -> 'a t
-
-  (** helpers: *)
-
-  val tagged_immediate : _ t
   val to_bytecode : any_locality_mode t -> Bytecode.t
 
   module Intrinsic : sig
@@ -1366,3 +1405,4 @@ val sign_extend_int : lambda -> bits:int -> loc:scoped_location -> lambda
 val equal_unboxed_integer : unboxed_integer -> unboxed_integer -> bool
 val unary : locality_mode Scalar.Intrinsic.Unary.t -> lambda -> loc:scoped_location -> lambda
 val binary : locality_mode Scalar.Intrinsic.Binary.t -> lambda -> lambda -> loc:scoped_location -> lambda
+val pintcomp : integer_comparison -> primitive

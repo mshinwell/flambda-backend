@@ -114,7 +114,7 @@ module Lambda_utils = struct
     (module struct
       let binop prim l r = Lprim (Pscalar (Binary prim), [l; r], loc)
 
-      let size = Scalar.Integral.tagged_immediate
+      let size = Scalar.Integral.int
 
       let ( + ) = binop (Add { size })
 
