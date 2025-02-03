@@ -417,12 +417,10 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
   let unary op : prim = Primitive (Pscalar (Unary op), 1) in
   let binary op : prim = Primitive (Pscalar (Binary op), 2) in
   let icmp size cmp =
-    let size = Scalar.Integral.ignore_locality size in
-    binary (Icmp { size; cmp })
+    binary (Icmp (Scalar.Integral.ignore_locality size, cmp))
   in
   let fcmp size cmp =
-    let size = Scalar.Floating.ignore_locality size in
-    binary (Fcmp { size; cmp })
+    binary (Fcmp (Scalar.Floating.ignore_locality size, cmp))
   in
   let naked scalar =
     Maybe_naked.Naked (Scalar.width (Scalar.ignore_locality scalar))
@@ -486,9 +484,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%andint" -> binary (Integral (int, And))
     | "%orint" -> binary (Integral (int, Or))
     | "%xorint" -> binary (Integral (int, Xor))
-    | "%lslint" -> binary (Shift (int, Lsl { by = Tagged_immediate }))
-    | "%lsrint" -> binary (Shift (int, Lsr { by = Tagged_immediate }))
-    | "%asrint" -> binary (Shift (int, Asr { by = Tagged_immediate }))
+    | "%lslint" -> binary (Shift (int, Lsl, Tagged_immediate))
+    | "%lsrint" -> binary (Shift (int, Lsr, Tagged_immediate))
+    | "%asrint" -> binary (Shift (int, Asr, Tagged_immediate))
     | "%eq" -> icmp int Ceq
     | "%noteq" -> icmp int Cne
     | "%ltint" -> icmp int Clt
@@ -649,9 +647,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%nativeint_and" -> binary (Integral (nativeint, And))
     | "%nativeint_or" -> binary (Integral (nativeint, Or))
     | "%nativeint_xor" -> binary (Integral (nativeint, Xor))
-    | "%nativeint_lsl" -> binary (Shift (nativeint, Lsl { by = Tagged_immediate }))
-    | "%nativeint_lsr" -> binary (Shift (nativeint, Lsr { by = Tagged_immediate }))
-    | "%nativeint_asr" -> binary (Shift (nativeint, Asr { by = Tagged_immediate }))
+    | "%nativeint_lsl" -> binary (Shift (nativeint, Lsl, Tagged_immediate))
+    | "%nativeint_lsr" -> binary (Shift (nativeint, Lsr, Tagged_immediate))
+    | "%nativeint_asr" -> binary (Shift (nativeint, Asr, Tagged_immediate))
     | "%int32_of_int" -> static_cast ~dst:(i int32) ~src:(i int)
     | "%int32_to_int" -> static_cast ~src:(i int32) ~dst:(i int)
     | "%int32_neg" -> unary (Integral (int32, Neg))
@@ -663,9 +661,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%int32_and" -> binary (Integral (int32, And))
     | "%int32_or" -> binary (Integral (int32, Or))
     | "%int32_xor" -> binary (Integral (int32, Xor))
-    | "%int32_lsl" -> binary (Shift (int32, Lsl { by = Tagged_immediate }))
-    | "%int32_lsr" -> binary (Shift (int32, Lsr { by = Tagged_immediate }))
-    | "%int32_asr" -> binary (Shift (int32, Asr { by = Tagged_immediate }))
+    | "%int32_lsl" -> binary (Shift (int32, Lsl, Tagged_immediate))
+    | "%int32_lsr" -> binary (Shift (int32, Lsr, Tagged_immediate))
+    | "%int32_asr" -> binary (Shift (int32, Asr, Tagged_immediate))
     | "%int64_of_int" -> static_cast ~dst:(i int64) ~src:(i int)
     | "%int64_to_int" -> static_cast ~src:(i int64) ~dst:(i int)
     | "%int64_neg" -> unary (Integral (int64, Neg))
@@ -677,9 +675,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%int64_and" -> binary (Integral (int64, And))
     | "%int64_or" -> binary (Integral (int64, Or))
     | "%int64_xor" -> binary (Integral (int64, Xor))
-    | "%int64_lsl" -> binary (Shift (int64, Lsl { by = Tagged_immediate }))
-    | "%int64_lsr" -> binary (Shift (int64, Lsr { by = Tagged_immediate }))
-    | "%int64_asr" -> binary (Shift (int64, Asr { by = Tagged_immediate }))
+    | "%int64_lsl" -> binary (Shift (int64, Lsl, Tagged_immediate))
+    | "%int64_lsr" -> binary (Shift (int64, Lsr, Tagged_immediate))
+    | "%int64_asr" -> binary (Shift (int64, Asr, Tagged_immediate))
     | "%nativeint_of_int32" -> static_cast ~dst:(i nativeint) ~src:(i int32)
     | "%nativeint_to_int32" -> static_cast ~src:(i nativeint) ~dst:(i int32)
     | "%int64_of_int32" -> static_cast ~dst:(i int64) ~src:(i int32)
@@ -1578,10 +1576,10 @@ let comparison_primitive comparison comparison_kind =
   let int64 : any_locality_mode Scalar.Integral.t =
     Value (Boxable (Int64 Any_locality_mode))
   in
-  let icmp size cmp = Pscalar (Binary (Icmp { size; cmp })) in
-  let fcmp size cmp = Pscalar (Binary (Fcmp { size; cmp })) in
+  let icmp size cmp = Pscalar (Binary (Icmp (size, cmp))) in
+  let fcmp size cmp = Pscalar (Binary (Fcmp (size, cmp))) in
   let three_way_compare size =
-    Pscalar (Binary (Three_way_compare { size }))
+    Pscalar (Binary (Three_way_compare size))
   in
   match comparison, comparison_kind with
   | Equal, Compare_generic -> Pccall caml_equal

@@ -420,10 +420,11 @@ module Scalar : sig
           (* CR jvanburen: add shift intrinsics that take other widths *)
           type t = Tagged_immediate
         end
+
         type t =
-          | Lsl of { by : Rhs.t }
-          | Asr of { by : Rhs.t }
-          | Lsr of { by : Rhs.t }
+          | Lsl
+          | Asr
+          | Lsr
       end
 
       module Float_op : sig
@@ -434,19 +435,15 @@ module Scalar : sig
           | Div
       end
 
+      (** comparisons return a tagged immediate *)
+      (* CR jvanburen: comparisons that return naked values *)
       type nonrec 'mode t =
         | Integral of 'mode Integral.t * Int_op.t
-        | Shift of 'mode Integral.t * Shift_op.t
+        | Shift of 'mode Integral.t * Shift_op.t * Shift_op.Rhs.t
         | Floating of 'mode Floating.t * Float_op.t
-        | Icmp of
-            { size : any_locality_mode Integral.t;
-              cmp : integer_comparison
-            }
-        | Fcmp of
-            { size : any_locality_mode Floating.t;
-              cmp : float_comparison
-            }
-        | Three_way_compare of { size : any_locality_mode t }
+        | Icmp of any_locality_mode Integral.t * integer_comparison
+        | Fcmp of any_locality_mode Floating.t * float_comparison
+        | Three_way_compare of any_locality_mode t
 
       val map : 'a t -> f:('a -> 'b) -> 'b t
       val info : 'a t -> 'a info

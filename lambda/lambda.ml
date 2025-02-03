@@ -286,12 +286,12 @@ module Maybe_naked = struct
 
     let width (Naked t | Value t : _ t) = t
 
-    let ignore_locality = map ~f:ignore_locality
-    let all = List.concat_map (fun m -> [ Value m; Naked m ]) M.all
-
     let to_string = function
       | Value m -> M.to_string m
       | Naked m -> M.to_string m ^ "#"
+
+    let ignore_locality = map ~f:ignore_locality
+    let all = List.concat_map (fun m -> [ Value m; Naked m ]) M.all
   end
 end
 
@@ -567,6 +567,8 @@ module Scalar = struct
 
   let to_bytecode t = Bytecode.Value (width t)
 
+  type 'a scalar = 'a t
+
   module Intrinsic = struct
     type 'mode info =
       { can_raise : bool;
@@ -699,21 +701,16 @@ module Scalar = struct
         end
 
         type t =
-          | Lsl of { by : Rhs.t }
-          | Asr of { by : Rhs.t }
-          | Lsr of { by : Rhs.t }
+          | Lsl
+          | Asr
+          | Lsr
 
-        let all =
-          List.concat
-            [ List.map (fun by -> Lsl { by }) Rhs.all
-            ; List.map (fun by -> Asr { by }) Rhs.all
-            ; List.map (fun by -> Lsr { by }) Rhs.all
-            ]
+        let all = [Lsl; Asr; Lsr]
 
         let to_string = function
-          | Lsl { by = Tagged_immediate } -> "lsl"
-          | Asr { by = Tagged_immediate } -> "asr"
-          | Lsr { by = Tagged_immediate } -> "lsr"
+          | Lsl -> "lsl"
+          | Asr -> "asr"
+          | Lsr -> "lsr"
 
       end
 
@@ -734,20 +731,19 @@ module Scalar = struct
       end
 
 
+      (** comparisons return a tagged immediate *)
+      (* CR jvanburen: comparisons that return naked values *)
       type nonrec 'mode t =
         (* CR jvanburen: Fmod, Min, Max? *)
         | Integral of 'mode Integral.t * Int_op.t
-        | Shift of 'mode Integral.t * Shift_op.t
+        | Shift of
+            'mode Integral.t
+            * Shift_op.t
+            * Shift_op.Rhs.t
         | Floating of 'mode Floating.t * Float_op.t
-        | Icmp of
-            { size : any_locality_mode Integral.t;
-              cmp : integer_comparison
-            }
-        | Fcmp of
-            { size : any_locality_mode Floating.t;
-              cmp : float_comparison
-            }
-        | Three_way_compare of { size : any_locality_mode t }
+        | Icmp of any_locality_mode Integral.t * integer_comparison
+        | Fcmp of any_locality_mode Floating.t * float_comparison
+        | Three_way_compare of any_locality_mode t
 
       let all =
         List.concat
@@ -758,13 +754,14 @@ module Scalar = struct
               ListLabels.map Float_op.all ~f:(fun op ->
                 Floating (size, op)))
           ; ListLabels.concat_map Integral.all ~f:(fun size ->
-              ListLabels.map Shift_op.all ~f:(fun op ->
-                Shift (size, op)))
+              ListLabels.concat_map Shift_op.all ~f:(fun op ->
+                ListLabels.map Shift_op.Rhs.all ~f:(fun rhs ->
+                  Shift (size, op, rhs))))
           ; ListLabels.concat_map all_integer_comparisons ~f:(fun cmp ->
-              List.map (fun size -> Icmp {size; cmp}) Integral.all)
+              List.map (fun size -> Icmp (size, cmp)) Integral.all)
           ; ListLabels.concat_map all_float_comparisons ~f:(fun cmp ->
-              List.map (fun size -> Fcmp {size; cmp}) Floating.all)
-          ; List.map (fun size -> Three_way_compare {size}) all
+              List.map (fun size -> Fcmp (size, cmp)) Floating.all)
+          ; List.map (fun size -> Three_way_compare size) all
           ]
 
       let to_string t =
@@ -776,54 +773,47 @@ module Scalar = struct
         match t with
         | Integral (size, op) -> make (integral size) (Int_op.to_string op)
         | Floating (size, op) -> make (floating size) (Float_op.to_string op)
-        | Shift (size, op) -> make (integral size) (Shift_op.to_string op)
-        | Icmp { size; cmp = Ceq } -> i size ^ "_equal"
-        | Icmp { size; cmp = Cne } -> i size ^ "_notequal"
-        | Icmp { size; cmp = Cgt } -> i size ^ "_greaterthan"
-        | Icmp { size; cmp = Cge } -> i size ^ "_greaterequal"
-        | Icmp { size; cmp = Clt } -> i size ^ "_lessthan"
-        | Icmp { size; cmp = Cle } -> i size ^ "_lessequal"
-        | Fcmp { size; cmp = CFeq } -> f size ^ "_ordered_and_equal"
-        | Fcmp { size; cmp = CFgt } -> f size ^ "_ordered_and_greaterthan"
-        | Fcmp { size; cmp = CFge } -> f size ^ "_ordered_and_greaterequal"
-        | Fcmp { size; cmp = CFlt } -> f size ^ "_ordered_and_lessthan"
-        | Fcmp { size; cmp = CFle } -> f size ^ "_ordered_and_lessequal"
-        | Fcmp { size; cmp = CFneq } -> f size ^ "_unordered_or_notequal"
-        | Fcmp { size; cmp = CFngt } -> f size ^ "_unordered_or_lessequal"
-        | Fcmp { size; cmp = CFnge } -> f size ^ "_unordered_or_lessthan"
-        | Fcmp { size; cmp = CFnlt } -> f size ^ "_unordered_or_greaterequal"
-        | Fcmp { size; cmp = CFnle } -> f size ^ "_unordered_or_greaterthan"
-        | Three_way_compare { size } -> make size "compare"
+        | Shift (size, op, Tagged_immediate) ->
+          make (integral size) (Shift_op.to_string op)
+        | Icmp (size, Ceq) -> i size ^ "_equal"
+        | Icmp (size, Cne) -> i size ^ "_notequal"
+        | Icmp (size, Cgt) -> i size ^ "_greaterthan"
+        | Icmp (size, Cge) -> i size ^ "_greaterequal"
+        | Icmp (size, Clt) -> i size ^ "_lessthan"
+        | Icmp (size, Cle) -> i size ^ "_lessequal"
+        | Fcmp (size, CFeq) -> f size ^ "_ordered_and_equal"
+        | Fcmp (size, CFgt) -> f size ^ "_ordered_and_greaterthan"
+        | Fcmp (size, CFge) -> f size ^ "_ordered_and_greaterequal"
+        | Fcmp (size, CFlt) -> f size ^ "_ordered_and_lessthan"
+        | Fcmp (size, CFle) -> f size ^ "_ordered_and_lessequal"
+        | Fcmp (size, CFneq) -> f size ^ "_unordered_or_notequal"
+        | Fcmp (size, CFngt) -> f size ^ "_unordered_or_lessequal"
+        | Fcmp (size, CFnge) -> f size ^ "_unordered_or_lessthan"
+        | Fcmp (size, CFnlt) -> f size ^ "_unordered_or_greaterequal"
+        | Fcmp (size, CFnle) -> f size ^ "_unordered_or_greaterthan"
+        | Three_way_compare size -> make size "compare"
 
       let map t ~f =
         match t with
         | Integral (size, op) -> Integral (Integral.map size ~f, op)
         | Floating (size, op) -> Floating (Floating.map size ~f, op)
-        | Shift (size, op) -> Shift (Integral.map size ~f, op)
-        | Icmp { size; cmp } -> Icmp { size; cmp }
-        | Fcmp { size; cmp } -> Fcmp { size; cmp }
-        | Three_way_compare { size } -> Three_way_compare { size }
+        | Shift (size, op, rhs) -> Shift (Integral.map size ~f, op, rhs)
+        | Icmp (size, cmp) -> Icmp (size, cmp)
+        | Fcmp (size, cmp) -> Fcmp (size, cmp)
+        | Three_way_compare size -> Three_way_compare size
 
       let info = function
         | Integral (size, (Add | Sub | Mul | Div Unsafe | Mod Unsafe | And | Or | Xor))
-        | Shift (size, ( Lsl { by = Tagged_immediate }
-                       | Lsr { by = Tagged_immediate }
-                       | Asr { by = Tagged_immediate }))
+        | Shift (size, ( Lsl | Lsr | Asr), Tagged_immediate)
             ->
             { result = integral size; can_raise = false }
         | Integral (size, (Div Safe | Mod Safe)) ->
           { result = integral size; can_raise = true }
         | Floating (size, (Add | Sub | Mul | Div)) ->
           { result = floating size; can_raise = false }
-        | Icmp
-            { size = (_ : any_locality_mode Integral.t);
-              cmp = (_ : integer_comparison)
-            }
-        | Fcmp
-            { size = (_ : any_locality_mode Floating.t);
-              cmp = (_ : float_comparison)
-            }
-        | Three_way_compare { size = _ } ->
+        | Icmp ((_ : any_locality_mode Integral.t), (_ : integer_comparison))
+        | Fcmp ((_ : any_locality_mode Floating.t), (_ : float_comparison))
+        | Three_way_compare (_ : any_locality_mode scalar) ->
           { result = int; can_raise = false }
     end
 
@@ -3116,7 +3106,7 @@ let rec ignorable_product_element_kind_involves_int
 
 let unary p arg ~loc = Lprim (Pscalar (Unary p), [arg], loc)
 let binary p x y ~loc = Lprim (Pscalar (Binary p), [x; y], loc)
-let pintcomp cmp = Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp}))
+let pintcomp cmp = Pscalar (Binary (Icmp (Scalar.Integral.int, cmp )))
 
 let sign_extend_int arg ~bits ~loc =
   let int : _ Scalar.Integral.t = Value ((Taggable Int)) in
@@ -3129,7 +3119,7 @@ let sign_extend_int arg ~bits ~loc =
       ~loc
   in
   let left_aligned =
-    binary (Shift (int, Lsl {by = Tagged_immediate})) arg unused_bits ~loc
+    binary (Shift (int, Lsl, Tagged_immediate)) arg unused_bits ~loc
   in
-  binary (Shift (int, Asr {by = Tagged_immediate})) left_aligned unused_bits ~loc
+  binary (Shift (int, Asr, Tagged_immediate)) left_aligned unused_bits ~loc
 ;;

@@ -629,8 +629,7 @@ let transform_primitive0 env (prim : L.primitive) args loc =
   | Pmakefloatblock (_mut, _mode), args when List.length args < 1 ->
     Misc.fatal_errorf "Pmakefloatblock must have at least one argument"
   | ( Pscalar
-        (Binary
-          (Fcmp { size; cmp = (CFneq | CFnlt | CFngt | CFnle | CFnge) as cmp })),
+        (Binary (Fcmp (size, ((CFneq | CFnlt | CFngt | CFnle | CFnge) as cmp)))),
       args ) ->
     let cmp = L.negate_float_comparison cmp in
     Primitive

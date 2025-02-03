@@ -2123,7 +2123,7 @@ let inline_lazy_force_cond arg pos loc =
   let varg = Lvar idarg in
   let tag = Ident.create_local "tag" in
   let test_tag t =
-    Lprim(Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp = Ceq})),
+    Lprim(Pscalar (Binary (Icmp (Scalar.Integral.int, Ceq))),
           [Lvar tag; Lconst(Const_base(Const_int t))], loc)
   in
   Llet
@@ -2572,7 +2572,7 @@ let zero_lam = Lconst (Const_base (Const_int 0))
 
 let tree_way_test loc kind arg lt eq gt =
   let lt_prim =
-    Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp = Clt}))
+    Pscalar (Binary (Icmp (Scalar.Integral.int, Clt)))
   in
   Lifthenelse
     ( Lprim (lt_prim, [ arg; zero_lam ], loc),
@@ -2690,8 +2690,8 @@ let rec do_tests_nofail value_kind loc tst arg = function
           act, value_kind )
 
 let make_test_sequence value_kind loc fail size arg const_lambda_list =
-  let icmp size cmp = Pscalar (Binary (Icmp {size; cmp })) in
-  let fcmp size cmp = Pscalar (Binary (Fcmp {size; cmp })) in
+  let icmp size cmp = Pscalar (Binary (Icmp (size, cmp))) in
+  let fcmp size cmp = Pscalar (Binary (Fcmp (size, cmp))) in
   let cmp cmp_if_i cmp_if_f =
     match (size : _ Scalar.t) with
     | Naked (Integral x) -> icmp (Naked x) cmp_if_i
@@ -2730,7 +2730,7 @@ let make_test_sequence value_kind loc fail size arg const_lambda_list =
 module SArg = struct
   type primitive = Lambda.primitive
   let pintcomp cmp =
-    Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp }))
+    Pscalar (Binary (Icmp (Scalar.Integral.int, cmp)))
 
   let eqint = pintcomp Ceq
 

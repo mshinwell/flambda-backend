@@ -124,17 +124,17 @@ module Lambda_utils = struct
 
       let ( / ) = binop (Integral (size, Div Unsafe))
 
-      let ( = ) = binop (Icmp { size; cmp = Ceq })
+      let ( = ) = binop (Icmp (size, Ceq))
 
-      let ( <> ) = binop (Icmp { size; cmp = Cne })
+      let ( <> ) = binop (Icmp (size, Cne))
 
-      let ( < ) = binop (Icmp { size; cmp = Clt })
+      let ( < ) = binop (Icmp (size, Clt))
 
-      let ( > ) = binop (Icmp { size; cmp = Cgt })
+      let ( > ) = binop (Icmp (size, Cgt))
 
-      let ( <= ) = binop (Icmp { size; cmp = Clt })
+      let ( <= ) = binop (Icmp (size, Clt))
 
-      let ( >= ) = binop (Icmp { size; cmp = Cgt })
+      let ( >= ) = binop (Icmp (size, Cgt))
 
       let ( && ) l r = Lprim (Psequand, [l; r], loc)
 
