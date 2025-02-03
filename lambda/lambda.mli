@@ -376,13 +376,23 @@ module Scalar : sig
       }
 
     module Unary : sig
+      module Int_op : sig
+        type t =
+          | Neg
+          | Succ (** add 1 *)
+          | Pred (** subtract 1 *)
+          | Bswap
+      end
+
+      module Float_op : sig
+        type t =
+          | Neg
+          | Abs
+      end
+
       type nonrec 'mode t =
-        | Neg of { size : 'mode Integral.t }
-        | Fneg of { size : 'mode Floating.t }
-        | Fabs of { size : 'mode Floating.t }
-        | Succ of { size : 'mode Integral.t }
-        | Pred of { size : 'mode Integral.t }
-        | Bswap of { size : 'mode Integral.t }
+        | Integral of 'mode Integral.t * Int_op.t
+        | Floating of 'mode Floating.t * Float_op.t
         | Static_cast of
             { src : any_locality_mode t;
               dst : 'mode t
@@ -393,37 +403,41 @@ module Scalar : sig
     end
 
     module Binary : sig
+      module Int_op : sig
+        type t =
+          | Add
+          | Sub
+          | Mul
+          | Div of is_safe
+          | Mod of is_safe
+          | And
+          | Or
+          | Xor
+      end
+
+      module Shift_op : sig
+        module Rhs : sig
+          (* CR jvanburen: add shift intrinsics that take other widths *)
+          type t = Tagged_immediate
+        end
+        type t =
+          | Lsl of { by : Rhs.t }
+          | Asr of { by : Rhs.t }
+          | Lsr of { by : Rhs.t }
+      end
+
+      module Float_op : sig
+        type t =
+          | Add
+          | Sub
+          | Mul
+          | Div
+      end
+
       type nonrec 'mode t =
-        | Add of { size : 'mode Integral.t }
-        | Fadd of { size : 'mode Floating.t }
-        | Sub of { size : 'mode Integral.t }
-        | Fsub of { size : 'mode Floating.t }
-        | Mul of { size : 'mode Integral.t }
-        | Fmul of { size : 'mode Floating.t }
-        | Div of
-            { size : 'mode Integral.t;
-              is_safe : is_safe
-            }
-        | Fdiv of { size : 'mode Floating.t }
-        | Mod of
-            { size : 'mode Integral.t;
-              is_safe : is_safe
-            }
-        | And of { size : 'mode Integral.t }
-        | Or of { size : 'mode Integral.t }
-        | Xor of { size : 'mode Integral.t }
-        | Lsl of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
-        | Asr of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
-        | Lsr of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
+        | Integral of 'mode Integral.t * Int_op.t
+        | Shift of 'mode Integral.t * Shift_op.t
+        | Floating of 'mode Floating.t * Float_op.t
         | Icmp of
             { size : any_locality_mode Integral.t;
               cmp : integer_comparison

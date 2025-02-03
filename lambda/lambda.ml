@@ -565,8 +565,6 @@ module Scalar = struct
   let naked_float32 : _ t = Naked Width.float32
   let naked_float : _ t = Naked Width.float
 
-
-
   let to_bytecode t = Bytecode.Value (width t)
 
   module Intrinsic = struct
@@ -581,14 +579,38 @@ module Scalar = struct
 
     module Unary = struct
       (* Remember to update [all] right below this if you add a constructor *)
+      module Int_op = struct
+        type t =
+          | Neg
+          | Succ (** add 1 *)
+          | Pred (** subtract 1 *)
+          | Bswap
+
+        let all = [ Neg; Succ; Pred; Bswap ]
+
+        let to_string = function
+          | Neg -> "neg"
+          | Succ -> "succ"
+          | Pred -> "pred"
+          | Bswap -> "bswap"
+      end
+
+      module Float_op = struct
+        type t =
+          | Neg
+          | Abs
+
+        let all = [ Neg; Abs ]
+
+        let to_string = function
+          | Neg -> "neg"
+          | Abs -> "abs"
+      end
+
       type nonrec 'mode t =
-        (* CR jvanburen: Not, Abs, float to/of bits *)
-        | Neg of { size : 'mode Integral.t }
-        | Fneg of { size : 'mode Floating.t }
-        | Fabs of { size : 'mode Floating.t }
-        | Succ of { size : 'mode Integral.t } (** add 1 *)
-        | Pred of { size : 'mode Integral.t } (** subtract 1 *)
-        | Bswap of { size : 'mode Integral.t }
+        (* CR jvanburen: logical Not, int Abs, float bitcast *)
+        | Integral of 'mode Integral.t * Int_op.t
+        | Floating of 'mode Floating.t * Float_op.t
         | Static_cast of
             { src : any_locality_mode t;
               dst : 'mode t
@@ -596,10 +618,10 @@ module Scalar = struct
 
       let all =
         List.concat
-          [ List.map (fun size -> Neg {size}) Integral.all
-          ; List.map (fun size -> Fneg {size}) Floating.all
-          ; List.map (fun size -> Fneg {size}) Floating.all
-          ; List.map (fun size -> Bswap {size}) Integral.all
+          [ ListLabels.concat_map Integral.all ~f:(fun size ->
+              ListLabels.map Int_op.all ~f:(fun op -> Integral (size, op)))
+          ; ListLabels.concat_map Floating.all ~f:(fun size ->
+              ListLabels.map Float_op.all ~f:(fun op -> Floating (size, op)))
           ; ListLabels.concat_map all ~f:(fun src ->
               ListLabels.concat_map all ~f:(fun dst ->
                 if src = dst then [] else [Static_cast {src; dst}]))
@@ -607,22 +629,14 @@ module Scalar = struct
 
       let map (type a b) (t : a t) ~(f : a -> b) : b t =
         match t with
-        | Neg { size } -> Neg { size = Integral.map size ~f }
-        | Fneg { size } -> Fneg { size  = Floating.map size ~f }
-        | Fabs { size } -> Fabs { size = Floating.map size ~f }
-        | Succ { size } -> Succ { size = Integral.map size ~f }
-        | Pred { size } -> Pred { size = Integral.map size ~f }
-        | Bswap { size } -> Bswap { size = Integral.map size ~f }
+        | Integral (size, op) -> Integral (Integral.map size ~f, op)
+        | Floating (size, op) -> Floating (Floating.map size ~f, op)
         | Static_cast { src; dst } -> Static_cast { src ; dst = map dst ~f }
 
       let info = function
-        | Neg { size  }
-        | Bswap { size }
-        | Succ { size }
-        | Pred { size }
-          -> { result = integral size; can_raise = false }
-        | Fneg { size }
-        | Fabs { size } ->
+        | Integral (size, (Neg | Bswap | Succ | Pred)) ->
+          { result = integral size; can_raise = false }
+        | Floating (size,  (Neg | Abs)) ->
           { result = floating size; can_raise = false }
         | Static_cast { src = _; dst } -> { result = dst; can_raise = false }
 
@@ -630,51 +644,101 @@ module Scalar = struct
         let i = Integral.to_string in
         let f = Floating.to_string in
         match t with
-        | Neg { size } -> i size ^ "_neg"
-        | Fneg { size } -> f size ^ "_neg"
-        | Fabs { size } -> f size ^ "_abs"
-        | Succ { size } -> i size ^ "_succ"
-        | Pred { size } -> i size ^ "_pred"
-        | Bswap { size } -> i size ^ "_bswap"
+        | Integral (size, op) ->
+          Printf.sprintf "%s_%s" (i size) (Int_op.to_string op)
+        | Floating (size, op) ->
+          Printf.sprintf "%s_%s" (f size) (Float_op.to_string op)
         | Static_cast { src; dst } ->
           Printf.sprintf "%s_of_%s" (to_string dst) (to_string src)
     end
 
     module Binary = struct
+      module Int_op = struct
+        type t =
+          | Add
+          | Sub
+          | Mul
+          | Div of is_safe
+          | Mod of is_safe
+          | And
+          | Or
+          | Xor
+
+        let all =
+          [ Add
+          ; Sub
+          ; Mul
+          ; Div Safe
+          ; Div Unsafe
+          ; Mod Safe
+          ; Mod Unsafe
+          ; And
+          ; Or
+          ; Xor
+          ]
+
+        let to_string = function
+          | Add -> "add"
+          | Sub -> "sub"
+          | Mul -> "mul"
+          | Div Safe -> "div"
+          | Div Unsafe -> "unsafe_div"
+          | Mod Safe -> "mod"
+          | Mod Unsafe -> "unsafe_mod"
+          | And -> "and"
+          | Or -> "or"
+          | Xor -> "xor"
+      end
+
+      module Shift_op = struct
+        module Rhs = struct
+          (* CR jvanburen: add shift intrinsics that take other widths *)
+          type t = Tagged_immediate
+
+          let all = [ Tagged_immediate ]
+        end
+
+        type t =
+          | Lsl of { by : Rhs.t }
+          | Asr of { by : Rhs.t }
+          | Lsr of { by : Rhs.t }
+
+        let all =
+          List.concat
+            [ List.map (fun by -> Lsl { by }) Rhs.all
+            ; List.map (fun by -> Asr { by }) Rhs.all
+            ; List.map (fun by -> Lsr { by }) Rhs.all
+            ]
+
+        let to_string = function
+          | Lsl { by = Tagged_immediate } -> "lsl"
+          | Asr { by = Tagged_immediate } -> "asr"
+          | Lsr { by = Tagged_immediate } -> "lsr"
+
+      end
+
+      module Float_op = struct
+        type t =
+          | Add
+          | Sub
+          | Mul
+          | Div
+
+        let all = [ Add; Sub; Mul; Div ]
+
+        let to_string = function
+          | Add -> "add"
+          | Sub -> "sub"
+          | Mul -> "mul"
+          | Div -> "div"
+      end
+
+
       type nonrec 'mode t =
         (* CR jvanburen: Fmod, Min, Max? *)
-        | Add of { size : 'mode Integral.t }
-        | Fadd of { size : 'mode Floating.t }
-        | Sub of { size : 'mode Integral.t }
-        | Fsub of { size : 'mode Floating.t }
-        | Mul of { size : 'mode Integral.t }
-        | Fmul of { size : 'mode Floating.t }
-        | Div of
-            { size : 'mode Integral.t;
-              is_safe : is_safe
-            }
-        | Fdiv of { size : 'mode Floating.t }
-        | Mod of
-            { size : 'mode Integral.t;
-              is_safe : is_safe
-            }
-        (* bitwise operators: *)
-        | And of { size : 'mode Integral.t }
-        | Or of { size : 'mode Integral.t }
-        | Xor of { size : 'mode Integral.t }
-        (* CR jvanburen: add shift intrinsics that take other widths *)
-        | Lsl of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
-        | Asr of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
-        | Lsr of
-            { size : 'mode Integral.t;
-              rhs : tagged_immediate
-            }
+        | Integral of 'mode Integral.t * Int_op.t
+        | Shift of 'mode Integral.t * Shift_op.t
+        | Floating of 'mode Floating.t * Float_op.t
         | Icmp of
             { size : any_locality_mode Integral.t;
               cmp : integer_comparison
@@ -687,22 +751,15 @@ module Scalar = struct
 
       let all =
         List.concat
-          [ List.map (fun size -> Add {size}) Integral.all
-          ; List.map (fun size -> Fadd {size}) Floating.all
-          ; List.map (fun size -> Sub {size}) Integral.all
-          ; List.map (fun size -> Fsub {size}) Floating.all
-          ; List.map (fun size -> Mul {size}) Integral.all
-          ; List.map (fun size -> Fmul {size}) Floating.all
-          ; List.map (fun size -> Div {size; is_safe = Safe}) Integral.all
-          ; List.map (fun size -> Div {size; is_safe = Unsafe}) Integral.all
-          ; List.map (fun size -> Mod {size; is_safe = Safe}) Integral.all
-          ; List.map (fun size -> Mod {size; is_safe = Unsafe}) Integral.all
-          ; List.map (fun size -> And {size}) Integral.all
-          ; List.map (fun size -> Or {size}) Integral.all
-          ; List.map (fun size -> Xor {size}) Integral.all
-          ; List.map (fun size -> Lsl {size; rhs = Tagged_immediate}) Integral.all
-          ; List.map (fun size -> Asr {size; rhs = Tagged_immediate}) Integral.all
-          ; List.map (fun size -> Lsr {size; rhs = Tagged_immediate}) Integral.all
+          [ ListLabels.concat_map Integral.all ~f:(fun size ->
+              ListLabels.map Int_op.all ~f:(fun op ->
+                Integral (size, op)))
+          ; ListLabels.concat_map Floating.all ~f:(fun size ->
+              ListLabels.map Float_op.all ~f:(fun op ->
+                Floating (size, op)))
+          ; ListLabels.concat_map Integral.all ~f:(fun size ->
+              ListLabels.map Shift_op.all ~f:(fun op ->
+                Shift (size, op)))
           ; ListLabels.concat_map all_integer_comparisons ~f:(fun cmp ->
               List.map (fun size -> Icmp {size; cmp}) Integral.all)
           ; ListLabels.concat_map all_float_comparisons ~f:(fun cmp ->
@@ -713,79 +770,50 @@ module Scalar = struct
       let to_string t =
         let i = Integral.to_string in
         let f = Floating.to_string in
+        let make size name =
+          String.concat "_" [ to_string size; name ]
+        in
         match t with
-        | Add { size } -> i size ^ "_add"
-        | Fadd { size } -> f size ^ "_add"
-        | Sub { size } -> i size ^ "_sub"
-        | Fsub { size } -> f size ^ "_sub"
-        | Mul { size } -> i size ^ "_mul"
-        | Fmul { size } -> f size ^ "_mul"
-        | Div { size; is_safe = Safe } -> i size ^ "_div"
-        | Div { size; is_safe = Unsafe } -> i size ^ "_div_unsafe"
-        | Fdiv { size } -> f size ^ "_div"
-        | Mod { size; is_safe = Safe } -> i size ^ "_mod"
-        | Mod { size; is_safe = Unsafe } -> i size ^ "_mod_unsafe"
-        | And { size } -> i size ^ "_and"
-        | Or { size } -> i size ^ "_or"
-        | Xor { size } -> i size ^ "_xor"
-        | Lsl { size; rhs = Tagged_immediate } -> i size ^ "_lsl"
-        | Asr { size; rhs = Tagged_immediate } -> i size ^ "_asr"
-        | Lsr { size; rhs = Tagged_immediate } -> i size ^ "_lsr"
+        | Integral (size, op) -> make (integral size) (Int_op.to_string op)
+        | Floating (size, op) -> make (floating size) (Float_op.to_string op)
+        | Shift (size, op) -> make (integral size) (Shift_op.to_string op)
         | Icmp { size; cmp = Ceq } -> i size ^ "_equal"
         | Icmp { size; cmp = Cne } -> i size ^ "_notequal"
         | Icmp { size; cmp = Cgt } -> i size ^ "_greaterthan"
         | Icmp { size; cmp = Cge } -> i size ^ "_greaterequal"
         | Icmp { size; cmp = Clt } -> i size ^ "_lessthan"
         | Icmp { size; cmp = Cle } -> i size ^ "_lessequal"
-        | Fcmp { size; cmp  = CFeq } -> f size ^ "_ordered_and_equal"
-        | Fcmp { size; cmp  = CFneq } -> f size ^ "_unordered_or_notequal"
+        | Fcmp { size; cmp = CFeq } -> f size ^ "_ordered_and_equal"
         | Fcmp { size; cmp = CFgt } -> f size ^ "_ordered_and_greaterthan"
         | Fcmp { size; cmp = CFge } -> f size ^ "_ordered_and_greaterequal"
         | Fcmp { size; cmp = CFlt } -> f size ^ "_ordered_and_lessthan"
         | Fcmp { size; cmp = CFle } -> f size ^ "_ordered_and_lessequal"
+        | Fcmp { size; cmp = CFneq } -> f size ^ "_unordered_or_notequal"
         | Fcmp { size; cmp = CFngt } -> f size ^ "_unordered_or_lessequal"
         | Fcmp { size; cmp = CFnge } -> f size ^ "_unordered_or_lessthan"
         | Fcmp { size; cmp = CFnlt } -> f size ^ "_unordered_or_greaterequal"
         | Fcmp { size; cmp = CFnle } -> f size ^ "_unordered_or_greaterthan"
-        | Three_way_compare { size } -> to_string size ^ "_compare"
+        | Three_way_compare { size } -> make size "compare"
 
       let map t ~f =
         match t with
-        | Add { size } -> Add { size = Integral.map size ~f }
-        | Fadd { size } -> Fadd { size = Floating.map size ~f }
-        | Sub { size } -> Sub { size = Integral.map size ~f }
-        | Fsub { size } -> Fsub { size = Floating.map size ~f }
-        | Mul { size } -> Mul { size = Integral.map size ~f }
-        | Fmul { size } -> Fmul { size = Floating.map size ~f }
-        | Div { size; is_safe } -> Div { size = Integral.map size ~f; is_safe }
-        | Fdiv { size } -> Fdiv { size = Floating.map size ~f }
-        | Mod { size; is_safe } -> Mod { size = Integral.map size ~f; is_safe }
-        | And { size } -> And { size = Integral.map size ~f }
-        | Or { size } -> Or { size = Integral.map size ~f }
-        | Xor { size } -> Xor { size = Integral.map size ~f }
-        | Lsl { size; rhs } -> Lsl { size = Integral.map size ~f; rhs }
-        | Asr { size; rhs } -> Asr { size = Integral.map size ~f; rhs }
-        | Lsr { size; rhs } -> Lsr { size = Integral.map size ~f; rhs }
-        | Icmp { size; cmp } -> Icmp {size; cmp }
-        | Fcmp { size; cmp } -> Fcmp {size; cmp}
+        | Integral (size, op) -> Integral (Integral.map size ~f, op)
+        | Floating (size, op) -> Floating (Floating.map size ~f, op)
+        | Shift (size, op) -> Shift (Integral.map size ~f, op)
+        | Icmp { size; cmp } -> Icmp { size; cmp }
+        | Fcmp { size; cmp } -> Fcmp { size; cmp }
         | Three_way_compare { size } -> Three_way_compare { size }
 
       let info = function
-        | Add { size }
-        | Sub { size }
-        | Mul { size }
-        | Div { size; is_safe = Unsafe }
-        | Mod { size; is_safe = Unsafe }
-        | And { size }
-        | Or { size }
-        | Xor { size }
-        | Lsl { size; rhs = Tagged_immediate }
-        | Asr { size; rhs = Tagged_immediate }
-        | Lsr { size; rhs = Tagged_immediate } ->
-          { result = integral size; can_raise = false }
-        | Div { size; is_safe = Safe } | Mod { size; is_safe = Safe } ->
+        | Integral (size, (Add | Sub | Mul | Div Unsafe | Mod Unsafe | And | Or | Xor))
+        | Shift (size, ( Lsl { by = Tagged_immediate }
+                       | Lsr { by = Tagged_immediate }
+                       | Asr { by = Tagged_immediate }))
+            ->
+            { result = integral size; can_raise = false }
+        | Integral (size, (Div Safe | Mod Safe)) ->
           { result = integral size; can_raise = true }
-        | Fadd { size } | Fsub { size } | Fmul { size } | Fdiv { size } ->
+        | Floating (size, (Add | Sub | Mul | Div)) ->
           { result = floating size; can_raise = false }
         | Icmp
             { size = (_ : any_locality_mode Integral.t);
@@ -3086,18 +3114,22 @@ let rec ignorable_product_element_kind_involves_int
 (* Functions for simulating naked int primitives. This is used for bytecode
    compilation which doesn't support naked int primitives directly *)
 
-let sign_extend_int arg ~bits ~loc =
-  let int_size = Lprim (Pctconst Int_size, [ Lconst const_unit ], loc) in
-  let unused_bits =
-    Lprim (Pscalar (Binary (Sub {size = Value (Taggable Int)})),
-           [int_size; Lconst(const_int bits)], loc) in
-  let left_aligned =
-    Lprim (Pscalar (Binary (Lsl {size = Value ((Taggable Int)); rhs = Tagged_immediate })),
-           [arg; unused_bits], loc)
-  in
-  Lprim (Pscalar (Binary (Asr {size = Value ((Taggable Int)); rhs = Tagged_immediate })), [left_aligned; unused_bits], loc)
-;;
-
 let unary p arg ~loc = Lprim (Pscalar (Unary p), [arg], loc)
 let binary p x y ~loc = Lprim (Pscalar (Binary p), [x; y], loc)
 let pintcomp cmp = Pscalar (Binary (Icmp {size = Scalar.Integral.int; cmp}))
+
+let sign_extend_int arg ~bits ~loc =
+  let int : _ Scalar.Integral.t = Value ((Taggable Int)) in
+  let int_size = Lprim (Pctconst Int_size, [ Lconst const_unit ], loc) in
+  let unused_bits =
+    binary
+      (Integral (int, Sub))
+      int_size
+      (Lconst(const_int bits))
+      ~loc
+  in
+  let left_aligned =
+    binary (Shift (int, Lsl {by = Tagged_immediate})) arg unused_bits ~loc
+  in
+  binary (Shift (int, Asr {by = Tagged_immediate})) left_aligned unused_bits ~loc
+;;

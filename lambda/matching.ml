@@ -2756,7 +2756,7 @@ module SArg = struct
   let make_offset arg n =
     match n with
     | 0 -> arg
-    | _ -> Lprim (Pscalar (Binary (Add {size = Scalar.Integral.int }) ), [ arg ; Lconst (const_int n)], Loc_unknown)
+    | _ -> Lprim (Pscalar (Binary (Integral (Scalar.Integral.int, Add))), [ arg ; Lconst (const_int n)], Loc_unknown)
 
   let bind arg body =
     let newvar, newarg =

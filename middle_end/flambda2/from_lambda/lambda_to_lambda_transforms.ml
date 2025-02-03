@@ -76,12 +76,12 @@ let rec_catch_for_for_loop env loc ident start stop
     match dir with
     | Upto ->
       L.Lprim
-        ( Pscalar (Unary (Succ { size = L.Scalar.Integral.int })),
+        ( Pscalar (Unary (Integral (L.Scalar.Integral.int, Succ))),
           [L.Lvar ident],
           loc )
     | Downto ->
       L.Lprim
-        ( Pscalar (Unary (Pred { size = L.Scalar.Integral.int })),
+        ( Pscalar (Unary (Integral (L.Scalar.Integral.int, Pred))),
           [L.Lvar ident],
           loc )
   in
@@ -146,7 +146,7 @@ let initialize_array0 env loc ~length array_set_kind width ~(init : L.lambda)
               Lprim
                 ( L.pintcomp Cne,
                   [ Lprim
-                      ( Pscalar (Binary (And { size = L.Scalar.Integral.int })),
+                      ( Pscalar (Binary (Integral (L.Scalar.Integral.int, And))),
                         [length; Lconst (L.const_int 1)],
                         loc );
                     Lconst (L.const_int 0) ],
@@ -164,7 +164,9 @@ let initialize_array0 env loc ~length array_set_kind width ~(init : L.lambda)
     rec_catch_for_for_loop env loc index
       (Lconst (L.const_int 0))
       (L.Lprim
-         (Pscalar (Unary (Pred { size = L.Scalar.Integral.int })), [length], loc))
+         ( Pscalar (Unary (Integral (L.Scalar.Integral.int, Pred))),
+           [length],
+           loc ))
       Upto
       (Lprim
          ( Parraysetu (array_set_kind, Ptagged_int_index),
@@ -494,8 +496,8 @@ let arrayblit env ~(src_mutability : L.mutable_flag)
     let dst_start_pos = id "dst_start_pos" in
     let length = id "length" in
     (* CR mshinwell: support indexing by other types apart from [int] *)
-    let paddint = L.Pscalar (Binary (Add { size = L.Scalar.Integral.int })) in
-    let psubint = L.Pscalar (Binary (Sub { size = L.Scalar.Integral.int })) in
+    let paddint = L.Pscalar (Binary (Integral (L.Scalar.Integral.int, Add))) in
+    let psubint = L.Pscalar (Binary (Integral (L.Scalar.Integral.int, Sub))) in
     let src_end_pos_exclusive =
       L.Lprim (paddint, [Lvar src_start_pos; Lvar length], loc)
     in
@@ -626,26 +628,13 @@ let transform_primitive0 env (prim : L.primitive) args loc =
     Misc.fatal_errorf "Pmakeblock with wrong or non-scannable block tag %d" tag
   | Pmakefloatblock (_mut, _mode), args when List.length args < 1 ->
     Misc.fatal_errorf "Pmakefloatblock must have at least one argument"
-  | Pfloatcomp (bf, CFnlt), args ->
-    Primitive (L.Pnot, [L.Lprim (Pfloatcomp (bf, CFlt), args, loc)], loc)
-  | Pfloatcomp (bf, CFngt), args ->
-    Primitive (L.Pnot, [L.Lprim (Pfloatcomp (bf, CFgt), args, loc)], loc)
-  | Pfloatcomp (bf, CFnle), args ->
-    Primitive (L.Pnot, [L.Lprim (Pfloatcomp (bf, CFle), args, loc)], loc)
-  | Pfloatcomp (bf, CFnge), args ->
-    Primitive (L.Pnot, [L.Lprim (Pfloatcomp (bf, CFge), args, loc)], loc)
-  | Punboxed_float_comp (bf, CFnlt), args ->
+  | ( Pscalar
+        (Binary
+          (Fcmp { size; cmp = (CFneq | CFnlt | CFngt | CFnle | CFnge) as cmp })),
+      args ) ->
+    let cmp = L.negate_float_comparison cmp in
     Primitive
-      (L.Pnot, [L.Lprim (Punboxed_float_comp (bf, CFlt), args, loc)], loc)
-  | Punboxed_float_comp (bf, CFngt), args ->
-    Primitive
-      (L.Pnot, [L.Lprim (Punboxed_float_comp (bf, CFgt), args, loc)], loc)
-  | Punboxed_float_comp (bf, CFnle), args ->
-    Primitive
-      (L.Pnot, [L.Lprim (Punboxed_float_comp (bf, CFle), args, loc)], loc)
-  | Punboxed_float_comp (bf, CFnge), args ->
-    Primitive
-      (L.Pnot, [L.Lprim (Punboxed_float_comp (bf, CFge), args, loc)], loc)
+      (L.Pnot, [L.Lprim (Pscalar (Binary (Fcmp { size; cmp })), args, loc)], loc)
   | Pbigarrayref (_unsafe, num_dimensions, kind, layout), args -> (
     (* CR mshinwell: factor out with the [Pbigarrayset] case *)
     match

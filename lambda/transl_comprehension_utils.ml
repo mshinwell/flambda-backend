@@ -116,13 +116,13 @@ module Lambda_utils = struct
 
       let size = Scalar.Integral.int
 
-      let ( + ) = binop (Add { size })
+      let ( + ) = binop (Integral (size, Add))
 
-      let ( - ) = binop (Sub { size })
+      let ( - ) = binop (Integral (size, Sub))
 
-      let ( * ) = binop (Mul { size })
+      let ( * ) = binop (Integral (size, Mul))
 
-      let ( / ) = binop (Div { size; is_safe = Unsafe })
+      let ( / ) = binop (Integral (size, Div Unsafe))
 
       let ( = ) = binop (Icmp { size; cmp = Ceq })
 

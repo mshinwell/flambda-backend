@@ -1411,6 +1411,14 @@ let opaque layout arg ~middle_end_only : H.expr_primitive list =
 let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     (dbg : Debuginfo.t) ~current_region ~current_ghost_region :
     H.expr_primitive list =
+  let naked_integral : unit L.Scalar.Integral.Width.t -> I.t = function
+    | Taggable Int8 -> I.Naked_int8
+    | Taggable Int16 -> I.Naked_int16
+    | Taggable Int -> I.Naked_immediate
+    | Boxable (Int32 Any_locality_mode) -> I.Naked_int32
+    | Boxable (Nativeint Any_locality_mode) -> I.Nativeint
+    | Boxable (Int64 Any_locality_mode) -> I.Naked_int64
+  in
   let orig_args = args in
   let args =
     List.map (List.map (fun arg : H.simple_or_prim -> Simple arg)) args
@@ -1598,6 +1606,14 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
           Printlambda.primitive prim
     in
     [Unary (Duplicate_block { kind }, arg)]
+  | Pscalar (Unary unary), [[arg]] -> (
+    let naked_neg size arg =
+      Unary (Int_arith (naked_integral size, Neg), arg)
+    in
+    match unary with
+    | Neg { size = Naked x } -> [naked_neg x arg]
+    | Neg { size = Value x } ->
+      [tag_int (naked_neg (naked_integral x) (untag_int arg))])
   | Pnegint, [[arg]] -> [Unary (Int_arith (I.Tagged_immediate, Neg), arg)]
   | Paddint, [[arg1]; [arg2]] ->
     [Binary (Int_arith (I.Tagged_immediate, Add), arg1, arg2)]
