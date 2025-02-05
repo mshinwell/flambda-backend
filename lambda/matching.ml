@@ -2756,7 +2756,7 @@ module SArg = struct
   let make_offset arg n =
     match n with
     | 0 -> arg
-    | _ -> Lprim (Pscalar (Binary (Integral (Scalar.Integral.int, Add))), [ arg ; Lconst (const_int n)], Loc_unknown)
+    | _ -> Lambda.add int arg (lconst_int int n) ~loc:Loc_unknown
 
   let bind arg body =
     let newvar, newarg =
@@ -3279,7 +3279,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
                   (fun (path, act) rem ->
                     let ext = transl_extension_path loc pat_env path in
                     Lifthenelse
-                      (Lprim (pintcomp Ceq, [ Lvar tag; ext ], loc), act, rem, value_kind))
+                      (icmp Ceq int ~loc (Lvar tag) ext, act, rem, value_kind))
                   nonconsts default
               in
               let ubr = Translmode.transl_unique_barrier pat_barrier in
@@ -3292,7 +3292,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
         List.fold_right
           (fun (path, act) rem ->
             let ext = transl_extension_path loc pat_env path in
-            Lifthenelse (Lprim (pintcomp Ceq, [ arg; ext ], loc), act, rem,
+            Lifthenelse (icmp Ceq int ~loc arg ext, act, rem,
                          value_kind))
           consts nonconst_lambda
       in

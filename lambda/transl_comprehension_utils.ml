@@ -32,7 +32,7 @@ end
 
 module Lambda_utils = struct
   module Constants = struct
-    let int n = Lconst (const_int n)
+    let int n = Lconst (const_int Scalar.Integral.int n)
 
     let float f = Lconst (Const_base (Const_float (Float.to_string f)))
 

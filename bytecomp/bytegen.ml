@@ -148,14 +148,9 @@ let preserve_tailcall_for_prim = function
   ->
       true
   | Pscalar (Unary (Static_cast {src; dst})) ->
-    Scalar.to_bytecode src = Scalar.to_bytecode dst
-  | Pscalar (Unary (Neg _ | Fneg _ | Fabs _ | Bswap _)
-            | Binary (Add _ | Fadd _ | Sub _ | Fsub _ | Mul _ | Fmul _
-                     | Div _ | Fdiv _ | Mod _
-                     | And _ | Or _ | Xor _ | Lsl _ | Lsr _ | Asr _
-                     | Icmp _ | Fcmp _ | Three_way_compare _
-                     )
-            )
+    (* no-op *)
+    Scalar.to_bytecode src = Scalar.to_bytecode (Scalar.ignore_locality dst)
+  | Pscalar _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
   | Pget_header _
@@ -170,11 +165,10 @@ let preserve_tailcall_for_prim = function
   | Pccall _ | Praise _ | Pnot
   | Poffsetref _
   | Pstringlength | Pstringrefu  | Pstringrefs
-  | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
   | Pmakearray_dynamic _ | Parrayblit _
-  | Parrayrefs _ | Parraysets _ | Pisint _ | Pisnull | Pisout | Pbintofint _ | Pintofbint _
+  | Parrayrefs _ | Parraysets _ | Pisint _ | Pisnull | Pisout
 
   | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _
   | Pstring_load_16 _ | Pstring_load_32 _ | Pstring_load_f32 _
@@ -390,6 +384,12 @@ let check_stack stack_info sz =
 (* Translate a primitive to a bytecode instruction (possibly a call to a C
    function) *)
 
+
+
+
+
+
+
 let comp_bint_primitive bi suff args =
   let pref =
     match bi with Boxed_nativeint -> "caml_nativeint_"
@@ -400,7 +400,8 @@ let comp_bint_primitive bi suff args =
 let indexing_primitive (index_kind : Lambda.array_index_kind) prefix =
   let suffix =
     match index_kind with
-    | Ptagged_int_index -> ""
+    | Ptagged_int_index
+    | Punboxed_int_index Unboxed_immediate -> ""
     | Punboxed_int_index Unboxed_int64 -> "_indexed_by_int64"
     | Punboxed_int_index Unboxed_int32 -> "_indexed_by_int32"
     | Punboxed_int_index Unboxed_int16 -> "_indexed_by_int16"
@@ -415,11 +416,45 @@ let comp_primitive stack_info p sz args =
     Pgetglobal cu -> Kgetglobal cu
   | Psetglobal cu -> Ksetglobal cu
   | Pgetpredef id -> Kgetpredef id
-  | Pintcomp cmp -> Kintcomp cmp
-  | Pcompare_ints -> Kccall("caml_int_compare", 2)
-  | Pcompare_floats Boxed_float64 -> Kccall("caml_float_compare", 2)
-  | Pcompare_floats Boxed_float32 -> Kccall("caml_float32_compare", 2)
-  | Pcompare_bints bi -> comp_bint_primitive bi "compare" args
+  | Pscalar (Binary (Three_way_compare size)) ->
+    let ty =
+      match Scalar.to_bytecode size with
+      | Immediate (Int8 | Int16 | Int) -> "int"
+      | Boxed b -> Scalar.Bytecode.Boxed.to_string b
+    in
+    Kccall (Printf.sprintf "caml_%s_compare" ty, 2)
+  | Pscalar (Binary (Icmp (size, cmp))) ->
+    (match Scalar.Integral.to_bytecode size with
+      | Immediate (Int8 | Int16 | Int) -> Kintcomp cmp
+      | Boxed (Int32 | Int64 | Nativeint) ->
+        match cmp with
+        | Ceq -> Kccall("caml_equal", 2)
+        | Cne -> Kccall("caml_notequal", 2)
+        | Clt -> Kccall("caml_lessthan", 2)
+        | Cgt -> Kccall("caml_greaterthan", 2)
+        | Cle -> Kccall("caml_lessequal", 2)
+        | Cge -> Kccall("caml_greaterequal", 2))
+  | Pscalar (Binary (Integral (size, op))) ->
+    match Scalar.Integral.to_bytecode size with
+    | Immediate (Int8 | Int16 | Int) ->
+      match op with
+      | Add -> Kaddint
+      | Sub -> Ksubint
+      | Mul -> Kmulint
+      | Div (Safe | Unsafe) -> Kdivint
+      | Mod (Safe | Unsafe) -> Kmodint
+      | And -> Kandint
+      | Or -> Korint
+      | Xor -> Kxorint
+      | Plslint -> Klslint
+      | Plsrint -> Klsrint
+      | Pasrint -> Kasrint
+      Kintop op
+    | Boxed (Int32 | Int64 | Nativeint) ->
+      Kintop op
+
+
+
   | Pfield (n, _ptr, _sem) -> Kgetfield n
   | Punboxed_product_field (n, _layouts) -> Kgetfield n
   | Parray_element_size_in_bytes _array_kind ->
@@ -738,20 +773,24 @@ let comp_primitive stack_info p sz args =
   | Pnot | Psequand | Psequor
   | Praise _
   | Pmakearray _ | Pduparray _
-  | Pfloatcomp (_, _) | Punboxed_float_comp (_, _)
+  | Pscalar (Binary (Fcmp _))
   | Pmakeblock _
   | Pmake_unboxed_product _
   | Pmakefloatblock _
   | Pmakeufloatblock _
   | Pmakemixedblock _
   | Pprobe_is_enabled _
-  | Punbox_float _ | Pbox_float (_, _) | Punbox_int _ | Pbox_int _
   | Ptag_int _ | Puntag_int _
-  | Pnaked_int_cast _ | Pnaked_int_binop _ | Pnaked_int_cmp _
     ->
       fatal_error "Bytegen.comp_primitive"
   | Ppeek _ | Ppoke _ ->
       fatal_error "Bytegen.comp_primitive: Ppeek/Ppoke not supported in bytecode"
+
+type smallint = I8 | I16
+
+let smallint_bits = function | I8 -> 8 | I16 -> 16
+
+
 
 let is_immed n = immed_min <= n && n <= immed_max
 
@@ -798,6 +837,24 @@ let rec translate_float32s stack_info env cst sz cont =
 
 and comp_expr stack_info env exp sz cont =
   check_stack stack_info sz;
+  let extend_int ~bits arg ~signed ~loc =
+    let int = Scalar.Integral.int in
+    let int_size = Lprim (Pctconst Int_size, [ Lconst const_unit ], loc) in
+    let unused_bits =
+      binary
+        (Integral (Scalar.Integral.int, Sub))
+        int_size
+        (Lconst(const_int bits))
+        ~loc
+    in
+    let left_aligned =
+      binary (Shift (int, Lsl, Tagged_immediate)) arg unused_bits ~loc
+    in
+    let shr = if signed then Asr else Lsr in
+    binary (Shift (int, shr, Tagged_immediate)) left_aligned unused_bits ~loc
+  in
+  let sign_extend = extend_int ~signed:true in
+  let zero_extend = extend_int ~signed:false in
   match exp with
     Lvar id | Lmutvar id ->
       begin try
@@ -1106,6 +1163,163 @@ and comp_expr stack_info env exp sz cont =
       let nargs = List.length args - 1 in
       comp_args stack_info env args sz
         (comp_primitive stack_info p (sz + nargs - 1) args :: cont)
+  | Lprim (Pscalar op, args, loc) ->
+    let expand exp =
+      comp_expr stack_info env exp sz cont
+    in
+    let continue args cont =
+      comp_args stack_info env args sz cont
+    in
+    let prim args prim =
+      continue args (prim :: cont)
+    in
+    let kccall args fmt =
+      Printf.ksprintf (fun name ->
+        prim args (Kccall(name, List.length args)))
+        fmt
+    in
+    let boxed_int i = function
+      | Boxed_int32 -> Lconst (Const_base (Const_int32 (Int32.of_int i)))
+      | Boxed_int64 -> Lconst (Const_base (Const_int64 (Int64.of_int i)))
+      | Boxed_nativeint ->
+        Lconst (Const_base (Const_nativeint (Nativeint.of_int i)))
+    in
+    (match op, args with
+     | Unary unary, [arg] ->
+       (* we don't need to sign- or zero-extend the inputs because tagged small integers are
+          always stored sign-extended *)
+       match unary with
+       | Integral (size, op) ->
+         (
+           match Scalar.Integral.to_bytecode size, op with
+           | Immediate Int, Neg -> prim args Knegint
+           | Immediate Int, Bswap -> c args "caml_bswap16"
+           | Immediate Int, Succ -> prim args (Koffsetint 1)
+           | Immediate Int, Pred -> prim args (Koffsetint (-1))
+           | Immediate Int8, Neg ->
+           | Boxed size, Neg ->
+             c "caml_%s_neg" (Scalar.Bytecode.Integral.Boxed.to_string size)
+           | Boxed size, Bswap ->
+             c "caml_%s_bswap" (Scalar.Bytecode.Integral.Boxed.to_string size)
+           | Boxed boxed, Succ ->
+             expand (binary ~loc (Integral (size, Add)) arg (boxed_int 1 boxed))
+           | Boxed boxed, Pred ->
+             expand (binary ~loc (Integral (size, Sub)) arg (boxed_int 1 boxed))
+         )
+
+
+
+
+         handle_sizes size (fun width ->
+           match op, width with
+           | Bswap, I8 -> arg
+           | (Neg | Succ | Pred), (I8 | I16)
+           | Bswap, I16
+             ->
+             sign_extend
+               width
+               (Lprim (Pscalar (Unary (Scalar.Integral.int, op)), args, loc)))
+       | Floating (size, op) ->
+         let size = Scalar.Floating.to_bytecode size in
+         match op with
+         |
+         Kccall("caml_abs_float", 1)
+
+
+
+       | Static_cast { src; dst } ->
+         let cast_immediate ~src ~dst arg =
+           match (src : Scalar.Bytecode.Integral.Immediate.t),
+                 (dst : Scalar.Bytecode.Integral.Immediate.t) with
+           | Int8, (Int8 | Int16 | Int)
+           | Int16, (Int16 | Int)
+           | Int, Int -> arg
+           | (Int | Int16), Int8 -> sign_extend I8 arg
+           | Int, Int16 -> sign_extend I16 arg
+         in
+         let cast_boxed ~src ~dst arg =
+           let to_scalar (boxed : boxed_integer)
+     let src =
+       match (src : boxed_integer) with
+       | Boxed_int32 -> Scalar.int32
+       | Boxed_int64 -> Value (Integral (Boxable (Int64 alloc_heap)))
+                          match , (dst : boxed_integer) with
+                          | Boxed_int32, Boxed_int32
+                          | Boxed_int64, Boxed_int64
+                          | Boxed_nativeint, Boxed_nativeint -> arg
+                          | (Boxed_int32 | Boxed_nativeint as src), Boxed_int64 ->
+
+                          | Int16, (Int16 | Int)
+                          | Int, Int -> arg
+                          | (Int | Int16), Int8 -> sign_extend I8 arg
+                          | Int, Int16 -> sign_extend I16 arg
+     in
+     let src = Scalar.to_bytecode src in
+     let dst = Scalar.to_bytecode dst in
+     if src = dst then arg
+     else
+       match src, dst with
+       | Immediate src, Immediate dst ->
+         cast_immediate ~src ~dst arg
+       | Boxed src, Boxed dst ->
+
+    )
+  | Lprim (Pscalar (Binary (Integral (size, op))), args, loc) ->
+    ( match Scalar.Integral.to_bytecode size with
+      | Boxed size ->
+        let c name =
+          let size = Scalar.Bytecode.Boxed.to_string size in
+          let prim =
+            Kccall (Printf.sprintf "caml_%s_%s" name size, List.length args)
+          in
+          comp_args stack_info env args sz (prim :: cont)
+        in
+        (match op with
+         | Add -> c "add"
+         | Sub -> c "sub"
+         | Mul -> c "mul"
+         | Div (Safe | Unsafe) -> c "div"
+         | Mod (Safe | Unsafe) -> c "mod"
+         | And -> c "and"
+         | Or -> c "or"
+         | Xor -> c "xor")
+      | Immediate size ->
+        let comp_int op cont =
+          let c prim =
+            comp_args stack_info env args sz (prim :: cont)
+          in
+          match op with
+          | Add -> c Kaddint
+          | Sub -> c Ksubint
+          | Mul -> c Kmulint
+          | Div (Safe | Unsafe) -> c Kdivint
+          | Mod (Safe | Unsafe) -> c Kmodint
+          | And -> c Kandint
+          | Or,-> c Korint
+          | Xor -> c Kxorint
+        in
+        match size with
+        | Int -> comp_int op cont
+        | Int8 ->
+          let exp =
+        | Lprim (Pscalar (Binary (Integral (Scalar.Integral.int, op)), args, loc)) ->
+            Lambda.sign_extend_int ~bits:8
+            stuff
+          in
+          comp_expr
+            stack_info
+            env
+            exp
+            sz
+            cont
+            stack_info
+
+
+
+
+
+    )
+
   | Lprim (Pfloatcomp (Boxed_float64, cmp), args, _) | Lprim (Punboxed_float_comp (Unboxed_float64, cmp), args, _) ->
       let cont =
         match cmp with

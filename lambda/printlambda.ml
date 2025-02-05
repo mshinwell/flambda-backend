@@ -54,6 +54,8 @@ let boxed_vector = function
   | Boxed_vec128 -> "vec128"
 
 let rec struct_const ppf = function
+  | Const_naked_immediate (i, (Int8 | Int16 | Int)) ->
+    fprintf ppf "%s" (Misc.format_as_unboxed_literal (Int.to_string i))
   | Const_base(Const_int n) -> fprintf ppf "%i" n
   | Const_base(Const_char c) -> fprintf ppf "%C" c
   | Const_base(Const_string (s, _, _)) -> fprintf ppf "%S" s

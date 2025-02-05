@@ -230,7 +230,40 @@ module Maybe_naked :  sig
 end
 
 module Scalar : sig
+  module Bytecode : sig
+  module Integral : sig
+    module Immediate : sig
+      type t = Int8 | Int16 | Int
+
+      val compare_size : t -> t -> int
+    end
+    module Boxed :
+    sig
+      type t =
+        boxed_integer =
+          Boxed_int64
+        | Boxed_nativeint
+        | Boxed_int32
+      val to_string : t -> label
+    end
+    type t = Immediate of Immediate.t | Boxed of boxed_integer
+  end
+  module Floating :
+  sig
+    type t = boxed_float = Boxed_float64 | Boxed_float32
+    val to_string : t -> label
+  end
+  module Boxed :
+  sig
+    type t = Int of boxed_integer | Float of boxed_float
+    val to_string : t -> label
+  end
+  type t = Immediate of Integral.Immediate.t | Boxed of Boxed.t
+  val integral : Integral.t -> t
+  val floating : Floating.t -> t
+end
   module type S := sig
+      type bytecode
       type 'a width
       type nonrec 'a t = ('a width, any_locality_mode width) Maybe_naked.t
 
@@ -241,6 +274,7 @@ module Scalar : sig
       val width : any_locality_mode t -> any_locality_mode width
       val layout : any_locality_mode t -> layout
       val to_string : any_locality_mode t -> string
+      val to_bytecode : _ t -> bytecode
     end
 
   module type Integral_width_constants := sig
@@ -281,17 +315,19 @@ module Scalar : sig
   module Integral : sig
     module Taggable : sig
       module Width : sig
-        type t =
+        type t = Bytecode.Integral.Immediate.t =
           | Int8
           | Int16
           | Int
 
-        val compare_sizes : t -> t -> int
+        val compare_size : t -> t -> int
         val to_unboxed_integer : t -> unboxed_integer
         val to_string : t -> string
+        val to_bytecode : t -> Bytecode.Integral.Immediate.t
       end
 
       include S with type 'a width := Width.t
+                 and type bytecode := Bytecode.Integral.Immediate.t
     end
 
     module Boxable : sig
@@ -306,9 +342,11 @@ module Scalar : sig
         val locality_mode : locality_mode t -> locality_mode option
         val to_boxed_integer : any_locality_mode t -> boxed_integer
         val to_unboxed_integer : any_locality_mode t -> unboxed_integer
+        val to_bytecode : _ t -> Bytecode.Integral.Boxed.t
       end
 
       include S with type 'a width := 'a Width.t
+                 and type bytecode := Bytecode.Integral.Boxed.t
     end
 
     module Width : sig
@@ -319,10 +357,12 @@ module Scalar : sig
       val map : 'a t -> f:('a -> 'b) -> 'b t
       val locality_mode : locality_mode t -> locality_mode option
       val to_unboxed_integer : any_locality_mode t -> unboxed_integer
+      val to_bytecode : _ t -> Bytecode.Integral.t
       include Integral_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
+               and type bytecode := Bytecode.Integral.t
     include Integral_constants with type 'a t := 'a t
   end
 
@@ -337,10 +377,12 @@ module Scalar : sig
       val locality_mode : locality_mode t -> locality_mode option
       val to_boxed_float : any_locality_mode t -> boxed_float
       val to_unboxed_float : any_locality_mode t -> unboxed_float
+      val to_bytecode : _ t -> Bytecode.Floating.t
       include Float_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
+               and type bytecode := Bytecode.Floating.t
     include Float_constants with type 'a t := 'a t
   end
 
@@ -350,24 +392,21 @@ module Scalar : sig
       | Integral of 'mode Integral.Width.t
 
     val map : 'a t -> f:('a -> 'b) -> 'b t
-
     val locality_mode : locality_mode t -> locality_mode option
+    val to_bytecode : _ t -> Bytecode.t
 
     include Integral_width_constants with type 'a t := 'a t
     include Float_width_constants with type 'a t := 'a t
   end
 
-  module Bytecode : sig
-    type nonrec t = Value of any_locality_mode Width.t
-  end
-
   include S with type 'a width := 'a Width.t
+             and type bytecode := Bytecode.t
   include Integral_constants with type 'a t := 'a t
   include Float_constants with type 'a t := 'a t
 
   val integral : 'a Integral.t -> 'a t
   val floating : 'a Floating.t -> 'a t
-  val to_bytecode : any_locality_mode t -> Bytecode.t
+  val to_bytecode : _ t -> Bytecode.t
 
   module Intrinsic : sig
     type 'mode info =
@@ -785,6 +824,8 @@ val layout_of_extern_repr : extern_repr -> layout
 
 type structured_constant =
     Const_base of constant
+  | Const_naked_immediate of int * Scalar.Integral.Taggable.Width.t
+  (** this is a stopgap until naked immediate values exist in [constant] *)
   | Const_block of int * structured_constant list
   | Const_mixed_block of int * mixed_block_shape * structured_constant list
   | Const_float_array of string list
@@ -1137,7 +1178,8 @@ type arg_descr =
 val make_key: lambda -> lambda option
 
 val const_unit: structured_constant
-val const_int : int -> structured_constant
+val const_int : any_locality_mode Scalar.Integral.t -> int -> structured_constant
+val lconst_int : any_locality_mode Scalar.Integral.t -> int -> lambda
 val lambda_unit: lambda
 
 val of_bool : bool -> lambda
@@ -1411,9 +1453,32 @@ val count_initializers_array_kind : array_kind -> int
 val ignorable_product_element_kind_involves_int :
   ignorable_product_element_kind -> bool
 
-val sign_extend_int : lambda -> bits:int -> loc:scoped_location -> lambda
-
 val equal_unboxed_integer : unboxed_integer -> unboxed_integer -> bool
-val unary : locality_mode Scalar.Intrinsic.Unary.t -> lambda -> loc:scoped_location -> lambda
-val binary : locality_mode Scalar.Intrinsic.Binary.t -> lambda -> lambda -> loc:scoped_location -> lambda
-val pintcomp : integer_comparison -> primitive
+
+val unary
+  : locality_mode Scalar.Intrinsic.Unary.t
+  -> lambda
+  -> loc:scoped_location
+  -> lambda
+
+val binary
+  :  locality_mode Scalar.Intrinsic.Binary.t
+  -> lambda
+  -> lambda
+  -> loc:scoped_location
+  -> lambda
+
+(** construction helpers *)
+
+val int : _ Scalar.Integral.t
+
+type 'a unop := 'a -> lambda -> loc:scoped_location -> lambda
+val succ : locality_mode Scalar.Integral.t unop
+val pred : locality_mode Scalar.Integral.t unop
+
+type 'a binop := 'a -> lambda -> lambda -> loc:scoped_location -> lambda
+
+val add : locality_mode Scalar.Integral.t binop
+val sub : locality_mode Scalar.Integral.t binop
+val and_ : locality_mode Scalar.Integral.t binop
+val icmp : integer_comparison -> any_locality_mode Scalar.Integral.t binop

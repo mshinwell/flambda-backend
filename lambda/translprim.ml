@@ -1703,7 +1703,7 @@ let lambda_of_prim prim_name prim loc args arg_exps =
   | Primitive (prim, arity), args when arity = List.length args ->
       Lprim(prim, args, loc)
   | Sys_argv, [] ->
-      Lprim(Pccall prim_sys_argv, [Lconst (const_int 0)], loc)
+      Lprim(Pccall prim_sys_argv, [lambda_unit], loc)
   | External prim, args ->
       Lprim(Pccall prim, args, loc)
   | Comparison(comp, knd), ([_;_] as args) ->
@@ -1755,10 +1755,7 @@ let lambda_of_prim prim_name prim loc args arg_exps =
       else
         Lsend(Public, meth, obj, [], apos, alloc_heap, loc, layout)
   | Frame_pointers, [] ->
-      let frame_pointers =
-        if !Clflags.native_code && Config.with_frame_pointers then 1 else 0
-      in
-      Lconst (const_int frame_pointers)
+     (of_bool (!Clflags.native_code && Config.with_frame_pointers))
   | Identity, [arg] -> arg
   | Apply (pos, layout), [func; arg]
   | Revapply (pos, layout), [arg; func] ->
@@ -1955,15 +1952,12 @@ let lambda_primitive_needs_event_after = function
     let { can_raise; result } : _  Scalar.Intrinsic.info =
       Scalar.Intrinsic.info op
     in
-    can_raise ||
-    (match Scalar.to_bytecode (Scalar.ignore_locality result) with
-      | Value (Integral (Taggable (Int | Int16 | Int8)) ) -> false
-      | Value(Integral (Boxable (Int32 Any_locality_mode
-                                | Int64 Any_locality_mode
-                                | Nativeint Any_locality_mode))
-             | Floating (Float32 Any_locality_mode
-                        | Float64 Any_locality_mode)) ->
-        true)
+    let may_allocate =
+      match Scalar.to_bytecode result with
+      | Immediate _ -> false
+      | Boxed _ -> true
+    in
+    can_raise || may_allocate
   | Pduprecord _ | Pccall _
   | Pstringrefs | Pbytesrefs
   | Pbytessets | Pmakearray (Pgenarray, _, _) | Pduparray _

@@ -56,7 +56,7 @@ let rec eliminate_ref id = function
             binary ~loc
               (Integral (Scalar.Integral.int, Add))
               (Lmutvar id)
-              (Lconst (const_int delta)))
+              (Lconst (const_int Scalar.Integral.int delta)))
   | Lprim(p, el, loc) ->
       Lprim(p, List.map (eliminate_ref id) el, loc)
   | Lswitch(e, sw, loc, kind) ->

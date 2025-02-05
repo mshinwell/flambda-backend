@@ -520,7 +520,7 @@ let rec split_static_function lfun block_var local_idents lam :
                    [Lvar block_var],
                    no_loc)
           in
-          (succ i, Ident.Map.add var access subst, Lvar var :: fields))
+          (Stdlib.succ i, Ident.Map.add var access subst, Lvar var :: fields))
         local_free_vars (0, Ident.Map.empty, [])
     in
     (* Note: When there are no local free variables, we don't need the
@@ -909,7 +909,7 @@ let compile_letrec input_bindings body =
         in
         let alloc =
           Lprim (Pccall alloc_prim,
-                 List.map (fun n -> Lconst (Lambda.const_int n)) const_args,
+                 List.map (fun n -> Lconst (Lambda.const_int int n)) const_args,
                  no_loc)
         in
         Llet(Strict, Lambda.layout_letrec, id, alloc, body))
