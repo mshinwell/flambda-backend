@@ -633,7 +633,7 @@ let transform_primitive0 env (prim : L.primitive) args loc =
       args ) ->
     let cmp = L.negate_float_comparison cmp in
     Primitive
-      (L.Pnot, [L.Lprim (Pscalar (Binary (Fcmp { size; cmp })), args, loc)], loc)
+      (L.Pnot, [L.Lprim (Pscalar (Binary (Fcmp (size, cmp))), args, loc)], loc)
   | Pbigarrayref (_unsafe, num_dimensions, kind, layout), args -> (
     (* CR mshinwell: factor out with the [Pbigarrayset] case *)
     match

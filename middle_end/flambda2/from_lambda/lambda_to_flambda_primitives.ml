@@ -51,13 +51,6 @@ let boxable_number_of_boxed_integer (bint : L.boxed_integer) :
   | Boxed_int32 -> Naked_int32
   | Boxed_int64 -> Naked_int64
 
-let standard_int_of_boxed_integer (bint : Primitive.boxed_integer) :
-    K.Standard_int.t =
-  match bint with
-  | Boxed_nativeint -> Naked_nativeint
-  | Boxed_int32 -> Naked_int32
-  | Boxed_int64 -> Naked_int64
-
 let standard_int_of_unboxed_integer : L.unboxed_integer -> K.Standard_int.t =
   function
   | Unboxed_int8 -> Naked_int8
@@ -76,12 +69,6 @@ let standard_int_or_float_of_unboxed_integer (ubint : L.unboxed_integer) :
   | Unboxed_int16 -> Naked_int16
   | Unboxed_int32 -> Naked_int32
   | Unboxed_int64 -> Naked_int64
-
-let standard_int_or_float_of_boxed_integer :
-    L.boxed_integer -> K.Standard_int_or_float.t = function
-  | Boxed_int32 -> Naked_int32
-  | Boxed_int64 -> Naked_int64
-  | Boxed_nativeint -> Naked_nativeint
 
 let standard_int_or_float_of_peek_or_poke (layout : L.peek_or_poke) :
     K.Standard_int_or_float.t =
@@ -517,14 +504,6 @@ let box_bint bi mode (arg : H.expr_primitive) ~current_region : H.expr_primitive
 let unbox_bint bi (arg : H.simple_or_prim) : H.simple_or_prim =
   Prim (Unary (Unbox_number (boxable_number_of_boxed_integer bi), arg))
 
-let box_vec128 mode (arg : H.expr_primitive) ~current_region : H.expr_primitive
-    =
-  Unary
-    ( Box_number
-        ( Naked_vec128,
-          Alloc_mode.For_allocations.from_lambda mode ~current_region ),
-      Prim arg )
-
 let static_cast ~src ~dst arg ~current_region : H.expr_primitive =
   (* strip [arg] *)
   let standard_int_or_float_of_scalar_width :
@@ -593,76 +572,6 @@ let static_cast ~src ~dst arg ~current_region : H.expr_primitive =
     match (arg : H.simple_or_prim) with
     | Prim prim -> prim
     | Simple simple -> Simple simple)
-
-let wrap_scalar scalar arg ~current_region : H.expr_primitive =
-  let prim =
-    let box_number width mode : P.unary_primitive =
-      let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
-      Box_number (width, mode)
-    in
-    match (scalar : L.locality_mode L.Scalar.Width.t) with
-    | Integral (Taggable (Int8 | Int16 | Int)) -> P.Tag_immediate
-    | Floating (Float32 mode) -> box_number Naked_float32 mode
-    | Floating (Float64 mode) -> box_number Naked_float mode
-    | Integral (Boxable (Int32 mode)) -> box_number Naked_int32 mode
-    | Integral (Boxable (Nativeint mode)) -> box_number Naked_nativeint mode
-    | Integral (Boxable (Int64 mode)) -> box_number Naked_int64 mode
-  in
-  Unary (prim, Prim arg)
-
-let maybe_wrap_integral i ~current_region =
-  match (i : L.locality_mode L.Scalar.Integral.t) with
-  | Naked width -> width, fun x -> x
-  | Value i ->
-    ( L.Scalar.Integral.Width.map i ~f:(fun (L.Alloc_heap | L.Alloc_local) ->
-          L.Any_locality_mode),
-      fun arg -> wrap_scalar (Integral i) arg ~current_region )
-
-let maybe_wrap_floating i ~current_region =
-  match (i : L.locality_mode L.Scalar.Floating.t) with
-  | Naked width -> width, fun x -> x
-  | Value i ->
-    ( L.Scalar.Floating.Width.map i ~f:(fun (L.Alloc_heap | L.Alloc_local) ->
-          L.Any_locality_mode),
-      fun arg -> wrap_scalar (Floating i) arg ~current_region )
-
-(* let maybe_wrap_scalar scalar ~current_region =
- *   match (scalar : L.locality_mode L.Scalar.t) with
- *   | Naked width -> width, fun x -> x
- *   | Value scalar ->
- *     let prim =
- *       let box_number width mode : P.unary_primitive =
- *         let mode =
- *           Alloc_mode.For_allocations.from_lambda mode ~current_region
- *         in
- *         Box_number (width, mode)
- *       in
- *       match (scalar : L.locality_mode L.Scalar.Width.t) with
- *       | Integral (Taggable (Int8 | Int16 | Int)) -> P.Tag_immediate
- *       | Floating (Float32 mode) -> box_number Naked_float32 mode
- *       | Floating (Float64 mode) -> box_number Naked_float64 mode
- *       | Integral (Boxable (Int32 mode)) -> box_number Naked_int32 mode
- *       | Integral (Boxable (Nativeint mode)) -> box_number Naked_nativeint mode
- *       | Integral (Boxable (Int64 m)) -> box_number Naked_int64 mode
- *     in
- *     ( L.Scalar.ignore_locality scalar,
- *       fun arg : H.expr_primitive -> Unary (prim, Prim arg) ) *)
-
-let maybe_unwrap_scalar scalar arg : H.simple_or_prim =
-  match (scalar : L.any_locality_mode L.Scalar.t) with
-  | Naked _ -> (* already unboxed... *) arg
-  | Value scalar ->
-    let prim : P.unary_primitive =
-      match (scalar : L.any_locality_mode L.Scalar.Width.t) with
-      | Integral (Taggable (Int8 | Int16 | Int)) -> Untag_immediate
-      | Floating (Float32 Any_locality_mode) -> Unbox_number Naked_float32
-      | Floating (Float64 Any_locality_mode) -> Unbox_number Naked_float
-      | Integral (Boxable (Int32 Any_locality_mode)) -> Unbox_number Naked_int32
-      | Integral (Boxable (Nativeint Any_locality_mode)) ->
-        Unbox_number Naked_nativeint
-      | Integral (Boxable (Int64 Any_locality_mode)) -> Unbox_number Naked_int64
-    in
-    Prim (Unary (prim, arg))
 
 let box_vec128 mode (arg : H.expr_primitive) ~current_region : H.expr_primitive
     =
@@ -1463,15 +1372,6 @@ let[@inline always] match_on_array_set_kind ~array array_set_kind f :
  *       dbg
  *     } *)
 
-let bbswap bi si mode arg ~current_region : H.expr_primitive =
-  let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
-  Unary
-    ( Box_number (bi, mode),
-      Prim
-        (Unary
-           ( Int_arith (si, Swap_byte_endianness),
-             Prim (Unary (Unbox_number bi, arg)) )) )
-
 let opaque layout arg ~middle_end_only : H.expr_primitive list =
   let kinds = Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout]) in
   if List.compare_lengths kinds arg <> 0
@@ -1526,22 +1426,6 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     | Float64 -> Naked (Floating (Float64 Any_locality_mode))
     | Float32 -> Naked (Floating (Float32 Any_locality_mode))
   in
-  (* let int_operator_width : L.any_locality_mode L.Scalar.Integral.Width.t -> I.t
-   *     = function
-   *   | Taggable Int8 -> Naked_int8
-   *   | Taggable Int16 -> Naked_int16
-   *   | Taggable Int -> Naked_immediate
-   *   | Boxable (Int32 Any_locality_mode) -> Naked_int32
-   *   | Boxable (Nativeint Any_locality_mode) -> Naked_nativeint
-   *   | Boxable (Int64 Any_locality_mode) -> Naked_int64
-   * in
-   * let float_operator_width : L.any_locality_mode L.Floating.t -> P.float_bitwidth =
-   *   | Float64 Any_locality_mode -> Float64
-   *   | Float32 Any_locality_mode -> Float32
-   * in
-   * let operator_width : L.any_locality_mode L.t -> I_or_f.t = function
-   *   |
-   * in *)
   let orig_args = args in
   let args =
     List.map (List.map (fun arg : H.simple_or_prim -> Simple arg)) args
@@ -1729,6 +1613,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
           Printlambda.primitive prim
     in
     [Unary (Duplicate_block { kind }, arg)]
+  | Pnot, [[arg]] -> [Unary (Boolean_not, arg)]
   | Pscalar (Unary unary), [[arg]] -> (
     match unary with
     | Static_cast { src; dst } -> [static_cast arg ~src ~dst ~current_region]
@@ -1794,7 +1679,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
                     ( Int_comp (width, Yielding_bool Neq),
                       arg2,
                       Simple (const width 0) ) ];
-              primitive = Binary (Int_arith (width, Div), arg1, arg2);
+              primitive = Binary (Int_arith (width, operator), arg1, arg2);
               failure = Division_by_zero;
               dbg
             }
@@ -1881,8 +1766,38 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
           ( Float_comp (width, Yielding_bool (convert_float_comparison cmp)),
             arg1,
             arg2 ) ]
-    | Three_way_compare size ->
-      (* failwith "TODO" *))
+    | Three_way_compare size -> (
+      let int_compare size : H.expr_primitive list =
+        let width = integral_width size in
+        let maybe_unwrap =
+          static_cast ~src:(L.Scalar.integral size) ~dst:(integral_scalar width)
+            ~current_region
+        in
+        let arg1 = H.Prim (maybe_unwrap arg1) in
+        let arg2 = H.Prim (maybe_unwrap arg2) in
+        [ Binary
+            ( Int_comp (width, Yielding_int_like_compare_functions Signed),
+              arg1,
+              arg2 ) ]
+      in
+      let float_compare size : H.expr_primitive list =
+        let width = floating_width size in
+        let maybe_unwrap =
+          static_cast ~src:(L.Scalar.floating size) ~dst:(floating_scalar width)
+            ~current_region
+        in
+        let arg1 = H.Prim (maybe_unwrap arg1) in
+        let arg2 = H.Prim (maybe_unwrap arg2) in
+        [ Binary
+            ( Float_comp (width, Yielding_int_like_compare_functions ()),
+              arg1,
+              arg2 ) ]
+      in
+      match size with
+      | Naked (Integral i) -> int_compare (Naked i)
+      | Value (Integral i) -> int_compare (Value i)
+      | Naked (Floating f) -> float_compare (Naked f)
+      | Value (Floating f) -> float_compare (Value f)))
   | Punbox_vector Boxed_vec128, [[arg]] ->
     [Unary (Unbox_number Naked_vec128, arg)]
   | Pbox_vector (Boxed_vec128, mode), [[arg]] ->
@@ -2533,17 +2448,17 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       "Closure_conversion.convert_primitive: Wrong arity for unary primitive \
        %a (%a)"
       Printlambda.primitive prim H.print_list_of_lists_of_simple_or_prim args
-  | ( ( Pstringrefu | Pbytesrefu | Pstringrefs | Pbytesrefs | Pstring_load_16 _
-      | Pstring_load_32 _ | Pstring_load_f32 _ | Pstring_load_64 _
-      | Pstring_load_128 _ | Pbytes_load_16 _ | Pbytes_load_32 _
-      | Pbytes_load_f32 _ | Pbytes_load_64 _ | Pbytes_load_128 _ | Pisout
-      | Pfield_computed _ | Psetfloatfield _ | Psetufloatfield _
-      | Psetmixedfield _ | Pbigstring_load_16 _ | Pbigstring_load_32 _
-      | Pbigstring_load_f32 _ | Pbigstring_load_64 _ | Pbigstring_load_128 _
-      | Pfloatarray_load_128 _ | Pfloat_array_load_128 _ | Pint_array_load_128 _
-      | Punboxed_float_array_load_128 _ | Punboxed_float32_array_load_128 _
-      | Punboxed_int32_array_load_128 _ | Punboxed_int64_array_load_128 _
-      | Punboxed_nativeint_array_load_128 _
+  | ( ( Psetfield _ | Pstringrefu | Pbytesrefu | Pstringrefs | Pbytesrefs
+      | Pstring_load_16 _ | Pstring_load_32 _ | Pstring_load_f32 _
+      | Pstring_load_64 _ | Pstring_load_128 _ | Pbytes_load_16 _
+      | Pbytes_load_32 _ | Pbytes_load_f32 _ | Pbytes_load_64 _
+      | Pbytes_load_128 _ | Pisout | Pfield_computed _ | Psetfloatfield _
+      | Psetufloatfield _ | Psetmixedfield _ | Pbigstring_load_16 _
+      | Pbigstring_load_32 _ | Pbigstring_load_f32 _ | Pbigstring_load_64 _
+      | Pbigstring_load_128 _ | Pfloatarray_load_128 _ | Pfloat_array_load_128 _
+      | Pint_array_load_128 _ | Punboxed_float_array_load_128 _
+      | Punboxed_float32_array_load_128 _ | Punboxed_int32_array_load_128 _
+      | Punboxed_int64_array_load_128 _ | Punboxed_nativeint_array_load_128 _
       | Parrayrefu
           ( ( Pgenarray_ref _ | Paddrarray_ref | Pintarray_ref
             | Pfloatarray_ref _ | Punboxedfloatarray_ref _
