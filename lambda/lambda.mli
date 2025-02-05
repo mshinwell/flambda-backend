@@ -229,39 +229,51 @@ module Maybe_naked :  sig
     | Naked of 'b
 end
 
+module Boxed_integer : sig
+  type t = boxed_integer =
+    | Boxed_int64
+    | Boxed_nativeint
+    | Boxed_int32
+
+  val to_string : t -> string
+end
+
+module Boxed_float : sig
+  type t = boxed_float =
+    | Boxed_float64
+    | Boxed_float32
+
+  val to_string : t -> string
+end
+
 module Scalar : sig
   module Bytecode : sig
-  module Integral : sig
-    module Immediate : sig
-      type t = Int8 | Int16 | Int
+    module Or_small_int : sig
+      type small_int = Int8 | Int16
 
-      val compare_size : t -> t -> int
+      type 'a t =
+        | Builtin of 'a
+        | Small_int of small_int
     end
-    module Boxed :
-    sig
+
+    module Immediate : sig
+      type t = Int
+    end
+
+    module Integral : sig
       type t =
-        boxed_integer =
-          Boxed_int64
-        | Boxed_nativeint
-        | Boxed_int32
-      val to_string : t -> label
+        | Int
+        | Boxed_integer of boxed_integer
     end
-    type t = Immediate of Immediate.t | Boxed of boxed_integer
+
+    type t =
+      | Int
+      | Boxed_integer of boxed_integer
+      | Boxed_float of boxed_float
+
+    val to_string : t -> string
+    val integral : Integral.t -> t
   end
-  module Floating :
-  sig
-    type t = boxed_float = Boxed_float64 | Boxed_float32
-    val to_string : t -> label
-  end
-  module Boxed :
-  sig
-    type t = Int of boxed_integer | Float of boxed_float
-    val to_string : t -> label
-  end
-  type t = Immediate of Integral.Immediate.t | Boxed of Boxed.t
-  val integral : Integral.t -> t
-  val floating : Floating.t -> t
-end
   module type S := sig
       type bytecode
       type 'a width
@@ -275,6 +287,7 @@ end
       val layout : any_locality_mode t -> layout
       val to_string : any_locality_mode t -> string
       val to_bytecode : _ t -> bytecode
+      val of_bytecode : bytecode -> locality_mode t
     end
 
   module type Integral_width_constants := sig
@@ -315,19 +328,20 @@ end
   module Integral : sig
     module Taggable : sig
       module Width : sig
-        type t = Bytecode.Integral.Immediate.t =
+        type bytecode := Bytecode.Immediate.t Bytecode.Or_small_int.t
+        type t =
           | Int8
           | Int16
           | Int
 
-        val compare_size : t -> t -> int
         val to_unboxed_integer : t -> unboxed_integer
         val to_string : t -> string
-        val to_bytecode : t -> Bytecode.Integral.Immediate.t
+        val to_bytecode : t -> bytecode
+        val of_bytecode : bytecode -> t
       end
 
       include S with type 'a width := Width.t
-                 and type bytecode := Bytecode.Integral.Immediate.t
+                 and type bytecode := Bytecode.Immediate.t Bytecode.Or_small_int.t
     end
 
     module Boxable : sig
@@ -342,11 +356,12 @@ end
         val locality_mode : locality_mode t -> locality_mode option
         val to_boxed_integer : any_locality_mode t -> boxed_integer
         val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-        val to_bytecode : _ t -> Bytecode.Integral.Boxed.t
+        val to_bytecode : _ t -> boxed_integer
+        val of_bytecode : boxed_integer -> locality_mode t
       end
 
       include S with type 'a width := 'a Width.t
-                 and type bytecode := Bytecode.Integral.Boxed.t
+                 and type bytecode := boxed_integer
     end
 
     module Width : sig
@@ -357,12 +372,12 @@ end
       val map : 'a t -> f:('a -> 'b) -> 'b t
       val locality_mode : locality_mode t -> locality_mode option
       val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-      val to_bytecode : _ t -> Bytecode.Integral.t
+      val to_bytecode : _ t -> Bytecode.Integral.t Bytecode.Or_small_int.t
       include Integral_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
-               and type bytecode := Bytecode.Integral.t
+               and type bytecode := Bytecode.Integral.t Bytecode.Or_small_int.t
     include Integral_constants with type 'a t := 'a t
   end
 
@@ -377,12 +392,13 @@ end
       val locality_mode : locality_mode t -> locality_mode option
       val to_boxed_float : any_locality_mode t -> boxed_float
       val to_unboxed_float : any_locality_mode t -> unboxed_float
-      val to_bytecode : _ t -> Bytecode.Floating.t
+      val to_bytecode : _ t -> boxed_float
+      val of_bytecode : boxed_float -> locality_mode t
       include Float_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
-               and type bytecode := Bytecode.Floating.t
+               and type bytecode := boxed_float
     include Float_constants with type 'a t := 'a t
   end
 
@@ -393,20 +409,19 @@ end
 
     val map : 'a t -> f:('a -> 'b) -> 'b t
     val locality_mode : locality_mode t -> locality_mode option
-    val to_bytecode : _ t -> Bytecode.t
+    val to_bytecode : _ t -> Bytecode.t Bytecode.Or_small_int.t
 
     include Integral_width_constants with type 'a t := 'a t
     include Float_width_constants with type 'a t := 'a t
   end
 
   include S with type 'a width := 'a Width.t
-             and type bytecode := Bytecode.t
+             and type bytecode := Bytecode.t Bytecode.Or_small_int.t
   include Integral_constants with type 'a t := 'a t
   include Float_constants with type 'a t := 'a t
 
   val integral : 'a Integral.t -> 'a t
   val floating : 'a Floating.t -> 'a t
-  val to_bytecode : _ t -> Bytecode.t
 
   module Intrinsic : sig
     type 'mode info =
@@ -421,12 +436,16 @@ end
           | Succ (** add 1 *)
           | Pred (** subtract 1 *)
           | Bswap
+
+        val to_string : t -> string
       end
 
       module Float_op : sig
         type t =
           | Neg
           | Abs
+
+        val to_string : t -> string
       end
 
       type nonrec 'mode t =
@@ -452,6 +471,8 @@ end
           | And
           | Or
           | Xor
+
+        val to_string : t -> string
       end
 
       module Shift_op : sig
@@ -1178,8 +1199,8 @@ type arg_descr =
 val make_key: lambda -> lambda option
 
 val const_unit: structured_constant
-val const_int : any_locality_mode Scalar.Integral.t -> int -> structured_constant
-val lconst_int : any_locality_mode Scalar.Integral.t -> int -> lambda
+val const_int : _ Scalar.Integral.t -> int -> structured_constant
+val lconst_int : _ Scalar.Integral.t -> int -> lambda
 val lambda_unit: lambda
 
 val of_bool : bool -> lambda
@@ -1482,3 +1503,10 @@ val add : locality_mode Scalar.Integral.t binop
 val sub : locality_mode Scalar.Integral.t binop
 val and_ : locality_mode Scalar.Integral.t binop
 val icmp : integer_comparison -> any_locality_mode Scalar.Integral.t binop
+
+val static_cast
+  : src:any_locality_mode Scalar.t
+  -> dst:locality_mode Scalar.t
+  -> lambda
+  -> loc:scoped_location
+  -> lambda

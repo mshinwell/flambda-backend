@@ -273,6 +273,7 @@ module Maybe_naked = struct
     val locality_mode : locality_mode t -> locality_mode option
     val to_string : any_locality_mode t -> string
     val to_bytecode : _ t -> bytecode
+    val of_bytecode : bytecode -> locality_mode t
   end) =
   struct
     type nonrec 'a t = ('a M.t, any_locality_mode M.t) t
@@ -298,74 +299,81 @@ module Maybe_naked = struct
     let to_bytecode = function
       | Value t -> M.to_bytecode t
       | Naked t -> M.to_bytecode t
+
+    let of_bytecode b : locality_mode t = Value (M.of_bytecode b)
   end
+end
+
+module Boxed_integer = struct
+  type t = Primitive.boxed_integer =
+    | Boxed_int64
+    | Boxed_nativeint
+    | Boxed_int32
+
+  let to_string = function
+    | Boxed_int32 -> "int32"
+    | Boxed_int64 -> "int64"
+    | Boxed_nativeint -> "nativeint"
+end
+
+module Boxed_float = struct
+  type t = Primitive.boxed_float =
+    | Boxed_float64
+    | Boxed_float32
+
+  let to_string = function
+    | Boxed_float32 -> "float32"
+    | Boxed_float64 -> "float"
 end
 
 module Scalar = struct
   module Bytecode = struct
+    module Or_small_int = struct
+      type small_int = Int8 | Int16
+
+      type 'a t =
+        | Builtin of 'a
+        | Small_int of small_int
+
+      let map t ~f =
+        match t with
+        | Small_int _ as t -> t
+        | Builtin x -> Builtin (f x)
+    end
+
+    module Immediate = struct
+      type t = Int
+    end
+
     module Integral = struct
-      module Immediate = struct
-        type t = Int8 | Int16 | Int
-
-        let compare_size x y =
-          (* we know [Int] is at least 31 bits, so it's bigger than the others
-             even though we don't know the speicific value *)
-          let to_int = function Int8 -> 0 | Int16 -> 1 | Int -> 2 in
-          Int.compare (to_int x) (to_int y)
-
-      end
-
-      module Boxed = struct
-        type t = Primitive.boxed_integer =
-          | Boxed_int64
-          | Boxed_nativeint
-          | Boxed_int32
-
-        let to_string = function
-          | Boxed_int32 -> "int32"
-          | Boxed_int64 -> "int64"
-          | Boxed_nativeint -> "nativeint"
-      end
-
       type t =
-        | Immediate of Immediate.t
-        | Boxed of Boxed.t
-    end
-
-    module Floating = struct
-      type t = Primitive.boxed_float =
-        | Boxed_float64
-        | Boxed_float32
-
-      let to_string = function
-        | Boxed_float32 -> "float32"
-        | Boxed_float64 -> "float"
-    end
-
-    module Boxed = struct
-      type t =
-        | Int of Integral.Boxed.t
-        | Float of Floating.t
-
-      let to_string = function
-        | Int i -> Integral.Boxed.to_string i
-        | Float f -> Floating.to_string f
+        | Int
+        | Boxed_integer of boxed_integer
     end
 
     type t =
-      | Immediate of Integral.Immediate.t
-      | Boxed of Boxed.t
+      | Int
+      | Boxed_integer of boxed_integer
+      | Boxed_float of boxed_float
 
-    let floating f = Boxed (Float f)
+    let to_string = function
+      | Int -> "int"
+      | Boxed_integer i -> Boxed_integer.to_string i
+      | Boxed_float f -> Boxed_float.to_string f
+
     let integral : Integral.t -> t = function
-      | Immediate i -> Immediate i
-      | Boxed i -> Boxed (Int i)
+      | Int -> Int
+      | Boxed_integer i -> Boxed_integer i
   end
 
   module Integral = struct
     module Taggable = struct
       module Width = struct
-        include Bytecode.Integral.Immediate
+        type bytecode = Bytecode.Immediate.t Bytecode.Or_small_int.t
+        type t =
+          | Int8
+          | Int16
+          | Int
 
         let all = [ Int8; Int16; Int ]
 
@@ -379,12 +387,19 @@ module Scalar = struct
           | Int16 -> "int16"
           | Int -> "int"
 
-        let to_bytecode t = t
+        let to_bytecode : t -> bytecode = function
+          | Int -> Builtin Int
+          | Int8 -> Small_int Int8
+          | Int16 -> Small_int Int16
+
+        let of_bytecode : bytecode -> t = function
+          | Builtin Int -> Int
+          | Small_int Int8 -> Int8
+          | Small_int Int16 -> Int16
       end
 
       include Maybe_naked.Make1 (struct
           include Width
-          type bytecode = t
           type nonrec 'a t = t
           let map t ~f:_ = t
           let locality_mode (Int8 | Int16 | Int) = None
@@ -398,7 +413,7 @@ module Scalar = struct
 
     module Boxable = struct
       module Width = struct
-        type bytecode = Bytecode.Integral.Boxed.t
+        type bytecode = boxed_integer
 
         type 'mode t =
           | Int32 of 'mode
@@ -437,6 +452,10 @@ module Scalar = struct
           | Int64 Any_locality_mode -> "int64"
 
         let to_bytecode = to_boxed_integer
+        let of_bytecode = function
+          | Boxed_int32 -> Int32 alloc_heap
+          | Boxed_int64 -> Int64 alloc_heap
+          | Boxed_nativeint -> Nativeint alloc_heap
       end
 
       include Maybe_naked.Make1 (Width)
@@ -448,14 +467,10 @@ module Scalar = struct
               nullable = Non_nullable
             }
         | Naked t -> Punboxed_int (Width.to_unboxed_integer t)
-
-      let to_bytecode : _ t -> _ = function
-        | Naked t -> Width.to_boxed_integer t
-        | Value t -> Width.to_boxed_integer t
     end
 
     module Width = struct
-      type bytecode = Bytecode.Integral.t
+      type bytecode = Bytecode.Integral.t Bytecode.Or_small_int.t
 
       type 'mode t =
         | Taggable of Taggable.Width.t
@@ -491,9 +506,17 @@ module Scalar = struct
       let int = Taggable Int
       let nativeint = Boxable (Nativeint Any_locality_mode)
 
-      let to_bytecode : _ t -> Bytecode.Integral.t = function
-        | Taggable x -> Immediate (Taggable.Width.to_bytecode x)
-        | Boxable x -> Boxed (Boxable.Width.to_bytecode x)
+      let to_bytecode : _ t -> bytecode = function
+        | Taggable x ->
+          Bytecode.Or_small_int.map (Taggable.Width.to_bytecode x)
+            ~f:(fun Bytecode.Immediate.Int -> Bytecode.Integral.Int)
+        | Boxable x -> Builtin (Boxed_integer (Boxable.Width.to_bytecode x))
+
+      let of_bytecode : bytecode -> locality_mode t = function
+        | Small_int Int8 -> Taggable Int8
+        | Small_int Int16 -> Taggable Int16
+        | Builtin Int -> Taggable Int
+        | Builtin (Boxed_integer i) -> Boxable (Boxable.Width.of_bytecode i)
     end
 
     include Maybe_naked.Make1 (Width)
@@ -520,7 +543,7 @@ module Scalar = struct
 
   module Floating = struct
     module Width = struct
-      type bytecode = Bytecode.Floating.t
+      type bytecode = boxed_float
 
       type 'mode t =
         | Float32 of 'mode
@@ -552,6 +575,10 @@ module Scalar = struct
       let float32 = Float32 Any_locality_mode
       let float = Float64 Any_locality_mode
       let to_bytecode = to_boxed_float
+
+      let of_bytecode = function
+        | Boxed_float32 -> Float32 alloc_heap
+        | Boxed_float64 -> Float64 alloc_heap
     end
 
     include Maybe_naked.Make1 (Width)
@@ -571,7 +598,7 @@ module Scalar = struct
   end
 
   module Width = struct
-    type bytecode = Bytecode.t
+    type bytecode = Bytecode.t Bytecode.Or_small_int.t
 
     type 'mode t =
       | Floating of 'mode Floating.Width.t
@@ -605,9 +632,19 @@ module Scalar = struct
     let int64 = Integral Integral.Width.int64
     let nativeint = Integral Integral.Width.nativeint
 
-    let to_bytecode = function
-      | Floating f -> Bytecode.floating (Floating.Width.to_bytecode f)
-      | Integral i -> Bytecode.integral (Integral.Width.to_bytecode i)
+    let to_bytecode : _ t -> bytecode = function
+      | Floating f -> Builtin (Bytecode.Boxed_float (Floating.Width.to_bytecode f))
+      | Integral i ->
+        Bytecode.Or_small_int.map (Integral.Width.to_bytecode i) ~f:Bytecode.integral
+
+    let of_bytecode : bytecode -> _ t = function
+      | Small_int Int8 -> int8
+      | Small_int Int16 -> int16
+      | Builtin Int -> int
+      | Builtin (Boxed_integer i)  ->
+        Integral (Boxable (Integral.Boxable.Width.of_bytecode i))
+      | Builtin (Boxed_float f)  ->
+        Floating (Floating.Width.of_bytecode f)
   end
 
   include Maybe_naked.Make1 (Width)
@@ -1575,20 +1612,20 @@ type arg_descr =
     arg_block_idx: int; }
 
 let const_int size n =
-  match (size : any_locality_mode Scalar.Integral.t) with
+  match (size : _ Scalar.Integral.t) with
   | Value (Taggable (Int8 | Int16 | Int)) -> Const_base (Const_int n)
-  | Value (Boxable (Int32 Any_locality_mode)) ->
+  | Value (Boxable (Int32 _)) ->
     Const_base (Const_int32 (Int32.of_int n))
-  | Value (Boxable (Int64 Any_locality_mode)) ->
+  | Value (Boxable (Int64 _)) ->
     Const_base (Const_int64 (Int64.of_int n))
-  | Value (Boxable (Nativeint Any_locality_mode)) ->
+  | Value (Boxable (Nativeint _)) ->
     Const_base (Const_nativeint (Nativeint.of_int n))
   | Naked (Taggable taggable) -> Const_naked_immediate (n, taggable)
-  | Naked (Boxable (Int32 Any_locality_mode)) ->
+  | Naked (Boxable (Int32 _)) ->
     Const_base (Const_unboxed_int32 (Int32.of_int n))
-  | Naked (Boxable (Int64 Any_locality_mode)) ->
+  | Naked (Boxable (Int64 _)) ->
     Const_base (Const_unboxed_int64 (Int64.of_int n))
-  | Naked (Boxable (Nativeint Any_locality_mode)) ->
+  | Naked (Boxable (Nativeint _)) ->
     Const_base (Const_unboxed_nativeint (Nativeint.of_int n))
 
 let lconst_int size n = Lconst (const_int size n)
@@ -3216,3 +3253,5 @@ let add = mk_integral_binop Add
 let sub = mk_integral_binop Sub
 let and_ = mk_integral_binop And
 let icmp cmp size x y ~loc = binary (Icmp (size, cmp)) x y ~loc
+
+let static_cast ~src ~dst arg ~loc = unary (Static_cast {src; dst}) arg ~loc
