@@ -1953,10 +1953,12 @@ let lambda_primitive_needs_event_after = function
       Scalar.Intrinsic.info op
     in
     let may_allocate =
-      match Scalar.to_bytecode result with
-      | Builtin Int | Small_int (Int8 | Int16) -> false
-      | Builtin ( Boxed_integer (Boxed_int32 | Boxed_int64 | Boxed_nativeint) )
-      | Builtin ( Boxed_float (Boxed_float64 | Boxed_float32) ) -> true
+      match Scalar.ignore_locality result with
+      | Value x | Naked x ->
+        match x with
+          Floating (Float32 _ | Float64 _)
+        | Integral (Boxable _) -> true
+        | Integral (Taggable _) -> false
     in
     can_raise || may_allocate
   | Pduprecord _ | Pccall _

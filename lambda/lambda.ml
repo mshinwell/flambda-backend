@@ -265,15 +265,12 @@ module Maybe_naked = struct
     | Naked of 'b
 
   module Make1 (M : sig
-    type bytecode
     type 'a t
 
     val all : any_locality_mode t list
     val map : 'a t -> f:('a -> 'b) -> 'b t
     val locality_mode : locality_mode t -> locality_mode option
     val to_string : any_locality_mode t -> string
-    val to_bytecode : _ t -> bytecode
-    val of_bytecode : bytecode -> locality_mode t
   end) =
   struct
     type nonrec 'a t = ('a M.t, any_locality_mode M.t) t
@@ -295,81 +292,13 @@ module Maybe_naked = struct
 
     let ignore_locality = map ~f:ignore_locality
     let all = List.concat_map (fun m -> [ Value m; Naked m ]) M.all
-
-    let to_bytecode = function
-      | Value t -> M.to_bytecode t
-      | Naked t -> M.to_bytecode t
-
-    let of_bytecode b : locality_mode t = Value (M.of_bytecode b)
   end
-end
-
-module Boxed_integer = struct
-  type t = Primitive.boxed_integer =
-    | Boxed_int64
-    | Boxed_nativeint
-    | Boxed_int32
-
-  let to_string = function
-    | Boxed_int32 -> "int32"
-    | Boxed_int64 -> "int64"
-    | Boxed_nativeint -> "nativeint"
-end
-
-module Boxed_float = struct
-  type t = Primitive.boxed_float =
-    | Boxed_float64
-    | Boxed_float32
-
-  let to_string = function
-    | Boxed_float32 -> "float32"
-    | Boxed_float64 -> "float"
 end
 
 module Scalar = struct
-  module Bytecode = struct
-    module Or_small_int = struct
-      type small_int = Int8 | Int16
-
-      type 'a t =
-        | Builtin of 'a
-        | Small_int of small_int
-
-      let map t ~f =
-        match t with
-        | Small_int _ as t -> t
-        | Builtin x -> Builtin (f x)
-    end
-
-    module Immediate = struct
-      type t = Int
-    end
-
-    module Integral = struct
-      type t =
-        | Int
-        | Boxed_integer of boxed_integer
-    end
-
-    type t =
-      | Int
-      | Boxed_integer of boxed_integer
-      | Boxed_float of boxed_float
-
-    let to_string = function
-      | Int -> "int"
-      | Boxed_integer i -> Boxed_integer.to_string i
-      | Boxed_float f -> Boxed_float.to_string f
-
-    let integral : Integral.t -> t = function
-      | Int -> Int
-      | Boxed_integer i -> Boxed_integer i
-  end
-
   module Integral = struct
     module Taggable = struct
       module Width = struct
-        type bytecode = Bytecode.Immediate.t Bytecode.Or_small_int.t
         type t =
           | Int8
           | Int16
@@ -386,16 +315,6 @@ module Scalar = struct
           | Int8 -> "int8"
           | Int16 -> "int16"
           | Int -> "int"
-
-        let to_bytecode : t -> bytecode = function
-          | Int -> Builtin Int
-          | Int8 -> Small_int Int8
-          | Int16 -> Small_int Int16
-
-        let of_bytecode : bytecode -> t = function
-          | Builtin Int -> Int
-          | Small_int Int8 -> Int8
-          | Small_int Int16 -> Int16
       end
 
       include Maybe_naked.Make1 (struct
@@ -413,7 +332,6 @@ module Scalar = struct
 
     module Boxable = struct
       module Width = struct
-        type bytecode = boxed_integer
 
         type 'mode t =
           | Int32 of 'mode
@@ -450,12 +368,6 @@ module Scalar = struct
           | Int32 Any_locality_mode -> "int32"
           | Nativeint Any_locality_mode -> "nativeint"
           | Int64 Any_locality_mode -> "int64"
-
-        let to_bytecode = to_boxed_integer
-        let of_bytecode = function
-          | Boxed_int32 -> Int32 alloc_heap
-          | Boxed_int64 -> Int64 alloc_heap
-          | Boxed_nativeint -> Nativeint alloc_heap
       end
 
       include Maybe_naked.Make1 (Width)
@@ -470,8 +382,6 @@ module Scalar = struct
     end
 
     module Width = struct
-      type bytecode = Bytecode.Integral.t Bytecode.Or_small_int.t
-
       type 'mode t =
         | Taggable of Taggable.Width.t
         | Boxable of 'mode Boxable.Width.t
@@ -505,18 +415,6 @@ module Scalar = struct
       let int64 = Boxable (Int64 Any_locality_mode)
       let int = Taggable Int
       let nativeint = Boxable (Nativeint Any_locality_mode)
-
-      let to_bytecode : _ t -> bytecode = function
-        | Taggable x ->
-          Bytecode.Or_small_int.map (Taggable.Width.to_bytecode x)
-            ~f:(fun Bytecode.Immediate.Int -> Bytecode.Integral.Int)
-        | Boxable x -> Builtin (Boxed_integer (Boxable.Width.to_bytecode x))
-
-      let of_bytecode : bytecode -> locality_mode t = function
-        | Small_int Int8 -> Taggable Int8
-        | Small_int Int16 -> Taggable Int16
-        | Builtin Int -> Taggable Int
-        | Builtin (Boxed_integer i) -> Boxable (Boxable.Width.of_bytecode i)
     end
 
     include Maybe_naked.Make1 (Width)
@@ -543,8 +441,6 @@ module Scalar = struct
 
   module Floating = struct
     module Width = struct
-      type bytecode = boxed_float
-
       type 'mode t =
         | Float32 of 'mode
         | Float64 of 'mode
@@ -574,11 +470,6 @@ module Scalar = struct
 
       let float32 = Float32 Any_locality_mode
       let float = Float64 Any_locality_mode
-      let to_bytecode = to_boxed_float
-
-      let of_bytecode = function
-        | Boxed_float32 -> Float32 alloc_heap
-        | Boxed_float64 -> Float64 alloc_heap
     end
 
     include Maybe_naked.Make1 (Width)
@@ -598,8 +489,6 @@ module Scalar = struct
   end
 
   module Width = struct
-    type bytecode = Bytecode.t Bytecode.Or_small_int.t
-
     type 'mode t =
       | Floating of 'mode Floating.Width.t
       | Integral of 'mode Integral.Width.t
@@ -631,20 +520,6 @@ module Scalar = struct
     let int32 = Integral Integral.Width.int32
     let int64 = Integral Integral.Width.int64
     let nativeint = Integral Integral.Width.nativeint
-
-    let to_bytecode : _ t -> bytecode = function
-      | Floating f -> Builtin (Bytecode.Boxed_float (Floating.Width.to_bytecode f))
-      | Integral i ->
-        Bytecode.Or_small_int.map (Integral.Width.to_bytecode i) ~f:Bytecode.integral
-
-    let of_bytecode : bytecode -> _ t = function
-      | Small_int Int8 -> int8
-      | Small_int Int16 -> int16
-      | Builtin Int -> int
-      | Builtin (Boxed_integer i)  ->
-        Integral (Boxable (Integral.Boxable.Width.of_bytecode i))
-      | Builtin (Boxed_float f)  ->
-        Floating (Floating.Width.of_bytecode f)
   end
 
   include Maybe_naked.Make1 (Width)

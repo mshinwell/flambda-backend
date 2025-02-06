@@ -229,53 +229,8 @@ module Maybe_naked :  sig
     | Naked of 'b
 end
 
-module Boxed_integer : sig
-  type t = boxed_integer =
-    | Boxed_int64
-    | Boxed_nativeint
-    | Boxed_int32
-
-  val to_string : t -> string
-end
-
-module Boxed_float : sig
-  type t = boxed_float =
-    | Boxed_float64
-    | Boxed_float32
-
-  val to_string : t -> string
-end
-
 module Scalar : sig
-  module Bytecode : sig
-    module Or_small_int : sig
-      type small_int = Int8 | Int16
-
-      type 'a t =
-        | Builtin of 'a
-        | Small_int of small_int
-    end
-
-    module Immediate : sig
-      type t = Int
-    end
-
-    module Integral : sig
-      type t =
-        | Int
-        | Boxed_integer of boxed_integer
-    end
-
-    type t =
-      | Int
-      | Boxed_integer of boxed_integer
-      | Boxed_float of boxed_float
-
-    val to_string : t -> string
-    val integral : Integral.t -> t
-  end
   module type S := sig
-      type bytecode
       type 'a width
       type nonrec 'a t = ('a width, any_locality_mode width) Maybe_naked.t
 
@@ -286,8 +241,6 @@ module Scalar : sig
       val width : any_locality_mode t -> any_locality_mode width
       val layout : any_locality_mode t -> layout
       val to_string : any_locality_mode t -> string
-      val to_bytecode : _ t -> bytecode
-      val of_bytecode : bytecode -> locality_mode t
     end
 
   module type Integral_width_constants := sig
@@ -328,7 +281,6 @@ module Scalar : sig
   module Integral : sig
     module Taggable : sig
       module Width : sig
-        type bytecode := Bytecode.Immediate.t Bytecode.Or_small_int.t
         type t =
           | Int8
           | Int16
@@ -336,12 +288,9 @@ module Scalar : sig
 
         val to_unboxed_integer : t -> unboxed_integer
         val to_string : t -> string
-        val to_bytecode : t -> bytecode
-        val of_bytecode : bytecode -> t
       end
 
       include S with type 'a width := Width.t
-                 and type bytecode := Bytecode.Immediate.t Bytecode.Or_small_int.t
     end
 
     module Boxable : sig
@@ -356,12 +305,9 @@ module Scalar : sig
         val locality_mode : locality_mode t -> locality_mode option
         val to_boxed_integer : any_locality_mode t -> boxed_integer
         val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-        val to_bytecode : _ t -> boxed_integer
-        val of_bytecode : boxed_integer -> locality_mode t
       end
 
       include S with type 'a width := 'a Width.t
-                 and type bytecode := boxed_integer
     end
 
     module Width : sig
@@ -372,12 +318,10 @@ module Scalar : sig
       val map : 'a t -> f:('a -> 'b) -> 'b t
       val locality_mode : locality_mode t -> locality_mode option
       val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-      val to_bytecode : _ t -> Bytecode.Integral.t Bytecode.Or_small_int.t
       include Integral_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
-               and type bytecode := Bytecode.Integral.t Bytecode.Or_small_int.t
     include Integral_constants with type 'a t := 'a t
   end
 
@@ -392,13 +336,10 @@ module Scalar : sig
       val locality_mode : locality_mode t -> locality_mode option
       val to_boxed_float : any_locality_mode t -> boxed_float
       val to_unboxed_float : any_locality_mode t -> unboxed_float
-      val to_bytecode : _ t -> boxed_float
-      val of_bytecode : boxed_float -> locality_mode t
       include Float_width_constants with type 'a t := 'a t
     end
 
     include S with type 'a width := 'a Width.t
-               and type bytecode := boxed_float
     include Float_constants with type 'a t := 'a t
   end
 
@@ -409,14 +350,12 @@ module Scalar : sig
 
     val map : 'a t -> f:('a -> 'b) -> 'b t
     val locality_mode : locality_mode t -> locality_mode option
-    val to_bytecode : _ t -> Bytecode.t Bytecode.Or_small_int.t
 
     include Integral_width_constants with type 'a t := 'a t
     include Float_width_constants with type 'a t := 'a t
   end
 
   include S with type 'a width := 'a Width.t
-             and type bytecode := Bytecode.t Bytecode.Or_small_int.t
   include Integral_constants with type 'a t := 'a t
   include Float_constants with type 'a t := 'a t
 
@@ -485,6 +424,8 @@ module Scalar : sig
           | Lsl
           | Asr
           | Lsr
+
+        val to_string : t -> string
       end
 
       module Float_op : sig
@@ -493,6 +434,8 @@ module Scalar : sig
           | Sub
           | Mul
           | Div
+
+        val to_string : t -> string
       end
 
       (** comparisons return a tagged immediate *)

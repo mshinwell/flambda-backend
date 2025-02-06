@@ -23,6 +23,117 @@ open Switch
 open Instruct
 open Debuginfo.Scoped_location
 
+module Scalar = struct
+  (** We represent small integers as sign-extended immediates in bytecode. Additionally,
+      all boxable integers are boxed, there are no naked integers, and there are no local
+      allocations. *)
+
+  type small_int = Int8 | Int16
+
+  module Or_small_int = struct
+    type 'a t =
+      | Small of small_int
+      | Builtin of 'a
+
+    let map t ~f =
+      match t with
+      | Small _ as t -> t
+      | Builtin x -> Builtin (f x)
+  end
+
+  module Integral = struct
+    type boxed = Int32 | Nativeint | Int64
+    type t = Int | Boxed of boxed
+
+    let of_lambda l : t Or_small_int.t =
+      match
+        Lambda.Scalar.Integral.width
+          (Lambda.Scalar.Integral.map l ~f:(fun _ ->
+             Lambda.Any_locality_mode))
+      with
+      | Taggable Int8 -> Small Int8
+      | Taggable Int16 -> Small Int16
+      | Taggable Int -> Builtin Int
+      | Boxable (Int32 Any_locality_mode) -> Builtin (Boxed Int32)
+      | Boxable (Nativeint Any_locality_mode) -> Builtin (Boxed Nativeint)
+      | Boxable (Int64 Any_locality_mode) -> Builtin (Boxed Int64)
+
+    let to_string = function
+      | Int -> "int"
+      | Boxed Int32 -> "int32"
+      | Boxed Nativeint -> "nativeint"
+      | Boxed Int64 -> "int64"
+
+    let to_const t i : Typedtree.constant =
+      match t with
+      | Int -> (Const_int i)
+      | Boxed Int32 -> Const_int32 (Int32.of_int i)
+      | Boxed Nativeint -> Const_nativeint (Nativeint.of_int i)
+      | Boxed Int64 -> Const_int64 (Int64.of_int i)
+  end
+
+  module Floating = struct
+    type t =
+        Float
+      | Float32
+
+    let to_string = function
+      | Float  -> "float"
+      | Float32 -> "float32"
+
+    let of_lambda l =
+      match
+        Lambda.Scalar.Floating.width
+          (Lambda.Scalar.Floating.map l ~f:(fun _ ->
+             Lambda.Any_locality_mode))
+      with
+      | Float32 Any_locality_mode -> Float32
+      | Float64 Any_locality_mode -> Float
+  end
+
+
+  module Boxed = struct
+    type t = Int32 | Nativeint | Int64 | Float | Float32
+
+    let integral : Integral.boxed -> t = function
+      | Int32 -> Int32
+      | Nativeint -> Nativeint
+      | Int64 -> Int64
+
+    let floating : Floating.t -> t = function
+      | Float -> Float
+      | Float32 -> Float32
+
+    let to_string = function
+      | Int32 -> "int32"
+      | Nativeint -> "nativeint"
+      | Int64 -> "int64"
+      | Float32 -> "float32"
+      | Float -> "float"
+    end
+
+  type t =
+    | Int
+    | Boxed of Boxed.t
+
+  let to_string = function
+    | Int -> "int"
+    | Boxed b -> Boxed.to_string b
+
+  let integral : Integral.t -> t = function
+    | Integral.Int -> Int
+    | Integral.Boxed boxed -> Boxed (Boxed.integral boxed)
+
+  let of_lambda l : t Or_small_int.t =
+    match
+      Lambda.Scalar.width
+        (Lambda.Scalar.map l ~f:(fun _ ->
+           Lambda.Any_locality_mode))
+    with
+    | Floating l -> Builtin (Boxed (Boxed.floating (Floating.of_lambda (Value l))))
+    | Integral l -> Or_small_int.map (Integral.of_lambda (Value l)) ~f:integral
+end
+
 (**** Label generation ****)
 
 let label_counter = ref 0
@@ -149,7 +260,7 @@ let preserve_tailcall_for_prim = function
       true
   | Pscalar (Unary (Static_cast {src; dst})) ->
     (* no-op *)
-    Scalar.to_bytecode src = Scalar.to_bytecode (Scalar.ignore_locality dst)
+    Scalar.of_lambda src = Scalar.of_lambda dst
   | Pscalar _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
@@ -390,13 +501,6 @@ let check_stack stack_info sz =
 
 
 
-let comp_bint_primitive bi suff args =
-  let pref =
-    match bi with Boxed_nativeint -> "caml_nativeint_"
-                | Boxed_int32 -> "caml_int32_"
-                | Boxed_int64 -> "caml_int64_" in
-  Kccall(pref ^ suff, List.length args)
-
 let indexing_primitive (index_kind : Lambda.array_index_kind) prefix =
   let suffix =
     match index_kind with
@@ -416,8 +520,6 @@ let comp_primitive stack_info p sz args =
     Pgetglobal cu -> Kgetglobal cu
   | Psetglobal cu -> Ksetglobal cu
   | Pgetpredef id -> Kgetpredef id
-
-
 
   | Pfield (n, _ptr, _sem) -> Kgetfield n
   | Punboxed_product_field (n, _layouts) -> Kgetfield n
@@ -448,38 +550,7 @@ let comp_primitive stack_info p sz args =
   | Pperform ->
       check_stack stack_info (sz + 4);
       Kperform
-  | Pnegint -> Knegint
-  | Paddint -> Kaddint
-  | Psubint -> Ksubint
-  | Pmulint -> Kmulint
-  | Pdivint _ -> Kdivint
-  | Pmodint _ -> Kmodint
-  | Pandint -> Kandint
-  | Porint -> Korint
-  | Pxorint -> Kxorint
-  | Plslint -> Klslint
-  | Plsrint -> Klsrint
-  | Pasrint -> Kasrint
-  | Poffsetint n -> Koffsetint n
   | Poffsetref n -> Koffsetref n
-  | Pintoffloat Boxed_float64 -> Kccall("caml_int_of_float", 1)
-  | Pfloatofint (Boxed_float64, _) -> Kccall("caml_float_of_int", 1)
-  | Pfloatoffloat32 _ -> Kccall("caml_float_of_float32", 1)
-  | Pfloat32offloat _ -> Kccall("caml_float32_of_float", 1)
-  | Pnegfloat (Boxed_float64, _) -> Kccall("caml_neg_float", 1)
-  | Pabsfloat (Boxed_float64, _) -> Kccall("caml_abs_float", 1)
-  | Paddfloat (Boxed_float64, _) -> Kccall("caml_add_float", 2)
-  | Psubfloat (Boxed_float64, _) -> Kccall("caml_sub_float", 2)
-  | Pmulfloat (Boxed_float64, _) -> Kccall("caml_mul_float", 2)
-  | Pdivfloat (Boxed_float64, _) -> Kccall("caml_div_float", 2)
-  | Pintoffloat Boxed_float32 -> Kccall("caml_int_of_float32", 1)
-  | Pfloatofint (Boxed_float32, _) -> Kccall("caml_float32_of_int", 1)
-  | Pnegfloat (Boxed_float32, _) -> Kccall("caml_neg_float32", 1)
-  | Pabsfloat (Boxed_float32, _) -> Kccall("caml_abs_float32", 1)
-  | Paddfloat (Boxed_float32, _) -> Kccall("caml_add_float32", 2)
-  | Psubfloat (Boxed_float32, _) -> Kccall("caml_sub_float32", 2)
-  | Pmulfloat (Boxed_float32, _) -> Kccall("caml_mul_float32", 2)
-  | Pdivfloat (Boxed_float32, _) -> Kccall("caml_div_float32", 2)
   | Pstringlength -> Kccall("caml_ml_string_length", 1)
   | Pbyteslength -> Kccall("caml_ml_bytes_length", 1)
   | Pstringrefs -> Kccall("caml_string_get", 2)
@@ -598,37 +669,6 @@ let comp_primitive stack_info p sz args =
      Kccall(Printf.sprintf "caml_sys_const_%s" const_name, 1)
   | Pisint _ -> Kisint
   | Pisout -> Kisout
-  | Pbintofint (bi,_) -> comp_bint_primitive bi "of_int" args
-  | Pintofbint bi -> comp_bint_primitive bi "to_int" args
-  | Pcvtbint(src, dst, _) ->
-      begin match (src, dst) with
-      | (Boxed_int32, Boxed_nativeint) -> Kccall("caml_nativeint_of_int32", 1)
-      | (Boxed_nativeint, Boxed_int32) -> Kccall("caml_nativeint_to_int32", 1)
-      | (Boxed_int32, Boxed_int64) -> Kccall("caml_int64_of_int32", 1)
-      | (Boxed_int64, Boxed_int32) -> Kccall("caml_int64_to_int32", 1)
-      | (Boxed_nativeint, Boxed_int64) -> Kccall("caml_int64_of_nativeint", 1)
-      | (Boxed_int64, Boxed_nativeint) -> Kccall("caml_int64_to_nativeint", 1)
-      | ((Boxed_int32 | Boxed_int64 | Boxed_nativeint), _) ->
-          fatal_error "Bytegen.comp_primitive: invalid Pcvtbint cast"
-      end
-  | Pnegbint (bi,_) -> comp_bint_primitive bi "neg" args
-  | Paddbint (bi,_) -> comp_bint_primitive bi "add" args
-  | Psubbint (bi,_) -> comp_bint_primitive bi "sub" args
-  | Pmulbint (bi,_) -> comp_bint_primitive bi "mul" args
-  | Pdivbint { size = bi } -> comp_bint_primitive bi "div" args
-  | Pmodbint { size = bi } -> comp_bint_primitive bi "mod" args
-  | Pandbint(bi,_) -> comp_bint_primitive bi "and" args
-  | Porbint(bi,_) -> comp_bint_primitive bi "or" args
-  | Pxorbint(bi,_) -> comp_bint_primitive bi "xor" args
-  | Plslbint(bi,_) -> comp_bint_primitive bi "shift_left" args
-  | Plsrbint(bi,_) -> comp_bint_primitive bi "shift_right_unsigned" args
-  | Pasrbint(bi,_) -> comp_bint_primitive bi "shift_right" args
-  | Pbintcomp(_, Ceq) -> Kccall("caml_equal", 2)
-  | Pbintcomp(_, Cne) -> Kccall("caml_notequal", 2)
-  | Pbintcomp(_, Clt) -> Kccall("caml_lessthan", 2)
-  | Pbintcomp(_, Cgt) -> Kccall("caml_greaterthan", 2)
-  | Pbintcomp(_, Cle) -> Kccall("caml_lessequal", 2)
-  | Pbintcomp(_, Cge) -> Kccall("caml_greaterequal", 2)
   | Pbigarrayref(_, n, Pbigarray_float32_t, _) -> Kccall("caml_ba_float32_get_" ^ Int.to_string n, n + 1)
   | Pbigarrayset(_, n, Pbigarray_float32_t, _) -> Kccall("caml_ba_float32_set_" ^ Int.to_string n, n + 2)
   | Pbigarrayref(_, n, _, _) -> Kccall("caml_ba_get_" ^ Int.to_string n, n + 1)
@@ -650,8 +690,6 @@ let comp_primitive stack_info p sz args =
       Kccall(indexing_primitive index_kind "caml_ba_uint8_setf32", 3)
   | Pbigstring_set_64{unsafe=_;index_kind} ->
       Kccall(indexing_primitive index_kind "caml_ba_uint8_set64", 3)
-  | Pbswap16 -> Kccall("caml_bswap16", 1)
-  | Pbbswap(bi,_) -> comp_bint_primitive bi "bswap" args
   | Pint_as_pointer _ -> Kccall("caml_int_as_pointer", 1)
   | Pbytes_to_string -> Kccall("caml_string_of_bytes", 1)
   | Pbytes_of_string -> Kccall("caml_bytes_of_string", 1)
@@ -737,26 +775,17 @@ let comp_primitive stack_info p sz args =
   | Pnot | Psequand | Psequor
   | Praise _
   | Pmakearray _ | Pduparray _
-  | Pscalar (Binary (Fcmp _))
   | Pmakeblock _
   | Pmake_unboxed_product _
   | Pmakefloatblock _
   | Pmakeufloatblock _
   | Pmakemixedblock _
   | Pprobe_is_enabled _
-  | Ptag_int _ | Puntag_int _
-    ->
+  | Pscalar _
+      ->
       fatal_error "Bytegen.comp_primitive"
   | Ppeek _ | Ppoke _ ->
       fatal_error "Bytegen.comp_primitive: Ppeek/Ppoke not supported in bytecode"
-
-type smallint = I8 | I16
-
-let smallint_bits = function | I8 -> 8 | I16 -> 16
-
-
-
-let is_immed n = immed_min <= n && n <= immed_max
 
 let is_nontail = function
   | Rc_nontail -> true
@@ -785,6 +814,34 @@ let rec contains_float32s = function
   | Const_block (_, fields) -> List.exists contains_float32s fields
   | Const_mixed_block _ ->  Misc.fatal_error "[Const_mixed_block] not supported in bytecode."
   | _ -> false
+
+
+let sign_or_zero_extend ~signed bits cont =
+  let bits =
+    match (bits : Scalar.small_int) with
+    | Int8 -> 8
+    | Int16 -> 16
+  in
+  let do_shift op cont =
+     Kpush (* save the accumulator, then compute how far to shift *)
+    :: Kconst (Const_base (Const_int bits))
+    :: Kpush
+    :: Kconst (Const_base (Const_int 0))
+    :: Kccall ("caml_sys_const_int_size", 1)
+    :: Ksubint
+    (* next, shift the old accumulator by the result of the subtraction *)
+    :: Kpush
+    :: Kacc 1
+    :: op
+    :: Kpop 1
+    :: cont
+  in
+  do_shift Klslint
+    (do_shift (if signed then Kasrint else Klsrint) cont)
+
+let sign_extend = sign_or_zero_extend ~signed:true
+let zero_extend = sign_or_zero_extend ~signed:false
+
 
 let rec translate_float32s stack_info env cst sz cont =
   match cst with
@@ -905,12 +962,7 @@ let rec translate_float32s stack_info env cst sz cont =
           (comp_expr stack_info
               (add_vars rec_idents (sz+1) env) body (sz + ndecl)
               (add_pop ndecl cont)))
-    | Lprim((Popaque _ | Pobj_magic _ | Ptag_int _ | Puntag_int _), [arg], _) ->
-        comp_expr stack_info env arg sz cont
-    | Lprim((Pbox_float ((Boxed_float64 | Boxed_float32), _)
-    | Punbox_float (Boxed_float64 | Boxed_float32)), [arg], _) ->
-        comp_expr stack_info env arg sz cont
-    | Lprim((Pbox_int _ | Punbox_int _), [arg], _) ->
+    | Lprim((Popaque _ | Pobj_magic _), [arg], _) ->
         comp_expr stack_info env arg sz cont
     | Lprim(Pignore, [arg], _) ->
         comp_expr stack_info env arg sz (add_const_unit cont)
@@ -951,18 +1003,6 @@ let rec translate_float32s stack_info env cst sz cont =
         end
     | Lprim(Praise k, [arg], _) ->
         comp_expr stack_info env arg sz (Kraise k :: discard_dead_code cont)
-    | Lprim(Paddint, [arg; Lconst(Const_base(Const_int n))], _)
-      when is_immed n ->
-        comp_expr stack_info env arg sz (Koffsetint n :: cont)
-    | Lprim(Psubint, [arg; Lconst(Const_base(Const_int n))], _)
-      when is_immed (-n) ->
-        comp_expr stack_info env arg sz (Koffsetint (-n) :: cont)
-    | Lprim (Poffsetint n, [arg], _)
-      when not (is_immed n) ->
-        comp_expr stack_info env arg sz
-          (Kpush::
-          Kconst (Const_base (Const_int n))::
-          Kaddint::cont)
     | Lprim ((Pmakefloatblock _ | Pmakeufloatblock _), args, loc) ->
         (* In bytecode, float# is boxed, so we can treat these two primitives the
           same. *)
@@ -1102,210 +1142,6 @@ let rec translate_float32s stack_info env cst sz cont =
         comp_expr stack_info env (Lprim (Pccall prim_obj_dup, [arg], loc)) sz cont
     | Lprim (Pduparray _, _, _) ->
         Misc.fatal_error "Bytegen.comp_expr: Pduparray takes exactly one arg"
-  (* Integer first for enabling further optimization (cf. emitcode.ml)  *)
-    | Lprim (Pintcomp c, [arg ; (Lconst _ as k)], _) ->
-        let p = Pintcomp (swap_integer_comparison c)
-        and args = [k ; arg] in
-        let nargs = List.length args - 1 in
-        comp_args stack_info env args sz
-          (comp_primitive stack_info p (sz + nargs - 1) args :: cont)
-    | Lprim (Pscalar op, args, loc) ->
-      let extend_int ~bits arg ~signed ~loc =
-        let int = Scalar.Integral.int in
-        let int_size = Lprim (Pctconst Int_size, [ lambda_unit ], loc) in
-        let unused_bits =
-          sub int ~loc int_size (lconst_int int bits)
-        in
-        let left_aligned =
-          binary (Shift (int, Lsl, Tagged_immediate)) arg unused_bits ~loc
-        in
-        let shr = if signed then Asr else Lsr in
-        binary (Shift (int, shr, Tagged_immediate)) left_aligned unused_bits ~loc
-      in
-      let sign_extend = extend_int ~loc ~signed:true in
-      let zero_extend = extend_int ~loc ~signed:false in
-      let expand exp =
-        comp_expr stack_info env exp sz cont
-      in
-      let continue args cont =
-        comp_args stack_info env args sz cont
-      in
-      let prim args prim =
-        continue args (prim :: cont)
-      in
-      let kccall args fmt =
-        Printf.ksprintf (fun name ->
-          prim args (Kccall(name, List.length args)))
-          fmt
-      in
-      let int_const size i =
-        lconst_int (Scalar.ignore_locality ( Scalar.to_bytecode size)) i
-      in
-      (match op, args with
-      | Unary op, [arg] ->
-        (* we don't need to sign- or zero-extend the inputs because tagged small integers are
-            always stored sign-extended *)
-        ( match op with
-        | Integral (size, op) ->
-          (
-            match op, Scalar.Integral.to_bytecode size with
-            | Neg, Immediate Int -> prim args Knegint
-            | Bswap, Immediate Int -> c args "caml_bswap16"
-            | Succ, Immediate Int -> prim args (Koffsetint 1)
-            | Pred, Immediate Int -> prim args (Koffsetint (-1))
-            | Bswap,  Immediate Int8 -> expand arg
-            | (Neg | Succ | Pred), Immediate Int8  ->
-              expand (sign_extend ~bits:8 (unary ~loc (Integral (Taggable Int, op)) arg))
-            | (Neg | Succ | Pred | Bswap), Immediate Int16 ->
-              expand (sign_extend ~bits:8 (unary ~loc (Integral (Taggable Int, op)) arg))
-            | Neg, Boxed size ->
-              c "caml_%s_neg" (Scalar.Bytecode.Integral.Boxed.to_string size)
-            | Bswap, Boxed size ->
-              c "caml_%s_bswap" (Scalar.Bytecode.Integral.Boxed.to_string size)
-            | Succ, Boxed (Boxed_int32 | Boxed_int64 | Boxed_nativeint) ->
-              expand (add size ~loc binary ~loc  arg (lconst_int size 1))
-            | Pred, Boxed (Boxed_int32 | Boxed_int64 | Boxed_nativeint) ->
-              expand (sub size ~loc binary ~loc  arg (lconst_int size 1))
-          )
-        | Floating (size, ((Abs | Neg) as op)) ->
-          let size = Scalar.Floating.to_bytecode size in
-          c args "caml_%s_%s"
-            (Scalar.Intrinsic.Unary.Float_op.to_string op)
-            (Scalar.Bytecode.Floating.to_string size)
-        | Static_cast { src; dst } ->
-          (match Scalar.to_bytecode src, Scalar.to_bytecode dst with
-            | Small_int (Int8 | Int16), Builtin (Boxed_integer _ | Boxed_float _)
-            | Builtin (Boxed_integer _ | Boxed_float _), Small_int (Int8 | Int16)
-              ->
-              (* there are no builtins to convert directly, so we go indirectly via int *)
-              arg
-              |> static_cast ~loc ~src ~dst:Scalar.int
-              |> static_cast ~loc ~src:Scalar.int ~dst
-              |> expand
-            | Small_int Int8, (Small_int (Int8 | Int16) | Builtin Int)
-            | Small_int Int16, (Small_int Int16 | Builtin Int) ->
-              (* we don't need to sign-extend in this case because tagged small integers
-                are always represented sign-extended *)
-              expand arg
-            | (Builtin Int), (Small_int (Int8 | Int16 as dst))
-            | (Small_int Int16), Small_int (Int8 as dst) ->
-              (* we need to sign-extend here because these values are stored in full-width
-                immediates *)
-              expand (sign_extend ~bits:(match dst with Int8 -> 8 | Int16 -> 16) arg)
-            | Builtin src, Builtin dst ->
-              (match src, dst with
-              | Boxed_float Boxed_float32, Boxed_integer _
-              | Boxed_integer _, Boxed_float Boxed_float32 ->
-                (* there are no builtins to convert directly, so we go indirectly via
-                    float64 *)
-                arg
-                |> static_cast ~loc ~src ~dst:Scalar.float
-                |> static_cast ~loc ~src:Scalar.float ~dst
-                |> expand
-              | Boxed_integer Boxed_int32, Boxed_integer Boxed_int32
-              | Boxed_integer Boxed_int64, Boxed_integer Boxed_int64
-              | Boxed_integer Boxed_nativeint, Boxed_integer Boxed_nativeint
-              | Boxed_float Boxed_float64, Boxed_float Boxed_float64
-              | Boxed_float Boxed_float32, Boxed_float Boxed_float32
-              | Int, Int ->
-                (* the identity function *)
-                expand arg
-              | Boxed_integer Boxed_int64,
-                Boxed_integer (Boxed_int32 | Boxed_nativeint)
-              | Boxed_integer Boxed_nativeint,
-                Boxed_integer Boxed_int32
-              | Boxed_integer (Boxed_int32 | Boxed_nativeint | Boxed_int64),
-                (Int | Boxed_float Boxed_float64)
-                ->
-                (* these happen to break from the more favored naming rule of
-                    caml_dst_of_src *)
-                c [ arg ] "caml_%s_to_%s"
-                  (Scalar.Bytecode.to_string src)
-                  (Scalar.Bytecode.to_string dst)
-              | Boxed_float Boxed_float32, Boxed_float Boxed_float64
-              | Boxed_float Boxed_float64, Boxed_float Boxed_float32
-              | Boxed_integer (Boxed_int32 | Boxed_nativeint),
-                Boxed_integer Boxed_int64
-              | Boxed_integer Boxed_int32,
-                Boxed_integer Boxed_nativeint
-              | (Int | Boxed_float (Boxed_float32 | Boxed_float64)),
-                Boxed_integer (Boxed_int32 | Boxed_nativeint | Boxed_int64) ->
-                  c [ arg ] "caml_%s_of_%s"
-                  (Scalar.Bytecode.to_string dst)
-                  (Scalar.Bytecode.to_string src))
-          ) )
-      | Binary (Binary (Integral (size, op))), [arg1; arg2] ->
-         ( match Scalar.Integral.to_bytecode size with
-           | Builtin (Boxed_integer size) ->
-             let c name =
-               let size = Scalar.Bytecode.Boxed.to_string size in
-               let prim =
-                 Kccall (Printf.sprintf "caml_%s_%s" name size, List.length args)
-               in
-               comp_args stack_info env args sz (prim :: cont)
-             in
-             (match op with
-              | Add -> c "add"
-              | Sub -> c "sub"
-              | Mul -> c "mul"
-              | Div (Safe | Unsafe) -> c "div"
-              | Mod (Safe | Unsafe) -> c "mod"
-              | And -> c "and"
-              | Or -> c "or"
-              | Xor -> c "xor")
-           | Immediate size ->
-             let comp_int op cont =
-               let c prim =
-                 comp_args stack_info env args sz (prim :: cont)
-               in
-               match op with
-               | Add -> c Kaddint
-               | Sub -> c Ksubint
-               | Mul -> c Kmulint
-               | Div (Safe | Unsafe) -> c Kdivint
-               | Mod (Safe | Unsafe) -> c Kmodint
-               | And -> c Kandint
-               | Or -> c Korint
-               | Xor -> c Kxorint
-             in
-             match size with
-             | Int -> comp_int op cont
-             | Int8 -> x
-             | Lprim (Pscalar (Binary (Integral (Scalar.Integral.int, op)), args, loc)) ->
-               Lambda.sign_extend_int ~bits:8
-                 stuff
-    ))
-
-  | Lprim (Pfloatcomp (Boxed_float64, cmp), args, _) | Lprim (Punboxed_float_comp (Unboxed_float64, cmp), args, _) ->
-      let cont =
-        match cmp with
-        | CFeq -> Kccall("caml_eq_float", 2) :: cont
-        | CFneq -> Kccall("caml_neq_float", 2) :: cont
-        | CFlt -> Kccall("caml_lt_float", 2) :: cont
-        | CFnlt -> Kccall("caml_lt_float", 2) :: Kboolnot :: cont
-        | CFgt -> Kccall("caml_gt_float", 2) :: cont
-        | CFngt -> Kccall("caml_gt_float", 2) :: Kboolnot :: cont
-        | CFle -> Kccall("caml_le_float", 2) :: cont
-        | CFnle -> Kccall("caml_le_float", 2) :: Kboolnot :: cont
-        | CFge -> Kccall("caml_ge_float", 2) :: cont
-        | CFnge -> Kccall("caml_ge_float", 2) :: Kboolnot :: cont
-      in
-      comp_args stack_info env args sz cont
-  | Lprim (Pfloatcomp (Boxed_float32, cmp), args, _) | Lprim (Punboxed_float_comp (Unboxed_float32, cmp), args, _) ->
-      let cont =
-        match cmp with
-        | CFeq -> Kccall("caml_eq_float32", 2) :: cont
-        | CFneq -> Kccall("caml_neq_float32", 2) :: cont
-        | CFlt -> Kccall("caml_lt_float32", 2) :: cont
-        | CFnlt -> Kccall("caml_lt_float32", 2) :: Kboolnot :: cont
-        | CFgt -> Kccall("caml_gt_float32", 2) :: cont
-        | CFngt -> Kccall("caml_gt_float32", 2) :: Kboolnot :: cont
-        | CFle -> Kccall("caml_le_float32", 2) :: cont
-        | CFnle -> Kccall("caml_le_float32", 2) :: Kboolnot :: cont
-        | CFge -> Kccall("caml_ge_float32", 2) :: cont
-        | CFnge -> Kccall("caml_ge_float32", 2) :: Kboolnot :: cont
-      in
-      comp_args stack_info env args sz cont
   | Lprim(Pmakeblock(tag, _mut, _, _), args, loc) ->
       let cont = add_pseudo_event loc !compunit_name cont in
       comp_args stack_info env args sz
@@ -1317,12 +1153,8 @@ let rec translate_float32s stack_info env cst sz cont =
   | Lprim(Pfloatfield (n, _, _), args, loc) ->
       let cont = add_pseudo_event loc !compunit_name cont in
       comp_args stack_info env args sz (Kgetfloatfield n :: cont)
-  | Lprim(Pnaked_int_cmp { op; size }, args, loc) ->
-    comp_expr stack_info env (Lambda.naked_int_cmp ~op ~size args loc) sz cont
-  | Lprim(Pnaked_int_cast {src;dst}, args, loc) ->
-    comp_expr stack_info env (Lambda.naked_int_cast ~src ~dst args loc) sz cont
-  | Lprim(Pnaked_int_binop {op; size}, args, loc) ->
-    comp_expr stack_info env (Lambda.naked_int_binop ~op ~size args loc) sz cont
+  | Lprim(Pscalar scalar, args, _) ->
+    comp_args stack_info env args sz ( comp_scalar_intrinsic scalar cont)
   | Lprim(p, args, _) ->
       let nargs = List.length args - 1 in
       comp_args stack_info env args sz
@@ -1590,6 +1422,210 @@ and comp_binary_test stack_info env cond ifso ifnot sz cont =
             comp_expr stack_info env ifso sz (branch_end :: cont2) in
 
   comp_expr stack_info env cond sz cont_cond
+
+(* Compiler a scalar intrinsic. *)
+
+and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
+  let module I = Lambda.Scalar.Intrinsic in
+  let ccall arity fmt =
+    Printf.ksprintf (fun name cont ->
+      (Kccall(name, arity) :: cont))
+      fmt
+  in
+  let comp_binary_integral size (op : I.Binary.Int_op.t) cont =
+    let size, cont =
+      match (size : _ Scalar.Or_small_int.t) with
+      | Builtin size -> size, cont
+      | Small (Int8 | Int16 as small) -> Scalar.Integral.Int, (sign_extend small cont)
+    in
+    match (size : Scalar.Integral.t) with
+    | Int ->
+      (match op with
+       | Add -> Kaddint :: cont
+       | Sub -> Ksubint:: cont
+       | Mul -> Kmulint:: cont
+       | Div (Safe | Unsafe) -> Kdivint :: cont
+      | Mod (Safe | Unsafe) -> Kmodint :: cont
+      | And -> Kandint :: cont
+      | Or -> Korint :: cont
+      | Xor -> Kxorint :: cont)
+    | Boxed (Int32 | Nativeint | Int64) ->
+      let c name =
+        ccall 2 "caml_%s_%s" name (Scalar.Integral.to_string size) cont
+      in
+      (match op with
+       | Add -> c "add"
+       | Sub -> c "sub"
+       | Mul -> c "mul"
+       | Div (Safe | Unsafe) -> c "div"
+       | Mod (Safe | Unsafe) -> c "mod"
+       | And -> c "and"
+       | Or -> c "or"
+       | Xor -> c "xor")
+  in
+  let comp_shift size (op : I.Binary.Shift_op.t) cont =
+    match (size : Scalar.Integral.t Scalar.Or_small_int.t) with
+    | Small (Int8 | Int16 as small) ->
+      (match op with
+       | Lsl -> Klslint :: sign_extend small cont
+       | Asr -> Kasrint :: sign_extend small cont
+       | Lsr -> zero_extend small (Klsrint :: sign_extend small cont))
+    | Builtin Int ->
+      (match op with
+       | Lsl -> Klslint :: cont
+       | Lsr -> Klsrint :: cont
+       | Asr -> Kasrint :: cont)
+    | Builtin (Boxed (Int32 | Nativeint | Int64) as size) ->
+      let c name =
+        ccall 2 "caml_%s_%s" name (Scalar.Integral.to_string size) cont
+      in
+      (match op with
+       | Lsl -> c "shift_left"
+       | Lsr -> c "shift_right_unsigned"
+       | Asr -> c "shift_right")
+  in
+  let comp_binary_scalar_intrinsic op cont =
+    match (op : _ Lambda.Scalar.Intrinsic.Binary.t) with
+    | Integral (size, op) ->
+      comp_binary_integral (Scalar.Integral.of_lambda size) op cont
+    | Floating (size, (Add | Sub | Mul | Div as op)) ->
+      let size = Scalar.Floating.of_lambda size in
+      ccall 2 "caml_%s_%s"
+        (I.Binary.Float_op.to_string op)
+        (Scalar.Floating.to_string size)
+        cont
+    | Shift (size, op, Tagged_immediate) ->
+      comp_shift (Scalar.Integral.of_lambda size) op cont
+    | Icmp (size, cmp) ->
+      (match Scalar.Integral.of_lambda size with
+       | Small (Int8 | Int16) | Builtin Int -> Kintcomp cmp :: cont
+       | Builtin (Boxed (Int32 | Nativeint | Int64)) ->
+         (match cmp with
+          | Ceq -> ccall 2 "caml_equal" cont
+          | Cne -> ccall 2 "caml_notequal" cont
+          | Clt -> ccall 2 "caml_lessthan" cont
+          | Cle -> ccall 2 "caml_lessequal" cont
+          | Cgt -> ccall 2 "caml_greaterthan" cont
+          | Cge -> ccall 2 "caml_greaterequal" cont))
+    | Fcmp (size, cmp) ->
+      (match Scalar.Floating.of_lambda size with
+       | Float | Float32 as size ->
+         let size = Scalar.Floating.to_string size in
+         match cmp with
+         | CFeq -> ccall 2 "caml_eq_%s" size (cont)
+         | CFneq -> ccall 2 "caml_neq_%s" size (cont)
+         | CFlt -> ccall 2 "caml_lt_%s" size (cont)
+         | CFnlt -> ccall 2 "caml_lt_%s" size (Kboolnot :: cont)
+         | CFgt -> ccall 2 "caml_gt_%s" size (cont)
+         | CFngt -> ccall 2 "caml_gt_%s" size (Kboolnot :: cont)
+         | CFle -> ccall 2 "caml_le_%s" size (cont)
+         | CFnle -> ccall 2 "caml_le_%s" size (Kboolnot :: cont)
+         | CFge -> ccall 2 "caml_ge_%s" size (cont)
+         | CFnge -> ccall 2 "caml_ge_%s" size (Kboolnot :: cont))
+    | Three_way_compare size ->
+      let size = match Scalar.of_lambda size with
+        | Small (Int8 | Int16) -> Scalar.Int
+        | Builtin (Int | Boxed (Int32 | Nativeint | Int64 | Float | Float32) as builtin )
+          -> builtin
+      in
+      ccall 2 "caml_%s_compare" (Scalar.to_string size) cont
+  in
+  let comp_unary_scalar_intrinsic op cont =
+    (* we don't need to sign- or zero-extend the inputs because tagged small integers are
+       always stored sign-extended *)
+    ( match (op : _ I.Unary.t) with
+      | Integral (size, op) ->
+        let comp_builtin size cont =
+          let comp_offset n cont =
+            let n = (Scalar.Integral.to_const size n) in
+            comp_binary_integral (Builtin size) Add
+              (Kpush :: Kconst (Const_base n) :: cont)
+          in
+          match op, (size : Scalar.Integral.t) with
+          | Bswap, Int -> ccall 1 "caml_bswap16" cont
+          | Bswap, Boxed (Int32 | Int64 | Nativeint) ->
+            ccall 1 "caml_%s_bswap" (Scalar.Integral.to_string size) cont
+          | Neg, Int -> Knegint :: cont
+          | Neg, Boxed (Int32 | Int64 | Nativeint) ->
+            ccall 1 "caml_%s_neg" (Scalar.Integral.to_string size) cont
+          | Succ, Int -> Koffsetint 1 :: cont
+          | Pred, Int -> Koffsetint (-1) :: cont
+          | Succ, Boxed _ -> comp_offset 1 cont
+          | Pred, Boxed _ -> comp_offset (-1) cont
+        in
+        (match op, Scalar.Integral.of_lambda size with
+        | _, Builtin size -> comp_builtin size cont
+        | Bswap, Small Int8 -> cont
+        | (Succ | Pred | Neg), (Small (Int8 | Int16 as small))
+        | Bswap, (Small (Int16 as small)) -> comp_builtin Int (sign_extend small cont))
+    | Floating (size, ((Abs | Neg) as op)) ->
+      let size = Scalar.Floating.of_lambda size in
+      ccall 1 "caml_%s_%s"
+        (I.Unary.Float_op.to_string op)
+        (Scalar.Floating.to_string size)
+        cont
+    | Static_cast { src; dst } ->
+      let rec static_cast ~src ~dst cont =
+        (match (src : Scalar.t), (dst : Scalar.t) with
+         | Boxed Int32, Boxed Int32
+         | Boxed Int64, Boxed Int64
+         | Boxed Nativeint, Boxed Nativeint
+         | Boxed Float, Boxed Float
+         | Boxed Float32, Boxed Float32
+         | Int, Int ->
+           (* the identity function *)
+           cont
+         | Boxed Float32, Boxed (Int64 | Nativeint | Int32)
+         | Boxed (Int64 | Nativeint | Int32), Boxed Float32 ->
+           (* there are no builtins to convert directly, so we go indirectly via
+              float *)
+           static_cast ~src ~dst:(Scalar.Boxed Float)
+             (static_cast ~src:(Scalar.Boxed Float) ~dst cont)
+         | Boxed Int64, (Int | Boxed (Int32 | Nativeint | Float))
+         | Boxed Nativeint, (Int | Boxed (Int32 | Float))
+         | Boxed Int32, (Int | Boxed (Float))
+            ->
+            (* these happen to break from the more favored naming rule of
+               caml_dst_of_src *)
+            ccall 1 "caml_%s_to_%s"
+              (Scalar.to_string src)
+              (Scalar.to_string dst)
+              cont
+         | (Boxed (Float | Float32)), Int
+         | (Int | Boxed (Float | Int32 | Nativeint)), Boxed Int64
+         | (Int | Boxed (Float | Int32)), Boxed Nativeint
+         | (Int | Boxed (Float)), Boxed Int32
+         | (Int | Boxed (Float)), Boxed Float32
+         | (Int | Boxed Float32), Boxed Float
+            ->
+            ccall 1 "caml_%s_of_%s"
+              (Scalar.to_string dst)
+              (Scalar.to_string src)
+              cont
+          )
+        in
+      (match Scalar.of_lambda src, Scalar.of_lambda dst with
+        | Builtin src, Builtin dst -> static_cast ~src ~dst cont
+        | Small (Int8 | Int16), Builtin dst ->
+          (* we don't need to sign-extend in this case because tagged small integers
+             are always represented sign-extended in bytecode *)
+          (static_cast ~src:Int ~dst cont)
+       | Builtin src, Small (Int8 | Int16 as dst)
+         -> static_cast ~src:src ~dst:Int (sign_extend dst cont)
+       | Small Int8, Small (Int8 | Int16)
+       | Small Int16, Small Int16 ->
+         (* we don't need to sign-extend in this case because tagged small integers
+            are always represented sign-extended in bytecode *)
+         cont
+       | (Small Int16), Small (Int8 as dst) ->
+         (* we need to sign-extend here because these values are stored in full-width
+            immediates *)
+         sign_extend dst cont))
+  in
+  match (op : _ Lambda.Scalar.Intrinsic.t) with
+  | Unary op -> comp_unary_scalar_intrinsic  op cont
+  | Binary op -> comp_binary_scalar_intrinsic  op cont
+
 
 (**** Compilation of a code block (with tracking of stack usage) ****)
 
