@@ -1750,10 +1750,11 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let arg1 = H.Prim (maybe_unwrap arg1) in
       let arg2 = H.Prim (maybe_unwrap arg2) in
-      [ Binary
-          ( Int_comp (width, Yielding_bool (convert_integer_comparison cmp)),
-            arg1,
-            arg2 ) ]
+      [ tag_int
+          (Binary
+             ( Int_comp (width, Yielding_bool (convert_integer_comparison cmp)),
+               arg1,
+               arg2 )) ]
     | Fcmp (size, cmp) ->
       let width = floating_width size in
       let maybe_unwrap =
@@ -1762,10 +1763,11 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let arg1 = H.Prim (maybe_unwrap arg1) in
       let arg2 = H.Prim (maybe_unwrap arg2) in
-      [ Binary
-          ( Float_comp (width, Yielding_bool (convert_float_comparison cmp)),
-            arg1,
-            arg2 ) ]
+      [ tag_int
+          (Binary
+             ( Float_comp (width, Yielding_bool (convert_float_comparison cmp)),
+               arg1,
+               arg2 )) ]
     | Three_way_compare size -> (
       let int_compare size : H.expr_primitive list =
         let width = integral_width size in
@@ -1775,10 +1777,11 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
         in
         let arg1 = H.Prim (maybe_unwrap arg1) in
         let arg2 = H.Prim (maybe_unwrap arg2) in
-        [ Binary
-            ( Int_comp (width, Yielding_int_like_compare_functions Signed),
-              arg1,
-              arg2 ) ]
+        [ tag_int
+            (Binary
+               ( Int_comp (width, Yielding_int_like_compare_functions Signed),
+                 arg1,
+                 arg2 )) ]
       in
       let float_compare size : H.expr_primitive list =
         let width = floating_width size in
@@ -1788,10 +1791,11 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
         in
         let arg1 = H.Prim (maybe_unwrap arg1) in
         let arg2 = H.Prim (maybe_unwrap arg2) in
-        [ Binary
-            ( Float_comp (width, Yielding_int_like_compare_functions ()),
-              arg1,
-              arg2 ) ]
+        [ tag_int
+            (Binary
+               ( Float_comp (width, Yielding_int_like_compare_functions ()),
+                 arg1,
+                 arg2 )) ]
       in
       match size with
       | Naked (Integral i) -> int_compare (Naked i)
