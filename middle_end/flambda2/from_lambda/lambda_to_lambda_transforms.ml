@@ -615,7 +615,7 @@ let transform_primitive0 env (prim : L.primitive) args loc =
   | ( Pscalar
         (Binary (Fcmp (size, ((CFneq | CFnlt | CFngt | CFnle | CFnge) as cmp)))),
       args ) ->
-    let cmp = L.negate_float_comparison cmp in
+    let cmp = Scalar.Float_comparison.negate cmp in
     Primitive
       (L.Pnot, [L.Lprim (Pscalar (Binary (Fcmp (size, cmp))), args, loc)], loc)
   | Pbigarrayref (_unsafe, num_dimensions, kind, layout), args -> (

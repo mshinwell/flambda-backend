@@ -17,6 +17,8 @@
 
 open Asttypes
 
+module Scalar = Scalar
+
 type constant = Typedtree.constant
 
 (* Overriding Asttypes.mutable_flag *)
@@ -66,10 +68,6 @@ type initialization_or_assignment =
      No checks are done to preserve GC invariants.  *)
   | Root_initialization
 
-type is_safe =
-  | Safe
-  | Unsafe
-
 type field_read_semantics =
   | Reads_agree
   | Reads_vary
@@ -104,10 +102,10 @@ type region_close =
     tail call because the outer region needs to end there.)
 *)
 
-type integer_comparison =
+type integer_comparison = Scalar.Integer_comparison.t =
     Ceq | Cne | Clt | Cgt | Cle | Cge
 
-type float_comparison =
+type float_comparison = Scalar.Float_comparison.t =
     CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
 
 
@@ -198,7 +196,7 @@ and unboxed_float = Primitive.unboxed_float =
 and unboxed_integer =
   | Unboxed_int64
   | Unboxed_nativeint
-  | Unboxed_immediate
+  | Unboxed_int
   | Unboxed_int32
   | Unboxed_int16
   | Unboxed_int8
@@ -219,250 +217,8 @@ and boxed_vector = Primitive.boxed_vector =
   | Boxed_vec128
 
 
-type any_locality_mode = Any_locality_mode
+type any_locality_mode = Scalar.any_locality_mode = Any_locality_mode
 
-type tagged_immediate = Tagged_immediate
-
-module Maybe_naked :  sig
-  type ('a, 'b) t =
-    | Value of 'a
-    | Naked of 'b
-end
-
-module Scalar : sig
-  module type S := sig
-      type 'a width
-      type nonrec 'a t = ('a width, any_locality_mode width) Maybe_naked.t
-
-      val all : any_locality_mode t list
-      val map : 'a t -> f:('a -> 'b) -> 'b t
-      val locality_mode : locality_mode t -> locality_mode option
-      val ignore_locality : locality_mode t -> any_locality_mode t
-      val width : any_locality_mode t -> any_locality_mode width
-      val layout : any_locality_mode t -> layout
-      val to_string : any_locality_mode t -> string
-    end
-
-  module type Integral_width_constants := sig
-    type 'a t
-
-    val int8 : _ t
-    val int16 : _ t
-    val int32 : any_locality_mode t
-    val int64 : any_locality_mode t
-    val int : _ t
-    val nativeint : any_locality_mode t
-  end
-
-  module type Integral_constants := sig
-    type 'a t
-    include Integral_width_constants with type 'a t := 'a t
-    val naked_int8 : _ t
-    val naked_int16 : _ t
-    val naked_int32 : any_locality_mode t
-    val naked_int64 : any_locality_mode t
-    val naked_int : _ t
-    val naked_nativeint : any_locality_mode t
-  end
-
-  module type Float_width_constants := sig
-      type 'a t
-      val float32 : any_locality_mode t
-      val float : any_locality_mode t
-    end
-
-  module type Float_constants := sig
-      type 'a t
-      include Float_width_constants with type 'a t := 'a t
-      val naked_float32 : any_locality_mode t
-      val naked_float : any_locality_mode t
-    end
-
-  module Integral : sig
-    module Taggable : sig
-      module Width : sig
-        type t =
-          | Int8
-          | Int16
-          | Int
-
-        val to_unboxed_integer : t -> unboxed_integer
-        val to_string : t -> string
-      end
-
-      include S with type 'a width := Width.t
-    end
-
-    module Boxable : sig
-      module Width : sig
-        type 'mode t =
-          | Int32 of 'mode
-          | Nativeint of 'mode
-          | Int64 of 'mode
-
-        val map : 'a t -> f:('a -> 'b) -> 'b t
-        val locality_mode' : locality_mode t -> locality_mode
-        val locality_mode : locality_mode t -> locality_mode option
-        val to_boxed_integer : any_locality_mode t -> boxed_integer
-        val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-      end
-
-      include S with type 'a width := 'a Width.t
-    end
-
-    module Width : sig
-      type 'mode t =
-        | Taggable of Taggable.Width.t
-        | Boxable of 'mode Boxable.Width.t
-
-      val map : 'a t -> f:('a -> 'b) -> 'b t
-      val locality_mode : locality_mode t -> locality_mode option
-      val to_unboxed_integer : any_locality_mode t -> unboxed_integer
-      include Integral_width_constants with type 'a t := 'a t
-    end
-
-    include S with type 'a width := 'a Width.t
-    include Integral_constants with type 'a t := 'a t
-  end
-
-  module Floating : sig
-    module Width : sig
-      type 'mode t =
-        | Float32 of 'mode
-        | Float64 of 'mode
-
-      val map : 'a t -> f:('a -> 'b) -> 'b t
-      val locality_mode' : locality_mode t -> locality_mode
-      val locality_mode : locality_mode t -> locality_mode option
-      val to_boxed_float : any_locality_mode t -> boxed_float
-      val to_unboxed_float : any_locality_mode t -> unboxed_float
-      include Float_width_constants with type 'a t := 'a t
-    end
-
-    include S with type 'a width := 'a Width.t
-    include Float_constants with type 'a t := 'a t
-  end
-
-  module Width : sig
-    type 'mode t =
-      | Floating of 'mode Floating.Width.t
-      | Integral of 'mode Integral.Width.t
-
-    val map : 'a t -> f:('a -> 'b) -> 'b t
-    val locality_mode : locality_mode t -> locality_mode option
-    val ignore_locality : locality_mode t -> any_locality_mode t
-
-    include Integral_width_constants with type 'a t := 'a t
-    include Float_width_constants with type 'a t := 'a t
-  end
-
-  include S with type 'a width := 'a Width.t
-  include Integral_constants with type 'a t := 'a t
-  include Float_constants with type 'a t := 'a t
-
-  val integral : 'a Integral.t -> 'a t
-  val floating : 'a Floating.t -> 'a t
-
-  module Intrinsic : sig
-    type 'mode info =
-      { can_raise : bool;
-        result : 'mode t
-      }
-
-    module Unary : sig
-      module Int_op : sig
-        type t =
-          | Neg
-          | Succ (** add 1 *)
-          | Pred (** subtract 1 *)
-          | Bswap
-
-        val to_string : t -> string
-      end
-
-      module Float_op : sig
-        type t =
-          | Neg
-          | Abs
-
-        val to_string : t -> string
-      end
-
-      type nonrec 'mode t =
-        | Integral of 'mode Integral.t * Int_op.t
-        | Floating of 'mode Floating.t * Float_op.t
-        | Static_cast of
-            { src : any_locality_mode t;
-              dst : 'mode t
-            }
-
-      val map : 'a t -> f:('a -> 'b) -> 'b t
-      val info : 'a t -> 'a info
-    end
-
-    module Binary : sig
-      module Int_op : sig
-        type t =
-          | Add
-          | Sub
-          | Mul
-          | Div of is_safe
-          | Mod of is_safe
-          | And
-          | Or
-          | Xor
-
-        val to_string : t -> string
-      end
-
-      module Shift_op : sig
-        module Rhs : sig
-          (* CR jvanburen: add shift intrinsics that take other widths *)
-          type t = Tagged_immediate
-        end
-
-        type t =
-          | Lsl
-          | Asr
-          | Lsr
-
-        val to_string : t -> string
-      end
-
-      module Float_op : sig
-        type t =
-          | Add
-          | Sub
-          | Mul
-          | Div
-
-        val to_string : t -> string
-      end
-
-      (** comparisons return a tagged immediate *)
-      (* CR jvanburen: comparisons that return naked values *)
-      type nonrec 'mode t =
-        | Integral of 'mode Integral.t * Int_op.t
-        | Shift of 'mode Integral.t * Shift_op.t * Shift_op.Rhs.t
-        | Floating of 'mode Floating.t * Float_op.t
-        | Icmp of any_locality_mode Integral.t * integer_comparison
-        | Fcmp of any_locality_mode Floating.t * float_comparison
-        | Three_way_compare of any_locality_mode t
-
-      val map : 'a t -> f:('a -> 'b) -> 'b t
-      val info : 'a t -> 'a info
-    end
-
-    type 'mode t =
-      | Unary of 'mode Unary.t
-      | Binary of 'mode Binary.t
-
-    val map : 'a t -> f:('a -> 'b) -> 'b t
-    val info : 'a t -> 'a info
-    val all : any_locality_mode t list
-    val to_string : any_locality_mode t -> string
-  end
-end
 
 module Phys_equal : sig
   type t = Eq | Noteq
@@ -1312,12 +1068,6 @@ val shallow_map  :
 
 val bind_with_layout:
   let_kind -> (Ident.t * layout) -> lambda -> lambda -> lambda
-
-val negate_integer_comparison : integer_comparison -> integer_comparison
-val swap_integer_comparison : integer_comparison -> integer_comparison
-
-val negate_float_comparison : float_comparison -> float_comparison
-val swap_float_comparison : float_comparison -> float_comparison
 
 val default_function_attribute : function_attribute
 val default_stub_attribute : function_attribute

@@ -30,7 +30,7 @@ let unboxed_integer : Lambda.unboxed_integer -> string = function
   | Unboxed_int8 -> "unboxed_int8"
   | Unboxed_int16 -> "unboxed_int16"
   | Unboxed_nativeint -> "unboxed_nativeint"
-  | Unboxed_immediate -> "unboxed_immediate"
+  | Unboxed_int -> "unboxed_int"
   | Unboxed_int32 -> "unboxed_int32"
   | Unboxed_int64 -> "unboxed_int64"
 
@@ -448,7 +448,7 @@ let primitive ppf = function
             ~f:(fun (Alloc_heap | Alloc_local) -> Any_locality_mode)));
     Option.iter
       (fun mode -> pp_print_string ppf (locality_kind mode))
-      (Scalar.locality_mode (Scalar.Intrinsic.info scalar).result)
+      (Lambda.primitive_may_allocate (Pscalar scalar))
   | Pbytes_to_string -> fprintf ppf "bytes_to_string"
   | Pbytes_of_string -> fprintf ppf "bytes_of_string"
   | Pignore -> fprintf ppf "ignore"

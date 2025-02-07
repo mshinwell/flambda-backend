@@ -345,31 +345,6 @@ let indexing_primitives =
   |> List.to_seq
   |> fun seq -> String.Map.add_seq seq String.Map.empty
 
-let lookup_scalar_intrinsic =
-  let tbl = lazy (
-    let tbl = String.Tbl.create 500 in
-    ListLabels.iter Scalar.Intrinsic.all ~f:(fun intrinsic ->
-      String.Tbl.add
-        tbl
-        ("%" ^ Scalar.Intrinsic.to_string intrinsic)
-        intrinsic);
-    tbl)
-  in
-  fun s ~mode ->
-    match String.Tbl.find_opt (Lazy.force tbl) s with
-    | None -> None
-    | Some intrinsic ->
-      let arity =
-        match intrinsic with
-        | Unary _ -> 1
-        | Binary _ -> 2
-      in
-      let intrinsic =
-        Scalar.Intrinsic.map intrinsic ~f:(fun Any_locality_mode -> mode)
-      in
-      Some (Primitive (Pscalar intrinsic, arity))
-
-
 let lookup_primitive loc ~poly_mode ~poly_sort pos p =
   let runtime5 = Config.runtime5 in
   let mode = to_locality ~poly:poly_mode p.prim_native_repr_res in
@@ -423,7 +398,7 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     binary (Fcmp (Scalar.Floating.ignore_locality size, cmp))
   in
   let naked scalar =
-    Maybe_naked.Naked (Scalar.width (Scalar.ignore_locality scalar))
+    Scalar.Maybe_naked.Naked (Scalar.width (Scalar.ignore_locality scalar))
   in
   let static_cast ~src ~dst =
     let src = Scalar.ignore_locality src in
@@ -484,9 +459,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%andint" -> binary (Integral (int, And))
     | "%orint" -> binary (Integral (int, Or))
     | "%xorint" -> binary (Integral (int, Xor))
-    | "%lslint" -> binary (Shift (int, Lsl, Tagged_immediate))
-    | "%lsrint" -> binary (Shift (int, Lsr, Tagged_immediate))
-    | "%asrint" -> binary (Shift (int, Asr, Tagged_immediate))
+    | "%lslint" -> binary (Shift (int, Lsl, Int))
+    | "%lsrint" -> binary (Shift (int, Lsr, Int))
+    | "%asrint" -> binary (Shift (int, Asr, Int))
     | "%eq" ->  Primitive (Pphys_equal Eq, 2)
     | "%noteq" -> Primitive (Pphys_equal Noteq, 2)
     | "%ltint" -> icmp int Clt
@@ -647,9 +622,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%nativeint_and" -> binary (Integral (nativeint, And))
     | "%nativeint_or" -> binary (Integral (nativeint, Or))
     | "%nativeint_xor" -> binary (Integral (nativeint, Xor))
-    | "%nativeint_lsl" -> binary (Shift (nativeint, Lsl, Tagged_immediate))
-    | "%nativeint_lsr" -> binary (Shift (nativeint, Lsr, Tagged_immediate))
-    | "%nativeint_asr" -> binary (Shift (nativeint, Asr, Tagged_immediate))
+    | "%nativeint_lsl" -> binary (Shift (nativeint, Lsl, Int))
+    | "%nativeint_lsr" -> binary (Shift (nativeint, Lsr, Int))
+    | "%nativeint_asr" -> binary (Shift (nativeint, Asr, Int))
     | "%int32_of_int" -> static_cast ~dst:(i int32) ~src:(i int)
     | "%int32_to_int" -> static_cast ~src:(i int32) ~dst:(i int)
     | "%int32_neg" -> unary (Integral (int32, Neg))
@@ -661,9 +636,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%int32_and" -> binary (Integral (int32, And))
     | "%int32_or" -> binary (Integral (int32, Or))
     | "%int32_xor" -> binary (Integral (int32, Xor))
-    | "%int32_lsl" -> binary (Shift (int32, Lsl, Tagged_immediate))
-    | "%int32_lsr" -> binary (Shift (int32, Lsr, Tagged_immediate))
-    | "%int32_asr" -> binary (Shift (int32, Asr, Tagged_immediate))
+    | "%int32_lsl" -> binary (Shift (int32, Lsl, Int))
+    | "%int32_lsr" -> binary (Shift (int32, Lsr, Int))
+    | "%int32_asr" -> binary (Shift (int32, Asr, Int))
     | "%int64_of_int" -> static_cast ~dst:(i int64) ~src:(i int)
     | "%int64_to_int" -> static_cast ~src:(i int64) ~dst:(i int)
     | "%int64_neg" -> unary (Integral (int64, Neg))
@@ -675,9 +650,9 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%int64_and" -> binary (Integral (int64, And))
     | "%int64_or" -> binary (Integral (int64, Or))
     | "%int64_xor" -> binary (Integral (int64, Xor))
-    | "%int64_lsl" -> binary (Shift (int64, Lsl, Tagged_immediate))
-    | "%int64_lsr" -> binary (Shift (int64, Lsr, Tagged_immediate))
-    | "%int64_asr" -> binary (Shift (int64, Asr, Tagged_immediate))
+    | "%int64_lsl" -> binary (Shift (int64, Lsl, Int))
+    | "%int64_lsr" -> binary (Shift (int64, Lsr, Int))
+    | "%int64_asr" -> binary (Shift (int64, Asr, Int))
     | "%nativeint_of_int32" -> static_cast ~dst:(i nativeint) ~src:(i int32)
     | "%nativeint_to_int32" -> static_cast ~src:(i nativeint) ~dst:(i int32)
     | "%int64_of_int32" -> static_cast ~dst:(i int64) ~src:(i int32)
@@ -987,10 +962,14 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
         (match String.Map.find_opt s indexing_primitives with
          | Some prim -> prim ~mode
          | None ->
-           match lookup_scalar_intrinsic s ~mode with
-           | Some prim -> prim
-           | None ->
-             raise (Error (loc, Unknown_builtin_primitive s)))
+           match Scalar.Intrinsic.With_percent_prefix.of_string s with
+           | exception Not_found -> raise (Error (loc, Unknown_builtin_primitive s))
+           | intrinsic ->
+             let arity = Scalar.Intrinsic.arity intrinsic in
+             let intrinsic =
+               Scalar.Intrinsic.map intrinsic ~f:(fun Any_locality_mode -> mode)
+             in
+             (Primitive (Pscalar intrinsic, arity)))
   in
   prim
 
@@ -1271,7 +1250,7 @@ let peek_or_poke_layout_from_type ~prim_name error_loc env ty
     | Punboxed_int Unboxed_int64 -> Some Ppp_unboxed_int64
     | Punboxed_int Unboxed_nativeint -> Some Ppp_unboxed_nativeint
     | Pvalue { raw_kind = Pintval ; _ } -> Some Ppp_tagged_immediate
-    | Punboxed_int Unboxed_immediate
+    | Punboxed_int Unboxed_int
     | Ptop
     | Pvalue _
     | Punboxed_vector _

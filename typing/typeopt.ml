@@ -250,7 +250,7 @@ let array_kind_of_elt ~elt_sort env loc ty =
   | Addr | Lazy -> Paddrarray
   | Int -> Pintarray
   | Unboxed_float f -> Punboxedfloatarray f
-  | Unboxed_int Unboxed_immediate -> Pintarray
+  | Unboxed_int Unboxed_int -> Punboxedintarray Unboxed_nativeint
   | Unboxed_int Unboxed_int64 -> Punboxedintarray Unboxed_int64
   | Unboxed_int Unboxed_nativeint -> Punboxedintarray Unboxed_nativeint
   | Unboxed_int Unboxed_int32 -> Punboxedintarray Unboxed_int32

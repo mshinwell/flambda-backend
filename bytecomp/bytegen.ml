@@ -492,21 +492,14 @@ let check_stack stack_info sz =
 
 (* Sequence of string tests *)
 
-
 (* Translate a primitive to a bytecode instruction (possibly a call to a C
    function) *)
-
-
-
-
-
-
 
 let indexing_primitive (index_kind : Lambda.array_index_kind) prefix =
   let suffix =
     match index_kind with
     | Ptagged_int_index
-    | Punboxed_int_index Unboxed_immediate -> ""
+    | Punboxed_int_index Unboxed_int -> ""
     | Punboxed_int_index Unboxed_int64 -> "_indexed_by_int64"
     | Punboxed_int_index Unboxed_int32 -> "_indexed_by_int32"
     | Punboxed_int_index Unboxed_int16 -> "_indexed_by_int16"
@@ -819,32 +812,35 @@ let rec contains_float32s = function
   | _ -> false
 
 
-let sign_or_zero_extend ~signed bits cont =
-  let bits =
-    match (bits : Scalar.small_int) with
-    | Int8 -> 8
-    | Int16 -> 16
-  in
-  let do_shift op cont =
-     Kpush (* save the accumulator, then compute how far to shift *)
-    :: Kconst (Const_base (Const_int bits))
-    :: Kpush
-    :: Kconst (Const_base (Const_int 0))
-    :: Kccall ("caml_sys_const_int_size", 1)
-    :: Ksubint
-    (* next, shift the old accumulator by the result of the subtraction *)
-    :: Kpush
-    :: Kacc 1
-    :: op
-    :: Kpop 1
-    :: cont
-  in
-  do_shift Klslint
-    (do_shift (if signed then Kasrint else Klsrint) cont)
+let bits : Scalar.small_int -> structured_constant = function
+  | Int8 -> Const_base (Const_int 8)
+  | Int16 -> Const_base (Const_int 16)
 
-let sign_extend = sign_or_zero_extend ~signed:true
-let zero_extend = sign_or_zero_extend ~signed:false
+let sign_extend width cont =
+    Kpush (* save the accumulator, then compute how far to shift *)
+  :: Kconst (bits width)
+  :: Kpush
+  :: Kconst const_unit
+  :: Kccall ("caml_sys_const_int_size", 1)
+  :: Ksubint
+  :: Kpush (* save the number of bits to shift by, once for each shift *)
+  :: Kpush
+  :: Kacc 2 (* load the original argument *)
+  :: Klslint (* shift left *)
+  :: Kasrint (* shift right *)
+  :: Kpop 1 (* restore the stack *)
+  :: cont
 
+let zero_extend width cont =
+  (* zero the top bits by computing [acc & (1 << bits - 1)] *)
+  Kpush
+  :: Kconst (bits width)
+  :: Kpush
+  :: Kconst (Const_base (Const_int 1))
+  :: Klslint
+  :: Koffsetint (-1)
+  :: Kandint
+  :: cont
 
 let rec translate_float32s stack_info env cst sz cont =
   match cst with
@@ -1447,14 +1443,14 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
        | Add -> Kaddint :: cont
        | Sub -> Ksubint:: cont
        | Mul -> Kmulint:: cont
-       | Div (Safe | Unsafe) -> Kdivint :: cont
-      | Mod (Safe | Unsafe) -> Kmodint :: cont
-      | And -> Kandint :: cont
-      | Or -> Korint :: cont
-      | Xor -> Kxorint :: cont)
+       | Div (Safe | Unsafe)-> Kdivint :: cont
+       | Mod (Safe | Unsafe) -> Kmodint :: cont
+       | And -> Kandint :: cont
+       | Or -> Korint :: cont
+       | Xor -> Kxorint :: cont)
     | Boxed (Int32 | Nativeint | Int64) ->
       let c name =
-        ccall 2 "caml_%s_%s" name (Scalar.Integral.to_string size) cont
+        ccall 2 "caml_%s_%s" (Scalar.Integral.to_string size) name cont
       in
       (match op with
        | Add -> c "add"
@@ -1480,7 +1476,7 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
        | Asr -> Kasrint :: cont)
     | Builtin (Boxed (Int32 | Nativeint | Int64) as size) ->
       let c name =
-        ccall 2 "caml_%s_%s" name (Scalar.Integral.to_string size) cont
+        ccall 2 "caml_%s_%s" (Scalar.Integral.to_string size) name cont
       in
       (match op with
        | Lsl -> c "shift_left"
@@ -1497,7 +1493,7 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
         (I.Binary.Float_op.to_string op)
         (Scalar.Floating.to_string size)
         cont
-    | Shift (size, op, Tagged_immediate) ->
+    | Shift (size, op, Int) ->
       comp_shift (Scalar.Integral.of_lambda size) op cont
     | Icmp (size, cmp) ->
       (match Scalar.Integral.of_lambda size with

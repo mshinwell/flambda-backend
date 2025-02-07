@@ -57,13 +57,13 @@ let standard_int_of_unboxed_integer : L.unboxed_integer -> K.Standard_int.t =
   | Unboxed_int16 -> Naked_int16
   | Unboxed_int32 -> Naked_int32
   | Unboxed_nativeint -> Naked_nativeint
-  | Unboxed_immediate -> Naked_immediate
+  | Unboxed_int -> Naked_immediate
   | Unboxed_int64 -> Naked_int64
 
 let standard_int_or_float_of_unboxed_integer (ubint : L.unboxed_integer) :
     K.Standard_int_or_float.t =
   match ubint with
-  | Unboxed_immediate -> Naked_immediate
+  | Unboxed_int -> Naked_immediate
   | Unboxed_nativeint -> Naked_nativeint
   | Unboxed_int8 -> Naked_int8
   | Unboxed_int16 -> Naked_int16
@@ -528,7 +528,7 @@ let rec static_cast ~(src : L.any_locality_mode L.Scalar.t)
       in
       static_cast
         (H.Prim (Unary (unwrap, arg)))
-        ~src:(L.Maybe_naked.Naked src) ~dst ~current_region
+        ~src:(Scalar.Maybe_naked.Naked src) ~dst ~current_region
     | src, Value dst ->
       let wrap =
         let box_number width mode =
@@ -545,7 +545,7 @@ let rec static_cast ~(src : L.any_locality_mode L.Scalar.t)
         | Integral (Boxable (Nativeint mode)) -> box_number Naked_nativeint mode
         | Integral (Boxable (Int64 mode)) -> box_number Naked_int64 mode
       in
-      let dst = L.Maybe_naked.Naked (L.Scalar.Width.ignore_locality dst) in
+      let dst = Scalar.Maybe_naked.Naked (L.Scalar.Width.ignore_locality dst) in
       Unary (wrap, Prim (static_cast arg ~src ~dst ~current_region))
     | Naked src, Naked dst ->
       let standard_int_or_float_of_scalar_width :
@@ -1699,10 +1699,8 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
           ~dst:(integral_scalar width) ~current_region
       in
       let arg2 =
-        match rhs with
-        | Tagged_immediate ->
-          static_cast arg2 ~src:L.Scalar.int ~dst:L.Scalar.naked_int
-            ~current_region
+        let src = match rhs with Int -> L.Scalar.int in
+        static_cast arg2 ~src ~dst:L.Scalar.naked_int ~current_region
       in
       let maybe_wrap =
         static_cast ~src:(integral_scalar width) ~dst:outer ~current_region

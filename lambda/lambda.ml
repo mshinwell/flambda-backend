@@ -35,10 +35,6 @@ type immediate_or_pointer =
   | Immediate
   | Pointer
 
-type is_safe =
-  | Safe
-  | Unsafe
-
 type field_read_semantics =
   | Reads_agree
   | Reads_vary
@@ -125,17 +121,11 @@ type region_close =
   | Rc_close_at_apply
 
 
-type integer_comparison =
+type integer_comparison = Scalar.Integer_comparison.t =
     Ceq | Cne | Clt | Cgt | Cle | Cge
 
-let all_integer_comparisons =
-  [ Ceq ; Cne ; Clt ; Cgt ; Cle ; Cge ]
-
-type float_comparison =
+type float_comparison = Scalar.Float_comparison.t =
     CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
-
-let all_float_comparisons =
-  [ CFeq ; CFneq ; CFlt ; CFnlt ; CFgt ; CFngt ; CFle ; CFnle ; CFge ; CFnge ]
 
 type unboxed_float = Primitive.unboxed_float =
   | Unboxed_float64
@@ -144,7 +134,7 @@ type unboxed_float = Primitive.unboxed_float =
 and unboxed_integer =
   | Unboxed_int64
   | Unboxed_nativeint
-  | Unboxed_immediate
+  | Unboxed_int
   | Unboxed_int32
   | Unboxed_int16
   | Unboxed_int8
@@ -250,587 +240,12 @@ let unboxed_integer_of_primitive : Primitive.unboxed_integer -> unboxed_integer 
 
 let equal_unboxed_integer
     (( Unboxed_int8 | Unboxed_int16 | Unboxed_int32 | Unboxed_int64
-     | Unboxed_nativeint | Unboxed_immediate ) as l) r =
+     | Unboxed_nativeint | Unboxed_int ) as l) r =
   l = r
 
-type any_locality_mode = Any_locality_mode
+type any_locality_mode = Scalar.any_locality_mode = Any_locality_mode
 
-type tagged_immediate = Tagged_immediate
-
-let ignore_locality (Alloc_local | Alloc_heap) = Any_locality_mode
-
-module Maybe_naked = struct
-  type ('a, 'b) t =
-    | Value of 'a
-    | Naked of 'b
-
-  module Make1 (M : sig
-    type 'a t
-
-    val all : any_locality_mode t list
-    val map : 'a t -> f:('a -> 'b) -> 'b t
-    val locality_mode : locality_mode t -> locality_mode option
-    val to_string : any_locality_mode t -> string
-  end) =
-  struct
-    type nonrec 'a t = ('a M.t, any_locality_mode M.t) t
-
-    let map (t : _ t) ~f =
-      match t with
-      | Naked (_ : any_locality_mode M.t) as t -> t
-      | Value t -> Value (M.map t ~f)
-
-    let locality_mode : locality_mode t -> locality_mode option = function
-      | Naked (_ : any_locality_mode M.t) -> None
-      | Value t -> M.locality_mode t
-
-    let width (Naked t | Value t : _ t) = t
-
-    let to_string = function
-      | Value m -> M.to_string m
-      | Naked m -> M.to_string m ^ "#"
-
-    let ignore_locality = map ~f:ignore_locality
-    let all = List.concat_map (fun m -> [ Value m; Naked m ]) M.all
-  end
-end
-
-module Scalar = struct
-  module Integral = struct
-    module Taggable = struct
-      module Width = struct
-        type t =
-          | Int8
-          | Int16
-          | Int
-
-        let all = [ Int8; Int16; Int ]
-
-        let to_unboxed_integer = function
-          | Int8 -> Unboxed_int8
-          | Int16 -> Unboxed_int16
-          | Int -> Unboxed_immediate
-
-        let to_string = function
-          | Int8 -> "int8"
-          | Int16 -> "int16"
-          | Int -> "int"
-      end
-
-      include Maybe_naked.Make1 (struct
-          include Width
-          type nonrec 'a t = t
-          let map t ~f:_ = t
-          let locality_mode (Int8 | Int16 | Int) = None
-        end)
-
-      let layout : any_locality_mode t -> layout = function
-        | Naked t -> Punboxed_int (Width.to_unboxed_integer t)
-        | Value (Int8 | Int16 | Int) ->
-          Pvalue { raw_kind = Pintval; nullable = Non_nullable }
-    end
-
-    module Boxable = struct
-      module Width = struct
-
-        type 'mode t =
-          | Int32 of 'mode
-          | Nativeint of 'mode
-          | Int64 of 'mode
-
-        let all =
-          [ Int32 Any_locality_mode
-          ; Nativeint Any_locality_mode
-          ; Int64 Any_locality_mode ]
-
-        let map t ~f =
-          match t with
-          | Int32 mode -> Int32 (f mode)
-          | Nativeint mode -> Nativeint (f mode)
-          | Int64 mode -> Int64 (f mode)
-
-        let locality_mode' (Int32 mode | Nativeint mode | Int64 mode) :
-            locality_mode = mode
-
-        let locality_mode t = Some (locality_mode' t)
-
-        let to_boxed_integer = function
-          | Int32 _ -> Boxed_int32
-          | Nativeint _ -> Boxed_nativeint
-          | Int64 _ -> Boxed_int64
-
-        let to_unboxed_integer = function
-          | Int32 Any_locality_mode -> Unboxed_int32
-          | Nativeint Any_locality_mode -> Unboxed_nativeint
-          | Int64 Any_locality_mode -> Unboxed_int64
-
-        let to_string = function
-          | Int32 Any_locality_mode -> "int32"
-          | Nativeint Any_locality_mode -> "nativeint"
-          | Int64 Any_locality_mode -> "int64"
-      end
-
-      include Maybe_naked.Make1 (Width)
-
-      let layout : any_locality_mode t -> layout = function
-        | Value t ->
-          Pvalue
-            { raw_kind = Pboxedintval (Width.to_boxed_integer t);
-              nullable = Non_nullable
-            }
-        | Naked t -> Punboxed_int (Width.to_unboxed_integer t)
-    end
-
-    module Width = struct
-      type 'mode t =
-        | Taggable of Taggable.Width.t
-        | Boxable of 'mode Boxable.Width.t
-
-      let all =
-        List.concat
-          [ List.map (fun t -> Taggable t) Taggable.Width.all
-          ; List.map (fun t -> Boxable t) Boxable.Width.all
-          ]
-
-      let map t ~f =
-        match t with
-        | Taggable (Int8 | Int16 | Int) as t -> t
-        | Boxable b -> Boxable (Boxable.Width.map b ~f)
-
-      let locality_mode = function
-        | Taggable (Int8 | Int16 | Int) -> None
-        | Boxable b -> Boxable.Width.locality_mode b
-
-      let to_unboxed_integer = function
-        | Taggable t -> Taggable.Width.to_unboxed_integer t
-        | Boxable b -> Boxable.Width.to_unboxed_integer b
-
-      let to_string = function
-        | Taggable t -> Taggable.Width.to_string t
-        | Boxable b -> Boxable.Width.to_string b
-
-      let int8 = Taggable Int8
-      let int16 = Taggable Int16
-      let int32 = Boxable (Int32 Any_locality_mode)
-      let int64 = Boxable (Int64 Any_locality_mode)
-      let int = Taggable Int
-      let nativeint = Boxable (Nativeint Any_locality_mode)
-    end
-
-    include Maybe_naked.Make1 (Width)
-
-    let layout : any_locality_mode t -> layout = function
-      | Value (Taggable t) -> Taggable.layout (Value t)
-      | Naked (Taggable t) -> Taggable.layout (Naked t)
-      | Value (Boxable t) -> Boxable.layout (Value t)
-      | Naked (Boxable t) -> Boxable.layout (Naked t)
-
-    let int8 : _ t = Value Width.int8
-    let int16 : _ t = Value Width.int16
-    let int32 : _ t = Value Width.int32
-    let int64 : _ t = Value Width.int64
-    let int : _ t = Value Width.int
-    let nativeint : _ t = Value Width.nativeint
-    let naked_int8 : _ t = Naked Width.int8
-    let naked_int16 : _ t = Naked Width.int16
-    let naked_int32 : _ t = Naked Width.int32
-    let naked_int64 : _ t = Naked Width.int32
-    let naked_int : _ t = Naked Width.int
-    let naked_nativeint : _ t = Naked Width.nativeint
-  end
-
-  module Floating = struct
-    module Width = struct
-      type 'mode t =
-        | Float32 of 'mode
-        | Float64 of 'mode
-
-      let all = [Float32 Any_locality_mode; Float64 Any_locality_mode]
-
-      let map t ~f =
-        match t with
-        | Float32 mode -> Float32 (f mode)
-        | Float64 mode -> Float64 (f mode)
-
-      let locality_mode' (Float32 mode | Float64 mode) : locality_mode = mode
-
-      let locality_mode t = Some (locality_mode' t)
-
-      let to_boxed_float = function
-        | Float32 _ -> Boxed_float32
-        | Float64 _ -> Boxed_float64
-
-      let to_unboxed_float = function
-        | Float32 Any_locality_mode -> Unboxed_float32
-        | Float64 Any_locality_mode -> Unboxed_float64
-
-      let to_string = function
-        | Float32 Any_locality_mode -> "float32"
-        | Float64 Any_locality_mode -> "float"
-
-      let float32 = Float32 Any_locality_mode
-      let float = Float64 Any_locality_mode
-    end
-
-    include Maybe_naked.Make1 (Width)
-
-    let layout : any_locality_mode t -> layout = function
-      | Naked t -> Punboxed_float (Width.to_unboxed_float t)
-      | Value t ->
-        Pvalue
-          { raw_kind = Pboxedfloatval (Width.to_boxed_float t);
-            nullable = Non_nullable
-          }
-
-    let float32 : _ t = Value Width.float32
-    let float : _ t = Value Width.float
-    let naked_float32 : _ t = Naked Width.float32
-    let naked_float : _ t = Naked Width.float
-  end
-
-  module Width = struct
-    type 'mode t =
-      | Floating of 'mode Floating.Width.t
-      | Integral of 'mode Integral.Width.t
-
-    let all =
-      List.concat
-        [ List.map (fun t -> Floating t) Floating.Width.all
-        ; List.map (fun t -> Integral t) Integral.Width.all
-        ]
-
-    let map t ~f =
-      match t with
-      | Floating g -> Floating (Floating.Width.map g ~f)
-      | Integral i -> Integral (Integral.Width.map i ~f)
-
-    let ignore_locality = map ~f:ignore_locality
-
-    let locality_mode = function
-      | Floating f -> Floating.Width.locality_mode f
-      | Integral i -> Integral.Width.locality_mode i
-
-    let to_string = function
-      | Floating f -> Floating.Width.to_string f
-      | Integral i -> Integral.Width.to_string i
-
-    let float32 = Floating Floating.Width.float32
-    let float = Floating Floating.Width.float
-    let int8 = Integral Integral.Width.int8
-    let int16 = Integral Integral.Width.int16
-    let int = Integral Integral.Width.int
-    let int32 = Integral Integral.Width.int32
-    let int64 = Integral Integral.Width.int64
-    let nativeint = Integral Integral.Width.nativeint
-  end
-
-  include Maybe_naked.Make1 (Width)
-
-  let layout : any_locality_mode t -> layout = function
-    | Value (Floating f) -> Floating.layout (Value f)
-    | Naked (Floating f) -> Floating.layout (Naked f)
-    | Value (Integral i) -> Integral.layout (Value i)
-    | Naked (Integral i) -> Integral.layout (Naked i)
-
-  let integral : 'a Integral.t -> 'a t = function
-    | Value i -> Value (Integral i)
-    | Naked i -> Naked (Integral i)
-
-  let floating : 'a Floating.t -> 'a t = function
-    | Value f -> Value (Floating f)
-    | Naked f -> Naked (Floating f)
-
-  let int8 : _ t = Value Width.int8
-  let int16 : _ t = Value Width.int16
-  let int : _ t = Value Width.int
-  let int32 : _ t = Value Width.int32
-  let nativeint : _ t = Value Width.nativeint
-  let int64 : _ t = Value Width.int64
-  let float32 : _ t = Value Width.float32
-  let float : _ t = Value Width.float
-  let naked_int8 : _ t = Naked Width.int8
-  let naked_int16 : _ t = Naked Width.int16
-  let naked_int : _ t = Naked Width.int
-  let naked_int32 : _ t = Naked Width.int32
-  let naked_nativeint : _ t = Naked Width.nativeint
-  let naked_int64 : _ t = Naked Width.int64
-  let naked_float32 : _ t = Naked Width.float32
-  let naked_float : _ t = Naked Width.float
-
-  type 'a scalar = 'a t
-
-  module Intrinsic = struct
-    type 'mode info =
-      { can_raise : bool;
-        result : 'mode t
-      }
-
-    (* CR jvanburen: nullary primitives for 0/1/-1/min/max once we can put
-       unboxed values into structures?
-    *)
-
-    module Unary = struct
-      (* Remember to update [all] right below this if you add a constructor *)
-      module Int_op = struct
-        type t =
-          | Neg
-          | Succ (** add 1 *)
-          | Pred (** subtract 1 *)
-          | Bswap
-
-        let all = [ Neg; Succ; Pred; Bswap ]
-
-        let to_string = function
-          | Neg -> "neg"
-          | Succ -> "succ"
-          | Pred -> "pred"
-          | Bswap -> "bswap"
-      end
-
-      module Float_op = struct
-        type t =
-          | Neg
-          | Abs
-
-        let all = [ Neg; Abs ]
-
-        let to_string = function
-          | Neg -> "neg"
-          | Abs -> "abs"
-      end
-
-      type nonrec 'mode t =
-        (* CR jvanburen: logical Not, int Abs, float bitcast *)
-        | Integral of 'mode Integral.t * Int_op.t
-        | Floating of 'mode Floating.t * Float_op.t
-        | Static_cast of
-            { src : any_locality_mode t;
-              dst : 'mode t
-            }
-
-      let all =
-        List.concat
-          [ ListLabels.concat_map Integral.all ~f:(fun size ->
-              ListLabels.map Int_op.all ~f:(fun op -> Integral (size, op)))
-          ; ListLabels.concat_map Floating.all ~f:(fun size ->
-              ListLabels.map Float_op.all ~f:(fun op -> Floating (size, op)))
-          ; ListLabels.concat_map all ~f:(fun src ->
-              ListLabels.concat_map all ~f:(fun dst ->
-                if src = dst then [] else [Static_cast {src; dst}]))
-          ]
-
-      let map (type a b) (t : a t) ~(f : a -> b) : b t =
-        match t with
-        | Integral (size, op) -> Integral (Integral.map size ~f, op)
-        | Floating (size, op) -> Floating (Floating.map size ~f, op)
-        | Static_cast { src; dst } -> Static_cast { src ; dst = map dst ~f }
-
-      let info = function
-        | Integral (size, (Neg | Bswap | Succ | Pred)) ->
-          { result = integral size; can_raise = false }
-        | Floating (size,  (Neg | Abs)) ->
-          { result = floating size; can_raise = false }
-        | Static_cast { src = _; dst } -> { result = dst; can_raise = false }
-
-      let to_string t =
-        let i = Integral.to_string in
-        let f = Floating.to_string in
-        match t with
-        | Integral (size, op) ->
-          Printf.sprintf "%s_%s" (i size) (Int_op.to_string op)
-        | Floating (size, op) ->
-          Printf.sprintf "%s_%s" (f size) (Float_op.to_string op)
-        | Static_cast { src; dst } ->
-          Printf.sprintf "%s_of_%s" (to_string dst) (to_string src)
-    end
-
-    module Binary = struct
-      module Int_op = struct
-        type t =
-          | Add
-          | Sub
-          | Mul
-          | Div of is_safe
-          | Mod of is_safe
-          | And
-          | Or
-          | Xor
-
-        let all =
-          [ Add
-          ; Sub
-          ; Mul
-          ; Div Safe
-          ; Div Unsafe
-          ; Mod Safe
-          ; Mod Unsafe
-          ; And
-          ; Or
-          ; Xor
-          ]
-
-        let to_string = function
-          | Add -> "add"
-          | Sub -> "sub"
-          | Mul -> "mul"
-          | Div Safe -> "div"
-          | Div Unsafe -> "unsafe_div"
-          | Mod Safe -> "mod"
-          | Mod Unsafe -> "unsafe_mod"
-          | And -> "and"
-          | Or -> "or"
-          | Xor -> "xor"
-      end
-
-      module Shift_op = struct
-        module Rhs = struct
-          (* CR jvanburen: add shift intrinsics that take other widths *)
-          type t = Tagged_immediate
-
-          let all = [ Tagged_immediate ]
-        end
-
-        type t =
-          | Lsl
-          | Asr
-          | Lsr
-
-        let all = [Lsl; Asr; Lsr]
-
-        let to_string = function
-          | Lsl -> "lsl"
-          | Asr -> "asr"
-          | Lsr -> "lsr"
-
-      end
-
-      module Float_op = struct
-        type t =
-          | Add
-          | Sub
-          | Mul
-          | Div
-
-        let all = [ Add; Sub; Mul; Div ]
-
-        let to_string = function
-          | Add -> "add"
-          | Sub -> "sub"
-          | Mul -> "mul"
-          | Div -> "div"
-      end
-
-      (** comparisons return a tagged immediate *)
-      (* CR jvanburen: comparisons that return naked values *)
-      type nonrec 'mode t =
-        (* CR jvanburen: Fmod, Min, Max? *)
-        | Integral of 'mode Integral.t * Int_op.t
-        | Shift of
-            'mode Integral.t
-            * Shift_op.t
-            * Shift_op.Rhs.t
-        | Floating of 'mode Floating.t * Float_op.t
-        | Icmp of any_locality_mode Integral.t * integer_comparison
-        | Fcmp of any_locality_mode Floating.t * float_comparison
-        | Three_way_compare of any_locality_mode t
-
-      let all =
-        List.concat
-          [ ListLabels.concat_map Integral.all ~f:(fun size ->
-              ListLabels.map Int_op.all ~f:(fun op ->
-                Integral (size, op)))
-          ; ListLabels.concat_map Floating.all ~f:(fun size ->
-              ListLabels.map Float_op.all ~f:(fun op ->
-                Floating (size, op)))
-          ; ListLabels.concat_map Integral.all ~f:(fun size ->
-              ListLabels.concat_map Shift_op.all ~f:(fun op ->
-                ListLabels.map Shift_op.Rhs.all ~f:(fun rhs ->
-                  Shift (size, op, rhs))))
-          ; ListLabels.concat_map all_integer_comparisons ~f:(fun cmp ->
-              List.map (fun size -> Icmp (size, cmp)) Integral.all)
-          ; ListLabels.concat_map all_float_comparisons ~f:(fun cmp ->
-              List.map (fun size -> Fcmp (size, cmp)) Floating.all)
-          ; List.map (fun size -> Three_way_compare size) all
-          ]
-
-      let to_string t =
-        let i = Integral.to_string in
-        let f = Floating.to_string in
-        let make size name =
-          String.concat "_" [ to_string size; name ]
-        in
-        match t with
-        | Integral (size, op) -> make (integral size) (Int_op.to_string op)
-        | Floating (size, op) -> make (floating size) (Float_op.to_string op)
-        | Shift (size, op, Tagged_immediate) ->
-          make (integral size) (Shift_op.to_string op)
-        | Icmp (size, Ceq) -> i size ^ "_equal"
-        | Icmp (size, Cne) -> i size ^ "_notequal"
-        | Icmp (size, Cgt) -> i size ^ "_greaterthan"
-        | Icmp (size, Cge) -> i size ^ "_greaterequal"
-        | Icmp (size, Clt) -> i size ^ "_lessthan"
-        | Icmp (size, Cle) -> i size ^ "_lessequal"
-        | Fcmp (size, CFeq) -> f size ^ "_ordered_and_equal"
-        | Fcmp (size, CFgt) -> f size ^ "_ordered_and_greaterthan"
-        | Fcmp (size, CFge) -> f size ^ "_ordered_and_greaterequal"
-        | Fcmp (size, CFlt) -> f size ^ "_ordered_and_lessthan"
-        | Fcmp (size, CFle) -> f size ^ "_ordered_and_lessequal"
-        | Fcmp (size, CFneq) -> f size ^ "_unordered_or_notequal"
-        | Fcmp (size, CFngt) -> f size ^ "_unordered_or_lessequal"
-        | Fcmp (size, CFnge) -> f size ^ "_unordered_or_lessthan"
-        | Fcmp (size, CFnlt) -> f size ^ "_unordered_or_greaterequal"
-        | Fcmp (size, CFnle) -> f size ^ "_unordered_or_greaterthan"
-        | Three_way_compare size -> make size "compare"
-
-      let map t ~f =
-        match t with
-        | Integral (size, op) -> Integral (Integral.map size ~f, op)
-        | Floating (size, op) -> Floating (Floating.map size ~f, op)
-        | Shift (size, op, rhs) -> Shift (Integral.map size ~f, op, rhs)
-        | Icmp (size, cmp) -> Icmp (size, cmp)
-        | Fcmp (size, cmp) -> Fcmp (size, cmp)
-        | Three_way_compare size -> Three_way_compare size
-
-      let info = function
-        | Integral (size, (Add | Sub | Mul | Div Unsafe | Mod Unsafe | And | Or | Xor))
-        | Shift (size, ( Lsl | Lsr | Asr), Tagged_immediate)
-            ->
-            { result = integral size; can_raise = false }
-        | Integral (size, (Div Safe | Mod Safe)) ->
-          { result = integral size; can_raise = true }
-        | Floating (size, (Add | Sub | Mul | Div)) ->
-          { result = floating size; can_raise = false }
-        | Icmp ((_ : any_locality_mode Integral.t), (_ : integer_comparison))
-        | Fcmp ((_ : any_locality_mode Floating.t), (_ : float_comparison))
-        | Three_way_compare (_ : any_locality_mode scalar) ->
-          { result = int; can_raise = false }
-    end
-
-    type 'mode t =
-      | Unary of 'mode Unary.t
-      | Binary of 'mode Binary.t
-
-    let map t ~f =
-      match t with
-      | Unary u -> Unary (Unary.map u ~f)
-      | Binary b -> Binary (Binary.map b ~f)
-
-    let info = function
-      | Unary u -> Unary.info u
-      | Binary b -> Binary.info b
-
-    let to_string = function
-      | Unary u -> Unary.to_string u
-      | Binary b -> Binary.to_string b
-
-    let all =
-      List.concat
-        [ List.map (fun u -> Unary u) Unary.all
-        ; List.map (fun b -> Binary b) Binary.all
-        ]
-  end
-end
-
+module Scalar = Scalar
 
 module Phys_equal = struct
   type t = Eq | Noteq
@@ -2279,46 +1694,6 @@ let bind_with_layout str (var, layout) exp body =
     Lvar var' when Ident.same var var' -> body
   | _ -> Llet(str, layout, var, exp, body)
 
-let negate_integer_comparison = function
-  | Ceq -> Cne
-  | Cne -> Ceq
-  | Clt -> Cge
-  | Cle -> Cgt
-  | Cgt -> Cle
-  | Cge -> Clt
-
-let swap_integer_comparison = function
-  | Ceq -> Ceq
-  | Cne -> Cne
-  | Clt -> Cgt
-  | Cle -> Cge
-  | Cgt -> Clt
-  | Cge -> Cle
-
-let negate_float_comparison = function
-  | CFeq -> CFneq
-  | CFneq -> CFeq
-  | CFlt -> CFnlt
-  | CFnlt -> CFlt
-  | CFgt -> CFngt
-  | CFngt -> CFgt
-  | CFle -> CFnle
-  | CFnle -> CFle
-  | CFge -> CFnge
-  | CFnge -> CFge
-
-let swap_float_comparison = function
-  | CFeq -> CFeq
-  | CFneq -> CFneq
-  | CFlt -> CFgt
-  | CFnlt -> CFngt
-  | CFle -> CFge
-  | CFnle -> CFnge
-  | CFgt -> CFlt
-  | CFngt -> CFnlt
-  | CFge -> CFle
-  | CFnge -> CFnle
-
 let raise_kind = function
   | Raise_regular -> "raise"
   | Raise_reraise -> "reraise"
@@ -2388,7 +1763,12 @@ let locality_mode_of_primitive_description (p : external_call_description) =
 (* Changes to this function may also require changes in Flambda 2 (e.g.
    closure_conversion.ml). *)
 let primitive_may_allocate : primitive -> locality_mode option = function
-  | Pscalar op -> Scalar.locality_mode (Scalar.Intrinsic.info op).result
+  | Pscalar op ->
+    (match (Scalar.Intrinsic.info op).result with
+     | Naked _ -> None
+     | Value (Integral (Taggable (Int8 | Int16 | Int))) -> None
+     | Value (Integral (Boxable (Int32 mode | Int64 mode | Nativeint mode))
+             | Floating (Float64 mode | Float32 mode)) -> Some mode)
   | Pphys_equal _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
@@ -2686,8 +2066,12 @@ let constant_layout: constant -> layout = function
 
 let structured_constant_layout = function
   | Const_base const -> constant_layout const
-  | Const_naked_immediate ((_ : int), i) ->
-    Scalar.Integral.Taggable.layout (Naked i)
+  | Const_naked_immediate ((_ : int), Int8) ->
+    Punboxed_int Unboxed_int8
+  | Const_naked_immediate ((_ : int), Int16) ->
+    Punboxed_int Unboxed_int16
+  | Const_naked_immediate ((_ : int), Int) ->
+    Punboxed_int Unboxed_int
   | Const_mixed_block _ | Const_block _ | Const_immstring _ ->
     non_null_value Pgenval
   | Const_float_array _ | Const_float_block _ ->
@@ -2765,7 +2149,23 @@ let primitive_result_layout (p : primitive) =
   assert !Clflags.native_code;
   match p with
   | Pphys_equal (Eq | Noteq) -> layout_int
-  | Pscalar op -> Scalar.layout (Scalar.map (Scalar.Intrinsic.info op).result ~f:(fun (Alloc_local | Alloc_heap) -> Any_locality_mode))
+  | Pscalar op ->
+    let result = Scalar.ignore_locality (Scalar.Intrinsic.info op).result in
+    (match result with
+     | Value (Integral (Taggable (Int8 | Int16 | Int)))  -> layout_int
+     | Value (Integral (Boxable (Int32 Any_locality_mode))) -> layout_boxed_int Boxed_int32
+     | Value (Integral (Boxable (Int64 Any_locality_mode))) -> layout_boxed_int Boxed_int64
+     | Value (Integral (Boxable (Nativeint Any_locality_mode))) -> layout_boxed_int Boxed_nativeint
+     | Value (Floating (Float64 Any_locality_mode)) -> layout_unboxed_float Unboxed_float64
+     | Value (Floating (Float32 Any_locality_mode)) -> layout_unboxed_float Unboxed_float32
+     | Naked (Integral (Taggable Int8)) -> layout_unboxed_int8
+     | Naked (Integral (Taggable Int16)) -> layout_unboxed_int16
+     | Naked (Integral (Taggable Int)) -> layout_unboxed_int Unboxed_int
+     | Naked (Integral (Boxable (Int32 Any_locality_mode))) -> layout_unboxed_int32
+     | Naked (Integral (Boxable (Int64 Any_locality_mode))) -> layout_unboxed_int64
+     | Naked (Integral (Boxable (Nativeint Any_locality_mode))) -> layout_unboxed_nativeint
+     | Naked (Floating (Float64 Any_locality_mode)) -> layout_unboxed_float Unboxed_float64
+     | Naked (Floating (Float32 Any_locality_mode)) -> layout_unboxed_float Unboxed_float32)
   | Popaque layout | Pobj_magic layout -> layout
   | Pbytes_to_string | Pbytes_of_string -> layout_string
   | Pignore | Psetfield _ | Psetfield_computed _ | Psetfloatfield _ | Poffsetref _
