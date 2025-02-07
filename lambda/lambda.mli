@@ -464,6 +464,10 @@ module Scalar : sig
   end
 end
 
+module Phys_equal : sig
+  type t = Eq | Noteq
+end
+
 (* CR layouts v5: When we add more blocks of non-scannable values, consider
    whether some of the primitives specific to ufloat records
    ([Pmakeufloatblock], [Pufloatfield], and [Psetufloatfield]) can/should be
@@ -513,6 +517,7 @@ type primitive =
   | Praise of raise_kind
   (* Boolean operations *)
   | Psequand | Psequor | Pnot
+  | Pphys_equal of Phys_equal.t
   (* Scalar operations *)
   | Pscalar of locality_mode Scalar.Intrinsic.t
   | Poffsetref of int

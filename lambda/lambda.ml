@@ -720,7 +720,6 @@ module Scalar = struct
           | Div -> "div"
       end
 
-
       (** comparisons return a tagged immediate *)
       (* CR jvanburen: comparisons that return naked values *)
       type nonrec 'mode t =
@@ -833,6 +832,10 @@ module Scalar = struct
 end
 
 
+module Phys_equal = struct
+  type t = Eq | Noteq
+end
+
 type primitive =
   | Pbytes_to_string
   | Pbytes_of_string
@@ -874,6 +877,7 @@ type primitive =
   | Praise of raise_kind
   (* Boolean operations *)
   | Psequand | Psequor | Pnot
+  | Pphys_equal of Phys_equal.t
   (* Scalar operations *)
   | Pscalar of locality_mode Scalar.Intrinsic.t
   | Poffsetref of int
@@ -2385,9 +2389,10 @@ let locality_mode_of_primitive_description (p : external_call_description) =
    closure_conversion.ml). *)
 let primitive_may_allocate : primitive -> locality_mode option = function
   | Pscalar op -> Scalar.locality_mode (Scalar.Intrinsic.info op).result
+  | Pphys_equal _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
-  | Pignore -> None
+  | Pignore  -> None
   | Pgetglobal _ | Psetglobal _ | Pgetpredef _ -> None
   | Pmakeblock (_, _, _, m) -> Some m
   | Pmakefloatblock (_, m) -> Some m
@@ -2525,6 +2530,7 @@ let primitive_may_allocate : primitive -> locality_mode option = function
 let primitive_can_raise prim =
   match prim with
   | Pscalar op -> (Scalar.Intrinsic.info op).can_raise
+  | Pphys_equal (Eq | Noteq) -> false
   | Pccall _ | Praise _ | Parrayrefs _ | Parraysets _
   | Pstringrefs | Pbytesrefs | Pbytessets
   | Pstring_load_16 { unsafe = false; _ }
@@ -2758,6 +2764,7 @@ let layout_of_mixed_field (kind : mixed_block_read) =
 let primitive_result_layout (p : primitive) =
   assert !Clflags.native_code;
   match p with
+  | Pphys_equal (Eq | Noteq) -> layout_int
   | Pscalar op -> Scalar.layout (Scalar.map (Scalar.Intrinsic.info op).result ~f:(fun (Alloc_local | Alloc_heap) -> Any_locality_mode))
   | Popaque layout | Pobj_magic layout -> layout
   | Pbytes_to_string | Pbytes_of_string -> layout_string

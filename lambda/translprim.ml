@@ -487,8 +487,8 @@ let lookup_primitive loc ~poly_mode ~poly_sort pos p =
     | "%lslint" -> binary (Shift (int, Lsl, Tagged_immediate))
     | "%lsrint" -> binary (Shift (int, Lsr, Tagged_immediate))
     | "%asrint" -> binary (Shift (int, Asr, Tagged_immediate))
-    | "%eq" -> icmp int Ceq
-    | "%noteq" -> icmp int Cne
+    | "%eq" ->  Primitive (Pphys_equal Eq, 2)
+    | "%noteq" -> Primitive (Pphys_equal Noteq, 2)
     | "%ltint" -> icmp int Clt
     | "%leint" -> icmp int Cle
     | "%gtint" -> icmp int Cgt
@@ -1989,6 +1989,7 @@ let lambda_primitive_needs_event_after = function
      bytecode, because int64# is actually represented as a boxed value. *)
   | Preinterpret_tagged_int63_as_unboxed_int64 -> true
 
+  | Pphys_equal _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
   | Pignore | Psetglobal _

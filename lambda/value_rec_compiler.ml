@@ -330,6 +330,7 @@ let compute_static_size lam =
     | Ppeek _
     | Ppoke _
     | Pscalar _
+    | Pphys_equal _
       ->
         dynamic_size lam
 

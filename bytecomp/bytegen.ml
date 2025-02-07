@@ -262,6 +262,7 @@ let preserve_tailcall_for_prim = function
     (* no-op *)
     Scalar.of_lambda src = Scalar.of_lambda dst
   | Pscalar _
+  | Pphys_equal _
   | Pbytes_to_string | Pbytes_of_string
   | Parray_to_iarray | Parray_of_iarray
   | Pget_header _
@@ -764,6 +765,8 @@ let comp_primitive stack_info p sz args =
     | Pgcscannableproductarray_set _ | Pgcignorableproductarray_set _ -> ()
     end;
     Kccall("caml_array_blit", 5)
+  | Pphys_equal Eq -> Kintcomp Ceq
+  | Pphys_equal Noteq -> Kintcomp Cne
   | Pmakearray_dynamic(_, _, Uninitialized) ->
     Misc.fatal_error "Pmakearray_dynamic Uninitialized should have been \
       translated to Pmakearray_dynamic Initialized earlier on"

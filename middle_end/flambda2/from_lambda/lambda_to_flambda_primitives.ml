@@ -1425,6 +1425,9 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     Targetint.size / 8
   in
   match prim, args with
+  | Pphys_equal eq, [[arg1]; [arg2]] ->
+    let eq : P.equality_comparison = match eq with Eq -> Eq | Noteq -> Neq in
+    [tag_int (Binary (Phys_equal eq, arg1, arg2))]
   | Pmakeblock (tag, mutability, shape, mode), _ ->
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
@@ -1740,11 +1743,10 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let arg1 = H.Prim (maybe_unwrap arg1) in
       let arg2 = H.Prim (maybe_unwrap arg2) in
-      [ tag_int
-          (Binary
-             ( Int_comp (width, Yielding_bool (convert_integer_comparison cmp)),
-               arg1,
-               arg2 )) ]
+      let prim : P.binary_primitive =
+        Int_comp (width, Yielding_bool (convert_integer_comparison cmp))
+      in
+      [tag_int (Binary (prim, arg1, arg2))]
     | Fcmp (size, cmp) ->
       let width = floating_width size in
       let maybe_unwrap =
@@ -1753,11 +1755,10 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let arg1 = H.Prim (maybe_unwrap arg1) in
       let arg2 = H.Prim (maybe_unwrap arg2) in
-      [ tag_int
-          (Binary
-             ( Float_comp (width, Yielding_bool (convert_float_comparison cmp)),
-               arg1,
-               arg2 )) ]
+      let prim : P.binary_primitive =
+        Float_comp (width, Yielding_bool (convert_float_comparison cmp))
+      in
+      [tag_int (Binary (prim, arg1, arg2))]
     | Three_way_compare size -> (
       let int_compare size : H.expr_primitive list =
         let width = integral_width size in
@@ -2469,7 +2470,8 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
             _ )
       | Patomic_exchange _ | Patomic_fetch_add | Patomic_add | Patomic_sub
       | Patomic_land | Patomic_lor | Patomic_lxor | Ppoke _
-      | Pscalar (Binary _) ),
+      | Pscalar (Binary _)
+      | Pphys_equal _ ),
       ( []
       | [_]
       | _ :: _ :: _ :: _
