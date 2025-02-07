@@ -504,6 +504,8 @@ module Scalar = struct
       | Floating g -> Floating (Floating.Width.map g ~f)
       | Integral i -> Integral (Integral.Width.map i ~f)
 
+    let ignore_locality = map ~f:ignore_locality
+
     let locality_mode = function
       | Floating f -> Floating.Width.locality_mode f
       | Integral i -> Integral.Width.locality_mode i

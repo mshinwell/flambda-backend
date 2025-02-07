@@ -1768,7 +1768,9 @@ let print_binary_primitive ppf p =
       num_dimensions Bigarray_kind.print kind Bigarray_layout.print layout
   | Phys_equal op ->
     Format.fprintf ppf "@[(Phys_equal %a)@]" print_equality_comparison op
-  | Int_arith (_k, op) -> print_binary_int_arith_op ppf op
+  | Int_arith (_k, op) ->
+    print_binary_int_arith_op ppf op;
+    K.Standard_int.print ppf _k
   | Int_shift (_k, op) -> print_int_shift_op ppf op
   | Int_comp (_, comp_behaviour) ->
     print_comparison_and_behaviour print_signed_or_unsigned ppf comp_behaviour

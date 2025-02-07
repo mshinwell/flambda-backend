@@ -350,6 +350,7 @@ module Scalar : sig
 
     val map : 'a t -> f:('a -> 'b) -> 'b t
     val locality_mode : locality_mode t -> locality_mode option
+    val ignore_locality : locality_mode t -> any_locality_mode t
 
     include Integral_width_constants with type 'a t := 'a t
     include Float_width_constants with type 'a t := 'a t
