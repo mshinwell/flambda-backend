@@ -119,6 +119,7 @@
   jkind_intf
   jkind_axis
   jkind_types
+  scalar
   primitive
   zero_alloc
   types
@@ -279,6 +280,8 @@
 (copy_files ../../typing/oprint.ml)
 
 (copy_files ../../typing/primitive.ml)
+
+(copy_files ../../typing/scalar.ml)
 
 (copy_files ../../typing/shape.ml)
 

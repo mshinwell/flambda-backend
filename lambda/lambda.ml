@@ -2156,8 +2156,8 @@ let primitive_result_layout (p : primitive) =
      | Value (Integral (Boxable (Int32 Any_locality_mode))) -> layout_boxed_int Boxed_int32
      | Value (Integral (Boxable (Int64 Any_locality_mode))) -> layout_boxed_int Boxed_int64
      | Value (Integral (Boxable (Nativeint Any_locality_mode))) -> layout_boxed_int Boxed_nativeint
-     | Value (Floating (Float64 Any_locality_mode)) -> layout_unboxed_float Unboxed_float64
-     | Value (Floating (Float32 Any_locality_mode)) -> layout_unboxed_float Unboxed_float32
+     | Value (Floating (Float64 Any_locality_mode)) -> layout_boxed_float Boxed_float64
+     | Value (Floating (Float32 Any_locality_mode)) -> layout_boxed_float Boxed_float32
      | Naked (Integral (Taggable Int8)) -> layout_unboxed_int8
      | Naked (Integral (Taggable Int16)) -> layout_unboxed_int16
      | Naked (Integral (Taggable Int)) -> layout_unboxed_int Unboxed_int

@@ -29,7 +29,7 @@ let size = Int16.size
 external of_int : int -> int16# = "%int16#_of_int"
 external to_int : int16# -> int = "%int_of_int16#"
 
-external sub : int16# -> int16# -> int16# = "%sub_int16#"
+external sub : int16# -> int16# -> int16# = "%int16#_sub"
 
 let[@inline always] to_int t = Int16.to_int (to_int16 t)
 
@@ -45,17 +45,17 @@ let[@inline always] max_int () = of_int16 Int16.max_int
 
 let[@inline always] min_int () = of_int16 Int16.min_int
 
-external add : int16# -> int16# -> int16# = "%add_int16#"
+external add : int16# -> int16# -> int16# = "%int16#_add"
 
-external sub : int16# -> int16# -> int16# = "%sub_int16#"
+external sub : int16# -> int16# -> int16# = "%int16#_sub"
 
-external mul : int16# -> int16# -> int16# = "%mul_int16#"
+external mul : int16# -> int16# -> int16# = "%int16#_mul"
 
-external div : int16# -> int16# -> int16# = "%sdiv_int16#"
+external div : int16# -> int16# -> int16# = "%int16#_div"
 
-external rem : int16# -> int16# -> int16# = "%srem_int16#"
+external rem : int16# -> int16# -> int16# = "%int16#_mod"
 
-external ( >= ) : int16# -> int16# -> bool = "%sge_int16#"
+external ( >= ) : int16# -> int16# -> bool = "%int16#_greaterequal"
 
 let[@inline always] neg x = sub (zero()) x
 
@@ -65,17 +65,17 @@ let[@inline always] pred x = sub x (one ())
 
 let[@inline always] abs x = if x >= zero() then x else neg x
 
-external logand : int16# -> int16# -> int16# = "%and_int16#"
+external logand : int16# -> int16# -> int16# = "%int16#_and"
 
-external logor : int16# -> int16# -> int16# = "%or_int16#"
+external logor : int16# -> int16# -> int16# = "%int16#_or"
 
-external logxor : int16# -> int16# -> int16# = "%xor_int16#"
+external logxor : int16# -> int16# -> int16# = "%int16#_xor"
 
 let[@inline always] lognot x = logxor x (minus_one ())
 
-external shift_left_unboxed : int16# -> int16# -> int16# = "%shl_int16#"
-external shift_right_unboxed : int16# -> int16# -> int16# = "%ashr_int16#"
-external shift_right_logical_unboxed : int16# -> int16# -> int16# = "%lshr_int16#"
+external shift_left_unboxed : int16# -> int16# -> int16# = "%int16#_shl"
+external shift_right_unboxed : int16# -> int16# -> int16# = "%int16#_ashr"
+external shift_right_logical_unboxed : int16# -> int16# -> int16# = "%int16#_lshr"
 
 let[@inline always] shift_left x y = shift_left_unboxed x (of_int16 y)
 
