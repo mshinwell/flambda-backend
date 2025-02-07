@@ -443,7 +443,7 @@ let primitive ppf = function
   | Pscalar scalar ->
     pp_print_string
       ppf
-      (Scalar.Intrinsic.to_string
+      (Scalar.Intrinsic.With_percent_prefix.to_string
          (Scalar.Intrinsic.map scalar
             ~f:(fun (Alloc_heap | Alloc_local) -> Any_locality_mode)));
     Option.iter
@@ -845,7 +845,9 @@ let primitive ppf = function
         peek_or_poke layout
 
 let name_of_primitive = function
-  | Pscalar _ -> "Pscalar"
+  | Pscalar i ->
+    Scalar.Intrinsic.map i ~f:(fun _ -> Scalar.Any_locality_mode)|>
+    Scalar.Intrinsic.to_string
   | Pphys_equal _ -> "Pphys_equal"
   | Pbytes_of_string -> "Pbytes_of_string"
   | Pbytes_to_string -> "Pbytes_to_string"

@@ -1218,7 +1218,7 @@ let close_let acc env let_bound_ids_with_kinds user_visible defining_expr
           in
           if not (Flambda_kind.equal kind result_kind)
           then
-            Misc.fatal_errorf
+            Format.fprintf Format.err_formatter
               "Incompatible kinds when binding %a: this variable has kind %a, \
                but is bound to the result of %a which has kind %a@."
               Variable.print var Flambda_kind.print kind Flambda_primitive.print

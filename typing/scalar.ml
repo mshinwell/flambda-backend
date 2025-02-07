@@ -589,7 +589,7 @@ module Intrinsic = struct
         sort, sort, Jkind_types.Sort.Const.value
 
     let to_string t =
-      let make size name = String.concat "" ["%"; to_string size; "_"; name] in
+      let make size name = String.concat "_" [to_string size; name] in
       match t with
       | Integral (size, op) -> make (integral size) (Int_op.to_string op)
       | Floating (size, op) -> make (floating size) (Float_op.to_string op)
