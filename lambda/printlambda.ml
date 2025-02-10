@@ -438,8 +438,8 @@ let peek_or_poke ppf (pp : peek_or_poke) =
   | Ppp_unboxed_nativeint -> fprintf ppf "unboxed_nativeint"
 
 let primitive ppf = function
-  | Pphys_equal Eq -> pp_print_string ppf "eq"
-  | Pphys_equal Noteq -> pp_print_string ppf "noteq"
+  | Pphys_equal Eq -> pp_print_string ppf "%eq"
+  | Pphys_equal Noteq -> pp_print_string ppf "%noteq"
   | Pscalar scalar ->
     pp_print_string
       ppf
@@ -848,7 +848,8 @@ let name_of_primitive = function
   | Pscalar i ->
     Scalar.Intrinsic.map i ~f:(fun _ -> Scalar.Any_locality_mode)|>
     Scalar.Intrinsic.to_string
-  | Pphys_equal _ -> "Pphys_equal"
+  | Pphys_equal Eq -> "eq"
+  | Pphys_equal Noteq -> "noteq"
   | Pbytes_of_string -> "Pbytes_of_string"
   | Pbytes_to_string -> "Pbytes_to_string"
   | Pignore -> "Pignore"

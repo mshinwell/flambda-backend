@@ -29,12 +29,14 @@ match (3, 2, 1) with
 (let (*match*/279 =[int] 3 *match*/280 =[int] 2 *match*/281 =[int] 1)
   (catch
     (catch
-      (catch (if (!= *match*/280 3) (exit 3) (exit 1)) with (3)
-        (if (!= *match*/279 1) (exit 2) (exit 1)))
+      (catch (if (%noteq *match*/280 3) (exit 3) (exit 1)) with (3)
+        (if (%noteq *match*/279 1) (exit 2) (exit 1)))
      with (2) 0)
    with (1) 1))
 (let (*match*/279 =[int] 3 *match*/280 =[int] 2 *match*/281 =[int] 1)
-  (catch (if (!= *match*/280 3) (if (!= *match*/279 1) 0 (exit 1)) (exit 1))
+  (catch
+    (if (%noteq *match*/280 3) (if (%noteq *match*/279 1) 0 (exit 1))
+      (exit 1))
    with (1) 1))
 - : bool = false
 |}];;
@@ -51,13 +53,13 @@ match (3, 2, 1) with
   (catch
     (catch
       (catch
-        (if (!= *match*/285 3) (exit 6)
+        (if (%noteq *match*/285 3) (exit 6)
           (let
             (x/288 =a[(consts ()) (non_consts ([0: [int], [int], [int]]))]
                (makeblock 0 *match*/284 *match*/285 *match*/286))
             (exit 4 x/288)))
        with (6)
-        (if (!= *match*/284 1) (exit 5)
+        (if (%noteq *match*/284 1) (exit 5)
           (let
             (x/287 =a[(consts ()) (non_consts ([0: [int], [int], [int]]))]
                (makeblock 0 *match*/284 *match*/285 *match*/286))
@@ -67,8 +69,8 @@ match (3, 2, 1) with
     (seq (ignore x/282) 1)))
 (let (*match*/284 =[int] 3 *match*/285 =[int] 2 *match*/286 =[int] 1)
   (catch
-    (if (!= *match*/285 3)
-      (if (!= *match*/284 1) 0
+    (if (%noteq *match*/285 3)
+      (if (%noteq *match*/284 1) 0
         (exit 4 (makeblock 0 *match*/284 *match*/285 *match*/286)))
       (exit 4 (makeblock 0 *match*/284 *match*/285 *match*/286)))
    with (4 x/282[(consts ()) (non_consts ([0: [int], [int], [int]]))])
