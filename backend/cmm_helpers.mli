@@ -1288,8 +1288,7 @@ module Scalar_type : sig
 
   (** An integer that fits into a general-purpose register. It is canonically stored in
       twos-complement representation, in the lower [bits] bits of its container (whether
-      that be memory or a register), and is sign- or zero-extended as needed, according
-      to [signed]. *)
+      that be memory or a register). *)
   module Integer : sig
     type t [@@immediate]
 

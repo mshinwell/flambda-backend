@@ -394,7 +394,6 @@ nullop:
 unary_int_arith_op:
   | KWD_BSWAP { Swap_byte_endianness }
 
-
 unop:
   | PRIM_ARRAY_LENGTH; kind = array_kind_for_length { Array_length kind }
   | PRIM_BOOLEAN_NOT { Boolean_not }

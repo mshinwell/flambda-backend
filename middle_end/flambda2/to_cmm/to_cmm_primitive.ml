@@ -730,38 +730,51 @@ let binary_int_shift_primitive _env dbg kind (op : P.int_shift_op) x y =
     x
 
 let binary_int_comp_primitive _env dbg kind cmp x y =
-  match
-    integral_of_standard_int kind, (cmp : P.signed_or_unsigned P.comparison)
-  with
-  (* [x] and [y] are expressions yielding well-formed tagged immediates, that is
-     to say, their least significant bit (LSB) is 1. However when comparing
-     tagged immediates, there always exists one argument (i.e. either [x] or
-     [y]) for which the setting of that LSB makes no difference to the result.
-     This means that we can optimise in the case where the argument in question
-     contains a tagging operation (or logical OR operation setting the last bit)
-     by removing such operation.
+  match[@warning "-fragile-match"] (kind : K.Standard_int.t) with
+  | Tagged_immediate -> (
+    (* [x] and [y] are expressions yielding well-formed tagged immediates, that
+       is to say, their least significant bit (LSB) is 1. However when comparing
+       tagged immediates, there always exists one argument (i.e. either [x] or
+       [y]) for which the setting of that LSB makes no difference to the result.
+       This means that we can optimise in the case where the argument in
+       question contains a tagging operation (or logical OR operation setting
+       the last bit) by removing such operation.
 
-     See middle_end/flambda2/z3/comparisons.smt2 for a Z3 script to prove
-     this. *)
-  | Tagged _, Lt Signed -> C.lt ~dbg x (C.ignore_low_bit_int y)
-  | Tagged _, Le Signed -> C.le ~dbg (C.ignore_low_bit_int x) y
-  | Tagged _, Gt Signed -> C.gt ~dbg (C.ignore_low_bit_int x) y
-  | Tagged _, Ge Signed -> C.ge ~dbg x (C.ignore_low_bit_int y)
-  | Tagged _, Lt Unsigned -> C.ult ~dbg x (C.ignore_low_bit_int y)
-  | Tagged _, Le Unsigned -> C.ule ~dbg (C.ignore_low_bit_int x) y
-  | Tagged _, Gt Unsigned -> C.ugt ~dbg (C.ignore_low_bit_int x) y
-  | Tagged _, Ge Unsigned -> C.uge ~dbg x (C.ignore_low_bit_int y)
-  (* Naked integers. *)
-  | Untagged _, Lt Signed -> C.lt ~dbg x y
-  | Untagged _, Le Signed -> C.le ~dbg x y
-  | Untagged _, Gt Signed -> C.gt ~dbg x y
-  | Untagged _, Ge Signed -> C.ge ~dbg x y
-  | Untagged _, Lt Unsigned -> C.ult ~dbg x y
-  | Untagged _, Le Unsigned -> C.ule ~dbg x y
-  | Untagged _, Gt Unsigned -> C.ugt ~dbg x y
-  | Untagged _, Ge Unsigned -> C.uge ~dbg x y
-  | (Tagged _ | Untagged _), Eq -> C.eq ~dbg x y
-  | (Tagged _ | Untagged _), Neq -> C.neq ~dbg x y
+       See middle_end/flambda2/z3/comparisons.smt2 for a Z3 script to prove
+       this. *)
+    match (cmp : P.signed_or_unsigned P.comparison) with
+    | Lt Signed -> C.lt ~dbg x (C.ignore_low_bit_int y)
+    | Le Signed -> C.le ~dbg (C.ignore_low_bit_int x) y
+    | Gt Signed -> C.gt ~dbg (C.ignore_low_bit_int x) y
+    | Ge Signed -> C.ge ~dbg x (C.ignore_low_bit_int y)
+    | Lt Unsigned -> C.ult ~dbg x (C.ignore_low_bit_int y)
+    | Le Unsigned -> C.ule ~dbg (C.ignore_low_bit_int x) y
+    | Gt Unsigned -> C.ugt ~dbg (C.ignore_low_bit_int x) y
+    | Ge Unsigned -> C.uge ~dbg x (C.ignore_low_bit_int y)
+    | Eq -> C.eq ~dbg x y
+    | Neq -> C.neq ~dbg x y)
+  | kind -> (
+    let unwrap_arg x ~signedness =
+      C.Scalar_type.Integral.static_cast x ~dbg
+        ~src:(integral_of_standard_int kind)
+        ~dst:
+          (C.Scalar_type.Integral.with_signedness
+             C.Scalar_type.Integral.nativeint ~signedness)
+    in
+    let go func signedness =
+      func ~dbg (unwrap_arg x ~signedness) (unwrap_arg y ~signedness)
+    in
+    match (cmp : P.signed_or_unsigned P.comparison) with
+    | Lt Signed -> go C.lt Signed
+    | Le Signed -> go C.le Signed
+    | Gt Signed -> go C.gt Signed
+    | Ge Signed -> go C.ge Signed
+    | Lt Unsigned -> go C.ult Unsigned
+    | Le Unsigned -> go C.ule Unsigned
+    | Gt Unsigned -> go C.ugt Unsigned
+    | Ge Unsigned -> go C.uge Unsigned
+    | Eq -> go C.eq Unsigned
+    | Neq -> go C.neq Unsigned)
 
 let binary_int_comp_primitive_yielding_int _env dbg _kind
     (signed : P.signed_or_unsigned) x y =

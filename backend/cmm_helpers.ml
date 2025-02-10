@@ -22,6 +22,11 @@ open Arch
 
 let arch_bits = Arch.size_int * 8
 
+let[@inline] get_const = function
+  | Cconst_int (i, _) -> Some (Nativeint.of_int i)
+  | Cconst_natint (i, _) -> Some i
+  | _ -> None
+
 type arity =
   { function_kind : Lambda.function_kind;
     params_layout : Lambda.layout list;
@@ -369,6 +374,10 @@ let rec lsl_int c1 c2 dbg =
   | Cop (Caddi, [c1; Cconst_int (n1, _)], _), Cconst_int (n2, _)
     when Misc.no_overflow_lsl n1 n2 ->
     add_const (lsl_int c1 c2 dbg) (n1 lsl n2) dbg
+  | c1, Cconst_int (n2, _) when 0 < n2 && n2 < arch_bits -> (
+    match get_const c1 with
+    | Some c1 -> natint_const_untagged dbg (Nativeint.shift_left c1 n2)
+    | None -> Cop (Clsl, [c1; c2], dbg))
   | _, _ -> Cop (Clsl, [c1; c2], dbg)
 
 let lsl_const c n dbg = lsl_int c (Cconst_int (n, dbg)) dbg
@@ -416,8 +425,10 @@ let lsr_int c1 c2 dbg =
   | Cop (Clsr, [c; Cconst_int (n1, _)], _), Cconst_int (n2, _)
     when n1 > 0 && n2 > 0 && n1 + n2 < size_int * 8 ->
     Cop (Clsr, [c; Cconst_int (n1 + n2, dbg)], dbg)
-  | c1, Cconst_int (n, _) when n > 0 ->
-    Cop (Clsr, [ignore_low_bit_int c1; c2], dbg)
+  | c1, Cconst_int (n, _) when n > 0 -> (
+    match get_const c1 with
+    | Some c1 -> natint_const_untagged dbg (Nativeint.shift_right_logical c1 n)
+    | None -> Cop (Clsr, [ignore_low_bit_int c1; c2], dbg))
   | _ -> Cop (Clsr, [c1; c2], dbg)
 
 let lsr_const c n dbg = lsr_int c (Cconst_int (n, dbg)) dbg
@@ -426,13 +437,16 @@ let asr_int c1 c2 dbg =
   match c2 with
   | Cconst_int (0, _) -> c1
   | Cconst_int (n, _) when n > 0 -> (
-    match ignore_low_bit_int c1 with
-    (* some operations always return small enough integers that it is safe and
-       correct to optimise [asr (lsl x 1) 1] into [x]. *)
-    | Cop (Clsl, [c; Cconst_int (1, _)], _)
-      when n = 1 && guaranteed_to_be_small_int c ->
-      c
-    | c1' -> Cop (Casr, [c1'; c2], dbg))
+    match get_const c1 with
+    | Some c1 -> natint_const_untagged dbg (Nativeint.shift_right c1 n)
+    | None -> (
+      match ignore_low_bit_int c1 with
+      (* some operations always return small enough integers that it is safe and
+         correct to optimise [asr (lsl x 1) 1] into [x]. *)
+      | Cop (Clsl, [c; Cconst_int (1, _)], _)
+        when n = 1 && guaranteed_to_be_small_int c ->
+        c
+      | c1' -> Cop (Casr, [c1'; c2], dbg)))
   | _ -> Cop (Casr, [c1; c2], dbg)
 
 let asr_const c n dbg = asr_int c (Cconst_int (n, dbg)) dbg
