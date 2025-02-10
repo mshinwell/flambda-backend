@@ -1190,6 +1190,7 @@ val binary
 
 (** construction helpers *)
 
+val phys_equal : lambda -> lambda -> loc:scoped_location -> lambda
 val int : _ Scalar.Integral.t
 
 type 'a unop := 'a -> lambda -> loc:scoped_location -> lambda

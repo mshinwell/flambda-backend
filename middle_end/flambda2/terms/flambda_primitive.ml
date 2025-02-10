@@ -1772,7 +1772,8 @@ let print_binary_primitive ppf p =
     print_binary_int_arith_op ppf op;
     K.Standard_int.print ppf _k
   | Int_shift (_k, op) -> print_int_shift_op ppf op
-  | Int_comp (_, comp_behaviour) ->
+  | Int_comp (k, comp_behaviour) ->
+    K.Standard_int.print ppf k;
     print_comparison_and_behaviour print_signed_or_unsigned ppf comp_behaviour
   | Float_arith (width, op) -> print_binary_float_arith_op ppf width op
   | Float_comp (_width, comp_behaviour) ->

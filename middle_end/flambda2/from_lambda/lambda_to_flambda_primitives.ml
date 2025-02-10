@@ -504,91 +504,6 @@ let box_bint bi mode (arg : H.expr_primitive) ~current_region : H.expr_primitive
 let unbox_bint bi (arg : H.simple_or_prim) : H.simple_or_prim =
   Prim (Unary (Unbox_number (boxable_number_of_boxed_integer bi), arg))
 
-let rec static_cast ~(src : L.any_locality_mode Scalar.t)
-    ~(dst : L.locality_mode Scalar.t) arg ~current_region : H.expr_primitive =
-  if Stdlib.( = ) src (Scalar.ignore_locality dst)
-  then
-    match (arg : H.simple_or_prim) with
-    | Prim prim -> prim
-    | Simple simple -> Simple simple
-  else
-    match src, dst with
-    | Value src, dst ->
-      let arg : H.expr_primitive =
-        match (src : L.any_locality_mode Scalar.Width.t) with
-        | Integral (Taggable Int8) ->
-          (* CR jvanburen: Untagging int8/16 is not the sleekest. we should be
-             able to untag without a Num_conv primitive, maybe by making
-             subkinds of Tagged_immediate *)
-          Unary
-            ( Num_conv { src = Naked_immediate; dst = Naked_int8 },
-              Prim (Unary (Untag_immediate, arg)) )
-        | Integral (Taggable Int16) ->
-          Unary
-            ( Num_conv { src = Naked_immediate; dst = Naked_int16 },
-              Prim (Unary (Untag_immediate, arg)) )
-        | Integral (Taggable Int) -> Unary (Untag_immediate, arg)
-        | Floating (Float32 Any_locality_mode) ->
-          Unary (Unbox_number Naked_float32, arg)
-        | Floating (Float64 Any_locality_mode) ->
-          Unary (Unbox_number Naked_float, arg)
-        | Integral (Boxable (Int32 Any_locality_mode)) ->
-          Unary (Unbox_number Naked_int32, arg)
-        | Integral (Boxable (Nativeint Any_locality_mode)) ->
-          Unary (Unbox_number Naked_nativeint, arg)
-        | Integral (Boxable (Int64 Any_locality_mode)) ->
-          Unary (Unbox_number Naked_int64, arg)
-      in
-      static_cast (H.Prim arg) ~src:(Scalar.Maybe_naked.Naked src) ~dst
-        ~current_region
-    | src, Value dst -> (
-      let arg =
-        let dst = Scalar.Maybe_naked.Naked (Scalar.Width.ignore_locality dst) in
-        if Stdlib.( = ) src dst
-        then arg
-        else H.Prim (static_cast arg ~src ~dst ~current_region)
-      in
-      let box_number width mode =
-        let mode =
-          Alloc_mode.For_allocations.from_lambda mode ~current_region
-        in
-        H.Unary (Box_number (width, mode), arg)
-      in
-      match (dst : L.locality_mode Scalar.Width.t) with
-      | Floating (Float32 mode) -> box_number Naked_float32 mode
-      | Floating (Float64 mode) -> box_number Naked_float mode
-      | Integral (Boxable (Int32 mode)) -> box_number Naked_int32 mode
-      | Integral (Boxable (Nativeint mode)) -> box_number Naked_nativeint mode
-      | Integral (Boxable (Int64 mode)) -> box_number Naked_int64 mode
-      | Integral (Taggable Int) -> Unary (Tag_immediate, arg)
-      | Integral (Taggable Int8) ->
-        Unary
-          ( Tag_immediate,
-            Prim
-              (Unary (Num_conv { src = Naked_int8; dst = Naked_immediate }, arg))
-          )
-      | Integral (Taggable Int16) ->
-        Unary
-          ( Tag_immediate,
-            Prim
-              (Unary (Num_conv { src = Naked_int16; dst = Naked_immediate }, arg))
-          ))
-    | Naked src, Naked dst ->
-      let standard_int_or_float_of_scalar_width :
-          L.any_locality_mode Scalar.Width.t -> I_or_f.t = function
-        | Integral (Taggable Int8) -> Naked_int8
-        | Integral (Taggable Int16) -> Naked_int16
-        | Integral (Taggable Int) -> Naked_immediate
-        | Floating (Float32 Any_locality_mode) -> Naked_float32
-        | Floating (Float64 Any_locality_mode) -> Naked_float
-        | Integral (Boxable (Int32 Any_locality_mode)) -> Naked_int32
-        | Integral (Boxable (Nativeint Any_locality_mode)) -> Naked_nativeint
-        | Integral (Boxable (Int64 Any_locality_mode)) -> Naked_int64
-      in
-      let src = standard_int_or_float_of_scalar_width src in
-      let dst = standard_int_or_float_of_scalar_width dst in
-      Unary (Num_conv { src; dst }, arg)
-
 let box_vec128 mode (arg : H.expr_primitive) ~current_region : H.expr_primitive
     =
   Unary
@@ -1401,6 +1316,89 @@ let opaque layout arg ~middle_end_only : H.expr_primitive list =
       Unary (Opaque_identity { middle_end_only; kind }, arg_component))
     arg kinds
 
+let rec static_cast ~(src : L.any_locality_mode Scalar.t)
+    ~(dst : L.locality_mode Scalar.t) (arg : H.simple_or_prim) ~current_region :
+    H.simple_or_prim =
+  if Stdlib.( = ) src (Scalar.ignore_locality dst)
+  then arg
+  else
+    match src, dst with
+    | Value src, dst ->
+      let arg : H.expr_primitive =
+        match (src : L.any_locality_mode Scalar.Width.t) with
+        | Integral (Taggable Int8) ->
+          (* CR jvanburen: Untagging int8/16 is not the sleekest. we should be
+             able to untag without a Num_conv primitive, maybe by making
+             subkinds of Tagged_immediate *)
+          Unary
+            ( Num_conv { src = Naked_immediate; dst = Naked_int8 },
+              Prim (Unary (Untag_immediate, arg)) )
+        | Integral (Taggable Int16) ->
+          Unary
+            ( Num_conv { src = Naked_immediate; dst = Naked_int16 },
+              Prim (Unary (Untag_immediate, arg)) )
+        | Integral (Taggable Int) -> Unary (Untag_immediate, arg)
+        | Floating (Float32 Any_locality_mode) ->
+          Unary (Unbox_number Naked_float32, arg)
+        | Floating (Float64 Any_locality_mode) ->
+          Unary (Unbox_number Naked_float, arg)
+        | Integral (Boxable (Int32 Any_locality_mode)) ->
+          Unary (Unbox_number Naked_int32, arg)
+        | Integral (Boxable (Nativeint Any_locality_mode)) ->
+          Unary (Unbox_number Naked_nativeint, arg)
+        | Integral (Boxable (Int64 Any_locality_mode)) ->
+          Unary (Unbox_number Naked_int64, arg)
+      in
+      static_cast (H.Prim arg) ~src:(Scalar.Maybe_naked.Naked src) ~dst
+        ~current_region
+    | src, Value dst -> (
+      let arg =
+        let dst = Scalar.Maybe_naked.Naked (Scalar.Width.ignore_locality dst) in
+        if Stdlib.( = ) src dst
+        then arg
+        else static_cast arg ~src ~dst ~current_region
+      in
+      let box_number width mode : H.simple_or_prim =
+        let mode =
+          Alloc_mode.For_allocations.from_lambda mode ~current_region
+        in
+        Prim (Unary (Box_number (width, mode), arg))
+      in
+      match (dst : L.locality_mode Scalar.Width.t) with
+      | Floating (Float32 mode) -> box_number Naked_float32 mode
+      | Floating (Float64 mode) -> box_number Naked_float mode
+      | Integral (Boxable (Int32 mode)) -> box_number Naked_int32 mode
+      | Integral (Boxable (Nativeint mode)) -> box_number Naked_nativeint mode
+      | Integral (Boxable (Int64 mode)) -> box_number Naked_int64 mode
+      | Integral (Taggable width) ->
+        let arg : H.simple_or_prim =
+          let dst = I_or_f.Naked_immediate in
+          match (width : Scalar.Integral.Taggable.Width.t) with
+          | Int -> arg
+          | Int16 -> Prim (Unary (Num_conv { src = Naked_int16; dst }, arg))
+          | Int8 -> Prim (Unary (Num_conv { src = Naked_int8; dst }, arg))
+        in
+        Prim (Unary (Tag_immediate, arg)))
+    | Naked src, Naked dst ->
+      let standard_int_or_float_of_scalar_width :
+          L.any_locality_mode Scalar.Width.t -> I_or_f.t = function
+        | Integral (Taggable Int8) -> Naked_int8
+        | Integral (Taggable Int16) -> Naked_int16
+        | Integral (Taggable Int) -> Naked_immediate
+        | Floating (Float32 Any_locality_mode) -> Naked_float32
+        | Floating (Float64 Any_locality_mode) -> Naked_float
+        | Integral (Boxable (Int32 Any_locality_mode)) -> Naked_int32
+        | Integral (Boxable (Nativeint Any_locality_mode)) -> Naked_nativeint
+        | Integral (Boxable (Int64 Any_locality_mode)) -> Naked_int64
+      in
+      let src = standard_int_or_float_of_scalar_width src in
+      let dst = standard_int_or_float_of_scalar_width dst in
+      Prim (Unary (Num_conv { src; dst }, arg))
+
+let to_expr : H.simple_or_prim -> H.expr_primitive = function
+  | Prim prim -> prim
+  | Simple simple -> Simple simple
+
 (* Primitive conversion *)
 let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     (dbg : Debuginfo.t) ~current_region ~current_ghost_region :
@@ -1635,7 +1633,8 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
   | Pnot, [[arg]] -> [Unary (Boolean_not, arg)]
   | Pscalar (Unary unary), [[arg]] -> (
     match unary with
-    | Static_cast { src; dst } -> [static_cast arg ~src ~dst ~current_region]
+    | Static_cast { src; dst } ->
+      [to_expr (static_cast arg ~src ~dst ~current_region)]
     | Integral (outer, op) ->
       let width = integral_width outer in
       let outer = Scalar.integral outer in
@@ -1649,14 +1648,12 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let result : H.expr_primitive =
         match op with
-        | Neg -> Unary (Int_arith (width, Neg), Prim arg)
-        | Bswap -> Unary (Int_arith (width, Swap_byte_endianness), Prim arg)
-        | Succ ->
-          Binary (Int_arith (width, Add), Prim arg, Simple (const width 1))
-        | Pred ->
-          Binary (Int_arith (width, Sub), Prim arg, Simple (const width 1))
+        | Neg -> Unary (Int_arith (width, Neg), arg)
+        | Bswap -> Unary (Int_arith (width, Swap_byte_endianness), arg)
+        | Succ -> Binary (Int_arith (width, Add), arg, Simple (const width 1))
+        | Pred -> Binary (Int_arith (width, Sub), arg, Simple (const width 1))
       in
-      [maybe_wrap (Prim result)]
+      [to_expr (maybe_wrap (Prim result))]
     | Floating (outer, op) ->
       let width = floating_width outer in
       let outer = Scalar.floating outer in
@@ -1670,22 +1667,22 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let result : H.expr_primitive =
         match op with
-        | Neg -> Unary (Float_arith (width, Neg), Prim arg)
-        | Abs -> Unary (Float_arith (width, Abs), Prim arg)
+        | Neg -> Unary (Float_arith (width, Neg), arg)
+        | Abs -> Unary (Float_arith (width, Abs), arg)
       in
-      [maybe_wrap (Prim result)])
+      [to_expr (maybe_wrap (Prim result))])
   | Pscalar (Binary binary), [[arg1]; [arg2]] -> (
     match binary with
     | Integral (outer, op) ->
       let width = integral_width outer in
       let outer = Scalar.integral outer in
-      let maybe_unwrap =
-        static_cast
+      let maybe_unwrap arg =
+        static_cast arg ~current_region
           ~src:(Scalar.ignore_locality outer)
-          ~dst:(integral_scalar width) ~current_region
+          ~dst:(integral_scalar width)
       in
-      let arg1 = H.Prim (maybe_unwrap arg1) in
-      let arg2 = H.Prim (maybe_unwrap arg2) in
+      let arg1 = maybe_unwrap arg1 in
+      let arg2 = maybe_unwrap arg2 in
       let maybe_wrap =
         static_cast ~src:(integral_scalar width) ~dst:outer ~current_region
       in
@@ -1715,7 +1712,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
         | Div Safe -> check_zero_division Div
         | Mod Safe -> check_zero_division Mod
       in
-      [maybe_wrap (Prim result)]
+      [to_expr (maybe_wrap (Prim result))]
     | Shift (outer, op, rhs) ->
       let width = integral_width outer in
       let outer = Scalar.integral outer in
@@ -1733,24 +1730,24 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let result : H.expr_primitive =
         match op with
-        | Lsl -> Binary (Int_shift (width, Lsl), Prim arg1, Prim arg2)
-        | Lsr -> Binary (Int_shift (width, Lsr), Prim arg1, Prim arg2)
-        | Asr -> Binary (Int_shift (width, Asr), Prim arg1, Prim arg2)
+        | Lsl -> Binary (Int_shift (width, Lsl), arg1, arg2)
+        | Lsr -> Binary (Int_shift (width, Lsr), arg1, arg2)
+        | Asr -> Binary (Int_shift (width, Asr), arg1, arg2)
       in
-      [maybe_wrap (Prim result)]
+      [to_expr (maybe_wrap (Prim result))]
     | Floating (outer, op) ->
       let width = floating_width outer in
       let outer = Scalar.floating outer in
-      let maybe_unwrap arg =
-        static_cast arg
+      let maybe_unwrap =
+        static_cast ~current_region
           ~src:(Scalar.ignore_locality outer)
-          ~dst:(floating_scalar width) ~current_region
+          ~dst:(floating_scalar width)
       in
       let maybe_wrap =
         static_cast ~src:(floating_scalar width) ~dst:outer ~current_region
       in
-      let arg1 = H.Prim (maybe_unwrap arg1) in
-      let arg2 = H.Prim (maybe_unwrap arg2) in
+      let arg1 = maybe_unwrap arg1 in
+      let arg2 = maybe_unwrap arg2 in
       let result : H.expr_primitive =
         match op with
         | Add -> Binary (Float_arith (width, Add), arg1, arg2)
@@ -1758,27 +1755,27 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
         | Mul -> Binary (Float_arith (width, Mul), arg1, arg2)
         | Div -> Binary (Float_arith (width, Div), arg1, arg2)
       in
-      [maybe_wrap (Prim result)]
+      [to_expr (maybe_wrap (Prim result))]
     | Icmp (size, cmp) ->
       let width = integral_width size in
-      let maybe_unwrap =
-        static_cast ~src:(Scalar.integral size) ~dst:(integral_scalar width)
-          ~current_region
+      let maybe_unwrap arg =
+        static_cast arg ~current_region ~src:(Scalar.integral size)
+          ~dst:(integral_scalar width)
       in
-      let arg1 = H.Prim (maybe_unwrap arg1) in
-      let arg2 = H.Prim (maybe_unwrap arg2) in
+      let arg1 = maybe_unwrap arg1 in
+      let arg2 = maybe_unwrap arg2 in
       let prim : P.binary_primitive =
         Int_comp (width, Yielding_bool (convert_integer_comparison cmp))
       in
       [tag_int (Binary (prim, arg1, arg2))]
     | Fcmp (size, cmp) ->
       let width = floating_width size in
-      let maybe_unwrap =
-        static_cast ~src:(Scalar.floating size) ~dst:(floating_scalar width)
-          ~current_region
+      let maybe_unwrap arg =
+        static_cast arg ~current_region ~src:(Scalar.floating size)
+          ~dst:(floating_scalar width)
       in
-      let arg1 = H.Prim (maybe_unwrap arg1) in
-      let arg2 = H.Prim (maybe_unwrap arg2) in
+      let arg1 = maybe_unwrap arg1 in
+      let arg2 = maybe_unwrap arg2 in
       let prim : P.binary_primitive =
         Float_comp (width, Yielding_bool (convert_float_comparison cmp))
       in
@@ -1786,12 +1783,12 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     | Three_way_compare size -> (
       let int_compare size : H.expr_primitive list =
         let width = integral_width size in
-        let maybe_unwrap =
-          static_cast ~src:(Scalar.integral size) ~dst:(integral_scalar width)
-            ~current_region
+        let maybe_unwrap arg =
+          static_cast arg ~current_region ~src:(Scalar.integral size)
+            ~dst:(integral_scalar width)
         in
-        let arg1 = H.Prim (maybe_unwrap arg1) in
-        let arg2 = H.Prim (maybe_unwrap arg2) in
+        let arg1 = maybe_unwrap arg1 in
+        let arg2 = maybe_unwrap arg2 in
         [ tag_int
             (Binary
                ( Int_comp (width, Yielding_int_like_compare_functions Signed),
@@ -1800,12 +1797,12 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let float_compare size : H.expr_primitive list =
         let width = floating_width size in
-        let maybe_unwrap =
-          static_cast ~src:(Scalar.floating size) ~dst:(floating_scalar width)
-            ~current_region
+        let maybe_unwrap arg =
+          static_cast arg ~current_region ~src:(Scalar.floating size)
+            ~dst:(floating_scalar width)
         in
-        let arg1 = H.Prim (maybe_unwrap arg1) in
-        let arg2 = H.Prim (maybe_unwrap arg2) in
+        let arg1 = maybe_unwrap arg1 in
+        let arg2 = maybe_unwrap arg2 in
         [ tag_int
             (Binary
                ( Float_comp (width, Yielding_int_like_compare_functions ()),

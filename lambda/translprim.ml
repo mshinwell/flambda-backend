@@ -1562,7 +1562,7 @@ let comparison_primitive comparison comparison_kind =
   in
   match comparison, comparison_kind with
   | Equal, Compare_generic -> Pccall caml_equal
-  | Equal, Compare_ints -> icmp int Ceq
+  | Equal, Compare_ints -> Pphys_equal Eq
   | Equal, Compare_floats -> fcmp float64 CFeq
   | Equal, Compare_float32s -> fcmp float32 CFeq
   | Equal, Compare_strings -> Pccall caml_string_equal
@@ -1571,7 +1571,7 @@ let comparison_primitive comparison comparison_kind =
   | Equal, Compare_int32s -> icmp int32 Ceq
   | Equal, Compare_int64s -> icmp int64 Ceq
   | Not_equal, Compare_generic -> Pccall caml_notequal
-  | Not_equal, Compare_ints -> icmp int Cne
+  | Not_equal, Compare_ints -> Pphys_equal Noteq
   | Not_equal, Compare_floats -> fcmp float64 CFneq
   | Not_equal, Compare_float32s -> fcmp float32 CFneq
   | Not_equal, Compare_strings -> Pccall caml_string_notequal

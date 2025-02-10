@@ -2122,10 +2122,7 @@ let inline_lazy_force_cond arg pos loc =
   let idarg = Ident.create_local "lzarg" in
   let varg = Lvar idarg in
   let tag = Ident.create_local "tag" in
-  let test_tag t =
-    Lprim(Pscalar (Binary (Icmp (Scalar.Integral.int, Ceq))),
-          [Lvar tag; Lconst(Const_base(Const_int t))], loc)
-  in
+  let test_tag t = phys_equal (Lvar tag) (lconst_int int t) ~loc in
   Llet
     ( Strict,
       Lambda.layout_lazy,
@@ -2571,14 +2568,11 @@ let rec split k xs =
 let zero_lam = Lconst (Const_base (Const_int 0))
 
 let tree_way_test loc kind arg lt eq gt =
-  let lt_prim =
-    Pscalar (Binary (Icmp (Scalar.Integral.int, Clt)))
-  in
   Lifthenelse
-    ( Lprim (lt_prim, [ arg; zero_lam ], loc),
+    ( icmp Clt int arg zero_lam ~loc,
       lt,
       Lifthenelse (
-        Lprim (lt_prim, [ zero_lam; arg ], loc),
+        icmp Clt int zero_lam arg ~loc,
         gt,
         eq,
         kind),
@@ -2690,7 +2684,12 @@ let rec do_tests_nofail value_kind loc tst arg = function
           act, value_kind )
 
 let make_test_sequence value_kind loc fail size arg const_lambda_list =
-  let icmp size cmp = Pscalar (Binary (Icmp (size, cmp))) in
+  let icmp size cmp =
+    match (size : _ Scalar.Integral.t), cmp with
+    | Value (Taggable Int), Ceq -> Pphys_equal Eq
+    | Value (Taggable Int), Cne -> Pphys_equal Noteq
+    | size, cmp -> Pscalar (Binary (Icmp (size, cmp)))
+  in
   let fcmp size cmp = Pscalar (Binary (Fcmp (size, cmp))) in
   let cmp cmp_if_i cmp_if_f =
     match (size : _ Scalar.t) with
@@ -2710,7 +2709,7 @@ let make_test_sequence value_kind loc fail size arg const_lambda_list =
     share_actions_tree value_kind const_lambda_list fail
   in
   let rec make_test_sequence const_lambda_list =
-    if List.length const_lambda_list >= 4 && lt_tst <> Pignore then
+    if List.length const_lambda_list >= 4 then
       split_sequence const_lambda_list
     else
       match fail with
@@ -2732,9 +2731,9 @@ module SArg = struct
   let pintcomp cmp =
     Pscalar (Binary (Icmp (Scalar.Integral.int, cmp)))
 
-  let eqint = pintcomp Ceq
+  let eqint = Pphys_equal Eq
 
-  let neint = pintcomp Cne
+  let neint = Pphys_equal Noteq
 
   let leint = pintcomp Cle
 
@@ -2777,9 +2776,7 @@ module SArg = struct
 
   let make_is_nonzero arg =
     if !Clflags.native_code then
-      Lprim (neint,
-             [arg; Lconst (Const_base (Const_int 0))],
-             Loc_unknown)
+      Lprim (Pphys_equal Noteq, [ arg; lconst_int int 0 ], Loc_unknown)
     else
       arg
 
@@ -3279,7 +3276,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
                   (fun (path, act) rem ->
                     let ext = transl_extension_path loc pat_env path in
                     Lifthenelse
-                      (icmp Ceq int ~loc (Lvar tag) ext, act, rem, value_kind))
+                      (phys_equal ~loc (Lvar tag) ext, act, rem, value_kind))
                   nonconsts default
               in
               let ubr = Translmode.transl_unique_barrier pat_barrier in
@@ -3292,7 +3289,7 @@ let combine_constructor value_kind loc arg pat_env pat_barrier cstr partial ctx 
         List.fold_right
           (fun (path, act) rem ->
             let ext = transl_extension_path loc pat_env path in
-            Lifthenelse (icmp Ceq int ~loc arg ext, act, rem,
+            Lifthenelse (phys_equal ~loc arg ext, act, rem,
                          value_kind))
           consts nonconst_lambda
       in
