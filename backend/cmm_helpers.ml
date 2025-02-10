@@ -4511,15 +4511,15 @@ module Scalar_type = struct
       | Signed, Unsigned -> false
 
     let[@inline] static_cast ~dbg ~src ~dst exp =
-      if is_promotable ~src ~dst
-      then
-        (* since the values are already stored sign- or zero-extended, this is a
-           no-op. *)
-        exp
+      let sign = signedness dst in
+      let src = bit_width src in
+      let dst = bit_width dst in
+      if dst <= src
+      then low_bits ~bits:dst exp ~dbg
       else
-        match signedness dst with
-        | Signed -> sign_extend ~bits:(bit_width dst) exp ~dbg
-        | Unsigned -> zero_extend ~bits:(bit_width dst) exp ~dbg
+        match sign with
+        | Signed -> sign_extend ~bits:src exp ~dbg
+        | Unsigned -> zero_extend ~bits:src exp ~dbg
 
     let[@inline] conjugate ~outer ~inner ~dbg ~f x =
       x

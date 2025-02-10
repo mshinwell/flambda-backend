@@ -198,7 +198,11 @@ end = struct
                        use the float version instead"
                 in
                 let prim : P.t =
-                  Unary (Int_arith (standard_int_kind, Neg), other_side)
+                  let kind =
+                    Flambda_kind.Standard_int.to_kind standard_int_kind
+                  in
+                  let zero = Simple.const_int_of_kind kind 0 in
+                  Binary (Int_arith (standard_int_kind, Sub), zero, other_side)
                 in
                 Some (PR.Set.add (Prim prim) possible_results)
               | Float_negation_of_the_other_side width ->

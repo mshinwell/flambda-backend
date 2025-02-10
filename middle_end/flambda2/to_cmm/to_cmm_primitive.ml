@@ -531,8 +531,8 @@ let integral_of_standard_int : K.Standard_int.t -> C.Scalar_type.Integral.t =
     Untagged (C.Scalar_type.Integer.create_exn ~bit_width ~signedness:Signed)
   in
   function
-  | Naked_int8 -> untagged_int 32
-  | Naked_int16 -> untagged_int 64
+  | Naked_int8 -> untagged_int 8
+  | Naked_int16 -> untagged_int 16
   | Naked_int32 -> untagged_int 32
   | Naked_int64 -> untagged_int 64
   | Naked_nativeint -> Untagged C.Scalar_type.Integer.nativeint
@@ -560,20 +560,6 @@ let numeric_of_standard_int_or_float :
 
 let unary_int_arith_primitive _env dbg kind op arg =
   match (op : P.unary_int_arith_op) with
-  | Neg -> (
-    match integral_of_standard_int kind with
-    | Tagged src ->
-      C.Scalar_type.Tagged_integer.conjugate ~dbg ~outer:src
-        ~inner:C.Scalar_type.Tagged_integer.immediate
-        ~f:(fun x -> C.negint x dbg)
-        arg
-    | Untagged src ->
-      let bits = C.Scalar_type.Integer.bit_width src in
-      C.Scalar_type.Integer.static_cast arg ~src
-        ~dst:C.Scalar_type.Integer.nativeint ~dbg
-      |> (fun arg -> C.neg_int (C.low_bits ~bits arg ~dbg) dbg)
-      |> C.Scalar_type.Integer.static_cast ~src:C.Scalar_type.Integer.nativeint
-           ~dst:src ~dbg)
   | Swap_byte_endianness -> (
     match (kind : K.Standard_int.t) with
     | Tagged_immediate -> C.tag_int (C.bswap16 (C.untag_int arg dbg) dbg) dbg
@@ -668,12 +654,10 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
         false
     in
     let[@inline] prepare_operand operand =
-      let operand =
+      if requires_sign_extended_operands
+      then
         C.Scalar_type.Integral.static_cast ~dbg ~src:kind ~dst:operator_type
           operand
-      in
-      if requires_sign_extended_operands
-      then operand
       else
         let bits =
           match kind with
@@ -685,8 +669,7 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
     in
     let x = prepare_operand x in
     let y = prepare_operand y in
-    let result = f x y dbg in
-    C.Scalar_type.Integral.static_cast ~dbg ~src:operator_type ~dst:kind result
+    f x y dbg
     (* Operations on integer arguments must return something in the range of
        their values, hence the [static_cast] here. The [C.low_bits] operations
        (see above in [prepare_operand]) are used to avoid unnecessary

@@ -1648,8 +1648,8 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       in
       let result : H.expr_primitive =
         match op with
-        | Neg -> Unary (Int_arith (width, Neg), arg)
         | Bswap -> Unary (Int_arith (width, Swap_byte_endianness), arg)
+        | Neg -> Binary (Int_arith (width, Sub), Simple (const width 0), arg)
         | Succ -> Binary (Int_arith (width, Add), arg, Simple (const width 1))
         | Pred -> Binary (Int_arith (width, Sub), arg, Simple (const width 1))
       in
