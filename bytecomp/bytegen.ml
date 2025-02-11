@@ -354,7 +354,7 @@ let merge_repr ev ev' =
   | x, Event_none -> x
   | Event_parent r, Event_child r' when r == r' && !r = 1 -> Event_none
   | Event_child r, Event_parent r' when r == r' -> Event_parent r
-  | x, y          ->
+  | _, _          ->
     fatal_error "Bytegen.merge_repr"
 
 let merge_events ev ev' =
