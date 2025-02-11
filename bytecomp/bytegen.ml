@@ -346,24 +346,16 @@ let merge_infos ev ev' =
   match ev.ev_info, ev'.ev_info with
     Event_other, info -> info
   | info, Event_other -> info
-  (* | Event_function, Event_function -> Event_function
-   * | Event_return x, Event_return y when x = y -> Event_return x *)
   | _                 -> fatal_error "Bytegen.merge_infos"
 
 let merge_repr ev ev' =
-  let print_repr ppf repr=
-    match ( repr : debug_event_repr ) with
-    | Event_none -> Format.fprintf ppf "none"
-    | Event_parent r -> Format.fprintf ppf "parent(%d)" !r
-    | Event_child r -> Format.fprintf ppf "child(%d)" !r
-  in
   match ev.ev_repr, ev'.ev_repr with
     Event_none, x -> x
   | x, Event_none -> x
   | Event_parent r, Event_child r' when r == r' && !r = 1 -> Event_none
   | Event_child r, Event_parent r' when r == r' -> Event_parent r
   | x, y          ->
-    fatal_errorf "Bytegen.merge_repr %a %a" print_repr x print_repr y
+    fatal_error "Bytegen.merge_repr"
 
 let merge_events ev ev' =
   let (maj, min) =
