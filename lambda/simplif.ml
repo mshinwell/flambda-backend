@@ -52,11 +52,7 @@ let rec eliminate_ref id = function
   | Lprim(Psetfield(0, _, _), [Lvar v; e], _) when Ident.same v id ->
       Lassign(id, eliminate_ref id e)
   | Lprim(Poffsetref delta, [Lvar v], loc) when Ident.same v id ->
-    Lassign(id,
-            binary ~loc
-              (Integral (Scalar.Integral.int, Add))
-              (Lmutvar id)
-              (Lconst (const_int Scalar.Integral.int delta)))
+    Lassign(id, add int ~loc (Lmutvar id) (lconst_int int delta))
   | Lprim(p, el, loc) ->
       Lprim(p, List.map (eliminate_ref id) el, loc)
   | Lswitch(e, sw, loc, kind) ->

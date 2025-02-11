@@ -274,6 +274,9 @@ type primitive =
   (* Boolean operations *)
   | Psequand | Psequor | Pnot
   | Pphys_equal of Phys_equal.t
+  (** Unlike in the language specification, the compiler defines physical equality
+     as referential equality on all values, including immediates and immutable
+     blocks. *)
   (* Scalar operations *)
   | Pscalar of locality_mode Scalar.Intrinsic.t
   | Poffsetref of int
@@ -528,6 +531,8 @@ and raise_kind =
 val equal_value_kind : value_kind -> value_kind -> bool
 
 val equal_layout : layout -> layout -> bool
+
+val equal_unboxed_integer : unboxed_integer -> unboxed_integer -> bool
 
 val compatible_layout : layout -> layout -> bool
 
@@ -1173,35 +1178,27 @@ val count_initializers_array_kind : array_kind -> int
 val ignorable_product_element_kind_involves_int :
   ignorable_product_element_kind -> bool
 
-val equal_unboxed_integer : unboxed_integer -> unboxed_integer -> bool
-
-val unary
-  : locality_mode Scalar.Intrinsic.Unary.t
-  -> lambda
-  -> loc:scoped_location
-  -> lambda
-
-val binary
-  :  locality_mode Scalar.Intrinsic.Binary.t
-  -> lambda
-  -> lambda
-  -> loc:scoped_location
-  -> lambda
-
 (** construction helpers *)
 
-val phys_equal : lambda -> lambda -> loc:scoped_location -> lambda
 val int : _ Scalar.Integral.t
+
+(** See the comment on the [Pphys_equal] primitive.
+    This can be applied to any arguments of kind [value]. *)
+val phys_equal : lambda -> lambda -> loc:scoped_location -> lambda
 
 type 'a unop := 'a -> lambda -> loc:scoped_location -> lambda
 val succ : locality_mode Scalar.Integral.t unop
 val pred : locality_mode Scalar.Integral.t unop
 
 type 'a binop := 'a -> lambda -> lambda -> loc:scoped_location -> lambda
-
 val add : locality_mode Scalar.Integral.t binop
 val sub : locality_mode Scalar.Integral.t binop
 val and_ : locality_mode Scalar.Integral.t binop
+
+(** This is ONLY for comparing scalar integral values.
+
+    It may NOT be applied to arbitrary arguments of kind value, even if they
+    are both known to be immediates. Use [phys_equal] for that. *)
 val icmp : integer_comparison -> any_locality_mode Scalar.Integral.t binop
 
 val static_cast
