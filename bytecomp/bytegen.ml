@@ -346,17 +346,24 @@ let merge_infos ev ev' =
   match ev.ev_info, ev'.ev_info with
     Event_other, info -> info
   | info, Event_other -> info
-  | Event_function, Event_function -> Event_function
-  | Event_return x, Event_return y when x = y -> Event_return x
+  (* | Event_function, Event_function -> Event_function
+   * | Event_return x, Event_return y when x = y -> Event_return x *)
   | _                 -> fatal_error "Bytegen.merge_infos"
 
 let merge_repr ev ev' =
+  let print_repr ppf repr=
+    match ( repr : debug_event_repr ) with
+    | Event_none -> Format.fprintf ppf "none"
+    | Event_parent r -> Format.fprintf ppf "parent(%d)" !r
+    | Event_child r -> Format.fprintf ppf "child(%d)" !r
+  in
   match ev.ev_repr, ev'.ev_repr with
     Event_none, x -> x
   | x, Event_none -> x
   | Event_parent r, Event_child r' when r == r' && !r = 1 -> Event_none
   | Event_child r, Event_parent r' when r == r' -> Event_parent r
-  | _, _          -> fatal_error "Bytegen.merge_repr"
+  | x, y          ->
+    fatal_errorf "Bytegen.merge_repr %a %a" print_repr x print_repr y
 
 let merge_events ev ev' =
   let (maj, min) =
@@ -1427,6 +1434,9 @@ and comp_binary_test stack_info env cond ifso ifnot sz cont =
 (* Compiler a scalar intrinsic. *)
 
 and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
+  let identity cont =
+    Kpop 0 :: cont
+  in
   let module I = Lambda.Scalar.Intrinsic in
   let ccall arity fmt =
     Printf.ksprintf (fun name cont ->
@@ -1556,7 +1566,7 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
         in
         (match op, Scalar.Integral.of_lambda size with
         | _, Builtin size -> comp_builtin size cont
-        | Bswap, Small Int8 -> cont
+        | Bswap, Small Int8 -> identity cont
         | (Succ | Pred | Neg), (Small (Int8 | Int16 as small))
         | Bswap, (Small (Int16 as small)) -> comp_builtin Int (sign_extend small cont))
     | Floating (size, ((Abs | Neg) as op)) ->
@@ -1575,7 +1585,7 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
          | Boxed Float32, Boxed Float32
          | Int, Int ->
            (* the identity function *)
-           cont
+           identity cont
          | Boxed Float32, Boxed (Int64 | Nativeint | Int32)
          | Boxed (Int64 | Nativeint | Int32), Boxed Float32 ->
            (* there are no builtins to convert directly, so we go indirectly via
@@ -1617,7 +1627,7 @@ and comp_scalar_intrinsic (op : _ Lambda.Scalar.Intrinsic.t) cont =
        | Small Int16, Small Int16 ->
          (* we don't need to sign-extend in this case because tagged small integers
             are always represented sign-extended in bytecode *)
-         cont
+         identity cont
        | (Small Int16), Small (Int8 as dst) ->
          (* we need to sign-extend here because these values are stored in full-width
             immediates *)
