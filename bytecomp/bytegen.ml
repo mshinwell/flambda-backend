@@ -346,6 +346,8 @@ let merge_infos ev ev' =
   match ev.ev_info, ev'.ev_info with
     Event_other, info -> info
   | info, Event_other -> info
+  | Event_function, Event_function -> Event_function
+  | Event_return x, Event_return y when x = y -> Event_return x
   | _                 -> fatal_error "Bytegen.merge_infos"
 
 let merge_repr ev ev' =
