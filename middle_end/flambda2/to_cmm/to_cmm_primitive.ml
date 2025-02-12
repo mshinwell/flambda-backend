@@ -540,13 +540,11 @@ let integral_of_standard_int i ~signedness : C.Scalar_type.Integral.t =
   | Naked_int64 -> I.naked_int_exn ~bits:64 signedness
   | Naked_nativeint -> I.nativeint signedness
   | Naked_immediate -> I.naked_immediate signedness
-  | Tagged_immediate -> I.tagged_immediate signedness
 
 let unary_int_arith_primitive _env dbg kind op arg =
   match (op : P.unary_int_arith_op) with
   | Swap_byte_endianness -> (
     match (kind : K.Standard_int.t) with
-    | Tagged_immediate -> C.tag_int (C.bswap16 (C.untag_int arg dbg) dbg) dbg
     | Naked_immediate ->
       (* This case should not have a sign extension, confusingly, because it
          arises from the [Pbswap16] Lambda primitive. That operation does not
@@ -580,7 +578,6 @@ let arithmetic_conversion dbg src dst arg =
     | Naked_int64 -> C.Scalar_type.naked_int_exn ~bits:64 Signed
     | Naked_nativeint -> C.Scalar_type.nativeint Signed
     | Naked_immediate -> C.Scalar_type.naked_immediate Signed
-    | Tagged_immediate -> C.Scalar_type.tagged_immediate Signed
     | Naked_float32 -> Float Float32
     | Naked_float -> Float Float64
   in
@@ -676,81 +673,49 @@ let binary_int_arith_primitive _env dbg (kind : K.Standard_int.t)
   C.Scalar_type.Integral.static_cast ~dbg ~src:dst ~dst:src result
 
 let binary_int_shift_primitive _env dbg kind (op : P.int_shift_op) x y =
-  match[@warning "-fragile-match"] (kind : K.Standard_int.t) with
-  | Tagged_immediate -> (
-    (* special case for tagged immediates *)
-    match op with
-    | Lsl -> C.lsl_int_caml_raw x y ~dbg
-    | Lsr -> C.lsr_int_caml_raw x y ~dbg
-    | Asr -> C.asr_int_caml_raw x y ~dbg)
-  | kind ->
-    let is_compatible_with_modular_arithmetic =
-      match op with Lsl -> true | Asr | Lsr -> false
+  let is_compatible_with_modular_arithmetic =
+    match op with Lsl -> true | Asr | Lsr -> false
+  in
+  let signedness : P.signed_or_unsigned =
+    match op with Lsl | Lsr -> Unsigned | Asr -> Signed
+  in
+  let outer = integral_of_standard_int kind ~signedness in
+  let inner =
+    let untagged =
+      (* Shifts always operate on untagged integers *)
+      C.Scalar_type.Integral.to_untagged outer
     in
-    let signedness : P.signed_or_unsigned =
-      match op with Lsl | Lsr -> Unsigned | Asr -> Signed
-    in
-    let outer = integral_of_standard_int kind ~signedness in
-    let inner =
-      let untagged =
-        (* Shifts always operate on untagged integers *)
-        C.Scalar_type.Integral.to_untagged outer
-      in
-      if is_compatible_with_modular_arithmetic
-      then untagged
-      else C.Scalar_type.Integer.to_register_width untagged
-    in
-    C.Scalar_type.Integral.conjugate x ~outer ~inner:(Untagged inner) ~dbg
-      ~f:(fun x ->
-        (* [kind] only applies to [x], the [y] argument is always a bare
-           register-sized integer *)
-        match op with
-        | Lsl -> C.lsl_int x y dbg
-        | Asr -> C.asr_int x y dbg
-        | Lsr -> C.lsr_int x y dbg)
+    if is_compatible_with_modular_arithmetic
+    then untagged
+    else C.Scalar_type.Integer.to_register_width untagged
+  in
+  C.Scalar_type.Integral.conjugate x ~outer ~inner:(Untagged inner) ~dbg
+    ~f:(fun x ->
+      (* [kind] only applies to [x], the [y] argument is always a bare
+         register-sized integer *)
+      match op with
+      | Lsl -> C.lsl_int x y dbg
+      | Asr -> C.asr_int x y dbg
+      | Lsr -> C.lsr_int x y dbg)
 
 let binary_int_comp_primitive _env dbg kind cmp x y =
-  match[@warning "-fragile-match"] (kind : K.Standard_int.t) with
-  | Tagged_immediate -> (
-    (* [x] and [y] are expressions yielding well-formed tagged immediates, that
-       is to say, their least significant bit (LSB) is 1. However when comparing
-       tagged immediates, there always exists one argument (i.e. either [x] or
-       [y]) for which the setting of that LSB makes no difference to the result.
-       This means that we can optimise in the case where the argument in
-       question contains a tagging operation (or logical OR operation setting
-       the last bit) by removing such operation.
-
-       See middle_end/flambda2/z3/comparisons.smt2 for a Z3 script to prove
-       this. *)
-    match (cmp : P.signed_or_unsigned P.comparison) with
-    | Lt Signed -> C.lt ~dbg x (C.ignore_low_bit_int y)
-    | Le Signed -> C.le ~dbg (C.ignore_low_bit_int x) y
-    | Gt Signed -> C.gt ~dbg (C.ignore_low_bit_int x) y
-    | Ge Signed -> C.ge ~dbg x (C.ignore_low_bit_int y)
-    | Lt Unsigned -> C.ult ~dbg x (C.ignore_low_bit_int y)
-    | Le Unsigned -> C.ule ~dbg (C.ignore_low_bit_int x) y
-    | Gt Unsigned -> C.ugt ~dbg (C.ignore_low_bit_int x) y
-    | Ge Unsigned -> C.uge ~dbg x (C.ignore_low_bit_int y)
-    | Eq -> C.eq ~dbg x y
-    | Neq -> C.neq ~dbg x y)
-  | kind -> (
-    let go func signedness =
-      let src = integral_of_standard_int kind ~signedness in
-      let dst = C.Scalar_type.Integral.to_register_width src in
-      let conv_arg = C.Scalar_type.Integral.static_cast ~dbg ~src ~dst in
-      func ~dbg (conv_arg x) (conv_arg y)
-    in
-    match (cmp : P.signed_or_unsigned P.comparison) with
-    | Lt Signed -> go C.lt Signed
-    | Le Signed -> go C.le Signed
-    | Gt Signed -> go C.gt Signed
-    | Ge Signed -> go C.ge Signed
-    | Lt Unsigned -> go C.ult Unsigned
-    | Le Unsigned -> go C.ule Unsigned
-    | Gt Unsigned -> go C.ugt Unsigned
-    | Ge Unsigned -> go C.uge Unsigned
-    | Eq -> go C.eq Unsigned
-    | Neq -> go C.neq Unsigned)
+  let go func signedness =
+    let src = integral_of_standard_int kind ~signedness in
+    let dst = C.Scalar_type.Integral.to_register_width src in
+    let conv_arg = C.Scalar_type.Integral.static_cast ~dbg ~src ~dst in
+    func ~dbg (conv_arg x) (conv_arg y)
+  in
+  match (cmp : P.signed_or_unsigned P.comparison) with
+  | Lt Signed -> go C.lt Signed
+  | Le Signed -> go C.le Signed
+  | Gt Signed -> go C.gt Signed
+  | Ge Signed -> go C.ge Signed
+  | Lt Unsigned -> go C.ult Unsigned
+  | Le Unsigned -> go C.ule Unsigned
+  | Gt Unsigned -> go C.ugt Unsigned
+  | Ge Unsigned -> go C.uge Unsigned
+  | Eq -> go C.eq Unsigned
+  | Neq -> go C.neq Unsigned
 
 let binary_int_comp_primitive_yielding_int _env dbg kind
     (signedness : P.signed_or_unsigned) x y =

@@ -57,10 +57,14 @@ let let_prim ~dbg v prim (free_names, body) =
 (* ******************************** *)
 
 let simplify_comparison_of_tagged_immediates ~dbg dacc ~cmp_prim cont a b =
+  let untagged_a = Variable.create "untagged_a" in
+  let untagged_b = Variable.create "untagged_b" in
   let v_comp = Variable.create "comp" in
   let tagged = Variable.create "tagged" in
   let _free_names, res =
-    let_prim ~dbg v_comp (P.Binary (cmp_prim, a, b))
+    let_prim ~dbg untagged_a (P.Unary (Untag_immediate, a))
+    @@ let_prim ~dbg untagged_b (P.Unary (Untag_immediate, b))
+    @@ let_prim ~dbg v_comp (P.Binary (cmp_prim, a, b))
     @@ let_prim ~dbg tagged (P.Unary (Tag_immediate, Simple.var v_comp))
     @@ apply_cont ~dbg cont tagged
   in
@@ -163,7 +167,7 @@ let simplify_returning_extcall ~dbg ~cont ~exn_cont:_ dacc fun_name args
       ~float_prim:(fun width ->
         Float_comp (width, Yielding_int_like_compare_functions ()))
       ~tagged_prim:
-        (Int_comp (Tagged_immediate, Yielding_int_like_compare_functions Signed))
+        (Int_comp (Naked_immediate, Yielding_int_like_compare_functions Signed))
       ~boxed_int_prim:(fun kind ->
         Int_comp (kind, Yielding_int_like_compare_functions Signed))
   | "caml_equal", [a; b], [a_ty; b_ty] ->
@@ -179,22 +183,22 @@ let simplify_returning_extcall ~dbg ~cont ~exn_cont:_ dacc fun_name args
   | "caml_lessequal", [a; b], [a_ty; b_ty] ->
     simplify_comparison ~dbg ~dacc ~cont a b a_ty b_ty
       ~float_prim:(fun width -> Float_comp (width, Yielding_bool (Le ())))
-      ~tagged_prim:(Int_comp (Tagged_immediate, Yielding_bool (Le Signed)))
+      ~tagged_prim:(Int_comp (Naked_immediate, Yielding_bool (Le Signed)))
       ~boxed_int_prim:(fun kind -> Int_comp (kind, Yielding_bool (Le Signed)))
   | "caml_lessthan", [a; b], [a_ty; b_ty] ->
     simplify_comparison ~dbg ~dacc ~cont a b a_ty b_ty
       ~float_prim:(fun width -> Float_comp (width, Yielding_bool (Lt ())))
-      ~tagged_prim:(Int_comp (Tagged_immediate, Yielding_bool (Lt Signed)))
+      ~tagged_prim:(Int_comp (Naked_immediate, Yielding_bool (Lt Signed)))
       ~boxed_int_prim:(fun kind -> Int_comp (kind, Yielding_bool (Lt Signed)))
   | "caml_greaterequal", [a; b], [a_ty; b_ty] ->
     simplify_comparison ~dbg ~dacc ~cont a b a_ty b_ty
       ~float_prim:(fun width -> Float_comp (width, Yielding_bool (Ge ())))
-      ~tagged_prim:(Int_comp (Tagged_immediate, Yielding_bool (Ge Signed)))
+      ~tagged_prim:(Int_comp (Naked_immediate, Yielding_bool (Ge Signed)))
       ~boxed_int_prim:(fun kind -> Int_comp (kind, Yielding_bool (Ge Signed)))
   | "caml_greaterthan", [a; b], [a_ty; b_ty] ->
     simplify_comparison ~dbg ~dacc ~cont a b a_ty b_ty
       ~float_prim:(fun width -> Float_comp (width, Yielding_bool (Gt ())))
-      ~tagged_prim:(Int_comp (Tagged_immediate, Yielding_bool (Gt Signed)))
+      ~tagged_prim:(Int_comp (Naked_immediate, Yielding_bool (Gt Signed)))
       ~boxed_int_prim:(fun kind -> Int_comp (kind, Yielding_bool (Gt Signed)))
   | "caml_make_vect", [_; _], [len_ty; init_value_ty] ->
     simplify_caml_make_vect dacc ~len_ty ~init_value_ty

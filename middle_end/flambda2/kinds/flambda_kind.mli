@@ -145,11 +145,10 @@ module Block_shape : sig
 end
 
 module Standard_int : sig
-  (** "Standard" because these correspond to the usual representations of tagged
-      immediates, 32-bit, 64-bit and native integers as expected by the
-      operations in [Flambda_primitive]. *)
+  (** "Standard" because these correspond to the usual representations of
+      32-bit, 64-bit and native integers as expected by the operations in
+      [Flambda_primitive]. *)
   type t =
-    | Tagged_immediate
     | Naked_immediate
     | Naked_int8
     | Naked_int16
@@ -339,7 +338,6 @@ end
 module Standard_int_or_float : sig
   (** The same as [Standard_int], but also permitting naked floats. *)
   type t =
-    | Tagged_immediate
     | Naked_immediate
     | Naked_float32
     | Naked_float

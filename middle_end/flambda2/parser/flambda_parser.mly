@@ -506,14 +506,12 @@ size_opt:
   | KWD_SIZE; LPAREN; size = targetint; RPAREN { Some size }
 
 standard_int:
-  | { Tagged_immediate }
   | KWD_IMM { Naked_immediate }
   | KWD_INT32 { Naked_int32 }
   | KWD_INT64 { Naked_int64 }
   | KWD_NATIVEINT { Naked_nativeint }
 
 convertible_type:
-  | KWD_IMM KWD_TAGGED { Tagged_immediate }
   | KWD_IMM { Naked_immediate }
   | KWD_FLOAT { Naked_float }
   | KWD_INT32 { Naked_int32 }

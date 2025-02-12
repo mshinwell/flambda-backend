@@ -66,10 +66,6 @@ let unary_int_prim_size kind op =
     ( (kind : Flambda_kind.Standard_int.t),
       (op : Flambda_primitive.unary_int_arith_op) )
   with
-  | Tagged_immediate, Swap_byte_endianness ->
-    (* CR pchambart: size depends a lot of the architecture. If the backend
-       handles it, this is a single arith op. *)
-    2 + does_not_need_caml_c_call_extcall_size + 1
   | Naked_immediate, Swap_byte_endianness ->
     does_not_need_caml_c_call_extcall_size + 1
   | Naked_int8, Swap_byte_endianness -> 0
@@ -83,14 +79,12 @@ let arith_conversion_size src dst =
       (dst : Flambda_kind.Standard_int_or_float.t) )
   with
   (* 64-bit on 32-bit host specific cases *)
-  | Naked_int64, Tagged_immediate
   | Naked_int64, Naked_int32
   | Naked_int64, (Naked_nativeint | Naked_immediate)
   | Naked_int64, Naked_float
   | Naked_int64, Naked_float32
     when arch32 ->
     does_not_need_caml_c_call_extcall_size + 1 (* arg *)
-  | Tagged_immediate, Naked_int64
   | Naked_int32, Naked_int64
   | (Naked_nativeint | Naked_immediate), Naked_int64
   | Naked_float, Naked_int64
@@ -101,14 +95,6 @@ let arith_conversion_size src dst =
   | Naked_float32, Naked_float32 -> 0
   | Naked_float, Naked_float32 -> 1
   | Naked_float32, Naked_float -> 1
-  | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
-      | Naked_immediate ),
-      Tagged_immediate ) ->
-    1
-  | ( Tagged_immediate,
-      ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
-      | Naked_immediate ) ) ->
-    1
   | ( Naked_int8,
       ( Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ) ) ->
@@ -116,7 +102,6 @@ let arith_conversion_size src dst =
   | Naked_int16, (Naked_int32 | Naked_int64 | Naked_nativeint | Naked_immediate)
     ->
     1
-  | Tagged_immediate, Tagged_immediate
   | Naked_int8, Naked_int8
   | Naked_int16, (Naked_int16 | Naked_int8)
   | ( Naked_int32,
@@ -132,12 +117,10 @@ let arith_conversion_size src dst =
       ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ) ) ->
     0
-  | Tagged_immediate, (Naked_float | Naked_float32) -> 1
   | ( ( Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64
       | Naked_nativeint ),
       (Naked_float | Naked_float32) ) ->
     1
-  | (Naked_float | Naked_float32), Tagged_immediate -> 1
   | ( (Naked_float | Naked_float32),
       ( Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64
       | Naked_nativeint ) ) ->
@@ -227,8 +210,7 @@ let divmod_bi_check else_branch_size (bi : Flambda_kind.Standard_int.t) =
      ||
      match bi with
      | Naked_int8 | Naked_int16 | Naked_int32 -> false
-     | Naked_int64 | Naked_nativeint | Naked_immediate | Tagged_immediate ->
-       true
+     | Naked_int64 | Naked_nativeint | Naked_immediate -> true
   then 2 + else_branch_size
   else 0
 
@@ -244,15 +226,6 @@ let binary_int_arith_primitive kind op =
     needs_caml_c_call_extcall_size + 2
   | (Naked_int64, And | Naked_int64, Or | Naked_int64, Xor) when arch32 ->
     does_not_need_caml_c_call_extcall_size + 2
-  (* Tagged integers *)
-  | Tagged_immediate, Add -> 2
-  | Tagged_immediate, Sub -> 2
-  | Tagged_immediate, Mul -> 4
-  | Tagged_immediate, Div -> 4
-  | Tagged_immediate, Mod -> 4
-  | Tagged_immediate, And -> 1
-  | Tagged_immediate, Or -> 1
-  | Tagged_immediate, Xor -> 2
   (* Naked ints *)
   | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ),
@@ -292,10 +265,6 @@ let binary_int_shift_primitive kind op =
     does_not_need_caml_c_call_extcall_size + 2
   (* Int32 special case *)
   | Naked_int32, Lsr when arch64 -> 2
-  (* Tagged integers *)
-  | Tagged_immediate, Lsl -> 3
-  | Tagged_immediate, Lsr -> 2
-  | Tagged_immediate, Asr -> 2
   (* Naked ints *)
   | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ),
@@ -326,18 +295,6 @@ let binary_int_comp_primitive kind cmp =
       (Neq | Eq | Lt Unsigned | Le Unsigned | Gt Unsigned | Ge Unsigned) )
     when arch32 ->
     needs_caml_c_call_extcall_size + 2
-  (* Tagged integers *)
-  | Tagged_immediate, Neq
-  | Tagged_immediate, Eq
-  | Tagged_immediate, Lt Signed
-  | Tagged_immediate, Le Signed
-  | Tagged_immediate, Gt Signed
-  | Tagged_immediate, Ge Signed
-  | Tagged_immediate, Lt Unsigned
-  | Tagged_immediate, Le Unsigned
-  | Tagged_immediate, Gt Unsigned
-  | Tagged_immediate, Ge Unsigned ->
-    2
   (* Naked integers. *)
   | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ),
@@ -347,8 +304,8 @@ let binary_int_comp_primitive kind cmp =
 let int_comparison_like_compare_functions (kind : Flambda_kind.Standard_int.t)
     (_signedness : Flambda_primitive.signed_or_unsigned) =
   match kind with
-  | Tagged_immediate | Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32
-  | Naked_int64 | Naked_nativeint ->
+  | Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64
+  | Naked_nativeint ->
     4
 
 let binary_float_arith_primitive _width _op = 2

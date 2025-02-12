@@ -279,8 +279,6 @@ module Unary_int_arith (I : A.Int_number_kind) = struct
     | Invalid -> SPR.create_invalid dacc
 end
 
-module Unary_int_arith_tagged_immediate =
-  Unary_int_arith (A.For_tagged_immediates)
 module Unary_int_arith_naked_immediate = Unary_int_arith (A.For_naked_immediates)
 module Unary_int_arith_naked_int8 = Unary_int_arith (A.For_int8s)
 module Unary_int_arith_naked_int16 = Unary_int_arith (A.For_int16s)
@@ -321,15 +319,6 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
             SPR.create original_term ~try_reify:true dacc
         end in
         match dst with
-        | Tagged_immediate ->
-          let module M = For_kind [@inlined hint] (struct
-            module Result_num = Targetint_31_63
-
-            let num_to_result_num = Num.to_immediate
-
-            let these = T.these_tagged_immediates
-          end) in
-          M.result
         | Naked_immediate ->
           let module M = For_kind [@inlined hint] (struct
             module Result_num = Targetint_31_63
@@ -408,8 +397,6 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
       | Invalid -> SPR.create_invalid dacc
 end
 
-module Simplify_int_conv_tagged_immediate =
-  Make_simplify_int_conv (A.For_tagged_immediates)
 module Simplify_int_conv_naked_immediate =
   Make_simplify_int_conv (A.For_naked_immediates)
 module Simplify_int_conv_naked_float = Make_simplify_int_conv (A.For_floats)
@@ -947,7 +934,6 @@ let simplify_unary_primitive dacc original_prim (prim : P.unary_primitive) ~arg
     | String_length _ -> simplify_string_length
     | Int_arith (kind, op) -> (
       match kind with
-      | Tagged_immediate -> Unary_int_arith_tagged_immediate.simplify op
       | Naked_immediate -> Unary_int_arith_naked_immediate.simplify op
       | Naked_int8 -> Unary_int_arith_naked_int8.simplify op
       | Naked_int16 -> Unary_int_arith_naked_int16.simplify op
@@ -958,7 +944,6 @@ let simplify_unary_primitive dacc original_prim (prim : P.unary_primitive) ~arg
     | Float_arith (Float32, op) -> simplify_float32_arith_op op
     | Num_conv { src; dst } -> (
       match src with
-      | Tagged_immediate -> Simplify_int_conv_tagged_immediate.simplify ~dst
       | Naked_immediate -> Simplify_int_conv_naked_immediate.simplify ~dst
       | Naked_float32 -> Simplify_int_conv_naked_float32.simplify ~dst
       | Naked_float -> Simplify_int_conv_naked_float.simplify ~dst

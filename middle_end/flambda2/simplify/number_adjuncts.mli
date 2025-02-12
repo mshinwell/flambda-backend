@@ -141,8 +141,6 @@ module type Boxable_int_number_kind = sig
   include Boxable with module Num := Num
 end
 
-module For_tagged_immediates : Int_number_kind
-
 module For_naked_immediates : Int_number_kind
 
 module For_float32s : Boxable_number_kind

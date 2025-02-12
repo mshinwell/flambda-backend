@@ -599,14 +599,12 @@ let binop env (op : Flambda_primitive.binary_primitive) : Fexpr.binop =
     Block_set { kind; init; field }
   | Array_load (ak, width, mut) -> Array_load (ak, width, mut)
   | Phys_equal op -> Phys_equal op
-  | Int_arith (Tagged_immediate, o) -> Infix (Int_arith o)
   | Int_arith
       ( (( Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32
          | Naked_int64 | Naked_nativeint ) as i),
         o ) ->
     Int_arith (i, o)
   | Int_comp (i, c) -> Int_comp (i, c)
-  | Int_shift (Tagged_immediate, s) -> Infix (Int_shift s)
   | Int_shift (i, s) -> Int_shift (i, s)
   | Float_arith (w, o) -> Infix (Float_arith (w, o))
   | Float_comp (w, c) -> Infix (Float_comp (w, c))

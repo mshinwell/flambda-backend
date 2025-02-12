@@ -185,7 +185,6 @@ end = struct
               | Negation_of_the_other_side ->
                 let standard_int_kind : K.Standard_int.t =
                   match N.arg_kind with
-                  | Tagged_immediate -> Tagged_immediate
                   | Naked_immediate -> Naked_immediate
                   | Naked_int8 -> Naked_int8
                   | Naked_int16 -> Naked_int16
@@ -273,7 +272,6 @@ end = struct
 
   let unknown _ =
     match arg_kind with
-    | Tagged_immediate -> T.any_tagged_immediate
     | Naked_immediate -> T.any_naked_immediate
     | Naked_float32 -> T.any_naked_float32
     | Naked_float -> T.any_naked_float
@@ -398,8 +396,6 @@ end = struct
 end
 [@@inline always]
 
-module Int_ops_for_binary_arith_tagged_immediate =
-  Int_ops_for_binary_arith (A.For_tagged_immediates)
 module Int_ops_for_binary_arith_naked_immediate =
   Int_ops_for_binary_arith (A.For_naked_immediates)
 module Int_ops_for_binary_arith_int8 = Int_ops_for_binary_arith (A.For_int8s)
@@ -408,8 +404,6 @@ module Int_ops_for_binary_arith_int32 = Int_ops_for_binary_arith (A.For_int32s)
 module Int_ops_for_binary_arith_int64 = Int_ops_for_binary_arith (A.For_int64s)
 module Int_ops_for_binary_arith_nativeint =
   Int_ops_for_binary_arith (A.For_nativeints)
-module Binary_int_arith_tagged_immediate =
-  Binary_arith_like (Int_ops_for_binary_arith_tagged_immediate)
 module Binary_int_arith_naked_immediate =
   Binary_arith_like (Int_ops_for_binary_arith_naked_immediate)
 module Binary_int_arith_int8 = Binary_arith_like (Int_ops_for_binary_arith_int8)
@@ -443,7 +437,6 @@ end = struct
 
   let unknown _ =
     match arg_kind with
-    | Tagged_immediate -> T.any_tagged_immediate
     | Naked_immediate -> T.any_naked_immediate
     | Naked_float32 -> T.any_naked_float32
     | Naked_float -> T.any_naked_float
@@ -522,8 +515,6 @@ end = struct
 end
 [@@inline always]
 
-module Int_ops_for_binary_shift_tagged_immediate =
-  Int_ops_for_binary_shift (A.For_tagged_immediates)
 module Int_ops_for_binary_shift_naked_immediate =
   Int_ops_for_binary_shift (A.For_naked_immediates)
 module Int_ops_for_binary_shift_int8 = Int_ops_for_binary_shift (A.For_int8s)
@@ -532,8 +523,6 @@ module Int_ops_for_binary_shift_int32 = Int_ops_for_binary_shift (A.For_int32s)
 module Int_ops_for_binary_shift_int64 = Int_ops_for_binary_shift (A.For_int64s)
 module Int_ops_for_binary_shift_nativeint =
   Int_ops_for_binary_shift (A.For_nativeints)
-module Binary_int_shift_tagged_immediate =
-  Binary_arith_like (Int_ops_for_binary_shift_tagged_immediate)
 module Binary_int_shift_naked_immediate =
   Binary_arith_like (Int_ops_for_binary_shift_naked_immediate)
 module Binary_int_shift_int8 = Binary_arith_like (Int_ops_for_binary_shift_int8)
@@ -631,8 +620,6 @@ end = struct
 end
 [@@inline always]
 
-module Int_ops_for_binary_comp_tagged_immediate =
-  Int_ops_for_binary_comp (A.For_tagged_immediates)
 module Int_ops_for_binary_comp_naked_immediate =
   Int_ops_for_binary_comp (A.For_naked_immediates)
 module Int_ops_for_binary_comp_int8 = Int_ops_for_binary_comp (A.For_int8s)
@@ -641,8 +628,6 @@ module Int_ops_for_binary_comp_int32 = Int_ops_for_binary_comp (A.For_int32s)
 module Int_ops_for_binary_comp_int64 = Int_ops_for_binary_comp (A.For_int64s)
 module Int_ops_for_binary_comp_nativeint =
   Int_ops_for_binary_comp (A.For_nativeints)
-module Binary_int_comp_tagged_immediate =
-  Binary_arith_like (Int_ops_for_binary_comp_tagged_immediate)
 module Binary_int_comp_naked_immediate =
   Binary_arith_like (Int_ops_for_binary_comp_naked_immediate)
 module Binary_int_comp_int8 = Binary_arith_like (Int_ops_for_binary_comp_int8)
@@ -1068,7 +1053,6 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
       simplify_array_load array_kind width mutability
     | Int_arith (kind, op) -> (
       match kind with
-      | Tagged_immediate -> Binary_int_arith_tagged_immediate.simplify op
       | Naked_immediate -> Binary_int_arith_naked_immediate.simplify op
       | Naked_int8 -> Binary_int_arith_int8.simplify op
       | Naked_int16 -> Binary_int_arith_int16.simplify op
@@ -1077,7 +1061,6 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
       | Naked_nativeint -> Binary_int_arith_nativeint.simplify op)
     | Int_shift (kind, op) -> (
       match kind with
-      | Tagged_immediate -> Binary_int_shift_tagged_immediate.simplify op
       | Naked_immediate -> Binary_int_shift_naked_immediate.simplify op
       | Naked_int8 -> Binary_int_shift_int8.simplify op
       | Naked_int16 -> Binary_int_shift_int16.simplify op
@@ -1086,7 +1069,6 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
       | Naked_nativeint -> Binary_int_shift_nativeint.simplify op)
     | Int_comp (kind, op) -> (
       match kind with
-      | Tagged_immediate -> Binary_int_comp_tagged_immediate.simplify op
       | Naked_immediate -> Binary_int_comp_naked_immediate.simplify op
       | Naked_int8 -> Binary_int_comp_int8.simplify op
       | Naked_int16 -> Binary_int_comp_int16.simplify op
@@ -1116,7 +1098,8 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
   in
   simplifier dacc ~original_term dbg ~arg1 ~arg1_ty ~arg2 ~arg2_ty ~result_var
 
-let recover_comparison_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg2 =
+let recover_comparison_primitive _dacc (prim : P.binary_primitive) ~arg1:_
+    ~arg2:_ =
   match prim with
   | Block_set _ | Array_load _ | Int_arith _ | Int_shift _
   | Int_comp (_, Yielding_int_like_compare_functions _)
@@ -1124,46 +1107,26 @@ let recover_comparison_primitive dacc (prim : P.binary_primitive) ~arg1 ~arg2 =
   | Bigarray_load _ | Bigarray_get_alignment _ | Atomic_exchange _
   | Atomic_int_arith _ | Poke _ ->
     None
-  | Int_comp (kind, Yielding_bool op) -> (
+  | Int_comp (kind, Yielding_bool _op) -> (
     match kind with
     | Naked_immediate | Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64
     | Naked_nativeint ->
       None
-    | Tagged_immediate -> (
-      let try_one_direction left right op =
-        Simple.pattern_match right
-          ~name:(fun _ ~coercion:_ -> None)
-          ~const:(fun const ->
-            match[@warning "-fragile-match"] Const.descr const with
-            | Tagged_immediate i when Targetint_31_63.(equal i zero) ->
-              Simple.pattern_match' left
-                ~const:(fun _ -> None)
-                ~symbol:(fun _ ~coercion:_ -> None)
-                ~var:(fun var ~coercion:_ ->
-                  match DE.find_comparison_result (DA.denv dacc) var with
-                  | None -> None
-                  | Some comp ->
-                    Some
-                      (Comparison_result.convert_result_compared_to_tagged_zero
-                         comp op))
-            | _ -> None)
-      in
-      match try_one_direction arg1 arg2 op with
-      | Some p -> Some p
-      | None ->
-        let op : _ P.comparison =
-          match op with
-          | Eq -> Eq
-          | Neq -> Neq
-          (* Note that this is not handling a negation of an inequality, it is
-             simply a pattern match for when the inequality appears the other
-             way around. So e.g. [Lt] maps to [Gt], not [Ge]. *)
-          | Lt s -> Gt s
-          | Gt s -> Lt s
-          | Le s -> Ge s
-          | Ge s -> Le s
-        in
-        try_one_direction arg2 arg1 op))
+      (* XXX | Tagged_immediate -> ( let try_one_direction left right op =
+         Simple.pattern_match right ~name:(fun _ ~coercion:_ -> None)
+         ~const:(fun const -> match[@warning "-fragile-match"] Const.descr const
+         with | Tagged_immediate i when Targetint_31_63.(equal i zero) ->
+         Simple.pattern_match' left ~const:(fun _ -> None) ~symbol:(fun _
+         ~coercion:_ -> None) ~var:(fun var ~coercion:_ -> match
+         DE.find_comparison_result (DA.denv dacc) var with | None -> None | Some
+         comp -> Some (Comparison_result.convert_result_compared_to_tagged_zero
+         comp op)) | _ -> None) in match try_one_direction arg1 arg2 op with |
+         Some p -> Some p | None -> let op : _ P.comparison = match op with | Eq
+         -> Eq | Neq -> Neq (* Note that this is not handling a negation of an
+         inequality, it is simply a pattern match for when the inequality
+         appears the other way around. So e.g. [Lt] maps to [Gt], not [Ge]. *) |
+         Lt s -> Gt s | Gt s -> Lt s | Le s -> Ge s | Ge s -> Le s in
+         try_one_direction arg2 arg1 op)) *))
 
 let simplify_binary_primitive dacc original_prim (prim : P.binary_primitive)
     ~arg1 ~arg1_ty ~arg2 ~arg2_ty dbg ~result_var =
@@ -1172,7 +1135,7 @@ let simplify_binary_primitive dacc original_prim (prim : P.binary_primitive)
       recover_comparison_primitive dacc prim ~arg1 ~arg2
     with
     | None -> original_prim, prim, arg1, arg1_ty, arg2, arg2_ty
-    | Some (Binary (new_prim, new_arg1, new_arg2) as new_original_prim) -> (
+    | Some (P.Binary (new_prim, new_arg1, new_arg2) as new_original_prim) -> (
       let min_name_mode = Bound_var.name_mode result_var in
       let arg1_ty_opt =
         S.simplify_simple_if_in_scope dacc new_arg1 ~min_name_mode

@@ -454,9 +454,9 @@ let unop env (unop : Fexpr.unop) : Flambda_primitive.unary_primitive =
 let infix_binop (binop : Fexpr.infix_binop) : Flambda_primitive.binary_primitive
     =
   match binop with
-  | Int_arith o -> Int_arith (Tagged_immediate, o)
-  | Int_comp c -> Int_comp (Tagged_immediate, c)
-  | Int_shift s -> Int_shift (Tagged_immediate, s)
+  | Int_arith o -> Int_arith (Naked_int64, o) (* XXX *)
+  | Int_comp c -> Int_comp (Naked_int64, c)
+  | Int_shift s -> Int_shift (Naked_int64, s)
   | Float_arith (w, o) -> Float_arith (w, o)
   | Float_comp (w, c) -> Float_comp (w, c)
 

@@ -198,7 +198,6 @@ let kinded_variable ppf (v, (k : kind_with_subkind option)) =
 let standard_int ~space ppf (i : standard_int) =
   let str =
     match i with
-    | Tagged_immediate -> None
     | Naked_immediate -> Some "imm"
     | Naked_int8 -> Some "int8"
     | Naked_int16 -> Some "int16"
@@ -211,7 +210,6 @@ let standard_int ~space ppf (i : standard_int) =
 let convertible_type ppf (t : standard_int_or_float) =
   let str =
     match t with
-    | Tagged_immediate -> "imm tagged"
     | Naked_immediate -> "imm"
     | Naked_float32 -> "float32"
     | Naked_float -> "float"

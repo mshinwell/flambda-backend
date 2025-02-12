@@ -214,7 +214,6 @@ type block_access_kind =
   | Naked_floats of { size : targetint option }
 
 type standard_int = Flambda_kind.Standard_int.t =
-  | Tagged_immediate
   | Naked_immediate
   | Naked_int8
   | Naked_int16
@@ -223,7 +222,6 @@ type standard_int = Flambda_kind.Standard_int.t =
   | Naked_nativeint
 
 type standard_int_or_float = Flambda_kind.Standard_int_or_float.t =
-  | Tagged_immediate
   | Naked_immediate
   | Naked_float32
   | Naked_float
