@@ -330,6 +330,8 @@ module Stdlib : sig
     val ends_with : suffix:string -> string -> bool
 
     val is_substring : string -> substring:string -> bool
+
+    val to_utf_8_seq : t -> Uchar.t Seq.t
   end
 
   module Int : sig
