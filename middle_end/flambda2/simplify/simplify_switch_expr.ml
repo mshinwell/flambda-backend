@@ -306,7 +306,8 @@ let rebuild_switch_with_single_arg_to_same_destination uacc ~dacc_before_switch
       (LC.create_definition
          (LC.Definition.block_like
             (DA.denv dacc_before_switch)
-            block_sym block_type ~symbol_projections:Variable.Map.empty
+            block_sym Bound_attributes.empty block_type
+            ~symbol_projections:Variable.Map.empty
             (RSC.create_immutable_value_array rebuilding fields)))
   in
   (* CR mshinwell: consider sharing the constants *)

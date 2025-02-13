@@ -578,6 +578,27 @@ let invalid env res ~message =
   let cmm, free_vars = wrap cmm_invalid Backend_var.Set.empty in
   cmm, free_vars, res
 
+(* Validation of attributes *)
+
+let check_attributes (bound_pattern : Bound_pattern.t)
+    ~(num_normal_occurrences_of_bound_vars : Num_occurrences.t Variable.Map.t) =
+  match bound_pattern with
+  | Singleton v -> (
+    match
+      Variable.Map.find (Bound_var.var v) num_normal_occurrences_of_bound_vars
+    with
+    | Zero -> ()
+    | One | More_than_one ->
+      List.iter
+        (fun (attr : Bound_attributes.Attribute.t) ->
+          match attr with
+          | Static_data_alignment _ -> ()
+          | Must_be_statically_allocated loc ->
+            Location.prerr_warning loc
+              Warnings.Could_not_be_statically_allocated)
+        (Bound_var.attributes v |> Bound_attributes.to_list))
+  | Set_of_closures _ | Static _ -> ()
+
 (* The main set of translation functions for expressions *)
 
 let rec expr env res e : Cmm.expression * Backend_var.Set.t * To_cmm_result.t =
@@ -637,6 +658,11 @@ and let_expr0 env res let_expr (bound_pattern : Bound_pattern.t)
     ~num_normal_occurrences_of_bound_vars ~body =
   match[@warning "-4"] bound_pattern, Let.defining_expr let_expr with
   | Singleton v, Simple s ->
+    (* CR mshinwell: this wouldn't allow "let[@static_alloc] x = y" where [y] is
+       a variable, but let's hope for now this isn't a problem. Any user-written
+       expression of this form should have gone by now anyway. *)
+    if Simple.is_var s
+    then check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     let v = Bound_var.var v in
     (* CR mshinwell: Try to get a proper [dbg] here (although the majority of
        these bindings should have been substituted out). *)
@@ -651,11 +677,14 @@ and let_expr0 env res let_expr (bound_pattern : Bound_pattern.t)
   | Singleton _, Prim (p, _)
     when (not (Flambda_features.stack_allocation_enabled ()))
          && Flambda_primitive.is_begin_or_end_region p ->
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     expr env res body
   | Singleton _, Prim (Nullary (Enter_inlined_apply { dbg }), _) ->
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     let env = Env.enter_inlined_apply env dbg in
     expr env res body
   | Singleton v, Prim ((Unary (End_region _, _) as p), dbg) ->
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     (* CR gbury: this is a hack to prevent moving of expressions past an
        End_region. We have to do this manually because we currently have effects
        and coeffects that are not precise enough. Particularly, an immutable
@@ -673,11 +702,14 @@ and let_expr0 env res let_expr (bound_pattern : Bound_pattern.t)
     let cmm, free_vars = wrap cmm free_vars in
     cmm, free_vars, res
   | Singleton v, Prim (p, dbg) ->
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     let_prim env res ~num_normal_occurrences_of_bound_vars v p dbg body
   | Set_of_closures bound_vars, Set_of_closures soc ->
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     To_cmm_set_of_closures.let_dynamic_set_of_closures env res ~body ~bound_vars
       ~num_normal_occurrences_of_bound_vars soc ~translate_expr:expr
   | Static bound_static, Static_consts consts -> (
+    check_attributes bound_pattern ~num_normal_occurrences_of_bound_vars;
     let env, res, update_opt =
       To_cmm_static.static_consts env res
         ~params_and_body:

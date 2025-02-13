@@ -70,7 +70,7 @@ let create_static_const dacc dbg (to_lift : T.to_lift) : RSC.t =
     RSC.create_immutable_value_array art fields
   | Empty_array array_kind -> RSC.create_empty_array art array_kind
 
-let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
+let lift dacc ty ~bound_to ~attributes static_const : _ Or_invalid.t * DA.t =
   let dacc, symbol =
     let existing_symbol =
       match RSC.to_const static_const with
@@ -107,7 +107,8 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
       in
       let dacc =
         let denv = DA.denv dacc in
-        LC.create_block_like symbol static_const denv ~symbol_projections ty
+        LC.create_block_like symbol attributes static_const denv
+          ~symbol_projections ty
         |> LCS.singleton
         |> DA.add_to_lifted_constant_accumulator dacc ~also_add_to_env:()
       in
@@ -131,6 +132,7 @@ let lift dacc ty ~bound_to static_const : _ Or_invalid.t * DA.t =
 let try_to_reify dacc dbg (term : Simplified_named.t) ~bound_to
     ~kind_of_bound_to ~allow_lifting : _ Or_invalid.t * DA.t =
   let occ_kind = Bound_var.name_mode bound_to in
+  let attributes = Bound_var.attributes bound_to in
   let bound_to = Bound_var.var bound_to in
   let denv = DA.denv dacc in
   let ty =
@@ -150,7 +152,7 @@ let try_to_reify dacc dbg (term : Simplified_named.t) ~bound_to
     if Name_mode.is_normal occ_kind && allow_lifting
     then
       let static_const = create_static_const dacc dbg to_lift in
-      lift dacc ty ~bound_to static_const
+      lift dacc ty ~bound_to ~attributes static_const
     else Ok term, dacc
   | Simple simple when Simple.equal simple (Simple.var bound_to) ->
     (* This could happen if [ty] is an alias type to a canonical that has

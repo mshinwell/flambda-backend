@@ -173,6 +173,9 @@ let find_shareable_constant t static_const =
   Static_const.Map.find_opt static_const t.shareable_constants
 
 let consider_constant_for_sharing t symbol static_const =
+  (* CR mshinwell: should look up in the map ignoring alignment, and if an
+     existing constant matches, replace it with the same but with the max of the
+     alignments. *)
   if not (Static_const.can_share static_const)
   then t
   else

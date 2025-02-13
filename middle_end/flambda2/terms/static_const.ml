@@ -260,6 +260,7 @@ include Container_types.Make (struct
           if c <> 0
           then c
           else
+            (* CR mshinwell: should we really be comparing the debuginfo? *)
             Misc.Stdlib.List.compare Simple.With_debuginfo.compare fields1
               fields2
     | Boxed_float32 or_var1, Boxed_float32 or_var2 ->
