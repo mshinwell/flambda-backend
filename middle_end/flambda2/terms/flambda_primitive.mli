@@ -405,8 +405,8 @@ type unary_primitive =
   | Reinterpret_64_bit_word of Reinterpret_64_bit_word.t
   | Unbox_number of Flambda_kind.Boxable_number.t
   | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.For_allocations.t
-  | Untag_immediate
-  | Tag_immediate
+  | Seal_tagged_immediate (* Naked_int64 -> Value *)
+  | Reveal_tagged_immediate (* Value -> Naked_int64 *)
   | Project_function_slot of
       { move_from : Function_slot.t;
         move_to : Function_slot.t

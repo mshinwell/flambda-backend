@@ -1068,8 +1068,8 @@ type unary_primitive =
   | Reinterpret_64_bit_word of Reinterpret_64_bit_word.t
   | Unbox_number of Flambda_kind.Boxable_number.t
   | Box_number of Flambda_kind.Boxable_number.t * Alloc_mode.For_allocations.t
-  | Untag_immediate
-  | Tag_immediate
+  | Close_tagged_immediate
+  | Open_tagged_immediate
   | Project_function_slot of
       { move_from : Function_slot.t;
         move_to : Function_slot.t
@@ -1376,7 +1376,9 @@ let result_kind_of_unary_primitive p : result_kind =
   | Bigarray_length _ -> Singleton K.naked_immediate
   | Unbox_number kind -> Singleton (K.Boxable_number.unboxed_kind kind)
   | Untag_immediate -> Singleton K.naked_immediate
-  | Box_number _ | Tag_immediate | Project_function_slot _ -> Singleton K.value
+  | Box_number _ | Project_function_slot _ -> Singleton K.value
+  | Tag_immediate -> Singleton K.naked_int64
+  (* XXX seems correct, but what happens for variants? Maybe we need a cast *)
   | Project_value_slot { value_slot; _ } ->
     Singleton (K.With_subkind.kind (Value_slot.kind value_slot))
   | Is_boxed_float | Is_flat_float_array -> Singleton K.naked_immediate

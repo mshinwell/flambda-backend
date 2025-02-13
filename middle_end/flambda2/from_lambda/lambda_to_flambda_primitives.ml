@@ -1414,11 +1414,6 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       | Boxable (Int64 _) -> Naked_int64
     in
     match[@warning "-fragile-match"] (scalar : _ Scalar.Integral.t) with
-    | Value (Taggable Int) ->
-      (* Although the compiler would still work without it, we special-case
-         tagged integers since since flambda has operators that operate directly
-         on them. *)
-      I.Tagged_immediate
     | Value width -> of_width width
     | Naked width -> of_width width
   in
@@ -1427,7 +1422,6 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
     | Value (Float32 _) | Naked (Float32 Any_locality_mode) -> Float32
   in
   let integral_scalar : I.t -> _ Scalar.t = function
-    | Tagged_immediate -> Value (Integral (Taggable Int))
     | Naked_immediate -> Naked (Integral (Taggable Int))
     | Naked_int8 -> Naked (Integral (Taggable Int8))
     | Naked_int16 -> Naked (Integral (Taggable Int16))
