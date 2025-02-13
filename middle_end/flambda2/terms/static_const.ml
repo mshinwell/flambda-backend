@@ -585,8 +585,8 @@ let match_against_bound_static_pattern t (pat : Bound_static.Pattern.t)
       | Immutable_int64_array _ | Immutable_nativeint_array _
       | Immutable_vec128_array _ | Immutable_value_array _ | Empty_array _
       | Immutable_string _ | Mutable_string _ ),
-      Block_like symbol ) ->
-    block_like_callback symbol t
+      Block_like (symbol, attributes) ) ->
+    block_like_callback symbol attributes t
   | Set_of_closures _, (Block_like _ | Code _)
   | ( ( Block _ | Boxed_float _ | Boxed_float32 _ | Boxed_int32 _
       | Boxed_int64 _ | Boxed_vec128 _ | Boxed_nativeint _

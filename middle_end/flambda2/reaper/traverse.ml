@@ -199,7 +199,7 @@ and traverse_let denv acc let_expr : rev_expr =
           ~set_of_closures:(fun rev_group ~closure_symbols:_ set_of_closures ->
             let static_const = Static_const.set_of_closures set_of_closures in
             Static_const static_const :: rev_group)
-          ~block_like:(fun rev_group _symbol static_const ->
+          ~block_like:(fun rev_group _symbol _attributes static_const ->
             Static_const static_const :: rev_group)
       in
       let group = List.rev rev_group in
@@ -328,7 +328,7 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
     ~code:(fun () -> prepare_code ~denv acc)
     ~deleted_code:(fun _ _ -> ())
     ~set_of_closures:(fun _ ~closure_symbols:_ _ -> ())
-    ~block_like:(fun _ _ _ -> ());
+    ~block_like:(fun _ _ _ _ -> ());
   Static_const_group.match_against_bound_static group bound_static ~init:()
     ~code:(fun () _code_id _code -> ())
     ~deleted_code:(fun () _ -> ())
@@ -338,7 +338,7 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
       in
       record_set_of_closures_deps ~denv names_and_function_slots set_of_closures
         acc)
-    ~block_like:(fun () symbol static_const ->
+    ~block_like:(fun () symbol _attributes static_const ->
       let name = Name.symbol symbol in
       match[@ocaml.warning "-4"] static_const with
       | Block (_, _, _, fields) | Immutable_value_array fields ->

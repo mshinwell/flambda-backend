@@ -600,7 +600,7 @@ module Static_const_group : sig
       closure_symbols:Symbol.t Function_slot.Lmap.t ->
       Set_of_closures.t ->
       'a) ->
-    block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
+    block_like:('a -> Symbol.t -> Bound_attributes.t -> Static_const.t -> 'a) ->
     'a
 
   (** This function ignores [Deleted] code. *)

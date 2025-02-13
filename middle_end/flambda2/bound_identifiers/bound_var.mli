@@ -19,12 +19,14 @@
 
 type t
 
-val create : Variable.t -> Name_mode.t -> t
+val create : ?attributes:Bound_attributes.t -> Variable.t -> Name_mode.t -> t
 
 val var : t -> Variable.t
 
 val name_mode : t -> Name_mode.t
 
 val with_name_mode : t -> Name_mode.t -> t
+
+val attributes : t -> Bound_attributes.t
 
 include Bindable.S with type t := t

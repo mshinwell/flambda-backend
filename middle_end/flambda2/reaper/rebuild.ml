@@ -415,7 +415,7 @@ and rebuild_holed (kinds : Flambda_kind.t Name.Map.t) (env : env)
                         (* Pattern is [Code _], so can't bind static const *)
                         assert false);
                       Some (p, Deleted_code))
-                  | Block_like sym ->
+                  | Block_like (sym, _attributes) ->
                     if is_symbol_used env sym then Some arg else None
                   | Set_of_closures m ->
                     if Function_slot.Lmap.exists

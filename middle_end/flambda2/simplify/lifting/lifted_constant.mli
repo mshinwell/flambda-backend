@@ -32,6 +32,7 @@ module Definition : sig
         }
     | Block_like of
         { symbol : Symbol.t;
+          attributes : Bound_attributes.t;
           denv : Downwards_env.t;
           ty : Flambda2_types.t;
           symbol_projections : Symbol_projection.t Variable.Map.t
@@ -58,6 +59,7 @@ module Definition : sig
   val block_like :
     Downwards_env.t ->
     Symbol.t ->
+    Bound_attributes.t ->
     Flambda2_types.t ->
     symbol_projections:Symbol_projection.t Variable.Map.t ->
     Rebuilt_static_const.t ->
@@ -78,6 +80,7 @@ val print : Format.formatter -> t -> unit
     them. *)
 val create_block_like :
   Symbol.t ->
+  Bound_attributes.t ->
   symbol_projections:Symbol_projection.t Variable.Map.t ->
   Rebuilt_static_const.t ->
   Downwards_env.t ->

@@ -268,7 +268,7 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
           closure_symbols dacc)
       ~code:(fun dacc _ _ -> dacc)
       ~deleted_code:(fun dacc _ -> dacc)
-      ~block_like:(fun dacc _ _ -> dacc)
+      ~block_like:(fun dacc _ _ _ -> dacc)
   in
   let all_code = Static_const_group.pieces_of_code static_consts in
   (* Next we simplify all the constants that are not closures. The ordering of
@@ -366,12 +366,12 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
       ~deleted_code:(fun acc _code_id -> acc)
       ~set_of_closures:(fun acc ~closure_symbols:_ _ -> acc)
       ~block_like:
-        (fun (bound_static, static_consts, dacc) symbol static_const ->
+        (fun (bound_static, static_consts, dacc) symbol attributes static_const ->
         let static_const, dacc =
           simplify_static_const_of_kind_value dacc static_const
             ~result_sym:symbol
         in
-        ( Bound_static.Pattern.block_like symbol :: bound_static,
+        ( Bound_static.Pattern.block_like ~attributes symbol :: bound_static,
           static_const :: static_consts,
           dacc ))
   in
@@ -387,7 +387,7 @@ let simplify_static_consts dacc (bound_static : Bound_static.t) static_consts
       ~init:([], [])
       ~code:(fun acc _ _ -> acc)
       ~deleted_code:(fun acc _ -> acc)
-      ~block_like:(fun acc _ _ -> acc)
+      ~block_like:(fun acc _ _ _ -> acc)
       ~set_of_closures:
         (fun (closure_bound_names_all_sets, sets_of_closures) ~closure_symbols
              set_of_closures ->

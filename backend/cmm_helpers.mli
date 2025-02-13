@@ -558,6 +558,8 @@ val plugin_header : Cmxs_format.dynunit list -> phrase
 (** Produce the data_item list corresponding to a symbol definition *)
 val cdefine_symbol : symbol -> data_item list
 
+val calign : bytes:int -> data_item list
+
 (** [emit_block symb white_header cont] prepends to [cont] the header and symbol
     for the block. [cont] must already contain the fields of the block (and may
     contain additional data items afterwards). *)

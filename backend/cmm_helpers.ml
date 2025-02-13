@@ -3627,6 +3627,8 @@ let setfield_computed ptr init arg1 arg2 arg3 dbg =
 
 let cdefine_symbol sym = [Cdefine_symbol sym]
 
+let calign ~bytes = [Calign bytes]
+
 let emit_block symb white_header cont =
   (* Headers for structured constants must be marked black in case we are in
      no-naked-pointers mode. See [caml_darken]. *)

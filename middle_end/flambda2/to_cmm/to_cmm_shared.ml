@@ -447,3 +447,11 @@ let alloc_mode_for_allocations_to_cmm t =
   | Alloc_mode.For_allocations.Local _ ->
     assert (Flambda_features.stack_allocation_enabled ());
     Cmm.Alloc_mode.Local
+
+let maybe_align_static_data attributes data =
+  let alignment_in_bytes =
+    Bound_attributes.static_data_alignment_in_bytes attributes
+  in
+  if alignment_in_bytes <= 0
+  then data
+  else calign ~bytes:alignment_in_bytes @ data

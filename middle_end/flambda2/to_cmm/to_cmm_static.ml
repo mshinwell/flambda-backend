@@ -85,10 +85,12 @@ let rec static_unboxed_array_updates symb env res acc update_kind i = function
       in
       static_unboxed_array_updates symb env res acc update_kind (i + 1) r)
 
-let static_boxed_number ~kind ~env ~symbol ~default ~emit ~transl ~structured v
-    res updates =
+let static_boxed_number ~kind ~env ~symbol ~attributes ~default ~emit ~transl
+    ~structured v res updates =
   let symbol = R.symbol res symbol in
-  let aux x cont = emit symbol (transl x) cont in
+  let aux x cont =
+    C.maybe_align_static_data attributes (emit symbol (transl x) cont)
+  in
   let env, res, updates =
     match (v : _ Or_variable.t) with
     | Const c ->
@@ -151,8 +153,8 @@ let immutable_unboxed_int_array_payload maybe_int32 num_fields ~elts ~to_int64 =
   assert (List.length packed_int64s = num_fields);
   List.map (fun i -> Cmm.Cint (Int64.to_nativeint i)) packed_int64s
 
-let immutable_unboxed_int_array env res updates maybe_int32 ~symbol ~elts
-    ~to_int64 ~custom_ops_symbol =
+let immutable_unboxed_int_array env res updates maybe_int32 ~symbol ~attributes
+    ~elts ~to_int64 ~custom_ops_symbol =
   let sym = R.symbol res symbol in
   let num_elts = List.length elts in
   let num_fields, update_kind =
@@ -176,12 +178,13 @@ let immutable_unboxed_int_array env res updates maybe_int32 ~symbol ~elts
          ~to_int64
   in
   let block = C.emit_block sym header static_fields in
+  let block_with_alignment = C.maybe_align_static_data attributes block in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates update_kind 0 elts
   in
-  env, R.set_data res block, updates
+  env, R.set_data res block_with_alignment, updates
 
-let immutable_unboxed_float32_array env res updates ~symbol ~elts =
+let immutable_unboxed_float32_array env res updates ~symbol ~attributes ~elts =
   let sym = R.symbol res symbol in
   let num_elts = List.length elts in
   let num_fields = (1 + num_elts) / 2 in
@@ -213,12 +216,13 @@ let immutable_unboxed_float32_array env res updates ~symbol ~elts =
     address :: payload
   in
   let block = C.emit_block sym header static_fields in
+  let block_with_alignment = C.maybe_align_static_data attributes block in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates UK.naked_float32s 0 elts
   in
-  env, R.set_data res block, updates
+  env, R.set_data res block_with_alignment, updates
 
-let immutable_unboxed_vec128_array env res updates ~symbol ~elts =
+let immutable_unboxed_vec128_array env res updates ~symbol ~attributes ~elts =
   let sym = R.symbol res symbol in
   let num_elts = List.length elts in
   let num_fields = num_elts * 2 in
@@ -242,15 +246,16 @@ let immutable_unboxed_vec128_array env res updates ~symbol ~elts =
     :: payload
   in
   let block = C.emit_block sym header static_fields in
+  let block_with_alignment = C.maybe_align_static_data attributes block in
   let env, res, updates =
     static_unboxed_array_updates sym env res updates UK.naked_vec128s 0 elts
   in
-  env, R.set_data res block, updates
+  env, R.set_data res block_with_alignment, updates
 
 let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     (static_const : Static_const.t) =
   match bound_static, static_const with
-  | Block_like s, Block (tag, mut, shape, fields) ->
+  | Block_like (s, attributes), Block (tag, mut, shape, fields) ->
     (match mut with
     | Immutable | Immutable_unique -> ()
     | Mutable ->
@@ -278,6 +283,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
       Misc.Stdlib.List.concat_map2 (static_field res) fields field_kinds
     in
     let block = C.emit_block sym header static_fields in
+    let block_with_alignment = C.maybe_align_static_data attributes block in
     let update_kinds =
       match shape with
       | Value_only -> List.map (fun _ -> UK.pointers) fields
@@ -303,55 +309,58 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
       static_block_updates sym env res updates 0
         (List.combine fields update_kinds)
     in
-    env, R.set_data res block, updates
+    env, R.set_data res block_with_alignment, updates
   | Set_of_closures closure_symbols, Set_of_closures set_of_closures ->
     let res, updates, env =
       preallocate_set_of_closures (res, updates, env) ~closure_symbols
         set_of_closures
     in
     env, res, updates
-  | Block_like symbol, Boxed_float32 v ->
+  | Block_like (symbol, attributes), Boxed_float32 v ->
     let default = Numeric_types.Float32_by_bit_pattern.zero in
     let transl = Numeric_types.Float32_by_bit_pattern.to_float in
     let structured f = Cmmgen_state.Const_float32 f in
     let res, env, updates =
-      static_boxed_number ~kind:UK.naked_float32_fields ~env ~symbol ~default
-        ~emit:C.emit_float32_constant ~transl ~structured v res updates
+      static_boxed_number ~kind:UK.naked_float32_fields ~env ~symbol ~attributes
+        ~default ~emit:C.emit_float32_constant ~transl ~structured v res updates
     in
     env, res, updates
-  | Block_like symbol, Boxed_float v ->
+  | Block_like (symbol, attributes), Boxed_float v ->
     let default = Numeric_types.Float_by_bit_pattern.zero in
     let transl = Numeric_types.Float_by_bit_pattern.to_float in
     let structured f = Cmmgen_state.Const_float f in
     let res, env, updates =
-      static_boxed_number ~kind:UK.naked_floats ~env ~symbol ~default
-        ~emit:C.emit_float_constant ~transl ~structured v res updates
+      static_boxed_number ~kind:UK.naked_floats ~env ~symbol ~attributes
+        ~default ~emit:C.emit_float_constant ~transl ~structured v res updates
     in
     env, res, updates
-  | Block_like symbol, Boxed_int32 v ->
+  | Block_like (symbol, attributes), Boxed_int32 v ->
     let structured i = Cmmgen_state.Const_int32 i in
     let res, env, updates =
-      static_boxed_number ~kind:UK.naked_int32_fields ~env ~symbol ~default:0l
-        ~emit:C.emit_int32_constant ~transl:Fun.id ~structured v res updates
+      static_boxed_number ~kind:UK.naked_int32_fields ~env ~symbol ~attributes
+        ~default:0l ~emit:C.emit_int32_constant ~transl:Fun.id ~structured v res
+        updates
     in
     env, res, updates
-  | Block_like symbol, Boxed_int64 v ->
+  | Block_like (symbol, attributes), Boxed_int64 v ->
     let structured i = Cmmgen_state.Const_int64 i in
     let res, env, updates =
-      static_boxed_number ~kind:UK.naked_int64s ~env ~symbol ~default:0L
-        ~emit:C.emit_int64_constant ~transl:Fun.id ~structured v res updates
+      static_boxed_number ~kind:UK.naked_int64s ~env ~symbol ~attributes
+        ~default:0L ~emit:C.emit_int64_constant ~transl:Fun.id ~structured v res
+        updates
     in
     env, res, updates
-  | Block_like symbol, Boxed_nativeint v ->
+  | Block_like (symbol, attributes), Boxed_nativeint v ->
     let default = Targetint_32_64.zero in
     let transl = C.nativeint_of_targetint in
     let structured i = Cmmgen_state.Const_nativeint i in
     let res, env, updates =
-      static_boxed_number ~kind:UK.naked_int64s ~env ~symbol ~default
-        ~emit:C.emit_nativeint_constant ~transl ~structured v res updates
+      static_boxed_number ~kind:UK.naked_int64s ~env ~symbol ~attributes
+        ~default ~emit:C.emit_nativeint_constant ~transl ~structured v res
+        updates
     in
     env, res, updates
-  | Block_like symbol, Boxed_vec128 v ->
+  | Block_like (symbol, attributes), Boxed_vec128 v ->
     let default = Vector_types.Vec128.Bit_pattern.zero in
     let transl v =
       let { Vector_types.Vec128.Bit_pattern.high; low } =
@@ -365,12 +374,12 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     let res, env, updates =
       (* Unaligned because boxed vec128 constants are not aligned during code
          emission. Aligning them would complicate block layout. *)
-      static_boxed_number ~kind:UK.naked_vec128s ~env ~symbol ~default
-        ~emit:C.emit_vec128_constant ~transl ~structured v res updates
+      static_boxed_number ~kind:UK.naked_vec128s ~env ~symbol ~attributes
+        ~default ~emit:C.emit_vec128_constant ~transl ~structured v res updates
     in
     env, res, updates
-  | Block_like s, (Immutable_float_block fields | Immutable_float_array fields)
-    ->
+  | ( Block_like (s, attributes),
+      (Immutable_float_block fields | Immutable_float_array fields) ) ->
     let aux =
       Or_variable.value_map ~default:0.
         ~f:Numeric_types.Float_by_bit_pattern.to_float
@@ -378,29 +387,33 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     let static_fields = List.map aux fields in
     let sym = R.symbol res s in
     let float_array = C.emit_float_array_constant sym static_fields in
+    let float_array_with_alignment cont =
+      C.maybe_align_static_data attributes (float_array cont)
+    in
     let env, res, e =
       static_unboxed_array_updates sym env res updates UK.naked_floats 0 fields
     in
-    env, R.update_data res float_array, e
-  | Block_like symbol, Immutable_float32_array elts ->
-    immutable_unboxed_float32_array env res updates ~symbol ~elts
-  | Block_like symbol, Immutable_int32_array elts ->
+    env, R.update_data res float_array_with_alignment, e
+  | Block_like (symbol, attributes), Immutable_float32_array elts ->
+    immutable_unboxed_float32_array env res updates ~symbol ~attributes ~elts
+  | Block_like (symbol, attributes), Immutable_int32_array elts ->
     assert (Arch.size_int = 8);
-    immutable_unboxed_int_array env res updates Int32 ~symbol ~elts
+    immutable_unboxed_int_array env res updates Int32 ~symbol ~attributes ~elts
       ~to_int64:Int64.of_int32 ~custom_ops_symbol:(fun ~num_elts ->
         ( "caml_unboxed_int32_array_ops",
           Some (Config.custom_ops_struct_size * (num_elts mod 2)) ))
-  | Block_like symbol, Immutable_int64_array elts ->
-    immutable_unboxed_int_array env res updates Int64_or_nativeint ~symbol ~elts
-      ~to_int64:Fun.id ~custom_ops_symbol:(fun ~num_elts:_ ->
+  | Block_like (symbol, attributes), Immutable_int64_array elts ->
+    immutable_unboxed_int_array env res updates Int64_or_nativeint ~symbol
+      ~attributes ~elts ~to_int64:Fun.id ~custom_ops_symbol:(fun ~num_elts:_ ->
         "caml_unboxed_int64_array_ops", None)
-  | Block_like symbol, Immutable_nativeint_array elts ->
-    immutable_unboxed_int_array env res updates Int64_or_nativeint ~symbol ~elts
-      ~to_int64:Targetint_32_64.to_int64 ~custom_ops_symbol:(fun ~num_elts:_ ->
+  | Block_like (symbol, attributes), Immutable_nativeint_array elts ->
+    immutable_unboxed_int_array env res updates Int64_or_nativeint ~symbol
+      ~attributes ~elts ~to_int64:Targetint_32_64.to_int64
+      ~custom_ops_symbol:(fun ~num_elts:_ ->
         "caml_unboxed_nativeint_array_ops", None)
-  | Block_like symbol, Immutable_vec128_array elts ->
-    immutable_unboxed_vec128_array env res updates ~symbol ~elts
-  | Block_like s, Immutable_value_array fields ->
+  | Block_like (symbol, attributes), Immutable_vec128_array elts ->
+    immutable_unboxed_vec128_array env res updates ~symbol ~attributes ~elts
+  | Block_like (s, attributes), Immutable_value_array fields ->
     let sym = R.symbol res s in
     let header = C.black_block_header 0 (List.length fields) in
     let field_kinds =
@@ -410,59 +423,69 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
       Misc.Stdlib.List.concat_map2 (static_field res) fields field_kinds
     in
     let block = C.emit_block sym header static_fields in
+    let block_with_alignment = C.maybe_align_static_data attributes block in
     let update_kinds = List.map (fun _ -> UK.pointers) fields in
     let env, res, updates =
       static_block_updates sym env res updates 0
         (List.combine fields update_kinds)
     in
-    env, R.set_data res block, updates
-  | ( Block_like s,
+    env, R.set_data res block_with_alignment, updates
+  | ( Block_like (s, attributes),
       Empty_array (Values_or_immediates_or_naked_floats | Unboxed_products) ) ->
     (* Recall: empty arrays have tag zero, even if their kind is naked float.
        Likewise arrays of unboxed products have tag zero. *)
     let sym = R.symbol res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
-    env, R.set_data res block, updates
-  | Block_like s, Empty_array Naked_float32s ->
+    let block_with_alignment = C.maybe_align_static_data attributes block in
+    env, R.set_data res block_with_alignment, updates
+  | Block_like (s, attributes), Empty_array Naked_float32s ->
     let block =
       C.emit_block (R.symbol res s)
         (C.black_custom_header ~size:1)
         [C.symbol_address (Cmm.global_symbol "caml_unboxed_float32_array_ops")]
+      |> C.maybe_align_static_data attributes
     in
     env, R.set_data res block, updates
-  | Block_like s, Empty_array Naked_int32s ->
+  | Block_like (s, attributes), Empty_array Naked_int32s ->
     let block =
       C.emit_block (R.symbol res s)
         (C.black_custom_header ~size:1)
         [C.symbol_address (Cmm.global_symbol "caml_unboxed_int32_array_ops")]
+      |> C.maybe_align_static_data attributes
     in
     env, R.set_data res block, updates
-  | Block_like s, Empty_array Naked_int64s ->
+  | Block_like (s, attributes), Empty_array Naked_int64s ->
     let block =
       C.emit_block (R.symbol res s)
         (C.black_custom_header ~size:1)
         [C.symbol_address (Cmm.global_symbol "caml_unboxed_int64_array_ops")]
+      |> C.maybe_align_static_data attributes
     in
     env, R.set_data res block, updates
-  | Block_like s, Empty_array Naked_nativeints ->
+  | Block_like (s, attributes), Empty_array Naked_nativeints ->
     let block =
       C.emit_block (R.symbol res s)
         (C.black_custom_header ~size:1)
         [C.symbol_address (Cmm.global_symbol "caml_unboxed_nativeint_array_ops")]
+      |> C.maybe_align_static_data attributes
     in
     env, R.set_data res block, updates
-  | Block_like s, Empty_array Naked_vec128s ->
+  | Block_like (s, attributes), Empty_array Naked_vec128s ->
     let block =
       C.emit_block (R.symbol res s)
         (C.black_custom_header ~size:1)
         [C.symbol_address (Cmm.global_symbol "caml_unboxed_vec128_array_ops")]
+      |> C.maybe_align_static_data attributes
     in
     env, R.set_data res block, updates
-  | Block_like s, Mutable_string { initial_value = str }
-  | Block_like s, Immutable_string str ->
+  | Block_like (s, attributes), Mutable_string { initial_value = str }
+  | Block_like (s, attributes), Immutable_string str ->
     let data = C.emit_string_constant (R.symbol res s) str in
-    env, R.update_data res data, updates
+    let data_with_alignment cont =
+      C.maybe_align_static_data attributes (data cont)
+    in
+    env, R.update_data res data_with_alignment, updates
   | Block_like _, Set_of_closures _ ->
     Misc.fatal_errorf
       "[Set_of_closures] values cannot be bound by [Block_like] bindings:@ %a"

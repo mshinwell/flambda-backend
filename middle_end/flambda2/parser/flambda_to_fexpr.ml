@@ -828,7 +828,7 @@ and static_let_expr env bound_static defining_expr body : Fexpr.expr =
       | Code _code_id ->
         (* Already bound at the beginning; see [bind_all_code_ids] *)
         env
-      | Block_like symbol ->
+      | Block_like (symbol, _attributes) ->
         let _, env = Env.bind_symbol env symbol in
         env
       | Set_of_closures closure_symbols ->
@@ -843,7 +843,7 @@ and static_let_expr env bound_static defining_expr body : Fexpr.expr =
   let translate_const (pat : Bound_static.Pattern.t)
       (const : Static_const_or_code.t) : Fexpr.symbol_binding =
     match pat, const with
-    | Block_like symbol, Static_const const ->
+    | Block_like (symbol, _attributes), Static_const const ->
       (* This is a binding occurrence, but it should have been added
        * already during the first pass *)
       let symbol = Env.find_symbol_exn env symbol in
@@ -1267,7 +1267,7 @@ module Iter = struct
       ~set_of_closures:(fun () ~closure_symbols set_of_closures ->
         f_s ~closure_symbols:(Some closure_symbols) ~is_phantom:false
           set_of_closures)
-      ~block_like:(fun () _ _ -> ())
+      ~block_like:(fun () _ _ _ -> ())
 end
 
 let ignore_code ~id:_ _ = ()

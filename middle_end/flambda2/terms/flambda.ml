@@ -467,7 +467,7 @@ and match_against_bound_static_pattern_static_const_or_code :
         (closure_symbols:Symbol.t Function_slot.Lmap.t ->
         Set_of_closures.t ->
         'a) ->
-      block_like:(Symbol.t -> Static_const.t -> 'a) ->
+      block_like:(Symbol.t -> Bound_attributes.t -> Static_const.t -> 'a) ->
       'a =
  fun static_const_or_code (pat : Bound_static.Pattern.t) ~code:code_callback
      ~deleted_code:deleted_code_callback ~set_of_closures ~block_like ->
@@ -501,7 +501,7 @@ and match_against_bound_static__static_const_group :
         closure_symbols:Symbol.t Function_slot.Lmap.t ->
         Set_of_closures.t ->
         'a) ->
-      block_like:('a -> Symbol.t -> Static_const.t -> 'a) ->
+      block_like:('a -> Symbol.t -> Bound_attributes.t -> Static_const.t -> 'a) ->
       'a =
  fun t bound_static ~init ~code:code_callback
      ~deleted_code:deleted_code_callback
@@ -709,7 +709,8 @@ and flatten_for_printing0 bound_static defining_exprs =
       in
       flattened_acc @ flattened, true)
     ~block_like:
-      (fun (flattened_acc, second_or_later_rec_binding) symbol defining_expr ->
+      (fun (flattened_acc, second_or_later_rec_binding) symbol _attributes
+           defining_expr ->
       let flattened =
         { second_or_later_binding_within_one_set = false;
           second_or_later_rec_binding;

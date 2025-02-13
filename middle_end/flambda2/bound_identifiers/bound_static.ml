@@ -18,23 +18,29 @@ module Pattern = struct
   type t =
     | Code of Code_id.t
     | Set_of_closures of Symbol.t Function_slot.Lmap.t
-    | Block_like of Symbol.t
+    | Block_like of Symbol.t * Bound_attributes.t
 
   let code code_id = Code code_id
 
   let set_of_closures closure_symbols = Set_of_closures closure_symbols
 
-  let block_like symbol = Block_like symbol
+  let block_like ?(attributes = Bound_attributes.empty) symbol =
+    Block_like (symbol, attributes)
 
-  let [@ocamlformat "disable"] print ppf t =
+  let print ppf t =
     match t with
     | Code code_id ->
       Format.fprintf ppf "@[<hov 1>(Code@ %a)@]" Code_id.print code_id
     | Set_of_closures closure_symbols ->
       Format.fprintf ppf "@[<hov 1>(Set_of_closures@ %a)@]"
-        (Function_slot.Lmap.print Symbol.print) closure_symbols
-    | Block_like symbol ->
-      Format.fprintf ppf "@[<hov 1>(Block_like@ %a)@]" Symbol.print symbol
+        (Function_slot.Lmap.print Symbol.print)
+        closure_symbols
+    | Block_like (symbol, attributes) ->
+      if Bound_attributes.is_empty attributes
+      then Format.fprintf ppf "@[<hov 1>(Block_like@ %a)@]" Symbol.print symbol
+      else
+        Format.fprintf ppf "@[<hov 1>(Block_like@ %a@ (attributes@ %a))@]"
+          Symbol.print symbol Bound_attributes.print attributes
 
   let apply_renaming t renaming =
     match t with
@@ -42,7 +48,8 @@ module Pattern = struct
     | Set_of_closures map ->
       Set_of_closures
         (Function_slot.Lmap.map (Renaming.apply_symbol renaming) map)
-    | Block_like symbol -> Block_like (Renaming.apply_symbol renaming symbol)
+    | Block_like (symbol, attributes) ->
+      Block_like (Renaming.apply_symbol renaming symbol, attributes)
 
   let free_names t =
     match t with
@@ -53,7 +60,7 @@ module Pattern = struct
         (fun _ symbol free_names ->
           Name_occurrences.add_symbol free_names symbol Name_mode.normal)
         closure_symbols Name_occurrences.empty
-    | Block_like symbol ->
+    | Block_like (symbol, _attributes) ->
       Name_occurrences.singleton_symbol symbol Name_mode.normal
 
   let symbols_being_defined t =
@@ -61,7 +68,7 @@ module Pattern = struct
     | Code _ -> Symbol.Set.empty
     | Set_of_closures closure_symbols ->
       closure_symbols |> Function_slot.Lmap.data |> Symbol.Set.of_list
-    | Block_like symbol -> Symbol.Set.singleton symbol
+    | Block_like (symbol, _attributes) -> Symbol.Set.singleton symbol
 
   let code_being_defined t =
     match t with
@@ -81,7 +88,7 @@ module Pattern = struct
     | Set_of_closures closure_symbols ->
       closure_symbols |> Function_slot.Lmap.data |> Symbol.Set.of_list
       |> Code_id_or_symbol.set_of_symbol_set
-    | Block_like symbol ->
+    | Block_like (symbol, _attributes) ->
       Code_id_or_symbol.Set.singleton (Code_id_or_symbol.create_symbol symbol)
 
   let everything_being_defined_as_list t =
@@ -90,7 +97,8 @@ module Pattern = struct
     | Set_of_closures closure_symbols ->
       closure_symbols |> Function_slot.Lmap.data
       |> List.map Code_id_or_symbol.create_symbol
-    | Block_like symbol -> [Code_id_or_symbol.create_symbol symbol]
+    | Block_like (symbol, _attributes) ->
+      [Code_id_or_symbol.create_symbol symbol]
 
   let ids_for_export t =
     match t with
@@ -100,14 +108,14 @@ module Pattern = struct
         closure_symbols |> Function_slot.Lmap.data |> Symbol.Set.of_list
       in
       Ids_for_export.create ~symbols ()
-    | Block_like symbol -> Ids_for_export.singleton_symbol symbol
+    | Block_like (symbol, _attributes) -> Ids_for_export.singleton_symbol symbol
 
   let gc_roots t =
     match t with
     | Code _ -> []
     | Set_of_closures closure_symbols ->
       [List.hd (Function_slot.Lmap.data closure_symbols)]
-    | Block_like s -> [s]
+    | Block_like (s, _attributes) -> [s]
 end
 
 type t = Pattern.t list

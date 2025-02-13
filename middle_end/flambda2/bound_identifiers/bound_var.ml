@@ -16,16 +16,21 @@
 
 type t =
   { var : Variable.t;
-    name_mode : Name_mode.t
+    name_mode : Name_mode.t;
+    attributes : Bound_attributes.t
   }
 
-let [@ocamlformat "disable"] print ppf { var; name_mode = _; } =
-  Variable.print ppf var
+let print ppf { var; name_mode = _; attributes } =
+  if Bound_attributes.is_empty attributes
+  then Variable.print ppf var
+  else
+    Format.fprintf ppf "@[(%a@ (attributes %a))@]" Variable.print var
+      Bound_attributes.print attributes
 
-let create var name_mode =
+let create ?(attributes = Bound_attributes.empty) var name_mode =
   (* Note that [name_mode] might be [In_types], e.g. when dealing with function
      return types and also using [Typing_env.add_definition]. *)
-  { var; name_mode }
+  { var; name_mode; attributes }
 
 let var t = t.var
 
@@ -35,6 +40,8 @@ let with_var t var = { t with var }
 
 let with_name_mode t name_mode = { t with name_mode }
 
+let attributes t = t.attributes
+
 let rename t = with_var t (Variable.rename t.var)
 
 let apply_renaming t renaming =
@@ -42,9 +49,11 @@ let apply_renaming t renaming =
 
 let free_names t = Name_occurrences.singleton_variable t.var t.name_mode
 
-let ids_for_export { var; name_mode = _ } =
+let ids_for_export { var; name_mode = _; attributes = _ } =
   Ids_for_export.add_variable Ids_for_export.empty var
 
-let renaming { var; name_mode = _ } ~guaranteed_fresh =
-  let { var = guaranteed_fresh; name_mode = _ } = guaranteed_fresh in
+let renaming { var; name_mode = _; attributes = _ } ~guaranteed_fresh =
+  let { var = guaranteed_fresh; name_mode = _; attributes = _ } =
+    guaranteed_fresh
+  in
   Renaming.add_fresh_variable Renaming.empty var ~guaranteed_fresh

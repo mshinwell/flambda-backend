@@ -28,6 +28,7 @@ module Definition = struct
         }
     | Block_like of
         { symbol : Symbol.t;
+          attributes : Bound_attributes.t;
           denv : Downwards_env.t;
           ty : Flambda2_types.t;
           symbol_projections : Symbol_projection.t Variable.Map.t
@@ -103,8 +104,8 @@ module Definition = struct
       defining_expr
     }
 
-  let block_like denv symbol ty ~symbol_projections defining_expr =
-    { descr = Block_like { symbol; denv; ty; symbol_projections };
+  let block_like denv symbol attributes ty ~symbol_projections defining_expr =
+    { descr = Block_like { symbol; attributes; denv; ty; symbol_projections };
       defining_expr
     }
 
@@ -167,13 +168,15 @@ let compute_defining_exprs definitions =
   ListLabels.map definitions ~f:Definition.defining_expr
   |> Rebuilt_static_const.Group.create
 
-let create_block_like symbol ~symbol_projections defining_expr denv ty =
+let create_block_like symbol attributes ~symbol_projections defining_expr denv
+    ty =
   if not (Rebuilt_static_const.is_block defining_expr)
   then
     Misc.fatal_errorf "Defining expression must be a block:@ %a"
       Rebuilt_static_const.print defining_expr;
   let definition =
-    Definition.block_like denv symbol ty ~symbol_projections defining_expr
+    Definition.block_like denv symbol attributes ty ~symbol_projections
+      defining_expr
   in
   let definitions = [definition] in
   { definitions;

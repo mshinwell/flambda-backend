@@ -19,7 +19,7 @@ open! Simplify_import
 let create_lifted_constant (dacc, lifted_constants)
     (pat : Bound_static.Pattern.t) static_const =
   match pat with
-  | Block_like symbol ->
+  | Block_like (symbol, attributes) ->
     let typ =
       (* CR mshinwell: Maybe the types should be returned from
          [Simplify_static_const] to avoid this lookup. *)
@@ -29,7 +29,7 @@ let create_lifted_constant (dacc, lifted_constants)
        projections when lifting -- and [static_const] has already been
        lifted. *)
     let lifted_constant =
-      LC.create_block_like symbol static_const (DA.denv dacc)
+      LC.create_block_like symbol attributes static_const (DA.denv dacc)
         ~symbol_projections:Variable.Map.empty typ
     in
     let dacc =

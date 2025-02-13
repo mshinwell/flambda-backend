@@ -162,3 +162,6 @@ val alloc_mode_for_applications_to_cmx :
 
 val alloc_mode_for_allocations_to_cmm :
   Alloc_mode.For_allocations.t -> Cmm.Alloc_mode.t
+
+val maybe_align_static_data :
+  Bound_attributes.t -> Cmm.data_item list -> Cmm.data_item list
