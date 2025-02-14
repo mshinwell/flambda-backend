@@ -1265,7 +1265,9 @@ let rec lam ppf = function
       let let_kind = begin function
         | Llet(str,_,_,_,_) ->
            begin match str with
-             Alias -> "a" | Strict -> "" | StrictOpt -> "o"
+             Alias -> "a" | Strict -> ""
+             | Strict_attr _ -> "+attr" (* XXX *)
+             | StrictOpt -> "o"
            end
         | Lmutlet _ -> "mut"
         | _ -> assert false

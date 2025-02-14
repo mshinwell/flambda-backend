@@ -733,7 +733,13 @@ type curried_function_kind = { nlocal : int } [@@unboxed]
 
 type function_kind = Curried of curried_function_kind | Tupled
 
-type let_kind = Strict | Alias | StrictOpt
+type let_attribute =
+  | Static_data_alignment of { bytes : int }
+  | Must_be_statically_allocated of Location.t
+
+type let_attributes = let_attribute list
+
+type let_kind = Strict | Strict_attr of let_attributes | Alias | StrictOpt
 
 type unique_barrier =
   | May_be_pushed_down
@@ -751,7 +757,7 @@ let add_barrier_to_read ubr sem =
 let add_barrier_to_let_kind ubr str =
   match ubr, str with
   | May_be_pushed_down, str -> str
-  | Must_stay_here, Strict -> Strict
+  | Must_stay_here, (Strict | Strict_attr _) -> str
   (* CR uniqueness: We lose some performance here since the new
      pattern-matching code in 5.3 looks at the binding_kind to determine whether
      an allocation is mutable or not. See [Matching.mut_of_binding_kind].

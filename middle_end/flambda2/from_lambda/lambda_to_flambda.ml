@@ -183,6 +183,11 @@ let is_user_visible env id : IR.user_visible =
       then Not_user_visible
       else User_visible
 
+let get_let_attributes (let_kind : L.let_kind) =
+  match let_kind with
+  | Strict | StrictOpt | Alias -> []
+  | Strict_attr attrs -> attrs
+
 let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
     ~params
     ~(body : Acc.t -> Env.t -> CCenv.t -> Continuation.t -> Expr_with_acc.t)
@@ -195,13 +200,13 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   in
   let handler_env, params_rev =
     List.fold_left
-      (fun (handler_env, params_rev) (id, visible, layout) ->
+      (fun (handler_env, params_rev) (id, visible, attributes, layout) ->
         let arity_component =
           Flambda_arity.Component_for_creation.from_lambda layout
         in
         match arity_component with
         | Singleton kind ->
-          let param = id, visible, kind in
+          let param = id, visible, attributes, kind in
           handler_env, param :: params_rev
         | Unboxed_product _ ->
           let arity = Flambda_arity.create [arity_component] in
@@ -220,7 +225,9 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
               ~unboxed_product:id ~before_unarization:arity_component ~fields
           in
           let new_params_rev =
-            List.map (fun (id, kind) -> id, IR.Not_user_visible, kind) fields
+            List.map
+              (fun (id, kind) -> id, IR.Not_user_visible, attributes, kind)
+              fields
             |> List.rev
           in
           handler_env, new_params_rev @ params_rev)
@@ -228,7 +235,9 @@ let let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler
   in
   let params = List.rev params_rev in
   let extra_params =
-    List.map (fun (id, kind) -> id, is_user_visible env id, kind) extra_params
+    List.map
+      (fun (id, kind) -> id, is_user_visible env id, [], kind)
+      extra_params
   in
   let handler acc ccenv = handler acc handler_env ccenv in
   let body acc ccenv = body acc body_env ccenv cont in
@@ -265,12 +274,14 @@ let restore_continuation_context acc env ccenv cont ~close_current_region_early
     let region = Env.Region_stack_element.region region_stack_elt in
     let ghost_region = Env.Region_stack_element.ghost_region region_stack_elt in
     CC.close_let acc ccenv
-      [Ident.create_local "unit", Flambda_kind.With_subkind.tagged_immediate]
+      [Ident.create_local "unit", [], Flambda_kind.With_subkind.tagged_immediate]
       Not_user_visible
       (End_region { is_try_region = false; region; ghost = false })
       ~body:(fun acc ccenv ->
         CC.close_let acc ccenv
-          [Ident.create_local "unit", Flambda_kind.With_subkind.tagged_immediate]
+          [ ( Ident.create_local "unit",
+              [],
+              Flambda_kind.With_subkind.tagged_immediate ) ]
           Not_user_visible
           (End_region
              { is_try_region = false; region = ghost_region; ghost = true })
@@ -493,7 +504,7 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
     (* CR mshinwell: user-visibleness needs thinking about here *)
     let temp_id = Ident.create_local "let_mutable" in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[temp_id, IR.Not_user_visible, value_kind]
+      ~params:[temp_id, IR.Not_user_visible, [], value_kind]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv ->
@@ -504,9 +515,14 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         let env, new_id = Env.register_mutable_variable env id kind in
         let body acc ccenv = cps acc env ccenv body k k_exn in
         CC.close_let acc ccenv
-          [new_id, kind]
+          [new_id, [], kind]
           User_visible (Simple (Var temp_id)) ~body)
-  | Llet ((Strict | Alias | StrictOpt), _, fun_id, Lfunction func, body) ->
+  | Llet
+      ( (Strict | Strict_attr _ | Alias | StrictOpt),
+        _,
+        fun_id,
+        Lfunction func,
+        body ) ->
     (* This case is here to get function names right. *)
     let bindings = cps_function_bindings env [L.{ id = fun_id; def = func }] in
     let body acc ccenv = cps acc env ccenv body k k_exn in
@@ -519,7 +535,12 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
         body bindings
     in
     let_expr acc ccenv
-  | Llet ((Strict | Alias | StrictOpt), layout, id, Lconst const, body) ->
+  | Llet
+      ( (Strict | Strict_attr _ | Alias | StrictOpt),
+        layout,
+        id,
+        Lconst const,
+        body ) ->
     (* This case avoids extraneous continuations. *)
     let body acc ccenv = cps acc env ccenv body k k_exn in
     let kind =
@@ -617,15 +638,27 @@ let rec cps acc env ccenv (lam : L.lambda) (k : cps_continuation)
           [new_id, value_kind]
           User_visible (Simple new_value) ~body)
       k_exn
-  | Llet ((Strict | Alias | StrictOpt), _layout, id, defining_expr, Lvar id')
+  | Llet
+      ( (Strict | Strict_attr _ | Alias | StrictOpt),
+        _layout,
+        id,
+        defining_expr,
+        Lvar id' )
     when Ident.same id id' ->
     (* Simplif already simplifies such bindings, but we can generate new ones
        when translating primitives (see the Lprim case below). *)
     (* This case must not be moved above the case for let-bound primitives. *)
+    (* XXX ignoring Strict_attr *)
     cps acc env ccenv defining_expr k k_exn
-  | Llet ((Strict | Alias | StrictOpt), layout, id, defining_expr, body) ->
+  | Llet
+      ( ((Strict | Strict_attr _ | Alias | StrictOpt) as let_kind),
+        layout,
+        id,
+        defining_expr,
+        body ) ->
+    let attributes = get_let_attributes let_kind in
     let_cont_nonrecursive_with_extra_params acc env ccenv ~is_exn_handler:false
-      ~params:[id, is_user_visible env id, layout]
+      ~params:[id, is_user_visible env id, attributes, layout]
       ~body:(fun acc env ccenv after_defining_expr ->
         cps_tail acc env ccenv defining_expr after_defining_expr k_exn)
       ~handler:(fun acc env ccenv -> cps acc env ccenv body k k_exn)

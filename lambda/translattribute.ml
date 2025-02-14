@@ -56,6 +56,9 @@ let is_opaque_attribute =
 let is_unboxable_attribute =
   [ "unboxable", Return ]
 
+let is_static_alloc_attribute =
+  [ "static_alloc", Return ]
+
 let find_attribute p attributes =
   let inline_attribute = select_attributes p attributes in
   let attr =
@@ -400,6 +403,29 @@ let add_unbox_return_attribute expr loc attributes =
       end
   | _ -> expr
 
+let add_static_alloc_attribute expr loc attributes =
+  match expr with
+  | Llet (let_kind, layout, id, defining_expr, body) ->
+      let attr = find_attribute is_static_alloc_attribute attributes in
+      begin match attr with
+      | None -> expr
+      | Some attr ->
+          let alignment_attr =
+            match Builtin_attributes.get_int_payload attr.attr_payload with
+            | Ok bytes -> [Static_data_alignment { bytes; }]
+            | Error () -> []
+          in
+          let static_alloc_attr = Must_be_statically_allocated loc in
+          let new_attrs = static_alloc_attr :: alignment_attr in
+          (* XXX should check for dups, tho flambda2 will *)
+          let let_kind =
+            match let_kind with
+            | Strict_attr attrs -> Strict_attr (new_attrs @ attrs)
+            | Strict | Alias | StrictOpt -> Strict_attr new_attrs
+          in
+          Llet (let_kind, layout, id, defining_expr, body)
+      end
+  | _ -> expr
 
 (* Get the [@inlined] attribute payload (or default if not present). *)
 let get_inlined_attribute e =
@@ -466,6 +492,9 @@ let add_function_attributes lam loc attr =
   in
   let lam =
     add_opaque_attribute lam loc attr
+  in
+  let lam =
+    add_static_alloc_attribute lam loc attr
   in
   lam
 

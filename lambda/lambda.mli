@@ -669,11 +669,19 @@ type curried_function_kind = { nlocal: int } [@@unboxed]
 
 type function_kind = Curried of curried_function_kind | Tupled
 
-type let_kind = Strict | Alias | StrictOpt
+type let_attribute =
+  | Static_data_alignment of { bytes : int }
+  | Must_be_statically_allocated of Location.t
+
+type let_attributes = let_attribute list
+
+type let_kind = Strict | Strict_attr of let_attributes | Alias | StrictOpt
 (* Meaning of kinds for let x = e in e':
     Strict: e may have side-effects; always evaluate e first
       (If e is a simple expression, e.g. a variable or constant,
        we may still substitute e'[x/e].)
+    Strict_attr: semantics as for [Strict], but additional attributes also
+      specified.  (Just too much trouble to change [Llet] itself.)
     Alias: e is pure, we can substitute e'[x/e] if x has 0 or 1 occurrences
       in e'
     StrictOpt: e does not have side-effects, but depend on the store;
