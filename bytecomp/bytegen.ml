@@ -724,8 +724,7 @@ let comp_primitive stack_info p sz args =
     | Pgcscannableproductarray_set _ | Pgcignorableproductarray_set _ -> ()
     end;
     Kccall("caml_array_blit", 5)
-  | Parrayconcat { array_kind; result_mutability = _;
-      result_locality_mode = _ } ->
+  | Parrayconcat { array_kind; result_locality_mode = _ } ->
     begin match array_kind with
     | Punboxedvectorarray _ ->
       fatal_error "SIMD is not supported in bytecode mode."

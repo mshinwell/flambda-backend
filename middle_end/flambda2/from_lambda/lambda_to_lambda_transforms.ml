@@ -22,8 +22,13 @@ type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
 
+let primitive_transform_result_to_lambda result =
+  match result with
+  | Primitive (prim, args, loc) -> L.Lprim (prim, args, loc)
+  | Transformed lam -> lam
+
 (* The term returned by this function must be surrounded by a region. *)
-let list_iter loc ~list_expr ~list_immediacy ~list_mutability ~body_expr =
+let list_iter loc ~list_expr ~list_immediacy ~body_expr =
   let func_name = Ident.create_local "list_iter" in
   let xs = Ident.create_local "xs" in
   let xs_param =
@@ -39,7 +44,7 @@ let list_iter loc ~list_expr ~list_immediacy ~list_mutability ~body_expr =
       ( Strict,
         L.layout_unit,
         x,
-        Lprim (Pfield (0, list_immediacy, list_mutability), [Lvar xs], loc),
+        Lprim (Pfield (0, list_immediacy, Reads_agree), [Lvar xs], loc),
         L.Lifthenelse
           ( Lprim (Pisint { variant_only = true }, [Lvar x], loc),
             L.lambda_unit,
@@ -49,7 +54,7 @@ let list_iter loc ~list_expr ~list_immediacy ~list_mutability ~body_expr =
                   { ap_func = Lvar func_name;
                     ap_args =
                       [ Lprim
-                          ( Pfield (1, list_immediacy, list_mutability),
+                          ( Pfield (1, list_immediacy, Reads_agree),
                             [Lvar xs],
                             loc ) ];
                     ap_result_layout = L.layout_unit;
@@ -617,6 +622,80 @@ let arrayblit env ~(src_mutability : L.mutable_flag)
       Debuginfo.print_compact
       (Debuginfo.from_location loc)
 
+let array_concat env (array_kind : L.array_kind) ~result_locality_mode args loc
+    =
+  match args with
+  | [arg_expr] ->
+    (* Care: the [arg] is an arbitrary Lambda expression, so needs to be
+       [let]-bound *)
+    let arg_ident = Ident.create_local "arg" in
+    let arg = L.Lvar arg_ident in
+    let total_num_elements_ident = Ident.create_local "total_num_elements" in
+    let total_num_elements = L.Lvar total_num_elements_ident in
+    let create_ref_zero =
+      L.Lprim
+        ( Pmakeblock
+            ( 1,
+              Mutable,
+              Some [{ L.raw_kind = Pintval; nullable = Non_nullable }],
+              L.alloc_local ),
+          [Lconst (L.const_int 0)],
+          loc )
+    in
+    let compute_total_num_elements =
+      list_iter loc ~list_expr:arg ~list_immediacy:Pointer
+        ~body_expr:(fun _elt ->
+          L.Lprim (Paddint, [total_num_elements; Lconst (L.const_int 1)], loc))
+    in
+    let result_array_ident = Ident.create_local "result_array" in
+    let result_array = L.Lvar result_array_ident in
+    let env, alloc_result_array =
+      let has_init : L.has_initializer =
+        (* CR mshinwell: move to [Lambda] and ensure in sync with makearray
+           code, above *)
+        match array_kind with
+        | Pgenarray | Paddrarray | Pintarray | Pfloatarray -> With_initializer
+        | Punboxedfloatarray Unboxed_float32
+        | Punboxedfloatarray Unboxed_float64
+        | Punboxedintarray Unboxed_int32
+        | Punboxedintarray Unboxed_int64
+        | Punboxedintarray Unboxed_nativeint
+        | Punboxedvectorarray Unboxed_vec128 ->
+          Uninitialized
+        | Pgcscannableproductarray _ -> With_initializer
+        | Pgcignorableproductarray ignorable ->
+          if List.exists L.ignorable_product_element_kind_involves_int ignorable
+          then With_initializer
+          else Uninitialized
+      in
+      let args =
+        match has_init with
+        | With_initializer -> [total_num_elements; L.Lconst L.const_unit]
+        | Uninitialized -> [total_num_elements]
+      in
+      let env, result =
+        makearray_dynamic env array_kind result_locality_mode has_init args loc
+      in
+      env, primitive_transform_result_to_lambda result
+    in
+    let bind = L.bind_with_layout in
+    let expr =
+      bind Strict (arg_ident, L.layout_any_value) arg_expr
+      @@ bind Strict (total_num_elements_ident, L.layout_block) create_ref_zero
+      @@ Lsequence
+           ( compute_total_num_elements,
+             bind Strict
+               (result_array_ident, L.layout_array array_kind)
+               alloc_result_array
+             @@ result_array )
+    in
+    env, Transformed (L.Lregion (expr, L.layout_array array_kind))
+  | _ ->
+    Misc.fatal_errorf
+      "Wrong arity for Parray_concat (expected one argument):@ %a"
+      Debuginfo.print_compact
+      (Debuginfo.from_location loc)
+
 let transform_primitive0 env (prim : L.primitive) args loc =
   match prim, args with
   | Psequor, [arg1; arg2] ->
@@ -765,5 +844,7 @@ let transform_primitive env (prim : L.primitive) args loc =
     makearray_dynamic env lambda_array_kind mode has_init args loc
   | Parrayblit { src_mutability; dst_array_set_kind } ->
     arrayblit env ~src_mutability ~dst_array_set_kind args loc
+  | Parrayconcat { array_kind; result_locality_mode } ->
+    array_concat env array_kind ~result_locality_mode args loc
   | _ -> env, transform_primitive0 env prim args loc
   [@@ocaml.warning "-fragile-match"]

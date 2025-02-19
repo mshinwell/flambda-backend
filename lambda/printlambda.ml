@@ -693,10 +693,9 @@ let primitive ppf = function
       fprintf ppf "arrayblit[%s -> %a]"
         (array_mut src_mutability)
         array_set_kind dst_array_set_kind
-  | Parrayconcat { array_kind = ak; result_mutability; result_locality_mode } ->
-      fprintf ppf "arrayconcat[%s %s%s]"
+  | Parrayconcat { array_kind = ak; result_locality_mode } ->
+      fprintf ppf "arrayconcat[%s %s]"
         (array_kind ak)
-        (array_mut result_mutability)
         (locality_mode_if_local result_locality_mode)
   | Parrayrefu (rk, idx, mut) -> fprintf ppf "%s.unsafe_get[%a indexed by %a]"
                                  (array_mut mut)

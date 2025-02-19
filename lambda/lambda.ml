@@ -202,7 +202,6 @@ type primitive =
     }
   | Parrayconcat of {
       array_kind : array_kind;
-      result_mutability : mutable_flag;
       result_locality_mode : locality_mode;
     }
   | Parraylength of array_kind
