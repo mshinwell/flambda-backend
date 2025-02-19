@@ -693,6 +693,11 @@ let primitive ppf = function
       fprintf ppf "arrayblit[%s -> %a]"
         (array_mut src_mutability)
         array_set_kind dst_array_set_kind
+  | Parrayconcat { array_kind = ak; result_mutability; result_locality_mode } ->
+      fprintf ppf "arrayconcat[%s %s%s]"
+        (array_kind ak)
+        (array_mut result_mutability)
+        (locality_mode_if_local result_locality_mode)
   | Parrayrefu (rk, idx, mut) -> fprintf ppf "%s.unsafe_get[%a indexed by %a]"
                                  (array_mut mut)
                                  array_ref_kind rk
@@ -1037,6 +1042,7 @@ let name_of_primitive = function
   | Pmakearray_dynamic _ -> "Pmakearray_dynamic"
   | Pduparray _ -> "Pduparray"
   | Parrayblit _ -> "Parrayblit"
+  | Parrayconcat _ -> "Parrayconcat"
   | Parrayrefu _ -> "Parrayrefu"
   | Parraysetu _ -> "Parraysetu"
   | Parrayrefs _ -> "Parrayrefs"

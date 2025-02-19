@@ -22,6 +22,73 @@ type primitive_transform_result =
   | Primitive of L.primitive * L.lambda list * L.scoped_location
   | Transformed of L.lambda
 
+(* The term returned by this function must be surrounded by a region. *)
+let list_iter loc ~list_expr ~list_immediacy ~list_mutability ~body_expr =
+  let func_name = Ident.create_local "list_iter" in
+  let xs = Ident.create_local "xs" in
+  let xs_param =
+    { L.name = xs;
+      layout = L.layout_list;
+      attributes = { unbox_param = false };
+      mode = L.alloc_local
+    }
+  in
+  let body =
+    let x = Ident.create_local "x" in
+    L.Llet
+      ( Strict,
+        L.layout_unit,
+        x,
+        Lprim (Pfield (0, list_immediacy, list_mutability), [Lvar xs], loc),
+        L.Lifthenelse
+          ( Lprim (Pisint { variant_only = true }, [Lvar x], loc),
+            L.lambda_unit,
+            Lsequence
+              ( body_expr (L.Lvar x),
+                Lapply
+                  { ap_func = Lvar func_name;
+                    ap_args =
+                      [ Lprim
+                          ( Pfield (1, list_immediacy, list_mutability),
+                            [Lvar xs],
+                            loc ) ];
+                    ap_result_layout = L.layout_unit;
+                    ap_region_close = Rc_normal;
+                    ap_mode = L.alloc_local;
+                    ap_loc = loc;
+                    ap_tailcall = Default_tailcall;
+                    ap_inlined = Default_inlined;
+                    ap_specialised = Never_specialise;
+                    ap_probe = None
+                  } ),
+            L.layout_unit ) )
+  in
+  L.Lletrec
+    ( [ { id = func_name;
+          def =
+            L.lfunction'
+              ~kind:(Curried { nlocal = 1 })
+              ~params:[xs_param] ~return:L.layout_unit ~body
+              ~attr:
+                { L.default_function_attribute with
+                  inline = Always_inline;
+                  loop = Always_loop
+                }
+              ~loc ~mode:L.alloc_local ~ret_mode:L.alloc_heap
+        } ],
+      L.Lapply
+        { ap_func = Lvar func_name;
+          ap_args = [list_expr];
+          ap_result_layout = L.layout_unit;
+          ap_region_close = Rc_normal;
+          ap_mode = L.alloc_local;
+          ap_loc = loc;
+          ap_tailcall = Default_tailcall;
+          ap_inlined = Always_inlined;
+          ap_specialised = Never_specialise;
+          ap_probe = None
+        } )
+
 let switch_for_if_then_else ~cond ~ifso ~ifnot ~kind =
   let switch : L.lambda_switch =
     { sw_numconsts = 2;

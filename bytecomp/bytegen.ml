@@ -170,7 +170,7 @@ let preserve_tailcall_for_prim = function
   | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
   | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
   | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
-  | Pmakearray_dynamic _ | Parrayblit _
+  | Pmakearray_dynamic _ | Parrayblit _ | Parrayconcat _
   | Parrayrefs _ | Parraysets _ | Pisint _ | Pisnull | Pisout | Pbintofint _ | Pintofbint _
   | Pcvtbint _ | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _
   | Pmodbint _ | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
@@ -724,6 +724,16 @@ let comp_primitive stack_info p sz args =
     | Pgcscannableproductarray_set _ | Pgcignorableproductarray_set _ -> ()
     end;
     Kccall("caml_array_blit", 5)
+  | Parrayconcat { array_kind; result_mutability = _;
+      result_locality_mode = _ } ->
+    begin match array_kind with
+    | Punboxedvectorarray _ ->
+      fatal_error "SIMD is not supported in bytecode mode."
+    | Pgenarray | Pintarray | Paddrarray | Punboxedintarray _
+    | Pfloatarray | Punboxedfloatarray _
+    | Pgcscannableproductarray _ | Pgcignorableproductarray _ -> ()
+    end;
+    Kccall("caml_array_concat_pair", 2)
   | Pmakearray_dynamic(_, _, Uninitialized) ->
     Misc.fatal_error "Pmakearray_dynamic Uninitialized should have been \
       translated to Pmakearray_dynamic Initialized earlier on"

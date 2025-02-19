@@ -275,6 +275,7 @@ let compute_static_size lam =
         | [] | _ :: _ :: _ ->
             Misc.fatal_error "size_of_primitive"
         end
+    | Parrayconcat _ -> Misc.fatal_error "size_of_primitive"
 
     | Praise _ ->
         Unreachable

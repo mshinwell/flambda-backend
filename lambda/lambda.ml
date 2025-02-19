@@ -200,6 +200,11 @@ type primitive =
       src_mutability : mutable_flag;
       dst_array_set_kind : array_set_kind;
     }
+  | Parrayconcat of {
+      array_kind : array_kind;
+      result_mutability : mutable_flag;
+      result_locality_mode : locality_mode;
+    }
   | Parraylength of array_kind
   | Parrayrefu of array_ref_kind * array_index_kind * mutable_flag
   | Parraysetu of array_set_kind * array_index_kind
@@ -1851,6 +1856,7 @@ let primitive_may_allocate : primitive -> locality_mode option = function
   | Pmakearray_dynamic (_, m, _) -> Some m
   | Pduparray _ -> Some alloc_heap
   | Parraylength _ -> None
+  | Parrayconcat { result_locality_mode; _ } -> Some result_locality_mode
   | Parrayblit _
   | Parraysetu _ | Parraysets _
   | Parrayrefu ((Paddrarray_ref | Pintarray_ref
@@ -2032,6 +2038,7 @@ let primitive_can_raise prim =
   | Pbigarrayref (_, _, _, Pbigarray_unknown_layout)
   | Pbigarrayset (_, _, _, Pbigarray_unknown_layout) ->
     true
+  | Parrayconcat _ -> false
   | Pbytes_to_string | Pbytes_of_string | Parray_of_iarray | Parray_to_iarray
   | Pignore | Pgetglobal _ | Psetglobal _ | Pgetpredef _ | Pmakeblock _
   | Pmakefloatblock _ | Pfield _ | Pfield_computed _ | Psetfield _
@@ -2238,6 +2245,7 @@ let primitive_result_layout (p : primitive) =
   | Punboxed_nativeint_array_set_128 _
   | Parrayblit _
     -> layout_unit
+  | Parrayconcat { array_kind; } -> layout_array array_kind
   | Pgetglobal _ | Psetglobal _ | Pgetpredef _ -> layout_module_field
   | Pmakeblock _ | Pmakefloatblock _ | Pmakearray _ | Pmakearray_dynamic _
   | Pduprecord _ | Pmakeufloatblock _ | Pmakemixedblock _

@@ -198,6 +198,11 @@ type primitive =
       array. We check that the source array has the same shape, but do not
       need to know anything about its locality. We do however request the
       mutability of the source array. *)
+  | Parrayconcat of {
+      array_kind : array_kind;
+      result_mutability : mutable_flag;
+      result_locality_mode : locality_mode;
+    }
   | Parraylength of array_kind
   | Parrayrefu of array_ref_kind * array_index_kind * mutable_flag
   | Parraysetu of array_set_kind * array_index_kind
