@@ -645,7 +645,11 @@ let array_concat env (array_kind : L.array_kind) ~result_locality_mode args loc
     let compute_total_num_elements =
       list_iter loc ~list_expr:arg ~list_immediacy:Pointer
         ~body_expr:(fun _elt ->
-          L.Lprim (Paddint, [total_num_elements; Lconst (L.const_int 1)], loc))
+          (* use Poffsetref? *)
+          L.Lprim
+            ( Paddint,
+              [(* Pfield *) total_num_elements; Lconst (L.const_int 1)],
+              loc ))
     in
     let result_array_ident = Ident.create_local "result_array" in
     let result_array = L.Lvar result_array_ident in
