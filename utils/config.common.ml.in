@@ -64,6 +64,7 @@ let lazy_tag = 246
 let max_young_wosize = 256
 let stack_threshold = 32 (* see runtime/caml/config.h *)
 let stack_safety_margin = 6
+let target_win32 = Sys.win32
 let default_executable_name =
   match Sys.os_type with
     "Unix" -> "a.out"

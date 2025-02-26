@@ -1014,9 +1014,21 @@ let transform_primitive0 env (prim : L.primitive) args loc =
       | Runtime5 -> "runtime5"
       | Arch_amd64 -> "arch_amd64"
       | Arch_arm64 -> "arch_arm64"
+      | Standard_library_default -> "standard_library_default"
     in
     let name = Format.sprintf "caml_sys_const_%s" name in
     let desc = L.simple_prim_on_values ~name ~arity:1 ~alloc:false in
+    Primitive (L.Pccall desc, [L.lambda_unit], loc)
+  | Pctconst Standard_library_default, _ ->
+    (* [Pctconst Standard_library_default] is resolved at runtime to allow
+       relocation. Route via the C primitive
+       [caml_sys_const_standard_library_default] in both bytecode and native
+       paths (the OCaml upstream design embeds a global symbol at link time for
+       native code, but that path is not yet wired through flambda2). *)
+    let desc =
+      L.simple_prim_on_values ~name:"caml_sys_const_standard_library_default"
+        ~arity:1 ~alloc:true
+    in
     Primitive (L.Pccall desc, [L.lambda_unit], loc)
   | ( Pstring_load_vec
         ({ size = Boxed_vec256; mode; index_kind; boxed; _ } as desc),

@@ -34,6 +34,7 @@ type compile_time_constant =
   | Runtime5
   | Arch_amd64
   | Arch_arm64
+  | Standard_library_default
 
 type immediate_or_pointer =
   | Immediate
@@ -2931,6 +2932,9 @@ let primitive_result_layout (p : primitive) =
     (* Compile-time constants only ever return ints for now,
        enumerate them all to be sure to modify this if it becomes wrong. *)
     layout_int
+  | Pctconst Standard_library_default ->
+    (* Returns a string at runtime. *)
+    layout_block
   | Pint_as_pointer _ ->
     (* CR ncourant: use an unboxed int64 here when it exists *)
     layout_any_value

@@ -225,7 +225,9 @@ end) : S = struct
         ui_export_info;
         ui_zero_alloc_info;
         ui_external_symbols =
-          union (List.map (fun info -> info.ui_external_symbols) units)
+          union (List.map (fun info -> info.ui_external_symbols) units);
+        ui_need_stdlib =
+          List.exists (fun info -> info.ui_need_stdlib) units;
       }
     in
     Compilenv.write_unit_info pkg_infos cmxfile

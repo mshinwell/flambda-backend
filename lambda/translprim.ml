@@ -180,7 +180,6 @@ let to_locality ~poly = function
     match poly with
     | None -> assert false
     | Some locality -> transl_locality_mode_l locality
-
 let to_modify_mode ~poly = function
   | Prim_global, _ -> modify_heap
   | Prim_local, _ -> modify_maybe_stack

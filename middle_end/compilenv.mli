@@ -57,6 +57,14 @@ val cached_zero_alloc_info : Zero_alloc_info.t
 val cache_zero_alloc_info : Zero_alloc_info.t -> unit
         (* [cache_zero_alloc_info c] adds [c] to [cached_zero_alloc_info] *)
 
+val need_stdlib_location: unit -> unit
+        (* Record that caml_standard_library_nat needs to be initialised if this
+           unit is linked. *)
+
+val stdlib_symbol_name: Ident.t
+        (* The name of the symbol defined globally for
+           %standard_library_default *)
+
 val new_const_symbol : unit -> string
 
 val read_unit_info: string -> unit_infos * Digest.t

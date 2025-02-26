@@ -36,6 +36,7 @@ type compile_time_constant =
   | Runtime5
   | Arch_amd64
   | Arch_arm64
+  | Standard_library_default
 
 type immediate_or_pointer =
   | Immediate

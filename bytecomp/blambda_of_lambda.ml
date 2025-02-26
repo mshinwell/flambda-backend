@@ -79,6 +79,7 @@ let caml_sys_const name =
     | Runtime5 -> "runtime5"
     | Arch_amd64 -> "arch_amd64"
     | Arch_arm64 -> "arch_arm64"
+    | Standard_library_default -> "standard_library_default"
   in
   ccallf "caml_sys_const_%s" const_name
 

@@ -44,6 +44,8 @@ let uid_deps = ref false
 module Magic_number = Misc.Magic_number
 module String = Misc.Stdlib.String
 
+let yesno_of_bool oc b = output_string oc (if b then "YES" else "no")
+
 let dummy_crc = String.make 32 '-'
 
 let null_crc = String.make 32 '0'
@@ -136,13 +138,13 @@ let print_cmo_infos cu =
         printf "YES\n";
         printf "Primitives declared in this module:\n";
         List.iter print_line l);
-  printf "Force link: %s\n" (if cu.cu_force_link then "YES" else "no")
+  printf "Force link: %a\n" yesno_of_bool cu.cu_force_link
 
 let print_spaced_string s =
   printf " %s" s
 
 let print_cma_infos (lib : Cmo_format.library) =
-  printf "Force custom: %s\n" (if lib.lib_custom then "YES" else "no");
+  printf "Force custom: %a\n" yesno_of_bool lib.lib_custom;
   printf "Extra C object files:";
   (* PR#4949: print in linking order *)
   List.iter print_spaced_string (List.rev lib.lib_ccobjs);
@@ -366,6 +368,8 @@ let print_cmx_infos (uir, sections, crc) =
   end;
   print_generic_fns uir.uir_generic_fns;
   printf "Force link: %s\n" (if uir.uir_force_link then "YES" else "no");
+  printf "Requires caml_standard_library_nat: %s\n"
+    (if uir.uir_need_stdlib then "YES" else "no");
   if not (!no_code || !no_approx) then begin
     Zero_alloc_info.Raw.print uir.uir_zero_alloc_info
   end
@@ -443,6 +447,11 @@ let dump_byte ic =
            | SYMB ->
                let symb = Bytesections.read_section_struct toc ic section in
                print_global_table symb
+           | OSLD ->
+               let caml_standard_library_default =
+                 Bytesections.read_section_string toc ic section in
+               printf "caml_standard_library_default: %s\n"
+                      caml_standard_library_default
            | _ -> ()
        with _ -> ()
     )

@@ -73,6 +73,7 @@ type 'format unit_infos_gen =
     mutable ui_zero_alloc_info: Zero_alloc_info.t;
     mutable ui_force_link: bool;          (* Always linked *)
     mutable ui_external_symbols: string list; (* Set of external symbols *)
+    mutable ui_need_stdlib: bool;         (* caml_standard_library_nat needed *)
   }
 
 type unit_infos = Lambda.main_module_block_format unit_infos_gen
@@ -94,6 +95,7 @@ type unit_infos_raw =
                                       this record *)
     uir_sections_length: int;      (* Byte length of all sections *)
     uir_external_symbols: string array;
+    uir_need_stdlib: bool;
   }
 
 (* Each .a library has a matching .cmxa file that provides the following

@@ -766,6 +766,24 @@ CAMLprim value caml_sys_const_arch_arm64(value unit)
 #endif
 }
 
+/* [caml_standard_library_default] is the runtime override for the standard
+   library path. When NULL, [caml_runtime_standard_library_default] (the
+   configured-at-build-time default) is used.
+
+   Upstream dra27 reserves this primitive for bytecode and embeds a
+   [caml_standard_library_nat] global at link time for native code (via
+   [Cmm_helpers.emit_global_string_constant]). OxCaml's flambda2 path does not
+   yet wire that link-time embedding through, so the primitive is also used
+   from native code (see [lambda_to_lambda_transforms.ml]). */
+char_os *caml_standard_library_default = NULL;
+
+CAMLprim value caml_sys_const_standard_library_default(value unit)
+{
+  return caml_copy_string_of_os(
+    caml_standard_library_default ? caml_standard_library_default
+                                  : caml_runtime_standard_library_default);
+}
+
 CAMLprim value caml_sys_get_config(value unit)
 {
   CAMLparam0 ();   /* unit is unused */

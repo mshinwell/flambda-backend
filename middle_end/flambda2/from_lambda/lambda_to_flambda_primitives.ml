@@ -2811,7 +2811,12 @@ let convert_lprim ~(machine_width : Target_system.Machine_width.t) ~big_endian
       | Backend_type ->
         [Simple (Simple.const_zero machine_width)]
         (* constructor 0 is the same as Native here *)
-      | Runtime5 -> [Simple (Simple.const_bool machine_width Config.runtime5)]))
+      | Runtime5 -> [Simple (Simple.const_bool machine_width Config.runtime5)]
+      | Standard_library_default ->
+        Misc.fatal_errorf
+          "Pctconst Standard_library_default should have been rewritten to a \
+           ccall by Lambda_to_lambda_transforms:@ %a"
+          Debuginfo.print_compact dbg))
   | Pint_as_pointer mode, [[arg]] ->
     (* This is not a stack allocation, but nonetheless has a region
        constraint. *)

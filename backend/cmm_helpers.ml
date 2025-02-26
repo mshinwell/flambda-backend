@@ -4231,6 +4231,9 @@ let emit_string_constant symb s cont =
     (string_header (String.length s))
     (emit_string_constant_fields s cont)
 
+let emit_global_string_constant name value =
+  Cdata (emit_string_constant { sym_name = name; sym_global = Global } value [])
+
 let emit_int32_constant symb n cont =
   emit_block symb boxedint32_header (emit_boxed_int32_constant_fields n cont)
 

@@ -751,6 +751,9 @@ val emit_float_constant : symbol -> float -> data_item list -> data_item list
 
 val emit_string_constant : symbol -> string -> data_item list -> data_item list
 
+(** Generate data for a global string constant *)
+val emit_global_string_constant : string -> string -> phrase
+
 val emit_int32_constant : symbol -> int32 -> data_item list -> data_item list
 
 val emit_int64_constant : symbol -> int64 -> data_item list -> data_item list
