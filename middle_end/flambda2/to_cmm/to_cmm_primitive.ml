@@ -985,12 +985,6 @@ let unary_primitive env res dbg f arg =
   | Get_header -> None, res, C.get_header arg dbg
   | Atomic_load block_access_kind ->
     None, res, C.atomic_load ~dbg (imm_or_ptr block_access_kind) arg
-  | Peek kind ->
-    let memory_chunk =
-      K.Standard_int_or_float.to_kind_with_subkind kind
-      |> C.memory_chunk_of_kind
-    in
-    None, res, C.load ~dbg memory_chunk Mutable ~addr:arg
 
 let binary_primitive env dbg f x y =
   match (f : P.binary_primitive) with
@@ -1026,13 +1020,12 @@ let binary_primitive env dbg f x y =
   | Atomic_int_arith And -> C.atomic_land ~dbg x y
   | Atomic_int_arith Or -> C.atomic_lor ~dbg x y
   | Atomic_int_arith Xor -> C.atomic_lxor ~dbg x y
-  | Poke kind ->
+  | Peek kind ->
     let memory_chunk =
       K.Standard_int_or_float.to_kind_with_subkind kind
       |> C.memory_chunk_of_kind
     in
-    C.store ~dbg memory_chunk Assignment ~addr:x ~new_value:y
-    |> C.return_unit dbg
+    C.load ~dbg memory_chunk Mutable ~addr:(C.add_int_caml x y dbg)
 
 let ternary_primitive _env dbg f x y z =
   match (f : P.ternary_primitive) with
@@ -1050,6 +1043,14 @@ let ternary_primitive _env dbg f x y z =
     C.atomic_compare_exchange ~dbg
       (imm_or_ptr block_access_kind)
       x ~old_value:y ~new_value:z
+  | Poke kind ->
+    let memory_chunk =
+      K.Standard_int_or_float.to_kind_with_subkind kind
+      |> C.memory_chunk_of_kind
+    in
+    C.store ~dbg memory_chunk Assignment ~addr:(C.add_int_caml x y dbg)
+      ~new_value:z
+    |> C.return_unit dbg
 
 let variadic_primitive _env dbg f args =
   match (f : P.variadic_primitive) with

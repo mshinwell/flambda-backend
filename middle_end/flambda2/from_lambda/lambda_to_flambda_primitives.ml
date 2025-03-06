@@ -2431,12 +2431,12 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
         "Preinterpret_tagged_int63_as_unboxed_int64 can only be used on 64-bit \
          targets";
     [Unary (Reinterpret_64_bit_word Tagged_int63_as_unboxed_int64, i)]
-  | Ppeek layout, [[ptr]] ->
+  | Ppeek layout, [[ptr]; [byte_offset]] ->
     let kind = standard_int_or_float_of_peek_or_poke layout in
-    [Unary (Peek kind, ptr)]
-  | Ppoke layout, [[ptr]; [new_value]] ->
+    [Binary (Peek kind, ptr, byte_offset)]
+  | Ppoke layout, [[ptr]; [byte_offset]; [new_value]] ->
     let kind = standard_int_or_float_of_peek_or_poke layout in
-    [Binary (Poke kind, ptr, new_value)]
+    [Ternary (Poke kind, ptr, byte_offset, new_value)]
   | ( ( Pdivbint { is_safe = Unsafe; size = _; mode = _ }
       | Pmodbint { is_safe = Unsafe; size = _; mode = _ }
       | Psetglobal _ | Praise _ | Pccall _ ),
@@ -2469,7 +2469,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       | Pufloatfield _ | Patomic_load _ | Pmixedfield _
       | Preinterpret_unboxed_int64_as_tagged_int63
       | Preinterpret_tagged_int63_as_unboxed_int64
-      | Parray_element_size_in_bytes _ | Ppeek _ ),
+      | Parray_element_size_in_bytes _ ),
       ([] | _ :: _ :: _ | [([] | _ :: _ :: _)]) ) ->
     Misc.fatal_errorf
       "Closure_conversion.convert_primitive: Wrong arity for unary primitive \
@@ -2513,7 +2513,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
             _ )
       | Pcompare_ints | Pcompare_floats _ | Pcompare_bints _
       | Patomic_exchange _ | Patomic_set _ | Patomic_fetch_add | Patomic_add
-      | Patomic_sub | Patomic_land | Patomic_lor | Patomic_lxor | Ppoke _ ),
+      | Patomic_sub | Patomic_land | Patomic_lor | Patomic_lxor | Ppeek _ ),
       ( []
       | [_]
       | _ :: _ :: _ :: _
@@ -2543,7 +2543,7 @@ let convert_lprim ~big_endian (prim : L.primitive) (args : Simple.t list list)
       | Punboxed_float_array_set_128 _ | Punboxed_float32_array_set_128 _
       | Punboxed_int32_array_set_128 _ | Punboxed_int64_array_set_128 _
       | Punboxed_nativeint_array_set_128 _ | Patomic_compare_set _
-      | Patomic_compare_exchange _ ),
+      | Patomic_compare_exchange _ | Ppoke _ ),
       ( []
       | [_]
       | [_; _]

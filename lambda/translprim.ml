@@ -1714,10 +1714,10 @@ let lambda_of_prim prim_name prim loc args arg_exps =
       }
   | Peek None, _ | Poke None, _ ->
       raise(Error(to_location loc, Wrong_layout_for_peek_or_poke prim_name))
-  | Peek (Some layout), [ptr] ->
-      Lprim (Ppeek layout, [ptr], loc)
-  | Poke (Some layout), [ptr; new_value] ->
-      Lprim (Ppoke layout, [ptr; new_value], loc)
+  | Peek (Some layout), [ptr; byte_offset] ->
+      Lprim (Ppeek layout, [ptr; byte_offset], loc)
+  | Poke (Some layout), [ptr; byte_offset; new_value] ->
+      Lprim (Ppoke layout, [ptr; byte_offset; new_value], loc)
   | Unsupported prim, _ ->
       let exn =
         transl_extension_path loc (Lazy.force Env.initial)
@@ -1768,8 +1768,10 @@ let check_primitive_arity loc p =
     | Send _ | Send_self _ -> p.prim_arity = 2
     | Send_cache _ -> p.prim_arity = 4
     | Frame_pointers -> p.prim_arity = 0
-    | Identity | Peek _ -> p.prim_arity = 1
-    | Apply _ | Revapply _ | Poke _ -> p.prim_arity = 2
+    | Identity -> p.prim_arity = 1
+    | Peek _ -> p.prim_arity = 2
+    | Apply _ | Revapply _ -> p.prim_arity = 2
+    | Poke _ -> p.prim_arity = 3
     | Unsupported _ -> true
   in
   if not ok then raise(Error(loc, Wrong_arity_builtin_primitive p.prim_name))

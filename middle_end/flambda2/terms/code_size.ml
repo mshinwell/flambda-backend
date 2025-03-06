@@ -379,7 +379,7 @@ let unary_prim_size prim =
   | End_region { ghost } | End_try_region { ghost } -> if ghost then 0 else 1
   | Obj_dup -> needs_caml_c_call_extcall_size + 1
   | Get_header -> 2
-  | Atomic_load _ | Peek _ -> 1
+  | Atomic_load _ -> 1
 
 let binary_prim_size prim =
   match (prim : Flambda_primitive.binary_primitive) with
@@ -406,7 +406,7 @@ let binary_prim_size prim =
   | Atomic_exchange Immediate -> 1
   | Atomic_exchange Any_value | Atomic_set Any_value ->
     does_not_need_caml_c_call_extcall_size
-  | Poke _ -> 1
+  | Peek _ -> 1
 
 let ternary_prim_size prim =
   match (prim : Flambda_primitive.ternary_primitive) with
@@ -420,6 +420,7 @@ let ternary_prim_size prim =
   | Atomic_compare_exchange Immediate -> 1
   | Atomic_compare_and_set Any_value | Atomic_compare_exchange Any_value ->
     does_not_need_caml_c_call_extcall_size
+  | Poke _ -> 1
 
 let variadic_prim_size prim args =
   match (prim : Flambda_primitive.variadic_primitive) with
