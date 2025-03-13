@@ -916,9 +916,9 @@ class virtual ['env, 'op, 'instr] common_selector =
         self#emit_expr_aux_catch env bound_name rec_flag handlers body
           value_kind
       | Cexit (lbl, args, traps) -> self#emit_expr_aux_exit env lbl args traps
-      | Ctrywith (e1, exn_cont, v, e2, dbg, value_kind) ->
-        self#emit_expr_aux_trywith env bound_name e1 exn_cont v e2 dbg
-          value_kind
+      | Ctrywith (e1, exn_cont, v, extra_args, e2, dbg, value_kind) ->
+        self#emit_expr_aux_trywith env bound_name e1 exn_cont v ~extra_args e2
+          dbg value_kind
 
     method virtual emit_expr_aux_raise
         : 'env environment ->
@@ -984,6 +984,7 @@ class virtual ['env, 'op, 'instr] common_selector =
           expression ->
           trywith_shared_label ->
           VP.t ->
+          extra_args:(VP.t * machtype) list ->
           expression ->
           Debuginfo.t ->
           kind_for_unboxing ->
@@ -1012,8 +1013,8 @@ class virtual ['env, 'op, 'instr] common_selector =
       | Ccatch (_, [], e1, _) -> self#emit_tail env e1
       | Ccatch (rec_flag, handlers, e1, value_kind) ->
         self#emit_tail_catch env rec_flag handlers e1 value_kind
-      | Ctrywith (e1, exn_cont, v, e2, dbg, value_kind) ->
-        self#emit_tail_trywith env e1 exn_cont v e2 dbg value_kind
+      | Ctrywith (e1, exn_cont, v, extra_args, e2, dbg, value_kind) ->
+        self#emit_tail_trywith env e1 exn_cont v ~extra_args e2 dbg value_kind
       | Cop _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _
       | Cconst_float _ | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _
       | Cexit _ ->
@@ -1065,6 +1066,7 @@ class virtual ['env, 'op, 'instr] common_selector =
           expression ->
           trywith_shared_label ->
           VP.t ->
+          extra_args:(VP.t * machtype) list ->
           expression ->
           Debuginfo.t ->
           kind_for_unboxing ->

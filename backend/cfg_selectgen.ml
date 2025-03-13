@@ -742,7 +742,7 @@ class virtual selector_generic =
             Misc.fatal_error
               "Selection.emit_expr: Return with too many arguments"))
 
-    method emit_expr_aux_trywith env bound_name e1 exn_cont v e2
+    method emit_expr_aux_trywith env bound_name e1 exn_cont v ~extra_args e2
         (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
@@ -1045,8 +1045,8 @@ class virtual selector_generic =
       let s_handlers = List.map (fun (_, _, s, _) -> s) new_handlers in
       sub_cfg <- Sub_cfg.join_tail ~from:(s_body :: s_handlers) ~to_:sub_cfg
 
-    method emit_tail_trywith env e1 exn_cont v e2 (_dbg : Debuginfo.t)
-        (_value_kind : Cmm.kind_for_unboxing) =
+    method emit_tail_trywith env e1 exn_cont v ~extra_args e2
+        (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let exn_label = Cmm.new_label () in
