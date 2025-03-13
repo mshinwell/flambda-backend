@@ -167,7 +167,7 @@ let rec check env (expr : Cmm.expression) =
     List.iter (fun (_, _, handler, _, _) -> check env_handler handler) handlers
   | Cexit (exit_label, args, _trap_actions) ->
     Env.jump env ~exit_label ~arg_num:(List.length args)
-  | Ctrywith (body, _trywith_kind, _, handler, _, _) ->
+  | Ctrywith (body, _trywith_kind, _, _, handler, _, _) ->
     (* Jumping from inside a trywith body to outside isn't very nice,
        but it's handled correctly by Linearize, as it happens
        when compiling match ... with exception ..., for instance, so it is

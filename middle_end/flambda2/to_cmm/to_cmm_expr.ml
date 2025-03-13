@@ -439,38 +439,7 @@ let translate_apply env res apply =
   let call, free_vars, env, res, effs =
     translate_apply0 ~dbg_with_inlined:dbg env res apply
   in
-  let k_exn = Apply.exn_continuation apply in
-  let mut_vars =
-    Exn_continuation.exn_handler k_exn |> Env.get_exn_extra_args env
-  in
-  let extra_args = Exn_continuation.extra_args k_exn in
-  if List.compare_lengths extra_args mut_vars = 0
-  then
-    (* Note wrt evaluation order: this is correct for the same reason as
-       `To_cmm_shared.simple_list`, namely the first simple translated (and
-       potentially inlined/substituted) is evaluted last. *)
-    let aux (call, env, res, free_vars) (arg, _k) v =
-      let To_cmm_env.
-            { env;
-              res;
-              expr = { cmm = arg; free_vars = arg_free_vars; effs = _ }
-            } =
-        C.simple ~dbg env res arg
-      in
-      let free_vars = Backend_var.Set.union free_vars arg_free_vars in
-      C.sequence (C.assign v arg) call, env, res, free_vars
-    in
-    let call, env, res, free_vars =
-      List.fold_left2 aux (call, env, res, free_vars) extra_args mut_vars
-    in
-    call, free_vars, env, res, effs
-  else
-    Misc.fatal_errorf
-      "Length of [extra_args] in exception continuation %a@ does not match \
-       those in the environment (%a)@ for application expression:@ %a"
-      Exn_continuation.print k_exn
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space Ident.print)
-      mut_vars Apply.print apply
+  call, free_vars, env, res, effs
 
 (* Helpers for translating [Apply_cont] expressions *)
 
@@ -500,14 +469,8 @@ let translate_raise ~dbg_with_inlined:dbg env res apply exn_handler args =
       C.simple_list ~dbg env res extra
     in
     let free_vars = Backend_var.Set.union exn_free_vars extra_free_vars in
-    let mut_vars = Env.get_exn_extra_args env exn_handler in
     let wrap, _, res = Env.flush_delayed_lets ~mode:Branching_point env res in
-    let cmm =
-      List.fold_left2
-        (fun expr arg v -> C.sequence (C.assign v arg) expr)
-        (C.raise_prim raise_kind exn dbg)
-        extra mut_vars
-    in
+    let cmm = C.raise_prim raise_kind exn ~extra_args:extra dbg in
     let cmm, free_vars = wrap cmm free_vars in
     cmm, free_vars, res
   | [] ->
@@ -808,17 +771,15 @@ and let_cont_exn_handler env res k body vars handler free_vars_of_handler
         "Exception continuation %a should have at least one argument"
         Continuation.print k
   in
-  let env_body, mut_vars = Env.add_exn_handler env k arity in
-  let handler =
-    (* Wrap the exn handler with reads of the mutable variables *)
-    List.fold_left2
-      (fun handler (mut_var, _) (extra_param, _) ->
-        (* We introduce these mutable cmm variables at very precise points, and
-           without going through the delayed let-bindings of the [env], so we do
-           not consider them when computing the [free_vars]. *)
-        C.letin extra_param ~defining_expr:(C.var mut_var) ~body:handler)
-      handler mut_vars extra_params
+  let extra_params =
+    List.filter_map
+      (fun (var, (param_type : _ Env.param_type)) ->
+        match param_type with
+        | Param machtype -> Some (var, machtype)
+        | Skip_param -> None)
+      extra_params
   in
+  let env_body = Env.add_exn_handler env k arity in
   let body, free_vars_of_body, res = expr env_body res body in
   let free_vars =
     Backend_var.Set.union free_vars_of_body
@@ -828,34 +789,10 @@ and let_cont_exn_handler env res k body vars handler free_vars_of_handler
   (* CR gbury: once we get proper debuginfo here, remember to apply
      Env.add_inlined_debuginfo to it *)
   let dbg = Debuginfo.none in
-  let trywith =
-    C.trywith ~dbg ~body ~exn_var ~handler_cont:catch_id ~handler ()
-  in
-  (* Define and initialize the mutable Cmm variables for extra args *)
-  let cmm =
-    List.fold_left
-      (fun cmm (mut_var, kind) ->
-        (* CR mshinwell: Fix [provenance] *)
-        let mut_var =
-          Backend_var.With_provenance.create ?provenance:None mut_var
-        in
-        let dummy_value =
-          match K.With_subkind.kind kind with
-          | Value -> C.int ~dbg 1
-          | Naked_number Naked_float -> C.float ~dbg 0.
-          | Naked_number Naked_float32 -> C.float32 ~dbg 0.
-          | Naked_number
-              (Naked_immediate | Naked_int32 | Naked_int64 | Naked_nativeint) ->
-            C.int ~dbg 0
-          | Naked_number Naked_vec128 -> C.vec128 ~dbg { high = 0L; low = 0L }
-          | Region | Rec_info ->
-            Misc.fatal_errorf "No dummy value available for kind %a"
-              K.With_subkind.print kind
-        in
-        C.letin_mut mut_var (C.machtype_of_kind kind) dummy_value cmm)
-      trywith mut_vars
-  in
-  cmm, free_vars, res
+  ( C.trywith ~dbg ~body ~exn_var ~extra_args:extra_params
+      ~handler_cont:catch_id ~handler (),
+    free_vars,
+    res )
 
 and let_cont_rec env res invariant_params conts body =
   (* Flush the env now to avoid inlining something inside of a recursive

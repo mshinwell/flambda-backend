@@ -401,9 +401,11 @@ let rec expr ppf = function
       fprintf ppf "@[<2>(exit%a %a" trap_action_list traps exit_label i;
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       fprintf ppf ")@]"
-  | Ctrywith(e1, exn_cont, id, e2, dbg, _value_kind) ->
+  | Ctrywith(e1, exn_cont, id, extra_args, e2, dbg, _value_kind) ->
       fprintf ppf "@[<2>(try@ %a@;<1 -2>with(%d)@ %a@ "
-            sequence e1 exn_cont VP.print id;
+            sequence e1 exn_cont
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space VP.print)
+            (id :: (List.map fst extra_args));
       with_location_mapping ~label:"Ctrywith" ~dbg ppf (fun () ->
             fprintf ppf "%a)@]" sequence e2);
 

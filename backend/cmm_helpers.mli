@@ -443,7 +443,8 @@ type unary_primitive = expression -> Debuginfo.t -> expression
 val int_as_pointer : unary_primitive
 
 (** Raise primitive *)
-val raise_prim : Lambda.raise_kind -> unary_primitive
+val raise_prim :
+  Lambda.raise_kind -> extra_args:expression list -> unary_primitive
 
 (** Unary negation of an OCaml integer *)
 val negint : unary_primitive
@@ -648,6 +649,7 @@ val trywith :
   dbg:Debuginfo.t ->
   body:expression ->
   exn_var:Backend_var.With_provenance.t ->
+  extra_args:(Backend_var.With_provenance.t * machtype) list ->
   handler_cont:trywith_shared_label ->
   handler:expression ->
   unit ->

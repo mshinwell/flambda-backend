@@ -374,8 +374,9 @@ type expression =
         * expression * kind_for_unboxing
   | Cexit of exit_label * expression list * trap_action list
   | Ctrywith of expression * trywith_shared_label
-      * Backend_var.With_provenance.t * expression * Debuginfo.t
-      * kind_for_unboxing
+      * Backend_var.With_provenance.t
+      * (Backend_var.With_provenance.t * machtype) list
+      * expression * Debuginfo.t * kind_for_unboxing
 
 type codegen_option =
   | Reduce_code_size
@@ -440,7 +441,7 @@ let iter_shallow_tail f = function
       List.iter (fun (_, _, h, _dbg, _) -> f h) handlers;
       f body;
       true
-  | Ctrywith(e1, _kind, _id, e2, _dbg, _value_kind) ->
+  | Ctrywith(e1, _kind, _id, _extra_args, e2, _dbg, _value_kind) ->
       f e1;
       f e2;
       true
@@ -482,8 +483,8 @@ let map_shallow_tail ?kind f = function
       in
       Ccatch(rec_flag, List.map map_h handlers, f body,
              Option.value kind ~default:kind_before)
-  | Ctrywith(e1, kind', id, e2, dbg, kind_before) ->
-      Ctrywith(f e1, kind', id, f e2, dbg,
+  | Ctrywith(e1, kind', id,extra_args, e2, dbg, kind_before) ->
+      Ctrywith(f e1, kind', id,extra_args, f e2, dbg,
               Option.value kind ~default:kind_before)
   | Cexit _ | Cop (Craise _, _, _) as cmm ->
       cmm
@@ -532,7 +533,7 @@ let iter_shallow f = function
       List.iter iter_h hl; f body
   | Cexit (_n, el, _traps) ->
       List.iter f el
-  | Ctrywith (e1, _kind, _id, e2, _dbg, _value_kind) ->
+  | Ctrywith (e1, _kind, _id,_extra_args, e2, _dbg, _value_kind) ->
       f e1; f e2
   | Cconst_int _
   | Cconst_natint _
@@ -565,8 +566,8 @@ let map_shallow f = function
       Ccatch (rf, List.map map_h hl, f body, kind)
   | Cexit (n, el, traps) ->
       Cexit (n, List.map f el, traps)
-  | Ctrywith (e1, kind, id, e2, dbg, value_kind) ->
-      Ctrywith (f e1, kind, id, f e2, dbg, value_kind)
+  | Ctrywith (e1, kind, id, extra_args, e2, dbg, value_kind) ->
+      Ctrywith (f e1, kind, id, extra_args,f e2, dbg, value_kind)
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _

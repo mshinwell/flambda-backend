@@ -3291,10 +3291,10 @@ type unary_primitive = expression -> Debuginfo.t -> expression
 let int_as_pointer arg dbg = Cop (Caddi, [arg; Cconst_int (-1, dbg)], dbg)
 (* always a pointer outside the heap *)
 
-let raise_prim raise_kind arg dbg =
+let raise_prim raise_kind ~extra_args arg dbg =
   if !Clflags.debug
-  then Cop (Craise raise_kind, [arg], dbg)
-  else Cop (Craise Lambda.Raise_notrace, [arg], dbg)
+  then Cop (Craise raise_kind, arg :: extra_args, dbg)
+  else Cop (Craise Lambda.Raise_notrace, arg :: extra_args, dbg)
 
 let negint arg dbg = Cop (Csubi, [Cconst_int (2, dbg); arg], dbg)
 
@@ -3801,8 +3801,8 @@ let sequence x y =
 let ite ~dbg ~then_dbg ~then_ ~else_dbg ~else_ cond =
   Cifthenelse (cond, then_dbg, then_, else_dbg, else_, dbg, Any)
 
-let trywith ~dbg ~body ~exn_var ~handler_cont ~handler () =
-  Ctrywith (body, handler_cont, exn_var, handler, dbg, Any)
+let trywith ~dbg ~body ~exn_var ~extra_args ~handler_cont ~handler () =
+  Ctrywith (body, handler_cont, exn_var, extra_args, handler, dbg, Any)
 
 type static_handler =
   int
