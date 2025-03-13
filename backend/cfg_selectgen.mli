@@ -183,7 +183,7 @@ class virtual selector_generic :
     method emit_expr_aux_raise :
       environment ->
       Lambda.raise_kind ->
-      Cmm.expression ->
+      Cmm.expression list ->
       Debuginfo.t ->
       Reg.t array option
 

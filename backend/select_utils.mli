@@ -64,11 +64,13 @@ val env_find_static_exception :
   Lambda.static_label -> 'a environment -> 'a static_handler
 
 val env_enter_trywith :
-  'a environment ->
-  Cmm.trywith_shared_label ->
-  extra_args:(Backend_var.With_provenance.t * Cmm.machtype) list ->
-  'a ->
-  'a environment
+  'a environment -> Cmm.trywith_shared_label -> 'a -> 'a environment
+
+val env_add_regs_for_exception_extra_args :
+  Cmm.trywith_shared_label -> Reg.t array -> 'a environment -> 'a environment
+
+val env_find_regs_for_exception_extra_args :
+  Cmm.trywith_shared_label -> _ environment -> Reg.t array
 
 val env_set_trap_stack :
   'a environment -> Simple_operation.trap_stack -> 'a environment
@@ -301,7 +303,7 @@ class virtual ['env, 'op, 'instr] common_selector :
     method virtual emit_expr_aux_raise :
       'env environment ->
       Lambda.raise_kind ->
-      Cmm.expression ->
+      Cmm.expression list ->
       Debuginfo.t ->
       Reg.t array option
 

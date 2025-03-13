@@ -371,15 +371,22 @@ class virtual selector_generic =
       if src.Reg.stamp <> dst.Reg.stamp
       then self#insert env (Op Move) [| src |] [| dst |]
 
-    method emit_expr_aux_raise env k arg dbg =
-      match self#emit_expr env arg ~bound_name:None with
-      | None -> None
-      | Some r1 ->
-        let rd = [| Proc.loc_exn_bucket |] in
-        self#insert env (Op Move) r1 rd;
-        self#insert_debug' env (Cfg.Raise k) dbg rd [||];
-        set_traps_for_raise env;
-        None
+    method emit_expr_aux_raise env k (args : expression list) dbg =
+      let r1 = self#emit_tuple env args in
+      let extra_args_regs =
+        match env.trap_stack with
+        | Uncaught ->
+          (* Function-level or toplevel exception continuations never have extra
+             args. *)
+          [||]
+        | Specific_trap (cont, _trap_stack) ->
+          Select_utils.env_find_regs_for_exception_extra_args cont env
+      in
+      let rd = Array.append [| Proc.loc_exn_bucket |] extra_args_regs in
+      self#insert env (Op Move) r1 rd;
+      self#insert_debug' env (Cfg.Raise k) dbg rd [||];
+      set_traps_for_raise env;
+      None
 
     method emit_expr_aux_op env bound_name op args dbg =
       let ret res = Some res in
@@ -753,20 +760,24 @@ class virtual selector_generic =
       let with_handler env_handler e2 =
         let r2, s2 =
           self#emit_sequence env_handler e2 ~bound_name ~at_start:(fun seq ->
-              let provenance = VP.provenance v in
-              if Option.is_some provenance
-              then
-                let var = VP.var v in
-                let naming_op =
-                  Operation.Name_for_debugger
-                    { ident = var;
-                      provenance;
-                      which_parameter = None;
-                      is_assignment = false;
-                      regs = rv
-                    }
-                in
-                seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||] [||])
+              List.iter
+                (fun v ->
+                  let provenance = VP.provenance v in
+                  if Option.is_some provenance
+                  then
+                    let var = VP.var v in
+                    let naming_op =
+                      Operation.Name_for_debugger
+                        { ident = var;
+                          provenance;
+                          which_parameter = None;
+                          is_assignment = false;
+                          regs = rv
+                        }
+                    in
+                    seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||]
+                      [||])
+                (v :: List.map fst extra_args))
         in
         let r = join env r1 s1 r2 s2 ~bound_name in
         let s1 : Sub_cfg.t = s1#extract in
@@ -779,6 +790,13 @@ class virtual selector_generic =
         r
       in
       let env = Select_utils.env_add v rv env in
+      let env =
+        let extra_args =
+          List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+          |> Array.concat
+        in
+        env_add_regs_for_exception_extra_args exn_cont extra_args env
+      in
       match Select_utils.env_find_static_exception exn_cont env_body with
       | { traps_ref = { contents = Reachable ts }; _ } ->
         with_handler (Select_utils.env_set_trap_stack env ts) e2
@@ -1050,29 +1068,30 @@ class virtual selector_generic =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let exn_label = Cmm.new_label () in
-      let env_body =
-        Select_utils.env_enter_trywith env exn_cont ~extra_args exn_label
-      in
+      let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
       let s1 : Sub_cfg.t = self#emit_tail_sequence env_body e1 in
       let rv = self#regs_for typ_val in
       let with_handler env_handler e2 =
         let s2 : Sub_cfg.t =
           self#emit_tail_sequence env_handler e2 ~at_start:(fun seq ->
-              let provenance = VP.provenance v in
-              if Option.is_some provenance
-              then
-                let var = VP.var v in
-                let naming_op =
-                  Operation.Name_for_debugger
-                    { ident = var;
-                      provenance;
-                      which_parameter = None;
-                      is_assignment = false;
-                      regs = rv
-                    }
-                in
-                seq#insert_debug env_handler (Cfg.Op naming_op) Debuginfo.none
-                  [||] [||])
+              List.iter
+                (fun v ->
+                  let provenance = VP.provenance v in
+                  if Option.is_some provenance
+                  then
+                    let var = VP.var v in
+                    let naming_op =
+                      Operation.Name_for_debugger
+                        { ident = var;
+                          provenance;
+                          which_parameter = None;
+                          is_assignment = false;
+                          regs = rv
+                        }
+                    in
+                    seq#insert_debug env_handler (Cfg.Op naming_op)
+                      Debuginfo.none [||] [||])
+                (v :: List.map fst extra_args))
         in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
         Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
@@ -1081,6 +1100,13 @@ class virtual selector_generic =
         sub_cfg <- Sub_cfg.join_tail ~from:[s1; s2] ~to_:sub_cfg
       in
       let env = Select_utils.env_add v rv env in
+      let env =
+        let extra_args =
+          List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+          |> Array.concat
+        in
+        env_add_regs_for_exception_extra_args exn_cont extra_args env
+      in
       match Select_utils.env_find_static_exception exn_cont env_body with
       | { traps_ref = { contents = Reachable ts }; _ } ->
         with_handler (Select_utils.env_set_trap_stack env ts) e2

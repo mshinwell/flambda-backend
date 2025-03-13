@@ -70,23 +70,22 @@ let env_find_mut id env =
     Misc.fatal_errorf "Selectgen.env_find_mut: %a is not mutable" V.print id);
   regs, provenance
 
-let env_add_regs_for_exception_extra_args id ~extra_args env =
+let env_add_regs_for_exception_extra_args id extra_args env =
   { env with
     regs_for_exception_extra_args =
       Int.Map.add id extra_args env.regs_for_exception_extra_args
   }
 
+let env_find_regs_for_exception_extra_args id env =
+  Int.Map.find id env.regs_for_exception_extra_args
+
 let _env_find_with_provenance id env = V.Map.find id env.vars
 
 let env_find_static_exception id env = Int.Map.find id env.static_exceptions
 
-let env_enter_trywith env id ~extra_args extra =
+let env_enter_trywith env id extra =
   let env, _ = env_add_static_exception id [] env extra in
-  let extra_args =
-    List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
-    |> Array.concat
-  in
-  env_add_regs_for_exception_extra_args id ~extra_args env
+  env
 
 let env_set_trap_stack env trap_stack = { env with trap_stack }
 
@@ -893,7 +892,7 @@ class virtual ['env, 'op, 'instr] common_selector =
         | None -> None
         | Some (simple_list, ext_env) ->
           ret (self#emit_tuple ext_env simple_list))
-      | Cop (Craise k, [arg], dbg) -> self#emit_expr_aux_raise env k arg dbg
+      | Cop (Craise k, args, dbg) -> self#emit_expr_aux_raise env k args dbg
       | Cop (Copaque, args, dbg) -> (
         match self#emit_parts_list env args with
         | None -> None
@@ -937,7 +936,7 @@ class virtual ['env, 'op, 'instr] common_selector =
     method virtual emit_expr_aux_raise
         : 'env environment ->
           Lambda.raise_kind ->
-          expression ->
+          expression list ->
           Debuginfo.t ->
           Reg.t array option
 
