@@ -756,12 +756,21 @@ class virtual selector_generic =
       let exn_label = Cmm.new_label () in
       let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
       let r1, s1 = self#emit_sequence env_body e1 ~bound_name in
-      let rv = self#regs_for typ_val in
+      let rv_list =
+        List.map
+          (fun machtype -> self#regs_for machtype)
+          (typ_val :: List.map snd extra_args)
+      in
+      let rv = Array.concat rv_list in
+      let extra_arg_regs =
+        List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+        |> Array.concat
+      in
       let with_handler env_handler e2 =
         let r2, s2 =
           self#emit_sequence env_handler e2 ~bound_name ~at_start:(fun seq ->
-              List.iter
-                (fun v ->
+              List.iter2
+                (fun v regs ->
                   let provenance = VP.provenance v in
                   if Option.is_some provenance
                   then
@@ -772,30 +781,34 @@ class virtual selector_generic =
                           provenance;
                           which_parameter = None;
                           is_assignment = false;
-                          regs = rv
+                          regs
                         }
                     in
                     seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||]
                       [||])
-                (v :: List.map fst extra_args))
+                (v :: List.map fst extra_args)
+                rv_list)
         in
         let r = join env r1 s1 r2 s2 ~bound_name in
         let s1 : Sub_cfg.t = s1#extract in
         let s2 : Sub_cfg.t = s2#extract in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
         Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
-          [| Proc.loc_exn_bucket |] rv Debuginfo.none;
+          (Array.append [| Proc.loc_exn_bucket |] extra_arg_regs)
+          rv Debuginfo.none;
         Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
         sub_cfg <- Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg;
         r
       in
-      let env = Select_utils.env_add v rv env in
       let env =
-        let extra_args =
-          List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
-          |> Array.concat
-        in
-        env_add_regs_for_exception_extra_args exn_cont extra_args env
+        List.fold_left2
+          (fun env var regs -> Select_utils.env_add var regs env)
+          env
+          (v :: List.map fst extra_args)
+          rv_list
+      in
+      let env =
+        env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env
       in
       match Select_utils.env_find_static_exception exn_cont env_body with
       | { traps_ref = { contents = Reachable ts }; _ } ->
@@ -1070,12 +1083,21 @@ class virtual selector_generic =
       let exn_label = Cmm.new_label () in
       let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
       let s1 : Sub_cfg.t = self#emit_tail_sequence env_body e1 in
-      let rv = self#regs_for typ_val in
+      let rv_list =
+        List.map
+          (fun machtype -> self#regs_for machtype)
+          (typ_val :: List.map snd extra_args)
+      in
+      let rv = Array.concat rv_list in
+      let extra_arg_regs =
+        List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+        |> Array.concat
+      in
       let with_handler env_handler e2 =
         let s2 : Sub_cfg.t =
           self#emit_tail_sequence env_handler e2 ~at_start:(fun seq ->
-              List.iter
-                (fun v ->
+              List.iter2
+                (fun v regs ->
                   let provenance = VP.provenance v in
                   if Option.is_some provenance
                   then
@@ -1086,12 +1108,13 @@ class virtual selector_generic =
                           provenance;
                           which_parameter = None;
                           is_assignment = false;
-                          regs = rv
+                          regs
                         }
                     in
-                    seq#insert_debug env_handler (Cfg.Op naming_op)
-                      Debuginfo.none [||] [||])
-                (v :: List.map fst extra_args))
+                    seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||]
+                      [||])
+                (v :: List.map fst extra_args)
+                rv_list)
         in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
         Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
@@ -1099,13 +1122,15 @@ class virtual selector_generic =
         Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
         sub_cfg <- Sub_cfg.join_tail ~from:[s1; s2] ~to_:sub_cfg
       in
-      let env = Select_utils.env_add v rv env in
       let env =
-        let extra_args =
-          List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
-          |> Array.concat
-        in
-        env_add_regs_for_exception_extra_args exn_cont extra_args env
+        List.fold_left2
+          (fun env var regs -> Select_utils.env_add var regs env)
+          env
+          (v :: List.map fst extra_args)
+          rv_list
+      in
+      let env =
+        env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env
       in
       match Select_utils.env_find_static_exception exn_cont env_body with
       | { traps_ref = { contents = Reachable ts }; _ } ->
