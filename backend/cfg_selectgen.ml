@@ -761,11 +761,10 @@ class virtual selector_generic =
           (fun machtype -> self#regs_for machtype)
           (typ_val :: List.map snd extra_args)
       in
-      let rv = Array.concat rv_list in
-      let extra_arg_regs =
+      let extra_arg_regs_split =
         List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
-        |> Array.concat
       in
+      let extra_arg_regs = Array.concat extra_arg_regs_split in
       let with_handler env_handler e2 =
         let r2, s2 =
           self#emit_sequence env_handler e2 ~bound_name ~at_start:(fun seq ->
@@ -793,9 +792,12 @@ class virtual selector_generic =
         let s1 : Sub_cfg.t = s1#extract in
         let s2 : Sub_cfg.t = s2#extract in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
-        Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
-          (Array.append [| Proc.loc_exn_bucket |] extra_arg_regs)
-          rv Debuginfo.none;
+        List.iter2
+          (fun extra_arg_reg rv ->
+            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) extra_arg_reg rv
+              Debuginfo.none)
+          ([| Proc.loc_exn_bucket |] :: extra_arg_regs_split)
+          rv_list;
         Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
         sub_cfg <- Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg;
         r
@@ -1088,11 +1090,10 @@ class virtual selector_generic =
           (fun machtype -> self#regs_for machtype)
           (typ_val :: List.map snd extra_args)
       in
-      let rv = Array.concat rv_list in
-      let extra_arg_regs =
+      let extra_arg_regs_split =
         List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
-        |> Array.concat
       in
+      let extra_arg_regs = Array.concat extra_arg_regs_split in
       let with_handler env_handler e2 =
         let s2 : Sub_cfg.t =
           self#emit_tail_sequence env_handler e2 ~at_start:(fun seq ->
@@ -1117,8 +1118,12 @@ class virtual selector_generic =
                 rv_list)
         in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
-        Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
-          [| Proc.loc_exn_bucket |] rv Debuginfo.none;
+        List.iter2
+          (fun extra_arg_reg rv ->
+            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) extra_arg_reg rv
+              Debuginfo.none)
+          ([| Proc.loc_exn_bucket |] :: extra_arg_regs_split)
+          rv_list;
         Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
         sub_cfg <- Sub_cfg.join_tail ~from:[s1; s2] ~to_:sub_cfg
       in
