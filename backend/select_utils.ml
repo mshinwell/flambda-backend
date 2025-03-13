@@ -42,7 +42,10 @@ type 'a environment =
     static_exceptions : 'a static_handler Int.Map.t;
         (** Which registers must be populated when jumping to the given
         handler. *)
-    trap_stack : Simple_operation.trap_stack
+    trap_stack : Simple_operation.trap_stack;
+    regs_for_exception_extra_args : Reg.t array Int.Map.t
+        (** For each exception handler, any registers that are to be used to hold
+            extra arguments. *)
   }
 
 let env_add ?(mut = Asttypes.Immutable) var regs env =
@@ -67,13 +70,23 @@ let env_find_mut id env =
     Misc.fatal_errorf "Selectgen.env_find_mut: %a is not mutable" V.print id);
   regs, provenance
 
+let env_add_regs_for_exception_extra_args id ~extra_args env =
+  { env with
+    regs_for_exception_extra_args =
+      Int.Map.add id extra_args env.regs_for_exception_extra_args
+  }
+
 let _env_find_with_provenance id env = V.Map.find id env.vars
 
 let env_find_static_exception id env = Int.Map.find id env.static_exceptions
 
-let env_enter_trywith env id extra =
+let env_enter_trywith env id ~extra_args extra =
   let env, _ = env_add_static_exception id [] env extra in
-  env
+  let extra_args =
+    List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+    |> Array.concat
+  in
+  env_add_regs_for_exception_extra_args id ~extra_args env
 
 let env_set_trap_stack env trap_stack = { env with trap_stack }
 
@@ -132,7 +145,8 @@ let pop_all_traps env =
 let env_empty =
   { vars = V.Map.empty;
     static_exceptions = Int.Map.empty;
-    trap_stack = Uncaught
+    trap_stack = Uncaught;
+    regs_for_exception_extra_args = Int.Map.empty
   }
 
 let select_mutable_flag : Asttypes.mutable_flag -> Simple_operation.mutable_flag

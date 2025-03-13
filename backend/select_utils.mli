@@ -35,7 +35,8 @@ type 'a environment =
     static_exceptions : 'a static_handler Numbers.Int.Map.t;
         (** Which registers must be populated when jumping to the given
           handler. *)
-    trap_stack : Simple_operation.trap_stack
+    trap_stack : Simple_operation.trap_stack;
+    regs_for_exception_extra_args : Reg.t array Numbers.Int.Map.t
   }
 
 val env_add :
@@ -63,7 +64,11 @@ val env_find_static_exception :
   Lambda.static_label -> 'a environment -> 'a static_handler
 
 val env_enter_trywith :
-  'a environment -> Cmm.trywith_shared_label -> 'a -> 'a environment
+  'a environment ->
+  Cmm.trywith_shared_label ->
+  extra_args:(Backend_var.With_provenance.t * Cmm.machtype) list ->
+  'a ->
+  'a environment
 
 val env_set_trap_stack :
   'a environment -> Simple_operation.trap_stack -> 'a environment

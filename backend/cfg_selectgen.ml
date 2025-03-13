@@ -1050,7 +1050,9 @@ class virtual selector_generic =
       (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let exn_label = Cmm.new_label () in
-      let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
+      let env_body =
+        Select_utils.env_enter_trywith env exn_cont ~extra_args exn_label
+      in
       let s1 : Sub_cfg.t = self#emit_tail_sequence env_body e1 in
       let rv = self#regs_for typ_val in
       let with_handler env_handler e2 =
