@@ -131,13 +131,10 @@ let rec check env (expr : Cmm.expression) =
   | Cconst_symbol _ | Cconst_vec128 _
   | Cvar _ ->
     ()
-  | Clet (_, expr, body)
-  | Clet_mut (_, _, expr, body) ->
+  | Clet (_, expr, body) ->
     check env expr;
     check env body
   | Cphantom_let (_, _, expr) ->
-    check env expr
-  | Cassign (_, expr) ->
     check env expr
   | Ctuple exprs ->
     List.iter (check env) exprs

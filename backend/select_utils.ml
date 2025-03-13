@@ -428,7 +428,7 @@ class virtual ['env, 'op, 'instr] common_selector =
       | Cconst_vec128 _ -> true
       | Cvar _ -> true
       | Ctuple el -> List.for_all self#is_simple_expr el
-      | Clet (_id, arg, body) | Clet_mut (_id, _, arg, body) ->
+      | Clet (_id, arg, body) ->
         self#is_simple_expr arg && self#is_simple_expr body
       | Cphantom_let (_var, _defining_expr, body) -> self#is_simple_expr body
       | Csequence (e1, e2) -> self#is_simple_expr e1 && self#is_simple_expr e2
@@ -452,9 +452,7 @@ class virtual ['env, 'op, 'instr] common_selector =
         | Caddf _ | Csubf _ | Cmulf _ | Cdivf _ | Cpackf32 | Creinterpret_cast _
         | Cstatic_cast _ | Ctuple_field _ | Ccmpf _ | Cdls_get ->
           List.for_all self#is_simple_expr args)
-      | Cassign _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _
-        ->
-        false
+      | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> false
 
     (* Analyses the effects and coeffects of an expression. This is used across
        a whole list of expressions with a view to determining which expressions
@@ -475,7 +473,7 @@ class virtual ['env, 'op, 'instr] common_selector =
       | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ ->
         EC.none
       | Ctuple el -> EC.join_list_map el self#effects_of
-      | Clet (_id, arg, body) | Clet_mut (_id, _, arg, body) ->
+      | Clet (_id, arg, body) ->
         EC.join (self#effects_of arg) (self#effects_of body)
       | Cphantom_let (_var, _defining_expr, body) -> self#effects_of body
       | Csequence (e1, e2) -> EC.join (self#effects_of e1) (self#effects_of e2)
@@ -507,7 +505,7 @@ class virtual ['env, 'op, 'instr] common_selector =
             EC.none
         in
         EC.join from_op (EC.join_list_map args self#effects_of)
-      | Cassign _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> EC.arbitrary
+      | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> EC.arbitrary
 
     (* Says whether an integer constant is a suitable immediate argument for the
        given integer operation *)
@@ -873,31 +871,8 @@ class virtual ['env, 'op, 'instr] common_selector =
         match self#emit_expr env e1 ~bound_name:(Some v) with
         | None -> None
         | Some r1 -> self#emit_expr_aux (self#bind_let env v r1) e2 ~bound_name)
-      | Clet_mut (v, k, e1, e2) -> (
-        match self#emit_expr env e1 ~bound_name:(Some v) with
-        | None -> None
-        | Some r1 ->
-          self#emit_expr_aux (self#bind_let_mut env v k r1) e2 ~bound_name)
       | Cphantom_let (_var, _defining_expr, body) ->
         self#emit_expr_aux env body ~bound_name
-      | Cassign (v, e1) -> (
-        let rv, provenance =
-          try env_find_mut v env
-          with Not_found ->
-            Misc.fatal_error ("Selection.emit_expr: unbound var " ^ V.name v)
-        in
-        match self#emit_expr env e1 ~bound_name:None with
-        | None -> None
-        | Some r1 ->
-          (if Option.is_some provenance
-          then
-            let naming_op =
-              self#make_name_for_debugger ~ident:v ~provenance
-                ~which_parameter:None ~is_assignment:true ~regs:r1
-            in
-            self#insert_debug env naming_op Debuginfo.none [||] [||]);
-          self#insert_moves env r1 rv;
-          ret [||])
       | Ctuple [] -> ret [||]
       | Ctuple exp_list -> (
         match self#emit_parts_list env exp_list with
@@ -1022,10 +997,6 @@ class virtual ['env, 'op, 'instr] common_selector =
         match self#emit_expr env e1 ~bound_name:None with
         | None -> ()
         | Some r1 -> self#emit_tail (self#bind_let env v r1) e2)
-      | Clet_mut (v, k, e1, e2) -> (
-        match self#emit_expr env e1 ~bound_name:None with
-        | None -> ()
-        | Some r1 -> self#emit_tail (self#bind_let_mut env v k r1) e2)
       | Cphantom_let (_var, _defining_expr, body) -> self#emit_tail env body
       | Cop ((Capply (ty, Rc_normal) as op), args, dbg) ->
         self#emit_tail_apply env ty op args dbg
@@ -1044,8 +1015,8 @@ class virtual ['env, 'op, 'instr] common_selector =
       | Ctrywith (e1, exn_cont, v, e2, dbg, value_kind) ->
         self#emit_tail_trywith env e1 exn_cont v e2 dbg value_kind
       | Cop _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _
-      | Cconst_float _ | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Cassign _
-      | Ctuple _ | Cexit _ ->
+      | Cconst_float _ | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _
+      | Cexit _ ->
         self#emit_return env exp (pop_all_traps env)
 
     method virtual emit_tail_apply

@@ -629,17 +629,6 @@ val letin :
   body:expression ->
   expression
 
-(** [letin_mut v ty e body] binds a mutable variable [v] of machtype [ty] to [e]
-    in [body]. (For immutable variables, use [Cmm_helpers.letin].) *)
-val letin_mut :
-  Backend_var.With_provenance.t ->
-  machtype ->
-  expression ->
-  expression ->
-  expression
-
-val assign : Backend_var.t -> expression -> expression
-
 (** Create a sequence of expressions. Will erase void expressions as needed. *)
 val sequence : expression -> expression -> expression
 

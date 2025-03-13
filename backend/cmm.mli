@@ -351,12 +351,8 @@ type expression =
   | Cconst_symbol of symbol * Debuginfo.t
   | Cvar of Backend_var.t
   | Clet of Backend_var.With_provenance.t * expression * expression
-  | Clet_mut of Backend_var.With_provenance.t * machtype
-                * expression * expression
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
-  (* Cassign must refer to a variable bound by Clet_mut *)
-  | Cassign of Backend_var.t * expression
   | Ctuple of expression list
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression

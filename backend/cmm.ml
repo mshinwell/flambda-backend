@@ -358,11 +358,8 @@ type expression =
   | Cconst_symbol of symbol * Debuginfo.t
   | Cvar of Backend_var.t
   | Clet of Backend_var.With_provenance.t * expression * expression
-  | Clet_mut of Backend_var.With_provenance.t * machtype
-                * expression * expression
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
-  | Cassign of Backend_var.t * expression
   | Ctuple of expression list
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
@@ -426,7 +423,7 @@ let reset () =
   Label.reset ()
 
 let iter_shallow_tail f = function
-  | Clet(_, _, body) | Cphantom_let (_, _, body) | Clet_mut(_, _, _, body) ->
+  | Clet(_, _, body) | Cphantom_let (_, _, body) ->
       f body;
       true
   | Cifthenelse(_cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg, _value_kind) ->
@@ -456,7 +453,6 @@ let iter_shallow_tail f = function
   | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _
-  | Cassign _
   | Ctuple _
   | Cop _ ->
       false
@@ -464,8 +460,6 @@ let iter_shallow_tail f = function
 let map_shallow_tail ?kind f = function
   | Clet(id, exp, body) ->
       Clet(id, exp, f body)
-  | Clet_mut(id, kind, exp, body) ->
-      Clet_mut(id, kind, exp, f body)
   | Cphantom_let(id, exp, body) ->
       Cphantom_let (id, exp, f body)
   | Cifthenelse(cond, ifso_dbg, ifso, ifnot_dbg, ifnot, dbg, kind_before) ->
@@ -500,7 +494,6 @@ let map_shallow_tail ?kind f = function
   | Cconst_vec128 _
   | Cconst_symbol _
   | Cvar _
-  | Cassign _
   | Ctuple _
   | Cop _ as cmm -> cmm
 
@@ -512,7 +505,6 @@ let map_tail ?kind f =
     | Cconst_float _
     | Cconst_symbol _
     | Cvar _
-    | Cassign _
     | Ctuple _
     | Cop _ as c ->
         f c
@@ -523,11 +515,7 @@ let map_tail ?kind f =
 let iter_shallow f = function
   | Clet (_id, e1, e2) ->
       f e1; f e2
-  | Clet_mut (_id, _kind, e1, e2) ->
-      f e1; f e2
   | Cphantom_let (_id, _de, e) ->
-      f e
-  | Cassign (_id, e) ->
       f e
   | Ctuple el ->
       List.iter f el
@@ -558,12 +546,8 @@ let iter_shallow f = function
 let map_shallow f = function
   | Clet (id, e1, e2) ->
       Clet (id, f e1, f e2)
-  | Clet_mut (id, kind, e1, e2) ->
-      Clet_mut (id, kind, f e1, f e2)
   | Cphantom_let (id, de, e) ->
       Cphantom_let (id, de, f e)
-  | Cassign (id, e) ->
-      Cassign (id, f e)
   | Ctuple el ->
       Ctuple (List.map f el)
   | Cop (op, el, dbg) ->

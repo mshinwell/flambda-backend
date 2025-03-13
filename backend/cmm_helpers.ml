@@ -536,12 +536,6 @@ let mk_compare_floats_untagged =
 let mk_compare_float32s_untagged =
   mk_compare_floats_gen ~tag_result:false ~width:Float32
 
-let create_loop body dbg =
-  let cont = Lambda.next_raise_count () in
-  let call_cont = Cexit (Lbl cont, [], []) in
-  let body = Csequence (body, call_cont) in
-  Ccatch (Recursive, [cont, [], body, dbg, false], call_cont, Any)
-
 (* Turning integer divisions into multiply-high then shift. The
    [division_parameters] function is used in module Emit for those target
    platforms that support this optimization. *)
@@ -2733,80 +2727,92 @@ let cache_public_method meths tag cache dbg =
   and hi = V.create_local "*hi*"
   and mi = V.create_local "*mi*"
   and tagged = V.create_local "*tagged*" in
-  Clet_mut
-    ( VP.create li,
-      typ_int,
-      cconst_int 3,
-      Clet_mut
-        ( VP.create hi,
-          typ_int,
-          Cop (mk_load_mut Word_int, [meths], dbg),
-          Csequence
-            ( ccatch
-                ( raise_num,
-                  [],
-                  create_loop
-                    (Clet
-                       ( VP.create mi,
-                         Cop
-                           ( Cor,
-                             [ Cop
-                                 ( Clsr,
-                                   [ Cop (Caddi, [Cvar li; Cvar hi], dbg);
-                                     cconst_int 1 ],
-                                   dbg );
-                               cconst_int 1 ],
-                             dbg ),
-                         Csequence
-                           ( Cifthenelse
-                               ( Cop
-                                   ( Ccmpi Clt,
-                                     [ tag;
-                                       Cop
-                                         ( mk_load_mut Word_int,
-                                           [ Cop
-                                               ( Cadda,
-                                                 [ meths;
-                                                   lsl_const (Cvar mi)
-                                                     log2_size_addr dbg ],
-                                                 dbg ) ],
-                                           dbg ) ],
-                                     dbg ),
-                                 dbg,
-                                 Cassign
-                                   ( hi,
-                                     Cop (Csubi, [Cvar mi; cconst_int 2], dbg)
-                                   ),
-                                 dbg,
-                                 Cassign (li, Cvar mi),
-                                 dbg,
-                                 Any ),
-                             Cifthenelse
-                               ( Cop (Ccmpi Cge, [Cvar li; Cvar hi], dbg),
-                                 dbg,
-                                 Cexit (Lbl raise_num, [], []),
-                                 dbg,
-                                 Ctuple [],
-                                 dbg,
-                                 Any ) ) ))
-                    dbg,
-                  Ctuple [],
-                  dbg,
-                  Any,
-                  false ),
-              Clet
-                ( VP.create tagged,
-                  Cop
-                    ( Caddi,
-                      [ lsl_const (Cvar li) log2_size_addr dbg;
-                        cconst_int (1 - (3 * size_addr)) ],
-                      dbg ),
-                  Csequence
-                    ( Cop
-                        ( Cstore (Word_int, Assignment),
-                          [cache; Cvar tagged],
+  let li_vp = VP.create li in
+  let hi_vp = VP.create hi in
+  let cont = Lambda.next_raise_count () in
+  let new_hi = V.create_local "*new_hi*" in
+  Csequence
+    ( ccatch
+        ( raise_num,
+          [],
+          Ccatch
+            ( Recursive,
+              [ ( cont,
+                  [li_vp, typ_int; hi_vp, typ_int],
+                  Clet
+                    ( VP.create mi,
+                      Cop
+                        ( Cor,
+                          [ Cop
+                              ( Clsr,
+                                [ Cop (Caddi, [Cvar li; Cvar hi], dbg);
+                                  cconst_int 1 ],
+                                dbg );
+                            cconst_int 1 ],
                           dbg ),
-                      Cvar tagged ) ) ) ) )
+                      Cifthenelse
+                        ( Cop
+                            ( Ccmpi Clt,
+                              [ tag;
+                                Cop
+                                  ( mk_load_mut Word_int,
+                                    [ Cop
+                                        ( Cadda,
+                                          [ meths;
+                                            lsl_const (Cvar mi) log2_size_addr
+                                              dbg ],
+                                          dbg ) ],
+                                    dbg ) ],
+                              dbg ),
+                          dbg,
+                          Clet
+                            ( VP.create new_hi,
+                              Cop (Csubi, [Cvar mi; cconst_int 2], dbg),
+                              Cifthenelse
+                                (* here, [li] remains unchanged, but [hi] has
+                                   been replaced by [mi - 2] aka [new_hi]. *)
+                                ( Cop (Ccmpi Cge, [Cvar li; Cvar new_hi], dbg),
+                                  dbg,
+                                  Cexit (Lbl raise_num, [], []),
+                                  dbg,
+                                  Cexit (Lbl cont, [Cvar li; Cvar new_hi], []),
+                                  dbg,
+                                  Any ) ),
+                          dbg,
+                          Cifthenelse
+                            (* here, we have replaced [li] by [mi]; [hi] remains
+                               unchanged. *)
+                            ( Cop (Ccmpi Cge, [Cvar mi; Cvar hi], dbg),
+                              dbg,
+                              Cexit (Lbl raise_num, [], []),
+                              dbg,
+                              Cexit (Lbl cont, [Cvar mi; Cvar hi], []),
+                              dbg,
+                              Any ),
+                          dbg,
+                          Any ) ),
+                  dbg,
+                  false ) ],
+              (* Start the first iteration of the loop *)
+              Cexit
+                ( Lbl cont,
+                  [cconst_int 3; Cop (mk_load_mut Word_int, [meths], dbg)],
+                  [] ),
+              Any ),
+          Ctuple [],
+          dbg,
+          Any,
+          false ),
+      Clet
+        ( VP.create tagged,
+          Cop
+            ( Caddi,
+              [ lsl_const (Cvar li) log2_size_addr dbg;
+                cconst_int (1 - (3 * size_addr)) ],
+              dbg ),
+          Csequence
+            ( Cop (Cstore (Word_int, Assignment), [cache; Cvar tagged], dbg),
+              Cvar tagged ) ) )
 
 let placeholder_fun_dbg ~human_name:_ = Debuginfo.none
 
@@ -3619,17 +3625,13 @@ let entry_point namelist =
   in
   let data = Cdefine_symbol table_symbol :: data in
   let raise_num = Lambda.next_raise_count () in
-  let id = VP.create (Ident.create_local "*id*") in
   let high = cconst_int (List.length namelist) in
   let body =
     let dbg = dbg () in
-    let incr_i =
-      Cassign
-        (VP.var id, Cop (Caddi, [Cvar (VP.var id); Cconst_int (1, dbg)], dbg))
-    in
-    let exit_if_last_iteration =
+    let incr_i id = Cop (Caddi, [Cvar id; Cconst_int (1, dbg)], dbg) in
+    let exit_if_last_iteration id =
       Cifthenelse
-        ( Cop (Ccmpi Ceq, [Cvar (VP.var id); high], dbg),
+        ( Cop (Ccmpi Ceq, [Cvar id; high], dbg),
           dbg,
           Cexit (Lbl raise_num, [], []),
           dbg,
@@ -3637,22 +3639,27 @@ let entry_point namelist =
           dbg,
           Any )
     in
-    Clet_mut
-      ( id,
-        typ_int,
-        cconst_int 0,
-        ccatch
-          ( raise_num,
-            [],
-            create_loop
-              (Csequence
-                 ( exit_if_last_iteration,
-                   Csequence (call (Cvar (VP.var id)), incr_i) ))
-              dbg,
-            Ctuple [],
-            dbg,
-            Any,
-            false ) )
+    let cont = Lambda.next_raise_count () in
+    let id = Backend_var.create_local "*id*" in
+    ccatch
+      ( raise_num,
+        [],
+        Ccatch
+          ( Recursive,
+            [ ( cont,
+                [VP.create id, typ_int],
+                Csequence
+                  ( exit_if_last_iteration id,
+                    Csequence (call (Cvar id), Cexit (Lbl cont, [incr_i id], []))
+                  ),
+                dbg,
+                false ) ],
+            Cexit (Lbl cont, [cconst_int 0], []),
+            Any ),
+        Ctuple [],
+        dbg,
+        Any,
+        false )
   in
   let fun_name = global_symbol "caml_program" in
   let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
@@ -3780,14 +3787,10 @@ let letin v ~defining_expr ~body =
   | Cvar v' when Backend_var.same (Backend_var.With_provenance.var v) v' ->
     defining_expr
   | Cvar _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
-  | Cconst_symbol _ | Cconst_vec128 _ | Clet _ | Clet_mut _ | Cphantom_let _
-  | Cassign _ | Ctuple _ | Cop _ | Csequence _ | Cifthenelse _ | Cswitch _
-  | Ccatch _ | Cexit _ | Ctrywith _ ->
+  | Cconst_symbol _ | Cconst_vec128 _ | Clet _ | Cphantom_let _ | Ctuple _
+  | Cop _ | Csequence _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _
+  | Ctrywith _ ->
     Clet (v, defining_expr, body)
-
-let letin_mut v ty e body = Clet_mut (v, ty, e, body)
-
-let assign x e = Cassign (x, e)
 
 let sequence x y =
   match x, y with
@@ -4116,8 +4119,8 @@ let cmm_arith_size (e : Cmm.expression) =
   | Cconst_symbol _ | Cvar _ | Cconst_vec128 _ ->
     Some 0
   | Cop _ -> Some (cmm_arith_size0 e)
-  | Clet _ | Clet_mut _ | Cphantom_let _ | Cassign _ | Ctuple _ | Csequence _
-  | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ ->
+  | Clet _ | Cphantom_let _ | Ctuple _ | Csequence _ | Cifthenelse _ | Cswitch _
+  | Ccatch _ | Cexit _ | Ctrywith _ ->
     None
 
 (* Atomics *)
