@@ -2,7 +2,7 @@ let [@inline never] print_endline x = print_endline x
 
 let g () = failwith "foo"
 
-let f x =
+let f () =
   let r = ref "foo" in
   let s = ref "bar" in
   try
@@ -12,3 +12,5 @@ let f x =
     print_endline !r;
     print_endline !s
   )
+
+let () = f ()
