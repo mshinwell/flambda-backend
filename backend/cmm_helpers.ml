@@ -2730,9 +2730,11 @@ let cache_public_method meths tag cache dbg =
   let li_vp = VP.create li in
   let hi_vp = VP.create hi in
   let cont = Lambda.next_raise_count () in
+  let new_li = V.create_local "*new_li*" in
   let new_hi = V.create_local "*new_hi*" in
-  Csequence
-    ( ccatch
+  Clet
+    ( VP.create new_li,
+      ccatch
         ( raise_num,
           [],
           Ccatch
@@ -2799,7 +2801,7 @@ let cache_public_method meths tag cache dbg =
                   [cconst_int 3; Cop (mk_load_mut Word_int, [meths], dbg)],
                   [] ),
               Any ),
-          Ctuple [],
+          Cvar li,
           dbg,
           Any,
           false ),
@@ -2807,7 +2809,7 @@ let cache_public_method meths tag cache dbg =
         ( VP.create tagged,
           Cop
             ( Caddi,
-              [ lsl_const (Cvar li) log2_size_addr dbg;
+              [ lsl_const (Cvar new_li) log2_size_addr dbg;
                 cconst_int (1 - (3 * size_addr)) ],
               dbg ),
           Csequence
