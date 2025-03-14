@@ -464,6 +464,12 @@ let translate_apply env res apply =
     let extra_args = List.rev extra_args_rev in
     let exn_var = Backend_var.create_local "*exn*" in
     let handler_cont = Lambda.next_raise_count () in
+    let push_cont = Lambda.next_raise_count () in
+    let body =
+      C.create_ccatch ~rec_flag:false
+        ~body:(C.cexit push_cont [] [Push handler_cont])
+        ~handlers:[C.handler ~dbg push_cont [] call false (* is_cold *)]
+    in
     let handler =
       (* This exception handler has no extra args, but reraises to the one which
          does. The exception arising from the function application is in
@@ -475,8 +481,7 @@ let translate_apply env res apply =
          handler *)
       C.trywith
         ~exn_var:(Backend_var.With_provenance.create exn_var)
-        ~extra_args:[] ~dbg:(Apply.dbg apply) ~body:call ~handler_cont ~handler
-        ()
+        ~extra_args:[] ~dbg:(Apply.dbg apply) ~body ~handler_cont ~handler ()
     in
     cmm, free_vars, env, res, effs
 
@@ -795,12 +800,7 @@ and let_cont_not_inlined env res k handler body =
   cmm, free_vars, res
 
 (* Exception continuations are translated using delayed Ctrywith blocks. The
-   exception handler parts of these blocks are identified by the [catch_id]s.
-
-   Additionally, exception continuations can have extra args, which are passed
-   through the try-with using mutable Cmm variables. Thus the exception handler
-   must first read the contents of those extra args (eagerly, in order to
-   minmize the lifetime of the mutable variables). *)
+   exception handler parts of these blocks are identified by the [catch_id]s. *)
 and let_cont_exn_handler env res k body vars handler free_vars_of_handler
     ~catch_id arity =
   let exn_var, extra_params =
