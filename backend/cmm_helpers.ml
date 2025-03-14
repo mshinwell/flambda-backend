@@ -2732,11 +2732,12 @@ let cache_public_method meths tag cache dbg =
   let cont = Lambda.next_raise_count () in
   let new_li = V.create_local "*new_li*" in
   let new_hi = V.create_local "*new_hi*" in
+  let li_return = V.create_local "*li_return*" in
   Clet
     ( VP.create new_li,
       ccatch
         ( raise_num,
-          [],
+          [VP.create li_return, typ_int],
           Ccatch
             ( Recursive,
               [ ( cont,
@@ -2775,7 +2776,7 @@ let cache_public_method meths tag cache dbg =
                                    been replaced by [mi - 2] aka [new_hi]. *)
                                 ( Cop (Ccmpi Cge, [Cvar li; Cvar new_hi], dbg),
                                   dbg,
-                                  Cexit (Lbl raise_num, [], []),
+                                  Cexit (Lbl raise_num, [Cvar li], []),
                                   dbg,
                                   Cexit (Lbl cont, [Cvar li; Cvar new_hi], []),
                                   dbg,
@@ -2786,7 +2787,7 @@ let cache_public_method meths tag cache dbg =
                                unchanged. *)
                             ( Cop (Ccmpi Cge, [Cvar mi; Cvar hi], dbg),
                               dbg,
-                              Cexit (Lbl raise_num, [], []),
+                              Cexit (Lbl raise_num, [Cvar li], []),
                               dbg,
                               Cexit (Lbl cont, [Cvar mi; Cvar hi], []),
                               dbg,
@@ -2801,7 +2802,7 @@ let cache_public_method meths tag cache dbg =
                   [cconst_int 3; Cop (mk_load_mut Word_int, [meths], dbg)],
                   [] ),
               Any ),
-          Cvar li,
+          Cvar li_return,
           dbg,
           Any,
           false ),
