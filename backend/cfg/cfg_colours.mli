@@ -30,6 +30,8 @@ val terminator : directive
 
 val block_label : directive
 
+val block_label_exn : directive
+
 val instr_id : directive
 
 val pred_succ : directive

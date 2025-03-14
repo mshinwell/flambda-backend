@@ -100,6 +100,8 @@ let terminator ppf = push ~fg:111 ppf
 
 let block_label ppf = push ~fg:198 ppf
 
+let block_label_exn ppf = push ~fg:198 ~bg:197 ppf
+
 let instr_id ppf = push ~fg:43 ppf
 
 let pred_succ ppf = push ~fg:243 ppf

@@ -124,6 +124,15 @@ let is_trap_handler t label =
 
 (* Printing utilities for debug *)
 
+let all_blocks_used_as_exn_successor t =
+  let blocks = ref Label.Set.empty in
+  DLL.iter t.layout ~f:(fun block_label ->
+      blocks
+        := Label.Set.union !blocks
+             (Cfg.successor_labels ~normal:false ~exn:true
+                (Cfg.get_block_exn t.cfg block_label)));
+  !blocks
+
 let dump ppf t ~msg =
   let open Format in
   fprintf ppf "\n%t%s%s%t (Cfg, layout length %d, num blocks %d)\n"
@@ -131,14 +140,17 @@ let dump ppf t ~msg =
     (if String.length msg = 0 then "" else msg ^ " ")
     t.cfg.fun_name Cfg_colours.pop (DLL.length t.layout)
     (Label.Tbl.length t.cfg.blocks);
+  let all_blocks_used_as_exn_successor = all_blocks_used_as_exn_successor t in
   let print_block label =
     let block = Label.Tbl.find t.cfg.blocks label in
     let succ = Cfg.successor_labels ~normal:true ~exn:false block in
     fprintf ppf "@[<h>%t%a%t@ %t%a\u{2190}-%t%t.%t%t-\u{2192}%a"
-      Cfg_colours.block_label Label.format label Cfg_colours.pop
-      Cfg_colours.pred_succ Label.Set.print block.predecessors Cfg_colours.pop
-      Cfg_colours.block_label Cfg_colours.pop Cfg_colours.pred_succ
-      Label.Set.print succ;
+      (if Label.Set.mem label all_blocks_used_as_exn_successor
+      then Cfg_colours.block_label_exn
+      else Cfg_colours.block_label)
+      Label.format label Cfg_colours.pop Cfg_colours.pred_succ Label.Set.print
+      block.predecessors Cfg_colours.pop Cfg_colours.block_label Cfg_colours.pop
+      Cfg_colours.pred_succ Label.Set.print succ;
     let exn_succ = Cfg.successor_labels ~normal:false ~exn:true block in
     if (not (Label.Set.is_empty exn_succ))
        && not (Label.Set.equal succ exn_succ)
