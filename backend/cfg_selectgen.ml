@@ -762,7 +762,7 @@ class virtual selector_generic =
           (typ_val :: List.map snd extra_args)
       in
       let extra_arg_regs_split =
-        List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+        List.map (fun (_param, machtype) -> self#regs_for machtype) extra_args
       in
       let extra_arg_regs = Array.concat extra_arg_regs_split in
       let with_handler env_handler e2 =
@@ -793,8 +793,8 @@ class virtual selector_generic =
         let s2 : Sub_cfg.t = s2#extract in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
         List.iter2
-          (fun extra_arg_reg rv ->
-            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) extra_arg_reg rv
+          (fun arg_reg rv ->
+            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) arg_reg rv
               Debuginfo.none)
           ([| Proc.loc_exn_bucket |] :: extra_arg_regs_split)
           rv_list;
@@ -1091,7 +1091,7 @@ class virtual selector_generic =
           (typ_val :: List.map snd extra_args)
       in
       let extra_arg_regs_split =
-        List.map (fun (_param, machtype) -> Reg.createv machtype) extra_args
+        List.map (fun (_param, machtype) -> self#regs_for machtype) extra_args
       in
       let extra_arg_regs = Array.concat extra_arg_regs_split in
       let with_handler env_handler e2 =
@@ -1119,8 +1119,8 @@ class virtual selector_generic =
         in
         Sub_cfg.mark_as_trap_handler s2 ~exn_label;
         List.iter2
-          (fun extra_arg_reg rv ->
-            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) extra_arg_reg rv
+          (fun arg_reg rv ->
+            Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move) arg_reg rv
               Debuginfo.none)
           ([| Proc.loc_exn_bucket |] :: extra_arg_regs_split)
           rv_list;
