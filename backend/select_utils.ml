@@ -77,7 +77,10 @@ let env_add_regs_for_exception_extra_args id extra_args env =
   }
 
 let env_find_regs_for_exception_extra_args id env =
-  Int.Map.find id env.regs_for_exception_extra_args
+  try Int.Map.find id env.regs_for_exception_extra_args
+  with Not_found ->
+    Misc.fatal_errorf
+      "Could not find exception extra args registers for continuation %d" id
 
 let _env_find_with_provenance id env = V.Map.find id env.vars
 
