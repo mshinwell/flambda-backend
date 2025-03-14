@@ -383,7 +383,9 @@ class virtual selector_generic =
           Select_utils.env_find_regs_for_exception_extra_args cont env
       in
       let rd = Array.append [| Proc.loc_exn_bucket |] extra_args_regs in
-      self#insert env (Op Move) r1 rd;
+      Array.iter2
+        (fun r1 rd -> self#insert env (Op Move) [| r1 |] [| rd |])
+        r1 rd;
       self#insert_debug' env (Cfg.Raise k) dbg rd [||];
       set_traps_for_raise env;
       None
