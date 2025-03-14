@@ -428,18 +428,59 @@ let translate_apply0 ~dbg_with_inlined:dbg env res apply =
       in
       C.resume ~dbg ~stack ~f ~arg ~last_fiber, free_vars, env, res, Ece.all)
 
-(* Function calls that have an exn continuation with extra arguments must be
-   wrapped with assignments for the mutable variables used to pass the extra
-   arguments. *)
-(* CR mshinwell: Add first-class support in Cmm for the concept of an exception
-   handler with extra arguments. *)
 let translate_apply env res apply =
   let dbg = Env.add_inlined_debuginfo env (Apply.dbg apply) in
   warn_if_unused_inlined_attribute apply ~dbg_with_inlined:dbg;
   let call, free_vars, env, res, effs =
     translate_apply0 ~dbg_with_inlined:dbg env res apply
   in
-  call, free_vars, env, res, effs
+  let k_exn = Apply.exn_continuation apply in
+  let extra_args = Exn_continuation.extra_args k_exn in
+  if Misc.Stdlib.List.is_empty extra_args
+  then call, free_vars, env, res, effs
+  else
+    (* If there are extra args, create a wrapper continuation, as we do when
+       inlining a function into a context where the exception continuation takes
+       extra args. *)
+    let env, res, free_vars, effs, extra_args_rev =
+      (* Obtain the Cmm expressions for the extra args *)
+      List.fold_left
+        (fun (env, res, free_vars, effs, extra_args_rev)
+             (extra_arg_simple, _kind) ->
+          let { To_cmm_env.env;
+                res;
+                expr = { cmm = extra_arg; free_vars = free_vars'; effs = effs' }
+              } =
+            C.simple ~dbg env res extra_arg_simple
+          in
+          ( env,
+            res,
+            Backend_var.Set.union free_vars free_vars',
+            Ece.join effs effs',
+            extra_arg :: extra_args_rev ))
+        (env, res, free_vars, effs, [])
+        extra_args
+    in
+    let extra_args = List.rev extra_args_rev in
+    let exn_var = Backend_var.create_local "*exn*" in
+    let handler_cont = Lambda.next_raise_count () in
+    let handler =
+      (* This exception handler has no extra args, but reraises to the one which
+         does. The exception arising from the function application is in
+         [exn_var]. *)
+      C.raise_prim Raise_reraise (Cvar exn_var) ~extra_args dbg
+    in
+    let cmm =
+      (* Catch any exceptions from the function application and send them to our
+         handler *)
+      C.trywith
+        ~exn_var:(Backend_var.With_provenance.create exn_var)
+        ~extra_args:[] ~dbg:(Apply.dbg apply) ~body:call ~handler_cont ~handler
+        ()
+    in
+    cmm, free_vars, env, res, effs
+
+(* Helpers for the translation of [Switch] expressions. *)
 
 (* Helpers for translating [Apply_cont] expressions *)
 
