@@ -1426,7 +1426,7 @@ let effects_and_coeffects_of_unary_primitive p : Effects_and_coeffects.t =
   | Opaque_identity _ -> Arbitrary_effects, Has_coeffects, Strict
   | Int_arith (_, (Neg | Swap_byte_endianness))
   | Num_conv _ | Boolean_not | Reinterpret_64_bit_word _ ->
-    No_effects, No_coeffects, Strict
+    No_effects, No_coeffects, Delay
   | Float_arith (_width, (Abs | Neg)) ->
     (* Float operations are not really pure since they actually access the
        globally mutable rounding mode, which can be changed (but only from C
@@ -1867,7 +1867,7 @@ let effects_and_coeffects_of_binary_primitive p : Effects_and_coeffects.t =
     reading_from_a_string_or_bigstring Mutable
   | Phys_equal _ -> No_effects, No_coeffects, Strict
   | Int_arith (_kind, (Add | Sub | Mul | Div | Mod | And | Or | Xor)) ->
-    No_effects, No_coeffects, Strict
+    No_effects, No_coeffects, Delay
   | Int_shift _ -> No_effects, No_coeffects, Strict
   | Int_comp _ -> No_effects, No_coeffects, Strict
   | Float_arith (_width, (Add | Sub | Mul | Div)) ->
