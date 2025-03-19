@@ -8,3 +8,11 @@ external array_get
 [@@layout_poly]
 
 let f (t : t) i = array_get t i
+
+let f x =
+  let x = x + x in
+  let x = x + x in
+  let x = x + x in
+  let x = x + x in
+  let x = x + x in
+  x
