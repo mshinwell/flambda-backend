@@ -112,8 +112,6 @@ int caml_read_trailer(int fd, struct exec_trailer *trail)
       ? 0 : WRONG_MAGIC;
 }
 
-enum caml_byte_program_mode caml_byte_program_mode = STANDARD;
-
 int caml_attempt_open(char_os **name, struct exec_trailer *trail,
                       int do_open_script)
 {
@@ -461,7 +459,7 @@ extern void caml_install_invalid_parameter_handler(void);
 
 CAMLexport void caml_main(char_os **argv)
 {
-  int fd, pos;
+  int fd = -1, pos;
   struct exec_trailer trail;
   struct channel * chan;
   value res;
@@ -494,9 +492,13 @@ CAMLexport void caml_main(char_os **argv)
   /* Determine position of bytecode file */
   pos = 0;
 
-  /* First, try argv[0] (when ocamlrun is called by a bytecode program) */
-  exe_name = argv[0];
-  fd = caml_attempt_open(&exe_name, &trail, 0);
+  proc_self_exe = caml_executable_name();
+
+  if (caml_byte_program_mode != APPENDED || proc_self_exe == NULL) {
+    /* First, try argv[0] (when ocamlrun is called by a bytecode program) */
+    exe_name = argv[0];
+    fd = caml_attempt_open(&exe_name, &trail, 0);
+  }
 
   /* Little grasshopper wonders why we do that at all, since
      "The current executable is ocamlrun itself, it's never a bytecode
@@ -504,9 +506,17 @@ CAMLexport void caml_main(char_os **argv)
      With -custom, we have an executable that is ocamlrun itself
      concatenated with the bytecode.  So, if the attempt with argv[0]
      failed, it is worth trying again with executable_name. */
-  if (fd < 0 && (proc_self_exe = caml_executable_name()) != NULL) {
-    exe_name = proc_self_exe;
-    fd = caml_attempt_open(&exe_name, &trail, 0);
+  if (caml_byte_program_mode == APPENDED || fd < 0) {
+    if (proc_self_exe != NULL) {
+      exe_name = proc_self_exe;
+      fd = caml_attempt_open(&exe_name, &trail, 0);
+    } else {
+      caml_stat_free(proc_self_exe);
+    }
+    if (fd < 0 && caml_byte_program_mode == APPENDED)
+      error("unable to open file '%s'", caml_stat_strdup_of_os(exe_name));
+  } else {
+    caml_stat_free(proc_self_exe);
   }
 
   if (fd < 0) {
