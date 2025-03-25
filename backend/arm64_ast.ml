@@ -202,6 +202,16 @@ module Instruction_name = struct
     | SXTW
     | UXTB
     | UXTH
+    (* Atomics *)
+    | LDADD
+    | LDCLR
+    | LDEOR
+    | LDSET
+    | LDSMAX
+    | LDSMIN
+    | LDUMAX
+    | LDUMIN
+    | STXR
     (* neon *)
     | MOV
     | MOVI

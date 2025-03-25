@@ -116,6 +116,16 @@ module Instruction_name : sig
     | SXTW
     | UXTB
     | UXTH
+    (* Atomics *)
+    | LDADD
+    | LDCLR
+    | LDEOR
+    | LDSET
+    | LDSMAX
+    | LDSMIN
+    | LDUMAX
+    | LDUMIN
+    | STXR
     (* neon *)
     | MOV
     | MOVI

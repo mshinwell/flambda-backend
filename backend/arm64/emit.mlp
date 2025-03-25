@@ -1010,6 +1010,50 @@ let move (src : Reg.t) (dst : Reg.t) =
        "Illegal move between registers of differing types (%a to %a)\n"
        Printreg.reg src Printreg.reg dst
 
+let emit_atomic instr op (size : Cmm.atomic_bitwidth) addr =
+  (* Requires armv8 atomic instructions that are mandatory at architecture
+     revision 8.4 and later. *)
+  let first_memory_arg_index =
+    match op with
+    | Compare_set -> 2
+    | Fetch_and_add -> 1
+    | Add | Sub | Land | Lor | Lxor -> 1
+    | Exchange -> 1
+    | Compare_exchange -> 2
+  in
+  let dst =
+    DSL.emit_addressing addr instr first_memory_arg_index
+  in
+  let src_index = first_memory_arg_index - 1 in
+  let typ, src =
+    match size with
+    | Thirtytwo -> DSL.DWORD, DSL.emit_reg_w instr src_index
+    | (Sixtyfour|Word) -> DSL.QWORD, DSL.emit_reg instr src_index
+  in
+  DSL.Address_sanitizer.emit_sanitize ~dependencies:[|src|] ~address:dst
+    DSL.Thirtytwo_unsigned DSL.Store_modify;
+  match op with
+  | Fetch_and_add ->
+    assert (Reg.same_loc instr.res.(0) instr.arg.(0));
+    DSL.ins DSL.I.LDADDAL [| src; dst |]
+  | Add -> DSL.ins DSL.I.LDADD [| src; dst |]
+  | Sub -> DSL.ins DSL.I.LDSUB [| src; dst |]
+  | Land -> DSL.ins DSL.I.LDCLR [| src; dst |] (* XXX *)
+  | Lor -> DSL.ins DSL.I.LDSET [| src; dst |]
+  | Lxor -> DSL.ins DSL.I.LDEOR [| src; dst |]
+  | Compare_set ->
+    (* compare_with is already in src, set_to is in instr.arg.(1) *)
+    assert (Reg.is_reg instr.arg.(1));
+    DSL.ins DSL.I.CAS [| src; DSL.emit_reg instr.arg.(1); dst |]
+  | Compare_exchange ->
+    (* compare_with is already in src, set_to is in instr.arg.(1), result in src *)
+    assert (Reg.is_reg instr.arg.(1));
+    DSL.ins DSL.I.CAS [| src; DSL.emit_reg instr.arg.(1); dst |]
+  | Exchange ->
+    (* no need for a "lock" prefix for XCHG with a memory operand *)
+    assert (Reg.is_reg instr.arg.(0));
+    DSL.ins DSL.I.SWP [| src; dst |]
+
 let emit_reinterpret_cast (cast : Cmm.reinterpret_cast) i =
     let src = i.arg.(0) in
     let dst = i.res.(0) in
