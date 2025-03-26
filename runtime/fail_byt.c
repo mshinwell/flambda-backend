@@ -79,9 +79,7 @@ CAMLexport void caml_raise_async(value v)
   }
 
   /* Restore all local allocations state for the new stack */
-  Caml_state->local_sp = Caml_state->current_stack->local_sp;
-  Caml_state->local_top = Caml_state->current_stack->local_top;
-  Caml_state->local_limit = Caml_state->current_stack->local_limit;
+  caml_sync_local_arenas_from_current_stack_to_caml_state();
 
   *Caml_state->external_raise_async->exn_bucket = v;
 

@@ -493,7 +493,7 @@ CAMLprim value caml_atomic_lxor (value ref, value incr)
 CAMLexport int caml_is_stack (value v)
 {
   int i;
-  // We elide a call to caml_refresh_locals here for speed, since we never 
+  // We elide a call to caml_refresh_locals here for speed, since we never
   // read the local sp.
   struct caml_local_arenas* loc = Caml_state->current_stack->local_arenas;
   if (!Is_block(v)) return 0;
@@ -543,6 +543,13 @@ CAMLexport caml_local_arenas* caml_refresh_locals(struct stack_info* stack)
   return s;
 }
 
+CAMLexport void caml_sync_local_arenas_from_current_stack_to_caml_state(void)
+{
+  Caml_state->local_sp = Caml_state->current_stack->local_sp;
+  Caml_state->local_top = Caml_state->current_stack->local_top;
+  Caml_state->local_limit = Caml_state->current_stack->local_limit;
+}
+
 CAMLexport void caml_use_local_arenas(caml_local_arenas* s, uintnat local_sp)
 {
   Caml_state->current_stack->local_arenas = s;
@@ -558,9 +565,7 @@ CAMLexport void caml_use_local_arenas(caml_local_arenas* s, uintnat local_sp)
   }
 
   // Sync changes to the root of [Caml_state], ready for OCaml code.
-  Caml_state->local_sp = Caml_state->current_stack->local_sp;
-  Caml_state->local_top = Caml_state->current_stack->local_top;
-  Caml_state->local_limit = Caml_state->current_stack->local_limit;
+  caml_sync_local_arenas_from_current_stack_to_caml_state();
 }
 
 void caml_free_local_arenas(caml_local_arenas* s) {

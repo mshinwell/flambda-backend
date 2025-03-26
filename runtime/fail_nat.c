@@ -111,6 +111,10 @@ CAMLno_asan void caml_raise_async(value v)
 
   CAMLassert(!Is_exception_result(v));
 
+  /* There must always be an async exn handler (caml_start_program installs
+     one). */
+  CAMLassert(Caml_state->async_exn_handler != NULL);
+
   /* Free stacks until we get back to the stack on which the async exn
      handler lives.  (Note that we cannot cross a C stack chunk, since
      installation of such a chunk via the callback mechanism always involves
@@ -133,9 +137,7 @@ CAMLno_asan void caml_raise_async(value v)
   }
 
   /* Restore all local allocations state for the new stack */
-  Caml_state->local_sp = Caml_state->current_stack->local_sp;
-  Caml_state->local_top = Caml_state->current_stack->local_top;
-  Caml_state->local_limit = Caml_state->current_stack->local_limit;
+  caml_sync_local_arenas_from_current_stack_to_caml_state();
 
   /* Do not run callbacks here: we are already raising an async exn,
      so no need to check for another one, and avoiding polling here
