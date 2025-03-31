@@ -18,6 +18,29 @@
 
 [@@@ocaml.warning "+a-4-9-40-41-42"]
 
+type is_immediate_result =
+  | Is_immediate of bool
+  | Use_default
+
+type is_simple_expr_result =
+  | Simple_if_all_args_are
+  | Use_default
+
+type effects_of_result =
+  | Effects_of_args
+  | Use_default
+
+type select_operation_result =
+  | Rewritten of Cfg_selectgen.basic_or_terminator * Cmm.expression list
+  | Select_operation_then_rewrite of
+      Cmm.operation
+      * Cmm.expression list
+      * Debuginfo.t
+      * (Cfg_selectgen.basic_or_terminator ->
+        args:Cmm.expression list ->
+        select_operation_result)
+  | Use_default
+
 type trap_stack_info =
   | Unreachable
   | Reachable of Simple_operation.trap_stack
