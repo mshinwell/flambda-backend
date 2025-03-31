@@ -228,227 +228,242 @@ let pseudoregs_for_operation op arg res =
 
 (* The selector class *)
 
-class selector =
-  object (self)
-    inherit Cfg_selectgen.selector_generic as super
+type is_immediate_result =
+  | Is_immediate of bool
+  | Use_default
 
-    method! is_immediate op n =
-      match op with
-      | Iadd | Isub | Imul | Iand | Ior | Ixor | Icomp _ -> is_immediate n
-      | _ -> super#is_immediate op n
+type is_simple_expr_result =
+  | Simple_if_all_args_are
+  | Use_default
 
-    method is_immediate_test _cmp n = is_immediate n
+type effects_of_result =
+  | Effects_of_args
+  | Use_default
 
-    method! is_simple_expr e =
-      match e with
-      | Cop (Cextcall { func = fn }, args, _) when List.mem fn inline_ops ->
-        (* inlined ops are simple if their arguments are *)
-        List.for_all self#is_simple_expr args
-      | _ -> super#is_simple_expr e
+type select_operation_result =
+  | Rewritten of Cfg_selectgen.basic_or_terminator * Cmm.expression list
+  | Select_operation_then_rewrite of
+      Cmm.operation
+      * Cmm.expression list
+      * Debuginfo.t
+      * (Cfg_selectgen.basic_or_terminator ->
+        args:Cmm.expression list ->
+        select_operation_result)
+  | Use_default
 
-    method! effects_of e =
-      match e with
-      | Cop (Cextcall { func = fn }, args, _) when List.mem fn inline_ops ->
-        Select_utils.Effect_and_coeffect.join_list_map args self#effects_of
-      | _ -> super#effects_of e
+type select_store_result =
+  | Rewritten of Cfg_selectgen.basic_or_terminator * Cmm.expression list
+  | Use_default
 
-    method select_addressing _chunk exp =
-      let a, d = select_addr exp in
-      (* PR#4625: displacement must be a signed 32-bit immediate *)
-      if not (is_immediate d)
-      then Iindexed 0, exp
-      else
-        match a with
-        | Asymbol s ->
-          let glob : Arch.sym_global =
-            match s.sym_global with Global -> Global | Local -> Local
-          in
-          Ibased (s.sym_name, glob, d), Ctuple []
-        | Alinear e -> Iindexed d, e
-        | Aadd (e1, e2) -> Iindexed2 d, Ctuple [e1; e2]
-        | Ascale (e, scale) -> Iscaled (scale, d), e
-        | Ascaledadd (e1, e2, scale) ->
-          Iindexed2scaled (scale, d), Ctuple [e1; e2]
+module Selection = struct
+  let is_immediate (op : Simple_operation.integer_operation) n =
+    match op with
+    | Iadd | Isub | Imul | Iand | Ior | Ixor | Icomp _ ->
+      Is_immediate (is_immediate n)
+    | _ -> Use_default
 
-    method! select_store is_assign addr exp =
-      match exp with
-      | Cconst_int (n, _dbg) when is_immediate n ->
-        Specific (Istore_int (Nativeint.of_int n, addr, is_assign)), Ctuple []
-      | Cconst_natint (n, _dbg) when is_immediate_natint n ->
-        Specific (Istore_int (n, addr, is_assign)), Ctuple []
-      | Cconst_int _ | Cconst_vec128 _
-      | Cconst_natint (_, _)
-      | Cconst_float32 (_, _)
-      | Cconst_float (_, _)
-      | Cconst_symbol (_, _)
-      | Cvar _
-      | Clet (_, _, _)
-      | Cphantom_let (_, _, _)
-      | Ctuple _
-      | Cop (_, _, _)
-      | Csequence (_, _)
-      | Cifthenelse (_, _, _, _, _, _, _)
-      | Cswitch (_, _, _, _, _)
-      | Ccatch (_, _, _, _)
-      | Cexit (_, _, _)
-      | Ctrywith (_, _, _, _, _, _, _) ->
-        super#select_store is_assign addr exp
+  let is_immediate_test t _cmp n = is_immediate t n
 
-    method! select_operation op args dbg ~label_after =
-      match op with
-      (* Recognize the LEA instruction *)
-      | Caddi | Caddv | Cadda | Csubi | Cor -> (
-        match self#select_addressing Word_int (Cop (op, args, dbg)) with
-        | Iindexed _, _ | Iindexed2 0, _ ->
-          super#select_operation op args dbg ~label_after
-        | ( ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr),
-            arg ) ->
-          specific (Ilea addr), [arg])
-      (* Recognize float arithmetic with memory. *)
-      | Caddf width ->
-        self#select_floatarith true width Simple_operation.Iaddf Arch.Ifloatadd
-          args
-      | Csubf width ->
-        self#select_floatarith false width Simple_operation.Isubf Arch.Ifloatsub
-          args
-      | Cmulf width ->
-        self#select_floatarith true width Simple_operation.Imulf Arch.Ifloatmul
-          args
-      | Cdivf width ->
-        self#select_floatarith false width Simple_operation.Idivf Arch.Ifloatdiv
-          args
-      | Cpackf32 ->
-        (* We must operate on registers. This is because if the second argument
-           was a float stack slot, the resulting UNPCKLPS instruction would
-           enforce the validity of loading it as a 128-bit memory location, even
-           though it only loads 64 bits. *)
-        specific (Isimd (SSE Interleave_low_32_regs)), args
-      (* Special cases overriding C implementations (regardless of
-         [@@builtin]). *)
-      | Cextcall { func = "sqrt" as func; _ }
-      (* x86 intrinsics ([@@builtin]) *)
-      | Cextcall { func; builtin = true; _ } -> (
-        match func with
-        | "caml_rdtsc_unboxed" -> specific Irdtsc, args
-        | "caml_rdpmc_unboxed" -> specific Irdpmc, args
-        | "caml_pause_hint" -> specific Ipause, args
-        | "caml_load_fence" -> specific Ilfence, args
-        | "caml_store_fence" -> specific Isfence, args
-        | "caml_memory_fence" -> specific Imfence, args
-        | "caml_cldemote" ->
-          let addr, eloc =
-            self#select_addressing Word_int (one_arg "cldemote" args)
-          in
-          specific (Icldemote addr), [eloc]
-        | _ -> (
-          match Simd_selection.select_operation_cfg func args with
-          | Some (op, args) -> Basic (Op op), args
-          | None -> super#select_operation op args dbg ~label_after))
-      (* Recognize store instructions *)
-      | Cstore (((Word_int | Word_val) as chunk), _init) -> (
-        match args with
-        | [loc; Cop (Caddi, [Cop (Cload _, [loc'], _); Cconst_int (n, _dbg)], _)]
-          when Stdlib.( = ) loc loc' && is_immediate n ->
-          let addr, arg = self#select_addressing chunk loc in
-          specific (Ioffset_loc (n, addr)), [arg]
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Cbswap { bitwidth } ->
-        let bitwidth = select_bitwidth bitwidth in
-        specific (Ibswap { bitwidth }), args
-      | Casr -> (
-        (* Recognize sign extension *)
-        match args with
-        | [Cop (Clsl, [k; Cconst_int (32, _)], _); Cconst_int (32, _)] ->
-          specific Isextend32, [k]
-        | _ -> super#select_operation op args dbg ~label_after)
-      (* Recognize zero extension *)
-      | Clsr -> (
-        match args with
-        | [Cop (Clsl, [k; Cconst_int (32, _)], _); Cconst_int (32, _)] ->
-          specific Izextend32, [k]
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Cand -> (
-        match args with
-        | [arg; Cconst_int (0xffff_ffff, _)]
-        | [arg; Cconst_natint (0xffff_ffffn, _)]
-        | [Cconst_int (0xffff_ffff, _); arg]
-        | [Cconst_natint (0xffff_ffffn, _); arg] ->
-          specific Izextend32, [arg]
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Ccsel _ -> (
-        match args with
-        | [cond; ifso; ifnot] -> (
-          let cond, earg = self#select_condition cond in
-          match cond with
-          | Ifloattest (w, CFeq) ->
-            (* CFeq cannot be represented as cmov without a jump. CFneq emits
-               cmov for "unordered" and "not equal" cases. Use Cneq and swap the
-               arguments. *)
-            Basic (Op (Csel (Ifloattest (w, CFneq)))), [earg; ifnot; ifso]
-          | _ -> Basic (Op (Csel cond)), [earg; ifso; ifnot])
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Cprefetch { is_write; locality } ->
-        (* Emit prefetch for read hint when prefetchw is not supported. Matches
-           the behavior of gcc's __builtin_prefetch *)
-        let is_write =
-          if is_write && not (Arch.Extension.enabled PREFETCHW)
-          then false
-          else is_write
+  let is_simple_expr (expr : Cmm.expression) =
+    match expr with
+    | Cop (Cextcall { func = fn }, args, _) when List.mem fn inline_ops ->
+      (* inlined ops are simple if their arguments are *)
+      Simple_if_all_args_are
+    | _ -> Use_default
+
+  let effects_of (expr : Cmm.expression) =
+    match expr with
+    | Cop (Cextcall { func = fn }, args, _) when List.mem fn inline_ops ->
+      Simple_if_all_args_are
+    | _ -> Use_default
+
+  let select_addressing _chunk exp =
+    let a, d = select_addr exp in
+    (* PR#4625: displacement must be a signed 32-bit immediate *)
+    if not (is_immediate d)
+    then Iindexed 0, exp
+    else
+      match a with
+      | Asymbol s ->
+        let glob : Arch.sym_global =
+          match s.sym_global with Global -> Global | Local -> Local
         in
-        let locality : Arch.prefetch_temporal_locality_hint =
-          match select_locality locality with
-          | Moderate when is_write && not (Arch.Extension.enabled PREFETCHWT1)
-            ->
-            High
-          | l -> l
-        in
+        Ibased (s.sym_name, glob, d), Ctuple []
+      | Alinear e -> Iindexed d, e
+      | Aadd (e1, e2) -> Iindexed2 d, Ctuple [e1; e2]
+      | Ascale (e, scale) -> Iscaled (scale, d), e
+      | Ascaledadd (e1, e2, scale) -> Iindexed2scaled (scale, d), Ctuple [e1; e2]
+
+  let select_store is_assign addr exp =
+    match exp with
+    | Cconst_int (n, _dbg) when is_immediate n ->
+      Rewritten
+        (Specific (Istore_int (Nativeint.of_int n, addr, is_assign)), Ctuple [])
+    | Cconst_natint (n, _dbg) when is_immediate_natint n ->
+      Rewritten (Specific (Istore_int (n, addr, is_assign)), Ctuple [])
+    | Cconst_int _ | Cconst_vec128 _
+    | Cconst_natint (_, _)
+    | Cconst_float32 (_, _)
+    | Cconst_float (_, _)
+    | Cconst_symbol (_, _)
+    | Cvar _
+    | Clet (_, _, _)
+    | Cphantom_let (_, _, _)
+    | Ctuple _
+    | Cop (_, _, _)
+    | Csequence (_, _)
+    | Cifthenelse (_, _, _, _, _, _, _)
+    | Cswitch (_, _, _, _, _)
+    | Ccatch (_, _, _, _)
+    | Cexit (_, _, _)
+    | Ctrywith (_, _, _, _, _, _, _) ->
+      Use_default
+
+  (* Recognize float arithmetic with mem *)
+
+  let select_floatarith t commutative width (regular_op : Simple_operation.t)
+      mem_op args : Cfg_selectgen.basic_or_terminator * Cmm.expression list =
+    let open Cmm in
+    match width, args with
+    | ( Float64,
+        [arg1; Cop (Cload { memory_chunk = Double as chunk; _ }, [loc2], _)] )
+    | ( Float32,
+        [ arg1;
+          Cop
+            ( Cload { memory_chunk = Single { reg = Float32 } as chunk; _ },
+              [loc2],
+              _ ) ] ) ->
+      let addr, arg2 = select_addressing t chunk loc2 in
+      specific (Ifloatarithmem (width, mem_op, addr)), [arg1; arg2]
+    | ( Float64,
+        [Cop (Cload { memory_chunk = Double as chunk; _ }, [loc1], _); arg2] )
+    | ( Float32,
+        [ Cop
+            ( Cload { memory_chunk = Single { reg = Float32 } as chunk; _ },
+              [loc1],
+              _ );
+          arg2 ] )
+      when commutative ->
+      let addr, arg1 = select_addressing t chunk loc1 in
+      specific (Ifloatarithmem (width, mem_op, addr)), [arg2; arg1]
+    | _, [arg1; arg2] -> Basic (Op (Floatop (width, regular_op))), [arg1; arg2]
+    | _ -> assert false
+
+  let select_operation t ~generic_select_condition (op : Cmm.operation) args dbg
+      ~label_after =
+    match op with
+    (* Recognize the LEA instruction *)
+    | Caddi | Caddv | Cadda | Csubi | Cor -> (
+      match select_addressing t Word_int (Cop (op, args, dbg)) with
+      | Iindexed _, _ | Iindexed2 0, _ -> Use_default
+      | ((Iindexed2 _ | Iscaled _ | Iindexed2scaled _ | Ibased _) as addr), arg
+        ->
+        Rewritten (specific (Ilea addr), [arg]))
+    (* Recognize float arithmetic with memory. *)
+    | Caddf width -> select_floatarith t true width Iaddf Ifloatadd args
+    | Csubf width -> select_floatarith t false width Isubf Ifloatsub args
+    | Cmulf width -> select_floatarith t true width Imulf Ifloatmul args
+    | Cdivf width -> select_floatarith t false width Idivf Ifloatdiv args
+    | Cpackf32 ->
+      (* We must operate on registers. This is because if the second argument
+         was a float stack slot, the resulting UNPCKLPS instruction would
+         enforce the validity of loading it as a 128-bit memory location, even
+         though it only loads 64 bits. *)
+      specific (Isimd (SSE Interleave_low_32_regs)), args
+    (* Special cases overriding C implementations (regardless of
+       [@@builtin]). *)
+    | Cextcall { func = "sqrt" as func; _ }
+    (* x86 intrinsics ([@@builtin]) *)
+    | Cextcall { func; builtin = true; _ } -> (
+      match func with
+      | "caml_rdtsc_unboxed" -> specific Irdtsc, args
+      | "caml_rdpmc_unboxed" -> specific Irdpmc, args
+      | "caml_pause_hint" -> specific Ipause, args
+      | "caml_load_fence" -> specific Ilfence, args
+      | "caml_store_fence" -> specific Isfence, args
+      | "caml_memory_fence" -> specific Imfence, args
+      | "caml_cldemote" ->
         let addr, eloc =
-          self#select_addressing Word_int (one_arg "prefetch" args)
+          select_addressing t Word_int (one_arg "cldemote" args)
         in
-        specific (Iprefetch { is_write; addr; locality }), [eloc]
-      | _ -> super#select_operation op args dbg ~label_after
+        specific (Icldemote addr), [eloc]
+      | _ -> (
+        match Simd_selection.select_operation_cfg func args with
+        | Some (op, args) -> Rewritten (Basic (Op op), args)
+        | None -> Use_default))
+    (* Recognize store instructions *)
+    | Cstore (((Word_int | Word_val) as chunk), _init) -> (
+      match args with
+      | [loc; Cop (Caddi, [Cop (Cload _, [loc'], _); Cconst_int (n, _dbg)], _)]
+        when Stdlib.( = ) loc loc' && is_immediate n ->
+        let addr, arg = select_addressing t chunk loc in
+        Rewritten (specific (Ioffset_loc (n, addr)), [arg] s)
+      | _ -> Use_default)
+    | Cbswap { bitwidth } ->
+      let bitwidth = select_bitwidth bitwidth in
+      Rewritten (specific (Ibswap { bitwidth }), args)
+    | Casr -> (
+      (* Recognize sign extension *)
+      match args with
+      | [Cop (Clsl, [k; Cconst_int (32, _)], _); Cconst_int (32, _)] ->
+        Rewritten (specific Isextend32, [k])
+      | _ -> Use_default)
+    (* Recognize zero extension *)
+    | Clsr -> (
+      match args with
+      | [Cop (Clsl, [k; Cconst_int (32, _)], _); Cconst_int (32, _)] ->
+        Rewritten (specific Izextend32, [k])
+      | _ -> Use_default)
+    | Cand -> (
+      match args with
+      | [arg; Cconst_int (0xffff_ffff, _)]
+      | [arg; Cconst_natint (0xffff_ffffn, _)]
+      | [Cconst_int (0xffff_ffff, _); arg]
+      | [Cconst_natint (0xffff_ffffn, _); arg] ->
+        Rewritten (specific Izextend32, [arg])
+      | _ -> Use_default)
+    | Ccsel _ -> (
+      match args with
+      | [cond; ifso; ifnot] -> (
+        let cond, earg = generic_select_condition t cond in
+        match cond with
+        | Ifloattest (w, CFeq) ->
+          (* CFeq cannot be represented as cmov without a jump. CFneq emits cmov
+             for "unordered" and "not equal" cases. Use Cneq and swap the
+             arguments. *)
+          Rewritten
+            (Basic (Op (Csel (Ifloattest (w, CFneq)))), [earg; ifnot; ifso])
+        | _ -> Rewritten (Basic (Op (Csel cond)), [earg; ifso; ifnot]))
+      | _ -> Use_default)
+    | Cprefetch { is_write; locality } ->
+      (* Emit prefetch for read hint when prefetchw is not supported. Matches
+         the behavior of gcc's __builtin_prefetch *)
+      let is_write =
+        if is_write && not (Arch.Extension.enabled PREFETCHW)
+        then false
+        else is_write
+      in
+      let locality : Arch.prefetch_temporal_locality_hint =
+        match select_locality locality with
+        | Moderate when is_write && not (Arch.Extension.enabled PREFETCHWT1) ->
+          High
+        | l -> l
+      in
+      let addr, eloc = select_addressing t Word_int (one_arg "prefetch" args) in
+      Rewritten (specific (Iprefetch { is_write; addr; locality }), [eloc])
+    | _ -> Use_default
 
-    (* Recognize float arithmetic with mem *)
+  (* Deal with register constraints *)
 
-    method select_floatarith commutative width regular_op mem_op args
-        : Cfg_selectgen.basic_or_terminator * Cmm.expression list =
-      let open Cmm in
-      match width, args with
-      | ( Float64,
-          [arg1; Cop (Cload { memory_chunk = Double as chunk; _ }, [loc2], _)] )
-      | ( Float32,
-          [ arg1;
-            Cop
-              ( Cload { memory_chunk = Single { reg = Float32 } as chunk; _ },
-                [loc2],
-                _ ) ] ) ->
-        let addr, arg2 = self#select_addressing chunk loc2 in
-        specific (Ifloatarithmem (width, mem_op, addr)), [arg1; arg2]
-      | ( Float64,
-          [Cop (Cload { memory_chunk = Double as chunk; _ }, [loc1], _); arg2] )
-      | ( Float32,
-          [ Cop
-              ( Cload { memory_chunk = Single { reg = Float32 } as chunk; _ },
-                [loc1],
-                _ );
-            arg2 ] )
-        when commutative ->
-        let addr, arg1 = self#select_addressing chunk loc1 in
-        specific (Ifloatarithmem (width, mem_op, addr)), [arg2; arg1]
-      | _, [arg1; arg2] -> Basic (Op (Floatop (width, regular_op))), [arg1; arg2]
-      | _ -> assert false
-
-    (* Deal with register constraints *)
-
-    method! insert_op_debug env op dbg rs rd =
-      try
-        let rsrc, rdst = pseudoregs_for_operation op rs rd in
-        self#insert_moves env rs rsrc;
-        self#insert_debug env (Op op) dbg rsrc rdst;
-        self#insert_moves env rdst rd;
-        rd
-      with Use_default -> super#insert_op_debug env op dbg rs rd
-  end
+  let insert_op_debug env op dbg rs rd =
+    try
+      let rsrc, rdst = pseudoregs_for_operation op rs rd in
+      generic_insert_moves t env rs rsrc;
+      generic_insert_debug t env (Op op) dbg rsrc rdst;
+      generic_insert_moves t env rdst rd;
+      rd
+    with Use_default -> super#insert_op_debug env op dbg rs rd
+end
 
 let fundecl ~future_funcnames f =
   Cfg.reset_instr_id ();

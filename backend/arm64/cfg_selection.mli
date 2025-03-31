@@ -1,6 +1,4 @@
-(******************************************************************************
- *                             flambda-backend                                *
- * -------------------------------------------------------------------------- *
+(* -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
  * Copyright (c) 2025 Jane Street Group LLC                                   *
@@ -25,11 +23,4 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** Instruction selection, parameterised over the target machine. *)
-
-module Make (Target : Cfg_selectgen_target_intf.S) : sig
-  val emit_fundecl :
-    future_funcnames:Misc.Stdlib.String.Set.t ->
-    Cmm.fundecl ->
-    Cfg_with_layout.t
-end
+include Cfg_selectgen_target_intf.S
