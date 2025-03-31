@@ -217,12 +217,13 @@ let select_store ~is_assign:_ _addr _exp ~byte_offset :
     Select_utils.select_store_result =
   if not (is_offset kind !offset) then Out_of_range else Use_default
 
-let insert_move_extcall_arg env ty_arg src dst =
+let insert_move_extcall_arg _env ty_arg src dst :
+    Select_utils.insert_move_extcall_arg_result =
   let ty_arg_is_int32 =
     match ty_arg with
     | XInt32 -> true
     | XInt | XInt64 | XFloat32 | XFloat | XVec128 -> false
   in
   if macosx && ty_arg_is_int32 && is_stack_slot dst
-  then self#insert env (Op (Specific Imove32)) src dst
-  else self#insert_moves env src dst
+  then Rewritten (Op (Specific Imove32), src, dst)
+  else Use_default
