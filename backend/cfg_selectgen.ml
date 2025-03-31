@@ -312,7 +312,7 @@ type basic_or_terminator =
 
 let basic_op x = Basic (Op x)
 
-module Common_selector (T : sig end) = struct
+module Common_selector (T : Select_utils.Cfg_selectgen) = struct
   (* inherit [Label.t, Operation.t, Cfg.basic] Select_utils.common_selector *)
 
   let is_store op = match op with Store (_, _, _) -> true | _ -> false
