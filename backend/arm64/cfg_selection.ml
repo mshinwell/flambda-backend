@@ -70,106 +70,129 @@ let specific x ~label_after =
       (Cfg.Specific_can_raise { Cfg.op = x; label_after })
   else Cfg_selectgen.Basic Cfg.(Op (Specific x))
 
-class selector =
-  object (self)
-    inherit Cfg_selectgen.selector_generic as super
+type is_immediate_result =
+  | Is_immediate of bool
+  | Use_default
 
-    method is_immediate_test _cmp n = is_immediate n
+type is_simple_expr_result =
+  | Simple_if_all_args_are
+  | Use_default
 
-    method! is_immediate op n =
-      match op with
-      | Iadd | Isub -> n <= 0xFFF_FFF && n >= -0xFFF_FFF
-      | Iand | Ior | Ixor -> is_logical_immediate_int n
-      | Icomp _ -> is_immediate n
-      | _ -> super#is_immediate op n
+type effects_of_result =
+  | Effects_of_args
+  | Use_default
 
-    method! is_simple_expr =
-      function
-      (* inlined floating-point ops are simple if their arguments are *)
-      | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
-        List.for_all self#is_simple_expr args
-      | e -> super#is_simple_expr e
+type select_operation_result =
+  | Rewritten of Cfg_selectgen.basic_or_terminator * Cmm.expression list
+  | Select_operation_then_rewrite of
+      Cmm.operation
+      * Cmm.expression list
+      * Debuginfo.t
+      * (Cfg_selectgen.basic_or_terminator ->
+        args:Cmm.expression list ->
+        select_operation_result)
+  | Use_default
 
-    method! effects_of e =
-      match e with
-      | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
-        Select_utils.Effect_and_coeffect.join_list_map args self#effects_of
-      | e -> super#effects_of e
+module Selector = struct
+  let is_immediate (op : Simple_operation.t) n : is_immediate_result =
+    match op with
+    | Iadd | Isub -> n <= 0xFFF_FFF && n >= -0xFFF_FFF
+    | Iand | Ior | Ixor -> is_logical_immediate_int n
+    | Icomp _ -> is_immediate n
+    | _ -> Use_default
 
-    method select_addressing chunk =
-      function
-      | Cop ((Caddv | Cadda), [Cconst_symbol (s, _); Cconst_int (n, _)], _)
-        when use_direct_addressing s ->
-        Ibased (s.sym_name, n), Ctuple []
-      | Cop ((Caddv | Cadda), [arg; Cconst_int (n, _)], _)
-        when is_offset chunk n ->
-        Iindexed n, arg
-      | Cop
-          ( ((Caddv | Cadda) as op),
-            [arg1; Cop (Caddi, [arg2; Cconst_int (n, _)], _)],
-            dbg )
-        when is_offset chunk n ->
-        Iindexed n, Cop (op, [arg1; arg2], dbg)
-      | Cconst_symbol (s, _) when use_direct_addressing s ->
-        Ibased (s.sym_name, 0), Ctuple []
-      | arg -> Iindexed 0, arg
+  let is_immediate_test _cmp n = is_immediate n
 
-    method! select_operation op args dbg ~label_after =
-      let[@inline] specific op = specific op ~label_after in
-      match op with
-      (* Integer addition *)
-      | Caddi | Caddv | Cadda -> (
-        match args with
-        (* Shift-add *)
-        | [arg1; Cop (Clsl, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftadd, n)), [arg1; arg2]
-        | [arg1; Cop (Casr, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftadd, -n)), [arg1; arg2]
-        | [Cop (Clsl, [arg1; Cconst_int (n, _)], _); arg2] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftadd, n)), [arg2; arg1]
-        | [Cop (Casr, [arg1; Cconst_int (n, _)], _); arg2] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftadd, -n)), [arg2; arg1]
-        (* Multiply-add *)
-        | [arg1; Cop (Cmuli, args2, dbg)] | [Cop (Cmuli, args2, dbg); arg1] -> (
-          match self#select_operation Cmuli args2 dbg ~label_after with
-          | Basic (Op (Intop_imm (Ilsl, l))), [arg3] ->
-            specific (Ishiftarith (Ishiftadd, l)), [arg1; arg3]
-          | Basic (Op (Intop Imul)), [arg3; arg4] ->
-            specific Imuladd, [arg3; arg4; arg1]
-          | _ -> super#select_operation op args dbg ~label_after)
-        | _ -> super#select_operation op args dbg ~label_after)
-      (* Integer subtraction *)
-      | Csubi -> (
-        match args with
-        (* Shift-sub *)
-        | [arg1; Cop (Clsl, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftsub, n)), [arg1; arg2]
-        | [arg1; Cop (Casr, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64
-          ->
-          specific (Ishiftarith (Ishiftsub, -n)), [arg1; arg2]
-        (* Multiply-sub *)
-        | [arg1; Cop (Cmuli, args2, dbg)] -> (
-          match self#select_operation Cmuli args2 dbg ~label_after with
-          | Basic (Op (Intop_imm (Ilsl, l))), [arg3] ->
-            specific (Ishiftarith (Ishiftsub, l)), [arg1; arg3]
-          | Basic (Op (Intop Imul)), [arg3; arg4] ->
-            specific Imulsub, [arg3; arg4; arg1]
-          | _ -> super#select_operation op args dbg ~label_after)
-        | _ -> super#select_operation op args dbg ~label_after)
-      (* Recognize sign extension *)
-      | Casr -> (
-        match args with
-        | [Cop (Clsl, [k; Cconst_int (n, _)], _); Cconst_int (n', _)]
-          when n' = n && 0 < n && n < 64 ->
-          specific (Isignext (64 - n)), [k]
-        | _ -> super#select_operation op args dbg ~label_after)
-      (* Use trivial addressing mode for atomic loads *)
-      | Cload { memory_chunk; mutability; is_atomic = true } ->
+  let is_simple_expr (expr : Cmm.expression) : is_simple_expr_result =
+    match expr with
+    (* inlined floating-point ops are simple if their arguments are *)
+    | Cop (Cextcall { func }, _, _) when List.mem func inline_ops ->
+      Simple_if_all_args_are
+    (* XXX List.for_all self#is_simple_expr args *)
+    | _ -> Use_default
+
+  let effects_of (expr : Cmm.expression) : effects_of_result =
+    match expr with
+    | Cop (Cextcall { func }, _, _) when List.mem func inline_ops ->
+      Effects_of_args
+      (* XXX Select_utils.Effect_and_coeffect.join_list_map args
+         self#effects_of *)
+    | _ -> Use_default
+
+  let select_addressing chunk (expr : Cmm.expression) :
+      addressing_mode * Cmm.expression =
+    match expr with
+    | Cop ((Caddv | Cadda), [Cconst_symbol (s, _); Cconst_int (n, _)], _)
+      when use_direct_addressing s ->
+      Ibased (s.sym_name, n), Ctuple []
+    | Cop ((Caddv | Cadda), [arg; Cconst_int (n, _)], _) when is_offset chunk n
+      ->
+      Iindexed n, arg
+    | Cop
+        ( ((Caddv | Cadda) as op),
+          [arg1; Cop (Caddi, [arg2; Cconst_int (n, _)], _)],
+          dbg )
+      when is_offset chunk n ->
+      Iindexed n, Cop (op, [arg1; arg2], dbg)
+    | Cconst_symbol (s, _) when use_direct_addressing s ->
+      Ibased (s.sym_name, 0), Ctuple []
+    | arg -> Iindexed 0, arg
+
+  let select_operation (op : Cmm.operation) (args : Cmm.expression list)
+      ~label_after : select_operation_result =
+    let[@inline] specific op = specific op ~label_after in
+    let[@inline] rewrite_multiply_add_or_sub shift_op mul_op ~arg1 ~args2 dbg =
+      Select_operation_then_rewrite
+        ( Cmuli,
+          args2,
+          dbg,
+          fun (basic_or_terminator : Cfg_selectgen.basic_or_terminator) ~args ->
+            match basic_or_terminator, args with
+            | Basic (Op (Intop_imm (Ilsl, l))), [arg3] ->
+              Rewritten (specific (Ishiftarith (shift_op, l)), [arg1; arg3])
+            | Basic (Op (Intop Imul)), [arg3; arg4] ->
+              Rewritten (specific mul_op, [arg3; arg4; arg1])
+            | _ -> Use_default )
+    in
+    match op with
+    (* Integer addition *)
+    | Caddi | Caddv | Cadda -> (
+      match args with
+      (* Shift-add *)
+      | [arg1; Cop (Clsl, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftadd, n)), [arg1; arg2])
+      | [arg1; Cop (Casr, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftadd, -n)), [arg1; arg2])
+      | [Cop (Clsl, [arg1; Cconst_int (n, _)], _); arg2] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftadd, n)), [arg2; arg1])
+      | [Cop (Casr, [arg1; Cconst_int (n, _)], _); arg2] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftadd, -n)), [arg2; arg1])
+      (* Multiply-add *)
+      | [arg1; Cop (Cmuli, args2, dbg)] | [Cop (Cmuli, args2, dbg); arg1] ->
+        rewrite_multiply_add_or_sub Ishiftadd Imuladd ~arg1 ~args2 dbg
+      | _ -> Use_default)
+    (* Integer subtraction *)
+    | Csubi -> (
+      match args with
+      (* Shift-sub *)
+      | [arg1; Cop (Clsl, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftsub, n)), [arg1; arg2])
+      | [arg1; Cop (Casr, [arg2; Cconst_int (n, _)], _)] when n > 0 && n < 64 ->
+        Rewritten (specific (Ishiftarith (Ishiftsub, -n)), [arg1; arg2])
+      (* Multiply-sub *)
+      | [arg1; Cop (Cmuli, args2, dbg)] ->
+        rewrite_multiply_add_or_sub Ishiftsub Imulsub ~arg1 ~args2 dbg
+      | _ -> Use_default)
+    (* Recognize sign extension *)
+    | Casr -> (
+      match args with
+      | [Cop (Clsl, [k; Cconst_int (n, _)], _); Cconst_int (n', _)]
+        when n' = n && 0 < n && n < 64 ->
+        Rewritten (specific (Isignext (64 - n)), [k])
+      | _ -> Use_default)
+    (* Use trivial addressing mode for atomic loads *)
+    | Cload { memory_chunk; mutability; is_atomic = true } ->
+      Rewritten
         ( Basic
             (Op
                (Load
@@ -179,99 +202,53 @@ class selector =
                     is_atomic = true
                   })),
           args )
-      (* Recognize floating-point negate and multiply *)
-      | Cnegf Float64 -> (
-        match args with
-        | [Cop (Cmulf Float64, args, _)] -> specific Inegmulf, args
-        | _ -> super#select_operation op args dbg ~label_after)
-      (* Recognize floating-point multiply and add/sub *)
-      | Caddf Float64 -> (
-        match args with
-        | [arg; Cop (Cmulf Float64, args, _)]
-        | [Cop (Cmulf Float64, args, _); arg] ->
-          specific Imuladdf, arg :: args
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Csubf Float64 -> (
-        match args with
-        | [arg; Cop (Cmulf Float64, args, _)] -> specific Imulsubf, arg :: args
-        | [Cop (Cmulf Float64, args, _); arg] ->
-          specific Inegmulsubf, arg :: args
-        | _ -> super#select_operation op args dbg ~label_after)
-      | Cpackf32 -> specific (Isimd Zip1_f32), args
-      (* Recognize floating-point square root *)
-      | Cextcall { func = "sqrt" | "sqrtf" | "caml_neon_float64_sqrt" } ->
-        specific Isqrtf, args
-      | Cextcall { func; builtin = true; _ } -> (
-        match Simd_selection.select_operation_cfg func args with
-        | Some (op, args) -> Basic (Op op), args
-        | None -> super#select_operation op args dbg ~label_after)
-      (* Recognize bswap instructions *)
-      | Cbswap { bitwidth } ->
-        let bitwidth = select_bitwidth bitwidth in
-        specific (Ibswap { bitwidth }), args
-      (* Other operations are regular *)
-      | _ -> super#select_operation op args dbg ~label_after
+    (* Recognize floating-point negate and multiply *)
+    | Cnegf Float64 -> (
+      match args with
+      | [Cop (Cmulf Float64, args, _)] -> Rewritten (specific Inegmulf, args)
+      | _ -> Use_default)
+    (* Recognize floating-point multiply and add/sub *)
+    | Caddf Float64 -> (
+      match args with
+      | [arg; Cop (Cmulf Float64, args, _)] | [Cop (Cmulf Float64, args, _); arg]
+        ->
+        Rewritten (specific Imuladdf, arg :: args)
+      | _ -> Use_default)
+    | Csubf Float64 -> (
+      match args with
+      | [arg; Cop (Cmulf Float64, args, _)] ->
+        Rewritten (specific Imulsubf, arg :: args)
+      | [Cop (Cmulf Float64, args, _); arg] ->
+        Rewritten (specific Inegmulsubf, arg :: args)
+      | _ -> Use_default)
+    | Cpackf32 -> Rewritten (specific (Isimd Zip1_f32), args)
+    (* Recognize floating-point square root *)
+    | Cextcall { func = "sqrt" | "sqrtf" | "caml_neon_float64_sqrt" } ->
+      Rewritten (specific Isqrtf, args)
+    | Cextcall { func; builtin = true; _ } -> (
+      match Simd_selection.select_operation_cfg func args with
+      | Some (op, args) -> Rewritten (Basic (Op op), args)
+      | None -> Use_default)
+    (* Recognize bswap instructions *)
+    | Cbswap { bitwidth } ->
+      let bitwidth = select_bitwidth bitwidth in
+      Rewritten (specific (Ibswap { bitwidth }), args)
+    (* Other operations are regular *)
+    | _ -> Use_default
 
-    method! emit_stores env dbg data regs_addr =
-      (* Override [emit_stores] to ensure that addressing mode always uses a
-         legal offset. *)
-      let offset = ref (-Arch.size_int) in
-      let base =
-        assert (Array.length regs_addr = 1);
-        ref regs_addr
-      in
-      List.iter
-        (fun arg ->
-          match self#emit_expr env arg ~bound_name:None with
-          | None -> assert false
-          | Some regs ->
-            for i = 0 to Array.length regs - 1 do
-              let r = regs.(i) in
-              let kind : Cmm.memory_chunk =
-                match r.Reg.typ with
-                | Float -> Double
-                | Float32 -> Single { reg = Float32 }
-                | Vec128 ->
-                  (* 128-bit memory operations are default unaligned. Aligned
-                     (big)array operations are handled separately via cmm. *)
-                  Onetwentyeight_unaligned
-                | Val | Addr | Int -> Word_val
-                | Valx2 ->
-                  Misc.fatal_error "Unexpected machtype_component Valx2"
-              in
-              if not (is_offset kind !offset)
-              then (
-                (* Use a temporary to store the address [!base + offset]. *)
-                let tmp = self#regs_for Cmm.typ_int in
-                self#insert_debug env
-                  (self#lift_op
-                     (self#make_const_int (Nativeint.of_int !offset)))
-                  dbg [||] tmp;
-                self#insert_debug env
-                  (self#lift_op (Operation.Intop Iadd))
-                  dbg (Array.append !base tmp) tmp;
-                (* Use the temporary as the new base address. *)
-                base := tmp;
-                offset := 0);
-              self#insert_debug env
-                (self#make_store kind (Iindexed !offset) false)
-                dbg
-                (Array.append [| r |] !base)
-                [||];
-              offset := !offset + Select_utils.size_component r.Reg.typ
-            done)
-        data
+  let select_store ~is_assign:_ _addr _exp ~byte_offset : select_store_result =
+    if not (is_offset kind !offset) then Out_of_range else Use_default
 
-    method! insert_move_extcall_arg env ty_arg src dst =
-      let ty_arg_is_int32 =
-        match ty_arg with
-        | XInt32 -> true
-        | XInt | XInt64 | XFloat32 | XFloat | XVec128 -> false
-      in
-      if macosx && ty_arg_is_int32 && is_stack_slot dst
-      then self#insert env (Op (Specific Imove32)) src dst
-      else self#insert_moves env src dst
-  end
+  let insert_move_extcall_arg env ty_arg src dst =
+    let ty_arg_is_int32 =
+      match ty_arg with
+      | XInt32 -> true
+      | XInt | XInt64 | XFloat32 | XFloat | XVec128 -> false
+    in
+    if macosx && ty_arg_is_int32 && is_stack_slot dst
+    then self#insert env (Op (Specific Imove32)) src dst
+    else self#insert_moves env src dst
+end
 
 let fundecl ~future_funcnames f =
   Cfg.reset_instr_id ();

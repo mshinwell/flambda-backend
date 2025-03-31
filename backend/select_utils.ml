@@ -719,14 +719,33 @@ module Select_utils = struct
     let a =
       ref (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int))
     in
+    let offset = ref (-Arch.size_int) in
+    let base =
+      assert (Array.length regs_addr = 1);
+      ref regs_addr
+    in
     List.iter
-      (fun e ->
-        let op, arg = self#select_store false !a e in
+      (fun arg ->
+        let select_store_result =
+          self#select_store ~is_assign:false !a arg ~byte_offset:!offset
+        in
+        let arg =
+          match select_store_result with
+          | Out_of_range -> arg
+          | Operation (_op, arg) -> arg
+          | Use_default -> assert false (* XXX *)
+        in
         match self#emit_expr env arg ~bound_name:None with
         | None -> assert false
         | Some regs -> (
-          match self#is_store op with
-          | true ->
+          let not_a_store =
+            match select_store_result with
+            | Out_of_range -> None
+            | Operation (op, _) -> if self#is_store op then None else Some op
+            | Use_default -> assert false (* XXX *)
+          in
+          match not_a_store with
+          | None ->
             for i = 0 to Array.length regs - 1 do
               let r = regs.(i) in
               let kind =
@@ -741,18 +760,35 @@ module Select_utils = struct
                 | Valx2 ->
                   Misc.fatal_error "Unexpected machtype_component Valx2"
               in
+              (match select_store_result with
+              | Out_of_range ->
+                (* Use a temporary to store the address [!base + offset]. *)
+                let tmp = self#regs_for Cmm.typ_int in
+                self#insert_debug env
+                  (self#lift_op
+                     (self#make_const_int (Nativeint.of_int !offset)))
+                  dbg [||] tmp;
+                self#insert_debug env
+                  (self#lift_op (Operation.Intop Iadd))
+                  dbg (Array.append !base tmp) tmp;
+                (* Use the temporary as the new base address. *)
+                base := tmp;
+                offset := 0
+              | Operation _ | Use_default -> ());
+              (* XXX why didn't this use [op]? *)
               self#insert_debug env
                 (self#make_store kind !a false)
                 dbg
                 (Array.append [| r |] regs_addr)
                 [||];
+              (* XXX need to resolve "a" vs. "offset" *)
               a := Arch.offset_addressing !a (size_component r.Reg.typ)
             done
-          | false ->
+          | Some op ->
             self#insert_debug env (self#lift_op op) dbg
               (Array.append regs regs_addr)
               [||];
-            a := Arch.offset_addressing !a (size_expr env e)))
+            a := Arch.offset_addressing !a (size_expr env arg)))
       data
 
   (* Emit an expression.
