@@ -35,6 +35,10 @@ type effects_of_result =
   | Effects_of_all_expressions of Cmm.expression list
   | Use_default
 
+type select_operation_then_rewrite_result =
+  | Rewritten of basic_or_terminator * Cmm.expression list
+  | Use_default
+
 type select_operation_result =
   | Rewritten of basic_or_terminator * Cmm.expression list
   | Select_operation_then_rewrite of
@@ -43,7 +47,7 @@ type select_operation_result =
       * Debuginfo.t
       * (basic_or_terminator ->
         args:Cmm.expression list ->
-        select_operation_result)
+        select_operation_then_rewrite_result)
   | Use_default
 
 type select_store_result =

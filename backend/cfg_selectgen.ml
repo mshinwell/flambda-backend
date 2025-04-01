@@ -629,9 +629,37 @@ struct
   let select_store is_assign addr arg : Operation.t * Cmm.expression =
     Store (Word_val, addr, is_assign), arg
 
+  (* Default instruction selection for integer operations *)
+
+  let select_arith_comm (op : Simple_operation.integer_operation)
+      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
+    match args with
+    | [arg; Cconst_int (n, _)] when is_immediate op n ->
+      basic_op (Intop_imm (op, n)), [arg]
+    | [Cconst_int (n, _); arg] when is_immediate op n ->
+      basic_op (Intop_imm (op, n)), [arg]
+    | _ -> basic_op (Intop op), args
+
+  let select_arith (op : Simple_operation.integer_operation)
+      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
+    match args with
+    | [arg; Cconst_int (n, _)] when is_immediate op n ->
+      basic_op (Intop_imm (op, n)), [arg]
+    | _ -> basic_op (Intop op), args
+
+  let select_arith_comp (cmp : Simple_operation.integer_comparison)
+      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
+    match args with
+    | [arg; Cconst_int (n, _)] when is_immediate (Icomp cmp) n ->
+      basic_op (Intop_imm (Icomp cmp, n)), [arg]
+    | [Cconst_int (n, _); arg]
+      when is_immediate (Icomp (Select_utils.swap_intcomp cmp)) n ->
+      basic_op (Intop_imm (Icomp (Select_utils.swap_intcomp cmp), n)), [arg]
+    | _ -> basic_op (Intop (Icomp cmp)), args
+
   (* Default instruction selection for operators *)
 
-  let select_operation0 t (op : Cmm.operation) (args : Cmm.expression list)
+  let select_operation0 (op : Cmm.operation) (args : Cmm.expression list)
       (dbg : Debuginfo.t) ~label_after :
       basic_or_terminator * Cmm.expression list =
     let wrong_num_args n =
@@ -677,19 +705,19 @@ struct
       else Terminator (Call_no_return external_call), args
     | Cload { memory_chunk; mutability; is_atomic } ->
       let arg = single_arg () in
-      let addressing_mode, eloc = select_addressing t memory_chunk arg in
+      let addressing_mode, eloc = Target.select_addressing memory_chunk arg in
       let mutability = select_mutable_flag mutability in
       ( basic_op (Load { memory_chunk; addressing_mode; mutability; is_atomic }),
         [eloc] )
     | Cstore (chunk, init) -> (
       let arg1, arg2 = two_args () in
-      let addr, eloc = select_addressing t chunk arg1 in
+      let addr, eloc = Target.select_addressing chunk arg1 in
       let is_assign =
         match init with Initialization -> false | Assignment -> true
       in
       match[@ocaml.warning "-fragile-match"] chunk with
       | Word_int | Word_val ->
-        let op, newarg2 = select_store t is_assign addr arg2 in
+        let op, newarg2 = select_store is_assign addr arg2 in
         basic_op op, [newarg2; eloc]
       | _ -> basic_op (Store (chunk, addr, is_assign)), [arg2; eloc]
       (* Inversion addr/datum in Istore *))
@@ -703,31 +731,31 @@ struct
              { bytes = 0; dbginfo = [placeholder_for_alloc_block_kind]; mode }),
         args )
     | Cpoll -> basic_op Poll, args
-    | Caddi -> select_arith_comm t Iadd args
-    | Csubi -> select_arith t Isub args
-    | Cmuli -> select_arith_comm t Imul args
-    | Cmulhi { signed } -> select_arith_comm t (Imulh { signed }) args
+    | Caddi -> select_arith_comm Iadd args
+    | Csubi -> select_arith Isub args
+    | Cmuli -> select_arith_comm Imul args
+    | Cmulhi { signed } -> select_arith_comm (Imulh { signed }) args
     | Cdivi -> basic_op (Intop Idiv), args
     | Cmodi -> basic_op (Intop Imod), args
-    | Cand -> select_arith_comm t Iand args
-    | Cor -> select_arith_comm t Ior args
-    | Cxor -> select_arith_comm t Ixor args
-    | Clsl -> select_arith t Ilsl args
-    | Clsr -> select_arith t Ilsr args
-    | Casr -> select_arith t Iasr args
+    | Cand -> select_arith_comm Iand args
+    | Cor -> select_arith_comm Ior args
+    | Cxor -> select_arith_comm Ixor args
+    | Clsl -> select_arith Ilsl args
+    | Clsr -> select_arith Ilsr args
+    | Casr -> select_arith Iasr args
     | Cclz { arg_is_non_zero } ->
       basic_op (Intop (Iclz { arg_is_non_zero })), args
     | Cctz { arg_is_non_zero } ->
       basic_op (Intop (Ictz { arg_is_non_zero })), args
     | Cpopcnt -> basic_op (Intop Ipopcnt), args
-    | Ccmpi comp -> select_arith_comp t (Isigned comp) args
-    | Caddv -> select_arith_comm t Iadd args
-    | Cadda -> select_arith_comm t Iadd args
-    | Ccmpa comp -> select_arith_comp t (Iunsigned comp) args
+    | Ccmpi comp -> select_arith_comp (Isigned comp) args
+    | Caddv -> select_arith_comm Iadd args
+    | Cadda -> select_arith_comm Iadd args
+    | Ccmpa comp -> select_arith_comp (Iunsigned comp) args
     | Ccmpf (w, comp) -> basic_op (Floatop (w, Icompf comp)), args
     | Ccsel _ ->
       let cond, ifso, ifnot = three_args () in
-      let cond, earg = select_condition t cond in
+      let cond, earg = select_condition cond in
       basic_op (Csel cond), [earg; ifso; ifnot]
     | Cnegf w -> basic_op (Floatop (w, Inegf)), args
     | Cabsf w -> basic_op (Floatop (w, Iabsf)), args
@@ -746,7 +774,7 @@ struct
           | Word | Sixtyfour -> Word_int
           | Thirtytwo -> Thirtytwo_signed
         in
-        let addr, eloc = select_addressing dst_size dst in
+        let addr, eloc = Target.select_addressing dst_size dst in
         basic_op (Intop_atomic { op; size; addr }), [src; eloc]
       | Compare_set | Compare_exchange ->
         let compare_with, set_to, dst = three_args () in
@@ -755,7 +783,7 @@ struct
           | Word | Sixtyfour -> Word_int
           | Thirtytwo -> Thirtytwo_signed
         in
-        let addr, eloc = select_addressing dst_size dst in
+        let addr, eloc = Target.select_addressing dst_size dst in
         basic_op (Intop_atomic { op; size; addr }), [compare_with; set_to; eloc]
       )
     | Cprobe { name; handler_code_sym; enabled_at_init } ->
@@ -772,43 +800,19 @@ struct
     | Ctuple_field (_, _) ->
       Misc.fatal_error "Selection.select_oper"
 
-  let rec select_operation t (op : Cmm.operation) (args : Cmm.expression list)
+  let rec select_operation (op : Cmm.operation) (args : Cmm.expression list)
       (dbg : Debuginfo.t) ~label_after :
       basic_or_terminator * Cmm.expression list =
-    match Target.select_operation op args dbg ~label_after with
+    match Target.select_operation op args ~label_after with
     | Rewritten (basic_or_terminator, args) -> basic_or_terminator, args
-    | Select_operation_then_rewrite (op, args, dbg, rewriter) ->
+    | Select_operation_then_rewrite (op, args, dbg, rewriter) -> (
       let basic_or_terminator, args =
-        select_operation t op args dbg ~label_after
+        select_operation op args dbg ~label_after
       in
-      rewriter t basic_or_terminator args dbg ~label_after
-    | Use_default -> select_operation0 t op args dbg ~label_after
-
-  let select_arith_comm (op : Simple_operation.integer_operation)
-      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
-    match args with
-    | [arg; Cconst_int (n, _)] when is_immediate op n ->
-      basic_op (Intop_imm (op, n)), [arg]
-    | [Cconst_int (n, _); arg] when is_immediate op n ->
-      basic_op (Intop_imm (op, n)), [arg]
-    | _ -> basic_op (Intop op), args
-
-  let select_arith (op : Simple_operation.integer_operation)
-      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
-    match args with
-    | [arg; Cconst_int (n, _)] when is_immediate op n ->
-      basic_op (Intop_imm (op, n)), [arg]
-    | _ -> basic_op (Intop op), args
-
-  let select_arith_comp (cmp : Simple_operation.integer_comparison)
-      (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
-    match args with
-    | [arg; Cconst_int (n, _)] when is_immediate (Icomp cmp) n ->
-      basic_op (Intop_imm (Icomp cmp, n)), [arg]
-    | [Cconst_int (n, _); arg]
-      when is_immediate (Icomp (Select_utils.swap_intcomp cmp)) n ->
-      basic_op (Intop_imm (Icomp (Select_utils.swap_intcomp cmp), n)), [arg]
-    | _ -> basic_op (Intop (Icomp cmp)), args
+      match rewriter basic_or_terminator ~args with
+      | Rewritten (basic_or_terminator, args) -> basic_or_terminator, args
+      | Use_default -> basic_or_terminator, args)
+    | Use_default -> select_operation0 op args dbg ~label_after
 
   let tailrec_label = ref Label.none
   (* set in emit_fundecl *)
@@ -933,6 +937,7 @@ struct
     emit_list exp_list
 
   and emit_tuple env sub_cfg exp_list =
+    (* XXX *)
     Array.concat (emit_tuple_not_flattened env sub_cfg exp_list)
 
   and emit_extcall_args env sub_cfg ty_args args =
@@ -1427,8 +1432,8 @@ struct
                         regs = r
                       }
                   in
-                  seq#insert_debug new_env (Cfg.Op naming_op) Debuginfo.none
-                    [||] [||])
+                  insert_debug new_env (Cfg.Op naming_op) Debuginfo.none [||]
+                    [||])
               ids_and_rs)
       in
       (nfail, trap_stack, is_cold, label), (r, s)
@@ -1569,8 +1574,7 @@ struct
                         regs
                       }
                   in
-                  seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||]
-                    [||])
+                  insert_debug env (Cfg.Op naming_op) Debuginfo.none [||] [||])
               (v :: List.map fst extra_args)
               rv_list)
       in
@@ -1638,9 +1642,10 @@ struct
       (emit_expr env sub_cfg exp ~bound_name:None)
       traps
 
-  and emit_tail_apply env sub_cfg ty op args dbg =
+  and emit_tail_apply env sub_cfg ty op args dbg : Sub_cfg.t Or_never_returns.t
+      =
     match emit_parts_list t env sub_cfg args with
-    | Never_returns -> ()
+    | Never_returns -> Never_returns
     | Ok (simple_args, env, sub_cfg) -> (
       let label_after = Cmm.new_label () in
       let new_op, new_args =
@@ -1648,8 +1653,8 @@ struct
       in
       match new_op with
       | Terminator (Call { op = Indirect; label_after } as term) ->
-        let r1 = emit_tuple t env sub_cfg new_args in
-        let rd = regs_for t ty in
+        let r1 = emit_tuple env sub_cfg new_args in
+        let rd = regs_for ty in
         let rarg = Array.sub r1 1 (Array.length r1 - 1) in
         let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
         let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
@@ -1657,20 +1662,24 @@ struct
         if stack_ofs = 0 && Select_utils.trap_stack_is_empty env
         then (
           let call = Cfg.Tailcall_func Indirect in
-          insert_moves t env rarg loc_arg;
-          insert_debug' t env call dbg (Array.append [| r1.(0) |] loc_arg) [||])
+          insert_moves env sub_cfg rarg loc_arg;
+          insert_debug' env sub_cfg call dbg
+            (Array.append [| r1.(0) |] loc_arg)
+            [||];
+          Ok sub_cfg)
         else (
-          insert_move_args t env rarg loc_arg stack_ofs;
-          insert_debug' t env term dbg
+          insert_move_args env sub_cfg rarg loc_arg stack_ofs;
+          insert_debug' env sub_cfg term dbg
             (Array.append [| r1.(0) |] loc_arg)
             loc_res;
-          sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
+          let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
           Select_utils.set_traps_for_raise env;
           insert t env (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return t env (Some loc_res) (pop_all_traps env))
+          insert_return t env (Some loc_res) (pop_all_traps env);
+          Ok sub_cfg)
       | Terminator (Call { op = Direct func; label_after } as term) ->
-        let r1 = emit_tuple t env sub_cfg new_args in
-        let rd = regs_for t ty in
+        let r1 = emit_tuple env sub_cfg new_args in
+        let rd = regs_for ty in
         let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
         let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
         let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
@@ -1683,19 +1692,22 @@ struct
             if stack_ofs = 0 then loc_arg else Proc.loc_parameters (Reg.typv r1)
           in
           insert_moves t env sub_cfg r1 loc_arg';
-          insert_debug' t env sub_cfg call dbg loc_arg' [||])
+          insert_debug' t env sub_cfg call dbg loc_arg' [||];
+          Ok sub_cfg)
         else if stack_ofs = 0 && Select_utils.trap_stack_is_empty env
         then (
           let call = Cfg.Tailcall_func (Direct func) in
           insert_moves t env sub_cfg r1 loc_arg;
-          insert_debug' t env sub_cfg call dbg loc_arg [||])
+          insert_debug' t env sub_cfg call dbg loc_arg [||];
+          Ok sub_cfg)
         else (
           insert_move_args t env sub_cfg r1 loc_arg stack_ofs;
           insert_debug' t env sub_cfg term dbg loc_arg loc_res;
-          sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
+          let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
           Select_utils.set_traps_for_raise env;
           insert t env (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return t env (Some loc_res) (pop_all_traps env))
+          insert_return t env (Some loc_res) (pop_all_traps env);
+          Ok sub_cfg)
       | _ -> Misc.fatal_error "Cfg_selectgen.emit_tail")
 
   and emit_tail_ifthenelse env sub_cfg econd (_ifso_dbg : Debuginfo.t) eif
@@ -1794,8 +1806,8 @@ struct
                         regs = r
                       }
                   in
-                  seq#insert_debug new_env (Cfg.Op naming_op) Debuginfo.none
-                    [||] [||])
+                  insert_debug new_env (Cfg.Op naming_op) Debuginfo.none [||]
+                    [||])
               ids_and_rs)
       in
       let seq = Sub_cfg.add_empty_block_at_start seq ~label in
@@ -1832,26 +1844,27 @@ struct
     let s_handlers = List.map (fun (_, _, s, _) -> s) new_handlers in
     Ok (Sub_cfg.join_tail ~from:(s_body :: s_handlers) ~to_:sub_cfg)
 
-  and emit_tail_trywith env e1 exn_cont v ~extra_args e2 (_dbg : Debuginfo.t)
-      (_value_kind : Cmm.kind_for_unboxing) : _ Or_never_returns.t =
+  and emit_tail_trywith env sub_cfg e1 exn_cont v ~extra_args e2
+      (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) :
+      _ Or_never_returns.t =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     let exn_label = Cmm.new_label () in
     (* See comment in emit_expr_trywith about extra args *)
     let extra_arg_regs_split =
-      List.map (fun (_param, machtype) -> regs_for t machtype) extra_args
+      List.map (fun (_param, machtype) -> regs_for machtype) extra_args
     in
     let extra_arg_regs = Array.concat extra_arg_regs_split in
     let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
     let env_body =
       env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
     in
-    let s1 : Sub_cfg.t = emit_tail_sequence t env_body e1 in
-    let exn_bucket_in_handler = regs_for t typ_val in
+    let s1 : Sub_cfg.t = emit_tail_sequence env_body e1 in
+    let exn_bucket_in_handler = regs_for typ_val in
     let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
     let with_handler env_handler e2 : _ Or_never_returns.t =
       let s2 : Sub_cfg.t =
-        emit_tail_sequence t env_handler e2 ~at_start:(fun seq ->
+        emit_tail_sequence t env_handler e2 ~at_start:(fun sub_cfg ->
             List.iter2
               (fun v regs ->
                 let provenance = VP.provenance v in
@@ -1867,8 +1880,8 @@ struct
                         regs
                       }
                   in
-                  seq#insert_debug env (Cfg.Op naming_op) Debuginfo.none [||]
-                    [||])
+                  insert_debug env sub_cfg (Cfg.Op naming_op) Debuginfo.none
+                    [||] [||])
               (v :: List.map fst extra_args)
               rv_list)
       in
