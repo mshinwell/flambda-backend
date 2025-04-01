@@ -394,19 +394,19 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
     else Terminator (Call_no_return external_call), args
   | Cload { memory_chunk; mutability; is_atomic } ->
     let arg = single_arg () in
-    let addressing_mode, eloc = self#select_addressing memory_chunk arg in
+    let addressing_mode, eloc = select_addressing t  memory_chunk arg in
     let mutability = select_mutable_flag mutability in
     ( basic_op (Load { memory_chunk; addressing_mode; mutability; is_atomic }),
       [eloc] )
   | Cstore (chunk, init) -> (
     let arg1, arg2 = two_args () in
-    let addr, eloc = self#select_addressing chunk arg1 in
+    let addr, eloc = select_addressing t  chunk arg1 in
     let is_assign =
       match init with Initialization -> false | Assignment -> true
     in
     match[@ocaml.warning "-fragile-match"] chunk with
     | Word_int | Word_val ->
-      let op, newarg2 = self#select_store is_assign addr arg2 in
+      let op, newarg2 = select_store t  is_assign addr arg2 in
       basic_op op, [newarg2; eloc]
     | _ -> basic_op (Store (chunk, addr, is_assign)), [arg2; eloc]
     (* Inversion addr/datum in Istore *))
@@ -419,32 +419,32 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
         (Alloc { bytes = 0; dbginfo = [placeholder_for_alloc_block_kind]; mode }),
       args )
   | Cpoll -> basic_op Poll, args
-  | Caddi -> self#select_arith_comm Simple_operation.Iadd args
-  | Csubi -> self#select_arith Simple_operation.Isub args
-  | Cmuli -> self#select_arith_comm Simple_operation.Imul args
+  | Caddi -> select_arith_comm t  Iadd args
+  | Csubi -> select_arith t  Isub args
+  | Cmuli -> select_arith_comm t  Imul args
   | Cmulhi { signed } ->
-    self#select_arith_comm (Simple_operation.Imulh { signed }) args
+    select_arith_comm t  (Imulh { signed }) args
   | Cdivi -> basic_op (Intop Idiv), args
   | Cmodi -> basic_op (Intop Imod), args
-  | Cand -> self#select_arith_comm Simple_operation.Iand args
-  | Cor -> self#select_arith_comm Simple_operation.Ior args
-  | Cxor -> self#select_arith_comm Simple_operation.Ixor args
-  | Clsl -> self#select_arith Simple_operation.Ilsl args
-  | Clsr -> self#select_arith Simple_operation.Ilsr args
-  | Casr -> self#select_arith Simple_operation.Iasr args
+  | Cand -> select_arith_comm t  Iand args
+  | Cor -> select_arith_comm t  Ior args
+  | Cxor -> select_arith_comm t  Ixor args
+  | Clsl -> select_arith t  Ilsl args
+  | Clsr -> select_arith t  Ilsr args
+  | Casr -> select_arith t  Iasr args
   | Cclz { arg_is_non_zero } ->
     basic_op (Intop (Iclz { arg_is_non_zero })), args
   | Cctz { arg_is_non_zero } ->
     basic_op (Intop (Ictz { arg_is_non_zero })), args
   | Cpopcnt -> basic_op (Intop Ipopcnt), args
-  | Ccmpi comp -> self#select_arith_comp (Simple_operation.Isigned comp) args
-  | Caddv -> self#select_arith_comm Simple_operation.Iadd args
-  | Cadda -> self#select_arith_comm Simple_operation.Iadd args
-  | Ccmpa comp -> self#select_arith_comp (Simple_operation.Iunsigned comp) args
+  | Ccmpi comp -> select_arith_comp t  (Isigned comp) args
+  | Caddv -> select_arith_comm t  Iadd args
+  | Cadda -> select_arith_comm t  Iadd args
+  | Ccmpa comp -> select_arith_comp t  (Iunsigned comp) args
   | Ccmpf (w, comp) -> basic_op (Floatop (w, Icompf comp)), args
   | Ccsel _ ->
     let cond, ifso, ifnot = three_args () in
-    let cond, earg = self#select_condition cond in
+    let cond, earg = select_condition t  cond in
     basic_op (Csel cond), [earg; ifso; ifnot]
   | Cnegf w -> basic_op (Floatop (w, Inegf)), args
   | Cabsf w -> basic_op (Floatop (w, Iabsf)), args
@@ -463,7 +463,7 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
         | Word | Sixtyfour -> Word_int
         | Thirtytwo -> Thirtytwo_signed
       in
-      let addr, eloc = self#select_addressing dst_size dst in
+      let addr, eloc = select_addressing t  dst_size dst in
       basic_op (Intop_atomic { op; size; addr }), [src; eloc]
     | Compare_set | Compare_exchange ->
       let compare_with, set_to, dst = three_args () in
@@ -472,7 +472,7 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
         | Word | Sixtyfour -> Word_int
         | Thirtytwo -> Thirtytwo_signed
       in
-      let addr, eloc = self#select_addressing dst_size dst in
+      let addr, eloc = select_addressing t  dst_size dst in
       basic_op (Intop_atomic { op; size; addr }), [compare_with; set_to; eloc])
   | Cprobe { name; handler_code_sym; enabled_at_init } ->
     ( Terminator
@@ -491,16 +491,16 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
 let select_arith_comm (op : Simple_operation.integer_operation)
     (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
   match args with
-  | [arg; Cconst_int (n, _)] when self#is_immediate op n ->
+  | [arg; Cconst_int (n, _)] when is_immediate t  op n ->
     basic_op (Intop_imm (op, n)), [arg]
-  | [Cconst_int (n, _); arg] when self#is_immediate op n ->
+  | [Cconst_int (n, _); arg] when is_immediate t  op n ->
     basic_op (Intop_imm (op, n)), [arg]
   | _ -> basic_op (Intop op), args
 
 let select_arith (op : Simple_operation.integer_operation)
     (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
   match args with
-  | [arg; Cconst_int (n, _)] when self#is_immediate op n ->
+  | [arg; Cconst_int (n, _)] when is_immediate t  op n ->
     basic_op (Intop_imm (op, n)), [arg]
   | _ -> basic_op (Intop op), args
 
@@ -508,10 +508,10 @@ let select_arith_comp (cmp : Simple_operation.integer_comparison)
     (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
   match args with
   | [arg; Cconst_int (n, _)]
-    when self#is_immediate (Simple_operation.Icomp cmp) n ->
+    when is_immediate t  (Simple_operation.Icomp cmp) n ->
     basic_op (Intop_imm (Icomp cmp, n)), [arg]
   | [Cconst_int (n, _); arg]
-    when self#is_immediate
+    when is_immediate t
            (Simple_operation.Icomp (Select_utils.swap_intcomp cmp))
            n ->
     basic_op (Intop_imm (Icomp (Select_utils.swap_intcomp cmp), n)), [arg]
@@ -549,10 +549,10 @@ let tailrec_label : Label.t = (* MUTABLE *) Label.none
 
 let insert_move env src dst =
   if src.Reg.stamp <> dst.Reg.stamp
-  then self#insert env (Op Move) [| src |] [| dst |]
+  then insert t  env (Op Move) [| src |] [| dst |]
 
 let emit_expr_aux_raise env k (args : expression list) dbg =
-  let r1 = self#emit_tuple env args in
+  let r1 = emit_tuple t  env args in
   let extra_args_regs =
     match env.trap_stack with
     | Uncaught ->
@@ -565,14 +565,14 @@ let emit_expr_aux_raise env k (args : expression list) dbg =
   (* Populate the distinguished extra args registers, for the current exception
      handler, with the extra args for this particular raise. *)
   let rd = Array.append [| Proc.loc_exn_bucket |] extra_args_regs in
-  Array.iter2 (fun r1 rd -> self#insert env (Op Move) [| r1 |] [| rd |]) r1 rd;
-  self#insert_debug' env (Cfg.Raise k) dbg rd [||];
+  Array.iter2 (fun r1 rd -> insert t  env (Op Move) [| r1 |] [| rd |]) r1 rd;
+  insert_debug t ' env (Cfg.Raise k) dbg rd [||];
   set_traps_for_raise env;
   None
 
 let emit_expr_aux_op env bound_name op args dbg =
   let ret res = Some res in
-  match self#emit_parts_list env args with
+  match emit_parts_list t  env args with
   | None -> None
   | Some (simple_args, env) -> (
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
@@ -593,23 +593,23 @@ let emit_expr_aux_op env bound_name op args dbg =
                 regs
               }
           in
-          self#insert_debug env (Op naming_op) Debuginfo.none [||] [||]
+          insert_debug t  env (Op naming_op) Debuginfo.none [||] [||]
     in
     let ty = Select_utils.oper_result_type op in
     let label_after = Cmm.new_label () in
     let new_op, new_args =
-      self#select_operation op simple_args dbg ~label_after
+      select_operation t  op simple_args dbg ~label_after
     in
     match new_op with
     | Terminator (Call { op = Indirect; label_after } as term) ->
-      let r1 = self#emit_tuple env new_args in
+      let r1 = emit_tuple t  env new_args in
       let rarg = Array.sub r1 1 (Array.length r1 - 1) in
-      let rd = self#regs_for ty in
+      let rd = regs_for t  ty in
       let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
       let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
       let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-      self#insert_move_args env rarg loc_arg stack_ofs;
-      self#insert_debug' env term dbg
+      insert_move_args t  env rarg loc_arg stack_ofs;
+      insert_debug t ' env term dbg
         (Array.append [| r1.(0) |] loc_arg)
         loc_res;
       sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
@@ -617,45 +617,45 @@ let emit_expr_aux_op env bound_name op args dbg =
          need to be named right now, otherwise the result of the function call
          may be unavailable in the debugger immediately after the call. *)
       add_naming_op_for_bound_name loc_res;
-      self#insert_move_results env loc_res rd stack_ofs;
+      insert_move_results t  env loc_res rd stack_ofs;
       Select_utils.set_traps_for_raise env;
       Some rd
     | Terminator (Call { op = Direct _; label_after } as term) ->
-      let r1 = self#emit_tuple env new_args in
-      let rd = self#regs_for ty in
+      let r1 = emit_tuple t  env new_args in
+      let rd = regs_for t  ty in
       let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
       let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
       let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-      self#insert_move_args env r1 loc_arg stack_ofs;
-      self#insert_debug' env term dbg loc_arg loc_res;
+      insert_move_args t  env r1 loc_arg stack_ofs;
+      insert_debug t ' env term dbg loc_arg loc_res;
       add_naming_op_for_bound_name loc_res;
       sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
-      self#insert_move_results env loc_res rd stack_ofs;
+      insert_move_results t  env loc_res rd stack_ofs;
       Select_utils.set_traps_for_raise env;
       Some rd
     | Terminator
         (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
-      let loc_arg, stack_ofs = self#emit_extcall_args env ty_args new_args in
-      let rd = self#regs_for ty_res in
+      let loc_arg, stack_ofs = emit_extcall_args t  env ty_args new_args in
+      let rd = regs_for t  ty_res in
       let term = Cfg.Prim { op = External { r with stack_ofs }; label_after } in
       let loc_res =
-        self#insert_op_debug' env term dbg loc_arg
+        insert_op_debug t ' env term dbg loc_arg
           (Proc.loc_external_results (Reg.typv rd))
       in
       sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
       add_naming_op_for_bound_name loc_res;
-      self#insert_move_results env loc_res rd stack_ofs;
+      insert_move_results t  env loc_res rd stack_ofs;
       Select_utils.set_traps_for_raise env;
       ret rd
     | Terminator (Prim { op = Probe _; label_after } as term) ->
-      let r1 = self#emit_tuple env new_args in
-      let rd = self#regs_for ty in
-      let rd = self#insert_op_debug' env term dbg r1 rd in
+      let r1 = emit_tuple t  env new_args in
+      let rd = regs_for t  ty in
+      let rd = insert_op_debug t ' env term dbg r1 rd in
       Select_utils.set_traps_for_raise env;
       sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
       ret rd
     | Terminator (Call_no_return ({ func_symbol; ty_args; _ } as r)) ->
-      let loc_arg, stack_ofs = self#emit_extcall_args env ty_args new_args in
+      let loc_arg, stack_ofs = emit_extcall_args t  env ty_args new_args in
       let keep_for_checking =
         !Select_utils.current_function_is_check_enabled
         && String.equal func_symbol Cmm.caml_flambda2_invalid
@@ -663,7 +663,7 @@ let emit_expr_aux_op env bound_name op args dbg =
       let returns, ty =
         if keep_for_checking then true, typ_int else false, ty
       in
-      let rd = self#regs_for ty in
+      let rd = regs_for t  ty in
       let label = Cmm.new_label () in
       let r = { r with stack_ofs } in
       let term : Cfg.terminator =
@@ -672,7 +672,7 @@ let emit_expr_aux_op env bound_name op args dbg =
         else Call_no_return r
       in
       let (_ : Reg.t array) =
-        self#insert_op_debug' env term dbg loc_arg
+        insert_op_debug t ' env term dbg loc_arg
           (Proc.loc_external_results (Reg.typv rd))
       in
       Select_utils.set_traps_for_raise env;
@@ -682,7 +682,7 @@ let emit_expr_aux_op env bound_name op args dbg =
         ret rd)
       else None
     | Basic (Op (Alloc { bytes = _; mode; dbginfo = [placeholder] })) ->
-      let rd = self#regs_for typ_val in
+      let rd = regs_for t  typ_val in
       let bytes = Select_utils.size_expr env (Ctuple new_args) in
       let alloc_words = (bytes + Arch.size_addr - 1) / Arch.size_addr in
       let op =
@@ -692,9 +692,9 @@ let emit_expr_aux_op env bound_name op args dbg =
             mode
           }
       in
-      self#insert_debug env (Op op) dbg [||] rd;
+      insert_debug t  env (Op op) dbg [||] rd;
       add_naming_op_for_bound_name rd;
-      self#emit_stores env dbg new_args rd;
+      emit_stores t  env dbg new_args rd;
       Select_utils.set_traps_for_raise env;
       ret rd
     | Basic (Op (Alloc { bytes = _; mode = _; dbginfo })) ->
@@ -702,10 +702,10 @@ let emit_expr_aux_op env bound_name op args dbg =
         "Selection Alloc: expected a single placehold in dbginfo, found %d"
         (List.length dbginfo)
     | Basic (Op op) ->
-      let r1 = self#emit_tuple env new_args in
-      let rd = self#regs_for ty in
+      let r1 = emit_tuple t  env new_args in
+      let rd = regs_for t  ty in
       add_naming_op_for_bound_name rd;
-      ret (self#insert_op_debug env op dbg r1 rd)
+      ret (insert_op_debug t  env op dbg r1 rd)
     | Basic basic ->
       Misc.fatal_errorf "unexpected basic (%a)" Cfg.dump_basic basic
     | Terminator term ->
@@ -717,13 +717,13 @@ let emit_expr_aux_ifthenelse env bound_name econd _ifso_dbg eif
     (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t)
     (_value_kind : Cmm.kind_for_unboxing) =
   (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-  let cond, earg = self#select_condition econd in
-  match self#emit_expr env earg ~bound_name:None with
+  let cond, earg = select_condition t  econd in
+  match emit_expr t  env earg ~bound_name:None with
   | None -> None
   | Some rarg ->
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-    let rif, (sif : 'self) = self#emit_sequence env eif ~bound_name in
-    let relse, (selse : 'self) = self#emit_sequence env eelse ~bound_name in
+    let rif, (sif : 'self) = emit_sequence t  env eif ~bound_name in
+    let relse, (selse : 'self) = emit_sequence t  env eelse ~bound_name in
     let r = join env rif sif relse selse ~bound_name in
     let sub_if = sif#extract in
     let sub_else = selse#extract in
@@ -739,13 +739,13 @@ let emit_expr_aux_ifthenelse env bound_name econd _ifso_dbg eif
 let emit_expr_aux_switch env bound_name esel index ecases (_dbg : Debuginfo.t)
     (_value_kind : Cmm.kind_for_unboxing) =
   (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-  match self#emit_expr env esel ~bound_name:None with
+  match emit_expr t  env esel ~bound_name:None with
   | None -> None
   | Some rsel ->
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     let sub_cases : (Reg.t array option * 'self) array =
       Array.map
-        (fun (case, _dbg) -> self#emit_sequence env case ~bound_name)
+        (fun (case, _dbg) -> emit_sequence t  env case ~bound_name)
         ecases
     in
     let r = join_array env sub_cases ~bound_name in
@@ -765,7 +765,7 @@ let emit_expr_aux_catch env bound_name (_rec_flag : Cmm.rec_flag) handlers body
         let rs =
           List.map
             (fun (id, typ) ->
-              let r = self#regs_for typ in
+              let r = regs_for t  typ in
               Select_utils.name_regs id r;
               r)
             ids
@@ -783,7 +783,7 @@ let emit_expr_aux_catch env bound_name (_rec_flag : Cmm.rec_flag) handlers body
         env, Int.Map.add nfail (r, (ids, rs, e2, dbg, is_cold, label)) map)
       (env, Int.Map.empty) handlers
   in
-  let r_body, s_body = self#emit_sequence env body ~bound_name in
+  let r_body, s_body = emit_sequence t  env body ~bound_name in
   let translate_one_handler nfail
       (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
     assert (List.length ids = List.length rs);
@@ -800,7 +800,7 @@ let emit_expr_aux_catch env bound_name (_rec_flag : Cmm.rec_flag) handlers body
         ids_and_rs
     in
     let r, s =
-      self#emit_sequence new_env e2 ~bound_name:None ~at_start:(fun seq ->
+      emit_sequence t  new_env e2 ~bound_name:None ~at_start:(fun seq ->
           List.iter
             (fun ((var, _typ), r) ->
               let provenance = VP.provenance var in
@@ -863,12 +863,12 @@ let emit_expr_aux_catch env bound_name (_rec_flag : Cmm.rec_flag) handlers body
   r
 
 let emit_expr_aux_exit env lbl args traps =
-  match self#emit_parts_list env args with
+  match emit_parts_list t  env args with
   | None -> None
   | Some (simple_list, ext_env) -> (
     match lbl with
     | Lbl nfail ->
-      let src = self#emit_tuple ext_env simple_list in
+      let src = emit_tuple t  ext_env simple_list in
       let handler =
         try Select_utils.env_find_static_exception nfail env
         with Not_found ->
@@ -886,8 +886,8 @@ let emit_expr_aux_exit env lbl args traps =
           | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
           | Val | Int | Float | Vec128 | Float32 -> ())
         src;
-      self#insert_moves env src tmp_regs;
-      self#insert_moves env tmp_regs (Array.concat handler.regs);
+      insert_moves t  env src tmp_regs;
+      insert_moves t  env tmp_regs (Array.concat handler.regs);
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       List.iter
         (fun trap ->
@@ -909,7 +909,7 @@ let emit_expr_aux_exit env lbl args traps =
     | Return_lbl -> (
       match simple_list with
       | [expr] ->
-        self#emit_return ext_env expr traps;
+        emit_return t  ext_env expr traps;
         None
       | [] -> Misc.fatal_error "Selection.emit_expr: Return without arguments"
       | _ :: _ :: _ ->
@@ -927,19 +927,19 @@ let emit_expr_aux_trywith env bound_name e1 exn_cont v ~extra_args e2
      exception continuation has to compiled using a wrapper; see
      [To_cmm_expr.translate_apply]. *)
   let extra_arg_regs_split =
-    List.map (fun (_param, machtype) -> self#regs_for machtype) extra_args
+    List.map (fun (_param, machtype) -> regs_for t  machtype) extra_args
   in
   let extra_arg_regs = Array.concat extra_arg_regs_split in
   let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
   let env_body =
     env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
   in
-  let r1, s1 = self#emit_sequence env_body e1 ~bound_name in
-  let exn_bucket_in_handler = self#regs_for typ_val in
+  let r1, s1 = emit_sequence t  env_body e1 ~bound_name in
+  let exn_bucket_in_handler = regs_for t  typ_val in
   let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
   let with_handler env_handler e2 =
     let r2, s2 =
-      self#emit_sequence env_handler e2 ~bound_name ~at_start:(fun seq ->
+      emit_sequence t  env_handler e2 ~bound_name ~at_start:(fun seq ->
           List.iter2
             (fun v regs ->
               let provenance = VP.provenance v in
@@ -1032,25 +1032,25 @@ let insert_return (env : environment) r (traps : trap_action list) =
         Sub_cfg.add_instruction sub_cfg instr_desc [||] [||] Debuginfo.none)
       traps;
     let loc = Proc.loc_results_return (Reg.typv r) in
-    self#insert_moves env r loc;
-    self#insert' env Cfg.Return loc [||]
+    insert_moves t  env r loc;
+    insert t ' env Cfg.Return loc [||]
 
 let emit_return (env : environment) exp traps =
   assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-  self#insert_return env (self#emit_expr_aux env exp ~bound_name:None) traps
+  insert_return t  env (self#emit_expr_aux env exp ~bound_name:None) traps
 
 let emit_tail_apply env ty op args dbg =
-  match self#emit_parts_list env args with
+  match emit_parts_list t  env args with
   | None -> ()
   | Some (simple_args, env) -> (
     let label_after = Cmm.new_label () in
     let new_op, new_args =
-      self#select_operation op simple_args dbg ~label_after
+      select_operation t  op simple_args dbg ~label_after
     in
     match new_op with
     | Terminator (Call { op = Indirect; label_after } as term) ->
-      let r1 = self#emit_tuple env new_args in
-      let rd = self#regs_for ty in
+      let r1 = emit_tuple t  env new_args in
+      let rd = regs_for t  ty in
       let rarg = Array.sub r1 1 (Array.length r1 - 1) in
       let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
       let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
@@ -1058,20 +1058,20 @@ let emit_tail_apply env ty op args dbg =
       if stack_ofs = 0 && Select_utils.trap_stack_is_empty env
       then (
         let call = Cfg.Tailcall_func Indirect in
-        self#insert_moves env rarg loc_arg;
-        self#insert_debug' env call dbg (Array.append [| r1.(0) |] loc_arg) [||])
+        insert_moves t  env rarg loc_arg;
+        insert_debug t ' env call dbg (Array.append [| r1.(0) |] loc_arg) [||])
       else (
-        self#insert_move_args env rarg loc_arg stack_ofs;
-        self#insert_debug' env term dbg
+        insert_move_args t  env rarg loc_arg stack_ofs;
+        insert_debug t ' env term dbg
           (Array.append [| r1.(0) |] loc_arg)
           loc_res;
         sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
         Select_utils.set_traps_for_raise env;
-        self#insert env (Op (Stackoffset (-stack_ofs))) [||] [||];
-        self#insert_return env (Some loc_res) (pop_all_traps env))
+        insert t  env (Op (Stackoffset (-stack_ofs))) [||] [||];
+        insert_return t  env (Some loc_res) (pop_all_traps env))
     | Terminator (Call { op = Direct func; label_after } as term) ->
-      let r1 = self#emit_tuple env new_args in
-      let rd = self#regs_for ty in
+      let r1 = emit_tuple t  env new_args in
+      let rd = regs_for t  ty in
       let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
       let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
       let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
@@ -1083,33 +1083,33 @@ let emit_tail_apply env ty op args dbg =
           assert (stack_ofs >= 0);
           if stack_ofs = 0 then loc_arg else Proc.loc_parameters (Reg.typv r1)
         in
-        self#insert_moves env r1 loc_arg';
-        self#insert_debug' env call dbg loc_arg' [||])
+        insert_moves t  env r1 loc_arg';
+        insert_debug t ' env call dbg loc_arg' [||])
       else if stack_ofs = 0 && Select_utils.trap_stack_is_empty env
       then (
         let call = Cfg.Tailcall_func (Direct func) in
-        self#insert_moves env r1 loc_arg;
-        self#insert_debug' env call dbg loc_arg [||])
+        insert_moves t  env r1 loc_arg;
+        insert_debug t ' env call dbg loc_arg [||])
       else (
-        self#insert_move_args env r1 loc_arg stack_ofs;
-        self#insert_debug' env term dbg loc_arg loc_res;
+        insert_move_args t  env r1 loc_arg stack_ofs;
+        insert_debug t ' env term dbg loc_arg loc_res;
         sub_cfg <- Sub_cfg.add_never_block sub_cfg ~label:label_after;
         Select_utils.set_traps_for_raise env;
-        self#insert env (Op (Stackoffset (-stack_ofs))) [||] [||];
-        self#insert_return env (Some loc_res) (pop_all_traps env))
+        insert t  env (Op (Stackoffset (-stack_ofs))) [||] [||];
+        insert_return t  env (Some loc_res) (pop_all_traps env))
     | _ -> Misc.fatal_error "Cfg_selectgen.emit_tail")
 
 let emit_tail_ifthenelse env econd (_ifso_dbg : Debuginfo.t) eif
     (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t)
     (_kind : Cmm.kind_for_unboxing) =
   (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-  let cond, earg = self#select_condition econd in
-  match self#emit_expr env earg ~bound_name:None with
+  let cond, earg = select_condition t  econd in
+  match emit_expr t  env earg ~bound_name:None with
   | None -> ()
   | Some rarg ->
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-    let sub_if = self#emit_tail_sequence env eif in
-    let sub_else = self#emit_tail_sequence env eelse in
+    let sub_if = emit_tail_sequence t  env eif in
+    let sub_else = emit_tail_sequence t  env eelse in
     let term_desc =
       terminator_of_test cond
         ~label_true:(Sub_cfg.start_label sub_if)
@@ -1121,12 +1121,12 @@ let emit_tail_ifthenelse env econd (_ifso_dbg : Debuginfo.t) eif
 let emit_tail_switch env esel index ecases (_dbg : Debuginfo.t)
     (_kind : Cmm.kind_for_unboxing) =
   (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
-  match self#emit_expr env esel ~bound_name:None with
+  match emit_expr t  env esel ~bound_name:None with
   | None -> ()
   | Some rsel ->
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     let sub_cases =
-      Array.map (fun (case, _dbg) -> self#emit_tail_sequence env case) ecases
+      Array.map (fun (case, _dbg) -> emit_tail_sequence t  env case) ecases
     in
     let term_desc : Cfg.terminator =
       Switch (Array.map (fun idx -> Sub_cfg.start_label sub_cases.(idx)) index)
@@ -1142,7 +1142,7 @@ let emit_tail_catch env (_rec_flag : Cmm.rec_flag) handlers e1
         let rs =
           List.map
             (fun (id, typ) ->
-              let r = self#regs_for typ in
+              let r = regs_for t  typ in
               Select_utils.name_regs id r;
               r)
             ids
@@ -1159,7 +1159,7 @@ let emit_tail_catch env (_rec_flag : Cmm.rec_flag) handlers e1
       (env, Int.Map.empty) handlers
   in
   assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-  let s_body = self#emit_tail_sequence env e1 in
+  let s_body = emit_tail_sequence t  env e1 in
   let translate_one_handler nfail
       (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
     assert (List.length ids = List.length rs);
@@ -1176,7 +1176,7 @@ let emit_tail_catch env (_rec_flag : Cmm.rec_flag) handlers e1
         ids_and_rs
     in
     let seq : Sub_cfg.t =
-      self#emit_tail_sequence new_env e2 ~at_start:(fun seq ->
+      emit_tail_sequence t  new_env e2 ~at_start:(fun seq ->
           List.iter
             (fun ((var, _typ), r) ->
               let provenance = VP.provenance var in
@@ -1237,19 +1237,19 @@ let emit_tail_trywith env e1 exn_cont v ~extra_args e2 (_dbg : Debuginfo.t)
   let exn_label = Cmm.new_label () in
   (* See comment in emit_expr_aux_trywith about extra args *)
   let extra_arg_regs_split =
-    List.map (fun (_param, machtype) -> self#regs_for machtype) extra_args
+    List.map (fun (_param, machtype) -> regs_for t  machtype) extra_args
   in
   let extra_arg_regs = Array.concat extra_arg_regs_split in
   let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
   let env_body =
     env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
   in
-  let s1 : Sub_cfg.t = self#emit_tail_sequence env_body e1 in
-  let exn_bucket_in_handler = self#regs_for typ_val in
+  let s1 : Sub_cfg.t = emit_tail_sequence t  env_body e1 in
+  let exn_bucket_in_handler = regs_for t  typ_val in
   let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
   let with_handler env_handler e2 =
     let s2 : Sub_cfg.t =
-      self#emit_tail_sequence env_handler e2 ~at_start:(fun seq ->
+      emit_tail_sequence t  env_handler e2 ~at_start:(fun seq ->
           List.iter2
             (fun v regs ->
               let provenance = VP.provenance v in
@@ -1328,7 +1328,7 @@ let emit_fundecl ~future_funcnames f =
   let rargs =
     List.mapi
       (fun arg_index (var, ty) ->
-        let r = self#regs_for ty in
+        let r = regs_for t  ty in
         Select_utils.name_regs var r;
         num_regs_per_arg.(arg_index) <- Array.length r;
         r)
@@ -1364,15 +1364,15 @@ let emit_fundecl ~future_funcnames f =
               regs = hard_regs_for_arg
             }
         in
-        self#insert_debug env (Cfg.Op naming_op) Debuginfo.none
+        insert_debug t  env (Cfg.Op naming_op) Debuginfo.none
           hard_regs_for_arg [||])
     f.Cmm.fun_args;
-  self#insert_moves env loc_arg rarg;
+  insert_moves t  env loc_arg rarg;
   let prologue_poll_instr_id =
-    self#insert_op_debug_returning_id env Operation.Poll Debuginfo.none [||] [||]
+    insert_op_debug_returning_id t  env Operation.Poll Debuginfo.none [||] [||]
   in
-  self#emit_tail env f.Cmm.fun_body;
-  let body = self#extract in
+  emit_tail t  env f.Cmm.fun_body;
+  let body = extract t  in
   let cfg =
     (* note: we set `fun_contains_calls` to `true` here, but will compute its
        proper value below, after possibly removing the prologue poll
