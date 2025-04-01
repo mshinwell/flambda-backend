@@ -691,7 +691,7 @@ struct
       let arg =
         match select_store ~is_assign:false !addressing_mode arg with
         | Maybe_out_of_range -> arg
-        | Operation (_, arg) -> arg
+        | Rewritten (_, arg) -> arg
         | Use_default -> Store (Word_val, addr, is_assign), arg
       in
       match emit_expr env arg ~bound_name:None with
@@ -699,7 +699,7 @@ struct
         let operation_replacing_store =
           match select_store_result with
           | Maybe_out_of_range -> None
-          | Operation (op, _) -> if is_store op then None else Some op
+          | Rewritten (op, _) -> if is_store op then None else Some op
           | Use_default -> None (* see above *)
         in
         match operation_replacing_store with
@@ -738,7 +738,6 @@ struct
                 base := tmp;
                 Arch.identity_addressing
             in
-            (* XXX why didn't this use [op]? *)
             insert_debug env
               (Op (Store (kind, !addressing_mode, false)))
               dbg
