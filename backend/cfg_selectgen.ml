@@ -980,10 +980,10 @@ struct
     in
     let for_one_arg arg =
       let arg : Cmm.expression =
-        match select_store ~is_assign:false !addressing_mode arg with
+        match Target.select_store ~is_assign:false !addressing_mode arg with
         | Maybe_out_of_range -> arg
         | Rewritten (_, arg) -> arg
-        | Use_default -> Store (Word_val, addr, is_assign), arg
+        | Use_default -> Op (Store (Word_val, addr, is_assign))
       in
       match emit_expr env sub_cfg arg ~bound_name:None with
       | Ok (regs, sub_cfg) -> (
@@ -1107,13 +1107,13 @@ struct
     | Ctuple exp_list -> (
       match emit_parts_list env sub_cfg exp_list with
       | Never_returns -> Never_returns
-      | Ok (simple_list, ext_env, sub_cfg) ->
-        Ok (emit_tuple ext_env sub_cfg simple_list))
+      | Ok (simple_list, ext_env) -> Ok (emit_tuple ext_env sub_cfg simple_list)
+      )
     | Cop (Craise k, args, dbg) -> emit_expr_raise env sub_cfg k args dbg
     | Cop (Copaque, args, dbg) -> (
       match emit_parts_list env sub_cfg args with
       | Never_returns -> Never_returns
-      | Ok (simple_args, env, sub_cfg) ->
+      | Ok (simple_args, env) ->
         let rs = emit_tuple env sub_cfg simple_args in
         let rd = insert_op_debug env sub_cfg (make_opaque ()) dbg rs rs in
         Ok rd)
@@ -1491,21 +1491,33 @@ struct
       build_all_reachable_handlers ~already_built:[] ~not_built:handlers_map
       (* Note: we're dropping unreachable handlers here *)
     in
-    let a = Array.of_list (body :: List.map snd l) in
+    let a =
+      Array.of_list
+        (body
+        :: List.map
+             (fun (_, regs_and_handler_sub_cfg) ->
+               Or_never_returns.Ok regs_and_handler_sub_cfg)
+             l)
+    in
     match join_array env a ~bound_name with
     | Never_returns -> Never_returns
-    | Ok (r, s_handlers) ->
+    | Ok (r, s_handlers) -> (
+      (* XXX look at this s_handlers var *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-      let s_handlers =
+      let handler_sub_cfgs =
         List.map
-          (fun ((_, _, _, label), (_, sub_handler)) ->
-            Sub_cfg.add_empty_block_at_start sub_handler ~label)
-          s_handlers
+          (fun ((_, _, _, label), (_regs, handler_sub_cfg)) ->
+            Sub_cfg.add_empty_block_at_start handler_sub_cfg ~label;
+            handler_sub_cfg)
+          l
       in
-      let term_desc = Cfg.Always (Sub_cfg.start_label s_body) in
-      Sub_cfg.update_exit_terminator sub_cfg term_desc;
-      Sub_cfg.join ~from:(s_body :: s_handlers) ~to_:sub_cfg;
-      Ok r
+      match body with
+      | Never_returns -> Never_returns (* XXX check this *)
+      | Ok (_regs, body_sub_cfg) ->
+        let term_desc = Cfg.Always (Sub_cfg.start_label body_sub_cfg) in
+        Sub_cfg.update_exit_terminator sub_cfg term_desc;
+        Sub_cfg.join ~from:(body_sub_cfg :: handler_sub_cfgs) ~to_:sub_cfg;
+        Ok r)
 
   and emit_expr_exit env sub_cfg lbl args traps : Reg.t array Or_never_returns.t
       =
@@ -1533,8 +1545,8 @@ struct
             | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
             | Val | Int | Float | Vec128 | Float32 -> ())
           src;
-        insert_moves t env src tmp_regs;
-        insert_moves t env tmp_regs (Array.concat handler.regs);
+        insert_moves env sub_cfg src tmp_regs;
+        insert_moves env sub_cfg tmp_regs (Array.concat handler.regs);
         assert (Sub_cfg.exit_has_never_terminator sub_cfg);
         List.iter
           (fun trap ->
@@ -1982,7 +1994,7 @@ struct
         f.Cmm.fun_args rargs Select_utils.env_empty
     in
     tailrec_label := Cmm.new_label ();
-    let sub_cfg = Sub_cfg.make_empty () in
+    let body = Sub_cfg.make_empty () in
     let loc_arg_index = ref 0 in
     List.iteri
       (fun param_index (var, _ty) ->
@@ -2005,15 +2017,15 @@ struct
                 regs = hard_regs_for_arg
               }
           in
-          insert_debug env sub_cfg (Cfg.Op naming_op) Debuginfo.none
+          insert_debug env body (Cfg.Op naming_op) Debuginfo.none
             hard_regs_for_arg [||])
       f.Cmm.fun_args;
-    insert_moves env sub_cfg loc_arg rarg;
+    insert_moves env body loc_arg rarg;
     let prologue_poll_instr_id =
-      insert_op_debug_returning_id env sub_cfg Operation.Poll Debuginfo.none
-        [||] [||]
+      insert_op_debug_returning_id env body Operation.Poll Debuginfo.none [||]
+        [||]
     in
-    let body = emit_tail env sub_cfg f.Cmm.fun_body in
+    emit_tail env body f.Cmm.fun_body;
     let cfg =
       (* note: we set `fun_contains_calls` to `true` here, but will compute its
          proper value below, after possibly removing the prologue poll
