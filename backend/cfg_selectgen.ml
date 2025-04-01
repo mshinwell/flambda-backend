@@ -298,12 +298,12 @@ let insert_move_results env sub_cfg loc res stacksize =
   if stacksize <> 0
   then insert env sub_cfg (make_stack_offset (-stacksize)) [||] [||]
 
-let insert_move_extcall_arg env _ty_arg src dst =
+let insert_move_extcall_arg env sub_cfg _ty_arg src dst =
   (* The default implementation is one or two ordinary moves. (Two in the case
      of an int64 argument on a 32-bit platform.) It can be overridden to use
      special move instructions, for example a "32-bit move" instruction for
      int32 arguments. *)
-  insert_moves env src dst
+  insert_moves env sub_cfg src dst
 
 (* Add an Iop opcode. Can be overridden by processor description to insert moves
    before and after the operation, i.e. for two-address instructions, or
@@ -935,17 +935,25 @@ struct
       exp_list_right_to_left
 
   and emit_tuple_not_flattened env sub_cfg exp_list =
-    let rec emit_list = function
+    let sub_cfg = ref !sub_cfg in
+    let rec emit_list exp_list =
+      match exp_list with
       | [] -> []
       | exp :: rem -> (
         (* Again, force right-to-left evaluation *)
         let loc_rem = emit_list rem in
-        match emit_expr env sub_cfg exp ~bound_name:None with
+        match emit_expr env !sub_cfg exp ~bound_name:None with
         | Never_returns ->
+          (* XXX maybe should return Never_returns here *)
           assert false (* should have been caught in emit_parts *)
-        | Ok loc_exp -> loc_exp :: loc_rem)
+        | Ok (loc_exp, new_sub_cfg) ->
+          sub_cfg := new_sub_cfg;
+          loc_exp :: loc_rem)
     in
-    emit_list exp_list
+    let loc_exp = emit_list exp_list in
+    loc_exp, !sub_cfg
+
+  (* XXX we need an "invalid" terminator in Cfg *)
 
   and emit_tuple env sub_cfg exp_list :
       (Reg.t array * Sub_cfg.t) Or_never_returns.t =
@@ -954,7 +962,7 @@ struct
   (* Array.concat (emit_tuple_not_flattened env sub_cfg exp_list) *)
 
   and emit_extcall_args env sub_cfg ty_args args =
-    let args = emit_tuple_not_flattened env sub_cfg args in
+    let args, sub_cfg = emit_tuple_not_flattened env sub_cfg args in
     let ty_args =
       match ty_args with
       | [] -> List.map (fun _ -> XInt) args
@@ -968,7 +976,7 @@ struct
       (fun i arg ->
         insert_move_extcall_arg env sub_cfg ty_args.(i) arg locs.(i))
       args;
-    Array.concat (Array.to_list locs), stack_ofs
+    Array.concat (Array.to_list locs), stack_ofs, sub_cfg
 
   and emit_stores env sub_cfg dbg args regs_addr =
     let addressing_mode =
@@ -1267,7 +1275,7 @@ struct
         Ok (rd, sub_cfg)
       | Terminator
           (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
-        let loc_arg, stack_ofs =
+        let loc_arg, stack_ofs, sub_cfg =
           emit_extcall_args env sub_cfg ty_args new_args
         in
         let rd = regs_for ty_res in
