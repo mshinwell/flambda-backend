@@ -372,41 +372,45 @@ let join env (branch1 : _ Or_never_returns.t) (branch2 : _ Or_never_returns.t)
     done;
     Ok (r, sub_cfg1, sub_cfg2)
 
-let join_array env rs ~bound_name =
+let join_array env
+    (rs_and_sub_cfgs : (Reg.t array * Sub_cfg.t) Or_never_returns.t array)
+    ~bound_name : (Reg.t array * Sub_cfg.t array) Or_never_returns.t =
   let maybe_emit_naming_op sub_cfg =
     maybe_emit_naming_op env sub_cfg ~bound_name
   in
-  let some_res = ref None in
-  for i = 0 to Array.length rs - 1 do
-    let r, _ = rs.(i) in
-    match r with
-    | None -> ()
-    | Some r -> (
+  let some_res = ref (Never_returns : _ Or_never_returns.t) in
+  let sub_cfgs_rev = ref [] in
+  for i = 0 to Array.length rs_and_sub_cfgs - 1 do
+    match rs_and_sub_cfgs.(i) with
+    | Never_returns -> sub_cfgs_rev := Sub_cfg.make_empty () :: !sub_cfgs_rev
+    | Ok (r, sub_cfg) -> (
+      sub_cfgs_rev := sub_cfg :: !sub_cfgs_rev;
       match !some_res with
-      | None -> some_res := Some (r, Array.map (fun r -> r.Reg.typ) r)
-      | Some (r', types) ->
+      | Never_returns ->
+        some_res := Or_never_returns.Ok (r, Array.map (fun r -> r.Reg.typ) r)
+      | Ok (r', types) ->
         let types =
           Array.map2 (fun r typ -> Cmm.lub_component r.Reg.typ typ) r types
         in
-        some_res := Some (r', types))
+        some_res := Or_never_returns.Ok (r', types))
   done;
+  let sub_cfgs = List.rev !sub_cfgs_rev |> Array.of_list in
   match !some_res with
-  | None -> None
-  | Some (template, types) ->
+  | Never_returns -> Never_returns
+  | Ok (template, types) ->
     let size_res = Array.length template in
     let res = Array.make size_res Reg.dummy in
     for i = 0 to size_res - 1 do
       res.(i) <- Reg.create types.(i)
     done;
-    for i = 0 to Array.length rs - 1 do
-      let r, sub_cfg = rs.(i) in
-      match r with
-      | None -> ()
-      | Some r ->
+    for i = 0 to Array.length rs_and_sub_cfgs - 1 do
+      match rs_and_sub_cfgs.(i) with
+      | Never_returns -> ()
+      | Ok (r, sub_cfg) ->
         insert_moves env sub_cfg r res;
         maybe_emit_naming_op sub_cfg res
     done;
-    Some res
+    Ok (res, sub_cfgs)
 
 module Make (Target : sig
   val is_immediate : int -> bool
@@ -1370,20 +1374,22 @@ struct
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     match emit_expr env sub_cfg esel ~bound_name:None with
     | Never_returns -> Never_returns
-    | Ok (rsel, sub_cfg) ->
+    | Ok (rsel, sub_cfg) -> (
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-      let sub_cases : (Reg.t array option * state) array =
+      let sub_cases =
         Array.map
           (fun (case, _dbg) -> emit_sequence env case ~bound_name)
           ecases
       in
-      let r = join_array env sub_cases ~bound_name in
-      let term_desc : Cfg.terminator =
-        Switch
-          (Array.map (fun idx -> Sub_cfg.start_label sub_cases.(idx)) index)
-      in
-      Sub_cfg.update_exit_terminator sub_cfg term_desc ~arg:rsel;
-      Ok (r, Sub_cfg.join ~from:(Array.to_list sub_cases) ~to_:sub_cfg)
+      match join_array env sub_cases ~bound_name with
+      | Never_returns -> Never_returns
+      | Ok (r, sub_cases) ->
+        let term_desc : Cfg.terminator =
+          Switch
+            (Array.map (fun idx -> Sub_cfg.start_label sub_cases.(idx)) index)
+        in
+        Sub_cfg.update_exit_terminator sub_cfg term_desc ~arg:rsel;
+        Ok (r, Sub_cfg.join ~from:(Array.to_list sub_cases) ~to_:sub_cfg))
 
   and emit_expr_catch env sub_cfg bound_name (_rec_flag : Cmm.rec_flag) handlers
       body (_value_kind : Cmm.kind_for_unboxing) : _ Or_never_returns.t =
