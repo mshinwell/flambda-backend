@@ -84,17 +84,14 @@ let is_simple_expr (expr : Cmm.expression) : Select_utils.is_simple_expr_result
     =
   match expr with
   (* inlined floating-point ops are simple if their arguments are *)
-  | Cop (Cextcall { func }, _, _) when List.mem func inline_ops ->
-    Simple_if_all_args_are
-  (* XXX List.for_all self#is_simple_expr args *)
+  | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
+    Simple_if_all_expressions_are args
   | _ -> Use_default
 
 let effects_of (expr : Cmm.expression) : Select_utils.effects_of_result =
   match expr with
-  | Cop (Cextcall { func }, _, _) when List.mem func inline_ops ->
-    Effects_of_args
-    (* XXX Select_utils.Effect_and_coeffect.join_list_map args
-       self#effects_of *)
+  | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
+    Simple_if_all_expressions_are args
   | _ -> Use_default
 
 let select_addressing chunk (expr : Cmm.expression) :
