@@ -950,10 +950,11 @@ struct
   and emit_tuple env sub_cfg exp_list :
       (Reg.t array * Sub_cfg.t) Or_never_returns.t =
     (* XXX *)
-    Array.concat (emit_tuple_not_flattened env sub_cfg exp_list)
+    assert false
+  (* Array.concat (emit_tuple_not_flattened env sub_cfg exp_list) *)
 
   and emit_extcall_args env sub_cfg ty_args args =
-    let args = emit_tuple_not_flattened env args in
+    let args = emit_tuple_not_flattened env sub_cfg args in
     let ty_args =
       match ty_args with
       | [] -> List.map (fun _ -> XInt) args
@@ -1259,7 +1260,7 @@ struct
         let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
         insert_move_args env sub_cfg r1 loc_arg stack_ofs;
         insert_debug' env sub_cfg term dbg loc_arg loc_res;
-        add_naming_op_for_bound_name loc_res;
+        add_naming_op_for_bound_name sub_cfg loc_res;
         let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
         insert_move_results env sub_cfg loc_res rd stack_ofs;
         Select_utils.set_traps_for_raise env;
@@ -1419,7 +1420,7 @@ struct
           env, Int.Map.add nfail (r, (ids, rs, e2, dbg, is_cold, label)) map)
         (env, Int.Map.empty) handlers
     in
-    let r_body, s_body = emit_sequence env body ~bound_name in
+    let body = emit_sequence env body ~bound_name in
     let translate_one_handler nfail
         (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
       assert (List.length ids = List.length rs);
@@ -1435,7 +1436,7 @@ struct
           (Select_utils.env_set_trap_stack env trap_stack)
           ids_and_rs
       in
-      let r, s =
+      let handler =
         emit_sequence new_env e2 ~bound_name:None ~at_start:(fun sub_cfg ->
             List.iter
               (fun ((var, _typ), r) ->
@@ -1456,7 +1457,13 @@ struct
                     [||] [||])
               ids_and_rs)
       in
-      (nfail, trap_stack, is_cold, label), (r, s)
+      let r, sub_cfg =
+        (* XXX this is maybe incorrect *)
+        match handler with
+        | Never_returns -> [||], Sub_cfg.make_empty ()
+        | Ok (r, sub_cfg) -> r, sub_cfg
+      in
+      (nfail, trap_stack, is_cold, label), (r, sub_cfg)
     in
     let rec build_all_reachable_handlers ~already_built ~not_built =
       let not_built, to_build =
@@ -1482,19 +1489,21 @@ struct
       build_all_reachable_handlers ~already_built:[] ~not_built:handlers_map
       (* Note: we're dropping unreachable handlers here *)
     in
-    let a = Array.of_list ((r_body, s_body) :: List.map snd l) in
-    let r = join_array env a ~bound_name in
-    assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-    let s_handlers =
-      List.map
-        (fun ((_, _, _, label), (_, sub_handler)) ->
-          Sub_cfg.add_empty_block_at_start sub_handler ~label)
-        l
-    in
-    let term_desc = Cfg.Always (Sub_cfg.start_label s_body) in
-    Sub_cfg.update_exit_terminator sub_cfg term_desc;
-    let sub_cfg = Sub_cfg.join ~from:(s_body :: s_handlers) ~to_:sub_cfg in
-    Ok (r, sub_cfg)
+    let a = Array.of_list (body :: List.map snd l) in
+    match join_array env a ~bound_name with
+    | Never_returns -> Never_returns
+    | Ok (r, s_handlers) ->
+      assert (Sub_cfg.exit_has_never_terminator sub_cfg);
+      let s_handlers =
+        List.map
+          (fun ((_, _, _, label), (_, sub_handler)) ->
+            Sub_cfg.add_empty_block_at_start sub_handler ~label)
+          s_handlers
+      in
+      let term_desc = Cfg.Always (Sub_cfg.start_label s_body) in
+      Sub_cfg.update_exit_terminator sub_cfg term_desc;
+      let sub_cfg = Sub_cfg.join ~from:(s_body :: s_handlers) ~to_:sub_cfg in
+      Ok (r, sub_cfg)
 
   and emit_expr_exit env sub_cfg lbl args traps : _ Or_never_returns.t =
     match emit_parts_list env sub_cfg args with
@@ -1572,12 +1581,12 @@ struct
     let env_body =
       env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
     in
-    let r1, s1 = emit_sequence env_body e1 ~bound_name in
+    let body = emit_sequence env_body e1 ~bound_name in
     let exn_bucket_in_handler = regs_for typ_val in
     let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
     let with_handler env_handler e2 : _ Or_never_returns.t =
-      let r2, s2 =
-        emit_sequence env_handler e2 ~bound_name ~at_start:(fun seq ->
+      let handler =
+        emit_sequence env_handler e2 ~bound_name ~at_start:(fun sub_cfg ->
             List.iter2
               (fun v regs ->
                 let provenance = VP.provenance v in
@@ -1598,12 +1607,14 @@ struct
               (v :: List.map fst extra_args)
               rv_list)
       in
-      let r = join env r1 s1 r2 s2 ~bound_name in
-      Sub_cfg.mark_as_trap_handler s2 ~exn_label;
-      Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
-        [| Proc.loc_exn_bucket |] exn_bucket_in_handler Debuginfo.none;
-      Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
-      Ok (r, Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg)
+      match join env body handler ~bound_name with
+      | Never_returns -> Never_returns
+      | Ok (r, s1, s2) ->
+        Sub_cfg.mark_as_trap_handler s2 ~exn_label;
+        Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
+          [| Proc.loc_exn_bucket |] exn_bucket_in_handler Debuginfo.none;
+        Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
+        Ok (r, Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg)
     in
     let env =
       List.fold_left2
