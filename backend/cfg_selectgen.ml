@@ -848,8 +848,7 @@ struct
      (and to be consistent with the bytecode compiler). *)
 
   let rec emit_parts env sub_cfg ~effects_after exp :
-      (Cmm.expression * Select_utils.environment * Sub_cfg.t) Or_never_returns.t
-      =
+      (Cmm.expression * Select_utils.environment) Or_never_returns.t =
     let module EC = Effect_and_coeffect in
     let may_defer_evaluation =
       let ec = effects_of exp in
@@ -888,25 +887,25 @@ struct
     (* Even though some expressions may look like they can be deferred from the
        (co)effect analysis, it may be forbidden to move them. *)
     if may_defer_evaluation && is_simple_expr exp
-    then Ok (exp, env, sub_cfg)
+    then Ok (exp, env)
     else
       match emit_expr env sub_cfg exp ~bound_name:None with
       | Never_returns -> Never_returns
-      | Ok (r, sub_cfg) ->
+      | Ok r ->
         if Array.length r = 0
-        then Ok (Ctuple [], env, sub_cfg)
+        then Ok (Ctuple [], env)
         else
           (* The normal case *)
           let id = V.create_local "bind" in
           if all_regs_anonymous r
           then
             (* r is an anonymous, unshared register; use it directly *)
-            Ok (Cvar id, env_add (VP.create id) r env, sub_cfg)
+            Ok (Cvar id, env_add (VP.create id) r env)
           else
             (* Introduce a fresh temp to hold the result *)
             let tmp = Reg.createv_like r in
             insert_moves env sub_cfg r tmp;
-            Ok (Cvar id, env_add (VP.create id) tmp env, sub_cfg)
+            Ok (Cvar id, env_add (VP.create id) tmp env)
 
   and emit_parts_list env sub_cfg exp_list :
       (expression list * environment * Sub_cfg.t) Or_never_returns.t =
@@ -935,34 +934,27 @@ struct
       exp_list_right_to_left
 
   and emit_tuple_not_flattened env sub_cfg exp_list =
-    let sub_cfg = ref !sub_cfg in
     let rec emit_list exp_list =
       match exp_list with
       | [] -> []
       | exp :: rem -> (
         (* Again, force right-to-left evaluation *)
         let loc_rem = emit_list rem in
-        match emit_expr env !sub_cfg exp ~bound_name:None with
+        match emit_expr env sub_cfg exp ~bound_name:None with
         | Never_returns ->
           (* XXX maybe should return Never_returns here *)
           assert false (* should have been caught in emit_parts *)
-        | Ok (loc_exp, new_sub_cfg) ->
-          sub_cfg := new_sub_cfg;
-          loc_exp :: loc_rem)
+        | Ok loc_exp -> loc_exp :: loc_rem)
     in
-    let loc_exp = emit_list exp_list in
-    loc_exp, !sub_cfg
+    emit_list exp_list
 
   (* XXX we need an "invalid" terminator in Cfg *)
 
-  and emit_tuple env sub_cfg exp_list :
-      (Reg.t array * Sub_cfg.t) Or_never_returns.t =
-    (* XXX *)
-    assert false
-  (* Array.concat (emit_tuple_not_flattened env sub_cfg exp_list) *)
+  and emit_tuple env sub_cfg exp_list : Reg.t array =
+    Array.concat (emit_tuple_not_flattened env sub_cfg exp_list)
 
   and emit_extcall_args env sub_cfg ty_args args =
-    let args, sub_cfg = emit_tuple_not_flattened env sub_cfg args in
+    let args = emit_tuple_not_flattened env sub_cfg args in
     let ty_args =
       match ty_args with
       | [] -> List.map (fun _ -> XInt) args
@@ -976,7 +968,7 @@ struct
       (fun i arg ->
         insert_move_extcall_arg env sub_cfg ty_args.(i) arg locs.(i))
       args;
-    Array.concat (Array.to_list locs), stack_ofs, sub_cfg
+    Array.concat (Array.to_list locs), stack_ofs
 
   and emit_stores env sub_cfg dbg args regs_addr =
     let addressing_mode =
@@ -1068,32 +1060,29 @@ struct
      - [None] if the expression does not finish normally (e.g. raises)
 
      - [Some rs] if the expression yields a result in registers [rs] *)
-  and emit_expr env sub_cfg exp ~bound_name :
-      (Reg.t array * Sub_cfg.t) Or_never_returns.t =
+  and emit_expr env sub_cfg exp ~bound_name : Reg.t array Or_never_returns.t =
     match exp with
     | Cconst_int (n, _dbg) ->
       let r = regs_for typ_int in
-      Ok
-        ( insert_op env sub_cfg (make_const_int (Nativeint.of_int n)) [||] r,
-          sub_cfg )
+      Ok (insert_op env sub_cfg (make_const_int (Nativeint.of_int n)) [||] r)
     | Cconst_natint (n, _dbg) ->
       let r = regs_for typ_int in
-      Ok (insert_op env sub_cfg (make_const_int n) [||] r, sub_cfg)
+      Ok (insert_op env sub_cfg (make_const_int n) [||] r)
     | Cconst_float32 (n, _dbg) ->
       let r = regs_for typ_float32 in
       Ok
-        ( insert_op env sub_cfg
-            (make_const_float32 (Int32.bits_of_float n))
-            [||] r,
-          sub_cfg )
+        (insert_op env sub_cfg
+           (make_const_float32 (Int32.bits_of_float n))
+           [||] r)
     | Cconst_float (n, _dbg) ->
       let r = regs_for typ_float in
       Ok
-        ( insert_op env sub_cfg (make_const_float (Int64.bits_of_float n)) [||] r,
-          sub_cfg )
+        (insert_op env sub_cfg
+           (make_const_float (Int64.bits_of_float n))
+           [||] r)
     | Cconst_vec128 (bits, _dbg) ->
       let r = regs_for typ_vec128 in
-      Ok (insert_op env sub_cfg (make_const_vec128 bits) [||] r, sub_cfg)
+      Ok (insert_op env sub_cfg (make_const_vec128 bits) [||] r)
     | Cconst_symbol (n, _dbg) ->
       (* Cconst_symbol _ evaluates to a statically-allocated address, so its
          value fits in a typ_int register and is never changed by the GC.
@@ -1112,11 +1101,10 @@ struct
     | Clet (v, e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:(Some v) with
       | Never_returns -> Never_returns
-      | Ok (r1, sub_cfg) ->
-        emit_expr (bind_let env sub_cfg v r1) sub_cfg e2 ~bound_name)
+      | Ok r1 -> emit_expr (bind_let env sub_cfg v r1) sub_cfg e2 ~bound_name)
     | Cphantom_let (_var, _defining_expr, body) ->
       emit_expr env sub_cfg body ~bound_name
-    | Ctuple [] -> Ok ([||], sub_cfg)
+    | Ctuple [] -> Ok [||]
     | Ctuple exp_list -> (
       match emit_parts_list env sub_cfg exp_list with
       | Never_returns -> Never_returns
@@ -1129,11 +1117,11 @@ struct
       | Ok (simple_args, env, sub_cfg) ->
         let rs = emit_tuple env sub_cfg simple_args in
         let rd = insert_op_debug env sub_cfg (make_opaque ()) dbg rs rs in
-        Ok (rd, sub_cfg))
+        Ok rd)
     | Cop (Ctuple_field (field, fields_layout), [arg], _dbg) -> (
       match emit_expr env sub_cfg arg ~bound_name:None with
       | Never_returns -> Never_returns
-      | Ok (loc_exp, sub_cfg) ->
+      | Ok loc_exp ->
         let flat_size a =
           Array.fold_left (fun acc t -> acc + Array.length t) 0 a
         in
@@ -1143,7 +1131,7 @@ struct
         let field_slice =
           Array.sub loc_exp size_before (Array.length fields_layout.(field))
         in
-        Ok (field_slice, sub_cfg))
+        Ok field_slice)
     | Cop (op, args, dbg) -> emit_expr_op env sub_cfg bound_name op args dbg
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
@@ -1163,7 +1151,7 @@ struct
         value_kind
 
   (* Emit an expression in tail position of a function *)
-  and emit_tail env sub_cfg exp : Sub_cfg.t =
+  and emit_tail env sub_cfg exp : unit =
     match exp with
     | Clet (v, e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
@@ -1213,7 +1201,7 @@ struct
     Never_returns
 
   and emit_expr_op env sub_cfg bound_name op args dbg :
-      (Reg.t array * Sub_cfg.t) Or_never_returns.t =
+      Reg.t array Or_never_returns.t =
     match emit_parts_list env sub_cfg args with
     | Never_returns -> Never_returns
     | Ok (simple_args, env, sub_cfg) -> (
@@ -1252,14 +1240,14 @@ struct
         insert_debug' env sub_cfg term dbg
           (Array.append [| r1.(0) |] loc_arg)
           loc_res;
-        let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
+        Sub_cfg.add_never_block sub_cfg ~label:label_after;
         (* The destination registers (as per the procedure calling convention)
            need to be named right now, otherwise the result of the function call
            may be unavailable in the debugger immediately after the call. *)
         add_naming_op_for_bound_name sub_cfg loc_res;
         insert_move_results env sub_cfg loc_res rd stack_ofs;
         Select_utils.set_traps_for_raise env;
-        Ok (rd, sub_cfg)
+        Ok rd
       | Terminator (Call { op = Direct _; label_after } as term) ->
         let r1 = emit_tuple env sub_cfg new_args in
         let rd = regs_for ty in
@@ -1269,13 +1257,13 @@ struct
         insert_move_args env sub_cfg r1 loc_arg stack_ofs;
         insert_debug' env sub_cfg term dbg loc_arg loc_res;
         add_naming_op_for_bound_name sub_cfg loc_res;
-        let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
+        Sub_cfg.add_never_block sub_cfg ~label:label_after;
         insert_move_results env sub_cfg loc_res rd stack_ofs;
         Select_utils.set_traps_for_raise env;
-        Ok (rd, sub_cfg)
+        Ok rd
       | Terminator
           (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
-        let loc_arg, stack_ofs, sub_cfg =
+        let loc_arg, stack_ofs =
           emit_extcall_args env sub_cfg ty_args new_args
         in
         let rd = regs_for ty_res in
@@ -1286,20 +1274,22 @@ struct
           insert_op_debug' env sub_cfg term dbg loc_arg
             (Proc.loc_external_results (Reg.typv rd))
         in
-        let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
+        Sub_cfg.add_never_block sub_cfg ~label:label_after;
         add_naming_op_for_bound_name sub_cfg loc_res;
         insert_move_results env sub_cfg loc_res rd stack_ofs;
         Select_utils.set_traps_for_raise env;
-        Ok (rd, sub_cfg)
+        Ok rd
       | Terminator (Prim { op = Probe _; label_after } as term) ->
         let r1 = emit_tuple env sub_cfg new_args in
         let rd = regs_for ty in
         let rd = insert_op_debug' env sub_cfg term dbg r1 rd in
         Select_utils.set_traps_for_raise env;
-        let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
-        Ok (rd, sub_cfg)
+        Sub_cfg.add_never_block sub_cfg ~label:label_after;
+        Ok rd
       | Terminator (Call_no_return ({ func_symbol; ty_args; _ } as r)) ->
-        let loc_arg, stack_ofs = emit_extcall_args t env ty_args new_args in
+        let loc_arg, stack_ofs =
+          emit_extcall_args env sub_cfg ty_args new_args
+        in
         let keep_for_checking =
           !Select_utils.current_function_is_check_enabled
           && String.equal func_symbol Cmm.caml_flambda2_invalid
@@ -1316,12 +1306,14 @@ struct
           else Call_no_return r
         in
         let (_ : Reg.t array) =
-          insert_op_debug' t env term dbg loc_arg
+          insert_op_debug' env sub_cfg term dbg loc_arg
             (Proc.loc_external_results (Reg.typv rd))
         in
         Select_utils.set_traps_for_raise env;
         if returns
-        then Ok (rd, Sub_cfg.add_never_block sub_cfg ~label)
+        then (
+          Sub_cfg.add_never_block sub_cfg ~label;
+          Ok rd)
         else Never_returns
       | Basic (Op (Alloc { bytes = _; mode; dbginfo = [placeholder] })) ->
         let rd = regs_for typ_val in
@@ -1338,7 +1330,7 @@ struct
         add_naming_op_for_bound_name sub_cfg rd;
         emit_stores env sub_cfg dbg new_args rd;
         Select_utils.set_traps_for_raise env;
-        Ok (rd, sub_cfg)
+        Ok rd
       | Basic (Op (Alloc { bytes = _; mode = _; dbginfo })) ->
         Misc.fatal_errorf
           "Selection Alloc: expected a single placehold in dbginfo, found %d"
@@ -1347,7 +1339,7 @@ struct
         let r1 = emit_tuple env sub_cfg new_args in
         let rd = regs_for ty in
         add_naming_op_for_bound_name sub_cfg rd;
-        Ok (insert_op_debug env sub_cfg op dbg r1 rd, sub_cfg)
+        Ok (insert_op_debug env sub_cfg op dbg r1 rd)
       | Basic basic ->
         Misc.fatal_errorf "unexpected basic (%a)" Cfg.dump_basic basic
       | Terminator term ->
@@ -1357,15 +1349,15 @@ struct
 
   and emit_expr_ifthenelse env sub_cfg bound_name econd _ifso_dbg eif
       (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t)
-      (_value_kind : Cmm.kind_for_unboxing) : _ Or_never_returns.t =
+      (_value_kind : Cmm.kind_for_unboxing) : Reg.t array Or_never_returns.t =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     let cond, earg = select_condition econd in
     match emit_expr env sub_cfg earg ~bound_name:None with
     | Never_returns -> Never_returns
-    | Ok (rarg, sub_cfg) -> (
+    | Ok rarg -> (
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-      let if_ = emit_sequence env eif ~bound_name in
-      let else_ = emit_sequence env eelse ~bound_name in
+      let if_ = emit_new_sub_cfg env eif ~bound_name in
+      let else_ = emit_new_sub_cfg env eelse ~bound_name in
       match join env if_ else_ ~bound_name with
       | Never_returns -> Never_returns
       | Ok (r, sub_if, sub_else) ->
@@ -1375,19 +1367,20 @@ struct
             ~label_false:(Sub_cfg.start_label sub_else)
         in
         Sub_cfg.update_exit_terminator sub_cfg term_desc ~arg:rarg;
-        Ok (r, Sub_cfg.join ~from:[sub_if; sub_else] ~to_:sub_cfg))
+        Sub_cfg.join ~from:[sub_if; sub_else] ~to_:sub_cfg;
+        Ok r)
 
   and emit_expr_switch env sub_cfg bound_name esel index ecases
       (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) :
-      _ Or_never_returns.t =
+      Reg.t array Or_never_returns.t =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     match emit_expr env sub_cfg esel ~bound_name:None with
     | Never_returns -> Never_returns
-    | Ok (rsel, sub_cfg) -> (
+    | Ok rsel -> (
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let sub_cases =
         Array.map
-          (fun (case, _dbg) -> emit_sequence env case ~bound_name)
+          (fun (case, _dbg) -> emit_new_sub_cfg env case ~bound_name)
           ecases
       in
       match join_array env sub_cases ~bound_name with
@@ -1398,10 +1391,12 @@ struct
             (Array.map (fun idx -> Sub_cfg.start_label sub_cases.(idx)) index)
         in
         Sub_cfg.update_exit_terminator sub_cfg term_desc ~arg:rsel;
-        Ok (r, Sub_cfg.join ~from:(Array.to_list sub_cases) ~to_:sub_cfg))
+        Sub_cfg.join ~from:(Array.to_list sub_cases) ~to_:sub_cfg;
+        Ok r)
 
-  and emit_expr_catch env sub_cfg bound_name (_rec_flag : Cmm.rec_flag) handlers
-      body (_value_kind : Cmm.kind_for_unboxing) : _ Or_never_returns.t =
+  and emit_expr_catch env (sub_cfg : Sub_cfg.t) bound_name
+      (_rec_flag : Cmm.rec_flag) handlers body
+      (_value_kind : Cmm.kind_for_unboxing) : Reg.t array Or_never_returns.t =
     let handlers =
       List.map
         (fun (nfail, ids, e2, dbg, is_cold) ->
@@ -1428,7 +1423,7 @@ struct
           env, Int.Map.add nfail (r, (ids, rs, e2, dbg, is_cold, label)) map)
         (env, Int.Map.empty) handlers
     in
-    let body = emit_sequence env body ~bound_name in
+    let body = emit_new_sub_cfg env body ~bound_name in
     let translate_one_handler nfail
         (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
       assert (List.length ids = List.length rs);
@@ -1445,7 +1440,7 @@ struct
           ids_and_rs
       in
       let handler =
-        emit_sequence new_env e2 ~bound_name:None ~at_start:(fun sub_cfg ->
+        emit_new_sub_cfg new_env e2 ~bound_name:None ~at_start:(fun sub_cfg ->
             List.iter
               (fun ((var, _typ), r) ->
                 let provenance = VP.provenance var in
@@ -1510,10 +1505,11 @@ struct
       in
       let term_desc = Cfg.Always (Sub_cfg.start_label s_body) in
       Sub_cfg.update_exit_terminator sub_cfg term_desc;
-      let sub_cfg = Sub_cfg.join ~from:(s_body :: s_handlers) ~to_:sub_cfg in
-      Ok (r, sub_cfg)
+      Sub_cfg.join ~from:(s_body :: s_handlers) ~to_:sub_cfg;
+      Ok r
 
-  and emit_expr_exit env sub_cfg lbl args traps : _ Or_never_returns.t =
+  and emit_expr_exit env sub_cfg lbl args traps : Reg.t array Or_never_returns.t
+      =
     match emit_parts_list env sub_cfg args with
     | Never_returns -> Never_returns
     | Ok (simple_list, ext_env, sub_cfg) -> (
@@ -1561,7 +1557,7 @@ struct
       | Return_lbl -> (
         match simple_list with
         | [expr] ->
-          let (_ : Sub_cfg.t) = emit_return ext_env sub_cfg expr traps in
+          emit_return ext_env sub_cfg expr traps;
           (* XXX what should happen here? *)
           Never_returns
         | [] -> Misc.fatal_error "Selection.emit_expr: Return without arguments"
@@ -1571,7 +1567,7 @@ struct
 
   and emit_expr_trywith env sub_cfg bound_name e1 exn_cont v ~extra_args e2
       (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) :
-      _ Or_never_returns.t =
+      Reg.t array Or_never_returns.t =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     let exn_label = Cmm.new_label () in
@@ -1589,12 +1585,12 @@ struct
     let env_body =
       env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
     in
-    let body = emit_sequence env_body e1 ~bound_name in
+    let body = emit_new_sub_cfg env_body e1 ~bound_name in
     let exn_bucket_in_handler = regs_for typ_val in
     let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
     let with_handler env_handler e2 : _ Or_never_returns.t =
       let handler =
-        emit_sequence env_handler e2 ~bound_name ~at_start:(fun sub_cfg ->
+        emit_new_sub_cfg env_handler e2 ~bound_name ~at_start:(fun sub_cfg ->
             List.iter2
               (fun v regs ->
                 let provenance = VP.provenance v in
@@ -1622,12 +1618,12 @@ struct
         Sub_cfg.add_instruction_at_start s2 (Cfg.Op Move)
           [| Proc.loc_exn_bucket |] exn_bucket_in_handler Debuginfo.none;
         Sub_cfg.update_exit_terminator sub_cfg (Always (Sub_cfg.start_label s1));
-        Ok (r, Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg)
+        Sub_cfg.join ~from:[s1; s2] ~to_:sub_cfg;
+        Ok r
     in
     let env =
       List.fold_left2
-        (* XXX check which [sub_cfg] this is *)
-          (fun env var regs -> Select_utils.env_add sub_cfg var regs env)
+        (fun env var regs -> Select_utils.env_add var regs env)
         env
         (v :: List.map fst extra_args)
         rv_list
@@ -1666,25 +1662,25 @@ struct
     | exception Not_found ->
       Misc.fatal_errorf "Selection.emit_expr: Unbound handler %d" exn_cont
 
-  and emit_sequence ?at_start (env : environment) exp ~bound_name :
+  and emit_new_sub_cfg ?at_start (env : environment) exp ~bound_name :
       (Reg.t array * Sub_cfg.t) Or_never_returns.t =
     let sub_cfg = Sub_cfg.make_empty () in
     (match at_start with None -> () | Some f -> f sub_cfg);
-    emit_expr env sub_cfg exp ~bound_name
+    match emit_expr env sub_cfg exp ~bound_name with
+    | Never_returns -> Never_returns
+    | Ok regs -> Ok (regs, sub_cfg)
 
   (* Same, but in tail position. *)
 
-  and emit_return (env : environment) sub_cfg exp traps : Sub_cfg.t =
+  and emit_return (env : environment) sub_cfg exp traps : unit =
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     match emit_expr env sub_cfg exp ~bound_name:None with
     | Never_returns -> sub_cfg
-    | Ok (rd, sub_cfg) ->
-      insert_return env sub_cfg (Some rd) traps;
-      sub_cfg
+    | Ok (rd, sub_cfg) -> insert_return env sub_cfg (Some rd) traps
 
-  and emit_tail_apply env (sub_cfg : Sub_cfg.t) ty op args dbg : Sub_cfg.t =
+  and emit_tail_apply env (sub_cfg : Sub_cfg.t) ty op args dbg : unit =
     match emit_parts_list env sub_cfg args with
-    | Never_returns -> sub_cfg
+    | Never_returns -> ()
     | Ok (simple_args, env, sub_cfg) -> (
       let label_after = Cmm.new_label () in
       let new_op, new_args = select_operation op simple_args dbg ~label_after in
@@ -1702,18 +1698,16 @@ struct
           insert_moves env sub_cfg rarg loc_arg;
           insert_debug' env sub_cfg call dbg
             (Array.append [| r1.(0) |] loc_arg)
-            [||];
-          sub_cfg)
+            [||])
         else (
           insert_move_args env sub_cfg rarg loc_arg stack_ofs;
           insert_debug' env sub_cfg term dbg
             (Array.append [| r1.(0) |] loc_arg)
             loc_res;
-          let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
+          Sub_cfg.add_never_block sub_cfg ~label:label_after;
           Select_utils.set_traps_for_raise env;
           insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return env sub_cfg (Some loc_res) (pop_all_traps env);
-          sub_cfg)
+          insert_return env sub_cfg (Some loc_res) (pop_all_traps env))
       | Terminator (Call { op = Direct func; label_after } as term) ->
         let r1 = emit_tuple env sub_cfg new_args in
         let rd = regs_for ty in
@@ -1729,35 +1723,32 @@ struct
             if stack_ofs = 0 then loc_arg else Proc.loc_parameters (Reg.typv r1)
           in
           insert_moves env sub_cfg r1 loc_arg';
-          insert_debug' env sub_cfg call dbg loc_arg' [||];
-          sub_cfg)
+          insert_debug' env sub_cfg call dbg loc_arg' [||])
         else if stack_ofs = 0 && Select_utils.trap_stack_is_empty env
         then (
           let call = Cfg.Tailcall_func (Direct func) in
           insert_moves env sub_cfg r1 loc_arg;
-          insert_debug' env sub_cfg call dbg loc_arg [||];
-          sub_cfg)
+          insert_debug' env sub_cfg call dbg loc_arg [||])
         else (
           insert_move_args env sub_cfg r1 loc_arg stack_ofs;
           insert_debug' env sub_cfg term dbg loc_arg loc_res;
-          let sub_cfg = Sub_cfg.add_never_block sub_cfg ~label:label_after in
+          Sub_cfg.add_never_block sub_cfg ~label:label_after;
           Select_utils.set_traps_for_raise env;
           insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return env sub_cfg (Some loc_res) (pop_all_traps env);
-          sub_cfg)
+          insert_return env sub_cfg (Some loc_res) (pop_all_traps env))
       | _ -> Misc.fatal_error "Cfg_selectgen.emit_tail")
 
   and emit_tail_ifthenelse env sub_cfg econd (_ifso_dbg : Debuginfo.t) eif
       (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t)
-      (_kind : Cmm.kind_for_unboxing) : Sub_cfg.t =
+      (_kind : Cmm.kind_for_unboxing) : unit =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     let cond, earg = select_condition econd in
     match emit_expr env sub_cfg earg ~bound_name:None with
-    | Never_returns -> sub_cfg
-    | Ok (rarg, sub_cfg) ->
+    | Never_returns -> ()
+    | Ok rarg ->
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-      let sub_if = emit_tail_sequence env eif in
-      let sub_else = emit_tail_sequence env eelse in
+      let sub_if = emit_tail_new_sub_cfg env eif in
+      let sub_else = emit_tail_new_sub_cfg env eelse in
       let term_desc =
         terminator_of_test cond
           ~label_true:(Sub_cfg.start_label sub_if)
@@ -1767,14 +1758,14 @@ struct
       Sub_cfg.join_tail ~from:[sub_if; sub_else] ~to_:sub_cfg
 
   and emit_tail_switch env sub_cfg esel index ecases (_dbg : Debuginfo.t)
-      (_kind : Cmm.kind_for_unboxing) : Sub_cfg.t =
+      (_kind : Cmm.kind_for_unboxing) : unit =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     match emit_expr env sub_cfg esel ~bound_name:None with
-    | Never_returns -> sub_cfg
-    | Ok (rsel, sub_cfg) ->
+    | Never_returns -> ()
+    | Ok rsel ->
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let sub_cases =
-        Array.map (fun (case, _dbg) -> emit_tail_sequence env case) ecases
+        Array.map (fun (case, _dbg) -> emit_tail_new_sub_cfg env case) ecases
       in
       let term_desc : Cfg.terminator =
         Switch
@@ -1784,7 +1775,7 @@ struct
       Sub_cfg.join_tail ~from:(Array.to_list sub_cases) ~to_:sub_cfg
 
   and emit_tail_catch env sub_cfg (_rec_flag : Cmm.rec_flag) handlers e1
-      (_value_kind : Cmm.kind_for_unboxing) : Sub_cfg.t =
+      (_value_kind : Cmm.kind_for_unboxing) : unit =
     let handlers =
       List.map
         (fun (nfail, ids, e2, dbg, is_cold) ->
@@ -1810,7 +1801,7 @@ struct
         (env, Int.Map.empty) handlers
     in
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
-    let s_body = emit_tail_sequence env e1 in
+    let s_body = emit_tail_new_sub_cfg env e1 in
     let translate_one_handler nfail
         (trap_info, (ids, rs, e2, _dbg, is_cold, label)) =
       assert (List.length ids = List.length rs);
@@ -1827,7 +1818,7 @@ struct
           ids_and_rs
       in
       let seq : Sub_cfg.t =
-        emit_tail_sequence new_env e2 ~at_start:(fun sub_cfg ->
+        emit_tail_new_sub_cfg new_env e2 ~at_start:(fun sub_cfg ->
             List.iter
               (fun ((var, _typ), r) ->
                 let provenance = VP.provenance var in
@@ -1882,7 +1873,7 @@ struct
     Sub_cfg.join_tail ~from:(s_body :: s_handlers) ~to_:sub_cfg
 
   and emit_tail_trywith env sub_cfg e1 exn_cont v ~extra_args e2
-      (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) : Sub_cfg.t =
+      (_dbg : Debuginfo.t) (_value_kind : Cmm.kind_for_unboxing) : unit =
     (* CR-someday xclerc for xclerc: use the `_dbg` parameter *)
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     let exn_label = Cmm.new_label () in
@@ -1895,12 +1886,12 @@ struct
     let env_body =
       env_add_regs_for_exception_extra_args exn_cont extra_arg_regs env_body
     in
-    let s1 : Sub_cfg.t = emit_tail_sequence env_body e1 in
+    let s1 : Sub_cfg.t = emit_tail_new_sub_cfg env_body e1 in
     let exn_bucket_in_handler = regs_for typ_val in
     let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
     let with_handler env_handler e2 : Sub_cfg.t =
       let s2 : Sub_cfg.t =
-        emit_tail_sequence env_handler e2 ~at_start:(fun sub_cfg ->
+        emit_tail_new_sub_cfg env_handler e2 ~at_start:(fun sub_cfg ->
             List.iter2
               (fun v regs ->
                 let provenance = VP.provenance v in
@@ -1961,10 +1952,11 @@ struct
     | exception Not_found ->
       Misc.fatal_errorf "Selection.emit_expr: Unbound handler %d" exn_cont
 
-  and emit_tail_sequence ?at_start env exp : Sub_cfg.t =
+  and emit_tail_new_sub_cfg ?at_start env exp : Sub_cfg.t =
     let sub_cfg = Sub_cfg.make_empty () in
     (match at_start with None -> () | Some f -> f sub_cfg);
-    emit_tail env sub_cfg exp
+    emit_tail env sub_cfg exp;
+    sub_cfg
 
   (* Sequentialization of a function definition *)
 
