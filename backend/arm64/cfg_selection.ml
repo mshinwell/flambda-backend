@@ -43,7 +43,7 @@ let is_logical_immediate_int n = Arch.is_logical_immediate (Nativeint.of_int n)
 
 (* Signed immediates are simpler *)
 
-let is_immediate n =
+let int_is_immediate n =
   let mn = -n in
   n land 0xFFF = n
   || n land 0xFFF_000 = n
@@ -71,15 +71,15 @@ let specific x ~label_after =
       (Cfg.Specific_can_raise { Cfg.op = x; label_after })
   else Cfg_selectgen.Basic Cfg.(Op (Specific x))
 
-let is_immediate (op : Simple_operation.t) n : Select_utils.is_immediate_result
-    =
+let is_immediate (op : Simple_operation.integer_operation) n :
+    Select_utils.is_immediate_result =
   match op with
-  | Iadd | Isub -> n <= 0xFFF_FFF && n >= -0xFFF_FFF
-  | Iand | Ior | Ixor -> is_logical_immediate_int n
-  | Icomp _ -> is_immediate n
+  | Iadd | Isub -> Is_immediate (n <= 0xFFF_FFF && n >= -0xFFF_FFF)
+  | Iand | Ior | Ixor -> Is_immediate (is_logical_immediate_int n)
+  | Icomp _ -> int_is_immediate n
   | _ -> Use_default
 
-let is_immediate_test _cmp n = is_immediate n
+let is_immediate_test _cmp n = int_is_immediate n
 
 let is_simple_expr (expr : Cmm.expression) : Select_utils.is_simple_expr_result
     =
@@ -218,7 +218,7 @@ let is_store_out_of_range kind ~byte_offset :
     Select_utils.is_store_out_of_range_result =
   if is_offset kind byte_offset then Within_range else Out_of_range
 
-let insert_move_extcall_arg _env ty_arg src dst :
+let insert_move_extcall_arg ty_arg src dst :
     Select_utils.insert_move_extcall_arg_result =
   let ty_arg_is_int32 =
     match ty_arg with

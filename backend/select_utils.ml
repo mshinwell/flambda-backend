@@ -25,21 +25,61 @@ module Int = Numbers.Int
 module V = Backend_var
 module VP = Backend_var.With_provenance
 
+type basic_or_terminator =
+  | Basic of Cfg.basic
+  | Terminator of Cfg.terminator
+
+type is_immediate_result =
+  | Is_immediate of bool
+  | Use_default
+
+type is_simple_expr_result =
+  | Simple_if_all_expressions_are of Cmm.expression list
+  | Use_default
+
+type effects_of_result =
+  | Effects_of_all_expressions of Cmm.expression list
+  | Use_default
+
+type select_operation_result =
+  | Rewritten of basic_or_terminator * Cmm.expression list
+  | Select_operation_then_rewrite of
+      Cmm.operation
+      * Cmm.expression list
+      * Debuginfo.t
+      * (basic_or_terminator ->
+        args:Cmm.expression list ->
+        select_operation_result)
+  | Use_default
+
+type select_store_result =
+  | Maybe_out_of_range
+  | Rewritten of Cmm.operation * Cmm.expression
+  | Use_default
+
+type is_store_out_of_range_result =
+  | Within_range
+  | Out_of_range
+
+type insert_move_extcall_arg_result =
+  | Rewritten of Cfg.basic * Reg.t array * Reg.t array
+  | Use_default
+
 type trap_stack_info =
   | Unreachable
   | Reachable of Simple_operation.trap_stack
 
-type 'a static_handler =
+type static_handler =
   { regs : Reg.t array list;
     traps_ref : trap_stack_info ref;
-    extra : 'a
+    extra : Label.t
   }
 
-type 'a environment =
+type environment =
   { vars :
       (Reg.t array * Backend_var.Provenance.t option * Asttypes.mutable_flag)
       V.Map.t;
-    static_exceptions : 'a static_handler Int.Map.t;
+    static_exceptions : static_handler Int.Map.t;
         (** Which registers must be populated when jumping to the given
         handler. *)
     trap_stack : Simple_operation.trap_stack;
@@ -55,7 +95,7 @@ let env_add ?(mut = Asttypes.Immutable) var regs env =
 
 let env_add_static_exception id v env extra =
   let r = ref Unreachable in
-  let s : _ static_handler = { regs = v; traps_ref = r; extra } in
+  let s : static_handler = { regs = v; traps_ref = r; extra } in
   { env with static_exceptions = Int.Map.add id s env.static_exceptions }, r
 
 let env_find id env =
@@ -251,7 +291,7 @@ let size_machtype mty =
   done;
   !size
 
-let size_expr (env : _ environment) exp =
+let size_expr (env : environment) exp =
   let rec size localenv = function
     | Cconst_int _ | Cconst_natint _ -> Arch.size_int
     | Cconst_symbol _ -> Arch.size_addr
@@ -397,5 +437,3 @@ let select_effects (e : Cmm.effects) : Effect.t =
 
 let select_coeffects (e : Cmm.coeffects) : Coeffect.t =
   match e with No_coeffects -> None | Has_coeffects -> Arbitrary
-
-module Select_utils = struct end

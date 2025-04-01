@@ -18,6 +18,11 @@
 
 [@@@ocaml.warning "+a-4-9-40-41-42"]
 
+(* XXX move to Cfg *)
+type basic_or_terminator =
+  | Basic of Cfg.basic
+  | Terminator of Cfg.terminator
+
 type is_immediate_result =
   | Is_immediate of bool
   | Use_default
@@ -31,12 +36,12 @@ type effects_of_result =
   | Use_default
 
 type select_operation_result =
-  | Rewritten of Cfg_selectgen.basic_or_terminator * Cmm.expression list
+  | Rewritten of basic_or_terminator * Cmm.expression list
   | Select_operation_then_rewrite of
       Cmm.operation
       * Cmm.expression list
       * Debuginfo.t
-      * (Cfg_selectgen.basic_or_terminator ->
+      * (basic_or_terminator ->
         args:Cmm.expression list ->
         select_operation_result)
   | Use_default
@@ -50,21 +55,26 @@ type is_store_out_of_range_result =
   | Within_range
   | Out_of_range
 
+type insert_move_extcall_arg_result =
+  | Rewritten of Cfg.basic * Reg.t array * Reg.t array
+  | Use_default
+
 type trap_stack_info =
   | Unreachable
   | Reachable of Simple_operation.trap_stack
 
-type 'a static_handler =
+type static_handler =
   { regs : Reg.t array list;
     traps_ref : trap_stack_info ref;
-    extra : 'a
+    (* CR mshinwell: rename [extra] -> [label] *)
+    extra : Label.t
   }
 
-type 'a environment =
+type environment =
   { vars :
       (Reg.t array * Backend_var.Provenance.t option * Asttypes.mutable_flag)
       Backend_var.Map.t;
-    static_exceptions : 'a static_handler Numbers.Int.Map.t;
+    static_exceptions : static_handler Numbers.Int.Map.t;
         (** Which registers must be populated when jumping to the given
           handler. *)
     trap_stack : Simple_operation.trap_stack;
@@ -75,37 +85,35 @@ val env_add :
   ?mut:Asttypes.mutable_flag ->
   Backend_var.With_provenance.t ->
   Reg.t array ->
-  'a environment ->
-  'a environment
+  environment ->
+  environment
 
 val env_add_static_exception :
   Lambda.static_label ->
   Reg.t array list ->
-  'a environment ->
-  'a ->
-  'a environment * trap_stack_info ref
+  environment ->
+  Label.t ->
+  environment * trap_stack_info ref
 
-val env_find : Backend_var.t -> 'a environment -> Reg.t array
+val env_find : Backend_var.t -> environment -> Reg.t array
 
 val env_find_mut :
-  Backend_var.t ->
-  'a environment ->
-  Reg.t array * Backend_var.Provenance.t option
+  Backend_var.t -> environment -> Reg.t array * Backend_var.Provenance.t option
 
 val env_find_static_exception :
-  Lambda.static_label -> 'a environment -> 'a static_handler
+  Lambda.static_label -> environment -> static_handler
 
 val env_enter_trywith :
-  'a environment -> Cmm.trywith_shared_label -> 'a -> 'a environment
+  environment -> Cmm.trywith_shared_label -> Label.t -> environment
 
 val env_add_regs_for_exception_extra_args :
-  Cmm.trywith_shared_label -> Reg.t array -> 'a environment -> 'a environment
+  Cmm.trywith_shared_label -> Reg.t array -> environment -> environment
 
 val env_find_regs_for_exception_extra_args :
-  Cmm.trywith_shared_label -> _ environment -> Reg.t array
+  Cmm.trywith_shared_label -> environment -> Reg.t array
 
 val env_set_trap_stack :
-  'a environment -> Simple_operation.trap_stack -> 'a environment
+  environment -> Simple_operation.trap_stack -> environment
 
 val set_traps :
   Lambda.static_label ->
@@ -114,17 +122,17 @@ val set_traps :
   Cmm.trap_action list ->
   unit
 
-val set_traps_for_raise : 'a environment -> unit
+val set_traps_for_raise : environment -> unit
 
-val trap_stack_is_empty : 'a environment -> bool
+val trap_stack_is_empty : environment -> bool
 
-val pop_all_traps : 'a environment -> Cmm.trap_action list
+val pop_all_traps : environment -> Cmm.trap_action list
 
-val env_empty : 'a environment
+val env_empty : environment
 
 val size_component : Cmm.machtype_component -> int
 
-val size_expr : 'a environment -> Cmm.expression -> int
+val size_expr : environment -> Cmm.expression -> int
 
 val select_mutable_flag : Asttypes.mutable_flag -> Simple_operation.mutable_flag
 
@@ -183,259 +191,149 @@ val select_effects : Cmm.effects -> Effect.t
 
 val select_coeffects : Cmm.coeffects -> Coeffect.t
 
-val is_store : 'op -> bool
+(* val is_store : 'op -> bool
 
-val lift_op : 'op -> 'instr
+   val lift_op : 'op -> 'instr
 
-val make_store : Cmm.memory_chunk -> Arch.addressing_mode -> bool -> 'instr
+   val make_store : Cmm.memory_chunk -> Arch.addressing_mode -> bool -> 'instr
 
-val make_stack_offset : int -> 'instr
+   val make_stack_offset : int -> 'instr
 
-val make_name_for_debugger :
-  ident:Backend_var.t ->
-  which_parameter:int option ->
-  provenance:Backend_var.Provenance.t option ->
-  is_assignment:bool ->
-  regs:Reg.t array ->
-  'instr
+   val make_name_for_debugger : ident:Backend_var.t -> which_parameter:int
+   option -> provenance:Backend_var.Provenance.t option -> is_assignment:bool ->
+   regs:Reg.t array -> 'instr
 
-val make_const_int : nativeint -> 'op
+   val make_const_int : nativeint -> 'op
 
-val make_const_float32 : int32 -> 'op
+   val make_const_float32 : int32 -> 'op
 
-val make_const_float : int64 -> 'op
+   val make_const_float : int64 -> 'op
 
-val make_const_vec128 : Cmm.vec128_bits -> 'op
+   val make_const_vec128 : Cmm.vec128_bits -> 'op
 
-val make_const_symbol : Cmm.symbol -> 'op
+   val make_const_symbol : Cmm.symbol -> 'op
 
-val make_opaque : unit -> 'op
+   val make_opaque : unit -> 'op
 
-val is_simple_expr : Cmm.expression -> bool
+   val is_simple_expr : Cmm.expression -> bool
 
-val effects_of : Cmm.expression -> Effect_and_coeffect.t
+   val effects_of : Cmm.expression -> Effect_and_coeffect.t
 
-val is_immediate : Simple_operation.integer_operation -> int -> bool
+   val is_immediate : Simple_operation.integer_operation -> int -> bool
 
-val is_immediate_test : Simple_operation.integer_comparison -> int -> bool
+   val is_immediate_test : Simple_operation.integer_comparison -> int -> bool
 
-val select_addressing :
-  Cmm.memory_chunk -> Cmm.expression -> Arch.addressing_mode * Cmm.expression
+   val select_addressing : Cmm.memory_chunk -> Cmm.expression ->
+   Arch.addressing_mode * Cmm.expression
 
-val select_store :
-  bool -> Arch.addressing_mode -> Cmm.expression -> 'op * Cmm.expression
+   val select_store : bool -> Arch.addressing_mode -> Cmm.expression -> 'op *
+   Cmm.expression
 
-val select_condition : Cmm.expression -> Simple_operation.test * Cmm.expression
+   val select_condition : Cmm.expression -> Simple_operation.test *
+   Cmm.expression val regs_for : Cmm.machtype -> Reg.t array val insert_debug :
+   environment -> 'instr -> Debuginfo.t -> Reg.t array -> Reg.t array -> unit
 
-val regs_for : Cmm.machtype -> Reg.t array
+   val insert : environment -> 'instr -> Reg.t array -> Reg.t array -> unit
 
-val insert_debug :
-  'env environment ->
-  'instr ->
-  Debuginfo.t ->
-  Reg.t array ->
-  Reg.t array ->
-  unit
+   val insert_move : environment -> Reg.t -> Reg.t -> unit
 
-val insert : 'env environment -> 'instr -> Reg.t array -> Reg.t array -> unit
+   val insert_moves : environment -> Reg.t array -> Reg.t array -> unit
 
-val insert_move : 'env environment -> Reg.t -> Reg.t -> unit
+   val insert_move_args : environment -> Reg.t array -> Reg.t array -> int ->
+   unit
 
-val insert_moves : 'env environment -> Reg.t array -> Reg.t array -> unit
+   val insert_move_results : environment -> Reg.t array -> Reg.t array -> int ->
+   unit val insert_op_debug : environment -> 'op -> Debuginfo.t -> Reg.t array
+   -> Reg.t array -> Reg.t array
 
-val insert_move_args :
-  'env environment -> Reg.t array -> Reg.t array -> int -> unit
+   val insert_op : environment -> 'op -> Reg.t array -> Reg.t array -> Reg.t
+   array
 
-val insert_move_results :
-  'env environment -> Reg.t array -> Reg.t array -> int -> unit
+   val bind_let : 'env environment -> Backend_var.With_provenance.t -> Reg.t
+   array -> 'env environment
 
-val insert_op_debug :
-  'env environment ->
-  'op ->
-  Debuginfo.t ->
-  Reg.t array ->
-  Reg.t array ->
-  Reg.t array
+   val bind_let_mut : 'env environment -> Backend_var.With_provenance.t ->
+   Cmm.machtype -> Reg.t array -> 'env environment
 
-val insert_op :
-  'env environment -> 'op -> Reg.t array -> Reg.t array -> Reg.t array
+   val emit_parts : 'env environment -> effects_after:Effect_and_coeffect.t ->
+   Cmm.expression -> (Cmm.expression * 'env environment) option
 
-val bind_let :
-  'env environment ->
-  Backend_var.With_provenance.t ->
-  Reg.t array ->
-  'env environment
+   val emit_parts_list : 'env environment -> Cmm.expression list ->
+   (Cmm.expression list * 'env environment) option
 
-val bind_let_mut :
-  'env environment ->
-  Backend_var.With_provenance.t ->
-  Cmm.machtype ->
-  Reg.t array ->
-  'env environment
+   val emit_tuple_not_flattened : 'env environment -> Cmm.expression list ->
+   Reg.t array list
 
-val emit_parts :
-  'env environment ->
-  effects_after:Effect_and_coeffect.t ->
-  Cmm.expression ->
-  (Cmm.expression * 'env environment) option
+   val emit_tuple : 'env environment -> Cmm.expression list -> Reg.t array
 
-val emit_parts_list :
-  'env environment ->
-  Cmm.expression list ->
-  (Cmm.expression list * 'env environment) option
+   val emit_extcall_args : 'env environment -> Cmm.exttype list ->
+   Cmm.expression list -> Reg.t array * int
 
-val emit_tuple_not_flattened :
-  'env environment -> Cmm.expression list -> Reg.t array list
+   val insert_move_extcall_arg : 'env environment -> Cmm.exttype -> Reg.t array
+   -> Reg.t array -> unit
 
-val emit_tuple : 'env environment -> Cmm.expression list -> Reg.t array
+   val emit_stores : 'env environment -> Debuginfo.t -> Cmm.expression list ->
+   Reg.t array -> unit
 
-val emit_extcall_args :
-  'env environment ->
-  Cmm.exttype list ->
-  Cmm.expression list ->
-  Reg.t array * int
+   val emit_expr : 'env environment -> Cmm.expression ->
+   bound_name:Backend_var.With_provenance.t option -> Reg.t array option
 
-val insert_move_extcall_arg :
-  'env environment -> Cmm.exttype -> Reg.t array -> Reg.t array -> unit
+   val emit_expr_aux : 'env environment -> Cmm.expression ->
+   bound_name:Backend_var.With_provenance.t option -> Reg.t array option
 
-val emit_stores :
-  'env environment -> Debuginfo.t -> Cmm.expression list -> Reg.t array -> unit
+   val emit_expr_aux_raise : 'env environment -> Lambda.raise_kind ->
+   Cmm.expression list -> Debuginfo.t -> Reg.t array option
 
-val emit_expr :
-  'env environment ->
-  Cmm.expression ->
-  bound_name:Backend_var.With_provenance.t option ->
-  Reg.t array option
+   val emit_expr_aux_op : 'env environment -> Backend_var.With_provenance.t
+   option -> Cmm.operation -> Cmm.expression list -> Debuginfo.t -> Reg.t array
+   option
 
-val emit_expr_aux :
-  'env environment ->
-  Cmm.expression ->
-  bound_name:Backend_var.With_provenance.t option ->
-  Reg.t array option
+   val emit_expr_aux_ifthenelse : 'env environment ->
+   Backend_var.With_provenance.t option -> Cmm.expression -> Debuginfo.t ->
+   Cmm.expression -> Debuginfo.t -> Cmm.expression -> Debuginfo.t ->
+   Cmm.kind_for_unboxing -> Reg.t array option
 
-val emit_expr_aux_raise :
-  'env environment ->
-  Lambda.raise_kind ->
-  Cmm.expression list ->
-  Debuginfo.t ->
-  Reg.t array option
+   val emit_expr_aux_switch : 'env environment -> Backend_var.With_provenance.t
+   option -> Cmm.expression -> int array -> (Cmm.expression * Debuginfo.t) array
+   -> Debuginfo.t -> Cmm.kind_for_unboxing -> Reg.t array option
 
-val emit_expr_aux_op :
-  'env environment ->
-  Backend_var.With_provenance.t option ->
-  Cmm.operation ->
-  Cmm.expression list ->
-  Debuginfo.t ->
-  Reg.t array option
+   val emit_expr_aux_catch : 'env environment -> Backend_var.With_provenance.t
+   option -> Cmm.rec_flag -> (Lambda.static_label *
+   (Backend_var.With_provenance.t * Cmm.machtype) list * Cmm.expression *
+   Debuginfo.t * bool) list -> Cmm.expression -> Cmm.kind_for_unboxing -> Reg.t
+   array option
 
-val emit_expr_aux_ifthenelse :
-  'env environment ->
-  Backend_var.With_provenance.t option ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  Reg.t array option
+   val emit_expr_aux_exit : 'env environment -> Cmm.exit_label -> Cmm.expression
+   list -> Cmm.trap_action list -> Reg.t array option
 
-val emit_expr_aux_switch :
-  'env environment ->
-  Backend_var.With_provenance.t option ->
-  Cmm.expression ->
-  int array ->
-  (Cmm.expression * Debuginfo.t) array ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  Reg.t array option
+   val emit_expr_aux_trywith : 'env environment -> Backend_var.With_provenance.t
+   option -> Cmm.expression -> Cmm.trywith_shared_label ->
+   Backend_var.With_provenance.t -> extra_args:(Backend_var.With_provenance.t *
+   Cmm.machtype) list -> Cmm.expression -> Debuginfo.t -> Cmm.kind_for_unboxing
+   -> Reg.t array option
 
-val emit_expr_aux_catch :
-  'env environment ->
-  Backend_var.With_provenance.t option ->
-  Cmm.rec_flag ->
-  (Lambda.static_label
-  * (Backend_var.With_provenance.t * Cmm.machtype) list
-  * Cmm.expression
-  * Debuginfo.t
-  * bool)
-  list ->
-  Cmm.expression ->
-  Cmm.kind_for_unboxing ->
-  Reg.t array option
+   val emit_tail : 'env environment -> Cmm.expression -> unit
 
-val emit_expr_aux_exit :
-  'env environment ->
-  Cmm.exit_label ->
-  Cmm.expression list ->
-  Cmm.trap_action list ->
-  Reg.t array option
+   val emit_tail_apply : 'env environment -> Cmm.machtype -> Cmm.operation ->
+   Cmm.expression list -> Debuginfo.t -> unit
 
-val emit_expr_aux_trywith :
-  'env environment ->
-  Backend_var.With_provenance.t option ->
-  Cmm.expression ->
-  Cmm.trywith_shared_label ->
-  Backend_var.With_provenance.t ->
-  extra_args:(Backend_var.With_provenance.t * Cmm.machtype) list ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  Reg.t array option
+   val emit_tail_ifthenelse : 'env environment -> Cmm.expression -> Debuginfo.t
+   -> Cmm.expression -> Debuginfo.t -> Cmm.expression -> Debuginfo.t ->
+   Cmm.kind_for_unboxing -> unit
 
-val emit_tail : 'env environment -> Cmm.expression -> unit
+   val emit_tail_switch : 'env environment -> Cmm.expression -> int array ->
+   (Cmm.expression * Debuginfo.t) array -> Debuginfo.t -> Cmm.kind_for_unboxing
+   -> unit
 
-val emit_tail_apply :
-  'env environment ->
-  Cmm.machtype ->
-  Cmm.operation ->
-  Cmm.expression list ->
-  Debuginfo.t ->
-  unit
+   val emit_tail_catch : 'env environment -> Cmm.rec_flag ->
+   (Lambda.static_label * (Backend_var.With_provenance.t * Cmm.machtype) list *
+   Cmm.expression * Debuginfo.t * bool) list -> Cmm.expression ->
+   Cmm.kind_for_unboxing -> unit
 
-val emit_tail_ifthenelse :
-  'env environment ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  unit
+   val emit_tail_trywith : 'env environment -> Cmm.expression ->
+   Cmm.trywith_shared_label -> Backend_var.With_provenance.t ->
+   extra_args:(Backend_var.With_provenance.t * Cmm.machtype) list ->
+   Cmm.expression -> Debuginfo.t -> Cmm.kind_for_unboxing -> unit
 
-val emit_tail_switch :
-  'env environment ->
-  Cmm.expression ->
-  int array ->
-  (Cmm.expression * Debuginfo.t) array ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  unit
-
-val emit_tail_catch :
-  'env environment ->
-  Cmm.rec_flag ->
-  (Lambda.static_label
-  * (Backend_var.With_provenance.t * Cmm.machtype) list
-  * Cmm.expression
-  * Debuginfo.t
-  * bool)
-  list ->
-  Cmm.expression ->
-  Cmm.kind_for_unboxing ->
-  unit
-
-val emit_tail_trywith :
-  'env environment ->
-  Cmm.expression ->
-  Cmm.trywith_shared_label ->
-  Backend_var.With_provenance.t ->
-  extra_args:(Backend_var.With_provenance.t * Cmm.machtype) list ->
-  Cmm.expression ->
-  Debuginfo.t ->
-  Cmm.kind_for_unboxing ->
-  unit
-
-val emit_return :
-  'env environment -> Cmm.expression -> Cmm.trap_action list -> unit
+   val emit_return : 'env environment -> Cmm.expression -> Cmm.trap_action list
+   -> unit *)
