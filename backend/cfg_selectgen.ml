@@ -677,12 +677,32 @@ struct
        special move instructions, for example a "32-bit move" instruction for
        int32 arguments. *)
     insert_moves env src dst
+  (* let emit_stores env dbg data regs_addr = let a = ref
+     (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int)) in
+     List.iter (fun e ->
+
+     let op, arg = self#select_store false !a e in
+
+     match self#emit_expr env arg ~bound_name:None with | None -> assert false |
+     Some regs -> (
+
+     match self#is_store op with | true ->
+
+     for i = 0 to Array.length regs - 1 do let r = regs.(i) in let kind = match
+     r.Reg.typ with | Float -> Double | Float32 -> Single { reg = Float32 } |
+     Vec128 -> (* 128-bit memory operations are default unaligned. Aligned
+     (big)array operations are handled separately via cmm. *)
+     Onetwentyeight_unaligned | Val | Addr | Int -> Word_val | Valx2 ->
+     Misc.fatal_error "Unexpected machtype_component Valx2" in self#insert_debug
+     env (self#make_store kind !a false) dbg (Array.append [| r |] regs_addr)
+     [||]; a := Arch.offset_addressing !a (size_component r.Reg.typ) done |
+     false -> self#insert_debug env (self#lift_op op) dbg (Array.append regs
+     regs_addr) [||]; a := Arch.offset_addressing !a (size_expr env e))) data *)
 
   let emit_stores env dbg data regs_addr =
-    let a =
+    let addressing_mode =
       ref (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int))
     in
-    let offset = ref (-Arch.size_int) in
     let base =
       assert (Array.length regs_addr = 1);
       ref regs_addr
@@ -690,22 +710,24 @@ struct
     List.iter
       (fun arg ->
         let select_store_result =
-          self#select_store ~is_assign:false !a arg ~byte_offset:!offset
+          self#select_store ~is_assign:false !addressing_mode arg
         in
         let arg =
           match select_store_result with
-          | Out_of_range -> arg
+          | Maybe_out_of_range -> arg
           | Operation (_op, arg) -> arg
-          | Use_default -> assert false (* XXX *)
+          | Use_default -> Store (Word_val, addr, is_assign), arg
         in
         match self#emit_expr env arg ~bound_name:None with
-        | None -> assert false
+        | None ->
+          Misc.fatal_error
+            "emit_expr did not return any registers in [emit_stores]"
         | Some regs -> (
           let not_a_store =
             match select_store_result with
-            | Out_of_range -> None
+            | Maybe_out_of_range -> None
             | Operation (op, _) -> if self#is_store op then None else Some op
-            | Use_default -> assert false (* XXX *)
+            | Use_default -> None (* see above *)
           in
           match not_a_store with
           | None ->
@@ -723,35 +745,43 @@ struct
                 | Valx2 ->
                   Misc.fatal_error "Unexpected machtype_component Valx2"
               in
-              (match select_store_result with
-              | Out_of_range ->
-                (* Use a temporary to store the address [!base + offset]. *)
-                let tmp = self#regs_for Cmm.typ_int in
-                insert_debug env
-                  (self#lift_op
-                     (self#make_const_int (Nativeint.of_int !offset)))
-                  dbg [||] tmp;
-                insert_debug env
-                  (self#lift_op (Operation.Intop Iadd))
-                  dbg (Array.append !base tmp) tmp;
-                (* Use the temporary as the new base address. *)
-                base := tmp;
-                offset := 0
-              | Operation _ | Use_default -> ());
+              let addressing_mode =
+                match select_store_result with
+                | Maybe_out_of_range -> (
+                  match
+                    Target.decide_if_store_out_of_range kind ~byte_offset
+                  with
+                  | Within_range -> !addressing_mode
+                  | Out_of_range ->
+                    (* Use a temporary to store the address [!base + offset]. *)
+                    let tmp = self#regs_for Cmm.typ_int in
+                    insert_debug env
+                      (self#lift_op
+                         (self#make_const_int (Nativeint.of_int !offset)))
+                      dbg [||] tmp;
+                    insert_debug env
+                      (self#lift_op (Operation.Intop Iadd))
+                      dbg (Array.append !base tmp) tmp;
+                    (* Use the temporary as the new base address. *)
+                    base := tmp;
+                    Arch.identity_addressing)
+                | Operation _ | Use_default -> !addressing_mode
+              in
               (* XXX why didn't this use [op]? *)
               insert_debug env
-                (self#make_store kind !a false)
+                (Store (kind, !addressing_mode, false))
                 dbg
                 (Array.append [| r |] regs_addr)
                 [||];
-              (* XXX need to resolve "a" vs. "offset" *)
-              a := Arch.offset_addressing !a (size_component r.Reg.typ)
+              let size = Select_utils.size_component r.Reg.typ in
+              addressing_mode := Arch.offset_addressing !addressing_mode size
             done
           | Some op ->
             insert_debug env (self#lift_op op) dbg
               (Array.append regs regs_addr)
               [||];
-            a := Arch.offset_addressing !a (size_expr env arg)))
+            let size = size_expr env arg in
+            addressing_mode := Arch.offset_addressing !addressing_mode size))
       data
 
   (* Emit an expression.
@@ -1054,18 +1084,17 @@ struct
     | Ctuple_field (_, _) ->
       Misc.fatal_error "Selection.select_oper"
 
-  let select_operation t (op : Cmm.operation) (args : Cmm.expression list)
+  let rec select_operation t (op : Cmm.operation) (args : Cmm.expression list)
       (dbg : Debuginfo.t) ~label_after :
       basic_or_terminator * Cmm.expression list =
-    match Target.select_operation op args dbg  ~label_after with
-  | Rewritten (basic_or_terminator, args) ->
-
-
-  | Select_operation_then_rewrite (op, args, dbg, rewriter) ->
-
-
-  | Use_default ->
-    select_operation0 t op args dbg ~label_after
+    match Target.select_operation op args dbg ~label_after with
+    | Rewritten (basic_or_terminator, args) -> basic_or_terminator, args
+    | Select_operation_then_rewrite (op, args, dbg, rewriter) ->
+      let basic_or_terminator, args =
+        select_operation t op args dbg ~label_after
+      in
+      rewriter t basic_or_terminator args dbg ~label_after
+    | Use_default -> select_operation0 t op args dbg ~label_after
 
   let select_arith_comm (op : Simple_operation.integer_operation)
       (args : Cmm.expression list) : basic_or_terminator * Cmm.expression list =
