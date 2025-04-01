@@ -211,7 +211,11 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
   | _ -> Use_default
 
 let select_store ~is_assign:_ _addr _exp : Select_utils.select_store_result =
-  Out_of_range
+  Maybe_out_of_range
+
+let is_store_out_of_range kind ~byte_offset :
+    Select_utils.is_store_out_of_range_result =
+  if is_offset kind byte_offset then Within_range else Out_of_range
 
 let insert_move_extcall_arg _env ty_arg src dst :
     Select_utils.insert_move_extcall_arg_result =

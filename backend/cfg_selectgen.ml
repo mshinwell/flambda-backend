@@ -677,112 +677,87 @@ struct
        special move instructions, for example a "32-bit move" instruction for
        int32 arguments. *)
     insert_moves env src dst
-  (* let emit_stores env dbg data regs_addr = let a = ref
-     (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int)) in
-     List.iter (fun e ->
 
-     let op, arg = self#select_store false !a e in
-
-     match self#emit_expr env arg ~bound_name:None with | None -> assert false |
-     Some regs -> (
-
-     match self#is_store op with | true ->
-
-     for i = 0 to Array.length regs - 1 do let r = regs.(i) in let kind = match
-     r.Reg.typ with | Float -> Double | Float32 -> Single { reg = Float32 } |
-     Vec128 -> (* 128-bit memory operations are default unaligned. Aligned
-     (big)array operations are handled separately via cmm. *)
-     Onetwentyeight_unaligned | Val | Addr | Int -> Word_val | Valx2 ->
-     Misc.fatal_error "Unexpected machtype_component Valx2" in self#insert_debug
-     env (self#make_store kind !a false) dbg (Array.append [| r |] regs_addr)
-     [||]; a := Arch.offset_addressing !a (size_component r.Reg.typ) done |
-     false -> self#insert_debug env (self#lift_op op) dbg (Array.append regs
-     regs_addr) [||]; a := Arch.offset_addressing !a (size_expr env e))) data *)
-
-  let emit_stores env dbg data regs_addr =
+  let emit_stores env dbg args regs_addr =
     let addressing_mode =
       ref (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int))
     in
+    let byte_offset = ref 0 in
     let base =
       assert (Array.length regs_addr = 1);
       ref regs_addr
     in
-    List.iter
-      (fun arg ->
-        let select_store_result =
-          self#select_store ~is_assign:false !addressing_mode arg
-        in
-        let arg =
+    let for_one_arg addressing_mode arg =
+      let arg =
+        match select_store ~is_assign:false !addressing_mode arg with
+        | Maybe_out_of_range -> arg
+        | Operation (_, arg) -> arg
+        | Use_default -> Store (Word_val, addr, is_assign), arg
+      in
+      match emit_expr env arg ~bound_name:None with
+      | Some regs -> (
+        let operation_replacing_store =
           match select_store_result with
-          | Maybe_out_of_range -> arg
-          | Operation (_op, arg) -> arg
-          | Use_default -> Store (Word_val, addr, is_assign), arg
+          | Maybe_out_of_range -> None
+          | Operation (op, _) -> if is_store op then None else Some op
+          | Use_default -> None (* see above *)
         in
-        match self#emit_expr env arg ~bound_name:None with
+        match operation_replacing_store with
         | None ->
-          Misc.fatal_error
-            "emit_expr did not return any registers in [emit_stores]"
-        | Some regs -> (
-          let not_a_store =
-            match select_store_result with
-            | Maybe_out_of_range -> None
-            | Operation (op, _) -> if self#is_store op then None else Some op
-            | Use_default -> None (* see above *)
-          in
-          match not_a_store with
-          | None ->
-            for i = 0 to Array.length regs - 1 do
-              let r = regs.(i) in
-              let kind =
-                match r.Reg.typ with
-                | Float -> Double
-                | Float32 -> Single { reg = Float32 }
-                | Vec128 ->
-                  (* 128-bit memory operations are default unaligned. Aligned
-                     (big)array operations are handled separately via cmm. *)
-                  Onetwentyeight_unaligned
-                | Val | Addr | Int -> Word_val
-                | Valx2 ->
-                  Misc.fatal_error "Unexpected machtype_component Valx2"
-              in
-              let addressing_mode =
-                match select_store_result with
-                | Maybe_out_of_range -> (
-                  match
-                    Target.decide_if_store_out_of_range kind ~byte_offset
-                  with
-                  | Within_range -> !addressing_mode
-                  | Out_of_range ->
-                    (* Use a temporary to store the address [!base + offset]. *)
-                    let tmp = self#regs_for Cmm.typ_int in
-                    insert_debug env
-                      (self#lift_op
-                         (self#make_const_int (Nativeint.of_int !offset)))
-                      dbg [||] tmp;
-                    insert_debug env
-                      (self#lift_op (Operation.Intop Iadd))
-                      dbg (Array.append !base tmp) tmp;
-                    (* Use the temporary as the new base address. *)
-                    base := tmp;
-                    Arch.identity_addressing)
-                | Operation _ | Use_default -> !addressing_mode
-              in
-              (* XXX why didn't this use [op]? *)
-              insert_debug env
-                (Store (kind, !addressing_mode, false))
-                dbg
-                (Array.append [| r |] regs_addr)
-                [||];
-              let size = Select_utils.size_component r.Reg.typ in
-              addressing_mode := Arch.offset_addressing !addressing_mode size
-            done
-          | Some op ->
-            insert_debug env (self#lift_op op) dbg
-              (Array.append regs regs_addr)
+          for i = 0 to Array.length regs - 1 do
+            let r = regs.(i) in
+            let kind =
+              match r.Reg.typ with
+              | Float -> Double
+              | Float32 -> Single { reg = Float32 }
+              | Vec128 ->
+                (* 128-bit memory operations are default unaligned. Aligned
+                   (big)array operations are handled separately via cmm. *)
+                Onetwentyeight_unaligned
+              | Val | Addr | Int -> Word_val
+              | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
+            in
+            let is_out_of_range : Select_utils.is_store_out_of_range_result =
+              match select_store_result with
+              | Operation _ | Use_default -> Within_range
+              | Maybe_out_of_range ->
+                Target.is_store_out_of_range kind ~byte_offset:!byte_offset
+            in
+            let addressing_mode =
+              match is_out_of_range with
+              | Within_range -> !addressing_mode
+              | Out_of_range ->
+                (* Use a temporary to store the address [!base + offset]. *)
+                let tmp = regs_for Cmm.typ_int in
+                insert_debug env
+                  (Op (make_const_int (Nativeint.of_int !byte_offset)))
+                  dbg [||] tmp;
+                insert_debug env (Op (Operation.Intop Iadd)) dbg
+                  (Array.append !base tmp) tmp;
+                (* Use the temporary as the new base address. *)
+                base := tmp;
+                Arch.identity_addressing
+            in
+            (* XXX why didn't this use [op]? *)
+            insert_debug env
+              (Op (Store (kind, !addressing_mode, false)))
+              dbg
+              (Array.append [| r |] regs_addr)
               [||];
-            let size = size_expr env arg in
-            addressing_mode := Arch.offset_addressing !addressing_mode size))
-      data
+            let size = Select_utils.size_component r.Reg.typ in
+            addressing_mode := Arch.offset_addressing !addressing_mode size;
+            byte_offset := !byte_offset + size
+          done
+        | Some op ->
+          insert_debug env (Op op) dbg (Array.append regs regs_addr) [||];
+          let size = size_expr env arg in
+          addressing_mode := Arch.offset_addressing !addressing_mode size;
+          byte_offset := !byte_offset + size)
+      | None ->
+        Misc.fatal_error
+          "emit_expr did not return any registers in [emit_stores]"
+    in
+    List.iter for_one_arg args
 
   (* Emit an expression.
 

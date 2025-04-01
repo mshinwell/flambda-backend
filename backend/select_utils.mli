@@ -41,6 +41,15 @@ type select_operation_result =
         select_operation_result)
   | Use_default
 
+type select_store_result =
+  | Maybe_out_range
+  | Operation of Cmm.operation * Cmm.expression
+  | Use_default
+
+type is_store_out_of_range_result =
+  | Within_range
+  | Out_of_range
+
 type trap_stack_info =
   | Unreachable
   | Reachable of Simple_operation.trap_stack
