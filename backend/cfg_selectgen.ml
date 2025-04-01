@@ -908,7 +908,7 @@ struct
             Ok (Cvar id, env_add (VP.create id) tmp env)
 
   and emit_parts_list env sub_cfg exp_list :
-      (expression list * environment * Sub_cfg.t) Or_never_returns.t =
+      (expression list * environment) Or_never_returns.t =
     let module EC = Effect_and_coeffect in
     let exp_list_right_to_left, _effect =
       (* Annotate each expression with the (co)effects that happen after it when
@@ -925,12 +925,11 @@ struct
            _ Or_never_returns.t ->
         match results_and_env with
         | Never_returns -> Never_returns
-        | Ok (result, env, sub_cfg) -> (
+        | Ok (result, env) -> (
           match emit_parts env sub_cfg exp ~effects_after with
           | Never_returns -> Never_returns
-          | Ok (exp_result, env, sub_cfg) ->
-            Ok (exp_result :: result, env, sub_cfg)))
-      (Or_never_returns.Ok ([], env, sub_cfg))
+          | Ok (exp_result, env) -> Ok (exp_result :: result, env)))
+      (Or_never_returns.Ok ([], env))
       exp_list_right_to_left
 
   and emit_tuple_not_flattened env sub_cfg exp_list =
@@ -970,7 +969,7 @@ struct
       args;
     Array.concat (Array.to_list locs), stack_ofs
 
-  and emit_stores env sub_cfg dbg args regs_addr =
+  and emit_stores env sub_cfg dbg (args : Cmm.expression list) regs_addr =
     let addressing_mode =
       ref (Arch.offset_addressing Arch.identity_addressing (-Arch.size_int))
     in
@@ -1092,9 +1091,9 @@ struct
          in the compilation unit's global roots structure, so adding this
          register to the frame table would be redundant *)
       let r = regs_for typ_int in
-      Ok (insert_op env sub_cfg (make_const_symbol n) [||] r, sub_cfg)
+      Ok (insert_op env sub_cfg (make_const_symbol n) [||] r)
     | Cvar v -> (
-      try Ok (env_find v env, sub_cfg)
+      try Ok (env_find v env)
       with Not_found ->
         Misc.fatal_error ("Selection.emit_expr: unbound var " ^ V.unique_name v)
       )
@@ -1155,14 +1154,14 @@ struct
     match exp with
     | Clet (v, e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
-      | Never_returns -> sub_cfg
-      | Ok (r1, sub_cfg) -> emit_tail (bind_let env sub_cfg v r1) sub_cfg e2)
+      | Never_returns -> ()
+      | Ok r1 -> emit_tail (bind_let env sub_cfg v r1) sub_cfg e2)
     | Cphantom_let (_var, _defining_expr, body) -> emit_tail env sub_cfg body
     | Cop ((Capply (ty, Rc_normal) as op), args, dbg) ->
       emit_tail_apply env sub_cfg ty op args dbg
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
-      | Never_returns -> sub_cfg
+      | Never_returns -> ()
       | Ok _ -> emit_tail env sub_cfg e2)
     | Cifthenelse (econd, ifso_dbg, eif, ifnot_dbg, eelse, dbg, value_kind) ->
       emit_tail_ifthenelse env sub_cfg econd ifso_dbg eif ifnot_dbg eelse dbg
@@ -1204,7 +1203,7 @@ struct
       Reg.t array Or_never_returns.t =
     match emit_parts_list env sub_cfg args with
     | Never_returns -> Never_returns
-    | Ok (simple_args, env, sub_cfg) -> (
+    | Ok (simple_args, env) -> (
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let add_naming_op_for_bound_name sub_cfg regs =
         match bound_name with
@@ -1435,7 +1434,7 @@ struct
       let ids_and_rs = List.combine ids rs in
       let new_env =
         List.fold_left
-          (fun env ((id, _typ), r) -> Select_utils.env_add sub_cfg id r env)
+          (fun env ((id, _typ), r) -> Select_utils.env_add id r env)
           (Select_utils.env_set_trap_stack env trap_stack)
           ids_and_rs
       in
@@ -1512,7 +1511,7 @@ struct
       =
     match emit_parts_list env sub_cfg args with
     | Never_returns -> Never_returns
-    | Ok (simple_list, ext_env, sub_cfg) -> (
+    | Ok (simple_list, ext_env) -> (
       match lbl with
       | Lbl nfail ->
         let src = emit_tuple ext_env sub_cfg simple_list in
@@ -1578,7 +1577,7 @@ struct
        on its exception continuation has to compiled using a wrapper; see
        [To_cmm_expr.translate_apply]. *)
     let extra_arg_regs_split =
-      List.map (fun (_param, machtype) -> regs_for t machtype) extra_args
+      List.map (fun (_param, machtype) -> regs_for machtype) extra_args
     in
     let extra_arg_regs = Array.concat extra_arg_regs_split in
     let env_body = Select_utils.env_enter_trywith env exn_cont exn_label in
@@ -1675,13 +1674,13 @@ struct
   and emit_return (env : environment) sub_cfg exp traps : unit =
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     match emit_expr env sub_cfg exp ~bound_name:None with
-    | Never_returns -> sub_cfg
-    | Ok (rd, sub_cfg) -> insert_return env sub_cfg (Some rd) traps
+    | Never_returns -> ()
+    | Ok rd -> insert_return env sub_cfg (Some rd) traps
 
   and emit_tail_apply env (sub_cfg : Sub_cfg.t) ty op args dbg : unit =
     match emit_parts_list env sub_cfg args with
     | Never_returns -> ()
-    | Ok (simple_args, env, sub_cfg) -> (
+    | Ok (simple_args, env) -> (
       let label_after = Cmm.new_label () in
       let new_op, new_args = select_operation op simple_args dbg ~label_after in
       match new_op with
@@ -1817,7 +1816,7 @@ struct
           (Select_utils.env_set_trap_stack env trap_stack)
           ids_and_rs
       in
-      let seq : Sub_cfg.t =
+      let sub_cfg =
         emit_tail_new_sub_cfg new_env e2 ~at_start:(fun sub_cfg ->
             List.iter
               (fun ((var, _typ), r) ->
@@ -1838,8 +1837,8 @@ struct
                     [||] [||])
               ids_and_rs)
       in
-      let seq = Sub_cfg.add_empty_block_at_start seq ~label in
-      nfail, trap_stack, seq, is_cold
+      Sub_cfg.add_empty_block_at_start sub_cfg ~label;
+      nfail, trap_stack, sub_cfg, is_cold
     in
     let rec build_all_reachable_handlers ~already_built ~not_built =
       let not_built, to_build =
@@ -1889,7 +1888,7 @@ struct
     let s1 : Sub_cfg.t = emit_tail_new_sub_cfg env_body e1 in
     let exn_bucket_in_handler = regs_for typ_val in
     let rv_list = exn_bucket_in_handler :: extra_arg_regs_split in
-    let with_handler env_handler e2 : Sub_cfg.t =
+    let with_handler env_handler e2 =
       let s2 : Sub_cfg.t =
         emit_tail_new_sub_cfg env_handler e2 ~at_start:(fun sub_cfg ->
             List.iter2
