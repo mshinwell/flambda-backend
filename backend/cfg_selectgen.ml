@@ -29,46 +29,7 @@ module Int = Numbers.Int
 module V = Backend_var
 module VP = Backend_var.With_provenance
 
-module Make (Target : sig
-  val is_immediate :
-    Simple_operation.integer_operation ->
-    int ->
-    Select_utils.is_immediate_result
-
-  val is_immediate_test :
-    Simple_operation.integer_comparison ->
-    int ->
-    Select_utils.is_immediate_result
-
-  val is_simple_expr : Cmm.expression -> Select_utils.is_simple_expr_result
-
-  val effects_of : Cmm.expression -> Select_utils.effects_of_result
-
-  val select_addressing :
-    Cmm.memory_chunk -> Cmm.expression -> Arch.addressing_mode * Cmm.expression
-
-  val select_operation :
-    Cmm.operation ->
-    Cmm.expression list ->
-    label_after:Label.t ->
-    Select_utils.select_operation_result
-
-  val select_store :
-    is_assign:bool ->
-    Arch.addressing_mode ->
-    Cmm.expression ->
-    Select_utils.select_store_result
-
-  val is_store_out_of_range :
-    memory_chunk -> byte_offset:int -> is_store_out_of_range_result
-
-  val insert_move_extcall_arg :
-    Cmm.exttype ->
-    Reg.t array ->
-    Reg.t array ->
-    Select_utils.insert_move_extcall_arg_result
-end) =
-struct
+module Make (Target : Cfg_selectgen_target_intf.S) = struct
   (* A syntactic criterion used in addition to judgements about (co)effects as
      to whether the evaluation of a given expression may be deferred by
      [emit_parts]. This criterion is a property of the instruction selection
@@ -620,7 +581,8 @@ struct
               | Val | Addr | Int -> Word_val
               | Valx2 -> Misc.fatal_error "Unexpected machtype_component Valx2"
             in
-            let is_out_of_range : Select_utils.is_store_out_of_range_result =
+            let is_out_of_range :
+                Cfg_selectgen_target_intf.is_store_out_of_range_result =
               match select_store_result with
               | Rewritten _ | Use_default -> Within_range
               | Maybe_out_of_range ->

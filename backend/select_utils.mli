@@ -32,46 +32,6 @@ type basic_or_terminator =
   | Basic of Cfg.basic
   | Terminator of Cfg.terminator
 
-type is_immediate_result =
-  | Is_immediate of bool
-  | Use_default
-
-type is_simple_expr_result =
-  | Simple_if_all_expressions_are of Cmm.expression list
-  | Use_default
-
-type effects_of_result =
-  | Effects_of_all_expressions of Cmm.expression list
-  | Use_default
-
-type select_operation_then_rewrite_result =
-  | Rewritten of basic_or_terminator * Cmm.expression list
-  | Use_default
-
-type select_operation_result =
-  | Rewritten of basic_or_terminator * Cmm.expression list
-  | Select_operation_then_rewrite of
-      Cmm.operation
-      * Cmm.expression list
-      * Debuginfo.t
-      * (basic_or_terminator ->
-        args:Cmm.expression list ->
-        select_operation_then_rewrite_result)
-  | Use_default
-
-type select_store_result =
-  | Maybe_out_of_range
-  | Rewritten of Operation.t * Cmm.expression
-  | Use_default
-
-type is_store_out_of_range_result =
-  | Within_range
-  | Out_of_range
-
-type insert_move_extcall_arg_result =
-  | Rewritten of Cfg.basic * Reg.t array * Reg.t array
-  | Use_default
-
 type trap_stack_info =
   | Unreachable
   | Reachable of Simple_operation.trap_stack
@@ -146,8 +106,6 @@ val set_traps_for_raise : environment -> unit
 val trap_stack_is_empty : environment -> bool
 
 val pop_all_traps : environment -> Cmm.trap_action list
-
-val e : 'a
 
 val env_empty : environment
 
