@@ -64,35 +64,35 @@ let select_bitwidth : Cmm.bswap_bitwidth -> Arch.bswap_bitwidth = function
   | Thirtytwo -> Thirtytwo
   | Sixtyfour -> Sixtyfour
 
-let specific x ~label_after =
+let specific x ~label_after : Select_utils.basic_or_terminator =
   if Arch.operation_can_raise x
-  then
-    Cfg_selectgen.Terminator
-      (Cfg.Specific_can_raise { Cfg.op = x; label_after })
-  else Cfg_selectgen.Basic Cfg.(Op (Specific x))
+  then Terminator (Specific_can_raise { op = x; label_after })
+  else Basic (Op (Specific x))
 
 let is_immediate (op : Simple_operation.integer_operation) n :
-    Select_utils.is_immediate_result =
+    Cfg_selectgen_target_intf.is_immediate_result =
   match op with
   | Iadd | Isub -> Is_immediate (n <= 0xFFF_FFF && n >= -0xFFF_FFF)
   | Iand | Ior | Ixor -> Is_immediate (is_logical_immediate_int n)
-  | Icomp _ -> int_is_immediate n
+  | Icomp _ -> Is_immediate (int_is_immediate n)
   | _ -> Use_default
 
-let is_immediate_test _cmp n = int_is_immediate n
+let is_immediate_test _cmp n : Cfg_selectgen_target_intf.is_immediate_result =
+  Is_immediate (int_is_immediate n)
 
-let is_simple_expr (expr : Cmm.expression) : Select_utils.is_simple_expr_result
-    =
+let is_simple_expr (expr : Cmm.expression) :
+    Cfg_selectgen_target_intf.is_simple_expr_result =
   match expr with
   (* inlined floating-point ops are simple if their arguments are *)
   | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
     Simple_if_all_expressions_are args
   | _ -> Use_default
 
-let effects_of (expr : Cmm.expression) : Select_utils.effects_of_result =
+let effects_of (expr : Cmm.expression) :
+    Cfg_selectgen_target_intf.effects_of_result =
   match expr with
   | Cop (Cextcall { func }, args, _) when List.mem func inline_ops ->
-    Simple_if_all_expressions_are args
+    Effects_of_all_expressions args
   | _ -> Use_default
 
 let select_addressing chunk (expr : Cmm.expression) :
@@ -114,14 +114,15 @@ let select_addressing chunk (expr : Cmm.expression) :
   | arg -> Iindexed 0, arg
 
 let select_operation (op : Cmm.operation) (args : Cmm.expression list)
-    ~label_after : Select_utils.select_operation_result =
+    ~label_after : Cfg_selectgen_target_intf.select_operation_result =
   let[@inline] specific op = specific op ~label_after in
-  let[@inline] rewrite_multiply_add_or_sub shift_op mul_op ~arg1 ~args2 dbg =
+  let[@inline] rewrite_multiply_add_or_sub shift_op mul_op ~arg1 ~args2 dbg :
+      Cfg_selectgen_target_intf.select_operation_result =
     Select_operation_then_rewrite
       ( Cmuli,
         args2,
         dbg,
-        fun (basic_or_terminator : Cfg_selectgen.basic_or_terminator) ~args ->
+        fun (basic_or_terminator : Select_utils.basic_or_terminator) ~args ->
           match basic_or_terminator, args with
           | Basic (Op (Intop_imm (Ilsl, l))), [arg3] ->
             Rewritten (specific (Ishiftarith (shift_op, l)), [arg1; arg3])
@@ -211,15 +212,16 @@ let select_operation (op : Cmm.operation) (args : Cmm.expression list)
   (* Other operations are regular *)
   | _ -> Use_default
 
-let select_store ~is_assign:_ _addr _exp : Select_utils.select_store_result =
+let select_store ~is_assign:_ _addr _exp :
+    Cfg_selectgen_target_intf.select_store_result =
   Maybe_out_of_range
 
 let is_store_out_of_range kind ~byte_offset :
-    Select_utils.is_store_out_of_range_result =
+    Cfg_selectgen_target_intf.is_store_out_of_range_result =
   if is_offset kind byte_offset then Within_range else Out_of_range
 
-let insert_move_extcall_arg ty_arg src dst :
-    Select_utils.insert_move_extcall_arg_result =
+let insert_move_extcall_arg (ty_arg : Cmm.exttype) src dst :
+    Cfg_selectgen_target_intf.insert_move_extcall_arg_result =
   let ty_arg_is_int32 =
     match ty_arg with
     | XInt32 -> true

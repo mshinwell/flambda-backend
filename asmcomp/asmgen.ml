@@ -362,7 +362,7 @@ let compile_fundecl ~ppf_dump ~funcnames fd_cmm =
   fd_cmm
   ++ Profile.record ~accumulate:true "cmm_invariants" (cmm_invariants ppf_dump)
   ++ (fun (fd_cmm : Cmm.fundecl) ->
-       Cfg_selection.fundecl ~future_funcnames:funcnames fd_cmm
+       Cfg_selection.emit_fundecl ~future_funcnames:funcnames fd_cmm
        ++ pass_dump_cfg_if ppf_dump Flambda_backend_flags.dump_cfg
             "After selection")
   ++ Profile.record ~accumulate:true "regalloc" (fun cfg_with_layout ->
