@@ -24,7 +24,7 @@ vectorize_utils.ml
 vectorize_utils.mli
 cfg_selectgen.ml
 cfg_selectgen.mli
-cfg_selection.mli
+cfg_selectgen_target_intf.ml
 cmm_builtins.ml
 cmm_builtins.mli
 cmm_helpers.ml

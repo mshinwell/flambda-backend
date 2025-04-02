@@ -175,7 +175,7 @@
   ast_invariants
   depend
   parser_types ; manual update: mli only files asttypes parsetree
-  ;; TYPING
+               ;; TYPING
   ident
   path
   jkind
@@ -433,6 +433,7 @@
   branch_relaxation
   branch_relaxation_intf
   cfg_selectgen
+  cfg_selectgen_target_intf
   cfg_selection
   cmm_helpers
   cmm_builtins
@@ -875,6 +876,7 @@
 ; guess is that targets in subdirectories aren't even discovered until
 ; ocamlcommon is built, unless something in the subdirectory is explicitly made
 ; a dependency.
+
 (alias
  (name install)
  (package ocaml)
