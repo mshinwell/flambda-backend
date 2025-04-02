@@ -224,9 +224,6 @@ module Stack_offset_and_exn = struct
         assert (not (block.is_trap_handler && block.dead)))
 end
 
-let make_store mem_chunk addr_mode is_assignment =
-  Cfg.Op (Operation.Store (mem_chunk, addr_mode, is_assignment))
-
 let make_stack_offset stack_ofs = Cfg.Op (Stackoffset stack_ofs)
 
 let make_name_for_debugger ~ident ~which_parameter ~provenance ~is_assignment
@@ -297,13 +294,6 @@ let insert_move_results env sub_cfg loc res stacksize =
   insert_moves env sub_cfg loc res;
   if stacksize <> 0
   then insert env sub_cfg (make_stack_offset (-stacksize)) [||] [||]
-
-let insert_move_extcall_arg env sub_cfg _ty_arg src dst =
-  (* The default implementation is one or two ordinary moves. (Two in the case
-     of an int64 argument on a 32-bit platform.) It can be overridden to use
-     special move instructions, for example a "32-bit move" instruction for
-     int32 arguments. *)
-  insert_moves env sub_cfg src dst
 
 (* Add an Iop opcode. Can be overridden by processor description to insert moves
    before and after the operation, i.e. for two-address instructions, or
@@ -413,11 +403,10 @@ let join_array env
     Ok (res, sub_cfgs)
 
 module Make (Target : sig
-  val is_immediate : int -> bool
-
-  val select_bitwidth : Cmm.bswap_bitwidth -> Arch.bswap_bitwidth
-
-  val is_immediate : 'a -> 'b -> Select_utils.is_immediate_result
+  val is_immediate :
+    Simple_operation.integer_operation ->
+    int ->
+    Select_utils.is_immediate_result
 
   val is_immediate_test :
     Simple_operation.integer_comparison ->
@@ -443,6 +432,9 @@ module Make (Target : sig
     Cmm.expression ->
     Select_utils.select_store_result
 
+  val is_store_out_of_range :
+    memory_chunk -> byte_offset:int -> is_store_out_of_range_result
+
   val insert_move_extcall_arg :
     Cmm.exttype ->
     Reg.t array ->
@@ -450,8 +442,6 @@ module Make (Target : sig
     Select_utils.insert_move_extcall_arg_result
 end) =
 struct
-  (* XXX BEGIN from select_utils *)
-
   (* A syntactic criterion used in addition to judgements about (co)effects as
      to whether the evaluation of a given expression may be deferred by
      [emit_parts]. This criterion is a property of the instruction selection
@@ -553,6 +543,15 @@ struct
       Select_utils.Effect_and_coeffect.join_list_map exprs effects_of
     | Use_default -> effects_of0 expr
 
+  let insert_move_extcall_arg env sub_cfg ty_arg src dst dbg =
+    (* The default implementation is one or two ordinary moves. (Two in the case
+       of an int64 argument on a 32-bit platform.) It can be overridden to use
+       special move instructions, for example a "32-bit move" instruction for
+       int32 arguments. *)
+    match Target.insert_move_extcall_arg ty_arg src dst with
+    | Rewritten (basic, src, dst) -> insert_debug env sub_cfg basic dbg src dst
+    | Use_default -> insert_moves env sub_cfg src dst
+
   (* Says whether an integer constant is a suitable immediate argument for the
      given integer operation *)
 
@@ -595,8 +594,6 @@ struct
   let is_store (op : Operation.t) =
     match op with Store (_, _, _) -> true | _ -> false
 
-  let lift_op op = Cfg.Op op
-
   let bind_let (env : Select_utils.environment) sub_cfg v r1 =
     let env =
       if all_regs_anonymous r1
@@ -618,20 +615,6 @@ struct
       in
       insert_debug env sub_cfg naming_op Debuginfo.none [||] [||]);
     env
-
-  let bind_let_mut env sub_cfg v k r1 =
-    let rv = regs_for k in
-    name_regs v rv;
-    insert_moves env sub_cfg r1 rv;
-    let provenance = VP.provenance v in
-    (if Option.is_some provenance
-    then
-      let naming_op =
-        make_name_for_debugger ~ident:(VP.var v) ~which_parameter:None
-          ~provenance:(VP.provenance v) ~is_assignment:false ~regs:r1
-      in
-      insert_debug env sub_cfg naming_op Debuginfo.none [||] [||]);
-    env_add ~mut:Mutable v rv env
 
   (* Default instruction selection for stores (of words) *)
 
@@ -952,7 +935,7 @@ struct
   and emit_tuple env sub_cfg exp_list : Reg.t array =
     Array.concat (emit_tuple_not_flattened env sub_cfg exp_list)
 
-  and emit_extcall_args env sub_cfg ty_args args =
+  and emit_extcall_args env sub_cfg ty_args args dbg =
     let args = emit_tuple_not_flattened env sub_cfg args in
     let ty_args =
       match ty_args with
@@ -965,7 +948,7 @@ struct
     then insert env sub_cfg (make_stack_offset stack_ofs) [||] [||];
     List.iteri
       (fun i arg ->
-        insert_move_extcall_arg env sub_cfg ty_args.(i) arg locs.(i))
+        insert_move_extcall_arg env sub_cfg ty_args.(i) arg locs.(i) dbg)
       args;
     Array.concat (Array.to_list locs), stack_ofs
 
@@ -979,14 +962,16 @@ struct
       ref regs_addr
     in
     let for_one_arg arg =
+      let select_store_result =
+        Target.select_store ~is_assign:false !addressing_mode arg
+      in
       let arg : Cmm.expression =
-        match Target.select_store ~is_assign:false !addressing_mode arg with
-        | Maybe_out_of_range -> arg
+        match select_store_result with
+        | Maybe_out_of_range | Use_default -> arg
         | Rewritten (_, arg) -> arg
-        | Use_default -> Op (Store (Word_val, addr, is_assign))
       in
       match emit_expr env sub_cfg arg ~bound_name:None with
-      | Ok (regs, sub_cfg) -> (
+      | Ok regs -> (
         let operation_replacing_store =
           match select_store_result with
           | Maybe_out_of_range -> None
@@ -1010,7 +995,7 @@ struct
             in
             let is_out_of_range : Select_utils.is_store_out_of_range_result =
               match select_store_result with
-              | Operation _ | Use_default -> Within_range
+              | Rewritten _ | Use_default -> Within_range
               | Maybe_out_of_range ->
                 Target.is_store_out_of_range kind ~byte_offset:!byte_offset
             in
@@ -1263,7 +1248,7 @@ struct
       | Terminator
           (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
         let loc_arg, stack_ofs =
-          emit_extcall_args env sub_cfg ty_args new_args
+          emit_extcall_args env sub_cfg ty_args new_args dbg
         in
         let rd = regs_for ty_res in
         let term =
@@ -1287,7 +1272,7 @@ struct
         Ok rd
       | Terminator (Call_no_return ({ func_symbol; ty_args; _ } as r)) ->
         let loc_arg, stack_ofs =
-          emit_extcall_args env sub_cfg ty_args new_args
+          emit_extcall_args env sub_cfg ty_args new_args dbg
         in
         let keep_for_checking =
           !Select_utils.current_function_is_check_enabled
@@ -1501,7 +1486,7 @@ struct
     in
     match join_array env a ~bound_name with
     | Never_returns -> Never_returns
-    | Ok (r, s_handlers) -> (
+    | Ok (r, _s_handlers) -> (
       (* XXX look at this s_handlers var *)
       assert (Sub_cfg.exit_has_never_terminator sub_cfg);
       let handler_sub_cfgs =

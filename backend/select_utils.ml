@@ -58,7 +58,7 @@ type select_operation_result =
 
 type select_store_result =
   | Maybe_out_of_range
-  | Rewritten of Cmm.operation * Cmm.expression
+  | Rewritten of Operation.t * Cmm.expression
   | Use_default
 
 type is_store_out_of_range_result =
