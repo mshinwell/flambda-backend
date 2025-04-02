@@ -21,6 +21,7 @@ open! Int_replace_polymorphic_compare
 [@@@ocaml.warning "+a-4-9-40-41-42"]
 
 open Cmm
+module DLL = Flambda_backend_utils.Doubly_linked_list
 module Int = Numbers.Int
 module V = Backend_var
 module VP = Backend_var.With_provenance
@@ -187,6 +188,8 @@ let pop_all_traps env =
     | Simple_operation.Specific_trap (lbl, t) -> pop_all (Pop lbl :: acc) t
   in
   pop_all [] env.trap_stack
+
+let e = Select_utils2.env_empty
 
 let env_empty =
   { vars = V.Map.empty;
