@@ -28,6 +28,7 @@ let c_has_debug_prefix_map = false
 let as_has_debug_prefix_map = false
 let as_compress_debug_sections_flag = ""
 let cc_compress_debug_sections_flag = ""
+let as_is_cc = false
 let ocamlc_cflags = ""
 let ocamlc_cppflags = ""
 let ocamlopt_cflags = ""

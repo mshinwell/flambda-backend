@@ -82,6 +82,12 @@ val objcopy : string
 (** The objcopy command (and flags) to use for split debug enabled by
     [Clflags.dwarf_fission]. *)
 
+val as_is_cc : bool
+(** Whether the assembler is actually an assembler, or whether we are really
+    assembling files via the C compiler
+
+    @since 5.5 *)
+
 val ocamlc_cflags : string
 (** The flags ocamlc should pass to the C compiler *)
 
