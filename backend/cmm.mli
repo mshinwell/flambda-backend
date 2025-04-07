@@ -252,19 +252,22 @@ type alloc_dbginfo_item =
 
 type alloc_dbginfo = alloc_dbginfo_item list
 
+(** [operation]s never have any control flow effects.  (Asynchronous exceptions
+    do not count as control flow effects). *)
 type operation =
-    Capply of machtype * Lambda.region_close
   | Cextcall of
       { func: string;
         ty: machtype;
         ty_args : exttype list;
-        alloc: bool;
         builtin: bool;
-        returns: bool;
         effects: effects;
         coeffects: coeffects;
       }
-      (** The [machtype] is the machine type of the result.
+      (** [Cextcall] never generates [caml_c_call].  Use the expression
+          [Capply_extcall] for those instead.
+          Likewise, extcalls that never return must use [Capply_extcall], since
+          divergence is a control flow effect.
+          The [machtype] is the machine type of the result.
           The [exttype list] describes the unboxing types of the arguments.
           An empty list means "all arguments are machine words [XInt]".
           The boolean indicates whether the function may allocate. *)
@@ -296,7 +299,6 @@ type operation =
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
   | Craise of Lambda.raise_kind
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Cprobe_is_enabled of { name: string }
   | Copaque (* Sys.opaque_identity *)
   | Cbeginregion | Cendregion
@@ -346,6 +348,7 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
+  | Capply of apply_shared * apply
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
@@ -358,6 +361,36 @@ type expression =
           * expression * Debuginfo.t * bool (* is_cold *)) list
         * expression
   | Cexit of exit_label * expression list * trap_action list
+
+and apply =
+  | OCaml of {
+      callee : expression;
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+    }
+  | External of {
+      func : string;
+      ty: machtype;
+      ty_args : exttype list;
+      builtin : bool;
+      alloc : bool;
+      returns : bool;
+      (** At least one of [alloc] and [returns] must be [true].  Otherwise,
+          use [Cop]. *)
+      (* CR mshinwell: improve description of effects/alloc/returns. *)
+      effects : effects;
+      coeffects : coeffects;
+    }
+  | Probe of {
+      name : string;
+      handler_code_sym : string;
+      enabled_at_init : bool;
+    }
+
+and apply_shared = {
+  args : expression list;
+  dbg : Debuginfo.t;
+}
 
 type codegen_option =
   | Reduce_code_size

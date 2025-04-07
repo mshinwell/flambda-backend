@@ -62,7 +62,8 @@ let rec with_afl_logging b dbg =
           [afl_prev_loc dbg; Cconst_int (cur_location lsr 1, dbg)]))) in
   Csequence(instrumentation, instrument b)
 
-and instrument = function
+and instrument expr =
+  match expr with
   (* these cases add logging, as they may be targets of conditional branches *)
   | Cifthenelse (cond, t_dbg, t, f_dbg, f, dbg) ->
      Cifthenelse (instrument cond, t_dbg, with_afl_logging t t_dbg,
@@ -88,6 +89,7 @@ and instrument = function
   | Cphantom_let (v, defining_expr, body) ->
     Cphantom_let (v, defining_expr, instrument body)
   | Ctuple es -> Ctuple (List.map instrument es)
+  | Capply _ -> Cmm.map_shallow instrument expr
   | Cop (op, es, dbg) -> Cop (op, List.map instrument es, dbg)
   | Csequence (e1, e2) -> Csequence (instrument e1, instrument e2)
   | Ccatch ((Normal | Recursive as flag), cases, body) ->
@@ -114,10 +116,9 @@ let instrument_initialiser c dbg =
   Csequence
     (Cop (Cextcall { func = "caml_setup_afl";
                      builtin = false;
-                     returns = true;
                      effects = Arbitrary_effects;
                      coeffects = Has_coeffects;
-                     ty = typ_int; alloc = false; ty_args = []; },
+                     ty = typ_int; ty_args = []; },
           [Cconst_int (0, dbg ())],
           dbg ()),
      with_afl_logging c (dbg ()))

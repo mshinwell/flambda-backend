@@ -282,14 +282,11 @@ type alloc_dbginfo_item =
 type alloc_dbginfo = alloc_dbginfo_item list
 
 type operation =
-    Capply of machtype * Lambda.region_close
   | Cextcall of
       { func: string;
         ty: machtype;
         ty_args : exttype list;
-        alloc: bool;
         builtin: bool;
-        returns: bool;
         effects: effects;
         coeffects: coeffects;
       }
@@ -320,7 +317,6 @@ type operation =
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
   | Craise of Lambda.raise_kind
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Cprobe_is_enabled of { name: string }
   | Copaque
   | Cbeginregion | Cendregion
@@ -357,6 +353,7 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
+  | Capply of apply_shared * apply
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
@@ -369,6 +366,33 @@ type expression =
           * expression * Debuginfo.t * bool (* is_cold *)) list
         * expression
   | Cexit of exit_label * expression list * trap_action list
+
+and apply =
+  | OCaml of {
+      callee : expression;
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+    }
+  | External of {
+      func : string;
+      ty: machtype;
+      ty_args : exttype list;
+      builtin : bool;
+      alloc : bool;
+      returns : bool;
+      effects : effects;
+      coeffects : coeffects;
+    }
+  | Probe of {
+      name : string;
+      handler_code_sym : string;
+      enabled_at_init : bool;
+    }
+
+and apply_shared = {
+  args : expression list;
+  dbg : Debuginfo.t;
+}
 
 type codegen_option =
   | Reduce_code_size
@@ -448,7 +472,8 @@ let iter_shallow_tail f = function
   | Cconst_symbol _
   | Cvar _
   | Ctuple _
-  | Cop _ ->
+  | Cop _
+  | Capply _ -> (* XXX *)
       false
 
 let map_shallow_tail f = function
@@ -483,6 +508,7 @@ let map_shallow_tail f = function
   | Cconst_symbol _
   | Cvar _
   | Ctuple _
+  | Capply _ (* XXX *)
   | Cop _ as cmm -> cmm
 
 let map_tail f =
@@ -509,6 +535,17 @@ let iter_shallow f = function
       List.iter f el
   | Cop (_op, el, _dbg) ->
       List.iter f el
+  | Capply ({ args; dbg = _ },
+        OCaml { callee; result_ty = _; region_close = _; }) ->
+      f callee;
+      List.iter f args
+  | Capply ({ args; dbg = _ },
+        External { func = _; ty = _; ty_args = _; builtin = _; returns = _;
+                   effects = _; coeffects = _; }) ->
+      List.iter f args
+  | Capply ({ args; dbg = _ },
+        Probe { name = _; handler_code_sym = _; enabled_at_init = _; }) ->
+      List.iter f args
   | Csequence (e1, e2) ->
       f e1; f e2
   | Cifthenelse(cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg) ->
@@ -536,6 +573,24 @@ let map_shallow f = function
       Cphantom_let (id, de, f e)
   | Ctuple el ->
       Ctuple (List.map f el)
+  | Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close }) ->
+      let callee = f callee in
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close })
+  | Capply ({ args; dbg },
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects }) ->
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects })
+  | Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init }) ->
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init })
   | Cop (op, el, dbg) ->
       Cop (op, List.map f el, dbg)
   | Csequence (e1, e2) ->
@@ -544,7 +599,7 @@ let map_shallow f = function
       Cifthenelse(f cond, ifso_dbg, f ifso, ifnot_dbg, f ifnot, dbg)
   | Cswitch (e, ia, ea, dbg) ->
       Cswitch (e, ia, Array.map (fun (e, dbg) -> f e, dbg) ea, dbg)
-  | Ccatch (flag, hl, body) ->
+  | Ccatch (flag, hl, body ) ->
       let map_h (n, ids, handler, dbg, is_cold) =
         (n, ids, f handler, dbg, is_cold)
       in

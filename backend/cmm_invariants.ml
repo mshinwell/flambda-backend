@@ -140,6 +140,8 @@ let rec check env (expr : Cmm.expression) =
     check env expr
   | Ctuple exprs ->
     List.iter (check env) exprs
+  | Capply _ ->
+    Cmm.iter_shallow (check env) expr
   | Cop (_, args, _) ->
     List.iter (check env) args;
   | Csequence (expr1, expr2) ->
