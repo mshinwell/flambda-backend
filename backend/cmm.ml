@@ -282,7 +282,6 @@ type alloc_dbginfo_item =
 type alloc_dbginfo = alloc_dbginfo_item list
 
 type operation =
-    Capply of machtype * Lambda.region_close
   | Cextcall of
       { func: string;
         ty: machtype;
@@ -355,6 +354,13 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
+  | Capply of {
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+      dbg : Debuginfo.t;
+      callee : expression;
+      args : expression list;
+  }
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
@@ -441,6 +447,10 @@ let iter_shallow_tail f = function
       true
   | Cexit _ | Cop (Craise _, _, _) ->
       true
+  | Capply { callee; args; _ } ->
+      f callee;
+      List.iter f args;
+      true
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _
@@ -478,6 +488,14 @@ let map_shallow_tail f = function
       Ctrywith(f e1, kind', id,extra_args, f e2, dbg)
   | Cexit _ | Cop (Craise _, _, _) as cmm ->
       cmm
+  | Capply { result_ty; region_close; dbg; callee; args } ->
+      Capply {
+        result_ty;
+        region_close;
+        dbg;
+        callee = f callee;
+        args = List.map f args;
+      }
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _
@@ -512,6 +530,9 @@ let iter_shallow f = function
       List.iter f el
   | Cop (_op, el, _dbg) ->
       List.iter f el
+  | Capply { callee; args; _ } ->
+      f callee;
+      List.iter f args
   | Csequence (e1, e2) ->
       f e1; f e2
   | Cifthenelse(cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg) ->
@@ -541,6 +562,14 @@ let map_shallow f = function
       Cphantom_let (id, de, f e)
   | Ctuple el ->
       Ctuple (List.map f el)
+  | Capply { result_ty; region_close; dbg; callee; args } ->
+      Capply {
+        result_ty;
+        region_close;
+        dbg;
+        callee = f callee;
+        args = List.map f args;
+      }
   | Cop (op, el, dbg) ->
       Cop (op, List.map f el, dbg)
   | Csequence (e1, e2) ->

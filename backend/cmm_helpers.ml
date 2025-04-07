@@ -346,7 +346,7 @@ let rec map_tail1 e ~f =
   | Cphantom_let (id, exp, body) -> Cphantom_let (id, exp, map_tail1 body ~f)
   | Csequence (e1, e2) -> Csequence (e1, map_tail1 e2 ~f)
   | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
-  | Cconst_vec128 _ | Cconst_symbol _ | Cvar _ | Ctuple _ | Cop _
+  | Cconst_vec128 _ | Cconst_symbol _ | Cvar _ | Ctuple _ | Cop _ | Capply _
   | Cifthenelse _ | Cexit _ | Ccatch _ | Ctrywith _ | Cswitch _ ->
     f e
 
@@ -1949,24 +1949,26 @@ let send_function_name arity result (mode : Cmx_format.alloc_mode) =
   let suff = match mode with Alloc_heap -> "" | Alloc_local -> "L" in
   global_symbol ("caml_send" ^ unique_arity_identifier arity ^ res ^ suff)
 
-let call_cached_method obj tag cache pos args args_type result (apos, mode) dbg
-    =
+let call_cached_method obj tag cache pos args args_type result
+    (region_close, mode) dbg =
   let cache = array_indexing log2_size_addr cache pos dbg in
   Compilenv.need_send_fun
     (List.map Extended_machtype.change_tagged_int_to_val args_type)
     (Extended_machtype.change_tagged_int_to_val result)
     mode;
-  Cop
-    ( Capply (Extended_machtype.to_machtype result, apos),
-      (* See the cases for caml_apply regarding [change_tagged_int_to_val]. *)
-      Cconst_symbol
-        ( send_function_name
-            (List.map Extended_machtype.change_tagged_int_to_val args_type)
-            (Extended_machtype.change_tagged_int_to_val result)
-            mode,
-          dbg )
-      :: obj :: tag :: cache :: args,
-      dbg )
+  Capply
+    { result_ty = Extended_machtype.to_machtype result;
+      region_close;
+      dbg;
+      callee =
+        Cconst_symbol
+          ( send_function_name
+              (List.map Extended_machtype.change_tagged_int_to_val args_type)
+              (Extended_machtype.change_tagged_int_to_val result)
+              mode,
+            dbg );
+      args = obj :: tag :: cache :: args
+    }
 
 (* Allocation *)
 
@@ -2809,17 +2811,21 @@ let split_arity_for_apply arity args =
     let args1, args2 = Misc.Stdlib.List.split_at max_arity args in
     (a1, args1), Some (a2, args2)
 
-let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
+let call_caml_apply extended_ty extended_args_type mut clos args region_close
+    mode dbg =
   (* Treat tagged int arguments and results as [typ_val], to avoid generating
      excessive numbers of caml_apply functions. *)
   let ty = Extended_machtype.to_machtype extended_ty in
   let really_call_caml_apply clos args =
-    let cargs =
-      Cconst_symbol (apply_function_sym extended_args_type extended_ty mode, dbg)
-      :: args
-      @ [clos]
-    in
-    Cop (Capply (ty, pos), cargs, dbg)
+    Capply
+      { result_ty = ty;
+        region_close;
+        callee =
+          Cconst_symbol
+            (apply_function_sym extended_args_type extended_ty mode, dbg);
+        args = args @ [clos];
+        dbg
+      }
   in
   if !Flambda_backend_flags.caml_apply_inline_fast_path
   then
@@ -2843,10 +2849,13 @@ let call_caml_apply extended_ty extended_args_type mut clos args pos mode dbg =
                       Cconst_int (List.length extended_args_type, dbg) ],
                     dbg ),
                 dbg,
-                Cop
-                  ( Capply (ty, pos),
-                    (get_field_codepointer mut clos 2 dbg :: args) @ [clos],
-                    dbg ),
+                Capply
+                  { result_ty = ty;
+                    region_close;
+                    callee = get_field_codepointer mut clos 2 dbg;
+                    args = args @ [clos];
+                    dbg
+                  },
                 dbg,
                 really_call_caml_apply clos args,
                 dbg )))
@@ -2868,15 +2877,18 @@ let maybe_reset_current_region ~dbg ~body_tail ~body_nontail old_region =
            Csequence (Cop (Cendregion, [old_region], dbg ()), Cvar res) )),
       dbg () )
 
-let apply_or_call_caml_apply result arity mut clos args pos mode dbg =
+let apply_or_call_caml_apply result arity mut clos args region_close mode dbg =
   match args with
   | [arg] ->
     bind "fun" clos (fun clos ->
-        Cop
-          ( Capply (Extended_machtype.to_machtype result, pos),
-            [get_field_codepointer mut clos 0 dbg; arg; clos],
-            dbg ))
-  | _ -> call_caml_apply result arity mut clos args pos mode dbg
+        Capply
+          { result_ty = Extended_machtype.to_machtype result;
+            region_close;
+            dbg;
+            callee = get_field_codepointer mut clos 0 dbg;
+            args = [arg; clos]
+          })
+  | _ -> call_caml_apply result arity mut clos args region_close mode dbg
 
 let rec might_split_call_caml_apply ?old_region result arity mut clos args pos
     mode dbg =
@@ -3082,12 +3094,14 @@ let apply_function_body arity result (mode : Cmx_format.alloc_mode) =
     | [] -> Misc.fatal_error "apply_function_body for empty arity"
     | [arg] -> (
       let app =
-        Cop
-          ( Capply (result, Rc_normal),
-            [ get_field_codepointer Asttypes.Mutable (Cvar clos) 0 (dbg ());
-              Cvar arg;
-              Cvar clos ],
-            dbg () )
+        Capply
+          { result_ty = result;
+            region_close = Rc_normal;
+            callee =
+              get_field_codepointer Asttypes.Mutable (Cvar clos) 0 (dbg ());
+            args = [Cvar arg; Cvar clos];
+            dbg = dbg ()
+          }
       in
       match region with
       | None -> app
@@ -3101,12 +3115,14 @@ let apply_function_body arity result (mode : Cmx_format.alloc_mode) =
       let newclos = V.create_local "clos" in
       Clet
         ( VP.create newclos,
-          Cop
-            ( Capply (typ_val, Rc_normal),
-              [ get_field_codepointer Asttypes.Mutable (Cvar clos) 0 (dbg ());
-                Cvar arg;
-                Cvar clos ],
-              dbg () ),
+          Capply
+            { result_ty = typ_val;
+              region_close = Rc_normal;
+              callee =
+                get_field_codepointer Asttypes.Mutable (Cvar clos) 0 (dbg ());
+              args = [Cvar arg; Cvar clos];
+              dbg = dbg ()
+            },
           app_fun newclos args )
   in
   let code =
@@ -3132,11 +3148,14 @@ let apply_function_body arity result (mode : Cmx_format.alloc_mode) =
                 Cconst_int (List.length arity, dbg ()) ],
               dbg () ),
           dbg (),
-          Cop
-            ( Capply (result, Rc_normal),
-              get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ())
-              :: List.map (fun s -> Cvar s) all_args,
-              dbg () ),
+          Capply
+            { result_ty = result;
+              region_close = Rc_normal;
+              callee =
+                get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ());
+              args = List.map (fun s -> Cvar s) all_args;
+              dbg = dbg ()
+            },
           dbg (),
           code,
           dbg () ) )
@@ -3245,12 +3264,14 @@ let tuplify_function arity return =
     { fun_name;
       fun_args = [VP.create arg, typ_val; VP.create clos, typ_val];
       fun_body =
-        Cop
-          ( Capply (return, Rc_normal),
-            get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ())
-            :: access_components 0
-            @ [Cvar clos],
-            dbg () );
+        Capply
+          { result_ty = return;
+            region_close = Rc_normal;
+            callee =
+              get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ());
+            args = access_components 0 @ [Cvar clos];
+            dbg = dbg ()
+          };
       fun_codegen_options = [];
       fun_dbg;
       fun_poll = Default_poll
@@ -3373,11 +3394,13 @@ let rec make_curry_apply result narity args_type args clos n =
   let dbg = placeholder_dbg in
   match args_type with
   | [] ->
-    Cop
-      ( Capply (result, Rc_normal),
-        (get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ()) :: args)
-        @ [Cvar clos],
-        dbg () )
+    Capply
+      { result_ty = result;
+        region_close = Rc_normal;
+        callee = get_field_codepointer Asttypes.Mutable (Cvar clos) 2 (dbg ());
+        args = args @ [Cvar clos];
+        dbg = dbg ()
+      }
   | arg_type :: args_type ->
     let newclos = V.create_local "clos" in
     let arg_pos = if curry_clos_has_nary_application ~narity n then 3 else 2 in
@@ -3844,10 +3867,13 @@ let entry_point namelist =
           dbg () )
     in
     Csequence
-      ( Cop
-          ( Capply (typ_void, Rc_normal),
-            [Cop (mk_load_immut Word_int, [f], dbg ())],
-            dbg () ),
+      ( Capply
+          { result_ty = typ_void;
+            region_close = Rc_normal;
+            callee = Cop (mk_load_immut Word_int, [f], dbg ());
+            args = [];
+            dbg = dbg ()
+          },
         incr_global_inited () )
   in
   let data =

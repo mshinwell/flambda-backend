@@ -255,7 +255,6 @@ type alloc_dbginfo_item =
 type alloc_dbginfo = alloc_dbginfo_item list
 
 type operation =
-    Capply of machtype * Lambda.region_close
   | Cextcall of
       { func: string;
         ty: machtype;
@@ -346,6 +345,13 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
+  | Capply of {
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+      dbg : Debuginfo.t;
+      callee : expression;
+      args : expression list;
+  }
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression

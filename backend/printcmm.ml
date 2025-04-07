@@ -215,7 +215,6 @@ let static_cast : Cmm.static_cast -> string = function
   | V128_of_scalar ty -> Printf.sprintf "scalar->%s" (vec128_name ty)
 
 let operation d = function
-  | Capply(_ty, _) -> "app" ^ location d
   | Cextcall { func = lbl; _ } ->
       Printf.sprintf "extcall \"%s\"%s" lbl (location d)
   | Cload {memory_chunk; mutability} -> (
@@ -342,12 +341,17 @@ let rec expr ppf = function
           expr ppf e)
         el in
       fprintf ppf "@[<1>[%a]@]" tuple el
+  | Capply { result_ty; region_close = _; dbg; callee; args } ->
+      fprintf ppf "@[<1>(apply@ %a@ (%a)@ %a @ %a)@]"
+        expr callee
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
+        machtype result_ty
+        Debuginfo.print_compact dbg
   | Cop(op, el, dbg) ->
       with_location_mapping ~label:"Cop" ~dbg ppf (fun () ->
       fprintf ppf "@[<2>(%s" (operation dbg op);
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       begin match op with
-      | Capply(mty, _) -> fprintf ppf "@ %a" machtype mty
       | Cextcall { ty; ty_args; alloc = _; func = _; returns; } ->
         let ty = if returns then Some ty else None in
         fprintf ppf "@ %a" extcall_signature (ty, ty_args)
