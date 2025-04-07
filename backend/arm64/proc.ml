@@ -498,7 +498,7 @@ let operation_supported : Cmm.operation -> bool = function
                   Int_of_float Float32 | Float_of_int Float32 |
                   V128_of_scalar _ | Scalar_of_v128 _)
   | Cclz _ | Cctz _ | Cbswap _
-  | Capply _ | Cextcall _ | Cload _ | Calloc _ | Cstore _
+  | Cextcall _ | Cload _ | Calloc _ | Cstore _
   | Caddi | Csubi | Cmuli | Cmulhi _ | Cdivi | Cmodi
   | Cand | Cor | Cxor | Clsl | Clsr | Casr
   | Ccmpi _ | Caddv | Cadda | Ccmpa _

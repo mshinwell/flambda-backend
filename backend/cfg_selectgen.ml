@@ -54,8 +54,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Cextcall { effects = No_effects; coeffects = No_coeffects } ->
         List.for_all is_simple_expr args
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc _ | Cstore _ | Craise _ | Catomic _
-      | Cprobe _ | Cprobe_is_enabled _ | Copaque | Cpoll ->
+      | Cextcall _ | Calloc _ | Cstore _ | Craise _ | Catomic _ | Cprobe _
+      | Cprobe_is_enabled _ | Copaque | Cpoll ->
         false
       | Cprefetch _ | Cbeginregion | Cendregion ->
         false
@@ -67,7 +67,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Csubf _ | Cmulf _ | Cdivf _ | Cpackf32 | Creinterpret_cast _
       | Cstatic_cast _ | Ctuple_field _ | Ccmpf _ | Cdls_get ->
         List.for_all is_simple_expr args)
-    | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> false
+    | Cifthenelse _ | Capply _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ ->
+      false
 
   and is_simple_expr expr =
     match Target.is_simple_expr expr with
@@ -103,7 +104,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         match op with
         | Cextcall { effects = e; coeffects = ce } ->
           EC.create (SU.select_effects e) (SU.select_coeffects ce)
-        | Capply _ | Cprobe _ | Copaque | Cpoll -> EC.arbitrary
+        | Cprobe _ | Copaque | Cpoll -> EC.arbitrary
         | Calloc (Heap, _) -> EC.none
         | Calloc (Local, _) -> EC.coeffect_only Arbitrary
         | Cstore _ -> EC.effect_only Arbitrary
@@ -123,7 +124,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           EC.none
       in
       EC.join from_op (EC.join_list_map args effects_of)
-    | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> EC.arbitrary
+    | Capply _ | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ -> EC.arbitrary
 
   and effects_of (expr : Cmm.expression) =
     match Target.effects_of expr with
@@ -271,11 +272,6 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | [] | _ :: _ -> wrong_num_args 3
     in
     match[@ocaml.warning "+fragile-match"] op with
-    | Capply _ -> (
-      match[@ocaml.warning "-fragile-match"] args with
-      | Cconst_symbol (func, _dbg) :: rem ->
-        Terminator (Call { op = Direct func; label_after }), rem
-      | _ -> Terminator (Call { op = Indirect; label_after }), args)
     | Cextcall { func; builtin = true } ->
       Misc.fatal_errorf "Selection.select_operation: builtin not recognized %s"
         func ()
@@ -734,6 +730,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         in
         Ok field_slice)
     | Cop (op, args, dbg) -> emit_expr_op env sub_cfg bound_name op args dbg
+    | Capply { result_ty; region_close; dbg; callee; args } ->
+      emit_expr_apply env sub_cfg ~result_ty region_close ~callee ~args dbg
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> Never_returns
@@ -758,8 +756,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Never_returns -> ()
       | Ok r1 -> emit_tail (bind_let env sub_cfg v r1) sub_cfg e2)
     | Cphantom_let (_var, _defining_expr, body) -> emit_tail env sub_cfg body
-    | Cop ((Capply (ty, Rc_normal) as op), args, dbg) ->
-      emit_tail_apply env sub_cfg ty op args dbg
+    | Capply { result_ty; region_close = Rc_normal; dbg; callee; args } ->
+      emit_tail_apply env sub_cfg ~result_ty ~callee ~args dbg
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> ()
@@ -774,7 +772,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Ctrywith (e1, exn_cont, v, extra_args, e2, dbg) ->
       emit_tail_trywith env sub_cfg e1 exn_cont v ~extra_args e2 dbg
     | Cop _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
-    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Cexit _ ->
+    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Capply _ | Cexit _
+      ->
       emit_return env sub_cfg exp (SU.pop_all_traps env)
 
   and emit_expr_raise (env : SU.environment) sub_cfg k
@@ -798,6 +797,41 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     SU.insert_debug' env sub_cfg (Cfg.Raise k) dbg rd [||];
     SU.set_traps_for_raise env;
     Never_returns
+
+  and emit_expr_apply env sub_cfg ~result_ty region_close ~callee ~args dbg =
+    match foo with
+    | Terminator (Call { op = Indirect; label_after } as term) ->
+      let r1 = emit_tuple env sub_cfg new_args in
+      let rarg = Array.sub r1 1 (Array.length r1 - 1) in
+      let rd = SU.regs_for ty in
+      let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
+      let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
+      let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+      SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
+      SU.insert_debug' env sub_cfg term dbg
+        (Array.append [| r1.(0) |] loc_arg)
+        loc_res;
+      Sub_cfg.add_never_block sub_cfg ~label:label_after;
+      (* The destination registers (as per the procedure calling convention)
+         need to be named right now, otherwise the result of the function call
+         may be unavailable in the debugger immediately after the call. *)
+      add_naming_op_for_bound_name sub_cfg loc_res;
+      SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+      SU.set_traps_for_raise env;
+      Ok rd
+    | Terminator (Call { op = Direct _; label_after } as term) ->
+      let r1 = emit_tuple env sub_cfg new_args in
+      let rd = SU.regs_for ty in
+      let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
+      let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
+      let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+      SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
+      SU.insert_debug' env sub_cfg term dbg loc_arg loc_res;
+      add_naming_op_for_bound_name sub_cfg loc_res;
+      Sub_cfg.add_never_block sub_cfg ~label:label_after;
+      SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+      SU.set_traps_for_raise env;
+      Ok rd
 
   and emit_expr_op env sub_cfg bound_name op args dbg : _ Or_never_returns.t =
     match emit_parts_list env sub_cfg args with
@@ -827,38 +861,6 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       let label_after = Cmm.new_label () in
       let new_op, new_args = select_operation op simple_args dbg ~label_after in
       match new_op with
-      | Terminator (Call { op = Indirect; label_after } as term) ->
-        let r1 = emit_tuple env sub_cfg new_args in
-        let rarg = Array.sub r1 1 (Array.length r1 - 1) in
-        let rd = SU.regs_for ty in
-        let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
-        let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
-        let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-        SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
-        SU.insert_debug' env sub_cfg term dbg
-          (Array.append [| r1.(0) |] loc_arg)
-          loc_res;
-        Sub_cfg.add_never_block sub_cfg ~label:label_after;
-        (* The destination registers (as per the procedure calling convention)
-           need to be named right now, otherwise the result of the function call
-           may be unavailable in the debugger immediately after the call. *)
-        add_naming_op_for_bound_name sub_cfg loc_res;
-        SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
-        SU.set_traps_for_raise env;
-        Ok rd
-      | Terminator (Call { op = Direct _; label_after } as term) ->
-        let r1 = emit_tuple env sub_cfg new_args in
-        let rd = SU.regs_for ty in
-        let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
-        let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
-        let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-        SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
-        SU.insert_debug' env sub_cfg term dbg loc_arg loc_res;
-        add_naming_op_for_bound_name sub_cfg loc_res;
-        Sub_cfg.add_never_block sub_cfg ~label:label_after;
-        SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
-        SU.set_traps_for_raise env;
-        Ok rd
       | Terminator
           (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
         let loc_arg, stack_ofs =
@@ -1249,12 +1251,17 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     insert_return env sub_cfg (emit_expr env sub_cfg exp ~bound_name:None) traps
 
-  and emit_tail_apply env sub_cfg ty op args dbg =
-    match emit_parts_list env sub_cfg args with
+  and emit_tail_apply env sub_cfg ~result_ty:ty ~callee ~args dbg =
+    match emit_parts_list env sub_cfg (callee :: args) with
     | Never_returns -> ()
     | Ok (simple_args, env) -> (
       let label_after = Cmm.new_label () in
-      let new_op, new_args = select_operation op simple_args dbg ~label_after in
+      let new_op, new_args =
+        match[@ocaml.warning "-fragile-match"] simple_args with
+        | Cmm.Cconst_symbol (func, _dbg) :: rem ->
+          Cfg.Terminator (Call { op = Direct func; label_after }), rem
+        | _ -> Cfg.Terminator (Call { op = Indirect; label_after }), args
+      in
       match new_op with
       | Terminator (Call { op = Indirect; label_after } as term) ->
         let r1 = emit_tuple env sub_cfg new_args in

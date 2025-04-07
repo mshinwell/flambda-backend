@@ -83,6 +83,10 @@ and instrument = function
   | Cphantom_let (v, defining_expr, body) ->
     Cphantom_let (v, defining_expr, instrument body)
   | Ctuple es -> Ctuple (List.map instrument es)
+  | Capply { result_ty; region_close; dbg; callee; args } ->
+      Capply { result_ty; region_close; dbg;
+                callee = instrument callee;
+                args = List.map instrument args }
   | Cop (op, es, dbg) -> Cop (op, List.map instrument es, dbg)
   | Csequence (e1, e2) -> Csequence (instrument e1, instrument e2)
   | Ccatch (isrec, cases, body) ->

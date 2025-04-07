@@ -254,18 +254,21 @@ type alloc_dbginfo_item =
 
 type alloc_dbginfo = alloc_dbginfo_item list
 
+(** [operation]s never have any control flow effects.  (Asynchronous exceptions
+    do not count as control flow effects. *)
 type operation =
   | Cextcall of
       { func: string;
         ty: machtype;
         ty_args : exttype list;
-        alloc: bool;
         builtin: bool;
         returns: bool;
         effects: effects;
         coeffects: coeffects;
       }
-      (** The [machtype] is the machine type of the result.
+      (** [Cextcall] never generates [caml_c_call].  Use the expression
+          [Capply_extcall] for those instead.
+          The [machtype] is the machine type of the result.
           The [exttype list] describes the unboxing types of the arguments.
           An empty list means "all arguments are machine words [XInt]".
           The boolean indicates whether the function may allocate. *)
@@ -297,7 +300,6 @@ type operation =
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
   | Craise of Lambda.raise_kind
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Cprobe_is_enabled of { name: string }
   | Copaque (* Sys.opaque_identity *)
   | Cbeginregion | Cendregion
@@ -352,7 +354,19 @@ type expression =
       callee : expression;
       args : expression list;
   }
+  | Capply_extcall of
+      { func: string;
+        ty: machtype;
+        ty_args : exttype list;
+        builtin: bool;
+        returns: bool;
+        effects: effects;
+        coeffects: coeffects;
+      }
+    (** See doc comment on [Cextcall] above.  [Capply_extcall] always
+        generates [caml_c_call]. *)
   | Cop of operation * expression list * Debuginfo.t
+  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t

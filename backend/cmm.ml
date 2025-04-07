@@ -286,7 +286,6 @@ type operation =
       { func: string;
         ty: machtype;
         ty_args : exttype list;
-        alloc: bool;
         builtin: bool;
         returns: bool;
         effects: effects;
@@ -319,7 +318,6 @@ type operation =
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
   | Craise of Lambda.raise_kind
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Cprobe_is_enabled of { name: string }
   | Copaque
   | Cbeginregion | Cendregion
@@ -361,7 +359,17 @@ type expression =
       callee : expression;
       args : expression list;
   }
+  | Capply_extcall of
+      { func: string;
+        ty: machtype;
+        ty_args : exttype list;
+        builtin: bool;
+        returns: bool;
+        effects: effects;
+        coeffects: coeffects;
+      }
   | Cop of operation * expression list * Debuginfo.t
+  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t

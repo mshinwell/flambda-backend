@@ -4045,8 +4045,8 @@ let letin v ~defining_expr ~body =
     defining_expr
   | Cvar _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
   | Cconst_symbol _ | Cconst_vec128 _ | Clet _ | Cphantom_let _ | Ctuple _
-  | Cop _ | Csequence _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _
-  | Ctrywith _ ->
+  | Capply _ | Cop _ | Csequence _ | Cifthenelse _ | Cswitch _ | Ccatch _
+  | Cexit _ | Ctrywith _ ->
     Clet (v, defining_expr, body)
 
 let sequence x y =
@@ -4248,8 +4248,14 @@ let load ~dbg memory_chunk mutability ~addr =
 let store ~dbg kind init ~addr ~new_value =
   Cop (Cstore (kind, init), [addr; new_value], dbg)
 
-let direct_call ~dbg ty pos f_code_sym args =
-  Cop (Capply (ty, pos), f_code_sym :: args, dbg)
+let direct_call ~dbg ty region_close f_code_sym args =
+  Capply
+    { result_ty = ty;
+      region_close;
+      callee = f_code_sym;
+      args = f_code_sym :: args;
+      dbg
+    }
 
 let indirect_call ~dbg ty pos alloc_mode f args_type args =
   might_split_call_caml_apply ty args_type Asttypes.Mutable f args pos
@@ -4268,10 +4274,13 @@ let indirect_full_call ~dbg ty pos alloc_mode f args_type = function
     in
     letin v' ~defining_expr:f
       ~body:
-        (Cop
-           ( Capply (Extended_machtype.to_machtype ty, pos),
-             (fun_ptr :: args) @ [Cvar v],
-             dbg ))
+        (Capply
+           { result_ty = Extended_machtype.to_machtype ty;
+             region_close = Rc_normal;
+             callee = fun_ptr;
+             args = (fun_ptr :: args) @ [Cvar v];
+             dbg
+           })
 
 let bigarray_load ~dbg ~elt_kind ~elt_size ~elt_chunk ~bigarray ~index =
   let ba_data_f = field_address bigarray 1 dbg in
@@ -4376,8 +4385,8 @@ let cmm_arith_size (e : Cmm.expression) =
   | Cconst_symbol _ | Cvar _ | Cconst_vec128 _ ->
     Some 0
   | Cop _ -> Some (cmm_arith_size0 e)
-  | Clet _ | Cphantom_let _ | Ctuple _ | Csequence _ | Cifthenelse _ | Cswitch _
-  | Ccatch _ | Cexit _ | Ctrywith _ ->
+  | Clet _ | Cphantom_let _ | Ctuple _ | Capply _ | Csequence _ | Cifthenelse _
+  | Cswitch _ | Ccatch _ | Cexit _ | Ctrywith _ ->
     None
 
 (* Atomics *)
@@ -4657,43 +4666,48 @@ let perform ~dbg eff =
   in
   (* Rc_normal means "allow tailcalls". Preventing them here by using Rc_nontail
      improves backtraces of paused fibers. *)
-  Cop
-    ( Capply (typ_val, Rc_nontail),
-      [Cconst_symbol (Cmm.global_symbol "caml_perform", dbg); eff; cont],
-      dbg )
+  Capply
+    { result_ty = typ_val;
+      region_close = Rc_nontail;
+      callee = Cconst_symbol (Cmm.global_symbol "caml_perform", dbg);
+      args = [eff; cont];
+      dbg
+    }
 
 let run_stack ~dbg ~stack ~f ~arg =
   (* Rc_normal would be fine here, but this is unlikely to ever be a tail call
      (usages of this primitive shouldn't be generated in tail position), so we
      use Rc_nontail for clarity. *)
-  Cop
-    ( Capply (typ_val, Rc_nontail),
-      [Cconst_symbol (Cmm.global_symbol "caml_runstack", dbg); stack; f; arg],
-      dbg )
+  Capply
+    { result_ty = typ_val;
+      region_close = Rc_nontail;
+      callee = Cconst_symbol (Cmm.global_symbol "caml_runstack", dbg);
+      args = [stack; f; arg];
+      dbg
+    }
 
 let resume ~dbg ~stack ~f ~arg ~last_fiber =
   (* Rc_normal is required here, because there are some uses of effects with
      repeated resumes, and these should consume O(1) stack space by tail-calling
      caml_resume. *)
-  Cop
-    ( Capply (typ_val, Rc_normal),
-      [ Cconst_symbol (Cmm.global_symbol "caml_resume", dbg);
-        stack;
-        f;
-        arg;
-        last_fiber ],
-      dbg )
+  Capply
+    { result_ty = typ_val;
+      region_close = Rc_normal;
+      callee = Cconst_symbol (Cmm.global_symbol "caml_resume", dbg);
+      args = [stack; f; arg; last_fiber];
+      dbg
+    }
 
 let reperform ~dbg ~eff ~cont ~last_fiber =
   (* Rc_normal is required here, this is used in tail position and should tail
      call. *)
-  Cop
-    ( Capply (typ_val, Rc_normal),
-      [ Cconst_symbol (Cmm.global_symbol "caml_reperform", dbg);
-        eff;
-        cont;
-        last_fiber ],
-      dbg )
+  Capply
+    { result_ty = typ_val;
+      region_close = Rc_normal;
+      callee = Cconst_symbol (Cmm.global_symbol "caml_reperform", dbg);
+      args = [eff; cont; last_fiber];
+      dbg
+    }
 
 let poll ~dbg = return_unit dbg (Cop (Cpoll, [], dbg))
 
