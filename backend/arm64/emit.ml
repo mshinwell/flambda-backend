@@ -723,7 +723,7 @@ let num_call_gc_points instr =
            Const_float32 _|Const_float _|Const_symbol _|Const_vec128 _|Stackoffset _|
            Load _|Store (_, _, _)|Intop _|Intop_imm (_, _)|Intop_atomic _|
            Floatop (_, _)|Csel _|Reinterpret_cast _|Static_cast _|Probe_is_enabled _|
-           Name_for_debugger _)
+           Name_for_debugger _ | Extcall _)
     | Lprologue|Lreloadretaddr|Lreturn|Lentertrap|Lpoptrap|Lcall_op _|Llabel _|
     Lbranch _|Lcondbranch (_, _)|Lcondbranch3 (_, _, _)|Lswitch _|
     Ladjust_stack_offset _|Lpushtrap _|Lraise _|Lstackcheck _
@@ -781,10 +781,10 @@ module BR = Branch_relaxation.Make (struct
             Const_float32 _|Const_float _|Const_symbol _|Const_vec128 _|Stackoffset _|
             Load _|Store (_, _, _)|Intop _|Intop_imm (_, _)|Intop_atomic _|
             Floatop (_, _)|Csel _|Reinterpret_cast _|Static_cast _|Probe_is_enabled _|
-            Name_for_debugger _)
+            Name_for_debugger _ | Extcall _)
       | Lprologue|Lend|Lreloadretaddr|Lreturn|Lentertrap|Lpoptrap|Lcall_op _
       | Llabel _|Lbranch _|Lswitch _|Ladjust_stack_offset _|Lpushtrap _|Lraise _
-      |Lstackcheck _
+      | Lstackcheck _
         -> None
   end
 
@@ -895,6 +895,7 @@ module BR = Branch_relaxation.Make (struct
     | Lop (Specific Imove32) -> 1
     | Lop (Specific (Isignext _)) -> 1
     | Lop (Name_for_debugger _) -> 0
+    | Lop (Extcall _) -> 1
     | Lcall_op (Lprobe _) | Lop (Probe_is_enabled _) ->
       fatal_error ("Probes not supported.")
     | Lop (Dls_get) -> 1
@@ -1202,6 +1203,37 @@ let emit_static_cast (cast : Cmm.static_cast) i =
            DSL.ins I.FMOV [| DSL.emit_reg_d dst ; DSL.emit_reg src |])
       end
 
+let emit_extcall i ~alloc ~stack_ofs ~func =
+  if Config.runtime5 && stack_ofs > 0 then begin
+    DSL.ins I.MOV [| DSL.emit_reg reg_stack_arg_begin; DSL.sp |];
+    DSL.ins I.ADD [| DSL.emit_reg reg_stack_arg_end; DSL.sp; DSL.imm (Misc.align stack_ofs 16) |];
+    emit_load_symbol_addr reg_x8 func;
+    DSL.ins I.BL [| DSL.emit_symbol "caml_c_call_stack_args" |];
+    emit_printf "%a\n" frecord_frame (i.live, Dbg_other i.dbg)
+  end else if alloc then begin
+    emit_load_symbol_addr reg_x8 func;
+    DSL.ins I.BL [| DSL.emit_symbol "caml_c_call" |];
+    emit_printf "%a\n" frecord_frame (i.live, Dbg_other i.dbg)
+  end else begin
+    (* store ocaml stack in the frame pointer register
+        NB: no need to store previous x29 because OCaml frames don't
+        maintain frame pointer *)
+    if Config.runtime5 then begin
+      DSL.ins I.MOV [| DSL.emit_reg_fixed_x 29; DSL.sp |];
+      cfi_remember_state ();
+      cfi_def_cfa_register ~reg:29;
+      let offset = Domainstate.(idx_of_field Domain_c_stack) * 8 in
+      (* CR sspies: This code seems to be never triggered. It contained a wrong assembly instruction. *)
+      DSL.ins I.LDR [| DSL.emit_reg reg_tmp1; DSL.emit_addressing (Iindexed offset) reg_domain_state_ptr |];
+        DSL.ins I.MOV [| DSL.sp; DSL.emit_reg reg_tmp1 |]
+    end;
+    DSL.ins I.BL [| DSL.emit_symbol func |];
+    if Config.runtime5 then begin
+      DSL.ins I.MOV [| DSL.sp; DSL.emit_reg_fixed_x 29 |]
+    end;
+    cfi_restore_state ()
+  end
+
 (* Output the assembly code for an instruction *)
 
 let emit_instr i =
@@ -1292,35 +1324,7 @@ let emit_instr i =
         else
           output_epilogue (fun () -> DSL.ins I.B [| DSL.emit_symbol func.sym_name |])
     | Lcall_op(Lextcall {func; alloc; stack_ofs}) ->
-        if Config.runtime5 && stack_ofs > 0 then begin
-          DSL.ins I.MOV [| DSL.emit_reg reg_stack_arg_begin; DSL.sp |];
-          DSL.ins I.ADD [| DSL.emit_reg reg_stack_arg_end; DSL.sp; DSL.imm (Misc.align stack_ofs 16) |];
-          emit_load_symbol_addr reg_x8 func;
-          DSL.ins I.BL [| DSL.emit_symbol "caml_c_call_stack_args" |];
-          emit_printf "%a\n" frecord_frame (i.live, Dbg_other i.dbg)
-        end else if alloc then begin
-          emit_load_symbol_addr reg_x8 func;
-          DSL.ins I.BL [| DSL.emit_symbol "caml_c_call" |];
-          emit_printf "%a\n" frecord_frame (i.live, Dbg_other i.dbg)
-        end else begin
-          (* store ocaml stack in the frame pointer register
-             NB: no need to store previous x29 because OCaml frames don't
-             maintain frame pointer *)
-          if Config.runtime5 then begin
-            DSL.ins I.MOV [| DSL.emit_reg_fixed_x 29; DSL.sp |];
-            cfi_remember_state ();
-            cfi_def_cfa_register ~reg:29;
-            let offset = Domainstate.(idx_of_field Domain_c_stack) * 8 in
-            (* CR sspies: This code seems to be never triggered. It contained a wrong assembly instruction. *)
-            DSL.ins I.LDR [| DSL.emit_reg reg_tmp1; DSL.emit_addressing (Iindexed offset) reg_domain_state_ptr |];
-              DSL.ins I.MOV [| DSL.sp; DSL.emit_reg reg_tmp1 |]
-          end;
-          DSL.ins I.BL [| DSL.emit_symbol func |];
-          if Config.runtime5 then begin
-            DSL.ins I.MOV [| DSL.sp; DSL.emit_reg_fixed_x 29 |]
-          end;
-          cfi_restore_state ()
-        end
+        emit_extcall i ~func ~alloc ~stack_ofs
     | Lop(Stackoffset n) ->
         assert (n mod 16 = 0);
         emit_stack_adjustment (-n);
@@ -1513,6 +1517,8 @@ let emit_instr i =
     | Lop(Specific(Isimd simd)) ->
       DSL.simd_instr simd i
     | Lop (Name_for_debugger _) -> ()
+    | Lop(Extcall {func_symbol; stack_ofs; _}) ->
+        emit_extcall i ~func:func_symbol ~alloc:false ~stack_ofs
     | Lcall_op (Lprobe _) | Lop (Probe_is_enabled _) ->
       fatal_error ("Probes not supported.")
     | Lop(Dls_get) ->

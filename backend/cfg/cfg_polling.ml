@@ -131,7 +131,7 @@ let is_safe_terminator : Cfg.terminator Cfg.instruction -> bool =
     false
   | Raise _ -> false
   | Tailcall_self _ | Tailcall_func _ | Return -> true
-  | Call_no_return _ | Call _ | Prim _ -> false
+  | Call _ -> false
 
 let is_safe_block : Cfg.basic_block -> bool =
  fun block ->
@@ -212,7 +212,7 @@ module Polls_before_prtc_transfer = struct
       then Ok Might_not_poll
       else Ok Always_polls
     | Return -> Ok Always_polls
-    | Call_no_return _ | Call _ | Prim _ ->
+    | Call _ ->
       if Cfg.can_raise_terminator term.desc
       then Ok (Polls_before_prtc_domain.join dom exn)
       else Ok dom
@@ -353,7 +353,8 @@ let add_poll_or_alloc_basic :
     | Const_symbol _ | Const_vec128 _ | Stackoffset _ | Load _ | Store _
     | Intop _ | Intop_imm _ | Intop_atomic _ | Floatop _ | Csel _
     | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _ | Opaque
-    | Begin_region | End_region | Specific _ | Name_for_debugger _ | Dls_get ->
+    | Begin_region | End_region | Specific _ | Name_for_debugger _ | Dls_get
+    | Extcall _ ->
       points
     | Poll -> (Poll, instr.dbg) :: points
     | Alloc _ -> (Alloc, instr.dbg) :: points)
@@ -368,50 +369,11 @@ let add_calls_terminator :
   | Switch _ | Return | Raise _ ->
     points
   | Tailcall_self _ | Tailcall_func _ -> (Function_call, term.dbg) :: points
-  | Call _ -> (Function_call, term.dbg) :: points
-  | Call_no_return
-      { alloc = false;
-        func_symbol = _;
-        ty_res = _;
-        ty_args = _;
-        stack_ofs = _;
-        effects = _
-      }
-  | Prim
-      { op =
-          External
-            { alloc = false;
-              func_symbol = _;
-              ty_res = _;
-              ty_args = _;
-              stack_ofs = _;
-              effects = _
-            };
-        label_after = _
-      } ->
-    points
-  | Call_no_return
-      { alloc = true;
-        func_symbol = _;
-        ty_res = _;
-        ty_args = _;
-        stack_ofs = _;
-        effects = _
-      }
-  | Prim
-      { op =
-          External
-            { alloc = true;
-              func_symbol = _;
-              ty_res = _;
-              ty_args = _;
-              stack_ofs = _;
-              effects = _
-            };
-        label_after = _
-      } ->
-    (External_call, term.dbg) :: points
-  | Prim { op = Probe _; label_after = _ } -> points
+  | Call { op = OCaml _; label_after = _ } ->
+    (Function_call, term.dbg) :: points
+  | Call { op = External { alloc; _ }; label_after = _ } ->
+    if alloc then (External_call, term.dbg) :: points else points
+  | Call { op = Probe _; label_after = _ } -> points
 
 let find_poll_alloc_or_calls : Cfg.t -> polling_points =
  fun cfg ->

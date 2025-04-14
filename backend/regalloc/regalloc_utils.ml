@@ -392,8 +392,8 @@ let remove_prologue_if_not_required : Cfg_with_layout.t -> unit =
         let removed = remove_prologue block in
         assert removed
       | Never | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-      | Switch _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _
-      | Call_no_return _ | Call _ | Prim _ ->
+      | Switch _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _ | Call _
+        ->
         assert false
 
 let update_live_fields : Cfg_with_layout.t -> liveness -> unit =
@@ -470,11 +470,12 @@ let update_spill_cost : Cfg_with_infos.t -> flat:bool -> unit -> unit =
       let cost = base_cost * cost_multiplier in
       DLL.iter ~f:(fun instr -> update_instr cost instr) block.body;
       (* Ignore probes *)
-      match[@ocaml.warning "-4"] block.terminator.desc with
-      | Prim { op = Probe _; _ } -> ()
+      match block.terminator.desc with
+      | Call { op = Probe _; _ } -> ()
       | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _
       | Int_test _ | Switch _ | Return | Raise _ | Tailcall_self _
-      | Tailcall_func _ | Call_no_return _ | Call _ | Prim _ ->
+      | Tailcall_func _
+      | Call { op = OCaml _ | External _; label_after = _ } ->
         update_instr cost block.terminator)
 
 let check_length str arr expected =

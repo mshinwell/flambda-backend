@@ -111,7 +111,6 @@ let instrument_initialiser c dbg =
   Csequence
     (Cop (Cextcall { func = "caml_setup_afl";
                      builtin = false;
-                     returns = true;
                      effects = Arbitrary_effects;
                      coeffects = Has_coeffects;
                      ty = typ_int; ty_args = []; },

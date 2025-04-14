@@ -113,7 +113,6 @@ let successor_labels_normal ti =
   | Tailcall_self { destination } -> Label.Set.singleton destination
   | Switch labels -> Array.to_seq labels |> Label.Set.of_seq
   | Return | Raise _ | Tailcall_func _ -> Label.Set.empty
-  | Call_no_return _ -> Label.Set.empty
   | Never -> Label.Set.empty
   | Always l -> Label.Set.singleton l
   | Parity_test { ifso; ifnot } | Truth_test { ifso; ifnot } ->
@@ -123,8 +122,7 @@ let successor_labels_normal ti =
     |> Label.Set.add uo
   | Int_test { lt; gt; eq; imm = _; is_signed = _ } ->
     Label.Set.singleton lt |> Label.Set.add gt |> Label.Set.add eq
-  | Call { op = _; label_after } | Prim { op = _; label_after } ->
-    Label.Set.singleton label_after
+  | Call { op = _; label_after } -> Label.Set.singleton label_after
 
 let successor_labels ~normal ~exn block =
   match normal, exn with
@@ -173,10 +171,14 @@ let replace_successor_labels t ~normal ~exn block ~f =
         Tailcall_self { destination = f destination }
       | Tailcall_func Indirect
       | Tailcall_func (Direct _)
-      | Return | Raise _ | Call_no_return _ ->
+      | Return | Raise _
+      | Call { op = External { returns = false; _ }; label_after = _ } ->
         block.terminator.desc
-      | Call { op; label_after } -> Call { op; label_after = f label_after }
-      | Prim { op; label_after } -> Prim { op; label_after = f label_after }
+      | Call
+          { op = (OCaml _ | External { returns = true; _ } | Probe _) as op;
+            label_after
+          } ->
+        Call { op; label_after = f label_after }
     in
     block.terminator <- { block.terminator with desc }
 
@@ -325,8 +327,6 @@ let dump_terminator' ?(print_reg = Printreg.reg) ?(res = [||]) ?(args = [||])
       done;
       let i = label_count - 1 in
       fprintf ppf "case %d: goto %a" i Label.format labels.(i))
-  | Call_no_return { func_symbol; _ } ->
-    fprintf ppf "Call_no_return %s%a" func_symbol print_args args
   | Return -> fprintf ppf "Return%a" print_args args
   | Raise _ -> fprintf ppf "Raise%a" print_args args
   | Tailcall_self { destination } ->
@@ -343,22 +343,33 @@ let dump_terminator' ?(print_reg = Printreg.reg) ?(res = [||]) ?(args = [||])
       (match call with
       | Indirect -> Linear.Ltailcall_ind
       | Direct func -> Linear.Ltailcall_imm { func })
-  | Call { op = call; label_after } ->
+  | Call { op = OCaml call; label_after } ->
     Format.fprintf ppf "%t%a" print_res dump_linear_call_op
       (match call with
       | Indirect -> Linear.Lcall_ind
       | Direct func -> Linear.Lcall_imm { func });
     Format.fprintf ppf "%sgoto %a" sep Label.format label_after
-  | Prim { op = prim; label_after } ->
+  | Call
+      { op =
+          External
+            { func_symbol = func;
+              ty_res;
+              ty_args;
+              alloc;
+              returns = _;
+              stack_ofs;
+              effects = _
+            };
+        label_after
+      } ->
     Format.fprintf ppf "%t%a" print_res dump_linear_call_op
-      (match prim with
-      | External
-          { func_symbol = func; ty_res; ty_args; alloc; stack_ofs; effects = _ }
-        ->
-        Linear.Lextcall
-          { func; ty_res; ty_args; returns = true; alloc; stack_ofs }
-      | Probe { name; handler_code_sym; enabled_at_init } ->
-        Linear.Lprobe { name; handler_code_sym; enabled_at_init });
+      (Linear.Lextcall
+         { func; ty_res; ty_args; returns = true; alloc; stack_ofs });
+    Format.fprintf ppf "%sgoto %a" sep Label.format label_after
+  | Call { op = Probe { name; handler_code_sym; enabled_at_init }; label_after }
+    ->
+    Format.fprintf ppf "%t%a" print_res dump_linear_call_op
+      (Linear.Lprobe { name; handler_code_sym; enabled_at_init });
     Format.fprintf ppf "%sgoto %a" sep Label.format label_after
 
 let dump_terminator ?sep ppf terminator = dump_terminator' ?sep ppf terminator
@@ -395,12 +406,15 @@ let print_instruction ppf i = print_instruction' ppf i
 
 let can_raise_terminator (i : terminator) =
   match i with
-  | Call_no_return { func_symbol; _ } ->
+  | Call { op = External { func_symbol; returns = false; _ }; label_after = _ }
+    ->
     not (String.equal func_symbol Cmm.caml_flambda2_invalid)
-  | Raise _ | Tailcall_func _ | Call _ | Prim { op = Probe _; label_after = _ }
+  | Raise _ | Tailcall_func _ | Call { op = OCaml _ | Probe _; label_after = _ }
     ->
     true
-  | Prim { op = External { alloc; effects; _ }; label_after = _ } -> (
+  | Call
+      { op = External { returns = true; alloc; effects; _ }; label_after = _ }
+    -> (
     if not alloc
     then false
     else
@@ -418,9 +432,7 @@ let can_raise_terminator (i : terminator) =
    taking into account [effects] on extcalls *)
 let is_pure_terminator desc =
   match (desc : terminator) with
-  | Return | Raise _ | Call_no_return _ | Tailcall_func _ | Tailcall_self _
-  | Call _ | Prim _ ->
-    false
+  | Return | Raise _ | Call _ | Tailcall_func _ | Tailcall_self _ -> false
   | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
   | Switch _ ->
     (* CR gyorsh: fix for memory operands *)
@@ -430,16 +442,14 @@ let is_never_terminator desc =
   match (desc : terminator) with
   | Never -> true
   | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-  | Switch _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _
-  | Call_no_return _ | Call _ | Prim _ ->
+  | Switch _ | Return | Raise _ | Tailcall_self _ | Tailcall_func _ | Call _ ->
     false
 
 let is_return_terminator desc =
   match (desc : terminator) with
   | Return -> true
   | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-  | Switch _ | Raise _ | Tailcall_self _ | Tailcall_func _ | Call_no_return _
-  | Call _ | Prim _ ->
+  | Switch _ | Raise _ | Tailcall_self _ | Tailcall_func _ | Call _ ->
     false
 
 let is_pure_basic : basic -> bool = function
@@ -490,7 +500,7 @@ let is_noop_move instr =
       | Const_vec128 _ | Stackoffset _ | Load _ | Store _ | Intop _
       | Intop_imm _ | Intop_atomic _ | Floatop _ | Opaque | Reinterpret_cast _
       | Static_cast _ | Probe_is_enabled _ | Specific _ | Name_for_debugger _
-      | Begin_region | End_region | Dls_get | Poll | Alloc _ )
+      | Begin_region | End_region | Dls_get | Poll | Alloc _ | Extcall _ )
   | Reloadretaddr | Pushtrap _ | Poptrap | Prologue | Stack_check _ ->
     false
 
@@ -584,10 +594,7 @@ let basic_block_contains_calls block =
          true)
      | Tailcall_self _ -> false
      | Tailcall_func _ -> false
-     | Call_no_return _ -> true
-     | Call _ -> true
-     | Prim { op = External _; _ } -> true
-     | Prim { op = Probe _; _ } -> true)
+     | Call _ -> true)
   || DLL.exists block.body ~f:(fun (instr : basic instruction) ->
          match[@ocaml.warning "-4"] instr.desc with
          | Op (Alloc _ | Poll) -> true

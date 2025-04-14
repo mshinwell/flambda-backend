@@ -346,7 +346,7 @@ let rec expr ppf = function
         machtype result_ty
         Debuginfo.print_compact dbg
   | Capply ({ args; dbg; },
-      Extcall { func; builtin = _; returns = _; effects = _; coeffects = _;
+      External { func; builtin = _; returns = _; effects = _; coeffects = _;
         ty = _; ty_args = _; }) ->
       fprintf ppf "@[<1>(extcall \"%s\"%s@ (%a))@]" func (location dbg)
         (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
