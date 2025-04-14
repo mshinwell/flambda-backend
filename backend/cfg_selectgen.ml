@@ -707,7 +707,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         in
         Ok field_slice)
     | Cop (op, args, dbg) -> emit_expr_op env sub_cfg bound_name op args dbg
-    | Capply apply -> emit_expr_apply env sub_cfg apply
+    | Capply (apply_shared, apply) ->
+      emit_expr_apply env sub_cfg apply_shared apply
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> Never_returns
@@ -732,7 +733,9 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Never_returns -> ()
       | Ok r1 -> emit_tail (bind_let env sub_cfg v r1) sub_cfg e2)
     | Cphantom_let (_var, _defining_expr, body) -> emit_tail env sub_cfg body
-    | Capply apply -> emit_tail_apply env sub_cfg apply
+    | Capply
+        (apply_shared, OCaml { region_close = Rc_normal; callee; result_ty }) ->
+      emit_tail_apply env sub_cfg apply_shared ~callee ~result_ty
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> ()
@@ -747,9 +750,15 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Ctrywith (e1, exn_cont, v, extra_args, e2, dbg) ->
       emit_tail_trywith env sub_cfg e1 exn_cont v ~extra_args e2 dbg
     | Cop _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
-    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Capply _ | Cexit _
+    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Cexit _
+    | Capply (_, (OCaml { region_close = Rc_nontail; _ } | External _ | Probe _))
       ->
       emit_return env sub_cfg exp (SU.pop_all_traps env)
+    | Capply (_, OCaml { region_close = Rc_close_at_apply; _ }) ->
+      Misc.fatal_errorf
+        "Cfg_selectgen.emit_tail: Rc_close_at_apply must always have gone \
+         through and been expanded by Flambda 2:@ %a"
+        Printcmm.expression exp
 
   and emit_expr_raise (env : SU.environment) sub_cfg k
       (args : Cmm.expression list) dbg : _ Or_never_returns.t =
@@ -773,43 +782,120 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     SU.set_traps_for_raise env;
     Never_returns
 
-  and emit_expr_apply env sub_cfg ~result_ty region_close ~callee ~args dbg =
-    (* | Cprobe { name; handler_code_sym; enabled_at_init } -> ( Terminator
-       (Prim { op = Probe { name; handler_code_sym; enabled_at_init };
-       label_after }), args ) *)
-    (* noreturn extcall: else Terminator (Call_no_return external_call), args *)
-    match foo with
-    | Call { op = OCaml Indirect; label_after } as term ->
-      let r1 = emit_tuple env sub_cfg new_args in
-      let rarg = Array.sub r1 1 (Array.length r1 - 1) in
-      let rd = SU.regs_for ty in
-      let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
-      let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
-      let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-      SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
-      SU.insert_debug' env sub_cfg term dbg
-        (Array.append [| r1.(0) |] loc_arg)
-        loc_res;
-      Sub_cfg.add_never_block sub_cfg ~label:label_after;
-      (* The destination registers (as per the procedure calling convention)
-         need to be named right now, otherwise the result of the function call
-         may be unavailable in the debugger immediately after the call. *)
-      add_naming_op_for_bound_name sub_cfg loc_res;
-      SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+  and emit_expr_apply env sub_cfg
+      ({ args; dbg } as apply_shared : Cmm.apply_shared) (apply : Cmm.apply) :
+      _ Or_never_returns.t =
+    match apply with
+    | OCaml { callee; result_ty; region_close } -> (
+      (match region_close with
+      | Rc_nontail | Rc_normal -> ()
+      | Rc_close_at_apply ->
+        Misc.fatal_errorf
+          "Cfg_selectgen.emit_expr_apply: Rc_close_at_apply must always have \
+           gone through and been expanded by Flambda 2:@ %a"
+          Printcmm.expression
+          (Cmm.Capply (apply_shared, apply)));
+      match emit_parts_list env sub_cfg (callee :: args) with
+      | Never_returns -> Never_returns
+      | Ok (callee_and_args, env) -> (
+        let label_after = Cmm.new_label () in
+        match[@ocaml.warning "-fragile-match"] callee_and_args with
+        | Cmm.Cconst_symbol (func, _dbg) :: args ->
+          (* Direct OCaml function call *)
+          let r1 = emit_tuple env sub_cfg args in
+          let rd = SU.regs_for result_ty in
+          let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
+          let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
+          let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+          SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
+          SU.insert_debug' env sub_cfg
+            (Call { op = OCaml (Direct func); label_after })
+            dbg loc_arg loc_res;
+          Sub_cfg.add_never_block sub_cfg ~label:label_after;
+          SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+          SU.set_traps_for_raise env;
+          Ok rd
+        | _ ->
+          (* Indirect OCaml function call *)
+          let r1 = emit_tuple env sub_cfg callee_and_args in
+          let rarg = Array.sub r1 1 (Array.length r1 - 1) in
+          let rd = SU.regs_for result_ty in
+          let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
+          let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
+          let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+          SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
+          SU.insert_debug' env sub_cfg
+            (Call { op = OCaml Indirect; label_after })
+            dbg
+            (Array.append [| r1.(0) |] loc_arg)
+            loc_res;
+          Sub_cfg.add_never_block sub_cfg ~label:label_after;
+          (* The destination registers (as per the procedure calling convention)
+             need to be named right now, otherwise the result of the function
+             call may be unavailable in the debugger immediately after the
+             call. *)
+          SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+          SU.set_traps_for_raise env;
+          Ok rd))
+    | External
+        { func;
+          ty = ty_res;
+          ty_args;
+          builtin = _;
+          alloc;
+          returns;
+          effects;
+          coeffects = _
+        } ->
+      let loc_arg, stack_ofs = emit_extcall_args env sub_cfg ty_args args dbg in
+      let rd = SU.regs_for ty_res in
+      let label_after = Cmm.new_label () in
+      let returns, ty_res =
+        let keep_for_checking =
+          !SU.current_function_is_check_enabled
+          && String.equal func Cmm.caml_flambda2_invalid
+        in
+        if keep_for_checking then true, Cmm.typ_int else returns, ty_res
+      in
+      let loc_res =
+        SU.insert_op_debug' env sub_cfg
+          (Call
+             { op =
+                 External
+                   { func_symbol = func;
+                     alloc;
+                     returns;
+                     effects;
+                     ty_res;
+                     ty_args;
+                     stack_ofs
+                   };
+               label_after
+             })
+          dbg loc_arg
+          (Proc.loc_external_results (Reg.typv rd))
+      in
       SU.set_traps_for_raise env;
-      Ok rd
-    | Call { op = OCaml (Direct _); label_after } as term ->
-      let r1 = emit_tuple env sub_cfg new_args in
-      let rd = SU.regs_for ty in
-      let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
-      let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
-      let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-      SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
-      SU.insert_debug' env sub_cfg term dbg loc_arg loc_res;
-      add_naming_op_for_bound_name sub_cfg loc_res;
-      Sub_cfg.add_never_block sub_cfg ~label:label_after;
-      SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+      if returns
+      then (
+        SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
+        Sub_cfg.add_never_block sub_cfg ~label:label_after;
+        Ok rd)
+      else Never_returns
+    | Probe { name; handler_code_sym; enabled_at_init } ->
+      let r1 = emit_tuple env sub_cfg args in
+      let rd = SU.regs_for Cmm.typ_void in
+      let label_after = Cmm.new_label () in
+      let rd =
+        SU.insert_op_debug' env sub_cfg
+          (Call
+             { op = Probe { name; handler_code_sym; enabled_at_init };
+               label_after
+             })
+          dbg r1 rd
+      in
       SU.set_traps_for_raise env;
+      Sub_cfg.add_never_block sub_cfg ~label:label_after;
       Ok rd
 
   and emit_expr_op env sub_cfg bound_name op args dbg : _ Or_never_returns.t =
@@ -838,63 +924,25 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       in
       let ty = SU.oper_result_type op in
       let label_after = Cmm.new_label () in
-      let new_op, new_args = select_operation op simple_args dbg ~label_after in
+      let new_op, new_args = select_operation op simple_args dbg in
       match new_op with
-      | Terminator
-          (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
+      | Op (Extcall { func_symbol; effects; ty_res; ty_args; stack_ofs = _ }) ->
+        (* XXX is it correct that [stack_ofs] gets ignored? *)
         let loc_arg, stack_ofs =
           emit_extcall_args env sub_cfg ty_args new_args dbg
         in
         let rd = SU.regs_for ty_res in
-        let term =
-          Cfg.Prim { op = External { r with stack_ofs }; label_after }
+        let term : Cfg.basic =
+          Op (Extcall { func_symbol; effects; ty_res; ty_args; stack_ofs })
         in
-        let loc_res =
-          SU.insert_op_debug' env sub_cfg term dbg loc_arg
-            (Proc.loc_external_results (Reg.typv rd))
-        in
+        let loc_res = Proc.loc_external_results (Reg.typv rd) in
+        SU.insert_debug env sub_cfg term dbg loc_arg loc_res;
         Sub_cfg.add_never_block sub_cfg ~label:label_after;
         add_naming_op_for_bound_name sub_cfg loc_res;
         SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
-        SU.set_traps_for_raise env;
+        (* No need for [SU.set_traps_for_raise]: this extcall never raises. *)
         Ok rd
-      | Terminator (Prim { op = Probe _; label_after } as term) ->
-        let r1 = emit_tuple env sub_cfg new_args in
-        let rd = SU.regs_for ty in
-        let rd = SU.insert_op_debug' env sub_cfg term dbg r1 rd in
-        SU.set_traps_for_raise env;
-        Sub_cfg.add_never_block sub_cfg ~label:label_after;
-        Ok rd
-      | Terminator (Call_no_return ({ func_symbol; ty_args; _ } as r)) ->
-        let loc_arg, stack_ofs =
-          emit_extcall_args env sub_cfg ty_args new_args dbg
-        in
-        let keep_for_checking =
-          !SU.current_function_is_check_enabled
-          && String.equal func_symbol Cmm.caml_flambda2_invalid
-        in
-        let returns, ty =
-          if keep_for_checking then true, Cmm.typ_int else false, ty
-        in
-        let rd = SU.regs_for ty in
-        let label = Cmm.new_label () in
-        let r = { r with stack_ofs } in
-        let term : Cfg.terminator =
-          if keep_for_checking
-          then Prim { op = External r; label_after = label }
-          else Call_no_return r
-        in
-        let (_ : Reg.t array) =
-          SU.insert_op_debug' env sub_cfg term dbg loc_arg
-            (Proc.loc_external_results (Reg.typv rd))
-        in
-        SU.set_traps_for_raise env;
-        if returns
-        then (
-          Sub_cfg.add_never_block sub_cfg ~label;
-          Ok rd)
-        else Never_returns
-      | Basic (Op (Alloc { bytes = _; mode; dbginfo = [placeholder] })) ->
+      | Op (Alloc { bytes = _; mode; dbginfo = [placeholder] }) ->
         let rd = SU.regs_for Cmm.typ_val in
         let bytes = SU.size_expr env (Ctuple new_args) in
         let alloc_words = (bytes + Arch.size_addr - 1) / Arch.size_addr in
@@ -910,21 +958,16 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         emit_stores env sub_cfg dbg new_args rd;
         SU.set_traps_for_raise env;
         Ok rd
-      | Basic (Op (Alloc { bytes = _; mode = _; dbginfo })) ->
+      | Op (Alloc { bytes = _; mode = _; dbginfo }) ->
         Misc.fatal_errorf
           "Selection Alloc: expected a single placehold in dbginfo, found %d"
           (List.length dbginfo)
-      | Basic (Op op) ->
+      | Op op ->
         let r1 = emit_tuple env sub_cfg new_args in
         let rd = SU.regs_for ty in
         add_naming_op_for_bound_name sub_cfg rd;
         Ok (insert_op_debug env sub_cfg op dbg r1 rd)
-      | Basic basic ->
-        Misc.fatal_errorf "unexpected basic (%a)" Cfg.dump_basic basic
-      | Terminator term ->
-        Misc.fatal_errorf "unexpected terminator (%a)"
-          (Cfg.dump_terminator ~sep:"")
-          term)
+      | basic -> Misc.fatal_errorf "unexpected basic (%a)" Cfg.dump_basic basic)
 
   and emit_expr_ifthenelse env sub_cfg bound_name econd _ifso_dbg eif
       (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t) :
@@ -1230,44 +1273,18 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     insert_return env sub_cfg (emit_expr env sub_cfg exp ~bound_name:None) traps
 
-  and emit_tail_apply env sub_cfg (apply : Cmm.apply) : unit =
+  and emit_tail_apply env sub_cfg ({ args; dbg } : Cmm.apply_shared) ~callee
+      ~result_ty : unit =
+    (* CR mshinwell: this next few lines could be shared with emit_expr_apply *)
     match emit_parts_list env sub_cfg (callee :: args) with
     | Never_returns -> ()
-    | Ok (simple_args, env) -> (
+    | Ok (callee_and_args, env) -> (
       let label_after = Cmm.new_label () in
-      let new_op, new_args =
-        match[@ocaml.warning "-fragile-match"] simple_args with
-        | Cmm.Cconst_symbol (func, _dbg) :: rem ->
-          Cfg.Terminator (Call { op = Direct func; label_after }), rem
-        | _ -> Cfg.Terminator (Call { op = Indirect; label_after }), args
-      in
-      match new_op with
-      | Terminator (Call { op = Indirect; label_after } as term) ->
-        let r1 = emit_tuple env sub_cfg new_args in
-        let rd = SU.regs_for ty in
-        let rarg = Array.sub r1 1 (Array.length r1 - 1) in
-        let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
-        let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
-        let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
-        if stack_ofs = 0 && SU.trap_stack_is_empty env
-        then (
-          let call = Cfg.Tailcall_func Indirect in
-          SU.insert_moves env sub_cfg rarg loc_arg;
-          SU.insert_debug' env sub_cfg call dbg
-            (Array.append [| r1.(0) |] loc_arg)
-            [||])
-        else (
-          SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
-          SU.insert_debug' env sub_cfg term dbg
-            (Array.append [| r1.(0) |] loc_arg)
-            loc_res;
-          Sub_cfg.add_never_block sub_cfg ~label:label_after;
-          SU.set_traps_for_raise env;
-          SU.insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
-          insert_return env sub_cfg (Ok loc_res) (SU.pop_all_traps env))
-      | Terminator (Call { op = Direct func; label_after } as term) ->
-        let r1 = emit_tuple env sub_cfg new_args in
-        let rd = SU.regs_for ty in
+      match[@ocaml.warning "-fragile-match"] callee_and_args with
+      | Cmm.Cconst_symbol (func, _dbg) :: args ->
+        (* Direct OCaml function call in tail position *)
+        let r1 = emit_tuple env sub_cfg args in
+        let rd = SU.regs_for result_ty in
         let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
         let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
         let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
@@ -1288,12 +1305,39 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           SU.insert_debug' env sub_cfg call dbg loc_arg [||])
         else (
           SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
-          SU.insert_debug' env sub_cfg term dbg loc_arg loc_res;
+          SU.insert_debug' env sub_cfg
+            (Call { op = OCaml (Direct func); label_after })
+            dbg loc_arg loc_res;
           Sub_cfg.add_never_block sub_cfg ~label:label_after;
           SU.set_traps_for_raise env;
           SU.insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
           insert_return env sub_cfg (Ok loc_res) (SU.pop_all_traps env))
-      | _ -> Misc.fatal_error "Cfg_selectgen.emit_tail")
+      | _ ->
+        (* Indirect OCaml function call in tail position *)
+        let r1 = emit_tuple env sub_cfg args in
+        let rd = SU.regs_for result_ty in
+        let rarg = Array.sub r1 1 (Array.length r1 - 1) in
+        let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv rarg) in
+        let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
+        let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
+        if stack_ofs = 0 && SU.trap_stack_is_empty env
+        then (
+          let call = Cfg.Tailcall_func Indirect in
+          SU.insert_moves env sub_cfg rarg loc_arg;
+          SU.insert_debug' env sub_cfg call dbg
+            (Array.append [| r1.(0) |] loc_arg)
+            [||])
+        else (
+          SU.insert_move_args env sub_cfg rarg loc_arg stack_ofs;
+          SU.insert_debug' env sub_cfg
+            (Call { op = OCaml Indirect; label_after })
+            dbg
+            (Array.append [| r1.(0) |] loc_arg)
+            loc_res;
+          Sub_cfg.add_never_block sub_cfg ~label:label_after;
+          SU.set_traps_for_raise env;
+          SU.insert env sub_cfg (Op (Stackoffset (-stack_ofs))) [||] [||];
+          insert_return env sub_cfg (Ok loc_res) (SU.pop_all_traps env)))
 
   and emit_tail_ifthenelse env sub_cfg econd (_ifso_dbg : Debuginfo.t) eif
       (_ifnot_dbg : Debuginfo.t) eelse (_dbg : Debuginfo.t) =
