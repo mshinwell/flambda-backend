@@ -847,6 +847,13 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           effects;
           coeffects = _
         } ->
+      if (not alloc) && not returns
+      then
+        Misc.fatal_errorf
+          "[Call External] must always have either [alloc] or [returns] set; \
+           otherwise, use [Op Extcall]:@ %a"
+          Printcmm.expression
+          (Cmm.Capply (apply_shared, apply));
       let loc_arg, stack_ofs = emit_extcall_args env sub_cfg ty_args args dbg in
       let rd = SU.regs_for ty_res in
       let label_after = Cmm.new_label () in
