@@ -579,6 +579,10 @@ end = struct
     (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
       when Stdlib.compare call1 call2 = 0 ->
       ()
+    | ( Call { op = External { returns = false; _ }; label_after = _ },
+        Call { op = External { returns = false; _ }; label_after = _ } )
+      when Stdlib.compare old_instr instr = 0 ->
+      ()
     | ( Call { op = call1; label_after = l1 },
         Call { op = call2; label_after = l2 } )
     (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)

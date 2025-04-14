@@ -122,7 +122,12 @@ let successor_labels_normal ti =
     |> Label.Set.add uo
   | Int_test { lt; gt; eq; imm = _; is_signed = _ } ->
     Label.Set.singleton lt |> Label.Set.add gt |> Label.Set.add eq
-  | Call { op = _; label_after } -> Label.Set.singleton label_after
+  | Call { op = External { returns = false; _ }; label_after = _ } ->
+    Label.Set.empty
+  | Call
+      { op = OCaml _ | External { returns = true; _ } | Probe _; label_after }
+    ->
+    Label.Set.singleton label_after
 
 let successor_labels ~normal ~exn block =
   match normal, exn with
@@ -169,16 +174,9 @@ let replace_successor_labels t ~normal ~exn block ~f =
       | Switch labels -> Switch (Array.map f labels)
       | Tailcall_self { destination } ->
         Tailcall_self { destination = f destination }
-      | Tailcall_func Indirect
-      | Tailcall_func (Direct _)
-      | Return | Raise _
-      | Call { op = External { returns = false; _ }; label_after = _ } ->
+      | Tailcall_func Indirect | Tailcall_func (Direct _) | Return | Raise _ ->
         block.terminator.desc
-      | Call
-          { op = (OCaml _ | External { returns = true; _ } | Probe _) as op;
-            label_after
-          } ->
-        Call { op; label_after = f label_after }
+      | Call { op; label_after } -> Call { op; label_after = f label_after }
     in
     block.terminator <- { block.terminator with desc }
 

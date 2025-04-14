@@ -53,6 +53,8 @@ module S = struct
   type call_operation =
     | OCaml of func_call_operation
     | External of external_call_operation
+    (* CR mshinwell: ideally we wouldn't have a [label_after] in the "external
+       call that doesn't return" case *)
     | Probe of
         { name : string;
           handler_code_sym : string;
