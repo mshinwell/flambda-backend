@@ -1673,7 +1673,10 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
               (Cfg.make_instr Cfg.Reloadretaddr [||] [||] Debuginfo.none);
           Cfg.add_block_exn cfg block;
           DLL.add_end layout block.start)
-        else assert (DLL.is_empty block.body));
+        else if not (DLL.is_empty block.body)
+        then
+          Misc.fatal_errorf "Expected empty block but found:@ %a"
+            Cfg.print_block block);
     if delete_prologue_poll && not !found_prologue_poll
     then Misc.fatal_error "Did not find [Poll] instruction to delete";
     (* note: `Cfgize.Stack_offset_and_exn.update_cfg` may add edges to the

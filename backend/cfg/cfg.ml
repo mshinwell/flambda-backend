@@ -621,3 +621,22 @@ let equal_irc_work_list left right =
     true
   | (Unknown_list | Coalesced | Constrained | Frozen | Work_list | Active), _ ->
     false
+
+let print_block ppf block =
+  let fprintf = Format.fprintf in
+  let pp_with_id ppf ~pp (instr : _ instruction) =
+    fprintf ppf "(id:%a) %a\n" InstructionId.format instr.id pp instr
+  in
+  DLL.iter ~f:(pp_with_id ppf ~pp:print_basic) block.body;
+  pp_with_id ppf ~pp:print_terminator block.terminator;
+  fprintf ppf "\npredecessors:";
+  Label.Set.iter (fprintf ppf " %a" Label.format) block.predecessors;
+  fprintf ppf "\nsuccessors:";
+  Label.Set.iter
+    (fprintf ppf " %a" Label.format)
+    (successor_labels ~normal:true ~exn:false block);
+  fprintf ppf "\nexn-successors:";
+  Label.Set.iter
+    (fprintf ppf " %a" Label.format)
+    (successor_labels ~normal:false ~exn:true block);
+  fprintf ppf "\n"
