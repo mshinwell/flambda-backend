@@ -161,40 +161,35 @@ let linearize_terminator cfg_with_layout (func : string) start
             (Ltailcall_imm { func = { sym_name = func; sym_global = Local } })
         ],
         Some destination )
-    | Call_no_return
-        { func_symbol; alloc; ty_args; ty_res; stack_ofs; effects = _ } ->
+    | Call
+        { op =
+            External
+              { func_symbol;
+                alloc;
+                returns;
+                ty_args;
+                ty_res;
+                stack_ofs;
+                effects = _
+              };
+          label_after = _
+        } ->
       single
         (L.Lcall_op
            (Lextcall
-              { func = func_symbol;
-                alloc;
-                ty_args;
-                ty_res;
-                returns = false;
-                stack_ofs
-              }))
-    | Call { op; label_after } ->
+              { func = func_symbol; alloc; ty_args; ty_res; returns; stack_ofs }))
+    | Call { op = OCaml op; label_after } ->
       let op : Linear.call_operation =
         match op with
         | Indirect -> Lcall_ind
         | Direct func_symbol -> Lcall_imm { func = func_symbol }
       in
       branch_or_fallthrough [L.Lcall_op op] label_after, None
-    | Prim { op; label_after } ->
+    | Call
+        { op = Probe { name; handler_code_sym; enabled_at_init }; label_after }
+      ->
       let op : Linear.call_operation =
-        match op with
-        | External
-            { func_symbol; alloc; ty_args; ty_res; stack_ofs; effects = _ } ->
-          Lextcall
-            { func = func_symbol;
-              alloc;
-              ty_args;
-              ty_res;
-              returns = true;
-              stack_ofs
-            }
-        | Probe { name; handler_code_sym; enabled_at_init } ->
-          Lprobe { name; handler_code_sym; enabled_at_init }
+        Lprobe { name; handler_code_sym; enabled_at_init }
       in
       branch_or_fallthrough [L.Lcall_op op] label_after, None
     | Switch labels -> single (L.Lswitch labels)
@@ -337,17 +332,20 @@ let need_starting_label (cfg_with_layout : CL.t) (block : Cfg.basic_block)
       match prev_block.terminator.desc with
       | Switch _ -> true
       | Never -> Misc.fatal_error "Cannot linearize terminator: Never"
+      | Call { op = External { returns = false; _ }; label_after = _ } ->
+        assert false
       | Always _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-      | Call _ | Prim _ ->
+      | Call
+          { op = OCaml _ | External { returns = true; _ } | Probe _;
+            label_after = _
+          } ->
         (* If the label came from the original [Linear] code, preserve it for
            checking that the conversion from [Linear] to [Cfg] and back is the
            identity; and for various assertions in reorder. *)
         let new_labels = CL.new_labels cfg_with_layout in
         CL.preserve_orig_labels cfg_with_layout
         && not (Label.Set.mem block.start new_labels)
-      | Return | Raise _ | Tailcall_func _ | Tailcall_self _ | Call_no_return _
-        ->
-        assert false)
+      | Return | Raise _ | Tailcall_func _ | Tailcall_self _ -> assert false)
 
 let adjust_stack_offset body (block : Cfg.basic_block)
     ~(prev_block : Cfg.basic_block) =

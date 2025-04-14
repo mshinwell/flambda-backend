@@ -360,8 +360,8 @@ let rec expr ppf = function
       fprintf ppf "@[<2>(%s" (operation dbg op);
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       begin match op with
-      | Cextcall { ty; ty_args; func = _; returns; } ->
-        let ty = if returns then Some ty else None in
+      | Cextcall { ty; ty_args; func = _; } ->
+        let ty = Some ty in
         fprintf ppf "@ %a" extcall_signature (ty, ty_args)
       | _ -> ()
       end;

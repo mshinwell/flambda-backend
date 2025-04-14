@@ -54,7 +54,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Cextcall { effects = No_effects; coeffects = No_coeffects } ->
         List.for_all is_simple_expr args
         (* The following may have side effects *)
-      | Cextcall _ | Calloc _ | Cstore _ | Craise _ | Catomic _ | Cprobe _
+      | Cextcall _ | Calloc _ | Cstore _ | Craise _ | Catomic _
       | Cprobe_is_enabled _ | Copaque | Cpoll ->
         false
       | Cprefetch _ | Cbeginregion | Cendregion ->
@@ -104,7 +104,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         match op with
         | Cextcall { effects = e; coeffects = ce } ->
           EC.create (SU.select_effects e) (SU.select_coeffects ce)
-        | Cprobe _ | Copaque | Cpoll -> EC.arbitrary
+        | Copaque | Cpoll -> EC.arbitrary
         | Calloc (Heap, _) -> EC.none
         | Calloc (Local, _) -> EC.coeffect_only Arbitrary
         | Cstore _ -> EC.effect_only Arbitrary
@@ -219,40 +219,36 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
   (* Default instruction selection for integer operations *)
 
   let select_arith_comm (op : Simple_operation.integer_operation)
-      (args : Cmm.expression list) :
-      Cfg.basic_or_terminator * Cmm.expression list =
+      (args : Cmm.expression list) : Cfg.basic * Cmm.expression list =
     match args with
     | [arg; Cconst_int (n, _)] when is_immediate op n ->
-      SU.basic_op (Intop_imm (op, n)), [arg]
+      Op (Intop_imm (op, n)), [arg]
     | [Cconst_int (n, _); arg] when is_immediate op n ->
-      SU.basic_op (Intop_imm (op, n)), [arg]
-    | _ -> SU.basic_op (Intop op), args
+      Op (Intop_imm (op, n)), [arg]
+    | _ -> Op (Intop op), args
 
   let select_arith (op : Simple_operation.integer_operation)
-      (args : Cmm.expression list) :
-      Cfg.basic_or_terminator * Cmm.expression list =
+      (args : Cmm.expression list) : Cfg.basic * Cmm.expression list =
     match args with
     | [arg; Cconst_int (n, _)] when is_immediate op n ->
-      SU.basic_op (Intop_imm (op, n)), [arg]
-    | _ -> SU.basic_op (Intop op), args
+      Op (Intop_imm (op, n)), [arg]
+    | _ -> Op (Intop op), args
 
   let select_arith_comp (cmp : Simple_operation.integer_comparison)
-      (args : Cmm.expression list) :
-      Cfg.basic_or_terminator * Cmm.expression list =
+      (args : Cmm.expression list) : Cfg.basic * Cmm.expression list =
     match args with
     | [arg; Cconst_int (n, _)] when is_immediate (Simple_operation.Icomp cmp) n
       ->
-      SU.basic_op (Intop_imm (Icomp cmp, n)), [arg]
+      Op (Intop_imm (Icomp cmp, n)), [arg]
     | [Cconst_int (n, _); arg]
       when is_immediate (Simple_operation.Icomp (SU.swap_intcomp cmp)) n ->
-      SU.basic_op (Intop_imm (Icomp (SU.swap_intcomp cmp), n)), [arg]
-    | _ -> SU.basic_op (Intop (Icomp cmp)), args
+      Op (Intop_imm (Icomp (SU.swap_intcomp cmp), n)), [arg]
+    | _ -> Op (Intop (Icomp cmp)), args
 
   (* Default instruction selection for operators *)
 
   let select_operation0 (op : Cmm.operation) (args : Cmm.expression list)
-      (dbg : Debuginfo.t) ~label_after :
-      Cfg.basic_or_terminator * Cmm.expression list =
+      (dbg : Debuginfo.t) : Cfg.basic * Cmm.expression list =
     let wrong_num_args n =
       Misc.fatal_errorf
         "Selection.select_operation: expected %d argument(s) for@ %s" n
@@ -275,27 +271,21 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Cextcall { func; builtin = true } ->
       Misc.fatal_errorf "Selection.select_operation: builtin not recognized %s"
         func ()
-    | Cextcall
-        { func; alloc; ty; ty_args; returns; builtin = false; effects; _ } ->
-      let external_call =
-        { Cfg.func_symbol = func;
-          alloc;
-          effects;
-          ty_res = ty;
-          ty_args;
-          stack_ofs = -1
-        }
-      in
-      if returns
-      then Terminator (Prim { op = External external_call; label_after }), args
-      else Terminator (Call_no_return external_call), args
+    | Cextcall { func; ty; ty_args; builtin = false; effects; _ } ->
+      ( Op
+          (Extcall
+             { func_symbol = func;
+               effects;
+               ty_res = ty;
+               ty_args;
+               stack_ofs = -1
+             }),
+        args )
     | Cload { memory_chunk; mutability; is_atomic } ->
       let arg = single_arg () in
       let addressing_mode, eloc = Target.select_addressing memory_chunk arg in
       let mutability = SU.select_mutable_flag mutability in
-      ( SU.basic_op
-          (Load { memory_chunk; addressing_mode; mutability; is_atomic }),
-        [eloc] )
+      Op (Load { memory_chunk; addressing_mode; mutability; is_atomic }), [eloc]
     | Cstore (chunk, init) -> (
       let arg1, arg2 = two_args () in
       let addr, eloc = Target.select_addressing chunk arg1 in
@@ -317,53 +307,51 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
                range:@ %s"
               (Printcmm.operation dbg op)
         in
-        SU.basic_op op, [newarg2; eloc]
-      | _ -> SU.basic_op (Store (chunk, addr, is_assign)), [arg2; eloc]
+        Op op, [newarg2; eloc]
+      | _ -> Op (Store (chunk, addr, is_assign)), [arg2; eloc]
       (* Inversion addr/datum in Istore *))
-    | Cdls_get -> SU.basic_op Dls_get, args
+    | Cdls_get -> Op Dls_get, args
     | Calloc (mode, alloc_block_kind) ->
       let placeholder_for_alloc_block_kind : Cmm.alloc_dbginfo_item =
         { alloc_words = 0; alloc_block_kind; alloc_dbg = Debuginfo.none }
       in
-      ( SU.basic_op
+      ( Op
           (Alloc
              { bytes = 0; dbginfo = [placeholder_for_alloc_block_kind]; mode }),
         args )
-    | Cpoll -> SU.basic_op Poll, args
+    | Cpoll -> Op Poll, args
     | Caddi -> select_arith_comm Iadd args
     | Csubi -> select_arith Isub args
     | Cmuli -> select_arith_comm Imul args
     | Cmulhi { signed } -> select_arith_comm (Imulh { signed }) args
-    | Cdivi -> SU.basic_op (Intop Idiv), args
-    | Cmodi -> SU.basic_op (Intop Imod), args
+    | Cdivi -> Op (Intop Idiv), args
+    | Cmodi -> Op (Intop Imod), args
     | Cand -> select_arith_comm Iand args
     | Cor -> select_arith_comm Ior args
     | Cxor -> select_arith_comm Ixor args
     | Clsl -> select_arith Ilsl args
     | Clsr -> select_arith Ilsr args
     | Casr -> select_arith Iasr args
-    | Cclz { arg_is_non_zero } ->
-      SU.basic_op (Intop (Iclz { arg_is_non_zero })), args
-    | Cctz { arg_is_non_zero } ->
-      SU.basic_op (Intop (Ictz { arg_is_non_zero })), args
-    | Cpopcnt -> SU.basic_op (Intop Ipopcnt), args
+    | Cclz { arg_is_non_zero } -> Op (Intop (Iclz { arg_is_non_zero })), args
+    | Cctz { arg_is_non_zero } -> Op (Intop (Ictz { arg_is_non_zero })), args
+    | Cpopcnt -> Op (Intop Ipopcnt), args
     | Ccmpi comp -> select_arith_comp (Isigned comp) args
     | Caddv -> select_arith_comm Iadd args
     | Cadda -> select_arith_comm Iadd args
     | Ccmpa comp -> select_arith_comp (Iunsigned comp) args
-    | Ccmpf (w, comp) -> SU.basic_op (Floatop (w, Icompf comp)), args
+    | Ccmpf (w, comp) -> Op (Floatop (w, Icompf comp)), args
     | Ccsel _ ->
       let cond, ifso, ifnot = three_args () in
       let cond, earg = select_condition cond in
-      SU.basic_op (Csel cond), [earg; ifso; ifnot]
-    | Cnegf w -> SU.basic_op (Floatop (w, Inegf)), args
-    | Cabsf w -> SU.basic_op (Floatop (w, Iabsf)), args
-    | Caddf w -> SU.basic_op (Floatop (w, Iaddf)), args
-    | Csubf w -> SU.basic_op (Floatop (w, Isubf)), args
-    | Cmulf w -> SU.basic_op (Floatop (w, Imulf)), args
-    | Cdivf w -> SU.basic_op (Floatop (w, Idivf)), args
-    | Creinterpret_cast cast -> SU.basic_op (Reinterpret_cast cast), args
-    | Cstatic_cast cast -> SU.basic_op (Static_cast cast), args
+      Op (Csel cond), [earg; ifso; ifnot]
+    | Cnegf w -> Op (Floatop (w, Inegf)), args
+    | Cabsf w -> Op (Floatop (w, Iabsf)), args
+    | Caddf w -> Op (Floatop (w, Iaddf)), args
+    | Csubf w -> Op (Floatop (w, Isubf)), args
+    | Cmulf w -> Op (Floatop (w, Imulf)), args
+    | Cdivf w -> Op (Floatop (w, Idivf)), args
+    | Creinterpret_cast cast -> Op (Reinterpret_cast cast), args
+    | Cstatic_cast cast -> Op (Static_cast cast), args
     | Catomic { op; size } -> (
       match op with
       | Exchange | Fetch_and_add | Add | Sub | Land | Lor | Lxor ->
@@ -374,7 +362,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           | Thirtytwo -> Thirtytwo_signed
         in
         let addr, eloc = Target.select_addressing dst_size dst in
-        SU.basic_op (Intop_atomic { op; size; addr }), [src; eloc]
+        Op (Intop_atomic { op; size; addr }), [src; eloc]
       | Compare_set | Compare_exchange ->
         let compare_with, set_to, dst = three_args () in
         let dst_size : Cmm.memory_chunk =
@@ -383,38 +371,27 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           | Thirtytwo -> Thirtytwo_signed
         in
         let addr, eloc = Target.select_addressing dst_size dst in
-        ( SU.basic_op (Intop_atomic { op; size; addr }),
-          [compare_with; set_to; eloc] ))
-    | Cprobe { name; handler_code_sym; enabled_at_init } ->
-      ( Terminator
-          (Prim
-             { op = Probe { name; handler_code_sym; enabled_at_init };
-               label_after
-             }),
-        args )
-    | Cprobe_is_enabled { name } -> SU.basic_op (Probe_is_enabled { name }), []
-    | Cbeginregion -> SU.basic_op Begin_region, []
-    | Cendregion -> SU.basic_op End_region, args
+        Op (Intop_atomic { op; size; addr }), [compare_with; set_to; eloc])
+    | Cprobe_is_enabled { name } -> Op (Probe_is_enabled { name }), []
+    | Cbeginregion -> Op Begin_region, []
+    | Cendregion -> Op End_region, args
     | Cpackf32 | Copaque | Cbswap _ | Cprefetch _ | Craise _
     | Ctuple_field (_, _) ->
       Misc.fatal_error "Selection.select_oper"
 
   let rec select_operation (op : Cmm.operation) (args : Cmm.expression list)
-      (dbg : Debuginfo.t) ~label_after :
-      Cfg.basic_or_terminator * Cmm.expression list =
+      (dbg : Debuginfo.t) : Cfg.basic * Cmm.expression list =
     match
       Target.select_operation ~generic_select_condition:select_condition op args
-        dbg ~label_after
+        dbg
     with
-    | Rewritten (basic_or_terminator, args) -> basic_or_terminator, args
+    | Rewritten (basic, args) -> basic, args
     | Select_operation_then_rewrite (op, args, dbg, rewriter) -> (
-      let basic_or_terminator, args =
-        select_operation op args dbg ~label_after
-      in
-      match rewriter basic_or_terminator ~args with
-      | Rewritten (basic_or_terminator, args) -> basic_or_terminator, args
-      | Use_default -> basic_or_terminator, args)
-    | Use_default -> select_operation0 op args dbg ~label_after
+      let basic, args = select_operation op args dbg in
+      match rewriter basic ~args with
+      | Rewritten (basic, args) -> basic, args
+      | Use_default -> basic, args)
+    | Use_default -> select_operation0 op args dbg
 
   let insert_return env sub_cfg (r : _ Or_never_returns.t)
       (traps : Cmm.trap_action list) =
@@ -730,8 +707,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         in
         Ok field_slice)
     | Cop (op, args, dbg) -> emit_expr_op env sub_cfg bound_name op args dbg
-    | Capply { result_ty; region_close; dbg; callee; args } ->
-      emit_expr_apply env sub_cfg ~result_ty region_close ~callee ~args dbg
+    | Capply apply -> emit_expr_apply env sub_cfg apply
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> Never_returns
@@ -756,8 +732,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Never_returns -> ()
       | Ok r1 -> emit_tail (bind_let env sub_cfg v r1) sub_cfg e2)
     | Cphantom_let (_var, _defining_expr, body) -> emit_tail env sub_cfg body
-    | Capply { result_ty; region_close = Rc_normal; dbg; callee; args } ->
-      emit_tail_apply env sub_cfg ~result_ty ~callee ~args dbg
+    | Capply apply -> emit_tail_apply env sub_cfg apply
     | Csequence (e1, e2) -> (
       match emit_expr env sub_cfg e1 ~bound_name:None with
       | Never_returns -> ()
@@ -799,8 +774,12 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     Never_returns
 
   and emit_expr_apply env sub_cfg ~result_ty region_close ~callee ~args dbg =
+    (* | Cprobe { name; handler_code_sym; enabled_at_init } -> ( Terminator
+       (Prim { op = Probe { name; handler_code_sym; enabled_at_init };
+       label_after }), args ) *)
+    (* noreturn extcall: else Terminator (Call_no_return external_call), args *)
     match foo with
-    | Terminator (Call { op = Indirect; label_after } as term) ->
+    | Call { op = OCaml Indirect; label_after } as term ->
       let r1 = emit_tuple env sub_cfg new_args in
       let rarg = Array.sub r1 1 (Array.length r1 - 1) in
       let rd = SU.regs_for ty in
@@ -819,7 +798,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
       SU.set_traps_for_raise env;
       Ok rd
-    | Terminator (Call { op = Direct _; label_after } as term) ->
+    | Call { op = OCaml (Direct _); label_after } as term ->
       let r1 = emit_tuple env sub_cfg new_args in
       let rd = SU.regs_for ty in
       let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
@@ -1251,7 +1230,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     assert (Sub_cfg.exit_has_never_terminator sub_cfg);
     insert_return env sub_cfg (emit_expr env sub_cfg exp ~bound_name:None) traps
 
-  and emit_tail_apply env sub_cfg ~result_ty:ty ~callee ~args dbg =
+  and emit_tail_apply env sub_cfg (apply : Cmm.apply) : unit =
     match emit_parts_list env sub_cfg (callee :: args) with
     | Never_returns -> ()
     | Ok (simple_args, env) -> (

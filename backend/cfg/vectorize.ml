@@ -314,7 +314,8 @@ end = struct
     | Name_for_debugger _, _
     | Dls_get, _
     | Poll, _
-    | Alloc _, _ ->
+    | Alloc _, _
+    | Extcall _, _ ->
       false
 
   let have_isomorphic_op instruction1 instruction2 =
@@ -1037,7 +1038,7 @@ end = struct
           | Move | Reinterpret_cast _ | Static_cast _ | Const_int _
           | Const_float32 _ | Const_float _ | Const_symbol _ | Const_vec128 _
           | Stackoffset _ | Intop _ | Intop_imm _ | Floatop _ | Csel _ | Alloc _
-            ->
+          | Extcall _ ->
             None)
 
       let create (instruction : Instruction.t) reaching_definitions : t option =
@@ -2285,7 +2286,7 @@ end = struct
         | Const_symbol _ | Const_vec128 _ | Stackoffset _ | Intop _
         | Intop_imm _ | Intop_atomic _ | Floatop _ | Csel _ | Probe_is_enabled _
         | Opaque | Begin_region | End_region | Name_for_debugger _ | Dls_get
-        | Poll ->
+        | Poll | Extcall _ ->
           None)
 
     let from_block (block : Block.t) deps : t list =

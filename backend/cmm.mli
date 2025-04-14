@@ -262,12 +262,13 @@ type operation =
         ty: machtype;
         ty_args : exttype list;
         builtin: bool;
-        returns: bool;
         effects: effects;
         coeffects: coeffects;
       }
       (** [Cextcall] never generates [caml_c_call].  Use the expression
           [Capply_extcall] for those instead.
+          Likewise, extcalls that never return must use [Capply_extcall], since
+          divergence is a control flow effect.
           The [machtype] is the machine type of the result.
           The [exttype list] describes the unboxing types of the arguments.
           An empty list means "all arguments are machine words [XInt]".
@@ -376,12 +377,16 @@ and apply =
       result_ty : machtype;
       region_close : Lambda.region_close;
     }
-  | Extcall of {
+  | External of {
       func : string;
       ty: machtype;
       ty_args : exttype list;
       builtin : bool;
+      alloc : bool;
       returns : bool;
+      (** At least one of [alloc] and [returns] must be [true].  Otherwise,
+          use [Cop]. *)
+      (* CR mshinwell: improve description of effects/alloc/returns. *)
       effects : effects;
       coeffects : coeffects;
     }

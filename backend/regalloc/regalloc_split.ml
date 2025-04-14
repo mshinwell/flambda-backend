@@ -371,14 +371,19 @@ let insert_phi_moves : State.t -> Cfg_with_infos.t -> Substitution.map -> bool =
             Cfg_with_infos.get_block_exn cfg_with_infos predecessor_label
           in
           match predecessor_block.terminator.desc with
-          | Return | Raise _ | Tailcall_func _ | Call_no_return _ | Never ->
+          | Return | Raise _ | Tailcall_func _
+          | Call { op = External { returns = false; _ }; label_after = _ }
+          | Never ->
             assert false
           | Tailcall_self _ -> ()
           | Always _ ->
             add_phi_moves_to_instr_list state ~before:predecessor_block
               ~phi:block substs to_unify predecessor_block.body
           | Switch _ | Parity_test _ | Truth_test _ | Float_test _ | Int_test _
-          | Call _ | Prim _ ->
+          | Call
+              { op = OCaml _ | External { returns = true; _ } | Probe _;
+                label_after = _
+              } ->
             let instrs = DLL.make_empty () in
             add_phi_moves_to_instr_list state ~before:predecessor_block
               ~phi:block substs to_unify instrs;

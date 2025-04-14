@@ -38,13 +38,20 @@ module S = struct
     { func_symbol : string;
       alloc : bool;
       (* CR mshinwell: rename [alloc] -> [needs_caml_c_call] *)
+      returns : bool;
+          (** At least one of [alloc] and [returns] must be set.  Otherwise,
+              use [Op]. *)
+      (* CR mshinwell: same comment as in cmm.mli about [effects], [alloc] and
+         [returns]. In addition this should apply to the [OCaml] case below e.g.
+         to know that an OCaml function doesn't return. *)
       effects : Cmm.effects;
       ty_res : Cmm.machtype;
       ty_args : Cmm.exttype list;
       stack_ofs : int
     }
 
-  type prim_call_operation =
+  type call_operation =
+    | OCaml of func_call_operation
     | External of external_call_operation
     | Probe of
         { name : string;
@@ -147,12 +154,10 @@ module S = struct
     | Raise of Lambda.raise_kind
     | Tailcall_self of { destination : Label.t }
     | Tailcall_func of func_call_operation
-    | Call_no_return of external_call_operation
-    (* CR mshinwell: [Call_no_return] should have "external" in the name *)
     (* CR mshinwell: [Invalid] from flambda2 should have its own terminator, to
        avoid the hack in [can_raise_terminator] *)
-    | Call of func_call_operation with_label_after
-    | Prim of prim_call_operation with_label_after
+    (* CR mshinwell: move [Tailcall_*] into [call_operation] *)
+    | Call of call_operation with_label_after
 
   type basic_or_terminator =
     | Basic of basic

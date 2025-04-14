@@ -287,7 +287,6 @@ type operation =
         ty: machtype;
         ty_args : exttype list;
         builtin: bool;
-        returns: bool;
         effects: effects;
         coeffects: coeffects;
       }
@@ -376,11 +375,12 @@ and apply =
       result_ty : machtype;
       region_close : Lambda.region_close;
     }
-  | Extcall of {
+  | External of {
       func : string;
       ty: machtype;
       ty_args : exttype list;
       builtin : bool;
+      alloc : bool;
       returns : bool;
       effects : effects;
       coeffects : coeffects;
@@ -543,8 +543,8 @@ let iter_shallow f = function
       f callee;
       List.iter f args
   | Capply ({ args; dbg = _ },
-        Extcall { func = _; ty = _; ty_args = _; builtin = _; returns = _;
-                  effects = _; coeffects = _; }) ->
+        External { func = _; ty = _; ty_args = _; builtin = _; returns = _;
+                   effects = _; coeffects = _; }) ->
       List.iter f args
   | Capply ({ args; dbg = _ },
         Probe { name = _; handler_code_sym = _; enabled_at_init = _; }) ->
@@ -585,10 +585,12 @@ let map_shallow f = function
       Capply ({ args; dbg },
         OCaml { callee; result_ty; region_close })
   | Capply ({ args; dbg },
-        Extcall { func; ty; ty_args; builtin; returns; effects; coeffects }) ->
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects }) ->
       let args = List.map f args in
       Capply ({ args; dbg },
-        Extcall { func; ty; ty_args; builtin; returns; effects; coeffects })
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects })
   | Capply ({ args; dbg },
         Probe { name; handler_code_sym; enabled_at_init }) ->
       let args = List.map f args in
