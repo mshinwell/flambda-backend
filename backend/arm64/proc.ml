@@ -510,7 +510,7 @@ let operation_supported : Cmm.operation -> bool = function
   | Ccmpf _
   | Ccsel _
   | Craise _
-  | Cprobe _ | Cprobe_is_enabled _ | Copaque
+  | Cprobe_is_enabled _ | Copaque
   | Cbeginregion | Cendregion | Ctuple_field _
   | Cdls_get
   | Cpoll

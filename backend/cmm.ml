@@ -352,24 +352,8 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
-  | Capply of {
-      result_ty : machtype;
-      region_close : Lambda.region_close;
-      dbg : Debuginfo.t;
-      callee : expression;
-      args : expression list;
-  }
-  | Capply_extcall of
-      { func: string;
-        ty: machtype;
-        ty_args : exttype list;
-        builtin: bool;
-        returns: bool;
-        effects: effects;
-        coeffects: coeffects;
-      }
+  | Capply of apply_shared * apply
   | Cop of operation * expression list * Debuginfo.t
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t
@@ -385,6 +369,32 @@ type expression =
       * Backend_var.With_provenance.t
       * (Backend_var.With_provenance.t * machtype) list
       * expression * Debuginfo.t
+
+and apply =
+  | OCaml of {
+      callee : expression;
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+    }
+  | Extcall of {
+      func : string;
+      ty: machtype;
+      ty_args : exttype list;
+      builtin : bool;
+      returns : bool;
+      effects : effects;
+      coeffects : coeffects;
+    }
+  | Probe of {
+      name : string;
+      handler_code_sym : string;
+      enabled_at_init : bool;
+    }
+
+and apply_shared = {
+  args : expression list;
+  dbg : Debuginfo.t;
+}
 
 type codegen_option =
   | Reduce_code_size
@@ -455,10 +465,6 @@ let iter_shallow_tail f = function
       true
   | Cexit _ | Cop (Craise _, _, _) ->
       true
-  | Capply { callee; args; _ } ->
-      f callee;
-      List.iter f args;
-      true
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _
@@ -467,7 +473,8 @@ let iter_shallow_tail f = function
   | Cconst_symbol _
   | Cvar _
   | Ctuple _
-  | Cop _ ->
+  | Cop _
+  | Capply _ -> (* XXX *)
       false
 
 let map_shallow_tail f = function
@@ -496,14 +503,6 @@ let map_shallow_tail f = function
       Ctrywith(f e1, kind', id,extra_args, f e2, dbg)
   | Cexit _ | Cop (Craise _, _, _) as cmm ->
       cmm
-  | Capply { result_ty; region_close; dbg; callee; args } ->
-      Capply {
-        result_ty;
-        region_close;
-        dbg;
-        callee = f callee;
-        args = List.map f args;
-      }
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _
@@ -512,6 +511,7 @@ let map_shallow_tail f = function
   | Cconst_symbol _
   | Cvar _
   | Ctuple _
+  | Capply _ (* XXX *)
   | Cop _ as cmm -> cmm
 
 let map_tail f =
@@ -538,8 +538,16 @@ let iter_shallow f = function
       List.iter f el
   | Cop (_op, el, _dbg) ->
       List.iter f el
-  | Capply { callee; args; _ } ->
+  | Capply ({ args; dbg = _ },
+        OCaml { callee; result_ty = _; region_close = _; }) ->
       f callee;
+      List.iter f args
+  | Capply ({ args; dbg = _ },
+        Extcall { func = _; ty = _; ty_args = _; builtin = _; returns = _;
+                  effects = _; coeffects = _; }) ->
+      List.iter f args
+  | Capply ({ args; dbg = _ },
+        Probe { name = _; handler_code_sym = _; enabled_at_init = _; }) ->
       List.iter f args
   | Csequence (e1, e2) ->
       f e1; f e2
@@ -570,14 +578,22 @@ let map_shallow f = function
       Cphantom_let (id, de, f e)
   | Ctuple el ->
       Ctuple (List.map f el)
-  | Capply { result_ty; region_close; dbg; callee; args } ->
-      Capply {
-        result_ty;
-        region_close;
-        dbg;
-        callee = f callee;
-        args = List.map f args;
-      }
+  | Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close }) ->
+      let callee = f callee in
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close })
+  | Capply ({ args; dbg },
+        Extcall { func; ty; ty_args; builtin; returns; effects; coeffects }) ->
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        Extcall { func; ty; ty_args; builtin; returns; effects; coeffects })
+  | Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init }) ->
+      let args = List.map f args in
+      Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init })
   | Cop (op, el, dbg) ->
       Cop (op, List.map f el, dbg)
   | Csequence (e1, e2) ->

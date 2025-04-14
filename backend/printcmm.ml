@@ -272,9 +272,6 @@ let operation d = function
   | Ccmpf (Float64, c) -> Printf.sprintf "%sf" (float_comparison c)
   | Ccmpf (Float32, c) -> Printf.sprintf "%sf32" (float_comparison c)
   | Craise k -> Lambda.raise_kind k ^ location d
-  | Cprobe { name; handler_code_sym; enabled_at_init; } ->
-    Printf.sprintf "probe[%s %s%s]" name handler_code_sym
-      (if enabled_at_init then " enabled_at_init" else "")
   | Cprobe_is_enabled {name} -> Printf.sprintf "probe_is_enabled[%s]" name
   | Cprefetch { is_write; locality; } ->
     Printf.sprintf "prefetch is_write=%b prefetch_temporal_locality_hint=%s"
@@ -341,18 +338,29 @@ let rec expr ppf = function
           expr ppf e)
         el in
       fprintf ppf "@[<1>[%a]@]" tuple el
-  | Capply { result_ty; region_close = _; dbg; callee; args } ->
+  | Capply ({ args; dbg; },
+      OCaml { result_ty; region_close = _; callee; }) ->
       fprintf ppf "@[<1>(apply@ %a@ (%a)@ %a @ %a)@]"
         expr callee
         (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
         machtype result_ty
         Debuginfo.print_compact dbg
+  | Capply ({ args; dbg; },
+      Extcall { func; builtin = _; returns = _; effects = _; coeffects = _;
+        ty = _; ty_args = _; }) ->
+      fprintf ppf "@[<1>(extcall \"%s\"%s@ (%a))@]" func (location dbg)
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
+  | Capply ({ args; dbg; },
+      Probe { name; handler_code_sym; enabled_at_init; }) ->
+      fprintf ppf "@[<1>(probe[%s %s%s]@ (%a))@]" name handler_code_sym
+        (if enabled_at_init then " enabled_at_init" else "")
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
   | Cop(op, el, dbg) ->
       with_location_mapping ~label:"Cop" ~dbg ppf (fun () ->
       fprintf ppf "@[<2>(%s" (operation dbg op);
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       begin match op with
-      | Cextcall { ty; ty_args; alloc = _; func = _; returns; } ->
+      | Cextcall { ty; ty_args; func = _; returns; } ->
         let ty = if returns then Some ty else None in
         fprintf ppf "@ %a" extcall_signature (ty, ty_args)
       | _ -> ()

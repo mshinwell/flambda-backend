@@ -347,26 +347,8 @@ type expression =
   | Cphantom_let of Backend_var.With_provenance.t
       * phantom_defining_expr option * expression
   | Ctuple of expression list
-  | Capply of {
-      result_ty : machtype;
-      region_close : Lambda.region_close;
-      dbg : Debuginfo.t;
-      callee : expression;
-      args : expression list;
-  }
-  | Capply_extcall of
-      { func: string;
-        ty: machtype;
-        ty_args : exttype list;
-        builtin: bool;
-        returns: bool;
-        effects: effects;
-        coeffects: coeffects;
-      }
-    (** See doc comment on [Cextcall] above.  [Capply_extcall] always
-        generates [caml_c_call]. *)
+  | Capply of apply_shared * apply
   | Cop of operation * expression list * Debuginfo.t
-  | Cprobe of { name: string; handler_code_sym: string; enabled_at_init: bool }
   | Csequence of expression * expression
   | Cifthenelse of expression * Debuginfo.t * expression
       * Debuginfo.t * expression * Debuginfo.t
@@ -387,6 +369,32 @@ type expression =
         going through an explicit Push-annotated Cexit will this handler become
         active.  This allows for sharing a single handler in several places, or
         having multiple entry and exit points to a single trywith block. *)
+
+and apply =
+  | OCaml of {
+      callee : expression;
+      result_ty : machtype;
+      region_close : Lambda.region_close;
+    }
+  | Extcall of {
+      func : string;
+      ty: machtype;
+      ty_args : exttype list;
+      builtin : bool;
+      returns : bool;
+      effects : effects;
+      coeffects : coeffects;
+    }
+  | Probe of {
+      name : string;
+      handler_code_sym : string;
+      enabled_at_init : bool;
+    }
+
+and apply_shared = {
+  args : expression list;
+  dbg : Debuginfo.t;
+}
 
 type codegen_option =
   | Reduce_code_size
