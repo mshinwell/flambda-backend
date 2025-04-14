@@ -800,19 +800,32 @@ let extcall ~dbg ~returns ~alloc ~is_c_builtin ~effects ~coeffects ~ty_args name
     typ_res args =
   if not returns then assert (typ_res = typ_void);
   let default =
-    Cop
-      ( Cextcall
-          { func = name;
-            ty = typ_res;
-            alloc;
-            ty_args;
-            returns;
-            builtin = is_c_builtin;
-            effects;
-            coeffects
-          },
-        args,
-        dbg )
+    if alloc || not returns
+    then
+      Capply
+        ( { args; dbg },
+          External
+            { func = name;
+              alloc;
+              returns;
+              ty = typ_res;
+              ty_args;
+              builtin = is_c_builtin;
+              effects;
+              coeffects
+            } )
+    else
+      Cop
+        ( Cextcall
+            { func = name;
+              ty = typ_res;
+              ty_args;
+              builtin = is_c_builtin;
+              effects;
+              coeffects
+            },
+          args,
+          dbg )
   in
   if is_c_builtin || builtin_even_if_not_annotated name
   then
