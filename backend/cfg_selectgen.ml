@@ -847,16 +847,17 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           effects;
           coeffects = _
         } ->
-      if (not alloc) && not returns
+      if (not alloc) && returns
       then
         Misc.fatal_errorf
-          "[Call External] must always have either [alloc] or [returns] set; \
-           otherwise, use [Op Extcall]:@ %a"
+          "[Capply External] with alloc=false and returns=true must be encoded \
+           as [Cop Cextcall]"
           Printcmm.expression
           (Cmm.Capply (apply_shared, apply));
       let loc_arg, stack_ofs = emit_extcall_args env sub_cfg ty_args args dbg in
       let rd = SU.regs_for ty_res in
       let label_after = Cmm.new_label () in
+      let orig_returns = returns in
       let returns, ty_res =
         let keep_for_checking =
           !SU.current_function_is_check_enabled
@@ -885,8 +886,10 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       SU.set_traps_for_raise env;
       if returns
       then (
-        SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
         Sub_cfg.add_never_block sub_cfg ~label:label_after;
+        (* No need to insert result moves for [caml_flambda2_invalid] *)
+        if orig_returns
+        then SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
         Ok rd)
       else Never_returns
     | Probe { name; handler_code_sym; enabled_at_init } ->
@@ -930,7 +933,6 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
             insert_debug env sub_cfg (Op naming_op) Debuginfo.none [||] [||]
       in
       let ty = SU.oper_result_type op in
-      let label_after = Cmm.new_label () in
       let new_op, new_args = select_operation op simple_args dbg in
       match new_op with
       | Op (Extcall { func_symbol; effects; ty_res; ty_args; stack_ofs = _ }) ->
@@ -943,8 +945,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           Op (Extcall { func_symbol; effects; ty_res; ty_args; stack_ofs })
         in
         let loc_res = Proc.loc_external_results (Reg.typv rd) in
-        SU.insert_debug env sub_cfg term dbg loc_arg loc_res;
-        Sub_cfg.add_never_block sub_cfg ~label:label_after;
+        insert_debug env sub_cfg term dbg loc_arg loc_res;
         add_naming_op_for_bound_name sub_cfg loc_res;
         SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
         (* No need for [SU.set_traps_for_raise]: this extcall never raises. *)
