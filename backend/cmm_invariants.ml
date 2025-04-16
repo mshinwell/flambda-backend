@@ -171,6 +171,8 @@ let rec check env (expr : Cmm.expression) =
     List.iter (fun (_, _, handler, _, _) -> check env_handler handler) handlers
   | Cexit (exit_label, args, _trap_actions) ->
     Env.jump env ~exit_label ~arg_num:(List.length args)
+  | Craise (_raise_kind, args, _dbg) ->
+    List.iter (check env) args
 
 let run ppf (fundecl : Cmm.fundecl) =
   let env = Env.init () in

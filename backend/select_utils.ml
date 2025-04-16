@@ -216,7 +216,6 @@ let oper_result_type = function
   | Cstatic_cast (Scalar_of_v128 Float32x4) -> typ_float32
   | Cstatic_cast (Scalar_of_v128 (Int8x16 | Int16x8 | Int32x4 | Int64x2)) ->
     typ_int
-  | Craise _ -> typ_void
   | Cprobe_is_enabled _ -> typ_int
   | Copaque -> typ_val
   | Cpoll -> typ_void

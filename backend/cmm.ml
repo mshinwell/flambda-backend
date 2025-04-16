@@ -316,7 +316,6 @@ type operation =
   | Creinterpret_cast of reinterpret_cast
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
-  | Craise of Lambda.raise_kind
   | Cprobe_is_enabled of { name: string }
   | Copaque
   | Cbeginregion | Cendregion
@@ -366,6 +365,7 @@ type expression =
           * expression * Debuginfo.t * bool (* is_cold *)) list
         * expression
   | Cexit of exit_label * expression list * trap_action list
+  | Craise of Lambda.raise_kind * expression list * Debuginfo.t
 
 and apply =
   | OCaml of {
@@ -462,7 +462,7 @@ let iter_shallow_tail f = function
       List.iter (fun (_, _, h, _dbg, _) -> f h) handlers;
       f body;
       true
-  | Cexit _ | Cop (Craise _, _, _) ->
+  | Cexit _ | Craise _ ->
       true
   | Cconst_int _
   | Cconst_natint _
@@ -498,7 +498,7 @@ let map_shallow_tail f = function
         (n, ids, f handler, dbg, is_cold)
       in
       Ccatch(flag, List.map map_h handlers, f body)
-  | Cexit _ | Cop (Craise _, _, _) as cmm ->
+  | Cexit _ | Craise _ as cmm ->
       cmm
   | Cconst_int _
   | Cconst_natint _
@@ -557,6 +557,8 @@ let iter_shallow f = function
       List.iter iter_h hl; f body
   | Cexit (_n, el, _traps) ->
       List.iter f el
+  | Craise (_, el, _) ->
+      List.iter f el
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _
@@ -606,6 +608,8 @@ let map_shallow f = function
       Ccatch (flag, List.map map_h hl, f body)
   | Cexit (n, el, traps) ->
       Cexit (n, List.map f el, traps)
+  | Craise (raise_kind, el, dbg) ->
+      Craise (raise_kind, List.map f el, dbg)
   | Cconst_int _
   | Cconst_natint _
   | Cconst_float32 _

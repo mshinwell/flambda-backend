@@ -273,7 +273,6 @@ let operation d = function
   | Cstatic_cast cast -> static_cast cast
   | Ccmpf (Float64, c) -> Printf.sprintf "%sf" (float_comparison c)
   | Ccmpf (Float32, c) -> Printf.sprintf "%sf32" (float_comparison c)
-  | Craise k -> Lambda.raise_kind k ^ location d
   | Cprobe_is_enabled {name} -> Printf.sprintf "probe_is_enabled[%s]" name
   | Cprefetch { is_write; locality; } ->
     Printf.sprintf "prefetch is_write=%b prefetch_temporal_locality_hint=%s"
@@ -415,6 +414,10 @@ let rec expr ppf = function
       fprintf ppf "@[<2>(exit%a %a" trap_action_list traps exit_label i;
       List.iter (fun e -> fprintf ppf "@ %a" expr e) el;
       fprintf ppf ")@]"
+  | Craise (k, args, dbg) ->
+      fprintf ppf "@<2>(raise@ %s@ %a)@]"
+        (Lambda.raise_kind k ^ location dbg)
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space expr) args
 
 and sequence ppf = function
   | Csequence(e1, e2) -> fprintf ppf "%a@ %a" sequence e1 sequence e2

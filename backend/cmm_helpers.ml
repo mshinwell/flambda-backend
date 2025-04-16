@@ -349,7 +349,7 @@ let rec map_tail1 e ~f =
   | Csequence (e1, e2) -> Csequence (e1, map_tail1 e2 ~f)
   | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
   | Cconst_vec128 _ | Cconst_symbol _ | Cvar _ | Ctuple _ | Cop _ | Capply _
-  | Cifthenelse _ | Cexit _ | Ccatch _ | Cswitch _ ->
+  | Cifthenelse _ | Cexit _ | Ccatch _ | Cswitch _ | Craise _ ->
     f e
 
 let map_tail2 x y ~f = map_tail1 y ~f:(fun y -> map_tail1 x ~f:(fun x -> f x y))
@@ -862,9 +862,15 @@ let divimm_parameters d =
  *   unsigned_compare2 twoszp md < 0 && unsigned_compare2 md (add2 twoszp twop1) <= 0
  *)
 
+let raise_prim raise_kind ~extra_args arg dbg =
+  if !Clflags.debug
+  then Craise (raise_kind, arg :: extra_args, dbg)
+  else Craise (Raise_notrace, arg :: extra_args, dbg)
+
 let raise_symbol dbg symb =
-  Cop
-    (Craise Lambda.Raise_regular, [Cconst_symbol (global_symbol symb, dbg)], dbg)
+  raise_prim Raise_regular ~extra_args:[]
+    (Cconst_symbol (global_symbol symb, dbg))
+    dbg
 
 let[@inline] get_const = function
   | Cconst_int (i, _) -> Some (Nativeint.of_int i)
@@ -3544,11 +3550,6 @@ type unary_primitive = expression -> Debuginfo.t -> expression
 let int_as_pointer arg dbg = Cop (Caddi, [arg; Cconst_int (-1, dbg)], dbg)
 (* always a pointer outside the heap *)
 
-let raise_prim raise_kind ~extra_args arg dbg =
-  if !Clflags.debug
-  then Cop (Craise raise_kind, arg :: extra_args, dbg)
-  else Cop (Craise Lambda.Raise_notrace, arg :: extra_args, dbg)
-
 let negint arg dbg = Cop (Csubi, [Cconst_int (2, dbg); arg], dbg)
 
 let addr_array_length arg dbg =
@@ -4032,7 +4033,7 @@ let letin v ~defining_expr ~body =
   | Cvar _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
   | Cconst_symbol _ | Cconst_vec128 _ | Clet _ | Cphantom_let _ | Ctuple _
   | Capply _ | Cop _ | Csequence _ | Cifthenelse _ | Cswitch _ | Ccatch _
-  | Cexit _ ->
+  | Cexit _ | Craise _ ->
     Clet (v, defining_expr, body)
 
 let sequence x y =
@@ -4374,7 +4375,7 @@ let cmm_arith_size (e : Cmm.expression) =
     Some 0
   | Cop _ -> Some (cmm_arith_size0 e)
   | Clet _ | Cphantom_let _ | Ctuple _ | Capply _ | Csequence _ | Cifthenelse _
-  | Cswitch _ | Ccatch _ | Cexit _ ->
+  | Cswitch _ | Ccatch _ | Cexit _ | Craise _ ->
     None
 
 (* Atomics *)

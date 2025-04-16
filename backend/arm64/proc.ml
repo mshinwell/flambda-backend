@@ -511,7 +511,6 @@ let operation_supported : Cmm.operation -> bool = function
   | Cstatic_cast (Float_of_int Float64 | Int_of_float Float64)
   | Ccmpf _
   | Ccsel _
-  | Craise _
   | Cprobe_is_enabled _ | Copaque
   | Cbeginregion | Cendregion | Ctuple_field _
   | Cdls_get

@@ -58,8 +58,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Cextcall { effects = No_effects; coeffects = No_coeffects } ->
         List.for_all is_simple_expr args
         (* The following may have side effects *)
-      | Cextcall _ | Calloc _ | Cstore _ | Craise _ | Catomic _
-      | Cprobe_is_enabled _ | Copaque | Cpoll ->
+      | Cextcall _ | Calloc _ | Cstore _ | Catomic _ | Cprobe_is_enabled _
+      | Copaque | Cpoll ->
         false
       | Cprefetch _ | Cbeginregion | Cendregion ->
         false
@@ -71,7 +71,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       | Csubf _ | Cmulf _ | Cdivf _ | Cpackf32 | Creinterpret_cast _
       | Cstatic_cast _ | Ctuple_field _ | Ccmpf _ | Cdls_get ->
         List.for_all is_simple_expr args)
-    | Cifthenelse _ | Capply _ | Cswitch _ | Ccatch _ | Cexit _ -> false
+    | Cifthenelse _ | Capply _ | Cswitch _ | Ccatch _ | Cexit _ | Craise _ ->
+      false
 
   and is_simple_expr expr =
     match Target.is_simple_expr expr with
@@ -114,7 +115,6 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         | Cbeginregion | Cendregion -> EC.arbitrary
         | Cprefetch _ -> EC.arbitrary
         | Catomic _ -> EC.arbitrary
-        | Craise _ -> EC.effect_only Raise
         | Cload { mutability = Immutable } -> EC.none
         | Cload { mutability = Mutable } | Cdls_get ->
           EC.coeffect_only Read_mutable
@@ -128,6 +128,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       in
       EC.join from_op (EC.join_list_map args effects_of)
     | Capply _ | Cswitch _ | Ccatch _ | Cexit _ -> EC.arbitrary
+    | Craise _ -> EC.effect_only Raise
 
   and effects_of (expr : Cmm.expression) =
     match Target.effects_of expr with
@@ -377,8 +378,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Cprobe_is_enabled { name } -> Op (Probe_is_enabled { name }), []
     | Cbeginregion -> Op Begin_region, []
     | Cendregion -> Op End_region, args
-    | Cpackf32 | Copaque | Cbswap _ | Cprefetch _ | Craise _
-    | Ctuple_field (_, _) ->
+    | Cpackf32 | Copaque | Cbswap _ | Cprefetch _ | Ctuple_field (_, _) ->
       Misc.fatal_error "Selection.select_oper"
 
   let rec select_operation (op : Cmm.operation) (args : Cmm.expression list)
@@ -454,7 +454,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
              Debuginfo.none )
        in
        let dummy_raise : Cmm.expression =
-         Cop (Craise Raise_notrace, [dummy_constant], Debuginfo.none)
+         Craise (Raise_notrace, [dummy_constant], Debuginfo.none)
        in
        (* The use of a raise operation means that this handler is known not to
           return, making it compatible with any layout for the body or
@@ -726,7 +726,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       match emit_parts_list env sub_cfg exp_list with
       | Never_returns -> Never_returns
       | Ok (simple_list, ext_env) -> emit_tuple ext_env sub_cfg simple_list)
-    | Cop (Craise k, args, dbg) -> emit_expr_raise env sub_cfg k args dbg
+    | Craise (k, args, dbg) -> emit_expr_raise env sub_cfg k args dbg
     | Cop (Copaque, args, dbg) -> (
       match emit_parts_list env sub_cfg args with
       | Never_returns -> Never_returns
@@ -787,7 +787,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Ccatch (rec_flag, handlers, e1) ->
       emit_tail_catch env sub_cfg rec_flag handlers e1
     | Cop _ | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
-    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Cexit _
+    | Cconst_symbol _ | Cconst_vec128 _ | Cvar _ | Ctuple _ | Cexit _ | Craise _
     | Capply (_, (OCaml { region_close = Rc_nontail; _ } | External _ | Probe _))
       ->
       emit_return env sub_cfg exp (SU.pop_all_traps env)

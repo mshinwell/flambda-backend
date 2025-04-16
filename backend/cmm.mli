@@ -298,7 +298,6 @@ type operation =
   | Creinterpret_cast of reinterpret_cast
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
-  | Craise of Lambda.raise_kind
   | Cprobe_is_enabled of { name: string }
   | Copaque (* Sys.opaque_identity *)
   | Cbeginregion | Cendregion
@@ -361,6 +360,7 @@ type expression =
           * expression * Debuginfo.t * bool (* is_cold *)) list
         * expression
   | Cexit of exit_label * expression list * trap_action list
+  | Craise of Lambda.raise_kind * expression list * Debuginfo.t
 
 and apply =
   | OCaml of {

@@ -100,6 +100,8 @@ and instrument expr =
      in
      Ccatch (flag, cases, instrument body)
   | Cexit (ex, args, traps) -> Cexit (ex, List.map instrument args, traps)
+  | Craise (raise_kind, args, dbg) ->
+      Craise (raise_kind, List.map instrument args, dbg)
 
   (* these are base cases and have no logging *)
   | Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
