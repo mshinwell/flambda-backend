@@ -370,7 +370,6 @@ unaryop:
   | INTOFFLOAT                  { Cstatic_cast (Int_of_float Float64) }
   | VALUEOFINT                  { Creinterpret_cast Value_of_int }
   | INTOFVALUE                  { Creinterpret_cast Int_of_value }
-  | RAISE                       { Craise $1 }
   | ABSF                        { Cabsf Float64 }
 ;
 binaryop:
