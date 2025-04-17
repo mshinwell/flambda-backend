@@ -971,10 +971,10 @@ module BR = Branch_relaxation.Make (struct
         (Lextcall
           { alloc; stack_ofs; func = _; ty_res = _; ty_args = _; returns = _ })
       ->
-      (* XXX shouldn't this be "if alloc then 5 else 3"? *)
       if Config.runtime5 && stack_ofs > 0 then 5 else if alloc then 3 else 5
-    | Lop (Extcall { stack_ofs; _ }) ->
-      if Config.runtime5 && stack_ofs > 0 then 5 else 5
+    | Lop (Extcall _) ->
+      (* Never allocates *)
+      5
     | Lop (Stackoffset _) -> 2
     | Lop (Load { memory_chunk; addressing_mode; is_atomic; mutability = _ }) ->
       let based = match addressing_mode with Iindexed _ -> 0 | Ibased _ -> 1

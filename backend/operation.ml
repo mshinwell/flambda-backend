@@ -360,7 +360,9 @@ let is_pure = function
   | Dls_get -> true
   | Poll -> false
   | Alloc _ -> false
-  | Extcall _ -> false
+  | Extcall _ ->
+    (* CR mshinwell/xclerc: refine this using [effects] *)
+    false
 
 (* The next 2 functions are copied almost as is from asmcomp/printmach.ml
    because there is no interface to call them. Eventually this won't be needed

@@ -757,7 +757,7 @@ let print_block ppf block =
   Label.Set.iter
     (fprintf ppf " %a" Label.format)
     (successor_labels ~normal:true ~exn:false block);
-  fprintf ppf "\nexn-successors:";
+  fprintf ppf "\nexn-successor:";
   Label.Set.iter
     (fprintf ppf " %a" Label.format)
     (successor_labels ~normal:false ~exn:true block);

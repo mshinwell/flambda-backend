@@ -282,6 +282,8 @@ type alloc_dbginfo_item =
 type alloc_dbginfo = alloc_dbginfo_item list
 
 type operation =
+  (* CR mshinwell/xclerc: maybe we could find a better name than "extcall"
+     for these "operation" ones *)
   | Cextcall of
       { func: string;
         ty: machtype;
