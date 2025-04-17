@@ -444,37 +444,6 @@ let ctrywith (body, lbl, id, extra_args, handler, dbg) =
 let reset () =
   Label.reset ()
 
-let iter_shallow_tail f = function
-  | Clet(_, _, body) | Cphantom_let (_, _, body) ->
-      f body;
-      true
-  | Cifthenelse(_cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg) ->
-      f ifso;
-      f ifnot;
-      true
-  | Csequence(_e1, e2) ->
-      f e2;
-      true
-  | Cswitch(_e, _tbl, el, _dbg') ->
-      Array.iter (fun (e, _dbg) -> f e) el;
-      true
-  | Ccatch(_flag, handlers, body) ->
-      List.iter (fun (_, _, h, _dbg, _) -> f h) handlers;
-      f body;
-      true
-  | Cexit _ | Craise _ ->
-      true
-  | Cconst_int _
-  | Cconst_natint _
-  | Cconst_float32 _
-  | Cconst_float _
-  | Cconst_vec128 _
-  | Cconst_symbol _
-  | Cvar _
-  | Ctuple _
-  | Cop _
-  | Capply _ -> (* XXX *)
-      false
 
 let map_shallow_tail f = function
   | Clet(id, exp, body) ->
