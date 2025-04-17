@@ -495,48 +495,6 @@ let map_tail f =
   in
   loop
 
-let iter_shallow f = function
-  | Clet (_id, e1, e2) ->
-      f e1; f e2
-  | Cphantom_let (_id, _de, e) ->
-      f e
-  | Ctuple el ->
-      List.iter f el
-  | Cop (_op, el, _dbg) ->
-      List.iter f el
-  | Capply ({ args; dbg = _ },
-        OCaml { callee; result_ty = _; region_close = _; }) ->
-      f callee;
-      List.iter f args
-  | Capply ({ args; dbg = _ },
-        External { func = _; ty = _; ty_args = _; builtin = _; returns = _;
-                   effects = _; coeffects = _; }) ->
-      List.iter f args
-  | Capply ({ args; dbg = _ },
-        Probe { name = _; handler_code_sym = _; enabled_at_init = _; }) ->
-      List.iter f args
-  | Csequence (e1, e2) ->
-      f e1; f e2
-  | Cifthenelse(cond, _ifso_dbg, ifso, _ifnot_dbg, ifnot, _dbg) ->
-      f cond; f ifso; f ifnot
-  | Cswitch (_e, _ia, ea, _dbg) ->
-      Array.iter (fun (e, _) -> f e) ea
-  | Ccatch (_f, hl, body) ->
-      let iter_h (_n, _ids, handler, _dbg, _is_cold) = f handler in
-      List.iter iter_h hl; f body
-  | Cexit (_n, el, _traps) ->
-      List.iter f el
-  | Craise (_, el, _) ->
-      List.iter f el
-  | Cconst_int _
-  | Cconst_natint _
-  | Cconst_float32 _
-  | Cconst_float _
-  | Cconst_vec128 _
-  | Cconst_symbol _
-  | Cvar _ ->
-      ()
-
 let map_shallow f = function
   | Clet (id, e1, e2) ->
       Clet (id, f e1, f e2)
