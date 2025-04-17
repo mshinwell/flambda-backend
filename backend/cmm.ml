@@ -26,17 +26,23 @@ type machtype_component = Cmx_format.machtype_component =
 
 type machtype = machtype_component array
 
-(* Note: To_cmm_expr.translate_apply0 relies on non-void
-   [machtype_component]s being singleton arrays. *)
+(* Note: To_cmm_expr.translate_apply0 relies on non-void [machtype_component]s
+   being singleton arrays. *)
 (* CR mshinwell/xclerc: Maybe this should be a variant type instead, or an
    option. *)
 let typ_void = ([||] : machtype_component array)
-let typ_val = [|Val|]
-let typ_addr = [|Addr|]
-let typ_int = [|Int|]
-let typ_float = [|Float|]
-let typ_float32 = [|Float32|]
-let typ_vec128 = [|Vec128|]
+
+let typ_val = [| Val |]
+
+let typ_addr = [| Addr |]
+
+let typ_int = [| Int |]
+
+let typ_float = [| Float |]
+
+let typ_float32 = [| Float32 |]
+
+let typ_vec128 = [| Vec128 |]
 
 (** [machtype_component]s are partially ordered as follows:
 
@@ -127,16 +133,30 @@ let machtype_of_exttype_list xtl =
   Array.concat (List.map machtype_of_exttype xtl)
 
 type integer_comparison = Lambda.integer_comparison =
-  | Ceq | Cne | Clt | Cgt | Cle | Cge
+  | Ceq
+  | Cne
+  | Clt
+  | Cgt
+  | Cle
+  | Cge
 
 let negate_integer_comparison = Lambda.negate_integer_comparison
 
 let swap_integer_comparison = Lambda.swap_integer_comparison
 
-(* With floats [not (x < y)] is not the same as [x >= y] due to NaNs,
-   so we provide additional comparisons to represent the negations.*)
+(* With floats [not (x < y)] is not the same as [x >= y] due to NaNs, so we
+   provide additional comparisons to represent the negations.*)
 type float_comparison = Lambda.float_comparison =
-  | CFeq | CFneq | CFlt | CFnlt | CFgt | CFngt | CFle | CFnle | CFge | CFnge
+  | CFeq
+  | CFneq
+  | CFlt
+  | CFnlt
+  | CFgt
+  | CFngt
+  | CFle
+  | CFnle
+  | CFge
+  | CFnge
 
 let negate_float_comparison = Lambda.negate_float_comparison
 
@@ -145,7 +165,9 @@ let swap_float_comparison = Lambda.swap_float_comparison
 type label = Label.t
 
 let new_label = Label.new_label
+
 let set_label = Label.set_label
+
 let cur_label = Label.cur_label
 
 type static_label = Lambda.static_label
@@ -154,7 +176,11 @@ type exit_label =
   | Return_lbl
   | Lbl of static_label
 
-type prefetch_temporal_locality_hint = Nonlocal | Low | Moderate | High
+type prefetch_temporal_locality_hint =
+  | Nonlocal
+  | Low
+  | Moderate
+  | High
 
 type atomic_op =
   | Fetch_and_add
@@ -167,19 +193,39 @@ type atomic_op =
   | Compare_set
   | Compare_exchange
 
-type atomic_bitwidth = Thirtytwo | Sixtyfour | Word
+type atomic_bitwidth =
+  | Thirtytwo
+  | Sixtyfour
+  | Word
 
-type effects = No_effects | Arbitrary_effects
-type coeffects = No_coeffects | Has_coeffects
+type effects =
+  | No_effects
+  | Arbitrary_effects
+
+type coeffects =
+  | No_coeffects
+  | Has_coeffects
 
 type phantom_defining_expr =
   | Cphantom_const_int of Targetint.t
   | Cphantom_const_symbol of string
   | Cphantom_var of Backend_var.t
-  | Cphantom_offset_var of { var : Backend_var.t; offset_in_words : int; }
-  | Cphantom_read_field of { var : Backend_var.t; field : int; }
-  | Cphantom_read_symbol_field of { sym : string; field : int; }
-  | Cphantom_block of { tag : int; fields : Backend_var.t list; }
+  | Cphantom_offset_var of
+      { var : Backend_var.t;
+        offset_in_words : int
+      }
+  | Cphantom_read_field of
+      { var : Backend_var.t;
+        field : int
+      }
+  | Cphantom_read_symbol_field of
+      { sym : string;
+        field : int
+      }
+  | Cphantom_block of
+      { tag : int;
+        fields : Backend_var.t list
+      }
 
 type trywith_shared_label = int
 
@@ -187,7 +233,10 @@ type trap_action =
   | Push of trywith_shared_label
   | Pop of trywith_shared_label
 
-type bswap_bitwidth = Sixteen | Thirtytwo | Sixtyfour
+type bswap_bitwidth =
+  | Sixteen
+  | Thirtytwo
+  | Sixtyfour
 
 type initialization_or_assignment =
   | Initialization
@@ -206,7 +255,7 @@ type float_width =
   | Float32
 
 type memory_chunk =
-    Byte_unsigned
+  | Byte_unsigned
   | Byte_signed
   | Sixteen_unsigned
   | Sixteen_signed
@@ -239,7 +288,9 @@ type static_cast =
   | Scalar_of_v128 of vec128_type
 
 module Alloc_mode = struct
-  type t = Heap | Local
+  type t =
+    | Heap
+    | Local
 
   let equal t1 t2 =
     match t1, t2 with
@@ -253,13 +304,9 @@ module Alloc_mode = struct
     | Heap -> Format.fprintf ppf "Heap"
     | Local -> Format.fprintf ppf "Local"
 
-  let is_local = function
-    | Heap -> false
-    | Local -> true
+  let is_local = function Heap -> false | Local -> true
 
-  let is_heap = function
-    | Heap -> true
-    | Local -> false
+  let is_heap = function Heap -> true | Local -> false
 end
 
 type alloc_block_kind =
@@ -278,54 +325,79 @@ type alloc_block_kind =
 type alloc_dbginfo_item =
   { alloc_words : int;
     alloc_block_kind : alloc_block_kind;
-    alloc_dbg : Debuginfo.t }
+    alloc_dbg : Debuginfo.t
+  }
+
 type alloc_dbginfo = alloc_dbginfo_item list
 
 type operation =
-  (* CR mshinwell/xclerc: maybe we could find a better name than "extcall"
-     for these "operation" ones *)
+  (* CR mshinwell/xclerc: maybe we could find a better name than "extcall" for
+     these "operation" ones *)
   | Cextcall of
-      { func: string;
-        ty: machtype;
+      { func : string;
+        ty : machtype;
         ty_args : exttype list;
-        builtin: bool;
-        effects: effects;
-        coeffects: coeffects;
+        builtin : bool;
+        effects : effects;
+        coeffects : coeffects
       }
   | Cload of
-      { memory_chunk: memory_chunk;
-        mutability: Asttypes.mutable_flag;
-        is_atomic: bool;
+      { memory_chunk : memory_chunk;
+        mutability : Asttypes.mutable_flag;
+        is_atomic : bool
       }
   | Calloc of Alloc_mode.t * alloc_block_kind
   | Cstore of memory_chunk * initialization_or_assignment
-  | Caddi | Csubi | Cmuli | Cmulhi of { signed: bool } | Cdivi | Cmodi
-  | Cand | Cor | Cxor | Clsl | Clsr | Casr
-  | Cbswap of { bitwidth: bswap_bitwidth; }
+  | Caddi
+  | Csubi
+  | Cmuli
+  | Cmulhi of { signed : bool }
+  | Cdivi
+  | Cmodi
+  | Cand
+  | Cor
+  | Cxor
+  | Clsl
+  | Clsr
+  | Casr
+  | Cbswap of { bitwidth : bswap_bitwidth }
   | Ccsel of machtype
-  | Cclz of { arg_is_non_zero: bool; }
-  | Cctz of { arg_is_non_zero: bool; }
+  | Cclz of { arg_is_non_zero : bool }
+  | Cctz of { arg_is_non_zero : bool }
   | Cpopcnt
-  | Cprefetch of { is_write: bool; locality: prefetch_temporal_locality_hint; }
-  | Catomic of { op: atomic_op; size : atomic_bitwidth }
+  | Cprefetch of
+      { is_write : bool;
+        locality : prefetch_temporal_locality_hint
+      }
+  | Catomic of
+      { op : atomic_op;
+        size : atomic_bitwidth
+      }
   | Ccmpi of integer_comparison
-  | Caddv | Cadda
+  | Caddv
+  | Cadda
   | Ccmpa of integer_comparison
-  | Cnegf of float_width | Cabsf of float_width
-  | Caddf of float_width | Csubf of float_width
-  | Cmulf of float_width | Cdivf of float_width
+  | Cnegf of float_width
+  | Cabsf of float_width
+  | Caddf of float_width
+  | Csubf of float_width
+  | Cmulf of float_width
+  | Cdivf of float_width
   | Cpackf32
   | Creinterpret_cast of reinterpret_cast
   | Cstatic_cast of static_cast
   | Ccmpf of float_width * float_comparison
-  | Cprobe_is_enabled of { name: string }
+  | Cprobe_is_enabled of { name : string }
   | Copaque
-  | Cbeginregion | Cendregion
+  | Cbeginregion
+  | Cendregion
   | Ctuple_field of int * machtype array
   | Cdls_get
   | Cpoll
 
-type is_global = Global | Local
+type is_global =
+  | Global
+  | Local
 
 let equal_is_global g g' =
   match g, g' with
@@ -334,16 +406,23 @@ let equal_is_global g g' =
 
 type symbol =
   { sym_name : string;
-    sym_global : is_global }
+    sym_global : is_global
+  }
 
-type vec128_bits = { low : int64; high: int64 }
+type vec128_bits =
+  { low : int64;
+    high : int64
+  }
 
 let global_symbol sym_name = { sym_name; sym_global = Global }
 
-type ccatch_flag = Normal | Recursive | Exn_handler
+type ccatch_flag =
+  | Normal
+  | Recursive
+  | Exn_handler
 
 type expression =
-    Cconst_int of int * Debuginfo.t
+  | Cconst_int of int * Debuginfo.t
   | Cconst_natint of nativeint * Debuginfo.t
   | Cconst_float32 of float * Debuginfo.t
   | Cconst_float of float * Debuginfo.t
@@ -351,73 +430,87 @@ type expression =
   | Cconst_symbol of symbol * Debuginfo.t
   | Cvar of Backend_var.t
   | Clet of Backend_var.With_provenance.t * expression * expression
-  | Cphantom_let of Backend_var.With_provenance.t
-      * phantom_defining_expr option * expression
+  | Cphantom_let of
+      Backend_var.With_provenance.t * phantom_defining_expr option * expression
   | Ctuple of expression list
   | Capply of apply_shared * apply
   | Cop of operation * expression list * Debuginfo.t
   | Csequence of expression * expression
-  | Cifthenelse of expression * Debuginfo.t * expression
-      * Debuginfo.t * expression * Debuginfo.t
-  | Cswitch of expression * int array * (expression * Debuginfo.t) array
+  | Cifthenelse of
+      expression
       * Debuginfo.t
+      * expression
+      * Debuginfo.t
+      * expression
+      * Debuginfo.t
+  | Cswitch of
+      expression * int array * (expression * Debuginfo.t) array * Debuginfo.t
   | Ccatch of
       ccatch_flag
-        * (static_label * (Backend_var.With_provenance.t * machtype) list
-          * expression * Debuginfo.t * bool (* is_cold *)) list
+      * (static_label
+        * (Backend_var.With_provenance.t * machtype) list
         * expression
+        * Debuginfo.t
+        * bool (* is_cold *))
+        list
+      * expression
   | Cexit of exit_label * expression list * trap_action list
   | Craise of Lambda.raise_kind * expression list * Debuginfo.t
 
 and apply =
-  | OCaml of {
-      callee : expression;
-      result_ty : machtype;
-      region_close : Lambda.region_close;
-    }
-  | External of {
-      func : string;
-      ty: machtype;
-      ty_args : exttype list;
-      builtin : bool;
-      alloc : bool;
-      returns : bool;
-      effects : effects;
-      coeffects : coeffects;
-    }
-  | Probe of {
-      name : string;
-      handler_code_sym : string;
-      enabled_at_init : bool;
-    }
+  | OCaml of
+      { callee : expression;
+        result_ty : machtype;
+        region_close : Lambda.region_close
+      }
+  | External of
+      { func : string;
+        ty : machtype;
+        ty_args : exttype list;
+        builtin : bool;
+        alloc : bool;
+        returns : bool;
+        effects : effects;
+        coeffects : coeffects
+      }
+  | Probe of
+      { name : string;
+        handler_code_sym : string;
+        enabled_at_init : bool
+      }
 
-and apply_shared = {
-  args : expression list;
-  dbg : Debuginfo.t;
-}
+and apply_shared =
+  { args : expression list;
+    dbg : Debuginfo.t
+  }
 
 type codegen_option =
   | Reduce_code_size
   | No_CSE
   | Use_linscan_regalloc
-  | Assume_zero_alloc of { strict: bool; never_returns_normally: bool;
-                           never_raises: bool;
-                           loc: Location.t }
-  | Check_zero_alloc of { strict: bool; loc : Location.t;
-                          custom_error_msg : string option;
-                        }
+  | Assume_zero_alloc of
+      { strict : bool;
+        never_returns_normally : bool;
+        never_raises : bool;
+        loc : Location.t
+      }
+  | Check_zero_alloc of
+      { strict : bool;
+        loc : Location.t;
+        custom_error_msg : string option
+      }
 
 type fundecl =
-  { fun_name: symbol;
-    fun_args: (Backend_var.With_provenance.t * machtype) list;
-    fun_body: expression;
+  { fun_name : symbol;
+    fun_args : (Backend_var.With_provenance.t * machtype) list;
+    fun_body : expression;
     fun_codegen_options : codegen_option list;
-    fun_poll: Lambda.poll_attribute;
-    fun_dbg : Debuginfo.t;
+    fun_poll : Lambda.poll_attribute;
+    fun_dbg : Debuginfo.t
   }
 
 type data_item =
-    Cdefine_symbol of symbol
+  | Cdefine_symbol of symbol
   | Cint8 of int
   | Cint16 of int
   | Cint32 of nativeint
@@ -432,74 +525,50 @@ type data_item =
   | Calign of int
 
 type phrase =
-    Cfunction of fundecl
+  | Cfunction of fundecl
   | Cdata of data_item list
 
 let ccatch (i, ids, e1, e2, dbg, is_cold) =
-  Ccatch(Normal, [i, ids, e2, dbg, is_cold], e1)
+  Ccatch (Normal, [i, ids, e2, dbg, is_cold], e1)
 
 let ctrywith (body, lbl, id, extra_args, handler, dbg) =
-  Ccatch (Exn_handler,
-          [lbl, (id, typ_val) :: extra_args, handler, dbg, false],
-          body)
+  Ccatch
+    (Exn_handler, [lbl, (id, typ_val) :: extra_args, handler, dbg, false], body)
 
-let reset () =
-  Label.reset ()
-
+let reset () = Label.reset ()
 
 let map_shallow_tail f = function
-  | Clet(id, exp, body) ->
-      Clet(id, exp, f body)
-  | Cphantom_let(id, exp, body) ->
-      Cphantom_let (id, exp, f body)
-  | Cifthenelse(cond, ifso_dbg, ifso, ifnot_dbg, ifnot, dbg) ->
-      Cifthenelse
-        (
-          cond,
-          ifso_dbg, f ifso,
-          ifnot_dbg, f ifnot,
-          dbg
-        )
-  | Csequence(e1, e2) ->
-      Csequence(e1, f e2)
-  | Cswitch(e, tbl, el, dbg') ->
-      Cswitch(e, tbl, Array.map (fun (e, dbg) -> f e, dbg) el, dbg')
-  | Ccatch(flag, handlers, body) ->
-      let map_h (n, ids, handler, dbg, is_cold) =
-        (n, ids, f handler, dbg, is_cold)
-      in
-      Ccatch(flag, List.map map_h handlers, f body)
-  | Cexit _ | Craise _ as cmm ->
-      cmm
-  | Cconst_int _
-  | Cconst_natint _
-  | Cconst_float32 _
-  | Cconst_float _
-  | Cconst_vec128 _
-  | Cconst_symbol _
-  | Cvar _
-  | Ctuple _
-  | Capply _
-    (* Maybe Capply that doesn't return could be treated as tail, but it
-       was not before the change to move Capply to expression. *)
-  | Cop _ as cmm -> cmm
+  | Clet (id, exp, body) -> Clet (id, exp, f body)
+  | Cphantom_let (id, exp, body) -> Cphantom_let (id, exp, f body)
+  | Cifthenelse (cond, ifso_dbg, ifso, ifnot_dbg, ifnot, dbg) ->
+    Cifthenelse (cond, ifso_dbg, f ifso, ifnot_dbg, f ifnot, dbg)
+  | Csequence (e1, e2) -> Csequence (e1, f e2)
+  | Cswitch (e, tbl, el, dbg') ->
+    Cswitch (e, tbl, Array.map (fun (e, dbg) -> f e, dbg) el, dbg')
+  | Ccatch (flag, handlers, body) ->
+    let map_h (n, ids, handler, dbg, is_cold) =
+      n, ids, f handler, dbg, is_cold
+    in
+    Ccatch (flag, List.map map_h handlers, f body)
+  | (Cexit _ | Craise _) as cmm -> cmm
+  | ( Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
+    | Cconst_vec128 _ | Cconst_symbol _ | Cvar _ | Ctuple _ | Capply _
+    (* Maybe Capply that doesn't return could be treated as tail, but it was not
+       before the change to move Capply to expression. *)
+    | Cop _ ) as cmm ->
+    cmm
 
 let map_tail f =
   let rec loop = function
-    | Cconst_int _
-    | Cconst_natint _
-    | Cconst_float32 _
-    | Cconst_float _
-    | Cconst_symbol _
-    | Cvar _
-    | Ctuple _
-    | Cop _ as c ->
-        f c
+    | ( Cconst_int _ | Cconst_natint _ | Cconst_float32 _ | Cconst_float _
+      | Cconst_symbol _ | Cvar _ | Ctuple _ | Cop _ ) as c ->
+      f c
     | cmm -> map_shallow_tail loop cmm
   in
   loop
 
-let equal_machtype_component (left : machtype_component) (right : machtype_component) =
+let equal_machtype_component (left : machtype_component)
+    (right : machtype_component) =
   match left, right with
   | Val, Val -> true
   | Addr, Addr -> true
@@ -549,7 +618,8 @@ let equal_float_width left right =
   | Float32, Float32 -> true
   | (Float32 | Float64), _ -> false
 
-let equal_reinterpret_cast (left : reinterpret_cast) (right : reinterpret_cast) =
+let equal_reinterpret_cast (left : reinterpret_cast) (right : reinterpret_cast)
+    =
   match left, right with
   | Int_of_value, Int_of_value -> true
   | Value_of_int, Value_of_int -> true
@@ -560,11 +630,11 @@ let equal_reinterpret_cast (left : reinterpret_cast) (right : reinterpret_cast) 
   | Float32_of_int32, Float32_of_int32 -> true
   | Int32_of_float32, Int32_of_float32 -> true
   | V128_of_v128, V128_of_v128 -> true
-  | (Int_of_value | Value_of_int |
-     Float_of_float32 | Float32_of_float |
-     Float_of_int64 | Int64_of_float |
-     Float32_of_int32 | Int32_of_float32 |
-     V128_of_v128), _ -> false
+  | ( ( Int_of_value | Value_of_int | Float_of_float32 | Float32_of_float
+      | Float_of_int64 | Int64_of_float | Float32_of_int32 | Int32_of_float32
+      | V128_of_v128 ),
+      _ ) ->
+    false
 
 let equal_static_cast (left : static_cast) (right : static_cast) =
   match left, right with
@@ -574,9 +644,10 @@ let equal_static_cast (left : static_cast) (right : static_cast) =
   | Int_of_float f1, Int_of_float f2 -> equal_float_width f1 f2
   | Scalar_of_v128 v1, Scalar_of_v128 v2 -> equal_vec128_type v1 v2
   | V128_of_scalar v1, V128_of_scalar v2 -> equal_vec128_type v1 v2
-  | (Float32_of_float | Float_of_float32 |
-     Float_of_int _ | Int_of_float _ |
-     Scalar_of_v128 _ | V128_of_scalar _), _ -> false
+  | ( ( Float32_of_float | Float_of_float32 | Float_of_int _ | Int_of_float _
+      | Scalar_of_v128 _ | V128_of_scalar _ ),
+      _ ) ->
+    false
 
 let equal_float_comparison left right =
   match left, right with
@@ -615,51 +686,56 @@ let equal_memory_chunk left right =
   | Single { reg = regl }, Single { reg = regr } -> equal_float_width regl regr
   | Double, Double -> true
   | Onetwentyeight_unaligned, Onetwentyeight_unaligned
-  | Onetwentyeight_aligned, Onetwentyeight_aligned -> true
-  | Byte_unsigned, (Byte_signed | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
-                   | Thirtytwo_signed | Word_int | Word_val
-                   | Single _ | Double
-                   | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Byte_signed, (Byte_unsigned | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
-                 | Thirtytwo_signed | Word_int | Word_val
-                 | Single _ | Double
-                 | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Sixteen_unsigned, (Byte_unsigned | Byte_signed | Sixteen_signed | Thirtytwo_unsigned
-                      | Thirtytwo_signed | Word_int | Word_val
-                      | Single _ | Double
-                      | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Sixteen_signed, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Thirtytwo_unsigned
-                    | Thirtytwo_signed | Word_int | Word_val
-                    | Single _ | Double
-                    | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Thirtytwo_unsigned, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-                        | Thirtytwo_signed | Word_int | Word_val
-                        | Single _ | Double
-                        | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Thirtytwo_signed, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-                      | Thirtytwo_unsigned | Word_int | Word_val
-                      | Single _ | Double
-                      | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Word_int, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-              | Thirtytwo_unsigned | Thirtytwo_signed | Word_val
-              | Single _ | Double
-              | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Word_val, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-              | Thirtytwo_unsigned | Thirtytwo_signed | Word_int
-              | Single _ | Double
-              | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Double, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-            | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
-            | Onetwentyeight_unaligned | Onetwentyeight_aligned)
-  | Onetwentyeight_unaligned, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-            | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
-            | Double | Onetwentyeight_aligned)
-  | Onetwentyeight_aligned, (Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-            | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
-            | Double | Onetwentyeight_unaligned)
-  | Single _, (Onetwentyeight_aligned | Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
-            | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val
-            | Double | Onetwentyeight_unaligned) ->
+  | Onetwentyeight_aligned, Onetwentyeight_aligned ->
+    true
+  | ( Byte_unsigned,
+      ( Byte_signed | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
+      | Thirtytwo_signed | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Byte_signed,
+      ( Byte_unsigned | Sixteen_unsigned | Sixteen_signed | Thirtytwo_unsigned
+      | Thirtytwo_signed | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Sixteen_unsigned,
+      ( Byte_unsigned | Byte_signed | Sixteen_signed | Thirtytwo_unsigned
+      | Thirtytwo_signed | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Sixteen_signed,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Thirtytwo_unsigned
+      | Thirtytwo_signed | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Thirtytwo_unsigned,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_signed | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Thirtytwo_signed,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Word_int | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Word_int,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Thirtytwo_signed | Word_val | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Word_val,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Single _ | Double
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Double,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
+      | Onetwentyeight_unaligned | Onetwentyeight_aligned ) )
+  | ( Onetwentyeight_unaligned,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
+      | Double | Onetwentyeight_aligned ) )
+  | ( Onetwentyeight_aligned,
+      ( Byte_unsigned | Byte_signed | Sixteen_unsigned | Sixteen_signed
+      | Thirtytwo_unsigned | Thirtytwo_signed | Word_int | Word_val | Single _
+      | Double | Onetwentyeight_unaligned ) )
+  | ( Single _,
+      ( Onetwentyeight_aligned | Byte_unsigned | Byte_signed | Sixteen_unsigned
+      | Sixteen_signed | Thirtytwo_unsigned | Thirtytwo_signed | Word_int
+      | Word_val | Double | Onetwentyeight_unaligned ) ) ->
     false
 
 let equal_integer_comparison left right =
@@ -680,12 +756,10 @@ let equal_integer_comparison left right =
 
 let caml_flambda2_invalid = "caml_flambda2_invalid"
 
-let is_val (m: machtype_component) =
+let is_val (m : machtype_component) =
   match m with
   | Val -> true
   | Addr | Int | Float | Vec128 | Float32 | Valx2 -> false
 
 let is_exn_handler (flag : ccatch_flag) =
-  match flag with
-  | Exn_handler -> true
-  | Normal | Recursive -> false
+  match flag with Exn_handler -> true | Normal | Recursive -> false
