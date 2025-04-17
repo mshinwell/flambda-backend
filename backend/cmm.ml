@@ -477,7 +477,9 @@ let map_shallow_tail f = function
   | Cconst_symbol _
   | Cvar _
   | Ctuple _
-  | Capply _ (* XXX *)
+  | Capply _
+    (* Maybe Capply that doesn't return could be treated as tail, but it
+       was not before the change to move Capply to expression. *)
   | Cop _ as cmm -> cmm
 
 let map_tail f =
