@@ -495,58 +495,6 @@ let map_tail f =
   in
   loop
 
-let map_shallow f = function
-  | Clet (id, e1, e2) ->
-      Clet (id, f e1, f e2)
-  | Cphantom_let (id, de, e) ->
-      Cphantom_let (id, de, f e)
-  | Ctuple el ->
-      Ctuple (List.map f el)
-  | Capply ({ args; dbg },
-        OCaml { callee; result_ty; region_close }) ->
-      let callee = f callee in
-      let args = List.map f args in
-      Capply ({ args; dbg },
-        OCaml { callee; result_ty; region_close })
-  | Capply ({ args; dbg },
-        External { func; ty; ty_args; builtin; alloc; returns; effects;
-          coeffects }) ->
-      let args = List.map f args in
-      Capply ({ args; dbg },
-        External { func; ty; ty_args; builtin; alloc; returns; effects;
-          coeffects })
-  | Capply ({ args; dbg },
-        Probe { name; handler_code_sym; enabled_at_init }) ->
-      let args = List.map f args in
-      Capply ({ args; dbg },
-        Probe { name; handler_code_sym; enabled_at_init })
-  | Cop (op, el, dbg) ->
-      Cop (op, List.map f el, dbg)
-  | Csequence (e1, e2) ->
-      Csequence (f e1, f e2)
-  | Cifthenelse(cond, ifso_dbg, ifso, ifnot_dbg, ifnot, dbg) ->
-      Cifthenelse(f cond, ifso_dbg, f ifso, ifnot_dbg, f ifnot, dbg)
-  | Cswitch (e, ia, ea, dbg) ->
-      Cswitch (e, ia, Array.map (fun (e, dbg) -> f e, dbg) ea, dbg)
-  | Ccatch (flag, hl, body ) ->
-      let map_h (n, ids, handler, dbg, is_cold) =
-        (n, ids, f handler, dbg, is_cold)
-      in
-      Ccatch (flag, List.map map_h hl, f body)
-  | Cexit (n, el, traps) ->
-      Cexit (n, List.map f el, traps)
-  | Craise (raise_kind, el, dbg) ->
-      Craise (raise_kind, List.map f el, dbg)
-  | Cconst_int _
-  | Cconst_natint _
-  | Cconst_float32 _
-  | Cconst_float _
-  | Cconst_vec128 _
-  | Cconst_symbol _
-  | Cvar _
-    as c ->
-      c
-
 let equal_machtype_component (left : machtype_component) (right : machtype_component) =
   match left, right with
   | Val, Val -> true

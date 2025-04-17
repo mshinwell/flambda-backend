@@ -89,7 +89,24 @@ and instrument expr =
   | Cphantom_let (v, defining_expr, body) ->
     Cphantom_let (v, defining_expr, instrument body)
   | Ctuple es -> Ctuple (List.map instrument es)
-  | Capply _ -> Cmm.map_shallow instrument expr
+ | Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close }) ->
+      let callee = instrument callee in
+      let args = List.map instrument args in
+      Capply ({ args; dbg },
+        OCaml { callee; result_ty; region_close })
+  | Capply ({ args; dbg },
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects }) ->
+      let args = List.map instrument args in
+      Capply ({ args; dbg },
+        External { func; ty; ty_args; builtin; alloc; returns; effects;
+          coeffects })
+  | Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init }) ->
+      let args = List.map instrument args in
+      Capply ({ args; dbg },
+        Probe { name; handler_code_sym; enabled_at_init })
   | Cop (op, es, dbg) -> Cop (op, List.map instrument es, dbg)
   | Csequence (e1, e2) -> Csequence (instrument e1, instrument e2)
   | Ccatch ((Normal | Recursive as flag), cases, body) ->
