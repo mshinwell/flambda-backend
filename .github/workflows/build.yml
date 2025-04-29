@@ -409,16 +409,16 @@ jobs:
         path: $GITHUB_WORKSPACE/ocaml-414
 
     - uses: actions/upload-artifact@v4
-      if: ${{ failure() }}
-      with:
-        name: _build-${{ github.sha }}-${{ github.run_id }}-${{ matrix.name }}
-        path: $GITHUB_WORKSPACE/flambda_backend/_build
-
-    - uses: actions/upload-artifact@v4
       if: ${{ failure() }} && matrix.os == 'macos-latest'
       with:
         name: DiagnosticReports-${{ github.sha }}-${{ github.run_id }}-${{ matrix.name }}
         path: $HOME/Library/Logs/DiagnosticReports
+
+    - uses: actions/upload-artifact@v4
+      if: ${{ failure() }}
+      with:
+        name: _build-${{ github.sha }}-${{ github.run_id }}-${{ matrix.name }}
+        path: $GITHUB_WORKSPACE/flambda_backend/_build
 
     - uses: actions/upload-artifact@v4
       if: ${{ failure() }} && matrix.os != 'macos-latest'
