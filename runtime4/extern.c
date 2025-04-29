@@ -653,10 +653,18 @@ Caml_inline void extern_custom(value v,
     writeblock(ident, strlen(ident) + 1);
     serialize(v, sz_32, sz_64);
         if (*sz_32 != fixed_length->bsize_32 ||
-            *sz_64 != fixed_length->bsize_64)
-          caml_fatal_error(
-            "output_value: incorrect fixed sizes specified by %s",
-            ident);
+            *sz_64 != fixed_length->bsize_64) {
+          fprintf(stderr,
+            "output_value: incorrect fixed sizes specified by %s, \
+             block %p, header %llux, *sz_32 %llu, *sz_64 %llu",
+            ident, (void*) v, (uint64_t) Hd_val(v), (uint64_t) *sz_32, (uint64_t) *sz_64);
+          int f;
+          for (f = 0; f < Wosize_val(v); f++) {
+            fprintf(stderr, "field %d = %p", f, (void*) Field(v, f));
+          }
+          fflush(stderr);
+          abort();
+        }
   }
 }
 
