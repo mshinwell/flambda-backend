@@ -613,6 +613,10 @@ let name_to_number =
 
 let parsed_ocamlparam = ref "<not-set>"
 
+let last_l : int ref = ref 0
+
+external abort : unit -> unit = "caml_gc_stat" "abort" [@@noalloc]
+
 (* CR-soon xclerc for xclerc: remove the `for_debug` parameter... *)
 let letter for_debug = function
   | 'a' ->
@@ -645,7 +649,9 @@ let letter for_debug = function
   | 'z' -> [27]
   | chr ->
     let ocamlparam_from_env = match Sys.getenv_opt "OCAMLPARAM" with None -> "-" | Some  value -> value in
-    Misc.fatal_errorf "Warnings.letter %C (for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)" chr for_debug ocamlparam_from_env !parsed_ocamlparam
+     Printf.eprintf "Warnings.letter %C (last_l=%d, for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)\n%!" chr !last_l for_debug ocamlparam_from_env !parsed_ocamlparam;
+     abort ();
+     assert false
 
 type state =
   {
@@ -897,7 +903,9 @@ let parse_opt error active errflag s =
           error.(i) <- true
         end
   in
-  let eval = function
+  let eval l =
+    last_l := ((Obj.magic l) : int);
+    match l with
     | Letter(c, m) ->
         let lc = Char.lowercase_ascii c in
         let modifier = match m with
