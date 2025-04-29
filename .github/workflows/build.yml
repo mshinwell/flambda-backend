@@ -339,13 +339,22 @@ jobs:
           --with-dune=$GITHUB_WORKSPACE/ocaml-414/_install/bin/dune \
           ${{ matrix.config }}
 
-    - name: Setup for saving core files (not for macOS at the moment)
+    - name: Setup for saving core files (not for macOS)
       if: matrix.os != 'macos-latest'
       run: |
         sudo mkdir /cores
         sudo chmod 777 /cores
         # Core filenames will be of the form executable.pid.timestamp:
         sudo bash -c 'echo "/cores/%e.%p.%t" > /proc/sys/kernel/core_pattern'
+
+    - name: Setup for saving core files (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        sudo chmod 1777 /cores
+        sudo sysctl kern.coredump=1
+        /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" /tmp/core.entitlements
+        codesign -s - -f --entitlements /tmp/core.entitlements $GITHUB_WORKSPACE/ocaml-414/_install/bin/ocamlc.opt
+        codesign -s - -f --entitlements /tmp/core.entitlements $GITHUB_WORKSPACE/ocaml-414/_install/bin/ocamlopt.opt
 
     - name: Build, install and test Flambda backend
       working-directory: flambda_backend
@@ -368,13 +377,11 @@ jobs:
         PATH=$GITHUB_WORKSPACE/ocaml-414/_install/bin:$PATH make check_all_arches
 
     - uses: actions/upload-artifact@v4
-      if: ${{ failure() }} && matrix.os != 'macos-latest'
+      if: ${{ failure() }}
       with:
         name: cores-${{ github.sha }}-${{ github.run_id }}
         path: /cores
 
-    # Core files should be in _build/default/ for some of these failures
-    # on macOS
     - uses: actions/upload-artifact@v4
       if: ${{ failure() }}
       with:
