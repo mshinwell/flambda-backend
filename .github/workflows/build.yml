@@ -102,8 +102,62 @@ jobs:
             config: --enable-middle-end=flambda2 --disable-warn-error
             os: macos-latest
             build_ocamlparam: '_,w=-46,regalloc=gi'
-#            ocamlparam: '_,w=-46,regalloc=gi'
-#
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi2
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi3
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi4
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi5
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi6
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi7
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi8
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi9
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
+          - name: flambda2_macos_arm64_gi10
+            config: --enable-middle-end=flambda2 --disable-warn-error
+            os: macos-latest
+            build_ocamlparam: '_,w=-46,regalloc=gi'
+            ocamlparam: '_,w=-46,regalloc=gi'
+
 #          - name: flambda2_macos_arm64_gi_debug_runtime
 #            config: --enable-middle-end=flambda2 --disable-warn-error
 #            os: macos-latest
