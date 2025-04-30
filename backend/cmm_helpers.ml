@@ -404,6 +404,8 @@ let rec sub_int c1 c2 dbg =
         add_const (sub_int c1 c2 dbg) n1 dbg
       | c1, c2 -> Cop (Csubi, [c1; c2], dbg))
 
+let add_int_addr c1 c2 dbg = Cop (Cadda, [c1; c2], dbg)
+
 let neg_int c dbg = sub_int (Cconst_int (0, dbg)) c dbg
 
 (** This function conservatively approximates the number of significant bits in its signed

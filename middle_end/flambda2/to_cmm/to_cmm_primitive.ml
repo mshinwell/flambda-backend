@@ -458,7 +458,8 @@ let bigarray_store ~dbg kind ~bigarray ~index ~new_value =
 
 let string_like_load_aux ~dbg width ~str ~index =
   match (width : P.string_accessor_width) with
-  | Eight -> C.load ~dbg Byte_unsigned Mutable ~addr:(C.add_int str index dbg)
+  | Eight ->
+    C.load ~dbg Byte_unsigned Mutable ~addr:(C.add_int_addr str index dbg)
   | Sixteen -> C.unaligned_load_16 str index dbg
   | Thirty_two ->
     C.sign_extend ~bits:32 ~dbg (C.unaligned_load_32 str index dbg)
@@ -479,7 +480,7 @@ let string_like_load ~dbg kind width ~str ~index =
 let bytes_or_bigstring_set_aux ~dbg width ~bytes ~index ~new_value =
   match (width : P.string_accessor_width) with
   | Eight ->
-    let addr = C.add_int bytes index dbg in
+    let addr = C.add_int_addr bytes index dbg in
     C.store ~dbg Byte_unsigned Assignment ~addr ~new_value
   | Sixteen -> C.unaligned_set_16 bytes index new_value dbg
   | Thirty_two -> C.unaligned_set_32 bytes index new_value dbg

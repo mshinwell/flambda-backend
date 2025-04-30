@@ -90,6 +90,9 @@ val or_int : expression -> expression -> Debuginfo.t -> expression
 
 val xor_int : expression -> expression -> Debuginfo.t -> expression
 
+(** Like [add_int] but produces a result with machtype [Addr]. *)
+val add_int_addr : expression -> expression -> Debuginfo.t -> expression
+
 (** Integer tagging. [tag_int x = (x lsl 1) + 1] *)
 val tag_int : expression -> Debuginfo.t -> expression
 
