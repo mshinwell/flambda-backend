@@ -2616,6 +2616,9 @@ let unaligned_load_128 ptr idx dbg =
   assert (size_vec128 = 16);
   Cop (mk_load_mut Onetwentyeight_unaligned, [add_int_addr ptr idx dbg], dbg)
 
+(* XXX these functions need to be parameterised as to whether they are operating
+   on bigstrings or not. *)
+
 let unaligned_set_128 ptr idx newval dbg =
   assert (size_vec128 = 16);
   Cop

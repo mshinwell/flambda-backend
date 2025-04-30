@@ -387,7 +387,7 @@ jobs:
       env:
         BUILD_OCAMLPARAM: ${{ matrix.build_ocamlparam }}
         OCAMLPARAM: ${{ matrix.ocamlparam }}
-        OCAMLRUNPARAM: ${{ matrix.ocamlrunparam }}
+        OCAMLRUNPARAM: b
         USE_RUNTIME: ${{ matrix.use_runtime }}
 
     - name: Check other architectures
