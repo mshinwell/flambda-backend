@@ -2309,14 +2309,14 @@ let make_unsigned_int bi arg dbg =
 
 let unaligned_load_16 ptr idx dbg =
   if Arch.allow_unaligned_access
-  then Cop (mk_load_mut Sixteen_unsigned, [add_int ptr idx dbg], dbg)
+  then Cop (mk_load_mut Sixteen_unsigned, [add_int_addr ptr idx dbg], dbg)
   else
     let cconst_int i = Cconst_int (i, dbg) in
-    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int ptr idx dbg], dbg) in
+    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int_addr ptr idx dbg], dbg) in
     let v2 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 1) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg],
           dbg )
     in
     let b1, b2 = if Arch.big_endian then v1, v2 else v2, v1 in
@@ -2326,7 +2326,9 @@ let unaligned_set_16 ptr idx newval dbg =
   if Arch.allow_unaligned_access
   then
     Cop
-      (Cstore (Sixteen_unsigned, Assignment), [add_int ptr idx dbg; newval], dbg)
+      ( Cstore (Sixteen_unsigned, Assignment),
+        [add_int_addr ptr idx dbg; newval],
+        dbg )
   else
     let cconst_int i = Cconst_int (i, dbg) in
     let v1 =
@@ -2335,34 +2337,37 @@ let unaligned_set_16 ptr idx newval dbg =
     let v2 = Cop (Cand, [newval; cconst_int 0xFF], dbg) in
     let b1, b2 = if Arch.big_endian then v1, v2 else v2, v1 in
     Csequence
-      ( Cop (Cstore (Byte_unsigned, Assignment), [add_int ptr idx dbg; b1], dbg),
+      ( Cop
+          ( Cstore (Byte_unsigned, Assignment),
+            [add_int_addr ptr idx dbg; b1],
+            dbg ),
         Cop
           ( Cstore (Byte_unsigned, Assignment),
-            [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2],
+            [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg; b2],
             dbg ) )
 
 let unaligned_load_32 ptr idx dbg =
   if Arch.allow_unaligned_access
-  then Cop (mk_load_mut Thirtytwo_unsigned, [add_int ptr idx dbg], dbg)
+  then Cop (mk_load_mut Thirtytwo_unsigned, [add_int_addr ptr idx dbg], dbg)
   else
     let cconst_int i = Cconst_int (i, dbg) in
-    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int ptr idx dbg], dbg) in
+    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int_addr ptr idx dbg], dbg) in
     let v2 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 1) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg],
           dbg )
     in
     let v3 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 2) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg],
           dbg )
     in
     let v4 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 3) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg],
           dbg )
     in
     let b1, b2, b3, b4 =
@@ -2382,7 +2387,7 @@ let unaligned_set_32 ptr idx newval dbg =
   then
     Cop
       ( Cstore (Thirtytwo_unsigned, Assignment),
-        [add_int ptr idx dbg; newval],
+        [add_int_addr ptr idx dbg; newval],
         dbg )
   else
     let cconst_int i = Cconst_int (i, dbg) in
@@ -2405,68 +2410,68 @@ let unaligned_set_32 ptr idx newval dbg =
       ( Csequence
           ( Cop
               ( Cstore (Byte_unsigned, Assignment),
-                [add_int ptr idx dbg; b1],
+                [add_int_addr ptr idx dbg; b1],
                 dbg ),
             Cop
               ( Cstore (Byte_unsigned, Assignment),
-                [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2],
+                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg; b2],
                 dbg ) ),
         Csequence
           ( Cop
               ( Cstore (Byte_unsigned, Assignment),
-                [add_int (add_int ptr idx dbg) (cconst_int 2) dbg; b3],
+                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg; b3],
                 dbg ),
             Cop
               ( Cstore (Byte_unsigned, Assignment),
-                [add_int (add_int ptr idx dbg) (cconst_int 3) dbg; b4],
+                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg; b4],
                 dbg ) ) )
 
 let unaligned_load_64 ptr idx dbg =
   if Arch.allow_unaligned_access
-  then Cop (mk_load_mut Word_int, [add_int ptr idx dbg], dbg)
+  then Cop (mk_load_mut Word_int, [add_int_addr ptr idx dbg], dbg)
   else
     let cconst_int i = Cconst_int (i, dbg) in
-    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int ptr idx dbg], dbg) in
+    let v1 = Cop (mk_load_mut Byte_unsigned, [add_int_addr ptr idx dbg], dbg) in
     let v2 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 1) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg],
           dbg )
     in
     let v3 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 2) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg],
           dbg )
     in
     let v4 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 3) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg],
           dbg )
     in
     let v5 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 4) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 4) dbg],
           dbg )
     in
     let v6 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 5) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 5) dbg],
           dbg )
     in
     let v7 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 6) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 6) dbg],
           dbg )
     in
     let v8 =
       Cop
         ( mk_load_mut Byte_unsigned,
-          [add_int (add_int ptr idx dbg) (cconst_int 7) dbg],
+          [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 7) dbg],
           dbg )
     in
     let b1, b2, b3, b4, b5, b6, b7, b8 =
@@ -2502,7 +2507,8 @@ let unaligned_load_64 ptr idx dbg =
 
 let unaligned_set_64 ptr idx newval dbg =
   if Arch.allow_unaligned_access
-  then Cop (Cstore (Word_int, Assignment), [add_int ptr idx dbg; newval], dbg)
+  then
+    Cop (Cstore (Word_int, Assignment), [add_int_addr ptr idx dbg; newval], dbg)
   else
     let cconst_int i = Cconst_int (i, dbg) in
     let v1 =
@@ -2555,70 +2561,77 @@ let unaligned_set_64 ptr idx newval dbg =
           ( Csequence
               ( Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int ptr idx dbg; b1],
+                    [add_int_addr ptr idx dbg; b1],
                     dbg ),
                 Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg;
+                      b2 ],
                     dbg ) ),
             Csequence
               ( Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 2) dbg; b3],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg;
+                      b3 ],
                     dbg ),
                 Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 3) dbg; b4],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg;
+                      b4 ],
                     dbg ) ) ),
         Csequence
           ( Csequence
               ( Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 4) dbg; b5],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 4) dbg;
+                      b5 ],
                     dbg ),
                 Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 5) dbg; b6],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 5) dbg;
+                      b6 ],
                     dbg ) ),
             Csequence
               ( Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 6) dbg; b7],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 6) dbg;
+                      b7 ],
                     dbg ),
                 Cop
                   ( Cstore (Byte_unsigned, Assignment),
-                    [add_int (add_int ptr idx dbg) (cconst_int 7) dbg; b8],
+                    [ add_int_addr (add_int_addr ptr idx dbg) (cconst_int 7) dbg;
+                      b8 ],
                     dbg ) ) ) )
 
 let unaligned_load_f32 ptr idx dbg =
-  Cop (mk_load_mut (Single { reg = Float32 }), [add_int ptr idx dbg], dbg)
+  Cop (mk_load_mut (Single { reg = Float32 }), [add_int_addr ptr idx dbg], dbg)
 
 let unaligned_set_f32 ptr idx newval dbg =
   Cop
     ( Cstore (Single { reg = Float32 }, Assignment),
-      [add_int ptr idx dbg; newval],
+      [add_int_addr ptr idx dbg; newval],
       dbg )
 
 let unaligned_load_128 ptr idx dbg =
   assert (size_vec128 = 16);
-  Cop (mk_load_mut Onetwentyeight_unaligned, [add_int ptr idx dbg], dbg)
+  Cop (mk_load_mut Onetwentyeight_unaligned, [add_int_addr ptr idx dbg], dbg)
 
 let unaligned_set_128 ptr idx newval dbg =
   assert (size_vec128 = 16);
   Cop
     ( Cstore (Onetwentyeight_unaligned, Assignment),
-      [add_int ptr idx dbg; newval],
+      [add_int_addr ptr idx dbg; newval],
       dbg )
 
 let aligned_load_128 ptr idx dbg =
   assert (size_vec128 = 16);
-  Cop (mk_load_mut Onetwentyeight_aligned, [add_int ptr idx dbg], dbg)
+  Cop (mk_load_mut Onetwentyeight_aligned, [add_int_addr ptr idx dbg], dbg)
 
 let aligned_set_128 ptr idx newval dbg =
   assert (size_vec128 = 16);
   Cop
     ( Cstore (Onetwentyeight_aligned, Assignment),
-      [add_int ptr idx dbg; newval],
+      [add_int_addr ptr idx dbg; newval],
       dbg )
 
 let opaque e dbg = Cop (Copaque, [e], dbg)
