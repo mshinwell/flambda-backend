@@ -893,10 +893,10 @@ external caml_gc_stat : int -> unit = "caml_gc_stat" "caml_gc_stat" [@@noalloc]
 let caml_enable_debug_file () =
   caml_gc_stat 42
 
-let parse_opt error active errflag s =
+let[@local never][@inline never] parse_opt error active errflag s =
   let _ = caml_enable_debug_file () in
   let flags = if errflag then error else active in
-  let action modifier i = match modifier with
+  let[@inline never][@local never] action modifier i = match modifier with
     | Set ->
         if i = 3 then set_alert ~error:errflag ~enable:true "deprecated"
         else flags.(i) <- true
@@ -913,7 +913,7 @@ let parse_opt error active errflag s =
           error.(i) <- true
         end
   in
-  let eval l =
+  let[@inline never][@local never] eval l =
     last_l := ((Obj.magic l) : int);
     match l with
     | Letter(c, m) ->
@@ -926,7 +926,7 @@ let parse_opt error active errflag s =
     | Num(n1,n2,modifier) ->
         for n = n1 to Misc.Stdlib.Int.min n2 last_warning_number do action modifier n done
   in
-  let parse_and_eval s =
+  let[@inline never][@local never] parse_and_eval s =
     let tokens = parse_warnings s in
     List.iter eval tokens;
     letter_alert tokens
@@ -947,7 +947,7 @@ let parse_opt error active errflag s =
 let parse_options errflag s =
   let error = Array.copy (!current).error in
   let active = Array.copy (!current).active in
-  let alerts = parse_opt error active errflag s in
+  let alerts = (parse_opt [@inlined never]) error active errflag s in
   current := {(!current) with error; active};
   alerts
 
