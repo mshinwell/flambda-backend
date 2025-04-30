@@ -1,3 +1,52 @@
+diff --git a/asmcomp/cmm_helpers.ml b/asmcomp/cmm_helpers.ml
+index 7ad42ceaea..9ad2a7653e 100644
+--- a/asmcomp/cmm_helpers.ml
++++ b/asmcomp/cmm_helpers.ml
+@@ -137,6 +137,8 @@ let rec add_const c n dbg =
+ let incr_int c dbg = add_const c 1 dbg
+ let decr_int c dbg = add_const c (-1) dbg
+ 
++let add_int_addr c1 c2 dbg = Cop (Cadda, [c1; c2], dbg)
++
+ let rec add_int c1 c2 dbg =
+   match (c1, c2) with
+   | (Cconst_int (n, _), c) | (c, Cconst_int (n, _)) ->
+@@ -2279,7 +2281,7 @@ let int_comp_caml cmp arg1 arg2 dbg =
+ 
+ let stringref_unsafe arg1 arg2 dbg =
+   tag_int(Cop(Cload (Byte_unsigned, Mutable),
+-              [add_int arg1 (untag_int arg2 dbg) dbg],
++              [add_int_addr arg1 (untag_int arg2 dbg) dbg],
+               dbg)) dbg
+ 
+ let stringref_safe arg1 arg2 dbg =
+@@ -2289,7 +2291,7 @@ let stringref_safe arg1 arg2 dbg =
+         Csequence(
+           make_checkbound dbg [string_length str dbg; idx],
+           Cop(Cload (Byte_unsigned, Mutable),
+-            [add_int str idx dbg], dbg))))) dbg
++            [add_int_addr str idx dbg], dbg))))) dbg
+ 
+ let string_load size unsafe arg1 arg2 dbg =
+   box_sized size dbg
+@@ -2397,7 +2399,7 @@ let setfield_computed ptr init arg1 arg2 arg3 dbg =
+ 
+ let bytesset_unsafe arg1 arg2 arg3 dbg =
+       return_unit dbg (Cop(Cstore (Byte_unsigned, Assignment),
+-                      [add_int arg1 (untag_int arg2 dbg) dbg;
++                      [add_int_addr arg1 (untag_int arg2 dbg) dbg;
+                        ignore_high_bit_int (untag_int arg3 dbg)], dbg))
+ 
+ let bytesset_safe arg1 arg2 arg3 dbg =
+@@ -2408,7 +2410,7 @@ let bytesset_safe arg1 arg2 arg3 dbg =
+         Csequence(
+           make_checkbound dbg [string_length str dbg; idx],
+           Cop(Cstore (Byte_unsigned, Assignment),
+-              [add_int str idx dbg; newval],
++              [add_int_addr str idx dbg; newval],
+               dbg))))))
+ 
+ let arrayset_unsafe kind arg1 arg2 arg3 dbg =
 diff --git a/asmcomp/comballoc.ml b/asmcomp/comballoc.ml
 index f03bb3e66f..510029d63c 100644
 --- a/asmcomp/comballoc.ml
