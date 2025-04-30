@@ -616,6 +616,7 @@ let parsed_ocamlparam = ref "<not-set>"
 let last_l : int ref = ref 0
 
 external abort : unit -> unit = "caml_gc_stat" "abort" [@@noalloc]
+external getpid : unit -> (int64 [@unboxed]) = "caml_gc_stat" "getpid" [@@noalloc]
 
 (* CR-soon xclerc for xclerc: remove the `for_debug` parameter... *)
 let letter for_debug = function
@@ -650,6 +651,9 @@ let letter for_debug = function
   | chr ->
     let ocamlparam_from_env = match Sys.getenv_opt "OCAMLPARAM" with None -> "-" | Some  value -> value in
      Printf.eprintf "Warnings.letter %C (last_l=%d, for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)\n%!" chr !last_l for_debug ocamlparam_from_env !parsed_ocamlparam;
+     let pid = getpid () in
+     Printf.eprintf "our pid = %Ld\n" pid;
+     Printf.eprintf "calling abort\n%!";
      abort ();
      assert false
 
@@ -884,7 +888,13 @@ let parse_warnings s =
   in
   loop [] 0
 
+external caml_gc_stat : int -> unit = "caml_gc_stat" "caml_gc_stat" [@@noalloc]
+
+let caml_enable_debug_file () =
+  caml_gc_stat 42
+
 let parse_opt error active errflag s =
+  let _ = caml_enable_debug_file () in
   let flags = if errflag then error else active in
   let action modifier i = match modifier with
     | Set ->

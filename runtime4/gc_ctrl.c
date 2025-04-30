@@ -278,11 +278,13 @@ void caml_heap_check (void)
 }
 #endif
 
+extern value caml_enable_debug_file (void);
+
 CAMLprim value caml_gc_stat(value v)
 {
   value result;
   CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
-  CAMLassert (v == Val_unit);
+  if (v != Val_unit) caml_enable_debug_file ();
   result = heap_stats (1);
   CAML_EV_END(EV_EXPLICIT_GC_STAT);
   return result;

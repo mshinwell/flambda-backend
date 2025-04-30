@@ -640,6 +640,21 @@ static void do_local_allocations(caml_local_arenas* loc,
   }
 }
 
+static FILE* debug_file = NULL;
+
+extern int getpid(void);
+
+value caml_enable_debug_file()
+{
+  char filename[2000];
+  sprintf(filename, "/tmp/gc-%d.log", getpid());
+  debug_file = fopen(filename, "a");
+  if (debug_file) {
+    fprintf(debug_file, "---caml_enable_debug_file---\n");
+  }
+  return Val_unit;
+}
+
 void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
                              char * bottom_of_stack,
                              uintnat last_retaddr, value * gc_regs,
@@ -658,8 +673,17 @@ void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
   sp = bottom_of_stack;
   retaddr = last_retaddr;
   regs = gc_regs;
+  if (debug_file) {
+    fprintf(debug_file, "caml_do_local_roots_nat: bottom_of_stack=%p\n",
+            bottom_of_stack);
+  }
   if (sp != NULL) {
     while (1) {
+      if (debug_file) {
+        fprintf(debug_file, "caml_do_local_roots_nat: sp=%p retaddr=%p, \
+                caml_do_local_roots_nat=%p\n",
+                sp, (void*)retaddr, (void*) &caml_do_local_roots_nat);
+      }
       /* Find the descriptor corresponding to the return address */
       h = Hash_retaddr(retaddr);
       while(1) {
@@ -670,6 +694,9 @@ void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
       if (d->frame_size != 0xFFFF) {
         /* Scan the roots in this frame */
         if (d->frame_size == LONG_FRAME_MARKER) {
+          if (debug_file) {
+            fprintf(debug_file, "caml_do_local_roots_nat: long frame\n");
+          }
           /* Handle long frames */
           frame_descr_long *dl = (frame_descr_long *)d;
           uint32_t * p;
@@ -687,16 +714,32 @@ void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
         } else {
           unsigned short * p;
           unsigned short n;
+          if (debug_file) {
+            fprintf(debug_file,
+              "caml_do_local_roots_nat: short frame, live_ofs=%p, num_live=%d, regs=%p\n",
+              (void*) d->live_ofs, d->num_live, (void*) regs);
+          }
           for (p = d->live_ofs, n = d->num_live; n > 0; n--, p++) {
             unsigned short ofs = *p;
             if (ofs & 1) {
               /* Negative offset to scan xmm registers in amd64. */
               root = regs + (((signed short)ofs) >> 1);
+              if (debug_file) {
+                fprintf(debug_file, "... REG, ofs=%d, root=%p\n",
+                        (int)ofs, (void*) root);
+              }
             } else {
               root = (value *)(sp + ofs);
+              if (debug_file) {
+                fprintf(debug_file, "... STACK, ofs=%d, root=%p\n",
+                        (int)ofs, (void*) root);
+              }
             }
             visit(maj, min, root);
           }
+        }
+        if (debug_file) {
+          fprintf(debug_file, "moving to next frame\n");
         }
         /* Move to next frame */
         sp += (caml_get_frame_size(d) & 0xFFFFFFFC);
@@ -707,6 +750,9 @@ void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
       } else {
         /* This marks the top of a stack chunk for an ML callback.
            Skip C portion of stack and continue with next ML stack chunk. */
+        if (debug_file) {
+          fprintf(debug_file, "caml_do_local_roots_nat: callback\n");
+        }
         struct caml_context * next_context = Callback_link(sp);
         sp = next_context->bottom_of_stack;
         retaddr = next_context->last_retaddr;
@@ -724,6 +770,9 @@ void caml_do_local_roots_nat(scanning_action maj, scanning_action min,
         visit(maj, min, root);
       }
     }
+  }
+  if (debug_file) {
+    fflush(debug_file);
   }
   /* Local allocations */
   do_local_allocations(arenas, maj, min);
