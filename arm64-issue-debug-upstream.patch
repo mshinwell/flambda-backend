@@ -45,6 +45,24 @@ index 8b1c4e5559..3e7de2533d 100644
      if s <> "" then
        let (before, after) =
          try
+diff --git a/stdlib/bytes.ml b/stdlib/bytes.ml
+index ae946dfa5e..319155a36c 100644
+--- a/stdlib/bytes.ml
++++ b/stdlib/bytes.ml
+@@ -62,8 +62,11 @@ let to_string b = unsafe_to_string (copy b)
+ let of_string s = copy (unsafe_of_string s)
+ 
+ let sub s ofs len =
+-  if ofs < 0 || len < 0 || ofs > length s - len
+-  then invalid_arg "String.sub / Bytes.sub"
++  let length_s = length s in
++  if ofs < 0 || len < 0 || ofs > length_s - len
++  then invalid_arg ("String.sub / Bytes.sub: ofs=" ^ string_of_int ofs
++                    ^ ", len=" ^ string_of_int len
++                    ^ ", length_s=" ^ string_of_int length_s)
+   else begin
+     let r = create len in
+     unsafe_blit s ofs r 0 len;
 diff --git a/utils/warnings.ml b/utils/warnings.ml
 index 895ef2be07..3785f61590 100644
 --- a/utils/warnings.ml
