@@ -459,6 +459,7 @@ let bigarray_store ~dbg kind ~bigarray ~index ~new_value =
 let string_like_load_aux ~dbg width ~str ~index =
   match (width : P.string_accessor_width) with
   | Eight ->
+    (* XXX should not be Mutable for [string] *)
     C.load ~dbg Byte_unsigned Mutable ~addr:(C.add_int_addr str index dbg)
   | Sixteen -> C.unaligned_load_16 str index dbg
   | Thirty_two ->
