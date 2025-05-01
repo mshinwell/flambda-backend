@@ -94,6 +94,132 @@ index 8b1c4e5559..3e7de2533d 100644
      if s <> "" then
        let (before, after) =
          try
+diff --git a/runtime/gc_ctrl.c b/runtime/gc_ctrl.c
+index 9c47b916a0..e56f240cbc 100644
+--- a/runtime/gc_ctrl.c
++++ b/runtime/gc_ctrl.c
+@@ -268,11 +268,13 @@ void caml_heap_check (void)
+ }
+ #endif
+ 
++extern void caml_enable_debug_file(value);
++
+ CAMLprim value caml_gc_stat(value v)
+ {
+   value result;
+   CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
+-  CAMLassert (v == Val_unit);
++  if (v != Val_unit) caml_enable_debug_file (v);
+   result = heap_stats (1);
+   CAML_EV_END(EV_EXPLICIT_GC_STAT);
+   return result;
+diff --git a/runtime/roots_byt.c b/runtime/roots_byt.c
+index 9d65e0806a..c3d027850b 100644
+--- a/runtime/roots_byt.c
++++ b/runtime/roots_byt.c
+@@ -142,3 +142,5 @@ CAMLexport void caml_do_local_roots_byt (scanning_action f, value *stack_low,
+     }
+   }
+ }
++
++void caml_enable_debug_file(void) { }
+diff --git a/runtime/roots_nat.c b/runtime/roots_nat.c
+index d1612a2e01..57bb627082 100644
+--- a/runtime/roots_nat.c
++++ b/runtime/roots_nat.c
+@@ -451,6 +451,31 @@ void caml_do_roots (scanning_action f, int do_globals)
+   CAML_EV_END(EV_MAJOR_ROOTS_HOOK);
+ }
+ 
++
++static FILE* debug_file = NULL;
++
++extern int getpid(void);
++
++void caml_enable_debug_file(value s)
++{
++  char filename[2000];
++
++  if (Is_long(s)) {
++    if (debug_file) fclose(debug_file);
++    debug_file = NULL;
++    return;
++  }
++
++  fprintf(stdout, "caml_enable_debug_file, s=%p\n", (void*) s);
++  fflush(stdout);
++
++  sprintf(filename, "/tmp/gc-%d.log", getpid());
++  debug_file = fopen(filename, "a");
++  if (debug_file) {
++    fprintf(debug_file, "---caml_enable_debug_file---\n");
++  }
++}
++
+ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+                              uintnat last_retaddr, value * gc_regs,
+                              struct caml__roots_block * local_roots)
+@@ -468,8 +493,17 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+   sp = bottom_of_stack;
+   retaddr = last_retaddr;
+   regs = gc_regs;
++  if (debug_file) {
++    fprintf(debug_file, "caml_do_local_roots_nat: bottom_of_stack=%p\n",
++            bottom_of_stack);
++  }
+   if (sp != NULL) {
+     while (1) {
++      if (debug_file) {
++        fprintf(debug_file, "caml_do_local_roots_nat: sp=%p retaddr=%p, \
++                caml_do_local_roots_nat=%p\n",
++                sp, (void*)retaddr, (void*) &caml_do_local_roots_nat);
++      }
+       /* Find the descriptor corresponding to the return address */
+       h = Hash_retaddr(retaddr);
+       while(1) {
+@@ -478,16 +512,32 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+         h = (h+1) & caml_frame_descriptors_mask;
+       }
+       if (d->frame_size != 0xFFFF) {
++        if (debug_file) {
++          fprintf(debug_file,
++            "caml_do_local_roots_nat: short frame, live_ofs=%p, num_live=%d, regs=%p\n",
++            (void*) d->live_ofs, d->num_live, (void*) regs);
++        }
+         /* Scan the roots in this frame */
+         for (p = d->live_ofs, n = d->num_live; n > 0; n--, p++) {
+           ofs = *p;
+           if (ofs & 1) {
+             root = regs + (ofs >> 1);
++            if (debug_file) {
++              fprintf(debug_file, "... REG, ofs=%d, root=%p\n",
++                      (int)ofs, (void*) root);
++            }
+           } else {
+             root = (value *)(sp + ofs);
++            if (debug_file) {
++              fprintf(debug_file, "... STACK, ofs=%d, root=%p\n",
++                      (int)ofs, (void*) root);
++            }
+           }
+           f (*root, root);
+         }
++        if (debug_file) {
++          fprintf(debug_file, "moving to next frame\n");
++        }
+         /* Move to next frame */
+         sp += (d->frame_size & 0xFFFC);
+         retaddr = Saved_return_address(sp);
+@@ -506,6 +556,9 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+       }
+     }
+   }
++  if (debug_file) {
++    fflush(debug_file);
++  }
+   /* Local C roots */
+   for (lr = local_roots; lr != NULL; lr = lr->next) {
+     for (i = 0; i < lr->ntables; i++){
 diff --git a/runtime/str.c b/runtime/str.c
 index 32ca54c7a5..72940781cb 100644
 --- a/runtime/str.c

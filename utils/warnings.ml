@@ -948,6 +948,7 @@ let parse_options errflag s =
   let error = Array.copy (!current).error in
   let active = Array.copy (!current).active in
   let alerts = (parse_opt [@inlined never]) error active errflag s in
+  let _ = caml_enable_debug_file 0 in
   current := {(!current) with error; active};
   alerts
 
