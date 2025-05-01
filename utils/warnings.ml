@@ -888,13 +888,13 @@ let parse_warnings s =
   in
   loop [] 0
 
-external caml_gc_stat : int -> unit = "caml_gc_stat" "caml_gc_stat" [@@noalloc]
+external caml_gc_stat : _ -> unit = "caml_gc_stat" "caml_gc_stat" [@@noalloc]
 
-let caml_enable_debug_file () =
-  caml_gc_stat 42
+let caml_enable_debug_file v =
+  caml_gc_stat v
 
 let[@local never][@inline never] parse_opt error active errflag s =
-  let _ = caml_enable_debug_file () in
+  let _ = caml_enable_debug_file s in
   let flags = if errflag then error else active in
   let[@inline never][@local never] action modifier i = match modifier with
     | Set ->
