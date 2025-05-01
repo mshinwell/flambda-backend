@@ -95,10 +95,10 @@ index 8b1c4e5559..3e7de2533d 100644
        let (before, after) =
          try
 diff --git a/runtime/gc_ctrl.c b/runtime/gc_ctrl.c
-index 9c47b916a0..e56f240cbc 100644
+index 9c47b916a0..f5823b0af2 100644
 --- a/runtime/gc_ctrl.c
 +++ b/runtime/gc_ctrl.c
-@@ -268,11 +268,13 @@ void caml_heap_check (void)
+@@ -268,14 +268,21 @@ void caml_heap_check (void)
  }
  #endif
  
@@ -106,39 +106,53 @@ index 9c47b916a0..e56f240cbc 100644
 +
  CAMLprim value caml_gc_stat(value v)
  {
-   value result;
-   CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
+-  value result;
+-  CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
 -  CAMLassert (v == Val_unit);
-+  if (v != Val_unit) caml_enable_debug_file (v);
-   result = heap_stats (1);
-   CAML_EV_END(EV_EXPLICIT_GC_STAT);
-   return result;
+-  result = heap_stats (1);
+-  CAML_EV_END(EV_EXPLICIT_GC_STAT);
+-  return result;
++  if (v != Val_unit) {
++    caml_enable_debug_file (v);
++    return Val_unit;
++  }
++  else {
++    value result;
++    CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
++    result = heap_stats (1);
++    CAML_EV_END(EV_EXPLICIT_GC_STAT);
++    return result;
++  }
+ }
+ 
+ CAMLprim value caml_gc_quick_stat(value v)
 diff --git a/runtime/hash.c b/runtime/hash.c
-index f33634c227..28f0b8abf6 100644
+index f33634c227..0e3251d2b8 100644
 --- a/runtime/hash.c
 +++ b/runtime/hash.c
-@@ -181,6 +181,8 @@ CAMLexport uint32_t caml_hash_mix_string(uint32_t h, value s)
+@@ -181,6 +181,9 @@ CAMLexport uint32_t caml_hash_mix_string(uint32_t h, value s)
  
  /* The generic hash function */
  
 +#include <assert.h>
++extern int getpid(void);
 +
  CAMLprim value caml_hash(value count, value limit, value seed, value obj)
  {
    value queue[HASH_QUEUE_SIZE]; /* Queue of values to examine */
-@@ -192,6 +194,11 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
+@@ -192,6 +195,11 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
    value v;
    mlsize_t i, len;
  
 +  if (Is_block(obj) && Hd_val(obj) == 0) {
-+    fprintf(stderr, "header of value %p is zero\n", (void*) obj);
++    fprintf(stderr, "pid %d: header of value %p is zero\n", getpid(), (void*) obj);
 +    abort();
 +  }
 +
    sz = Long_val(limit);
    if (sz < 0 || sz > HASH_QUEUE_SIZE) sz = HASH_QUEUE_SIZE;
    num = Long_val(count);
-@@ -199,6 +206,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
+@@ -199,6 +207,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
    queue[0] = obj; rd = 0; wr = 1;
  
    while (rd < wr && num > 0) {
@@ -146,7 +160,7 @@ index f33634c227..28f0b8abf6 100644
      v = queue[rd++];
    again:
      if (Is_long(v)) {
-@@ -265,7 +273,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
+@@ -265,7 +274,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
          mlsize_t startenv;
          len = Wosize_val(v);
          startenv = Start_env_closinfo(Closinfo_val(v));
@@ -155,7 +169,7 @@ index f33634c227..28f0b8abf6 100644
          /* Mix in the tag and size, but do not count this towards [num] */
          h = caml_hash_mix_uint32(h, Whitehd_hd(Hd_val(v)));
          /* Mix the code pointers, closure info fields, and infix headers */
-@@ -277,6 +285,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
+@@ -277,6 +286,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
             not exceeding the total size [sz] */
          for (/*nothing*/; i < len; i++) {
            if (wr >= sz) break;
@@ -163,7 +177,7 @@ index f33634c227..28f0b8abf6 100644
            queue[wr++] = Field(v, i);
          }
          break;
-@@ -288,6 +297,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
+@@ -288,6 +298,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
          /* Copy fields into queue, not exceeding the total size [sz] */
          for (i = 0, len = Wosize_val(v); i < len; i++) {
            if (wr >= sz) break;
