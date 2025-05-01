@@ -114,7 +114,7 @@ index 9c47b916a0..e56f240cbc 100644
    CAML_EV_END(EV_EXPLICIT_GC_STAT);
    return result;
 diff --git a/runtime/hash.c b/runtime/hash.c
-index f33634c227..0a3a02cb83 100644
+index f33634c227..28f0b8abf6 100644
 --- a/runtime/hash.c
 +++ b/runtime/hash.c
 @@ -181,6 +181,8 @@ CAMLexport uint32_t caml_hash_mix_string(uint32_t h, value s)
@@ -130,7 +130,7 @@ index f33634c227..0a3a02cb83 100644
    value v;
    mlsize_t i, len;
  
-+  if (Hd_val(obj) == 0) {
++  if (Is_block(obj) && Hd_val(obj) == 0) {
 +    fprintf(stderr, "header of value %p is zero\n", (void*) obj);
 +    abort();
 +  }
