@@ -95,7 +95,7 @@ index 8b1c4e5559..3e7de2533d 100644
        let (before, after) =
          try
 diff --git a/runtime/str.c b/runtime/str.c
-index 32ca54c7a5..fe52db83d4 100644
+index 32ca54c7a5..72940781cb 100644
 --- a/runtime/str.c
 +++ b/runtime/str.c
 @@ -27,12 +27,22 @@
@@ -136,7 +136,7 @@ index 32ca54c7a5..fe52db83d4 100644
    value * p1, * p2;
  
 +  if (caml_string_length_signed(s1) < 0) {
-+    fprintf(stderr, "s1 (%p):\n", (void*) s1);
++    fprintf(stderr, "s1 (%p) header %p, wosize_val %d:\n", (void*) s1, (void*) Hd_val(s1), (int) Wosize_val(s1));
 +    for (int i = -1; i < Wosize_val(s1); i++) {
 +      fprintf(stderr, "  field %d: %p\n", i, (void*) Field(s1, i));
 +    }
