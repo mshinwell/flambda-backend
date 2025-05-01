@@ -94,6 +94,58 @@ index 8b1c4e5559..3e7de2533d 100644
      if s <> "" then
        let (before, after) =
          try
+diff --git a/runtime/str.c b/runtime/str.c
+index 32ca54c7a5..728a518ff8 100644
+--- a/runtime/str.c
++++ b/runtime/str.c
+@@ -27,12 +27,14 @@
+ #include "caml/mlvalues.h"
+ #include "caml/misc.h"
+ 
++#include <assert.h>
++
+ /* returns a number of bytes (chars) */
+ CAMLexport mlsize_t caml_string_length(value s)
+ {
+   mlsize_t temp;
+   temp = Bosize_val(s) - 1;
+-  CAMLassert (Byte (s, temp - Byte (s, temp)) == 0);
++  assert (Byte (s, temp - Byte (s, temp)) == 0);
+   return temp - Byte (s, temp);
+ }
+ 
+@@ -41,7 +43,7 @@ CAMLprim value caml_ml_string_length(value s)
+ {
+   mlsize_t temp;
+   temp = Bosize_val(s) - 1;
+-  CAMLassert (Byte (s, temp - Byte (s, temp)) == 0);
++  assert (Byte (s, temp - Byte (s, temp)) == 0);
+   return Val_long(temp - Byte (s, temp));
+ }
+ 
+@@ -273,6 +275,22 @@ CAMLprim value caml_string_equal(value s1, value s2)
+   mlsize_t sz1, sz2;
+   value * p1, * p2;
+ 
++  if (caml_string_length(s1) < 0) {
++    fprintf(stderr, "s1 (%p):\n", (void*) s1);
++    for (int i = -1; i < Wosize_val(s1); i++) {
++      fprintf(stderr, "  field %d: %p\n", i, (void*) Field(s1, i));
++    }
++    fflush(stderr);
++  }
++
++  if (caml_string_length(s2) < 0) {
++    fprintf(stderr, "s2 (%p):\n", (void*) s2);
++    for (int i = -1; i < Wosize_val(s2); i++) {
++      fprintf(stderr, "  field %d: %p\n", i, (void*) Field(s2, i));
++    }
++    fflush(stderr);
++  }
++
+   if (s1 == s2) return Val_true;
+   sz1 = Wosize_val(s1);
+   sz2 = Wosize_val(s2);
 diff --git a/stdlib/bytes.ml b/stdlib/bytes.ml
 index ae946dfa5e..319155a36c 100644
 --- a/stdlib/bytes.ml
@@ -113,7 +165,7 @@ index ae946dfa5e..319155a36c 100644
      let r = create len in
      unsafe_blit s ofs r 0 len;
 diff --git a/utils/warnings.ml b/utils/warnings.ml
-index 895ef2be07..3785f61590 100644
+index 895ef2be07..455e5508f2 100644
 --- a/utils/warnings.ml
 +++ b/utils/warnings.ml
 @@ -459,7 +459,14 @@ let name_to_number =
@@ -145,7 +197,15 @@ index 895ef2be07..3785f61590 100644
  ;;
  
  type state =
-@@ -738,14 +749,16 @@ let parse_opt error active errflag s =
+@@ -720,6 +731,7 @@ let parse_warnings s =
+   loop [] 0
+ 
+ let parse_opt error active errflag s =
++  Printf.eprintf "parse_opt %S (s=%d)\n%!" s ((Obj.magic s): int);
+   let flags = if errflag then error else active in
+   let action modifier i = match modifier with
+     | Set ->
+@@ -738,14 +750,16 @@ let parse_opt error active errflag s =
            error.(i) <- true
          end
    in
@@ -164,7 +224,7 @@ index 895ef2be07..3785f61590 100644
      | Num(n1,n2,modifier) ->
          for n = n1 to Int.min n2 last_warning_number do action modifier n done
    in
-@@ -1131,7 +1144,7 @@ let help_warnings () =
+@@ -1131,7 +1145,7 @@ let help_warnings () =
    print_endline "  A all warnings";
    for i = Char.code 'b' to Char.code 'z' do
      let c = Char.chr i in
