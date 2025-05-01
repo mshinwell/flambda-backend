@@ -124,7 +124,7 @@ index 9d65e0806a..c3d027850b 100644
 +
 +void caml_enable_debug_file(void) { }
 diff --git a/runtime/roots_nat.c b/runtime/roots_nat.c
-index d1612a2e01..e549554f09 100644
+index d1612a2e01..7c35025f1f 100644
 --- a/runtime/roots_nat.c
 +++ b/runtime/roots_nat.c
 @@ -451,6 +451,38 @@ void caml_do_roots (scanning_action f, int do_globals)
@@ -152,7 +152,7 @@ index d1612a2e01..e549554f09 100644
 +  }
 +
 +  if (debug_file) {
-+    fprintf(debug_file, "---caml_enable_debug_file---s=%p\n", (void*) s);
++    fprintf(debug_file, "---caml_enable_debug_file---s=%p, retaddr=%p\n", (void*) s, __builtin_return_address(0));
 +    if (Is_block(s)) {
 +      fprintf(debug_file, "s (%p) header %p, wosize_val %d:\n", (void*) s, (void*) Hd_val(s), (int) Wosize_val(s));
 +      for (int i = -1; i < (int) Wosize_val(s); i++) {
