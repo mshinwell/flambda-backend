@@ -895,6 +895,8 @@ let caml_enable_debug_file () =
 
 let[@local never][@inline never] parse_opt error active errflag s =
   Printf.eprintf "parse_opt %S (s=%d)\n%!" s ((Obj.magic s): int);
+  Printf.eprintf "tag of s=%d\n%!" (Obj.tag (Obj.repr s));
+  Printf.eprintf "size of s=%d\n%!" (Obj.size (Obj.repr s));
   let _ = caml_enable_debug_file () in
   let flags = if errflag then error else active in
   let[@inline never][@local never] action modifier i = match modifier with
