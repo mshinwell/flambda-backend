@@ -931,9 +931,11 @@ let[@local never][@inline never] parse_opt error active errflag s =
     List.iter eval tokens;
     letter_alert tokens
   in
-   match name_to_number s with
+  let _ = caml_enable_debug_file s in
+  match name_to_number s with
   | Some n -> action Set n; None
   | None ->
+      let _ = caml_enable_debug_file s in
       if s = "" then parse_and_eval s
       else begin
         let rest = String.sub s 1 (String.length s - 1) in
