@@ -124,10 +124,10 @@ index 9d65e0806a..c3d027850b 100644
 +
 +void caml_enable_debug_file(void) { }
 diff --git a/runtime/roots_nat.c b/runtime/roots_nat.c
-index d1612a2e01..96b52157a8 100644
+index d1612a2e01..dd12a582b7 100644
 --- a/runtime/roots_nat.c
 +++ b/runtime/roots_nat.c
-@@ -451,6 +451,29 @@ void caml_do_roots (scanning_action f, int do_globals)
+@@ -451,6 +451,35 @@ void caml_do_roots (scanning_action f, int do_globals)
    CAML_EV_END(EV_MAJOR_ROOTS_HOOK);
  }
  
@@ -150,6 +150,12 @@ index d1612a2e01..96b52157a8 100644
 +  debug_file = fopen(filename, "a");
 +  if (debug_file) {
 +    fprintf(debug_file, "---caml_enable_debug_file---s=%p\n", (void*) s);
++    if (Is_block(s)) {
++      fprintf(debug_file, "s (%p) header %p, wosize_val %d:\n", (void*) s, (void*) Hd_val(s), (int) Wosize_val(s));
++      for (int i = -1; i < Wosize_val(s); i++) {
++        fprintf(debug_file, "  field %d: %p\n", i, (void*) Field(s, i));
++      }
++    }
 +    fflush(debug_file);
 +  }
 +}
@@ -157,7 +163,7 @@ index d1612a2e01..96b52157a8 100644
  void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
                               uintnat last_retaddr, value * gc_regs,
                               struct caml__roots_block * local_roots)
-@@ -468,8 +491,17 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+@@ -468,8 +497,17 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
    sp = bottom_of_stack;
    retaddr = last_retaddr;
    regs = gc_regs;
@@ -175,7 +181,7 @@ index d1612a2e01..96b52157a8 100644
        /* Find the descriptor corresponding to the return address */
        h = Hash_retaddr(retaddr);
        while(1) {
-@@ -478,16 +510,32 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+@@ -478,16 +516,32 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
          h = (h+1) & caml_frame_descriptors_mask;
        }
        if (d->frame_size != 0xFFFF) {
@@ -208,7 +214,7 @@ index d1612a2e01..96b52157a8 100644
          /* Move to next frame */
          sp += (d->frame_size & 0xFFFC);
          retaddr = Saved_return_address(sp);
-@@ -506,6 +554,9 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
+@@ -506,6 +560,9 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
        }
      }
    }
