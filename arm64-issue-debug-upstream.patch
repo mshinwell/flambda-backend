@@ -1,5 +1,5 @@
 diff --git a/asmcomp/cmm_helpers.ml b/asmcomp/cmm_helpers.ml
-index 7ad42ceaea..9ad2a7653e 100644
+index 7ad42ceaea..0cb43b7ecd 100644
 --- a/asmcomp/cmm_helpers.ml
 +++ b/asmcomp/cmm_helpers.ml
 @@ -137,6 +137,8 @@ let rec add_const c n dbg =
@@ -11,6 +11,175 @@ index 7ad42ceaea..9ad2a7653e 100644
  let rec add_int c1 c2 dbg =
    match (c1, c2) with
    | (Cconst_int (n, _), c) | (c, Cconst_int (n, _)) ->
+@@ -1103,12 +1105,12 @@ let make_unsigned_int bi arg dbg =
+ 
+ let unaligned_load_16 ptr idx dbg =
+   if Arch.allow_unaligned_access
+-  then Cop(Cload (Sixteen_unsigned, Mutable), [add_int ptr idx dbg], dbg)
++  then Cop(Cload (Sixteen_unsigned, Mutable), [add_int_addr ptr idx dbg], dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+-    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int ptr idx dbg], dbg) in
++    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int_addr ptr idx dbg], dbg) in
+     let v2 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 1) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg], dbg) in
+     let b1, b2 = if Arch.big_endian then v1, v2 else v2, v1 in
+     Cop(Cor, [lsl_int b1 (cconst_int 8) dbg; b2], dbg)
+ 
+@@ -1116,7 +1118,7 @@ let unaligned_set_16 ptr idx newval dbg =
+   if Arch.allow_unaligned_access
+   then
+     Cop(Cstore (Sixteen_unsigned, Assignment),
+-      [add_int ptr idx dbg; newval], dbg)
++      [add_int_addr ptr idx dbg; newval], dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+     let v1 =
+@@ -1126,24 +1128,24 @@ let unaligned_set_16 ptr idx newval dbg =
+     let v2 = Cop(Cand, [newval; cconst_int 0xFF], dbg) in
+     let b1, b2 = if Arch.big_endian then v1, v2 else v2, v1 in
+     Csequence(
+-        Cop(Cstore (Byte_unsigned, Assignment), [add_int ptr idx dbg; b1], dbg),
++        Cop(Cstore (Byte_unsigned, Assignment), [add_int_addr ptr idx dbg; b1], dbg),
+         Cop(Cstore (Byte_unsigned, Assignment),
+-            [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2], dbg))
++            [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg; b2], dbg))
+ 
+ let unaligned_load_32 ptr idx dbg =
+   if Arch.allow_unaligned_access
+-  then Cop(Cload (Thirtytwo_unsigned, Mutable), [add_int ptr idx dbg], dbg)
++  then Cop(Cload (Thirtytwo_unsigned, Mutable), [add_int_addr ptr idx dbg], dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+-    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int ptr idx dbg], dbg) in
++    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int_addr ptr idx dbg], dbg) in
+     let v2 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 1) dbg], dbg)
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg], dbg)
+     in
+     let v3 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 2) dbg], dbg)
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg], dbg)
+     in
+     let v4 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 3) dbg], dbg)
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg], dbg)
+     in
+     let b1, b2, b3, b4 =
+       if Arch.big_endian
+@@ -1158,7 +1160,7 @@ let unaligned_load_32 ptr idx dbg =
+ let unaligned_set_32 ptr idx newval dbg =
+   if Arch.allow_unaligned_access
+   then
+-    Cop(Cstore (Thirtytwo_unsigned, Assignment), [add_int ptr idx dbg; newval],
++    Cop(Cstore (Thirtytwo_unsigned, Assignment), [add_int_addr ptr idx dbg; newval],
+       dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+@@ -1179,39 +1181,39 @@ let unaligned_set_32 ptr idx newval dbg =
+     Csequence(
+         Csequence(
+             Cop(Cstore (Byte_unsigned, Assignment),
+-                [add_int ptr idx dbg; b1], dbg),
++                [add_int_addr ptr idx dbg; b1], dbg),
+             Cop(Cstore (Byte_unsigned, Assignment),
+-                [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2],
++                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg; b2],
+                 dbg)),
+         Csequence(
+             Cop(Cstore (Byte_unsigned, Assignment),
+-                [add_int (add_int ptr idx dbg) (cconst_int 2) dbg; b3],
++                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg; b3],
+                 dbg),
+             Cop(Cstore (Byte_unsigned, Assignment),
+-                [add_int (add_int ptr idx dbg) (cconst_int 3) dbg; b4],
++                [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg; b4],
+                 dbg)))
+ 
+ let unaligned_load_64 ptr idx dbg =
+   assert(size_int = 8);
+   if Arch.allow_unaligned_access
+-  then Cop(Cload (Word_int, Mutable), [add_int ptr idx dbg], dbg)
++  then Cop(Cload (Word_int, Mutable), [add_int_addr ptr idx dbg], dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+-    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int ptr idx dbg], dbg) in
++    let v1 = Cop(Cload (Byte_unsigned, Mutable), [add_int_addr ptr idx dbg], dbg) in
+     let v2 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 1) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg], dbg) in
+     let v3 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 2) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg], dbg) in
+     let v4 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 3) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg], dbg) in
+     let v5 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 4) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 4) dbg], dbg) in
+     let v6 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 5) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 5) dbg], dbg) in
+     let v7 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 6) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 6) dbg], dbg) in
+     let v8 = Cop(Cload (Byte_unsigned, Mutable),
+-                 [add_int (add_int ptr idx dbg) (cconst_int 7) dbg], dbg) in
++                 [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 7) dbg], dbg) in
+     let b1, b2, b3, b4, b5, b6, b7, b8 =
+       if Arch.big_endian
+       then v1, v2, v3, v4, v5, v6, v7, v8
+@@ -1233,7 +1235,7 @@ let unaligned_load_64 ptr idx dbg =
+ let unaligned_set_64 ptr idx newval dbg =
+   assert(size_int = 8);
+   if Arch.allow_unaligned_access
+-  then Cop(Cstore (Word_int, Assignment), [add_int ptr idx dbg; newval], dbg)
++  then Cop(Cstore (Word_int, Assignment), [add_int_addr ptr idx dbg; newval], dbg)
+   else
+     let cconst_int i = Cconst_int (i, dbg) in
+     let v1 =
+@@ -1273,32 +1275,32 @@ let unaligned_set_64 ptr idx newval dbg =
+         Csequence(
+             Csequence(
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int ptr idx dbg; b1],
++                    [add_int_addr ptr idx dbg; b1],
+                     dbg),
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 1) dbg; b2],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 1) dbg; b2],
+                     dbg)),
+             Csequence(
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 2) dbg; b3],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 2) dbg; b3],
+                     dbg),
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 3) dbg; b4],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 3) dbg; b4],
+                     dbg))),
+         Csequence(
+             Csequence(
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 4) dbg; b5],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 4) dbg; b5],
+                     dbg),
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 5) dbg; b6],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 5) dbg; b6],
+                     dbg)),
+             Csequence(
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 6) dbg; b7],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 6) dbg; b7],
+                     dbg),
+                 Cop(Cstore (Byte_unsigned, Assignment),
+-                    [add_int (add_int ptr idx dbg) (cconst_int 7) dbg; b8],
++                    [add_int_addr (add_int_addr ptr idx dbg) (cconst_int 7) dbg; b8],
+                     dbg))))
+ 
+ let max_or_zero a dbg =
 @@ -2279,7 +2281,7 @@ let int_comp_caml cmp arg1 arg2 dbg =
  
  let stringref_unsafe arg1 arg2 dbg =
@@ -82,386 +251,3 @@ index 6a56cc2a27..0c7f6e7cb1 100644
        end
    | Cassign _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _
    | Ctrywith _ -> false
-diff --git a/driver/compenv.ml b/driver/compenv.ml
-index 8b1c4e5559..3e7de2533d 100644
---- a/driver/compenv.ml
-+++ b/driver/compenv.ml
-@@ -489,6 +489,7 @@ let read_one_param ppf position name v =
- let read_OCAMLPARAM ppf position =
-   try
-     let s = Sys.getenv "OCAMLPARAM" in
-+    Warnings.parsed_ocamlparam := s;
-     if s <> "" then
-       let (before, after) =
-         try
-diff --git a/runtime/gc_ctrl.c b/runtime/gc_ctrl.c
-index 9c47b916a0..f5823b0af2 100644
---- a/runtime/gc_ctrl.c
-+++ b/runtime/gc_ctrl.c
-@@ -268,14 +268,21 @@ void caml_heap_check (void)
- }
- #endif
- 
-+extern void caml_enable_debug_file(value);
-+
- CAMLprim value caml_gc_stat(value v)
- {
--  value result;
--  CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
--  CAMLassert (v == Val_unit);
--  result = heap_stats (1);
--  CAML_EV_END(EV_EXPLICIT_GC_STAT);
--  return result;
-+  if (v != Val_unit) {
-+    caml_enable_debug_file (v);
-+    return Val_unit;
-+  }
-+  else {
-+    value result;
-+    CAML_EV_BEGIN(EV_EXPLICIT_GC_STAT);
-+    result = heap_stats (1);
-+    CAML_EV_END(EV_EXPLICIT_GC_STAT);
-+    return result;
-+  }
- }
- 
- CAMLprim value caml_gc_quick_stat(value v)
-diff --git a/runtime/hash.c b/runtime/hash.c
-index f33634c227..0e3251d2b8 100644
---- a/runtime/hash.c
-+++ b/runtime/hash.c
-@@ -181,6 +181,9 @@ CAMLexport uint32_t caml_hash_mix_string(uint32_t h, value s)
- 
- /* The generic hash function */
- 
-+#include <assert.h>
-+extern int getpid(void);
-+
- CAMLprim value caml_hash(value count, value limit, value seed, value obj)
- {
-   value queue[HASH_QUEUE_SIZE]; /* Queue of values to examine */
-@@ -192,6 +195,11 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
-   value v;
-   mlsize_t i, len;
- 
-+  if (Is_block(obj) && Hd_val(obj) == 0) {
-+    fprintf(stderr, "pid %d: header of value %p is zero\n", getpid(), (void*) obj);
-+    abort();
-+  }
-+
-   sz = Long_val(limit);
-   if (sz < 0 || sz > HASH_QUEUE_SIZE) sz = HASH_QUEUE_SIZE;
-   num = Long_val(count);
-@@ -199,6 +207,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
-   queue[0] = obj; rd = 0; wr = 1;
- 
-   while (rd < wr && num > 0) {
-+    assert(rd >= 0 && rd < HASH_QUEUE_SIZE);
-     v = queue[rd++];
-   again:
-     if (Is_long(v)) {
-@@ -265,7 +274,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
-         mlsize_t startenv;
-         len = Wosize_val(v);
-         startenv = Start_env_closinfo(Closinfo_val(v));
--        CAMLassert (startenv <= len);
-+        assert (startenv <= len);
-         /* Mix in the tag and size, but do not count this towards [num] */
-         h = caml_hash_mix_uint32(h, Whitehd_hd(Hd_val(v)));
-         /* Mix the code pointers, closure info fields, and infix headers */
-@@ -277,6 +286,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
-            not exceeding the total size [sz] */
-         for (/*nothing*/; i < len; i++) {
-           if (wr >= sz) break;
-+          assert(wr >= 0 && wr < HASH_QUEUE_SIZE);
-           queue[wr++] = Field(v, i);
-         }
-         break;
-@@ -288,6 +298,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
-         /* Copy fields into queue, not exceeding the total size [sz] */
-         for (i = 0, len = Wosize_val(v); i < len; i++) {
-           if (wr >= sz) break;
-+          assert(wr >= 0 && wr < HASH_QUEUE_SIZE);
-           queue[wr++] = Field(v, i);
-         }
-         break;
-diff --git a/runtime/roots_byt.c b/runtime/roots_byt.c
-index 9d65e0806a..c3d027850b 100644
---- a/runtime/roots_byt.c
-+++ b/runtime/roots_byt.c
-@@ -142,3 +142,5 @@ CAMLexport void caml_do_local_roots_byt (scanning_action f, value *stack_low,
-     }
-   }
- }
-+
-+void caml_enable_debug_file(void) { }
-diff --git a/runtime/roots_nat.c b/runtime/roots_nat.c
-index d1612a2e01..7c35025f1f 100644
---- a/runtime/roots_nat.c
-+++ b/runtime/roots_nat.c
-@@ -451,6 +451,38 @@ void caml_do_roots (scanning_action f, int do_globals)
-   CAML_EV_END(EV_MAJOR_ROOTS_HOOK);
- }
- 
-+
-+static FILE* debug_file = NULL;
-+
-+extern int getpid(void);
-+
-+void caml_enable_debug_file(value s)
-+{
-+  char filename[2000];
-+
-+  if (Is_long(s)) {
-+    if (debug_file) fclose(debug_file);
-+    debug_file = NULL;
-+    return;
-+  }
-+
-+  if (!debug_file) {
-+    sprintf(filename, "/tmp/gc-%d.log", getpid());
-+    debug_file = fopen(filename, "a");
-+  }
-+
-+  if (debug_file) {
-+    fprintf(debug_file, "---caml_enable_debug_file---s=%p, retaddr=%p\n", (void*) s, __builtin_return_address(0));
-+    if (Is_block(s)) {
-+      fprintf(debug_file, "s (%p) header %p, wosize_val %d:\n", (void*) s, (void*) Hd_val(s), (int) Wosize_val(s));
-+      for (int i = -1; i < (int) Wosize_val(s); i++) {
-+        fprintf(debug_file, "  field %d: %p\n", i, (void*) Field(s, i));
-+      }
-+    }
-+    fflush(debug_file);
-+  }
-+}
-+
- void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
-                              uintnat last_retaddr, value * gc_regs,
-                              struct caml__roots_block * local_roots)
-@@ -468,8 +500,17 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
-   sp = bottom_of_stack;
-   retaddr = last_retaddr;
-   regs = gc_regs;
-+  if (debug_file) {
-+    fprintf(debug_file, "caml_do_local_roots_nat: bottom_of_stack=%p\n",
-+            bottom_of_stack);
-+  }
-   if (sp != NULL) {
-     while (1) {
-+      if (debug_file) {
-+        fprintf(debug_file, "caml_do_local_roots_nat: sp=%p retaddr=%p, \
-+                caml_do_local_roots_nat=%p\n",
-+                sp, (void*)retaddr, (void*) &caml_do_local_roots_nat);
-+      }
-       /* Find the descriptor corresponding to the return address */
-       h = Hash_retaddr(retaddr);
-       while(1) {
-@@ -478,16 +519,32 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
-         h = (h+1) & caml_frame_descriptors_mask;
-       }
-       if (d->frame_size != 0xFFFF) {
-+        if (debug_file) {
-+          fprintf(debug_file,
-+            "caml_do_local_roots_nat: short frame, live_ofs=%p, num_live=%d, regs=%p\n",
-+            (void*) d->live_ofs, d->num_live, (void*) regs);
-+        }
-         /* Scan the roots in this frame */
-         for (p = d->live_ofs, n = d->num_live; n > 0; n--, p++) {
-           ofs = *p;
-           if (ofs & 1) {
-             root = regs + (ofs >> 1);
-+            if (debug_file) {
-+              fprintf(debug_file, "... REG, ofs=%d, root=%p\n",
-+                      (int)ofs, (void*) root);
-+            }
-           } else {
-             root = (value *)(sp + ofs);
-+            if (debug_file) {
-+              fprintf(debug_file, "... STACK, ofs=%d, root=%p\n",
-+                      (int)ofs, (void*) root);
-+            }
-           }
-           f (*root, root);
-         }
-+        if (debug_file) {
-+          fprintf(debug_file, "moving to next frame\n");
-+        }
-         /* Move to next frame */
-         sp += (d->frame_size & 0xFFFC);
-         retaddr = Saved_return_address(sp);
-@@ -506,6 +563,9 @@ void caml_do_local_roots_nat(scanning_action f, char * bottom_of_stack,
-       }
-     }
-   }
-+  if (debug_file) {
-+    fflush(debug_file);
-+  }
-   /* Local C roots */
-   for (lr = local_roots; lr != NULL; lr = lr->next) {
-     for (i = 0; i < lr->ntables; i++){
-diff --git a/runtime/str.c b/runtime/str.c
-index 32ca54c7a5..cf40e4bb17 100644
---- a/runtime/str.c
-+++ b/runtime/str.c
-@@ -27,12 +27,22 @@
- #include "caml/mlvalues.h"
- #include "caml/misc.h"
- 
-+#include <assert.h>
-+
-+int64_t caml_string_length_signed(value s)
-+{
-+  int64_t temp;
-+  temp = Bosize_val(s) - 1;
-+  assert (Byte (s, temp - Byte (s, temp)) == 0);
-+  return temp - Byte (s, temp);
-+}
-+
- /* returns a number of bytes (chars) */
- CAMLexport mlsize_t caml_string_length(value s)
- {
-   mlsize_t temp;
-   temp = Bosize_val(s) - 1;
--  CAMLassert (Byte (s, temp - Byte (s, temp)) == 0);
-+  assert (Byte (s, temp - Byte (s, temp)) == 0);
-   return temp - Byte (s, temp);
- }
- 
-@@ -41,7 +51,7 @@ CAMLprim value caml_ml_string_length(value s)
- {
-   mlsize_t temp;
-   temp = Bosize_val(s) - 1;
--  CAMLassert (Byte (s, temp - Byte (s, temp)) == 0);
-+  assert (Byte (s, temp - Byte (s, temp)) == 0);
-   return Val_long(temp - Byte (s, temp));
- }
- 
-@@ -268,11 +278,31 @@ CAMLprim value caml_bytes_set64(value str, value index, value newval)
-   return Val_unit;
- }
- 
-+extern int getpid(void);
-+
- CAMLprim value caml_string_equal(value s1, value s2)
- {
-   mlsize_t sz1, sz2;
-   value * p1, * p2;
- 
-+  if (caml_string_length_signed(s1) < 0) {
-+    fprintf(stderr, "caml_string_equal pid %d\n", getpid());
-+    fprintf(stderr, "s1 (%p) header %p, wosize_val %d:\n", (void*) s1, (void*) Hd_val(s1), (int) Wosize_val(s1));
-+    for (int i = -1; i < Wosize_val(s1); i++) {
-+      fprintf(stderr, "  field %d: %p\n", i, (void*) Field(s1, i));
-+    }
-+    fflush(stderr);
-+  }
-+
-+  if (caml_string_length_signed(s2) < 0) {
-+    fprintf(stderr, "caml_string_equal pid %d\n", getpid());
-+    fprintf(stderr, "s2 (%p):\n", (void*) s2);
-+    for (int i = -1; i < Wosize_val(s2); i++) {
-+      fprintf(stderr, "  field %d: %p\n", i, (void*) Field(s2, i));
-+    }
-+    fflush(stderr);
-+  }
-+
-   if (s1 == s2) return Val_true;
-   sz1 = Wosize_val(s1);
-   sz2 = Wosize_val(s2);
-diff --git a/stdlib/bytes.ml b/stdlib/bytes.ml
-index ae946dfa5e..319155a36c 100644
---- a/stdlib/bytes.ml
-+++ b/stdlib/bytes.ml
-@@ -62,8 +62,11 @@ let to_string b = unsafe_to_string (copy b)
- let of_string s = copy (unsafe_of_string s)
- 
- let sub s ofs len =
--  if ofs < 0 || len < 0 || ofs > length s - len
--  then invalid_arg "String.sub / Bytes.sub"
-+  let length_s = length s in
-+  if ofs < 0 || len < 0 || ofs > length_s - len
-+  then invalid_arg ("String.sub / Bytes.sub: ofs=" ^ string_of_int ofs
-+                    ^ ", len=" ^ string_of_int len
-+                    ^ ", length_s=" ^ string_of_int length_s)
-   else begin
-     let r = create len in
-     unsafe_blit s ofs r 0 len;
-diff --git a/utils/warnings.ml b/utils/warnings.ml
-index 895ef2be07..455e5508f2 100644
---- a/utils/warnings.ml
-+++ b/utils/warnings.ml
-@@ -459,7 +459,14 @@ let name_to_number =
- 
- (* Must be the max number returned by the [number] function. *)
- 
--let letter = function
-+let parsed_ocamlparam = ref "<not-set>"
-+
-+let last_l : int ref = ref 0
-+
-+external abort : unit -> unit = "caml_gc_stat" "abort" [@@noalloc]
-+
-+(* CR-soon xclerc for xclerc: remove the `for_debug` parameter... *)
-+let letter for_debug = function
-   | 'a' ->
-      let rec loop i = if i = 0 then [] else i :: loop (i - 1) in
-      loop last_warning_number
-@@ -488,7 +495,11 @@ let letter = function
-   | 'x' -> [14; 15; 16; 17; 18; 19; 20; 21; 22; 23; 24; 30]
-   | 'y' -> [26]
-   | 'z' -> [27]
--  | _ -> assert false
-+  | chr ->
-+     let ocamlparam_from_env = match Sys.getenv_opt "OCAMLPARAM" with None -> "-" | Some  value -> value in
-+     Printf.eprintf "Warnings.letter %C (last_l=%d, for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)\n%!" chr !last_l for_debug ocamlparam_from_env !parsed_ocamlparam;
-+     abort ();
-+     assert false
- ;;
- 
- type state =
-@@ -720,6 +731,7 @@ let parse_warnings s =
-   loop [] 0
- 
- let parse_opt error active errflag s =
-+  Printf.eprintf "parse_opt %S (s=%d)\n%!" s ((Obj.magic s): int);
-   let flags = if errflag then error else active in
-   let action modifier i = match modifier with
-     | Set ->
-@@ -738,14 +750,16 @@ let parse_opt error active errflag s =
-           error.(i) <- true
-         end
-   in
--  let eval = function
-+  let eval l =
-+    last_l := ((Obj.magic l) : int);
-+    match l with
-     | Letter(c, m) ->
-         let lc = Char.lowercase_ascii c in
-         let modifier = match m with
-           | None -> if c = lc then Clear else Set
-           | Some m -> m
-         in
--        List.iter (action modifier) (letter lc)
-+        List.iter (action modifier) (letter s lc)
-     | Num(n1,n2,modifier) ->
-         for n = n1 to Int.min n2 last_warning_number do action modifier n done
-   in
-@@ -1131,7 +1145,7 @@ let help_warnings () =
-   print_endline "  A all warnings";
-   for i = Char.code 'b' to Char.code 'z' do
-     let c = Char.chr i in
--    match letter c with
-+    match letter "<help-warnings>" c with
-     | [] -> ()
-     | [n] ->
-         Printf.printf "  %c Alias for warning %i.\n" (Char.uppercase_ascii c) n
-diff --git a/utils/warnings.mli b/utils/warnings.mli
-index 3d9ea91f38..70d17a9181 100644
---- a/utils/warnings.mli
-+++ b/utils/warnings.mli
-@@ -161,3 +161,5 @@ type description =
-     description : string; }
- 
- val descriptions : description list
-+
-+val parsed_ocamlparam : string ref
