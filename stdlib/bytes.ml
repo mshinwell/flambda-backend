@@ -67,11 +67,8 @@ let to_string b = unsafe_to_string (copy b)
 let of_string s = copy (unsafe_of_string s)
 
 let sub s ofs len =
-  let length_s = length s in
-  if ofs < 0 || len < 0 || ofs > length_s - len
-  then invalid_arg ("String.sub / Bytes.sub: ofs=" ^ string_of_int ofs
-                    ^ ", len=" ^ string_of_int len
-                    ^ ", length_s=" ^ string_of_int length_s)
+  if ofs < 0 || len < 0 || ofs > length s - len
+  then invalid_arg "String.sub / Bytes.sub"
   else begin
     let r = create len in
     unsafe_blit s ofs r 0 len;

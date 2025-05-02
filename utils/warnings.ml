@@ -613,11 +613,6 @@ let name_to_number =
 
 let parsed_ocamlparam = ref "<not-set>"
 
-let last_l : int ref = ref 0
-
-external abort : unit -> unit = "caml_gc_stat" "abort" [@@noalloc]
-external getpid : unit -> (int64 [@unboxed]) = "caml_gc_stat" "getpid" [@@noalloc]
-
 (* CR-soon xclerc for xclerc: remove the `for_debug` parameter... *)
 let letter for_debug = function
   | 'a' ->
@@ -650,12 +645,7 @@ let letter for_debug = function
   | 'z' -> [27]
   | chr ->
     let ocamlparam_from_env = match Sys.getenv_opt "OCAMLPARAM" with None -> "-" | Some  value -> value in
-     Printf.eprintf "Warnings.letter %C (last_l=%d, for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)\n%!" chr !last_l for_debug ocamlparam_from_env !parsed_ocamlparam;
-     let pid = getpid () in
-     Printf.eprintf "our pid = %Ld\n" pid;
-     Printf.eprintf "calling abort\n%!";
-     abort ();
-     assert false
+    Misc.fatal_errorf "Warnings.letter %C (for_debug=%S, ocamlparam_from_env=%S ocamlparam_from_compenv=%S)" chr for_debug ocamlparam_from_env !parsed_ocamlparam
 
 type state =
   {
@@ -888,15 +878,9 @@ let parse_warnings s =
   in
   loop [] 0
 
-external caml_gc_stat : _ -> unit = "caml_gc_stat" "caml_gc_stat" [@@noalloc]
-
-let caml_enable_debug_file v =
-  caml_gc_stat v
-
-let[@local never][@inline never] parse_opt error active errflag s =
-  let _ = caml_enable_debug_file s in
+let parse_opt error active errflag s =
   let flags = if errflag then error else active in
-  let[@inline never][@local never] action modifier i = match modifier with
+  let action modifier i = match modifier with
     | Set ->
         if i = 3 then set_alert ~error:errflag ~enable:true "deprecated"
         else flags.(i) <- true
@@ -913,9 +897,7 @@ let[@local never][@inline never] parse_opt error active errflag s =
           error.(i) <- true
         end
   in
-  let[@inline never][@local never] eval l =
-    last_l := ((Obj.magic l) : int);
-    match l with
+  let eval = function
     | Letter(c, m) ->
         let lc = Char.lowercase_ascii c in
         let modifier = match m with
@@ -926,16 +908,14 @@ let[@local never][@inline never] parse_opt error active errflag s =
     | Num(n1,n2,modifier) ->
         for n = n1 to Misc.Stdlib.Int.min n2 last_warning_number do action modifier n done
   in
-  let[@inline never][@local never] parse_and_eval s =
+  let parse_and_eval s =
     let tokens = parse_warnings s in
     List.iter eval tokens;
     letter_alert tokens
   in
-  let _ = caml_enable_debug_file s in
-  match name_to_number s with
+   match name_to_number s with
   | Some n -> action Set n; None
   | None ->
-      let _ = caml_enable_debug_file s in
       if s = "" then parse_and_eval s
       else begin
         let rest = String.sub s 1 (String.length s - 1) in
@@ -949,8 +929,7 @@ let[@local never][@inline never] parse_opt error active errflag s =
 let parse_options errflag s =
   let error = Array.copy (!current).error in
   let active = Array.copy (!current).active in
-  let alerts = (parse_opt [@inlined never]) error active errflag s in
-  let _ = caml_enable_debug_file 0 in
+  let alerts = parse_opt error active errflag s in
   current := {(!current) with error; active};
   alerts
 

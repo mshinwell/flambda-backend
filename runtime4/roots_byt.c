@@ -142,5 +142,3 @@ CAMLexport void caml_do_local_roots_byt (scanning_action f, value *stack_low,
     }
   }
 }
-
-value caml_enable_debug_file() { return Val_unit;}
