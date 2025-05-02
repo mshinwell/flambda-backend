@@ -1022,11 +1022,20 @@ let simplify_atomic_set ~original_prim dacc ~original_term _dbg ~arg1:_
     (P.result_kind' original_prim)
     ~original_term
 
-let simplify_atomic_exchange ~original_prim dacc ~original_term _dbg ~arg1:_
-    ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
-  SPR.create_unknown dacc ~result_var
-    (P.result_kind' original_prim)
-    ~original_term
+let simplify_atomic_exchange ~(atomic_kind : P.Block_access_field_kind.t)
+    ~original_prim:_ dacc ~original_term _dbg ~arg1:_ ~arg1_ty:_ ~arg2:_
+    ~arg2_ty:_ ~result_var =
+  (* The only thing we can do is to propagate a better type for the result,
+     unlike for [Atomic_compare_exchange]. Specialization based on observed
+     arguments isn't possible in general here, because we might not know what
+     kind of value is already in the atomic. *)
+  let result_var_ty =
+    match atomic_kind with
+    | Immediate -> T.any_tagged_immediate
+    | Any_value -> T.any_value
+  in
+  let dacc = DA.add_variable dacc result_var result_var_ty in
+  SPR.create original_term ~try_reify:false dacc
 
 let simplify_atomic_int_arith ~original_prim dacc ~original_term _dbg ~op:_
     ~arg1:_ ~arg1_ty:_ ~arg2:_ ~arg2_ty:_ ~result_var =
@@ -1089,7 +1098,8 @@ let simplify_binary_primitive0 dacc original_prim (prim : P.binary_primitive)
     | Bigarray_get_alignment align ->
       simplify_bigarray_get_alignment align ~original_prim
     | Atomic_set _ -> simplify_atomic_set ~original_prim
-    | Atomic_exchange _ -> simplify_atomic_exchange ~original_prim
+    | Atomic_exchange atomic_kind ->
+      simplify_atomic_exchange ~atomic_kind ~original_prim
     | Atomic_int_arith op -> simplify_atomic_int_arith ~original_prim ~op
     | Poke _ -> simplify_poke
   in
