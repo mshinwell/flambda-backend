@@ -251,3 +251,24 @@ index 6a56cc2a27..0c7f6e7cb1 100644
        end
    | Cassign _ | Cifthenelse _ | Cswitch _ | Ccatch _ | Cexit _
    | Ctrywith _ -> false
+diff --git a/runtime/startup_nat.c b/runtime/startup_nat.c
+index b75732596a..0b8f93449b 100644
+--- a/runtime/startup_nat.c
++++ b/runtime/startup_nat.c
+@@ -113,12 +113,14 @@ value caml_startup_common(char_os **argv, int pooling)
+   caml_init_domain();
+   /* Determine options */
+ #ifdef DEBUG
+-  caml_verb_gc = 0x3F;
++  /* Silenced for flambda-backend builds to avoid excessively large CI logs */
++  /* caml_verb_gc = 0x3F; */
+ #endif
+   caml_parse_ocamlrunparam();
+   CAML_EVENTLOG_INIT();
+ #ifdef DEBUG
+-  caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
++  /* Silenced for flambda-backend builds to avoid excessively large CI logs */
++  /* caml_gc_message (-1, "### OCaml runtime: debug mode ###\n"); */
+ #endif
+   if (caml_cleanup_on_exit)
+     pooling = 1;
