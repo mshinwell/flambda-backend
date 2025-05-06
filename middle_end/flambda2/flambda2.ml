@@ -90,9 +90,7 @@ type run_result =
     reachable_names : NO.t
   }
 
-let build_run_result unit ~free_names ~final_typing_env ~all_code slot_offsets :
-    run_result =
-  let module_symbol = Flambda_unit.module_symbol unit in
+let finalize_slot_offsets ~free_names ~all_code slot_offsets =
   let function_slots_in_normal_projections =
     NO.function_slots_in_normal_projections free_names
   in
@@ -101,25 +99,46 @@ let build_run_result unit ~free_names ~final_typing_env ~all_code slot_offsets :
   in
   let all_function_slots = NO.all_function_slots free_names in
   let all_value_slots = NO.all_value_slots free_names in
-  let ({ used_value_slots; exported_offsets } : Slot_offsets.result) =
-    let used_slots : Slot_offsets.used_slots =
-      { function_slots_in_normal_projections;
-        all_function_slots;
-        value_slots_in_normal_projections;
-        all_value_slots
-      }
-    in
-    let get_code_metadata code_id =
-      Exported_code.find_exn all_code code_id |> Code_or_metadata.code_metadata
-    in
-    Slot_offsets.finalize_offsets slot_offsets ~get_code_metadata ~used_slots
+  let used_slots : Slot_offsets.used_slots =
+    { function_slots_in_normal_projections;
+      all_function_slots;
+      value_slots_in_normal_projections;
+      all_value_slots
+    }
   in
+  let get_code_metadata code_id =
+    Exported_code.find_exn all_code code_id |> Code_or_metadata.code_metadata
+  in
+  Slot_offsets.finalize_offsets slot_offsets ~get_code_metadata ~used_slots
+
+let build_run_result unit ~free_names ~final_typing_env ~all_code slot_offsets :
+    run_result =
+  let ({ used_value_slots; exported_offsets } : Slot_offsets.result) =
+    finalize_slot_offsets ~free_names ~all_code slot_offsets
+  in
+  let module_symbol = Flambda_unit.module_symbol unit in
   let reachable_names, cmx =
     Flambda_cmx.prepare_cmx_file_contents ~final_typing_env ~module_symbol
       ~used_value_slots ~exported_offsets all_code
   in
   let unit = Flambda_unit.with_used_value_slots unit used_value_slots in
   { cmx; unit; all_code; exported_offsets; reachable_names }
+
+let build_cmx_for_reaper_lto unit ~free_names ~final_typing_env ~all_code
+    slot_offsets : run_result =
+  let ({ used_value_slots; exported_offsets } : Slot_offsets.result) =
+    finalize_slot_offsets ~free_names ~all_code slot_offsets
+  in
+  Flambda_cmx.prepare_cmx_file_contents_for_reaper_lto ~final_typing_env
+    ~used_value_slots ~exported_offsets all_code
+
+type next_step =
+  | Generate_cmm of Flambda_unit.t * Exported_offsets.t * NO.t * Exported_code.t
+  | Reaper_traverse_result_saved_in_cmx
+
+type lambda_to_cmm_result =
+  | Cmm of Cmm.phrase list
+  | Exit_normally
 
 let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~keep_symbol_tables
     (program : Lambda.program) =
@@ -173,7 +192,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~keep_symbol_tables
     in
     Compiler_hooks.execute Raw_flambda2 raw_flambda;
     print_rawflambda ppf raw_flambda;
-    let flambda, offsets, reachable_names, cmx, all_code =
+    let next_step, cmx =
       match mode, close_program_metadata with
       | Classic, Classic (code, reachable_names, cmx, offsets) ->
         (if Flambda_features.inlining_report ()
@@ -183,7 +202,7 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~keep_symbol_tables
             Inlining_report.output_then_forget_decisions ~output_prefix
           in
           Compiler_hooks.execute Inlining_tree inlining_tree);
-        raw_flambda, offsets, reachable_names, cmx, code
+        Generate_cmm (raw_flambda, offsets, reachable_names, code), cmx
       | Normal, Normal ->
         let round = 0 in
         let { Simplify.free_names;
@@ -208,40 +227,57 @@ let lambda_to_cmm ~ppf_dump:ppf ~prefixname ~keep_symbol_tables
           (Flambda_features.dump_simplify ())
           ppf flambda;
         print_flexpect "simplify" ppf ~raw_flambda flambda;
-        let flambda, free_names, all_code, slot_offsets, last_pass_name =
-          if Flambda_features.enable_reaper ()
-          then (
-            let flambda, free_names, all_code, slot_offsets =
-              Profile.record_call ~accumulate:true "reaper" (fun () ->
-                  Flambda2_reaper.Reaper.run ~cmx_loader ~all_code flambda)
-            in
-            print_flexpect "reaper" ppf ~raw_flambda flambda;
-            flambda, free_names, all_code, slot_offsets, "reaper")
-          else flambda, free_names, all_code, slot_offsets, last_pass_name
-        in
-        print_flambda last_pass_name
-          (Flambda_features.dump_flambda ())
-          ppf flambda;
-        let { unit = flambda; exported_offsets; cmx; all_code; reachable_names }
-            =
-          build_run_result flambda ~free_names ~final_typing_env ~all_code
-            slot_offsets
-        in
-        Compiler_hooks.execute Reaped_flambda2 flambda;
-        flambda, exported_offsets, reachable_names, cmx, all_code
+        if Flambda_features.enable_reaper_lto ()
+        then
+          let traverse_result =
+            Profile.record_call ~accumulate:true "reaper-traverse" (fun () ->
+                Flambda2_reaper.Reaper.traverse flambda)
+          in
+          let cmx = assert false (* XXX *) in
+          Reaper_traverse_result_saved_in_cmx, cmx
+        else
+          let flambda, free_names, all_code, slot_offsets, last_pass_name =
+            if Flambda_features.enable_reaper ()
+            then (
+              let flambda, free_names, all_code, slot_offsets =
+                Profile.record_call ~accumulate:true "reaper" (fun () ->
+                    Flambda2_reaper.Reaper.run ~cmx_loader ~all_code flambda)
+              in
+              print_flexpect "reaper" ppf ~raw_flambda flambda;
+              flambda, free_names, all_code, slot_offsets, "reaper")
+            else flambda, free_names, all_code, slot_offsets, last_pass_name
+          in
+          print_flambda last_pass_name
+            (Flambda_features.dump_flambda ())
+            ppf flambda;
+          let { unit = flambda;
+                exported_offsets;
+                cmx;
+                all_code;
+                reachable_names
+              } =
+            build_run_result flambda ~free_names ~final_typing_env ~all_code
+              slot_offsets
+          in
+          Compiler_hooks.execute Reaped_flambda2 flambda;
+          ( Generate_cmm (flambda, exported_offsets, reachable_names, all_code),
+            cmx )
     in
     (match cmx with
     | None ->
       () (* Either opaque was passed, or there is no need to export offsets *)
     | Some cmx -> Compilenv.set_export_info cmx);
-    let cmm =
-      Flambda2_to_cmm.To_cmm.unit flambda ~all_code ~offsets ~reachable_names
-    in
-    if not keep_symbol_tables
-    then (
-      Compilenv.reset_info_tables ();
-      Flambda2_identifiers.Continuation.reset ();
-      Flambda2_identifiers.Int_ids.reset ());
-    cmm
+    match next_step with
+    | Generate_cmm (flambda, offsets, reachable_names, all_code) ->
+      let cmm =
+        Flambda2_to_cmm.To_cmm.unit flambda ~all_code ~offsets ~reachable_names
+      in
+      if not keep_symbol_tables
+      then (
+        Compilenv.reset_info_tables ();
+        Flambda2_identifiers.Continuation.reset ();
+        Flambda2_identifiers.Int_ids.reset ());
+      Cmm cmm
+    | Reaper_traverse_result_saved_in_cmx -> Exit_normally
   in
   Profile.record_call "flambda2" run

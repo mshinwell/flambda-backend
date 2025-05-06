@@ -47,6 +47,8 @@ val join_algorithm : unit -> join_algorithm
 
 val enable_reaper : unit -> bool
 
+val enable_reaper_lto : unit -> bool
+
 val kind_checks : unit -> bool
 
 val flat_float_array : unit -> bool

@@ -16,13 +16,17 @@
 
 (** Translate Lambda code to Cmm using Flambda 2. *)
 
+type lambda_to_cmm_result = private
+  | Cmm of Cmm.phrase list
+  | Exit_normally
+
 (** This function is not currently re-entrant. *)
 val lambda_to_cmm :
   ppf_dump:Format.formatter ->
   prefixname:string ->
   keep_symbol_tables:bool ->
   Lambda.program ->
-  Cmm.phrase list
+  lambda_to_cmm_result
 
 val get_module_info :
   Compilation_unit.t -> Flambda2_cmx.Flambda_cmx_format.t option
