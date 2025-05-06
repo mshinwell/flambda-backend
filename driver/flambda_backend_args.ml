@@ -352,6 +352,19 @@ let mk_no_flambda2_reaper f =
     (format_not_default Flambda2.Default.enable_reaper)
 ;;
 
+let mk_flambda2_reaper_lto f =
+  "-flambda2-reaper-lto", Arg.Unit f,
+  Printf.sprintf
+    " Enable reaper pass%s (Flambda2 only, implies -flambda2-reaper)"
+    (format_default Flambda2.Default.enable_reaper_lto)
+;;
+
+let mk_no_flambda2_reaper_lto f =
+  "-no-flambda2-reaper-lto", Arg.Unit f,
+  Printf.sprintf " Disable reaper pass%s (Flambda2 only)"
+    (format_not_default Flambda2.Default.enable_reaper_lto)
+;;
+
 let mk_flambda2_expert_fallback_inlining_heuristic f =
   "-flambda2-expert-fallback-inlining-heuristic", Arg.Unit f,
   Printf.sprintf " Prevent inlining of functions\n\
@@ -1166,6 +1179,8 @@ module Flambda_backend_options_impl = struct
   let flambda2_join_depth n = Flambda2.join_depth := Flambda_backend_flags.Set n
   let flambda2_reaper = set Flambda2.enable_reaper
   let no_flambda2_reaper = clear Flambda2.enable_reaper
+  let flambda2_reaper_lto = set Flambda2.enable_reaper_lto
+  let no_flambda2_reaper_lto = clear Flambda2.enable_reaper_lto
   let flambda2_expert_fallback_inlining_heuristic =
     set Flambda2.Expert.fallback_inlining_heuristic
   let no_flambda2_expert_fallback_inlining_heuristic =
@@ -1577,6 +1592,8 @@ module Extra_params = struct
       Flambda_backend_flags.cached_generic_functions_path := v; true
     | "reaper" ->
       set Flambda2.enable_reaper
+    | "reaper-lto" ->
+      set Flambda2.enable_reaper_lto
     | _ -> false
 end
 

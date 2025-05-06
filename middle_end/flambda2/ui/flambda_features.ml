@@ -73,9 +73,15 @@ let use_n_way_join () =
     false
   | N_way -> true
 
-let enable_reaper () =
+let enable_reaper_normal () =
   !Flambda_backend_flags.Flambda2.enable_reaper
   |> with_default ~f:(fun d -> d.enable_reaper)
+
+let enable_reaper_lto () =
+  !Flambda_backend_flags.Flambda2.enable_reaper_lto
+  |> with_default ~f:(fun d -> d.enable_reaper_lto)
+
+let enable_reaper () = enable_reaper_normal () || enable_reaper_lto ()
 
 let flat_float_array () = Config.flat_float_array
 

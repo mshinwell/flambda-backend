@@ -115,6 +115,7 @@ module Flambda2 : sig
     val join_algorithm : join_algorithm
     val function_result_types : function_result_types
     val enable_reaper : bool
+    val enable_reaper_lto : bool
     val unicode : bool
     val kind_checks : bool
   end
@@ -132,6 +133,7 @@ module Flambda2 : sig
     join_algorithm : join_algorithm;
     function_result_types : function_result_types;
     enable_reaper : bool;
+    enable_reaper_lto : bool;
     unicode : bool;
     kind_checks : bool;
   }
@@ -148,6 +150,7 @@ module Flambda2 : sig
   val join_depth : int or_default ref
   val join_algorithm : join_algorithm or_default ref
   val enable_reaper : bool or_default ref
+  val enable_reaper_lto : bool or_default ref
   val unicode : bool or_default ref
   val kind_checks : bool or_default ref
 

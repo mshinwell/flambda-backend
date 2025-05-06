@@ -134,6 +134,7 @@ module Flambda2 = struct
     let join_algorithm = Binary
     let function_result_types = Never
     let enable_reaper = false
+    let enable_reaper_lto = false
     let unicode = true
     let kind_checks = false
   end
@@ -148,6 +149,7 @@ module Flambda2 = struct
     join_algorithm : join_algorithm;
     function_result_types : function_result_types;
     enable_reaper : bool;
+    enable_reaper_lto : bool;
     unicode : bool;
     kind_checks : bool;
   }
@@ -162,6 +164,7 @@ module Flambda2 = struct
     join_algorithm = Default.join_algorithm;
     function_result_types = Default.function_result_types;
     enable_reaper = Default.enable_reaper;
+    enable_reaper_lto = Default.enable_reaper_lto;
     unicode = Default.unicode;
     kind_checks = Default.kind_checks;
   }
@@ -198,6 +201,7 @@ module Flambda2 = struct
   let kind_checks = ref Default
   let function_result_types = ref Default
   let enable_reaper = ref Default
+  let enable_reaper_lto = ref Default
 
   module Dump = struct
     type target = Nowhere | Main_dump_stream | File of Misc.filepath
