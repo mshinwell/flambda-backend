@@ -29,7 +29,9 @@
 
 (** Sections that hold DWARF debugging information. *)
 type normal_or_dwo =
-  | Normal  (** Non-split DWARF section in .o *)
+  | Normal
+      (** Non-split DWARF section in .o; or skeleton DWARF section in .o when
+          split DWARF is being used. *)
   | Dwo
       (** Section in .dwo or .dwp file (or .dwo embedded in .o).
           DWARF-5 spec section 7.3.2.2, page 188. *)

@@ -23,7 +23,12 @@ module DS = Dwarf_state
 module L = Linear
 
 type t =
-  { state : DS.t;
+  { skeleton_state : DS.t option;
+    (* [skeleton_state] is only used when emitting split DWARF. It is the state
+       for the DWARF information that will be written into the .o file. The main
+       body of the DWARF information will be written into the .cmx file; this is
+       accumulated in [main_state]. *)
+    main_state : DS.t;
     asm_directives : Asm_directives_dwarf.t;
     get_file_id : string -> int;
     mutable emitted : bool;
@@ -38,18 +43,9 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
   (match !Dwarf_flags.gdwarf_format with
   | Thirty_two -> Dwarf_format.set Thirty_two
   | Sixty_four -> Dwarf_format.set Sixty_four);
-  let compilation_unit_proto_die =
+  let compile_unit_proto_dies =
     Dwarf_compilation_unit.compile_unit_proto_die ~sourcefile ~unit_name
       ~code_begin ~code_end
-  in
-  let compilation_unit_header_label = Asm_label.create (DWARF Debug_info) in
-  let value_type_proto_die =
-    Proto_die.create ~parent:(Some compilation_unit_proto_die) ~tag:Base_type
-      ~attribute_values:
-        [ DAH.create_name "ocaml_value";
-          DAH.create_encoding ~encoding:Encoding_attribute.signed;
-          DAH.create_byte_size_exn ~byte_size:Arch.size_addr ]
-      ()
   in
   let start_of_code_symbol =
     Cmm_helpers.make_symbol "code_begin" |> Asm_symbol.create
@@ -58,15 +54,48 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
   let debug_ranges_table = Debug_ranges_table.create () in
   let address_table = Address_table.create () in
   let location_list_table = Location_list_table.create () in
-  let state =
+  let skeleton_state =
+    match compile_unit_proto_dies with
+    | Normal _ -> None
+    | Dwo { skeleton; dwo = _ } ->
+      let compilation_unit_header_label =
+        Asm_label.create (DWARF (Debug_info Normal))
+      in
+      Some
+        (DS.create ~compilation_unit_header_label
+           ~compilation_unit_proto_die:skeleton ~value_type_proto_die:None
+           ~start_of_code_symbol debug_loc_table debug_ranges_table
+           address_table location_list_table ~get_file_num:get_file_id)
+    (* CR mshinwell: does get_file_id successfully emit .file directives for
+       files we haven't seen before? *)
+  in
+  let main_state =
+    let compilation_unit_proto_die, section_kind =
+      match compile_unit_proto_dies with
+      | Normal compilation_unit_proto_die ->
+        compilation_unit_proto_die, Asm_section.Normal
+      | Dwo { skeleton = _; dwo } -> dwo, Asm_section.Dwo
+    in
+    let compilation_unit_header_label =
+      Asm_label.create (DWARF (Debug_info section_kind))
+    in
+    let value_type_proto_die =
+      Proto_die.create ~parent:(Some compilation_unit_proto_die) ~tag:Base_type
+        ~attribute_values:
+          [ DAH.create_name "ocaml_value";
+            DAH.create_encoding ~encoding:Encoding_attribute.signed;
+            DAH.create_byte_size_exn ~byte_size:Arch.size_addr ]
+        ()
+    in
     DS.create ~compilation_unit_header_label ~compilation_unit_proto_die
-      ~value_type_proto_die ~start_of_code_symbol debug_loc_table
-      debug_ranges_table address_table location_list_table
+      ~value_type_proto_die:(Some value_type_proto_die) ~start_of_code_symbol
+      debug_loc_table debug_ranges_table address_table location_list_table
       ~get_file_num:get_file_id
     (* CR mshinwell: does get_file_id successfully emit .file directives for
        files we haven't seen before? *)
   in
-  { state;
+  { skeleton_state;
+    main_state;
     asm_directives;
     emitted = false;
     emitted_delayed = false;
@@ -98,7 +127,7 @@ let dwarf_for_fundecl t fundecl ~fun_end_label =
         (fun fundecl -> Inlined_frame_ranges.create fundecl)
         ~accumulate:true fundecl
     in
-    Dwarf_concrete_instances.for_fundecl ~get_file_id:t.get_file_id t.state
+    Dwarf_concrete_instances.for_fundecl ~get_file_id:t.get_file_id t.main_state
       fundecl
       ~fun_end_label:(Asm_label.create_int Text (fun_end_label |> Label.to_int))
       available_ranges_vars inlined_frame_ranges;
@@ -110,21 +139,34 @@ let emit t ~basic_block_sections ~binary_backend_available =
     Misc.fatal_error
       "Cannot call [Dwarf.emit] more than once on a given value of type \
        [Dwarf.t]";
-  if !Dwarf_flags.split_dwarf
-  then
-    (* Save DWARF IR to the .cmx file *)
-    Compilenv.set_debug_info (DS.Serialized.create t.state)
-  else (
+  t.emitted <- true;
+  match t.skeleton_state with
+  | None ->
+    assert (not !Dwarf_flags.split_dwarf);
     (* Emit DWARF to the .o file / binary emitter *)
-    t.emitted <- true;
-    Dwarf_world.emit ~asm_directives:t.asm_directives
-      ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.state)
-      ~compilation_unit_header_label:(DS.compilation_unit_header_label t.state)
-      ~debug_loc_table:(DS.debug_loc_table t.state)
-      ~debug_ranges_table:(DS.debug_ranges_table t.state)
-      ~address_table:(DS.address_table t.state)
-      ~location_list_table:(DS.location_list_table t.state)
-      ~basic_block_sections ~binary_backend_available)
+    Dwarf_world.emit ~asm_directives:t.asm_directives Normal
+      ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.main_state)
+      ~compilation_unit_header_label:
+        (DS.compilation_unit_header_label t.main_state)
+      ~debug_loc_table:(DS.debug_loc_table t.main_state)
+      ~debug_ranges_table:(DS.debug_ranges_table t.main_state)
+      ~address_table:(DS.address_table t.main_state)
+      ~location_list_table:(DS.location_list_table t.main_state)
+      ~basic_block_sections ~binary_backend_available
+  | Some skeleton_state ->
+    (* Cause the main DWARF IR to be saved to the .cmx file *)
+    assert !Dwarf_flags.split_dwarf;
+    Compilenv.set_debug_info (DS.Serialized.create t.main_state);
+    (* Emit the skeleton DWARF to the .o file / binary emitter *)
+    Dwarf_world.emit ~asm_directives:t.asm_directives Normal
+      ~compilation_unit_proto_die:(DS.compilation_unit_proto_die skeleton_state)
+      ~compilation_unit_header_label:
+        (DS.compilation_unit_header_label skeleton_state)
+      ~debug_loc_table:(DS.debug_loc_table skeleton_state)
+      ~debug_ranges_table:(DS.debug_ranges_table skeleton_state)
+      ~address_table:(DS.address_table skeleton_state)
+      ~location_list_table:(DS.location_list_table skeleton_state)
+      ~basic_block_sections ~binary_backend_available
 
 let emit t ~basic_block_sections ~binary_backend_available =
   Profile.record "emit_dwarf"

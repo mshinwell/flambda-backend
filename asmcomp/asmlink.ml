@@ -43,6 +43,7 @@ type unit_link_info = {
   crc: Digest.t;
   (* for shared libs *)
   dynunit : Cmxs_format.dynunit option;
+  dwarf : Dwarf_state.Serialized.t option;
 }
 
 (* Consistency check between interfaces and implementations *)
@@ -234,7 +235,9 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
           crc;
           defines = info.ui_defines;
           file_name;
-          dynunit }
+          dynunit;
+          dwarf = if !Dwarf_flags.split_dwarf then info.ui_debug_info else None
+        }
       in
       let object_file_name =
         Filename.chop_suffix file_name ".cmx" ^ ext_obj in
@@ -297,12 +300,31 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
                      imports_list infos.lib_imports_cmx info.li_imports_cmx
                      |> Array.of_list }
              in
+             let dwarf =
+                if not !Dwarf_flags.split_dwarf then None
+                else
+                  let cmx =
+                    Filename.concat
+                      (Filename.concat
+                        (Filename.dirname file_name)
+                        (CU.base_filename info.li_name))
+                      ".cmx"
+                  in
+                  (* CR mshinwell: might want to emit warnings here in case
+                     of failure, although actually the Library case should be
+                     an error *)
+                  match read_file cmx with
+                  | exception _ | Library _ -> None
+                  | Unit (_, info, _) -> info.ui_debug_info
+             in
              let unit =
                { name = info.li_name;
                  crc = info.li_crc;
                  defines = info.li_defines;
                  file_name;
-                 dynunit }
+                 dynunit;
+                 dwarf
+               }
              in
              check_consistency ~unit [| |] [| |];
              unit :: reqd
@@ -447,6 +469,8 @@ let call_linker_shared ?(native_toplevel = false) file_list output_name =
   then raise(Error(Linking_error exitcode))
 
 let link_shared unix ~ppf_dump objfiles output_name =
+  if !Dwarf_flags.split_dwarf then (* XXX proper error *)
+    Misc.fatal_error "Split DWARF not supported for shared libraries";
   Profile.(record_call (annotate_file_name output_name)) (fun () ->
     if !Flambda_backend_flags.use_cached_generic_functions then
       (* When doing shared linking do not use the shared generated startup file.
@@ -520,6 +544,35 @@ let call_linker file_list_rev startup_file output_name =
   if not (exitcode = 0)
   then raise(Error(Linking_error exitcode))
 
+(* Third pass: generate a DWARF .dwp file *)
+
+let keep_dwp_dot_s = true (* XXX move to a command-line flag *)
+
+let generate_dwarf_dwp ~output_name ~units_tolink =
+  assert !Dwarf_flags.split_dwarf;
+  let asm_file =
+    if keep_dwp_dot_s then output_name ^ ".dwp" ^ ext_asm
+    else Filename.temp_file "camlstartup" ext_asm
+  in
+  let dwp_file = output_name ^ ".dwp" in
+  let remove_asm_file () =
+    if not keep_dwp_dot_s then remove_file asm_file
+  in
+  Misc.try_finally
+    ~exceptionally:(fun () -> remove_file dwp_file)
+    (fun () ->
+      Emitaux.output_channel := open_out asm_file;
+      Misc.try_finally
+        (fun () ->
+          List.iter (fun unit ->
+              match unit.dwarf with
+              | None -> ()
+              | Some dwarf -> xxx ()  (* probably needs to call Dwarf.emit_foo *)
+            )
+            units_tolink)
+        ~always:(fun () -> close_out !Emitaux.output_channel)
+        ~exceptionally:remove_asm_file
+
 let reset () =
   Cmi_consistbl.clear crc_interfaces;
   Cmx_consistbl.clear crc_implementations;
@@ -573,7 +626,10 @@ let link unix ~ppf_dump objfiles output_name =
                    genfns units_tolink cached_genfns_imports);
     Emitaux.reduce_heap_size ~reset:(fun () -> reset ());
     Misc.try_finally
-      (fun () -> call_linker ml_objfiles startup_obj output_name)
+      (fun () ->
+        call_linker ml_objfiles startup_obj output_name;
+        if !Dwarf_flags.split_dwarf then
+          generate_dwarf_dwp ~output_name ~units_tolink;
       ~always:(fun () -> remove_file startup_obj)
   )
 
@@ -584,7 +640,8 @@ let check_consistency file_name u crc =
       name = u.ui_unit;
       defines = u.ui_defines;
       crc;
-      dynunit = None }
+      dynunit = None;
+      dwarf = None }
   in
   check_consistency ~unit
     (Array.of_list u.ui_imports_cmi) (Array.of_list u.ui_imports_cmx)

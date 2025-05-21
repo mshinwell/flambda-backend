@@ -25,7 +25,8 @@ type dwarf_state = t
 val create :
   compilation_unit_header_label:Asm_label.t ->
   compilation_unit_proto_die:Proto_die.t ->
-  value_type_proto_die:Proto_die.t ->
+  value_type_proto_die:Proto_die.t option ->
+  (* [value_type_proto_die] is not provided for skeleton units. *)
   start_of_code_symbol:Asm_symbol.t ->
   Debug_loc_table.t ->
   Debug_ranges_table.t ->
@@ -38,7 +39,7 @@ val compilation_unit_header_label : t -> Asm_label.t
 
 val compilation_unit_proto_die : t -> Proto_die.t
 
-val value_type_proto_die : t -> Proto_die.t
+val value_type_proto_die : t -> Proto_die.t option
 
 val start_of_code_symbol : t -> Asm_symbol.t
 

@@ -692,14 +692,16 @@ let mk_gdwarf_max_function_complexity f =
 
 let mk_gsplit_dwarf f =
   "-gsplit-dwarf", Arg.Unit f,
-    Format.sprintf " Write DWARF (except for source location and stack \
-        unwinding information) to .cmx files instead of .o files, for use at \
-        link time with -gdwp%s"
+    Format.sprintf " At compile time, write DWARF (except for source location \
+        and stack unwinding information) to .cmx files instead of .o files, \
+        for use at link time with -gsplit-dwarf.  At link time, generate a \
+        .dwp file containing the split DWARF.  %s"
       (if !Dwarf_flags.split_dwarf then " (default)" else "")
 
 let mk_no_gsplit_dwarf f =
   "-gno-split-dwarf", Arg.Unit f,
-    Format.sprintf " Write all DWARF information to .o files%s"
+    Format.sprintf " Write all DWARF information to .o files, no DWARF \
+        fission %s"
       (if !Dwarf_flags.split_dwarf then "" else " (default)")
 
 let mk_use_cached_generic_functions f =
