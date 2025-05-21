@@ -24,6 +24,8 @@ type result_dies =
         dwo : Proto_die.t
       }
 
+(* XXX need to set the dwo_id in the unit header *)
+
 let compile_unit_proto_die ~sourcefile ~unit_name ~code_begin ~code_end =
   let source_filename = Filename.basename sourcefile in
   let comp_dir =
@@ -48,7 +50,15 @@ let compile_unit_proto_die ~sourcefile ~unit_name ~code_begin ~code_end =
       DAH.create_low_pc_from_symbol code_begin;
       DAH.create_high_pc_from_symbol ~low_pc:code_begin code_end ]
   in
-  let attribute_values_only_skeleton = [DAH.create_dwo_name "foo"] in
+  let attribute_values_only_skeleton =
+    [ (* DWARF-5 spec page 67: "containing the full or relative path name
+         (relative to the value of the DW_AT_comp_dir attribute, see below) of
+         the object file that contains the full compilation unit." *)
+      (* XXX what should this be set to? If we're not making .dwo, there is no
+         name to put here. Is this supposed to be the .dwp name? If so we don't
+         know which directory it might be in... *)
+      DAH.create_dwo_name "foo" ]
+  in
   let attribute_values_both_normal_and_dwo =
     [ DAH.create_name source_filename;
       (* The [OCaml] attribute value here is only defined in DWARF-5, but it
@@ -59,7 +69,6 @@ let compile_unit_proto_die ~sourcefile ~unit_name ~code_begin ~code_end =
       DAH.create_ocaml_unit_name unit_name;
       DAH.create_ocaml_compiler_version Sys.ocaml_version ]
   in
-  let attribute_values_only_dwo = [] in
   if not !Dwarf_flags.split_dwarf
   then
     let attribute_values =
@@ -70,7 +79,7 @@ let compile_unit_proto_die ~sourcefile ~unit_name ~code_begin ~code_end =
       (Proto_die.create ~parent:None ~tag:Compile_unit ~attribute_values ())
   else
     let skeleton =
-      Proto_die.create ~normal_or_dwo:Normal ~parent:None ~tag:Compile_unit
+      Proto_die.create ~normal_or_dwo:Normal ~parent:None ~tag:Skeleton_unit
         ~attribute_values:
           (attribute_values_both_normal_and_skeleton
          @ attribute_values_only_skeleton)
@@ -78,8 +87,6 @@ let compile_unit_proto_die ~sourcefile ~unit_name ~code_begin ~code_end =
     in
     let dwo =
       Proto_die.create ~normal_or_dwo:Dwo ~parent:None ~tag:Compile_unit
-        ~attribute_values:
-          (attribute_values_both_normal_and_dwo @ attribute_values_only_dwo)
-        ()
+        ~attribute_values:attribute_values_both_normal_and_dwo ()
     in
     Dwo { skeleton; dwo }

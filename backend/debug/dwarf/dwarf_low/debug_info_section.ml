@@ -20,13 +20,17 @@ module DIE = Debugging_information_entry
 module A = Asm_directives
 
 type t =
-  { dies : DIE.t list;
+  { unit_type : Unit_type.t;
+    dies : DIE.t list;
     debug_abbrev_label : Asm_label.t;
     compilation_unit_header_label : Asm_label.t
   }
 
 let create ~dies ~debug_abbrev_label ~compilation_unit_header_label =
-  { dies; debug_abbrev_label; compilation_unit_header_label }
+  let unit_type : Unit_type.t =
+    if !Dwarf_flags.split_dwarf then Skeleton else Compile
+  in
+  { unit_type; dies; debug_abbrev_label; compilation_unit_header_label }
 
 let dwarf_version () =
   match !Dwarf_flags.gdwarf_version with
@@ -44,8 +48,6 @@ let address_width_in_bytes_on_target =
   Dwarf_value.int8 ~comment:"Dwarf_arch_sizes.size_addr"
     (Numbers.Int8.of_int_exn Dwarf_arch_sizes.size_addr)
 
-let unit_type = Unit_type.Compile
-
 let size_without_first_word t =
   let ( + ) = Dwarf_int.add in
   let total_die_size =
@@ -61,7 +63,7 @@ let size_without_first_word t =
     + total_die_size
   | Five ->
     Dwarf_version.size (dwarf_version ())
-    + Unit_type.size unit_type
+    + Unit_type.size t.unit_type
     + Dwarf_value.size address_width_in_bytes_on_target
     + Dwarf_value.size (debug_abbrev_offset t)
     + total_die_size
@@ -82,7 +84,7 @@ let emit ~asm_directives t =
     Dwarf_value.emit ~asm_directives (debug_abbrev_offset t);
     Dwarf_value.emit ~asm_directives address_width_in_bytes_on_target
   | Five ->
-    Unit_type.emit ~asm_directives unit_type;
+    Unit_type.emit ~asm_directives t.unit_type;
     Dwarf_value.emit ~asm_directives address_width_in_bytes_on_target;
     Dwarf_value.emit ~asm_directives (debug_abbrev_offset t));
   A.new_line ();
