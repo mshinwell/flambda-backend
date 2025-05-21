@@ -60,6 +60,7 @@ let current_unit =
     ui_force_link = false;
     ui_zero_alloc_info = Zero_alloc_info.create ();
     ui_export_info = None;
+    ui_debug_info = None;
     ui_external_symbols = []
   }
 
@@ -79,6 +80,7 @@ let reset compilation_unit =
   Zero_alloc_info.reset current_unit.ui_zero_alloc_info;
   Hashtbl.clear exported_constants;
   current_unit.ui_export_info <- None;
+  current_unit.ui_debug_info <- None;
   current_unit.ui_external_symbols <- []
 
 let record_external_symbols () =
@@ -122,6 +124,7 @@ let read_unit_info filename =
         ui_imports_cmx = uir.uir_imports_cmx |> Array.to_list;
         ui_generic_fns = uir.uir_generic_fns;
         ui_export_info = export_info;
+        ui_debug_info = uir.uir_debug_info;
         ui_zero_alloc_info = Zero_alloc_info.of_raw uir.uir_zero_alloc_info;
         ui_force_link = uir.uir_force_link;
         ui_external_symbols = uir.uir_external_symbols |> Array.to_list
@@ -216,6 +219,8 @@ let cache_unit_info ui =
 let set_export_info export_info =
   current_unit.ui_export_info <- Some export_info
 
+let set_debug_info debug_info = current_unit.ui_debug_info <- Some debug_info
+
 (* Record that a currying function or application function is needed *)
 
 let need_curry_fun kind arity result =
@@ -264,6 +269,9 @@ let write_unit_info info filename =
       Some info, sections
   in
   let serialized_sections, toc, total_length =
+    (* CR mshinwell: [File_sections] needs fixing to allow groups of sections
+       for different things, e.g. flambda2, debug info, etc. It isn't obvious at
+       first sight how to do this. *)
     File_sections.serialize sections
   in
   let raw_info =
@@ -275,6 +283,7 @@ let write_unit_info info filename =
       uir_format = info.ui_format;
       uir_generic_fns = info.ui_generic_fns;
       uir_export_info = raw_export_info;
+      uir_debug_info = info.ui_debug_info;
       uir_zero_alloc_info = Zero_alloc_info.to_raw info.ui_zero_alloc_info;
       uir_force_link = info.ui_force_link;
       uir_section_toc = toc;

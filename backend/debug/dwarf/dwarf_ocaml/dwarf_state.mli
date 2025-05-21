@@ -20,6 +20,8 @@ open Dwarf_high
 
 type t
 
+type dwarf_state = t
+
 val create :
   compilation_unit_header_label:Asm_label.t ->
   compilation_unit_proto_die:Proto_die.t ->
@@ -57,4 +59,12 @@ val get_file_num : t -> string -> int
 
 module Debug : sig
   val log : ('a, Format.formatter, unit) format -> 'a
+end
+
+module Serialized : sig
+  type t
+
+  val create : dwarf_state -> t
+
+  val to_dwarf_state : t -> dwarf_state
 end

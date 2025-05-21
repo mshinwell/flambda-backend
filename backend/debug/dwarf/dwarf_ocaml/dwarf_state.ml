@@ -30,6 +30,8 @@ type t =
     get_file_num : string -> int
   }
 
+type dwarf_state = t
+
 let create ~compilation_unit_header_label ~compilation_unit_proto_die
     ~value_type_proto_die ~start_of_code_symbol debug_loc_table
     debug_ranges_table address_table location_list_table ~get_file_num =
@@ -72,4 +74,12 @@ module Debug = struct
     match Sys.getenv "DWARF_DEBUG" with
     | exception Not_found -> Format.ifprintf Format.err_formatter f
     | _ -> Format.eprintf f
+end
+
+module Serialized = struct
+  type t = dwarf_state
+
+  let create t = t
+
+  let to_dwarf_state t = t
 end

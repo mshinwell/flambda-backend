@@ -32,7 +32,7 @@ let create ~label ~name ~abbreviation_code ~attribute_values =
 
 let null =
   lazy
-    { label = Asm_label.create (DWARF Debug_info);
+    { label = Asm_label.create (DWARF (Debug_info Normal));
       name = None;
       abbreviation_code = Abbreviation_code.null;
       attribute_values = ASS.Map.empty

@@ -28,6 +28,7 @@ type error =
   | Linking_error
   | Assembler_error of string
   | File_not_found of string
+  | Split_dwarf_not_supported
 
 exception Error of error
 
@@ -167,6 +168,7 @@ let make_package_object unix ~ppf_dump members target coercion
 (* Make the .cmx file for the package *)
 
 let build_package_cmx members cmxfile ~main_module_block_size =
+  if !Dwarf_flags.split_dwarf then raise (Error Split_dwarf_not_supported);
   let unit_names =
     List.map (fun m -> m.pm_name) members in
   let filter lst =
@@ -220,6 +222,7 @@ let build_package_cmx members cmxfile ~main_module_block_size =
       ui_force_link =
           List.exists (fun info -> info.ui_force_link) units;
       ui_export_info;
+      ui_debug_info = None;
       ui_zero_alloc_info;
       ui_external_symbols = union (List.map (fun info -> info.ui_external_symbols) units);
     } in
@@ -298,6 +301,8 @@ let report_error ppf = function
       fprintf ppf "Error while assembling %a" Style.inline_code file
   | Linking_error ->
       fprintf ppf "Error during partial linking"
+  | Split_dwarf_not_supported ->
+      fprintf ppf "Packing is not supported in conjunction with -gsplit-dwarf"
 
 let () =
   Location.register_error_of_exn

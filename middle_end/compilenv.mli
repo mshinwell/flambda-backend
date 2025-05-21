@@ -40,6 +40,8 @@ val get_unit_export_info :
 val set_export_info : Flambda2_cmx.Flambda_cmx_format.t -> unit
 (* Set the export information for the current unit. *)
 
+val set_debug_info : Dwarf_state.Serialized.t -> unit
+
 val need_curry_fun :
   Lambda.function_kind -> Cmm.machtype list -> Cmm.machtype -> unit
 

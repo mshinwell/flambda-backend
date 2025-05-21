@@ -56,6 +56,8 @@ val create_producer : string -> Dwarf_attribute_values.Attribute_value.t
 
 val create_name : string -> Dwarf_attribute_values.Attribute_value.t
 
+val create_dwo_name : string -> Dwarf_attribute_values.Attribute_value.t
+
 val create_comp_dir : string -> Dwarf_attribute_values.Attribute_value.t
 
 val create_stmt_list :

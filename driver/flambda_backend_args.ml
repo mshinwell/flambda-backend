@@ -690,6 +690,18 @@ let mk_gdwarf_max_function_complexity f =
       \     will not be emitted, to improve compilation time (default %d)"
     !Dwarf_flags.dwarf_max_function_complexity
 
+let mk_gsplit_dwarf f =
+  "-gsplit-dwarf", Arg.Unit f,
+    Format.sprintf " Write DWARF (except for source location and stack \
+        unwinding information) to .cmx files instead of .o files, for use at \
+        link time with -gdwp%s"
+      (if !Dwarf_flags.split_dwarf then " (default)" else "")
+
+let mk_no_gsplit_dwarf f =
+  "-gno-split-dwarf", Arg.Unit f,
+    Format.sprintf " Write all DWARF information to .o files%s"
+      (if !Dwarf_flags.split_dwarf then "" else " (default)")
+
 let mk_use_cached_generic_functions f =
   "-use-cached-generic-functions", Arg.Unit f, " Use the cached generated functions"
 ;;
@@ -1299,6 +1311,8 @@ module type Debugging_options = sig
   val gdwarf_may_alter_codegen : unit -> unit
   val no_gdwarf_may_alter_codegen : unit -> unit
   val gdwarf_max_function_complexity : int -> unit
+  val gsplit_dwarf : unit -> unit
+  val no_gsplit_dwarf : unit -> unit
 end
 
 module Make_debugging_options (F : Debugging_options) = struct
@@ -1312,6 +1326,8 @@ module Make_debugging_options (F : Debugging_options) = struct
     mk_gdwarf_may_alter_codegen F.gdwarf_may_alter_codegen;
     mk_no_gdwarf_may_alter_codegen F.no_gdwarf_may_alter_codegen;
     mk_gdwarf_max_function_complexity F.gdwarf_max_function_complexity;
+    mk_gsplit_dwarf F.gsplit_dwarf;
+    mk_no_gsplit_dwarf F.no_gsplit_dwarf;
    ]
 end
 
@@ -1334,6 +1350,10 @@ module Debugging_options_impl = struct
     Debugging.gdwarf_may_alter_codegen := false
   let gdwarf_max_function_complexity c =
     Debugging.dwarf_max_function_complexity := c
+  let gsplit_dwarf () =
+    Debugging.split_dwarf := true
+  let no_gsplit_dwarf () =
+    Debugging.split_dwarf := false
 end
 
 module Extra_params = struct

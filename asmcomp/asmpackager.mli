@@ -37,6 +37,7 @@ type error =
   | Linking_error
   | Assembler_error of string
   | File_not_found of string
+  | Split_dwarf_not_supported
 
 exception Error of error
 

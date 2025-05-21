@@ -20,6 +20,7 @@ open Dwarf_low
 
 val emit :
   asm_directives:Asm_directives_dwarf.t ->
+  Asm_section.normal_or_dwo ->
   compilation_unit_proto_die:Proto_die.t ->
   compilation_unit_header_label:Asm_label.t ->
   debug_loc_table:Debug_loc_table.t ->

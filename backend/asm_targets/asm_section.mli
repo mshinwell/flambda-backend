@@ -28,17 +28,25 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 (** Sections that hold DWARF debugging information. *)
+type normal_or_dwo =
+  | Normal  (** Non-split DWARF section in .o *)
+  | Dwo
+      (** Section in .dwo or .dwp file (or .dwo embedded in .o).
+          DWARF-5 spec section 7.3.2.2, page 188. *)
+
 type dwarf_section =
-  | Debug_info
-  | Debug_abbrev
+  | Debug_info of normal_or_dwo
+  | Debug_abbrev of normal_or_dwo
   | Debug_aranges
   | Debug_addr
   | Debug_loc
   | Debug_ranges
-  | Debug_loclists
-  | Debug_rnglists
+  | Debug_loclists of normal_or_dwo
+  | Debug_rnglists of normal_or_dwo
   | Debug_str
-  | Debug_line
+  | Debug_line of normal_or_dwo
+  | Debug_str_offsets of normal_or_dwo
+  | Debug_macro of normal_or_dwo
 
 type t =
   | DWARF of dwarf_section
@@ -62,7 +70,7 @@ type section_details = private
     is_delayed : bool
   }
 
-val dwarf_sections_in_order : unit -> t list
+val dwarf_sections_in_order : normal_or_dwo -> t list
 
 (* If [is_delayed] = true the corresponding section will be emitted after
    text *)

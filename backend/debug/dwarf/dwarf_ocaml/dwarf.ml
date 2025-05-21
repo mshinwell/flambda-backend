@@ -110,15 +110,21 @@ let emit t ~basic_block_sections ~binary_backend_available =
     Misc.fatal_error
       "Cannot call [Dwarf.emit] more than once on a given value of type \
        [Dwarf.t]";
-  t.emitted <- true;
-  Dwarf_world.emit ~asm_directives:t.asm_directives
-    ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.state)
-    ~compilation_unit_header_label:(DS.compilation_unit_header_label t.state)
-    ~debug_loc_table:(DS.debug_loc_table t.state)
-    ~debug_ranges_table:(DS.debug_ranges_table t.state)
-    ~address_table:(DS.address_table t.state)
-    ~location_list_table:(DS.location_list_table t.state)
-    ~basic_block_sections ~binary_backend_available
+  if !Dwarf_flags.split_dwarf
+  then
+    (* Save DWARF IR to the .cmx file *)
+    Compilenv.set_debug_info (DS.Serialized.create t.state)
+  else (
+    (* Emit DWARF to the .o file / binary emitter *)
+    t.emitted <- true;
+    Dwarf_world.emit ~asm_directives:t.asm_directives
+      ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.state)
+      ~compilation_unit_header_label:(DS.compilation_unit_header_label t.state)
+      ~debug_loc_table:(DS.debug_loc_table t.state)
+      ~debug_ranges_table:(DS.debug_ranges_table t.state)
+      ~address_table:(DS.address_table t.state)
+      ~location_list_table:(DS.location_list_table t.state)
+      ~basic_block_sections ~binary_backend_available)
 
 let emit t ~basic_block_sections ~binary_backend_available =
   Profile.record "emit_dwarf"
@@ -131,9 +137,11 @@ let emit_delayed t ~basic_block_sections ~binary_backend_available =
     Misc.fatal_error
       "Cannot call [Dwarf.emit_delayed] more than once on a given value of \
        type [Dwarf.t]";
-  t.emitted_delayed <- true;
-  Dwarf_world.emit_delayed ~asm_directives:t.asm_directives
-    ~basic_block_sections ~binary_backend_available
+  if not !Dwarf_flags.split_dwarf
+  then (
+    t.emitted_delayed <- true;
+    Dwarf_world.emit_delayed ~asm_directives:t.asm_directives
+      ~basic_block_sections ~binary_backend_available)
 
 let emit_delayed t ~basic_block_sections ~binary_backend_available =
   Profile.record "emit_delayed_dwarf"

@@ -145,7 +145,8 @@ type dwarf_version =
   | Four
   | Five
 
-let default_gdwarf_version = Four
+let default_gdwarf_version = Five
+(* XXX we don't support DWARF 4 + split-dwarf *)
 
 let gdwarf_version = ref default_gdwarf_version
 
@@ -172,3 +173,5 @@ let gdwarf_self_tail_calls = ref default_gdwarf_self_tail_calls
 let gdwarf_may_alter_codegen = ref false
 
 let dwarf_inlined_frames = ref false
+
+let split_dwarf = ref true

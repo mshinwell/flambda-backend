@@ -19,9 +19,16 @@
 open Asm_targets
 open Dwarf_high
 
+type result_dies = private
+  | Normal of Proto_die.t
+  | Dwo of
+      { skeleton : Proto_die.t;
+        dwo : Proto_die.t
+      }
+
 val compile_unit_proto_die :
   sourcefile:string ->
   unit_name:Ident.t ->
   code_begin:Asm_symbol.t ->
   code_end:Asm_symbol.t ->
-  Proto_die.t
+  result_dies

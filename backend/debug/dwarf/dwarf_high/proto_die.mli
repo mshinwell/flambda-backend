@@ -32,12 +32,18 @@ type t
 (** For creation of proto-DIEs in a group, with references between them. *)
 type reference = Asm_label.t
 
-val create_reference : unit -> reference
+(* [normal_or_dwo] defaults to [Normal] unless split DWARF generation is in
+   effect. *)
+val create_reference :
+  ?normal_or_dwo:Asm_section.normal_or_dwo -> unit -> reference
 
 (* It is an error for [parent] to be [None] unless the [tag] is that for a
-   compilation unit (which is a top-level entity). *)
+   compilation unit (which is a top-level entity).
+
+   [normal_or_dwo] defaults as described above. *)
 val create :
   ?reference:reference ->
+  ?normal_or_dwo:Asm_section.normal_or_dwo ->
   ?sort_priority:int ->
   ?location_list_in_debug_loc_table:Dwarf_4_location_list.t ->
   parent:t option ->
@@ -48,6 +54,7 @@ val create :
 
 val create_ignore :
   ?reference:reference ->
+  ?normal_or_dwo:Asm_section.normal_or_dwo ->
   ?sort_priority:int ->
   ?location_list_in_debug_loc_table:Dwarf_4_location_list.t ->
   parent:t option ->

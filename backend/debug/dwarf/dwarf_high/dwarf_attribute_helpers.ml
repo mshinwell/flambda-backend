@@ -102,6 +102,10 @@ let create_name name =
   let spec = AS.create Name Strp in
   AV.create spec (V.indirect_string ~comment:"name" name)
 
+let create_dwo_name name =
+  let spec = AS.create Dwo_name Strp in
+  AV.create spec (V.indirect_string ~comment:"dwo name" name)
+
 let create_comp_dir directory =
   let spec = AS.create Comp_dir Strp in
   AV.create spec (V.indirect_string ~comment:"compilation directory" directory)

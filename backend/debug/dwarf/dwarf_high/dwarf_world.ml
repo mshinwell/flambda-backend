@@ -17,11 +17,9 @@ open Asm_targets
 open Dwarf_low
 module A = Asm_directives
 
-let emit0_delayed ~asm_directives:_ = ()
-
-let emit0 ~asm_directives ~compilation_unit_proto_die
-    ~compilation_unit_header_label ~debug_loc_table ~debug_ranges_table
-    ~address_table ~location_list_table =
+let emit0 ~asm_directives (normal_or_dwo : Asm_section.normal_or_dwo)
+    ~compilation_unit_proto_die ~compilation_unit_header_label ~debug_loc_table
+    ~debug_ranges_table ~address_table ~location_list_table =
   (* CR-soon mshinwell: the [compilation_unit_die] member of the record returned
      from [Assign_abbrevs.run] is now unused *)
   let assigned_abbrevs =
@@ -32,7 +30,9 @@ let emit0 ~asm_directives ~compilation_unit_proto_die
   List.iter
     (fun location_list -> Debug_loc_table.insert debug_loc_table location_list)
     assigned_abbrevs.dwarf_4_location_lists;
-  let debug_abbrev_label = Asm_label.for_dwarf_section Debug_abbrev in
+  let debug_abbrev_label =
+    Asm_label.for_dwarf_section (Debug_abbrev normal_or_dwo)
+  in
   let debug_info =
     Profile.record "debug_info_section"
       (fun () ->
@@ -42,11 +42,11 @@ let emit0 ~asm_directives ~compilation_unit_proto_die
   in
   Profile.record "dwarf_world_emit"
     (fun () ->
-      A.switch_to_section (DWARF Debug_info);
+      A.switch_to_section (DWARF (Debug_info normal_or_dwo));
       Profile.record "debug_info_section"
         (Debug_info_section.emit ~asm_directives)
         debug_info;
-      A.switch_to_section (DWARF Debug_abbrev);
+      A.switch_to_section (DWARF (Debug_abbrev normal_or_dwo));
       Profile.record "abbreviations_table"
         (Abbreviations_table.emit ~asm_directives)
         assigned_abbrevs.abbrev_table;
@@ -66,13 +66,13 @@ let emit0 ~asm_directives ~compilation_unit_proto_die
         Profile.record "addr_table"
           (Address_table.emit ~asm_directives)
           address_table;
-        A.switch_to_section (DWARF Debug_loclists);
+        A.switch_to_section (DWARF (Debug_loclists normal_or_dwo));
         Profile.record "loclists_table"
           (Location_list_table.emit ~asm_directives)
           location_list_table)
     ()
 
-let emit ~asm_directives ~compilation_unit_proto_die
+let emit ~asm_directives normal_or_dwo ~compilation_unit_proto_die
     ~compilation_unit_header_label ~debug_loc_table ~debug_ranges_table
     ~address_table ~location_list_table ~basic_block_sections
     ~binary_backend_available =
@@ -82,15 +82,10 @@ let emit ~asm_directives ~compilation_unit_proto_die
      || binary_backend_available
   then ()
   else
-    emit0 ~asm_directives ~compilation_unit_proto_die
+    emit0 ~asm_directives normal_or_dwo ~compilation_unit_proto_die
       ~compilation_unit_header_label ~debug_loc_table ~debug_ranges_table
       ~address_table ~location_list_table
 
-let emit_delayed ~asm_directives ~basic_block_sections ~binary_backend_available
-    =
-  if (* CR mshinwell: support function sections *)
-     !Clflags.function_sections || basic_block_sections
-     (* CR mshinwell: support the internal assembler *)
-     || binary_backend_available
-  then ()
-  else emit0_delayed ~asm_directives
+let emit_delayed ~asm_directives:_ ~basic_block_sections:_
+    ~binary_backend_available:_ =
+  ()

@@ -24,7 +24,15 @@ module Int = Numbers.Int
 
 type reference = Asm_label.t
 
-let create_reference () = Asm_label.create (DWARF Debug_info)
+let create_reference ?normal_or_dwo () =
+  let normal_or_dwo =
+    Option.value normal_or_dwo
+      ~default:
+        (if !Dwarf_flags.split_dwarf
+        then Asm_section.Dwo
+        else Asm_section.Normal)
+  in
+  Asm_label.create (DWARF (Debug_info normal_or_dwo))
 
 type t =
   { parent : t option;
@@ -51,8 +59,15 @@ let attribute_values_map attribute_values =
 
 (* CR-someday mshinwell: Resurrect support for sibling links. *)
 
-let create ?reference ?(sort_priority = -1) ?location_list_in_debug_loc_table
-    ~parent ~tag ~attribute_values () =
+let create ?reference ?normal_or_dwo ?(sort_priority = -1)
+    ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values () =
+  let normal_or_dwo =
+    Option.value normal_or_dwo
+      ~default:
+        (if !Dwarf_flags.split_dwarf
+        then Asm_section.Dwo
+        else Asm_section.Normal)
+  in
   (match parent with
   | None ->
     if Dwarf_tag.compare tag Dwarf_tag.Compile_unit <> 0
@@ -60,7 +75,7 @@ let create ?reference ?(sort_priority = -1) ?location_list_in_debug_loc_table
   | Some _parent -> ());
   let reference =
     match reference with
-    | None -> Asm_label.create (DWARF Debug_info)
+    | None -> Asm_label.create (DWARF (Debug_info normal_or_dwo))
     | Some reference -> reference
   in
   let attribute_values = attribute_values_map attribute_values in
@@ -88,11 +103,11 @@ let create ?reference ?(sort_priority = -1) ?location_list_in_debug_loc_table
            parent.children_by_sort_priority);
   t
 
-let create_ignore ?reference ?sort_priority ?location_list_in_debug_loc_table
-    ~parent ~tag ~attribute_values () =
+let create_ignore ?reference ?normal_or_dwo ?sort_priority
+    ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values () =
   let (_ : t) =
-    create ?reference ?sort_priority ?location_list_in_debug_loc_table ~parent
-      ~tag ~attribute_values ()
+    create ?reference ?normal_or_dwo ?sort_priority
+      ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values ()
   in
   ()
 
