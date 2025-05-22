@@ -68,6 +68,8 @@ let flambda_backend = true
 let oxcaml = true
 let parameterised_modules = true
 
+type launch_method = Executable | Shebang of string option
+
 let interface_suffix = ref ".mli"
 
 let max_tag = 243

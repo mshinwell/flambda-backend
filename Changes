@@ -1,5 +1,313 @@
+<<<<<<< HEAD
 OCaml 5.2.0
 ------------
+||||||| parent of 08e0ba157b (Add -launch-method to ocamlc)
+OCaml 5.2 maintenance version
+-----------------------------
+
+### Runtime system:
+
+* #11449, #13497: Add caml_stat_char_array_{to,of}_os functions allowing
+  conversion of string data which may contain NUL characters. Correct
+  implementation of caml_stat_strdup_to_utf16 to raise Out_of_memory instead of
+  returning of NULL (the behaviour of caml_stat_strdup_to_os was inconsistent
+  between Unix/Windows).
+  (David Allsopp, review by Nick Barnes, Antonin Décimo and Miod Vallat)
+
+- #13492: Parse the CAML_LD_LIBRARY_PATH environment variable for the
+  shared_libs_path item in `ocamlrun -config` in addition to displaying the
+  entries found in ld.conf.
+  (David Allsopp, review by Stephen Dolan)
+
+* #14???: Explicit relative paths in ld.conf (".", "..", "./<path...>",
+  "../<path...>") are interpreted as being relative to the directory ld.conf
+  was loaded from, and the default ld.conf now uses relative paths, rather than
+  embedding the absolute path to the Standard Library. The brave may continue to
+  put implicit paths in ld.conf. The interpretation of CAML_LD_LIBRARY_PATH is
+  unaltered. Additionally, ld.conf is loaded from all of $OCAMLLIB/ld.conf,
+  $CAMLLIB/ld.conf and standard_library_default/ld.conf rather than just the
+  first one found. ld.conf files with CRLF line endings are now consistently on
+  both Windows and Unix.
+  (David Allsopp, review by ???)
+
+- #14???: Added --with-relative-bindir which allows the runtime and the
+  compilers to locate the Standard Library relative to where the binaries
+  themselves are installed, removing the absolute path previously embedded in
+  caml_standard_library_default. Executables linked with `ocamlc -custom` now
+  always attempt to load bytecode from the executable itself, rather than first
+  trying `argv[0]`.
+  (David Allsopp, review by ???)
+
+### Tools:
+
+- #14???: ocamlobjinfo now displays the runtime invoked by a bytecode
+  executable (either from the RNTM section or by analysing the shebang lines)
+  (David Allsopp, review by ???)
+
+### Compiler user-interface and warnings:
+
+- #14???: Add -set-runtime-default option to the compiler, allowing the default
+  value of the Standard Library location used by the runtime to be overridden.
+  (Antonin Décimo, review by David Allsopp)
+
+### Internal/compiler-libs changes:
+
+- #12896: Simplify the compilation of custom bytecode runtimes by explicitly
+  compiling the primitives file before calling the linker.
+  (David Allsopp, review by Vincent Laviron)
+
+- #14???: ocamlc now uses the same code as the runtime to parse ld.conf (via a
+  C primitive), eliminating some highly obscure corner cases.
+  (David Allsopp, review by ???)
+
+### Build system:
+
+- #13494: Use native symlinks on Windows for the OCaml installation, reducing
+  disk usage considerably.
+  (David Allsopp, review by Nicolás Ojeda Bär and Gabriel Scherer)
+
+- #13789: Harden the escaping of backslashes when generating
+  runtime/build_config.h (in particular, if the underlying implementation of sh
+  is dash, rather than bash, this now works correctly).
+  (David Allsopp and Samuel Hym, review by Antonin Décimo and Gabriel Scherer)
+
+- #14???: New configure option --with-stublibs allows an additional directory
+  to be added to the start of ld.conf. Additionally, the stublibs subdirectory
+  is no longer created, nor added to ld.conf, when building OCaml with
+  --disable-shared.
+  (David Allsopp, review by ???)
+
+- #14???: When targeting native Windows on Cygwin or MSYS2, preserve
+  backslashes in the supplied `--prefix` (in particular, backslashes instead of
+  slashes will then be displayed by `ocamlopt -config-var standard_library`).
+  If the supplied prefix contains a slash, then it is normalised, as
+  previously.
+  (David Allsopp, review by ???)
+
+### Bug fixes:
+
+* #13070: On Windows, when configured with bootstrapped flexdll, don't add
+  +flexdll to the search path when -nostdlib is specified (which then means
+  -L <path-to-flexdll> no longer gets passed to the system linker).
+  (David Allsopp, review by Florian Angeletti)
+
+- #13790: Fix bytecode-only build of Cygwin when flexlink is being bootstrapped
+  with the compiler.
+  (David Allsopp, review by Antonin Décimo and Miod Vallat)
+
+OCaml 5.2.1 (18 November 2024)
+------------------------------
+
+- #13207: Be sure to reload the register caching the exception handler in
+  caml_c_call and caml_c_call_stack_args, as its value may have been changed
+  if the OCaml stack is expanded during a callback.
+  (Miod Vallat, report by Vesa Karvonen, review by Gabriel Scherer and
+   Xavier Leroy)
+
+- #13252: Rework register assignment in the interpreter code on m68k on Linux,
+  due to the %a5 register being used by Glibc.
+  (Miod Vallat, report by Stéphane Glondu, review by Gabriel Scherer and
+   Xavier Leroy)
+
+- #13268: Fix a call to test in configure.ac that was causing errors when
+  LDFLAGS contains several words.
+  (Stéphane Glondu, review by Miod Vallat)
+
+- #13234, #13267: Open runtime events file in read-write mode on armel
+  (armv5) systems due to atomic operations limitations on that
+  platform.
+  (Stéphane Glondu, review by Miod Vallat and Vincent Laviron)
+
+- #13188: fix races in the FFI code coming from the use of Int_val(...)
+  on rooted values inside blocking questions / without the runtime lock.
+  (Calling Int_val(...) on non-rooted immediates is fine, but any
+   access to rooted values must be done outside blocking sections /
+   with the runtime lock.)
+  (Etienne Millon, review by Gabriel Scherer, Jan Midtgaard, Olivier Nicole)
+
+- #13318: Fix regression in GC alarms, and fix them for flambda.
+  (Guillaume Munch-Maccagnoni, report by Benjamin Monate, review by
+   Vincent Laviron and Gabriel Scherer)
+
+- #13140: POWER back-end: fix issue with call to `caml_call_realloc_stack`
+  from a DLL
+  (Xavier Leroy, review by Miod Vallat)
+
+- #13370: Fix a low-probability crash when calling Gc.counters.
+  (Demi Marie Obenour, review by Gabriel Scherer)
+
+- #13402, #13512, #13549, #13553: Revise bytecode implementation of callbacks
+  so that it no longer produces dangling registered bytecode fragments.
+  (Xavier Leroy, report by Jan Midtgaard, analysis by Stephen Dolan,
+   review by Miod Vallat)
+
+- #13502: Fix misindexing related to `Gc.finalise_last` that could prevent
+  finalisers from being run.
+  (Nick Roberts, review by Mark Shinwell)
+
+- #13520: Fix compilation of native-code version of systhreads. Bytecode fields
+  were being included in the thread descriptors.
+  (David Allsopp, review by Sébastien Hinderer and Miod Vallat)
+
+OCaml 5.2.0 (13 May 2024)
+-------------------------
+=======
+OCaml 5.2 maintenance version
+-----------------------------
+
+### Runtime system:
+
+* #11449, #13497: Add caml_stat_char_array_{to,of}_os functions allowing
+  conversion of string data which may contain NUL characters. Correct
+  implementation of caml_stat_strdup_to_utf16 to raise Out_of_memory instead of
+  returning of NULL (the behaviour of caml_stat_strdup_to_os was inconsistent
+  between Unix/Windows).
+  (David Allsopp, review by Nick Barnes, Antonin Décimo and Miod Vallat)
+
+- #13492: Parse the CAML_LD_LIBRARY_PATH environment variable for the
+  shared_libs_path item in `ocamlrun -config` in addition to displaying the
+  entries found in ld.conf.
+  (David Allsopp, review by Stephen Dolan)
+
+* #14???: Explicit relative paths in ld.conf (".", "..", "./<path...>",
+  "../<path...>") are interpreted as being relative to the directory ld.conf
+  was loaded from, and the default ld.conf now uses relative paths, rather than
+  embedding the absolute path to the Standard Library. The brave may continue to
+  put implicit paths in ld.conf. The interpretation of CAML_LD_LIBRARY_PATH is
+  unaltered. Additionally, ld.conf is loaded from all of $OCAMLLIB/ld.conf,
+  $CAMLLIB/ld.conf and standard_library_default/ld.conf rather than just the
+  first one found. ld.conf files with CRLF line endings are now consistently on
+  both Windows and Unix.
+  (David Allsopp, review by ???)
+
+- #14???: Added --with-relative-bindir which allows the runtime and the
+  compilers to locate the Standard Library relative to where the binaries
+  themselves are installed, removing the absolute path previously embedded in
+  caml_standard_library_default. Executables linked with `ocamlc -custom` now
+  always attempt to load bytecode from the executable itself, rather than first
+  trying `argv[0]`.
+  (David Allsopp, review by ???)
+
+### Tools:
+
+- #14???: ocamlobjinfo now displays the runtime invoked by a bytecode
+  executable (either from the RNTM section or by analysing the shebang lines)
+  (David Allsopp, review by ???)
+
+### Compiler user-interface and warnings:
+
+- #14???: Add -set-runtime-default option to the compiler, allowing the default
+  value of the Standard Library location used by the runtime to be overridden.
+  (Antonin Décimo, review by David Allsopp)
+
+- #14???: New option -launch-method for ocamlc allows the method used by a
+  tendered bytecode executable to locate the interpreter to be given explicitly.
+  In particular, it makes it easier to specify the use of the executable
+  launcher on Unix.
+  (David Allsopp, review by ???)
+
+### Internal/compiler-libs changes:
+
+- #12896: Simplify the compilation of custom bytecode runtimes by explicitly
+  compiling the primitives file before calling the linker.
+  (David Allsopp, review by Vincent Laviron)
+
+- #14???: ocamlc now uses the same code as the runtime to parse ld.conf (via a
+  C primitive), eliminating some highly obscure corner cases.
+  (David Allsopp, review by ???)
+
+### Build system:
+
+- #13494: Use native symlinks on Windows for the OCaml installation, reducing
+  disk usage considerably.
+  (David Allsopp, review by Nicolás Ojeda Bär and Gabriel Scherer)
+
+- #13789: Harden the escaping of backslashes when generating
+  runtime/build_config.h (in particular, if the underlying implementation of sh
+  is dash, rather than bash, this now works correctly).
+  (David Allsopp and Samuel Hym, review by Antonin Décimo and Gabriel Scherer)
+
+- #14???: New configure option --with-stublibs allows an additional directory
+  to be added to the start of ld.conf. Additionally, the stublibs subdirectory
+  is no longer created, nor added to ld.conf, when building OCaml with
+  --disable-shared.
+  (David Allsopp, review by ???)
+
+- #14???: When targeting native Windows on Cygwin or MSYS2, preserve
+  backslashes in the supplied `--prefix` (in particular, backslashes instead of
+  slashes will then be displayed by `ocamlopt -config-var standard_library`).
+  If the supplied prefix contains a slash, then it is normalised, as
+  previously.
+  (David Allsopp, review by ???)
+
+### Bug fixes:
+
+* #13070: On Windows, when configured with bootstrapped flexdll, don't add
+  +flexdll to the search path when -nostdlib is specified (which then means
+  -L <path-to-flexdll> no longer gets passed to the system linker).
+  (David Allsopp, review by Florian Angeletti)
+
+- #13790: Fix bytecode-only build of Cygwin when flexlink is being bootstrapped
+  with the compiler.
+  (David Allsopp, review by Antonin Décimo and Miod Vallat)
+
+OCaml 5.2.1 (18 November 2024)
+------------------------------
+
+- #13207: Be sure to reload the register caching the exception handler in
+  caml_c_call and caml_c_call_stack_args, as its value may have been changed
+  if the OCaml stack is expanded during a callback.
+  (Miod Vallat, report by Vesa Karvonen, review by Gabriel Scherer and
+   Xavier Leroy)
+
+- #13252: Rework register assignment in the interpreter code on m68k on Linux,
+  due to the %a5 register being used by Glibc.
+  (Miod Vallat, report by Stéphane Glondu, review by Gabriel Scherer and
+   Xavier Leroy)
+
+- #13268: Fix a call to test in configure.ac that was causing errors when
+  LDFLAGS contains several words.
+  (Stéphane Glondu, review by Miod Vallat)
+
+- #13234, #13267: Open runtime events file in read-write mode on armel
+  (armv5) systems due to atomic operations limitations on that
+  platform.
+  (Stéphane Glondu, review by Miod Vallat and Vincent Laviron)
+
+- #13188: fix races in the FFI code coming from the use of Int_val(...)
+  on rooted values inside blocking questions / without the runtime lock.
+  (Calling Int_val(...) on non-rooted immediates is fine, but any
+   access to rooted values must be done outside blocking sections /
+   with the runtime lock.)
+  (Etienne Millon, review by Gabriel Scherer, Jan Midtgaard, Olivier Nicole)
+
+- #13318: Fix regression in GC alarms, and fix them for flambda.
+  (Guillaume Munch-Maccagnoni, report by Benjamin Monate, review by
+   Vincent Laviron and Gabriel Scherer)
+
+- #13140: POWER back-end: fix issue with call to `caml_call_realloc_stack`
+  from a DLL
+  (Xavier Leroy, review by Miod Vallat)
+
+- #13370: Fix a low-probability crash when calling Gc.counters.
+  (Demi Marie Obenour, review by Gabriel Scherer)
+
+- #13402, #13512, #13549, #13553: Revise bytecode implementation of callbacks
+  so that it no longer produces dangling registered bytecode fragments.
+  (Xavier Leroy, report by Jan Midtgaard, analysis by Stephen Dolan,
+   review by Miod Vallat)
+
+- #13502: Fix misindexing related to `Gc.finalise_last` that could prevent
+  finalisers from being run.
+  (Nick Roberts, review by Mark Shinwell)
+
+- #13520: Fix compilation of native-code version of systhreads. Bytecode fields
+  were being included in the thread descriptors.
+  (David Allsopp, review by Sébastien Hinderer and Miod Vallat)
+
+OCaml 5.2.0 (13 May 2024)
+-------------------------
+>>>>>>> 08e0ba157b (Add -launch-method to ocamlc)
 
 (Changes that can break existing programs are marked with a "*")
 

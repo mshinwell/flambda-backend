@@ -365,6 +365,16 @@ val parameterised_modules : bool
 val syntax_quotations : bool
 (** Whether runtime quotations syntax is enabled. *)
 
+(** Launch mechanisms for bytecode executables
+
+    @since 5.5 *)
+type launch_method =
+| Executable               (** Use executable launcher stub *)
+| Shebang of string option (** Use shebang-style launcher, either directly to
+                               the runtime, or via sh. The parameter if
+                               specified is the full path to sh, otherwise the
+                               linker searches for it. *)
+
 (** Access to configuration values *)
 val print_config : out_channel -> unit
 
