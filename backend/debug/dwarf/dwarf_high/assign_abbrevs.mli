@@ -17,11 +17,12 @@ open Dwarf_low
 (** Construction of abbreviation tables from proto-DIEs together with flattening
     of the proto-DIE tree to a list of DIEs. *)
 
-type result =
+type t = private
   { abbrev_table : Abbreviations_table.t;
     dies : Debugging_information_entry.t list;
-    compilation_unit_die : Debugging_information_entry.t option;
     dwarf_4_location_lists : Dwarf_4_location_list.t list
   }
 
-val run : proto_die_root:Proto_die.t -> result
+val create : unit -> t
+
+val run : t -> proto_die_root:Proto_die.t -> t

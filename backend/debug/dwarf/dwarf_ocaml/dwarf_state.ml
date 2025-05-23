@@ -18,14 +18,9 @@ open Dwarf_low
 open Dwarf_high
 
 type t =
-  { compilation_unit_header_label : Asm_label.t;
-    compilation_unit_proto_die : Proto_die.t;
+  { state : Dwarf_world.State.t;
     value_type_proto_die : Proto_die.t option;
     start_of_code_symbol : Asm_symbol.t;
-    debug_loc_table : Debug_loc_table.t;
-    debug_ranges_table : Debug_ranges_table.t;
-    address_table : Address_table.t;
-    location_list_table : Location_list_table.t;
     function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t;
     get_file_num : string -> int
   }

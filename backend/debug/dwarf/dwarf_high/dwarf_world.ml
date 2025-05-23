@@ -17,14 +17,44 @@ open Asm_targets
 open Dwarf_low
 module A = Asm_directives
 
-let emit0 ~asm_directives (normal_or_dwo : Asm_section.normal_or_dwo)
-    ~compilation_unit_proto_die ~compilation_unit_header_label ~debug_loc_table
-    ~debug_ranges_table ~address_table ~location_list_table =
-  (* CR-soon mshinwell: the [compilation_unit_die] member of the record returned
-     from [Assign_abbrevs.run] is now unused *)
+module State = struct
+  type t =
+    { compilation_unit_proto_die : Proto_die.t;
+      compilation_unit_header_label : Asm_label.t;
+      debug_loc_table : Debug_loc_table.t;
+      debug_ranges_table : Debug_ranges_table.t;
+      address_table : Address_table.t;
+      location_list_table : Location_list_table.t
+    }
+
+  let create ~compilation_unit_proto_die ~compilation_unit_header_label
+      ~debug_loc_table ~debug_ranges_table ~address_table ~location_list_table =
+    { compilation_unit_proto_die;
+      compilation_unit_header_label;
+      debug_loc_table;
+      debug_ranges_table;
+      address_table;
+      location_list_table
+    }
+end
+
+type t = { states : State.t list }
+
+let create states = { states }
+
+let emit_for_one_unit ~asm_directives
+    (normal_or_dwo : Asm_section.normal_or_dwo) (state : State.t)
+    assigned_abbrevs =
+  let compilation_unit_header_label = state.compilation_unit_header_label in
+  let debug_loc_table = state.debug_loc_table in
+  let debug_ranges_table = state.debug_ranges_table in
+  let address_table = state.address_table in
+  let location_list_table = state.location_list_table in
   let assigned_abbrevs =
     Profile.record "assign_abbrevs"
-      (fun () -> Assign_abbrevs.run ~proto_die_root:compilation_unit_proto_die)
+      (fun () ->
+        Assign_abbrevs.run assigned_abbrevs
+          ~proto_die_root:state.compilation_unit_proto_die)
       ()
   in
   List.iter
@@ -46,12 +76,6 @@ let emit0 ~asm_directives (normal_or_dwo : Asm_section.normal_or_dwo)
       Profile.record "debug_info_section"
         (Debug_info_section.emit ~asm_directives)
         debug_info;
-      A.switch_to_section (DWARF (Debug_abbrev normal_or_dwo));
-      Profile.record "abbreviations_table"
-        (Abbreviations_table.emit ~asm_directives)
-        assigned_abbrevs.abbrev_table;
-      A.switch_to_section (DWARF Debug_str);
-      A.emit_cached_strings ();
       match !Dwarf_flags.gdwarf_version with
       | Four ->
         A.switch_to_section (DWARF Debug_loc);
@@ -70,11 +94,10 @@ let emit0 ~asm_directives (normal_or_dwo : Asm_section.normal_or_dwo)
         Profile.record "loclists_table"
           (Location_list_table.emit ~asm_directives)
           location_list_table)
-    ()
+    ();
+  assigned_abbrevs
 
-let emit ~asm_directives normal_or_dwo ~compilation_unit_proto_die
-    ~compilation_unit_header_label ~debug_loc_table ~debug_ranges_table
-    ~address_table ~location_list_table ~basic_block_sections
+let emit t ~asm_directives normal_or_dwo ~basic_block_sections
     ~binary_backend_available =
   if (* CR mshinwell: support function sections *)
      !Clflags.function_sections || basic_block_sections
@@ -82,10 +105,21 @@ let emit ~asm_directives normal_or_dwo ~compilation_unit_proto_die
      || binary_backend_available
   then ()
   else
-    emit0 ~asm_directives normal_or_dwo ~compilation_unit_proto_die
-      ~compilation_unit_header_label ~debug_loc_table ~debug_ranges_table
-      ~address_table ~location_list_table
-
-let emit_delayed ~asm_directives:_ ~basic_block_sections:_
-    ~binary_backend_available:_ =
-  ()
+    let assigned_abbrevs =
+      List.fold_left
+        (fun assigned_abbrevs state ->
+          emit_for_one_unit ~asm_directives normal_or_dwo state assigned_abbrevs)
+        (Assign_abbrevs.create ()) t.states
+    in
+    Profile.record "emit_debug_abbrev"
+      (fun () ->
+        A.switch_to_section (DWARF (Debug_abbrev normal_or_dwo));
+        Profile.record "abbreviations_table"
+          (Abbreviations_table.emit ~asm_directives)
+          assigned_abbrevs.abbrev_table)
+      ();
+    Profile.record "emit_debug_str"
+      (fun () ->
+        A.switch_to_section (DWARF Debug_str);
+        A.emit_cached_strings ())
+      ()

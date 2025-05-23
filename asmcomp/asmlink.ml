@@ -571,7 +571,7 @@ let generate_dwarf_dwp ~output_name ~units_tolink =
             )
             units_tolink)
         ~always:(fun () -> close_out !Emitaux.output_channel)
-        ~exceptionally:remove_asm_file
+        ~exceptionally:remove_asm_file)
 
 let reset () =
   Cmi_consistbl.clear crc_interfaces;
@@ -629,9 +629,10 @@ let link unix ~ppf_dump objfiles output_name =
       (fun () ->
         call_linker ml_objfiles startup_obj output_name;
         if !Dwarf_flags.split_dwarf then
-          generate_dwarf_dwp ~output_name ~units_tolink;
-      ~always:(fun () -> remove_file startup_obj)
-  )
+          generate_dwarf_dwp ~output_name ~units_tolink
+(* XXX *)
+      )
+      ~always:(fun () -> remove_file startup_obj))
 
 (* Exported version for Asmlibrarian / Asmpackager *)
 let check_consistency file_name u crc =

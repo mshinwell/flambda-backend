@@ -69,3 +69,5 @@ module Serialized : sig
 
   val to_dwarf_state : t -> dwarf_state
 end
+
+val get_dwarf_world_state : t -> Dwarf_world.State.t
