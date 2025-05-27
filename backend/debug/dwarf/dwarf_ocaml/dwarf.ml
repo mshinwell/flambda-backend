@@ -145,13 +145,6 @@ let emit t ~basic_block_sections ~binary_backend_available =
     assert (not !Dwarf_flags.split_dwarf);
     (* Emit DWARF to the .o file / binary emitter *)
     Dwarf_world.emit ~asm_directives:t.asm_directives Normal
-      ~compilation_unit_proto_die:(DS.compilation_unit_proto_die t.main_state)
-      ~compilation_unit_header_label:
-        (DS.compilation_unit_header_label t.main_state)
-      ~debug_loc_table:(DS.debug_loc_table t.main_state)
-      ~debug_ranges_table:(DS.debug_ranges_table t.main_state)
-      ~address_table:(DS.address_table t.main_state)
-      ~location_list_table:(DS.location_list_table t.main_state)
       ~basic_block_sections ~binary_backend_available
   | Some skeleton_state ->
     (* Cause the main DWARF IR to be saved to the .cmx file *)
