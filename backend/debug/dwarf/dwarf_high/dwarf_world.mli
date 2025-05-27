@@ -19,6 +19,7 @@ open Asm_targets
 open Dwarf_low
 
 module State : sig
+  (** DWARF IR for a single compilation unit. *)
   type t
 
   val create :
@@ -29,8 +30,22 @@ module State : sig
     address_table:Address_table.t ->
     location_list_table:Location_list_table.t ->
     t
+
+  val compilation_unit_proto_die : t -> Proto_die.t
+
+  val compilation_unit_header_label : t -> Asm_label.t
+
+  val debug_loc_table : t -> Debug_loc_table.t
+
+  val debug_ranges_table : t -> Debug_ranges_table.t
+
+  val address_table : t -> Address_table.t
+
+  val location_list_table : t -> Location_list_table.t
 end
 
+(** DWARF IR for one or more compilation units, which will be converted to
+    DWARF as a single entity. *)
 type t
 
 val create : State.t list -> t

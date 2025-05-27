@@ -40,11 +40,8 @@ type fundecl = private
 val dwarf_for_fundecl :
   t -> Linear.fundecl -> fun_end_label:Cmm.label -> fundecl
 
-(** Write the DWARF information to the assembly file. This should only be called
-    once all (in)constants and function declarations have been passed to the
-    above functions. *)
+(** Write the DWARF information to the assembly file (and the .cmx file, if
+    using split DWARF). This should only be called once all (in)constants and
+    function declarations have been passed to the above functions. *)
 val emit :
-  t -> basic_block_sections:bool -> binary_backend_available:bool -> unit
-
-val emit_delayed :
   t -> basic_block_sections:bool -> binary_backend_available:bool -> unit

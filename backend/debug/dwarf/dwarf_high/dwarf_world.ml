@@ -36,6 +36,18 @@ module State = struct
       address_table;
       location_list_table
     }
+
+  let compilation_unit_proto_die t = t.compilation_unit_proto_die
+
+  let compilation_unit_header_label t = t.compilation_unit_header_label
+
+  let debug_loc_table t = t.debug_loc_table
+
+  let debug_ranges_table t = t.debug_ranges_table
+
+  let address_table t = t.address_table
+
+  let location_list_table t = t.location_list_table
 end
 
 type t = { states : State.t list }

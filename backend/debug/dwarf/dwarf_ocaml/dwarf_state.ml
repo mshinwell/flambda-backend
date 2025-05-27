@@ -21,48 +21,48 @@ type t =
   { state : Dwarf_world.State.t;
     value_type_proto_die : Proto_die.t option;
     start_of_code_symbol : Asm_symbol.t;
-    function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t;
-    get_file_num : string -> int
+    function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t
   }
 
 type dwarf_state = t
 
 let create ~compilation_unit_header_label ~compilation_unit_proto_die
     ~value_type_proto_die ~start_of_code_symbol debug_loc_table
-    debug_ranges_table address_table location_list_table ~get_file_num =
-  { compilation_unit_header_label;
-    compilation_unit_proto_die;
+    debug_ranges_table address_table location_list_table =
+  let state =
+    Dwarf_world.State.create ~compilation_unit_header_label
+      ~compilation_unit_proto_die ~debug_loc_table ~debug_ranges_table
+      ~address_table ~location_list_table
+  in
+  { state;
     value_type_proto_die;
     start_of_code_symbol;
-    debug_loc_table;
-    debug_ranges_table;
-    address_table;
-    location_list_table;
-    function_abstract_instances = Asm_symbol.Tbl.create 42;
-    get_file_num
+    function_abstract_instances = Asm_symbol.Tbl.create 42
   }
 
-let compilation_unit_header_label t = t.compilation_unit_header_label
+let get_dwarf_world_state t = t.state
 
-let compilation_unit_proto_die t = t.compilation_unit_proto_die
+let compilation_unit_header_label t =
+  Dwarf_world.State.compilation_unit_header_label t.state
+
+let compilation_unit_proto_die t =
+  Dwarf_world.State.compilation_unit_proto_die t.state
 
 let value_type_proto_die t = t.value_type_proto_die
 
 let start_of_code_symbol t = t.start_of_code_symbol
 
-let debug_loc_table t = t.debug_loc_table
+let debug_loc_table t = Dwarf_world.State.debug_loc_table t.state
 
-let debug_ranges_table t = t.debug_ranges_table
+let debug_ranges_table t = Dwarf_world.State.debug_ranges_table t.state
 
-let address_table t = t.address_table
+let address_table t = Dwarf_world.State.address_table t.state
 
-let location_list_table t = t.location_list_table
+let location_list_table t = Dwarf_world.State.location_list_table t.state
 
 let function_abstract_instances t = t.function_abstract_instances
 
 let can_reference_dies_across_units _t = true
-
-let get_file_num t filename = t.get_file_num filename
 
 module Debug = struct
   let log f =
