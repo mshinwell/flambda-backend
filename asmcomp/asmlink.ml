@@ -546,32 +546,14 @@ let call_linker file_list_rev startup_file output_name =
 
 (* Third pass: generate a DWARF .dwp file *)
 
-let keep_dwp_dot_s = true (* XXX move to a command-line flag *)
-
 let generate_dwarf_dwp ~output_name ~units_tolink =
-  assert !Dwarf_flags.split_dwarf;
-  let asm_file =
-    if keep_dwp_dot_s then output_name ^ ".dwp" ^ ext_asm
-    else Filename.temp_file "camlstartup" ext_asm
-  in
-  let dwp_file = output_name ^ ".dwp" in
-  let remove_asm_file () =
-    if not keep_dwp_dot_s then remove_file asm_file
-  in
-  Misc.try_finally
-    ~exceptionally:(fun () -> remove_file dwp_file)
-    (fun () ->
-      Emitaux.output_channel := open_out asm_file;
-      Misc.try_finally
-        (fun () ->
-          List.iter (fun unit ->
-              match unit.dwarf with
-              | None -> ()
-              | Some dwarf -> xxx ()  (* probably needs to call Dwarf.emit_foo *)
-            )
-            units_tolink)
-        ~always:(fun () -> close_out !Emitaux.output_channel)
-        ~exceptionally:remove_asm_file)
+  Dwarf_link_time.generate_dwarf_dwp
+    ~asm_directives:(Asm_directives.create ()) (* XXX *)
+    ~basic_block_sections:Emitaux.basic_block_sections
+    ~binary_backend_available:!Emitaux.binary_backend_available
+    ~output_name
+    ~units_to_link:units_tolink
+    ~get_dwarf_from_unit:(fun unit -> unit.dwarf)
 
 let reset () =
   Cmi_consistbl.clear crc_interfaces;
