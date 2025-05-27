@@ -67,7 +67,7 @@ let generate_dwarf_dwp ~asm_directives ~basic_block_sections
             | [] -> ()
             | _ :: _ ->
               let dwarf_world = Dwarf_world.create dwarf_states in
-              Dwarf_world.emit dwarf_world ~asm_directives Normal
+              Dwarf_world.emit dwarf_world ~asm_directives Dwo
                 ~basic_block_sections ~binary_backend_available)
           ~always:(fun () -> close_out !Emitaux.output_channel)
           ~exceptionally:remove_asm_file)

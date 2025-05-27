@@ -27,13 +27,20 @@ type result =
     dwarf_4_location_lists : Dwarf_4_location_list.t list
   }
 
+let create () =
+  { abbrev_table = Abbreviations_table.create ();
+    dies = [];
+    compilation_unit_die = None;
+    dwarf_4_location_lists = []
+  }
+
 (* For each pattern of attributes found in the tree of proto-DIEs (of which
    there should be few compared to the number of DIEs), assign an abbreviation
    code, generating an abbreviations table in the process. At the same time,
    generate a list of DIEs in flattened format, ready for emission. (These DIEs
    reference the particular patterns of attributes they use via the abbreviation
    codes.) *)
-let run ~proto_die_root =
+let run t ~proto_die_root =
   let abbrev_table, dies_rev, compilation_unit_die, location_lists_rev =
     let next_abbreviation_code = ref 1 in
     Proto_die.depth_first_fold proto_die_root

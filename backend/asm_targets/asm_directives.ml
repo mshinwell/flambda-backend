@@ -833,14 +833,14 @@ let initialize ~big_endian ~emit_assembly_comments ~(emit : Directive.t -> unit)
   emit_assembly_comments_ref := Some emit_assembly_comments;
   reset ()
 
-let debug_header ~get_file_num =
+let debug_header normal_or_dwo ~get_file_num =
   (* Forward label references are illegal on some assemblers/platforms. To avoid
      errors, emit the beginning of all dwarf sections in advance. *)
   if TS.is_gas () || TS.is_macos ()
   then
     List.iter
       (switch_to_section ~emit_label_on_first_occurrence:true)
-      (Asm_section.dwarf_sections_in_order ());
+      (Asm_section.dwarf_sections_in_order normal_or_dwo);
   (* Stop dsymutil complaining about empty __debug_line sections (produces bogus
      error "line table parameters mismatch") by making sure such sections are
      never empty. *)

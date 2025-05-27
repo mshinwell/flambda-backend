@@ -548,8 +548,8 @@ let call_linker file_list_rev startup_file output_name =
 
 let generate_dwarf_dwp ~output_name ~units_tolink =
   Dwarf_link_time.generate_dwarf_dwp
-    ~asm_directives:(Asm_directives.create ()) (* XXX *)
-    ~basic_block_sections:Emitaux.basic_block_sections
+    ~asm_directives:(Asm_targets.Asm_directives_dwarf.build_asm_directives ()) (* XXX *)
+    ~basic_block_sections:!Flambda_backend_flags.basic_block_sections
     ~binary_backend_available:!Emitaux.binary_backend_available
     ~output_name
     ~units_to_link:units_tolink

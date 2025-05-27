@@ -29,8 +29,8 @@
 (** Link-time reading of DWARF IR from .cmx files and conversion to DWARF. *)
 
 val generate_dwarf_dwp :
-  asm_directives:Asm_directives.t ->
-  basic_block_sections:Asm_section.t list ->
+  asm_directives:Asm_targets.Asm_directives_dwarf.t ->
+  basic_block_sections:bool ->
   binary_backend_available:bool ->
   output_name:string ->
   units_to_link:'unit list ->

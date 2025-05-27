@@ -479,7 +479,8 @@ val initialize :
   emit:(Directive.t -> unit) ->
   unit
 
-val debug_header : get_file_num:(string -> int) -> unit
+val debug_header :
+  Asm_section.normal_or_dwo -> get_file_num:(string -> int) -> unit
 
 (** Reinitialize the emitter before compiling a different source file. *)
 val reset : unit -> unit
