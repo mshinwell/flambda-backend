@@ -141,9 +141,7 @@ let describe_debug_default thing =
 let describe_debug_default_negated thing =
   describe_debug_default_internal ~negate:true thing
 
-type dwarf_version =
-  | Four
-  | Five
+type dwarf_version = Five
 
 let default_gdwarf_version = Five
 (* XXX we don't support DWARF 4 + split-dwarf *)

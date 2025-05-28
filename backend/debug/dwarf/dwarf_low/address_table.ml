@@ -19,40 +19,97 @@ open Asm_targets
 module Uint8 = Numbers.Uint8
 module A = Asm_directives
 
-module Entry = struct
+module Lower_address = struct
   type t =
-    { addr : Asm_label.t;
-      adjustment : int
-    }
+    | Label of Asm_label.t
+    | Symbol of Asm_symbol.t
 
   include Identifiable.Make (struct
     type nonrec t = t
 
-    let compare { addr = addr1; adjustment = adjustment1 }
-        { addr = addr2; adjustment = adjustment2 } =
-      let c = Asm_label.compare addr1 addr2 in
-      if c <> 0 then c else Stdlib.compare adjustment1 adjustment2
+    let compare t1 t2 =
+      match t1, t2 with
+      | Label label1, Label label2 -> Asm_label.compare label1 label2
+      | Symbol symbol1, Symbol symbol2 -> Asm_symbol.compare symbol1 symbol2
+      | Label _, Symbol _ -> -1
+      | Symbol _, Label _ -> 1
 
     let equal t1 t2 = compare t1 t2 = 0
 
-    let hash { addr; adjustment } =
-      Hashtbl.hash (Asm_label.hash addr, adjustment)
+    let hash t =
+      match t with
+      | Label label -> Asm_label.hash label
+      | Symbol symbol -> Asm_symbol.hash symbol
 
-    let print _ _ = Misc.fatal_error "Not yet implemented"
+    let print ppf t =
+      match t with
+      | Label label -> Asm_label.print ppf label
+      | Symbol symbol -> Asm_symbol.print ppf symbol
 
     let output _ _ = Misc.fatal_error "Not yet implemented"
   end)
 end
 
-type entry_and_soc_symbol =
-  { entry : Entry.t;
-    start_of_code_symbol : Asm_symbol.t
-  }
+module Upper_address = struct
+  type t =
+    { addr : Asm_label.t;
+      offset : int
+    }
+
+  include Identifiable.Make (struct
+    type nonrec t = t
+
+    let compare { addr = addr1; offset = offset1 }
+        { addr = addr2; offset = offset2 } =
+      let c = Asm_label.compare addr1 addr2 in
+      if c <> 0 then c else Stdlib.compare offset1 offset2
+
+    let equal t1 t2 = compare t1 t2 = 0
+
+    let hash { addr; offset } = Hashtbl.hash (Asm_label.hash addr, offset)
+
+    let print ppf { addr; offset } =
+      if offset = 0
+      then Asm_label.print ppf addr
+      else Format.fprintf ppf "%a + %d" Asm_label.print addr offset
+
+    let output _ _ = Misc.fatal_error "Not yet implemented"
+  end)
+end
+
+module Entry = struct
+  type t =
+    { lower : Lower_address.t;
+      upper : Upper_address.t
+    }
+
+  include Identifiable.Make (struct
+    type nonrec t = t
+
+    let compare { lower = lower1; upper = upper1 }
+        { lower = lower2; upper = upper2 } =
+      let c = Lower_address.compare lower1 lower2 in
+      if c <> 0 then c else Upper_address.compare upper1 upper2
+
+    let equal t1 t2 = compare t1 t2 = 0
+
+    let hash { lower; upper } =
+      Hashtbl.hash (Lower_address.hash lower, Upper_address.hash upper)
+
+    let print ppf { lower; upper } =
+      Format.fprintf ppf "@[<hov 1>((lower@ %a)@ (upper@ %a))@]"
+        Lower_address.print lower Upper_address.print upper
+
+    let output _ _ = Misc.fatal_error "Not yet implemented"
+  end)
+end
 
 type t =
   { base_addr : Asm_label.t;
+    (* [base_addr] is the start address of the table (see below), not anything
+       to do with the addresses within it. *)
     mutable next_index : Address_index.t;
-    mutable table : entry_and_soc_symbol Address_index.Map.t;
+    mutable table : Entry.t Address_index.Map.t;
     mutable rev_table : Address_index.t Entry.Map.t
   }
 
@@ -63,14 +120,12 @@ let create () =
     rev_table = Entry.Map.empty
   }
 
-let add ?(adjustment = 0) t ~start_of_code_symbol addr =
-  let entry : Entry.t = { addr; adjustment } in
+let add t entry =
   match Entry.Map.find entry t.rev_table with
   | exception Not_found ->
     let index = t.next_index in
     t.next_index <- Address_index.succ index;
     t.rev_table <- Entry.Map.add entry index t.rev_table;
-    let entry : entry_and_soc_symbol = { entry; start_of_code_symbol } in
     t.table <- Address_index.Map.add index entry t.table;
     index
   | index -> index
@@ -91,10 +146,10 @@ let size t =
     (Initial_length.to_dwarf_int initial_length)
 
 let entry_to_dwarf_value (entry : entry_and_soc_symbol) =
-  let adjustment = Targetint.of_int_exn entry.entry.adjustment in
-  Dwarf_value.code_address_from_label_symbol_diff ~comment:"ending address"
-    ~upper:entry.entry.addr ~lower:entry.start_of_code_symbol
-    ~offset_upper:adjustment ()
+  let offset = Targetint.of_int_exn entry.entry.offset in
+  Dwarf_value.address_table_entry_from_label_symbol_diff
+    ~comment:"ending address" ~upper:entry.entry.addr
+    ~lower:entry.section_symbol ~offset_upper:offset ()
 
 let emit ~asm_directives t =
   Initial_length.emit ~asm_directives (initial_length t);

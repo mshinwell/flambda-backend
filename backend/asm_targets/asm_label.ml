@@ -163,3 +163,27 @@ let for_section (section : Asm_section.t) =
   match section with
   | DWARF d -> for_dwarf_section d
   | _ -> Misc.fatal_error "Non DWARF sections are not pre-defined with a label."
+
+let normal_or_dwo t =
+  match t.section with
+  | DWARF dwarf_section -> (
+    match dwarf_section with
+    | Debug_info normal_or_dwo
+    | Debug_abbrev normal_or_dwo
+    | Debug_loclists normal_or_dwo
+    | Debug_rnglists normal_or_dwo
+    | Debug_line normal_or_dwo
+    | Debug_str_offsets normal_or_dwo
+    | Debug_macro normal_or_dwo ->
+      normal_or_dwo
+    | Debug_aranges | Debug_addr | Debug_loc | Debug_ranges | Debug_str ->
+      Misc.fatal_errorf
+        "Label %a must be in a DWARF section that can potentially be emitted \
+         to a .dwo"
+        print t)
+  | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
+  | Jump_tables | Text | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
+    Misc.fatal_errorf
+      "Label %a must be in a DWARF section that can potentially be emitted to \
+       a .dwo"
+      print t

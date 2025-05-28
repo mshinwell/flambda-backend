@@ -29,10 +29,9 @@ val create :
   value_type_proto_die:Proto_die.t option ->
   (* [value_type_proto_die] is not provided for skeleton units. *)
   start_of_code_symbol:Asm_symbol.t ->
-  Debug_loc_table.t ->
-  Debug_ranges_table.t ->
   Address_table.t ->
   Location_list_table.t ->
+  Range_list_table.t ->
   t
 
 val normal_or_dwo : t -> Asm_section.normal_or_dwo
@@ -45,13 +44,11 @@ val value_type_proto_die : t -> Proto_die.t option
 
 val start_of_code_symbol : t -> Asm_symbol.t
 
-val debug_loc_table : t -> Debug_loc_table.t
-
-val debug_ranges_table : t -> Debug_ranges_table.t
-
 val address_table : t -> Address_table.t
 
 val location_list_table : t -> Location_list_table.t
+
+val range_list_table : t -> Range_list_table.t
 
 val function_abstract_instances :
   t -> (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t

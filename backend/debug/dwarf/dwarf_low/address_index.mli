@@ -12,7 +12,13 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Indexes into the .debug_addr table. *)
+(** Indexes into the .debug_addr table.
+
+    Note that these indexes might refer to a constant (c.f. DW_OP_constx) whose
+    computation required relocation, rather than to a single address.  The
+    name "address index" is thus potentially confusing, but we keep it to
+    match the DWARF specification.
+*)
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 

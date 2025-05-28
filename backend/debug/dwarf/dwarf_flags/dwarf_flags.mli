@@ -39,9 +39,7 @@ val dwarf_max_function_complexity : int ref
 
 val dwarf_for_startup_file : bool ref
 
-type dwarf_version =
-  | Four
-  | Five
+type dwarf_version = Five
 
 val gdwarf_version : dwarf_version ref
 

@@ -705,24 +705,7 @@ struct
     | DW_op_implicit_pointer { offset_in_bytes; label }
     | DW_op_GNU_implicit_pointer { offset_in_bytes; label } ->
       let offset_in_bytes = Targetint.to_int64 offset_in_bytes in
-      let section_kind =
-        match Asm_label.section label with
-        | DWARF dwarf_section -> (
-          match dwarf_section with
-          | Debug_info normal_or_dwo -> normal_or_dwo
-          | Debug_abbrev _ | Debug_aranges | Debug_addr | Debug_loc
-          | Debug_ranges | Debug_loclists _ | Debug_rnglists _ | Debug_str
-          | Debug_line _ | Debug_str_offsets _ | Debug_macro _ ->
-            Misc.fatal_error
-              "DW_op_implicit_pointer / DW_op_GNU_implicit_pointer: label must \
-               be in the [Debug_info] section")
-        | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
-        | Jump_tables | Text | Stapsdt_base | Stapsdt_note | Probes
-        | Note_ocaml_eh ->
-          Misc.fatal_error
-            "DW_op_implicit_pointer / DW_op_GNU_implicit_pointer: label must \
-             be in the [Debug_info] section"
-      in
+      let section_kind = Asm_label.normal_or_dwo label in
       value (V.offset_into_debug_info section_kind label) >>> fun () ->
       value (V.sleb128 ~comment:"offset in bytes" offset_in_bytes)
 end

@@ -20,7 +20,7 @@ open Dwarf_low
 
 val create_entry_pc : Asm_label.t -> Dwarf_attribute_values.Attribute_value.t
 
-val create_low_pc : Asm_label.t -> Dwarf_attribute_values.Attribute_value.t
+val create_low_pc : Address_index.t -> Dwarf_attribute_values.Attribute_value.t
 
 val create_low_pc_with_offset :
   Asm_label.t ->
@@ -37,7 +37,9 @@ val create_high_pc_offset :
   Dwarf_attribute_values.Attribute_value.t
 
 val create_high_pc :
-  low_pc:Asm_symbol.t -> Asm_label.t -> Dwarf_attribute_values.Attribute_value.t
+  low_pc:Address_index.t ->
+  Address_index.t ->
+  Dwarf_attribute_values.Attribute_value.t
 
 (* CR mshinwell: Make labels consistent / remove unnecessary ones. *)
 

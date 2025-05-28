@@ -37,8 +37,6 @@ type dwarf_section =
   | Debug_abbrev of normal_or_dwo
   | Debug_aranges
   | Debug_addr
-  | Debug_loc
-  | Debug_ranges
   | Debug_loclists of normal_or_dwo
   | Debug_rnglists of normal_or_dwo
   | Debug_str
@@ -71,7 +69,6 @@ let dwarf_sections_in_order normal_or_dwo =
   in
   let dwarf_version_dependent_sections =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> [DWARF Debug_loc; DWARF Debug_ranges]
     | Five ->
       [ DWARF Debug_addr;
         DWARF (Debug_loclists normal_or_dwo);
@@ -85,8 +82,8 @@ let is_delayed = function
   | DWARF (Debug_line _) -> true
   | DWARF
       ( Debug_info _ | Debug_abbrev _ | Debug_aranges | Debug_str
-      | Debug_loclists _ | Debug_rnglists _ | Debug_addr | Debug_loc
-      | Debug_ranges | Debug_str_offsets _ | Debug_macro _ )
+      | Debug_loclists _ | Debug_rnglists _ | Debug_addr | Debug_str_offsets _
+      | Debug_macro _ )
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
   | Jump_tables | Text | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
     false
@@ -100,8 +97,6 @@ let print ppf t =
     | DWARF (Debug_abbrev Dwo) -> "(DWARF Debug_abbrev Dwo)"
     | DWARF Debug_aranges -> "(DWARF Debug_aranges)"
     | DWARF Debug_addr -> "(DWARF Debug_addr)"
-    | DWARF Debug_loc -> "(DWARF Debug_loc)"
-    | DWARF Debug_ranges -> "(DWARF Debug_ranges)"
     | DWARF (Debug_loclists Normal) -> "(DWARF Debug_loclists)"
     | DWARF (Debug_loclists Dwo) -> "(DWARF Debug_loclists Dwo)"
     | DWARF (Debug_rnglists Normal) -> "(DWARF Debug_rnglists)"
@@ -160,8 +155,6 @@ let details t ~first_occurrence =
         | Debug_abbrev Normal -> "__debug_abbrev"
         | Debug_aranges -> "__debug_aranges"
         | Debug_addr -> "__debug_addr"
-        | Debug_loc -> "__debug_loc"
-        | Debug_ranges -> "__debug_ranges"
         | Debug_loclists Normal -> "__debug_loclists"
         | Debug_rnglists Normal -> "__debug_rnglists"
         | Debug_str -> "__debug_str"
@@ -184,8 +177,6 @@ let details t ~first_occurrence =
         | Debug_abbrev Normal -> ".debug_abbrev", Normal
         | Debug_aranges -> ".debug_aranges", Normal
         | Debug_addr -> ".debug_addr", Normal
-        | Debug_loc -> ".debug_loc", Normal
-        | Debug_ranges -> ".debug_ranges", Normal
         | Debug_loclists Normal -> ".debug_loclists", Normal
         | Debug_rnglists Normal -> ".debug_rnglists", Normal
         | Debug_str -> ".debug_str", Normal

@@ -29,11 +29,11 @@ type dwarf_state = t
 
 let create normal_or_dwo ~compilation_unit_header_label
     ~compilation_unit_proto_die ~value_type_proto_die ~start_of_code_symbol
-    debug_loc_table debug_ranges_table address_table location_list_table =
+    address_table location_list_table range_list_table =
   let state =
     Dwarf_world.State.create ~compilation_unit_header_label
-      ~compilation_unit_proto_die ~debug_loc_table ~debug_ranges_table
-      ~address_table ~location_list_table
+      ~compilation_unit_proto_die ~address_table ~location_list_table
+      ~range_list_table
   in
   { normal_or_dwo;
     state;
@@ -56,13 +56,11 @@ let value_type_proto_die t = t.value_type_proto_die
 
 let start_of_code_symbol t = t.start_of_code_symbol
 
-let debug_loc_table t = Dwarf_world.State.debug_loc_table t.state
-
-let debug_ranges_table t = Dwarf_world.State.debug_ranges_table t.state
-
 let address_table t = Dwarf_world.State.address_table t.state
 
 let location_list_table t = Dwarf_world.State.location_list_table t.state
+
+let range_list_table t = Dwarf_world.State.range_list_table t.state
 
 let function_abstract_instances t = t.function_abstract_instances
 

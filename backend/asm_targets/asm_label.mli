@@ -81,3 +81,7 @@ val for_section : Asm_section.t -> t
 
 (** Like [for_section], but for DWARF sections only. *)
 val for_dwarf_section : Asm_section.dwarf_section -> t
+
+(** This function will fail if not provided with a DWARF section that is
+    eligible for .dwo emission. *)
+val normal_or_dwo : t -> Asm_section.normal_or_dwo

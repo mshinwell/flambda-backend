@@ -21,20 +21,18 @@ module State = struct
   type t =
     { compilation_unit_proto_die : Proto_die.t;
       compilation_unit_header_label : Asm_label.t;
-      debug_loc_table : Debug_loc_table.t;
-      debug_ranges_table : Debug_ranges_table.t;
       address_table : Address_table.t;
-      location_list_table : Location_list_table.t
+      location_list_table : Location_list_table.t;
+      range_list_table : Range_list_table.t
     }
 
   let create ~compilation_unit_proto_die ~compilation_unit_header_label
-      ~debug_loc_table ~debug_ranges_table ~address_table ~location_list_table =
+      ~address_table ~location_list_table ~range_list_table =
     { compilation_unit_proto_die;
       compilation_unit_header_label;
-      debug_loc_table;
-      debug_ranges_table;
       address_table;
-      location_list_table
+      location_list_table;
+      range_list_table
     }
 
   let compilation_unit_proto_die t = t.compilation_unit_proto_die
@@ -48,6 +46,8 @@ module State = struct
   let address_table t = t.address_table
 
   let location_list_table t = t.location_list_table
+
+  let range_list_table t = t.range_list_table
 end
 
 type t = { states : State.t list }
@@ -88,24 +88,13 @@ let emit_for_one_unit ~asm_directives
       Profile.record "debug_info_section"
         (Debug_info_section.emit ~asm_directives)
         debug_info;
-      match !Dwarf_flags.gdwarf_version with
-      | Four ->
-        A.switch_to_section (DWARF Debug_loc);
-        Profile.record "debug_loc"
-          (Debug_loc_table.emit ~asm_directives)
-          debug_loc_table;
-        A.switch_to_section (DWARF Debug_ranges);
-        Profile.record "debug_ranges"
-          (Debug_ranges_table.emit ~asm_directives)
-          debug_ranges_table
-      | Five ->
-        Profile.record "addr_table"
-          (Address_table.emit ~asm_directives)
-          address_table;
-        A.switch_to_section (DWARF (Debug_loclists normal_or_dwo));
-        Profile.record "loclists_table"
-          (Location_list_table.emit ~asm_directives)
-          location_list_table)
+      Profile.record "addr_table"
+        (Address_table.emit ~asm_directives)
+        address_table;
+      A.switch_to_section (DWARF (Debug_loclists normal_or_dwo));
+      Profile.record "loclists_table"
+        (Location_list_table.emit ~asm_directives)
+        location_list_table)
     ();
   assigned_abbrevs
 

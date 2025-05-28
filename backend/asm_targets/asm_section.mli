@@ -36,13 +36,12 @@ type normal_or_dwo =
       (** Section in .dwo or .dwp file (or .dwo embedded in .o).
           DWARF-5 spec section 7.3.2.2, page 188. *)
 
+(** No .debug_loc or .debug_ranges: only DWARF-5 and onwards is supported. *)
 type dwarf_section =
   | Debug_info of normal_or_dwo
   | Debug_abbrev of normal_or_dwo
   | Debug_aranges
   | Debug_addr
-  | Debug_loc
-  | Debug_ranges
   | Debug_loclists of normal_or_dwo
   | Debug_rnglists of normal_or_dwo
   | Debug_str
