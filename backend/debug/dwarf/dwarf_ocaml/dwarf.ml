@@ -49,10 +49,7 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
   let start_of_code_symbol =
     Cmm_helpers.make_symbol "code_begin" |> Asm_symbol.create
   in
-  let debug_loc_table = Debug_loc_table.create () in
-  let debug_ranges_table = Debug_ranges_table.create () in
-  let address_table = Address_table.create () in
-  let location_list_table = Location_list_table.create () in
+  let address_table = Address_table.create ~start_of_code_symbol in
   let skeleton_state =
     match compile_unit_proto_dies with
     | Normal _ -> None
@@ -60,11 +57,13 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
       let compilation_unit_header_label =
         Asm_label.create (DWARF (Debug_info Normal))
       in
+      let location_list_table = Location_list_table.create () in
+      let range_list_table = Range_list_table.create () in
       Some
         (DS.create Normal ~compilation_unit_header_label
            ~compilation_unit_proto_die:skeleton ~value_type_proto_die:None
-           ~start_of_code_symbol debug_loc_table debug_ranges_table
-           address_table location_list_table)
+           ~start_of_code_symbol address_table location_list_table
+           range_list_table)
     (* CR mshinwell: does get_file_id successfully emit .file directives for
        files we haven't seen before? *)
   in
@@ -86,10 +85,12 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
             DAH.create_byte_size_exn ~byte_size:Arch.size_addr ]
         ()
     in
+    let location_list_table = Location_list_table.create () in
+    let range_list_table = Range_list_table.create () in
     DS.create section_kind ~compilation_unit_header_label
       ~compilation_unit_proto_die
       ~value_type_proto_die:(Some value_type_proto_die) ~start_of_code_symbol
-      debug_loc_table debug_ranges_table address_table location_list_table
+      address_table location_list_table range_list_table
     (* CR mshinwell: does get_file_id successfully emit .file directives for
        files we haven't seen before? *)
   in

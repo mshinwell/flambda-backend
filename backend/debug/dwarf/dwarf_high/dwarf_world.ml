@@ -39,10 +39,6 @@ module State = struct
 
   let compilation_unit_header_label t = t.compilation_unit_header_label
 
-  let debug_loc_table t = t.debug_loc_table
-
-  let debug_ranges_table t = t.debug_ranges_table
-
   let address_table t = t.address_table
 
   let location_list_table t = t.location_list_table
@@ -58,10 +54,9 @@ let emit_for_one_unit ~asm_directives
     (normal_or_dwo : Asm_section.normal_or_dwo) (state : State.t)
     assigned_abbrevs =
   let compilation_unit_header_label = state.compilation_unit_header_label in
-  let debug_loc_table = state.debug_loc_table in
-  let debug_ranges_table = state.debug_ranges_table in
   let address_table = state.address_table in
   let location_list_table = state.location_list_table in
+  let range_list_table = state.range_list_table in
   let assigned_abbrevs =
     Profile.record "assign_abbrevs"
       (fun () ->
@@ -69,16 +64,13 @@ let emit_for_one_unit ~asm_directives
           ~proto_die_root:state.compilation_unit_proto_die)
       ()
   in
-  List.iter
-    (fun location_list -> Debug_loc_table.insert debug_loc_table location_list)
-    assigned_abbrevs.dwarf_4_location_lists;
   let debug_abbrev_label =
     Asm_label.for_dwarf_section (Debug_abbrev normal_or_dwo)
   in
   let debug_info =
     Profile.record "debug_info_section"
       (fun () ->
-        Debug_info_section.create ~dies:assigned_abbrevs.dies
+        Debug_info_section.create normal_or_dwo ~dies:assigned_abbrevs.dies
           ~debug_abbrev_label ~compilation_unit_header_label)
       ()
   in
@@ -88,13 +80,23 @@ let emit_for_one_unit ~asm_directives
       Profile.record "debug_info_section"
         (Debug_info_section.emit ~asm_directives)
         debug_info;
-      Profile.record "addr_table"
-        (Address_table.emit ~asm_directives)
-        address_table;
+      (* .debug_addr is only emitted during compilation, to the object file. It
+         never appears in a .dwo section. When generating split DWARF, both the
+         skeleton and main states share the address table, but only the former
+         will emit it. *)
+      (match normal_or_dwo with
+      | Normal ->
+        Profile.record "addr_table"
+          (Address_table.emit ~asm_directives)
+          address_table
+      | Dwo -> ());
       A.switch_to_section (DWARF (Debug_loclists normal_or_dwo));
       Profile.record "loclists_table"
         (Location_list_table.emit ~asm_directives)
-        location_list_table)
+        location_list_table;
+      Profile.record "rnglists_table"
+        (Range_list_table.emit ~asm_directives)
+        range_list_table)
     ();
   assigned_abbrevs
 
