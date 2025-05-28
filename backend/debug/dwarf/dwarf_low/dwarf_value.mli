@@ -58,13 +58,19 @@ val code_address_from_label_plus_offset :
 
 val code_address_from_symbol : ?comment:string -> Asm_symbol.t -> t
 
-(* CR mshinwell: This doesn't form a code address. *)
-
 (** The calculation is: (upper + offset_upper) - lower. *)
 val address_table_entry_from_label_symbol_diff :
   ?comment:string ->
   upper:Asm_label.t ->
   lower:Asm_symbol.t ->
+  offset_upper:Targetint.t ->
+  unit ->
+  t
+
+val address_table_entry_from_label_label_diff :
+  ?comment:string ->
+  upper:Asm_label.t ->
+  lower:Asm_label.t ->
   offset_upper:Targetint.t ->
   unit ->
   t

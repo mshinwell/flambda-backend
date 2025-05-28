@@ -53,7 +53,7 @@ end
 module Upper_address = struct
   type t =
     { addr : Asm_label.t;
-      offset : int
+      offset : Targetint.t
     }
 
   include Identifiable.Make (struct
@@ -69,9 +69,10 @@ module Upper_address = struct
     let hash { addr; offset } = Hashtbl.hash (Asm_label.hash addr, offset)
 
     let print ppf { addr; offset } =
-      if offset = 0
+      if Targetint.equal offset Targetint.zero
       then Asm_label.print ppf addr
-      else Format.fprintf ppf "%a + %d" Asm_label.print addr offset
+      else
+        Format.fprintf ppf "%a + %a" Asm_label.print addr Targetint.print offset
 
     let output _ _ = Misc.fatal_error "Not yet implemented"
   end)
@@ -102,6 +103,30 @@ module Entry = struct
 
     let output _ _ = Misc.fatal_error "Not yet implemented"
   end)
+
+  let code_address ?offset ~start_of_code_symbol label =
+    { lower = Symbol start_of_code_symbol;
+      upper =
+        { addr = label; offset = Option.value offset ~default:Targetint.zero }
+    }
+
+  let distance_between_labels ?offset_upper ~lower ~upper () =
+    { lower = Label lower;
+      upper =
+        { addr = upper;
+          offset = Option.value offset_upper ~default:Targetint.zero
+        }
+    }
+
+  let to_dwarf_value { lower; upper = { addr = upper; offset = offset_upper } }
+      =
+    match lower with
+    | Label lower ->
+      Dwarf_value.address_table_entry_from_label_label_diff
+        ~comment:"ending address" ~lower ~upper ~offset_upper ()
+    | Symbol lower ->
+      Dwarf_value.address_table_entry_from_label_symbol_diff
+        ~comment:"ending address" ~lower ~upper ~offset_upper ()
 end
 
 type t =
@@ -145,12 +170,6 @@ let size t =
     (Initial_length.size initial_length)
     (Initial_length.to_dwarf_int initial_length)
 
-let entry_to_dwarf_value (entry : entry_and_soc_symbol) =
-  let offset = Targetint.of_int_exn entry.entry.offset in
-  Dwarf_value.address_table_entry_from_label_symbol_diff
-    ~comment:"ending address" ~upper:entry.entry.addr
-    ~lower:entry.section_symbol ~offset_upper:offset ()
-
 let emit ~asm_directives t =
   Initial_length.emit ~asm_directives (initial_length t);
   Dwarf_version.emit ~asm_directives Dwarf_version.five;
@@ -159,5 +178,5 @@ let emit ~asm_directives t =
   A.define_label t.base_addr;
   Address_index.Map.iter
     (fun _index entry ->
-      Dwarf_value.emit ~asm_directives (entry_to_dwarf_value entry))
+      Dwarf_value.emit ~asm_directives (Entry.to_dwarf_value entry))
     t.table

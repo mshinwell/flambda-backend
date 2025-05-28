@@ -40,9 +40,7 @@ let create normal_or_dwo ~dies ~debug_abbrev_label
   }
 
 let dwarf_version () =
-  match !Dwarf_flags.gdwarf_version with
-  | Four -> Dwarf_version.four
-  | Five -> Dwarf_version.five
+  match !Dwarf_flags.gdwarf_version with Five -> Dwarf_version.five
 
 (* CR-someday mshinwell: this used to have "label - section", but maybe zero
    will do. *)
@@ -63,11 +61,6 @@ let size_without_first_word t =
       (Dwarf_int.zero ()) t.dies
   in
   match !Dwarf_flags.gdwarf_version with
-  | Four ->
-    Dwarf_version.size (dwarf_version ())
-    + Dwarf_value.size (debug_abbrev_offset t)
-    + Dwarf_value.size address_width_in_bytes_on_target
-    + total_die_size
   | Five ->
     Dwarf_version.size (dwarf_version ())
     + Unit_type.size t.unit_type

@@ -21,12 +21,11 @@ module Uint64 = Numbers.Uint64
    function on values of that type. *)
 include Int64
 
-let size t =
-  Dwarf_value.size (Dwarf_value.uleb128 (Uint64.of_nonnegative_int64_exn t))
+let size _t = Dwarf_int.eight ()
 
-let emit ~asm_directives ?comment t =
-  Dwarf_value.emit ~asm_directives
-    (Dwarf_value.uleb128 ?comment (Uint64.of_nonnegative_int64_exn t))
+let emit ~asm_directives:_ ?comment t =
+  Asm_targets.Asm_directives.uleb128 ?comment
+    (Uint64.of_nonnegative_int64_exn t)
 
 include Identifiable.Make (struct
   type nonrec t = t

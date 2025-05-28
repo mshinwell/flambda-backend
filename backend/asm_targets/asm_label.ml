@@ -102,10 +102,6 @@ let debug_aranges_label = lazy (create (DWARF Debug_aranges))
 
 let debug_addr_label = lazy (create (DWARF Debug_addr))
 
-let debug_loc_label = lazy (create (DWARF Debug_loc))
-
-let debug_ranges_label = lazy (create (DWARF Debug_ranges))
-
 let debug_str_label = lazy (create (DWARF Debug_str))
 
 let debug_info_label_normal = lazy (create (DWARF (Debug_info Normal)))
@@ -145,8 +141,6 @@ let for_dwarf_section (dwarf_section : Asm_section.dwarf_section) =
   | Debug_abbrev Dwo -> Lazy.force debug_abbrev_label_dwo
   | Debug_aranges -> Lazy.force debug_aranges_label
   | Debug_addr -> Lazy.force debug_addr_label
-  | Debug_loc -> Lazy.force debug_loc_label
-  | Debug_ranges -> Lazy.force debug_ranges_label
   | Debug_loclists Normal -> Lazy.force debug_loclists_label_normal
   | Debug_loclists Dwo -> Lazy.force debug_loclists_label_dwo
   | Debug_rnglists Normal -> Lazy.force debug_rnglists_label_normal
@@ -176,7 +170,7 @@ let normal_or_dwo t =
     | Debug_str_offsets normal_or_dwo
     | Debug_macro normal_or_dwo ->
       normal_or_dwo
-    | Debug_aranges | Debug_addr | Debug_loc | Debug_ranges | Debug_str ->
+    | Debug_aranges | Debug_addr | Debug_str ->
       Misc.fatal_errorf
         "Label %a must be in a DWARF section that can potentially be emitted \
          to a .dwo"

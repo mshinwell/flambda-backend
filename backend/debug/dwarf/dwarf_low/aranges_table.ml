@@ -23,15 +23,16 @@ type t =
     values : Dwarf_value.t list
   }
 
-let create ~start_of_code_symbol ~end_of_code_symbol ~debug_info_label =
+let create normal_or_dwo ~start_of_code_symbol ~end_of_code_symbol
+    ~debug_info_label =
   let module V = Dwarf_value in
   let values =
     [ (* The initial length is inserted here by the code below. *)
       V.int16 ~comment:"section version number" (Int16.of_int_exn 2);
       (* N.B. The following offset is to the compilation unit *header*, not the
          compilation unit DIE. *)
-      V.offset_into_debug_info ~comment:"offset to compilation unit header"
-        debug_info_label;
+      V.offset_into_debug_info normal_or_dwo
+        ~comment:"offset to compilation unit header" debug_info_label;
       V.int8 ~comment:"Dwarf_arch_sizes.size_addr"
         (Int8.of_int_exn Dwarf_arch_sizes.size_addr);
       V.int8 ~comment:"flat address space" Int8.zero;

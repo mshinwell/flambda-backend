@@ -43,9 +43,8 @@ type t =
     (* For references between DIEs within a single unit *)
     (* CR-someday mshinwell: consider combining [label] and [name] into one "how
        to reference this DIE" value. *)
-    mutable name : Asm_symbol.t option;
-    (* For references between DIEs across units *)
-    location_list_in_debug_loc_table : Dwarf_4_location_list.t option
+    mutable name : Asm_symbol.t option
+        (* For references between DIEs across units *)
   }
 
 (* CR mshinwell/xclerc: maybe this could avoid using phys-equal? *)
@@ -59,8 +58,8 @@ let attribute_values_map attribute_values =
 
 (* CR-someday mshinwell: Resurrect support for sibling links. *)
 
-let create ?reference ?normal_or_dwo ?(sort_priority = -1)
-    ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values () =
+let create ?reference ?normal_or_dwo ?(sort_priority = -1) ~parent ~tag
+    ~attribute_values () =
   let normal_or_dwo =
     Option.value normal_or_dwo
       ~default:
@@ -85,8 +84,7 @@ let create ?reference ?normal_or_dwo ?(sort_priority = -1)
       tag;
       attribute_values;
       label = reference;
-      name = None;
-      location_list_in_debug_loc_table
+      name = None
     }
   in
   (match parent with
@@ -103,11 +101,11 @@ let create ?reference ?normal_or_dwo ?(sort_priority = -1)
            parent.children_by_sort_priority);
   t
 
-let create_ignore ?reference ?normal_or_dwo ?sort_priority
-    ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values () =
+let create_ignore ?reference ?normal_or_dwo ?sort_priority ~parent ~tag
+    ~attribute_values () =
   let (_ : t) =
-    create ?reference ?normal_or_dwo ?sort_priority
-      ?location_list_in_debug_loc_table ~parent ~tag ~attribute_values ()
+    create ?reference ?normal_or_dwo ?sort_priority ~parent ~tag
+      ~attribute_values ()
   in
   ()
 
@@ -131,10 +129,7 @@ type fold_arg =
         has_children : Child_determination.t;
         attribute_values : AV.t ASS.Map.t;
         label : Asm_label.t;
-        name : Asm_symbol.t option;
-        location_list_in_debug_loc_table :
-          (* optional name *)
-          Dwarf_4_location_list.t option
+        name : Asm_symbol.t option
       }
   | End_of_siblings
 
@@ -149,8 +144,7 @@ let rec depth_first_fold t ~init ~f =
            has_children;
            attribute_values = t.attribute_values;
            label = t.label;
-           name = t.name;
-           location_list_in_debug_loc_table = t.location_list_in_debug_loc_table
+           name = t.name
          })
   in
   if Int.Map.is_empty t.children_by_sort_priority
@@ -167,5 +161,3 @@ let rec depth_first_fold t ~init ~f =
     f acc End_of_siblings
 
 let reference t = t.label
-
-let location_list_in_debug_loc_table t = t.location_list_in_debug_loc_table

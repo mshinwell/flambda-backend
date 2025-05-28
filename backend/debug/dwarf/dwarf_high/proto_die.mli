@@ -45,7 +45,6 @@ val create :
   ?reference:reference ->
   ?normal_or_dwo:Asm_section.normal_or_dwo ->
   ?sort_priority:int ->
-  ?location_list_in_debug_loc_table:Dwarf_4_location_list.t ->
   parent:t option ->
   tag:Dwarf_tag.t ->
   attribute_values:Dwarf_attribute_values.Attribute_value.t list ->
@@ -56,7 +55,6 @@ val create_ignore :
   ?reference:reference ->
   ?normal_or_dwo:Asm_section.normal_or_dwo ->
   ?sort_priority:int ->
-  ?location_list_in_debug_loc_table:Dwarf_4_location_list.t ->
   parent:t option ->
   tag:Dwarf_tag.t ->
   attribute_values:Dwarf_attribute_values.Attribute_value.t list ->
@@ -86,10 +84,7 @@ type fold_arg = private
           Dwarf_attribute_values.Attribute_value.t
           Dwarf_attributes.Attribute_specification.Sealed.Map.t;
         label : Asm_label.t;
-        name : Asm_symbol.t option;
-        location_list_in_debug_loc_table :
-          (* optional name *)
-          Dwarf_4_location_list.t option
+        name : Asm_symbol.t option
       }
   | End_of_siblings
 
@@ -101,16 +96,5 @@ type fold_arg = private
    of sibling entries [must be] terminated by a null entry" specified in the
    DWARF-4 spec. *)
 val depth_first_fold : t -> init:'a -> f:('a -> fold_arg -> 'a) -> 'a
-
-(** If this proto-DIE has been marked as referencing a DWARF-4 location list,
-    return which list it is. We do not currently need to reference more than one
-    list in the [attribute_values] of any given proto-DIE. This information
-    (which could theoretically be deduced directly from [attribute_values]
-    rather than relying on the caller---though relying on the caller is easier)
-    enables us to emit the .debug_loc location lists in the same order as they
-    are encountered during a top-down traversal as per [depth_first_fold]. This
-    suppresses a complaint from objdump "Location lists in .debug_loc start at
-    ...". *)
-val location_list_in_debug_loc_table : t -> Dwarf_4_location_list.t option
 
 val equal : t -> t -> bool

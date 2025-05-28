@@ -21,11 +21,11 @@ open Asm_targets
 module Entry : sig
   type t
 
-  val code_address : ?offset:int -> Asm_label.t -> t
+  val code_address :
+    ?offset:Targetint.t -> start_of_code_symbol:Asm_symbol.t -> Asm_label.t -> t
 
   val distance_between_labels :
-    ?lower_offset:int ->
-    ?upper_offset:int ->
+    ?offset_upper:Targetint.t ->
     lower:Asm_label.t ->
     upper:Asm_label.t ->
     unit ->
@@ -34,7 +34,7 @@ end
 
 type t
 
-val create : start_of_code_symbol:Asm_symbol.t -> t
+val create : unit -> t
 
 val add : t -> Entry.t -> Address_index.t
 

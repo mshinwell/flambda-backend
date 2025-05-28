@@ -24,6 +24,7 @@ type t
 include Dwarf_emittable.S with type t := t
 
 val create :
+  Asm_section.normal_or_dwo ->
   start_of_code_symbol:Asm_symbol.t ->
   end_of_code_symbol:Asm_symbol.t ->
   debug_info_label:Asm_label.t ->
