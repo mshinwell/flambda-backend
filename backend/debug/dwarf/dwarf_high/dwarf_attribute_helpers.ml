@@ -22,36 +22,13 @@ module AV = Dwarf_attribute_values.Attribute_value
 module V = Dwarf_attribute_values.Value
 module Uint64 = Numbers.Uint64
 
-let needs_dwarf_five () =
-  match !Dwarf_flags.gdwarf_version with
-  | Four -> Misc.fatal_error "Attribute not supported for DWARF-4"
-  | Five -> ()
-
-let create_entry_pc address_label =
+let create_entry_pc address =
   let spec = AS.create Entry_pc Addr in
-  AV.create spec
-    (V.code_address_from_label ~comment:"entry PC value" address_label)
+  AV.create spec (V.address_index ~comment:"entry PC value" address)
 
-let create_low_pc address_label =
+let create_low_pc address =
   let spec = AS.create Low_pc Addr in
-  AV.create spec
-    (V.code_address_from_label ~comment:"low PC value" address_label)
-
-let create_low_pc_with_offset address_label ~offset_in_bytes =
-  let spec = AS.create Low_pc Addr in
-  AV.create spec
-    (V.code_address_from_label_plus_offset ~comment:"low PC value" address_label
-       ~offset_in_bytes)
-
-let create_high_pc_offset ~low_pc ~low_pc_offset_in_bytes ~high_pc
-    ~high_pc_offset_in_bytes =
-  assert (Targetint.size = 64);
-  let spec = AS.create High_pc Data8 in
-  AV.create spec
-    (V.distance_between_labels_64_bit_with_offsets ~upper:high_pc
-       ~upper_offset:high_pc_offset_in_bytes ~lower:low_pc
-       ~lower_offset:low_pc_offset_in_bytes ~comment:"high PC value as offset"
-       ())
+  AV.create spec (V.address_index ~comment:"low PC value" address)
 
 let create_high_pc ~low_pc high_pc =
   match Dwarf_arch_sizes.size_addr with
@@ -163,11 +140,9 @@ let create_call_column column =
 
 let create_call_pc label =
   let spec = AS.create Call_pc Addr in
-  needs_dwarf_five ();
   AV.create spec (V.code_address_from_label ~comment:"PC of call site" label)
 
 let create_call_return_pc label =
-  needs_dwarf_five ();
   let spec = AS.create Call_return_pc Addr in
   AV.create spec
     (V.code_address_from_label ~comment:"PC immediately after call site" label)
@@ -177,14 +152,12 @@ let create_call_tail_call ~is_tail =
   then
     let spec =
       match !Dwarf_flags.gdwarf_version with
-      | Four -> AS.create (Dwarf_4 GNU_tail_call) Flag_present
       | Five -> AS.create Call_tail_call Flag_present
     in
     AV.create spec (V.flag_true ~comment:"is a tail call" ())
   else
     let spec =
       match !Dwarf_flags.gdwarf_version with
-      | Four -> AS.create (Dwarf_4 GNU_tail_call) Flag
       | Five -> AS.create Call_tail_call Flag
     in
     AV.create spec (V.bool ~comment:"is a non-tail call" false)
@@ -192,7 +165,6 @@ let create_call_tail_call ~is_tail =
 let create_call_all_calls () =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_all_call_sites) Flag_present
     | Five -> AS.create Call_all_calls Flag_present
   in
   AV.create spec (V.flag_true ~comment:"DW_AT_call_all_calls is set" ())
@@ -200,7 +172,6 @@ let create_call_all_calls () =
 let create_call_target loc_desc =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_call_site_target) Exprloc
     | Five -> AS.create Call_target Exprloc
   in
   AV.create spec (V.single_location_description loc_desc)
@@ -208,13 +179,11 @@ let create_call_target loc_desc =
 let create_call_target_clobbered loc_desc =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_call_site_target_clobbered) Exprloc
     | Five -> AS.create Call_target_clobbered Exprloc
   in
   AV.create spec (V.single_location_description loc_desc)
 
 let create_location index =
-  needs_dwarf_five ();
   let location_list_label = Location_list_table.Index.to_label index in
   let location_list_index = Location_list_table.Index.to_uint64 index in
   if not !Dwarf_flags.gdwarf_offsets
@@ -226,7 +195,6 @@ let create_location index =
     AV.create spec (V.loclistx ~index:location_list_index)
 
 let create_ranges index =
-  needs_dwarf_five ();
   let range_list_label = Range_list_table.Index.to_label index in
   let range_list_index = Range_list_table.Index.to_uint64 index in
   if not !Dwarf_flags.gdwarf_offsets
@@ -248,7 +216,6 @@ let create_composite_location_description loc_desc =
 let create_single_call_value_location_description loc_desc =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_call_site_value) Exprloc
     | Five -> AS.create Call_value Exprloc
   in
   AV.create spec (V.single_location_description loc_desc)
@@ -256,20 +223,17 @@ let create_single_call_value_location_description loc_desc =
 let create_composite_call_value_location_description loc_desc =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_call_site_value) Exprloc
     | Five -> AS.create Call_value Exprloc
   in
   AV.create spec (V.composite_location_description loc_desc)
 
 let create_single_call_data_location_description loc_desc =
-  needs_dwarf_five ();
   let spec = AS.create Call_data_location Exprloc in
   AV.create spec (V.single_location_description loc_desc)
 
 let create_single_call_data_value_location_description loc_desc =
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four -> AS.create (Dwarf_4 GNU_call_site_data_value) Exprloc
     | Five -> AS.create Call_data_value Exprloc
   in
   AV.create spec (V.single_location_description loc_desc)
@@ -366,10 +330,6 @@ let create_call_origin ~die_symbol =
   let comment = "reference to call origin DIE" in
   let spec =
     match !Dwarf_flags.gdwarf_version with
-    | Four ->
-      (* The GDB code says that [DW_AT_abstract_origin] is a GNU extension
-         alias, pre-DWARF 5, for [DW_AT_call_origin]. *)
-      AS.create Abstract_origin Ref_addr
     | Five -> AS.create Call_origin Ref_addr
   in
   AV.create spec (V.offset_into_debug_info_from_symbol ~comment die_symbol)

@@ -51,6 +51,8 @@ val indirect_string : ?comment:string -> string -> t
 
 val absolute_address : ?comment:string -> Targetint.t -> t
 
+val address_index : ?comment:string -> Address_index.t -> t
+
 val code_address_from_label : ?comment:string -> Asm_label.t -> t
 
 val code_address_from_label_plus_offset :

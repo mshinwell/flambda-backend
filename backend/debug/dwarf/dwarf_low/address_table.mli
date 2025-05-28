@@ -21,8 +21,8 @@ open Asm_targets
 module Entry : sig
   type t
 
-  val code_address :
-    ?offset:Targetint.t -> start_of_code_symbol:Asm_symbol.t -> Asm_label.t -> t
+  val address_in_section :
+    ?offset:Targetint.t -> section_symbol:Asm_symbol.t -> Asm_label.t -> t
 
   val distance_between_labels :
     ?offset_upper:Targetint.t ->
