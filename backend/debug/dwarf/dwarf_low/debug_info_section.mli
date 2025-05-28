@@ -23,6 +23,7 @@ type t
 (** It is recommended that the [Dwarf_high] library be used to form [dies]
     (along with the abbreviation table). *)
 val create :
+  Asm_section.normal_or_dwo ->
   dies:Debugging_information_entry.t list ->
   debug_abbrev_label:Asm_label.t ->
   compilation_unit_header_label:Asm_label.t ->

@@ -23,6 +23,7 @@ type t
 type dwarf_state = t
 
 val create :
+  Asm_section.normal_or_dwo ->
   compilation_unit_header_label:Asm_label.t ->
   compilation_unit_proto_die:Proto_die.t ->
   value_type_proto_die:Proto_die.t option ->
@@ -33,6 +34,8 @@ val create :
   Address_table.t ->
   Location_list_table.t ->
   t
+
+val normal_or_dwo : t -> Asm_section.normal_or_dwo
 
 val compilation_unit_header_label : t -> Asm_label.t
 

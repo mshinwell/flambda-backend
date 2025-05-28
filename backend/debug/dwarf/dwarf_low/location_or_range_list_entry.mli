@@ -64,8 +64,6 @@ module type S = sig
 
   val create : entry -> start_of_code_symbol:Asm_symbol.t -> t
 
-  val section : Asm_section.dwarf_section
-
   include Dwarf_emittable.S with type t := t
 end
 
@@ -73,6 +71,4 @@ module Make (P : sig
   module Payload : Dwarf_emittable.S
 
   val code_for_entry_kind : _ entry -> int
-
-  val section : Asm_section.dwarf_section
 end) : S with type payload = P.Payload.t

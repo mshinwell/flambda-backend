@@ -20,17 +20,24 @@ module DIE = Debugging_information_entry
 module A = Asm_directives
 
 type t =
-  { unit_type : Unit_type.t;
+  { normal_or_dwo : Asm_section.normal_or_dwo;
+    unit_type : Unit_type.t;
     dies : DIE.t list;
     debug_abbrev_label : Asm_label.t;
     compilation_unit_header_label : Asm_label.t
   }
 
-let create ~dies ~debug_abbrev_label ~compilation_unit_header_label =
+let create normal_or_dwo ~dies ~debug_abbrev_label
+    ~compilation_unit_header_label =
   let unit_type : Unit_type.t =
     if !Dwarf_flags.split_dwarf then Skeleton else Compile
   in
-  { unit_type; dies; debug_abbrev_label; compilation_unit_header_label }
+  { normal_or_dwo;
+    unit_type;
+    dies;
+    debug_abbrev_label;
+    compilation_unit_header_label
+  }
 
 let dwarf_version () =
   match !Dwarf_flags.gdwarf_version with
@@ -41,7 +48,7 @@ let dwarf_version () =
    will do. *)
 let debug_abbrev_offset t =
   Dwarf_value.offset_into_debug_abbrev ~comment:"abbrevs. for this comp. unit"
-    t.debug_abbrev_label
+    t.normal_or_dwo t.debug_abbrev_label
 
 (* CR-someday mshinwell: fix for cross compilation *)
 let address_width_in_bytes_on_target =
@@ -72,6 +79,8 @@ let size t =
   let size_without_first_word = size_without_first_word t in
   let initial_length = Initial_length.create size_without_first_word in
   Dwarf_int.add (Initial_length.size initial_length) size_without_first_word
+
+(* XXX dwo hash? *)
 
 let emit ~asm_directives t =
   let size_without_first_word = size_without_first_word t in

@@ -32,6 +32,7 @@ open! Dwarf_low
 open! Dwarf_high
 
 val dwarf :
+  get_file_num:(filename:string -> int) ->
   Dwarf_state.t ->
   Linear.fundecl ->
   Inlined_frame_ranges.t ->

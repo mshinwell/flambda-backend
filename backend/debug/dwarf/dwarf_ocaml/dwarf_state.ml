@@ -18,7 +18,8 @@ open Dwarf_low
 open Dwarf_high
 
 type t =
-  { state : Dwarf_world.State.t;
+  { normal_or_dwo : Asm_section.normal_or_dwo;
+    state : Dwarf_world.State.t;
     value_type_proto_die : Proto_die.t option;
     start_of_code_symbol : Asm_symbol.t;
     function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t
@@ -26,19 +27,22 @@ type t =
 
 type dwarf_state = t
 
-let create ~compilation_unit_header_label ~compilation_unit_proto_die
-    ~value_type_proto_die ~start_of_code_symbol debug_loc_table
-    debug_ranges_table address_table location_list_table =
+let create normal_or_dwo ~compilation_unit_header_label
+    ~compilation_unit_proto_die ~value_type_proto_die ~start_of_code_symbol
+    debug_loc_table debug_ranges_table address_table location_list_table =
   let state =
     Dwarf_world.State.create ~compilation_unit_header_label
       ~compilation_unit_proto_die ~debug_loc_table ~debug_ranges_table
       ~address_table ~location_list_table
   in
-  { state;
+  { normal_or_dwo;
+    state;
     value_type_proto_die;
     start_of_code_symbol;
     function_abstract_instances = Asm_symbol.Tbl.create 42
   }
+
+let normal_or_dwo t = t.normal_or_dwo
 
 let get_dwarf_world_state t = t.state
 

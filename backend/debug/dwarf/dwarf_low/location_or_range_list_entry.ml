@@ -59,8 +59,6 @@ module type S = sig
 
   val create : entry -> start_of_code_symbol:Asm_symbol.t -> t
 
-  val section : Asm_section.dwarf_section
-
   include Dwarf_emittable.S with type t := t
 end
 
@@ -68,8 +66,6 @@ module Make (P : sig
   module Payload : Dwarf_emittable.S
 
   val code_for_entry_kind : _ entry -> int
-
-  val section : Asm_section.dwarf_section
 end) =
 struct
   module Payload = P.Payload
@@ -89,8 +85,6 @@ struct
     let adjustment = Targetint.of_int_exn adjustment in
     Dwarf_value.code_address_from_label_symbol_diff ~comment ~upper:label
       ~lower:t.start_of_code_symbol ~offset_upper:adjustment ()
-
-  let section = P.section
 
   let size0 t =
     match t.entry with

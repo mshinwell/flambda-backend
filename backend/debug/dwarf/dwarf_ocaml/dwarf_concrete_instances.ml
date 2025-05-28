@@ -65,7 +65,9 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
          PC value should be assumed, which is correct. *)
       DAH.create_entry_pc_from_symbol start_sym;
       DAH.create_stmt_list
-        ~debug_line_label:(Asm_label.for_dwarf_section Asm_section.Debug_line);
+        ~debug_line_label:
+          (Asm_label.for_dwarf_section
+             (Asm_section.Debug_line (DS.normal_or_dwo state)));
       DAH.create_abstract_origin ~die_symbol:_abstract_instance_root_symbol ]
   in
   let concrete_instance_proto_die =

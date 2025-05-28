@@ -98,10 +98,6 @@ let create (section : Asm_section.t) = !new_label_ref section
    get rid of all these variables plus the pattern matching in
    for_dwarf_section. *)
 
-let debug_info_label = lazy (create (DWARF Debug_info))
-
-let debug_abbrev_label = lazy (create (DWARF Debug_abbrev))
-
 let debug_aranges_label = lazy (create (DWARF Debug_aranges))
 
 let debug_addr_label = lazy (create (DWARF Debug_addr))
@@ -110,26 +106,58 @@ let debug_loc_label = lazy (create (DWARF Debug_loc))
 
 let debug_ranges_label = lazy (create (DWARF Debug_ranges))
 
-let debug_loclists_label = lazy (create (DWARF Debug_loclists))
-
-let debug_rnglists_label = lazy (create (DWARF Debug_rnglists))
-
 let debug_str_label = lazy (create (DWARF Debug_str))
 
-let debug_line_label = lazy (create (DWARF Debug_line))
+let debug_info_label_normal = lazy (create (DWARF (Debug_info Normal)))
+
+let debug_info_label_dwo = lazy (create (DWARF (Debug_info Dwo)))
+
+let debug_abbrev_label_normal = lazy (create (DWARF (Debug_abbrev Normal)))
+
+let debug_abbrev_label_dwo = lazy (create (DWARF (Debug_abbrev Dwo)))
+
+let debug_loclists_label_normal = lazy (create (DWARF (Debug_loclists Normal)))
+
+let debug_loclists_label_dwo = lazy (create (DWARF (Debug_loclists Dwo)))
+
+let debug_rnglists_label_normal = lazy (create (DWARF (Debug_rnglists Normal)))
+
+let debug_rnglists_label_dwo = lazy (create (DWARF (Debug_rnglists Dwo)))
+
+let debug_line_label_normal = lazy (create (DWARF (Debug_line Normal)))
+
+let debug_line_label_dwo = lazy (create (DWARF (Debug_line Dwo)))
+
+let debug_str_offsets_label_normal =
+  lazy (create (DWARF (Debug_str_offsets Normal)))
+
+let debug_str_offsets_label_dwo = lazy (create (DWARF (Debug_str_offsets Dwo)))
+
+let debug_macro_label_normal = lazy (create (DWARF (Debug_macro Normal)))
+
+let debug_macro_label_dwo = lazy (create (DWARF (Debug_macro Dwo)))
 
 let for_dwarf_section (dwarf_section : Asm_section.dwarf_section) =
   match dwarf_section with
-  | Debug_info -> Lazy.force debug_info_label
-  | Debug_abbrev -> Lazy.force debug_abbrev_label
+  | Debug_info Normal -> Lazy.force debug_info_label_normal
+  | Debug_info Dwo -> Lazy.force debug_info_label_dwo
+  | Debug_abbrev Normal -> Lazy.force debug_abbrev_label_normal
+  | Debug_abbrev Dwo -> Lazy.force debug_abbrev_label_dwo
   | Debug_aranges -> Lazy.force debug_aranges_label
   | Debug_addr -> Lazy.force debug_addr_label
   | Debug_loc -> Lazy.force debug_loc_label
   | Debug_ranges -> Lazy.force debug_ranges_label
-  | Debug_loclists -> Lazy.force debug_loclists_label
-  | Debug_rnglists -> Lazy.force debug_rnglists_label
+  | Debug_loclists Normal -> Lazy.force debug_loclists_label_normal
+  | Debug_loclists Dwo -> Lazy.force debug_loclists_label_dwo
+  | Debug_rnglists Normal -> Lazy.force debug_rnglists_label_normal
+  | Debug_rnglists Dwo -> Lazy.force debug_rnglists_label_dwo
   | Debug_str -> Lazy.force debug_str_label
-  | Debug_line -> Lazy.force debug_line_label
+  | Debug_line Normal -> Lazy.force debug_line_label_normal
+  | Debug_line Dwo -> Lazy.force debug_line_label_dwo
+  | Debug_str_offsets Normal -> Lazy.force debug_str_offsets_label_normal
+  | Debug_str_offsets Dwo -> Lazy.force debug_str_offsets_label_dwo
+  | Debug_macro Normal -> Lazy.force debug_macro_label_normal
+  | Debug_macro Dwo -> Lazy.force debug_macro_label_dwo
 
 let for_section (section : Asm_section.t) =
   match section with

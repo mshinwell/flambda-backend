@@ -61,7 +61,7 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
         Asm_label.create (DWARF (Debug_info Normal))
       in
       Some
-        (DS.create ~compilation_unit_header_label
+        (DS.create Normal ~compilation_unit_header_label
            ~compilation_unit_proto_die:skeleton ~value_type_proto_die:None
            ~start_of_code_symbol debug_loc_table debug_ranges_table
            address_table location_list_table)
@@ -86,7 +86,8 @@ let create ~sourcefile ~unit_name ~asm_directives ~get_file_id ~code_begin
             DAH.create_byte_size_exn ~byte_size:Arch.size_addr ]
         ()
     in
-    DS.create ~compilation_unit_header_label ~compilation_unit_proto_die
+    DS.create section_kind ~compilation_unit_header_label
+      ~compilation_unit_proto_die
       ~value_type_proto_die:(Some value_type_proto_die) ~start_of_code_symbol
       debug_loc_table debug_ranges_table address_table location_list_table
     (* CR mshinwell: does get_file_id successfully emit .file directives for

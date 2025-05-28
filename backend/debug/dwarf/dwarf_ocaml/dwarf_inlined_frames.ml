@@ -133,8 +133,8 @@ module All_summaries = Identifiable.Make (struct
   let hash t = Hashtbl.hash (elements t)
 end)
 
-let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
-    range_list_attributes block =
+let die_for_inlined_frame state ~get_file_num ~compilation_unit_proto_die
+    ~parent range_list_attributes block =
   let abstract_instance_symbol =
     Dwarf_abstract_instances.find state ~compilation_unit_proto_die block
   in
@@ -163,7 +163,7 @@ let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
   Proto_die.create ~parent:(Some parent) ~tag:Inlined_subroutine
     ~attribute_values:
       (abstract_instance @ range_list_attributes
-      @ [DAH.create_call_file (Dwarf_state.get_file_num state block.dinfo_file)]
+      @ [DAH.create_call_file (get_file_num ~filename:block.dinfo_file)]
       @ (if block.dinfo_line >= 0
         then [DAH.create_call_line block.dinfo_line]
         else [])
@@ -216,9 +216,10 @@ let create_range_list_attributes_and_summarise state range all_summaries =
       range_list_attributes, all_summaries
     | range_list_attributes -> range_list_attributes, all_summaries)
 
-let rec create_down_to_innermost_frame fundecl state ~compilation_unit_proto_die
-    ~(prefix : Debuginfo.item list) ~(blocks_outermost_first : Debuginfo.t)
-    scope_proto_dies all_summaries ~parent_die range inlined_frame_ranges =
+let rec create_down_to_innermost_frame ~get_file_num fundecl state
+    ~compilation_unit_proto_die ~(prefix : Debuginfo.item list)
+    ~(blocks_outermost_first : Debuginfo.t) scope_proto_dies all_summaries
+    ~parent_die range inlined_frame_ranges =
   DS.Debug.log ">> create_down_to_innermost_frame: %a || %a\n%!"
     Debuginfo.print_compact_extended
     (Debuginfo.of_items prefix)
@@ -243,8 +244,8 @@ let rec create_down_to_innermost_frame fundecl state ~compilation_unit_proto_die
       DS.Debug.log "prefix+block already has a proto DIE (ref %a)\n%!"
         Asm_label.print
         (Proto_die.reference existing_die);
-      create_down_to_innermost_frame fundecl state ~compilation_unit_proto_die
-        ~prefix:(prefix @ [block_item])
+      create_down_to_innermost_frame ~get_file_num fundecl state
+        ~compilation_unit_proto_die ~prefix:(prefix @ [block_item])
         ~blocks_outermost_first:(Debuginfo.of_items deeper_blocks)
         scope_proto_dies all_summaries ~parent_die:existing_die range
         inlined_frame_ranges
@@ -271,7 +272,7 @@ let rec create_down_to_innermost_frame fundecl state ~compilation_unit_proto_die
         create_range_list_attributes_and_summarise state range all_summaries
       in
       let inlined_subroutine_die =
-        die_for_inlined_frame state ~compilation_unit_proto_die
+        die_for_inlined_frame state ~get_file_num ~compilation_unit_proto_die
           ~parent:parent_die range_list_attributes block
       in
       DS.Debug.log "Our DIE ref (DW_TAG_inlined_subroutine) for %a is %a\n%!"
@@ -282,7 +283,8 @@ let rec create_down_to_innermost_frame fundecl state ~compilation_unit_proto_die
       in
       scope_proto_dies, all_summaries)
 
-let dwarf state (fundecl : L.fundecl) inlined_frame_ranges ~function_proto_die =
+let dwarf ~get_file_num state (fundecl : L.fundecl) inlined_frame_ranges
+    ~function_proto_die =
   DS.Debug.log "\n\nDwarf_inlined_frames.dwarf: function proto DIE is %a\n%!"
     Asm_label.print
     (Proto_die.reference function_proto_die);
@@ -324,7 +326,7 @@ let dwarf state (fundecl : L.fundecl) inlined_frame_ranges ~function_proto_die =
             K.print block_with_parents;
           match IF.find inlined_frame_ranges block_with_parents with
           | range ->
-            create_down_to_innermost_frame fundecl state
+            create_down_to_innermost_frame ~get_file_num fundecl state
               ~compilation_unit_proto_die ~prefix:[first_item]
               ~blocks_outermost_first:parents_outermost_first scope_proto_dies
               all_summaries ~parent_die:function_proto_die range
