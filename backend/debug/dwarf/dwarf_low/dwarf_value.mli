@@ -53,84 +53,41 @@ val absolute_address : ?comment:string -> Targetint.t -> t
 
 val address_index : ?comment:string -> Address_index.t -> t
 
-val code_address_from_label : ?comment:string -> Asm_label.t -> t
+val offset_into_debug_info : ?comment:string -> Address_index.t -> t
 
-val code_address_from_label_plus_offset :
-  ?comment:string -> Asm_label.t -> offset_in_bytes:Targetint.t -> t
+val offset_into_debug_line : ?comment:string -> Address_index.t -> t
 
-val code_address_from_symbol : ?comment:string -> Asm_symbol.t -> t
+val offset_into_debug_loclists : ?comment:string -> Address_index.t -> t
 
-(** The calculation is: (upper + offset_upper) - lower. *)
-val address_table_entry_from_label_symbol_diff :
-  ?comment:string ->
-  upper:Asm_label.t ->
-  lower:Asm_symbol.t ->
-  offset_upper:Targetint.t ->
-  unit ->
-  t
+val offset_into_debug_rnglists : ?comment:string -> Address_index.t -> t
 
-val address_table_entry_from_label_label_diff :
-  ?comment:string ->
-  upper:Asm_label.t ->
-  lower:Asm_label.t ->
-  offset_upper:Targetint.t ->
-  unit ->
-  t
+val offset_into_debug_abbrev : ?comment:string -> Address_index.t -> t
 
-val code_address_from_symbol_diff :
-  ?comment:string -> upper:Asm_symbol.t -> lower:Asm_symbol.t -> unit -> t
+module Not_in_dwo : sig
+  (** These functions may only be used for generating DWARF sections that
+      are not dwo sections, since they reference either assembler
+      metalanguage constructs (Asm_label) or entities whose references
+      require relocation (Asm_symbol). *)
 
-val code_address_from_symbol_plus_bytes : Asm_symbol.t -> Targetint.t -> t
+  val offset_into_debug_addr : ?comment:string -> Asm_label.t -> t
 
-val offset_into_debug_info :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_label.t -> t
+  (** The calculation is: (upper + offset_upper) - lower. *)
+  val address_table_entry_from_label_symbol_diff :
+    ?comment:string ->
+    upper:Asm_label.t ->
+    lower:Asm_symbol.t ->
+    offset_upper:Targetint.t ->
+    unit ->
+    t
 
-val offset_into_debug_info_from_symbol :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_symbol.t -> t
-
-val offset_into_debug_line :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_label.t -> t
-
-val offset_into_debug_line_from_symbol :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_symbol.t -> t
-
-(** Not for use for DWARF >= version 5. *)
-val offset_into_debug_loc : ?comment:string -> Asm_label.t -> t
-
-(** Not for use for DWARF >= version 5. *)
-val offset_into_debug_ranges : ?comment:string -> Asm_label.t -> t
-
-(** Not for use for DWARF < version 5. *)
-val offset_into_debug_addr : ?comment:string -> Asm_label.t -> t
-
-(** Not for use for DWARF < version 5. *)
-val offset_into_debug_loclists :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_label.t -> t
-
-(** Not for use for DWARF < version 5. *)
-val offset_into_debug_rnglists :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_label.t -> t
-
-val offset_into_debug_abbrev :
-  ?comment:string -> Asm_section.normal_or_dwo -> Asm_label.t -> t
-
-val distance_between_labels_16_bit :
-  ?comment:string -> upper:Asm_label.t -> lower:Asm_label.t -> unit -> t
-
-val distance_between_labels_32_bit :
-  ?comment:string -> upper:Asm_label.t -> lower:Asm_label.t -> unit -> t
-
-val distance_between_labels_64_bit :
-  ?comment:string -> upper:Asm_label.t -> lower:Asm_label.t -> unit -> t
-
-val distance_between_labels_64_bit_with_offsets :
-  ?comment:string ->
-  upper:Asm_label.t ->
-  upper_offset:Targetint.t ->
-  lower:Asm_label.t ->
-  lower_offset:Targetint.t ->
-  unit ->
-  t
+  val address_table_entry_from_label_label_diff :
+    ?comment:string ->
+    upper:Asm_label.t ->
+    lower:Asm_label.t ->
+    offset_upper:Targetint.t ->
+    unit ->
+    t
+end
 
 val append_to_comment : t -> string -> t
 

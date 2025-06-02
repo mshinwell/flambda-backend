@@ -29,6 +29,19 @@ module Uint32 = Numbers.Uint32
 module Uint64 = Numbers.Uint64
 module A = Asm_directives
 
+type not_in_dwo =
+  | Offset_into_debug_addr of Address_index.t
+  | Address_table_entry_from_label_symbol_diff of
+      { upper : Asm_label.t;
+        lower : Asm_symbol.t;
+        offset_upper : Targetint.t
+      }
+  | Address_table_entry_from_label_label_diff of
+      { upper : Asm_label.t;
+        lower : Asm_label.t;
+        offset_upper : Targetint.t
+      }
+
 type value =
   | Flag_true
   | Bool of bool
@@ -45,57 +58,13 @@ type value =
   | String of string
   | Indirect_string of string
   | Absolute_address of Targetint.t
-  | Address_table_entry_from_label_symbol_diff of
-      { upper : Asm_label.t;
-        (* This one is allowed to use [Asm_label] because it is never emitted
-           into a dwo section. *)
-        lower : Asm_symbol.t;
-        offset_upper : Targetint.t
-      }
-  | Code_address_from_label of Address_index.t
-  | Code_address_from_label_plus_offset of
-      { label : Address_index.t;
-        offset_in_bytes : Targetint.t
-      }
-  | Code_address_from_symbol of Asm_symbol.t
-  | Code_address_from_symbol_diff of
-      { upper : Asm_symbol.t;
-        lower : Asm_symbol.t
-      }
-  | Code_address_from_symbol_plus_bytes of
-      { sym : Asm_symbol.t;
-        offset_in_bytes : Targetint.t
-      }
+  | Address_index of Address_index.t
   | Offset_into_debug_info of Address_index.t
-  | Offset_into_debug_info_from_symbol of
-      Asm_section.normal_or_dwo * Asm_symbol.t
   | Offset_into_debug_line of Address_index.t
-  | Offset_into_debug_line_from_symbol of
-      Asm_section.normal_or_dwo * Asm_symbol.t
-  | Offset_into_debug_addr of Address_index.t
-  | Offset_into_debug_loc of Address_index.t
-  | Offset_into_debug_ranges of Address_index.t
   | Offset_into_debug_loclists of Address_index.t
   | Offset_into_debug_rnglists of Address_index.t
   | Offset_into_debug_abbrev of Address_index.t
-  | Distance_between_labels_16_bit of
-      { upper : Address_index.t;
-        lower : Address_index.t
-      }
-  | Distance_between_labels_32_bit of
-      { upper : Address_index.t;
-        lower : Address_index.t
-      }
-  | Distance_between_labels_64_bit of
-      { upper : Address_index.t;
-        lower : Address_index.t
-      }
-  | Distance_between_labels_64_bit_with_offsets of
-      { upper : Address_index.t;
-        upper_offset : Targetint.t;
-        lower : Address_index.t;
-        lower_offset : Targetint.t
-      }
+  | Not_in_dwo of not_in_dwo
 
 type t =
   { value : value;
@@ -121,61 +90,39 @@ let print ppf { value; comment = _ } =
   | Indirect_string str -> Format.fprintf ppf "\"%S\" [indirect]" str
   | Absolute_address addr ->
     Format.fprintf ppf "0x%Lx" (Targetint.to_int64 addr)
-  | Code_address_from_label lbl -> Asm_label.print ppf lbl
-  | Code_address_from_label_plus_offset
-      { label : Asm_label.t; offset_in_bytes : Targetint.t } ->
-    Format.fprintf ppf "%a + %a" Asm_label.print label Targetint.print
-      offset_in_bytes
-  | Code_address_from_symbol sym -> Asm_symbol.print ppf sym
-  | Address_table_entry_from_label_symbol_diff { upper; lower; offset_upper } ->
-    Format.fprintf ppf "(%a + %a) - %a" Asm_label.print upper Targetint.print
-      offset_upper Asm_symbol.print lower
-  | Code_address_from_symbol_diff { upper; lower } ->
-    Format.fprintf ppf "%a - %a" Asm_symbol.print upper Asm_symbol.print lower
-  | Code_address_from_symbol_plus_bytes { sym; offset_in_bytes } ->
-    Format.fprintf ppf "%a + %a" Asm_symbol.print sym Targetint.print
-      offset_in_bytes
-  | Offset_into_debug_info lbl ->
-    Format.fprintf ppf "%a - .debug_info%s" Asm_label.print lbl
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_info_from_symbol sym ->
-    Format.fprintf ppf "%a - .debug_info%s" Asm_symbol.print sym
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_line lbl ->
-    Format.fprintf ppf "%a - .debug_line%s" Asm_label.print lbl
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_line_from_symbol sym ->
-    Format.fprintf ppf "%a - .debug_line%s" Asm_symbol.print sym
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_addr lbl ->
-    Format.fprintf ppf "%a - .debug_addr" Asm_label.print lbl
-  | Offset_into_debug_loc lbl ->
-    Format.fprintf ppf "%a - .debug_loc" Asm_label.print lbl
-  | Offset_into_debug_ranges lbl ->
-    Format.fprintf ppf "%a - .debug_ranges" Asm_label.print lbl
-  | Offset_into_debug_loclists lbl ->
-    Format.fprintf ppf "%a - .debug_loclists%s" Asm_label.print lbl
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_rnglists lbl ->
-    Format.fprintf ppf "%a - .debug_rnglists%s" Asm_label.print lbl
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Offset_into_debug_abbrev lbl ->
-    Format.fprintf ppf "%a - .debug_abbrev%s" Asm_label.print lbl
-      (dwo (Asm_label.normal_or_dwo lbl))
-  | Distance_between_labels_16_bit { upper; lower } ->
-    Format.fprintf ppf "%a - %a (16)" Asm_label.print upper Asm_label.print
-      lower
-  | Distance_between_labels_32_bit { upper; lower } ->
-    Format.fprintf ppf "%a - %a (32)" Asm_label.print upper Asm_label.print
-      lower
-  | Distance_between_labels_64_bit { upper; lower } ->
-    Format.fprintf ppf "%a - %a (64)" Asm_label.print upper Asm_label.print
-      lower
-  | Distance_between_labels_64_bit_with_offsets
-      { upper; upper_offset; lower; lower_offset } ->
-    Format.fprintf ppf "(%a + %a) - (%a + %a) (64)" Asm_label.print upper
-      Targetint.print upper_offset Asm_label.print lower Targetint.print
-      lower_offset
+  | Address_index addr_index -> Address_index.print ppf addr_index
+  | Offset_into_debug_info (normal_or_dwo, addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_info%s %a)" (dwo normal_or_dwo)
+      Address_index.print addr_index
+  | Offset_into_debug_line (normal_or_dwo, addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_line%s %a)" (dwo normal_or_dwo)
+      Address_index.print addr_index
+  | Offset_into_debug_loclists (normal_or_dwo, addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_loclists%s %a)" (dwo normal_or_dwo)
+      Address_index.print addr_index
+  | Offset_into_debug_rnglists (normal_or_dwo, addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_rnglists%s %a)" (dwo normal_or_dwo)
+      Address_index.print addr_index
+  | Offset_into_debug_abbrev (normal_or_dwo, addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_abbrev%s %a)" (dwo normal_or_dwo)
+      Address_index.print addr_index
+  | Not_in_dwo (Offset_into_debug_addr addr_index) ->
+    Format.fprintf ppf "(Offset_into_debug_addr %a)" Address_index.print
+      addr_index
+  | Not_in_dwo
+      (Address_table_entry_from_label_symbol_diff
+        { upper; lower; offset_upper }) ->
+    Format.fprintf ppf
+      "(Address_table_entry_from_label_symbol_diff@ (lower %a)@ (upper %a)@ \
+       (offset_upper@ %a))"
+      Asm_symbol.print lower Asm_label.print upper Targetint.print offset_upper
+  | Not_in_dwo
+      (Address_table_entry_from_label_label_diff { upper; lower; offset_upper })
+    ->
+    Format.fprintf ppf
+      "(Address_table_entry_from_label_label_diff@ (lower %a)@ (upper %a)@ \
+       (offset_upper@ %a))"
+      Asm_label.print lower Asm_label.print upper Targetint.print offset_upper
 
 let flag_true ?comment () = { value = Flag_true; comment }
 
@@ -207,80 +154,33 @@ let indirect_string ?comment str = { value = Indirect_string str; comment }
 
 let absolute_address ?comment addr = { value = Absolute_address addr; comment }
 
-let code_address_from_label ?comment lbl =
-  { value = Code_address_from_label lbl; comment }
+module Not_in_dwo = struct
+  let offset_into_debug_addr ?comment lbl =
+    { value = Offset_into_debug_addr lbl; comment }
 
-let code_address_from_label_plus_offset ?comment label ~offset_in_bytes =
-  { value = Code_address_from_label_plus_offset { label; offset_in_bytes };
-    comment
-  }
+  let address_table_entry_from_label_symbol_diff ?comment ~upper ~lower
+      ~offset_upper () =
+    { value =
+        Address_table_entry_from_label_symbol_diff
+          { upper; lower; offset_upper };
+      comment
+    }
+end
 
-let code_address_from_symbol ?comment sym =
-  { value = Code_address_from_symbol sym; comment }
+let offset_into_debug_info ?comment addr_index =
+  { value = Offset_into_debug_info addr_index; comment }
 
-let address_table_entry_from_label_symbol_diff ?comment ~upper ~lower
-    ~offset_upper () =
-  { value =
-      Address_table_entry_from_label_symbol_diff { upper; lower; offset_upper };
-    comment
-  }
+let offset_into_debug_line ?comment addr_index =
+  { value = Offset_into_debug_line addr_index; comment }
 
-let code_address_from_symbol_diff ?comment ~upper ~lower () =
-  { value = Code_address_from_symbol_diff { upper; lower }; comment }
+let offset_into_debug_loclists ?comment addr_index =
+  { value = Offset_into_debug_loclists addr_index; comment }
 
-let code_address_from_symbol_plus_bytes sym offset_in_bytes =
-  { value = Code_address_from_symbol_plus_bytes { sym; offset_in_bytes };
-    comment = None
-  }
+let offset_into_debug_rnglists ?comment addr_index =
+  { value = Offset_into_debug_rnglists addr_index; comment }
 
-let offset_into_debug_info ?comment lbl =
-  { value = Offset_into_debug_info lbl; comment }
-
-let offset_into_debug_info_from_symbol ?comment sym =
-  let normal_or_dwo = assert false (* XXX *) in
-  { value = Offset_into_debug_info_from_symbol (normal_or_dwo, sym); comment }
-
-let offset_into_debug_line ?comment lbl =
-  { value = Offset_into_debug_line lbl; comment }
-
-let offset_into_debug_line_from_symbol ?comment sym =
-  let normal_or_dwo = assert false (* XXX *) in
-  { value = Offset_into_debug_line_from_symbol (normal_or_dwo, sym); comment }
-
-let offset_into_debug_addr ?comment lbl =
-  { value = Offset_into_debug_addr lbl; comment }
-
-let offset_into_debug_loc ?comment lbl =
-  { value = Offset_into_debug_loc lbl; comment }
-
-let offset_into_debug_ranges ?comment lbl =
-  { value = Offset_into_debug_ranges lbl; comment }
-
-let offset_into_debug_loclists ?comment lbl =
-  { value = Offset_into_debug_loclists lbl; comment }
-
-let offset_into_debug_rnglists ?comment lbl =
-  { value = Offset_into_debug_rnglists lbl; comment }
-
-let offset_into_debug_abbrev ?comment lbl =
-  { value = Offset_into_debug_abbrev lbl; comment }
-
-let distance_between_labels_16_bit ?comment ~upper ~lower () =
-  { value = Distance_between_labels_16_bit { upper; lower }; comment }
-
-let distance_between_labels_32_bit ?comment ~upper ~lower () =
-  { value = Distance_between_labels_32_bit { upper; lower }; comment }
-
-let distance_between_labels_64_bit ?comment ~upper ~lower () =
-  { value = Distance_between_labels_64_bit { upper; lower }; comment }
-
-let distance_between_labels_64_bit_with_offsets ?comment ~upper ~upper_offset
-    ~lower ~lower_offset () =
-  { value =
-      Distance_between_labels_64_bit_with_offsets
-        { upper; upper_offset; lower; lower_offset };
-    comment
-  }
+let offset_into_debug_abbrev ?comment addr_index =
+  { value = Offset_into_debug_abbrev addr_index; comment }
 
 let append_to_comment { value; comment } to_append =
   let comment =

@@ -24,6 +24,7 @@
 
 open Asm_targets
 
+(* XXX should this have submodules or a phantom param? *)
 type t
 
 val zero : t
