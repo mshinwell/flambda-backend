@@ -2677,16 +2677,22 @@ third-party libraries such as Lwt, but with a different API."
     let _output_obj () = output_c_object := true; custom_runtime := true
     let _use_prims s = use_prims := s
     let _use_runtime s = use_runtime := s
-    let _launch_method = function
-    | "exe" ->
-        launch_method := Some Config.Executable
-    | "sh" ->
-        launch_method := Some (Config.Shebang None)
-    | s when s <> "" && s.[0] = '/' ->
-        launch_method := Some (Config.Shebang (Some s))
-    | _ ->
-        Compenv.fatal
-          "-launch-method: expect sh, exe or an absolute path for <method>"
+    let _launch_method s =
+      let s, bindir =
+        try Misc.cut_at s ' '
+        with Not_found ->
+          s, Config.target_bindir
+      in
+      match s with
+      | "exe" ->
+          launch_method := (Config.Executable, bindir)
+      | "sh" ->
+          launch_method := (Config.Shebang None, bindir)
+      | s when s <> "" && s.[0] = '/' ->
+          launch_method := (Config.Shebang (Some s), bindir)
+      | _ ->
+          Compenv.fatal
+            "-launch-method: expect sh, exe or an absolute path for <method>"
     let _v () = Compenv.print_version_and_library "compiler"
     let _vmthread () = Compenv.fatal vmthread_removed_message
   end

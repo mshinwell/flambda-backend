@@ -44,6 +44,11 @@ let standard_library_relative = relative_root_dir <> None
 
 let bindir = Option.value ~default:bindir relative_root_dir
 
+(* OxCaml boot stage: [target_bindir] and [launch_method] come from
+   [config.generated.ml] directly (no post-processing as in
+   [config.common.ml.in]). *)
+let target_bindir = target_bindir
+
 let exec_magic_number = {magic|@EXEC_MAGIC_NUMBER@|magic}
     (* exec_magic_number is duplicated in runtime/caml/exec.h *)
 and cmi_magic_number = {magic|@CMI_MAGIC_NUMBER@|magic}
@@ -69,6 +74,14 @@ let oxcaml = true
 let parameterised_modules = true
 
 type launch_method = Executable | Shebang of string option
+
+(* Boot stage: parse the string form from [config.generated.ml] the same way
+   [config.common.ml.in] does in the main stage. *)
+let launch_method =
+  match launch_method with
+  | "exe" -> Executable
+  | "sh" -> Shebang None
+  | _ -> Shebang (Some launch_method)
 
 let interface_suffix = ref ".mli"
 

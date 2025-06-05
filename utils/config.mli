@@ -47,6 +47,11 @@ val standard_library_relative: bool
 
     @since 5.5 *)
 
+val target_bindir: string
+(** The directory containing the runtime binaries on the target system
+
+    @since 5.5 *)
+
 val standard_library: string
 (** The effective directory containing the standard libraries, taking CAMLLIB
     and OCAMLLIB into account. *)
@@ -374,6 +379,11 @@ type launch_method =
                                the runtime, or via sh. The parameter if
                                specified is the full path to sh, otherwise the
                                linker searches for it. *)
+
+val launch_method : launch_method
+(** Default launch mechanism for bytecode executables
+
+    @since 5.5 *)
 
 (** Access to configuration values *)
 val print_config : out_channel -> unit

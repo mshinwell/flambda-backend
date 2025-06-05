@@ -99,6 +99,8 @@ OC_EXE_LDFLAGS=@oc_exe_ldflags@
 MKEXE_VIA_CC=\
   $(CC) $(OC_EXE_LDFLAGS) $(OC_CFLAGS) $(CFLAGS) @mkexe_via_cc_ldflags@
 
+LAUNCH_METHOD = @launch_method@
+
 # Which tool to use to display differences between files
 DIFF=@DIFF@
 # Which flags to pass to the diff tool

@@ -19,6 +19,7 @@
    than compiled on its own *)
 
 let bindir = {@QS@|@ocaml_bindir@|@QS@}
+let target_bindir = {@QS@|@TARGET_BINDIR@|@QS@}
 
 let ccomp_type = {@QS@|@ccomptype@|@QS@}
 let c_compiler = {@QS@|@CC@|@QS@}
@@ -142,3 +143,5 @@ let objcopy_compress_debug_sections_flag = {@QS@|@objcopy_compress_debug_section
 let objcopy = {@QS@|@objcopy@|@QS@}
 
 let oxcaml_dwarf = "@enable_oxcaml_dwarf@" = "yes"
+
+let launch_method = {@QS@|@target_launch_method@|@QS@}
