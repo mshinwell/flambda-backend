@@ -12,12 +12,15 @@ set -x -eu -o pipefail
 #
 
 OPAM=opam
+
 sudo apt-get update
+
 sudo apt-get install -y opam
+sudo apt-get install -y autoconf
 
 $OPAM init -a
 
-$OPAM switch create 5.2.0+flambda2 \
+$OPAM switch create 5.2.0+flambda2 --yes \
   --repos "with-extensions=\
 git+https://github.com/janestreet/opam-repository.git#with-extensions,default"
 
