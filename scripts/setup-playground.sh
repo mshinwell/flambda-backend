@@ -13,7 +13,7 @@ set -x -eu -o pipefail
 
 OPAM=opam
 
-curl -oL /tmp/autoconf.tar.gz \
+curl -L -o /tmp/autoconf.tar.gz \
   https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
 tar fxz /tmp/autoconf.tar.gz
 cd autoconf-2.71
