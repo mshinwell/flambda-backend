@@ -1,5 +1,6 @@
 {
         "name": "OxCaml Playground",
+        "image": "microsoft/vscode-dev-containers/ubuntu-22.04",
         "postCreateCommand": "/usr/bin/env bash scripts/setup-playground.sh",
         "customizations": {
                 "vscode": {
