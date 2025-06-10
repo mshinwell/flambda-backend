@@ -2,15 +2,19 @@
 
 set -x -eu -o pipefail
 
-sudo apt-get install bubblewrap
+#sudo apt-get install bubblewrap
+#
+#OPAM="$HOME/opam"
+#
+#curl -Lo $OPAM \
+#  https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-i686-linux
+#chmod +x $OPAM
+#
+#$OPAM init -a
 
-OPAM="$HOME/opam"
-
-curl -Lo $OPAM \
-  https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-i686-linux
-chmod +x $OPAM
-
-$OPAM init -a
+OPAM=opam
+sudo apt-get update
+sudo apt-get install -y opam
 
 $OPAM switch create 5.2.0+ox \
   --repos "with-extensions=\
