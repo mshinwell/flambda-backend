@@ -2,6 +2,8 @@
 
 set -x -eu -o pipefail
 
+sudo apt-get install bubblewrap
+
 OPAM="$HOME/opam"
 
 curl -Lo $OPAM \
