@@ -10,7 +10,8 @@ git+https://github.com/janestreet/opam-repository.git#with-extensions,default"
 
 eval $(opam env --switch 5.2.0+ox)
 
-opam install ocamlformat merlin ocaml-lsp-server utop
+# opam install ocamlformat merlin ocaml-lsp-server utop
+opam install ocaml-lsp-server
 
 # Install extensions here rather than via customizations.vscode.extensions
 # in .devcontainer.json, so the OPAM environment is set up first, to avoid
