@@ -13,10 +13,17 @@ set -x -eu -o pipefail
 
 OPAM=opam
 
-sudo apt-get update
+curl -oL /tmp/autoconf.tar.gz \
+  https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
+tar fxz /tmp/autoconf.tar.gz
+cd autoconf-2.71
+./configure --prefix=$HOME/autoconf-2.71-install
+make
+make install
+export PATH=$HOME/autoconf-2.71-install/bin:$PATH
 
+sudo apt-get update
 sudo apt-get install -y opam
-sudo apt-get install -y autoconf
 
 $OPAM init -a
 
