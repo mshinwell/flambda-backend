@@ -8,6 +8,8 @@ curl -Lo $OPAM \
   https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-i686-linux
 chmod +x $OPAM
 
+$OPAM init -a
+
 $OPAM switch create 5.2.0+ox \
   --repos "with-extensions=\
 git+https://github.com/janestreet/opam-repository.git#with-extensions,default"
