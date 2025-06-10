@@ -17,11 +17,11 @@ sudo apt-get install -y opam
 
 $OPAM init -a
 
-$OPAM switch create 5.2.0+ox \
+$OPAM switch create 5.2.0+flambda2 \
   --repos "with-extensions=\
 git+https://github.com/janestreet/opam-repository.git#with-extensions,default"
 
-eval $($OPAM env --switch 5.2.0+ox)
+eval $($OPAM env --switch 5.2.0+flambda2)
 
 # $OPAM install ocamlformat merlin ocaml-lsp-server utop
 $OPAM install ocaml-lsp-server
