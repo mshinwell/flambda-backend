@@ -2,18 +2,19 @@
 
 set -x -eu -o pipefail
 
-sh <(curl -fsSL https://opam.ocaml.org/install.sh) < /dev/null
+OPAM="$HOME/opam"
 
-export PATH=/usr/local/bin:$PATH
+curl -Lo $OPAM -v \
+  https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-i686-linux
 
-opam switch create 5.2.0+ox \
+$OPAM switch create 5.2.0+ox \
   --repos "with-extensions=\
 git+https://github.com/janestreet/opam-repository.git#with-extensions,default"
 
-eval $(opam env --switch 5.2.0+ox)
+eval $($OPAM env --switch 5.2.0+ox)
 
-# opam install ocamlformat merlin ocaml-lsp-server utop
-opam install ocaml-lsp-server
+# $OPAM install ocamlformat merlin ocaml-lsp-server utop
+$OPAM install ocaml-lsp-server
 
 # Install extensions here rather than via customizations.vscode.extensions
 # in .devcontainer.json, so the OPAM environment is set up first, to avoid
