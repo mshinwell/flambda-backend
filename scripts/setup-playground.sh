@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-set -eu -o pipefail
+set -x -eu -o pipefail
 
-sudo apt-get install opam
+sh <(curl -fsSL https://opam.ocaml.org/install.sh)
 
 opam switch create 5.2.0+ox \
   --repos "with-extensions=\
