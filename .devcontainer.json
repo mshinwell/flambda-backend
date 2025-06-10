@@ -1,4 +1,11 @@
 {
         "name": "OxCaml Playground",
-        "postCreateCommand": "/usr/bin/env bash scripts/setup-playground.sh"
+        "postCreateCommand": "/usr/bin/env bash scripts/setup-playground.sh",
+        "customizations": {
+                "vscode": {
+                        "settings": {
+                                "extensions.ignoreRecommendations": true
+                        }
+                }
+        },
 }

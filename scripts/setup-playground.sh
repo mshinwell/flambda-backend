@@ -2,7 +2,9 @@
 
 set -x -eu -o pipefail
 
-sh <(curl -fsSL https://opam.ocaml.org/install.sh)
+sh <(curl -fsSL https://opam.ocaml.org/install.sh) < /dev/null
+
+export PATH=/usr/local/bin:$PATH
 
 opam switch create 5.2.0+ox \
   --repos "with-extensions=\
