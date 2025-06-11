@@ -19,7 +19,7 @@ RUN apt-get update && \
         apt-get clean && \
         rm -rf /var/lib/apt/lists/*
 
-RUN opam init -a --yes && \
+RUN opam init -a --disable-sandboxing --yes && \
         opam switch create 5.2.0+flambda2 --yes \
         --repos "with-extensions=git+https://github.com/janestreet/opam-repository.git#with-extensions,default" && \
         eval $(opam env --switch 5.2.0+flambda2) && \
