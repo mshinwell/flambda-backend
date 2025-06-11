@@ -14,10 +14,13 @@ ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-RUN apt-get update && \
-        apt-get install -y opam && \
-        apt-get clean && \
-        rm -rf /var/lib/apt/lists/*
+RUN curl -L -o /usr/bin/opam https://github.com/ocaml/opam/releases/download/2.3.0/opam-2.3.0-i686-linux && \
+        chmod +x /usr/bin/opam
+
+# RUN apt-get update && \
+#         apt-get install -y opam && \
+#         apt-get clean && \
+#         rm -rf /var/lib/apt/lists/*
 
 RUN opam init -a --disable-sandboxing --yes && \
         opam switch create 5.2.0+flambda2 --yes \
