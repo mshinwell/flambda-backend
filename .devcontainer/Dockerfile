@@ -10,7 +10,7 @@ RUN cd /root && \
         cd .. && \
         rm -rf autoconf-2.71 autoconf.tar.gz
 
-ARG USERNAME=vscode
+ARG USERNAME=codespace
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
