@@ -27,6 +27,6 @@ RUN opam init -a --disable-sandboxing --yes && \
         opam switch create 5.2.0+flambda2 --yes \
         --repos "with-extensions=git+https://github.com/janestreet/opam-repository.git#with-extensions,default" && \
         eval $(opam env --switch 5.2.0+flambda2) && \
-        opam install --yes ocamlformat merlin ocaml-lsp-server utop
+        opam install --yes ocamlformat merlin ocaml-lsp-server utop parallel
 
 USER root
