@@ -1,11 +1,13 @@
 {
+        "image": "Dockerfile",
         "name": "OxCaml Playground",
-        "postCreateCommand": "/usr/bin/env bash scripts/setup-playground.sh",
         "customizations": {
                 "vscode": {
-                        "settings": {
-                                "extensions.ignoreRecommendations": true
-                        }
+                        "extensions": [
+                                "ocaml.ocaml-platform",
+                                "ms-vscode.cpptools",
+                                "eamodio.gitlens"
+                        ]
                 }
-        },
+        }
 }
