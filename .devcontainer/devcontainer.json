@@ -6,7 +6,7 @@
         "customizations": {
                 "vscode": {
                         "extensions": [
-                                "ocaml.ocaml-platform",
+                                "ocamllabs.ocaml-platform",
                                 "ms-vscode.cpptools",
                                 "eamodio.gitlens"
                         ]
