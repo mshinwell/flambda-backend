@@ -1,4 +1,10 @@
 /**************************************************************************/
+/* This file forms part of OxCaml, https://github.com/oxcaml/oxcaml/      */
+/* Please see the CONTRIBUTORS and LICENSING files at the root of the     */
+/* repo.                                                                  */
+/*                                                                        */
+/* This file was derived from code in the OCaml compiler distribution     */
+/* having the following licensing and attribution:                        */
 /*                                                                        */
 /*                                 OCaml                                  */
 /*                                                                        */

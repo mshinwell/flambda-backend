@@ -1,16 +1,8 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*                        Guillaume Bury, OCamlPro                        *)
-(*                                                                        *)
-(*   Copyright 2019--2019 OCamlPro SAS                                    *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
+(****************************************************************************)
+(* This file forms part of OxCaml, https://github.com/oxcaml/oxcaml/        *)
+(* Please see the CONTRIBUTORS and LICENSING files at the root of the repo. *)
+(* SPDX-License-Identifier: MIT                                             *)
+(****************************************************************************)
 
 (** Helper functions and values for Flambda 2 to Cmm translation. Functions in
     this module, unlike the ones in [Cmm_helpers], depend on Flambda 2 data

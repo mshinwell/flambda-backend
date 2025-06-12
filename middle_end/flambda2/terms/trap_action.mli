@@ -1,18 +1,8 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*                       Pierre Chambart, OCamlPro                        *)
-(*           Mark Shinwell and Leo White, Jane Street Europe              *)
-(*                                                                        *)
-(*   Copyright 2013--2019 OCamlPro SAS                                    *)
-(*   Copyright 2014--2019 Jane Street Group LLC                           *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
+(****************************************************************************)
+(* This file forms part of OxCaml, https://github.com/oxcaml/oxcaml/        *)
+(* Please see the CONTRIBUTORS and LICENSING files at the root of the repo. *)
+(* SPDX-License-Identifier: MIT                                             *)
+(****************************************************************************)
 
 (** Actions affecting exception traps on the stack. These are always associated
     with an [Apply_cont] node; the trap action is executed before the

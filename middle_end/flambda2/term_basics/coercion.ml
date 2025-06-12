@@ -1,16 +1,8 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*                   Mark Shinwell, Jane Street Europe                    *)
-(*                                                                        *)
-(*   Copyright 2019 Jane Street Group LLC                                 *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
+(****************************************************************************)
+(* This file forms part of OxCaml, https://github.com/oxcaml/oxcaml/        *)
+(* Please see the CONTRIBUTORS and LICENSING files at the root of the repo. *)
+(* SPDX-License-Identifier: MIT                                             *)
+(****************************************************************************)
 
 include Int_ids.Coercion
 

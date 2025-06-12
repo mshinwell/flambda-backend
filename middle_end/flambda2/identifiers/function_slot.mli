@@ -1,18 +1,8 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*                       Pierre Chambart, OCamlPro                        *)
-(*           Mark Shinwell and Leo White, Jane Street Europe              *)
-(*                                                                        *)
-(*   Copyright 2013--2017 OCamlPro SAS                                    *)
-(*   Copyright 2014--2017 Jane Street Group LLC                           *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
+(****************************************************************************)
+(* This file forms part of OxCaml, https://github.com/oxcaml/oxcaml/        *)
+(* Please see the CONTRIBUTORS and LICENSING files at the root of the repo. *)
+(* SPDX-License-Identifier: MIT                                             *)
+(****************************************************************************)
 
 (** A label, unique across the whole program, that identifies a function within
     a set of closures. In essence these function slots describe the semantics of
