@@ -331,13 +331,10 @@ ocaml/primitives.new
 /runtime/build_config.h
 /runtime/sak
 
-/stdlib/runtime.info
 /stdlib/runtime-launch-info
 /stdlib/labelled-*
 /stdlib/caml
 /stdlib/sys.ml
-/stdlib/target_runtime.info
-/stdlib/target_runtime-launch-info
 
 /testsuite/**/*.result
 /testsuite/**/*.opt_result
