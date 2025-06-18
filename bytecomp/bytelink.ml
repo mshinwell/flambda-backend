@@ -435,25 +435,22 @@ let find_bin_sh () =
    called) *)
 
 let write_header outchan =
-  let use_runtime, runtime =
-    if String.length !Clflags.use_runtime > 0 then
-      (true, make_absolute !Clflags.use_runtime)
-    else
-      (false, "ocamlrun" ^ !Clflags.runtime_variant)
-  in
-  (* Write the header *)
   let runtime_info =
     let header = "runtime-launch-info" in
     try read_runtime_launch_info (Load_path.find header)
     with Not_found -> raise (Error (File_not_found header))
   in
   let runtime =
-    (* Historically, the native Windows ports are assumed to be finding
-       ocamlrun using a PATH search. *)
-    if use_runtime || Sys.win32 then
-      runtime
+    if String.length !Clflags.use_runtime > 0 then
+      make_absolute !Clflags.use_runtime
     else
-      Filename.concat runtime_info.bindir runtime
+      let runtime = "ocamlrun" ^ !Clflags.runtime_variant in
+      (* Historically, the native Windows ports are assumed to be finding
+         ocamlrun using a PATH search. *)
+      if Sys.win32 then
+        runtime
+      else
+        Filename.concat runtime_info.bindir runtime
   in
   (* Determine which method will be used for launching the executable:
      Executable: concatenate the bytecode image to the executable stub
@@ -480,6 +477,7 @@ let write_header outchan =
       else
         Shebang_runtime
   in
+  (* Write the header *)
   match launcher with
   | Shebang_runtime ->
       (* Use the runtime directly *)
