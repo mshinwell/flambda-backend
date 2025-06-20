@@ -12,6 +12,14 @@
 ;*                                                                        *
 ;**************************************************************************
 
+; Generate byterntm.ml from byterntm.mll (the lexer for the bytecode runtime
+; header introduced by the relocatable-OCaml port).
+(rule
+ (targets byterntm.ml)
+ (mode fallback)
+ (deps (:src byterntm.mll))
+ (action (bash "ocamllex -q -o %{targets} %{src}")))
+
 (rule
  (targets opcodes.ml)
  (mode    fallback)
