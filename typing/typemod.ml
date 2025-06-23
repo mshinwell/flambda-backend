@@ -2656,8 +2656,6 @@ and type_module_aux ~alias ~hold_locks sttn funct_body anchor env smod =
       in
       md, shape, None
   | Pmod_functor(arg_opt, sbody) ->
-      let newenv = Env.add_escape_lock Module env in
-      let newenv = Env.add_share_lock Module newenv in
       let t_arg, ty_arg, newenv, funct_shape_param, funct_body =
         match arg_opt with
         | Unit ->
@@ -2681,12 +2679,15 @@ and type_module_aux ~alias ~hold_locks sttn funct_body anchor env smod =
               let id = Ident.create_scoped ~scope name in
               let shape = Shape.var md_uid id in
               let newenv = Env.add_module_declaration
-                ~shape ~arg:true ~check:true id Mp_present arg_md newenv
+                ~shape ~arg:true ~check:true id Mp_present arg_md env
               in
               Some id, newenv, id
           in
           Named (id, param, mty), Types.Named (id, mty.mty_type), newenv,
           var, true
+      in
+      let newenv =
+        Env.add_closure_lock Functor Mode.Value.Comonadic.legacy newenv
       in
       let body, body_shape = type_module true funct_body None newenv sbody in
       { mod_desc = Tmod_functor(t_arg, body);
@@ -3101,7 +3102,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
         Tstr_eval (expr, sort, attrs), [], shape_map, env
     | Pstr_value (rec_flag, sdefs) ->
         let (defs, newenv) =
-          Typecore.type_binding env rec_flag ~force_toplevel sdefs in
+          Typecore.type_binding env Immutable rec_flag ~force_toplevel sdefs in
         let defs = match rec_flag with
           | Recursive -> Typecore.annotate_recursive_bindings env defs
           | Nonrecursive -> defs
