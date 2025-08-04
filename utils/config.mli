@@ -330,3 +330,5 @@ val config_var : string -> string option
 val merlin : bool
 
 (**/**)
+
+val oxcaml_dwarf : bool
