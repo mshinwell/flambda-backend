@@ -108,3 +108,7 @@ let no_stack_checks = "@enable_stack_checks@" <> "yes"
 let multidomain = "@enable_multidomain@" = "yes"
 
 let tsan = @tsan@
+
+let as_compress_debug_sections_flag = {@QS@|@as_compress_debug_sections_flag@|@QS@}
+let cc_compress_debug_sections_flag = {@QS@|@cc_compress_debug_sections_flag@|@QS@}
+
