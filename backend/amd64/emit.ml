@@ -3064,7 +3064,13 @@ let end_assembly () =
      with zeros or nops here. *)
   D.align ~fill_x86_bin_emitter:Zero ~bytes:8;
   (* PR#7591 *)
-  emit_global_label ~section:Text "frametable";
+  (* Use Large_data section for frametable when -frametables-in-ldata is set
+     to support medium code model *)
+  let frametable_section = 
+    if !Oxcaml_flags.frametables_in_ldata then Large_data else Text
+  in
+  if !Oxcaml_flags.frametables_in_ldata then D.switch_to_section Large_data;
+  emit_global_label ~section:frametable_section "frametable";
   (* CR sspies: Share the [emit_frames] code with the Arm backend. *)
   emit_frames
     { efa_code_label =
@@ -3073,7 +3079,7 @@ let end_assembly () =
           D.label l);
       efa_data_label =
         (fun l ->
-          let l = label_to_asm_label ~section:Data l in
+          let l = label_to_asm_label ~section:frametable_section l in
           D.label l);
       efa_i8 = (fun n -> D.int8 n);
       efa_i16 = (fun n -> D.int16 n);
@@ -3091,12 +3097,13 @@ let end_assembly () =
             ~offset_upper:ofs);
       efa_def_label =
         (fun l ->
-          let lbl = label_to_asm_label ~section:Text l in
+          let lbl = label_to_asm_label ~section:frametable_section l in
           D.define_label lbl);
       efa_string = (fun s -> D.string (s ^ "\000"))
     };
   let frametable_sym = S.create (Cmm_helpers.make_symbol "frametable") in
   D.size frametable_sym;
+  (* Switch back to regular data section after frametable *)
   D.data ();
   emit_probe_notes ();
   emit_trap_notes ();

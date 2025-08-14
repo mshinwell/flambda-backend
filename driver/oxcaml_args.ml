@@ -173,6 +173,21 @@ let mk_module_entry_functions_section f =
     in
     ("-module-entry-functions-section", Arg.Unit err, " (option not available)")
 
+let mk_frametables_in_ldata f =
+  match Config.architecture with
+  | "amd64" ->
+    ( "-frametables-in-ldata",
+      Arg.Unit f,
+      " Place frametables in .ldata section for medium code model (x86-64 only)" )
+  | _ ->
+    let err () =
+      raise
+        (Arg.Bad "frametables-in-ldata is only supported on x86-64 architecture")
+    in
+    ( "-frametables-in-ldata",
+      Arg.Unit err,
+      " (option not available on this architecture)" )
+
 let mk_dasm_comments f =
   ("-dasm-comments", Arg.Unit f, " Add comments in .s files (e.g. for DWARF)")
 
@@ -926,6 +941,7 @@ module type Oxcaml_options = sig
   val reorder_blocks_random : int -> unit
   val basic_block_sections : unit -> unit
   val module_entry_functions_section : unit -> unit
+  val frametables_in_ldata : unit -> unit
   val dasm_comments : unit -> unit
   val dno_asm_comments : unit -> unit
   val heap_reduction_threshold : int -> unit
@@ -1053,6 +1069,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_reorder_blocks_random F.reorder_blocks_random;
       mk_basic_block_sections F.basic_block_sections;
       mk_module_entry_functions_section F.module_entry_functions_section;
+      mk_frametables_in_ldata F.frametables_in_ldata;
       mk_dasm_comments F.dasm_comments;
       mk_dno_asm_comments F.dno_asm_comments;
       mk_heap_reduction_threshold F.heap_reduction_threshold;
@@ -1218,6 +1235,8 @@ module Oxcaml_options_impl = struct
 
   let module_entry_functions_section () =
     set' Oxcaml_flags.module_entry_functions_section ()
+
+  let frametables_in_ldata () = set' Oxcaml_flags.frametables_in_ldata ()
 
   let dasm_comments = set' Oxcaml_flags.dasm_comments
   let dno_asm_comments = clear' Oxcaml_flags.dasm_comments

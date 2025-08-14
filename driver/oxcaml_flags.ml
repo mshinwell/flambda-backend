@@ -40,6 +40,8 @@ let basic_block_sections = ref false    (* -basic-block-sections *)
 (* -module-entry-functions-section *)
 let module_entry_functions_section = ref false
 
+let frametables_in_ldata = ref false (* -frametables-in-ldata *)
+
 let dasm_comments = ref false (* -dasm-comments *)
 
 let default_heap_reduction_threshold = 500_000_000 / (Sys.word_size / 8)
