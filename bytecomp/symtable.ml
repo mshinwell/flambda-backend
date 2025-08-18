@@ -42,12 +42,25 @@ module Global = struct
 
   let quote s = "`" ^ s ^ "'"
 
+<<<<<<< HEAD
   let description ppf = function
     | Glob_compunit cu ->
         Format.fprintf ppf "compilation unit %a"
           (Style.as_inline_code Compilation_unit.print) cu
+||||||| 23e84b8c4d
+  let description ppf = function
+    | Glob_compunit (Compunit cu) ->
+        Format.fprintf ppf "compilation unit %a" Style.inline_code (quote cu)
+=======
+  let description ppf g =
+    let open Format_doc in
+    match g with
+    | Glob_compunit (Compunit cu) ->
+        fprintf ppf "compilation unit %a"
+          Style.inline_code (quote cu)
+>>>>>>> ocaml/5.4
     | Glob_predef (Predef_exn exn) ->
-        Format.fprintf ppf "predefined exception %a"
+        fprintf ppf "predefined exception %a"
           Style.inline_code (quote exn)
 
   let of_compilation_unit cu = Glob_compunit cu
@@ -168,19 +181,25 @@ let output_primitive_table outchan =
   for i = 0 to Array.length prim - 1 do
     fprintf outchan "extern value %s(void);\n" prim.(i)
   done;
-  fprintf outchan "typedef value (*c_primitive)(void);\n";
-  fprintf outchan "#if defined __cplusplus\n";
-  fprintf outchan "extern\n";
-  fprintf outchan "#endif\n";
-  fprintf outchan "const c_primitive caml_builtin_cprim[] = {\n";
+  fprintf outchan {|
+typedef value (*c_primitive)(void);
+
+#if defined __cplusplus
+extern
+#endif
+const c_primitive caml_builtin_cprim[] = {
+|};
   for i = 0 to Array.length prim - 1 do
     fprintf outchan "  %s,\n" prim.(i)
   done;
-  fprintf outchan "  0 };\n";
-  fprintf outchan "#if defined __cplusplus\n";
-  fprintf outchan "extern\n";
-  fprintf outchan "#endif\n";
-  fprintf outchan "const char * const caml_names_of_builtin_cprim[] = {\n";
+  fprintf outchan
+{|  0 };
+
+#if defined __cplusplus
+extern
+#endif
+const char * const caml_names_of_builtin_cprim[] = {
+|};
   for i = 0 to Array.length prim - 1 do
     fprintf outchan "  \"%s\",\n" prim.(i)
   done;
@@ -348,15 +367,86 @@ let update_global_table () =
 
 type bytecode_sections =
   { symb: GlobalMap.t;
+<<<<<<< HEAD
     crcs: Import_info.t array;
     prim: string list;
     dlpt: string list }
+||||||| 23e84b8c4d
+(* Recover data for toplevel initialization.  Data can come either from
+   executable file (normal case) or from linked-in data (-output-obj). *)
+
+type section_reader = {
+  read_string: Bytesections.Name.t -> string;
+  read_struct: Bytesections.Name.t -> Obj.t;
+  close_reader: unit -> unit
+}
+
+let read_sections () =
+  try
+    let sections =
+      List.map
+        (fun (n,o) -> Bytesections.Name.of_string n, o)
+        (Meta.get_section_table ())
+    in
+    { read_string =
+        (fun name ->
+           (Obj.magic(List.assoc name sections) : string));
+      read_struct =
+        (fun name -> List.assoc name sections);
+      close_reader =
+        (fun () -> ()) }
+  with Not_found ->
+    let ic = open_in_bin Sys.executable_name in
+    let section_table = Bytesections.read_toc ic in
+    { read_string = Bytesections.read_section_string section_table ic;
+      read_struct = Bytesections.read_section_struct section_table ic;
+      close_reader = fun () -> close_in ic }
+=======
+    crcs: (string * Digest.t option) list;
+    prim: string list;
+    dlpt: string list }
+
+external get_bytecode_sections : unit -> bytecode_sections =
+  "caml_dynlink_get_bytecode_sections"
+>>>>>>> ocaml/5.4
 
 (* Initialize the linker for toplevel use *)
 
+<<<<<<< HEAD
 (* In oxcaml, [get_bytecode_sections] is passed in, because it is
    absent from the 4.x runtime as used by the current system compiler. *)
 let init_toplevel ~get_bytecode_sections =
+||||||| 23e84b8c4d
+let init_toplevel () =
+  try
+    let sect = read_sections () in
+    (* Locations of globals *)
+    global_table :=
+      (Obj.magic (sect.read_struct Bytesections.Name.SYMB) : GlobalMap.t);
+    (* Primitives *)
+    let prims =
+      Misc.split_null_terminated (sect.read_string Bytesections.Name.PRIM) in
+    c_prim_table := PrimMap.empty;
+    List.iter set_prim_table prims;
+    (* DLL initialization *)
+    let dllpaths =
+      try Misc.split_null_terminated (sect.read_string Bytesections.Name.DLPT)
+      with Not_found -> [] in
+    Dll.init_toplevel dllpaths;
+    (* Recover CRC infos for interfaces *)
+    let crcintfs =
+      try
+        (Obj.magic (sect.read_struct Bytesections.Name.CRCS)
+         : (string * Digest.t option) list)
+      with Not_found -> [] in
+    (* Done *)
+    sect.close_reader();
+    crcintfs
+  with Bytesections.Bad_magic_number | Not_found | Failure _ ->
+    fatal_error "Toplevel bytecode executable is corrupted"
+=======
+let init_toplevel () =
+>>>>>>> ocaml/5.4
   let sect = get_bytecode_sections () in
   global_table := sect.symb;
   c_prim_table := PrimMap.empty;
@@ -445,9 +535,9 @@ let empty_global_map = GlobalMap.empty
 
 (* Error report *)
 
-open Format
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Undefined_global global ->
       fprintf ppf "Reference to undefined %a" Global.description global
   | Unavailable_primitive s ->
@@ -463,9 +553,11 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc
 
 let reset () =
   global_table := GlobalMap.empty;

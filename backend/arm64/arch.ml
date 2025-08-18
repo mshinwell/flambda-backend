@@ -62,9 +62,29 @@ type bswap_bitwidth = Sixteen | Thirtytwo | Sixtyfour
 
 (* Specific operations, including [Simd], must not raise. *)
 type specific_operation =
+<<<<<<< HEAD:backend/arm64/arch.ml
   | Ifar_poll
   | Ifar_alloc of { bytes : int; dbginfo : Cmm.alloc_dbginfo }
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ifar_poll of { return_label: cmm_label option }
+  | Ifar_alloc of { bytes : int; dbginfo : Debuginfo.alloc_dbginfo }
+  | Ifar_intop_checkbound
+  | Ifar_intop_imm_checkbound of { bound : int; }
+=======
+  | Ipoll_far of { return_label: cmm_label option }
+  | Ialloc_far of { bytes : int; dbginfo : Debuginfo.alloc_dbginfo }
+  | Icheckbound_far
+  | Icheckbound_imm_far of { bound : int; }
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
   | Ishiftarith of arith_operation * int
+<<<<<<< HEAD:backend/arm64/arch.ml
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ishiftcheckbound of { shift : int; }
+  | Ifar_shiftcheckbound of { shift : int; }
+=======
+  | Ishiftcheckbound of { shift : int; }
+  | Ishiftcheckbound_far of { shift : int; }
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
   | Imuladd       (* multiply and add *)
   | Imulsub       (* multiply and subtract *)
   | Inegmulf      (* floating-point negate and multiply *)
@@ -90,10 +110,15 @@ let size_addr = 8
 let size_int = 8
 let size_float = 8
 
+<<<<<<< HEAD:backend/arm64/arch.ml
 let size_vec128 = 16
 let size_vec256 = 32
 let size_vec512 = 64
 
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+let allow_unaligned_access = false
+=======
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
 let allow_unaligned_access = true
 
 (* Behavior of division *)
@@ -111,6 +136,7 @@ let offset_addressing addr delta =
   | Iindexed i -> Iindexed (i + delta)
   | Ibased (sym, i) -> Ibased (sym, i + delta)
 
+<<<<<<< HEAD:backend/arm64/arch.ml
 let num_args_addressing = function
   | Iindexed _ -> 1
   | Ibased _ -> 0
@@ -128,6 +154,13 @@ let addressing_displacement_for_llvmize addr =
       Misc.fatal_error
         "Arch.displacement_addressing_for_llvmize: unexpected addressing mode"
 
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+let num_args_addressing = function
+  | Iindexed _ -> 1
+  | Ibased _ -> 0
+
+=======
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
 (* Printing operations and addressing modes *)
 
 let print_addressing printreg addr ppf arg =
@@ -147,10 +180,34 @@ let int_of_bswap_bitwidth = function
 
 let print_specific_operation printreg op ppf arg =
   match op with
+<<<<<<< HEAD:backend/arm64/arch.ml
   | Ifar_poll ->
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ifar_poll _ ->
+=======
+  | Ipoll_far _ ->
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
     fprintf ppf "(far) poll"
+<<<<<<< HEAD:backend/arm64/arch.ml
   | Ifar_alloc { bytes; dbginfo = _ } ->
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ifar_alloc { bytes; } ->
+=======
+  | Ialloc_far { bytes; } ->
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
     fprintf ppf "(far) alloc %i" bytes
+<<<<<<< HEAD:backend/arm64/arch.ml
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ifar_intop_checkbound ->
+    fprintf ppf "%a (far) check > %a" printreg arg.(0) printreg arg.(1)
+  | Ifar_intop_imm_checkbound { bound; } ->
+    fprintf ppf "%a (far) check > %i" printreg arg.(0) bound
+=======
+  | Icheckbound_far ->
+    fprintf ppf "%a (far) check > %a" printreg arg.(0) printreg arg.(1)
+  | Icheckbound_imm_far { bound; } ->
+    fprintf ppf "%a (far) check > %i" printreg arg.(0) bound
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
   | Ishiftarith(op, shift) ->
       let op_name = function
       | Ishiftadd -> "+"
@@ -161,6 +218,22 @@ let print_specific_operation printreg op ppf arg =
        else sprintf ">> %i" (-shift) in
       fprintf ppf "%a %s %a %s"
        printreg arg.(0) (op_name op) printreg arg.(1) shift_mark
+<<<<<<< HEAD:backend/arm64/arch.ml
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+  | Ishiftcheckbound { shift; } ->
+      fprintf ppf "check %a >> %i > %a" printreg arg.(0) shift
+        printreg arg.(1)
+  | Ifar_shiftcheckbound { shift; } ->
+      fprintf ppf
+        "(far) check %a >> %i > %a" printreg arg.(0) shift printreg arg.(1)
+=======
+  | Ishiftcheckbound { shift; } ->
+      fprintf ppf "check %a >> %i > %a" printreg arg.(0) shift
+        printreg arg.(1)
+  | Ishiftcheckbound_far { shift; } ->
+      fprintf ppf
+        "(far) check %a >> %i > %a" printreg arg.(0) shift printreg arg.(1)
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
   | Imuladd ->
       fprintf ppf "(%a * %a) + %a"
         printreg arg.(0)
@@ -352,6 +425,7 @@ let is_logical_immediate x =
 
 (* Specific operations that are pure *)
 
+<<<<<<< HEAD:backend/arm64/arch.ml
 let operation_is_pure : specific_operation -> bool = function
   | Ifar_alloc _ | Ifar_poll -> false
   | Ishiftarith _ -> true
@@ -367,9 +441,27 @@ let operation_is_pure : specific_operation -> bool = function
   | Imove32 -> true
   | Isignext _ -> true
   | Isimd op -> Simd.operation_is_pure op
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+let operation_is_pure = function
+  | Ifar_alloc _
+  | Ifar_intop_checkbound
+  | Ifar_intop_imm_checkbound _
+  | Ishiftcheckbound _
+  | Ifar_shiftcheckbound _ -> false
+  | _ -> true
+=======
+let operation_is_pure = function
+  | Ialloc_far _
+  | Icheckbound_far
+  | Icheckbound_imm_far _
+  | Ishiftcheckbound _
+  | Ishiftcheckbound_far _ -> false
+  | _ -> true
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml
 
 (* Specific operations that can raise *)
 
+<<<<<<< HEAD:backend/arm64/arch.ml
 let operation_allocates = function
   | Ifar_alloc _ -> true
   | Ifar_poll
@@ -398,3 +490,20 @@ let equal_addressing_mode_without_displ (addressing_mode_1: addressing_mode)
 let addressing_offset_in_bytes (_addressing_mode_1: addressing_mode)
       (_addressing_mode_2 : addressing_mode) ~arg_offset_in_bytes:_ _ _ =
   None
+||||||| 23e84b8c4d:asmcomp/arm64/arch.ml
+let operation_can_raise = function
+  | Ifar_alloc _
+  | Ifar_intop_checkbound
+  | Ifar_intop_imm_checkbound _
+  | Ishiftcheckbound _
+  | Ifar_shiftcheckbound _ -> true
+  | _ -> false
+=======
+let operation_can_raise = function
+  | Ialloc_far _
+  | Icheckbound_far
+  | Icheckbound_imm_far _
+  | Ishiftcheckbound _
+  | Ishiftcheckbound_far _ -> true
+  | _ -> false
+>>>>>>> ocaml/5.4:asmcomp/arm64/arch.ml

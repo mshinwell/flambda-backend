@@ -16,8 +16,6 @@
 (* Typing of type definitions and primitive definitions *)
 
 open Types
-open Format
-
 val transl_type_decl:
     Env.t -> Asttypes.rec_flag -> Parsetree.type_declaration list ->
     Typedtree.type_declaration list * Env.t * Shape.t list
@@ -47,6 +45,7 @@ val transl_with_constraint:
     Typedtree.type_declaration
 
 val transl_package_constraint:
+<<<<<<< HEAD
   loc:Location.t -> type_expr -> Types.type_declaration
 
 val abstract_type_decl:
@@ -55,6 +54,13 @@ val abstract_type_decl:
   params:jkind_lr list ->
   type_declaration
 
+||||||| 23e84b8c4d
+val abstract_type_decl: injective:bool -> int -> type_declaration
+=======
+  loc:Location.t -> Env.t -> type_expr -> Types.type_declaration
+
+val abstract_type_decl: injective:bool -> int -> type_declaration
+>>>>>>> ocaml/5.4
 val approx_type_decl:
     Parsetree.type_declaration list -> (Ident.t * type_declaration) list
 val check_recmod_typedecl:
@@ -162,6 +168,7 @@ type error =
   | Boxed_and_unboxed
   | Nonrec_gadt
   | Invalid_private_row_declaration of type_expr
+<<<<<<< HEAD
   | Local_not_enabled
   | Unexpected_layout_any_in_primitive of string
   | Useless_layout_poly
@@ -178,7 +185,11 @@ type error =
   | No_unboxed_version of Path.t
   | Atomic_field_must_be_mutable of string
   | Constructor_submode_failed of Mode.Value.error
+||||||| 23e84b8c4d
+=======
+  | Atomic_field_must_be_mutable of string
+>>>>>>> ocaml/5.4
 
 exception Error of Location.t * error
 
-val report_error: formatter -> error -> unit
+val report_error: loc:Location.t -> error -> Location.report

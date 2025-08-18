@@ -1,11 +1,28 @@
 # resumed...
+<<<<<<< HEAD
 camlReperform__foo_0_8_code
 camlReperform__foo_0_8_code
 camlReperform__foo_0_8_code
 camlReperform__foo_0_8_code
 camlReperform__foo_0_8_code
 camlReperform__foo_0_8_code
+||||||| 23e84b8c4d
+camlReperform.foo
+camlReperform.foo
+camlReperform.foo
+camlReperform.foo
+camlReperform.foo
+camlReperform.foo
+=======
+camlReperform$foo
+camlReperform$foo
+camlReperform$foo
+camlReperform$foo
+camlReperform$foo
+camlReperform$foo
+>>>>>>> ocaml/5.4
 caml_runstack
+<<<<<<< HEAD
 camlStdlib__Effect__with_stack_1_29_code
 camlReperform__bar_1_9_code
 camlReperform__bar_1_9_code
@@ -13,7 +30,28 @@ camlReperform__bar_1_9_code
 camlReperform__bar_1_9_code
 camlReperform__bar_1_9_code
 camlReperform__bar_1_9_code
+||||||| 23e84b8c4d
+camlReperform.bar
+camlReperform.bar
+camlReperform.bar
+camlReperform.bar
+camlReperform.bar
+camlReperform.bar
+=======
+camlReperform$bar
+camlReperform$bar
+camlReperform$bar
+camlReperform$bar
+camlReperform$bar
+camlReperform$bar
+>>>>>>> ocaml/5.4
 caml_runstack
+<<<<<<< HEAD
 camlStdlib__Effect__with_stack_1_29_code
 camlReperform__entry
+||||||| 23e84b8c4d
+camlReperform.entry
+=======
+camlReperform$entry
+>>>>>>> ocaml/5.4
 caml_program

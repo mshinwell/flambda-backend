@@ -129,8 +129,15 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
   | Tarrow(_,ty1,ty2,_) ->
       [ty1; ty2]
   | Ttuple(tys) -> List.map snd tys
+<<<<<<< HEAD
   | Tunboxed_tuple(tys) -> List.map snd tys
   | Tpackage(_, fl) -> (snd (List.split fl))
+||||||| 23e84b8c4d
+  | Ttuple(tys) -> tys
+  | Tpackage(_, fl) -> (snd (List.split fl))
+=======
+  | Tpackage pack -> (snd (List.split pack.pack_cstrs))
+>>>>>>> ocaml/5.4
   | Tobject(row,class_ty) ->
       let class_subtys =
         match !class_ty with
@@ -408,8 +415,14 @@ let check_type
     | (Tvariant(_)        , Sep    )
     | (Tobject(_,_)       , Sep    )
     | ((Tnil | Tfield _)  , Sep    )
+<<<<<<< HEAD
     | (Tpackage(_,_)      , Sep    )
     | (Tof_kind(_)        , Sep    ) -> empty
+||||||| 23e84b8c4d
+    | (Tpackage(_,_)      , Sep    ) -> empty
+=======
+    | (Tpackage _         , Sep    ) -> empty
+>>>>>>> ocaml/5.4
     (* "Deeply separable" case for these same constructors. *)
     | (Tarrow _           , Deepsep)
     | (Ttuple _           , Deepsep)
@@ -417,7 +430,7 @@ let check_type
     | (Tvariant(_)        , Deepsep)
     | (Tobject(_,_)       , Deepsep)
     | ((Tnil | Tfield _)  , Deepsep)
-    | (Tpackage(_,_)      , Deepsep) ->
+    | (Tpackage _         , Deepsep) ->
         let tys = immediate_subtypes ty in
         let on_subtype context ty =
           context ++ check_type (Hyps.guard hyps) ty Deepsep in

@@ -49,9 +49,13 @@
     a talk about the reduction strategy
 *)
 
+<<<<<<< HEAD
 module Layout = Jkind_types.Sort.Const
 type base_layout = Jkind_types.Sort.base
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 (** A [Uid.t] is associated to every declaration in signatures and
     implementations. They uniquely identify bindings in the program. When
     associated with these bindings' locations they are useful to external tools
@@ -60,19 +64,33 @@ type base_layout = Jkind_types.Sort.base
 module Uid : sig
   type t = private
     | Compilation_unit of string
+<<<<<<< HEAD
     | Item of {
         comp_unit: string;
         id: int;
         from: Unit_info.intf_or_impl }
+||||||| 23e84b8c4d
+    | Item of { comp_unit: string; id: int }
+=======
+    | Item of { comp_unit: string; id: int; from: Unit_info.intf_or_impl }
+>>>>>>> ocaml/5.4
     | Internal
     | Predef of string
     | Unboxed_version of t
 
   val reinit : unit -> unit
 
+<<<<<<< HEAD
   val mk : current_unit:Unit_info.t option -> t
   val of_compilation_unit_id : Compilation_unit.t -> t
   val of_compilation_unit_name : Compilation_unit.Name.t -> t
+||||||| 23e84b8c4d
+  val mk : current_unit:string -> t
+  val of_compilation_unit_id : Ident.t -> t
+=======
+  val mk : current_unit:(Unit_info.t option) -> t
+  val of_compilation_unit_id : Ident.t -> t
+>>>>>>> ocaml/5.4
   val of_predef_id : Ident.t -> t
   val internal_not_actually_unique : t
   val unboxed_version : t -> t
@@ -88,7 +106,11 @@ module Sig_component_kind : sig
     | Type
     | Constructor
     | Label
+<<<<<<< HEAD
     | Unboxed_label
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
     | Module
     | Module_type
     | Extension_constructor
@@ -116,7 +138,11 @@ module Item : sig
   val type_ : Ident.t -> t
   val constr : Ident.t -> t
   val label : Ident.t -> t
+<<<<<<< HEAD
   val unboxed_label : Ident.t -> t
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
   val module_ : Ident.t -> t
   val module_type : Ident.t -> t
   val extension_constructor : Ident.t -> t
@@ -125,8 +151,12 @@ module Item : sig
 
   val print : Format.formatter -> t -> unit
 
+<<<<<<< HEAD
   val compare : t -> t -> int
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
   module Map : Map.S with type key = t
 end
 
@@ -192,7 +222,13 @@ module Predef : sig
 end
 
 type var = Ident.t
+<<<<<<< HEAD
 type t = private { hash: int; uid: Uid.t option; desc: desc; approximated: bool }
+||||||| 23e84b8c4d
+type t = { uid: Uid.t option; desc: desc }
+=======
+type t = { uid: Uid.t option; desc: desc; approximated: bool }
+>>>>>>> ocaml/5.4
 and desc =
   | Var of var
   | Abs of var * t
@@ -327,8 +363,12 @@ val print : Format.formatter -> t -> unit
 
 val strip_head_aliases : t -> t
 
+<<<<<<< HEAD
 val equal : t -> t -> bool
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 (* Smart constructors *)
 
 val for_unnamed_functor_param : var
@@ -339,7 +379,11 @@ val abs : ?uid:Uid.t -> var -> t -> t
 val app : ?uid:Uid.t -> t -> arg:t -> t
 val str : ?uid:Uid.t -> t Item.Map.t -> t
 val alias : ?uid:Uid.t -> t -> t
+<<<<<<< HEAD
 val error : ?uid:Uid.t -> string -> t
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 val proj : ?uid:Uid.t -> t -> Item.t -> t
 val leaf : Uid.t -> t
 val leaf' : Uid.t option -> t
@@ -395,9 +439,13 @@ module Map : sig
   val add_label : t -> Ident.t -> Uid.t -> t
   val add_label_proj : t -> Ident.t -> shape -> t
 
+<<<<<<< HEAD
   val add_unboxed_label : t -> Ident.t -> Uid.t -> t
   val add_unboxed_label_proj : t -> Ident.t -> shape -> t
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
   val add_module : t -> Ident.t -> shape -> t
   val add_module_proj : t -> Ident.t -> shape -> t
 

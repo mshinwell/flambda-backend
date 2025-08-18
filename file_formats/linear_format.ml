@@ -75,22 +75,53 @@ let restore filename =
 
 (* Error report *)
 
+<<<<<<< HEAD
 open Format
+||||||| 23e84b8c4d
+open Format
+module Style=Misc.Style
+=======
+open Format_doc
+>>>>>>> ocaml/5.4
 
 let report_error ppf = function
   | Wrong_format filename ->
       fprintf ppf "Expected Linear format. Incompatible file %a"
+<<<<<<< HEAD
         Location.print_filename filename
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) filename
+=======
+         Location.Doc.quoted_filename filename
+>>>>>>> ocaml/5.4
   | Wrong_version filename ->
       fprintf ppf
         "%a@ is not compatible with this version of OCaml"
+<<<<<<< HEAD
         Location.print_filename filename
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) filename
+=======
+        Location.Doc.quoted_filename filename
+>>>>>>> ocaml/5.4
   | Corrupted filename ->
       fprintf ppf "Corrupted format@ %a"
+<<<<<<< HEAD
         Location.print_filename filename
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) filename
+=======
+        Location.Doc.quoted_filename filename
+>>>>>>> ocaml/5.4
   | Marshal_failed filename ->
       fprintf ppf "Failed to marshal Linear to file@ %a"
+<<<<<<< HEAD
         Location.print_filename filename
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) filename
+=======
+         Location.Doc.quoted_filename filename
+>>>>>>> ocaml/5.4
 
 let () =
   Location.register_error_of_exn

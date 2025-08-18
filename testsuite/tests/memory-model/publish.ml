@@ -1,6 +1,13 @@
 (* TEST
  flags += "-alert -do_not_spawn_domains -alert -unsafe_multidomain";
  modules = "opt.ml barrier.ml hist.ml shared.ml run.ml outcome.ml";
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+ no-tsan; (* tsan detects data races and fails *)
+=======
+ multicore;
+ no-tsan; (* tsan detects data races and fails *)
+>>>>>>> ocaml/5.4
  not-bsd;
  no-tsan; (* tsan detects data races and fails *)
  runtime5;

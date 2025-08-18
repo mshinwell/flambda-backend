@@ -1,4 +1,15 @@
 (* TEST
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+ include runtime_events;
+ include unix;
+ libunix;
+=======
+ include runtime_events;
+ include unix;
+ hasunix;
+ not-target-windows;
+>>>>>>> ocaml/5.4
  {
    runtime4;
    skip;

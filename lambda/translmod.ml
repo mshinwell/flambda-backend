@@ -486,8 +486,15 @@ let transl_class_bindings ~scopes cl_list =
    List.map
      (fun ({ci_id_class=id; ci_expr=cl; ci_virt=vf}, meths) ->
        let def, rkind = transl_class ~scopes ids id meths cl vf in
+<<<<<<< HEAD
        (* CR sspies: Can we find a better [debug_uid] here? *)
        (id, Lambda.debug_uid_none, rkind, def))
+||||||| 23e84b8c4d
+       let def = transl_class ~scopes ids id meths cl vf in
+       { id; rkind = Class; def})
+=======
+       (id, rkind, def))
+>>>>>>> ocaml/5.4
      cl_list)
 
 (* Compile one or more functors, merging curried functors to produce
@@ -593,7 +600,7 @@ and transl_module ~scopes cc rootpath mexp =
       apply_coercion loc Strict cc
         (transl_module_path loc mexp.mod_env path)
   | Tmod_structure str ->
-      fst (transl_struct ~scopes loc [] cc rootpath str)
+      transl_struct ~scopes loc [] cc rootpath str
   | Tmod_functor _ ->
       oo_wrap mexp.mod_env true (fun () ->
         compile_functor ~scopes mexp cc rootpath loc) ()
@@ -634,12 +641,21 @@ and transl_struct ~scopes loc fields cc rootpath {str_final_env; str_items; _} =
    warning by increasing locations. *)
 and transl_structure ~scopes loc fields cc rootpath final_env = function
     [] ->
-      let body, size =
+      let body =
         match cc with
           Tcoerce_none ->
+<<<<<<< HEAD
             Lprim(Pmakeblock(0, Immutable, None, alloc_heap),
                   List.map (fun id -> Lvar id) (List.rev fields), loc),
               List.length fields
+||||||| 23e84b8c4d
+            Lprim(Pmakeblock(0, Immutable, None),
+                  List.map (fun id -> Lvar id) (List.rev fields), loc),
+              List.length fields
+=======
+            Lprim(Pmakeblock(0, Immutable, None),
+                  List.map (fun id -> Lvar id) (List.rev fields), loc)
+>>>>>>> ocaml/5.4
         | Tcoerce_structure(pos_cc_list, id_pos_list) ->
                 (* Do not ignore id_pos_list ! *)
             (*Format.eprintf "%a@.@[" Includemod.print_coercion cc;
@@ -670,31 +686,43 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
               List.filter (fun (id,_,_) -> not (Ident.Set.mem id ids))
                 id_pos_list
             in
-            wrap_id_pos_list loc id_pos_list get_field lam,
-              List.length pos_cc_list
+            wrap_id_pos_list loc id_pos_list get_field lam
         | _ ->
             fatal_error "Translmod.transl_structure"
       in
       (* This debugging event provides information regarding the structure
          items. It is ignored by the OCaml debugger but is used by
          Js_of_ocaml to preserve variable names. *)
-      (if !Clflags.debug && not !Clflags.native_code then
-         Levent(body,
-                {lev_loc = loc;
-                 lev_kind = Lev_pseudo;
-                 lev_repr = None;
-                 lev_env = final_env})
-       else
-         body),
-      size
+      if !Clflags.debug && not !Clflags.native_code then
+        Levent(body,
+               {lev_loc = loc;
+                lev_kind = Lev_pseudo;
+                lev_repr = None;
+                lev_env = final_env})
+      else
+        body
   | item :: rem ->
       match item.str_desc with
+<<<<<<< HEAD
       | Tstr_eval (expr, sort, _) ->
           let body, size =
+||||||| 23e84b8c4d
+      | Tstr_eval (expr, _) ->
+          let body, size =
+=======
+      | Tstr_eval (expr, _) ->
+          let body =
+>>>>>>> ocaml/5.4
             transl_structure ~scopes loc fields cc rootpath final_env rem
           in
+<<<<<<< HEAD
           let sort = Jkind.Sort.default_for_transl_and_get sort in
           Lsequence(transl_exp ~scopes sort expr, body), size
+||||||| 23e84b8c4d
+          Lsequence(transl_exp ~scopes expr, body), size
+=======
+          Lsequence(transl_exp ~scopes expr, body)
+>>>>>>> ocaml/5.4
       | Tstr_value(rec_flag, pat_expr_list) ->
           (* Translate bindings first *)
           let mk_lam_let =
@@ -704,10 +732,10 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
           let ext_fields =
             List.rev_append (let_bound_idents pat_expr_list) fields in
           (* Then, translate remainder of struct *)
-          let body, size =
+          let body =
             transl_structure ~scopes loc ext_fields cc rootpath final_env rem
           in
-          mk_lam_let body, size
+          mk_lam_let body
       | Tstr_primitive descr ->
           record_primitive descr.val_val;
           transl_structure ~scopes loc fields cc rootpath final_env rem
@@ -715,25 +743,24 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
           transl_structure ~scopes loc fields cc rootpath final_env rem
       | Tstr_typext(tyext) ->
           let ids = List.map (fun ext -> ext.ext_id) tyext.tyext_constructors in
-          let body, size =
+          let body =
             transl_structure ~scopes loc (List.rev_append ids fields)
               cc rootpath final_env rem
           in
-          transl_type_extension ~scopes item.str_env rootpath tyext body, size
+          transl_type_extension ~scopes item.str_env rootpath tyext body
       | Tstr_exception ext ->
           let id = ext.tyexn_constructor.ext_id in
           let id_duid = Lambda.debug_uid_none in
           (* CR sspies: Can we find a better [debug_uid] here? *)
           let path = field_path rootpath id in
-          let body, size =
+          let body =
             transl_structure ~scopes loc (id::fields) cc rootpath final_env rem
           in
           Llet(Strict, Lambda.layout_block, id, id_duid,
                transl_extension_constructor ~scopes
                                             item.str_env
                                             path
-                                            ext.tyexn_constructor, body),
-          size
+                                            ext.tyexn_constructor, body)
       | Tstr_module ({mb_presence=Mp_present} as mb) ->
           let id = mb.mb_id in
           let id_duid = mb.mb_uid in
@@ -750,18 +777,23 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
                                                  mb.mb_attributes
           in
           (* Translate remainder second *)
-          let body, size =
+          let body =
             transl_structure ~scopes loc (cons_opt id fields)
               cc rootpath final_env rem
           in
           begin match id with
           | None ->
               Lsequence (Lprim(Pignore, [module_body],
-                               of_location ~scopes mb.mb_name.loc), body),
-              size
+                               of_location ~scopes mb.mb_name.loc), body)
           | Some id ->
+<<<<<<< HEAD
               Llet(pure_module mb.mb_expr, Lambda.layout_module, id,
               id_duid, module_body, body), size
+||||||| 23e84b8c4d
+              Llet(pure_module mb.mb_expr, Pgenval, id, module_body, body), size
+=======
+              Llet(pure_module mb.mb_expr, Pgenval, id, module_body, body)
+>>>>>>> ocaml/5.4
           end
       | Tstr_module ({mb_presence=Mp_absent}) ->
           transl_structure ~scopes loc fields cc rootpath final_env rem
@@ -770,7 +802,7 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
             List.rev_append (List.filter_map (fun mb -> mb.mb_id) bindings)
               fields
           in
-          let body, size =
+          let body =
             transl_structure ~scopes loc ext_fields cc rootpath final_env rem
           in
           let lam =
@@ -783,14 +815,20 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
                     Tcoerce_none (field_path rootpath id) modl
             ) bindings body
           in
-          lam, size
+          lam
       | Tstr_class cl_list ->
           let (ids, class_bindings) = transl_class_bindings ~scopes cl_list in
-          let body, size =
+          let body =
             transl_structure ~scopes loc (List.rev_append ids fields)
               cc rootpath final_env rem
           in
+<<<<<<< HEAD
           Value_rec_compiler.compile_letrec class_bindings body, size
+||||||| 23e84b8c4d
+          Lletrec(class_bindings, body), size
+=======
+          Value_rec_compiler.compile_letrec class_bindings body
+>>>>>>> ocaml/5.4
       | Tstr_include incl ->
           let ids = bound_value_identifiers incl.incl_type in
           let modl = incl.incl_mod in
@@ -800,16 +838,28 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
               [] ->
                 transl_structure ~scopes loc newfields cc rootpath final_env rem
             | id :: ids ->
-                let body, size =
+                let body =
                   rebind_idents (pos + 1) (id :: newfields) ids
                 in
+<<<<<<< HEAD
                 let id_duid = Lambda.debug_uid_none in
                 (* CR sspies: Can we find a better [debug_uid] here? *)
                 Llet(Alias, Lambda.layout_module_field, id, id_duid,
                      Lprim(mod_field pos, [Lvar mid],
                            of_location ~scopes incl.incl_loc), body),
                 size
+||||||| 23e84b8c4d
+                Llet(Alias, Pgenval, id,
+                     Lprim(Pfield (pos, Pointer, Mutable),
+                        [Lvar mid], of_location ~scopes incl.incl_loc), body),
+                size
+=======
+                Llet(Alias, Pgenval, id,
+                     Lprim(Pfield (pos, Pointer, Mutable),
+                        [Lvar mid], of_location ~scopes incl.incl_loc), body)
+>>>>>>> ocaml/5.4
           in
+<<<<<<< HEAD
           let body, size = rebind_idents 0 fields ids in
           let loc = of_location ~scopes incl.incl_loc in
           let let_kind, modl =
@@ -825,6 +875,16 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
           in
           Llet(let_kind, Lambda.layout_module, mid, mid_duid, modl, body),
           size
+||||||| 23e84b8c4d
+          let body, size = rebind_idents 0 fields ids in
+          Llet(pure_module modl, Pgenval, mid,
+               transl_module ~scopes Tcoerce_none None modl, body),
+          size
+=======
+          let body = rebind_idents 0 fields ids in
+          Llet(pure_module modl, Pgenval, mid,
+               transl_module ~scopes Tcoerce_none None modl, body)
+>>>>>>> ocaml/5.4
 
       | Tstr_open od ->
           let pure = pure_module od.open_expr in
@@ -843,20 +903,42 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
                   [] -> transl_structure
                           ~scopes loc newfields cc rootpath final_env rem
                 | id :: ids ->
-                  let body, size =
+                  let body =
                     rebind_idents (pos + 1) (id :: newfields) ids
                   in
+<<<<<<< HEAD
                   let id_duid = Lambda.debug_uid_none in
                   (* CR sspies: Can we find a better [debug_uid] here? *)
                   Llet(Alias, Lambda.layout_module_field, id, id_duid,
                       Lprim(mod_field pos, [Lvar mid],
                             of_location ~scopes od.open_loc), body),
                   size
+||||||| 23e84b8c4d
+                  Llet(Alias, Pgenval, id,
+                      Lprim(Pfield (pos, Pointer, Mutable), [Lvar mid],
+                            of_location ~scopes od.open_loc), body),
+                  size
+=======
+                  Llet(Alias, Pgenval, id,
+                      Lprim(Pfield (pos, Pointer, Mutable), [Lvar mid],
+                            of_location ~scopes od.open_loc), body)
+>>>>>>> ocaml/5.4
               in
+<<<<<<< HEAD
               let body, size = rebind_idents 0 fields ids in
               Llet(pure, Lambda.layout_module, mid, mid_duid,
                    transl_module ~scopes Tcoerce_none None od.open_expr, body),
               size
+||||||| 23e84b8c4d
+              let body, size = rebind_idents 0 fields ids in
+              Llet(pure, Pgenval, mid,
+                   transl_module ~scopes Tcoerce_none None od.open_expr, body),
+              size
+=======
+              let body = rebind_idents 0 fields ids in
+              Llet(pure, Pgenval, mid,
+                   transl_module ~scopes Tcoerce_none None od.open_expr, body)
+>>>>>>> ocaml/5.4
           end
       | Tstr_modtype _
       | Tstr_class_type _
@@ -928,6 +1010,7 @@ let required_globals ~flambda body =
   Translprim.clear_used_primitives ();
   required
 
+<<<<<<< HEAD
 let add_arg_block_to_module_block primary_block_lam size restr =
   let primary_block_id = Ident.create_local "*primary-block*" in
   let primary_block_id_duid = Lambda.debug_uid_none in
@@ -935,7 +1018,43 @@ let add_arg_block_to_module_block primary_block_lam size restr =
   let arg_block_id_duid = Lambda.debug_uid_none in
   let arg_block_lam =
     apply_coercion Loc_unknown Strict restr (Lvar primary_block_id)
+||||||| 23e84b8c4d
+(* Compile an implementation *)
+
+let transl_implementation_flambda module_name (str, cc) =
+  reset_labels ();
+  primitive_declarations := [];
+  Translprim.clear_used_primitives ();
+  let module_id = Ident.create_persistent module_name in
+  let scopes = enter_module_definition ~scopes:empty_scopes module_id in
+  let body, size =
+    Translobj.transl_label_init
+      (fun () -> transl_struct ~scopes Loc_unknown [] cc
+                   (global_path module_id) str)
+=======
+(* Compile an implementation *)
+
+let module_block_size component_names coercion =
+  match coercion with
+  | Tcoerce_none -> List.length component_names
+  | Tcoerce_structure (l, _) -> List.length l
+  | Tcoerce_functor _
+  | Tcoerce_primitive _
+  | Tcoerce_alias _ -> assert false
+
+let transl_implementation_flambda module_name (str, cc) =
+  reset_labels ();
+  primitive_declarations := [];
+  Translprim.clear_used_primitives ();
+  let module_id = Ident.create_persistent module_name in
+  let scopes = enter_module_definition ~scopes:empty_scopes module_id in
+  let body =
+    Translobj.transl_label_init
+      (fun () -> transl_struct ~scopes Loc_unknown [] cc
+                   (global_path module_id) str)
+>>>>>>> ocaml/5.4
   in
+<<<<<<< HEAD
   let get_field i = Lprim (mod_field i, [Lvar primary_block_id], Loc_unknown) in
   let all_fields = List.init size get_field @ [Lvar arg_block_id] in
   let arg_block_field = size in
@@ -949,6 +1068,19 @@ let add_arg_block_to_module_block primary_block_lam size restr =
                   Loc_unknown))),
   new_size,
   Some arg_block_field
+||||||| 23e84b8c4d
+  { module_ident = module_id;
+    main_module_block_size = size;
+    required_globals = required_globals ~flambda:true body;
+    code = body }
+=======
+  let size =
+    module_block_size (bound_value_identifiers str.str_type) cc in
+  { module_ident = module_id;
+    main_module_block_size = size;
+    required_globals = required_globals ~flambda:true body;
+    code = body }
+>>>>>>> ocaml/5.4
 
 let add_runtime_parameters lam params =
   let params =
@@ -1398,7 +1530,14 @@ let transl_store_structure ~scopes glob map prims aliases str =
             let (ids, class_bindings) = transl_class_bindings ~scopes cl_list in
             let body = store_idents Loc_unknown ids in
             let lam =
+<<<<<<< HEAD
               Value_rec_compiler.compile_letrec class_bindings body
+||||||| 23e84b8c4d
+              Lletrec(class_bindings, store_idents Loc_unknown ids)
+=======
+              Value_rec_compiler.compile_letrec class_bindings
+                (store_idents Loc_unknown ids)
+>>>>>>> ocaml/5.4
             in
             Lsequence(Lambda.subst no_env_update subst lam,
                       transl_store ~scopes rootpath (add_idents false ids subst)
@@ -1805,9 +1944,17 @@ let toploop_setvalue id lam =
 
 let toploop_setvalue_id id = toploop_setvalue id (Lvar id)
 
+<<<<<<< HEAD
 let close_toplevel_term (lam, ()) =
   Ident.Set.fold (fun id l -> Llet(Strict, Lambda.layout_any_value, id,
                                   Lambda.debug_uid_none,
+||||||| 23e84b8c4d
+let close_toplevel_term (lam, ()) =
+  Ident.Set.fold (fun id l -> Llet(Strict, Pgenval, id,
+=======
+let close_toplevel_term lam =
+  Ident.Set.fold (fun id l -> Llet(Strict, Pgenval, id,
+>>>>>>> ocaml/5.4
                                   toploop_getvalue id, l))
                 (free_variables lam) lam
 
@@ -1871,8 +2018,15 @@ let transl_toplevel_item ~scopes item =
          be a value named identically *)
       let (ids, class_bindings) = transl_class_bindings ~scopes cl_list in
       List.iter set_toplevel_unique_name ids;
+<<<<<<< HEAD
       let body = make_sequence toploop_setvalue_id ids in
       Value_rec_compiler.compile_letrec class_bindings body
+||||||| 23e84b8c4d
+      Lletrec(class_bindings, make_sequence toploop_setvalue_id ids)
+=======
+      Value_rec_compiler.compile_letrec class_bindings
+        (make_sequence toploop_setvalue_id ids)
+>>>>>>> ocaml/5.4
   | Tstr_include incl ->
       let ids = bound_value_identifiers incl.incl_type in
       let loc = of_location ~scopes incl.incl_loc in
@@ -1933,10 +2087,16 @@ let transl_toplevel_item ~scopes item =
 
 let transl_toplevel_item_and_close ~scopes itm =
   close_toplevel_term
+<<<<<<< HEAD
     (transl_label_init
        (fun () ->
           let expr = transl_toplevel_item ~scopes itm
           in Translcore.declare_probe_handlers expr, ()))
+||||||| 23e84b8c4d
+    (transl_label_init (fun () -> transl_toplevel_item ~scopes itm, ()))
+=======
+    (transl_label_init (fun () -> transl_toplevel_item ~scopes itm))
+>>>>>>> ocaml/5.4
 
 let transl_toplevel_definition str =
   reset_labels ();
@@ -1952,6 +2112,7 @@ let get_component = function
     None -> Lconst const_unit
   | Some id -> Lprim(Pgetglobal id, [], Loc_unknown)
 
+<<<<<<< HEAD
 let transl_package_plain_block component_names coercion =
   let size =
     match coercion with
@@ -1962,6 +2123,21 @@ let transl_package_plain_block component_names coercion =
     | Tcoerce_alias _ -> assert false
   in
   size,
+||||||| 23e84b8c4d
+let transl_package_flambda component_names coercion =
+  let size =
+    match coercion with
+    | Tcoerce_none -> List.length component_names
+    | Tcoerce_structure (l, _) -> List.length l
+    | Tcoerce_functor _
+    | Tcoerce_primitive _
+    | Tcoerce_alias _ -> assert false
+  in
+  size,
+=======
+let transl_package_flambda component_names coercion =
+  module_block_size component_names coercion,
+>>>>>>> ocaml/5.4
   apply_coercion Loc_unknown Strict coercion
     (Lprim(Pmakeblock(0, Immutable, None, alloc_heap),
            List.map get_component component_names,
@@ -2138,14 +2314,14 @@ let transl_instance instance_unit ~runtime_args ~main_module_block_size
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
 let print_cycle ppf cycle =
-  let print_ident ppf (x,_) = Format.pp_print_string ppf (Ident.name x) in
+  let print_ident ppf (x,_) = pp_print_string ppf (Ident.name x) in
   let pp_sep ppf () = fprintf ppf "@ -> " in
-  Format.fprintf ppf "%a%a%s"
-    (Format.pp_print_list ~pp_sep print_ident) cycle
+  fprintf ppf "%a%a%s"
+    (pp_print_list ~pp_sep print_ident) cycle
     pp_sep ()
     (Ident.name @@ fst @@ List.hd cycle)
 (* we repeat the first element to make the cycle more apparent *)
@@ -2155,7 +2331,7 @@ let explanation_submsg (id, unsafe_info) =
   | Unnamed -> assert false (* can't be part of a cycle. *)
   | Unsafe {reason;loc;subid} ->
       let print fmt =
-        let printer = Format.dprintf fmt
+        let printer = doc_printf fmt
             Style.inline_code (Ident.name id)
             Style.inline_code (Ident.name subid) in
         Location.mkloc printer loc in

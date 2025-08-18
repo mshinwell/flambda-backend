@@ -1,4 +1,5 @@
 (* TEST
+<<<<<<< HEAD
 {
    runtime4;
    skip;
@@ -9,6 +10,16 @@
    libunix;
    { bytecode; }
    { native; }
+||||||| 23e84b8c4d
+=======
+ include unix;
+ include runtime_events;
+ hasunix;
+ {
+   bytecode;
+ }{
+   native;
+>>>>>>> ocaml/5.4
  }
 *)
 

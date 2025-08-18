@@ -12,7 +12,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-type 'a t = ..
+type 'a t = 'a eff = ..
 external perform : 'a t -> 'a = "%perform"
 
 type exn += Unhandled: 'a t -> exn
@@ -51,15 +51,29 @@ external cont_set_last_fiber :
 
 module Must_not_enter_gc = struct
 
+<<<<<<< HEAD
   (* Stacks are represented as tagged pointers, so do not keep the fiber alive.
      We must not enter the GC between the creation and use of a [stack]. *)
   type (-'a, +'b) stack [@@immediate]
+||||||| 23e84b8c4d
+  type ('a,'b) continuation
+=======
+  type nonrec ('a,'b) continuation = ('a,'b) continuation
+>>>>>>> ocaml/5.4
 
   external alloc_stack :
     ('a -> 'b) ->
     (exn -> 'b) ->
     ('c t -> ('c, 'b) cont -> last_fiber -> 'b) ->
     ('a, 'b) stack = "caml_alloc_stack"
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+  external cont_last_fiber : ('a, 'b) continuation -> last_fiber = "%field1"
+  external cont_set_last_fiber :
+    ('a, 'b) continuation -> last_fiber -> unit = "%setfield1"
+=======
+  external cont_last_fiber : ('a, 'b) continuation -> last_fiber = "%field1"
+>>>>>>> ocaml/5.4
 
   external runstack : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%runstack"
 
@@ -116,9 +130,7 @@ module Deep = struct
   let match_with comp arg handler =
     let effc eff k last_fiber =
       match handler.effc eff with
-      | Some f ->
-          cont_set_last_fiber k last_fiber;
-          f k
+      | Some f -> f k
       | None -> reperform eff k last_fiber
     in
     Must_not_enter_gc.with_stack handler.retc handler.exnc effc comp arg
@@ -129,9 +141,7 @@ module Deep = struct
   let try_with comp arg handler =
     let effc' eff k last_fiber =
       match handler.effc eff with
-      | Some f ->
-          cont_set_last_fiber k last_fiber;
-          f k
+      | Some f -> f k
       | None -> reperform eff k last_fiber
     in
     Must_not_enter_gc.with_stack (fun x -> x) (fun e -> raise e) effc' comp arg
@@ -143,18 +153,40 @@ end
 
 module Shallow = struct
 
+<<<<<<< HEAD
   type ('a,'b) continuation = ('a,'b) cont
+||||||| 23e84b8c4d
+  type ('a,'b) continuation
+
+  external alloc_stack :
+    ('a -> 'b) ->
+    (exn -> 'b) ->
+    ('c t -> ('c, 'b) continuation -> last_fiber -> 'b) ->
+    ('a, 'b) stack = "caml_alloc_stack"
+
+  external cont_last_fiber : ('a, 'b) continuation -> last_fiber = "%field1"
+  external cont_set_last_fiber :
+    ('a, 'b) continuation -> last_fiber -> unit = "%setfield1"
+=======
+  type ('a,'b) continuation
+
+  external alloc_stack :
+    ('a -> 'b) ->
+    (exn -> 'b) ->
+    ('c t -> ('c, 'b) continuation -> last_fiber -> 'b) ->
+    ('a, 'b) stack = "caml_alloc_stack"
+
+  external cont_last_fiber : ('a, 'b) continuation -> last_fiber = "%field1"
+>>>>>>> ocaml/5.4
 
   let fiber : type a b. (a -> b) -> (a, b) continuation = fun f ->
     let module M = struct type _ t += Initial_setup__ : a t end in
     let exception E of (a,b) continuation in
     let f' () = f (perform M.Initial_setup__) in
     let error _ = failwith "impossible" in
-    let effc eff k last_fiber =
+    let effc eff k _last_fiber =
       match eff with
-      | M.Initial_setup__ ->
-          cont_set_last_fiber k last_fiber;
-          raise_notrace (E k)
+      | M.Initial_setup__ -> raise_notrace (E k)
       | _ -> error ()
     in
     match Must_not_enter_gc.with_stack error error effc f' () with
@@ -172,9 +204,7 @@ module Shallow = struct
   let continue_gen k resume_fun v handler =
     let effc eff k last_fiber =
       match handler.effc eff with
-      | Some f ->
-          cont_set_last_fiber k last_fiber;
-          f k
+      | Some f -> f k
       | None -> reperform eff k last_fiber
     in
     Must_not_enter_gc.with_handler k handler.retc handler.exnc effc resume_fun v

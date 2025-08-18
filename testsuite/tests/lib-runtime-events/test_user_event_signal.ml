@@ -1,10 +1,18 @@
 (* TEST
+<<<<<<< HEAD
  runtime5;
  flags = "-alert -unsafe_multidomain";
  include runtime_events;
  include unix;
  hasunix;
  not-windows;
+||||||| 23e84b8c4d
+=======
+ include runtime_events;
+ include unix;
+ hasunix;
+ not-target-windows;
+>>>>>>> ocaml/5.4
  {
    bytecode;
  }

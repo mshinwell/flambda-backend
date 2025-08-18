@@ -24,6 +24,7 @@ let foo :
    Cannot_subst turning into Missing_cmi in estimate_type_jkind. When we fix that, this
    should change back to a better error message. *)
 [%%expect{|
+<<<<<<< HEAD
 Line 2, characters 4-53:
 2 |   < m : 'left 'right. <left:'left; right:'right> pair >
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -35,4 +36,29 @@ Error: Object field types must have layout value.
          value
          because it's the type of an object field.
        No .cmi file found containing pair.
+||||||| 23e84b8c4d
+Line 4, characters 11-12:
+4 | = fun x -> x
+               ^
+Error: This expression has type
+         "< m : 'left 'right. < left : 'left; right : 'right > pair >"
+       but an expression was expected of type
+         "< m : 'left 'right. < left : 'left; right : 'right > pair >"
+       The method "m" has type
+       "'left 'right. < left : 'left; right : 'right > pair",
+       but the expected method type was
+       "'left 'right. < left : 'left; right : 'right > pair"
+=======
+Line 4, characters 11-12:
+4 | = fun x -> x
+               ^
+Error: The value "x" has type
+         "< m : 'left 'right. < left : 'left; right : 'right > pair >"
+       but an expression was expected of type
+         "< m : 'left 'right. < left : 'left; right : 'right > pair >"
+       The method "m" has type
+       "'left 'right. < left : 'left; right : 'right > pair",
+       but the expected method type was
+       "'left 'right. < left : 'left; right : 'right > pair"
+>>>>>>> ocaml/5.4
 |}]

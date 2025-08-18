@@ -666,8 +666,20 @@ let rec choice ctx t =
            we need to remove the exception handler) *)
         let+ l1 = choice ctx ~tail:false l1
         and+ l2 = choice ctx ~tail l2 in
+<<<<<<< HEAD
         Ltrywith (l1, id, id_duid, l2, kind)
     | Lstaticcatch (l1, ids, l2, r, kind) ->
+||||||| 23e84b8c4d
+           we need to remove the exception handler),
+           so it is not transformed here *)
+        let l1 = traverse ctx l1 in
+        let+ l2 = choice ctx ~tail l2 in
+        Ltrywith (l1, id, l2)
+    | Lstaticcatch (l1, ids, l2) ->
+=======
+        Ltrywith (l1, id, l2)
+    | Lstaticcatch (l1, ids, l2) ->
+>>>>>>> ocaml/5.4
         (* In [static-catch l1 with ids -> l2],
            the term [l1] is in fact in tail-position *)
         let+ l1 = choice ctx ~tail l1
@@ -872,7 +884,20 @@ let rec choice ctx t =
           |  [l1] -> l1
           | _ -> invalid_arg "choice_prim" in
         let+ l1 = choice ctx ~tail l1 in
+<<<<<<< HEAD
         Lprim (Popaque layout, [l1], loc)
+||||||| 23e84b8c4d
+        Lprim (Popaque, [l1], loc)
+    | (Psequand | Psequor) as shortcutop ->
+        let l1, l2 = match primargs with
+          |  [l1; l2] -> l1, l2
+          | _ -> invalid_arg "choice_prim" in
+        let l1 = traverse ctx l1 in
+        let+ l2 = choice ctx ~tail l2 in
+        Lprim (shortcutop, [l1; l2], loc)
+=======
+        Lprim (Popaque, [l1], loc)
+>>>>>>> ocaml/5.4
 
     (* in common cases we just return *)
     | Pphys_equal _
@@ -905,6 +930,7 @@ let rec choice ctx t =
     | Prunstack | Pperform | Presume | Preperform | Pdls_get
 
     (* we don't handle atomic primitives *)
+<<<<<<< HEAD
     | Patomic_exchange_field _ | Patomic_compare_exchange_field _
     | Patomic_compare_set_field _ | Patomic_fetch_add_field
     | Patomic_add_field | Patomic_sub_field | Patomic_land_field
@@ -915,6 +941,11 @@ let rec choice ctx t =
 
     (* it doesn't seem worth it to support lazy blocks for tmc *)
     | Pmakelazyblock _
+||||||| 23e84b8c4d
+    | Patomic_exchange | Patomic_cas | Patomic_fetch_add | Patomic_load _
+=======
+    | Patomic_load
+>>>>>>> ocaml/5.4
 
     (* we don't handle array indices as destinations yet *)
     | (Pmakearray _ | Pduparray _ | Pmakearray_dynamic _)
@@ -936,6 +967,13 @@ let rec choice ctx t =
     | Pobj_dup
     | Pobj_magic _
     | Pprobe_is_enabled _
+
+    (* Lazy blocks should never contain a recursive call directly:
+       either it's a closure (Lazy_tag), or a variable (Forward_tag).
+       The case 'let foo = recursive_call in lazy foo' could be translated to
+       use tmc in the cases where 'foo' might be of type lazy or float, but
+       given the fragility of such a transformation we choose not to. *)
+    | Pmakelazyblock _
 
     (* more common cases... *)
     | Pbigarrayref _ | Pbigarrayset _
@@ -968,6 +1006,7 @@ let rec choice ctx t =
     | Punboxed_nativeint_array_set_vec _
     | Pget_header _
     | Pctconst _
+<<<<<<< HEAD
     | Pint_as_pointer _
     | Psequand | Psequor
     | Ppoll
@@ -975,6 +1014,19 @@ let rec choice ctx t =
     | Pmake_idx_field _ | Pmake_idx_mixed_field _ | Pidx_deepen _
     | Pmake_idx_array _
     | Pget_idx _ | Pset_idx _ ->
+||||||| 23e84b8c4d
+    | Pbswap16
+    | Pbbswap _
+    | Pint_as_pointer
+      ->
+=======
+    | Pbswap16
+    | Pbbswap _
+    | Pint_as_pointer
+    | Psequand | Psequor
+    | Ppoll
+      ->
+>>>>>>> ocaml/5.4
         let primargs = traverse_list ctx primargs in
         Choice.lambda (Lprim (prim, primargs, loc))
 
@@ -1001,10 +1053,22 @@ and traverse ctx = function
 and traverse_lfunction ctx lfun =
   map_lfunction (traverse ctx) lfun
 
+<<<<<<< HEAD
 and traverse_let outer_ctx var var_duid def =
+||||||| 23e84b8c4d
+and traverse_let outer_ctx var def =
+=======
+and traverse_let outer_ctx var def =
+>>>>>>> ocaml/5.4
   let inner_ctx = declare_binding outer_ctx (var, def) in
   let bindings =
+<<<<<<< HEAD
     traverse_let_binding outer_ctx inner_ctx var var_duid def
+||||||| 23e84b8c4d
+    traverse_binding Non_recursive outer_ctx inner_ctx (var, def)
+=======
+    traverse_let_binding outer_ctx inner_ctx var def
+>>>>>>> ocaml/5.4
   in
   inner_ctx, bindings
 
@@ -1019,10 +1083,40 @@ and traverse_letrec ctx bindings =
   in
   ctx, bindings
 
+<<<<<<< HEAD
 and traverse_let_binding outer_ctx inner_ctx var var_duid def =
+||||||| 23e84b8c4d
+and traverse_binding :
+  type a. a binding_kind -> context -> context -> a -> a list =
+  fun binding_kind outer_ctx inner_ctx binding ->
+  let (var, def) : Ident.t * lambda =
+    match binding_kind, binding with
+    | Recursive, { id; rkind=_; def } -> id, def
+    | Non_recursive, (var, def) -> var, def
+  in
+  let mk_same_binding (var : Ident.t) (def : lambda) : a =
+    match binding_kind, binding with
+    | Recursive, { id=_; rkind; def=_ } -> { id = var; rkind; def }
+    | Non_recursive, _ -> var, def
+  in
+  let mk_static_binding (var : Ident.t) (def : lambda) : a =
+    match binding_kind, binding with
+    | Recursive, _ -> { id = var; rkind = Static; def }
+    | Non_recursive, _ -> var, def
+  in
+=======
+and traverse_let_binding outer_ctx inner_ctx var def =
+>>>>>>> ocaml/5.4
   match find_candidate def with
+<<<<<<< HEAD
   | None -> [ var, var_duid, traverse outer_ctx def ]
+||||||| 23e84b8c4d
+  | None -> [mk_same_binding var (traverse outer_ctx def)]
+=======
+  | None -> [ var, traverse outer_ctx def ]
+>>>>>>> ocaml/5.4
   | Some lfun ->
+<<<<<<< HEAD
       let functions = make_dps_variant var var_duid inner_ctx outer_ctx lfun in
       List.map
         (fun (var, var_duid, lfun) -> var, var_duid, Lfunction lfun) functions
@@ -1038,6 +1132,21 @@ and traverse_letrec_binding ctx { id; debug_uid; def } =
     [ { id; debug_uid = debug_uid; def = traverse_lfunction ctx def } ]
 
 and make_dps_variant var var_duid inner_ctx outer_ctx (lfun : lfunction) =
+||||||| 23e84b8c4d
+=======
+      let functions = make_dps_variant var inner_ctx outer_ctx lfun in
+      List.map (fun (var, lfun) -> var, Lfunction lfun) functions
+
+and traverse_letrec_binding ctx { id; def } =
+  if def.attr.tmc_candidate
+  then
+    let functions = make_dps_variant id ctx ctx def in
+    List.map (fun (id, def) -> { id; def }) functions
+  else
+    [ { id; def = traverse_lfunction ctx def } ]
+
+and make_dps_variant var inner_ctx outer_ctx (lfun : lfunction) =
+>>>>>>> ocaml/5.4
   let special = Ident.Map.find var inner_ctx.specialized in
   let fun_choice = choice outer_ctx ~tail:true lfun.body in
   if fun_choice.Choice.tmc_calls = [] then
@@ -1047,7 +1156,13 @@ and make_dps_variant var var_duid inner_ctx outer_ctx (lfun : lfunction) =
   let direct =
     let { kind; params; return; body = _; attr; loc; mode; ret_mode } = lfun in
     let body = Choice.direct fun_choice in
+<<<<<<< HEAD
     lfunction' ~kind ~params ~return ~body ~attr ~loc ~mode ~ret_mode in
+||||||| 23e84b8c4d
+    lfunction ~kind ~params ~return ~body ~attr ~loc in
+=======
+    lfunction' ~kind ~params ~return ~body ~attr ~loc in
+>>>>>>> ocaml/5.4
   let dps =
     let dst_param = {
       var = Ident.create_local "dst";
@@ -1055,6 +1170,7 @@ and make_dps_variant var var_duid inner_ctx outer_ctx (lfun : lfunction) =
       loc = lfun.loc;
     } in
     let dst = { dst_param with offset = Offset (Lvar dst_param.offset) } in
+<<<<<<< HEAD
     let params = add_dst_params dst_param lfun.params in
     let kind =
       match lfun.mode, lfun.kind with
@@ -1070,6 +1186,19 @@ and make_dps_variant var var_duid inner_ctx outer_ctx (lfun : lfunction) =
     Lambda.duplicate_function @@ lfunction'
       ~kind
       ~params
+||||||| 23e84b8c4d
+    Lambda.duplicate @@ lfunction
+      ~kind:
+        (* Support of Tupled function: see [choice_apply]. *)
+        Curried
+      ~params:(add_dst_params dst_param lfun.params)
+=======
+    Lambda.duplicate_function @@ lfunction'
+      ~kind:
+        (* Support of Tupled function: see [choice_apply]. *)
+        Curried
+      ~params:(add_dst_params dst_param lfun.params)
+>>>>>>> ocaml/5.4
       ~return:lfun.return
       ~body:(Choice.dps ~tail:true ~dst:dst fun_choice)
       ~attr:lfun.attr
@@ -1078,9 +1207,15 @@ and make_dps_variant var var_duid inner_ctx outer_ctx (lfun : lfunction) =
       ~ret_mode:lfun.ret_mode
   in
   let dps_var = special.dps_id in
+<<<<<<< HEAD
   let dps_var_duid = Lambda.debug_uid_none in
   [var, var_duid, direct;
    dps_var, dps_var_duid, dps]
+||||||| 23e84b8c4d
+  [mk_static_binding var direct; mk_static_binding dps_var dps]
+=======
+  [var, direct; dps_var, dps]
+>>>>>>> ocaml/5.4
 
 and traverse_list ctx terms =
   List.map (traverse ctx) terms
@@ -1098,7 +1233,7 @@ let () =
                Ambiguous_constructor_arguments
                  { explicit = false; arguments }) ->
           let print_msg ppf =
-            Format.fprintf ppf
+            Format_doc.fprintf ppf
               "%a:@ this@ constructor@ application@ may@ be@ \
                TMC-transformed@ in@ several@ different@ ways.@ \
                Please@ disambiguate@ by@ adding@ an@ explicit@ %a \
@@ -1123,7 +1258,7 @@ let () =
                Ambiguous_constructor_arguments
                  { explicit = true; arguments }) ->
           let print_msg ppf =
-            Format.fprintf ppf
+            Format_doc.fprintf ppf
               "%a:@ this@ constructor@ application@ may@ be@ \
                TMC-transformed@ in@ several@ different@ ways.@ Only@ one@ of@ \
                the@ arguments@ may@ become@ a@ TMC@ call,@ but@ several@ \

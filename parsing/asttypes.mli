@@ -40,6 +40,8 @@ type private_flag = Private | Public
 
 type mutable_flag = Immutable | Mutable
 
+type atomic_flag = Nonatomic | Atomic
+
 type virtual_flag = Virtual | Concrete
 
 type override_flag = Override | Fresh
@@ -64,13 +66,19 @@ type variance =
   | Covariant
   | Contravariant
   | NoVariance
+  | Bivariant
 
 type injectivity =
   | Injective
   | NoInjectivity
 
+<<<<<<< HEAD
 type index_kind =
   | Index_int
   | Index_unboxed_int64
   | Index_unboxed_int32
   | Index_unboxed_nativeint
+||||||| 23e84b8c4d
+=======
+val string_of_label: arg_label -> string
+>>>>>>> ocaml/5.4

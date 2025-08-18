@@ -37,7 +37,9 @@ type compile_time_constant =
 
 type immediate_or_pointer =
   | Immediate
+  (* The value must be immediate. *)
   | Pointer
+  (* The value may be a pointer or an immediate. *)
 
 type locality_mode = private
   | Alloc_heap
@@ -72,6 +74,7 @@ type field_read_semantics =
   | Reads_agree
   | Reads_vary
 
+<<<<<<< HEAD
 type has_initializer =
   | With_initializer
   | Uninitialized
@@ -116,6 +119,13 @@ type lazy_block_tag =
    whether some of the primitives specific to ufloat records
    ([Pmakeufloatblock], [Pufloatfield], and [Psetufloatfield]) can/should be
    generalized, rather than just adding new primitives. *)
+||||||| 23e84b8c4d
+=======
+type lazy_block_tag =
+  | Lazy_tag
+  | Forward_tag
+
+>>>>>>> ocaml/5.4
 type primitive =
   | Pbytes_to_string
   | Pbytes_of_string
@@ -125,6 +135,7 @@ type primitive =
   | Psetglobal of Compilation_unit.t
   | Pgetpredef of Ident.t
   (* Operations on heap blocks *)
+<<<<<<< HEAD
   | Pmakeblock of int * mutable_flag * block_shape * locality_mode
   | Pmakefloatblock of mutable_flag * locality_mode
   | Pmakeufloatblock of mutable_flag * locality_mode
@@ -132,6 +143,16 @@ type primitive =
   | Pmakelazyblock of lazy_block_tag
   | Pfield of int * immediate_or_pointer * field_read_semantics
   | Pfield_computed of field_read_semantics
+||||||| 23e84b8c4d
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pfield of int * immediate_or_pointer * mutable_flag
+  | Pfield_computed
+=======
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pmakelazyblock of lazy_block_tag
+  | Pfield of int * immediate_or_pointer * mutable_flag
+  | Pfield_computed
+>>>>>>> ocaml/5.4
   | Psetfield of int * immediate_or_pointer * initialization_or_assignment
   | Psetfield_computed of immediate_or_pointer * initialization_or_assignment
   | Pfloatfield of int * field_read_semantics * locality_mode
@@ -314,6 +335,7 @@ type primitive =
   (* Compile time constants *)
   | Pctconst of compile_time_constant
   (* Integer to external pointer *)
+<<<<<<< HEAD
   | Pint_as_pointer of locality_mode
   (* Atomic operations. Note that these operations must not be used on fields of
      all-float blocks. *)
@@ -329,6 +351,18 @@ type primitive =
   | Patomic_land_field
   | Patomic_lor_field
   | Patomic_lxor_field
+||||||| 23e84b8c4d
+  | Pint_as_pointer
+  (* Atomic operations *)
+  | Patomic_load of {immediate_or_pointer : immediate_or_pointer}
+  | Patomic_exchange
+  | Patomic_cas
+  | Patomic_fetch_add
+=======
+  | Pint_as_pointer
+  (* Atomic operations *)
+  | Patomic_load
+>>>>>>> ocaml/5.4
   (* Inhibition of optimisation *)
   | Popaque of layout
   (* Statically-defined probes *)
@@ -368,10 +402,14 @@ type primitive =
      handlers, finalizers, memprof callbacks, etc, as well as GCs and
      GC slices, so should not be moved or optimised away. *)
   | Ppoll
+<<<<<<< HEAD
   (* Arch-specific pause. Without poll insertion, also acts as a [Ppoll]. *)
   | Pcpu_relax
   | Pget_idx of layout * Asttypes.mutable_flag
   | Pset_idx of layout * modify_mode
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 
 (** This is the same as [Primitive.native_repr] but with [Repr_poly]
     compiled away. *)
@@ -829,7 +867,13 @@ type lambda =
 
 and rec_binding = {
   id : Ident.t;
+<<<<<<< HEAD
   debug_uid : debug_uid;
+||||||| 23e84b8c4d
+  rkind : Value_rec_types.recursive_binding_kind;
+  def : lambda;
+=======
+>>>>>>> ocaml/5.4
   def : lfunction;
   (* Generic recursive bindings have been removed from Lambda in 5.2.
      [Value_rec_compiler.compile_letrec] deals with transforming generic
@@ -994,6 +1038,7 @@ val const_int : int -> structured_constant
 val tagged_immediate : int -> lambda
 val lambda_unit: lambda
 
+<<<<<<< HEAD
 val of_bool : bool -> lambda
 
 val layout_unit : layout
@@ -1045,6 +1090,16 @@ val layout_bottom : layout
 val dummy_constant: lambda
 val name_lambda: let_kind -> lambda -> layout -> (Ident.t -> lambda) -> lambda
 val name_lambda_list: (lambda * layout) list -> (lambda list -> lambda) -> lambda
+||||||| 23e84b8c4d
+val name_lambda: let_kind -> lambda -> (Ident.t -> lambda) -> lambda
+val name_lambda_list: lambda list -> (lambda list -> lambda) -> lambda
+=======
+(** [dummy_constant] produces a plecholder value with a recognizable
+    bit pattern (currently 0xBBBB in its tagged form) *)
+val dummy_constant: lambda
+val name_lambda: let_kind -> lambda -> (Ident.t -> lambda) -> lambda
+val name_lambda_list: lambda list -> (lambda list -> lambda) -> lambda
+>>>>>>> ocaml/5.4
 
 val lfunction :
   kind:function_kind ->
@@ -1059,6 +1114,7 @@ val lfunction :
 
 val lfunction' :
   kind:function_kind ->
+<<<<<<< HEAD
   params:lparam list ->
   return:layout ->
   body:lambda ->
@@ -1066,6 +1122,14 @@ val lfunction' :
   loc:scoped_location ->
   mode:locality_mode ->
   ret_mode:locality_mode ->
+||||||| 23e84b8c4d
+=======
+  params:(Ident.t * value_kind) list ->
+  return:value_kind ->
+  body:lambda ->
+  attr:function_attribute -> (* specified with [@inline] attribute *)
+  loc:scoped_location ->
+>>>>>>> ocaml/5.4
   lfunction
 
 
@@ -1086,9 +1150,13 @@ val transl_prim: string -> string -> lambda
 (** Translate a value from a persistent module. For instance:
 
     {[
-      transl_internal_value "CamlinternalLazy" "force"
+      transl_prim "CamlinternalLazy" "force"
     ]}
 *)
+
+val is_evaluated : lambda -> bool
+(** [is_evaluated lam] returns [true] if [lam] is either a constant, a variable
+    or a function abstract. *)
 
 val free_variables: lambda -> Ident.Set.t
 
@@ -1141,10 +1209,16 @@ val map : (lambda -> lambda) -> lambda -> lambda
 val map_lfunction : (lambda -> lambda) -> lfunction -> lfunction
   (** Apply the given transformation on the function's body *)
 
+<<<<<<< HEAD
 val shallow_map  :
   tail:(lambda -> lambda) ->
   non_tail:(lambda -> lambda) ->
   lambda -> lambda
+||||||| 23e84b8c4d
+val shallow_map  : (lambda -> lambda) -> lambda -> lambda
+=======
+val shallow_map  : (lambda -> lambda) -> lambda -> lambda
+>>>>>>> ocaml/5.4
   (** Rewrite each immediate sub-term with the function. *)
 
 val bind_with_layout:
@@ -1163,6 +1237,7 @@ val max_arity : unit -> int
       This is unlimited ([max_int]) for bytecode, but limited
       (currently to 126) for native code. *)
 
+<<<<<<< HEAD
 val join_locality_mode : locality_mode -> locality_mode -> locality_mode
 val sub_locality_mode : locality_mode -> locality_mode -> bool
 val eq_locality_mode : locality_mode -> locality_mode -> bool
@@ -1185,6 +1260,10 @@ val primitive_may_allocate : primitive -> locality_mode option
 val locality_mode_of_primitive_description :
   external_call_description -> locality_mode option
   (** Like [primitive_may_allocate], for [external] calls. *)
+||||||| 23e84b8c4d
+=======
+val tag_of_lazy_tag : lazy_block_tag -> int
+>>>>>>> ocaml/5.4
 
 (***********************)
 (* For static failures *)

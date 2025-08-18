@@ -34,18 +34,36 @@ val extract_crc_implementations: unit -> Import_info.t list
 type error =
   | File_not_found of filepath
   | Not_an_object_file of filepath
+<<<<<<< HEAD
   | Missing_implementations of (Compilation_unit.t * string list) list
   | Inconsistent_interface of Compilation_unit.Name.t * filepath * filepath
   | Inconsistent_implementation of Compilation_unit.t * filepath * filepath
+||||||| 23e84b8c4d
+  | Missing_implementations of (modname * string list) list
+  | Inconsistent_interface of modname * filepath * filepath
+  | Inconsistent_implementation of modname * filepath * filepath
+=======
+  | Inconsistent_interface of modname * filepath * filepath
+  | Inconsistent_implementation of modname * filepath * filepath
+>>>>>>> ocaml/5.4
   | Assembler_error of filepath
   | Linking_error of int
+<<<<<<< HEAD
   | Multiple_definition of Compilation_unit.Name.t * filepath * filepath
   | Missing_cmx of filepath * Compilation_unit.t
   | Dwarf_fission_objcopy_on_macos
   | Dwarf_fission_dsymutil_not_macos
   | Dsymutil_error of int
   | Objcopy_error of int
+||||||| 23e84b8c4d
+  | Multiple_definition of modname * filepath * filepath
+  | Missing_cmx of filepath * modname
+=======
+  | Missing_cmx of filepath * modname
+  | Link_error of Linkdeps.error
+>>>>>>> ocaml/5.4
 
 exception Error of error
 
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

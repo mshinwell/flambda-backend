@@ -470,8 +470,17 @@ external kill : int -> int -> unit @@ portable = "caml_unix_kill"
 type sigprocmask_command = SIG_SETMASK | SIG_BLOCK | SIG_UNBLOCK
 external sigprocmask: sigprocmask_command -> int list -> int list @@ portable
         = "caml_unix_sigprocmask"
+<<<<<<< HEAD
 external sigpending: unit -> int list @@ portable = "caml_unix_sigpending"
 external sigsuspend: int list -> unit @@ portable = "caml_unix_sigsuspend"
+||||||| 23e84b8c4d
+external sigpending: unit -> int list = "caml_unix_sigpending"
+external sigsuspend: int list -> unit = "caml_unix_sigsuspend"
+=======
+external sigpending: unit -> int list = "caml_unix_sigpending"
+external sigsuspend: int list -> unit = "caml_unix_sigsuspend"
+external sigwait: int list -> int = "caml_unix_sigwait"
+>>>>>>> ocaml/5.4
 
 let pause() =
   let sigs = sigprocmask SIG_BLOCK [] in sigsuspend sigs

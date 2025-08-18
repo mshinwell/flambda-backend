@@ -23,6 +23,7 @@ let tool_name = "ocamlopt"
 let with_info = Compile_common.with_info ~native:true ~tool_name
 
 let interface ~source_file ~output_prefix =
+<<<<<<< HEAD
   with_info ~source_file ~output_prefix ~dump_ext:"cmi"
     ~compilation_unit:Inferred_from_output_prefix ~kind:Intf
   @@ fun info ->
@@ -30,6 +31,18 @@ let interface ~source_file ~output_prefix =
   ~hook_parse_tree:(Compiler_hooks.execute Compiler_hooks.Parse_tree_intf)
   ~hook_typed_tree:(Compiler_hooks.execute Compiler_hooks.Typed_tree_intf)
     info
+||||||| 23e84b8c4d
+  with_info ~source_file ~output_prefix ~dump_ext:"cmi" @@ fun info ->
+  Compile_common.interface info
+
+let (|>>) (x, y) f = (x, f y)
+=======
+  let unit_info = Unit_info.make ~source_file Intf output_prefix in
+  with_info ~dump_ext:"cmi" unit_info @@ fun info ->
+  Compile_common.interface info
+
+let (|>>) (x, y) f = (x, f y)
+>>>>>>> ocaml/5.4
 
 (** Native compilation backend for .ml files. *)
 
@@ -93,6 +106,7 @@ let emit unix i =
     (Unit_info.prefix i.target)
     ~progname:(Unit_info.source_file i.target)
 
+<<<<<<< HEAD
 type starting_point =
   | Parsing
   | Emit
@@ -103,6 +117,28 @@ type starting_point =
   }
 
 let starting_point_of_compiler_pass start_from  =
+||||||| 23e84b8c4d
+let implementation ~backend ~start_from ~source_file ~output_prefix =
+  let backend info typed =
+    Compilenv.reset ?packname:!Clflags.for_package
+      (Unit_info.modname info.target);
+    if Config.flambda
+    then flambda info backend typed
+    else clambda info backend typed
+  in
+  with_info ~source_file ~output_prefix ~dump_ext:"cmx" @@ fun info ->
+=======
+let implementation ~backend ~start_from ~source_file ~output_prefix =
+  let backend info typed =
+    Compilenv.reset ?packname:!Clflags.for_package
+      (Unit_info.modname info.target);
+    if Config.flambda
+    then flambda info backend typed
+    else clambda info backend typed
+  in
+  let unit_info = Unit_info.make ~source_file Impl output_prefix in
+  with_info ~dump_ext:"cmx" unit_info @@ fun info ->
+>>>>>>> ocaml/5.4
   match (start_from:Clflags.Compiler_pass.t) with
   | Parsing -> Parsing
   | Emit -> Emit

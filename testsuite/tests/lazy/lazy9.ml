@@ -34,4 +34,8 @@ let () =
       (* this is what should happen if `todo` is compiled correctly *)
       ()
   end;
+<<<<<<< HEAD
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4

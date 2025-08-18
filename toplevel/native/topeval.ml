@@ -115,7 +115,7 @@ let load_lambda ppf ~compilation_unit ~required_globals phrase_name lam size =
 (* Print the outcome of an evaluation *)
 
 let pr_item =
-  Printtyp.print_items
+  Out_type.print_items
     (fun env -> function
       | Sig_value(id, {val_kind = Val_reg; val_type}, _) ->
           Some (outval_of_value env (toplevel_value id) val_type)
@@ -139,8 +139,14 @@ let name_expression ~loc ~attrs sort exp =
    in
    let sg = [Sig_value(id, vd, Exported)] in
    let pat =
+<<<<<<< HEAD
      { pat_desc = Tpat_var(id, mknoloc name, vd.val_uid,
         Mode.Value.disallow_right Mode.Value.legacy);
+||||||| 23e84b8c4d
+     { pat_desc = Tpat_var(id, mknoloc name);
+=======
+     { pat_desc = Tpat_var(id, mknoloc name, vd.val_uid);
+>>>>>>> ocaml/5.4
        pat_loc = loc;
        pat_extra = [];
        pat_type = exp.exp_type;
@@ -151,7 +157,12 @@ let name_expression ~loc ~attrs sort exp =
      { vb_pat = pat;
        vb_expr = exp;
        vb_rec_kind = Dynamic;
+<<<<<<< HEAD
        vb_sort = sort;
+||||||| 23e84b8c4d
+       vb_rec_kind = Not_recursive;
+=======
+>>>>>>> ocaml/5.4
        vb_attributes = attrs;
        vb_loc = loc; }
    in
@@ -175,6 +186,7 @@ let execute_phrase print_outcome ppf phr =
       let oldsig = !toplevel_sig in
       incr phrase_seqid;
       let phrase_name = "TOP" ^ string_of_int !phrase_seqid in
+<<<<<<< HEAD
       let phrase_comp_unit =
         Compilation_unit.create Compilation_unit.Prefix.empty
           (Compilation_unit.Name.of_string phrase_name)
@@ -190,6 +202,22 @@ let execute_phrase print_outcome ppf phr =
       Typecore.force_delayed_checks ();
       let shape = Shape_reduce.local_reduce Env.empty shape in
       if !Clflags.dump_shape then Shape.print ppf shape;
+||||||| 23e84b8c4d
+      Compilenv.reset ?packname:None phrase_name;
+      Typecore.reset_delayed_checks ();
+      let (str, sg, names, shape, newenv) =
+        Typemod.type_toplevel_phrase oldenv sstr
+      in
+      if !Clflags.dump_typedtree then Printtyped.implementation ppf str;
+      let sg' = Typemod.Signature_names.simplify newenv names sg in
+      ignore (Includemod.signatures oldenv ~mark:Mark_positive sg sg');
+      Typecore.force_delayed_checks ();
+      let shape = Shape.local_reduce shape in
+      if !Clflags.dump_shape then Shape.print ppf shape;
+=======
+      Compilenv.reset ?packname:None phrase_name;
+      let (str, sg', newenv) = typecheck_phrase ppf oldenv sstr in
+>>>>>>> ocaml/5.4
       (* `let _ = <expression>` or even just `<expression>` require special
          handling in toplevels, or nothing is displayed. In bytecode, the
          lambda for <expression> is directly executed and the result _is_ the
@@ -252,7 +280,10 @@ let execute_phrase print_outcome ppf phr =
                             outval_of_value newenv (toplevel_value id)
                               vd.val_type
                           in
-                          let ty = Printtyp.tree_of_type_scheme vd.val_type in
+                          let ty =
+                            Out_type.prepare_for_printing [vd.val_type];
+                            Out_type.tree_of_typexp Type_scheme vd.val_type
+                          in
                           Ophr_eval (outv, ty)
                       | _ -> assert false
                     else

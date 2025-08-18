@@ -17,6 +17,7 @@
 
 open Asttypes
 open Types
+<<<<<<< HEAD
 open Mode
 
 type constant =
@@ -33,6 +34,10 @@ type constant =
   | Const_unboxed_int32 of int32
   | Const_unboxed_int64 of int64
   | Const_unboxed_nativeint of nativeint
+||||||| 23e84b8c4d
+=======
+open Data_types
+>>>>>>> ocaml/5.4
 
 module Uid = Shape.Uid
 
@@ -147,15 +152,35 @@ and pat_extra =
 and 'k pattern_desc =
   (* value patterns *)
   | Tpat_any : value pattern_desc
+<<<<<<< HEAD
   | Tpat_var : Ident.t * string loc * Uid.t * Mode.Value.l -> value pattern_desc
+||||||| 23e84b8c4d
+  | Tpat_var : Ident.t * string loc -> value pattern_desc
+=======
+  | Tpat_var : Ident.t * string loc * Uid.t -> value pattern_desc
+>>>>>>> ocaml/5.4
   | Tpat_alias :
+<<<<<<< HEAD
       value general_pattern * Ident.t * string loc * Uid.t * Mode.Value.l
       * Types.type_expr -> value pattern_desc
+||||||| 23e84b8c4d
+      value general_pattern * Ident.t * string loc -> value pattern_desc
+=======
+      value general_pattern * Ident.t * string loc * Uid.t * type_expr ->
+      value pattern_desc
+>>>>>>> ocaml/5.4
   | Tpat_constant : constant -> value pattern_desc
+<<<<<<< HEAD
   | Tpat_tuple : (string option * value general_pattern) list -> value pattern_desc
   | Tpat_unboxed_tuple :
       (string option * value general_pattern * Jkind.sort) list ->
       value pattern_desc
+||||||| 23e84b8c4d
+  | Tpat_tuple : value general_pattern list -> value pattern_desc
+=======
+  | Tpat_tuple :
+      (string option * value general_pattern) list -> value pattern_desc
+>>>>>>> ocaml/5.4
   | Tpat_construct :
       Longident.t loc * Types.constructor_description *
         value general_pattern list *
@@ -169,12 +194,19 @@ and 'k pattern_desc =
       (Longident.t loc * label_description * value general_pattern) list *
         closed_flag ->
       value pattern_desc
+<<<<<<< HEAD
   | Tpat_record_unboxed_product :
       (Longident.t loc * unboxed_label_description * value general_pattern) list
       * closed_flag ->
       value pattern_desc
   | Tpat_array :
       mutability * Jkind.sort * value general_pattern list -> value pattern_desc
+||||||| 23e84b8c4d
+  | Tpat_array : value general_pattern list -> value pattern_desc
+=======
+  | Tpat_array :
+      mutable_flag * value general_pattern list -> value pattern_desc
+>>>>>>> ocaml/5.4
   | Tpat_lazy : value general_pattern -> value pattern_desc
   (* computation patterns *)
   | Tpat_value : tpat_value_argument -> computation pattern_desc
@@ -215,6 +247,7 @@ and expression_desc =
       Path.t * Longident.t loc * Types.value_description * ident_kind * unique_use
   | Texp_constant of constant
   | Texp_let of rec_flag * value_binding list * expression
+<<<<<<< HEAD
   | Texp_letmutable of value_binding * expression
   | Texp_function of
       { params : function_param list;
@@ -231,15 +264,29 @@ and expression_desc =
   | Texp_try of expression * value case list
   | Texp_tuple of (string option * expression) list * alloc_mode
   | Texp_unboxed_tuple of (string option * expression * Jkind.sort) list
+||||||| 23e84b8c4d
+  | Texp_function of function_param list * function_body
+  | Texp_apply of expression * (arg_label * expression option) list
+  | Texp_match of expression * computation case list * partial
+  | Texp_try of expression * value case list
+  | Texp_tuple of expression list
+=======
+  | Texp_function of function_param list * function_body
+  | Texp_apply of expression * (arg_label * apply_arg) list
+  | Texp_match of expression * computation case list * value case list * partial
+  | Texp_try of expression * value case list * value case list
+  | Texp_tuple of (string option * expression) list
+>>>>>>> ocaml/5.4
   | Texp_construct of
       Longident.t loc * constructor_description * expression list * alloc_mode option
   | Texp_variant of label * (expression * alloc_mode) option
   | Texp_record of {
-      fields : ( Types.label_description * record_label_definition ) array;
+      fields : ( Data_types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : (expression * Jkind.sort * Unique_barrier.t) option;
       alloc_mode : alloc_mode option
     }
+<<<<<<< HEAD
   | Texp_record_unboxed_product of {
       fields :
         ( Types.unboxed_label_description * record_label_definition ) array;
@@ -255,12 +302,26 @@ and expression_desc =
   | Texp_unboxed_field of
       expression * Jkind.sort * Longident.t loc * unboxed_label_description *
         unique_use
+||||||| 23e84b8c4d
+  | Texp_field of expression * Longident.t loc * label_description
+=======
+  | Texp_atomic_loc of expression * Longident.t loc * label_description
+  | Texp_field of expression * Longident.t loc * label_description
+>>>>>>> ocaml/5.4
   | Texp_setfield of
+<<<<<<< HEAD
       expression * Mode.Locality.l * Longident.t loc * label_description * expression
   | Texp_array of mutability * Jkind.Sort.t * expression list * alloc_mode
   | Texp_idx of block_access * unboxed_access list
   | Texp_list_comprehension of comprehension
   | Texp_array_comprehension of mutability * Jkind.sort * comprehension
+||||||| 23e84b8c4d
+      expression * Longident.t loc * label_description * expression
+  | Texp_array of expression list
+=======
+      expression * Longident.t loc * label_description * expression
+  | Texp_array of mutable_flag * expression list
+>>>>>>> ocaml/5.4
   | Texp_ifthenelse of expression * expression * expression option
   | Texp_sequence of expression * Jkind.sort * expression
   | Texp_while of {
@@ -369,6 +430,7 @@ and comprehension_iterator =
 and 'k case =
     {
      c_lhs: 'k general_pattern;
+     c_cont: Ident.t option;
      c_guard: expression option;
      c_rhs: expression;
     }
@@ -434,6 +496,7 @@ and ('a, 'b) arg_or_omitted =
   | Arg of 'a
   | Omitted of 'b
 
+<<<<<<< HEAD
 and omitted_parameter =
   { mode_closure : Mode.Alloc.r;
     mode_arg : Mode.Alloc.l;
@@ -447,6 +510,10 @@ and apply_position =
   | Tail
   | Nontail
   | Default
+||||||| 23e84b8c4d
+=======
+and apply_arg = (expression, unit) arg_or_omitted
+>>>>>>> ocaml/5.4
 
 (* Value expressions for the class language *)
 
@@ -738,7 +805,12 @@ and core_type_desc =
   | Ttyp_var of string option * Parsetree.jkind_annotation option
   | Ttyp_arrow of arg_label * core_type * core_type
   | Ttyp_tuple of (string option * core_type) list
+<<<<<<< HEAD
   | Ttyp_unboxed_tuple of (string option * core_type) list
+||||||| 23e84b8c4d
+  | Ttyp_tuple of core_type list
+=======
+>>>>>>> ocaml/5.4
   | Ttyp_constr of Path.t * Longident.t loc * core_type list
   | Ttyp_object of object_field list * closed_flag
   | Ttyp_class of Path.t * Longident.t loc * core_type list
@@ -752,10 +824,10 @@ and core_type_desc =
   | Ttyp_call_pos
 
 and package_type = {
-  pack_path : Path.t;
-  pack_fields : (Longident.t loc * core_type) list;
-  pack_type : Types.module_type;
-  pack_txt : Longident.t loc;
+  tpt_path : Path.t;
+  tpt_cstrs : (Longident.t loc * core_type) list;
+  tpt_type : Types.module_type;
+  tpt_txt : Longident.t loc;
 }
 
 and row_field = {
@@ -814,8 +886,15 @@ and label_declaration =
      ld_id: Ident.t;
      ld_name: string loc;
      ld_uid: Uid.t;
+<<<<<<< HEAD
      ld_mutable: mutability;
      ld_modalities: Modality.Value.Const.t;
+||||||| 23e84b8c4d
+     ld_mutable: mutable_flag;
+=======
+     ld_mutable: mutable_flag;
+     ld_atomic: atomic_flag;
+>>>>>>> ocaml/5.4
      ld_type: core_type;
      ld_loc: Location.t;
      ld_attributes: attribute list;
@@ -826,7 +905,13 @@ and constructor_declaration =
      cd_id: Ident.t;
      cd_name: string loc;
      cd_uid: Uid.t;
+<<<<<<< HEAD
      cd_vars: (string * Parsetree.jkind_annotation option) list;
+||||||| 23e84b8c4d
+     cd_vars: string loc list;
+=======
+     cd_vars: string loc list;
+>>>>>>> ocaml/5.4
      cd_args: constructor_arguments;
      cd_res: core_type option;
      cd_loc: Location.t;
@@ -1015,16 +1100,30 @@ type pattern_action =
 let shallow_iter_pattern_desc
   : type k . pattern_action -> k pattern_desc -> unit
   = fun f -> function
+<<<<<<< HEAD
   | Tpat_alias(p, _, _, _, _, _) -> f.f p
   | Tpat_tuple patl -> List.iter (fun (_, p) -> f.f p) patl
   | Tpat_unboxed_tuple patl -> List.iter (fun (_, p, _) -> f.f p) patl
+||||||| 23e84b8c4d
+  | Tpat_alias(p, _, _) -> f.f p
+  | Tpat_tuple patl -> List.iter f.f patl
+=======
+  | Tpat_alias(p, _, _, _, _) -> f.f p
+  | Tpat_tuple patl -> List.iter (fun (_, p) -> f.f p) patl
+>>>>>>> ocaml/5.4
   | Tpat_construct(_, _, patl, _) -> List.iter f.f patl
   | Tpat_variant(_, pat, _) -> Option.iter f.f pat
   | Tpat_record (lbl_pat_list, _) ->
       List.iter (fun (_, _, pat) -> f.f pat) lbl_pat_list
+<<<<<<< HEAD
   | Tpat_record_unboxed_product (lbl_pat_list, _) ->
       List.iter (fun (_, _, pat) -> f.f pat) lbl_pat_list
   | Tpat_array (_, _, patl) -> List.iter f.f patl
+||||||| 23e84b8c4d
+  | Tpat_array patl -> List.iter f.f patl
+=======
+  | Tpat_array (_, patl) -> List.iter f.f patl
+>>>>>>> ocaml/5.4
   | Tpat_lazy p -> f.f p
   | Tpat_any
   | Tpat_var _
@@ -1038,13 +1137,26 @@ type pattern_transformation =
 let shallow_map_pattern_desc
   : type k . pattern_transformation -> k pattern_desc -> k pattern_desc
   = fun f d -> match d with
+<<<<<<< HEAD
   | Tpat_alias (p1, id, s, uid, m, ty) ->
       Tpat_alias (f.f p1, id, s, uid, m, ty)
+||||||| 23e84b8c4d
+  | Tpat_alias (p1, id, s) ->
+      Tpat_alias (f.f p1, id, s)
+=======
+  | Tpat_alias (p1, id, s, uid, ty) ->
+      Tpat_alias (f.f p1, id, s, uid, ty)
+>>>>>>> ocaml/5.4
   | Tpat_tuple pats ->
       Tpat_tuple (List.map (fun (label, pat) -> label, f.f pat) pats)
+<<<<<<< HEAD
   | Tpat_unboxed_tuple pats ->
       Tpat_unboxed_tuple
         (List.map (fun (label, pat, sort) -> label, f.f pat, sort) pats)
+||||||| 23e84b8c4d
+      Tpat_tuple (List.map f.f pats)
+=======
+>>>>>>> ocaml/5.4
   | Tpat_record (lpats, closed) ->
       Tpat_record (List.map (fun (lid, l,p) -> lid, l, f.f p) lpats, closed)
   | Tpat_record_unboxed_product (lpats, closed) ->
@@ -1052,8 +1164,16 @@ let shallow_map_pattern_desc
         (List.map (fun (lid, l,p) -> lid, l, f.f p) lpats, closed)
   | Tpat_construct (lid, c, pats, ty) ->
       Tpat_construct (lid, c, List.map f.f pats, ty)
+<<<<<<< HEAD
   | Tpat_array (am, arg_sort, pats) ->
       Tpat_array (am, arg_sort, List.map f.f pats)
+||||||| 23e84b8c4d
+  | Tpat_array pats ->
+      Tpat_array (List.map f.f pats)
+=======
+  | Tpat_array (am, pats) ->
+      Tpat_array (am, List.map f.f pats)
+>>>>>>> ocaml/5.4
   | Tpat_lazy p1 -> Tpat_lazy (f.f p1)
   | Tpat_variant (x1, Some p1, x2) ->
       Tpat_variant (x1, Some (f.f p1), x2)
@@ -1106,9 +1226,19 @@ let rec iter_bound_idents
   : type k . _ -> k general_pattern -> _
   = fun f pat ->
   match pat.pat_desc with
+<<<<<<< HEAD
   | Tpat_var (id, s, uid, _mode) ->
      f (id,s,pat.pat_type, uid)
   | Tpat_alias(p, id, s, uid, _mode, ty) ->
+||||||| 23e84b8c4d
+  | Tpat_var (id,s) ->
+     f (id,s,pat.pat_type)
+  | Tpat_alias(p, id, s) ->
+=======
+  | Tpat_var (id, s, uid) ->
+     f (id,s,pat.pat_type, uid)
+  | Tpat_alias(p, id, s, uid, ty) ->
+>>>>>>> ocaml/5.4
       iter_bound_idents f p;
       f (id, s, ty, uid)
   | Tpat_or(p1, _, _) ->
@@ -1206,7 +1336,13 @@ let rev_pat_bound_idents_full ~of_sort ~of_const_sort sort pat =
   !idents_full
 
 let rev_only_idents idents_full =
+<<<<<<< HEAD
   List.rev_map (fun (id,_,_,_,_) -> id) idents_full
+||||||| 23e84b8c4d
+  List.rev_map (fun (id,_,_) -> id) idents_full
+=======
+  List.rev_map (fun (id,_,_,_) -> id) idents_full
+>>>>>>> ocaml/5.4
 
 let pat_bound_idents_full sort pat =
   List.rev (for_transl rev_pat_bound_idents_full sort pat)
@@ -1285,15 +1421,39 @@ let alpha_var env id = List.assoc id env
 let rec alpha_pat
   : type k . _ -> k general_pattern -> k general_pattern
   = fun env p -> match p.pat_desc with
+<<<<<<< HEAD
   | Tpat_var (id, s, uid, mode) -> (* note the ``Not_found'' case *)
+||||||| 23e84b8c4d
+  | Tpat_var (id, s) -> (* note the ``Not_found'' case *)
+=======
+  | Tpat_var (id, s, uid) -> (* note the ``Not_found'' case *)
+>>>>>>> ocaml/5.4
       {p with pat_desc =
+<<<<<<< HEAD
        try Tpat_var (alpha_var env id, s, uid, mode) with
+||||||| 23e84b8c4d
+       try Tpat_var (alpha_var env id, s) with
+=======
+       try Tpat_var (alpha_var env id, s, uid) with
+>>>>>>> ocaml/5.4
        | Not_found -> Tpat_any}
+<<<<<<< HEAD
   | Tpat_alias (p1, id, s, uid, mode, ty) ->
+||||||| 23e84b8c4d
+  | Tpat_alias (p1, id, s) ->
+=======
+  | Tpat_alias (p1, id, s, uid, ty) ->
+>>>>>>> ocaml/5.4
       let new_p =  alpha_pat env p1 in
       begin try
+<<<<<<< HEAD
         {p with pat_desc =
            Tpat_alias (new_p, alpha_var env id, s, uid, mode, ty)}
+||||||| 23e84b8c4d
+        {p with pat_desc = Tpat_alias (new_p, alpha_var env id, s)}
+=======
+        {p with pat_desc = Tpat_alias (new_p, alpha_var env id, s, uid, ty)}
+>>>>>>> ocaml/5.4
       with
       | Not_found -> new_p
       end
@@ -1335,6 +1495,7 @@ let split_pattern pat =
   in
   split_pattern pat
 
+<<<<<<< HEAD
 (* Expressions are considered nominal if they can be used as the subject of a
    sentence or action. In practice, we consider that an expression is nominal
    if they satisfy one of:
@@ -1387,3 +1548,24 @@ let min_mode_with_locks = (Mode.Value.(disallow_right legacy), None)
 let mode_without_locks_exn = function
   | (_, Some _) -> assert false
   | (m, None) -> m
+||||||| 23e84b8c4d
+(* Expressions are considered nominal if they can be used as the subject of a
+   sentence or action. In practice, we consider that an expression is nominal
+   if they satisfy one of:
+   - Similar to an identifier: words separated by '.' or '#'.
+   - Do not contain spaces when printed.
+  *)
+let rec exp_is_nominal exp =
+  match exp.exp_desc with
+  | _ when exp.exp_attributes <> [] -> false
+  | Texp_ident _ | Texp_instvar _ | Texp_constant _
+  | Texp_variant (_, None)
+  | Texp_construct (_, _, []) ->
+      true
+  | Texp_field (parent, _, _) | Texp_send (parent, _) -> exp_is_nominal parent
+  | _ -> false
+=======
+let map_apply_arg f = function
+  | Arg arg -> Arg (f arg)
+  | Omitted _ as arg -> arg
+>>>>>>> ocaml/5.4

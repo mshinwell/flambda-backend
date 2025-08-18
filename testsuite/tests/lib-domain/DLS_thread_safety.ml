@@ -1,10 +1,15 @@
 (* TEST
    include systhreads;
+<<<<<<< HEAD
    flags = "-alert -unsafe_multidomain";
    hassysthreads;
    runtime5;
    { bytecode; }
    { native; }
+||||||| 23e84b8c4d
+=======
+   hassysthreads;
+>>>>>>> ocaml/5.4
 *)
 
 (* This test creates [nb_keys] DLS keys, each storing an atomic integer.

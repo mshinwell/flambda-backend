@@ -1,5 +1,10 @@
 (* TEST
+<<<<<<< HEAD
  flags += "-alert -do_not_spawn_domains -alert -unsafe_multidomain";
+||||||| 23e84b8c4d
+=======
+ multicore;
+>>>>>>> ocaml/5.4
  no-tsan; (* TSan detects the intentional data race *)
  runtime5;
  multidomain;

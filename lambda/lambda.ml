@@ -132,6 +132,14 @@ type lazy_block_tag =
   | Lazy_tag
   | Forward_tag
 
+type lazy_block_tag =
+  | Lazy_tag
+  | Forward_tag
+
+let tag_of_lazy_tag = function
+  | Lazy_tag -> Config.lazy_tag
+  | Forward_tag -> Obj.forward_tag
+
 type primitive =
   | Pbytes_to_string
   | Pbytes_of_string
@@ -141,6 +149,7 @@ type primitive =
   | Psetglobal of Compilation_unit.t
   | Pgetpredef of Ident.t
   (* Operations on heap blocks *)
+<<<<<<< HEAD
   | Pmakeblock of int * mutable_flag * block_shape * locality_mode
   | Pmakefloatblock of mutable_flag * locality_mode
   | Pmakeufloatblock of mutable_flag * locality_mode
@@ -148,6 +157,16 @@ type primitive =
   | Pmakelazyblock of lazy_block_tag
   | Pfield of int * immediate_or_pointer * field_read_semantics
   | Pfield_computed of field_read_semantics
+||||||| 23e84b8c4d
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pfield of int * immediate_or_pointer * mutable_flag
+  | Pfield_computed
+=======
+  | Pmakeblock of int * mutable_flag * block_shape
+  | Pmakelazyblock of lazy_block_tag
+  | Pfield of int * immediate_or_pointer * mutable_flag
+  | Pfield_computed
+>>>>>>> ocaml/5.4
   | Psetfield of int * immediate_or_pointer * initialization_or_assignment
   | Psetfield_computed of immediate_or_pointer * initialization_or_assignment
   | Pfloatfield of int * field_read_semantics * locality_mode
@@ -316,6 +335,7 @@ type primitive =
   (* Integer to external pointer *)
   | Pint_as_pointer of locality_mode
   (* Atomic operations *)
+<<<<<<< HEAD
   | Patomic_load_field of {immediate_or_pointer : immediate_or_pointer}
   | Patomic_set_field of {immediate_or_pointer : immediate_or_pointer}
   | Patomic_exchange_field of {immediate_or_pointer : immediate_or_pointer}
@@ -328,6 +348,14 @@ type primitive =
   | Patomic_land_field
   | Patomic_lor_field
   | Patomic_lxor_field
+||||||| 23e84b8c4d
+  | Patomic_load of {immediate_or_pointer : immediate_or_pointer}
+  | Patomic_exchange
+  | Patomic_cas
+  | Patomic_fetch_add
+=======
+  | Patomic_load
+>>>>>>> ocaml/5.4
   (* Inhibition of optimisation *)
   | Popaque of layout
   (* Statically-defined probes *)
@@ -350,9 +378,13 @@ type primitive =
   | Pdls_get
   (* Poll for runtime actions *)
   | Ppoll
+<<<<<<< HEAD
   | Pcpu_relax
   | Pget_idx of layout * Asttypes.mutable_flag
   | Pset_idx of layout * modify_mode
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 
 and extern_repr =
   | Same_as_ocaml_repr of Jkind.Sort.Const.t
@@ -874,7 +906,13 @@ type lambda =
 
 and rec_binding = {
   id : Ident.t;
+<<<<<<< HEAD
   debug_uid : debug_uid;
+||||||| 23e84b8c4d
+  rkind : Value_rec_types.recursive_binding_kind;
+  def : lambda;
+=======
+>>>>>>> ocaml/5.4
   def : lfunction;
 }
 
@@ -972,16 +1010,28 @@ let int = Scalar.Maybe_naked.Value (Scalar.Integral.Width.Taggable Int)
 
 let const_unit = const_int 0
 
+<<<<<<< HEAD
 let dummy_constant = tagged_immediate (0xBBBB / 2)
+||||||| 23e84b8c4d
+=======
+let dummy_constant = Lconst (const_int (0xBBBB / 2))
+>>>>>>> ocaml/5.4
 
 let max_arity () =
   if !Clflags.native_code then 126 else max_int
   (* 126 = 127 (the maximal number of parameters supported in C--)
            - 1 (the hidden parameter containing the environment) *)
 
+<<<<<<< HEAD
 let lfunction' ~kind ~params ~return ~body ~attr ~loc ~mode ~ret_mode =
   assert (List.length params > 0);
+||||||| 23e84b8c4d
+let lfunction ~kind ~params ~return ~body ~attr ~loc =
+=======
+let lfunction' ~kind ~params ~return ~body ~attr ~loc =
+>>>>>>> ocaml/5.4
   assert (List.length params <= max_arity ());
+<<<<<<< HEAD
   (* A curried function type with n parameters has n arrows. Of these,
      the first [n-nlocal] have return mode Heap, while the remainder
      have return mode Local, except possibly the final one.
@@ -1007,6 +1057,14 @@ let lfunction' ~kind ~params ~return ~body ~attr ~loc ~mode ~ret_mode =
 
 let lfunction ~kind ~params ~return ~body ~attr ~loc ~mode ~ret_mode =
   Lfunction (lfunction' ~kind ~params ~return ~body ~attr ~loc ~mode ~ret_mode)
+||||||| 23e84b8c4d
+  Lfunction { kind; params; return; body; attr; loc }
+=======
+  { kind; params; return; body; attr; loc }
+
+let lfunction ~kind ~params ~return ~body ~attr ~loc =
+  Lfunction (lfunction' ~kind ~params ~return ~body ~attr ~loc)
+>>>>>>> ocaml/5.4
 
 let lambda_unit = Lconst const_unit
 
@@ -1286,6 +1344,10 @@ let shallow_iter ~tail ~non_tail:f = function
 let iter_head_constructor f l =
   shallow_iter ~tail:f ~non_tail:f l
 
+let is_evaluated = function
+  | Lconst _ | Lvar _ | Lfunction _ -> true
+  | _ -> false
+
 let rec free_variables = function
   | Lvar id
   | Lmutvar id -> Ident.Set.singleton id
@@ -1432,14 +1494,18 @@ let transl_extension_path loc env path =
 let transl_class_path loc env path =
   transl_path Env.find_class_address loc env path
 
-let transl_prim mod_name name =
-  let pers = Ident.create_persistent mod_name in
-  let env = Env.add_persistent_structure pers Env.empty in
-  let lid = Longident.Ldot (Longident.Lident mod_name, name) in
-  match Env.find_value_by_name lid env with
-  | path, _ -> transl_value_path Loc_unknown env path
-  | exception Not_found ->
-      fatal_error ("Primitive " ^ name ^ " not found.")
+let transl_prim modname field =
+  let mod_ident = Ident.create_persistent modname in
+  let env = Env.add_persistent_structure mod_ident Env.initial in
+  match Env.open_pers_signature modname env with
+  | Error `Not_found ->
+      fatal_errorf "Module %s unavailable." modname
+  | Ok env -> (
+      match Env.find_value_by_name (Longident.Lident field) env with
+      | exception Not_found ->
+          fatal_errorf "Primitive %s.%s not found." modname field
+      | path, _ -> transl_value_path Loc_unknown env path
+    )
 
 let rec transl_mixed_product_shape ~get_value_kind shape =
   Array.mapi (fun i (elt : Types.mixed_block_element) ->
@@ -1560,12 +1626,30 @@ let build_substs update_env ?(freshen_bound_variables = false) s =
                       ap_args = subst_list s l ap.ap_args}
     | Lfunction lf ->
         Lfunction (subst_lfun s l lf)
+<<<<<<< HEAD
     | Llet(str, k, id, duid, arg, body) ->
         let id, duid, l' = bind id duid l in
         Llet(str, k, id, duid, subst s l arg, subst s l' body)
     | Lmutlet(k, id, duid, arg, body) ->
         let id, duid, l' = bind id duid l in
         Lmutlet(k, id, duid, subst s l arg, subst s l' body)
+||||||| 23e84b8c4d
+        let params, l' = bind_many lf.params l in
+        Lfunction {lf with params; body = subst s l' lf.body}
+    | Llet(str, k, id, arg, body) ->
+        let id, l' = bind id l in
+        Llet(str, k, id, subst s l arg, subst s l' body)
+    | Lmutlet(k, id, arg, body) ->
+        let id, l' = bind id l in
+        Lmutlet(k, id, subst s l arg, subst s l' body)
+=======
+    | Llet(str, k, id, arg, body) ->
+        let id, l' = bind id l in
+        Llet(str, k, id, subst s l arg, subst s l' body)
+    | Lmutlet(k, id, arg, body) ->
+        let id, l' = bind id l in
+        Lmutlet(k, id, subst s l arg, subst s l' body)
+>>>>>>> ocaml/5.4
     | Lletrec(decl, body) ->
         let decl, l' = bind_rec decl l in
         Lletrec(List.map (subst_decl s l') decl, subst s l' body)
@@ -1655,7 +1739,13 @@ let build_substs update_env ?(freshen_bound_variables = false) s =
   and subst_list s l li = List.map (subst s l) li
   and subst_decl s l decl = { decl with def = subst_lfun s l decl.def }
   and subst_lfun s l lf =
+<<<<<<< HEAD
     let params, l' = bind_params lf.params l in
+||||||| 23e84b8c4d
+  and subst_decl s l decl = { decl with def = subst s l decl.def }
+=======
+    let params, l' = bind_many lf.params l in
+>>>>>>> ocaml/5.4
     { lf with params; body = subst s l' lf.body }
   and subst_case s l (key, case) = (key, subst s l case)
   and subst_strcase s l (key, case) = (key, subst s l case)
@@ -1683,6 +1773,20 @@ let duplicate_function =
      (fun _ _ env -> env)
      ~freshen_bound_variables:true
      Ident.Map.empty).subst_lfunction
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+let duplicate lam =
+  subst
+    (fun _ _ env -> env)
+    ~freshen_bound_variables:true
+    Ident.Map.empty
+    lam
+=======
+
+let map_lfunction f { kind; params; return; body; attr; loc } =
+  let body = f body in
+  { kind; params; return; body; attr; loc }
+>>>>>>> ocaml/5.4
 
 let map_lfunction f { kind; params; return; body; attr; loc;
                       mode; ret_mode } =
@@ -1709,19 +1813,39 @@ let shallow_map ~tail ~non_tail:f = function
       }
   | Lfunction lfun ->
       Lfunction (map_lfunction f lfun)
+<<<<<<< HEAD
   | Llet (str, layout, v, v_duid, e1, e2) ->
       Llet (str, layout, v, v_duid, f e1, tail e2)
   | Lmutlet (layout, v, v_duid, e1, e2) ->
       Lmutlet (layout, v, v_duid, f e1, tail e2)
+||||||| 23e84b8c4d
+  | Lfunction { kind; params; return; body; attr; loc; } ->
+      Lfunction { kind; params; return; body = f body; attr; loc; }
+  | Llet (str, k, v, e1, e2) ->
+      Llet (str, k, v, f e1, f e2)
+  | Lmutlet (k, v, e1, e2) ->
+      Lmutlet (k, v, f e1, f e2)
+=======
+  | Llet (str, k, v, e1, e2) ->
+      Llet (str, k, v, f e1, f e2)
+  | Lmutlet (k, v, e1, e2) ->
+      Lmutlet (k, v, f e1, f e2)
+>>>>>>> ocaml/5.4
   | Lletrec (idel, e2) ->
       Lletrec
         (List.map (fun rb ->
              { rb with def = map_lfunction f rb.def })
             idel,
+<<<<<<< HEAD
          tail e2)
   | Lprim (Psequand as p, [l1; l2], loc)
   | Lprim (Psequor as p, [l1; l2], loc) ->
       Lprim(p, [f l1; tail l2], loc)
+||||||| 23e84b8c4d
+      Lletrec (List.map (fun rb -> { rb with def = f rb.def }) idel, f e2)
+=======
+         f e2)
+>>>>>>> ocaml/5.4
   | Lprim (p, el, loc) ->
       Lprim (p, List.map f el, loc)
   | Lswitch (e, sw, loc, layout) ->

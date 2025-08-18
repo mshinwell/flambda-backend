@@ -20,7 +20,12 @@ end
 [%%expect{|
 {
  "M"[module] ->
+<<<<<<< HEAD
    {<.39>
+||||||| 23e84b8c4d
+=======
+   {<.37>
+>>>>>>> ocaml/5.4
     "Exn"[extension constructor] -> {<.1>
                                      "lbl_exn"[label] -> <.0>;
                                      };

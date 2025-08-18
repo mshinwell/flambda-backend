@@ -16,7 +16,8 @@
 open Local_store
 
 let lowest_scope  = 0
-let highest_scope = 100000000
+let highest_scope = 100_000_000
+  (* assumed to fit in 27 bits, see Types.scope_field *)
 
 type t =
   | Local of { name: string; stamp: int }
@@ -130,6 +131,9 @@ let stamp = function
   | Scoped { stamp; _ } -> stamp
   | _ -> 0
 
+let compare_stamp id1 id2 =
+  compare (stamp id1) (stamp id2)
+
 let scope = function
   | Scoped { scope; _ } -> scope
   | Local _ -> highest_scope
@@ -158,6 +162,7 @@ let is_predef = function
   | Predef _ -> true
   | _ -> false
 
+<<<<<<< HEAD
 let is_instance = function
   | Global_with_args _ -> true
   | _ -> false
@@ -166,10 +171,41 @@ let to_global = function
   | Global head -> Some (Global_module.Name.create_no_args head)
   | Global_with_args g -> Some g
   | _ -> None
+||||||| 23e84b8c4d
+=======
+let canonical_stamps = s_table Hashtbl.create 0
+let next_canonical_stamp = s_table Hashtbl.create 0
+
+let canonicalize name stamp =
+  try Hashtbl.find !canonical_stamps (name, stamp)
+  with Not_found ->
+    let canonical_stamp =
+      try Hashtbl.find !next_canonical_stamp name
+      with Not_found -> 0
+    in
+    Hashtbl.replace !next_canonical_stamp name
+      (canonical_stamp + 1);
+    Hashtbl.add !canonical_stamps (name, stamp)
+      canonical_stamp;
+    canonical_stamp
+
+let pp_stamped ppf (name, stamp) =
+  let open Format_doc in
+  if not !Clflags.unique_ids then
+    fprintf ppf "%s" name
+  else begin
+    let stamp =
+      if not !Clflags.canonical_ids then stamp
+      else canonicalize name stamp
+    in
+    fprintf ppf "%s/%i" name stamp
+  end
+>>>>>>> ocaml/5.4
 
 let print ~with_scope ppf =
-  let open Format in
+  let open Format_doc in
   function
+<<<<<<< HEAD
   | Global name -> fprintf ppf "%s!" name
   | Predef { name; stamp = n } ->
       fprintf ppf "%s%s!" name
@@ -183,9 +219,36 @@ let print ~with_scope ppf =
         (if with_scope then sprintf "[%i]" scope else "")
   | Global_with_args g ->
       fprintf ppf "%a!" Global_module.Name.print g
+||||||| 23e84b8c4d
+  | Global name -> fprintf ppf "%s!" name
+  | Predef { name; stamp = n } ->
+      fprintf ppf "%s%s!" name
+        (if !Clflags.unique_ids then sprintf "/%i" n else "")
+  | Local { name; stamp = n } ->
+      fprintf ppf "%s%s" name
+        (if !Clflags.unique_ids then sprintf "/%i" n else "")
+  | Scoped { name; stamp = n; scope } ->
+      fprintf ppf "%s%s%s" name
+        (if !Clflags.unique_ids then sprintf "/%i" n else "")
+        (if with_scope then sprintf "[%i]" scope else "")
+=======
+  | Global name ->
+      fprintf ppf "%s!" name
+  | Predef { name; stamp } ->
+      fprintf ppf "%a!"
+        pp_stamped (name, stamp)
+  | Local { name; stamp } ->
+      fprintf ppf "%a"
+        pp_stamped (name, stamp)
+  | Scoped { name; stamp; scope } ->
+      fprintf ppf "%a%s"
+        pp_stamped (name, stamp)
+        (if with_scope then asprintf "[%i]" scope else "")
+>>>>>>> ocaml/5.4
 
 let print_with_scope ppf id = print ~with_scope:true ppf id
 
+<<<<<<< HEAD
 let print ppf id = print ~with_scope:false ppf id
 
 let to_global_exn id =
@@ -193,6 +256,13 @@ let to_global_exn id =
   | Some global -> global
   | None -> Misc.fatal_errorf "Not global: %a" print id
 
+||||||| 23e84b8c4d
+let print ppf id = print ~with_scope:false ppf id
+
+=======
+let doc_print ppf id = print ~with_scope:false ppf id
+let print ppf id = Format_doc.compat doc_print ppf id
+>>>>>>> ocaml/5.4
 (* For the documentation of ['a Ident.tbl], see ident.mli.
 
    The implementation is a copy-paste specialization of

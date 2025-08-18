@@ -127,6 +127,7 @@ type error =
   | Boxed_and_unboxed
   | Nonrec_gadt
   | Invalid_private_row_declaration of type_expr
+<<<<<<< HEAD
   | Local_not_enabled
   | Unexpected_layout_any_in_primitive of string
   | Useless_layout_poly
@@ -143,6 +144,10 @@ type error =
   | No_unboxed_version of Path.t
   | Atomic_field_must_be_mutable of string
   | Constructor_submode_failed of Mode.Value.error
+||||||| 23e84b8c4d
+=======
+  | Atomic_field_must_be_mutable of string
+>>>>>>> ocaml/5.4
 
 open Typedtree
 
@@ -204,6 +209,7 @@ let enter_type ?abstract_abbrevs rec_flag env sdecl (id, uid) =
     | Asttypes.Recursive -> true
   in
   if not needed then env else
+<<<<<<< HEAD
   let arity = List.length sdecl.ptype_params in
   let path = Path.Pident id in
   let any = Jkind.Builtin.any ~why:Initial_typedecl_env in
@@ -280,6 +286,19 @@ let enter_type ?abstract_abbrevs rec_flag env sdecl (id, uid) =
       ~transl_type:(fun _ -> Predef.type_exn)
       ~default:(Jkind.disallow_right any)
       sdecl
+||||||| 23e84b8c4d
+  let abstract_source, type_manifest =
+    match sdecl.ptype_manifest, abstract_abbrevs with
+    | None, _             -> Definition, None
+    | Some _, None        -> Definition, Some (Btype.newgenvar ())
+    | Some _, Some reason -> reason, None
+=======
+  let abstract_source, type_manifest =
+    match sdecl.ptype_manifest, abstract_abbrevs with
+    | None, _             -> Definition, None
+    | Some _, None        -> Definition, Some (Ctype.newvar ())
+    | Some _, Some reason -> reason, None
+>>>>>>> ocaml/5.4
   in
   let abstract_source, type_manifest, unboxed_type_manifest =
     match sdecl.ptype_manifest, abstract_abbrevs with
@@ -501,12 +520,30 @@ let transl_labels (type rep) ~(record_form : rep record_form) ~new_var_jkind
           Typemode.transl_modalities ~maturity:Stable mut modalities
          in
          let arg = Ast_helper.Typ.force_poly arg in
+<<<<<<< HEAD
          let cty = transl_simple_type ~new_var_jkind env ?univars ~closed Mode.Alloc.Const.legacy arg in
+||||||| 23e84b8c4d
+         let cty = transl_simple_type env ?univars ~closed arg in
+=======
+         let cty = transl_simple_type env ?univars ~closed arg in
+         let is_atomic = Builtin_attributes.has_atomic attrs in
+         let is_mutable = match mut with Mutable -> true | Immutable -> false in
+         if is_atomic && not is_mutable then
+           raise (Error (loc, Atomic_field_must_be_mutable name.txt));
+>>>>>>> ocaml/5.4
          {ld_id = Ident.create_local name.txt;
           ld_name = name;
+<<<<<<< HEAD
           ld_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
           ld_mutable = mut;
           ld_modalities = modalities;
+||||||| 23e84b8c4d
+          ld_name = name; ld_mutable = mut;
+=======
+          ld_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
+          ld_mutable = mut;
+          ld_atomic = if is_atomic then Atomic else Nonatomic;
+>>>>>>> ocaml/5.4
           ld_type = cty; ld_loc = loc; ld_attributes = attrs}
       )
   in
@@ -520,9 +557,14 @@ let transl_labels (type rep) ~(record_form : rep record_form) ~new_var_jkind
            env ld.ld_loc kloc ty;
          {Types.ld_id = ld.ld_id;
           ld_mutable = ld.ld_mutable;
+<<<<<<< HEAD
           ld_modalities = ld.ld_modalities;
           ld_sort = Jkind.Sort.Const.void;
             (* Updated by [update_label_sorts] *)
+||||||| 23e84b8c4d
+=======
+          ld_atomic = ld.ld_atomic;
+>>>>>>> ocaml/5.4
           ld_type = ty;
           ld_loc = ld.ld_loc;
           ld_attributes = ld.ld_attributes;
@@ -594,6 +636,7 @@ let make_constructor
          then widen so as to not introduce any new constraints *)
       (* narrow and widen are now invoked through with_local_scope *)
       TyVarEnv.with_local_scope begin fun () ->
+<<<<<<< HEAD
       let closed =
         match svars with
         | [] -> false
@@ -601,6 +644,15 @@ let make_constructor
       in
       let targs, tret_type, args, ret_type, _univars =
         Ctype.with_local_level_if closed begin fun () ->
+||||||| 23e84b8c4d
+      let closed = svars <> [] in
+      let targs, tret_type, args, ret_type, _univars =
+        Ctype.with_local_level_if closed begin fun () ->
+=======
+      let closed = svars <> [] in
+      let targs, tret_type, args, ret_type, univars =
+        Ctype.with_local_level_generalize_if closed begin fun () ->
+>>>>>>> ocaml/5.4
           TyVarEnv.reset ();
           let univar_list =
             TyVarEnv.make_poly_univars_jkinds
@@ -635,19 +687,73 @@ let make_constructor
           end;
           (targs, tret_type, args, ret_type, univar_list)
         end
-        ~post: begin fun (_, _, args, ret_type, univars) ->
-          Btype.iter_type_expr_cstr_args Ctype.generalize args;
-          Ctype.generalize ret_type;
-          let _vars = TyVarEnv.instance_poly_univars env loc univars in
-          let set_level t = Ctype.enforce_current_level env t in
-          Btype.iter_type_expr_cstr_args set_level args;
-          set_level ret_type;
-        end
       in
+<<<<<<< HEAD
       tvars, targs, Some tret_type, args, Some ret_type
+||||||| 23e84b8c4d
+      targs, Some tret_type, args, Some ret_type
+=======
+      if closed then begin
+        ignore (TyVarEnv.instance_poly_univars env loc univars);
+        let set_level t = Ctype.enforce_current_level env t in
+        Btype.iter_type_expr_cstr_args set_level args;
+        set_level ret_type
+      end;
+      targs, Some tret_type, args, Some ret_type
+>>>>>>> ocaml/5.4
       end
 
+<<<<<<< HEAD
 let verify_unboxed_attr unboxed_attr sdecl =
+||||||| 23e84b8c4d
+let transl_declaration env sdecl (id, uid) =
+  (* Bind type parameters *)
+  Ctype.with_local_level begin fun () ->
+  TyVarEnv.reset();
+  let tparams = make_params env sdecl.ptype_params in
+  let params = List.map (fun (cty, _) -> cty.ctyp_type) tparams in
+  let cstrs = List.map
+    (fun (sty, sty', loc) ->
+      transl_simple_type env ~closed:false sty,
+      transl_simple_type env ~closed:false sty', loc)
+    sdecl.ptype_cstrs
+  in
+  let unboxed_attr = get_unboxed_from_attributes sdecl in
+=======
+
+let shape_map_labels =
+  List.fold_left (fun map { ld_id; ld_uid; _} ->
+    Shape.Map.add_label map ld_id ld_uid)
+    Shape.Map.empty
+
+let shape_map_cstrs =
+  List.fold_left (fun map { cd_id; cd_uid; cd_args; _ } ->
+    let cstr_shape_map =
+      let label_decls =
+        match cd_args with
+        | Cstr_tuple _ -> []
+        | Cstr_record ldecls -> ldecls
+      in
+      shape_map_labels label_decls
+    in
+    Shape.Map.add_constr map cd_id
+      @@ Shape.str ~uid:cd_uid cstr_shape_map)
+    (Shape.Map.empty)
+
+
+let transl_declaration env sdecl (id, uid) =
+  (* Bind type parameters *)
+  TyVarEnv.reset();
+  let tparams = make_params env sdecl.ptype_params in
+  let params = List.map (fun (cty, _) -> cty.ctyp_type) tparams in
+  let cstrs = List.map
+    (fun (sty, sty', loc) ->
+      transl_simple_type env ~closed:false sty,
+      transl_simple_type env ~closed:false sty', loc)
+    sdecl.ptype_cstrs
+  in
+  let unboxed_attr = get_unboxed_from_attributes sdecl in
+>>>>>>> ocaml/5.4
   begin match unboxed_attr with
   | (None | Some false) -> ()
   | Some true ->
@@ -659,7 +765,7 @@ let verify_unboxed_attr unboxed_attr sdecl =
         | [] -> bad "it has no fields"
         | _::_::_ -> bad "it has more than one field"
         | [{pld_mutable = Mutable}] -> bad "it is mutable"
-        | [{pld_mutable = Immutable}] -> ()
+        | [{pld_mutable = Immutable; _}] -> ()
       end
     | Ptype_record_unboxed_product _ ->
         bad "[@@unboxed] may not be used on unboxed records"
@@ -954,8 +1060,15 @@ let transl_declaration env sdecl (id, uid) =
           let tcstr =
             { cd_id = name;
               cd_name = scstr.pcd_name;
+<<<<<<< HEAD
               cd_vars = tvars;
               cd_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+||||||| 23e84b8c4d
+              cd_vars = scstr.pcd_vars;
+=======
+              cd_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
+              cd_vars = scstr.pcd_vars;
+>>>>>>> ocaml/5.4
               cd_args = targs;
               cd_res = tret_type;
               cd_loc = scstr.pcd_loc;
@@ -966,7 +1079,14 @@ let transl_declaration env sdecl (id, uid) =
               cd_args = args;
               cd_res = ret_type;
               cd_loc = scstr.pcd_loc;
+<<<<<<< HEAD
               cd_attributes = attributes;
+||||||| 23e84b8c4d
+              cd_attributes = scstr.pcd_attributes;
+              cd_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) }
+=======
+              cd_attributes = scstr.pcd_attributes;
+>>>>>>> ocaml/5.4
               cd_uid = tcstr.cd_uid }
           in
             tcstr, cstr
@@ -1001,9 +1121,31 @@ let transl_declaration env sdecl (id, uid) =
         in
           Ttype_variant tcstrs, Type_variant (cstrs, rep, None), jkind
       | Ptype_record lbls ->
+<<<<<<< HEAD
           let lbls, lbls' =
             transl_labels ~record_form:Legacy ~new_var_jkind:Any
               env None true lbls (Record { unboxed = unbox })
+||||||| 23e84b8c4d
+          let lbls, lbls' = transl_labels env None true lbls in
+          let rep =
+            if unbox then Record_unboxed false
+            else if List.for_all (fun l -> is_float env l.Types.ld_type) lbls'
+            then Record_float
+            else Record_regular
+=======
+          let lbls, lbls' = transl_labels env None true lbls in
+          let rep =
+            if unbox then (
+              Record_unboxed false
+            ) else if
+              List.for_all (fun (l : Types.label_declaration) ->
+                is_float env l.ld_type && l.ld_atomic = Nonatomic
+              ) lbls'
+            then
+              Record_float
+            else
+              Record_regular
+>>>>>>> ocaml/5.4
           in
           let rep, jkind =
             if unbox then
@@ -1038,6 +1180,7 @@ let transl_declaration env sdecl (id, uid) =
         Ttype_open, Type_open,
         Jkind.for_non_float ~why:Extensible_variant
       in
+<<<<<<< HEAD
     let jkind =
     (* - If there's an annotation, we use that. It's checked against a kind in
          [update_decl_jkind] and the manifest in [narrow_to_manifest_jkind].
@@ -1073,6 +1216,22 @@ let transl_declaration env sdecl (id, uid) =
         end
       | Type_abstract _ | Type_variant _ | Type_record _
       | Type_open -> jkind
+||||||| 23e84b8c4d
+    let (tman, man) = match sdecl.ptype_manifest with
+        None -> None, None
+      | Some sty ->
+        let no_row = not (is_fixed_type sdecl) in
+        let cty = transl_simple_type env ~closed:no_row sty in
+        Some cty, Some cty.ctyp_type
+=======
+  begin
+    let (tman, man) = match sdecl.ptype_manifest with
+        None -> None, None
+      | Some sty ->
+        let no_row = not (is_fixed_type sdecl) in
+        let cty = transl_simple_type env ~closed:no_row sty in
+        Some cty, Some cty.ctyp_type
+>>>>>>> ocaml/5.4
     in
     let arity = List.length params in
     let decl =
@@ -1123,6 +1282,7 @@ let transl_declaration env sdecl (id, uid) =
         typ_kind = tkind;
         typ_private = sdecl.ptype_private;
         typ_attributes = sdecl.ptype_attributes;
+<<<<<<< HEAD
         typ_jkind_annotation = jkind_annotation
       }
     in
@@ -1305,6 +1465,41 @@ let rec generalize_decl decl =
   begin match decl.type_manifest with
   | None    -> ()
   | Some ty -> Ctype.generalize ty
+||||||| 23e84b8c4d
+    {
+      typ_id = id;
+      typ_name = sdecl.ptype_name;
+      typ_params = tparams;
+      typ_type = decl;
+      typ_cstrs = cstrs;
+      typ_loc = sdecl.ptype_loc;
+      typ_manifest = tman;
+      typ_kind = tkind;
+      typ_private = sdecl.ptype_private;
+      typ_attributes = sdecl.ptype_attributes;
+    }
+  end
+
+(* Generalize a type declaration *)
+
+let generalize_decl decl =
+  List.iter Ctype.generalize decl.type_params;
+  Btype.iter_type_expr_kind Ctype.generalize decl.type_kind;
+  begin match decl.type_manifest with
+  | None    -> ()
+  | Some ty -> Ctype.generalize ty
+=======
+      }
+    in
+    let typ_shape =
+      let uid = decl.typ_type.type_uid in
+      match decl.typ_kind with
+      | Ttype_variant cstrs -> Shape.str ~uid (shape_map_cstrs cstrs)
+      | Ttype_record labels -> Shape.str ~uid (shape_map_labels labels)
+      | Ttype_abstract | Ttype_open -> Shape.leaf uid
+    in
+    decl, typ_shape
+>>>>>>> ocaml/5.4
   end
 
 (* Check that all constraints are enforced *)
@@ -1524,6 +1719,7 @@ let narrow_to_manifest_jkind env loc decl =
 (* Check that the type expression (if present) is compatible with the kind.
    If both a variant/record definition and a type equation are given,
    need to check that the equation refers to a type of the same kind
+<<<<<<< HEAD
    with the same constructors and labels. *)
 let check_kind_coherence env loc dpath decl =
   match decl.type_kind, decl.type_manifest with
@@ -1558,6 +1754,79 @@ let check_kind_coherence env loc dpath decl =
                 decl'
                 dpath
                 decl
+||||||| 23e84b8c4d
+   with the same constructors and labels.
+*)
+let check_coherence env loc dpath decl =
+  match decl with
+    { type_kind = (Type_variant _ | Type_record _| Type_open);
+      type_manifest = Some ty } ->
+      begin match get_desc ty with
+        Tconstr(path, args, _) ->
+          begin try
+            let decl' = Env.find_type path env in
+            let err =
+              if List.length args <> List.length decl.type_params
+              then Some Includecore.Arity
+              else begin
+                match Ctype.equal env false args decl.type_params with
+                | exception Ctype.Equality err ->
+                    Some (Includecore.Constraint err)
+                | () ->
+                    Includecore.type_declarations ~loc ~equality:true env
+                      ~mark:true
+                      (Path.last path)
+                      decl'
+                      dpath
+                      (Subst.type_declaration
+                         (Subst.add_type_path dpath path Subst.identity) decl)
+              end
+            in
+            if err <> None then
+              raise(Error(loc, Definition_mismatch (ty, env, err)))
+          with Not_found ->
+            raise(Error(loc, Unavailable_type_constructor path))
+=======
+   with the same constructors and labels.
+*)
+let check_coherence env loc dpath decl =
+  match decl with
+    { type_kind = (Type_variant _ | Type_record _| Type_open);
+      type_manifest = Some ty } ->
+      begin match get_desc ty with
+        Tconstr(path, args, _) ->
+          begin try
+            let decl' = Env.find_type path env in
+            let err =
+              if List.length args <> List.length decl.type_params
+              then Some Includecore.Arity
+              else begin
+                match Ctype.equal env false args decl.type_params with
+                | exception Ctype.Equality err ->
+                    Some (Includecore.Constraint err)
+                | () ->
+                    let subst =
+                      Subst.Unsafe.add_type_path dpath path Subst.identity in
+                    let decl =
+                      match Subst.Unsafe.type_declaration subst decl with
+                      | Ok decl -> decl
+                      | Error (Fcm_type_substituted_away _) ->
+                           (* no module type substitution in [subst] *)
+                          assert false
+                    in
+                    Includecore.type_declarations ~loc ~equality:true env
+                      ~mark:true
+                      (Path.last path)
+                      decl'
+                      dpath
+                      decl
+              end
+            in
+            if err <> None then
+              raise(Error(loc, Definition_mismatch (ty, env, err)))
+          with Not_found ->
+            raise(Error(loc, Unavailable_type_constructor path))
+>>>>>>> ocaml/5.4
           end
         in
         if err <> None then
@@ -2430,11 +2699,8 @@ let check_well_founded_decl  ~abs_env env loc path decl to_check =
   let open Btype in
   (* We iterate on all subexpressions of the declaration to check
      "in depth" that no ill-founded type exists. *)
-  let it =
-    let checked =
-      (* [checked] remembers the types that the iterator already
-         checked, to avoid looping on cyclic types. *)
-      ref TypeSet.empty in
+  with_type_mark begin fun mark ->
+    let super = type_iterators mark in
     let visited =
       (* [visited] remembers the inner visits performed by
          [check_well_founded] on each type expression reachable from
@@ -2442,14 +2708,14 @@ let check_well_founded_decl  ~abs_env env loc path decl to_check =
          [check_well_founded] work when invoked on two parts of the
          type declaration that have common subexpressions. *)
       ref TypeMap.empty in
-    {type_iterators with it_type_expr =
-     (fun self ty ->
-       if TypeSet.mem ty !checked then () else begin
-         check_well_founded  ~abs_env env loc path to_check visited ty;
-         checked := TypeSet.add ty !checked;
-         self.it_do_type_expr self ty
-       end)} in
-  it.it_type_declaration it (Ctype.generic_instance_declaration decl)
+    let it =
+      {super with it_do_type_expr =
+       (fun self ty ->
+         check_well_founded ~abs_env env loc path to_check visited ty;
+         super.it_do_type_expr self ty
+       )} in
+    it.it_type_declaration it (Ctype.generic_instance_declaration decl)
+  end
 
 (* We only allow recursion in unboxed product types to occur through boxes,
    otherwise the type is uninhabitable and usually also infinite-size.
@@ -2693,10 +2959,10 @@ let name_recursion sdecl id decl =
   | { type_kind = Type_abstract _;
       type_manifest = Some ty;
       type_private = Private; } when is_fixed_type sdecl ->
-    let ty' = newty2 ~level:(get_level ty) (get_desc ty) in
+    let ty' = Btype.newty2 ~level:(get_level ty) (get_desc ty) in
     if Ctype.deep_occur ty ty' then
       let td = Tconstr(Path.Pident id, decl.type_params, ref Mnil) in
-      link_type ty (newty2 ~level:(get_level ty) td);
+      link_type ty (Btype.newty2 ~level:(get_level ty) td);
       {decl with type_manifest = Some ty'}
     else decl
   | _ -> decl
@@ -2719,6 +2985,7 @@ let check_redefined_unit (td: Parsetree.type_declaration) =
   | _ ->
       ()
 
+<<<<<<< HEAD
 
 (* Note [Quality of jkinds during inference]
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2825,6 +3092,35 @@ let normalize_decl_jkinds env decls =
     )
     env
     decls
+||||||| 23e84b8c4d
+let add_types_to_env decls env =
+  List.fold_right
+    (fun (id, decl) env -> add_type ~check:true id decl env)
+    decls env
+=======
+(* Update a temporary definition to share recursion *)
+let update_type temp_env env id loc =
+  let path = Path.Pident id in
+  let decl = Env.find_type path temp_env in
+  match decl.type_manifest with None -> ()
+  | Some ty ->
+      (* Since this function is called after generalizing declarations,
+         ty is at the generic level.  Since we need to keep possible
+         sharings in recursive type definitions, unify without instantiating,
+         but generalize again after unification. *)
+      Ctype.with_local_level_generalize begin fun () ->
+        let params = List.map (fun _ -> Ctype.newvar ()) decl.type_params in
+        try Ctype.unify env (Ctype.newconstr path params) ty
+        with Ctype.Unify err ->
+          raise (Error(loc, Type_clash (env, err)))
+      end
+
+let add_types_to_env decls shapes env =
+  List.fold_right2
+    (fun (id, decl) shape env ->
+      add_type ~check:true ~shape id decl env)
+    decls shapes env
+>>>>>>> ocaml/5.4
 
 (* Translate a set of type declarations, mutually recursive or not *)
 let transl_type_decl env rec_flag sdecl_list =
@@ -2852,21 +3148,29 @@ let transl_type_decl env rec_flag sdecl_list =
   let ids_list =
     List.map (fun sdecl ->
       Ident.create_scoped ~scope sdecl.ptype_name.txt,
-      Uid.mk ~current_unit:(Env.get_unit_name ())
+      Uid.mk ~current_unit:(Env.get_current_unit ())
     ) sdecl_list
   in
   (* Translate declarations, using a temporary environment where abbreviations
      expand to a generic type variable. After that, we check the coherence of
      the translated declarations in the resulting new environment. *)
+<<<<<<< HEAD
   let tdecls, decls, new_env, delayed_jkind_checks =
     Ctype.with_local_level_iter ~post:generalize_decl begin fun () ->
+||||||| 23e84b8c4d
+  let tdecls, decls, new_env =
+    Ctype.with_local_level_iter ~post:generalize_decl begin fun () ->
+=======
+  let tdecls, decls, shapes, temp_env, new_env =
+    Ctype.with_local_level_generalize begin fun () ->
+>>>>>>> ocaml/5.4
       (* Enter types. *)
       let temp_env =
         List.fold_left2 (enter_type rec_flag) env sdecl_list ids_list in
       (* Translate each declaration. *)
       let current_slot = ref None in
       let warn_unused =
-        Warnings.is_active (Warnings.Unused_type_declaration "") in
+        Warnings.(is_active (Unused_type_declaration ("", Declaration))) in
       let ids_slots (id, _uid as ids) =
         match rec_flag with
         | Asttypes.Recursive when warn_unused ->
@@ -2899,16 +3203,27 @@ let transl_type_decl env rec_flag sdecl_list =
          enviroment. *)
       let tdecls =
         List.map2 transl_declaration sdecl_list (List.map ids_slots ids_list) in
+<<<<<<< HEAD
       let decls = List.map (fun d -> (d.typ_id, d.typ_type)) tdecls in
       let decls = derive_unboxed_versions decls env in
       let tdecls =
         List.map2
           (fun tdecl (_, decl) -> { tdecl with typ_type = decl }) tdecls decls
+||||||| 23e84b8c4d
+      let decls =
+        List.map (fun tdecl -> (tdecl.typ_id, tdecl.typ_type)) tdecls in
+=======
+      let decls, shapes =
+        List.map (fun (tdecl, shape) ->
+          (tdecl.typ_id, tdecl.typ_type), shape) tdecls
+        |> List.split
+>>>>>>> ocaml/5.4
       in
       current_slot := None;
       (* Check for duplicates *)
       check_duplicates sdecl_list;
       (* Build the final env. *)
+<<<<<<< HEAD
       let new_env = add_types_to_env ~shapes:None decls env in
       (* Update stubs *)
       let delayed_jkind_checks =
@@ -2922,6 +3237,13 @@ let transl_type_decl env rec_flag sdecl_list =
             ids_list sdecl_list
       in
       ((tdecls, decls, new_env, delayed_jkind_checks), List.map snd decls)
+||||||| 23e84b8c4d
+      let new_env = add_types_to_env decls env in
+      ((tdecls, decls, new_env), List.map snd decls)
+=======
+      let new_env = add_types_to_env decls shapes env in
+      (tdecls, decls, shapes, temp_env, new_env)
+>>>>>>> ocaml/5.4
     end
   in
   (* Check for ill-formed abbrevs *)
@@ -2956,6 +3278,7 @@ let transl_type_decl env rec_flag sdecl_list =
       (Path.Pident id)
       decl to_check)
     decls;
+<<<<<<< HEAD
   List.iter
     (check_abbrev_regularity ~abs_env new_env id_loc_list to_check) tdecls;
   List.iter (fun (id, decl) ->
@@ -3003,8 +3326,28 @@ let transl_type_decl env rec_flag sdecl_list =
      do the defaulting first is actually unsound: the unification in
      check_constraints will succeed via mutation, be backtracked, and then
      perhaps a sort variable gets defaulted to value. Bad bad.) *)
+||||||| 23e84b8c4d
+  List.iter
+    (check_abbrev_regularity ~abs_env new_env id_loc_list to_check)
+    tdecls;
+  (* Check that all type variables are closed *)
+=======
+  List.iter (fun (tdecl, _shape) ->
+    check_abbrev_regularity ~abs_env new_env id_loc_list to_check tdecl)
+    tdecls;
+  (* Update temporary definitions (for well-founded recursive types) *)
+  begin match rec_flag with
+  | Asttypes.Nonrecursive -> ()
+  | Asttypes.Recursive ->
+      List.iter2
+        (fun (id, _) sdecl ->
+          update_type temp_env new_env id sdecl.ptype_loc)
+        ids_list sdecl_list
+  end;
+  (* Check that all type variables are closed *)
+>>>>>>> ocaml/5.4
   List.iter2
-    (fun sdecl tdecl ->
+    (fun sdecl (tdecl, _shape) ->
       let decl = tdecl.typ_type in
        match Ctype.closed_type_decl decl with
          Some ty -> raise(Error(sdecl.ptype_loc, Unbound_type_var(ty,decl)))
@@ -3038,6 +3381,7 @@ let transl_type_decl env rec_flag sdecl_list =
   let decls = List.map2 (check_abbrev new_env) sdecl_list decls in
   let shapes = shape_declarations env decls in
   (* Compute the final environment with variance and immediacy *)
+<<<<<<< HEAD
   let final_env = add_types_to_env ~shapes:(Some shapes) decls env in
   (* Save the type shapes of the declarations in [Type_shape] for debug info. *)
   if !Clflags.debug && !Clflags.shape_format = Clflags.Debugging_shapes then
@@ -3046,10 +3390,19 @@ let transl_type_decl env rec_flag sdecl_list =
         (Pident id) decl
         (Env.find_uid_of_path final_env)
     ) decls;
+||||||| 23e84b8c4d
+  let final_env = add_types_to_env decls env in
+  (* Check re-exportation *)
+  List.iter2 (check_abbrev final_env) sdecl_list decls;
+=======
+  let final_env = add_types_to_env decls shapes env in
+  (* Check re-exportation *)
+  List.iter2 (check_abbrev final_env) sdecl_list decls;
+>>>>>>> ocaml/5.4
   (* Keep original declaration *)
   let final_decls =
     List.map2
-      (fun tdecl (_id2, decl) ->
+      (fun (tdecl, _shape) (_id2, decl) ->
         { tdecl with typ_type = decl }
       ) tdecls decls
   in
@@ -3110,10 +3463,18 @@ let transl_extension_constructor ~scope env type_path type_params
         end;
         (* Remove "_" names from parameters used in the constructor *)
         if not cdescr.cstr_generalized then begin
+<<<<<<< HEAD
           let vars =
             Ctype.free_variables
               (Btype.newgenty (Ttuple (List.map (fun {Types.ca_type=t; _} -> None, t) args)))
           in
+||||||| 23e84b8c4d
+          let vars =
+            Ctype.free_variables (Btype.newgenty (Ttuple args))
+          in
+=======
+          let vars = Ctype.free_variables_list args in
+>>>>>>> ocaml/5.4
           List.iter
             (fun ty ->
               match get_desc ty with
@@ -3133,12 +3494,13 @@ let transl_extension_constructor ~scope env type_path type_params
         | Ok _ -> ()
         | Error e -> raise (Error (lid.loc, Constructor_submode_failed e)));
         (* Ensure that constructor's type matches the type being extended *)
-        let cstr_type_path = Btype.cstr_type_path cdescr in
-        let cstr_type_params = (Env.find_type cstr_type_path env).type_params in
+        let cstr_res_type_path = Data_types.cstr_res_type_path cdescr in
+        let cstr_res_type_params =
+          (Env.find_type cstr_res_type_path env).type_params in
         let cstr_types =
           (Btype.newgenty
-             (Tconstr(cstr_type_path, cstr_type_params, ref Mnil)))
-          :: cstr_type_params
+             (Tconstr(cstr_res_type_path, cstr_res_type_params, ref Mnil)))
+          :: cstr_res_type_params
         in
         let ext_types =
           (Btype.newgenty
@@ -3147,7 +3509,7 @@ let transl_extension_constructor ~scope env type_path type_params
         in
         if not (Ctype.is_equal env true cstr_types ext_types) then
           raise (Error(lid.loc,
-                       Rebind_mismatch(lid.txt, cstr_type_path, type_path)));
+                   Rebind_mismatch(lid.txt, cstr_res_type_path, type_path)));
         (* Disallow rebinding private constructors to non-private *)
         begin
           match cdescr.cstr_private, priv with
@@ -3194,7 +3556,7 @@ let transl_extension_constructor ~scope env type_path type_params
       ext_private = priv;
       Types.ext_loc = sext.pext_loc;
       Types.ext_attributes = sext.pext_attributes;
-      ext_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+      ext_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
     }
   in
   let ext_cstrs =
@@ -3205,7 +3567,18 @@ let transl_extension_constructor ~scope env type_path type_params
       Typedtree.ext_loc = sext.pext_loc;
       Typedtree.ext_attributes = sext.pext_attributes; }
   in
+<<<<<<< HEAD
   let shape = shape_extension_constructor args ext_cstrs.ext_type.ext_uid in
+||||||| 23e84b8c4d
+=======
+  let shape =
+    let map =  match ext_cstrs.ext_kind with
+    | Text_decl (_, Cstr_record lbls, _) -> shape_map_labels lbls
+    | _ -> Shape.Map.empty
+    in
+    Shape.str ~uid:ext_cstrs.ext_type.ext_uid map
+ in
+>>>>>>> ocaml/5.4
   ext_cstrs, shape
 
 let transl_extension_constructor ~scope env type_path type_params
@@ -3268,7 +3641,7 @@ let transl_type_extension extend env loc styext =
     (* Note: it would be incorrect to call [create_scope] *after*
        [TyVarEnv.reset] or after [with_local_level] (see #10010). *)
     let scope = Ctype.create_scope () in
-    Ctype.with_local_level begin fun () ->
+    Ctype.with_local_level_generalize begin fun () ->
       TyVarEnv.reset();
       let ttype_params = make_params env type_path styext.ptyext_params in
       let type_params = List.map (fun (cty, _) -> cty.ctyp_type) ttype_params in
@@ -3282,6 +3655,7 @@ let transl_type_extension extend env loc styext =
       in
       (ttype_params, type_params, constructors)
     end
+<<<<<<< HEAD
     ~post: begin fun (_, type_params, constructors) ->
       (* Generalize types *)
       List.iter Ctype.generalize type_params;
@@ -3291,6 +3665,18 @@ let transl_type_extension extend env loc styext =
           Option.iter Ctype.generalize ext.ext_type.ext_ret_type)
         constructors;
     end
+||||||| 23e84b8c4d
+    ~post: begin fun (_, type_params, constructors) ->
+      (* Generalize types *)
+      List.iter Ctype.generalize type_params;
+      List.iter
+        (fun ext ->
+          Btype.iter_type_expr_cstr_args Ctype.generalize ext.ext_type.ext_args;
+          Option.iter Ctype.generalize ext.ext_type.ext_ret_type)
+        constructors;
+    end
+=======
+>>>>>>> ocaml/5.4
   in
   (* Check that all type variables are closed *)
   List.iter
@@ -3340,15 +3726,23 @@ let transl_type_extension extend env loc styext =
 let transl_exception env sext =
   let ext, shape =
     let scope = Ctype.create_scope () in
-    Ctype.with_local_level
+    Ctype.with_local_level_generalize
       (fun () ->
         TyVarEnv.reset();
         transl_extension_constructor ~scope env
           Predef.path_exn [] [] Asttypes.Public sext)
+<<<<<<< HEAD
       ~post: begin fun (ext, _shape) ->
         Btype.iter_type_expr_cstr_args Ctype.generalize ext.ext_type.ext_args;
         Option.iter Ctype.generalize ext.ext_type.ext_ret_type;
       end
+||||||| 23e84b8c4d
+      ~post: begin fun ext ->
+        Btype.iter_type_expr_cstr_args Ctype.generalize ext.ext_type.ext_args;
+        Option.iter Ctype.generalize ext.ext_type.ext_ret_type;
+      end
+=======
+>>>>>>> ocaml/5.4
   in
   (* Check that all type variables are closed *)
   begin match Ctype.closed_extension_constructor ext.ext_type with
@@ -3836,9 +4230,17 @@ let transl_value_decl env loc ~modalities valdecl =
           raise (Error(valdecl.pval_loc, Zero_alloc_attr_unsupported zero_alloc))
       in
       { val_type = ty; val_kind = Val_reg; Types.val_loc = loc;
+<<<<<<< HEAD
         val_attributes = valdecl.pval_attributes; val_modalities = modalities;
         val_zero_alloc = zero_alloc;
         val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+||||||| 23e84b8c4d
+        val_attributes = valdecl.pval_attributes;
+        val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+=======
+        val_attributes = valdecl.pval_attributes;
+        val_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
+>>>>>>> ocaml/5.4
       }
   | [] ->
       raise (Error(valdecl.pval_loc, Val_in_structure))
@@ -3876,9 +4278,17 @@ let transl_value_decl env loc ~modalities valdecl =
       then raise(Error(valdecl.pval_type.ptyp_loc, Missing_native_external));
       check_unboxable env loc ty;
       { val_type = ty; val_kind = Val_prim prim; Types.val_loc = loc;
+<<<<<<< HEAD
         val_attributes = valdecl.pval_attributes; val_modalities = modalities;
         val_zero_alloc = Zero_alloc.default;
         val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+||||||| 23e84b8c4d
+        val_attributes = valdecl.pval_attributes;
+        val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+=======
+        val_attributes = valdecl.pval_attributes;
+        val_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
+>>>>>>> ocaml/5.4
       }
   in
   let (id, newenv) =
@@ -3917,7 +4327,7 @@ let transl_value_decl env ~modalities loc valdecl =
 let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
     sdecl =
   Env.mark_type_used sig_decl.type_uid;
-  Ctype.with_local_level begin fun () ->
+  Ctype.with_local_level_generalize begin fun () ->
   TyVarEnv.reset();
   (* In the first part of this function, we typecheck the syntactic
      declaration [sdecl] in the outer environment [outer_env]. *)
@@ -3945,10 +4355,18 @@ let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
   let (tman, man) =  match sdecl.ptype_manifest with
       None -> Misc.fatal_error "Typedecl.transl_with_constraint: no manifest"
     | Some sty ->
+<<<<<<< HEAD
       let cty =
         transl_simple_type ~new_var_jkind:Any env ~closed:no_row Mode.Alloc.Const.legacy sty
       in
       cty, cty.ctyp_type
+||||||| 23e84b8c4d
+        let cty = transl_simple_type env ~closed:no_row sty in
+        Some cty, Some cty.ctyp_type
+=======
+        let cty = transl_simple_type env ~closed:no_row sty in
+        cty, cty.ctyp_type
+>>>>>>> ocaml/5.4
   in
   (* In the second part, we check the consistency between the two
      declarations and compute a "merged" declaration; we now need to
@@ -3981,6 +4399,7 @@ let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
   if arity_ok && not sig_decl_abstract
   && sdecl.ptype_private = Private then
     Location.deprecated loc "spurious use of private";
+<<<<<<< HEAD
   let type_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
   let type_unboxed_version =
     match get_desc man with
@@ -4024,6 +4443,15 @@ let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
       sig_decl.type_kind,
       sig_decl.type_unboxed_default,
       sig_decl.type_jkind
+||||||| 23e84b8c4d
+  let type_kind, type_unboxed_default =
+    if arity_ok && man <> None then
+      sig_decl.type_kind, sig_decl.type_unboxed_default
+=======
+  let type_kind, type_unboxed_default =
+    if arity_ok then
+      sig_decl.type_kind, sig_decl.type_unboxed_default
+>>>>>>> ocaml/5.4
     else
       Type_abstract Definition, false, sig_decl.type_jkind
   in
@@ -4041,8 +4469,14 @@ let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
       type_loc = loc;
       type_attributes = sdecl.ptype_attributes;
       type_unboxed_default;
+<<<<<<< HEAD
       type_uid;
       type_unboxed_version;
+||||||| 23e84b8c4d
+      type_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+=======
+      type_uid = Uid.mk ~current_unit:(Env.get_current_unit ());
+>>>>>>> ocaml/5.4
     }
   in
   Option.iter (fun p -> set_private_row env sdecl.ptype_loc p new_sig_decl)
@@ -4123,7 +4557,33 @@ let transl_with_constraint id ?fixed_row_path ~sig_env ~sig_decl ~outer_env
     typ_jkind_annotation = Jkind.get_annotation type_jkind;
   }
   end
-  ~post:(fun ttyp -> generalize_decl ttyp.typ_type)
+
+(* A simplified version of [transl_with_constraint], for the case of packages.
+   Package constraints are much simpler than normal with type constraints (e.g.,
+   they can not have parameters and can only update abstract types.) *)
+let transl_package_constraint ~loc env ty =
+  let new_sig_decl =
+    { type_params = [];
+      type_arity = 0;
+      type_kind = Type_abstract Definition;
+      type_private = Public;
+      type_manifest = Some ty;
+      type_variance = [];
+      type_separability = [];
+      type_is_newtype = false;
+      type_expansion_scope = Btype.lowest_level;
+      type_loc = loc;
+      type_attributes = [];
+      type_immediate = Unknown;
+      type_unboxed_default = false;
+      type_uid = Uid.mk ~current_unit:(Env.get_current_unit ())
+    }
+  in
+  let new_type_immediate =
+    (* Typedecl_immediacy.compute_decl never raises *)
+    Typedecl_immediacy.compute_decl env new_sig_decl
+  in
+  { new_sig_decl with type_immediate = new_type_immediate }
 
 (* A simplified version of [transl_with_constraint], for the case of packages.
    Package constraints are much simpler than normal with type constraints (e.g.,
@@ -4151,11 +4611,25 @@ let transl_package_constraint ~loc ty =
 
 (* Approximate a type declaration: just make all types abstract *)
 
+<<<<<<< HEAD
 let abstract_type_decl ~injective ~jkind ~params =
   let arity = List.length params in
   Ctype.with_local_level ~post:generalize_decl begin fun () ->
     let params = List.map Ctype.newvar params in
     { type_params = params;
+||||||| 23e84b8c4d
+let abstract_type_decl ~injective arity =
+  let rec make_params n =
+    if n <= 0 then [] else Ctype.newvar() :: make_params (n-1) in
+  Ctype.with_local_level ~post:generalize_decl begin fun () ->
+    { type_params = make_params arity;
+=======
+let abstract_type_decl ~injective arity =
+  let rec make_params n =
+    if n <= 0 then [] else Ctype.newvar() :: make_params (n-1) in
+  Ctype.with_local_level_generalize begin fun () ->
+    { type_params = make_params arity;
+>>>>>>> ocaml/5.4
       type_arity = arity;
       type_kind = Type_abstract Definition;
       type_jkind = jkind;
@@ -4243,25 +4717,26 @@ let check_recmod_typedecl env loc recmod_ids path decl =
 
 (**** Error report ****)
 
-open Format
+open Format_doc
 module Style = Misc.Style
+module Printtyp = Printtyp.Doc
 
 let explain_unbound_gen ppf tv tl typ kwd pr =
   try
     let ti = List.find (fun ti -> Ctype.deep_occur tv (typ ti)) tl in
     let ty0 = (* Hack to force aliasing when needed *)
       Btype.newgenty (Tobject(tv, ref None)) in
-    Printtyp.prepare_for_printing [typ ti; ty0];
+    Out_type.prepare_for_printing [typ ti; ty0];
     fprintf ppf
       ".@ @[<hov2>In %s@ %a@;<1 -2>the variable %a is unbound@]"
       kwd (Style.as_inline_code pr) ti
-      (Style.as_inline_code Printtyp.prepared_type_expr) tv
+      (Style.as_inline_code Out_type.prepared_type_expr) tv
   with Not_found -> ()
 
 let explain_unbound ppf tv tl typ kwd lab =
   explain_unbound_gen ppf tv tl typ kwd
     (fun ppf ti ->
-       fprintf ppf "%s%a" (lab ti) Printtyp.prepared_type_expr (typ ti)
+       fprintf ppf "%s%a" (lab ti) Out_type.prepared_type_expr (typ ti)
     )
 
 let explain_unbound_single ppf tv ty =
@@ -4279,7 +4754,14 @@ let explain_unbound_single ppf tv ty =
         (fun (_l,f) -> match row_field_repr f with
           Rpresent (Some t) -> t
         | Reither (_,[t],_) -> t
+<<<<<<< HEAD
         | Reither (_,tl,_) -> Btype.newgenty (Ttuple (List.map (fun e -> None, e) tl))
+||||||| 23e84b8c4d
+        | Reither (_,tl,_) -> Btype.newgenty (Ttuple tl)
+=======
+        | Reither (_,tl,_) ->
+          Btype.newgenty (Ttuple (List.map (fun e -> None, e) tl))
+>>>>>>> ocaml/5.4
         | _ -> Btype.newgenty (Ttuple[]))
         "case" (fun (lab,_) -> "`" ^ lab ^ " of ")
   | _ -> trivial ty
@@ -4300,7 +4782,7 @@ module Reaching_path = struct
       | [] -> []
     in simplify path
 
-  (* See Printtyp.add_type_to_preparation.
+  (* See Out_type.add_type_to_preparation.
 
      Note: it is better to call this after [simplify], otherwise some
      type variable names may be used for types that are removed
@@ -4309,28 +4791,29 @@ module Reaching_path = struct
   let add_to_preparation path =
     List.iter (function
       | Contains (ty1, ty2) | Expands_to (ty1, ty2) ->
-          List.iter Printtyp.add_type_to_preparation [ty1; ty2]
+          List.iter Out_type.add_type_to_preparation [ty1; ty2]
     ) path
+
+  module Fmt = Format_doc
 
   let pp ppf reaching_path =
     let pp_step ppf = function
       | Expands_to (ty, body) ->
-          Format.fprintf ppf "%a = %a"
-            (Style.as_inline_code Printtyp.prepared_type_expr) ty
-            (Style.as_inline_code Printtyp.prepared_type_expr) body
+          Fmt.fprintf ppf "%a = %a"
+            (Style.as_inline_code Out_type.prepared_type_expr) ty
+            (Style.as_inline_code Out_type.prepared_type_expr) body
       | Contains (outer, inner) ->
-          Format.fprintf ppf "%a contains %a"
-            (Style.as_inline_code Printtyp.prepared_type_expr) outer
-            (Style.as_inline_code Printtyp.prepared_type_expr) inner
+          Fmt.fprintf ppf "%a contains %a"
+            (Style.as_inline_code Out_type.prepared_type_expr) outer
+            (Style.as_inline_code Out_type.prepared_type_expr) inner
     in
-    let comma ppf () = Format.fprintf ppf ",@ " in
-    Format.(pp_print_list ~pp_sep:comma pp_step) ppf reaching_path
+    Fmt.(pp_print_list ~pp_sep:comma) pp_step ppf reaching_path
 
   let pp_colon ppf path =
-  Format.fprintf ppf ":@;<1 2>@[<v>%a@]"
-    pp path
+    Fmt.fprintf ppf ":@\n  @[<v>%a@]" pp path
 end
 
+<<<<<<< HEAD
 let report_jkind_mismatch_due_to_bad_inference ppf ty violation loc =
   let loc =
     match loc with
@@ -4357,29 +4840,140 @@ let report_error ppf = function
   | Duplicate_constructor s ->
       fprintf ppf "Two constructors are named %a" Style.inline_code s
   | Too_many_constructors ->
+||||||| 23e84b8c4d
+let report_error ppf = function
+  | Repeated_parameter ->
+      fprintf ppf "A type parameter occurs several times"
+  | Duplicate_constructor s ->
+      fprintf ppf "Two constructors are named %a" Style.inline_code s
+  | Too_many_constructors ->
+=======
+let quoted_out_type ppf ty = Style.as_inline_code !Oprint.out_type ppf ty
+let quoted_type ppf ty = Style.as_inline_code Printtyp.type_expr ppf ty
+let quoted_constr = Style.as_inline_code Pprintast.Doc.constr
+
+let explain_unbounded ty decl ppf =
+  match decl.type_kind, decl.type_manifest with
+  | Type_variant (tl, _rep), _ ->
+      explain_unbound_gen ppf ty tl (fun c ->
+          let tl = tys_of_constr_args c.Types.cd_args in
+          Btype.newgenty (Ttuple (List.map (fun t -> None, t) tl))
+        )
+        "case" (fun ppf c ->
+          fprintf ppf
+            "%a of %a" Printtyp.ident c.Types.cd_id
+            Printtyp.constructor_arguments c.Types.cd_args)
+  | Type_record (tl, _), _ ->
+      explain_unbound ppf ty tl (fun l -> l.Types.ld_type)
+        "field" (fun l -> Ident.name l.Types.ld_id ^ ": ")
+  | Type_abstract _, Some ty' ->
+      explain_unbound_single ppf ty ty'
+  | _ -> ()
+
+let variance (p,n,i) =
+  let inj = if i then "injective " else "" in
+  match p, n with
+    true,  true  -> inj ^ "invariant"
+  | true,  false -> inj ^ "covariant"
+  | false, true  -> inj ^ "contravariant"
+  | false, false -> if inj = "" then "unrestricted" else inj
+
+let variance_context =
+  let open Typedecl_variance in
+  function
+  | Type_declaration (id, decl) ->
+      Out_type.add_type_declaration_to_preparation id decl;
+      Format_doc.doc_printf "In the definition@\n  @[%a@]@\n"
+        (Style.as_inline_code @@ Out_type.prepared_type_declaration id)
+        decl
+  | Gadt_constructor c ->
+      Out_type.add_constructor_to_preparation c;
+      doc_printf "In the GADT constructor@\n  @[%a@]@\n"
+        (Style.as_inline_code Out_type.prepared_constructor)
+        c
+  | Extension_constructor (id, e) ->
+      Out_type.add_extension_constructor_to_preparation e;
+      doc_printf "In the extension constructor@\n  @[%a@]@\n"
+        (Out_type.prepared_extension_constructor id)
+        e
+
+let variance_variable_error ~v1 ~v2 variable error ppf =
+  let open Typedecl_variance in
+  match error with
+  | Variance_not_reflected ->
+>>>>>>> ocaml/5.4
       fprintf ppf
-        "@[Too many non-constant constructors@ -- maximum is %i %s@]"
-        (Config.max_tag + 1) "non-constant constructors"
+        "the type variable@ %a@ has a variance that@ \
+         is not reflected by its occurrence in type parameters.@ \
+         It was expected to be %s,@ but it is %s."
+        (Style.as_inline_code Out_type.prepared_type_expr) variable
+        (variance v2) (variance v1)
+  | No_variable ->
+      fprintf ppf
+        "the type variable@ %a@ cannot be deduced@ \
+         from the type parameters."
+        (Style.as_inline_code Out_type.prepared_type_expr) variable
+  | Variance_not_deducible ->
+      fprintf ppf
+        "the type variable@ %a@ has a variance that@ \
+         cannot be deduced from the type parameters.@ \
+         It was expected to be %s,@ but it is %s."
+        (Style.as_inline_code Out_type.prepared_type_expr) variable
+        (variance v2) (variance v1)
+
+let variance_error ~loc ~v1 ~v2 =
+  let open Typedecl_variance in
+  function
+  | Variance_variable_error { error; variable; context } ->
+      Out_type.prepare_for_printing [ variable ];
+      let intro = variance_context context in
+      Location.errorf ~loc "%a%t" pp_doc intro
+        (variance_variable_error ~v1 ~v2 variable error)
+  | Variance_not_satisfied n ->
+        Location.errorf ~loc
+          "In this definition, expected parameter@ \
+           variances are not satisfied.@ \
+           The %d%s type parameter was expected to be %s,@ but it is %s."
+          n (Misc.ordinal_suffix n)
+          (variance v2) (variance v1)
+
+let report_error ~loc = function
+  | Repeated_parameter ->
+      Location.errorf ~loc "A type parameter occurs several times"
+  | Duplicate_constructor s ->
+      Location.errorf ~loc "Two constructors are named %a" Style.inline_code s
+  | Too_many_constructors ->
+      Location.errorf ~loc
+      "Too many non-constant constructors@ \
+       -- maximum is %i non-constant constructors@]"
+      (Config.max_tag + 1)
   | Duplicate_label s ->
+<<<<<<< HEAD
       fprintf ppf "Two labels are named %a" Style.inline_code s
   | Unboxed_mutable_label ->
       fprintf ppf "Unboxed record labels cannot be mutable"
+||||||| 23e84b8c4d
+      fprintf ppf "Two labels are named %a" Style.inline_code s
+=======
+      Location.errorf "Two labels are named %a" Style.inline_code s
+>>>>>>> ocaml/5.4
   | Recursive_abbrev (s, env, reaching_path) ->
       let reaching_path = Reaching_path.simplify reaching_path in
       Printtyp.wrap_printing_env ~error:true env @@ fun () ->
-      Printtyp.reset ();
+      Out_type.reset ();
       Reaching_path.add_to_preparation reaching_path;
-      fprintf ppf "@[<v>The type abbreviation %a is cyclic%a@]"
+      Location.errorf ~loc "The type abbreviation %a is cyclic%a"
         Style.inline_code s
         Reaching_path.pp_colon reaching_path
   | Cycle_in_def (s, env, reaching_path) ->
       let reaching_path = Reaching_path.simplify reaching_path in
       Printtyp.wrap_printing_env ~error:true env @@ fun () ->
-      Printtyp.reset ();
+      Out_type.reset ();
       Reaching_path.add_to_preparation reaching_path;
-      fprintf ppf "@[<v>The definition of %a contains a cycle%a@]"
+      Location.errorf ~loc "The definition of %a contains a cycle%a"
         Style.inline_code s
         Reaching_path.pp_colon reaching_path
+<<<<<<< HEAD
   | Unboxed_recursion (s, env, reaching_path) ->
       let reaching_path = Reaching_path.simplify reaching_path in
       Printtyp.wrap_printing_env ~error:true env @@ fun () ->
@@ -4398,8 +4992,34 @@ let report_error ppf = function
         (Style.as_inline_code Printtyp.type_expr) ty
         (Includecore.report_type_mismatch
            "the original" "this" "definition" env)
+||||||| 23e84b8c4d
+  | Definition_mismatch (ty, _env, None) ->
+      fprintf ppf "@[<v>@[<hov>%s@ %s@;<1 2>%a@]@]"
+        "This variant or record definition" "does not match that of type"
+        (Style.as_inline_code Printtyp.type_expr) ty
+  | Definition_mismatch (ty, env, Some err) ->
+      fprintf ppf "@[<v>@[<hov>%s@ %s@;<1 2>%a@]%a@]"
+        "This variant or record definition" "does not match that of type"
+        (Style.as_inline_code Printtyp.type_expr) ty
+        (Includecore.report_type_mismatch
+           "the original" "this" "definition" env)
+=======
+  | Definition_mismatch (ty, env, err) ->
+      let err ppf = match err with
+        | None -> ()
+        | Some err ->
+            Format_doc.fprintf ppf "@\n@[<v>%a@]"
+            (Includecore.report_type_mismatch "the original" "this" "definition"
+              env) err
+      in
+      Location.errorf ~loc
+        "@[This variant or record definition@ \
+         does not match that of type@;<1 2>%a@]%t"
+        quoted_type ty
+>>>>>>> ocaml/5.4
         err
   | Constraint_failed (env, err) ->
+<<<<<<< HEAD
       let get_jkind_error : _ Errortrace.elt -> _ = function
       | Bad_jkind (ty, violation) | Bad_jkind_sort (ty, violation) ->
         Some (ty, violation)
@@ -4419,46 +5039,73 @@ let report_error ppf = function
       end
   | Jkind_mismatch_due_to_bad_inference (ty, violation, loc) ->
       report_jkind_mismatch_due_to_bad_inference ppf ty violation loc
+||||||| 23e84b8c4d
+      fprintf ppf "@[<v>Constraints are not satisfied in this type.@ ";
+      Printtyp.report_unification_error ppf env err
+        (fun ppf -> fprintf ppf "Type")
+        (fun ppf -> fprintf ppf "should be an instance of");
+      fprintf ppf "@]"
+=======
+      Location.errorf ~loc "Constraints are not satisfied in this type.@\n%t"
+        (fun ppf ->
+          Errortrace_report.unification ppf env err
+            (Doc.msg "Type")
+            (Doc.msg "should be an instance of")
+        )
+>>>>>>> ocaml/5.4
   | Non_regular { definition; used_as; defined_as; reaching_path } ->
       let reaching_path = Reaching_path.simplify reaching_path in
-      let pp_type ppf ty = Style.as_inline_code !Oprint.out_type ppf ty in
-      Printtyp.prepare_for_printing [used_as; defined_as];
+      Out_type.prepare_for_printing [used_as; defined_as];
       Reaching_path.add_to_preparation reaching_path;
+<<<<<<< HEAD
       Printtyp.Naming_context.reset ();
       fprintf ppf
         "@[<hv>This recursive type is not regular.@ \
          The type constructor %a is defined as@;<1 2>type %a@ \
          but it is used as@;<1 2>%a%t\
+||||||| 23e84b8c4d
+      fprintf ppf
+        "@[<hv>This recursive type is not regular.@ \
+         The type constructor %a is defined as@;<1 2>type %a@ \
+         but it is used as@;<1 2>%a%t\
+=======
+      Location.errorf ~loc
+        "This recursive type is not regular.@ \
+         @[<v>The type constructor %a is defined as@;<1 2>type %a@ \
+         but it is used as@;<1 2>%a%t@,\
+>>>>>>> ocaml/5.4
          All uses need to match the definition for the recursive type \
          to be regular.@]"
         Style.inline_code (Path.name definition)
-        pp_type (Printtyp.tree_of_typexp Type defined_as)
-        pp_type (Printtyp.tree_of_typexp Type used_as)
+        quoted_out_type (Out_type.tree_of_typexp Type defined_as)
+        quoted_out_type (Out_type.tree_of_typexp Type used_as)
         (fun pp ->
            let is_expansion = function Expands_to _ -> true | _ -> false in
            if List.exists is_expansion reaching_path then
-             fprintf pp "@ after the following expansion(s)%a@ "
+             fprintf pp "@ after the following expansion(s)%a"
              Reaching_path.pp_colon reaching_path
-           else fprintf pp ".@ ")
+           else fprintf pp ".")
   | Inconsistent_constraint (env, err) ->
-      fprintf ppf "@[<v>The type constraints are not consistent.@ ";
-      Printtyp.report_unification_error ppf env err
-        (fun ppf -> fprintf ppf "Type")
-        (fun ppf -> fprintf ppf "is not compatible with type");
-      fprintf ppf "@]"
+      Location.errorf ~loc "The type constraints are not consistent.@\n%t"
+      (fun ppf -> Errortrace_report.unification ppf env err
+        (Doc.msg "Type")
+        (Doc.msg "is not compatible with type")
+      )
   | Type_clash (env, err) ->
-      Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "This type constructor expands to type")
-        (function ppf ->
-           fprintf ppf "but is used here with type")
+      let msg = Format_doc.Doc.msg in
+      Location.errorf ~loc "%t" @@ fun ppf ->
+        Errortrace_report.unification ppf env err
+        (msg "This type constructor expands to type")
+        (msg "but is used here with type")
   | Null_arity_external ->
-      fprintf ppf "External identifiers must be functions"
+      Location.errorf ~loc "External identifiers must be functions"
   | Missing_native_external ->
-      fprintf ppf "@[<hv>An external function with more than 5 arguments \
-                   requires a second stub function@ \
-                   for native-code compilation@]"
+      Location.errorf ~loc
+        "An external function with more than 5 arguments \
+         requires a second stub function@
+         for native-code compilation"
   | Unbound_type_var (ty, decl) ->
+<<<<<<< HEAD
       fprintf ppf "@[A type variable is unbound in this type declaration";
       begin match decl.type_kind, decl.type_manifest with
       | Type_variant (tl, _rep, _), _ ->
@@ -4481,48 +5128,73 @@ let report_error ppf = function
       | _ -> ()
       end;
       fprintf ppf "@]"
-  | Unbound_type_var_ext (ty, ext) ->
-      fprintf ppf "@[A type variable is unbound in this extension constructor";
-      let args = tys_of_constr_args ext.ext_args in
-      explain_unbound ppf ty args (fun c -> c) "type" (fun _ -> "");
+||||||| 23e84b8c4d
+      fprintf ppf "@[A type variable is unbound in this type declaration";
+      begin match decl.type_kind, decl.type_manifest with
+      | Type_variant (tl, _rep), _ ->
+          explain_unbound_gen ppf ty tl (fun c ->
+            let tl = tys_of_constr_args c.Types.cd_args in
+            Btype.newgenty (Ttuple tl)
+          )
+            "case" (fun ppf c ->
+              fprintf ppf
+                "%a of %a" Printtyp.ident c.Types.cd_id
+                Printtyp.constructor_arguments c.Types.cd_args)
+      | Type_record (tl, _), _ ->
+          explain_unbound ppf ty tl (fun l -> l.Types.ld_type)
+            "field" (fun l -> Ident.name l.Types.ld_id ^ ": ")
+      | Type_abstract _, Some ty' ->
+          explain_unbound_single ppf ty ty'
+      | _ -> ()
+      end;
       fprintf ppf "@]"
+=======
+      Location.errorf ~loc
+        "A type variable is unbound in this type declaration%t"
+        (explain_unbounded ty decl)
+>>>>>>> ocaml/5.4
+  | Unbound_type_var_ext (ty, ext) ->
+      let explain ppf =
+        let args = tys_of_constr_args ext.ext_args in
+        explain_unbound ppf ty args (fun c -> c) "type" (fun _ -> "")
+      in
+      Location.errorf ~loc
+        "A type variable is unbound in this extension constructor%t"
+        explain
   | Cannot_extend_private_type path ->
-      fprintf ppf "@[%s@ %a@]"
-        "Cannot extend private type definition"
+      Location.errorf ~loc
+        "Cannot extend private type definition@ %a"
         Printtyp.path path
   | Not_extensible_type path ->
-      fprintf ppf "@[%s@ %a@ %s@]"
-        "Type definition"
+      Location.errorf ~loc
+        "Type definition@ %a@ is not extensible@]"
         (Style.as_inline_code Printtyp.path) path
-        "is not extensible"
   | Extension_mismatch (path, env, err) ->
-      fprintf ppf "@[<v>@[<hov>%s@ %s@;<1 2>%a@]%a@]"
-        "This extension" "does not match the definition of type"
+      Location.errorf ~loc
+        "@[This extension@ does not match the definition of type\
+         @;<1 2>%a@]@\n@[<v>%a@]"
         Style.inline_code (Path.name path)
         (Includecore.report_type_mismatch
            "the type" "this extension" "definition" env)
         err
   | Rebind_wrong_type (lid, env, err) ->
-      Printtyp.report_unification_error ppf env err
-        (function ppf ->
-           fprintf ppf "The constructor %a@ has type"
-             (Style.as_inline_code Printtyp.longident) lid)
-        (function ppf ->
-           fprintf ppf "but was expected to be of type")
+      Location.errorf ~loc "%t" @@ fun ppf ->
+      Errortrace_report.unification ppf env err
+        (doc_printf "The constructor %a@ has type"
+             quoted_constr lid)
+        (Doc.msg "but was expected to be of type")
   | Rebind_mismatch (lid, p, p') ->
-      fprintf ppf
-        "@[%s@ %a@ %s@ %a@ %s@ %s@ %a@]"
-        "The constructor"
-        (Style.as_inline_code Printtyp.longident) lid
-        "extends type" Style.inline_code (Path.name p)
-        "whose declaration does not match"
-        "the declaration of type" Style.inline_code (Path.name p')
+      Location.errorf ~loc
+        "The constructor@ %a@ extends type@ %a@ \
+         whose declaration does not match@ the declaration of type@ %a"
+        quoted_constr lid
+        Style.inline_code (Path.name p)
+        Style.inline_code (Path.name p')
   | Rebind_private lid ->
-      fprintf ppf "@[%s@ %a@ %s@]"
-        "The constructor"
-        (Style.as_inline_code Printtyp.longident) lid
-        "is private"
+      Location.errorf ~loc "The constructor@ %a@ is private"
+        quoted_constr lid
   | Variance (Typedecl_variance.Bad_variance (n, v1, v2)) ->
+<<<<<<< HEAD
       let variance (p,n,i) =
         let inj = if i then "injective " else "" in
         match p, n with
@@ -4595,40 +5267,143 @@ let report_error ppf = function
        | _ ->
            fprintf ppf " was expected to be %s,@ but it is %s.@]@]"
              (variance v2) (variance v1))
+||||||| 23e84b8c4d
+      let variance (p,n,i) =
+        let inj = if i then "injective " else "" in
+        match p, n with
+          true,  true  -> inj ^ "invariant"
+        | true,  false -> inj ^ "covariant"
+        | false, true  -> inj ^ "contravariant"
+        | false, false -> if inj = "" then "unrestricted" else inj
+      in
+      (match n with
+       | Variance_variable_error { error; variable; context } ->
+           Printtyp.prepare_for_printing [ variable ];
+           begin match context with
+           | Type_declaration (id, decl) ->
+               Printtyp.add_type_declaration_to_preparation id decl;
+               fprintf ppf "@[<v>%s@;<1 2>%a@;"
+                 "In the definition"
+                 (Style.as_inline_code @@ Printtyp.prepared_type_declaration id)
+                 decl
+           | Gadt_constructor c ->
+               Printtyp.add_constructor_to_preparation c;
+               fprintf ppf "@[<v>%s@;<1 2>%a@;"
+                 "In the GADT constructor"
+                 (Style.as_inline_code Printtyp.prepared_constructor)
+                 c
+           | Extension_constructor (id, e) ->
+               Printtyp.add_extension_constructor_to_preparation e;
+               fprintf ppf "@[<v>%s@;<1 2>%a@;"
+                 "In the extension constructor"
+                 (Printtyp.prepared_extension_constructor id)
+                 e
+           end;
+           begin match error with
+           | Variance_not_reflected ->
+               fprintf ppf "@[%s@ %a@ %s@ %s@ It"
+                 "the type variable"
+                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
+                 "has a variance that"
+                 "is not reflected by its occurrence in type parameters."
+           | No_variable ->
+               fprintf ppf "@[%s@ %a@ %s@ %s@]@]"
+                 "the type variable"
+                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
+                 "cannot be deduced"
+                 "from the type parameters."
+           | Variance_not_deducible ->
+               fprintf ppf "@[%s@ %a@ %s@ %s@ It"
+                 "the type variable"
+                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
+                 "has a variance that"
+                 "cannot be deduced from the type parameters."
+           end
+       | Variance_not_satisfied n ->
+           fprintf ppf "@[@[%s@ %s@ The %d%s type parameter"
+             "In this definition, expected parameter"
+             "variances are not satisfied."
+             n (Misc.ordinal_suffix n));
+      (match n with
+       | Variance_variable_error { error = No_variable; _ } -> ()
+       | _ ->
+           fprintf ppf " was expected to be %s,@ but it is %s.@]@]"
+             (variance v2) (variance v1))
+=======
+      variance_error ~loc ~v1 ~v2 n
+>>>>>>> ocaml/5.4
   | Unavailable_type_constructor p ->
-      fprintf ppf "The definition of type %a@ is unavailable"
+      Location.errorf ~loc "The definition of type %a@ is unavailable"
         (Style.as_inline_code Printtyp.path) p
-  | Variance Typedecl_variance.Varying_anonymous ->
-      fprintf ppf "@[%s@ %s@ %s@]"
-        "In this GADT definition," "the variance of some parameter"
-        "cannot be checked"
+  | Variance (Typedecl_variance.Varying_anonymous (n, reason)) ->
+      let reason_text =
+        match reason with
+        | Variable_constrained ty ->
+            dprintf
+              ", because the type variable %a appears@ in other parameters.@ \
+               In GADTS, covariant or contravariant type parameters@ \
+               must not depend@ on other parameters."
+              (Style.as_inline_code Printtyp.type_expr) ty
+        | Variable_instantiated ty ->
+            dprintf
+              ", because it is instantiated to the type %a.@ \
+               Covariant or contravariant type parameters@ \
+               may only appear@ as type variables@ \
+               in GADT constructor definitions."
+              (Style.as_inline_code Printtyp.type_expr) ty
+      in
+      Location.errorf ~loc
+        "In this GADT constructor definition,@ \
+         the variance of the@ %d%s parameter@ \
+         cannot be checked%t"
+        n (Misc.ordinal_suffix n)
+        reason_text
   | Val_in_structure ->
-      fprintf ppf "Value declarations are only allowed in signatures"
+      Location.errorf ~loc "Value declarations are only allowed in signatures"
   | Multiple_native_repr_attributes ->
-      fprintf ppf "Too many %a/%a attributes"
+      Location.errorf ~loc "Too many %a/%a attributes"
         Style.inline_code "[@@unboxed]"
         Style.inline_code "[@@untagged]"
   | Cannot_unbox_or_untag_type Unboxed ->
+<<<<<<< HEAD
       fprintf ppf "@[Don't know how to unbox this type.@ \
                    Only %a, %a, %a, %a, vector primitives, and@ \
                    the corresponding unboxed types can be marked unboxed.@]"
+||||||| 23e84b8c4d
+      fprintf ppf "@[Don't know how to unbox this type.@ \
+                   Only %a, %a, %a, and %a can be unboxed.@]"
+=======
+      Location.errorf ~loc
+        "Don't know how to unbox this type.@ \
+         Only %a, %a, %a, and %a can be unboxed."
+>>>>>>> ocaml/5.4
         Style.inline_code "float"
         Style.inline_code "int32"
         Style.inline_code "int64"
         Style.inline_code "nativeint"
   | Cannot_unbox_or_untag_type Untagged ->
+<<<<<<< HEAD
       fprintf ppf "@[Don't know how to untag this type. Only %a, %a, %a, \
                    and@ other immediate types can be untagged.@]"
         Style.inline_code "int8"
         Style.inline_code "int16"
+||||||| 23e84b8c4d
+      fprintf ppf "@[Don't know how to untag this type. Only %a@ \
+                   and other immediate types can be untagged.@]"
+=======
+      Location.errorf ~loc
+        "Don't know how to untag this type. Only %a@ \
+         and other immediate types can be untagged."
+>>>>>>> ocaml/5.4
         Style.inline_code "int"
   | Deep_unbox_or_untag_attribute kind ->
-      fprintf ppf
-        "@[The attribute %a should be attached to@ \
+      Location.errorf ~loc
+        "The attribute %a should be attached to@ \
          a direct argument or result of the primitive,@ \
-         it should not occur deeply into its type.@]"
+         it should not occur deeply into its type."
         Style.inline_code
         (match kind with Unboxed -> "@unboxed" | Untagged -> "@untagged")
+<<<<<<< HEAD
   | Jkind_mismatch_of_path (dpath,v) ->
     (* the type is always printed just above, so print out just the head of the
        path instead of something like [t/3] *)
@@ -4729,29 +5504,65 @@ let report_error ppf = function
             (Mixed_product_kind.to_plural_string mixed_product_kind)
             hint)
     end
+||||||| 23e84b8c4d
+  | Immediacy (Typedecl_immediacy.Bad_immediacy_attribute violation) ->
+      (match violation with
+       | Type_immediacy.Violation.Not_always_immediate ->
+           fprintf ppf
+             "@[Types@ marked@ with@ the@ immediate@ attribute@ must@ be@ \
+              non-pointer@ types@ like@ %a@ or@ %a.@]"
+             Style.inline_code "int"
+             Style.inline_code "bool"
+       | Type_immediacy.Violation.Not_always_immediate_on_64bits ->
+           fprintf ppf
+             "@[Types@ marked@ with@ the@ %a@ attribute@ must@ be@ \
+              produced@ using@ the@ %a@ functor.@]"
+             Style.inline_code "immediate64"
+             Style.inline_code "Stdlib.Sys.Immediate64.Make"
+      )
+=======
+  | Immediacy (Typedecl_immediacy.Bad_immediacy_attribute violation) ->
+      (match violation with
+       | Type_immediacy.Violation.Not_always_immediate ->
+           Location.errorf ~loc
+             "Types@ marked@ with@ the@ immediate@ attribute@ must@ be@ \
+              non-pointer@ types@ like@ %a@ or@ %a."
+             Style.inline_code "int"
+             Style.inline_code "bool"
+       | Type_immediacy.Violation.Not_always_immediate_on_64bits ->
+           Location.errorf ~loc
+           "Types@ marked@ with@ the@ %a@ attribute@ must@ be@ \
+              produced@ using@ the@ %a@ functor."
+             Style.inline_code "immediate64"
+             Style.inline_code "Stdlib.Sys.Immediate64.Make"
+      )
+>>>>>>> ocaml/5.4
   | Bad_unboxed_attribute msg ->
-      fprintf ppf "@[This type cannot be unboxed because@ %s.@]" msg
+      Location.errorf ~loc "This type cannot be unboxed because@ %s." msg
   | Separability (Typedecl_separability.Non_separable_evar evar) ->
       let pp_evar ppf = function
         | None ->
             fprintf ppf "an unnamed existential variable"
         | Some str ->
             fprintf ppf "the existential variable %a"
-              (Style.as_inline_code Pprintast.tyvar) str in
-      fprintf ppf "@[This type cannot be unboxed because@ \
-                   it might contain both float and non-float values,@ \
-                   depending on the instantiation of %a.@ \
-                   You should annotate it with %a.@]"
+              (Style.as_inline_code Pprintast.Doc.tyvar) str in
+      Location.errorf ~loc
+        "This type cannot be unboxed because@ \
+         it might contain both float and non-float values,@ \
+         depending on the instantiation of %a.@ \
+         You should annotate it with %a."
         pp_evar evar
         Style.inline_code "[@@ocaml.boxed]"
   | Boxed_and_unboxed ->
-      fprintf ppf "@[A type cannot be boxed and unboxed at the same time.@]"
+      Location.errorf ~loc
+        "A type cannot be boxed and unboxed at the same time."
   | Nonrec_gadt ->
-      fprintf ppf
-        "@[GADT case syntax cannot be used in a %a block.@]"
+      Location.errorf ~loc
+        "GADT case syntax cannot be used in a %a block."
         Style.inline_code "nonrec"
   | Invalid_private_row_declaration ty ->
       let pp_private ppf ty = fprintf ppf "private %a" Printtyp.type_expr ty in
+<<<<<<< HEAD
       Format.fprintf ppf
         "@[<hv>This private row type declaration is invalid.@ \
          The type expression on the right-hand side reduces to@;<1 2>%a@ \
@@ -4759,7 +5570,30 @@ let report_error ppf = function
          @[<hv>@[@{<hint>Hint@}: If you intended to define a private \
          type abbreviation,@ \
         write explicitly@]@;<1 2>%a@]"
+||||||| 23e84b8c4d
+      Format.fprintf ppf
+        "@[<hv>This private row type declaration is invalid.@ \
+         The type expression on the right-hand side reduces to@;<1 2>%a@ \
+         which does not have a free row type variable.@]@,\
+         @[<hv>@[@{<hint>Hint@}: If you intended to define a private \
+         type abbreviation,@ \
+         write explicitly@]@;<1 2>%a@]"
+=======
+      let sub = [
+          Location.msg
+            "@[<hv>@[@{<hint>Hint@}: If you intended to define a private \
+             type abbreviation,@ \
+             write explicitly@]@;<1 2>%a@]"
+            (Style.as_inline_code pp_private) ty
+        ]
+      in
+      Location.errorf ~sub ~loc
+        "This private row type declaration is invalid.@\n\
+         @[<v>The type expression on the right-hand side reduces to@;<1 2>%a@ \
+         which does not have a free row type variable.@]"
+>>>>>>> ocaml/5.4
         (Style.as_inline_code Printtyp.type_expr) ty
+<<<<<<< HEAD
         (Style.as_inline_code pp_private) ty
   | Local_not_enabled ->
       fprintf ppf "@[The local extension is disabled@ \
@@ -4828,12 +5662,19 @@ let report_error ppf = function
         (Style.as_inline_code (Mode.Value.Const.print_axis ax)) right;
       fprintf ppf "@[<hv>@[@{<hint>Hint@}: all argument types must \
         mode-cross for rebinding to succeed.@]"
+||||||| 23e84b8c4d
+        (Style.as_inline_code pp_private) ty
+=======
+  | Atomic_field_must_be_mutable name ->
+      Location.errorf ~loc
+        "@[The label %a must be mutable to be declared atomic.@]"
+        Style.inline_code name
+>>>>>>> ocaml/5.4
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error (loc, err) ->
-        Some (Location.error_of_printer ~loc report_error err)
+      | Error (loc, err) -> Some (report_error ~loc err)
       | _ ->
         None
     )

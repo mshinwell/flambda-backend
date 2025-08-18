@@ -77,7 +77,18 @@ val peek_opt : ('a : value_or_null) . 'a t -> 'a option
 val top : ('a : value_or_null) . 'a t -> 'a
 (** [top] is a synonym for [peek]. *)
 
+<<<<<<< HEAD
 val clear : ('a : value_or_null) . 'a t -> unit
+||||||| 23e84b8c4d
+val clear : 'a t -> unit
+=======
+val drop : 'a t -> unit
+(** [drop q] removes the first element in queue [q], or raises {!Empty}
+   if the queue is empty.
+   @since 5.3 *)
+
+val clear : 'a t -> unit
+>>>>>>> ocaml/5.4
 (** Discard all elements from a queue. *)
 
 val copy : ('a : value_or_null) . 'a t -> 'a t

@@ -1,4 +1,17 @@
 (* TEST
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+ include runtime_events;
+ include unix;
+ set OCAML_RUNTIME_EVENTS_PRESERVE = "1";
+ libunix;
+=======
+ include runtime_events;
+ include unix;
+ set OCAML_RUNTIME_EVENTS_PRESERVE = "1";
+ hasunix;
+ not-target-windows;
+>>>>>>> ocaml/5.4
  {
    runtime4;
    skip;

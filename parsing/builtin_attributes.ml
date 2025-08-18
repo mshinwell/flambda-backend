@@ -56,6 +56,14 @@ let warn_unchecked_zero_alloc_attribute () =
     Location.prerr_warning sloc.loc (Warnings.Unchecked_zero_alloc_attribute))
     keys
 
+let compiler_stops_before_attributes_consumed () =
+  let stops_before_lambda =
+    match !Clflags.stop_after with
+    | None -> false
+    | Some pass -> Clflags.Compiler_pass.(compare pass Lambda) < 0
+  in
+  stops_before_lambda || !Clflags.print_types
+
 let warn_unused () =
   let keys = List.of_seq (Attribute_table.to_seq_keys unused_attrs) in
   Attribute_table.clear unused_attrs;
@@ -68,8 +76,29 @@ let warn_unused () =
 (* These are the attributes that are tracked in the builtin_attrs table for
    misplaced attribute warnings. *)
 let builtin_attrs =
+<<<<<<< HEAD
   [ "inline"
   ; "atomic"
+||||||| 23e84b8c4d
+  [ "alert"
+  ; "boxed"
+  ; "deprecated"
+  ; "deprecated_mutable"
+  ; "explicit_arity"
+  ; "immediate"
+  ; "immediate64"
+  ; "inline"
+=======
+  [ "alert"
+  ; "atomic"
+  ; "boxed"
+  ; "deprecated"
+  ; "deprecated_mutable"
+  ; "explicit_arity"
+  ; "immediate"
+  ; "immediate64"
+  ; "inline"
+>>>>>>> ocaml/5.4
   ; "inlined"
   ; "specialise"
   ; "specialised"
@@ -142,12 +171,19 @@ let register_attr current_phase name =
     if is_builtin_attr name.txt then
       Attribute_table.replace unused_attrs name ()
 
+<<<<<<< HEAD
 let ident_of_payload = function
   | PStr[{pstr_desc=Pstr_eval({pexp_desc=Pexp_ident {txt=Lident id}},_)}] ->
      Some id
   | _ -> None
 
 let string_of_cst = function
+||||||| 23e84b8c4d
+let string_of_cst = function
+=======
+let string_of_cst const =
+  match const.pconst_desc with
+>>>>>>> ocaml/5.4
   | Pconst_string(s, _, _) -> Some s
   | _ -> None
 
@@ -170,37 +206,39 @@ let string_of_opt_payload p =
   | Some s -> s
   | None -> ""
 
+module Style = Misc.Style
 let error_of_extension ext =
   let submessage_from main_loc main_txt = function
     | {pstr_desc=Pstr_extension
            (({txt = ("ocaml.error"|"error"); loc}, p), _)} ->
         begin match p with
         | PStr([{pstr_desc=Pstr_eval
-                     ({pexp_desc=Pexp_constant(Pconst_string(msg,_,_))}, _)}
+                     ({pexp_desc=Pexp_constant
+                           {pconst_desc=Pconst_string(msg, _, _); _}}, _)}
                ]) ->
-            { Location.loc; txt = fun ppf -> Format.pp_print_text ppf msg }
+            Location.msg ~loc "%a" Format_doc.pp_print_text msg
         | _ ->
-            { Location.loc; txt = fun ppf ->
-                Format.fprintf ppf
-                  "Invalid syntax for sub-message of extension '%s'." main_txt }
+            Location.msg ~loc "Invalid syntax for sub-message of extension %a."
+              Style.inline_code main_txt
         end
     | {pstr_desc=Pstr_extension (({txt; loc}, _), _)} ->
-        { Location.loc; txt = fun ppf ->
-            Format.fprintf ppf "Uninterpreted extension '%s'." txt }
+        Location.msg ~loc "Uninterpreted extension '%a'."
+          Style.inline_code txt
     | _ ->
-        { Location.loc = main_loc; txt = fun ppf ->
-            Format.fprintf ppf
-              "Invalid syntax for sub-message of extension '%s'." main_txt }
+        Location.msg ~loc:main_loc
+          "Invalid syntax for sub-message of extension %a."
+          Style.inline_code main_txt
   in
   match ext with
   | ({txt = ("ocaml.error"|"error") as txt; loc}, p) ->
       begin match p with
       | PStr [] -> raise Location.Already_displayed_error
       | PStr({pstr_desc=Pstr_eval
-                  ({pexp_desc=Pexp_constant(Pconst_string(msg,_,_))}, _)}::
+                  ({pexp_desc=Pexp_constant
+                      {pconst_desc=Pconst_string(msg, _, _)}}, _)}::
              inner) ->
           let sub = List.map (submessage_from loc txt) inner in
-          Location.error_of_printer ~loc ~sub Format.pp_print_text msg
+          Location.error_of_printer ~loc ~sub Format_doc.pp_print_text msg
       | _ ->
           Location.errorf ~loc "Invalid syntax for extension '%s'." txt
       end
@@ -250,7 +288,8 @@ let kind_and_message = function
          Pstr_eval
            ({pexp_desc=Pexp_apply
                  ({pexp_desc=Pexp_ident{txt=Longident.Lident id}},
-                  [Nolabel,{pexp_desc=Pexp_constant (Pconst_string(s,_,_))}])
+                  [Nolabel,{pexp_desc=Pexp_constant
+                                {pconst_desc=Pconst_string(s,_,_); _}}])
             },_)}] ->
       Some (id, s)
   | PStr[
@@ -329,8 +368,15 @@ let rec attrs_of_sig_items = function
   | _ ->
       []
 
+<<<<<<< HEAD
 let alerts_of_sig ~mark {psg_items; _} =
   let a = attrs_of_sig_items psg_items in
+||||||| 23e84b8c4d
+let alerts_of_sig sg = alerts_of_attrs (attrs_of_sig sg)
+=======
+let alerts_of_sig ~mark sg =
+  let a = attrs_of_sig sg in
+>>>>>>> ocaml/5.4
   if mark then mark_alerts_used a;
   alerts_of_attrs a
 
@@ -364,7 +410,7 @@ let warning_attribute ?(ppwarning = true) =
   let process_alert loc name = function
     | PStr[{pstr_desc=
               Pstr_eval(
-                {pexp_desc=Pexp_constant(Pconst_string(s,_,_))},
+                {pexp_desc=Pexp_constant {pconst_desc=Pconst_string(s,_,_); _}},
                 _)
            }] ->
         begin
@@ -401,7 +447,7 @@ let warning_attribute ?(ppwarning = true) =
       begin match attr_payload with
       | PStr [{ pstr_desc=
                   Pstr_eval({pexp_desc=Pexp_constant
-                                         (Pconst_string (s, _, _))},_);
+                                 {pconst_desc=Pconst_string (s, _, _); _}},_);
                 pstr_loc }] ->
         (mark_used attr_name;
          Location.prerr_warning pstr_loc (Warnings.Preprocessor s))
@@ -504,6 +550,7 @@ let has_unboxed attrs = has_attribute "unboxed" attrs
 
 let has_boxed attrs = has_attribute "boxed" attrs
 
+<<<<<<< HEAD
 let has_unsafe_allow_any_mode_crossing attrs =
   has_attribute "unsafe_allow_any_mode_crossing" attrs
 
@@ -1115,4 +1162,7 @@ let get_tracing_probe_payload (payload : Parsetree.payload) =
   in
   Ok { name; name_loc; enabled_at_init; arg }
 
+||||||| 23e84b8c4d
+=======
+>>>>>>> ocaml/5.4
 let has_atomic attrs = has_attribute "atomic" attrs

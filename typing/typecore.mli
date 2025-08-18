@@ -60,6 +60,11 @@ type type_expected = private {
 }
 
 (* Variables in patterns *)
+type pattern_variable_kind =
+  | Std_var
+  | As_var
+  | Continuation_var
+
 type pattern_variable =
   {
     pv_id: Ident.t;
@@ -68,8 +73,9 @@ type pattern_variable =
     pv_kind: value_kind;
     pv_type: type_expr;
     pv_loc: Location.t;
-    pv_as_var: bool;
+    pv_kind: pattern_variable_kind;
     pv_attributes: Typedtree.attributes;
+    pv_uid : Uid.t;
   }
 
 val mk_expected:
@@ -165,7 +171,6 @@ val type_option_some:
 val type_option_none:
         Env.t -> type_expr -> Location.t -> Typedtree.expression
 val generalizable: int -> type_expr -> bool
-val generalize_structure_exp: Typedtree.expression -> unit
 val reset_delayed_checks: unit -> unit
 val force_delayed_checks: unit -> unit
 
@@ -192,6 +197,7 @@ val escape : loc:Location.t -> env:Env.t -> reason:submode_reason -> (Mode.allow
 
 val self_coercion : (Path.t * Location.t list ref) list ref
 
+<<<<<<< HEAD
 type contention_context =
   | Read_mutable
   | Write_mutable
@@ -207,6 +213,13 @@ type unsupported_stack_allocation =
   | Object
   | List_comprehension
   | Array_comprehension
+||||||| 23e84b8c4d
+=======
+type existential_binding =
+  | Bind_already_bound
+  | Bind_not_in_scope
+  | Bind_non_locally_abstract
+>>>>>>> ocaml/5.4
 
 type error =
   | Constructor_arity_mismatch of Longident.t * int * int
@@ -223,7 +236,7 @@ type error =
   | Orpat_vars of Ident.t * Ident.t list
   | Expr_type_clash of
       Errortrace.unification_error * type_forcing_context option
-      * Parsetree.expression_desc option
+      * Parsetree.expression option
   | Function_arity_type_clash of
       { syntactic_arity :  int;
         type_constraint : type_expr;
@@ -252,7 +265,7 @@ type error =
   | Virtual_class of Longident.t
   | Private_type of type_expr
   | Private_label of Longident.t * type_expr
-  | Private_constructor of constructor_description * type_expr
+  | Private_constructor of Data_types.constructor_description * type_expr
   | Unbound_instance_variable of string * string list
   | Instance_variable_not_mutable of string
   | Not_subtype of Errortrace.Subtype.error
@@ -283,11 +296,14 @@ type error =
   | No_value_clauses
   | Exception_pattern_disallowed
   | Mixed_value_and_exception_patterns_under_guard
+  | Effect_pattern_below_toplevel
+  | Invalid_continuation_pattern
   | Inlined_record_escape
   | Inlined_record_expected
   | Unrefuted_pattern of Typedtree.pattern
   | Invalid_extension_constructor_payload
   | Not_an_extension_constructor
+<<<<<<< HEAD
   | Probe_format
   | Probe_name_format of string
   | Probe_name_undefined of string
@@ -298,6 +314,12 @@ type error =
   | Invalid_atomic_loc_payload
   | Label_not_atomic of Longident.t
   | Modalities_on_atomic_field of Longident.t
+||||||| 23e84b8c4d
+=======
+  | Invalid_atomic_loc_payload
+  | Label_not_atomic of Longident.t
+  | Atomic_in_pattern of Longident.t
+>>>>>>> ocaml/5.4
   | Literal_overflow of string
   | Unknown_literal of string * char
   | Float32_literal of string
@@ -309,8 +331,10 @@ type error =
   | Andop_type_clash of string * Errortrace.unification_error
   | Bindings_type_clash of Errortrace.unification_error
   | Unbound_existential of Ident.t list * type_expr
+  | Bind_existential of existential_binding * Ident.t * type_expr
   | Missing_type_constraint
   | Wrong_expected_kind of wrong_kind_sort * wrong_kind_context * type_expr
+<<<<<<< HEAD
   | Wrong_expected_record_boxing of wrong_kind_context * record_form_packed * type_expr
   | Expr_not_a_record_type of record_form_packed * type_expr
   | Expr_record_type_has_wrong_boxing of record_form_packed * type_expr
@@ -351,6 +375,17 @@ type error =
       { some_args_ok : bool; ty_fun : type_expr; jkind : jkind_lr }
   | Overwrite_of_invalid_term
   | Unexpected_hole
+||||||| 23e84b8c4d
+  | Expr_not_a_record_type of type_expr
+=======
+  | Expr_not_a_record_type of type_expr
+  | Constructor_labeled_arg
+  | Partial_tuple_pattern_bad_type
+  | Extra_tuple_label of string option * type_expr
+  | Missing_tuple_label of string option * type_expr
+  | Repeated_tuple_exp_label of string
+  | Repeated_tuple_pat_label of string
+>>>>>>> ocaml/5.4
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
@@ -376,8 +411,8 @@ val type_object:
   (Env.t -> Location.t -> Parsetree.class_structure ->
    Typedtree.class_structure * string list) ref
 val type_package:
-  (Env.t -> Parsetree.module_expr -> Path.t -> (Longident.t * type_expr) list ->
-  Typedtree.module_expr * (Longident.t * type_expr) list) ref
+  (Env.t -> Parsetree.module_expr -> package ->
+   Typedtree.module_expr * package) ref
 
 val constant: Parsetree.constant -> (Typedtree.constant, error) result
 

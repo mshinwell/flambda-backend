@@ -1,5 +1,10 @@
 (* TEST
+<<<<<<< HEAD
  expect;
+||||||| 23e84b8c4d
+=======
+  expect;
+>>>>>>> ocaml/5.4
 *)
 
 module M = struct type t = T end

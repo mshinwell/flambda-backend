@@ -1,8 +1,13 @@
+<<<<<<< HEAD
 (* TEST
    runtime5;
    { bytecode; }
    { native; }
 *)
+||||||| 23e84b8c4d
+=======
+(* TEST *)
+>>>>>>> ocaml/5.4
 
 (* Tests various valid and invalid orderings of start/stop/discard
 statmemprof calls. Doesn't test any callbacks or count any allocations,

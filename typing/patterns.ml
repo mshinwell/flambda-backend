@@ -16,6 +16,7 @@
 
 open Asttypes
 open Types
+open Data_types
 open Typedtree
 
 (* useful pattern auxiliary functions *)
@@ -54,16 +55,27 @@ module Simple = struct
     | `Any
     | `Constant of constant
     | `Tuple of (string option * pattern) list
+<<<<<<< HEAD
     | `Unboxed_tuple of (string option * pattern * Jkind.sort) list
+||||||| 23e84b8c4d
+    | `Tuple of pattern list
+=======
+>>>>>>> ocaml/5.4
     | `Construct of
         Longident.t loc * constructor_description * pattern list
     | `Variant of label * pattern option * row_desc ref
     | `Record of
         (Longident.t loc * label_description * pattern) list * closed_flag
+<<<<<<< HEAD
     | `Record_unboxed_product of
         (Longident.t loc * unboxed_label_description * pattern) list
         * closed_flag
     | `Array of mutability * Jkind.sort * pattern list
+||||||| 23e84b8c4d
+    | `Array of pattern list
+=======
+    | `Array of mutable_flag * pattern list
+>>>>>>> ocaml/5.4
     | `Lazy of pattern
   ]
 
@@ -84,19 +96,39 @@ end
 module General = struct
   type view = [
     | Half_simple.view
+<<<<<<< HEAD
     | `Var of Ident.t * string loc * Uid.t * Mode.Value.l
     | `Alias of pattern * Ident.t * string loc
                 * Uid.t * Mode.Value.l * Types.type_expr
+||||||| 23e84b8c4d
+    | `Var of Ident.t * string loc
+    | `Alias of pattern * Ident.t * string loc
+=======
+    | `Var of Ident.t * string loc * Uid.t
+    | `Alias of pattern * Ident.t * string loc * Uid.t * Types.type_expr
+>>>>>>> ocaml/5.4
   ]
   type pattern = view pattern_data
 
   let view_desc = function
     | Tpat_any ->
        `Any
+<<<<<<< HEAD
     | Tpat_var (id, str, uid, mode) ->
        `Var (id, str, uid, mode)
     | Tpat_alias (p, id, str, uid, mode, ty) ->
        `Alias (p, id, str, uid, mode, ty)
+||||||| 23e84b8c4d
+    | Tpat_var (id, str) ->
+       `Var (id, str)
+    | Tpat_alias (p, id, str) ->
+       `Alias (p, id, str)
+=======
+    | Tpat_var (id, str, uid) ->
+       `Var (id, str, uid)
+    | Tpat_alias (p, id, str, uid, ty) ->
+       `Alias (p, id, str, uid, ty)
+>>>>>>> ocaml/5.4
     | Tpat_constant cst ->
        `Constant cst
     | Tpat_tuple ps ->
@@ -109,9 +141,15 @@ module General = struct
        `Variant (cstr, arg, row_desc)
     | Tpat_record (fields, closed) ->
        `Record (fields, closed)
+<<<<<<< HEAD
     | Tpat_record_unboxed_product (fields, closed) ->
        `Record_unboxed_product (fields, closed)
     | Tpat_array (am, arg_sort, ps) -> `Array (am, arg_sort, ps)
+||||||| 23e84b8c4d
+    | Tpat_array ps -> `Array ps
+=======
+    | Tpat_array (am,ps) -> `Array (am, ps)
+>>>>>>> ocaml/5.4
     | Tpat_or (p, q, row_desc) -> `Or (p, q, row_desc)
     | Tpat_lazy p -> `Lazy p
 
@@ -120,9 +158,17 @@ module General = struct
 
   let erase_desc = function
     | `Any -> Tpat_any
+<<<<<<< HEAD
     | `Var (id, str, uid, mode) -> Tpat_var (id, str, uid, mode)
     | `Alias (p, id, str, uid, mode, ty) ->
        Tpat_alias (p, id, str, uid, mode, ty)
+||||||| 23e84b8c4d
+    | `Var (id, str) -> Tpat_var (id, str)
+    | `Alias (p, id, str) -> Tpat_alias (p, id, str)
+=======
+    | `Var (id, str, uid) -> Tpat_var (id, str, uid)
+    | `Alias (p, id, str, uid, ty) -> Tpat_alias (p, id, str, uid, ty)
+>>>>>>> ocaml/5.4
     | `Constant cst -> Tpat_constant cst
     | `Tuple ps -> Tpat_tuple ps
     | `Unboxed_tuple ps -> Tpat_unboxed_tuple ps
@@ -132,9 +178,15 @@ module General = struct
        Tpat_variant (cstr, arg, row_desc)
     | `Record (fields, closed) ->
        Tpat_record (fields, closed)
+<<<<<<< HEAD
     | `Record_unboxed_product (fields, closed) ->
        Tpat_record_unboxed_product (fields, closed)
     | `Array (am, arg_sort, ps) -> Tpat_array (am, arg_sort, ps)
+||||||| 23e84b8c4d
+    | `Array ps -> Tpat_array ps
+=======
+    | `Array (am, ps) -> Tpat_array (am, ps)
+>>>>>>> ocaml/5.4
     | `Or (p, q, row_desc) -> Tpat_or (p, q, row_desc)
     | `Lazy p -> Tpat_lazy p
 
@@ -143,7 +195,13 @@ module General = struct
 
   let rec strip_vars (p : pattern) : Half_simple.pattern =
     match p.pat_desc with
+<<<<<<< HEAD
     | `Alias (p, _, _, _, _, _) -> strip_vars (view p)
+||||||| 23e84b8c4d
+    | `Alias (p, _, _) -> strip_vars (view p)
+=======
+    | `Alias (p, _, _, _, _) -> strip_vars (view p)
+>>>>>>> ocaml/5.4
     | `Var _ -> { p with pat_desc = `Any }
     | #Half_simple.view as view -> { p with pat_desc = view }
 end
@@ -156,14 +214,25 @@ module Head : sig
     | Construct of constructor_description
     | Constant of constant
     | Tuple of string option list
+<<<<<<< HEAD
     | Unboxed_tuple of (string option * Jkind.sort) list
+||||||| 23e84b8c4d
+    | Tuple of int
+=======
+>>>>>>> ocaml/5.4
     | Record of label_description list
     | Record_unboxed_product of unboxed_label_description list
     | Variant of
         { tag: label; has_arg: bool;
           cstr_row: row_desc ref;
           type_row : unit -> row_desc; }
+<<<<<<< HEAD
     | Array of mutability * Jkind.sort * int
+||||||| 23e84b8c4d
+    | Array of int
+=======
+    | Array of mutable_flag * int
+>>>>>>> ocaml/5.4
     | Lazy
 
   type t = desc pattern_data
@@ -183,7 +252,12 @@ end = struct
     | Construct of constructor_description
     | Constant of constant
     | Tuple of string option list
+<<<<<<< HEAD
     | Unboxed_tuple of (string option * Jkind.sort) list
+||||||| 23e84b8c4d
+    | Tuple of int
+=======
+>>>>>>> ocaml/5.4
     | Record of label_description list
     | Record_unboxed_product of unboxed_label_description list
     | Variant of
@@ -192,7 +266,13 @@ end = struct
           type_row : unit -> row_desc; }
           (* the row of the type may evolve if [close_variant] is called,
              hence the (unit -> ...) delay *)
+<<<<<<< HEAD
     | Array of mutability * Jkind.sort * int
+||||||| 23e84b8c4d
+    | Array of int
+=======
+    | Array of mutable_flag * int
+>>>>>>> ocaml/5.4
     | Lazy
 
   type t = desc pattern_data
@@ -203,10 +283,15 @@ end = struct
       | `Constant c -> Constant c, []
       | `Tuple args ->
           Tuple (List.map fst args), (List.map snd args)
+<<<<<<< HEAD
       | `Unboxed_tuple args ->
           let labels_and_sorts = List.map (fun (l, _, s) -> l, s) args in
           let pats = List.map (fun (_, p, _) -> p) args in
           Unboxed_tuple labels_and_sorts, pats
+||||||| 23e84b8c4d
+          Tuple (List.length args), args
+=======
+>>>>>>> ocaml/5.4
       | `Construct (_, c, args) ->
           Construct c, args
       | `Variant (tag, arg, cstr_row) ->
@@ -221,8 +306,16 @@ end = struct
             | _ -> assert false
           in
           Variant {tag; has_arg; cstr_row; type_row}, pats
+<<<<<<< HEAD
       | `Array (am, arg_sort, args) ->
           Array (am, arg_sort, List.length args), args
+||||||| 23e84b8c4d
+      | `Array args ->
+          Array (List.length args), args
+=======
+      | `Array (am, args) ->
+          Array (am, List.length args), args
+>>>>>>> ocaml/5.4
       | `Record (largs, _) ->
           let lbls = List.map (fun (_,lbl,_) -> lbl) largs in
           let pats = List.map (fun (_,_,pat) -> pat) largs in
@@ -243,8 +336,14 @@ end = struct
       | Constant _ -> 0
       | Construct c -> c.cstr_arity
       | Tuple l -> List.length l
+<<<<<<< HEAD
       | Unboxed_tuple l -> List.length l
       | Array (_, _, n) -> n
+||||||| 23e84b8c4d
+      | Tuple n | Array n -> n
+=======
+      | Array (_, n) -> n
+>>>>>>> ocaml/5.4
       | Record l -> List.length l
       | Record_unboxed_product l -> List.length l
       | Variant { has_arg; _ } -> if has_arg then 1 else 0
@@ -259,10 +358,17 @@ end = struct
       | Constant c -> Tpat_constant c
       | Tuple lbls ->
           Tpat_tuple (List.map (fun lbl -> lbl, omega) lbls)
+<<<<<<< HEAD
       | Unboxed_tuple lbls_and_sorts ->
           Tpat_unboxed_tuple
             (List.map (fun (lbl, sort) -> lbl, omega, sort) lbls_and_sorts)
       | Array (am, arg_sort, n) -> Tpat_array (am, arg_sort, omegas n)
+||||||| 23e84b8c4d
+      | Tuple n -> Tpat_tuple (omegas n)
+      | Array n -> Tpat_array (omegas n)
+=======
+      | Array (am, n) -> Tpat_array (am, omegas n)
+>>>>>>> ocaml/5.4
       | Construct c ->
           let lid_loc = mkloc (Longident.Lident c.cstr_name) in
           Tpat_construct (lid_loc, c, omegas c.cstr_arity, None)

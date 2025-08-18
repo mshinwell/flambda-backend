@@ -14,6 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
+<<<<<<< HEAD
 open Format
 
 (* Convert environment summaries to environments. The Boolean [allow_missing_modules]
@@ -21,6 +22,13 @@ open Format
    will not be opened into the environment such that their contents will be missing from
    the resulting environment. If it set to [false], an exception is raised when missing
    modules are encountered. *)
+||||||| 23e84b8c4d
+open Format
+
+(* Convert environment summaries to environments *)
+=======
+(* Convert environment summaries to environments *)
+>>>>>>> ocaml/5.4
 
 val env_from_summary : allow_missing_modules:bool -> Env.summary -> Subst.t -> Env.t
 
@@ -42,4 +50,5 @@ type error =
 
 exception Error of error
 
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer
