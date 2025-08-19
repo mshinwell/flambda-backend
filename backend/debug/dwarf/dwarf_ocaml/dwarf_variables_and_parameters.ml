@@ -22,6 +22,7 @@ open! Dwarf_high
 module ARV = Available_ranges_vars
 module DAH = Dwarf_attribute_helpers
 module DS = Dwarf_state
+module Int = Numbers.Int
 module L = Linear
 module SLDL = Simple_location_description_lang
 module V = Backend_var
@@ -145,7 +146,7 @@ let location_list_entry state ~subrange single_location_description :
          ~start_of_code_symbol:(DS.start_of_code_symbol state))
 
 let dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
-    (var : Backend_var.t) ~ident_for_type ~range =
+    ~param_dies (var : Backend_var.t) ~ident_for_type ~range =
   let range_info = ARV.Range.info range in
   let provenance = ARV.Range_info.provenance range_info in
   let (parent_proto_die : Proto_die.t), hidden =
@@ -253,18 +254,41 @@ let dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
   in
   if not hidden
   then
-    Proto_die.create_ignore ?reference ?sort_priority
-      ?location_list_in_debug_loc_table ~parent:(Some parent_proto_die) ~tag
-      ~attribute_values:(type_and_name_attributes @ location_attribute_value)
-      ()
+    let die =
+      Proto_die.create ?reference ?sort_priority
+        ?location_list_in_debug_loc_table ~parent:(Some parent_proto_die) ~tag
+        ~attribute_values:(type_and_name_attributes @ location_attribute_value)
+        ()
+    in
+    match is_parameter with
+    | Local -> ()
+    | Parameter { index } -> (
+      match Int.Tbl.find_opt param_dies index with
+      | None ->
+        (* Parameter DIEs may be referenced across compilation units by concrete
+           inlined instance DIEs, so they need to be named with symbols. *)
+        let param_symbol =
+          (* CR mshinwell: this isn't really the correct creation fn *)
+          Symbol.for_new_const_in_current_unit ()
+          |> Symbol.linkage_name |> Linkage_name.to_string |> Asm_symbol.create
+        in
+        Proto_die.set_name die param_symbol;
+        Int.Tbl.add param_dies index param_symbol
+      | Some _ ->
+        Misc.fatal_errorf
+          "Clash on parameter index %d when processing variable %a" index
+          Backend_var.print var)
 
 let iterate_over_variable_like_things state ~available_ranges_vars ~f =
   ARV.iter available_ranges_vars ~f:(fun var range ->
       let ident_for_type = Some (Compilation_unit.get_current_exn (), var) in
       f var ~ident_for_type ~range)
 
+type result = { param_dies : Asm_targets.Asm_symbol.t option array }
+
 let dwarf state ~function_proto_die available_ranges_vars =
   let proto_dies_for_vars = Backend_var.Tbl.create 42 in
+  let param_dies = Int.Tbl.create 42 in
   iterate_over_variable_like_things state ~available_ranges_vars
     ~f:(fun var ~ident_for_type:_ ~range:_ ->
       let value_die_lvalue = Proto_die.create_reference () in
@@ -272,4 +296,14 @@ let dwarf state ~function_proto_die available_ranges_vars =
       assert (not (Backend_var.Tbl.mem proto_dies_for_vars var));
       Backend_var.Tbl.add proto_dies_for_vars var { value_die_lvalue; type_die });
   iterate_over_variable_like_things state ~available_ranges_vars
-    ~f:(dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars)
+    ~f:
+      (dwarf_for_variable state ~function_proto_die ~proto_dies_for_vars
+         ~param_dies);
+  let num_params = Int.Tbl.length param_dies in
+  let param_dies =
+    Array.init num_params (fun i ->
+        match Int.Tbl.find_opt param_dies i with
+        | None -> None
+        | Some die_symbol -> Some die_symbol)
+  in
+  { param_dies }

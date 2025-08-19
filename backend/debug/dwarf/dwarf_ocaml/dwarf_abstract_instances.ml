@@ -55,13 +55,19 @@ let add_empty state ~compilation_unit_proto_die ~fun_symbol ~demangled_name =
   in
   Proto_die.set_name abstract_instance_proto_die
     abstract_instance_proto_die_symbol;
-  Asm_symbol.Tbl.add
-    (DS.function_abstract_instances state)
-    fun_symbol
-    (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
-  abstract_instance_proto_die, abstract_instance_proto_die_symbol
+  let abstract_instance : DS.abstract_instance =
+    { abstract_instance_die = abstract_instance_proto_die;
+      abstract_instance_symbol = abstract_instance_proto_die_symbol;
+      abstract_instance_param_die_symbols = [||] (* XXX *)
+    }
+  in
+  ( Asm_symbol.Tbl.add
+      (DS.function_abstract_instances state)
+      fun_symbol abstract_instance,
+    abstract_instance_proto_die_symbol )
 
-let add_root state ~parent ~demangled_name fun_symbol ~location_attributes =
+let add_root state ~parent ~demangled_name fun_symbol ~location_attributes
+    ~param_dies =
   let attributes =
     [ DAH.create_name (Asm_symbol.encode fun_symbol);
       DAH.create_linkage_name ~linkage_name:demangled_name;
@@ -97,11 +103,16 @@ let add_root state ~parent ~demangled_name fun_symbol ~location_attributes =
   in
   Proto_die.set_name abstract_instance_proto_die
     abstract_instance_proto_die_symbol;
+  let abstract_instance : DS.abstract_instance =
+    { abstract_instance_die = abstract_instance_proto_die;
+      abstract_instance_symbol = abstract_instance_proto_die_symbol;
+      abstract_instance_param_die_symbols = [||] (* XXX *)
+    }
+  in
   Asm_symbol.Tbl.add (* or replace *)
     (DS.function_abstract_instances state)
-    fun_symbol
-    (abstract_instance_proto_die, abstract_instance_proto_die_symbol);
-  abstract_instance_proto_die, abstract_instance_proto_die_symbol
+    fun_symbol abstract_instance;
+  abstract_instance
 
 type decomposed_singleton_debuginfo =
   { demangled_name : string;
@@ -141,7 +152,10 @@ let decompose_singleton_debuginfo dbg =
       Debuginfo.print_compact_extended dbg
 
 type find_result =
-  | Ok of Asm_symbol.t
+  | Ok of
+      { abstract_instance_symbol : Asm_symbol.t;
+        abstract_instance_param_die_symbols : Asm_symbol.t option array
+      }
   | External_unit of
       { demangled_name : string;
         fun_symbol : Asm_symbol.t

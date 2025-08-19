@@ -17,6 +17,14 @@ open Asm_targets
 open Dwarf_low
 open Dwarf_high
 
+type abstract_instance =
+  { abstract_instance_die : Proto_die.t;
+    (* CR mshinwell: why is [abstract_instance_symbol] not the name of
+       [abstract_instance_die]? *)
+    abstract_instance_symbol : Asm_symbol.t;
+    abstract_instance_param_die_symbols : Asm_symbol.t array
+  }
+
 type t =
   { compilation_unit_header_label : Asm_label.t;
     compilation_unit_proto_die : Proto_die.t;
@@ -26,7 +34,7 @@ type t =
     debug_ranges_table : Debug_ranges_table.t;
     address_table : Address_table.t;
     location_list_table : Location_list_table.t;
-    function_abstract_instances : (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t;
+    function_abstract_instances : abstract_instance Asm_symbol.Tbl.t;
     get_file_num : string -> int
   }
 

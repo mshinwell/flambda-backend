@@ -52,12 +52,6 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
         :: DAH.create_decl_column startchar
         :: attributes
   in
-  let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
-    (* Add the abstract instance root for this function *)
-    DS.Debug.log "*** Adding absint root for %s\n%!" fundecl.fun_name;
-    Dwarf_abstract_instances.add_root state ~parent ~demangled_name:linkage_name
-      start_sym ~location_attributes
-  in
   let attribute_values =
     [ DAH.create_low_pc_from_symbol start_sym;
       DAH.create_high_pc ~low_pc:start_sym fun_end_label;
@@ -78,13 +72,26 @@ let for_fundecl ~get_file_id state (fundecl : L.fundecl) ~fun_end_label
           ~function_proto_die:concrete_instance_proto_die inlined_frame_ranges)
       ~accumulate:true ()
   in
-  if not !Dwarf_flags.restrict_to_upstream_dwarf
-  then
-    Profile.record "dwarf_variables_and_parameters"
-      (fun () ->
-        Dwarf_variables_and_parameters.dwarf state
-          ~function_proto_die:concrete_instance_proto_die available_ranges_vars)
-      ~accumulate:true ();
+  let param_dies =
+    if !Dwarf_flags.restrict_to_upstream_dwarf
+    then [||]
+    else
+      Profile.record "dwarf_variables_and_parameters"
+        (fun () ->
+          let { Dwarf_variables_and_parameters.param_dies } =
+            Dwarf_variables_and_parameters.dwarf state
+              ~function_proto_die:concrete_instance_proto_die
+              available_ranges_vars
+          in
+          param_dies)
+        ~accumulate:true ()
+  in
+  let _abstract_instance_root_proto_die, _abstract_instance_root_symbol =
+    (* Add the abstract instance root for this function *)
+    DS.Debug.log "*** Adding absint root for %s\n%!" fundecl.fun_name;
+    Dwarf_abstract_instances.add_root state ~parent ~demangled_name:linkage_name
+      start_sym ~location_attributes ~param_dies
+  in
   (* CR mshinwell: When cross-referencing of DIEs across files is necessary we
      need to be careful about symbol table size. let name = Printf.sprintf
      "__concrete_instance_%s" fun_name in Proto_die.set_name

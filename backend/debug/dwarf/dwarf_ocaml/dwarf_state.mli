@@ -48,8 +48,16 @@ val address_table : t -> Address_table.t
 
 val location_list_table : t -> Location_list_table.t
 
-val function_abstract_instances :
-  t -> (Proto_die.t * Asm_symbol.t) Asm_symbol.Tbl.t
+(* CR mshinwell: move into a separate file, and make abstract *)
+type abstract_instance =
+  { abstract_instance_die : Proto_die.t;
+    (* CR mshinwell: why is [abstract_instance_symbol] not the name of
+       [abstract_instance_die]? *)
+    abstract_instance_symbol : Asm_symbol.t;
+    abstract_instance_param_die_symbols : Asm_symbol.t array
+  }
+
+val function_abstract_instances : t -> abstract_instance Asm_symbol.Tbl.t
 
 val can_reference_dies_across_units : t -> bool
 

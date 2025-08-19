@@ -24,8 +24,10 @@ val normal_type_for_var :
   Is_parameter.t ->
   Proto_die.t
 
+type result = private { param_dies : Asm_targets.Asm_symbol.t option array }
+
 val dwarf :
   Dwarf_state.t ->
   function_proto_die:Proto_die.t ->
   Available_ranges_vars.t ->
-  unit
+  result

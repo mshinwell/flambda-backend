@@ -41,10 +41,14 @@ val add_root :
   demangled_name:string ->
   Asm_symbol.t ->
   location_attributes:Dwarf_attribute_values.Attribute_value.t list ->
+  param_dies:Asm_symbol.t option array ->
   Proto_die.t * Asm_symbol.t
 
 type find_result = private
-  | Ok of Asm_symbol.t
+  | Ok of
+      { abstract_instance_symbol : Asm_symbol.t;
+        abstract_instance_param_die_symbols : Asm_symbol.t option array
+      }
   | External_unit of
       { demangled_name : string;
         fun_symbol : Asm_symbol.t

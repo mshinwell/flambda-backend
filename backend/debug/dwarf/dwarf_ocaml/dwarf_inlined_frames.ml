@@ -138,6 +138,9 @@ let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
   let abstract_instance_symbol =
     Dwarf_abstract_instances.find state ~compilation_unit_proto_die block
   in
+  let parameter_attributes =
+    if not !Dwarf_state.can_reference_dies_across_units state then [] else []
+  in
   let abstract_instance =
     match abstract_instance_symbol with
     | Ok abstract_instance_symbol ->
@@ -150,11 +153,7 @@ let die_for_inlined_frame state ~compilation_unit_proto_die ~parent
          and in the current unit an inlining stack mentions it. *)
       (* For references to DIEs in other units, we reconstitute as many of their
          attributes as we can and put them directly into the DIE for the inlined
-         frame, making use of DWARF-5 spec page 85, line 30 onwards. This won't
-         provide parameter information for the functions concerned, but will do
-         for now, until we sort out how to properly reference DIEs across units
-         (in a way which will also work on macOS). In particular it should
-         otherwise suffice for backtraces. *)
+         frame, making use of DWARF-5 spec page 85, line 30 onwards. *)
       [ DAH.create_name (Asm_symbol.encode fun_symbol);
         DAH.create_linkage_name ~linkage_name:demangled_name;
         DAH.create_external ~is_visible_externally:true ]
