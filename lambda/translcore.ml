@@ -890,22 +890,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
                below. *)
             duparray_to_mutable imm_array
         | cl ->
-            let const =
-              if Config.flambda2 then
-                imm_array
-              else
-                match kind with
-                | Paddrarray | Pintarray ->
-                  Lconst(Const_block(0, cl))
-                | Pfloatarray ->
-                  Lconst(Const_float_array(List.map extract_float cl))
-                | Pgenarray ->
-                  raise Not_constant    (* can this really happen? *)
-                | Punboxedfloatarray _ | Punboxedoruntaggedintarray _
-                | Punboxedvectorarray _
-                | Pgcscannableproductarray _ | Pgcignorableproductarray _ ->
-                  Misc.fatal_error "Use flambda2 for unboxed arrays"
-            in
+            let const = imm_array in
             if Types.is_mutable amut then duparray_to_mutable const else const
         end
       with Not_constant ->
@@ -1307,19 +1292,8 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
           ap_probe = Some {name; enabled_at_init};
         }
       in
-      begin match Config.flambda || Config.flambda2 with
-      | true ->
-          Llet(Strict, Lambda.layout_function, funcid, funcid_duid, handler,
-               Lapply app)
-      | false ->
-        (* Needs to be lifted to top level manually here,
-           because functions that contain other function declarations
-           are not inlined by Closure. For example, adding a probe into
-           the body of function foo will prevent foo from being inlined
-           into another function. *)
-        probe_handlers := (funcid, funcid_duid, handler)::!probe_handlers;
-        Lapply app
-      end
+      Llet(Strict, Lambda.layout_function, funcid, funcid_duid, handler,
+           Lapply app)
     end else begin
       lambda_unit
     end

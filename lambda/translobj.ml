@@ -113,7 +113,6 @@ let transl_label_init_general f =
   expr, size
 
 let transl_label_init_flambda f =
-  assert(Config.flambda || Config.flambda2);
   let method_cache_id = Ident.create_local "method_cache" in
   let method_cache_duid = Lambda.debug_uid_none in
   method_cache := Lvar method_cache_id;
@@ -133,28 +132,6 @@ let transl_label_init_flambda f =
   in
   transl_label_init_general (fun () -> expr, size)
 
-let transl_store_label_init glob size f arg =
-  assert(not (Config.flambda || Config.flambda2));
-  assert(!Clflags.native_code);
-  method_cache := Lprim(mod_field ~read_semantics:Reads_vary size,
-                        (* XXX KC: conservative *)
-                        [Lprim(Pgetglobal glob, [], Loc_unknown)],
-                        Loc_unknown);
-  let expr = f arg in
-  let (size, expr) =
-    if !method_count = 0 then (size, expr) else
-    (size+1,
-     Lsequence(
-     Lprim(mod_setfield size,
-           [Lprim(Pgetglobal glob, [], Loc_unknown);
-            Lprim (Pccall prim_makearray,
-                   [int !method_count; int 0],
-                   Loc_unknown)],
-           Loc_unknown),
-     expr))
-  in
-  let lam, size = transl_label_init_general (fun () -> (expr, size)) in
-  size, lam
 
 let transl_label_init f =
   if !Clflags.native_code then

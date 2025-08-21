@@ -1219,7 +1219,7 @@ let flambda = Actions.make
   ~description:"Passes if the compiler is configured with flambda or flambda2 enabled"
   ~does_something:false
   (Actions_helpers.predicate
-     (Ocamltest_config.flambda || Ocamltest_config.flambda2)
+     true
     "support for flambda enabled"
     "support for flambda disabled")
 
@@ -1228,7 +1228,7 @@ let no_flambda = make
   ~description:"Passes if the compiler is NOT configured with flambda or flambda2 enabled"
   ~does_something:false
   (Actions_helpers.predicate
-     (not (Ocamltest_config.flambda || Ocamltest_config.flambda2))
+     false
     "support for flambda disabled"
     "support for flambda enabled")
 
@@ -1236,7 +1236,7 @@ let flambda2 = Actions.make
   ~name:"flambda2"
   ~description:"Passes if the compiler is configured with flambda2 enabled"
   ~does_something:false
-  (Actions_helpers.predicate (Ocamltest_config.flambda2)
+  (Actions_helpers.predicate true
     "support for flambda2 enabled"
     "support for flambda2 disabled")
 
@@ -1244,7 +1244,7 @@ let no_flambda2 = make
   ~name:"no-flambda2"
   ~description:"Passes if the compiler is NOT configured with flambda2 enabled"
   ~does_something:false
-  (Actions_helpers.predicate (not (Ocamltest_config.flambda2))
+  (Actions_helpers.predicate false
     "support for flambda2 disabled"
     "support for flambda2 enabled")
 

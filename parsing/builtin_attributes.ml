@@ -563,13 +563,12 @@ let nolabels_attribute attr =
 let flambda_oclassic_attribute attr =
   clflags_attribute_without_payload' attr
     ~name:"flambda_oclassic"
-    ~f:(fun () ->
-      if Config.flambda || Config.flambda2 then Clflags.set_oclassic ())
+    ~f:(fun () -> Clflags.set_oclassic ())
 
 let flambda_o3_attribute attr =
   clflags_attribute_without_payload' attr
     ~name:"flambda_o3"
-    ~f:(fun () -> if Config.flambda || Config.flambda2 then Clflags.set_o3 ())
+    ~f:(fun () -> Clflags.set_o3 ())
 
 let llvm_backend_attribute attr =
   clflags_attribute_without_payload' attr

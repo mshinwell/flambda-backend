@@ -500,19 +500,9 @@ let split_at_destruction_points :
 
 let split_live_ranges : Cfg_with_infos.t -> Regalloc_stack_slots.t =
  fun cfg_with_infos ->
-  (* CR-soon xclerc for xclerc: support closure, flambda, and
-     flambda2/classic *)
-  (match Config.flambda, Config.flambda2 with
-  | false, false -> fatal "Regalloc_split: closure is currently not supported"
-  | true, false -> fatal "Regalloc_split: flambda is currently not supported"
-  | false, true ->
-    (* note: classic mode is not properly supported, but is used in the
-       "tests/backend/frame-too-long" tests. We now implicitly disable split (in
-       `Regalloc_rewrite.prelude`) if classic mode is enabled. *)
-    (* if Flambda2_ui.Flambda_features.classic_mode () then fatal
-       "Regalloc_split: classic mode is currently not supported" *)
-    ()
-  | true, true -> assert false);
+  (* note: classic mode is not properly supported, but is used in the
+     "tests/backend/frame-too-long" tests. We now implicitly disable split (in
+     `Regalloc_rewrite.prelude`) if classic mode is enabled. *)
   match split_at_destruction_points cfg_with_infos with
   | None -> Regalloc_stack_slots.make ()
   | Some (stack_slots, block_inserted) ->

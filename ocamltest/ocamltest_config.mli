@@ -82,11 +82,6 @@ val ocamlopt_default_flags : string
 val ocamlsrcdir : string
 (** The absolute path of the directory containing the sources of OCaml *)
 
-val flambda : bool
-(** Whether flambda has been enabled at configure time *)
-
-val flambda2 : bool
-(** Whether flambda2 has been enabled at configure time *)
 
 val flat_float_array : bool
 (* Whether the compiler was configured with --enable-flat-float-array *)

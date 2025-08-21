@@ -136,8 +136,7 @@ let implementation_aux unix ~(flambda2 : flambda2) ~start_from
         !Clflags.as_argument_for
         |> Option.map Global_module.Parameter_name.of_string
       in
-      if not (Config.flambda || Config.flambda2) then Clflags.set_oclassic ();
-      compile_from_typed info typed ~unix ~pipeline ~as_arg_for
+        compile_from_typed info typed ~unix ~pipeline ~as_arg_for
     in
     Compile_common.implementation
       ~hook_parse_tree:(Compiler_hooks.execute Compiler_hooks.Parse_tree_impl)
@@ -164,7 +163,6 @@ let implementation_aux unix ~(flambda2 : flambda2) ~start_from
       Translmod.transl_instance info.module_name ~runtime_args
         ~main_module_block_size ~arg_block_idx
     in
-    if not (Config.flambda || Config.flambda2) then Clflags.set_oclassic ();
     compile_from_raw_lambda info impl ~unix ~pipeline ~as_arg_for
 
 let implementation unix ~flambda2 ~start_from ~source_file

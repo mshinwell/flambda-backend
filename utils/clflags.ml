@@ -220,7 +220,7 @@ let rounds () =
   | None -> !default_simplify_rounds
   | Some r -> r
 
-let default_inline_threshold = if Config.flambda then 10. else 10. /. 8.
+let default_inline_threshold = 10. /. 8.
 let inline_toplevel_multiplier = 16
 let default_inline_toplevel_threshold =
   int_of_float ((float inline_toplevel_multiplier) *. default_inline_threshold)
@@ -505,7 +505,7 @@ module Compiler_ir = struct
 end
 
 let is_flambda2 () =
-  Config.flambda2 && !native_code
+  !native_code
 
 module Opt_flag_handler = struct
   type t = {

@@ -56,9 +56,6 @@ let system = {@QS@|@system@|@QS@}
 
 let ocamlsrcdir = {@QS@|@ocamlsrcdir@|@QS@}
 
-let flambda = @flambda@
-
-let flambda2 = @flambda2@
 
 let ocamlc_default_flags = ""
 let ocamlopt_default_flags = ""

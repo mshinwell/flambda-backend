@@ -18,8 +18,7 @@ open Lambda
 open Location
 open Builtin_attributes
 
-let return_if_flambda =
-  if Config.flambda || Config.flambda2 then Return else Mark_used_only
+let return_if_flambda = Return
 
 let is_inline_attribute =
   [ "inline", Return ]
