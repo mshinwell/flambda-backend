@@ -35,7 +35,6 @@ CAMLexport value caml_alloc_with_reserved (mlsize_t wosize, tag_t tag,
                                            reserved_t reserved)
 {
   value result;
-  mlsize_t i;
 
   // Optimization: for mixed blocks, don't fill in non-scannable fields
   mlsize_t scannable_wosize = Scannable_wosize_reserved(reserved, wosize);
@@ -50,13 +49,13 @@ CAMLexport value caml_alloc_with_reserved (mlsize_t wosize, tag_t tag,
       Alloc_small_with_reserved (result, wosize, tag, Alloc_small_enter_GC,
                                  reserved);
       if (Scannable_tag(tag)) {
-        for (i = 0; i < scannable_wosize; i++) Field (result, i) = Val_unit;
+        for (mlsize_t i = 0; i < scannable_wosize; i++) Field (result, i) = Val_unit;
       }
     }
   } else {
     result = caml_alloc_shr_reserved (wosize, tag, reserved);
     if (Scannable_tag(tag)) {
-      for (i = 0; i < scannable_wosize; i++) Field (result, i) = Val_unit;
+      for (mlsize_t i = 0; i < scannable_wosize; i++) Field (result, i) = Val_unit;
     }
     result = caml_check_urgent_gc (result);
   }
@@ -109,13 +108,13 @@ CAMLexport value caml_alloc_mixed_shr_check_gc (mlsize_t wosize, tag_t tag,
 /* Copy the values to be preserved to a different array.
    The original vals array never escapes, generating better code in
    the fast path. */
-#define Enter_gc_preserve_vals(dom_st, wosize) do {         \
-    CAMLparam0();                                           \
-    CAMLlocalN(vals_copy, (wosize));                        \
-    for (i = 0; i < (wosize); i++) vals_copy[i] = vals[i];  \
-    Alloc_small_enter_GC(dom_st, wosize);                   \
-    for (i = 0; i < (wosize); i++) vals[i] = vals_copy[i];  \
-    CAMLdrop;                                               \
+#define Enter_gc_preserve_vals(dom_st, wosize) do {                     \
+    CAMLparam0();                                                       \
+    CAMLlocalN(vals_copy, (wosize));                                    \
+    for (mlsize_t j = 0; j < (wosize); j++) vals_copy[j] = vals[j];     \
+    Alloc_small_enter_GC(dom_st, wosize);                               \
+    for (mlsize_t j = 0; j < (wosize); j++) vals[j] = vals_copy[j];     \
+    CAMLdrop;                                                           \
   } while (0)
 
 /* This has to be done with a macro, rather than an inline function, since
@@ -126,12 +125,11 @@ CAMLexport value caml_alloc_mixed_shr_check_gc (mlsize_t wosize, tag_t tag,
   Caml_check_caml_state();                              \
   value v;                                              \
   value vals[wosize] = {__VA_ARGS__};                   \
-  mlsize_t i;                                           \
   CAMLassert ((tag) < 256);                             \
                                                         \
   Alloc_small(v, wosize, tag, Enter_gc_preserve_vals);  \
-  for (i = 0; i < (wosize); i++) {                      \
-    Field(v, i) = vals[i];                              \
+  for (mlsize_t j = 0; j < (wosize); j++) {             \
+    Field(v, j) = vals[j];                              \
   }                                                     \
   return v;                                             \
 }
@@ -277,13 +275,13 @@ CAMLexport value caml_alloc_array(value (*funct)(char const *),
                                   char const * const* arr)
 {
   CAMLparam0 ();
-  mlsize_t nbr, n;
+  mlsize_t nbr;
   CAMLlocal2 (v, result);
 
   nbr = 0;
   while (arr[nbr] != 0) nbr++;
   result = caml_alloc (nbr, 0);
-  for (n = 0; n < nbr; n++) {
+  for (mlsize_t n = 0; n < nbr; n++) {
     /* The two statements below must be separate because of evaluation
        order (don't take the address &Field(result, n) before
        calling funct, which may cause a GC and move result). */
@@ -300,7 +298,7 @@ value caml_alloc_float_array(mlsize_t len)
   Caml_check_caml_state();
   mlsize_t wosize = len * Double_wosize;
   value result;
-  /* For consistency with [caml_make_vect], which can't tell whether it should
+  /* For consistency with [caml_array_make], which can't tell whether it should
      create a float array or not when the size is zero, the tag is set to
      zero when the size is zero. */
   if (wosize <= Max_young_wosize){

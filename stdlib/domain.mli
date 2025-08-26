@@ -17,15 +17,15 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@alert unstable
-    "The Domain interface may change in incompatible ways in the future."
-]
-
 (** Domains.
 
     See 'Parallel programming' chapter in the manual.
 
     @since 5.0 *)
+
+[@@@alert unstable
+    "The Domain interface may change in incompatible ways in the future."
+]
 
 type !'a t : value mod portable contended with 'a
 (** A domain of type ['a t] runs independently, eventually producing a
@@ -98,6 +98,18 @@ let temp_file_key = Domain.DLS.new_key (fun _ ->
     to close it, thus guaranteeing the descriptor is not leaked in
     case the current domain exits. *)
 
+val self_index : unit -> int
+(** The index of the current domain. It is an integer unique among
+    currently-running domains, in the interval [0; N-1] where N is the
+    peak number of domains running simultaneously so far.
+
+    The index of a terminated domain may be reused for a new
+    domain. Use [(Domain.self () :> int)] instead for an identifier
+    unique among all domains ever created by the program.
+
+    @since 5.3
+*)
+
 module DLS : sig
 (** Domain-local Storage *)
 
@@ -107,7 +119,7 @@ module DLS : sig
     val new_key : ?split_from_parent:('a -> 'a) -> (unit -> 'a) -> 'a key @@ nonportable
     [@@alert unsafe_multidomain "Use [Domain.Safe.DLS.new_key]."]
     (** [new_key f] returns a new key bound to initialiser [f] for accessing
-,        domain-local variables.
+        domain-local variables.
 
         If [split_from_parent] is not provided, the value for a new
         domain will be computed on-demand by the new domain: the first

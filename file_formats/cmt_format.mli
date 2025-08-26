@@ -55,6 +55,8 @@ type cmt_infos = {
   cmt_declaration_dependencies : (dependency_kind * Uid.t * Uid.t) list;
   cmt_comments : (string * Location.t) list;
   cmt_args : string array;
+    (** {!Sys.argv} from the compiler invocation which created the file.
+        [Sys.argv.(0)] is rewritten using [BUILD_PATH_PREFIX_MAP]. *)
   cmt_sourcefile : string option;
   cmt_builddir : string;
   cmt_loadpath : Load_path.paths;
@@ -66,7 +68,7 @@ type cmt_infos = {
   cmt_uid_to_decl : item_declaration Shape.Uid.Tbl.t;
   cmt_impl_shape : Shape.t option; (* None for mli *)
   cmt_ident_occurrences :
-    (Longident.t Location.loc * Shape_reduce.result) array
+    (Longident.t Location.loc * Shape_reduce.result) list
 }
 
 type error =
@@ -111,7 +113,7 @@ val set_saved_types : binary_part list -> unit
 val record_declaration_dependency: dependency_kind * Uid.t * Uid.t -> unit
 
 val index_occurrences :
-  binary_annots -> (Longident.t Location.loc * Shape_reduce.result) array
+  binary_annots -> (Longident.t Location.loc * Shape_reduce.result) list
 
 val iter_declarations
   : binary_annots

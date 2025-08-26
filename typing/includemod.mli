@@ -90,7 +90,9 @@ module Error: sig
     (Types.functor_parameter, Ident.t) functor_param_symptom
 
   and functor_params_diff =
-    (Types.functor_parameter list * Types.module_type) core_diff
+    functor_params_info core_diff
+   and functor_params_info =
+     { params: functor_parameter list; res: module_type }
 
   and signature_symptom = {
     env: Env.t;
@@ -188,6 +190,13 @@ val modtypes:
 val modtypes_constraint:
   shape:Shape.t -> loc:Location.t -> Env.t -> mark:bool -> modes:modes ->
   module_type -> module_type -> module_coercion * Shape.t
+
+val modtypes_with_shape:
+  shape:Shape.t -> loc:Location.t -> Env.t -> mark:bool -> modes:modes ->
+  module_type -> module_type -> module_coercion * Shape.t
+
+val modtypes_consistency:
+  loc:Location.t -> Env.t -> module_type -> module_type -> unit
 
 val strengthened_module_decl:
   loc:Location.t -> aliasable:bool -> Env.t -> mark:bool -> mmodes:modes ->

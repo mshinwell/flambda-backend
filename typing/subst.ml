@@ -97,6 +97,9 @@ let add_type id p s =
   let types = add_type_replacement s.types (Pident id) (Path p) in
   { s with types; last_compose = None }
 
+let add_type_function id ~params ~body s =
+  let types = add_type_replacement s.types id (Type_function { params; body }) in
+  { s with types; last_compose = None }
 let add_module id p s =
   { s with modules = Path.Map.add (Pident id) p s.modules; last_compose = None }
 
@@ -442,9 +445,12 @@ let rec typexp copy_scope s ty =
          | Type_function { params; body } ->
             Tlink (apply_type_function params args body)
          end
-      | Tpackage(p, fl) ->
-          Tpackage(modtype_path s p,
-                   List.map (fun (n, ty) -> (n, typexp copy_scope s ty)) fl)
+      | Tpackage {pack_path; pack_cstrs} ->
+          Tpackage {
+            pack_path = modtype_path s pack_path;
+            pack_cstrs =
+              List.map (fun (n, ty) -> (n, typexp copy_scope s ty)) pack_cstrs;
+          }
       | Tobject (t1, name) ->
           let t1' = typexp copy_scope s t1 in
           let name' =
@@ -530,6 +536,7 @@ let label_declaration copy_scope s l =
     ld_mutable = l.ld_mutable;
     ld_modalities = l.ld_modalities;
     ld_sort = l.ld_sort;
+    ld_atomic = l.ld_atomic;
     ld_type = typexp copy_scope s l.ld_loc l.ld_type;
     ld_loc = loc s l.ld_loc;
     ld_attributes = attrs s l.ld_attributes;

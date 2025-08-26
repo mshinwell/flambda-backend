@@ -397,16 +397,16 @@ Lines 2-4, characters 0-3:
 4 | end
 Error: Signature mismatch:
        Modules do not match:
-         sig module type x = functor (X : c12) -> s end
+         sig module type x = (X : c12) -> s end
        is not included in
-         sig module type x = functor (X : s) -> s end
+         sig module type x = (X : s) -> s end
        Module type declarations do not match:
-         module type x = functor (X : c12) -> s
+         module type x = (X : c12) -> s
        does not match
-         module type x = functor (X : s) -> s
+         module type x = (X : s) -> s
        At position "module type x = <here>"
        Illegal permutation of runtime components in a module type.
-         For example, at position "functor (X : <here>) -> ...",
+         For example, at position "(X : <here>) -> ...",
          the class "two" and the value "one" are not in the same order
          in the expected and actual module types.
 |}]
@@ -422,16 +422,16 @@ Lines 2-4, characters 0-3:
 4 | end
 Error: Signature mismatch:
        Modules do not match:
-         sig module type x = functor (X : s) -> c12 end
+         sig module type x = (X : s) -> c12 end
        is not included in
-         sig module type x = functor (X : s) -> s end
+         sig module type x = (X : s) -> s end
        Module type declarations do not match:
-         module type x = functor (X : s) -> c12
+         module type x = (X : s) -> c12
        does not match
-         module type x = functor (X : s) -> s
+         module type x = (X : s) -> s
        At position "module type x = <here>"
        Illegal permutation of runtime components in a module type.
-         For example, at position "functor (X) -> <here>",
+         For example, at position "(X) -> <here>",
          the class "two" and the value "one" are not in the same order
          in the expected and actual module types.
 |}]
@@ -501,8 +501,8 @@ Error: Signature mismatch:
                    module B :
                      sig
                        module C :
-                         functor (X : sig end) (Y : sig end)
-                           (Z : sig ... end) -> sig end
+                         (X : sig end) (Y : sig end)
+                         (Z : sig ... end) -> sig end
                      end
                  end
              end
@@ -516,8 +516,8 @@ Error: Signature mismatch:
                    module B :
                      sig
                        module C :
-                         functor (X : sig end) (Y : sig end)
-                           (Z : sig ... end) -> sig end
+                         (X : sig end) (Y : sig end)
+                         (Z : sig ... end) -> sig end
                      end
                  end
              end
@@ -530,9 +530,8 @@ Error: Signature mismatch:
                  module B :
                    sig
                      module C :
-                       functor (X : sig end) (Y : sig end)
-                         (Z : sig module D : sig ... end end) -> sig end
-                   end
+                       (X : sig end) (Y : sig end)
+                       (Z : sig module D : sig ... end end) -> sig end
                end
            end
        does not match
@@ -543,9 +542,8 @@ Error: Signature mismatch:
                  module B :
                    sig
                      module C :
-                       functor (X : sig end) (Y : sig end)
+                       (X : sig end) (Y : sig end)
                          (Z : sig module D : sig ... end end) -> sig end
-                   end
                end
            end
        At position "module type x = <here>"

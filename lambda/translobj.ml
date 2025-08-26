@@ -84,11 +84,11 @@ let int n = Lconst (Const_base (Const_int n))
 
 (* CR layouts v5: To change when we have arrays of other sorts *)
 let prim_makearray =
-  Lambda.simple_prim_on_values ~name:"caml_make_vect" ~arity:2 ~alloc:true
+  Lambda.simple_prim_on_values ~name:"caml_array_make" ~arity:2 ~alloc:true
 
 (* Also use it for required globals *)
 let transl_label_init_general f =
-  let expr, size = f () in
+  let expr = f () in
   let expr =
     Hashtbl.fold
       (fun c id expr ->
@@ -110,7 +110,7 @@ let transl_label_init_general f =
   in
   Env.reset_required_globals ();*)
   reset_labels ();
-  expr, size
+  expr
 
 let transl_label_init_flambda f =
   assert(Config.flambda || Config.flambda2);
@@ -120,7 +120,7 @@ let transl_label_init_flambda f =
   (* Calling f (usually Translmod.transl_struct) requires the
      method_cache variable to be initialised to be able to generate
      method accesses. *)
-  let expr, size = f () in
+  let expr = f () in
   let expr =
     if !method_count = 0 then expr
     else
@@ -131,7 +131,7 @@ let transl_label_init_flambda f =
                Loc_unknown),
         expr)
   in
-  transl_label_init_general (fun () -> expr, size)
+  transl_label_init_general (fun () -> expr)
 
 let transl_store_label_init glob size f arg =
   assert(not (Config.flambda || Config.flambda2));
@@ -153,8 +153,7 @@ let transl_store_label_init glob size f arg =
            Loc_unknown),
      expr))
   in
-  let lam, size = transl_label_init_general (fun () -> (expr, size)) in
-  size, lam
+  size, transl_label_init_general (fun () -> expr)
 
 let transl_label_init f =
   if !Clflags.native_code then

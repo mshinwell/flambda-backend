@@ -33,7 +33,7 @@ open Types
    type expression may fail to produce a well-formed type. In order to confine
    this issue to local substitutions, the type of substitutions is split into a
    safe and unsafe variant. Only unsafe substitutions may expand a module type
-   path into a generic module type. *)
+   path into a generic module type. */
 
 (** Type familly for substitutions *)
 type +'k subst
@@ -75,6 +75,15 @@ val with_additional_action: additional_action_config -> t -> t
 *)
 val reset_additional_action_type_id: unit -> unit
 
+val add_type_path: Path.t -> Path.t -> 'k subst -> 'k subst
+val add_type_function:
+  Path.t -> params:type_expr list -> body:type_expr -> 'k subst -> 'k subst
+val add_module_path: Path.t -> Path.t -> 'k subst -> 'k subst
+val add_modtype: Ident.t -> module_type -> 'k subst -> 'k subst
+val add_modtype_path: Path.t -> module_type -> 'k subst -> 'k subst
+
+val for_saving: t -> t
+val reset_for_saving: unit -> unit
 val change_locs: 'k subst -> Location.t -> 'k subst
 
 val module_path: t -> Path.t -> Path.t

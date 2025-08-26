@@ -214,6 +214,23 @@ let get_paths () =
 let get_visible_path_list () = List.rev_map Dir.path !visible_dirs
 let get_hidden_path_list () = List.rev_map Dir.path !hidden_dirs
 
+(* Optimized version of [add] below, for use in [init] and [remove_dir]: since
+   we are starting from an empty cache, we can avoid checking whether a unit
+   name already exists in the cache simply by adding entries in reverse
+   order. *)
+let prepend_add dir =
+  List.iter (fun base ->
+      Result.iter (fun filename ->
+          let fn = Filename.concat dir.Dir.path base in
+          if dir.Dir.hidden then begin
+            STbl.replace !hidden_files base fn;
+            STbl.replace !hidden_files_uncap filename fn
+          end else begin
+            STbl.replace !visible_files base fn;
+            STbl.replace !visible_files_uncap filename fn
+          end)
+        (Misc.normalized_unit_filename base)
+    ) dir.Dir.files
 let init ~auto_include ~visible ~hidden =
   reset ();
   visible_dirs := List.rev_map (Dir.create ~hidden:false) visible;
@@ -251,7 +268,23 @@ let remove_dir dir =
 let add (dir : Dir.t) =
   assert (not Config.merlin || Local_store.is_bound ());
   Path_cache.add dir;
-  if (Dir.hidden dir) then
+  let update base fn visible_files hidden_files =
+    if dir.hidden && not (STbl.mem !hidden_files base) then
+      STbl.replace !hidden_files base fn
+    else if not (STbl.mem !visible_files base) then
+      STbl.replace !visible_files base fn
+  in
+  List.iter
+    (fun base ->
+       Result.iter (fun ubase ->
+           let fn = Filename.concat dir.Dir.path base in
+           update base fn visible_files hidden_files;
+           update ubase fn visible_files_uncap hidden_files_uncap
+         )
+         (Misc.normalized_unit_filename base)
+    )
+    dir.files;
+  if dir.hidden then
     hidden_dirs := dir :: !hidden_dirs
   else
     visible_dirs := dir :: !visible_dirs
@@ -306,6 +339,9 @@ let find fn =
 
 let find_normalized_with_visibility fn =
   assert (not Config.merlin || Local_store.is_bound ());
+  match Misc.normalized_unit_filename fn with
+  | Error _ -> raise Not_found
+  | Ok fn_uncap ->
   try
     if is_basename fn && not !Sys.interactive then
       Path_cache.find ~uncap:true fn
@@ -316,7 +352,6 @@ let find_normalized_with_visibility fn =
       | Not_found ->
         (Misc.find_in_path_normalized (get_hidden_path_list ()) fn, Hidden)
   with Not_found ->
-    let fn_uncap = String.uncapitalize_ascii fn in
     (!auto_include_callback Dir.find_normalized fn_uncap, Visible)
 
 let find_normalized fn = fst (find_normalized_with_visibility fn)

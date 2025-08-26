@@ -18,29 +18,31 @@
 
 open Asttypes
 open Types
+open Data_types
 open Btype
 
 (* Simplified version of Ctype.free_vars *)
 let free_vars ?(param=false) ty =
   let ret = ref TypeSet.empty in
-  let rec loop ty =
-    if try_mark_node ty then
-      match get_desc ty with
-      | Tvar _ ->
-          ret := TypeSet.add ty !ret
-      | Tvariant row ->
-        iter_row loop row;
-        if not (static_row row) then begin
-          match get_desc (row_more row) with
-          | Tvar _ when param -> ret := TypeSet.add ty !ret
-          | _ -> loop (row_more row)
-        end
-      (* XXX: What about Tobject ? *)
-      | _ ->
-          iter_type_expr loop ty
-  in
-  loop ty;
-  unmark_type ty;
+  with_type_mark begin fun mark ->
+    let rec loop ty =
+      if try_mark_node mark ty then
+        match get_desc ty with
+        | Tvar _ ->
+            ret := TypeSet.add ty !ret
+        | Tvariant row ->
+            iter_row loop row;
+            if not (static_row row) then begin
+              match get_desc (row_more row) with
+              | Tvar _ when param -> ret := TypeSet.add ty !ret
+              | _ -> loop (row_more row)
+            end
+                (* XXX: What about Tobject ? *)
+        | _ ->
+            iter_type_expr loop ty
+    in
+    loop ty
+  end;
   !ret
 
 let newgenconstr path tyl = newgenty (Tconstr (path, tyl, ref Mnil))
@@ -244,6 +246,7 @@ let dummy_label (type rep) (record_form : rep record_form)
   { lbl_name = ""; lbl_res = none; lbl_arg = none;
     lbl_mut = Immutable; lbl_modalities = Mode.Modality.Value.Const.id;
     lbl_sort = Jkind.Sort.Const.void;
+    lbl_atomic = Nonatomic;
     lbl_pos = -1; lbl_all = [||];
     lbl_repres = repres;
     lbl_private = Public;
@@ -264,6 +267,7 @@ let label_descrs record_form ty_res lbls repres priv =
             lbl_mut = l.ld_mutable;
             lbl_modalities = l.ld_modalities;
             lbl_sort = l.ld_sort;
+            lbl_atomic = l.ld_atomic;
             lbl_pos = pos;
             lbl_all = all_labels;
             lbl_repres = repres;

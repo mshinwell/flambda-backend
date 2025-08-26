@@ -37,7 +37,9 @@ type compile_time_constant =
 
 type immediate_or_pointer =
   | Immediate
+  (* The value must be immediate. *)
   | Pointer
+  (* The value may be a pointer or an immediate. *)
 
 type locality_mode = private
   | Alloc_heap
@@ -1086,9 +1088,13 @@ val transl_prim: string -> string -> lambda
 (** Translate a value from a persistent module. For instance:
 
     {[
-      transl_internal_value "CamlinternalLazy" "force"
+      transl_prim "CamlinternalLazy" "force"
     ]}
 *)
+
+val is_evaluated : lambda -> bool
+(** [is_evaluated lam] returns [true] if [lam] is either a constant, a variable
+    or a function abstract. *)
 
 val free_variables: lambda -> Ident.Set.t
 
@@ -1185,6 +1191,8 @@ val primitive_may_allocate : primitive -> locality_mode option
 val locality_mode_of_primitive_description :
   external_call_description -> locality_mode option
   (** Like [primitive_may_allocate], for [external] calls. *)
+
+val tag_of_lazy_tag : lazy_block_tag -> int
 
 (***********************)
 (* For static failures *)

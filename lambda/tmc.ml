@@ -937,6 +937,13 @@ let rec choice ctx t =
     | Pobj_magic _
     | Pprobe_is_enabled _
 
+    (* Lazy blocks should never contain a recursive call directly:
+       either it's a closure (Lazy_tag), or a variable (Forward_tag).
+       The case 'let foo = recursive_call in lazy foo' could be translated to
+       use tmc in the cases where 'foo' might be of type lazy or float, but
+       given the fragility of such a transformation we choose not to. *)
+    | Pmakelazyblock _
+
     (* more common cases... *)
     | Pbigarrayref _ | Pbigarrayset _
     | Pbigarraydim _
@@ -968,6 +975,8 @@ let rec choice ctx t =
     | Punboxed_nativeint_array_set_vec _
     | Pget_header _
     | Pctconst _
+    | Pbswap16
+    | Pbbswap _
     | Pint_as_pointer _
     | Psequand | Psequor
     | Ppoll
@@ -1098,7 +1107,7 @@ let () =
                Ambiguous_constructor_arguments
                  { explicit = false; arguments }) ->
           let print_msg ppf =
-            Format.fprintf ppf
+            Format_doc.fprintf ppf
               "%a:@ this@ constructor@ application@ may@ be@ \
                TMC-transformed@ in@ several@ different@ ways.@ \
                Please@ disambiguate@ by@ adding@ an@ explicit@ %a \
@@ -1123,7 +1132,7 @@ let () =
                Ambiguous_constructor_arguments
                  { explicit = true; arguments }) ->
           let print_msg ppf =
-            Format.fprintf ppf
+            Format_doc.fprintf ppf
               "%a:@ this@ constructor@ application@ may@ be@ \
                TMC-transformed@ in@ several@ different@ ways.@ Only@ one@ of@ \
                the@ arguments@ may@ become@ a@ TMC@ call,@ but@ several@ \

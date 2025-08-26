@@ -132,6 +132,7 @@ external ( = ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> 
    even if the two mutable objects are not the same physical object.
    Equality between functional values raises [Invalid_argument].
    Equality between cyclic data structures may not terminate.
+   See also {!Repr.equal}.
    Left-associative operator, see {!Ocaml_operators} for more information. *)
 
 external ( <> ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%notequal"
@@ -159,8 +160,8 @@ external ( >= ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) ->
    the usual orderings over integers, characters, strings, byte sequences
    and floating-point numbers, and extend them to a
    total ordering over all types.
-   The ordering is compatible with [( = )]. As in the case
-   of [( = )], mutable structures are compared by contents.
+   The ordering is compatible with {!Repr.equal}. As in the case
+   of {!Repr.equal}, mutable structures are compared by contents.
    Comparison between functional values raises [Invalid_argument].
    Comparison between cyclic structures may not terminate.
    Left-associative operator, see {!Ocaml_operators} for more information.
@@ -183,17 +184,21 @@ external compare : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -
 
    The [compare] function can be used as the comparison function
    required by the {!Set.Make} and {!Map.Make} functors, as well as
-   the {!List.sort} and {!Array.sort} functions. *)
+   the {!List.sort} and {!Array.sort} functions.
+
+   See also {!Repr.compare}. *)
 
 val min : ('a : value_or_null) . 'a -> 'a -> 'a
 (** Return the smaller of the two arguments.
     The result is unspecified if one of the arguments contains
-    the float value [nan]. *)
+    the float value [nan].
+    See also {!Repr.min}. *)
 
 val max : ('a : value_or_null) . 'a -> 'a -> 'a
 (** Return the greater of the two arguments.
     The result is unspecified if one of the arguments contains
-    the float value [nan]. *)
+    the float value [nan].
+    See also {!Repr.max}. *)
 
 external ( == ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) -> bool = "%eq"
 (** [e1 == e2] tests for physical equality of [e1] and [e2].
@@ -204,6 +209,7 @@ external ( == ) : ('a : value_or_null) . ('a[@local_opt]) -> ('a[@local_opt]) ->
    On non-mutable types, the behavior of [( == )] is
    implementation-dependent; however, it is guaranteed that
    [e1 == e2] implies [compare e1 e2 = 0].
+   See also {!Repr.phys_equal}.
    Left-associative operator,  see {!Ocaml_operators} for more information.
 *)
 
@@ -1434,6 +1440,7 @@ module Domain         = Domain
     "The Domain interface may change in incompatible ways in the future."
 ]
 module Dynarray       = Dynarray
+module Pqueue         = Pqueue
 module Effect         = Effect
 [@@alert "-unstable"]
 [@@alert unstable
@@ -1447,6 +1454,7 @@ module Format         = Format
 module Fun            = Fun
 module Gc             = Gc
 module Hashtbl        = Hashtbl
+module Iarray         = Iarray
 module In_channel     = In_channel
 module Int            = Int
 module Int32          = Int32
@@ -1465,12 +1473,14 @@ module Obj            = Obj
 module Oo             = Oo
 module Option         = Option
 module Out_channel    = Out_channel
+module Pair           = Pair
 module Parsing        = Parsing
 module Printexc       = Printexc
 module Printf         = Printf
 module Queue          = Queue
 module Random         = Random
 module Result         = Result
+module Repr           = Repr
 module Scanf          = Scanf
 module Semaphore      = Semaphore
 module Seq            = Seq

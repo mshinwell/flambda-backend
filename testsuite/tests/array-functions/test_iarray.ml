@@ -1,9 +1,4 @@
-(* TEST
- include stdlib_stable;
-*)
-
-module Iarray = Stdlib_stable.Iarray
-external ( .:() ) : 'a iarray -> int -> 'a = "%array_safe_get"
+(* TEST *)
 
 (* Copied from [test.ml], but with all the [Array.fill] tests deleted *)
 

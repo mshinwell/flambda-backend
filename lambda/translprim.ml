@@ -16,7 +16,6 @@
 (* Translation of primitives *)
 
 open Primitive
-open Types
 open Typedtree
 open Typeopt
 open Lambda
@@ -118,21 +117,20 @@ type loc_kind =
 type atomic_kind =
   | Ref   (* operation on an atomic reference (takes only a pointer) *)
   | Field (* operation on an atomic field (takes a pointer and an offset) *)
-  | Loc (* operation on a first-class field (takes a (pointer, offset) pair *)
+  | Loc   (* operation on a first-class field (takes a (pointer, offset) pair *)
 
 type atomic_op =
   | Load
   | Set
   | Exchange
   | Compare_exchange
-  | Compare_and_set
-  | Fetch_add
+  | Cas      (* was Compare_and_set in OxCaml *)
+  | Faa      (* was Fetch_add in OxCaml *)
   | Add
   | Sub
   | Land
   | Lor
   | Lxor
-
 
 type prim =
   | Primitive of Lambda.primitive * int
@@ -193,7 +191,6 @@ let to_locality ~poly = function
     match poly with
     | None -> assert false
     | Some locality -> transl_locality_mode_l locality
-
 let to_modify_mode ~poly = function
   | Prim_global, _ -> modify_heap
   | Prim_local, _ -> modify_maybe_stack
@@ -1813,13 +1810,8 @@ let lambda_of_loc kind sloc =
   | Loc_FILE -> Lconst (Const_immstring file)
   | Loc_MODULE ->
     let filename = Filename.basename file in
-    let name = Compilation_unit.get_current () in
-    let module_name =
-      match name with
-      | None -> "//"^filename^"//"
-      | Some comp_unit ->
-        Compilation_unit.name_as_string comp_unit
-    in
+    let name = Env.get_current_unit_name () in
+    let module_name = if name = "" then "//"^filename^"//" else name in
     Lconst (Const_immstring module_name)
   | Loc_LOC ->
     let loc = Printf.sprintf "File %S, line %d, characters %d-%d"
@@ -1838,8 +1830,8 @@ let atomic_arity op (kind : atomic_kind) =
     | Set -> 2
     | Exchange -> 2
     | Compare_exchange -> 3
-    | Compare_and_set -> 3
-    | Fetch_add | Add | Sub | Land | Lor | Lxor -> 2
+    | Cas -> 3      (* was Compare_and_set in OxCaml *)
+    | Faa | Add | Sub | Land | Lor | Lxor -> 2  (* Faa was Fetch_add in OxCaml *)
   in
   let extra_kind_arity =
     match kind with
@@ -1865,9 +1857,9 @@ let lambda_of_atomic prim_name loc op (kind : atomic_kind) args =
     | Exchange -> Patomic_exchange_field { immediate_or_pointer = Pointer }
     | Compare_exchange ->
       Patomic_compare_exchange_field { immediate_or_pointer = Pointer }
-    | Compare_and_set ->
+    | Cas ->
       Patomic_compare_set_field { immediate_or_pointer = Pointer }
-    | Fetch_add -> Patomic_fetch_add_field
+    | Faa -> Patomic_fetch_add_field
     | Add -> Patomic_add_field
     | Sub -> Patomic_sub_field
     | Land -> Patomic_land_field
@@ -2230,7 +2222,7 @@ let lambda_primitive_needs_event_after = function
   | Punboxed_nativeint_array_set_vec _
   | Pget_idx _ | Pset_idx _
   | Prunstack | Pperform | Preperform | Presume
-  | Ppoll | Pobj_dup | Pget_header _ -> true
+  | Pbbswap _ | Ppoll | Pobj_dup | Pget_header _ -> true
   (* [Preinterpret_tagged_int63_as_unboxed_int64] has to allocate in
      bytecode, because int64# is actually represented as a boxed value. *)
   | Preinterpret_tagged_int63_as_unboxed_int64 -> true
@@ -2275,7 +2267,7 @@ let lambda_primitive_needs_event_after = function
   (* These don't allocate in bytecode; they're just identity functions: *)
   | Pbox_vector (_, _)
   | Punbox_unit
-    -> false
+  | Pmakelazyblock _ -> false
 
 (* Determine if a primitive should be surrounded by an "after" debug event *)
 let primitive_needs_event_after = function
@@ -2347,10 +2339,10 @@ let transl_primitive_application loc p env ty ~poly_mode ~stack ~poly_sort
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Unknown_builtin_primitive prim_name ->
       fprintf ppf "Unknown builtin primitive %a" Style.inline_code prim_name
   | Wrong_arity_builtin_primitive prim_name ->
@@ -2389,7 +2381,9 @@ let () =
   Location.register_error_of_exn
     (function
       | Error (loc, err) ->
-          Some (Location.error_of_printer ~loc report_error err)
+          Some (Location.error_of_printer ~loc report_error_doc err)
       | _ ->
         None
     )
+
+let report_error = Format_doc.compat report_error_doc

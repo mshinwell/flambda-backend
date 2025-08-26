@@ -26,17 +26,34 @@ module CU = Compilation_unit
 type error =
   | File_not_found of filepath
   | Not_an_object_file of filepath
+<<<<<<< HEAD
   | Missing_implementations of (CU.t * string list) list
   | Inconsistent_interface of CU.Name.t * filepath * filepath
   | Inconsistent_implementation of CU.t * filepath * filepath
+||||||| 23e84b8c4d
+  | Missing_implementations of (modname * string list) list
+  | Inconsistent_interface of modname * filepath * filepath
+  | Inconsistent_implementation of modname * filepath * filepath
+=======
+  | Inconsistent_interface of modname * filepath * filepath
+  | Inconsistent_implementation of modname * filepath * filepath
+>>>>>>> ocaml/5.4
   | Assembler_error of filepath
   | Linking_error of int
+<<<<<<< HEAD
   | Multiple_definition of CU.Name.t * filepath * filepath
   | Missing_cmx of filepath * CU.t
   | Dwarf_fission_objcopy_on_macos
   | Dwarf_fission_dsymutil_not_macos
   | Dsymutil_error of int
   | Objcopy_error of int
+||||||| 23e84b8c4d
+  | Multiple_definition of modname * filepath * filepath
+  | Missing_cmx of filepath * modname
+=======
+  | Missing_cmx of filepath * modname
+  | Link_error of Linkdeps.error
+>>>>>>> ocaml/5.4
 
 exception Error of error
 
@@ -57,10 +74,20 @@ let interfaces = CU.Name.Tbl.create 100
 
 module Cmx_consistbl = Consistbl.Make (CU) (Unit)
 let crc_implementations = Cmx_consistbl.create ()
+<<<<<<< HEAD
 let implementations = ref ([] : CU.t list)
 let implementations_defined = CU.Tbl.create 100
 let cmx_required = ref ([] : CU.t list)
+||||||| 23e84b8c4d
+let implementations = ref ([] : string list)
+let implementations_defined = ref ([] : (string * string) list)
+let cmx_required = ref ([] : string list)
+=======
+let implementations = ref ([] : string list)
+let cmx_required = ref ([] : string list)
+>>>>>>> ocaml/5.4
 
+<<<<<<< HEAD
 let check_cmi_consistency file_name cmis =
   try
     Array.iter
@@ -69,6 +96,26 @@ let check_cmi_consistency file_name cmis =
         let info = Import_info.Intf.info import in
         CU.Name.Tbl.replace interfaces name ();
         match info with
+||||||| 23e84b8c4d
+let check_consistency file_name unit crc =
+  begin try
+    let source = List.assoc unit.ui_name !implementations_defined in
+    raise (Error(Multiple_definition(unit.ui_name, file_name, source)))
+  with Not_found -> ()
+  end;
+  begin try
+    List.iter
+      (fun (name, crco) ->
+        interfaces := name :: !interfaces;
+        match crco with
+=======
+let check_consistency file_name unit crc =
+  begin try
+    List.iter
+      (fun (name, crco) ->
+        interfaces := name :: !interfaces;
+        match crco with
+>>>>>>> ocaml/5.4
           None -> ()
         | Some (kind, crc) ->
             Cmi_consistbl.check crc_interfaces name kind crc file_name)
@@ -110,11 +157,25 @@ let check_consistency ~unit cmis cmxs =
     raise (Error(Multiple_definition(ui_unit, unit.file_name, source)))
   with Not_found -> ()
   end;
+<<<<<<< HEAD
   implementations := unit.name :: !implementations;
   Cmx_consistbl.check crc_implementations unit.name () unit.crc unit.file_name;
   CU.Tbl.replace implementations_defined unit.name unit.file_name;
   if CU.is_packed unit.name then
     cmx_required := unit.name :: !cmx_required
+||||||| 23e84b8c4d
+  implementations := unit.ui_name :: !implementations;
+  Cmx_consistbl.check crc_implementations unit.ui_name crc file_name;
+  implementations_defined :=
+    (unit.ui_name, file_name) :: !implementations_defined;
+  if unit.ui_symbol <> unit.ui_name then
+    cmx_required := unit.ui_name :: !cmx_required
+=======
+  implementations := unit.ui_name :: !implementations;
+  Cmx_consistbl.check crc_implementations unit.ui_name crc file_name;
+  if unit.ui_symbol <> unit.ui_name then
+    cmx_required := unit.ui_name :: !cmx_required
+>>>>>>> ocaml/5.4
 
 let extract_crc_interfaces () =
   CU.Name.Tbl.fold (fun name () crcs ->
@@ -158,6 +219,7 @@ let runtime_lib () =
 
 (* First pass: determine which units are needed *)
 
+<<<<<<< HEAD
 let missing_globals =
   (Hashtbl.create 17 :
      (CU.t, (string * CU.Name.t option) list ref) Hashtbl.t)
@@ -186,6 +248,30 @@ let extract_missing_globals () =
   Hashtbl.iter (fun md rq -> mg := (md, List.map fmt !rq) :: !mg) missing_globals;
   !mg
 
+||||||| 23e84b8c4d
+let missing_globals = (Hashtbl.create 17 : (string, string list ref) Hashtbl.t)
+
+let is_required name =
+  try ignore (Hashtbl.find missing_globals name); true
+  with Not_found -> false
+
+let add_required by (name, _crc) =
+  try
+    let rq = Hashtbl.find missing_globals name in
+    rq := by :: !rq
+  with Not_found ->
+    Hashtbl.add missing_globals name (ref [by])
+
+let remove_required name =
+  Hashtbl.remove missing_globals name
+
+let extract_missing_globals () =
+  let mg = ref [] in
+  Hashtbl.iter (fun md rq -> mg := (md, !rq) :: !mg) missing_globals;
+  !mg
+
+=======
+>>>>>>> ocaml/5.4
 type file =
   | Unit of string * unit_infos * Digest.t
   | Library of string * library_infos
@@ -212,6 +298,7 @@ let read_file obj_name =
   end
   else raise(Error(Not_an_object_file file_name))
 
+<<<<<<< HEAD
 let assume_no_prefix modname =
   (* We're the linker, so we assume that everything's already been packed, so
      no module needs its prefix considered. *)
@@ -219,8 +306,14 @@ let assume_no_prefix modname =
 
 let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
   match read_file file with
+||||||| 23e84b8c4d
+let scan_file file tolink = match file with
+=======
+let scan_file ldeps file tolink = match file with
+>>>>>>> ocaml/5.4
   | Unit (file_name,info,crc) ->
       (* This is a .cmx file. It must be linked in any case. *)
+<<<<<<< HEAD
       remove_required info.ui_unit;
       List.iter (fun import ->
           add_required (file_name, None) import)
@@ -249,6 +342,17 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
         Generic_fns.Tbl.add ~imports:cached_genfns_imports genfns info.ui_generic_fns
       in
       object_file_name :: objfiles, unit :: tolink, cached_genfns_imports
+||||||| 23e84b8c4d
+      remove_required info.ui_name;
+      List.iter (add_required file_name) info.ui_imports_cmx;
+      (info, file_name, crc) :: tolink
+=======
+      Linkdeps.add ldeps
+        ~filename:file_name ~compunit:info.ui_name
+        ~provides:[info.ui_name]
+        ~requires:(List.map fst info.ui_imports_cmx);
+      (info, file_name, crc) :: tolink
+>>>>>>> ocaml/5.4
   | Library (file_name,infos) ->
       (* This is an archive file. Each unit contained in it will be linked
          in only if needed. *)
@@ -276,8 +380,15 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
            let li_name = CU.name info.li_name in
            if info.li_force_link
            || !Clflags.link_everything
+<<<<<<< HEAD
            || is_required info.li_name
+||||||| 23e84b8c4d
+           || is_required info.ui_name
+=======
+           || Linkdeps.required ldeps info.ui_name
+>>>>>>> ocaml/5.4
            then begin
+<<<<<<< HEAD
              remove_required info.li_name;
              let req_by = (file_name, Some li_name) in
              info.li_imports_cmx |> Misc.Bitmap.iter (fun i ->
@@ -310,6 +421,19 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
              in
              check_consistency ~unit [| |] [| |];
              unit :: reqd
+||||||| 23e84b8c4d
+             remove_required info.ui_name;
+             List.iter (add_required (Printf.sprintf "%s(%s)"
+                                        file_name info.ui_name))
+               info.ui_imports_cmx;
+             (info, file_name, crc) :: reqd
+=======
+             Linkdeps.add ldeps
+               ~filename:file_name ~compunit:info.ui_name
+               ~provides:[info.ui_name]
+               ~requires:(List.map fst info.ui_imports_cmx);
+             (info, file_name, crc) :: reqd
+>>>>>>> ocaml/5.4
            end else
            reqd)
         infos.lib_units tolink, cached_genfns_imports
@@ -456,6 +580,7 @@ let call_linker_shared ?(native_toplevel = false) file_list output_name =
   if not (exitcode = 0)
   then raise(Error(Linking_error exitcode))
 
+<<<<<<< HEAD
 let link_shared unix ~ppf_dump objfiles output_name =
   Profile.(record_call (annotate_file_name output_name)) (fun () ->
     if !Oxcaml_flags.use_cached_generic_functions then
@@ -475,6 +600,27 @@ let link_shared unix ~ppf_dump objfiles output_name =
         objfiles
         ([],[], Generic_fns.Partition.Set.empty)
     in
+||||||| 23e84b8c4d
+let link_shared ~ppf_dump objfiles output_name =
+  Profile.record_call output_name (fun () ->
+    let obj_infos = List.map read_file objfiles in
+    let units_tolink = List.fold_right scan_file obj_infos [] in
+    List.iter
+      (fun (info, file_name, crc) -> check_consistency file_name info crc)
+      units_tolink;
+=======
+let link_shared ~ppf_dump objfiles output_name =
+  Profile.record_call output_name (fun () ->
+    let obj_infos = List.map read_file objfiles in
+    let ldeps = Linkdeps.create ~complete:false in
+    let units_tolink = List.fold_right (scan_file ldeps) obj_infos [] in
+    (match Linkdeps.check ldeps with
+     | None -> ()
+     | Some e -> raise (Error (Link_error e)));
+    List.iter
+      (fun (info, file_name, crc) -> check_consistency file_name info crc)
+      units_tolink;
+>>>>>>> ocaml/5.4
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
     let objfiles = List.rev ml_objfiles @ List.rev !Clflags.ccobjs in
@@ -623,6 +769,7 @@ let link unix ~ppf_dump objfiles output_name =
       if !Clflags.nopervasives then objfiles
       else if !Clflags.output_c_object then stdlib :: objfiles
       else stdlib :: (objfiles @ [stdexit]) in
+<<<<<<< HEAD
     let genfns = Generic_fns.Tbl.make () in
     let ml_objfiles, units_tolink, cached_genfns_imports =
       List.fold_right
@@ -634,6 +781,30 @@ let link unix ~ppf_dump objfiles output_name =
       [] -> ()
     | mg -> raise(Error(Missing_implementations mg))
     end;
+||||||| 23e84b8c4d
+    let obj_infos = List.map read_file objfiles in
+    let units_tolink = List.fold_right scan_file obj_infos [] in
+    Array.iter remove_required Runtimedef.builtin_exceptions;
+    begin match extract_missing_globals() with
+      [] -> ()
+    | mg -> raise(Error(Missing_implementations mg))
+    end;
+    List.iter
+      (fun (info, file_name, crc) -> check_consistency file_name info crc)
+      units_tolink;
+    let crc_interfaces = extract_crc_interfaces () in
+=======
+    let obj_infos = List.map read_file objfiles in
+    let ldeps = Linkdeps.create ~complete:true in
+    let units_tolink = List.fold_right (scan_file ldeps) obj_infos [] in
+    (match Linkdeps.check ldeps with
+     | None -> ()
+     | Some e -> raise (Error (Link_error e)));
+    List.iter
+      (fun (info, file_name, crc) -> check_consistency file_name info crc)
+      units_tolink;
+    let crc_interfaces = extract_crc_interfaces () in
+>>>>>>> ocaml/5.4
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
                                                  (* put user's opts first *)
@@ -672,13 +843,22 @@ let check_consistency file_name u crc =
 
 (* Error report *)
 
+<<<<<<< HEAD
 open Format
+||||||| 23e84b8c4d
+open Format
+module Style = Misc.Style
+=======
+module Style = Misc.Style
+open Format_doc
+>>>>>>> ocaml/5.4
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | File_not_found name ->
       fprintf ppf "Cannot find file %s" name
   | Not_an_object_file name ->
       fprintf ppf "The file %a is not a compilation unit description"
+<<<<<<< HEAD
         Location.print_filename name
   | Missing_implementations l ->
      let print_references ppf = function
@@ -695,33 +875,92 @@ let report_error ppf = function
       fprintf ppf
        "@[<v 2>No implementations provided for the following modules:%a@]"
        print_modules l
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) name
+  | Missing_implementations l ->
+     let print_references ppf = function
+       | [] -> ()
+       | r1 :: rl ->
+           Style.inline_code ppf r1;
+           List.iter (fun r -> fprintf ppf ",@ %a" Style.inline_code r) rl in
+      let print_modules ppf =
+        List.iter
+         (fun (md, rq) ->
+           fprintf ppf "@ @[<hov 2>%a referenced from %a@]"
+             Style.inline_code md
+             print_references rq) in
+      fprintf ppf
+       "@[<v 2>No implementations provided for the following modules:%a@]"
+       print_modules l
+=======
+        Location.Doc.quoted_filename name
+>>>>>>> ocaml/5.4
   | Inconsistent_interface(intf, file1, file2) ->
       fprintf ppf
        "@[<hov>Files %a@ and %a@ make inconsistent assumptions \
               over interface %a@]"
+<<<<<<< HEAD
        Location.print_filename file1
        Location.print_filename file2
        CU.Name.print intf
+||||||| 23e84b8c4d
+       (Style.as_inline_code Location.print_filename) file1
+       (Style.as_inline_code Location.print_filename) file2
+       Style.inline_code intf
+=======
+       Location.Doc.quoted_filename file1
+       Location.Doc.quoted_filename file2
+       Style.inline_code intf
+>>>>>>> ocaml/5.4
   | Inconsistent_implementation(intf, file1, file2) ->
       fprintf ppf
        "@[<hov>Files %a@ and %a@ make inconsistent assumptions \
               over implementation %a@]"
+<<<<<<< HEAD
        Location.print_filename file1
        Location.print_filename file2
        CU.print intf
+||||||| 23e84b8c4d
+       (Style.as_inline_code Location.print_filename) file1
+       (Style.as_inline_code Location.print_filename) file2
+       Style.inline_code intf
+=======
+       Location.Doc.quoted_filename file1
+       Location.Doc.quoted_filename file2
+       Style.inline_code intf
+>>>>>>> ocaml/5.4
   | Assembler_error file ->
+<<<<<<< HEAD
       fprintf ppf "Error while assembling %a" Location.print_filename file
+||||||| 23e84b8c4d
+      fprintf ppf "Error while assembling %a"
+        (Style.as_inline_code Location.print_filename) file
+=======
+      fprintf ppf "Error while assembling %a"
+        Location.Doc.quoted_filename file
+>>>>>>> ocaml/5.4
   | Linking_error exitcode ->
       fprintf ppf "Error during linking (exit code %d)" exitcode
+<<<<<<< HEAD
   | Multiple_definition(modname, file1, file2) ->
       fprintf ppf
         "@[<hov>Files %a@ and %a@ both define a module named %a@]"
         Location.print_filename file1
         Location.print_filename file2
         CU.Name.print modname
+||||||| 23e84b8c4d
+  | Multiple_definition(modname, file1, file2) ->
+      fprintf ppf
+        "@[<hov>Files %a@ and %a@ both define a module named %a@]"
+        (Style.as_inline_code Location.print_filename) file1
+        (Style.as_inline_code Location.print_filename) file2
+        Style.inline_code modname
+=======
+>>>>>>> ocaml/5.4
   | Missing_cmx(filename, name) ->
       fprintf ppf
         "@[<hov>File %a@ was compiled without access@ \
+<<<<<<< HEAD
          to the .cmx file@ for module %a,@ \
          which was produced by `ocamlopt -for-pack'.@ \
          Please recompile %a@ with the correct `-I' option@ \
@@ -741,10 +980,62 @@ let report_error ppf = function
       fprintf ppf "Error running dsymutil (exit code %d)" exitcode
   | Objcopy_error exitcode ->
       fprintf ppf "Error running objcopy (exit code %d)" exitcode
+||||||| 23e84b8c4d
+         to the %a file@ for module %a,@ \
+         which was produced by %a.@ \
+         Please recompile %a@ with the correct %a option@ \
+         so that %a@ is found.@]"
+        (Style.as_inline_code Location.print_filename) filename
+        Style.inline_code ".cmx"
+        Style.inline_code name
+        Style.inline_code "ocamlopt -for-pack"
+        (Style.as_inline_code Location.print_filename) filename
+        Style.inline_code "-I"
+        Style.inline_code (name^".cmx")
+=======
+         to the %a file@ for module %a,@ \
+         which was produced by %a.@ \
+         Please recompile %a@ with the correct %a option@ \
+         so that %a@ is found.@]"
+        Location.Doc.quoted_filename filename
+        Style.inline_code ".cmx"
+        Style.inline_code name
+        Style.inline_code "ocamlopt -for-pack"
+        Location.Doc.quoted_filename filename
+        Style.inline_code "-I"
+        Style.inline_code (name^".cmx")
+  | Link_error e ->
+      Linkdeps.report_error_doc ~print_filename:Location.Doc.filename ppf e
+>>>>>>> ocaml/5.4
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+<<<<<<< HEAD
+||||||| 23e84b8c4d
+
+let reset () =
+  Cmi_consistbl.clear crc_interfaces;
+  Cmx_consistbl.clear crc_implementations;
+  implementations_defined := [];
+  cmx_required := [];
+  interfaces := [];
+  implementations := [];
+  lib_ccobjs := [];
+  lib_ccopts := []
+=======
+
+let report_error = Format_doc.compat report_error_doc
+
+let reset () =
+  Cmi_consistbl.clear crc_interfaces;
+  Cmx_consistbl.clear crc_implementations;
+  cmx_required := [];
+  interfaces := [];
+  implementations := [];
+  lib_ccobjs := [];
+  lib_ccopts := []
+>>>>>>> ocaml/5.4

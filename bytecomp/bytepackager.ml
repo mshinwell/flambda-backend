@@ -156,21 +156,33 @@ let process_append_bytecode oc state objfile compunit =
     let events, debug_dirs =
       if !Clflags.debug && compunit.cu_debug > 0 then begin
         seek_in ic compunit.cu_debug;
+<<<<<<< HEAD
         (* CR ocaml 5 compressed-marshal:
         let unit_events = (Compression.input_value ic : debug_event list) in
         *)
         let unit_events = (Marshal.from_channel ic : debug_event list) in
+||||||| 23e84b8c4d
+        let unit_events = (input_value ic : debug_event list) in
+=======
+        let unit_events = (Compression.input_value ic : debug_event list) in
+>>>>>>> ocaml/5.4
         let events =
           rev_append_map
             (relocate_debug state.offset state.subst)
             unit_events
             state.events in
+<<<<<<< HEAD
         let unit_debug_dirs =
           (* CR ocaml 5 compressed-marshal:
           (Compression.input_value ic : string list)
           *)
           (Marshal.from_channel ic : string list)
         in
+||||||| 23e84b8c4d
+        let unit_debug_dirs = (input_value ic : string list) in
+=======
+        let unit_debug_dirs = (Compression.input_value ic : string list) in
+>>>>>>> ocaml/5.4
         let debug_dirs =
           String.Set.union
             state.debug_dirs
@@ -369,27 +381,61 @@ let package_files ~ppf_dump initial_env files targetfile =
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
     Forward_reference(file, compunit) ->
       fprintf ppf "Forward reference to %a in file %a"
+<<<<<<< HEAD
         (Style.as_inline_code CU.print) compunit
         (Style.as_inline_code Location.print_filename) file
+||||||| 23e84b8c4d
+        Style.inline_code (Compunit.name compunit)
+        (Style.as_inline_code Location.print_filename) file
+=======
+        Style.inline_code (Compunit.name compunit)
+        Location.Doc.quoted_filename file
+>>>>>>> ocaml/5.4
   | Multiple_definition(file, compunit) ->
       fprintf ppf "File %a redefines %a"
+<<<<<<< HEAD
         (Style.as_inline_code Location.print_filename) file
         (Style.as_inline_code CU.print) compunit
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) file
+        Style.inline_code (Compunit.name compunit)
+=======
+        Location.Doc.quoted_filename file
+        Style.inline_code (Compunit.name compunit)
+>>>>>>> ocaml/5.4
   | Not_an_object_file file ->
       fprintf ppf "%a is not a bytecode object file"
+<<<<<<< HEAD
         (Style.as_inline_code Location.print_filename) file
   | Illegal_renaming(name, file, compunit) ->
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) file
+  | Illegal_renaming(name, file, id) ->
+=======
+        Location.Doc.quoted_filename file
+  | Illegal_renaming(name, file, id) ->
+>>>>>>> ocaml/5.4
       fprintf ppf "Wrong file naming: %a@ contains the code for\
                    @ %a when %a was expected"
+<<<<<<< HEAD
         (Style.as_inline_code Location.print_filename) file
         (Style.as_inline_code CU.print) name
         (Style.as_inline_code CU.print) compunit
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) file
+        Style.inline_code (Compunit.name name)
+        Style.inline_code (Compunit.name id)
+=======
+        Location.Doc.quoted_filename file
+        Style.inline_code (Compunit.name name)
+        Style.inline_code (Compunit.name id)
+>>>>>>> ocaml/5.4
   | File_not_found file ->
       fprintf ppf "File %a not found"
         Style.inline_code file
@@ -397,6 +443,8 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

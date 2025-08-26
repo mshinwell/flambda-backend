@@ -183,7 +183,7 @@ and 'k pattern_desc =
             Invariant: n >= 2
          *)
   | Tpat_construct :
-      Longident.t loc * Types.constructor_description *
+      Longident.t loc * Data_types.constructor_description *
         value general_pattern list *
         ((Ident.t loc * Parsetree.jkind_annotation option) list * core_type)
           option ->
@@ -207,16 +207,19 @@ and 'k pattern_desc =
             See {!Types.row_desc} for an explanation of the last parameter.
          *)
   | Tpat_record :
-      (Longident.t loc * Types.label_description * value general_pattern) list *
-        closed_flag ->
-      value pattern_desc
+      (Longident.t loc
+       * Data_types.label_description
+       * value general_pattern
+      ) list
+      * closed_flag
+      -> value pattern_desc
         (** { l1=P1; ...; ln=Pn }     (flag = Closed)
             { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
             Invariant: n > 0
          *)
   | Tpat_record_unboxed_product :
-      (Longident.t loc * Types.unboxed_label_description * value general_pattern) list *
+      (Longident.t loc * Data_types.unboxed_label_description * value general_pattern) list *
         closed_flag ->
       value pattern_desc
         (** #{ l1=P1; ...; ln=Pn }     (flag = Closed)
@@ -339,7 +342,7 @@ and expression_desc =
       (** fun P0 P1 -> function p1 -> e1 | p2 -> e2  (body = Tfunction_cases _)
           fun P0 P1 -> E                             (body = Tfunction_body _)
           This construct has the same arity as the originating
-          {{!Parsetree.Pexp_function}[Pexp_function]}.
+          {{!Parsetree.expression_desc.Pexp_function}[Pexp_function]}.
           Arity determines when side-effects for effectful parameters are run
           (e.g. optional argument defaults, matching against lazy patterns).
           Parameters' effects are run left-to-right when an n-ary function is
@@ -360,22 +363,27 @@ and expression_desc =
             The resulting typedtree for the application is:
             Texp_apply (Texp_ident "f/1037",
                         [(Nolabel, Omitted _);
-                         (Labelled "y", Some (Texp_constant Const_int 3))
+                         (Labelled "y", Arg (Texp_constant Const_int 3))
                         ])
 
             The [Zero_alloc.assume option] records the optional [@zero_alloc
             assume] attribute that may appear on applications. *)
-  | Texp_match of expression * Jkind.sort * computation case list * partial
+  | Texp_match of expression * Jkind.sort * computation case list * value case list * partial
         (** match E0 with
             | P1 -> E1
             | P2 | exception P3 -> E2
             | exception P4 -> E3
+            | effect P4 k -> E4
 
             [Texp_match (E0, sort_of_E0, [(P1, E1); (P2 | exception P3, E2);
-                              (exception P4, E3)], _)]
+                              (exception P4, E3)], [(P4, E4)],  _)]
          *)
-  | Texp_try of expression * value case list
-        (** try E with P1 -> E1 | ... | PN -> EN *)
+  | Texp_try of expression * value case list * value case list
+         (** try E with
+            | P1 -> E1
+            | effect P2 k -> E2
+            [Texp_try (E, [(P1, E1)], [(P2, E2)])]
+          *)
   | Texp_tuple of (string option * expression) list * alloc_mode
         (** [Texp_tuple(el)] represents
             - [(E1, ..., En)]
@@ -395,7 +403,7 @@ and expression_desc =
                 when [el] is [(Some L1, E1, s1); (None, E2, s2)]
           *)
   | Texp_construct of
-      Longident.t loc * Types.constructor_description *
+      Longident.t loc * Data_types.constructor_description *
       expression list * alloc_mode option
         (** C                []
             C E              [E]
@@ -411,7 +419,7 @@ and expression_desc =
             in which case it does not need allocation.
           *)
   | Texp_record of {
-      fields : ( Types.label_description * record_label_definition ) array;
+      fields : ( Data_types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : (expression * Jkind.sort * Unique_barrier.t) option;
       alloc_mode : alloc_mode option
@@ -431,7 +439,7 @@ and expression_desc =
             in which case it does not need allocation.
           *)
   | Texp_record_unboxed_product of {
-      fields : ( Types.unboxed_label_description * record_label_definition ) array;
+      fields : ( Data_types.unboxed_label_description * record_label_definition ) array;
       representation : Types.record_unboxed_product_representation;
       extended_expression : (expression * Jkind.sort) option;
     }
@@ -447,20 +455,20 @@ and expression_desc =
                 extended_expression = Some E0 }
           *)
   | Texp_atomic_loc of
-      expression * Jkind.sort * Longident.t loc * Types.label_description *
+      expression * Jkind.sort * Longident.t loc * Data_types.label_description *
       alloc_mode
   | Texp_field of expression * Jkind.sort * Longident.t loc *
-      Types.label_description * texp_field_boxing * Unique_barrier.t
+      Data_types.label_description * texp_field_boxing * Unique_barrier.t
     (** - The sort is the sort of the whole record (which may be non-value if
           the record is @@unboxed).
         - [texp_field_boxing] provides extra information depending on if the
           projection requires boxing. *)
   | Texp_unboxed_field of
-      expression * Jkind.sort * Longident.t loc * Types.unboxed_label_description *
+      expression * Jkind.sort * Longident.t loc * Data_types.unboxed_label_description *
         unique_use
   | Texp_setfield of
       expression * Mode.Locality.l * Longident.t loc *
-      Types.label_description * expression
+      Data_types.label_description * expression
     (** [alloc_mode] translates to the [modify_mode] of the record *)
   | Texp_array of Types.mutability * Jkind.Sort.t * expression list * alloc_mode
   | Texp_idx of block_access * unboxed_access list
@@ -526,6 +534,19 @@ and expression_desc =
 and function_curry =
   | More_args of { partial_mode : Mode.Alloc.l }
   | Final_arg
+
+and meth =
+    Tmeth_name of string
+  | Tmeth_val of Ident.t
+  | Tmeth_ancestor of Ident.t * Path.t
+
+and 'k case =
+    {
+     c_lhs: 'k general_pattern;
+     c_cont: Ident.t option;
+     c_guard: expression option;
+     c_rhs: expression;
+    }
 
 and function_param =
   {
@@ -1034,10 +1055,10 @@ and core_type_desc =
           argument ([lbl:[%call_pos] -> ...]). *)
 
 and package_type = {
-  pack_path : Path.t;
-  pack_fields : (Longident.t loc * core_type) list;
-  pack_type : Types.module_type;
-  pack_txt : Longident.t loc;
+  tpt_path : Path.t;
+  tpt_cstrs : (Longident.t loc * core_type) list;
+  tpt_type : Types.module_type;
+  tpt_txt : Longident.t loc;
 }
 
 and row_field = {
@@ -1099,6 +1120,7 @@ and label_declaration =
      ld_uid: Uid.t;
      ld_mutable: Types.mutability;
      ld_modalities: Mode.Modality.Value.Const.t;
+     ld_atomic: atomic_flag;
      ld_type: core_type;
      ld_loc: Location.t;
      ld_attributes: attributes;
@@ -1346,3 +1368,6 @@ val min_mode_with_locks : mode_with_locks
 
 (** Get the mode, asserting no held locks. *)
 val mode_without_locks_exn : mode_with_locks -> Mode.Value.l
+
+val map_apply_arg:
+  ('a -> ' b) -> ('a, 'omitted) arg_or_omitted ->  ('b, 'omitted) arg_or_omitted

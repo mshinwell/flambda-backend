@@ -13,7 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open Format
+open Format_doc
 
 type error =
   | CannotRun of string
@@ -182,6 +182,18 @@ let set_input_lexbuf ic =
   Location.input_lexbuf := Some lexbuf;
   lexbuf
 
+let check_loc_ghost (type a) (kind : a ast_kind) (ast : a) ~inputfile =
+  if !Clflags.parsetree_ghost_loc_invariant then
+    let meth : (Ast_iterator.iterator -> Ast_iterator.iterator -> a -> unit) =
+      match kind with
+      | Structure -> (fun i -> i.structure)
+      | Signature -> (fun i -> i.signature)
+    in
+    let source_contents =
+      In_channel.with_open_bin inputfile In_channel.input_all
+    in
+    Ast_invariants.check_loc_ghost meth ast ~source_contents
+
 let file_aux ~tool_name ~sourcefile inputfile (type a) parse_fun invariant_fun
              (kind : a ast_kind) : a =
   let ast =
@@ -216,6 +228,7 @@ let file_aux ~tool_name ~sourcefile inputfile (type a) parse_fun invariant_fun
       Profile.record_call "parser" (fun () -> parse_fun lexbuf)
     end
   in
+  check_loc_ghost kind ast ~inputfile;
   Profile.record_call "-ppx" (fun () ->
       apply_rewriters ~restore:false ~tool_name kind ast
     )
@@ -223,7 +236,7 @@ let file_aux ~tool_name ~sourcefile inputfile (type a) parse_fun invariant_fun
 let file ~tool_name inputfile parse_fun ast_kind =
   file_aux ~tool_name ~sourcefile:inputfile inputfile parse_fun ignore ast_kind
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | CannotRun cmd ->
       fprintf ppf "Error while running external preprocessor@.\
                    Command line: %s@." cmd
@@ -234,9 +247,11 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc
 
 let parse_file ~tool_name invariant_fun parse kind sourcefile =
   Location.input_name := sourcefile;

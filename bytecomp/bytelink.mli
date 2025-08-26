@@ -24,7 +24,15 @@ module DepSet : Set.S with type elt = Dep.t
 val link : filepath list -> filepath -> unit
 val reset : unit -> unit
 
+<<<<<<< HEAD
 val check_consistency: filepath -> Cmo_format.compilation_unit_descr -> unit
+||||||| 23e84b8c4d
+val check_consistency: filepath -> Cmo_format.compilation_unit -> unit
+=======
+val check_consistency: filepath -> Cmo_format.compilation_unit -> unit
+val linkdeps_unit :
+  Linkdeps.t -> filename:string -> Cmo_format.compilation_unit -> unit
+>>>>>>> ocaml/5.4
 
 val extract_crc_interfaces: unit -> Import_info.t list
 
@@ -37,13 +45,25 @@ type error =
   | Custom_runtime
   | File_exists of filepath
   | Cannot_open_dll of filepath
+<<<<<<< HEAD
   | Required_compunit_unavailable of Compilation_unit.t * Compilation_unit.t
+||||||| 23e84b8c4d
+  | Required_compunit_unavailable of (Cmo_format.compunit * Cmo_format.compunit)
+=======
+>>>>>>> ocaml/5.4
   | Camlheader of string * filepath
+<<<<<<< HEAD
   | Wrong_link_order of DepSet.t
   | Multiple_definition of Compilation_unit.t * filepath * filepath
+||||||| 23e84b8c4d
+  | Wrong_link_order of DepSet.t
+  | Multiple_definition of Cmo_format.compunit * filepath * filepath
+=======
+  | Link_error of Linkdeps.error
+  | Needs_custom_runtime of filepath
+>>>>>>> ocaml/5.4
 
 exception Error of error
 
-open Format
-
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

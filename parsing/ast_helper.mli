@@ -44,15 +44,16 @@ val with_default_loc: loc -> (unit -> 'a) -> 'a
 (** {1 Constants} *)
 
 module Const : sig
-  val char : char -> constant
+  val mk : ?loc:loc -> constant_desc -> constant
+  val char : ?loc:loc -> char -> constant
   val string :
     ?quotation_delimiter:string -> ?loc:Location.t -> string -> constant
-  val integer : ?suffix:char -> string -> constant
-  val int : ?suffix:char -> int -> constant
-  val int32 : ?suffix:char -> int32 -> constant
-  val int64 : ?suffix:char -> int64 -> constant
-  val nativeint : ?suffix:char -> nativeint -> constant
-  val float : ?suffix:char -> string -> constant
+  val integer : ?loc:loc -> ?suffix:char -> string -> constant
+  val int : ?loc:loc -> ?suffix:char -> int -> constant
+  val int32 : ?loc:loc -> ?suffix:char -> int32 -> constant
+  val int64 : ?loc:loc -> ?suffix:char -> int64 -> constant
+  val nativeint : ?loc:loc -> ?suffix:char -> nativeint -> constant
+  val float : ?loc:loc -> ?suffix:char -> string -> constant
 end
 
 (** {1 Attributes} *)
@@ -87,8 +88,7 @@ module Typ :
                  -> label list option -> core_type
     val poly: ?loc:loc -> ?attrs:attrs ->
       (str * jkind_annotation option) list -> core_type -> core_type
-    val package: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
-                 -> core_type
+    val package: ?loc:loc -> ?attrs:attrs -> package_type -> core_type
     val open_ : ?loc:loc -> ?attrs:attrs -> lid -> core_type -> core_type
     val of_kind : ?loc:loc -> ?attrs:attrs -> jkind_annotation -> core_type
     val extension: ?loc:loc -> ?attrs:attrs -> extension -> core_type
@@ -104,6 +104,10 @@ module Typ :
         ['a. 'a -> 'a] during parsing.
         @since 4.05
      *)
+
+    val package_type: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
+      -> package_type
+    (** @since 5.4 *)
   end
 
 (** Patterns *)
@@ -139,6 +143,7 @@ module Pat:
     val unpack: ?loc:loc -> ?attrs:attrs -> str_opt -> pattern
     val open_: ?loc:loc -> ?attrs:attrs  -> lid -> pattern -> pattern
     val exception_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern
+    val effect_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern -> pattern
     val extension: ?loc:loc -> ?attrs:attrs -> extension -> pattern
   end
 
@@ -208,7 +213,8 @@ module Exp:
     val object_: ?loc:loc -> ?attrs:attrs -> class_structure -> expression
     val newtype: ?loc:loc -> ?attrs:attrs -> str -> jkind_annotation option ->
       expression  -> expression
-    val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> expression
+    val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> package_type option
+               -> expression
     val open_: ?loc:loc -> ?attrs:attrs -> open_declaration -> expression
                -> expression
     val letop: ?loc:loc -> ?attrs:attrs -> binding_op

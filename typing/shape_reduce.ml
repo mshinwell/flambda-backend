@@ -27,6 +27,7 @@ type result =
 let rec print_result fmt result =
   match result with
   | Resolved uid ->
+
       Format.fprintf fmt "@[Resolved: %a@]@;" Uid.print uid
   | Resolved_alias (uid, r) ->
       Format.fprintf fmt "@[Alias: %a -> %a@]@;"

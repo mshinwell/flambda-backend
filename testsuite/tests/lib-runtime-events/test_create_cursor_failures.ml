@@ -1,14 +1,4 @@
 (* TEST
-{
-   runtime4;
-   skip;
-}{
-   runtime5;
-   include unix;
-   include runtime_events;
-   libunix;
-   { bytecode; }
-   { native; }
  }
 *)
 

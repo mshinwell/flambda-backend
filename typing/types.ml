@@ -348,8 +348,12 @@ end
 type transient_expr =
   { mutable desc: type_desc;
     mutable level: int;
-    mutable scope: int;
+    mutable scope: scope_field;
     id: int }
+
+and scope_field = int
+  (* bit field: 27 bits for scope (Ident.highest_scope = 100_000_000)
+     and at least 4 marks *)
 
 and type_expr = transient_expr
 
@@ -367,8 +371,12 @@ and type_desc =
   | Tvariant of row_desc
   | Tunivar of { name : string option; jkind : jkind_lr }
   | Tpoly of type_expr * type_expr list
-  | Tpackage of Path.t * (Longident.t * type_expr) list
+  | Tpackage of package
   | Tof_kind of jkind_lr
+
+and package =
+    { pack_path : Path.t;
+      pack_cstrs : (string list * type_expr) list }
 
 and arg_label =
   | Nolabel
@@ -392,13 +400,14 @@ and fixed_explanation =
   | Rigid
   | Fixed_existential
 and row_field = [`some] row_field_gen
+and row_field_cell = [`some | `none] row_field_gen ref
 and _ row_field_gen =
     RFpresent : type_expr option -> [> `some] row_field_gen
   | RFeither :
       { no_arg: bool;
         arg_type: type_expr list;
         matched: bool;
-        ext: [`some | `none] row_field_gen ref} -> [> `some] row_field_gen
+        ext: row_field_cell} -> [> `some] row_field_gen
   | RFabsent : [> `some] row_field_gen
   | RFnone : [> `none] row_field_gen
 
@@ -478,6 +487,8 @@ module TransientTypeOps = struct
   let equal t1 t2 = t1 == t2
 end
 
+module TransientTypeHash = Hashtbl.Make(TransientTypeOps)
+
 (* *)
 
 module Uid = Shape.Uid
@@ -524,18 +535,25 @@ and method_privacy =
      0 <= may_pos <= pos
      0 <= may_weak <= may_neg <= neg
      0 <= inj
+   may_pos/may_neg mean possible positive/negative occurrences;
+     thus, may_pos + may_neg = invariant
    Additionally, the following implications are valid
      pos => inj
      neg => inj
    Examples:
-     type 'a t        : may_pos + may_neg + may_weak
+     type 'a t        : may_pos + may_neg
+     type +'a t       : may_pos
+     type -'a t       : may_neg
+     type +-'a t      : null (no occurrence of 'a assured)
+     type !'a t       : may_pos + may_neg + inj
+     type +!'a t      : may_pos + inj
+     type -!'a t      : may_neg + inj
+     type +-!'a t     : inj
      type 'a t = 'a   : pos
      type 'a t = 'a -> unit : neg
      type 'a t = ('a -> unit) -> unit : pos + may_weak
      type 'a t = A of (('a -> unit) -> unit) : pos
      type +'a p = ..  : may_pos + inj
-     type +!'a t      : may_pos + inj
-     type -!'a t      : may_neg + inj
      type 'a t = A    : inj
  *)
 
@@ -561,6 +579,7 @@ module Variance = struct
   let unknown = 7
   let full = single Inv
   let covariant = single Pos
+  let contravariant = single Neg
   let swap f1 f2 v v' =
     set_if (mem f2 v) f1 (set_if (mem f1 v) f2 v')
   let conjugate v =
@@ -707,6 +726,7 @@ and label_declaration =
     ld_id: Ident.t;
     ld_mutable: mutability;
     ld_modalities: Mode.Modality.Value.Const.t;
+    ld_atomic: atomic_flag;
     ld_type: type_expr;
     ld_sort: Jkind_types.Sort.Const.t;
     ld_loc: Location.t;
@@ -1331,12 +1351,48 @@ let repr t =
      repr_link1 t t'
  | _ -> t
 
+(* scope_field and marks *)
+
+let scope_mask = (1 lsl 27) - 1
+let marks_mask = (-1) lxor scope_mask
+let () = assert (Ident.highest_scope land marks_mask = 0)
+
+type type_mark =
+  | Mark of {mark: int; mutable marked: type_expr list}
+  | Hash of {visited: unit TransientTypeHash.t}
+let type_marks =
+  (* All the bits in marks_mask *)
+  List.init (Sys.int_size - 27) (fun x -> 1 lsl (x + 27))
+let available_marks = Local_store.s_ref type_marks
+let with_type_mark f =
+  match !available_marks with
+  | mark :: rem as old ->
+      available_marks := rem;
+      let mk = Mark {mark; marked = []} in
+      Misc.try_finally (fun () -> f mk) ~always: begin fun () ->
+        available_marks := old;
+        match mk with
+        | Mark {marked} ->
+            (* unmark marked type nodes *)
+            List.iter
+              (fun ty -> ty.scope <- ty.scope land ((-1) lxor mark))
+              marked
+        | Hash _ -> ()
+      end
+  | [] ->
+      (* When marks are exhausted, fall back to using a hash table *)
+      f (Hash {visited = TransientTypeHash.create 1})
+
 (* getters for type_expr *)
 
 let get_desc t = (repr t).desc
 let get_level t = (repr t).level
-let get_scope t = (repr t).scope
+let get_scope t = (repr t).scope land scope_mask
 let get_id t = (repr t).id
+let not_marked_node mark t =
+  match mark with
+  | Mark {mark} -> (repr t).scope land mark = 0
+  | Hash {visited} -> not (TransientTypeHash.mem visited (repr t))
 
 (* transient type_expr *)
 
@@ -1349,16 +1405,32 @@ module Transient_expr = struct
     | _ -> assert false);
     ty.desc <- d
   let set_level ty lv = ty.level <- lv
-  let set_scope ty sc = ty.scope <- sc
+  let get_scope ty = ty.scope land scope_mask
+  let get_marks ty = ty.scope lsr 27
+  let set_scope ty sc =
+    if (sc land marks_mask <> 0) then
+      invalid_arg "Types.Transient_expr.set_scope";
+    ty.scope <- (ty.scope land marks_mask) lor sc
   let set_var_jkind ty jkind' =
     match ty.desc with
     | Tvar { name; _ } ->
       set_desc ty (Tvar { name; jkind = jkind' })
     | _ -> Misc.fatal_error "set_var_jkind called on non-var"
+  let try_mark_node mark ty =
+    match mark with
+    | Mark ({mark} as mk) ->
+        (ty.scope land mark = 0) && (* mark type node when not marked *)
+        (ty.scope <- ty.scope lor mark; mk.marked <- ty :: mk.marked; true)
+    | Hash {visited} ->
+        not (TransientTypeHash.mem visited ty) &&
+        (TransientTypeHash.add visited ty (); true)
   let coerce ty = ty
   let repr = repr
   let type_expr ty = ty
 end
+
+(* setting marks *)
+let try_mark_node mark t = Transient_expr.try_mark_node mark (repr t)
 
 (* Comparison for [type_expr]; cannot be used for functors *)
 
@@ -1661,8 +1733,7 @@ let match_row_field ~present ~absent ~either (f : row_field) =
         | RFnone -> None
         | RFeither _ | RFpresent _ | RFabsent as e -> Some e
       in
-      either no_arg arg_type matched e
-
+      either no_arg arg_type matched (ext,e)
 
 (**** Some type creators ****)
 
@@ -1670,12 +1741,9 @@ let new_id = Local_store.s_ref (-1)
 
 let create_expr = Transient_expr.create
 
-let newty3 ~level ~scope desc  =
+let proto_newty3 ~level ~scope desc  =
   incr new_id;
   create_expr desc ~level ~scope ~id:!new_id
-
-let newty2 ~level desc =
-  newty3 ~level ~scope:Ident.lowest_scope desc
 
                   (**********************************)
                   (*  Utilities for backtracking    *)
@@ -1742,11 +1810,13 @@ let set_level ty level =
     if ty.id <= !last_snapshot then log_change (Clevel (ty, ty.level));
     Transient_expr.set_level ty level
   end
+
 (* TODO: introduce a guard and rename it to set_higher_scope? *)
 let set_scope ty scope =
   let ty = repr ty in
-  if scope <> ty.scope then begin
-    if ty.id <= !last_snapshot then log_change (Cscope (ty, ty.scope));
+  let prev_scope = ty.scope land scope_mask in
+  if scope <> prev_scope then begin
+    if ty.id <= !last_snapshot then log_change (Cscope (ty, prev_scope));
     Transient_expr.set_scope ty scope
   end
 let set_var_jkind ty jkind =

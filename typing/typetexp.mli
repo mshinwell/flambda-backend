@@ -181,10 +181,9 @@ type error =
   | Bad_jkind_annot of type_expr * Jkind.Violation.t
   | Did_you_mean_unboxed of Longident.t
   | Invalid_label_for_call_pos of Parsetree.arg_label
+  | Repeated_tuple_label of string
 
 exception Error of Location.t * Env.t * error
-
-val report_error: Env.t -> Format.formatter -> error -> unit
 
 (* Support for first-class modules. *)
 val transl_modtype_longident:  (* from Typemod *)

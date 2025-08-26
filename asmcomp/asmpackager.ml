@@ -246,8 +246,15 @@ let package_files unix ~ppf_dump initial_env files targetcmx ~flambda2 =
         try Load_path.find f
         with Not_found -> raise(Error(File_not_found f)))
       files in
+<<<<<<< HEAD
   let for_pack_prefix = CU.Prefix.from_clflags () in
   let cmx = Unit_info.Artifact.from_filename ~for_pack_prefix targetcmx in
+||||||| 23e84b8c4d
+  let cmi = Unit_info.(companion_cmi @@ Artifact.from_filename targetcmx) in
+  let obj = Unit_info.companion_obj cmi in
+=======
+  let cmx = Unit_info.Artifact.from_filename targetcmx in
+>>>>>>> ocaml/5.4
   let cmi = Unit_info.companion_cmi cmx in
   let obj = Unit_info.companion_obj cmx in
   (* Set the name of the current "input" *)
@@ -270,24 +277,50 @@ let package_files unix ~ppf_dump initial_env files targetcmx ~flambda2 =
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
     Illegal_renaming(name, file, id) ->
       fprintf ppf "Wrong file naming: %a@ contains the code for\
                    @ %a when %a was expected"
+<<<<<<< HEAD
         (Style.as_inline_code Location.print_filename) file
         (Style.as_inline_code CU.Name.print) name
         (Style.as_inline_code CU.Name.print) id
+||||||| 23e84b8c4d
+        (Style.as_inline_code Location.print_filename) file
+        Style.inline_code name Style.inline_code id
+=======
+        Location.Doc.quoted_filename file
+        Style.inline_code name Style.inline_code id
+>>>>>>> ocaml/5.4
   | Forward_reference(file, ident) ->
+<<<<<<< HEAD
       fprintf ppf "Forward reference to %a in file %a"
         (Style.as_inline_code CU.Name.print) ident
         (Style.as_inline_code Location.print_filename) file
+||||||| 23e84b8c4d
+      fprintf ppf "Forward reference to %a in file %a" Style.inline_code ident
+        (Style.as_inline_code Location.print_filename) file
+=======
+      fprintf ppf "Forward reference to %a in file %a" Style.inline_code ident
+        Location.Doc.quoted_filename file
+>>>>>>> ocaml/5.4
   | Wrong_for_pack(file, path) ->
+<<<<<<< HEAD
       fprintf ppf "File %a@ was not compiled with the `-for-pack %a' option"
         (Style.as_inline_code Location.print_filename) file
         (Style.as_inline_code CU.print) path
+||||||| 23e84b8c4d
+      fprintf ppf "File %a@ was not compiled with the %a option"
+        (Style.as_inline_code Location.print_filename) file
+        Style.inline_code ("-for-pack " ^ path)
+=======
+      fprintf ppf "File %a@ was not compiled with the %a option"
+        Location.Doc.quoted_filename file
+        Style.inline_code ("-for-pack " ^ path)
+>>>>>>> ocaml/5.4
   | File_not_found file ->
       fprintf ppf "File %a not found" Style.inline_code file
   | Assembler_error file ->
@@ -298,6 +331,8 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

@@ -20,6 +20,7 @@ open Misc
 open Asttypes
 open Primitive
 open Types
+open Data_types
 open Typedtree
 open Typeopt
 open Lambda
@@ -99,7 +100,7 @@ let prim_fresh_oo_id =
 let transl_extension_constructor ~scopes env path ext =
   let path =
     Printtyp.wrap_printing_env env ~error:true (fun () ->
-      Option.map (Printtyp.rewrite_double_underscore_longidents env) path)
+      Option.map (Out_type.rewrite_double_underscore_paths env) path)
   in
   let name =
     match path with
@@ -321,11 +322,11 @@ let transl_ident loc env ty path desc kind =
       transl_value_path loc env path
   |  _ -> fatal_error "Translcore.transl_exp: bad Texp_ident"
 
+let is_omitted = function
+  | Arg _ -> false
+  | Omitted () -> true
+
 let can_apply_primitive p pmode pos args =
-  let is_omitted = function
-    | Arg _ -> false
-    | Omitted _ -> true
-  in
   if List.exists (fun (_, arg) -> is_omitted arg) args then false
   else begin
     let nargs = List.length args in
@@ -482,17 +483,42 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
            ~result_layout
            ~position ~mode (transl_exp ~scopes Jkind.Sort.Const.for_function funct)
            oargs (of_location ~scopes e.exp_loc))
-  | Texp_match(arg, arg_sort, pat_expr_list, partial) ->
+  | Texp_match(arg, arg_sort, pat_expr_list, [], partial) ->
       let arg_sort = Jkind.Sort.default_for_transl_and_get arg_sort in
       transl_match ~scopes ~arg_sort ~return_sort:sort e arg pat_expr_list
         partial
-  | Texp_try(body, pat_expr_list) ->
+  | Texp_match(arg, arg_sort, pat_expr_list, eff_pat_expr_list, partial) ->
+  (* need to separate the values from exceptions for transl_handler *)
+      let arg_sort = Jkind.Sort.default_for_transl_and_get arg_sort in
+      let split_case (val_cases, exn_cases as acc)
+            ({ c_lhs; c_rhs } as case) =
+        if c_rhs.exp_desc = Texp_unreachable then acc else
+        let val_pat, exn_pat = split_pattern c_lhs in
+        match val_pat, exn_pat with
+        | None, None -> assert false
+        | Some pv, None ->
+            { case with c_lhs = pv } :: val_cases, exn_cases
+        | None, Some pe ->
+            val_cases, { case with c_lhs = pe } :: exn_cases
+        | Some pv, Some pe ->
+            { case with c_lhs = pv } :: val_cases,
+            { case with c_lhs = pe } :: exn_cases
+      in
+      let pat_expr_list, exn_pat_expr_list =
+        let x, y = List.fold_left split_case ([], []) pat_expr_list in
+        List.rev x, List.rev y
+      in
+      transl_handler ~scopes ~arg_sort ~return_sort:sort e arg (Some (pat_expr_list, partial))
+        exn_pat_expr_list eff_pat_expr_list
+  | Texp_try(body, pat_expr_list, []) ->
       let id, id_duid = Typecore.name_cases "exn" pat_expr_list in
       let return_layout = layout_exp sort e in
       Ltrywith(transl_exp ~scopes sort body, id, id_duid,
                Matching.for_trywith ~scopes ~return_layout e.exp_loc (Lvar id)
                  (transl_cases_try ~scopes sort pat_expr_list),
                return_layout)
+  | Texp_try(body, exn_pat_expr_list, eff_pat_expr_list) ->
+      transl_handler ~scopes ~return_sort:sort e body None exn_pat_expr_list eff_pat_expr_list
   | Texp_tuple (el, alloc_mode) ->
       let ll, shape =
         transl_value_list_with_shape ~scopes
@@ -876,6 +902,16 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
         begin match List.map extract_constant ll with
         | exception Not_constant
           when kind = Pfloatarray && Types.is_mutable amut ->
+            (* We cannot currently lift [Pintarray] arrays safely in Flambda
+               because [caml_modify] might be called upon them (e.g. from
+               code operating on polymorphic arrays, or functions such as
+               [caml_array_blit].
+               To avoid having different Lambda code for
+               bytecode/Closure vs.  Flambda, we always generate
+               [Pduparray] here, and deal with it in [Bytegen] (or in
+               the case of Closure, in [Cmmgen], which already has to
+               handle [Pduparray Pmakearray Pfloatarray] in the case
+               where the array turned out to be inconstant).
             (* We cannot currently lift mutable [Pintarray] arrays safely in
                Flambda because [caml_modify] might be called upon them
                (e.g. from code operating on polymorphic arrays, or functions
@@ -895,6 +931,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
                 imm_array
               else
                 match kind with
+              | Paddrarray | Pintarray ->
                 | Paddrarray | Pintarray ->
                   Lconst(Const_block(0, cl))
                 | Pfloatarray ->
@@ -1113,6 +1150,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
             value may subsequently turn into an immediate... *)
          Lprim(Pmakelazyblock Forward_tag,
                 [transl_exp ~scopes Jkind.Sort.Const.for_lazy_body e],
+         Lprim (Pmakelazyblock Forward_tag,
                 of_location ~scopes e.exp_loc)
       | `Identifier `Other ->
          transl_exp ~scopes Jkind.Sort.Const.for_lazy_body e
@@ -1381,13 +1419,20 @@ and transl_guard ~scopes guard rhs_sort rhs =
         (Lifthenelse(transl_exp ~scopes Jkind.Sort.Const.for_predef_value cond,
                      expr, staticfail, layout))
 
-and transl_case ~scopes rhs_sort {c_lhs; c_guard; c_rhs} =
-  (c_lhs, transl_guard ~scopes c_guard rhs_sort c_rhs)
+and transl_cont cont c_cont body =
+  match cont, c_cont with
+  | Some id1, Some id2 -> Llet(Alias, layout_function, id2, Lambda.debug_uid_none, Lvar id1, body)
+  | None, None
+  | Some _, None -> body
+  | None, Some _ -> assert false
 
-and transl_cases ~scopes rhs_sort cases =
+and transl_case ~scopes ?cont rhs_sort {c_lhs; c_cont; c_guard; c_rhs} =
+  (c_lhs, transl_cont cont c_cont (transl_guard ~scopes c_guard rhs_sort c_rhs))
+
+and transl_cases ~scopes ?cont rhs_sort cases =
   let cases =
     List.filter (fun c -> c.c_rhs.exp_desc <> Texp_unreachable) cases in
-  List.map (transl_case ~scopes rhs_sort) cases
+  List.map (transl_case ~scopes ?cont rhs_sort) cases
 
 and transl_case_try ~scopes rhs_sort {c_lhs; c_guard; c_rhs} =
   iter_exn_names Translprim.add_exception_ident c_lhs;
@@ -1602,7 +1647,7 @@ and transl_tupled_function
     | [{ fp_kind = Tparam_pat pat; fp_partial; fp_mode; fp_sort }],
       Tfunction_body body ->
         let fp_sort = Jkind.Sort.default_for_transl_and_get fp_sort in
-        let case = { c_lhs = pat; c_guard = None; c_rhs = body } in
+        let case = { c_lhs = pat; c_cont = None; c_guard = None; c_rhs = body } in
         Some ([ case ], fp_partial, pat, fp_mode, fp_sort)
     | _ -> None
   in
@@ -2022,6 +2067,7 @@ and transl_let ~scopes ~return_layout ?(add_regions=false) ?(in_structure=false)
         List.map
           (fun {vb_pat=pat} -> match pat.pat_desc with
               Tpat_var (id,_,uid,_) -> id, uid
+            | Tpat_alias ({pat_desc=Tpat_any}, id,_,uid,_,_) -> id, uid
             | _ -> assert false)
         pat_expr_list in
       let transl_case
@@ -2034,6 +2080,7 @@ and transl_let ~scopes ~return_layout ?(add_regions=false) ?(in_structure=false)
         let def =
           if add_regions then maybe_region_exp vb_sort expr def else def
         in
+        ( id, id_duid, rkind, def ) in
         ( id, id_duid, rkind, def ) in
       let lam_bds = List.map2 transl_case pat_expr_list idlist in
       fun body -> Value_rec_compiler.compile_letrec lam_bds body
@@ -2457,6 +2504,22 @@ and transl_idx ~scopes loc env ba uas =
            (of_location ~scopes loc))
   end
 
+and transl_atomic_loc ~scopes arg arg_sort lbl =
+  let arg = transl_exp ~scopes arg_sort arg in
+  let offset =
+    match lbl.lbl_repres with
+    | Record_boxed _
+    | Record_inlined _ -> field_offset_for_label lbl
+    | Record_float | Record_ufloat ->
+        fatal_error
+          "Translcore.transl_atomic_loc: atomic field in float record"
+    | Record_unboxed | Record_mixed _ ->
+        fatal_error
+          "Translcore.transl_atomic_loc: atomic field in unboxed record"
+  in
+  let lbl = Lconst (Const_base (Const_int offset)) in
+  (arg, lbl)
+
 and transl_match ~scopes ~arg_sort ~return_sort e arg pat_expr_list partial =
   let return_layout = layout_exp return_sort e in
   let rewrite_case (val_cases, exn_cases, static_handlers as acc)
@@ -2592,9 +2655,67 @@ and transl_match ~scopes ~arg_sort ~return_sort e arg pat_expr_list partial =
        handler, Same_region, return_layout)
   ) classic static_handlers
 
-and transl_letop ~scopes loc env let_ ands param param_debug_uid param_sort case
-      case_sort partial =
-  let rec loop prev_layout prev_lam = function
+and prim_alloc_stack =
+  Pccall (Primitive.simple ~name:"caml_alloc_stack" ~arity:3 ~alloc:true)
+
+and transl_handler ~scopes ~arg_sort ~return_sort e body val_caselist exn_caselist eff_caselist =
+  let val_fun =
+    match val_caselist with
+    | None ->
+        let param = Ident.create_local "param" in
+        lfunction ~kind:Curried ~params:[param, Pgenval]
+         ~return:Pgenval ~body:(Lvar param)
+         ~attr:default_function_attribute ~loc:Loc_unknown
+    | Some (val_caselist, partial) ->
+        let val_cases = transl_cases ~scopes val_caselist in
+        let param = Typecore.name_cases "param" val_caselist in
+        let body =
+          Matching.for_function ~scopes e.exp_loc None (Lvar param) val_cases
+            partial
+        in
+        lfunction ~kind:Curried ~params:[param, Pgenval]
+          ~return:Pgenval ~attr:default_function_attribute
+          ~loc:Loc_unknown ~body
+  in
+  let exn_fun =
+    let exn_cases = transl_cases ~scopes exn_caselist in
+    let param = Typecore.name_cases "exn" exn_caselist in
+    let body = Matching.for_trywith ~scopes e.exp_loc (Lvar param) exn_cases in
+    lfunction ~kind:Curried ~params:[param, Pgenval] ~return:Pgenval
+      ~attr:default_function_attribute ~loc:Loc_unknown ~body
+  in
+  let eff_fun =
+    let param = Typecore.name_cases "eff" eff_caselist in
+    let cont = Ident.create_local "k" in
+    let cont_tail = Ident.create_local "ktail" in
+    let eff_cases = transl_cases ~scopes ~cont eff_caselist in
+    let body =
+      Matching.for_handler ~scopes e.exp_loc (Lvar param) (Lvar cont)
+        (Lvar cont_tail) eff_cases
+    in
+    lfunction ~kind:Curried
+      ~params:[(param, Pgenval); (cont, Pgenval); (cont_tail, Pgenval)]
+      ~return:Pgenval ~attr:default_function_attribute ~loc:Loc_unknown ~body
+  in
+  let (body_fun, arg) =
+    match transl_exp ~scopes body with
+    | Lapply { ap_func = fn; ap_args = [arg]; _ }
+        when is_evaluated fn && is_evaluated arg -> (fn, arg)
+    | body ->
+       let param = Ident.create_local "param" in
+       (lfunction ~kind:Curried ~params:[param, Pgenval] ~return:Pgenval
+                  ~attr:default_function_attribute ~loc:Loc_unknown
+                  ~body,
+        Lconst(Const_base(Const_int 0)))
+  in
+  let alloc_stack =
+    Lprim(prim_alloc_stack, [val_fun; exn_fun; eff_fun], Loc_unknown)
+  in
+  Lprim(Prunstack, [alloc_stack; body_fun; arg],
+        of_location ~scopes e.exp_loc)
+
+and transl_letop ~scopes loc env let_ ands param case partial =
+  let rec loop prev_lam = function
     | [] -> prev_lam
     | and_ :: rest ->
         let left_id = Ident.create_local "left" in
@@ -2713,9 +2834,9 @@ let transl_apply
 
 (* Error report *)
 
-open Format
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Free_super_var ->
       fprintf ppf
         "Ancestor names can only be used to select inherited methods"
@@ -2769,7 +2890,9 @@ let () =
   Location.register_error_of_exn
     (function
       | Error (loc, err) ->
-          Some (Location.error_of_printer ~loc report_error err)
+          Some (Location.error_of_printer ~loc report_error_doc err)
       | _ ->
         None
     )
+
+let report_error = Format_doc.compat report_error_doc

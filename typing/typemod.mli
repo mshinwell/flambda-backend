@@ -59,8 +59,7 @@ val type_open_:
         Env.t -> Location.t -> Longident.t Asttypes.loc -> Path.t * Env.t
         *)
 val modtype_of_package:
-        Env.t -> Location.t ->
-        Path.t -> (Longident.t * type_expr) list -> module_type
+        Env.t -> Location.t -> package -> module_type
 
 val path_of_module : Typedtree.module_expr -> Path.t option
 
@@ -184,6 +183,7 @@ type error =
   | Item_weaker_than_structure of Mode.Value.error
   | Unsupported_modal_module of unsupported_modal_module
   | Legacy_module of legacy_module * Mode.Value.error
+  | Cannot_alias of Path.t
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error

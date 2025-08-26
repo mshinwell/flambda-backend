@@ -1,2 +1,8 @@
 Run without exception.
+<<<<<<< HEAD
 Exception from memprof.
+||||||| 23e84b8c4d
+Fatal error: exception Failure("callback failed")
+=======
+Exception from major allocation callback.
+>>>>>>> ocaml/5.4

@@ -14,6 +14,7 @@
 
 (library
  (name stdlib)
+ (libraries dune_support)
  (stdlib
   (exit_module std_exit)
   (internal_modules Camlinternal*)
@@ -26,7 +27,8 @@
    -bin-annot
    -nostdlib
    -safe-string
-   -strict-formats))
+   -strict-formats
+   -open New_predef_types))
  (ocamlopt_flags
   (:include %{project_root}/ocamlopt_flags.sexp))
  (preprocess

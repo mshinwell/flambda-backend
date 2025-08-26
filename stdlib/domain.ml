@@ -163,6 +163,8 @@ module Runtime_5 = struct
       = "caml_domain_spawn"
     external self : unit -> t @@ portable
       = "caml_ml_domain_id" [@@noalloc]
+    external self_index : unit -> int @@ portable
+      = "caml_ml_domain_index" [@@noalloc]
     external get_recommended_domain_count: unit -> int @@ portable
       = "caml_recommended_domain_count" [@@noalloc]
   end

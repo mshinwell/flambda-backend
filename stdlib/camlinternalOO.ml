@@ -332,7 +332,7 @@ let init_class table =
   table.initializers <- List.rev table.initializers;
   resize table (3 + Obj.magic table.methods.(1) * 16 / Sys.word_size)
 
-let inherits cla vals virt_meths concr_meths (_, super, _, env) top =
+let inherits cla vals virt_meths concr_meths (_, super, env) top =
   narrow cla vals virt_meths concr_meths;
   let init =
     if top then super cla env else Obj.repr (super cla) in
@@ -348,7 +348,7 @@ let make_class pub_meths class_init =
   let table = create_table pub_meths in
   let env_init = class_init table in
   init_class table;
-  (env_init (Obj.repr 0), class_init, env_init, Obj.repr 0)
+  (env_init (Obj.repr 0), class_init, Obj.repr 0)
 
 type init_table = { mutable env_init: t; mutable class_init: table -> t }
 [@@warning "-unused-field"]
@@ -362,7 +362,7 @@ let make_class_store pub_meths class_init init_table =
 
 let dummy_class loc =
   let undef = fun _ -> raise (Undefined_recursive_module loc) in
-  (magic undef, undef, undef, Obj.repr 0)
+  (magic undef, undef, Obj.repr 0)
 
 (**** Objects ****)
 
@@ -413,8 +413,8 @@ let sendself obj lab =
 external send : obj -> tag -> 'a @@ portable = "%send"
 external sendcache : obj -> tag -> t -> int -> 'a @@ portable = "%sendcache"
 external sendself : obj -> label -> 'a @@ portable = "%sendself"
-external get_public_method : obj -> tag -> closure @@ portable
-    = "caml_get_public_method" [@@noalloc]
+external get_public_method : obj -> tag -> closure
+    @@ portable = "caml_get_public_method" [@@noalloc]
 
 (**** table collection access ****)
 
@@ -628,6 +628,6 @@ type stats =
   { classes: int; methods: int; inst_vars: int; }
 
 let stats () =
-  { classes = Atomic.Contended.get table_count;
-    methods = Atomic.Contended.get method_count;
-    inst_vars = Atomic.Contended.get inst_var_count; }
+  { classes = Atomic.get table_count;
+    methods = Atomic.get method_count;
+    inst_vars = Atomic.get inst_var_count; }
