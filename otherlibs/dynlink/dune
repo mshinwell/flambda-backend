@@ -140,6 +140,7 @@
   persistent_env
   env
   debuginfo
+  static_label
   lambda
   runtimedef
   runtimetags
@@ -324,6 +325,8 @@
 
 (copy_files ../../lambda/debuginfo.ml)
 
+(copy_files ../../lambda/static_label.ml)
+
 (copy_files ../../lambda/lambda.ml)
 
 (copy_files ../../lambda/runtimedef.ml)
@@ -484,6 +487,8 @@
 
 (copy_files ../../lambda/debuginfo.mli)
 
+(copy_files ../../lambda/static_label.mli)
+
 (copy_files ../../lambda/lambda.mli)
 
 (copy_files ../../lambda/runtimedef.mli)
@@ -630,6 +635,7 @@
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Predef.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Type_shape.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Env.cmo
+  .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Static_label.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Lambda.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Dll.cmo
   .dynlink_compilerlibs.objs/byte/dynlink_compilerlibs__Instruct.cmo
@@ -728,6 +734,7 @@
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Predef.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Type_shape.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Env.cmx
+  .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Static_label.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Lambda.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Dll.cmx
   .dynlink_compilerlibs.objs/native/dynlink_compilerlibs__Instruct.cmx
