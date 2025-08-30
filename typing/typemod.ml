@@ -145,10 +145,11 @@ let new_mode_var_from_annots (m : Alloc.Const.Option.t) =
 
 let register_allocation () =
   let m, _ =
-    Alloc.(newvar_below
-      (max_with_comonadic Areality Locality.global))
+    Value.(newvar_below (of_const
+      ~hint_comonadic:Module_allocated_on_heap
+      { Const.max with areality = Global }))
   in
-  m, alloc_as_value m
+  value_to_alloc_r2g m, m
 
 open Typedtree
 
@@ -2851,9 +2852,8 @@ let infer_modalities ~loc ~env ~md_mode ~mode =
       mode.Mode.comonadic
       md_mode.Mode.comonadic with
       | Ok () -> ()
-      | Error (Error (ax, e)) ->
-          raise (Error (loc, env, Item_weaker_than_structure
-            (Error (Comonadic ax, e))))
+      | Error e ->
+          raise (Error (loc, env, Item_weaker_than_structure (Comonadic e)))
     end;
     Mode.Modality.infer ~md_mode ~mode
 
@@ -4801,7 +4801,8 @@ let report_error ~loc _env = function
       Location.errorf ~loc
         "This instance has multiple arguments with the name %a."
         (Style.as_inline_code Global_module.Parameter_name.print) name
-  | Item_weaker_than_structure (Error (ax, {left; right})) ->
+  | Item_weaker_than_structure e ->
+      let Mode.Value.Error (ax, {left; right}) = Mode.Value.to_simple_error e in
       let d =
         match ax with
         | Comonadic Areality -> Format.dprintf "a structure"
@@ -4814,7 +4815,8 @@ let report_error ~loc _env = function
         (Style.as_inline_code (Mode.Value.Const.print_axis ax)) left
         (Style.as_inline_code (Mode.Value.Const.print_axis ax)) right
         d
-  | Submode_failed (Error (ax, {left; right})) ->
+  | Submode_failed e ->
+      let Mode.Value.Error (ax, {left; right}) = Mode.Value.to_simple_error e in
       Location.errorf ~loc
         "This is %a, but expected to be %a."
         (Style.as_inline_code (Mode.Value.Const.print_axis ax)) left
@@ -4823,7 +4825,8 @@ let report_error ~loc _env = function
       Location.errorf ~loc
         "Mode annotations on %a are not supported yet."
         print_unsupported_modal_module e
-  | Legacy_module (reason, Error (ax, {left; right})) ->
+  | Legacy_module (reason, e) ->
+      let Mode.Value.Error (ax, {left; right}) = Mode.Value.to_simple_error e in
       Location.errorf ~loc
         "This is %a, but expected to be %a because it is a %a."
         (Style.as_inline_code (Mode.Value.Const.print_axis ax)) left
