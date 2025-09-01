@@ -650,6 +650,246 @@ end
 
 module Int = Stdlib.Int
 
+let repeated_label l =
+  let module Set = Stdlib.String.Set in
+  let rec go s = function
+    | [] -> None
+    | (None, _) :: l -> go s l
+    | (Some lbl, _) :: l ->
+      if Set.mem lbl s then Some lbl else go (Set.add lbl s) l
+  in
+  go Set.empty l
+
+(** {1 Minimal support for Unicode characters in identifiers} *)
+
+module Utf8_lexeme = struct
+
+  type t = string
+
+  (* Non-ASCII letters that are allowed in identifiers (currently: Latin-9) *)
+
+  type case = Upper of Uchar.t | Lower of Uchar.t
+  let known_chars : (Uchar.t, case) Hashtbl.t = Hashtbl.create 32
+
+  let _ =
+    List.iter
+      (fun (upper, lower) ->
+        let upper = Uchar.of_int upper and lower = Uchar.of_int lower in
+        Hashtbl.add known_chars upper (Upper lower);
+        Hashtbl.add known_chars lower (Lower upper))
+  [
+    (0xc0, 0xe0); (* À, à *)    (0xc1, 0xe1); (* Á, á *)
+    (0xc2, 0xe2); (* Â, â *)    (0xc3, 0xe3); (* Ã, ã *)
+    (0xc4, 0xe4); (* Ä, ä *)    (0xc5, 0xe5); (* Å, å *)
+    (0xc6, 0xe6); (* Æ, æ *)    (0xc7, 0xe7); (* Ç, ç *)
+    (0xc8, 0xe8); (* È, è *)    (0xc9, 0xe9); (* É, é *)
+    (0xca, 0xea); (* Ê, ê *)    (0xcb, 0xeb); (* Ë, ë *)
+    (0xcc, 0xec); (* Ì, ì *)    (0xcd, 0xed); (* Í, í *)
+    (0xce, 0xee); (* Î, î *)    (0xcf, 0xef); (* Ï, ï *)
+    (0xd0, 0xf0); (* Ð, ð *)    (0xd1, 0xf1); (* Ñ, ñ *)
+    (0xd2, 0xf2); (* Ò, ò *)    (0xd3, 0xf3); (* Ó, ó *)
+    (0xd4, 0xf4); (* Ô, ô *)    (0xd5, 0xf5); (* Õ, õ *)
+    (0xd6, 0xf6); (* Ö, ö *)    (0xd8, 0xf8); (* Ø, ø *)
+    (0xd9, 0xf9); (* Ù, ù *)    (0xda, 0xfa); (* Ú, ú *)
+    (0xdb, 0xfb); (* Û, û *)    (0xdc, 0xfc); (* Ü, ü *)
+    (0xdd, 0xfd); (* Ý, ý *)    (0xde, 0xfe); (* Þ, þ *)
+    (0x160, 0x161); (* Š, š *)  (0x17d, 0x17e); (* Ž, ž *)
+    (0x152, 0x153); (* Œ, œ *)  (0x178, 0xff); (* Ÿ, ÿ *)
+    (0x1e9e, 0xdf); (* ẞ, ß *)
+  ]
+
+  (* NFD to NFC conversion table for the letters above *)
+
+  let known_pairs : (Uchar.t * Uchar.t, Uchar.t) Hashtbl.t = Hashtbl.create 32
+
+  let _ =
+    List.iter
+      (fun (c1, n2, n) ->
+        Hashtbl.add known_pairs
+          (Uchar.of_char c1, Uchar.of_int n2) (Uchar.of_int n))
+  [
+    ('A', 0x300, 0xc0); (* À *)    ('A', 0x301, 0xc1); (* Á *)
+    ('A', 0x302, 0xc2); (* Â *)    ('A', 0x303, 0xc3); (* Ã *)
+    ('A', 0x308, 0xc4); (* Ä *)    ('A', 0x30a, 0xc5); (* Å *)
+    ('C', 0x327, 0xc7); (* Ç *)    ('E', 0x300, 0xc8); (* È *)
+    ('E', 0x301, 0xc9); (* É *)    ('E', 0x302, 0xca); (* Ê *)
+    ('E', 0x308, 0xcb); (* Ë *)    ('I', 0x300, 0xcc); (* Ì *)
+    ('I', 0x301, 0xcd); (* Í *)    ('I', 0x302, 0xce); (* Î *)
+    ('I', 0x308, 0xcf); (* Ï *)    ('N', 0x303, 0xd1); (* Ñ *)
+    ('O', 0x300, 0xd2); (* Ò *)    ('O', 0x301, 0xd3); (* Ó *)
+    ('O', 0x302, 0xd4); (* Ô *)    ('O', 0x303, 0xd5); (* Õ *)
+    ('O', 0x308, 0xd6); (* Ö *)
+    ('U', 0x300, 0xd9); (* Ù *)    ('U', 0x301, 0xda); (* Ú *)
+    ('U', 0x302, 0xdb); (* Û *)    ('U', 0x308, 0xdc); (* Ü *)
+    ('Y', 0x301, 0xdd); (* Ý *)    ('Y', 0x308, 0x178);  (* Ÿ *)
+    ('S', 0x30c, 0x160); (* Š *)   ('Z', 0x30c, 0x17d); (* Ž *)
+    ('a', 0x300, 0xe0); (* à *)    ('a', 0x301, 0xe1); (* á *)
+    ('a', 0x302, 0xe2); (* â *)    ('a', 0x303, 0xe3); (* ã *)
+    ('a', 0x308, 0xe4); (* ä *)    ('a', 0x30a, 0xe5); (* å *)
+    ('c', 0x327, 0xe7); (* ç *)    ('e', 0x300, 0xe8); (* è *)
+    ('e', 0x301, 0xe9); (* é *)    ('e', 0x302, 0xea); (* ê *)
+    ('e', 0x308, 0xeb); (* ë *)    ('i', 0x300, 0xec); (* ì *)
+    ('i', 0x301, 0xed); (* í *)    ('i', 0x302, 0xee); (* î *)
+    ('i', 0x308, 0xef); (* ï *)    ('n', 0x303, 0xf1); (* ñ *)
+    ('o', 0x300, 0xf2); (* ò *)    ('o', 0x301, 0xf3); (* ó *)
+    ('o', 0x302, 0xf4); (* ô *)    ('o', 0x303, 0xf5); (* õ *)
+    ('o', 0x308, 0xf6); (* ö *)
+    ('u', 0x300, 0xf9); (* ù *)    ('u', 0x301, 0xfa); (* ú *)
+    ('u', 0x302, 0xfb); (* û *)    ('u', 0x308, 0xfc); (* ü *)
+    ('y', 0x301, 0xfd); (* ý *)    ('y', 0x308, 0xff); (* ÿ *)
+    ('s', 0x30c, 0x161); (* š *)   ('z', 0x30c, 0x17e); (* ž *)
+  ]
+
+  let normalize_generic ~keep_ascii transform s =
+    let rec norm check buf prev i =
+      if i >= String.length s then begin
+        Buffer.add_utf_8_uchar buf (transform prev)
+      end else begin
+        let d = String.get_utf_8_uchar s i in
+        let u = Uchar.utf_decode_uchar d in
+        check d u;
+        let i' = i + Uchar.utf_decode_length d in
+        match Hashtbl.find_opt known_pairs (prev, u) with
+        | Some u' ->
+            norm check buf u' i'
+        | None ->
+            Buffer.add_utf_8_uchar buf (transform prev);
+            norm check buf u i'
+      end in
+    let ascii_limit = 128 in
+    if s = ""
+    || keep_ascii && String.for_all (fun x -> Char.code x < ascii_limit) s
+    then Ok s
+    else
+      let buf = Buffer.create (String.length s) in
+      let valid = ref true in
+      let check d u =
+        valid := !valid && Uchar.utf_decode_is_valid d && u <> Uchar.rep
+      in
+      let d = String.get_utf_8_uchar s 0 in
+      let u = Uchar.utf_decode_uchar d in
+      check d u;
+      norm check buf u (Uchar.utf_decode_length d);
+      let contents = Buffer.contents buf in
+      if !valid then
+        Ok contents
+      else
+        Error contents
+
+  let normalize s =
+    normalize_generic ~keep_ascii:true (fun u -> u) s
+
+  (* Capitalization *)
+
+  let uchar_is_uppercase u =
+    let c = Uchar.to_int u in
+    if c < 0x80 then c >= 65 && c <= 90 else
+      match Hashtbl.find_opt known_chars u with
+      | Some(Upper _) -> true
+      | _ -> false
+
+  let uchar_lowercase u =
+    let c = Uchar.to_int u in
+    if c < 0x80 then
+      if c >= 65 && c <= 90 then Uchar.of_int (c + 32) else u
+    else
+      match Hashtbl.find_opt known_chars u with
+      | Some(Upper u') -> u'
+      | _ -> u
+
+  let uchar_uppercase u =
+    let c = Uchar.to_int u in
+    if c < 0x80 then
+      if c >= 97 && c <= 122 then Uchar.of_int (c - 32) else u
+    else
+      match Hashtbl.find_opt known_chars u with
+      | Some(Lower u') -> u'
+      | _ -> u
+
+  let capitalize s =
+    let first = ref true in
+    normalize_generic ~keep_ascii:false
+      (fun u -> if !first then (first := false; uchar_uppercase u) else u)
+      s
+
+  let uncapitalize s =
+    let first = ref true in
+    normalize_generic ~keep_ascii:false
+      (fun u -> if !first then (first := false; uchar_lowercase u) else u)
+      s
+
+  let is_capitalized s =
+    s <> "" &&
+    uchar_is_uppercase (Uchar.utf_decode_uchar (String.get_utf_8_uchar s 0))
+
+  (* Characters allowed in identifiers after normalization is applied.
+     Currently:
+       - ASCII letters, underscore
+       - Latin-9 letters, represented in NFC
+       - ASCII digits, single quote (but not as first character)
+       - dot if [with_dot] = true
+  *)
+  let uchar_valid_in_identifier ~with_dot u =
+    let c = Uchar.to_int u in
+    if c < 0x80 then
+         c >= 97 (* a *) && c <= 122 (* z *)
+      || c >= 65 (* A *) && c <= 90 (* Z *)
+      || c >= 48 (* 0 *) && c <= 57 (* 9 *)
+      || c = 95 (* underscore *)
+      || c = 39 (* single quote *)
+      || (with_dot && c = 46) (* dot *)
+    else
+      Hashtbl.mem known_chars u
+
+  let uchar_not_identifier_start u =
+    let c = Uchar.to_int u in
+       c >= 48 (* 0 *) && c <= 57 (* 9 *)
+    || c = 39  (* single quote *)
+
+  (* Check whether a normalized string is a valid OCaml identifier. *)
+
+  type validation_result =
+    | Valid
+    | Invalid_character of Uchar.t   (** Character not allowed *)
+    | Invalid_beginning of Uchar.t   (** Character not allowed as first char *)
+
+  let validate_identifier ?(with_dot=false) s =
+    let rec check i =
+      if i >= String.length s then Valid else begin
+        let d = String.get_utf_8_uchar s i in
+        let u = Uchar.utf_decode_uchar d in
+        let i' = i + Uchar.utf_decode_length d in
+        if not (uchar_valid_in_identifier ~with_dot u) then
+          Invalid_character u
+        else if i = 0 && uchar_not_identifier_start u then
+          Invalid_beginning u
+        else
+          check i'
+      end
+    in check 0
+
+  let is_valid_identifier s =
+    validate_identifier s = Valid
+
+  let starts_like_a_valid_identifier s =
+    s <> "" &&
+    (let u = Uchar.utf_decode_uchar (String.get_utf_8_uchar s 0) in
+     uchar_valid_in_identifier ~with_dot:false u
+     && not (uchar_not_identifier_start u))
+
+  let is_lowercase s =
+    let rec is_lowercase_at len s n =
+      if n >= len then true
+      else
+        let d = String.get_utf_8_uchar s n in
+        let u = Uchar.utf_decode_uchar d in
+        (uchar_valid_in_identifier ~with_dot:false  u)
+        && not (uchar_is_uppercase u)
+        && is_lowercase_at len s (n+Uchar.utf_decode_length d)
+    in
+    is_lowercase_at (String.length s) s 0
+end
+
 (* File functions *)
 
 let find_in_path path name =
@@ -680,10 +920,12 @@ let find_in_path_rel path name =
       if Sys.file_exists fullname then fullname else try_dir rem
   in try_dir path
 
-let normalized_unit_filename = String.uncapitalize_ascii
+let normalized_unit_filename = Utf8_lexeme.uncapitalize
 
 let find_in_path_normalized path name =
-  let uname = normalized_unit_filename name in
+  match normalized_unit_filename name with
+  | Error _ -> raise Not_found
+  | Ok uname ->
   let rec try_dir = function
     [] -> raise Not_found
   | dir::rem ->
@@ -1015,6 +1257,7 @@ module Color = struct
 
   let default_setting = Auto
   let enabled = ref true
+  let is_enabled () = !enabled
 
 end
 
@@ -1085,7 +1328,7 @@ module Style = struct
       error = no_markup [Bold; FG Red];
       loc = no_markup [Bold];
       hint = no_markup [Bold; FG Blue];
-      inline_code= { ansi=[Bold]; text_open = {|"|}; text_close = {|"|} }
+      inline_code= no_markup [Bold]
     }
 
   let cur_styles = ref default_styles
@@ -1100,16 +1343,19 @@ module Style = struct
     | Format.String_tag "loc" -> (!cur_styles).loc
     | Format.String_tag "hint" -> (!cur_styles).hint
     | Format.String_tag "inline_code" -> (!cur_styles).inline_code
+    | Format.String_tag "ralign" -> no_markup []
     | Style s -> no_markup s
     | _ -> raise Not_found
 
 
   let as_inline_code printer ppf x =
-    Format.pp_open_stag ppf (Format.String_tag "inline_code");
+    let open Format_doc in
+    pp_open_stag ppf (Format.String_tag "inline_code");
     printer ppf x;
-    Format.pp_close_stag ppf ()
+    pp_close_stag ppf ()
 
-  let inline_code ppf s = as_inline_code Format.pp_print_string ppf s
+  let inline_code ppf s = as_inline_code Format_doc.pp_print_string ppf s
+  let hint ppf = Format_doc.fprintf ppf "@{<hint>Hint@}"
 
   let as_clflag flag printer ppf x =
     Format.fprintf ppf "@{<inline_code>%s %a@}" flag printer x
@@ -1226,21 +1472,34 @@ let spellcheck env name =
   let env = List.sort_uniq (fun s1 s2 -> String.compare s2 s1) env in
   fst (List.fold_left (compare name) ([], max_int) env)
 
-let did_you_mean ppf get_choices =
-  (* flush now to get the error report early, in the (unheard of) case
-     where the search in the get_choices function would take a bit of
-     time; in the worst case, the user has seen the error, she can
-     interrupt the process before the spell-checking terminates. *)
-  Format.fprintf ppf "@?";
-  match get_choices () with
-  | [] -> ()
+let align_hint ~prefix ~main ~hint =
+    let prefix_shift = String.length prefix in
+    Format_doc.Doc.align_prefix2 (main,prefix_shift) (hint,0)
+
+let align_error_hint ~main ~hint = align_hint ~prefix:"Error: " ~main ~hint
+
+let aligned_hint ~prefix ppf main_fmt  =
+  let open Format_doc in
+  kdoc_printf (fun main hint ->
+      match hint with
+      | None -> pp_doc ppf main
+      | Some hint ->
+        let main, hint = align_hint ~prefix ~main ~hint in
+        fprintf ppf "%a@.%a" pp_doc main pp_doc hint
+    ) main_fmt
+
+let did_you_mean ?(pp=Style.inline_code) choices =
+  let open Format_doc in
+  match choices with
+  | [] -> None
   | choices ->
     let rest, last = split_last choices in
-    let comma ppf () = Format.fprintf ppf ", " in
-     Format.fprintf ppf "@\n@{<hint>Hint@}: Did you mean %a%s%a?@?"
-       (Format.pp_print_list ~pp_sep:comma Style.inline_code) rest
-       (if rest = [] then "" else " or ")
-       Style.inline_code last
+    Some (doc_printf
+            "@[@{<hint>Hint@}: @{<ralign>Did you mean @}%a%s%a?@]"
+            (pp_print_list ~pp_sep:comma pp) rest
+            (if rest = [] then "" else " or ")
+            pp last
+      )
 
 module Error_style = struct
   type setting =
@@ -1338,110 +1597,132 @@ and column =
 and cell = string list
 
 (* Initialize a table by storing the original column string in the cells. *)
-let make_table (columns : (string * string list) list) =
-  match columns with
-  | [] -> fatal_errorf "make_table: empty table"
-  | (_, col) :: _ ->
-    let num_rows = List.length col in
-    let columns =
-      List.map
-        (fun (header, col) ->
-          let char_width, entries =
-            List.fold_right
-              (fun cell (width, acc) ->
-                let char_width = max width (String.length cell) in
-                char_width, [cell] :: acc)
-              col
-              (String.length header, [])
-          in
-          let entries = Array.of_list entries in
-          if Array.length entries <> num_rows then
-            fatal_errorf "make_table: inconsistent column lengths";
-          { header; entries; char_width })
-        columns
-    in
-    { columns = Array.of_list columns; num_rows }
+let make_table ~headers:col_headers ~entries:rows =
+  assert (col_headers <> []);
+  assert (List.for_all (fun r -> List.length r = List.length col_headers) rows);
+  let columns = Array.of_list col_headers in
+  let num_cols = Array.length columns in
+  let num_rows = List.length rows in
+  let rows = Array.of_list rows in
+  let columns =
+    Array.mapi (fun i header ->
+        let entries =
+          Array.init num_rows (fun j -> [List.nth rows.(j) i])
+        in
+        { header; entries; char_width = String.length header})
+      columns
+  in
+  { columns; num_rows }
 
-(* Splits all cells based on new lines,
-   and expands the cells with white space to be all of the same length. *)
-let expand_table t =
-  let pad_string desired_length s =
-    s ^ String.make (desired_length - String.length s) ' '
+let split_to_width width lines =
+  let split_one line =
+    let chunks = chunks_of width line in
+    match chunks with
+    | [] -> [""]
+    | _ -> chunks
   in
-  let pad_row_cell desired_depth cell =
-    cell @ List.init (desired_depth - List.length cell) (fun _ -> "")
-  in
-  (* split based on new lines and adjust column width *)
-  for i = 0 to Array.length t.columns - 1 do
-    let column = t.columns.(i) in
-    column.char_width <- String.length column.header;
-    for j = 0 to Array.length column.entries - 1 do
-      let cell_strings = column.entries.(j) in
-      let cell_strings =
-        List.concat_map (String.split_on_char '\n') cell_strings
-      in
-      let cell_max_width =
-        List.fold_left (fun acc s -> max acc (String.length s)) 0 cell_strings
-      in
-      column.char_width <- max column.char_width cell_max_width;
-      column.entries.(j) <- cell_strings
-    done
-  done;
-  (* add empty strings for rows with different depths *)
-  for j = 0 to t.num_rows - 1 do
-    let max_depth = ref 1 in
-    for i = 0 to Array.length t.columns - 1 do
-      max_depth := max !max_depth (List.length t.columns.(i).entries.(j))
-    done;
-    for i = 0 to Array.length t.columns - 1 do
-      t.columns.(i).entries.(j)
-        <- pad_row_cell !max_depth t.columns.(i).entries.(j)
-    done
-  done;
-  (* expand all strings to be of the correct width *)
-  for i = 0 to Array.length t.columns - 1 do
-    let column = t.columns.(i) in
-    column.header <- pad_string column.char_width column.header;
-    for j = 0 to Array.length column.entries - 1 do
-      column.entries.(j)
-        <- List.map (pad_string column.char_width) column.entries.(j)
+  List.concat_map split_one lines
+
+(* Wrap each cell to the column width *)
+let wrap_cells ~width table =
+  for i = 0 to Array.length table.columns - 1 do
+    let entries = table.columns.(i).entries in
+    for j = 0 to table.num_rows - 1 do
+      entries.(j) <- split_to_width width entries.(j)
     done
   done
 
-let print_separator ppf table_width =
-  Format.fprintf ppf "|%s|\n" (String.make (table_width - 2) '-')
+let rec get_column_widths ~width ~min_width ~sep_width table =
+  let cols = table.columns in
+  let num_cols = Array.length cols in
+  if num_cols = 0 then [||]
+  else if num_cols = 1 then
+    (* If there is only one column, we give it all the width *)
+    let () = cols.(0).char_width <- width in
+    [| width |]
+  else
+    (* Iterate on the columns. Give each column the width of its widest entry
+       that respects [min_width]. Give the remaining space equally to the
+       first columns. *)
+    let k = ref 0 in
+    let sum_column_widths = ref 0 in
+    let update_column ~width col =
+      let char_width = min width (max min_width col.char_width) in
+      col.char_width <- char_width;
+      sum_column_widths := !sum_column_widths + char_width
+    in
+    while !k < num_cols && !sum_column_widths < width do
+      let budget = width - !sum_column_widths - (!k * sep_width) in
+      let cols_to_fill = num_cols - !k in
+      let width_per_col = budget / cols_to_fill in
+      update_column ~width:width_per_col cols.(!k);
+      incr k
+    done;
+    (* If we did not give any width to the last columns (i.e. [k < num_cols]),
+       we give them [min_width]. *)
+    for i = !k to num_cols - 1 do
+      update_column ~width:min_width cols.(i)
+    done;
+    (* Create the result *)
+    Array.init num_cols (fun i -> cols.(i).char_width)
 
-(* prints a single row of [num_cols] columns *)
-let print_row ppf num_cols f =
-  for i = 0 to num_cols - 1 do
-    Format.fprintf ppf "| %s " (f i)
-  done;
-  Format.fprintf ppf "|\n"
+(* Given a cell, compute the number of rows it will span once it is wrapped.
+   It is at least one. *)
+let get_wrapped_row_count table i j =
+  Int.max 1 (List.length table.columns.(i).entries.(j))
 
-let pp_table ppf (columns : (string * string list) list) =
-  if List.length columns = 0 then fatal_errorf "pp_table: empty table";
-  let table = make_table columns in
-  expand_table table;
+let pp_table ppf table ~sep =
+  let col_widths = get_column_widths ~width:80 ~min_width:1 ~sep_width:3 table in
+  let num_cols = Array.length table.columns in
+  (* Account for the width of the table. *)
   let table_width =
-    Array.fold_left (fun acc column -> acc + column.char_width) 0 table.columns
-    + 4 (* boundary characters *)
-    + ((Array.length table.columns - 1) * 3 (* inter column boundaries *))
+    if num_cols = 0 then 0
+    else
+      let cols_width = Array.fold_left (+) 0 col_widths in
+      let sep_width = 3 * (num_cols - 1) in
+      cols_width + sep_width
+  in
+  (* Wrap the cells according to their column widths. *)
+  for i = 0 to num_cols - 1 do
+    wrap_cells ~width:col_widths.(i) { table with columns = [| table.columns.(i) |] }
+  done;
+  (* Print the header row *)
+  let print_separator ppf width =
+    Format.fprintf ppf "%s@," (String.make width -);
+  in
+  let print_row ppf headers =
+    Format.fprintf ppf "@[<h>";
+    for i = 0 to num_cols - 1 do
+      if i > 0 then Format.fprintf ppf " %s " sep;
+      Format.fprintf ppf "%-*s" col_widths.(i) headers.(i)
+    done;
+    Format.fprintf ppf "@]@,"
   in
   print_separator ppf table_width;
-  print_row ppf (Array.length table.columns)
-    (fun i -> table.columns.(i).header);
+  print_row ppf (Array.map (fun c -> c.header) table.columns);
   print_separator ppf table_width;
+  (* Print the table rows. Because cells can be multi-line, we have to pay
+     attention: for each original row, we might have to print several rows to
+     print all the lines. *)
   for j = 0 to table.num_rows - 1 do
-    let first_column_cell = table.columns.(0).entries.(j) in
-    let depth = List.length first_column_cell in
-    for k = 0 to depth - 1 do
-      print_row ppf (Array.length table.columns) (fun i ->
-          List.nth table.columns.(i).entries.(j) k)
+    let row_height =
+      let max = ref 1 in
+      for i = 0 to num_cols - 1 do
+        max := Int.max !max (get_wrapped_row_count table i j)
+      done;
+      !max
+    in
+    for k = 0 to row_height - 1 do
+      Format.fprintf ppf "@[<h>";
+      for i = 0 to num_cols - 1 do
+        if i > 0 then Format.fprintf ppf " %s " sep;
+        Format.fprintf ppf "%-*s" col_widths.(i)
+          (List.nth_opt table.columns.(i).entries.(j) k |> Option.value ~default:"")
+      done;
+      Format.fprintf ppf "@]@,"
     done;
     print_separator ppf table_width
   done
-
-
 (* showing configuration and configuration variables *)
 let show_config_and_exit () =
   Config.print_config stdout;
@@ -1498,12 +1779,8 @@ let debug_prefix_map_flags () =
         []
   end
 
-let print_if ppf flag printer arg =
-  if !flag then Format.fprintf ppf "%a@." printer arg;
-  arg
-
 let print_see_manual ppf manual_section =
-  let open Format in
+  let open Format_doc in
   fprintf ppf "(see manual section %a)"
     (pp_print_list ~pp_sep:(fun f () -> pp_print_char f '.') pp_print_int)
     manual_section
@@ -1555,6 +1832,10 @@ let to_string_of_print print =
     Buffer.contents buf
   in
   to_string
+
+let print_if ppf flag printer arg =
+  if !flag then Format.fprintf ppf "%a@." printer arg;
+  arg
 
 
 type filepath = string

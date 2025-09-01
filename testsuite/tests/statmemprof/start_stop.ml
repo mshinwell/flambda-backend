@@ -1,8 +1,3 @@
-(* TEST
-   runtime5;
-   { bytecode; }
-   { native; }
-*)
 
 (* Tests various valid and invalid orderings of start/stop/discard
 statmemprof calls. Doesn't test any callbacks or count any allocations,

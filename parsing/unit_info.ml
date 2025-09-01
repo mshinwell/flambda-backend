@@ -18,6 +18,9 @@ type modname = string
 type filename = string
 type file_prefix = string
 
+type error = Invalid_encoding of string
+exception Error of error
+
 type t = {
   source_file: filename;
   prefix: file_prefix;
@@ -40,13 +43,18 @@ let basename_chop_extensions basename  =
     String.sub basename 0 pos
   with Not_found -> basename
 
-let modulize s = String.capitalize_ascii s
+let strict_modulize s =
+  match Misc.Utf8_lexeme.capitalize s with
+  | Ok x -> x
+  | Error _ -> raise (Error (Invalid_encoding s))
 
-(* We re-export the [Misc] definition *)
-let normalize = Misc.normalized_unit_filename
+let modulize s = match Misc.Utf8_lexeme.capitalize s with Ok x | Error x -> x
 
-let modname_from_source source_file =
-  source_file |> Filename.basename |> basename_chop_extensions |> modulize
+(* We re-export the [Misc] definition, and ignore encoding errors under the
+   assumption that we should focus our effort on not *producing* badly encoded
+   module names *)
+let normalize x = match Misc.normalized_unit_filename x with
+  | Ok x | Error x -> x
 
 let compilation_unit_from_source ~for_pack_prefix source_file =
   let modname =
@@ -54,20 +62,21 @@ let compilation_unit_from_source ~for_pack_prefix source_file =
   in
   Compilation_unit.create for_pack_prefix modname
 
+let stem source_file =
+  source_file |> Filename.basename |> basename_chop_extensions
+
 let start_char = function
   | 'A' .. 'Z' -> true
   | _ -> false
 
-let is_identchar_latin1 = function
-  | 'A'..'Z' | 'a'..'z' | '_' | '\192'..'\214' | '\216'..'\246'
-  | '\248'..'\255' | '\'' | '0'..'9' -> true
-  | _ -> false
+let strict_modname_from_source source_file =
+  source_file |> stem |> strict_modulize
+
+let lax_modname_from_source source_file =
+  source_file |> stem |> modulize
 
 (* Check validity of module name *)
-let is_unit_name name =
-  String.length name > 0
-  && start_char name.[0]
-  && String.for_all is_identchar_latin1 name
+let is_unit_name name = Misc.Utf8_lexeme.is_valid_identifier name
 
 let check_unit_name file =
   let name = modname file |> Compilation_unit.name_as_string in
@@ -104,7 +113,6 @@ module Artifact = struct
 
   let from_filename ~for_pack_prefix filename =
     let modname = compilation_unit_from_source ~for_pack_prefix filename in
-
     { modname; filename; source_file = None }
 
 end
@@ -143,6 +151,10 @@ let companion_cmi f =
   let prefix = Misc.chop_extensions f.Artifact.filename in
   { f with Artifact.filename = prefix ^ ".cmi"}
 
+let companion_cmi f =
+  let prefix = Misc.chop_extensions f.Artifact.filename in
+  { f with Artifact.filename = prefix ^ ".cmi"}
+
 let mli_from_artifact f = Artifact.prefix f ^ !Config.interface_suffix
 let mli_from_source u =
    let prefix = Filename.remove_extension (source_file u) in
@@ -154,3 +166,14 @@ let find_normalized_cmi f =
   let filename = (modname f |> Compilation_unit.name_as_string) ^ ".cmi" in
   let filename = Load_path.find_normalized filename in
   { Artifact.filename; modname = modname f; source_file = Some f.source_file  }
+
+let report_error = function
+  | Invalid_encoding name ->
+      Location.errorf "Invalid encoding of output name: %s." name
+
+let () =
+  Location.register_error_of_exn
+    (function
+      | Error err -> Some (report_error err)
+      | _ -> None
+    )

@@ -130,7 +130,7 @@ let input_cmi_lazy ic =
       header_globals = globals;
       header_sign = sign;
       header_params = params;
-    } = (input_value ic : header) in
+    } = (Compression.input_value ic : header) in
   let crcs = (input_value ic : crcs) in
   let flags = (input_value ic : flags) in
   (* CR ocaml 5 compressed-marshal mshinwell: upstream uses [Compression] *)
@@ -192,7 +192,7 @@ let output_cmi filename oc cmi =
   let len = Int64.sub val_pos data_pos in
   output_int64 oc len;
   Out_channel.seek oc val_pos;
-  output_value oc
+  Compression.output_value oc
     {
       header_name = cmi.cmi_name;
       header_kind = cmi.cmi_kind;
@@ -220,25 +220,26 @@ let read_cmi filename = read_cmi_lazy filename |> force_cmi_infos
 
 (* Error report *)
 
-open Format
-module Style = Misc.Style
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Not_an_interface filename ->
       fprintf ppf "%a@ is not a compiled interface"
-        (Style.as_inline_code Location.print_filename) filename
+        Location.Doc.quoted_filename filename
   | Wrong_version_interface (filename, older_newer) ->
       fprintf ppf
         "%a@ is not a compiled interface for this version of OCaml.@.\
          It seems to be for %s version of OCaml."
-        (Style.as_inline_code  Location.print_filename) filename older_newer
+        Location.Doc.quoted_filename filename older_newer
   | Corrupted_interface filename ->
       fprintf ppf "Corrupted compiled interface@ %a"
-        (Style.as_inline_code Location.print_filename) filename
+        Location.Doc.quoted_filename filename
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

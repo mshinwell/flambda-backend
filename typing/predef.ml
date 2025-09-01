@@ -28,6 +28,60 @@ let wrap create s =
 
 let ident_create = wrap Ident.create_predef
 
+type abstract_type_constr = [
+  | `Int
+  | `Char
+  | `String
+  | `Bytes
+  | `Float
+  | `Continuation
+  | `Array
+  | `Nativeint
+  | `Int32
+  | `Int64
+  | `Lazy_t
+  | `Extension_constructor
+  | `Floatarray
+  | `Iarray
+  | `Atomic_loc
+]
+type data_type_constr = [
+  | `Bool
+  | `Unit
+  | `Exn
+  | `Eff
+  | `List
+  | `Option
+]
+type type_constr = [
+  | abstract_type_constr
+  | data_type_constr
+]
+
+let all_type_constrs : type_constr list = [
+  `Int;
+  `Char;
+  `String;
+  `Bytes;
+  `Float;
+  `Bool;
+  `Unit;
+  `Exn;
+  `Eff;
+  `Continuation;
+  `Array;
+  `List;
+  `Option;
+  `Nativeint;
+  `Int32;
+  `Int64;
+  `Lazy_t;
+  `Extension_constructor;
+  `Floatarray;
+  `Iarray;
+  `Atomic_loc;
+]
+
 let ident_int = ident_create "int"
 and ident_char = ident_create "char"
 and ident_bytes = ident_create "bytes"
@@ -36,6 +90,8 @@ and ident_float32 = ident_create "float32"
 and ident_bool = ident_create "bool"
 and ident_unit = ident_create "unit"
 and ident_exn = ident_create "exn"
+and ident_eff = ident_create "eff"
+and ident_continuation = ident_create "continuation"
 and ident_array = ident_create "array"
 and ident_iarray = ident_create "iarray"
 and ident_list = ident_create "list"
@@ -74,6 +130,30 @@ and ident_int32x16 = ident_create "int32x16"
 and ident_int64x8 = ident_create "int64x8"
 and ident_float32x16 = ident_create "float32x16"
 and ident_float64x8 = ident_create "float64x8"
+and ident_iarray = ident_create "iarray"
+
+let ident_of_type_constr : type_constr -> Ident.t = function
+  | `Int -> ident_int
+  | `Char -> ident_char
+  | `String -> ident_string
+  | `Bytes -> ident_bytes
+  | `Float -> ident_float
+  | `Bool -> ident_bool
+  | `Unit -> ident_unit
+  | `Exn -> ident_exn
+  | `Eff -> ident_eff
+  | `Continuation -> ident_continuation
+  | `Array -> ident_array
+  | `List -> ident_list
+  | `Option -> ident_option
+  | `Nativeint -> ident_nativeint
+  | `Int32 -> ident_int32
+  | `Int64 -> ident_int64
+  | `Lazy_t -> ident_lazy_t
+  | `Extension_constructor -> ident_extension_constructor
+  | `Floatarray -> ident_floatarray
+  | `Iarray -> ident_iarray
+  | `Atomic_loc -> ident_atomic_loc
 
 let path_int = Pident ident_int
 and path_char = Pident ident_char
@@ -83,6 +163,8 @@ and path_float32 = Pident ident_float32
 and path_bool = Pident ident_bool
 and path_unit = Pident ident_unit
 and path_exn = Pident ident_exn
+and path_eff = Pident ident_eff
+and path_continuation = Pident ident_continuation
 and path_array = Pident ident_array
 and path_iarray = Pident ident_iarray
 and path_list = Pident ident_list
@@ -150,7 +232,7 @@ and path_unboxed_int32x16 = Path.unboxed_version path_int32x16
 and path_unboxed_int64x8 = Path.unboxed_version path_int64x8
 and path_unboxed_float32x16 = Path.unboxed_version path_float32x16
 and path_unboxed_float64x8 = Path.unboxed_version path_float64x8
-
+and path_iarray = Pident ident_iarray
 let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
 and type_int8 = newgenty (Tconstr(path_int8, [], ref Mnil))
 and type_int16 = newgenty (Tconstr(path_int16, [], ref Mnil))
@@ -245,6 +327,24 @@ and type_unboxed_float32x16 =
   newgenty (Tconstr(path_unboxed_float32x16, [], ref Mnil))
 and type_unboxed_float64x8 =
   newgenty (Tconstr(path_unboxed_float64x8, [], ref Mnil))
+let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
+and type_char = newgenty (Tconstr(path_char, [], ref Mnil))
+and type_bytes = newgenty (Tconstr(path_bytes, [], ref Mnil))
+and type_float = newgenty (Tconstr(path_float, [], ref Mnil))
+and type_bool = newgenty (Tconstr(path_bool, [], ref Mnil))
+and type_unit = newgenty (Tconstr(path_unit, [], ref Mnil))
+and type_exn = newgenty (Tconstr(path_exn, [], ref Mnil))
+and type_array t = newgenty (Tconstr(path_array, [t], ref Mnil))
+and type_list t = newgenty (Tconstr(path_list, [t], ref Mnil))
+and type_option t = newgenty (Tconstr(path_option, [t], ref Mnil))
+and type_nativeint = newgenty (Tconstr(path_nativeint, [], ref Mnil))
+and type_int32 = newgenty (Tconstr(path_int32, [], ref Mnil))
+and type_int64 = newgenty (Tconstr(path_int64, [], ref Mnil))
+and type_lazy_t t = newgenty (Tconstr(path_lazy_t, [t], ref Mnil))
+and type_string = newgenty (Tconstr(path_string, [], ref Mnil))
+and type_extension_constructor =
+      newgenty (Tconstr(path_extension_constructor, [], ref Mnil))
+and type_floatarray = newgenty (Tconstr(path_floatarray, [], ref Mnil))
 
 let ident_match_failure = ident_create "Match_failure"
 and ident_out_of_memory = ident_create "Out_of_memory"
@@ -259,6 +359,7 @@ and ident_sys_blocked_io = ident_create "Sys_blocked_io"
 and ident_assert_failure = ident_create "Assert_failure"
 and ident_undefined_recursive_module =
         ident_create "Undefined_recursive_module"
+and ident_continuation_already_taken = ident_create "Continuation_already_taken"
 
 let all_predef_exns = [
   ident_match_failure;
@@ -273,22 +374,13 @@ let all_predef_exns = [
   ident_sys_blocked_io;
   ident_assert_failure;
   ident_undefined_recursive_module;
+  ident_continuation_already_taken;
 ]
 
 let path_match_failure = Pident ident_match_failure
 and path_invalid_argument = Pident ident_invalid_argument
 and path_assert_failure = Pident ident_assert_failure
 and path_undefined_recursive_module = Pident ident_undefined_recursive_module
-
-let cstr id args =
-  {
-    cd_id = id;
-    cd_args = Cstr_tuple args;
-    cd_res = None;
-    cd_loc = Location.none;
-    cd_attributes = [];
-    cd_uid = Uid.of_predef_id id;
-  }
 
 let ident_false = ident_create "false"
 and ident_true = ident_create "true"
@@ -300,6 +392,26 @@ and ident_some = ident_create "Some"
 
 and ident_null = ident_create "Null"
 and ident_this = ident_create "This"
+let mk_add_type add_type type_ident ?manifest
+    ?(immediate=Type_immediacy.Unknown) ?(kind=Type_abstract Definition) env =
+  let decl =
+    {type_params = [];
+     type_arity = 0;
+     type_kind = kind;
+     type_loc = Location.none;
+     type_private = Asttypes.Public;
+     type_manifest = manifest;
+     type_variance = [];
+     type_separability = [];
+     type_is_newtype = false;
+     type_expansion_scope = lowest_level;
+     type_attributes = [];
+     type_immediate = immediate;
+     type_unboxed_default = false;
+     type_uid = Uid.of_predef_id type_ident;
+    }
+  in
+  add_type type_ident decl env
 
 let option_argument_sort = Jkind.Sort.Const.value
 let option_argument_jkind = Jkind.Builtin.value_or_null ~why:(
@@ -384,6 +496,43 @@ let mk_add_type add_type =
   let add_type ?manifest type_ident ?kind ~jkind ?unboxed_jkind env =
     let jkind = Jkind.of_builtin ~why:(Primitive type_ident) jkind in
     add_type_with_jkind ?manifest type_ident ?kind ~jkind ?unboxed_jkind env
+let build_initial_env add_type add_extension empty_env =
+  let add_type = mk_add_type add_type
+  and add_type1 type_ident
+      ~variance ~separability ?(kind=fun _ -> Type_abstract Definition) env =
+    let param = newgenvar () in
+    let decl =
+      {type_params = [param];
+       type_arity = 1;
+       type_kind = kind param;
+       type_loc = Location.none;
+       type_private = Asttypes.Public;
+       type_manifest = None;
+       type_variance = [variance];
+       type_separability = [separability];
+       type_is_newtype = false;
+       type_expansion_scope = lowest_level;
+       type_attributes = [];
+       type_immediate = Unknown;
+       type_unboxed_default = false;
+       type_uid = Uid.of_predef_id type_ident;
+      }
+    in
+    add_type type_ident decl env
+  in
+  let add_extension id l =
+    add_extension id
+      { ext_type_path = path_exn;
+        ext_type_params = [];
+        ext_args = Cstr_tuple l;
+        ext_ret_type = None;
+        ext_private = Asttypes.Public;
+        ext_loc = Location.none;
+        ext_attributes = [Ast_helper.Attr.mk
+                            (Location.mknoloc "ocaml.warn_on_literal_pattern")
+                            (Parsetree.PStr [])];
+        ext_uid = Uid.of_predef_id id;
+      }
   in
   add_type_with_jkind, add_type
 
@@ -663,10 +812,47 @@ let build_initial_env add_type add_extension empty_env =
   |> add_type ident_unit
        ~kind:(variant [cstr ident_void []])
        ~jkind:Jkind.Const.Builtin.immediate
+  let variant constrs = Type_variant (constrs, Variant_regular) in
+  empty_env
+  (* Predefined types - alphabetical order *)
+  |> add_type1 ident_array
+       ~variance:Variance.full
+       ~separability:Separability.Ind
+  |> add_type ident_bool
+       ~immediate:Always
+       ~kind:(variant [cstr ident_false []; cstr ident_true []])
+  |> add_type ident_char ~immediate:Always
+  |> add_type ident_exn ~kind:Type_open
+  |> add_type ident_extension_constructor
+  |> add_type ident_float
+  |> add_type ident_floatarray
+  |> add_type ident_int ~immediate:Always
+  |> add_type ident_int32
+  |> add_type ident_int64
+  |> add_type1 ident_lazy_t
+       ~variance:Variance.covariant
+       ~separability:Separability.Ind
+  |> add_type1 ident_list
+       ~variance:Variance.covariant
+       ~separability:Separability.Ind
+       ~kind:(fun tvar ->
+         variant [cstr ident_nil []; cstr ident_cons [tvar; type_list tvar]])
+  |> add_type ident_nativeint
+  |> add_type1 ident_option
+       ~variance:Variance.covariant
+       ~separability:Separability.Ind
+       ~kind:(fun tvar ->
+         variant [cstr ident_none []; cstr ident_some [tvar]])
+  |> add_type ident_string
+  |> add_type ident_bytes
+  |> add_type ident_unit
+       ~immediate:Always
+       ~kind:(variant [cstr ident_void []])
   (* Predefined exceptions - alphabetical order *)
   |> add_extension ident_assert_failure
        [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
         Jkind.Sort.Const.value]
+       [newgenty (Ttuple[type_string; type_int; type_int])]
   |> add_extension ident_division_by_zero []
   |> add_extension ident_end_of_file []
   |> add_extension ident_failure [type_string,
@@ -676,6 +862,7 @@ let build_initial_env add_type add_extension empty_env =
   |> add_extension ident_match_failure
        [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
        Jkind.Sort.Const.value]
+       [newgenty (Ttuple[type_string; type_int; type_int])]
   |> add_extension ident_not_found []
   |> add_extension ident_out_of_memory []
   |> add_extension ident_stack_overflow []
@@ -778,6 +965,7 @@ let add_or_null add_type env =
   ~kind:or_null_kind
   ~param_jkind:(Jkind.for_or_null_argument ident_or_null)
   ~jkind:or_null_jkind
+       [newgenty (Ttuple[type_string; type_int; type_int])]
 
 let builtin_values =
   List.map (fun id -> (Ident.name id, id)) all_predef_exns

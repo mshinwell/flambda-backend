@@ -8,9 +8,10 @@
 #use "contexts_1.ml";;
 (* Notice that (field_mut 1 input) occurs twice, it
    is evaluated once in the 'false' branch and once in the 'true'
-   branch. The compiler assumes that its static knowledge about the
+   branch. The compiler does not assume that its static knowledge about the
    first read (it cannot be a [Right] as we already matched against it
-   and failed) also applies to the second read, which is unsound.
+   and failed) also applies to the second read, and it inserts a Match_failure
+   case if [Right] is read again.
 *)
 [%%expect {|
 

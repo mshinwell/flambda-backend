@@ -37,6 +37,7 @@ type error =
   | Dwarf_fission_dsymutil_not_macos
   | Dsymutil_error of int
   | Objcopy_error of int
+  | Link_error of Linkdeps.error
 
 exception Error of error
 
@@ -185,7 +186,6 @@ let extract_missing_globals () =
   in
   Hashtbl.iter (fun md rq -> mg := (md, List.map fmt !rq) :: !mg) missing_globals;
   !mg
-
 type file =
   | Unit of string * unit_infos * Digest.t
   | Library of string * library_infos
@@ -217,7 +217,7 @@ let assume_no_prefix modname =
      no module needs its prefix considered. *)
   CU.create CU.Prefix.empty modname
 
-let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
+let scan_file ~shared ldeps genfns file (objfiles, tolink, cached_genfns_imports) =
   match read_file file with
   | Unit (file_name,info,crc) ->
       (* This is a .cmx file. It must be linked in any case. *)
@@ -225,6 +225,10 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
       List.iter (fun import ->
           add_required (file_name, None) import)
         info.ui_imports_cmx;
+      Linkdeps.add ldeps
+        ~filename:file_name ~compunit:(CU.name info.ui_unit)
+        ~provides:[CU.name info.ui_unit]
+        ~requires:(List.map (fun import -> CU.name (Import_info.cu import)) info.ui_imports_cmx);
       let dynunit : Cmxs_format.dynunit option =
         if not shared then None else
           Some { dynu_name = info.ui_unit;
@@ -279,6 +283,13 @@ let scan_file ~shared genfns file (objfiles, tolink, cached_genfns_imports) =
            || is_required info.li_name
            then begin
              remove_required info.li_name;
+             let li_name = CU.name info.li_name in
+             Linkdeps.add ldeps
+               ~filename:file_name ~compunit:li_name
+               ~provides:[li_name]
+               ~requires:(List.map (fun import -> CU.name (Import_info.cu import)) 
+                         (info.li_imports_cmx |> Misc.Bitmap.foldi (fun i acc b -> 
+                           if b then infos.lib_imports_cmx.(i) :: acc else acc) []));
              let req_by = (file_name, Some li_name) in
              info.li_imports_cmx |> Misc.Bitmap.iter (fun i ->
                let import = infos.lib_imports_cmx.(i) in
@@ -468,13 +479,17 @@ let link_shared unix ~ppf_dump objfiles output_name =
       (* CR-soon gyorsh: workaround to turn off internal assembler temporarily,
          until it is properly tested for shared library linking. *)
       Emitaux.binary_backend_available := false;
+    let ldeps = Linkdeps.create ~complete:false in
     let genfns = Generic_fns.Tbl.make () in
     let ml_objfiles, units_tolink, _ =
       List.fold_right
-        (scan_file ~shared:true genfns)
+        (scan_file ~shared:true ldeps genfns)
         objfiles
         ([],[], Generic_fns.Partition.Set.empty)
     in
+    (match Linkdeps.check ldeps with
+     | None -> ()
+     | Some e -> raise (Error (Link_error e)));
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
     let objfiles = List.rev ml_objfiles @ List.rev !Clflags.ccobjs in
@@ -601,15 +616,6 @@ let call_linker file_list_rev startup_file output_name =
           raise (Error(Dsymutil_error dsymutil_exit))
   end
 
-let reset () =
-  Cmi_consistbl.clear crc_interfaces;
-  Cmx_consistbl.clear crc_implementations;
-  CU.Tbl.reset implementations_defined;
-  cmx_required := [];
-  CU.Name.Tbl.reset interfaces;
-  implementations := [];
-  lib_ccobjs := [];
-  lib_ccopts := []
 
 (* Main entry point *)
 
@@ -623,17 +629,22 @@ let link unix ~ppf_dump objfiles output_name =
       if !Clflags.nopervasives then objfiles
       else if !Clflags.output_c_object then stdlib :: objfiles
       else stdlib :: (objfiles @ [stdexit]) in
+    let ldeps = Linkdeps.create ~complete:true in
     let genfns = Generic_fns.Tbl.make () in
     let ml_objfiles, units_tolink, cached_genfns_imports =
       List.fold_right
-        (scan_file ~shared:false genfns)
+        (scan_file ~shared:false ldeps genfns)
         objfiles
         ([],[], Generic_fns.Partition.Set.empty)
     in
+    (match Linkdeps.check ldeps with
+     | None -> ()
+     | Some e -> raise (Error (Link_error e)));
     begin match extract_missing_globals() with
       [] -> ()
     | mg -> raise(Error(Missing_implementations mg))
     end;
+    let crc_interfaces = extract_crc_interfaces () in
     Clflags.ccobjs := !Clflags.ccobjs @ !lib_ccobjs;
     Clflags.all_ccopts := !lib_ccopts @ !Clflags.all_ccopts;
                                                  (* put user's opts first *)
@@ -672,25 +683,26 @@ let check_consistency file_name u crc =
 
 (* Error report *)
 
-open Format
+module Style = Misc.Style
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | File_not_found name ->
       fprintf ppf "Cannot find file %s" name
   | Not_an_object_file name ->
       fprintf ppf "The file %a is not a compilation unit description"
-        Location.print_filename name
+        Location.Doc.quoted_filename name
   | Missing_implementations l ->
      let print_references ppf = function
        | [] -> ()
        | r1 :: rl ->
-           fprintf ppf "%s" r1;
-           List.iter (fun r -> fprintf ppf ",@ %s" r) rl in
+           Style.inline_code ppf r1;
+           List.iter (fun r -> fprintf ppf ",@ %a" Style.inline_code r) rl in
       let print_modules ppf =
         List.iter
          (fun (md, rq) ->
             fprintf ppf "@ @[<hov 2>%a referenced from %a@]"
-            CU.print md
+            (Style.as_inline_code CU.print) md
             print_references rq) in
       fprintf ppf
        "@[<v 2>No implementations provided for the following modules:%a@]"
@@ -699,52 +711,72 @@ let report_error ppf = function
       fprintf ppf
        "@[<hov>Files %a@ and %a@ make inconsistent assumptions \
               over interface %a@]"
-       Location.print_filename file1
-       Location.print_filename file2
-       CU.Name.print intf
+       Location.Doc.quoted_filename file1
+       Location.Doc.quoted_filename file2
+       (Style.as_inline_code CU.Name.print) intf
   | Inconsistent_implementation(intf, file1, file2) ->
       fprintf ppf
        "@[<hov>Files %a@ and %a@ make inconsistent assumptions \
               over implementation %a@]"
-       Location.print_filename file1
-       Location.print_filename file2
-       CU.print intf
+       Location.Doc.quoted_filename file1
+       Location.Doc.quoted_filename file2
+       (Style.as_inline_code CU.print) intf
   | Assembler_error file ->
-      fprintf ppf "Error while assembling %a" Location.print_filename file
+      fprintf ppf "Error while assembling %a"
+        Location.Doc.quoted_filename file
   | Linking_error exitcode ->
       fprintf ppf "Error during linking (exit code %d)" exitcode
   | Multiple_definition(modname, file1, file2) ->
       fprintf ppf
         "@[<hov>Files %a@ and %a@ both define a module named %a@]"
-        Location.print_filename file1
-        Location.print_filename file2
-        CU.Name.print modname
+        Location.Doc.quoted_filename file1
+        Location.Doc.quoted_filename file2
+        (Style.as_inline_code CU.Name.print) modname
   | Missing_cmx(filename, name) ->
       fprintf ppf
         "@[<hov>File %a@ was compiled without access@ \
-         to the .cmx file@ for module %a,@ \
-         which was produced by `ocamlopt -for-pack'.@ \
-         Please recompile %a@ with the correct `-I' option@ \
-         so that %a.cmx@ is found.@]"
-        Location.print_filename filename
-        CU.print name
-        Location.print_filename filename
-        CU.print name
+         to the %a file@ for module %a,@ \
+         which was produced by %a.@ \
+         Please recompile %a@ with the correct %a option@ \
+         so that %a@ is found.@]"
+        Location.Doc.quoted_filename filename
+        Style.inline_code ".cmx"
+        (Style.as_inline_code CU.print) name
+        Style.inline_code "ocamlopt -for-pack"
+        Location.Doc.quoted_filename filename
+        Style.inline_code "-I"
+        Style.inline_code (CU.name name^".cmx")
   | Dwarf_fission_objcopy_on_macos ->
       fprintf ppf
-        "Error: -gdwarf-fission=objcopy is not supported on macOS systems.@ \
-         Please use -gdwarf-fission=dsymutil instead."
+        "Error: %a is not supported on macOS systems.@ \
+         Please use %a instead."
+        Style.inline_code "-gdwarf-fission=objcopy"
+        Style.inline_code "-gdwarf-fission=dsymutil"
   | Dwarf_fission_dsymutil_not_macos ->
       fprintf ppf
-        "Error: -gdwarf-fission=dsymutil is only supported on macOS systems."
+        "Error: %a is only supported on macOS systems."
+        Style.inline_code "-gdwarf-fission=dsymutil"
   | Dsymutil_error exitcode ->
       fprintf ppf "Error running dsymutil (exit code %d)" exitcode
   | Objcopy_error exitcode ->
       fprintf ppf "Error running objcopy (exit code %d)" exitcode
+  | Link_error e ->
+      Linkdeps.report_error_doc ~print_filename:Location.Doc.filename ppf e
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+let report_error = Format_doc.compat report_error_doc
+
+let reset () =
+  Cmi_consistbl.clear crc_interfaces;
+  Cmx_consistbl.clear crc_implementations;
+  CU.Tbl.clear implementations_defined;
+  cmx_required := [];
+  CU.Name.Tbl.clear interfaces;
+  implementations := [];
+  lib_ccobjs := [];
+  lib_ccopts := []

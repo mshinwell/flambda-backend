@@ -22,7 +22,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#ifdef HAS_UNISTD
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <assert.h>
@@ -131,15 +131,13 @@ void caml_change_max_stack_size (uintnat new_max_wsize)
 
 struct stack_info** caml_alloc_stack_cache (void)
 {
-  int i;
-
   struct stack_info** stack_cache =
     (struct stack_info**)caml_stat_alloc_noexc(sizeof(struct stack_info*) *
                                                NUM_STACK_SIZE_CLASSES);
   if (stack_cache == NULL)
     return NULL;
 
-  for(i = 0; i < NUM_STACK_SIZE_CLASSES; i++)
+  for (int i = 0; i < NUM_STACK_SIZE_CLASSES; i++)
     stack_cache[i] = NULL;
 
   return stack_cache;
@@ -176,11 +174,28 @@ Caml_inline struct stack_info* alloc_for_stack (mlsize_t wosize, int64_t id)
   /* Ensure we have room to offset Stack_high. */
   wosize += Stack_padding_word;
 
+  size_t stack_len = sizeof(struct stack_info) + sizeof(value) * wosize;
+  size_t len;
+
+  /* Some platforms require 16-byte alignment of the stack pointer, which
+     will be _at the end_ of this allocation, so we need to ask for a bit more
+     memory to make sure that
+       caml_round_up(allocated stack base + stack_len, 16) + sizeof handler
+     will fit the allocated space.
+
+     When using mmap, we can rely upon the stack base being page-aligned
+     and thus aligned to a 16 byte boundary, and can round up here;
+     otherwise we need to always ask for 15 more bytes in order to cope with
+     all misalignment possibilities, even though it is likely that the
+     result of caml_stat_alloc_noexc() will be at least aligned to an
+     8-byte boundary. */
 #ifdef USE_MMAP_MAP_STACK
-  size_t len = sizeof(struct stack_info) +
-               sizeof(value) * wosize +
-               8 + /* For 16-byte aligning handler */
-               sizeof(struct stack_handler);
+  len = caml_round_up(stack_len, 16) + sizeof(struct stack_handler);
+#else
+  len = stack_len + (16 - 1) + sizeof(struct stack_handler);
+#endif
+
+#ifdef USE_MMAP_MAP_STACK
   struct stack_info* si;
   si = mmap(NULL, len, PROT_WRITE | PROT_READ,
              MAP_ANONYMOUS | MAP_PRIVATE | MAP_STACK, -1, 0);
@@ -305,7 +320,7 @@ Caml_inline int stack_cache_bucket (mlsize_t wosize) {
     ++bucket;
     size_bucket_wsz += size_bucket_wsz;
   }
-
+  CAMLassert(wosize>=size_bucket_wsz/2);
   return -1;
 }
 
@@ -336,6 +351,13 @@ alloc_size_class_stack_noexc(mlsize_t wosize, int cache_bucket, value hval,
     }
 
     stack->cache_bucket = cache_bucket;
+
+    /* Ensure 16-byte alignment because some architectures (e.g. arm64)
+       require it. alloc_for_stack() has allocated extra room to prevent
+       this computation from overflowing. */
+    struct stack_handler* hand = (struct stack_handler*)caml_round_up(
+      (uintnat)stack + sizeof(struct stack_info) + sizeof(value) * wosize, 16);
+    stack->handler = hand;
   }
 
   struct stack_handler* hand = stack->handler;
@@ -573,7 +595,7 @@ Caml_inline void scan_stack_frames(
   value * regs;
   frame_descr * d;
   value *root;
-  caml_frame_descrs fds = caml_get_frame_descrs();
+  caml_frame_descrs * fds = caml_get_frame_descrs();
   /* does not change during marking */
   struct global_heap_state colors = caml_global_heap_state;
 
@@ -680,7 +702,7 @@ void caml_maybe_expand_stack (void)
 
 #else /* End NATIVE_CODE, begin BYTE_CODE */
 
-value caml_global_data;
+value caml_global_data = Val_unit;
 
 CAMLprim value caml_alloc_stack_bind(value hval, value hexn, value heff,
                                      value dyn, value val)
@@ -737,14 +759,14 @@ void caml_scan_stack(
   scanning_action f, scanning_action_flags fflags, void* fdata,
   struct stack_info* stack, value* v_gc_regs)
 {
-  value *low, *high, *sp;
+  value *low, *high;
 
   while (stack != NULL) {
     CAMLassert(stack->magic == 42);
 
     high = Stack_high(stack);
     low = stack->sp;
-    for (sp = low; sp < high; sp++) {
+    for (value *sp = low; sp < high; sp++) {
       value v = *sp;
       if (is_scannable(fflags, v)) {
         f(fdata, v, sp);
@@ -866,6 +888,7 @@ int caml_try_realloc_stack(asize_t required_space)
   stack_used = Stack_high(old_stack) - (value*)old_stack->sp;
   wsize = Stack_high(old_stack) - Stack_base(old_stack);
   uintnat max_stack_wsize = caml_max_stack_wsize;
+  wsize = wsize & (~1); // zero alignment bit
   do {
     if (wsize >= max_stack_wsize) return 0;
     wsize *= 2;
@@ -917,14 +940,17 @@ int caml_try_realloc_stack(asize_t required_space)
   caml_rewrite_exception_stack(old_stack, (value**)&Caml_state->exn_handler,
                                (value**) &Caml_state->async_exn_handler,
                                new_stack);
+#ifdef WITH_FRAME_POINTERS
+  rewrite_frame_pointers(old_stack, new_stack);
 #endif
 
   /* Update stack pointers in Caml_state->c_stack. It is possible to have
    * multiple c_stack_links to point to the same stack since callbacks are run
    * on existing stacks. */
   {
-    struct c_stack_link* link;
-    for (link = Caml_state->c_stack; link; link = link->prev) {
+    for (struct c_stack_link *link = Caml_state->c_stack;
+         link != NULL;
+         link = link->prev) {
       if (link->stack == old_stack) {
         ptrdiff_t delta =
           (char*)Stack_high(new_stack) - (char*)Stack_high(old_stack);
@@ -1038,7 +1064,8 @@ CAMLprim value caml_continuation_use_noexc (value cont)
 
   fiber_debug_log("cont: is_block(%d) tag_val(%ul) is_young(%d)",
                   Is_block(cont), Tag_val(cont), Is_young(cont));
-  CAMLassert(Is_block(cont) && Tag_val(cont) == Cont_tag);
+  CAMLassert(Is_block(cont));
+  CAMLassert(Tag_val(cont) == Cont_tag);
 
   /* this forms a barrier between execution and any other domains
      that might be marking this continuation */
@@ -1079,7 +1106,7 @@ CAMLprim value caml_continuation_use_and_update_handler_noexc
     /* The continuation has already been taken */
     return stack;
   }
-  while (Stack_parent(stk) != NULL) stk = Stack_parent(stk);
+  stk = Ptr_val(Field(cont, 1));
   Stack_handle_value(stk) = hval;
   Stack_handle_exception(stk) = hexn;
   Stack_handle_effect(stk) = heff;
@@ -1092,13 +1119,6 @@ void caml_continuation_replace(value cont, struct stack_info* stk)
   int b = atomic_compare_exchange_strong(Op_atomic_val(cont), &n, Val_ptr(stk));
   CAMLassert(b);
   (void)b; /* squash unused warning */
-}
-
-CAMLprim value caml_drop_continuation (value cont)
-{
-  struct stack_info* stk = Ptr_val(caml_continuation_use(cont));
-  caml_free_stack(stk);
-  return Val_unit;
 }
 
 static const value * _Atomic caml_unhandled_effect_exn = NULL;

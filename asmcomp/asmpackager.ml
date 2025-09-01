@@ -270,24 +270,24 @@ let package_files unix ~ppf_dump initial_env files targetcmx ~flambda2 =
 
 (* Error report *)
 
-open Format
+open Format_doc
 module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
     Illegal_renaming(name, file, id) ->
       fprintf ppf "Wrong file naming: %a@ contains the code for\
                    @ %a when %a was expected"
-        (Style.as_inline_code Location.print_filename) file
+        Location.Doc.quoted_filename file
         (Style.as_inline_code CU.Name.print) name
         (Style.as_inline_code CU.Name.print) id
   | Forward_reference(file, ident) ->
       fprintf ppf "Forward reference to %a in file %a"
         (Style.as_inline_code CU.Name.print) ident
-        (Style.as_inline_code Location.print_filename) file
+        Location.Doc.quoted_filename file
   | Wrong_for_pack(file, path) ->
-      fprintf ppf "File %a@ was not compiled with the `-for-pack %a' option"
-        (Style.as_inline_code Location.print_filename) file
-        (Style.as_inline_code CU.print) path
+      fprintf ppf "File %a@ was not compiled with the %a option"
+        Location.Doc.quoted_filename file
+        Style.inline_code ("-for-pack " ^ CU.name path)
   | File_not_found file ->
       fprintf ppf "File %a not found" Style.inline_code file
   | Assembler_error file ->
@@ -298,6 +298,8 @@ let report_error ppf = function
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

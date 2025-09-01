@@ -1,8 +1,8 @@
 (* TEST
  include systhreads;
  hassysthreads;
+ not-target-windows; (* Broken on Windows (missing join?), needs to be fixed *)
  not-macos;
- libunix;
  {
    bytecode;
  }{
@@ -35,7 +35,7 @@ let client (addr, msg) =
     Unix.socket (Unix.domain_of_sockaddr addr) Unix.SOCK_STREAM 0 in
   Unix.connect sock addr;
   let buf = Bytes.make 1024 ' ' in
-  ignore(Unix.write_substring sock msg 0 (String.length msg));
+  ignore (Unix.write_substring sock msg 0 (String.length msg));
   let n = Unix.read sock buf 0 (Bytes.length buf) in
   Mutex.lock mutex;
   lines := (Bytes.sub buf 0 n) :: !lines;

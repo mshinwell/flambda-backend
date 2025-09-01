@@ -43,9 +43,13 @@ type cmm_label = Label.t
 type bswap_bitwidth = Sixteen | Thirtytwo | Sixtyfour
 
 type specific_operation =
-  | Ifar_poll
-  | Ifar_alloc of { bytes : int; dbginfo : Cmm.alloc_dbginfo }
+  | Ipoll_far of { return_label: cmm_label option }
+  | Ialloc_far of { bytes : int; dbginfo : Cmm.alloc_dbginfo }
+  | Icheckbound_far
+  | Icheckbound_imm_far of { bound : int; }
   | Ishiftarith of arith_operation * int
+  | Ishiftcheckbound of { shift : int; }
+  | Ishiftcheckbound_far of { shift : int; }
   | Imuladd       (* multiply and add *)
   | Imulsub       (* multiply and subtract *)
   | Inegmulf      (* floating-point negate and multiply *)

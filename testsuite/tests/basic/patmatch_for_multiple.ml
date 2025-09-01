@@ -1,5 +1,5 @@
 (* TEST
- flags = "-drawlambda -dlambda";
+ flags = "-drawlambda -dlambda -dcanonical-ids";
  expect;
 *)
 

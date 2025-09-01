@@ -282,7 +282,7 @@ let string_of_int n =
 external int_of_string : string -> int @@ portable = "caml_int_of_string"
 
 let int_of_string_opt s =
-  (* TODO: provide this directly as a non-raising primitive. *)
+  (* Trashes current backtrace *)
   try Some (int_of_string s)
   with Failure _ -> None
 
@@ -303,7 +303,7 @@ let string_of_float f = valid_float_lexem (format_float "%.12g" f)
 external float_of_string : string -> float @@ portable = "caml_float_of_string"
 
 let float_of_string_opt s =
-  (* TODO: provide this directly as a non-raising primitive. *)
+  (* Trashes current backtrace *)
   try Some (float_of_string s)
   with Failure _ -> None
 
@@ -629,6 +629,7 @@ module Condition      = Condition
 module Digest         = Digest
 module Domain         = Domain
 module Dynarray       = Dynarray
+module Pqueue         = Pqueue
 module Effect         = Effect
 module Either         = Either
 module Ephemeron      = Ephemeron
@@ -638,6 +639,7 @@ module Format         = Format
 module Fun            = Fun
 module Gc             = Gc
 module Hashtbl        = Hashtbl
+module Iarray         = Iarray
 module In_channel     = In_channel
 module Int            = Int
 module Int32          = Int32
@@ -656,12 +658,14 @@ module Obj            = Obj
 module Oo             = Oo
 module Option         = Option
 module Out_channel    = Out_channel
+module Pair           = Pair
 module Parsing        = Parsing
 module Printexc       = Printexc
 module Printf         = Printf
 module Queue          = Queue
 module Random         = Random
 module Result         = Result
+module Repr           = Repr
 module Scanf          = Scanf
 module Semaphore      = Semaphore
 module Seq            = Seq

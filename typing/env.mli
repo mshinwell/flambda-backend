@@ -16,6 +16,7 @@
 (* Environment handling *)
 
 open Types
+open Data_types
 open Misc
 
 type value_unbound_reason =
@@ -430,7 +431,7 @@ val add_value:
     ?check:(string -> Warnings.t) -> mode:(Mode.allowed * 'r) Mode.Value.t ->
     Ident.t -> Types.value_description -> t -> t
 val add_type:
-    check:bool -> ?shape:Shape.t -> Ident.t -> type_declaration -> t -> t
+  check:bool -> ?shape:Shape.t -> Ident.t -> type_declaration -> t -> t
 val add_extension:
   check:bool -> ?shape:Shape.t -> rebind:bool -> Ident.t ->
   extension_constructor -> t -> t
@@ -550,9 +551,12 @@ val reset_cache: preserve_persistent_env:bool -> unit
 (* To be called before each toplevel phrase. *)
 val reset_cache_toplevel: unit -> unit
 
-(* Remember the name of the current compilation unit. *)
+(* Remember the current compilation unit. *)
 val set_unit_name: Unit_info.t option -> unit
 val get_unit_name: unit -> Unit_info.t option
+val set_current_unit: Unit_info.t -> unit
+val get_current_unit : unit -> Unit_info.t option
+val get_current_unit_name: unit -> string
 
 (* Read, save a signature to/from a file. *)
 val read_signature:
@@ -635,12 +639,6 @@ type error =
 
 exception Error of error
 
-open Format
-
-val report_error: formatter -> error -> unit
-
-val report_lookup_error: Location.t -> t -> formatter -> lookup_error -> unit
-
 val in_signature: bool -> t -> t
 
 val is_in_signature: t -> bool
@@ -676,7 +674,7 @@ val constrain_type_jkind:
 (* Forward declaration to break mutual recursion with Printtyp. *)
 val print_longident: (Format.formatter -> Longident.t -> unit) ref
 (* Forward declaration to break mutual recursion with Printtyp. *)
-val print_path: (Format.formatter -> Path.t -> unit) ref
+val print_path: Path.t Format_doc.printer ref
 (* Forward declaration to break mutual recursion with Printtyp. *)
 val print_type_expr: (Format.formatter -> Types.type_expr -> unit) ref
 

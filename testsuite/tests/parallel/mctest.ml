@@ -2,6 +2,7 @@
  skip;
  runtime5;
  include unix;
+ multicore;
  hasunix;
  {
    bytecode;

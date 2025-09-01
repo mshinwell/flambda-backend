@@ -883,14 +883,15 @@ let check_pers_struct ~allow_hidden penv f ~loc name =
       let warn = Warnings.No_cmi_file(name_as_string, None) in
         Location.prerr_warning loc warn
   | Cmi_format.Error err ->
-      let msg = Format.asprintf "%a" Cmi_format.report_error err in
+      let msg = Format.asprintf "%a"
+          Cmi_format.report_error err in
       let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
         Location.prerr_warning loc warn
   | Error err ->
       let msg =
         match err with
         | Illegal_renaming(name, ps_name, filename) ->
-            Format.asprintf
+            Format_doc.doc_printf
               " %a@ contains the compiled interface for @ \
                %a when %a was expected"
               (Style.as_inline_code Location.print_filename) filename
@@ -900,7 +901,7 @@ let check_pers_struct ~allow_hidden penv f ~loc name =
             (* Can't be raised by [find_pers_struct ~check:false] *)
             assert false
         | Need_recursive_types name ->
-            Format.asprintf
+            Format_doc.doc_printf
               "%a uses recursive types"
               (Style.as_inline_code CU.Name.print) name
         | Inconsistent_package_declaration_between_imports _ ->
@@ -938,6 +939,7 @@ let check_pers_struct ~allow_hidden penv f ~loc name =
             Format.asprintf "Can't find argument %a"
               (Style.as_inline_code Global_module.Name.print) value
       in
+      let msg = Format_doc.(asprintf "%a" pp_doc) msg in
       let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
         Location.prerr_warning loc warn
 
@@ -1097,20 +1099,20 @@ let save_cmi penv psig =
     )
     ~exceptionally:(fun () -> remove_file filename)
 
-let report_error ppf =
-  let open Format in
+let report_error_doc ppf =
+  let open Format_doc in
   function
   | Illegal_renaming(modname, ps_name, filename) -> fprintf ppf
       "Wrong file naming: %a@ contains the compiled interface for@ \
        %a when %a was expected"
-      (Style.as_inline_code Location.print_filename) filename
+      Location.Doc.quoted_filename filename
       (Style.as_inline_code CU.Name.print) ps_name
       (Style.as_inline_code CU.Name.print) modname
   | Inconsistent_import(name, source1, source2) -> fprintf ppf
       "@[<hov>The files %a@ and %a@ \
               make inconsistent assumptions@ over interface %a@]"
-      (Style.as_inline_code Location.print_filename) source1
-      (Style.as_inline_code Location.print_filename) source2
+      Location.Doc.quoted_filename source1
+      Location.Doc.quoted_filename source2
       (Style.as_inline_code CU.Name.print) name
   | Need_recursive_types(import) ->
       fprintf ppf
@@ -1225,6 +1227,8 @@ let () =
              [Env] is often able to add location info to our errors by
              re-raising them with the [Env.Error_from_persistent_env]
              constructor. *)
-          Some (Location.error_of_printer_file report_error err)
+          Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

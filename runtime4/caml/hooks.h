@@ -23,8 +23,6 @@
 extern "C" {
 #endif
 
-#ifdef CAML_INTERNALS
-
 #ifdef NATIVE_CODE
 
 /* executed just before calling the entry point of a dynamically

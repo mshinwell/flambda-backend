@@ -62,9 +62,13 @@ type bswap_bitwidth = Sixteen | Thirtytwo | Sixtyfour
 
 (* Specific operations, including [Simd], must not raise. *)
 type specific_operation =
-  | Ifar_poll
-  | Ifar_alloc of { bytes : int; dbginfo : Cmm.alloc_dbginfo }
+  | Ipoll_far of { return_label: cmm_label option }
+  | Ialloc_far of { bytes : int; dbginfo : Cmm.alloc_dbginfo }
+  | Icheckbound_far
+  | Icheckbound_imm_far of { bound : int; }
   | Ishiftarith of arith_operation * int
+  | Ishiftcheckbound of { shift : int; }
+  | Ishiftcheckbound_far of { shift : int; }
   | Imuladd       (* multiply and add *)
   | Imulsub       (* multiply and subtract *)
   | Inegmulf      (* floating-point negate and multiply *)
@@ -127,7 +131,6 @@ let addressing_displacement_for_llvmize addr =
     | Ibased _ ->
       Misc.fatal_error
         "Arch.displacement_addressing_for_llvmize: unexpected addressing mode"
-
 (* Printing operations and addressing modes *)
 
 let print_addressing printreg addr ppf arg =
@@ -147,10 +150,14 @@ let int_of_bswap_bitwidth = function
 
 let print_specific_operation printreg op ppf arg =
   match op with
-  | Ifar_poll ->
+  | Ipoll_far _ ->
     fprintf ppf "(far) poll"
-  | Ifar_alloc { bytes; dbginfo = _ } ->
+  | Ialloc_far { bytes; dbginfo = _ } ->
     fprintf ppf "(far) alloc %i" bytes
+  | Icheckbound_far ->
+    fprintf ppf "%a (far) check > %a" printreg arg.(0) printreg arg.(1)
+  | Icheckbound_imm_far { bound; } ->
+    fprintf ppf "%a (far) check > %i" printreg arg.(0) bound
   | Ishiftarith(op, shift) ->
       let op_name = function
       | Ishiftadd -> "+"
@@ -161,6 +168,12 @@ let print_specific_operation printreg op ppf arg =
        else sprintf ">> %i" (-shift) in
       fprintf ppf "%a %s %a %s"
        printreg arg.(0) (op_name op) printreg arg.(1) shift_mark
+  | Ishiftcheckbound { shift; } ->
+      fprintf ppf "check %a >> %i > %a" printreg arg.(0) shift
+        printreg arg.(1)
+  | Ishiftcheckbound_far { shift; } ->
+      fprintf ppf
+        "(far) check %a >> %i > %a" printreg arg.(0) shift printreg arg.(1)
   | Imuladd ->
       fprintf ppf "(%a * %a) + %a"
         printreg arg.(0)
@@ -353,8 +366,10 @@ let is_logical_immediate x =
 (* Specific operations that are pure *)
 
 let operation_is_pure : specific_operation -> bool = function
-  | Ifar_alloc _ | Ifar_poll -> false
+  | Ialloc_far _ | Ipoll_far _ -> false
   | Ishiftarith _ -> true
+  | Ishiftcheckbound _ | Ishiftcheckbound_far _ -> true
+  | Icheckbound_far | Icheckbound_imm_far _ -> true
   | Imuladd -> true
   | Imulsub -> true
   | Inegmulf -> true
@@ -371,8 +386,12 @@ let operation_is_pure : specific_operation -> bool = function
 (* Specific operations that can raise *)
 
 let operation_allocates = function
-  | Ifar_alloc _ -> true
-  | Ifar_poll
+  | Ialloc_far _ -> true
+  | Ipoll_far _
+  | Icheckbound_far
+  | Icheckbound_imm_far _
+  | Ishiftcheckbound _
+  | Ishiftcheckbound_far _
   | Imuladd
   | Imulsub
   | Inegmulf

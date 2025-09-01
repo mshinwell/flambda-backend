@@ -40,6 +40,14 @@ type runtime_counter =
 | EV_C_MAJOR_SLICE_TOTAL_WORK
 | EV_C_MAJOR_SLICE_BUDGET
 | EV_C_MAJOR_SLICE_WORK_DONE
+| EV_C_MAJOR_HEAP_WORDS
+| EV_C_MAJOR_ALLOCATED_WORDS
+| EV_C_MAJOR_ALLOCATED_WORK
+| EV_C_MAJOR_DEPENDENT_WORK
+| EV_C_MAJOR_EXTRA_WORK
+| EV_C_MAJOR_WORK_COUNTER
+| EV_C_MAJOR_ALLOC_COUNTER
+| EV_C_MAJOR_SLICE_TARGET
 
 type runtime_phase =
 | EV_EXPLICIT_GC_SET
@@ -92,6 +100,7 @@ type runtime_phase =
 | EV_COMPACT_RELEASE
 | EV_MINOR_EPHE_CLEAN
 | EV_MINOR_DEPENDENT
+| EV_EMPTY_MINOR
 
 type lifecycle =
   EV_RING_START
@@ -144,6 +153,22 @@ let runtime_counter_name counter =
     "major_slice_budget"
   | EV_C_MAJOR_SLICE_WORK_DONE ->
     "major_slice_work_done"
+  | EV_C_MAJOR_HEAP_WORDS ->
+      "major_heap_words"
+  | EV_C_MAJOR_ALLOCATED_WORDS ->
+      "major_allocated_words"
+  | EV_C_MAJOR_ALLOCATED_WORK ->
+      "major_allocated_work"
+  | EV_C_MAJOR_DEPENDENT_WORK ->
+      "major_dependent_work"
+  | EV_C_MAJOR_EXTRA_WORK ->
+      "major_extra_work"
+  | EV_C_MAJOR_WORK_COUNTER ->
+      "major_work_counter"
+  | EV_C_MAJOR_ALLOC_COUNTER ->
+      "major_alloc_counter"
+  | EV_C_MAJOR_SLICE_TARGET ->
+      "major_slice_target"
 
 let runtime_phase_name phase =
   match phase with
@@ -197,6 +222,7 @@ let runtime_phase_name phase =
   | EV_COMPACT_RELEASE -> "compaction_release"
   | EV_MINOR_EPHE_CLEAN -> "minor_ephe_clean"
   | EV_MINOR_DEPENDENT -> "minor_dependent"
+  | EV_EMPTY_MINOR -> "empty_minor"
 
 let lifecycle_name lifecycle =
   match lifecycle with
@@ -216,6 +242,11 @@ module Timestamp = struct
 
   let to_int64 t =
     t
+
+  external get_current : unit -> (t [@unboxed]) =
+    "caml_ml_runtime_current_timestamp"
+    "caml_ml_runtime_current_timestamp_unboxed"
+    [@@noalloc]
 end
 
 module Type = struct
@@ -242,11 +273,11 @@ module Type = struct
 
   let int = Int
 
-  let next_id = ref 3
+  let next_id = Atomic.make 3
 
   let register ~encode ~decode =
-    incr next_id;
-    Custom { serialize = encode; deserialize = decode; id = !next_id - 1}
+    let id = Atomic.fetch_and_add next_id 1 in
+    Custom { serialize = encode; deserialize = decode; id; }
 
   let id: type a. a t -> int = function
     | Unit -> 0
@@ -285,14 +316,14 @@ module User = struct
        the write buffer across calls.
 
        To be safe for multi-domain programs, we use domain-local
-       storage for the write buffer. To accomodate for multi-threaded
+       storage for the write buffer. To accommodate for multi-threaded
        programs (without depending on the Thread module), we store
        a list of caches for each domain. This might leak a bit of
        memory: the number of buffers for a domain is equal to the
        maximum number of threads that requested a buffer concurrently,
        and we never free those buffers. *)
     let create_buffer () = Bytes.create 1024 in
-    let write_buffer_cache = Domain.Safe.DLS.new_key (fun () -> ref []) in
+    let write_buffer_cache = Domain.DLS.new_key (fun () -> ref []) in
     let pop_or_create buffers =
       (* intended to be thread-safe *)
       (* begin atomic *)

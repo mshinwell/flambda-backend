@@ -12,6 +12,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+external ignore : 'a -> unit = "%ignore"
+
 type (!'a : value_or_null) t : mutable_data with 'a
 
 external make

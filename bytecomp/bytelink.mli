@@ -25,6 +25,8 @@ val link : filepath list -> filepath -> unit
 val reset : unit -> unit
 
 val check_consistency: filepath -> Cmo_format.compilation_unit_descr -> unit
+val linkdeps_unit :
+  Linkdeps.t -> filename:string -> Cmo_format.compilation_unit_descr -> unit
 
 val extract_crc_interfaces: unit -> Import_info.t list
 
@@ -41,9 +43,10 @@ type error =
   | Camlheader of string * filepath
   | Wrong_link_order of DepSet.t
   | Multiple_definition of Compilation_unit.t * filepath * filepath
+  | Link_error of Linkdeps.error
+  | Needs_custom_runtime of filepath
 
 exception Error of error
 
-open Format
-
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

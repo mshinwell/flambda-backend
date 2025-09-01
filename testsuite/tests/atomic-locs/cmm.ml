@@ -5,8 +5,11 @@
 let standard_atomic_get (r : 'a Atomic.t) =
   Atomic.get r
 
-let standard_atomic_get (r : 'a Atomic.t) v =
+let standard_atomic_set (r : 'a Atomic.t) v =
   Atomic.set r v
+
+let standard_atomic_cas (r : 'a Atomic.t) oldv newv =
+  Atomic.compare_and_set r oldv newv
 
 (* atomic record fields *)
 
@@ -44,7 +47,3 @@ let set_imm (r : int atomic) v =
    {
     setup-ocamlopt.byte-build-env;
     flags += " -O3";
-    ocamlopt.byte;
-    check-ocamlopt.byte-output;
-   }
-*)

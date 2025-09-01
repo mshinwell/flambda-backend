@@ -77,7 +77,8 @@ module Typedtree_search =
           | ext :: _ -> Hashtbl.add table (X (Name.from_ident ext.ext_id)) tt
         end
       | Typedtree.Tstr_exception ext ->
-          Hashtbl.add table (E (Name.from_ident ext.tyexn_constructor.ext_id)) tt
+          Hashtbl.add table (E (Name.from_ident ext.tyexn_constructor.ext_id))
+            tt
       | Typedtree.Tstr_type (rf, ident_type_decl_list) ->
           List.iter
             (fun td ->
@@ -268,7 +269,7 @@ module Analyser =
 
         | Typedtree.Tpat_construct (_, cons_desc, _, _) when
             (* we give a name to the parameter only if it is unit *)
-            Path.same (Btype.cstr_type_path cons_desc) Predef.path_unit
+            Path.same (Data_types.cstr_res_type_path cons_desc) Predef.path_unit
           ->
             (* a () argument, it never has description *)
             Simple_name { sn_name = "()" ;
@@ -1854,7 +1855,7 @@ module Analyser =
        let (tree_structure, _) = typedtree in
        prepare_file source_file input_file;
        (* We create the t_module for this file. *)
-       let mod_name = Unit_info.modname_from_source source_file in
+       let mod_name = Unit_info.lax_modname_from_source source_file in
        let len, info_opt = Sig.preamble !file_name !file
            (fun x -> x.Parsetree.pstr_loc) parsetree in
       let info_opt = analyze_toplevel_alerts info_opt parsetree in

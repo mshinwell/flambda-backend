@@ -1,6 +1,5 @@
 (* TEST
- flags = "-extension labeled_tuples";
- expect;
+   expect;
 *)
 
 (* Test match statements with exception patterns *)
@@ -632,10 +631,3 @@ let _ =
 
 let _ =
   let (~x:n1, ~y:n2, n3, ~x:n4, ~x:n5, ~y:n6, ~y:n7, n8, n9, ~y:n10, ~x:n11) =
-    t
-  in
-  (n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11)
-[%%expect{|
-- : int * int * int * int * int * int * int * int * int * int * int =
-(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-|}]

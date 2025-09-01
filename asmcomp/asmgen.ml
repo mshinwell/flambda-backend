@@ -650,25 +650,31 @@ let compile_implementation_linear unix output_prefix ~progname =
       linear_gen_implementation unix progname)
 
 (* Error report *)
+module Style = Misc.Style
+let fprintf, dprintf = Format_doc.fprintf, Format_doc.dprintf
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Assembler_error file ->
-    fprintf ppf "Assembler error, input left in file %a" Location.print_filename
-      file
+      fprintf ppf "Assembler error, input left in file %a"
+        Location.Doc.quoted_filename file
   | Mismatched_for_pack saved ->
     let msg prefix =
       if Compilation_unit.Prefix.is_empty prefix
-      then "without -for-pack"
-      else "with -for-pack " ^ Compilation_unit.Prefix.to_string prefix
+      then dprintf "without %a" Style.inline_code "-for-pack"
+      else dprintf "with %a" Style.inline_code ("-for-pack " ^ Compilation_unit.Prefix.to_string prefix)
     in
-    fprintf ppf "This input file cannot be compiled %s: it was generated %s."
+    fprintf ppf "This input file cannot be compiled %t: it was generated %t."
       (msg (Compilation_unit.Prefix.from_clflags ()))
       (msg saved)
   | Asm_generation (fn, err) ->
-    fprintf ppf "Error producing assembly code for %s: %a" fn
-      Emitaux.report_error err
+    fprintf ppf "Error producing assembly code for function %a: %a"
+      Style.inline_code fn Emitaux.report_error_doc err
 
 let () =
-  Location.register_error_of_exn (function
-    | Error err -> Some (Location.error_of_printer_file report_error err)
-    | _ -> None)
+  Location.register_error_of_exn
+    (function
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
+      | _ -> None
+    )
+
+let report_error = Format_doc.compat report_error_doc

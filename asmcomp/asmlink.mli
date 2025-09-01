@@ -45,7 +45,9 @@ type error =
   | Dwarf_fission_dsymutil_not_macos
   | Dsymutil_error of int
   | Objcopy_error of int
+  | Link_error of Linkdeps.error
 
 exception Error of error
 
-val report_error: formatter -> error -> unit
+val report_error: error Format_doc.format_printer
+val report_error_doc: error Format_doc.printer

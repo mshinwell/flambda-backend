@@ -1,10 +1,28 @@
+<<<<<<< HEAD
 camlStack_realloc__callback_3_14_code
+||||||| 23e84b8c4d
+camlStack_realloc.callback
+=======
+camlStack_realloc$callback
+>>>>>>> ocaml/5.4
 caml_start_program
 caml_callback
 c_fun
 caml_c_call
+<<<<<<< HEAD
 camlStack_realloc__f_comp_5_16_code
+||||||| 23e84b8c4d
+camlStack_realloc.f_comp
+=======
+camlStack_realloc$f_comp
+>>>>>>> ocaml/5.4
 caml_runstack
+<<<<<<< HEAD
 camlStdlib__Effect__with_stack_1_29_code
 camlStack_realloc__entry
+||||||| 23e84b8c4d
+camlStack_realloc.entry
+=======
+camlStack_realloc$entry
+>>>>>>> ocaml/5.4
 caml_program

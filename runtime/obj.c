@@ -150,7 +150,7 @@ CAMLprim value caml_obj_with_tag(value new_tag_v, value arg)
 {
   CAMLparam2 (new_tag_v, arg);
   CAMLlocal1 (res);
-  mlsize_t sz, i;
+  mlsize_t sz;
   tag_t tag_for_alloc;
   uintnat infix_offset = 0;
 
@@ -194,7 +194,7 @@ CAMLprim value caml_obj_with_tag(value new_tag_v, value arg)
   } else if (sz <= Max_young_wosize) {
     reserved_t reserved = Reserved_val(arg);
     res = caml_alloc_small_with_reserved(sz, tag_for_alloc, reserved);
-    for (i = 0; i < sz; i++) Field(res, i) = Field(arg, i);
+    for (mlsize_t i = 0; i < sz; i++) Field(res, i) = Field(arg, i);
   } else {
     mlsize_t scannable_sz = Scannable_wosize_val(arg);
     reserved_t reserved = Reserved_val(arg);
@@ -217,24 +217,30 @@ CAMLprim value caml_obj_with_tag(value new_tag_v, value arg)
       // These two can be equal when there is no scannable environment.
       CAMLassert(start_of_scannable_env <= scannable_sz);
 
+      mlsize_t i;
       for (i = 0; i < start_of_scannable_env; i++) {
         Field(res, i) = Field(arg, i);
       }
+      // Copy scannable values (for closures, this is only the scannable
+      // environment).
+      for (; i < scannable_sz; i++) {
+        caml_initialize(&Field(res, i), Field(arg, i));
+      }
+      // Copy any non-scannable flat suffix of a mixed block.
+      for (; i < sz; i++) {
+        Field(res, i) = Field(arg, i);
+      }
     } else {
-      i = 0;
+      mlsize_t i;
+      // Copy scannable values
+      for (i = 0; i < scannable_sz; i++) {
+        caml_initialize(&Field(res, i), Field(arg, i));
+      }
+      // Copy any non-scannable flat suffix of a mixed block.
+      for (; i < sz; i++) {
+        Field(res, i) = Field(arg, i);
+      }
     }
-
-    // Copy scannable values (for closures, this is only the scannable
-    // environment).
-    for (; i < scannable_sz; i++) {
-      caml_initialize(&Field(res, i), Field(arg, i));
-    }
-
-    // Copy any non-scannable flat suffix of a mixed block.
-    for (; i < sz; i++) {
-      Field(res, i) = Field(arg, i);
-    }
-
     /* Give gc a chance to run, and run memprof callbacks */
     caml_process_pending_actions();
   }

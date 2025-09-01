@@ -65,8 +65,36 @@ let current_unit =
     ui_external_symbols = [];
   }
 
+let linuxlike_mangling = match Config.system with
+  | "macosx"
+  | "mingw" | "mingw64" | "cygwin" | "win32" | "win64" -> false
+  | _ -> true
+
+let symbol_separator = if linuxlike_mangling then '.' else '$'
+let escape_prefix = if linuxlike_mangling then "$" else "$$"
+
+let concat_symbol unitname id =
+  Printf.sprintf "%s%c%s" unitname symbol_separator id
+
+let symbolname_for_pack pack name =
+  match pack with
+  | None -> name
+  | Some p -> concat_symbol p name
+
+let unit_id_from_name name = Ident.create_persistent name
+
+let make_symbol ?(unitname = current_unit.ui_symbol) idopt =
+  let prefix = "caml" ^ unitname in
+  match idopt with
+  | None -> prefix
+  | Some id -> concat_symbol prefix id
+
+let current_unit_linkage_name () =
+  Linkage_name.create (make_symbol ~unitname:current_unit.ui_symbol None)
+
 let reset unit_info =
   let compilation_unit = Unit_info.modname unit_info in
+  Hashtbl.clear exported_constants;
   Infos_table.clear global_infos_table;
   Zero_alloc_info.reset cached_zero_alloc_info;
   Env.set_unit_name (Some unit_info);
@@ -315,25 +343,41 @@ let require_global global_ident =
 
 (* Error report *)
 
-open Format
+open Format_doc
+module Style = Misc.Style
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | Not_a_unit_info filename ->
       fprintf ppf "%a@ is not a compilation unit description."
-        Location.print_filename filename
+        Location.Doc.quoted_filename filename
   | Corrupted_unit_info filename ->
       fprintf ppf "Corrupted compilation unit description@ %a"
-        Location.print_filename filename
+        Location.Doc.quoted_filename filename
   | Illegal_renaming(name, modname, filename) ->
       fprintf ppf "%a@ contains the description for unit\
                    @ %a when %a was expected"
-        Location.print_filename filename
-        CU.print name
-        CU.print modname
+        Location.Doc.quoted_filename filename
+        (Style.as_inline_code CU.print_name) name
+        (Style.as_inline_code CU.print_name) modname
+  | Mismatching_for_pack(filename, pack_1, current_unit, None) ->
+      fprintf ppf "%a@ was built with %a, but the \
+                   @ current unit %a is not"
+        Location.Doc.quoted_filename filename
+        Style.inline_code ("-for-pack " ^ pack_1)
+        Style.inline_code current_unit
+  | Mismatching_for_pack(filename, pack_1, current_unit, Some pack_2) ->
+      fprintf ppf "%a@ was built with %a, but the \
+                   @ current unit %a is built with %a"
+        Location.Doc.quoted_filename filename
+        Style.inline_code ("-for-pack " ^ pack_1)
+        Style.inline_code current_unit
+        Style.inline_code ("-for-pack " ^ pack_2)
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc

@@ -140,6 +140,7 @@
   priority_queue
   terminfo
   ccomp
+  format_doc    ; from upstream
   warnings
   consistbl
   strongly_connected_components
@@ -158,6 +159,8 @@
   diffing
   diffing_with_keys
   unit_info
+  compression   ; from upstream
+  linkdeps      ; from upstream
   language_extension_kernel
   language_extension
   zero_alloc_utils
@@ -203,6 +206,7 @@
   persistent_env
   env
   errortrace
+  errortrace_report  ; from upstream
   mode
   jkind_types
   jkind_intf
@@ -211,6 +215,7 @@
   printtyped
   ctype
   printtyp
+  rawprinttyp        ; from upstream
   includeclass
   mtype
   envaux
@@ -246,6 +251,8 @@
   typedecl_properties
   typedecl_separability
   cmt2annot
+  out_type           ; from upstream
+  data_types         ; from upstream
   ; manual update: mli only files
   annot
   outcometree
@@ -295,7 +302,9 @@
   cmo_format
   outcometree
   parsetree
-  debug_event))
+  debug_event
+  ; manual update: this is required.
+  instruct))
 
 (library
  (name ocamlbytecomp)

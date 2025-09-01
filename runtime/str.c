@@ -279,7 +279,6 @@ CAMLprim value caml_bytes_set64(value str, value index, value newval)
 CAMLno_tsan_for_perf /* This attribute needs to stay on its own line for this
                         function to be detected as a primitive by the build
                         system. */
-
 CAMLprim value caml_string_get16_indexed_by_int64(value, value);
 CAMLprim value caml_string_get16_indexed_by_int32(value, value);
 CAMLprim value caml_string_get16_indexed_by_nativeint(value, value);
@@ -342,7 +341,6 @@ String_and_bytes_access_index_by(32, nativeint, intnat, Nativeint_val)
 String_and_bytes_access_index_by(64, int64, int64_t, Int64_val)
 String_and_bytes_access_index_by(64, int32, int32_t, Int32_val)
 String_and_bytes_access_index_by(64, nativeint, intnat, Nativeint_val)
-
 CAMLprim value caml_string_equal(value s1, value s2)
 {
   mlsize_t sz1, sz2;

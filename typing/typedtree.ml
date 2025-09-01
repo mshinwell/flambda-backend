@@ -235,7 +235,7 @@ and expression_desc =
       Longident.t loc * constructor_description * expression list * alloc_mode option
   | Texp_variant of label * (expression * alloc_mode) option
   | Texp_record of {
-      fields : ( Types.label_description * record_label_definition ) array;
+      fields : ( Data_types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : (expression * Jkind.sort * Unique_barrier.t) option;
       alloc_mode : alloc_mode option
@@ -369,6 +369,7 @@ and comprehension_iterator =
 and 'k case =
     {
      c_lhs: 'k general_pattern;
+     c_cont: Ident.t option;
      c_guard: expression option;
      c_rhs: expression;
     }
@@ -752,10 +753,10 @@ and core_type_desc =
   | Ttyp_call_pos
 
 and package_type = {
-  pack_path : Path.t;
-  pack_fields : (Longident.t loc * core_type) list;
-  pack_type : Types.module_type;
-  pack_txt : Longident.t loc;
+  tpt_path : Path.t;
+  tpt_cstrs : (Longident.t loc * core_type) list;
+  tpt_type : Types.module_type;
+  tpt_txt : Longident.t loc;
 }
 
 and row_field = {

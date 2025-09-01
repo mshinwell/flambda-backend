@@ -17,6 +17,10 @@
 
 open Misc
 open Blambda
+open Asttypes
+open Primitive
+open Lambda
+open Switch
 open Instruct
 open Debuginfo.Scoped_location
 
@@ -128,6 +132,44 @@ let rec discard_dead_code = function
   | (Klabel _ | Krestart | Ksetglobal _) :: _ as cont -> cont
   | _ :: cont -> discard_dead_code cont
 
+(* Check if we're in tailcall position *)
+
+let rec is_tailcall = function
+    Kreturn _ :: _ -> true
+  | Klabel _ :: c -> is_tailcall c
+  | Kpop _ :: c -> is_tailcall c
+  | _ -> false
+
+(* Will this primitive result in an OCaml call which would benefit
+   from the tail call optimization? *)
+
+let preserve_tailcall_for_prim = function
+  | Popaque | Psequor | Psequand
+  | Prunstack | Pperform | Presume | Preperform | Ppoll ->
+      true
+  | Pbytes_to_string | Pbytes_of_string | Pignore | Pgetglobal _ | Psetglobal _
+  | Pmakeblock _ | Pmakelazyblock _ | Pfield _ | Pfield_computed | Psetfield _
+  | Psetfield_computed _ | Pfloatfield _ | Psetfloatfield _ | Pduprecord _
+  | Pccall _ | Praise _ | Pnot | Pnegint | Paddint | Psubint | Pmulint
+  | Pdivint _ | Pmodint _ | Pandint | Porint | Pxorint | Plslint | Plsrint
+  | Pasrint | Pintcomp _ | Poffsetint _ | Poffsetref _ | Pintoffloat
+  | Pfloatofint | Pnegfloat | Pabsfloat | Paddfloat | Psubfloat | Pmulfloat
+  | Pdivfloat | Pfloatcomp _ | Pstringlength | Pstringrefu  | Pstringrefs
+  | Pcompare_ints | Pcompare_floats | Pcompare_bints _
+  | Pbyteslength | Pbytesrefu | Pbytessetu | Pbytesrefs | Pbytessets
+  | Pmakearray _ | Pduparray _ | Parraylength _ | Parrayrefu _ | Parraysetu _
+  | Parrayrefs _ | Parraysets _ | Pisint | Pisout | Pbintofint _ | Pintofbint _
+  | Pcvtbint _ | Pnegbint _ | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _
+  | Pmodbint _ | Pandbint _ | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _
+  | Pasrbint _ | Pbintcomp _ | Pbigarrayref _ | Pbigarrayset _ | Pbigarraydim _
+  | Pstring_load_16 _ | Pstring_load_32 _ | Pstring_load_64 _ | Pbytes_load_16 _
+  | Pbytes_load_32 _ | Pbytes_load_64 _ | Pbytes_set_16 _ | Pbytes_set_32 _
+  | Pbytes_set_64 _ | Pbigstring_load_16 _ | Pbigstring_load_32 _
+  | Pbigstring_load_64 _ | Pbigstring_set_16 _ | Pbigstring_set_32 _
+  | Pbigstring_set_64 _ | Pctconst _ | Pbswap16 | Pbbswap _ | Pint_as_pointer
+  | Patomic_load
+  | Pdls_get ->
+      false
 (* Add a Kpop N instruction in front of a continuation *)
 
 let rec add_pop n cont =
@@ -147,10 +189,145 @@ let add_const const = function
 
 let add_const_unit = add_const Lambda.const_unit
 
-let rec push_dummies n k =
-  match n with
-  | 0 -> k
-  | _ -> Kconst Lambda.const_unit :: Kpush :: push_dummies (n - 1) k
+let rec push_dummies n k = match n with
+| 0 -> k
+| _ -> Kconst const_unit::Kpush::push_dummies (n-1) k
+
+
+(**** Auxiliary for compiling "let rec" ****)
+
+type rhs_kind =
+  | RHS_block of int
+  | RHS_infix of { blocksize : int; offset : int }
+  | RHS_floatblock of int
+  | RHS_nonrec
+  | RHS_function of int * int
+  | RHS_unreachable
+
+ (* We expect Rec_check to associate Dynamic mode to branches with multiple
+    returning paths, which translates to RHS_nonrec. *)
+let join_rhs_kind k1 k2 =
+  match k1, k2 with
+  | RHS_unreachable, k | k, RHS_unreachable -> k
+  | _, _ -> RHS_nonrec
+
+let rec check_recordwith_updates id e =
+  match e with
+  | Lsequence (Lprim ((Psetfield _ | Psetfloatfield _), [Lvar id2; _], _), cont)
+      -> id2 = id && check_recordwith_updates id cont
+  | Lvar id2 -> id2 = id
+  | _ -> false
+
+let rec size_of_lambda env = function
+  | Lvar id ->
+      begin try Ident.find_same id env with Not_found -> RHS_nonrec end
+  | Lconst _ ->
+      (* This is a constant, so obviously not recursive. But Rec_check might
+         have treated it as Static. We rely on the fact that the compilation
+         of non-recursive values (RHS_nonrec) already handles that case
+         correctly, and return RHS_nonrec. *)
+      RHS_nonrec
+  | Lfunction{params} as funct ->
+      RHS_function (2 + Ident.Set.cardinal(free_variables funct),
+                    List.length params)
+  | Llet (Strict, _k, id, Lprim (Pduprecord (kind, size), _, _), body)
+    when check_recordwith_updates id body ->
+      begin match kind with
+      | Record_regular | Record_inlined _ -> RHS_block size
+      | Record_unboxed _ -> assert false
+      | Record_float -> RHS_floatblock size
+      | Record_extension _ -> RHS_block (size + 1)
+      end
+  | Llet(_str, _k, id, arg, body) ->
+      size_of_lambda (Ident.add id (size_of_lambda env arg) env) body
+  | Lmutlet (_kind, _id, _def, body) ->
+      size_of_lambda env body
+  (* See the Lletrec case of comp_expr *)
+  | Lletrec(bindings, body) when
+      List.for_all
+        (function { def = Lfunction _ } -> true | _ -> false)
+        bindings ->
+      (* let rec of functions *)
+      let fv =
+        Ident.Set.elements (free_variables (Lletrec(bindings, lambda_unit))) in
+      (* See Instruct(CLOSUREREC) in interp.c *)
+      let blocksize = List.length bindings * 3 - 1 + List.length fv in
+      let offsets = List.mapi (fun i { id } -> (id, i * 3)) bindings in
+      let env = List.fold_right (fun (id, offset) env ->
+        Ident.add id (RHS_infix { blocksize; offset }) env) offsets env in
+      size_of_lambda env body
+  | Lletrec(bindings, body) ->
+      let env = List.fold_right
+        (fun { id; rkind=_; def } env ->
+          Ident.add id (size_of_lambda env def) env)
+        bindings env
+      in
+      size_of_lambda env body
+  | Lprim(Pmakeblock _, args, _) -> RHS_block (List.length args)
+  | Lprim (Pmakearray ((Paddrarray|Pintarray), _), args, _) ->
+      RHS_block (List.length args)
+  | Lprim (Pmakearray (Pfloatarray, _), args, _) ->
+      RHS_floatblock (List.length args)
+  | Lprim (Pmakearray (Pgenarray, _), _, _) ->
+     (* Pgenarray is excluded from recursive bindings by the
+        check in Translcore.check_recursive_lambda *)
+      RHS_nonrec
+  | Lprim (Pduprecord ((Record_regular | Record_inlined _), size), _, _) ->
+      RHS_block size
+  | Lprim (Pduprecord (Record_unboxed _, _), _, _) ->
+      assert false
+  | Lprim (Pduprecord (Record_extension _, size), _, _) ->
+      RHS_block (size + 1)
+  | Lprim (Pduprecord (Record_float, size), _, _) -> RHS_floatblock size
+  | Lprim (Praise _, _, _) -> RHS_unreachable
+  | Lprim (_, _, _) -> RHS_nonrec
+  | Levent (lam, _) -> size_of_lambda env lam
+  | Lsequence (_lam, lam') -> size_of_lambda env lam'
+  | Lifthenelse (_cond, ifso, ifnot) ->
+      let size_ifso = size_of_lambda env ifso in
+      let size_ifnot = size_of_lambda env ifnot in
+      join_rhs_kind size_ifso size_ifnot
+  | Lstaticraise (_, _) -> RHS_unreachable
+  | Lstaticcatch (body, _, handler)
+  | Ltrywith (body, _, handler) ->
+      (* For Lstaticcatch, we could refine the sizes of the parameters by
+         propagating the sizes from the Lstaticraise sites. *)
+      let size_body = size_of_lambda env body in
+      let size_handler = size_of_lambda env handler in
+      join_rhs_kind size_body size_handler
+  | Lswitch (_arg, sw, _loc) ->
+      List.fold_left (fun acc (_const, act) ->
+          join_rhs_kind acc (size_of_lambda env act))
+        (List.fold_left (fun acc (_tag, act) ->
+             join_rhs_kind acc (size_of_lambda env act))
+           (match sw.sw_failaction with
+            | None -> RHS_unreachable
+            | Some act -> size_of_lambda env act)
+           sw.sw_blocks)
+        sw.sw_consts
+  | Lstringswitch (_arg, cases, default, _loc) ->
+      List.fold_left (fun acc (_string, act) ->
+          join_rhs_kind acc (size_of_lambda env act))
+        (match default with
+         | None -> RHS_unreachable
+         | Some act -> size_of_lambda env act)
+        cases
+  | Lmutvar _ | Lapply _ | Lwhile _ | Lfor _ | Lassign _ | Lsend _
+  | Lifused _ -> RHS_nonrec
+
+let size_of_rec_binding clas expr =
+  match (clas : Value_rec_types.recursive_binding_kind) with
+  | Not_recursive | Constant -> RHS_nonrec
+  | Class ->
+       (* Actual size is always 4, but [transl_class] only generates
+          explicit allocations when the classes are actually recursive.
+          Computing the size means that we don't go through pre-allocation
+          when the classes are not recursive. *)
+      size_of_lambda Ident.empty expr
+  | Static ->
+      let result = size_of_lambda Ident.empty expr in
+      assert (result <> RHS_nonrec);
+      result
 
 (**** Merging consecutive events ****)
 
@@ -311,7 +488,6 @@ let comp_primitive stack_info p sz args =
   | Raise kind -> Kraise kind
   | Make_faux_mixedblock { total_len; tag } ->
     Kmake_faux_mixedblock (total_len, tag)
-
 (* Compile an expression.
    The value of the expression is left in the accumulator.
    env = compilation environment
@@ -601,7 +777,6 @@ and comp_expr stack_info env exp sz cont =
       then add_pop (sz - size) cont
       else
         match tbb with
-        | [] -> assert false
         | try_sz :: tbb ->
           add_pop (sz - try_sz - 4) (Kpoptrap :: loop try_sz tbb)
     in

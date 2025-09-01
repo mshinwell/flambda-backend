@@ -49,6 +49,10 @@ type name_out_of_scope_warning =
   | Name of string
   | Fields of { record_form : string ; fields : string list }
 
+type type_declaration_usage_warning =
+  | Declaration
+  | Alias
+
 type t =
   | Comment_start                           (*  1 *)
   | Comment_not_end                         (*  2 *)
@@ -57,8 +61,8 @@ type t =
   | Ignored_partial_application             (*  5 *)
   | Labels_omitted of string list           (*  6 *)
   | Method_override of string list          (*  7 *)
-  | Partial_match of string                 (*  8 *)
-  | Missing_record_field_pattern of { form : string ; unbound : string } (* 9 *)
+  | Partial_match of Format_doc.t           (*  8 *)
+  | Missing_record_field_pattern of string  (*  9 *)
   | Non_unit_statement                      (* 10 *)
   | Redundant_case                          (* 11 *)
   | Redundant_subpat                        (* 12 *)
@@ -67,7 +71,7 @@ type t =
   | Implicit_public_methods of string list  (* 15 *)
   | Unerasable_optional_argument            (* 16 *)
   | Undeclared_virtual_method of string     (* 17 *)
-  | Not_principal of string                 (* 18 *)
+  | Not_principal of Format_doc.t           (* 18 *)
   | Non_principal_labels of string          (* 19 *)
   | Ignored_extra_argument                  (* 20 *)
   | Nonreturning_statement                  (* 21 *)
@@ -88,7 +92,7 @@ type t =
   | Duplicate_definitions of string * string * string * string (* 30 *)
   | Unused_value_declaration of string      (* 32 *)
   | Unused_open of string                   (* 33 *)
-  | Unused_type_declaration of string       (* 34 *)
+  | Unused_type_declaration of string * type_declaration_usage_warning (* 34 *)
   | Unused_for_index of string              (* 35 *)
   | Unused_ancestor of string               (* 36 *)
   | Unused_constructor of string * constructor_usage_warning (* 37 *)
@@ -130,11 +134,13 @@ type t =
   | Unused_tmc_attribute                    (* 71 *)
   | Tmc_breaks_tailcall                     (* 72 *)
   | Generative_application_expects_unit     (* 73 *)
+  | Degraded_to_partial_match               (* 74 *)
+  | Unnecessarily_partial_tuple_pattern     (* 75 *)
 (* Oxcaml specific warnings: numbers should go down from 199 *)
   | Unmutated_mutable of string             (* 186 *)
   | Incompatible_with_upstream of upstream_compat_warning (* 187 *)
   | Unerasable_position_argument            (* 188 *)
-  | Unnecessarily_partial_tuple_pattern     (* 189 *)
+  | Unnecessarily_partial_tuple_pattern_oxcaml (* 189 *)
   | Probe_name_too_long of string           (* 190 *)
   | Zero_alloc_all_hidden_arrow of string   (* 198 *)
   | Unchecked_zero_alloc_attribute          (* 199 *)
@@ -167,9 +173,9 @@ val defaults_warn_error : string
 
 type reporting_information =
   { id : string
-  ; message : string
+  ; message : Format_doc.t
   ; is_error : bool
-  ; sub_locs : (loc * string) list;
+  ; sub_locs : (loc * Format_doc.t) list;
   }
 
 val report : t -> [ `Active of reporting_information | `Inactive ]

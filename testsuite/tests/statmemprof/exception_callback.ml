@@ -24,13 +24,3 @@ let () =
 
 let _ =
 try
- Sys.with_async_exns (fun () ->
-  let _:MP.t = MP.start ~callstack_size:10 ~sampling_rate:1.
-                   (alloc_major_tracker
-                     (fun _ -> raise Sys.Break)) in
-   (ignore (Sys.opaque_identity (Array.make 500 0));
-    MP.stop ())
- )
-with
-  Sys.Break -> (MP.stop();
-                Printf.printf "Exception from memprof.\n")

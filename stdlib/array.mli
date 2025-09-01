@@ -55,7 +55,7 @@ external set : 'a array -> int -> 'a -> unit = "%array_safe_set"
    @raise Invalid_argument
    if [n] is outside the range 0 to [length a - 1]. *)
 
-external make : int -> 'a -> 'a array = "caml_make_vect"
+external make : int -> 'a -> 'a array = "caml_array_make"
 (** [make n x] returns a fresh array of length [n],
    initialized with [x].
    All the elements of this new array are initially
@@ -68,7 +68,7 @@ external make : int -> 'a -> 'a array = "caml_make_vect"
    If the value of [x] is a floating-point number, then the maximum
    size is only [Sys.max_array_length / 2].*)
 
-external create_float: int -> float array = "caml_make_float_vect"
+external create_float: int -> float array = "caml_array_create_float"
 (** [create_float n] returns a fresh float array of length [n],
     with uninitialized data.
     @since 4.03 *)
@@ -162,6 +162,22 @@ val of_list : 'a list -> 'a array
 
    @raise Invalid_argument if the length of [l] is greater than
    [Sys.max_array_length]. *)
+
+(** {1:comparison Comparison} *)
+
+val equal : ('a -> 'a -> bool) -> 'a array -> 'a array -> bool
+(** [equal eq a b] is [true] if and only if [a] and [b] have the
+    same length [n] and for all [i] in \[[0];[n-1]\], [eq a.(i) b.(i)]
+    is [true].
+
+    @since 5.4 *)
+
+val compare : ('a -> 'a -> int) -> 'a array -> 'a array -> int
+(** [compare cmp a b] compares [a] and [b] according to the shortlex order,
+    that is, shorter arrays are smaller and equal-sized arrays are compared
+    in lexicographic order using [cmp] to compare elements.
+
+    @since 5.4 *)
 
 (** {1 Iterators} *)
 
@@ -331,7 +347,7 @@ val sort : ('a -> 'a -> int) -> 'a array -> unit
 
    When [sort] returns, [a] contains the same elements as before,
    reordered in such a way that for all i and j valid indices of [a] :
--   [cmp a.(i) a.(j)] >= 0 if and only if i >= j
+-   [cmp a.(i) a.(j)] >= 0 if i >= j
 *)
 
 val stable_sort : ('a -> 'a -> int) -> 'a array -> unit

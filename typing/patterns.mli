@@ -17,6 +17,7 @@
 open Asttypes
 open Typedtree
 open Types
+open Data_types
 
 val omega : pattern
 (** aka. "Tpat_any" or "_"  *)
@@ -49,7 +50,7 @@ module Simple : sig
         (Longident.t loc * label_description * pattern) list * closed_flag
     | `Record_unboxed_product of
         (Longident.t loc * unboxed_label_description * pattern) list * closed_flag
-    | `Array of mutability * Jkind.sort * pattern list
+    | `Array of mutable_flag * Jkind.sort * pattern list
     | `Lazy of pattern
   ]
   type pattern = view pattern_data
@@ -95,7 +96,7 @@ module Head : sig
           type_row : unit -> row_desc; }
           (* the row of the type may evolve if [close_variant] is called,
              hence the (unit -> ...) delay *)
-    | Array of mutability * Jkind.sort * int
+    | Array of mutable_flag * Jkind.sort * int
     | Lazy
 
   type t = desc pattern_data

@@ -18,7 +18,9 @@
 
 (* Dynamic loading of .cmx files *)
 
-open! Dynlink_compilerlibs
+module Config = Dynlink_config
+
+open Dynlink_cmxs_format
 
 module DC = Dynlink_common
 module DT = Dynlink_types
@@ -39,7 +41,7 @@ module Native = struct
   type handle
 
   (* mshinwell: We need something better than caml_sys_exit *)
-  external ndl_open : string -> bool -> handle * Cmxs_format.dynheader
+  external ndl_open : string -> bool -> handle * dynheader
     = "caml_sys_exit" "caml_natdynlink_open"
   external ndl_register : handle -> string array -> unit
     = "caml_sys_exit" "caml_natdynlink_register"
@@ -56,7 +58,7 @@ module Native = struct
     [@@noalloc]
 
   module Unit_header = struct
-    type t = Cmxs_format.dynunit
+    type t = dynunit
 
     let name (t : t) = t.dynu_name |> Compilation_unit.name_as_string
     let crc (t : t) = Some t.dynu_crc

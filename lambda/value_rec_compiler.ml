@@ -931,6 +931,5 @@ let compile_letrec input_bindings body =
                  no_loc)
         in
         Llet(Strict, Lambda.layout_letrec, id, duid, alloc, body))
-      body_with_dynamic_values all_bindings_rev.static
   in
   body_with_pre_allocations

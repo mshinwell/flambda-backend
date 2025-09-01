@@ -47,7 +47,7 @@ let with_info ~native ~tool_name ~source_file ~output_prefix
   Env.set_unit_name (Some target);
   let env = Compmisc.initial_env() in
   let dump_file = String.concat "." [output_prefix; dump_ext] in
-  Compmisc.with_ppf_dump ~file_prefix:dump_file (fun ppf_dump ->
+  Compmisc.with_ppf_dump ~file_prefix:dump_file @@ fun ppf_dump ->
   k {
     target;
     module_name = compilation_unit;

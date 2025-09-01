@@ -16,6 +16,7 @@
 
 open Asttypes
 open Types
+open Data_types
 open Typedtree
 
 (* useful pattern auxiliary functions *)
@@ -63,7 +64,7 @@ module Simple = struct
     | `Record_unboxed_product of
         (Longident.t loc * unboxed_label_description * pattern) list
         * closed_flag
-    | `Array of mutability * Jkind.sort * pattern list
+    | `Array of mutable_flag * Jkind.sort * pattern list
     | `Lazy of pattern
   ]
 
@@ -85,8 +86,8 @@ module General = struct
   type view = [
     | Half_simple.view
     | `Var of Ident.t * string loc * Uid.t * Mode.Value.l
-    | `Alias of pattern * Ident.t * string loc
-                * Uid.t * Mode.Value.l * Types.type_expr
+    | `Alias of pattern * Ident.t * string loc * Uid.t 
+                * Mode.Value.l * Types.type_expr
   ]
   type pattern = view pattern_data
 
@@ -163,7 +164,7 @@ module Head : sig
         { tag: label; has_arg: bool;
           cstr_row: row_desc ref;
           type_row : unit -> row_desc; }
-    | Array of mutability * Jkind.sort * int
+    | Array of mutable_flag * Jkind.sort * int
     | Lazy
 
   type t = desc pattern_data
@@ -192,7 +193,7 @@ end = struct
           type_row : unit -> row_desc; }
           (* the row of the type may evolve if [close_variant] is called,
              hence the (unit -> ...) delay *)
-    | Array of mutability * Jkind.sort * int
+    | Array of mutable_flag * Jkind.sort * int
     | Lazy
 
   type t = desc pattern_data

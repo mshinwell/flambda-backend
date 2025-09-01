@@ -23,6 +23,7 @@ module String = Misc.Stdlib.String
 type error =
     File_not_found of string
   | Archiver_error of string
+  | Link_error of Linkdeps.error
 
 exception Error of error
 
@@ -39,7 +40,7 @@ let read_info name =
      The linker, which is the only one that reads .cmxa files, does not
      need the approximation. *)
   info.ui_export_info <- None;
-  (Filename.chop_suffix filename ".cmx" ^ ext_obj, (info, crc))
+  filename, (info, crc)
 
 let create_archive file_list lib_name =
   let archive_name = Filename.remove_extension lib_name ^ ext_lib in
@@ -49,12 +50,25 @@ let create_archive file_list lib_name =
     ~exceptionally:(fun () -> remove_file lib_name; remove_file archive_name)
     (fun () ->
        output_string outchan cmxa_magic_number;
-       let (objfile_list, descr_list) =
-         List.split (List.map read_info file_list) in
-       List.iter2
-         (fun file_name (unit, crc) ->
+       let units = List.map read_info file_list in
+       let objfiles = List.map (fun (filename,_) ->
+           Filename.chop_suffix filename ".cmx" ^ ext_obj)
+           units in
+       List.iter
+         (fun (file_name, (unit, crc)) ->
             Asmlink.check_consistency file_name unit crc)
          file_list descr_list;
+       let ldeps = Linkdeps.create ~complete:false in
+       List.iter
+         (fun (filename, (unit, _crc)) ->
+            Linkdeps.add ldeps
+              ~filename ~compunit:(Compilation_unit.name unit.ui_unit)
+              ~provides:[Compilation_unit.name unit.ui_unit]
+              ~requires:(List.map (fun import -> Compilation_unit.name (Import_info.cu import)) unit.ui_imports_cmx))
+         (List.rev file_list);
+       (match Linkdeps.check ldeps with
+        | None -> ()
+        | Some e -> raise (Error (Link_error e)));
        let cmis = Asmlink.extract_crc_interfaces () in
        let cmxs = Asmlink.extract_crc_implementations () in
        (* CR mshinwell: see comment in compilenv.ml
@@ -108,21 +122,26 @@ let create_archive file_list lib_name =
            lib_ccobjs = !Clflags.ccobjs;
            lib_ccopts = !Clflags.all_ccopts } in
        output_value outchan infos;
-       if Ccomp.create_archive archive_name objfile_list <> 0
+       if Ccomp.create_archive archive_name objfiles <> 0
        then raise(Error(Archiver_error archive_name));
     )
 
-open Format
+module Style = Misc.Style
+open Format_doc
 
-let report_error ppf = function
+let report_error_doc ppf = function
   | File_not_found name ->
       fprintf ppf "Cannot find file %s" name
   | Archiver_error name ->
-      fprintf ppf "Error while creating the library %s" name
+      fprintf ppf "Error while creating the library %a" Style.inline_code name
+  | Link_error e ->
+      Linkdeps.report_error_doc ~print_filename:Location.Doc.filename ppf e
 
 let () =
   Location.register_error_of_exn
     (function
-      | Error err -> Some (Location.error_of_printer_file report_error err)
+      | Error err -> Some (Location.error_of_printer_file report_error_doc err)
       | _ -> None
     )
+
+let report_error = Format_doc.compat report_error_doc
