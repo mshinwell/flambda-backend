@@ -35,6 +35,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
       | Is_closed_by x -> Close_over x
       | Captured_by_partial_application -> Adj_captured_by_partial_application
       | Crossing -> Crossing
+      | Unknown_non_rigid -> Unknown_non_rigid
 
     let right_adjoint : type r. (allowed * r) t -> (disallowed * allowed) t =
       function
@@ -43,6 +44,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
       | Close_over x -> Is_closed_by x
       | Adj_captured_by_partial_application -> Captured_by_partial_application
       | Crossing -> Crossing
+      | Unknown_non_rigid -> Unknown_non_rigid
 
     include Magic_allow_disallow (struct
       type (_, _, 'd) sided = 'd t constraint 'd = 'l * 'r
@@ -56,6 +58,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
          | Adj_captured_by_partial_application ->
            Adj_captured_by_partial_application
          | Crossing -> Crossing
+         | Unknown_non_rigid -> Unknown_non_rigid
 
       let allow_right : type l r. (l * allowed) t -> (l * r) t =
         fun (type l r) (h : (l * allowed) t) : (l * r) t ->
@@ -65,6 +68,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
          | Is_closed_by x -> Is_closed_by x
          | Captured_by_partial_application -> Captured_by_partial_application
          | Crossing -> Crossing
+         | Unknown_non_rigid -> Unknown_non_rigid
 
       let disallow_left : type l r. (l * r) t -> (disallowed * r) t =
         fun (type l r) (h : (l * r) t) : (disallowed * r) t ->
@@ -77,6 +81,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
          | Adj_captured_by_partial_application ->
            Adj_captured_by_partial_application
          | Crossing -> Crossing
+         | Unknown_non_rigid -> Unknown_non_rigid
 
       let disallow_right : type l r. (l * r) t -> (l * disallowed) t =
         fun (type l r) (h : (l * r) t) : (l * disallowed) t ->
@@ -89,6 +94,7 @@ module Hint_for_solver (* : Solver_intf.Hint *) = struct
          | Adj_captured_by_partial_application ->
            Adj_captured_by_partial_application
          | Crossing -> Crossing
+         | Unknown_non_rigid -> Unknown_non_rigid
     end)
   end
 
@@ -1966,9 +1972,10 @@ module Report = struct
     | Unknown -> Misc.fatal_error "Unknown hint should not be printed"
     | Lazy_allocated_on_heap ->
       pp_print_string ppf
-        "it is a lazy expression and thus always allocated on the heap"
+        "it is a lazy expression and thus always needs to be allocated on the \
+         heap"
     | Class_legacy_monadic | Class_legacy_comonadic ->
-      pp_print_string ppf "it is a class and thus always of legacy modes"
+      pp_print_string ppf "it is a class and thus always at the legacy modes"
     | Tailcall_function ->
       pp_print_string ppf "it is the function in a tail call"
     | Tailcall_argument ->
@@ -1981,9 +1988,11 @@ module Report = struct
       fprintf ppf
         "it is a function return value.@\n\
          Hint: Use exclave_ to return a local value"
-    | Stack_expression -> pp_print_string ppf "it is a stack expression"
+    | Stack_expression ->
+      fprintf ppf "it is %a-allocated" Misc.Style.inline_code "stack_"
     | Module_allocated_on_heap ->
-      pp_print_string ppf "it is a module and thus always allocated on the heap"
+      pp_print_string ppf
+        "it is a module and thus always needs to be allocated on the heap"
 
   let print_lock_item ppf = function
     | Module -> fprintf ppf "module"
@@ -1996,26 +2005,27 @@ module Report = struct
     | Functor -> fprintf ppf "functor"
     | Lazy -> fprintf ppf "lazy expression"
 
-  let print_morph : type l r. formatter -> (l * r) morph -> unit =
-   fun ppf hint ->
-    match hint with
+  let print_morph : type l r. (l * r) morph -> (formatter -> unit) option =
+    function
     | Skip -> Misc.fatal_error "Skip hint should not be printed"
-    | Unknown -> Misc.fatal_error "Unknown hint should not be printed"
+    | Unknown | Unknown_non_rigid -> None
     | Close_over closure ->
       (* CR-someday pdsouza: in the future, we should print out the code at the mentioned
          location, instead of just the location *)
-      fprintf ppf "closes over the %a %a (at %a)" print_lock_item
-        closure.value_item
-        (Misc.Style.as_inline_code !print_longident)
-        closure.value_lid Location.print_loc closure.value_loc
+      Some
+        (dprintf "closes over the %a %a (at %a)" print_lock_item
+           closure.value_item
+           (Misc.Style.as_inline_code !print_longident)
+           closure.value_lid Location.print_loc closure.value_loc)
     | Is_closed_by closure ->
-      fprintf ppf "is used inside a %a" print_closure_context
-        closure.closure_context
+      Some
+        (dprintf "is used inside a %a" print_closure_context
+           closure.closure_context)
     | Captured_by_partial_application ->
-      fprintf ppf "is captured by a partial application"
+      Some (dprintf "is captured by a partial application")
     | Adj_captured_by_partial_application ->
-      fprintf ppf "has a partial application capturing a value"
-    | Crossing -> fprintf ppf "crosses with something"
+      Some (dprintf "has a partial application capturing a value")
+    | Crossing -> Some (dprintf "crosses with something")
 
   let print_mode :
       type a. [`Actual | `Expected] -> a C.obj -> formatter -> a -> unit =
@@ -2064,12 +2074,11 @@ module Report = struct
   (** Some morph hints are said to be "non-rigid", because they should be printed only
       when they change modes. *)
   let is_rigid : type l r. (l * r) morph -> bool = function
-    | Unknown ->
-      Misc.fatal_error "Unknown morph hint should not be checked for rigidity"
+    | Unknown -> true
     | Close_over _ | Is_closed_by _ | Captured_by_partial_application
     | Adj_captured_by_partial_application ->
       true
-    | Skip | Crossing -> false
+    | Skip | Crossing | Unknown_non_rigid -> false
 
   let eq_mode : type a b. a C.obj -> b C.obj -> a -> b -> bool =
    fun a_obj b_obj a b ->
@@ -2092,18 +2101,17 @@ module Report = struct
       print_ahint_result =
    fun ?(sub = false) side (obj : a C.obj) ppf (a, hint) ->
     match hint with
-    | Apply (Unknown, _, _) ->
-      print_mode_with_side ~sub side obj ppf a;
-      Mode
     | Apply (morph_hint, src, ahint)
       when (not (is_rigid morph_hint)) && eq_mode obj src a (fst ahint) ->
       print_ahint ~sub side src ppf ahint
-    | Apply (morph_hint, src, ahint) ->
-      fprintf ppf "%a@ because it %a@ "
-        (print_mode_with_side ~sub side obj)
-        a print_morph morph_hint;
-      ignore (print_ahint ~sub:true side src ppf ahint);
-      Mode_with_hint
+    | Apply (morph_hint, src, ahint) -> (
+      print_mode_with_side ~sub side obj ppf a;
+      match print_morph morph_hint with
+      | None -> Mode
+      | Some t ->
+        fprintf ppf "@ because it %t@ " t;
+        ignore (print_ahint ~sub:true side src ppf ahint);
+        Mode_with_hint)
     | Const Unknown ->
       print_mode_with_side ~sub side obj ppf a;
       Mode
@@ -2150,7 +2158,7 @@ module Report = struct
         (Misc.Style.as_inline_code !print_longident)
         target_lid);
     (match print_ahint_sided obj ppf actual with
-    | Mode_with_hint -> fprintf ppf ".@\nHowever, it "
+    | Mode_with_hint -> fprintf ppf ".@\nHowever, the highlighted expression "
     | Mode -> fprintf ppf "@ but "
     | Nothing -> assert false);
     ignore (print_ahint_sided obj ppf expected);
@@ -2308,7 +2316,7 @@ module Comonadic_gen (Obj : Obj) = struct
 
   let meet_const_unhint c m = Solver.Unhint.apply obj (Meet_with c) m
 
-  let meet_const c m = wrap (meet_const_unhint c) m
+  let meet_const ?hint c m = wrap ?hint (meet_const_unhint c) m
 
   let imply_unhint c m = Solver.Unhint.apply obj (Imply c) m
 
@@ -2400,7 +2408,7 @@ module Monadic_gen (Obj : Obj) = struct
 
   let join_const_unhint c m = Solver.Unhint.apply Obj.obj (Meet_with c) m
 
-  let join_const c m = wrap (join_const_unhint c) m
+  let join_const ?hint c m = wrap ?hint (join_const_unhint c) m
 
   let subtract_unhint c m = Solver.Unhint.apply obj (Imply c) m
 
@@ -3689,7 +3697,9 @@ module Modality = struct
         | Join_const c0, Join_const c1 -> Join_const (Mode.Const.join c0 c1)
 
       let apply : type l r. t -> (l * r) Mode.t -> (l * r) Mode.t =
-       fun t x -> match t with Join_const c -> Mode.join_const c x
+       fun t x ->
+        match t with
+        | Join_const c -> Mode.join_const ~hint:Unknown_non_rigid c x
 
       let proj ax (Join_const c) : _ Atom.t = Join_with (Axis.proj ax c)
 
@@ -3826,7 +3836,9 @@ module Modality = struct
         | Meet_const c0, Meet_const c1 -> Meet_const (Mode.Const.meet c0 c1)
 
       let apply : type l r. t -> (l * r) Mode.t -> (l * r) Mode.t =
-       fun t x -> match t with Meet_const c -> Mode.meet_const c x
+       fun t x ->
+        match t with
+        | Meet_const c -> Mode.meet_const ~hint:Unknown_non_rigid c x
 
       let proj ax (Meet_const c) : _ Atom.t = Meet_with (Axis.proj ax c)
 

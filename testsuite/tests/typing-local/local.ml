@@ -438,7 +438,10 @@ let heap_closure () =
 Line 10, characters 24-26:
 10 |   let _force_heap = ref fn in
                              ^^
-Error: This value is "local" but is expected to be "global".
+Error: This value is "local"
+       because it closes over the value "foo" (at Line 5, characters 25-28)
+       which is "local".
+       However, the highlighted expression is expected to be "global".
 |}]
 
 let local_closure () =
@@ -689,7 +692,7 @@ Line 2, characters 30-31:
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a lazy expression
        which is expected to be "global"
-       because it is a lazy expression and thus always allocated on the heap.
+       because it is a lazy expression and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a functor *)
@@ -706,7 +709,7 @@ Line 3, characters 27-28:
                                ^
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a functor which is expected to be "global"
-       because it is a module and thus always allocated on the heap.
+       because it is a module and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a functor with underscore parameter *)
@@ -723,7 +726,7 @@ Line 3, characters 27-28:
                                ^
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a functor which is expected to be "global"
-       because it is a module and thus always allocated on the heap.
+       because it is a module and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a generative functor *)
@@ -740,7 +743,7 @@ Line 3, characters 27-28:
                                ^
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a functor which is expected to be "global"
-       because it is a module and thus always allocated on the heap.
+       because it is a module and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a functor with underscore parameter *)
@@ -757,7 +760,7 @@ Line 3, characters 27-28:
                                ^
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a functor which is expected to be "global"
-       because it is a module and thus always allocated on the heap.
+       because it is a module and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a generative functor *)
@@ -774,7 +777,7 @@ Line 3, characters 27-28:
                                ^
 Error: The value "x" is "local" but is expected to be "global"
        because it is used inside a functor which is expected to be "global"
-       because it is a module and thus always allocated on the heap.
+       because it is a module and thus always needs to be allocated on the heap.
 |}]
 
 (* Don't escape through a class method *)
