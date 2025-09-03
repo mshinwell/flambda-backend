@@ -1557,6 +1557,10 @@ module Debugging_options_impl = struct
 
   let no_restrict_to_upstream_dwarf () =
     Debugging.restrict_to_upstream_dwarf := false
+  (* CR sspies: We have to be careful here. We can only enable no-upstream-dwarf
+     on the compiler once the Merlin support is fixed (i.e., once we can use
+     -shape-format debugging-shapes on the compiler), since without the debugging
+     shapes there is little DWARF information that we will get. *)
 
   let dwarf_inlined_frames () = Debugging.dwarf_inlined_frames := true
   let no_dwarf_inlined_frames () = Debugging.dwarf_inlined_frames := false
