@@ -125,6 +125,8 @@ let fmt_constant i f x =
   | Pconst_string (s, strloc, Some delim) ->
       line i f "PConst_string (%S,%a,Some %S)\n" s fmt_location strloc delim
   | Pconst_float (s,m) -> line i f "PConst_float (%s,%a)\n" s fmt_char_option m
+  | Pconst_unboxed_integer (j,m) -> line i f "PConst_unboxed_int (%s,%c)\n" j m
+  | Pconst_unboxed_float (s,m) -> line i f "PConst_unboxed_float (%s,%a)\n" s fmt_char_option m
 
 let list i f ppf l =
   match l with
@@ -1265,4 +1267,4 @@ let implementation ppf x = list 0 structure_item ppf x
 
 let top_phrase ppf x = toplevel_phrase 0 ppf x
 
-let constant = fmt_constant
+let constant ppf x = fmt_constant 0 ppf x

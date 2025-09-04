@@ -330,7 +330,6 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
         Ppat_unpack { txt = None; loc  }
     | { pat_extra=[Tpat_unpack, _, _attrs];
         pat_desc = Tpat_var (_,name, _, _); _ } ->
-    | { pat_extra=[Tpat_unpack, _, _attrs]; pat_desc = Tpat_var (_,name); _ } ->
         Ppat_unpack { name with txt = Some name.txt }
     | { pat_extra=[Tpat_type (_path, lid), _, _attrs]; _ } ->
         Ppat_type (map_loc sub lid)
@@ -342,7 +341,6 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
     match pat.pat_desc with
       Tpat_any -> Ppat_any
     | Tpat_var (id, name,_,_) ->
-    | Tpat_var (id, name) ->
         begin
           match (Ident.name id).[0] with
             'A'..'Z' ->
@@ -361,7 +359,6 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
        Ppat_var name
 
     | Tpat_alias (pat, _id, name, _uid, _mode, _ty) ->
-    | Tpat_alias (pat, _id, name) ->
         Ppat_alias (sub.pat sub pat, name)
     | Tpat_constant cst -> Ppat_constant (constant cst)
     | Tpat_tuple list ->
@@ -372,7 +369,6 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
         Ppat_unboxed_tuple
           (List.map (fun (label, p, _) -> label, sub.pat sub p) list,
            Closed)
-        Ppat_tuple (List.map (sub.pat sub) list)
     | Tpat_construct (lid, _, args, vto) ->
         let tyo =
           match vto with
@@ -508,9 +504,6 @@ let label : Types.arg_label -> Parsetree.arg_label = function
   | Nolabel -> Nolabel
 
 let call_pos_extension = Location.mknoloc "call_pos_extension", PStr []
-  Vb.mk ~loc ~attrs
-    (sub.pat sub vb.vb_pat)
-    (sub.expr sub vb.vb_expr)
 
 let expression sub exp =
   let loc = sub.location sub exp.exp_loc in
@@ -590,10 +583,6 @@ let expression sub exp =
               match arg with
               | Omitted _ -> list
               | Arg (exp, _) -> (label, sub.expr sub exp) :: list
-          List.fold_right (fun (label, expo) list ->
-              match expo with
-                None -> list
-              | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
     | Texp_match (exp, _, cases, _) ->
       Pexp_match (sub.expr sub exp, List.map (sub.case sub) cases)
@@ -605,21 +594,13 @@ let expression sub exp =
         Pexp_unboxed_tuple
           (List.map (fun (lbl, e, _) -> lbl, sub.expr sub e) list)
     | Texp_construct (lid, _, args, _) ->
-    | Texp_match (exp, cases, _) ->
-      Pexp_match (sub.expr sub exp, List.map (sub.case sub) cases)
-    | Texp_try (exp, cases) ->
-        Pexp_try (sub.expr sub exp, List.map (sub.case sub) cases)
-    | Texp_tuple list ->
-        Pexp_tuple (List.map (sub.expr sub) list)
-    | Texp_construct (lid, _, args) ->
         Pexp_construct (map_loc sub lid,
           (match args with
               [] -> None
           | [ arg ] -> Some (sub.expr sub arg)
-          | args ->
-              Some
-                (Exp.tuple ~loc (List.map (fun e -> None, sub.expr sub e) args))
-          ))
+          | args -> Some (ghexp ~loc (Pexp_tuple (List.map (fun a -> None, sub.expr sub a) args)))))
+    | Texp_try (exp, cases) ->
+        Pexp_try (sub.expr sub exp, List.map (sub.case sub) cases)
     | Texp_variant (label, expo) ->
         Pexp_variant (label, Option.map (fun (e, _) -> sub.expr sub e) expo)
     | Texp_record { fields; extended_expression; _ } ->
@@ -982,8 +963,6 @@ let class_expr sub cexpr =
               match expo with
               | Omitted _ -> list
               | Arg (exp, _) -> (label, sub.expr sub exp) :: list
-                None -> list
-              | Some exp -> (label, sub.expr sub exp) :: list
           ) args [])
 
     | Tcl_let (rec_flat, bindings, _ivars, cl) ->
@@ -1051,11 +1030,10 @@ let core_type sub ct =
     | Ttyp_unboxed_tuple list ->
         Ptyp_unboxed_tuple
           (List.map (fun (lbl, t) -> lbl, sub.typ sub t) list)
-      Ttyp_any -> Ptyp_any
+    | Ttyp_any -> Ptyp_any
     | Ttyp_var s -> Ptyp_var s
     | Ttyp_arrow (label, ct1, ct2) ->
         Ptyp_arrow (label, sub.typ sub ct1, sub.typ sub ct2)
-    | Ttyp_tuple list -> Ptyp_tuple (List.map (sub.typ sub) list)
     | Ttyp_constr (_path, lid, list) ->
         Ptyp_constr (map_loc sub lid,
           List.map (sub.typ sub) list)
@@ -1084,8 +1062,6 @@ let core_type sub ct =
 let class_structure sub cs =
   let rec remove_self = function
     | { pat_desc = Tpat_alias (p, id, _s, _uid, _mode, _ty) }
-      when string_is_prefix "selfpat-" (Ident.name id) ->
-    | { pat_desc = Tpat_alias (p, id, _s) }
       when string_is_prefix "selfpat-" (Ident.name id) ->
         remove_self p
     | p -> p

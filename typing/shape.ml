@@ -777,7 +777,6 @@ let of_path ~find_shape ~namespace path =
       M.t.C.lbl
     Path of label of implicit unboxed record:
       M.t#.lbl
-  *)
       M.t.C [Pextra_ty("M.t", "C")]
     Path of label:
       M.t.lbl [Pextra_ty("M.t", "lbl")]
@@ -801,16 +800,13 @@ let of_path ~find_shape ~namespace path =
       proj (aux namespace path) (name, ns)
     | Papply (p1, p2) -> app (aux Module p1) ~arg:(aux Module p2)
     | Pextra_ty (path, extra) -> begin
-        match extra with
-          Pcstr_ty name -> proj (aux Type path) (name, Constructor)
-        | Pext_ty -> aux Extension_constructor path
-        | Punboxed_ty -> aux ns path
         match extra, ns, path with
         | Pcstr_ty name, Label, Pextra_ty _ ->
             (* Handle the M.t.C.lbl case *)
             proj (aux Constructor path) (name, ns)
-        | Pcstr_ty name, _, _ -> proj (aux Type path) (name, ns)
+        | Pcstr_ty name, _, _ -> proj (aux Type path) (name, Constructor)
         | Pext_ty, _, _ -> aux Extension_constructor path
+        | Punboxed_ty, _, _ -> aux ns path
       end
   in
   aux namespace path

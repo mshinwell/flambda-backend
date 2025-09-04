@@ -56,6 +56,9 @@ let modulize s = match Misc.Utf8_lexeme.capitalize s with Ok x | Error x -> x
 let normalize x = match Misc.normalized_unit_filename x with
   | Ok x | Error x -> x
 
+let modname_from_source source_file =
+  source_file |> Filename.basename |> basename_chop_extensions |> modulize
+
 let compilation_unit_from_source ~for_pack_prefix source_file =
   let modname =
     modname_from_source source_file |> Compilation_unit.Name.of_string

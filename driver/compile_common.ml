@@ -55,7 +55,7 @@ let with_info ~native ~tool_name ~source_file ~output_prefix
     ppf_dump;
     tool_name;
     native;
-  })
+  }
 
 (** Compile a .mli file *)
 

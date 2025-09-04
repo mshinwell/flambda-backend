@@ -5017,3 +5017,4 @@ CAMLprim value caml_memprof_discard(value config)
 
   return Val_unit;
 }
+#endif

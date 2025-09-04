@@ -215,7 +215,8 @@ let print ~with_scope ppf =
         pp_stamped (name, stamp)
         (if with_scope then asprintf "[%i]" scope else "")
   | Global_with_args g ->
-      fprintf ppf "%a!" Global_module.Name.print g
+      let s = Format.asprintf "%a" Global_module.Name.print g in
+      fprintf ppf "%s!" s
 
 let print_with_scope ppf id = print ~with_scope:true ppf id
 

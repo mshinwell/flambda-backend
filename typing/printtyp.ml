@@ -832,18 +832,6 @@ let rec rewrite_double_underscore_paths env p =
   | Pextra_ty (p, extra) ->
     Pextra_ty (rewrite_double_underscore_paths env p, extra)
   | Pident id ->
-(* Simple heuristic to print Foo__bar.* as Foo.Bar.* when Foo.Bar is an alias
-   for Foo__bar. This pattern is used by the stdlib. *)
-let rec rewrite_double_underscore_paths env p =
-  match p with
-  | Pdot (p, s) ->
-    Pdot (rewrite_double_underscore_paths env p, s)
-  | Papply (a, b) ->
-    Papply (rewrite_double_underscore_paths env a,
-            rewrite_double_underscore_paths env b)
-  | Pextra_ty (p, extra) ->
-    Pextra_ty (rewrite_double_underscore_paths env p, extra)
-  | Pident id ->
     let name = Ident.name id in
     match expand_longident_head name with
     | None -> p
@@ -855,12 +843,6 @@ let rec rewrite_double_underscore_paths env p =
             p'
           else
           p
-
-let rewrite_double_underscore_paths env p =
-  if env == Env.empty then
-    p
-  else
-    rewrite_double_underscore_paths env p
 
 let rec rewrite_double_underscore_longidents env (l : Longident.t) =
   match l with
@@ -1415,28 +1397,51 @@ end = struct
                   String.Map.add constr (tree_of_path None p :: prev) acc
               | Definition | Rec_check_regularity -> acc)
         !names String.Map.empty
-    match find_double_underscore name with
-    | None -> p
-    | Some i ->
-      let better_lid =
-        Ldot
-          (Lident (String.sub name 0 i),
-           Unit_info.modulize
-             (String.sub name (i + 2) (String.length name - i - 2)))
-      in
-      match Env.find_module_by_name better_lid env with
-      | exception Not_found -> p
-      | p', _ ->
-          if module_path_is_an_alias_of env p' ~alias_of:p then
-            p'
-          else
-          p
+    in
+    String.Map.iter
+      (fun constr out_idents ->
+        match out_idents with
+        | [] -> ()
+        | [out_ident] ->
+            fprintf ppf
+              "@ @[<2>@{<hint>Hint@}:@ %a@ is an existential type@ \
+               bound by the constructor@ %a.@]"
+              (Style.as_inline_code !Oprint.out_ident) out_ident
+              Style.inline_code constr
+        | out_ident :: out_idents ->
+            fprintf ppf
+              "@ @[<2>@{<hint>Hint@}:@ %a@ and %a@ are existential types@ \
+               bound by the constructor@ %a.@]"
+              (Format.pp_print_list
+                 ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
+                 (Style.as_inline_code !Oprint.out_ident))
+              (List.rev out_idents)
+              (Style.as_inline_code !Oprint.out_ident) out_ident
+              Style.inline_code constr)
+      constrs
 
-let rewrite_double_underscore_paths env p =
-  if env == Env.empty then
-    p
-  else
-    rewrite_double_underscore_paths env p
+end
+
+module Names : sig
+  val reset_names : unit -> unit
+
+  val add_named_vars : type_expr -> unit
+  val add_subst : (type_expr * type_expr) list -> unit
+
+  val new_name : unit -> string
+  val new_var_name : non_gen:bool -> type_expr -> unit -> string
+
+  val name_of_type : (unit -> string) -> transient_expr -> string
+
+  val check_name_of_type : transient_expr -> unit
+
+  val names_of_type : transient_expr -> nameable_context
+  val with_local_names : (unit -> 'a) -> 'a
+
+  val with_new_names : nameable_context -> (unit -> 'a) -> 'a
+end = struct
+  include Naming_context
+end
 
 let rec tree_of_path ?(disambiguation=true) namespace p =
   let tree_of_path namespace p = tree_of_path ~disambiguation namespace p in
@@ -3079,27 +3084,9 @@ let extension_only_constructor id ppf ext =
   Format.fprintf ppf "@[<hv>%a@]"
     !Oprint.out_constr {
       ocstr_name = name;
-    String.Map.iter
-      (fun constr out_idents ->
-        match out_idents with
-        | [] -> ()
-        | [out_ident] ->
-            fprintf ppf
-              "@ @[<2>@{<hint>Hint@}:@ %a@ is an existential type@ \
-               bound by the constructor@ %a.@]"
-              (Style.as_inline_code !Oprint.out_ident) out_ident
-              Style.inline_code constr
-        | out_ident :: out_idents ->
-            fprintf ppf
-              "@ @[<2>@{<hint>Hint@}:@ %a@ and %a@ are existential types@ \
-               bound by the constructor@ %a.@]"
-              (Format.pp_print_list
-                 ~pp_sep:(fun ppf () -> fprintf ppf ",@ ")
-                 (Style.as_inline_code !Oprint.out_ident))
-              (List.rev out_idents)
-              (Style.as_inline_code !Oprint.out_ident) out_ident
-              Style.inline_code constr)
-      constrs
+      ocstr_args = args;
+      ocstr_return_type = ret;
+    }
 
 end
 
@@ -3976,28 +3963,10 @@ let tree_of_value_description id decl =
   let r = Osig_value vd in
   Btype.backtrack snap;
   r
-let tree_of_value_description id decl =
-  (* Format.eprintf "@[%a@]@." raw_type_expr decl.val_type; *)
-  let id = Ident.name id in
-  let ty = tree_of_type_scheme decl.val_type in
-  let vd =
-    { oval_name = id;
-      oval_type = ty;
-      oval_prims = [];
-      oval_attributes = [] }
-  in
-  let vd =
-    match decl.val_kind with
-    | Val_prim p -> Primitive.print p vd
-    | _ -> vd
-  in
-  Osig_value vd
 
-  let signature ppf sg =
-    Fmt.fprintf ppf "%a" print_signature (tree_of_signature sg)
+let signature ppf sg =
+  Fmt.fprintf ppf "%a" print_signature (tree_of_signature sg)
 
-end
-open Doc
 let string_of_path p = Fmt.asprintf "%a" path p
 
 let strings_of_paths namespace p =
@@ -4881,8 +4850,7 @@ let printed_signature sourcefile ppf sg =
     Location.prerr_warning (Location.in_file sourcefile)
       (Warnings.Erroneous_printed_signature conflicts);
     Warnings.check_fatal ()
-  end;
-  fprintf ppf "%a" print_signature t
+  end
 
 (* Trace-specific printing *)
 
@@ -5542,6 +5510,8 @@ let type_expansion mode ppf ty_exp =
 let tree_of_type_declaration ident td rs =
   with_hidden_items [{hide=true; ident}]
     (fun () -> tree_of_type_declaration ident td rs)
+
+let check_conflicts sourcefile =
   if Warnings.(is_active @@ Erroneous_printed_signature "")
   && Conflicts.exists ()
   then begin
@@ -5549,8 +5519,7 @@ let tree_of_type_declaration ident td rs =
     Location.prerr_warning (Location.in_file sourcefile)
       (Warnings.Erroneous_printed_signature conflicts);
     Warnings.check_fatal ()
-  end;
-  fprintf ppf "%a" print_signature t
+  end
 
 (* Trace-specific printing *)
 

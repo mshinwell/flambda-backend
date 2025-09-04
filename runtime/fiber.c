@@ -992,6 +992,7 @@ int caml_try_realloc_stack(asize_t required_space)
       }
     }
   }
+#endif /* NATIVE_CODE */
 
   caml_free_stack(old_stack);
   Caml_state->current_stack = new_stack;

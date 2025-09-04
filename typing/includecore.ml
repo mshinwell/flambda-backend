@@ -229,25 +229,6 @@ let value_descriptions ~loc env name
          | Val_prim _ -> raise (Dont_match Not_a_primitive)
          | _ -> Tcoerce_none
      end
-||||||| 23e84b8c4d
-  match Ctype.moregeneral env true vd1.val_type vd2.val_type with
-  | exception Ctype.Moregen err -> raise (Dont_match (Type err))
-  | () -> begin
-      match (vd1.val_kind, vd2.val_kind) with
-      | (Val_prim p1, Val_prim p2) -> begin
-          match primitive_descriptions p1 p2 with
-          | None -> Tcoerce_none
-          | Some err -> raise (Dont_match (Primitive_mismatch err))
-        end
-      | (Val_prim p, _) ->
-          let pc =
-            { pc_desc = p; pc_type = vd2.Types.val_type;
-              pc_env = env; pc_loc = vd1.Types.val_loc; }
-          in
-          Tcoerce_primitive pc
-      | (_, Val_prim _) -> raise (Dont_match Not_a_primitive)
-      | (_, _) -> Tcoerce_none
-    end
 
 (* Inclusion between manifest types (particularly for private row types) *)
 
@@ -1485,27 +1466,6 @@ let type_declarations ?(equality = false) ~loc env ~mark name
     | Some err -> Some (Privacy err)
     | None -> None
   in
-||||||| 23e84b8c4d
-  if decl1.type_arity <> decl2.type_arity then Some Arity else
-  let err =
-    match privacy_mismatch env decl1 decl2 with
-    | Some err -> Some (Privacy err)
-    | None -> None
-  in
-  if err <> None then err else
-  let err = match (decl1.type_manifest, decl2.type_manifest) with
-      (_, None) -> None
-    | (Some ty1, Some ty2) ->
-         type_manifest env ty1 ty2 decl2.type_private decl2.type_kind
-    | (None, Some ty2) ->
-        let ty1 =
-          Btype.newgenty (Tconstr(path, decl2.type_params, ref Mnil))
-        in
-        match Ctype.equal env false [ty1] [ty2] with
-        | exception Ctype.Equality err -> Some (Manifest err)
-        | () -> None
-  in
-  if err <> None then err else
   let mark_and_compare_records record_form labels1 rep1 labels2 rep2 =
     if mark then begin
       let mark usage lbls =
@@ -1575,14 +1535,6 @@ let type_declarations ?(equality = false) ~loc env ~mark name
           (mark_and_compare_records Unboxed_product labels1 rep1 labels2 rep2)
           (fun () -> compare_unsafe_mode_crossing ~env umc1 umc2)
       end
-||||||| 23e84b8c4d
-        Variant_diffing.compare_with_representation ~loc env
-          decl1.type_params
-          decl2.type_params
-          cstrs1
-          cstrs2
-          rep1
-          rep2
     | (Type_record(labels1,rep1), Type_record(labels2,rep2)) ->
         if mark then begin
           let mark usage lbls =

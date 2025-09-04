@@ -923,7 +923,6 @@ let cstr_type_path cstr =
   match get_desc cstr.cstr_res with
   | Tconstr (p, _, _) -> p
   | _ -> assert false
-||||||| 23e84b8c4d
 
                   (**********************************)
                   (*  Utilities for level-marking   *)

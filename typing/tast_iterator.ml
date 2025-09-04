@@ -181,7 +181,6 @@ let value_description sub x =
   sub.typ sub x.val_desc
 
 let label_decl sub ({ld_loc; ld_name; ld_type; ld_attributes; ld_modalities = _} as ld) =
-let label_decl sub {ld_loc; ld_name; ld_type; ld_attributes; _} =
   sub.item_declaration sub (Label ld);
   sub.location sub ld_loc;
   sub.attributes sub ld_attributes;

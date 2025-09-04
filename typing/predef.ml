@@ -392,27 +392,6 @@ and ident_some = ident_create "Some"
 
 and ident_null = ident_create "Null"
 and ident_this = ident_create "This"
-let mk_add_type add_type type_ident ?manifest
-    ?(immediate=Type_immediacy.Unknown) ?(kind=Type_abstract Definition) env =
-  let decl =
-    {type_params = [];
-     type_arity = 0;
-     type_kind = kind;
-     type_loc = Location.none;
-     type_private = Asttypes.Public;
-     type_manifest = manifest;
-     type_variance = [];
-     type_separability = [];
-     type_is_newtype = false;
-     type_expansion_scope = lowest_level;
-     type_attributes = [];
-     type_immediate = immediate;
-     type_unboxed_default = false;
-     type_uid = Uid.of_predef_id type_ident;
-    }
-  in
-  add_type type_ident decl env
-
 let option_argument_sort = Jkind.Sort.Const.value
 let option_argument_jkind = Jkind.Builtin.value_or_null ~why:(
   Type_argument {parent_path = path_option; position = 1; arity = 1})
@@ -496,43 +475,6 @@ let mk_add_type add_type =
   let add_type ?manifest type_ident ?kind ~jkind ?unboxed_jkind env =
     let jkind = Jkind.of_builtin ~why:(Primitive type_ident) jkind in
     add_type_with_jkind ?manifest type_ident ?kind ~jkind ?unboxed_jkind env
-let build_initial_env add_type add_extension empty_env =
-  let add_type = mk_add_type add_type
-  and add_type1 type_ident
-      ~variance ~separability ?(kind=fun _ -> Type_abstract Definition) env =
-    let param = newgenvar () in
-    let decl =
-      {type_params = [param];
-       type_arity = 1;
-       type_kind = kind param;
-       type_loc = Location.none;
-       type_private = Asttypes.Public;
-       type_manifest = None;
-       type_variance = [variance];
-       type_separability = [separability];
-       type_is_newtype = false;
-       type_expansion_scope = lowest_level;
-       type_attributes = [];
-       type_immediate = Unknown;
-       type_unboxed_default = false;
-       type_uid = Uid.of_predef_id type_ident;
-      }
-    in
-    add_type type_ident decl env
-  in
-  let add_extension id l =
-    add_extension id
-      { ext_type_path = path_exn;
-        ext_type_params = [];
-        ext_args = Cstr_tuple l;
-        ext_ret_type = None;
-        ext_private = Asttypes.Public;
-        ext_loc = Location.none;
-        ext_attributes = [Ast_helper.Attr.mk
-                            (Location.mknoloc "ocaml.warn_on_literal_pattern")
-                            (Parsetree.PStr [])];
-        ext_uid = Uid.of_predef_id id;
-      }
   in
   add_type_with_jkind, add_type
 
@@ -812,47 +754,10 @@ let build_initial_env add_type add_extension empty_env =
   |> add_type ident_unit
        ~kind:(variant [cstr ident_void []])
        ~jkind:Jkind.Const.Builtin.immediate
-  let variant constrs = Type_variant (constrs, Variant_regular) in
-  empty_env
-  (* Predefined types - alphabetical order *)
-  |> add_type1 ident_array
-       ~variance:Variance.full
-       ~separability:Separability.Ind
-  |> add_type ident_bool
-       ~immediate:Always
-       ~kind:(variant [cstr ident_false []; cstr ident_true []])
-  |> add_type ident_char ~immediate:Always
-  |> add_type ident_exn ~kind:Type_open
-  |> add_type ident_extension_constructor
-  |> add_type ident_float
-  |> add_type ident_floatarray
-  |> add_type ident_int ~immediate:Always
-  |> add_type ident_int32
-  |> add_type ident_int64
-  |> add_type1 ident_lazy_t
-       ~variance:Variance.covariant
-       ~separability:Separability.Ind
-  |> add_type1 ident_list
-       ~variance:Variance.covariant
-       ~separability:Separability.Ind
-       ~kind:(fun tvar ->
-         variant [cstr ident_nil []; cstr ident_cons [tvar; type_list tvar]])
-  |> add_type ident_nativeint
-  |> add_type1 ident_option
-       ~variance:Variance.covariant
-       ~separability:Separability.Ind
-       ~kind:(fun tvar ->
-         variant [cstr ident_none []; cstr ident_some [tvar]])
-  |> add_type ident_string
-  |> add_type ident_bytes
-  |> add_type ident_unit
-       ~immediate:Always
-       ~kind:(variant [cstr ident_void []])
   (* Predefined exceptions - alphabetical order *)
   |> add_extension ident_assert_failure
        [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
         Jkind.Sort.Const.value]
-       [newgenty (Ttuple[type_string; type_int; type_int])]
   |> add_extension ident_division_by_zero []
   |> add_extension ident_end_of_file []
   |> add_extension ident_failure [type_string,

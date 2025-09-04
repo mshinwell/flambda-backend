@@ -341,14 +341,30 @@ let print_loc ~capitalize_first ppf loc =
       comma ();
       Fmt.fprintf ppf "%s %i-%i" (capitalize "characters") startchar endchar
     );
+    
+    Fmt.fprintf ppf "@}"
 
-let print_loc_in_lowercase = print_loc ~capitalize_first:false
-let print_loc = print_loc ~capitalize_first:true
+  let print_loc_in_lowercase = print_loc ~capitalize_first:false
+  let print_loc = print_loc ~capitalize_first:true
 
-(* Print a comma-separated list of locations *)
-let print_locs ppf locs =
-  Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ",@ ")
-    print_loc ppf locs
+  (* Print a comma-separated list of locations *)
+  let print_locs ppf locs =
+    Fmt.pp_print_list ~pp_sep:(fun ppf () -> Fmt.fprintf ppf ",@ ")
+      print_loc ppf locs
+
+  let quoted_filename ppf file =
+    Fmt.fprintf ppf "\"%s\"" (show_filename file)
+
+  let loc = print_loc
+  let locs = print_locs
+
+end
+
+let print_filename = Fmt.compat Doc.filename
+let print_loc = Fmt.compat Doc.print_loc
+let print_loc_in_lowercase = Fmt.compat Doc.print_loc_in_lowercase
+let print_locs = Fmt.compat Doc.print_locs
+let separate_new_message ppf = Fmt.compat Doc.separate_new_message ppf ()
 
 (******************************************************************************)
 (* An interval set structure; additionally, it stores user-provided information

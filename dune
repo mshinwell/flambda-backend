@@ -74,7 +74,6 @@
   --explain
   --dump
   --require-aliases
-  --strict
   --unused-token
   COMMENT
   --unused-token
@@ -117,7 +116,6 @@
  (modules_without_implementation
   annot
   value_rec_types
-  asttypes
   cmo_format
   outcometree
   parsetree
@@ -183,7 +181,8 @@
   builtin_attributes
   ast_invariants
   depend
-  parser_types ; manual update: mli only files asttypes parsetree
+  parser_types ; manual update: mli only files parsetree
+  asttypes
   ;; TYPING
   ident
   path
@@ -298,13 +297,10 @@
   ; manual update: mli only files
   annot
   value_rec_types
-  asttypes
   cmo_format
   outcometree
   parsetree
-  debug_event
-  ; manual update: this is required.
-  instruct))
+  debug_event))
 
 (library
  (name ocamlbytecomp)

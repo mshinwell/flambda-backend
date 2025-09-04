@@ -238,7 +238,7 @@ let constr ppf l = Format_doc.compat Doc.constr ppf l
 let ident_of_name_loc ppf s = ident_of_name ppf s.txt
 
 let protect_longident ppf print_longident longprefix txt =
-    if not (needs_parens txt) then
+    if not (needs_parens ~kind:Other txt) then
       fprintf ppf "%a.%a" print_longident longprefix ident_of_name txt
     else if needs_spaces txt then
       fprintf ppf "%a.(@;%s@;)" print_longident longprefix txt
@@ -934,9 +934,9 @@ and record_pattern ctxt f ~unboxed l closed =
         {ppat_desc=Ppat_var {txt;_};
         ppat_attributes=[]; _})
       when s = txt ->
-        pp f "@[<2>%a@]"  longident_loc li
+        pp f "@[<2>%a@]"  value_longident_loc li
     | _ ->
-        pp f "@[<2>%a@;=@;%a@]" longident_loc li (pattern1 ctxt) p
+        pp f "@[<2>%a@;=@;%a@]" value_longident_loc li (pattern1 ctxt) p
   in
   let hash = if unboxed then "#" else "" in
   match closed with
@@ -1095,7 +1095,7 @@ and sugar_expr ctxt f e =
 and function_param ctxt f param =
   match param.pparam_desc with
   | Pparam_val (a, b, c) -> label_exp ctxt f (a, b, c)
-  | Pparam_newtype ty -> pp f "(type %a)@;" ident_of_name ty.txt
+  | Pparam_newtype (ty, _jkind_annot) -> pp f "(type %a)@;" ident_of_name ty.txt
 
 and function_body ctxt f function_body =
   match function_body with
@@ -1161,7 +1161,7 @@ and expression ctxt f x =
             pp f "@[<2>fun@;%t@]"
               (fun f ->
                 function_params_then_body
-                  ctxt f params constraint_ body ~delimiter:"->")
+                  ctxt f params constraint_.ret_type_constraint body ~delimiter:"->")
         end
     | Pexp_match (e, l) ->
         pp f "@[<hv0>@[<hv0>@[<2>match %a@]@ with@]%a@]"
@@ -1671,13 +1671,13 @@ and module_type ctxt f x =
     | Pmty_strengthen (mty, mod_id) ->
         pp f "@[<hov2>%a@ with@ %a@]"
           (module_type1 ctxt) mty
-          longident_loc mod_id
+          value_longident_loc mod_id
 
     | _ -> module_type1 ctxt f x
 and with_constraint ctxt f = function
   | Pwith_type (li, ({ptype_params= ls ;_} as td)) ->
       pp f "type@ %a %a =@ %a"
-        (type_params ctxt) ls
+        type_params ls
         (with_loc type_longident) li (type_declaration ctxt) td
   | Pwith_module (li, li2) ->
       pp f "module %a =@ %a" value_longident_loc li value_longident_loc li2;
@@ -1687,7 +1687,7 @@ and with_constraint ctxt f = function
         (module_type ctxt) mty;
   | Pwith_typesubst (li, ({ptype_params=ls;_} as td)) ->
       pp f "type@ %a %a :=@ %a"
-        (type_params ctxt) ls
+        type_params ls
         (with_loc type_longident) li
         (type_declaration ctxt) td
   | Pwith_modsubst (li, li2) ->
@@ -1898,7 +1898,7 @@ and pp_print_params_then_equals ctxt f x =
   else
   match x.pexp_desc with
   | Pexp_function (params, constraint_, body) ->
-      function_params_then_body ctxt f params constraint_ body
+      function_params_then_body ctxt f params constraint_.ret_type_constraint body
         ~delimiter:"="
   | _ -> pp_print_pexp_newtype ctxt "=" f x
 
@@ -2314,7 +2314,7 @@ and type_extension ctxt f x =
     (fun f -> function
        | [] -> ()
        | l ->
-           pp f "%a@;" (list (type_param ctxt) ~first:"(" ~last:")" ~sep:",") l)
+           pp f "%a@;" (list type_param ~first:"(" ~last:")" ~sep:",") l)
     x.ptyext_params
     (with_loc type_longident) x.ptyext_path
     private_flag x.ptyext_private (* Cf: #7200 *)
@@ -2432,7 +2432,7 @@ and directive_argument f x =
 
 and block_access ctxt f = function
   | Baccess_field li ->
-    pp f ".%a" longident_loc li
+    pp f ".%a" value_longident_loc li
   | Baccess_array (mut, index_kind, index) ->
     let dotop =
       match mut with
@@ -2456,7 +2456,7 @@ and block_access ctxt f = function
 
 and unboxed_access f = function
   | Uaccess_unboxed_field li ->
-    pp f ".#%a" longident_loc li
+    pp f ".#%a" value_longident_loc li
 
 and comprehension_expr ctxt f cexp =
   let punct, comp = match cexp with
@@ -2505,21 +2505,6 @@ and comprehension_iterator ctxt f x =
   | Pcomp_in seq ->
       pp f "in %a" (expression ctxt) seq
 
-and function_param ctxt f { pparam_desc; pparam_loc = _ } =
-  match pparam_desc with
-  | Pparam_val (a, b, c) -> label_exp ctxt f (a, b, c)
-  | Pparam_newtype (ty, None) -> pp f "(type %a)" ident_of_name ty.txt
-  | Pparam_newtype (ty, Some annot) ->
-      pp f "(type %a : %a)" ident_of_name ty.txt (jkind_annotation ctxt) annot
-
-and function_body ctxt f x =
-  match x with
-  | Pfunction_body body -> expression ctxt f body
-  | Pfunction_cases (cases, _, attrs) ->
-    pp f "@[<hv>function%a%a@]"
-      (item_attributes ctxt) attrs
-      (case_list ctxt) cases
-
 and function_constraint ctxt f x =
   (* We don't print [mode_annotations], which describes the whole function and goes on the
      [let] binding. *)
@@ -2536,18 +2521,6 @@ and function_constraint ctxt f x =
       (core_type ctxt) ty2
   | { ret_type_constraint = None; ret_mode_annotations; _} ->
     pp f "%a" optional_at_modes ret_mode_annotations
-
-and function_params_then_body ctxt f params constraint_ body ~delimiter =
-  let pp_params f =
-    match params with
-    | [] -> ()
-    | _ :: _ -> pp f "%a@;" (list (function_param ctxt) ~sep:"@ ") params
-  in
-  pp f "%t%a%s@;%a"
-    pp_params
-    (function_constraint ctxt) constraint_
-    delimiter
-    (function_body (under_functionrhs ctxt)) body
 
 and labeled_tuple_expr ctxt f ~unboxed x =
   pp f "@[<hov2>%s(%a)@]" (if unboxed then "#" else "")
@@ -2629,7 +2602,6 @@ let longident = value_longident
 let core_type = print_reset_with_maximal_extensions core_type
 let pattern = print_reset_with_maximal_extensions pattern
 let signature = print_reset_with_maximal_extensions signature
-let structure = structure reset_ctxt
 let module_expr = print_reset_with_maximal_extensions module_expr
 let module_type = print_reset_with_maximal_extensions module_type
 let class_field = print_reset_with_maximal_extensions class_field

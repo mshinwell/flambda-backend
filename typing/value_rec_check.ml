@@ -121,9 +121,6 @@ let is_ref : Types.value_description -> bool = function
     Typedtree.Texp_apply *)
 let is_abstracted_arg : arg_label * apply_arg -> bool = function
   | (_, Omitted _) -> true
-let is_abstracted_arg : arg_label * expression option -> bool = function
-  | (_, None) -> true
-  | (_, Some _) -> false
   | (_, Arg _) -> false
 
 let classify_expression : Typedtree.expression -> sd =
@@ -166,7 +163,6 @@ let classify_expression : Typedtree.expression -> sd =
         let env = Ident.add mid size env in
         classify_expression env e
     | Texp_ident (path, _, _, _, _) ->
-    | Texp_ident (path, _, _) ->
         classify_path env path
 
     (* non-binding cases *)
@@ -175,9 +171,6 @@ let classify_expression : Typedtree.expression -> sd =
     | Texp_sequence (_, _, e)
     | Texp_letexception (_, e)
     | Texp_exclave e ->
-    | Texp_letmodule (_, _, _, _, e)
-    | Texp_sequence (_, e)
-    | Texp_letexception (_, e) ->
         classify_expression env e
 
     | Texp_construct (_, {cstr_repr = Variant_unboxed}, [e], _) ->
@@ -186,32 +179,11 @@ let classify_expression : Typedtree.expression -> sd =
         Static
 
     | Texp_record { representation = Record_unboxed;
-    | Texp_construct (_, _, exprs) ->
-        if List.for_all is_constant exprs then Constant else Static
-
-    | Texp_variant (_, Some expr) ->
-        if is_constant expr then Constant else Static
-    | Texp_variant (_, None) ->
-        Constant
-
-    | Texp_record { representation = Record_unboxed _;
                     fields = [| _, Overridden (_,e) |] } ->
         classify_expression env e
     | Texp_record { representation = Record_ufloat; _ } ->
         Dynamic
     | Texp_record _ ->
-    | Texp_record { fields; _ } ->
-        (* We ignore the [extended_expression] field.
-           As long as all fields are Overridden rather than Kept, the value
-           can be constant. *)
-        let is_constant_field (_label, def) =
-          match def with
-          | Kept _ -> false
-          | Overridden (_loc, expr) -> is_constant expr
-        in
-        if Array.for_all is_constant_field fields then Constant else Static
-    | Texp_tuple exprs ->
-        if List.for_all is_constant exprs then Constant else Static
         Static
 
     | Texp_record_unboxed_product { representation = Record_unboxed_product;
@@ -320,7 +292,6 @@ let classify_expression : Typedtree.expression -> sd =
     let add_value_binding env vb =
       match vb.vb_pat.pat_desc with
       | Tpat_var (id, _loc, _uid, _mode) ->
-      | Tpat_var (id, _loc) ->
           let size = classify_expression old_env vb.vb_expr in
           Ident.add id size env
       | _ ->
@@ -685,10 +656,8 @@ let rec expression : Typedtree.expression -> term_judg =
       value_bindings Nonrecursive [binding] >> expression body
     | Texp_letmodule (x, _, _, mexp, e) ->
       module_binding (x, mexp) >> expression e
-    | Texp_match (e, _, cases, _) ->
-      (*
-    | Texp_match (e, cases, _) ->
-      (*
+    | Texp_match (e, _, comp_cases, val_cases, _) ->
+      (* TODO: update comment below for comp_cases
          (Gi; mi |- pi -> ei : m)^i
          G |- e : sum(mi)^i
          ----------------------------------------------
@@ -696,12 +665,14 @@ let rec expression : Typedtree.expression -> term_judg =
        *)
       (fun mode ->
         let pat_envs, pat_modes =
-          List.split (List.map (fun c -> case c mode) cases) in
+          List.split (List.map (fun c -> case c mode) val_cases) in
         let env_e = expression e (List.fold_left Mode.join Ignore pat_modes) in
-        Env.join_list (env_e :: pat_envs))
+        let comp_envs, comp_modes =
+          List.split (List.map (fun c -> case c mode) comp_cases) in
+        let comp_e = expression e (List.fold_left Mode.join Ignore comp_modes) in
+        Env.join_list
+          ((Env.join_list (env_e :: pat_envs)) :: (comp_e :: comp_envs)))
     | Texp_for tf ->
-        Env.join_list (env_e :: pat_envs))
-    | Texp_for (_, _, low, high, _, body) ->
       (*
         G1 |- low: m[Dereference]
         G2 |- high: m[Dereference]
@@ -730,7 +701,6 @@ let rec expression : Typedtree.expression -> term_judg =
     | Texp_apply
         ({exp_desc = Texp_ident (_, _, vd, Id_prim _, _)}, [_, Arg (arg, _)], _,
          _, _)
-    | Texp_apply ({exp_desc = Texp_ident (_, _, vd)}, [_, Some arg])
       when is_ref vd ->
       (*
         G |- e: m[Guard]
@@ -752,8 +722,6 @@ let rec expression : Typedtree.expression -> term_judg =
           | [] -> [], []
           | (_, Omitted _) :: rest -> split_args ~has_omitted_arg:true rest
           | (_, Arg (arg, _)) :: rest ->
-          | (_, None) :: rest -> split_args ~has_omitted_arg:true rest
-          | (_, Some arg) :: rest ->
             let applied, delayed = split_args ~has_omitted_arg rest in
             if has_omitted_arg
             then applied, arg :: delayed
@@ -790,20 +758,6 @@ let rec expression : Typedtree.expression -> term_judg =
           expression index << Dereference
         | Baccess_block (_, idx) ->
           expression idx << Dereference
-    | Texp_tuple exprs ->
-      list expression exprs << Guard
-    | Texp_array exprs ->
-      let array_mode = match Typeopt.array_kind exp with
-        | Lambda.Pfloatarray ->
-            (* (flat) float arrays unbox their elements *)
-            Dereference
-        | Lambda.Pgenarray ->
-            (* This is counted as a use, because constructing a generic array
-               involves inspecting to decide whether to unbox (PR#6939). *)
-            Dereference
-        | Lambda.Paddrarray | Lambda.Pintarray ->
-            (* non-generic, non-float arrays act as constructors *)
-            Guard
       in
       (* All unboxed accesses are nonrecursive, but we include the below match
          in case we add new unboxed access types *)
@@ -1008,7 +962,7 @@ let rec expression : Typedtree.expression -> term_judg =
       modexp mexp
     | Texp_object (clsstrct, _) ->
       class_structure clsstrct
-    | Texp_try (e, cases, eff_cases) ->
+    | Texp_try (e, cases) ->
       (*
         G |- e: m      (Gi; _ |- pi -> ei : m)^i
         --------------------------------------------
@@ -1022,7 +976,6 @@ let rec expression : Typedtree.expression -> term_judg =
       join [
         expression e;
         list case_env cases;
-        list case_env eff_cases;
       ]
     | Texp_override (pth, fields) ->
       (*
@@ -1404,7 +1357,6 @@ and class_expr : Typedtree.class_expr -> term_judg =
           match arg with
           | Omitted _ -> empty
           | Arg (e, _) -> expression e
-        let arg (_label, eo) = option expression eo in
         in
         join [
           class_expr ce << Dereference;
@@ -1562,8 +1514,6 @@ and is_destructuring_pattern : type k . k general_pattern -> bool =
     | Tpat_any -> false
     | Tpat_var (_, _, _, _) -> false
     | Tpat_alias (pat, _, _, _, _, _) -> is_destructuring_pattern pat
-    | Tpat_var (_, _) -> false
-    | Tpat_alias (pat, _, _) -> is_destructuring_pattern pat
     | Tpat_constant _ -> true
     | Tpat_tuple _ -> true
     | Tpat_unboxed_tuple _ -> true

@@ -324,17 +324,12 @@ let pat
       Tpat_unboxed_tuple
         (List.map (fun (label, p, sort) -> label, sub.pat sub p, sort) l)
     | Tpat_construct (loc, cd, l, vto) ->
-    | Tpat_var (id, s) -> Tpat_var (id, map_loc sub s)
-    | Tpat_tuple l -> Tpat_tuple (List.map (sub.pat sub) l)
-    | Tpat_construct (loc, cd, l, vto) ->
         let vto = Option.map (fun (vl,cty) ->
           List.map
             (fun (v, jk) ->
                (map_loc sub v,
                 Option.map (sub.jkind_annotation sub) jk))
             vl, sub.typ sub cty) vto in
-        Tpat_construct (map_loc sub loc, cd, List.map (sub.pat sub) l, vto)
-          List.map (map_loc sub) vl, sub.typ sub cty) vto in
         Tpat_construct (map_loc sub loc, cd, List.map (sub.pat sub) l, vto)
     | Tpat_variant (l, po, rd) ->
         Tpat_variant (l, Option.map (sub.pat sub) po, rd)
@@ -346,9 +341,6 @@ let pat
     | Tpat_array (am, arg_sort, l) -> Tpat_array (am, arg_sort, List.map (sub.pat sub) l)
     | Tpat_alias (p, id, s, uid, m, ty) ->
         Tpat_alias (sub.pat sub p, id, map_loc sub s, uid, m, ty)
-        Tpat_record (List.map (tuple3 (map_loc sub) id (sub.pat sub)) l, closed)
-    | Tpat_array l -> Tpat_array (List.map (sub.pat sub) l)
-    | Tpat_alias (p, id, s) -> Tpat_alias (sub.pat sub p, id, map_loc sub s)
     | Tpat_lazy p -> Tpat_lazy (sub.pat sub p)
     | Tpat_value p ->
        (as_computation_pattern (sub.pat sub (p :> pattern))).pat_desc
@@ -522,12 +514,10 @@ let expr sub x =
           List.map (tuple2 id (Option.map (sub.expr sub))) list
         )
     | Texp_match (exp, sort, cases, p) ->
-    | Texp_match (exp, cases, p) ->
         Texp_match (
           sub.expr sub exp,
           sort,
           List.map (sub.case sub) cases,
-          List.map (sub.case sub) eff_cases,
           p
         )
     | Texp_try (exp, exn_cases, eff_cases) ->
@@ -578,13 +568,9 @@ let expr sub x =
     | Texp_unboxed_field (exp, sort, lid, ld, uu) ->
         Texp_unboxed_field (sub.expr sub exp, sort, map_loc sub lid, ld, uu)
     | Texp_setfield (exp1, am, lid, ld, exp2) ->
-    | Texp_field (exp, lid, ld) ->
-        Texp_field (sub.expr sub exp, map_loc sub lid, ld)
-    | Texp_setfield (exp1, lid, ld, exp2) ->
         Texp_setfield (
           sub.expr sub exp1,
           am,
-          map_loc sub lid,
           map_loc sub lid,
           ld,
           sub.expr sub exp2
@@ -1022,7 +1008,6 @@ let typ sub x =
         Ttyp_open (path, map_loc sub mod_ident, sub.typ sub t)
     | Ttyp_of_kind jkind ->
       Ttyp_of_kind (sub.jkind_annotation sub jkind)
-        Ttyp_open (path, map_loc sub mod_ident, sub.typ sub t)
   in
   let ctyp_attributes = sub.attributes sub x.ctyp_attributes in
   {x with ctyp_loc; ctyp_desc; ctyp_env; ctyp_attributes}

@@ -21,15 +21,15 @@ type 'a toplevel_printer = (Format.formatter -> 'a -> unit) ref
 val out_ident: out_ident printer
 val out_value : out_value toplevel_printer
 val out_label : out_label printer
-val out_modality : (formatter -> out_modality -> unit) ref
-val out_modes_new : (formatter -> out_mode_new list -> unit) ref
-val out_jkind_const : (formatter -> out_jkind_const -> unit) ref
-val out_jkind : (formatter -> out_jkind -> unit) ref
+val out_modality : (Format.formatter -> out_modality -> unit) ref
+val out_modes_new : (Format.formatter -> out_mode_new list -> unit) ref
+val out_jkind_const : (Format.formatter -> out_jkind_const -> unit) ref
+val out_jkind : (Format.formatter -> out_jkind -> unit) ref
 val out_type : out_type printer
 val out_type_args : out_type list printer
 val out_constr : out_constructor printer
 val out_constr_args :
-  (formatter -> ((out_type * out_modality list) list) -> unit) ref
+  (Format.formatter -> ((out_type * out_modality list) list) -> unit) ref
 val out_class_type : out_class_type printer
 val out_module_type : out_module_type printer
 val out_sig_item : out_sig_item printer

@@ -528,7 +528,6 @@ let add_instance_var_met loc label id sign cl_num attrs met_env =
       Types.val_loc = loc;
       val_zero_alloc = Zero_alloc.default;
       val_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) }
-      val_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) }
   in
   Env.add_value ~mode:Mode.Value.legacy id desc met_env
 
@@ -1115,9 +1114,8 @@ and class_structure cl_num virt self_scope final val_env met_env loc
   let met_env =
     List.fold_right
       (fun {Typecore.pv_id; pv_type; pv_loc; pv_as_var; pv_attributes} met_env ->
-      (fun {pv_id; pv_type; pv_loc; pv_as_var; pv_attributes} met_env ->
          add_self_met pv_loc pv_id sign self_var_kind vars
-           cl_num (pv_kind=As_var) pv_type pv_attributes met_env)
+           cl_num (pv_as_var=As_var) pv_type pv_attributes met_env)
       self_pat_vars met_env
   in
   let fields =
@@ -1264,7 +1262,6 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
              {exp_desc =
               Texp_ident(path, mknoloc (Longident.Lident (Ident.name id)), vd,
                          Id_value, aliased_many_use);
-              Texp_ident(path, mknoloc (Longident.Lident (Ident.name id)), vd);
               exp_loc = Location.none; exp_extra = [];
               exp_type = Ctype.instance vd.val_type;
               exp_attributes = []; (* check *)
@@ -1360,7 +1357,6 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
             let eliminate_position_arg () =
               let arg = Typecore.src_pos (Location.ghostify scl.pcl_loc) [] val_env in
               Arg (arg, Jkind.Sort.value)
-              Some (option_none val_env ty0 Location.none)
             in
             let remaining_sargs, arg =
               if ignore_labels then begin
@@ -1419,8 +1415,6 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
             let omitted =
               match arg with
               | Omitted _ -> (l,ty0) :: omitted
-                    else
-                      None
               | Arg _ -> omitted
             in
             type_args ((l,arg)::args) omitted ty_fun ty_fun0 remaining_sargs
@@ -1463,7 +1457,6 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
                                  Non_value_let_binding (Ident.name id, sort)))
                )
                modes_and_sorts;
-          (fun (id, _id_loc, _typ) (vals, met_env) ->
              let path = Pident id in
              (* do not mark the value as used *)
              let vd = Env.find_value path val_env
@@ -1477,7 +1470,6 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
                {exp_desc =
                 Texp_ident(path, mknoloc(Longident.Lident (Ident.name id)),vd,
                            Id_value, aliased_many_use);
-                Texp_ident(path, mknoloc(Longident.Lident (Ident.name id)),vd);
                 exp_loc = Location.none; exp_extra = [];
                 exp_type = ty;
                 exp_attributes = [];

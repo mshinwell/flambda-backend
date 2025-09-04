@@ -881,11 +881,6 @@ val pp_nested_list :
     always called with [nested:true], indicating that any inner lists are nested
     and need parens. *)
 
-val print_see_manual : Format.formatter -> int list -> unit
-||||||| 23e84b8c4d
-val pp_two_columns :
-  ?sep:string -> ?max_lines:int ->
-  Format.formatter -> (string * string) list -> unit
 (** [pp_two_columns ?sep ?max_lines ppf l] prints the lines in [l] as two
    columns separated by [sep] ("|" by default). [max_lines] can be used to
    indicate a maximum number of lines to print -- an ellipsis gets inserted at

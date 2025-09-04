@@ -253,10 +253,8 @@ let show_locs ppf (loc1, loc2) =
 let dmodtype mty =
   let tmty = Printtyp.tree_of_modtype ~abbrev:true mty in
   Format.dprintf "%a" !Oprint.out_module_type tmty
-  let tmty = Printtyp.tree_of_modtype mty in
-  Format.dprintf "%a" !Oprint.out_module_type tmty
 
-let space ppf () = Fmt.fprintf ppf "@ "
+let space ppf () = Format.fprintf ppf "@ "
 
 
 (** Checks if the error is a mode error at the leaf node, and returns the
@@ -654,9 +652,6 @@ module Functor_suberror = struct
         let g = With_shorthand.definition ~is_modal:None g in
         let e = With_shorthand.definition ~is_modal:None e in
         Format.dprintf
-        let g = With_shorthand.definition g in
-        let e = With_shorthand.definition e in
-        Format.dprintf
           "Module types do not match:@ @[%t@]@;<1 -2>does not include@ \
            @[%t@]%t"
           g e (more ())
@@ -713,10 +708,6 @@ module Functor_suberror = struct
       let g = With_shorthand.definition_of_argument ~is_modal g in
       let e = With_shorthand.definition ~is_modal e in
       Format.dprintf
-    let diff g e more =
-      let g = With_shorthand.definition_of_argument g in
-      let e = With_shorthand.definition e in
-      Format.dprintf
         "Modules do not match:@ @[%t@]@;<1 -2>\
          is not included in@ @[%t@]%t"
         g e (more ())
@@ -741,10 +732,6 @@ module Functor_suberror = struct
         "Modules do not match:@ @[%t%t@]@;<1 -2>\
          is not included in@ @[%t%t@]%t"
         (dmodtype mty) mode1 e mode2 (more ())
-      Format.dprintf
-        "Modules do not match:@ @[%t@]@;<1 -2>\
-         is not included in@ @[%t@]%t"
-        (dmodtype mty) e (more ())
 
 
     let incompatible = function
@@ -933,28 +920,19 @@ let module_types {Err.got=mty1; expected=mty2; modes; symptom}=
   let is_modal = Is_modal.module_type_symptom symptom in
   let mode1, mode2 = maybe_print_modes ~in_structure:false ~is_modal modes in
   Format.dprintf
-let module_types {Err.got=mty1; expected=mty2} =
-  Format.dprintf
     "@[<hv 2>Modules do not match:@ \
      %a%t@;<1 -2>is not included in@ %a%t@]"
     !Oprint.out_module_type (Printtyp.tree_of_modtype ~abbrev:true mty1)
     mode1
     !Oprint.out_module_type (Printtyp.tree_of_modtype ~abbrev:true mty2)
     mode2
-     %a@;<1 -2>is not included in@ %a@]"
-    !Oprint.out_module_type (Printtyp.tree_of_modtype mty1)
-    !Oprint.out_module_type (Printtyp.tree_of_modtype mty2)
 
 let eq_module_types ({Err.got=mty1; expected=mty2} : _ mdiff) =
-  Format.dprintf
-let eq_module_types {Err.got=mty1; expected=mty2} =
   Format.dprintf
     "@[<hv 2>Module types do not match:@ \
      %a@;<1 -2>is not equal to@ %a@]"
     !Oprint.out_module_type (Printtyp.tree_of_modtype ~abbrev:true mty1)
     !Oprint.out_module_type (Printtyp.tree_of_modtype ~abbrev:true mty2)
-    !Oprint.out_module_type (Printtyp.tree_of_modtype mty1)
-    !Oprint.out_module_type (Printtyp.tree_of_modtype mty2)
 
 let module_type_declarations id {Err.got=d1 ; expected=d2} =
   Fmt.dprintf
@@ -993,7 +971,6 @@ let core_module_type_symptom (x:Err.core_module_type_symptom)  =
 
 let rec module_type ~expansion_token ~eqmode ~env ~before ~ctx
   (diff : _ mdiff) =
-let rec module_type ~expansion_token ~eqmode ~env ~before ~ctx diff =
   match diff.symptom with
   | Invalid_module_alias _ (* the difference is non-informative here *)
   | After_alias_expansion _ (* we print only the expanded module types *) ->

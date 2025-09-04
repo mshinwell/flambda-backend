@@ -153,6 +153,7 @@ let rec run_test_tree log common_prefix behavior env summ ast
           (msg, sub_behavior, newenv, result)
         with e ->
           (report_error name.loc e, Skip_all, env, Result.fail)
+        end
     in
     if not skip_all then Printf.printf "%s\n%!" msg;
     let newsumm = join_result summ result in

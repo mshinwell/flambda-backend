@@ -1614,6 +1614,17 @@ let make_table ~headers:col_headers ~entries:rows =
   in
   { columns; num_rows }
 
+let chunks_of width str =
+  let len = String.length str in
+  let rec aux acc offset =
+    if offset >= len then List.rev acc
+    else
+      let chunk_len = min width (len - offset) in
+      let chunk = String.sub str offset chunk_len in
+      aux (chunk :: acc) (offset + chunk_len)
+  in
+  aux [] 0
+
 let split_to_width width lines =
   let split_one line =
     let chunks = chunks_of width line in
@@ -1632,7 +1643,7 @@ let wrap_cells ~width table =
     done
   done
 
-let rec get_column_widths ~width ~min_width ~sep_width table =
+let get_column_widths ~width ~min_width ~sep_width table =
   let cols = table.columns in
   let num_cols = Array.length cols in
   if num_cols = 0 then [||]
@@ -1671,7 +1682,7 @@ let rec get_column_widths ~width ~min_width ~sep_width table =
 let get_wrapped_row_count table i j =
   Int.max 1 (List.length table.columns.(i).entries.(j))
 
-let pp_table ppf table ~sep =
+let pp_table_impl ppf table ~sep =
   let col_widths = get_column_widths ~width:80 ~min_width:1 ~sep_width:3 table in
   let num_cols = Array.length table.columns in
   (* Account for the width of the table. *)
@@ -1688,7 +1699,7 @@ let pp_table ppf table ~sep =
   done;
   (* Print the header row *)
   let print_separator ppf width =
-    Format.fprintf ppf "%s@," (String.make width -);
+    Format.fprintf ppf "%s@," (String.make width '-');
   in
   let print_row ppf headers =
     Format.fprintf ppf "@[<h>";
@@ -1741,6 +1752,23 @@ let show_config_variable_and_exit x =
       exit 0
   | None ->
       exit 2
+
+(* Simple wrapper to match the interface signature *)
+let pp_table ppf cols_with_headers =
+  let headers = List.map fst cols_with_headers in
+  let entries_lists = List.map snd cols_with_headers in
+  (* Transpose to get rows *)
+  let rec transpose = function
+    | [] -> []
+    | [] :: _ -> []
+    | cols ->
+        let heads = List.map List.hd cols in
+        let tails = List.map List.tl cols in
+        heads :: transpose tails
+  in
+  let rows = transpose entries_lists in
+  let table = make_table ~headers ~entries:rows in
+  pp_table_impl ppf table ~sep:"|"
 
 let get_build_path_prefix_map =
   let init = ref false in

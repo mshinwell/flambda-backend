@@ -33,7 +33,7 @@ open Types
    type expression may fail to produce a well-formed type. In order to confine
    this issue to local substitutions, the type of substitutions is split into a
    safe and unsafe variant. Only unsafe substitutions may expand a module type
-   path into a generic module type. */
+   path into a generic module type. *)
 
 (** Type familly for substitutions *)
 type +'k subst

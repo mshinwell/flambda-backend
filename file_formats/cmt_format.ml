@@ -69,6 +69,8 @@ type cmt_infos = {
 type error =
     Not_a_typedtree of string
 
+exception Error of error
+
 let iter_on_parts (it : Tast_iterator.iterator) = function
   | Partial_structure s -> it.structure it s
   | Partial_structure_item s -> it.structure_item it s
@@ -199,7 +201,204 @@ let iter_on_occurrences
       in
       add_label ~namespace pat_env lid label_descr) fields
   in
-exception Error of error
+  let with_constraint ~env (_path, _lid, with_constraint) =
+    match with_constraint with
+    | Twith_module (path', lid') | Twith_modsubst (path', lid') ->
+        f ~namespace:Module env path' lid'
+    | _ -> ()
+  in
+  Tast_iterator.{ default_iterator with
+
+  expr = (fun sub ({ exp_desc; exp_env; _ } as e) ->
+      (match exp_desc with
+      | Texp_ident (path, lid, _) ->
+          f ~namespace:Value exp_env path lid
+      | Texp_construct (lid, constr_desc, _) ->
+          add_constructor_description exp_env lid constr_desc
+      | Texp_field (_, lid, label_desc)
+      | Texp_setfield (_, lid, label_desc, _)
+      | Texp_atomic_loc (_, lid, label_desc) ->
+          add_label ~namespace:Label exp_env lid label_desc
+      | Texp_new (path, lid, _) ->
+          f ~namespace:Class exp_env path lid
+      | Texp_record { fields; _ } ->
+        iter_field_exps ~namespace:Label exp_env fields
+      | Texp_instvar  (_self_path, path, name) ->
+          let lid = { name with txt = Longident.Lident name.txt } in
+          f ~namespace:Value exp_env path lid
+      | Texp_setinstvar  (_self_path, path, name, _) ->
+          let lid = { name with txt = Longident.Lident name.txt } in
+          f ~namespace:Value exp_env path lid
+      | Texp_override (_self_path, modifs) ->
+          List.iter (fun (id, (name : string Location.loc), _exp) ->
+            let lid = { name with txt = Longident.Lident name.txt } in
+            f ~namespace:Value exp_env (Path.Pident id) lid)
+            modifs
+      | Texp_extension_constructor (lid, path) ->
+          f ~namespace:Extension_constructor exp_env path lid
+      | Texp_constant _ | Texp_let _ | Texp_function _ | Texp_apply _
+      | Texp_match _ | Texp_try _ | Texp_tuple _ | Texp_variant _ | Texp_array _
+      | Texp_ifthenelse _ | Texp_sequence _ | Texp_while _ | Texp_for _
+      | Texp_send _
+      | Texp_letmodule _ | Texp_letexception _ | Texp_assert _ | Texp_lazy _
+      | Texp_object _ | Texp_pack _ | Texp_letop _ | Texp_unreachable
+      | Texp_open _ -> ());
+      default_iterator.expr sub e);
+
+  typ =
+    (fun sub ({ ctyp_desc; ctyp_env; _ } as ct) ->
+      (match ctyp_desc with
+      | Ttyp_constr (path, lid, _ctyps) ->
+          f ~namespace:Type ctyp_env path lid
+      | Ttyp_package {pack_path; pack_txt} ->
+          f ~namespace:Module_type ctyp_env pack_path pack_txt
+      | Ttyp_class (path, lid, _typs) ->
+          f ~namespace:Type ctyp_env path lid
+      |  Ttyp_open (path, lid, _ct) ->
+          f ~namespace:Module ctyp_env path lid
+      | Ttyp_any | Ttyp_var _ | Ttyp_arrow _ | Ttyp_tuple _ | Ttyp_object _
+      | Ttyp_alias _ | Ttyp_variant _ | Ttyp_poly _ -> ());
+      default_iterator.typ sub ct);
+
+  pat =
+    (fun (type a) sub
+      ({ pat_desc; pat_extra; pat_env; _ } as pat : a general_pattern) ->
+      (match pat_desc with
+      | Tpat_construct (lid, constr_desc, _, _) ->
+          add_constructor_description pat_env lid constr_desc
+      | Tpat_record (fields, _) ->
+        iter_field_pats ~namespace:Label pat_env fields
+      | Tpat_any | Tpat_var _ | Tpat_alias _ | Tpat_constant _ | Tpat_tuple _
+      | Tpat_variant _ | Tpat_array _ | Tpat_lazy _ | Tpat_value _
+      | Tpat_exception _ | Tpat_or _ -> ());
+      List.iter  (fun (pat_extra, _, _) ->
+        match pat_extra with
+        | Tpat_open (path, lid, _) ->
+            f ~namespace:Module pat_env path lid
+        | Tpat_type (path, lid) ->
+            f ~namespace:Type pat_env path lid
+        | Tpat_constraint _ | Tpat_unpack -> ())
+        pat_extra;
+      default_iterator.pat sub pat);
+
+  binding_op = (fun sub ({bop_op_path; bop_op_name; bop_exp; _} as bop) ->
+    let lid = { bop_op_name with txt = Longident.Lident bop_op_name.txt } in
+    f ~namespace:Value bop_exp.exp_env bop_op_path lid;
+    default_iterator.binding_op sub bop);
+
+  module_expr =
+    (fun sub ({ mod_desc; mod_env; _ } as me) ->
+      (match mod_desc with
+      | Tmod_ident (path, lid) -> f ~namespace:Module mod_env path lid
+      | Tmod_structure _ | Tmod_functor _ | Tmod_apply _ | Tmod_apply_unit _
+      | Tmod_constraint _ | Tmod_unpack _ -> ());
+      default_iterator.module_expr sub me);
+
+  open_description =
+    (fun sub ({ open_expr = (path, lid); open_env; _ } as od)  ->
+      f ~namespace:Module open_env path lid;
+      default_iterator.open_description sub od);
+
+  module_type =
+    (fun sub ({ mty_desc; mty_env; _ } as mty)  ->
+      (match mty_desc with
+      | Tmty_ident (path, lid) ->
+          f ~namespace:Module_type mty_env path lid
+      | Tmty_with (_mty, l) ->
+          List.iter (with_constraint ~env:mty_env) l
+      | Tmty_alias (path, lid) ->
+          f ~namespace:Module mty_env path lid
+      | Tmty_signature _ | Tmty_functor _ | Tmty_typeof _ -> ());
+      default_iterator.module_type sub mty);
+
+  class_expr =
+    (fun sub ({ cl_desc; cl_env; _} as ce) ->
+      (match cl_desc with
+      | Tcl_ident (path, lid, _) -> f ~namespace:Class cl_env path lid
+      | Tcl_structure _ | Tcl_fun _ | Tcl_apply _ | Tcl_let _
+      | Tcl_constraint _ | Tcl_open _ -> ());
+      default_iterator.class_expr sub ce);
+
+  class_type =
+    (fun sub ({ cltyp_desc; cltyp_env; _} as ct) ->
+      (match cltyp_desc with
+      | Tcty_constr (path, lid, _) -> f ~namespace:Class_type cltyp_env path lid
+      | Tcty_signature _ | Tcty_arrow _ | Tcty_open _ -> ());
+      default_iterator.class_type sub ct);
+
+  signature_item =
+    (fun sub ({ sig_desc; sig_env; _ } as sig_item) ->
+      (match sig_desc with
+      | Tsig_exception {
+          tyexn_constructor = { ext_kind = Text_rebind (path, lid)}} ->
+          f ~namespace:Extension_constructor sig_env path lid
+      | Tsig_modsubst { ms_manifest; ms_txt } ->
+          f ~namespace:Module sig_env ms_manifest ms_txt
+      | Tsig_typext { tyext_path; tyext_txt } ->
+          f ~namespace:Type sig_env tyext_path tyext_txt
+      | Tsig_value _ | Tsig_type _ | Tsig_typesubst _ | Tsig_exception _
+      | Tsig_module _ | Tsig_recmodule _ | Tsig_modtype _ | Tsig_modtypesubst _
+      | Tsig_open _ | Tsig_include _ | Tsig_class _ | Tsig_class_type _
+      | Tsig_attribute _ -> ());
+      default_iterator.signature_item sub sig_item);
+
+  structure_item =
+    (fun sub ({ str_desc; str_env; _ } as str_item) ->
+      (match str_desc with
+      | Tstr_exception {
+          tyexn_constructor = { ext_kind = Text_rebind (path, lid)}} ->
+          f ~namespace:Extension_constructor str_env path lid
+      | Tstr_typext { tyext_path; tyext_txt } ->
+          f ~namespace:Type str_env tyext_path tyext_txt
+      | Tstr_eval _ | Tstr_value _ | Tstr_primitive _ | Tstr_type _
+      | Tstr_exception _ | Tstr_module _ | Tstr_recmodule _
+      | Tstr_modtype _ | Tstr_open _ | Tstr_class _ | Tstr_class_type _
+      | Tstr_include _ | Tstr_attribute _ -> ());
+      default_iterator.structure_item sub str_item)
+}
+
+let iter_declarations binary_annots ~f =
+  iter_on_annots (iter_on_declarations ~f) binary_annots
+
+let index_declarations binary_annots =
+  let index : item_declaration Shape.Uid.Tbl.t = Shape.Uid.Tbl.create 16 in
+  let f uid fragment = Shape.Uid.Tbl.add index uid fragment in
+  iter_declarations binary_annots ~f;
+  index
+
+let index_occurrences binary_annots =
+  let index : (Longident.t Location.loc * Shape_reduce.result) list ref =
+    ref []
+  in
+  let f ~namespace env path lid =
+    let not_ghost { Location.loc = { loc_ghost; _ }; _ } = not loc_ghost in
+    let reduce_and_store ~namespace lid path = 
+      if not_ghost lid then
+        match Env.shape_of_path ~namespace env path with
+        | exception Not_found -> ()
+        | { uid = Some (Predef _); _ } -> ()
+        | path_shape ->
+          let result = Shape_reduce.local_reduce_for_uid env path_shape in
+          index := (lid, result) :: !index
+    in
+    let rec index_components namespace lid path  =
+      let module_ = Shape.Sig_component_kind.Module in
+      let scraped_path = Path.scrape_extra_ty path in
+      match lid.Location.txt, scraped_path with
+      | Longident.Ldot (lid_name, _), Path.Pdot (path', _) ->
+        reduce_and_store ~namespace lid path;
+        index_components module_ {lid with txt = lid_name} path'
+      | Longident.Lapply (lid1, lid2), Path.Papply (path1, path2) ->
+        index_components module_ {lid with txt = lid2} path2;
+        index_components module_ {lid with txt = lid1} path1
+      | Longident.Lident _, _ ->
+        reduce_and_store ~namespace lid path;
+      | _, _ -> ()
+    in
+    index_components namespace lid path
+  in
+  iter_on_annots (iter_on_occurrences ~f) binary_annots;
+  !index
 
 let input_cmt ic = (Compression.input_value ic : cmt_infos)
 

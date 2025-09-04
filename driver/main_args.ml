@@ -52,13 +52,6 @@ let mk_binannot_occurrences f =
     features such as project-wide occurrences. This flag has\n\
     no effect in the absence of '-bin-annot'."
 
-let mk_binannot_occurrences f =
-  "-bin-annot-occurrences", Arg.Unit f,
-  " Store every occurrence of a bound name in the .cmt file.\n\
-    This information can be used by external tools to provide\n\
-    features such as project-wide occurrences. This flag has\n\
-    no effect in the absence of '-bin-annot'."
-
 let mk_c f =
   "-c", Arg.Unit f, " Compile only (do not link)"
 
@@ -477,12 +470,11 @@ let mk_ppx f =
 
 let mk_keywords f =
   "-keywords", Arg.String f,
-  "<version+list>  set keywords following the <version+list> spec:\n
-  \                -<version> if present specifies the base set of keywords\n
-  \                  (if absent the current set of keywords is used)
-  \                -<list> is a \"+\"-separated list of keywords to add to\n
-  \                  the base set of keywords.
-  "
+  "<version+list>  set keywords following the <version+list> spec:\n\
+  \                -<version> if present specifies the base set of keywords\n\
+  \                  (if absent the current set of keywords is used)\n\
+  \                -<list> is a \"+\"-separated list of keywords to add to\n\
+  \                  the base set of keywords."
 
 let mk_plugin f =
   "-plugin", Arg.String f,
@@ -915,8 +907,10 @@ let mk_dcse f =
 let mk_dlinear f =
   "-dlinear", Arg.Unit f, " (undocumented)"
 
+(* Unused - commented out to avoid warning
 let mk_dinterval f =
   "-dinterval", Arg.Unit f, " (undocumented)"
+*)
 
 let mk_dparsetree_loc_ghost_invariants f =
   "-dparsetree-loc-ghost-invariants", Arg.Unit f, " (undocumented)"
@@ -1057,8 +1051,8 @@ module type Compiler_options = sig
   val _as_parameter : unit -> unit
   val _binannot : unit -> unit
   val _binannot_cms : unit -> unit
-  val _binannot_occurrences : unit -> unit
   val _shape_format : string -> unit
+  val _binannot_occurrences : unit -> unit
   val _c : unit -> unit
   val _cc : string -> unit
   val _cclib : string -> unit

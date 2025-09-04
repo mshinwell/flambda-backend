@@ -791,7 +791,6 @@ let closed_type_decl decl =
     None
   with Non_closed (ty, _) ->
     Some ty
-  end
 
 let closed_extension_constructor ext =
   with_type_mark begin fun mark -> try

@@ -1222,7 +1222,6 @@ type record_form_packed =
 
 val record_form_to_string : _ record_form -> string
 
-||||||| 23e84b8c4d
 (* Constructor and record label descriptions inserted held in typing
    environments *)
 

@@ -1081,10 +1081,11 @@ let message = function
   | Nonreturning_statement ->
       msg "this statement never returns (or has an unsound type.)"
   | Preprocessor s -> msg "%s" s
-  | Useless_record_with ->
+  | Useless_record_with fields ->
       msg "all the fields are explicitly listed in this record:@ \
-           the %a clause is useless."
+           the %a clause is useless. (%s)"
         Style.inline_code "with"
+        fields
   | Bad_module_name (modname) ->
       msg "bad source file name: %a is not a valid module name."
         Style.inline_code modname

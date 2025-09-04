@@ -4477,9 +4477,6 @@ let lookup_all_dot_constructors ~errors ~use ~loc usage l s env =
                let use_fun () = use_constructor ~use ~loc usage env cda in
                (cda.cda_description, use_fun))
             cstrs
-  let vd, mode = normalize_vda_mode vda in
-  let vd = Subst.Lazy.force_value_description vd in
-  path, vd, (mode, locks)
 
 let lookup_type_full ~errors ~use ~loc lid env =
   match lid with

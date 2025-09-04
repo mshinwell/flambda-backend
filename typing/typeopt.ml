@@ -57,28 +57,16 @@ let scrape_ty env ty =
       let ty = Ctype.correct_levels ty in
       let ty' = Ctype.expand_head_opt env ty in
       begin match get_desc ty' with
-      let ty = Ctype.expand_head_opt env (Ctype.correct_levels ty) in
-      begin match get_desc ty with
       | Tconstr (p, _, _) ->
           begin match find_unboxed_type (Env.find_type p env) with
           | Some _ -> (Ctype.get_unboxed_type_approximation env ty').ty
           | None -> ty'
           | exception Not_found -> ty (* missing cmi file *)
-          begin match Env.find_type p env with
-          | {type_kind = ( Type_variant (_, Variant_unboxed)
-          | Type_record (_, Record_unboxed _) ); _} -> begin
-              match Typedecl_unboxed.get_unboxed_type_representation env ty with
-              | None -> ty
-              | Some ty2 -> ty2
-          end
-          | _ -> ty
-          | exception Not_found -> ty
           end
       | _ ->
           ty'
-          ty
       end
-  | _ -> Some ty
+  | _ -> ty
 
 (* See [scrape_ty]; this returns the [type_desc] of a scraped [type_expr]. *)
 let scrape env ty =
@@ -126,9 +114,6 @@ let maybe_pointer_type env ty =
     | false -> Nullable
   in
   immediate_or_pointer, nullable
-  let ty = scrape_ty env ty in
-  if is_immediate (Ctype.immediacy env ty) then Immediate
-  else Pointer
 
 let maybe_pointer exp = maybe_pointer_type exp.exp_env exp.exp_type
 
@@ -167,11 +152,15 @@ let classify ~classify_product env ty sort : _ classification =
   let ty = scrape_ty env ty in
   match (sort : Jkind.Sort.Const.t) with
   | Base Value -> begin
-  (* CR or_null: [immediate_or_null] arrays can be intarrays once that is
-     supported by the middle-end *)
-  if is_always_gc_ignorable env ty
-    && Ctype.check_type_nullability env ty Non_null
-  then Int
+      (* CR or_null: [immediate_or_null] arrays can be intarrays once that is
+         supported by the middle-end *)
+      if is_always_gc_ignorable env ty
+        && Ctype.check_type_nullability env ty Non_null
+      then Int
+      else Addr
+    end
+  | _ -> Addr
+
 let classify env ty =
   let ty = scrape_ty env ty in
   if maybe_pointer_type env ty = Immediate then Int
@@ -209,47 +198,34 @@ let classify env ty =
            || Path.same p Predef.path_float64x8
            then Addr
       else begin
-      if Path.same p Predef.path_float then Float
-      else if Path.same p Predef.path_lazy_t then Lazy
-      else if Path.same p Predef.path_string
-           || Path.same p Predef.path_bytes
-           || Path.same p Predef.path_array
-           || Path.same p Predef.path_nativeint
-           || Path.same p Predef.path_int32
-           || Path.same p Predef.path_int64 then Addr
-      else begin
-        try
-          match (Env.find_type p env).type_kind with
-          | Type_abstract _ ->
-              Any
-          | Type_record _ | Type_variant _ | Type_open ->
-              Addr
-          | Type_record_unboxed_product _ ->
-              Any
-        with Not_found ->
-          (* This can happen due to e.g. missing -I options,
-             causing some .cmi files to be unavailable.
-             Maybe we should emit a warning. *)
-          Any
+        if Path.same p Predef.path_float then Float
+        else if Path.same p Predef.path_lazy_t then Lazy
+        else if Path.same p Predef.path_string
+             || Path.same p Predef.path_bytes
+             || Path.same p Predef.path_array
+             || Path.same p Predef.path_nativeint
+             || Path.same p Predef.path_int32
+             || Path.same p Predef.path_int64 then Addr
+        else begin
+          try
+            match (Env.find_type p env).type_kind with
+            | Type_abstract _ ->
+                Any
+            | Type_record _ | Type_variant _ | Type_open ->
+                Addr
+            | Type_record_unboxed_product _ ->
+                Any
+          with Not_found ->
+            (* This can happen due to e.g. missing -I options,
+               causing some .cmi files to be unavailable.
+               Maybe we should emit a warning. *)
+            Any
+        end
       end
   | Tarrow _ | Ttuple _ | Tpackage _ | Tobject _ | Tnil | Tvariant _ ->
       Addr
   | Tlink _ | Tsubst _ | Tpoly _ | Tfield _ | Tunboxed_tuple _ | Tof_kind _ ->
       assert false
-  end
-  | Base Float64 -> Unboxed_float Unboxed_float64
-  | Base Float32 -> Unboxed_float Unboxed_float32
-  | Base Bits8 -> Unboxed_int Untagged_int8
-  | Base Bits16 -> Unboxed_int Untagged_int16
-  | Base Bits32 -> Unboxed_int Unboxed_int32
-  | Base Bits64 -> Unboxed_int Unboxed_int64
-  | Base Vec128 -> Unboxed_vector Unboxed_vec128
-  | Base Vec256 -> Unboxed_vector Unboxed_vec256
-  | Base Vec512 -> Unboxed_vector Unboxed_vec512
-  | Base Word -> Unboxed_int Unboxed_nativeint
-  | Base Untagged_immediate -> Unboxed_int Untagged_int
-  | Base Void -> Void
-  | Product c -> Product (classify_product ty c)
 
 let rec scannable_product_array_kind elt_ty_for_error loc sorts =
   List.map (sort_to_scannable_product_element_kind elt_ty_for_error loc) sorts
@@ -342,6 +318,7 @@ let array_type_kind ~elt_sort ~elt_ty env loc ty =
       | Pgenarray | Paddrarray | Pintarray | Pfloatarray | Punboxedfloatarray _
       | Punboxedoruntaggedintarray _ | Punboxedvectorarray _  ->
         kind
+      end
   | Tconstr(p, [elt_ty], _) when Path.same p Predef.path_array ->
       begin match classify env elt_ty with
       | Any -> if Config.flat_float_array then Pgenarray else Paddrarray

@@ -4451,13 +4451,7 @@ let report_error ppf = function
   | Duplicate_constructor s ->
       fprintf ppf "Two constructors are named %a" Style.inline_code s
   | Too_many_constructors ->
-||||||| 23e84b8c4d
-let report_error ppf = function
-  | Repeated_parameter ->
-      fprintf ppf "A type parameter occurs several times"
-  | Duplicate_constructor s ->
-      fprintf ppf "Two constructors are named %a" Style.inline_code s
-  | Too_many_constructors ->
+      fprintf ppf "Too many constructors"
 
 let quoted_out_type ppf ty = Style.as_inline_code !Oprint.out_type ppf ty
 let quoted_type ppf ty = Style.as_inline_code Printtyp.type_expr ppf ty
@@ -4595,7 +4589,6 @@ let report_error ~loc = function
         (Style.as_inline_code Printtyp.type_expr) ty
         (Includecore.report_type_mismatch
            "the original" "this" "definition" env)
-||||||| 23e84b8c4d
   | Definition_mismatch (ty, _env, None) ->
       fprintf ppf "@[<v>@[<hov>%s@ %s@;<1 2>%a@]@]"
         "This variant or record definition" "does not match that of type"
@@ -4633,18 +4626,13 @@ let report_error ~loc = function
         report_jkind_mismatch_due_to_bad_inference ppf ty violation
           Check_constraints
       | None ->
-      fprintf ppf "@[<v>Constraints are not satisfied in this type.@ ";
-      Printtyp.report_unification_error ppf env err
-        (fun ppf -> fprintf ppf "Type")
-        (fun ppf -> fprintf ppf "should be an instance of");
-      fprintf ppf "@]"
-
-      Location.errorf ~loc "Constraints are not satisfied in this type.@\n%t"
-        (fun ppf ->
-          Errortrace_report.unification ppf env err
-            (Doc.msg "Type")
-            (Doc.msg "should be an instance of")
-        )
+        Location.errorf ~loc "Constraints are not satisfied in this type.@\n%t"
+          (fun ppf ->
+            Errortrace_report.unification ppf env err
+              (Doc.msg "Type")
+              (Doc.msg "should be an instance of")
+          )
+      end
   | Non_regular { definition; used_as; defined_as; reaching_path } ->
       let reaching_path = Reaching_path.simplify reaching_path in
       Out_type.prepare_for_printing [used_as; defined_as];
@@ -4707,7 +4695,6 @@ let report_error ~loc = function
       | _ -> ()
       end;
       fprintf ppf "@]"
-||||||| 23e84b8c4d
       fprintf ppf "@[A type variable is unbound in this type declaration";
       begin match decl.type_kind, decl.type_manifest with
       | Type_variant (tl, _rep), _ ->
@@ -4812,7 +4799,7 @@ let report_error ~loc = function
                Printtyp.add_extension_constructor_to_preparation e;
                fprintf ppf "@[<v>%s@;<1 2>%a@;"
                  "In the extension constructor"
-                 (Printtyp.prepared_extension_constructor id)
+                 (Style.as_inline_code (Printtyp.prepared_extension_constructor id))
                  e
            end;
            begin match error with
@@ -4836,79 +4823,26 @@ let report_error ~loc = function
                  "cannot be deduced from the type parameters."
            end
        | Variance_not_satisfied n ->
+           let variance (p,n,i) =
+             let inj = if i then "injective " else "" in
+             match p, n with
+               true,  true  -> inj ^ "invariant"
+             | true,  false -> inj ^ "covariant"
+             | false, true  -> inj ^ "contravariant"
+             | false, false -> if inj = "" then "unrestricted" else inj
+           in
            fprintf ppf "@[@[%s@ %s@ The %d%s type parameter"
              "In this definition, expected parameter"
              "variances are not satisfied."
-             n (Misc.ordinal_suffix n));
-      (match n with
-       | Variance_variable_error { error = No_variable; _ } -> ()
-       | _ ->
-           fprintf ppf " was expected to be %s,@ but it is %s.@]@]"
-             (variance v2) (variance v1))
-||||||| 23e84b8c4d
-      let variance (p,n,i) =
-        let inj = if i then "injective " else "" in
-        match p, n with
-          true,  true  -> inj ^ "invariant"
-        | true,  false -> inj ^ "covariant"
-        | false, true  -> inj ^ "contravariant"
-        | false, false -> if inj = "" then "unrestricted" else inj
-      in
-      (match n with
-       | Variance_variable_error { error; variable; context } ->
-           Printtyp.prepare_for_printing [ variable ];
-           begin match context with
-           | Type_declaration (id, decl) ->
-               Printtyp.add_type_declaration_to_preparation id decl;
-               fprintf ppf "@[<v>%s@;<1 2>%a@;"
-                 "In the definition"
-                 (Style.as_inline_code @@ Printtyp.prepared_type_declaration id)
-                 decl
-           | Gadt_constructor c ->
-               Printtyp.add_constructor_to_preparation c;
-               fprintf ppf "@[<v>%s@;<1 2>%a@;"
-                 "In the GADT constructor"
-                 (Style.as_inline_code Printtyp.prepared_constructor)
-                 c
-           | Extension_constructor (id, e) ->
-               Printtyp.add_extension_constructor_to_preparation e;
-               fprintf ppf "@[<v>%s@;<1 2>%a@;"
-                 "In the extension constructor"
-                 (Printtyp.prepared_extension_constructor id)
-                 e
-           end;
-           begin match error with
-           | Variance_not_reflected ->
-               fprintf ppf "@[%s@ %a@ %s@ %s@ It"
-                 "the type variable"
-                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
-                 "has a variance that"
-                 "is not reflected by its occurrence in type parameters."
-           | No_variable ->
-               fprintf ppf "@[%s@ %a@ %s@ %s@]@]"
-                 "the type variable"
-                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
-                 "cannot be deduced"
-                 "from the type parameters."
-           | Variance_not_deducible ->
-               fprintf ppf "@[%s@ %a@ %s@ %s@ It"
-                 "the type variable"
-                 (Style.as_inline_code Printtyp.prepared_type_expr) variable
-                 "has a variance that"
-                 "cannot be deduced from the type parameters."
-           end
+             n (Misc.ordinal_suffix n);
+           (match n with
+            | Variance_variable_error { error = No_variable; _ } -> ()
+            | _ ->
+                fprintf ppf " was expected to be %s,@ but it is %s.@]@]"
+                  (variance v2) (variance v1))
        | Variance_not_satisfied n ->
-           fprintf ppf "@[@[%s@ %s@ The %d%s type parameter"
-             "In this definition, expected parameter"
-             "variances are not satisfied."
-             n (Misc.ordinal_suffix n));
-      (match n with
-       | Variance_variable_error { error = No_variable; _ } -> ()
-       | _ ->
-           fprintf ppf " was expected to be %s,@ but it is %s.@]@]"
-             (variance v2) (variance v1))
-
-      variance_error ~loc ~v1 ~v2 n
+           variance_error ~loc ~v1 ~v2 n
+       )
 
   | Unavailable_type_constructor p ->
       Location.errorf ~loc "The definition of type %a@ is unavailable"
@@ -5106,13 +5040,6 @@ let report_error ~loc = function
         Style.inline_code "nonrec"
   | Invalid_private_row_declaration ty ->
       let pp_private ppf ty = fprintf ppf "private %a" Printtyp.type_expr ty in
-      Format.fprintf ppf
-        "@[<hv>This private row type declaration is invalid.@ \
-         The type expression on the right-hand side reduces to@;<1 2>%a@ \
-         which does not have a free row type variable.@]@,\
-         @[<hv>@[@{<hint>Hint@}: If you intended to define a private \
-         type abbreviation,@ \
-        write explicitly@]@;<1 2>%a@]"
       let sub = [
           Location.msg
             "@[<hv>@[@{<hint>Hint@}: If you intended to define a private \
@@ -5126,7 +5053,6 @@ let report_error ~loc = function
          @[<v>The type expression on the right-hand side reduces to@;<1 2>%a@ \
          which does not have a free row type variable.@]"
         (Style.as_inline_code Printtyp.type_expr) ty
-        (Style.as_inline_code pp_private) ty
   | Local_not_enabled ->
       fprintf ppf "@[The local extension is disabled@ \
                    To enable it, pass the '-extension local' flag@]"

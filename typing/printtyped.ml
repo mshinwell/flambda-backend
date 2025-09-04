@@ -348,8 +348,6 @@ and pattern : type k . _ -> _ -> k general_pattern -> unit = fun i ppf x ->
       line i ppf "Tpat_var \"%a\"\n" fmt_ident s;
       value_mode i ppf m
   | Tpat_alias (p, s,_,_,m,_) ->
-  | Tpat_var (s,_) -> line i ppf "Tpat_var \"%a\"\n" fmt_ident s;
-  | Tpat_alias (p, s,_) ->
       line i ppf "Tpat_alias \"%a\"\n" fmt_ident s;
       value_mode i ppf m;
       pattern i ppf p;
@@ -415,7 +413,6 @@ and labeled_pattern_with_sorts :
     line i ppf "%a\n" Jkind.Sort.format sort
 
 and pattern_extra i ppf (extra_pat, _, attrs) =
-and pattern_extra i ppf (extra_pat, _, attrs) =
   match extra_pat with
   | Tpat_unpack ->
      line i ppf "Tpat_extra_unpack\n";
@@ -455,9 +452,6 @@ and function_body i ppf (body : function_body) =
       Option.iter (fun e -> expression_extra (i+1) ppf e []) exp_extra;
       list (i+1) case ppf cases
 
-and expression_extra i ppf x attrs =
-  match x with
-  | Texp_constraint (ct) ->
 and expression_extra i ppf x attrs =
   match x with
   | Texp_constraint ct ->

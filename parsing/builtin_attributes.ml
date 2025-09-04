@@ -167,7 +167,8 @@ let string_of_cst const =
   | Pconst_string(s, _, _) -> Some s
   | _ -> None
 
-let int_of_cst = function
+let int_of_cst const =
+  match const.pconst_desc with
   | Pconst_integer(i, None) -> Some (int_of_string i)
   | _ -> None
 
@@ -774,7 +775,7 @@ let get_optional_payload get_from_exp =
 let get_int_from_exp =
   let open Parsetree in
   function
-    | { pexp_desc = Pexp_constant (Pconst_integer(s, None)) } ->
+    | { pexp_desc = Pexp_constant { pconst_desc = Pconst_integer(s, None) } } ->
         begin match Misc.Int_literal_converter.int s with
         | n -> Result.Ok n
         | exception (Failure _) -> Result.Error ()
@@ -814,8 +815,8 @@ let get_id_or_constant_from_exp =
   let open Parsetree in
   function
   | { pexp_desc = Pexp_ident { txt = Longident.Lident id } } -> Result.Ok (Ident, id)
-  | { pexp_desc = Pexp_constant (Pconst_integer (s,None)) } -> Result.Ok (Const_int, s)
-  | { pexp_desc = Pexp_constant (Pconst_string (s,_loc,_so)) } -> Result.Ok (Const_string, s)
+  | { pexp_desc = Pexp_constant { pconst_desc = Pconst_integer (s,None) } } -> Result.Ok (Const_int, s)
+  | { pexp_desc = Pexp_constant { pconst_desc = Pconst_string (s,_loc,_so) } } -> Result.Ok (Const_string, s)
   | _ -> Result.Error ()
 
 let get_ids_and_constants_from_exp exp =
@@ -1107,7 +1108,7 @@ let get_tracing_probe_payload (payload : Parsetree.payload) =
                 ({ pexp_desc =
                       (Pexp_apply
                         ({ pexp_desc=
-                              (Pexp_constant (Pconst_string(name,_,None)));
+                              (Pexp_constant { pconst_desc = Pconst_string(name,_,None) });
                             pexp_loc = name_loc;
                             _ }
                         , args))

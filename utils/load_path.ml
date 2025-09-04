@@ -151,7 +151,9 @@ end = struct
     List.iter (fun ({ basename = base; path = fn } : Dir.entry) ->
         if Dir.hidden dir then begin
           STbl.replace !hidden_files base fn;
-          STbl.replace !hidden_files_uncap (Misc.normalized_unit_filename base) fn
+          match Misc.normalized_unit_filename base with
+          | Ok normalized -> STbl.replace !hidden_files_uncap normalized fn
+          | Error _ -> ()
         end else begin
           STbl.replace !visible_files base fn;
           STbl.replace !visible_files_uncap (String.uncapitalize_ascii base) fn
@@ -168,8 +170,9 @@ end = struct
     List.iter
       (fun ({ basename = base; path = fn }: Dir.entry) ->
          update base fn visible_files hidden_files;
-         let ubase = Misc.normalized_unit_filename base in
-         update ubase fn visible_files_uncap hidden_files_uncap)
+         match Misc.normalized_unit_filename base with
+         | Ok ubase -> update ubase fn visible_files_uncap hidden_files_uncap
+         | Error _ -> ())
       (Dir.files dir)
 
   let find fn visible_files hidden_files =
@@ -214,23 +217,6 @@ let get_paths () =
 let get_visible_path_list () = List.rev_map Dir.path !visible_dirs
 let get_hidden_path_list () = List.rev_map Dir.path !hidden_dirs
 
-(* Optimized version of [add] below, for use in [init] and [remove_dir]: since
-   we are starting from an empty cache, we can avoid checking whether a unit
-   name already exists in the cache simply by adding entries in reverse
-   order. *)
-let prepend_add dir =
-  List.iter (fun base ->
-      Result.iter (fun filename ->
-          let fn = Filename.concat dir.Dir.path base in
-          if dir.Dir.hidden then begin
-            STbl.replace !hidden_files base fn;
-            STbl.replace !hidden_files_uncap filename fn
-          end else begin
-            STbl.replace !visible_files base fn;
-            STbl.replace !visible_files_uncap filename fn
-          end)
-        (Misc.normalized_unit_filename base)
-    ) dir.Dir.files
 let init ~auto_include ~visible ~hidden =
   reset ();
   visible_dirs := List.rev_map (Dir.create ~hidden:false) visible;
@@ -262,29 +248,10 @@ let remove_dir dir =
     List.iter Path_cache.prepend_add visible
   end
 
-(* General purpose version of function to add a new entry to load path: We only
-   add a basename to the cache if it is not already present, in order to enforce
-   left-to-right precedence. *)
 let add (dir : Dir.t) =
   assert (not Config.merlin || Local_store.is_bound ());
   Path_cache.add dir;
-  let update base fn visible_files hidden_files =
-    if dir.hidden && not (STbl.mem !hidden_files base) then
-      STbl.replace !hidden_files base fn
-    else if not (STbl.mem !visible_files base) then
-      STbl.replace !visible_files base fn
-  in
-  List.iter
-    (fun base ->
-       Result.iter (fun ubase ->
-           let fn = Filename.concat dir.Dir.path base in
-           update base fn visible_files hidden_files;
-           update ubase fn visible_files_uncap hidden_files_uncap
-         )
-         (Misc.normalized_unit_filename base)
-    )
-    dir.files;
-  if dir.hidden then
+  if Dir.hidden dir then
     hidden_dirs := dir :: !hidden_dirs
   else
     visible_dirs := dir :: !visible_dirs

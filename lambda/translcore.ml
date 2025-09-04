@@ -911,7 +911,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
                [Pduparray] here, and deal with it in [Bytegen] (or in
                the case of Closure, in [Cmmgen], which already has to
                handle [Pduparray Pmakearray Pfloatarray] in the case
-               where the array turned out to be inconstant).
+               where the array turned out to be inconstant). *)
             (* We cannot currently lift mutable [Pintarray] arrays safely in
                Flambda because [caml_modify] might be called upon them
                (e.g. from code operating on polymorphic arrays, or functions
@@ -931,7 +931,6 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
                 imm_array
               else
                 match kind with
-              | Paddrarray | Pintarray ->
                 | Paddrarray | Pintarray ->
                   Lconst(Const_block(0, cl))
                 | Pfloatarray ->
@@ -1150,7 +1149,6 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
             value may subsequently turn into an immediate... *)
          Lprim(Pmakelazyblock Forward_tag,
                 [transl_exp ~scopes Jkind.Sort.Const.for_lazy_body e],
-         Lprim (Pmakelazyblock Forward_tag,
                 of_location ~scopes e.exp_loc)
       | `Identifier `Other ->
          transl_exp ~scopes Jkind.Sort.Const.for_lazy_body e
@@ -2080,7 +2078,6 @@ and transl_let ~scopes ~return_layout ?(add_regions=false) ?(in_structure=false)
         let def =
           if add_regions then maybe_region_exp vb_sort expr def else def
         in
-        ( id, id_duid, rkind, def ) in
         ( id, id_duid, rkind, def ) in
       let lam_bds = List.map2 transl_case pat_expr_list idlist in
       fun body -> Value_rec_compiler.compile_letrec lam_bds body

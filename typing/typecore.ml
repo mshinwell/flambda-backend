@@ -6708,7 +6708,7 @@ and type_expect_
       type_expect_record ~overwrite Unboxed_product lid_sexp_list opt_sexp
   | Pexp_field(srecord, lid) ->
       let (record, record_sort, rmode, label, _) =
-        type_label_access Legacy env srecord Env.Projection lid
+        type_label_access Legacy env srecord Env.Projection lid in
       let mode = Modality.Value.Const.apply label.lbl_modalities rmode in
       let boxing : texp_field_boxing =
         let is_float_boxing =
@@ -7616,27 +7616,12 @@ and type_expect_
             exp_desc =
               Texp_atomic_loc
                 (record, record_sort, lid, label, alloc_mode);
-  | Pexp_extension ({ txt = ("ocaml.atomic.loc"
-                             |"atomic.loc"); _ },
-                    payload) ->
-      begin match payload with
-      | PStr [ { pstr_desc =
-                  Pstr_eval (
-                    { pexp_desc = Pexp_field (srecord, lid); _ } as sexp, _
-                  )
-               } ] ->
-          let record, label, ty_arg =
-            solve_Pexp_field ~label_usage:Env.Mutation env sexp srecord lid
-          in
-          Env.mark_label_used Env.Projection label.lbl_uid;
-          if label.lbl_atomic = Nonatomic then
-            raise (Error (loc, env, Label_not_atomic lid.txt)) ;
-          rue {
-            exp_desc = Texp_atomic_loc (record, lid, label);
-            exp_loc = loc; exp_extra = [];
-            exp_type = instance (Predef.type_atomic_loc ty_arg);
+            exp_loc = loc;
+            exp_extra = [];
+            exp_type = newvar();
             exp_attributes = sexp.pexp_attributes;
-            exp_env = env }
+            exp_env = env
+          }
       | _ ->
           raise (Error (loc, env, Invalid_atomic_loc_payload))
       end
@@ -8929,7 +8914,7 @@ and type_argument ?explanation ?recarg ~overwrite env (mode : expected_mode) sar
       if not (simple_res || safe_expect) then begin
         unify_exp ~sexp:sarg env texp ty_expected;
         texp
-      end else begin
+      end else
       let warn = !Clflags.principal &&
         (lv <> generic_level || get_level ty_fun' <> generic_level)
       and ty_fun = instance ty_fun' in
@@ -9044,12 +9029,6 @@ and type_argument ?explanation ?recarg ~overwrite env (mode : expected_mode) sar
                           }],
                          func let_var) }
       end
-  | None ->
-      let mode = expect_mode_cross env ty_expected' mode in
-      let texp = type_expect ?recarg ~overwrite env mode sarg
-        (mk_expected ?explanation ty_expected') in
-      unify_exp ~sexp:sarg env texp ty_expected;
-      texp
 
 (* See Note [Type-checking applications] for an overview *)
 and type_apply_arg env ~app_loc ~funct ~index ~position_and_mode ~partial_app (lbl, arg) =
@@ -9123,6 +9102,8 @@ and type_apply_arg env ~app_loc ~funct ~index ~position_and_mode ~partial_app (l
           in
           {arg with exp_type = instance arg.exp_type}
         end
+      in
+      (lbl, Arg (arg, mode_arg, sort_arg))
   | Arg (Eliminated_optional_arg { ty_arg; sort_arg; expected_label; _ }) ->
       (match expected_label with
       | Optional _ ->

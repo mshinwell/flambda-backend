@@ -396,8 +396,8 @@ let mkexp_type_constraint_with_modes ?(ghost=false) ~loc ~modes e t =
   | Pcoerce(t1, t2)  ->
      match modes with
      | [] ->
-      let mk = if ghost then ghexp else mkexp ?attrs:None in
-      mk ~loc (Pexp_coerce(e, t1, t2))
+      if ghost then ghexp ~loc (Pexp_coerce(e, t1, t2))
+      else mkexp ~loc (Pexp_coerce(e, t1, t2))
      | _ :: _ -> not_expecting loc "mode annotations"
 
 let mkexp_opt_type_constraint_with_modes ?ghost ~loc ~modes e = function
@@ -590,6 +590,14 @@ let mkexp_attrs ~loc desc (ext, attrs) =
   | Some id ->
      mkexp ~loc (pexp_extension ~id (ghexp ~loc ~attrs desc))
 
+let wrap_exp_attrs ~loc body (ext, attrs) =
+  let ghexp = ghexp ~loc in
+  (* todo: keep exact location for the entire attribute *)
+  let body = {body with pexp_attributes = attrs @ body.pexp_attributes} in
+  match ext with
+  | None -> body
+  | Some id -> ghexp(Pexp_extension (id, PStr [mkstrexp body []]))
+
 let mkexp_attrs ~loc d ext_attrs =
   wrap_exp_attrs ~loc (mkexp ~loc d) ext_attrs
 
@@ -622,7 +630,9 @@ let wrap_mkstr_ext ~loc (item, ext) =
 let wrap_mksig_ext ~loc (item, ext) =
   match ext with
   | None -> mksig ~loc item
-  | Some id -> mksig ~loc (Psig_extension ((id, PSig [ghsig ~loc item]), []))
+  | Some id -> 
+      let sig_ = { psg_modalities = []; psg_items = [ghsig ~loc item]; psg_loc = make_loc loc } in
+      mksig ~loc (Psig_extension ((id, PSig sig_), []))
 
 let mk_quotedext ~loc (id, idloc, str, strloc, delim) =
   let exp_id = mkloc id idloc in
@@ -831,7 +841,7 @@ let mk_functor_typ args mty_mm =
 
 let mk_functor_typ args mty =
   List.fold_left (fun acc (startpos, arg) ->
-      mkmty ~loc:(startpos, mty.pmty_loc.loc_end) (Pmty_functor (arg, acc)))
+      mkmty ~loc:(startpos, mty.pmty_loc.loc_end) (Pmty_functor (arg, acc, [])))
     mty args
 
 (* Alternatively, we could keep the generic module type in the Parsetree
@@ -1175,21 +1185,21 @@ The precedences must be listed from low to high.
 %nonassoc below_FUNCTOR                 /* include M */
 %nonassoc FUNCTOR                       /* include functor M */
 %right    MINUSGREATER                  /* function_type (t -> t -> t) */
-%right    OR BARBAR                     /* expr (e || e || e) */
-%nonassoc below_AMPERSAND
-%right    AMPERSAND AMPERAMPER          /* expr (e && e && e) */
-%nonassoc below_EQUAL
-%left     INFIXOP0 EQUAL LESS GREATER   /* expr (e OP e OP e) */
-%right    ATAT AT INFIXOP1              /* expr (e OP e OP e) */
+/* %right    OR BARBAR */                    /* expr (e || e || e) - unused */
+/* %nonassoc below_AMPERSAND */              /* unused after merge */
+/* %right    AMPERSAND AMPERAMPER */         /* expr (e && e && e) - unused */
+/* %nonassoc below_EQUAL */                  /* unused after merge */
+/* %left     INFIXOP0 EQUAL LESS GREATER */  /* expr (e OP e OP e) - unused */
+/* %right    ATAT AT INFIXOP1 */             /* expr (e OP e OP e) - unused */
 %nonassoc below_LBRACKETAT
 %nonassoc LBRACKETAT
 %right    COLONCOLON                    /* expr (e :: e :: e) */
-%left     INFIXOP2 PLUS PLUSDOT MINUS MINUSDOT PLUSEQ /* expr (e OP e OP e) */
-%left     PERCENT INFIXOP3 MOD STAR                 /* expr (e OP e OP e) */
-%right    INFIXOP4                      /* expr (e OP e OP e) */
+/* %left     INFIXOP2 PLUS PLUSDOT MINUS MINUSDOT PLUSEQ */ /* expr (e OP e OP e) - unused */
+/* %left     PERCENT INFIXOP3 MOD */ %left STAR             /* expr (e OP e OP e) - partially unused */
+/* %right    INFIXOP4 */                     /* expr (e OP e OP e) - unused */
 %nonassoc prec_unboxed_product_kind
 %nonassoc prec_unary_minus prec_unary_plus /* unary - */
-%nonassoc prec_constant_constructor     /* cf. simple_expr (C versus C x) */
+/* %nonassoc prec_constant_constructor */    /* cf. simple_expr (C versus C x) - unused */
 %nonassoc prec_constr_appl              /* above AS BAR COLONCOLON COMMA */
 %nonassoc below_HASH
 %nonassoc HASH HASH_SUFFIX              /* simple_expr/toplevel_directive */
@@ -1197,11 +1207,13 @@ The precedences must be listed from low to high.
 %nonassoc below_DOT
 %nonassoc DOT DOTHASH DOTOP
 /* Finally, the first tokens of simple_expr are above everything else. */
+/* Commented out - unused precedences after merge
 %nonassoc BACKQUOTE BANG BEGIN CHAR FALSE FLOAT HASH_FLOAT INT HASH_INT OBJECT
           LBRACE LBRACELESS LBRACKET LBRACKETBAR LBRACKETCOLON LIDENT LPAREN
           NEW PREFIXOP STRING TRUE UIDENT LESSLBRACKET DOLLAR
           LBRACKETPERCENT QUOTED_STRING_EXPR HASHLBRACE HASHLPAREN
           METAOCAML_BRACKET_OPEN METAOCAML_ESCAPE
+*/
 
 /* Entry points */
 
@@ -1848,8 +1860,7 @@ structure_item:
     { $1 }
   | include_statement(module_expr)
       { let incl, ext = $1 in
-        let item = mkstr ~loc:$sloc (Pstr_include incl) in
-        wrap_str_ext ~loc:$sloc item ext
+        wrap_mkstr_ext ~loc:$sloc (Pstr_include incl, ext)
       }
 ;
 
@@ -2041,8 +2052,6 @@ module_type_atomic:
     MINUSGREATER mty = module_type
       %prec below_WITH
       { mk_functor_typ args mty }
-  | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
-      { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
   | LPAREN module_type RPAREN
       { $2 }
   | LPAREN module_type error
@@ -2050,11 +2059,6 @@ module_type_atomic:
   | mkmty(
       mkrhs(mty_longident)
         { Pmty_ident $1 }
-    | module_type MINUSGREATER module_type
-        %prec below_WITH
-        { Pmty_functor(Named (mknoloc None, $1), $3) }
-    | module_type WITH separated_nonempty_llist(AND, with_constraint)
-        { Pmty_with($1, $3) }
 /*  | LPAREN MODULE mkrhs(mod_longident) RPAREN
         { Pmty_alias $3 } */
     )
@@ -2063,25 +2067,12 @@ module_type_atomic:
 
 module_type:
   | module_type_atomic { $1 }
-  | FUNCTOR attrs = attributes args = functor_args
-    MINUSGREATER mty_mm = module_type_with_optional_modes
-      %prec below_WITH
-      { wrap_mty_attrs ~loc:$sloc attrs (mk_functor_typ args mty_mm) }
-  | args = functor_args
-    MINUSGREATER mty_mm = module_type_with_optional_modes
-      %prec below_WITH
-      { mk_functor_typ args mty_mm }
   | MODULE TYPE OF attributes module_expr %prec below_LBRACKETAT
       { mkmty ~loc:$sloc ~attrs:$4 (Pmty_typeof $5) }
   | module_type attribute
       { Mty.attr $1 $2 }
   | mkmty(
-      module_type_with_optional_modes MINUSGREATER module_type_with_optional_modes
-        %prec below_WITH
-        { let mty0, mm0 = $1 in
-          let mty1, mm1 = $3 in
-          Pmty_functor(Named (mknoloc None, mty0, mm0), mty1, mm1) }
-    | module_type WITH separated_nonempty_llist(AND, with_constraint)
+      module_type WITH separated_nonempty_llist(AND, with_constraint)
         { Pmty_with($1, $3) }
     | extension
         { Pmty_extension $1 }
@@ -2162,8 +2153,7 @@ signature_item:
     { $1 }
   | include_statement(module_type) modalities = optional_atat_modalities_expr
       { let incl, ext = $1 in
-        let item = mksig ~loc:$sloc (Psig_include (incl, modalities)) in
-        wrap_sig_ext ~loc:$sloc item ext
+        wrap_mksig_ext ~loc:$sloc (Psig_include (incl, modalities), ext)
       }
 
 (* A module declaration. *)
@@ -2858,8 +2848,6 @@ fun_expr:
         mkexp_attrs ~loc:$sloc desc attrs }
   | fun_
       { $1 }
-  | expr_
-      { $1 }
   | let_bindings(ext) IN seq_expr
       { expr_of_let_bindings ~loc:$sloc $1 $3 }
   | pbop_op = mkrhs(LETOP) bindings = letop_bindings IN body = seq_expr
@@ -2925,11 +2913,11 @@ fun_expr:
   | LAZY ext_attributes simple_expr %prec below_HASH
       { Pexp_lazy $3, $2 }
   | subtractive expr %prec prec_unary_minus
-      { let desc, attrs = mkuminus ~oploc:$loc($1) $1 $2 in
-        desc, (None, attrs) }
+      { let desc = mkuminus ~sloc:$sloc ~oploc:$loc($1) $1 $2 in
+        desc, (None, []) }
   | additive expr %prec prec_unary_plus
-      { let desc, attrs = mkuplus ~oploc:$loc($1) $1 $2 in
-        desc, (None, attrs) }
+      { let desc = mkuplus ~sloc:$sloc ~oploc:$loc($1) $1 $2 in
+        desc, (None, []) }
 ;
 %inline do_done_expr:
   | DO e = seq_expr DONE
@@ -3165,9 +3153,9 @@ block_access:
 %inline simple_expr_:
   | mkrhs(val_longident)
       { Pexp_ident ($1) }
-  | mkrhs(constr_longident) %prec prec_constant_constructor
+  | mkrhs(constr_longident)
       { Pexp_construct($1, None) }
-  | name_tag %prec prec_constant_constructor
+  | name_tag
       { Pexp_variant($1, None) }
   | op(PREFIXOP) simple_expr
       { Pexp_apply($1, [Nolabel,$2]) }
@@ -3537,12 +3525,12 @@ fun_params:
 %inline labeled_tuple_element :
   | expr
      { None, $1 }
-  | LABEL simple_expr %prec below_HASH
+  | LABEL simple_expr
      { Some $1, $2 }
   | TILDE label = LIDENT
      { let loc = $loc(label) in
        Some label, mkexpvar ~loc label }
-  | TILDE LPAREN label = LIDENT c = type_constraint RPAREN %prec below_HASH
+  | TILDE LPAREN label = LIDENT c = type_constraint RPAREN
       { Some label,
         mkexp_type_constraint_with_modes
           ~loc:($startpos($2), $endpos) ~modes:[] (mkexpvar ~loc:$loc(label) label) c }
@@ -3570,41 +3558,8 @@ reversed_labeled_tuple_body:
   COMMA
   x2 = labeled_tuple_element
   { let x1 =
-      mkexp_constraint ~loc:($startpos($2), $endpos)
-        (mkexpvar ~loc:$loc(l1) l1) c
-    in
-    [ x2; Some l1, x1] }
-;
-%inline labeled_tuple:
-  xs = rev(reversed_labeled_tuple_body)
-    { xs }
-;
-reversed_labeled_tuple_body:
-  (* > 2 elements *)
-  xs = reversed_labeled_tuple_body
-  COMMA
-  x = labeled_tuple_element
-    { x :: xs }
-  (* base cases (2 elements) *)
-| x1 = expr
-  COMMA
-  x2 = labeled_tuple_element
-    { [ x2; None, x1 ] }
-| l1 = LABEL x1 = simple_expr
-  COMMA
-  x2 = labeled_tuple_element
-    { [ x2; Some l1, x1 ] }
-| TILDE l1 = LIDENT
-  COMMA
-  x2 = labeled_tuple_element
-  { let loc = $loc(l1) in
-    [ x2; Some l1, mkexpvar ~loc l1] }
-| TILDE LPAREN l1 = LIDENT c = type_constraint RPAREN
-  COMMA
-  x2 = labeled_tuple_element
-  { let x1 =
-      mkexp_type_constraint_with_modes
-        ~loc:($startpos($2), $endpos) ~modes:[] (mkexpvar ~loc:$loc(l1) l1) c
+      mkexp_type_constraint_with_modes ~loc:($startpos($2), $endpos)
+        ~modes:[] (mkexpvar ~loc:$loc(l1) l1) c
     in
     [ x2; Some l1, x1] }
 ;
@@ -3743,7 +3698,7 @@ pattern_no_exn:
     | self AS error
         { expecting $loc($3) "identifier" }
     | labeled_tuple_pattern(self)
-        { $1 }
+        { $1.ppat_desc }
     | self COLONCOLON error
         { expecting $loc($3) "pattern" }
     | self BAR pattern
@@ -3751,10 +3706,6 @@ pattern_no_exn:
     | self BAR error
         { expecting $loc($3) "pattern" }
   ) { $1 }
-  | reversed_labeled_tuple_pattern(self)
-      { let closed, pats = $1 in
-        mkpat ~loc:$sloc (Ppat_tuple (List.rev pats, closed))
-      }
 ;
 
 (* Parsing labeled tuple patterns
@@ -3806,6 +3757,13 @@ labeled_tuple_pat_element_list(self):
       { expecting $loc($3) "pattern" }
 ;
 
+%inline labeled_tuple_pattern(self):
+  | reversed_labeled_tuple_pattern(self)
+      { let closed, pats = $1 in
+        mkpat ~loc:$sloc (Ppat_tuple (List.rev pats, closed))
+      }
+;
+
 reversed_labeled_tuple_pattern(self):
   | labeled_tuple_pat_element_list(self) %prec below_COMMA
       { Closed, $1 }
@@ -3835,7 +3793,7 @@ pattern_gen:
 ;
 
 simple_pattern:
-    mkpat(mkrhs(val_ident) %prec below_EQUAL
+    mkpat(mkrhs(val_ident)
       { Ppat_var ($1) })
       { $1 }
   | simple_pattern_not_ident { $1 }
@@ -3861,7 +3819,7 @@ simple_pattern_not_ident:
     UNDERSCORE
       { Ppat_any }
   | signed_value_constant DOTDOT signed_value_constant
-      { Ppat_interval ($1, $3) }
+      { Ppat_interval (mkconst ~loc:$loc($1) $1, mkconst ~loc:$loc($3) $3) }
   | mkrhs(constr_longident)
       { Ppat_construct($1, None) }
   | name_tag
@@ -4147,7 +4105,7 @@ jkind_desc:
   | UNDERSCORE {
       Default
     }
-  | reverse_product_jkind %prec below_AMPERSAND {
+  | reverse_product_jkind {
       Product (List.rev $1)
     }
   | LPAREN jkind_desc RPAREN {
@@ -4573,7 +4531,6 @@ alias_type:
  *)
 function_type:
   | ty = tuple_type
-    %prec MINUSGREATER
       { ty }
   | ty = strict_function_or_labeled_tuple_type
       { ty }
@@ -4594,7 +4551,6 @@ strict_function_or_labeled_tuple_type:
       domain_with_modes = with_optional_mode_expr(extra_rhs(param_type))
       MINUSGREATER
       codomain_with_modes = with_optional_mode_expr(tuple_type)
-      %prec MINUSGREATER
         { let (domain, (_ : Lexing.position * Lexing.position)), arg_modes = domain_with_modes in
           let (codomain, codomain_loc), ret_modes = codomain_with_modes in
           Ptyp_arrow(label,
@@ -4633,7 +4589,6 @@ strict_function_or_labeled_tuple_type:
       tuple_with_modes = with_optional_mode_expr(proper_tuple_type)
       MINUSGREATER
       codomain_with_modes = with_optional_mode_expr(tuple_type)
-      %prec MINUSGREATER
          { let (tuple, tuple_loc), arg_modes = tuple_with_modes in
            let (codomain, codomain_loc), ret_modes = codomain_with_modes in
            let ty, ltys = tuple in
@@ -4648,7 +4603,7 @@ strict_function_or_labeled_tuple_type:
          }
     )
     { $1 }
-  | label = LIDENT COLON proper_tuple_type %prec MINUSGREATER
+  | label = LIDENT COLON proper_tuple_type
     { let ty, ltys = $3 in
       mktyp ~loc:$sloc (Ptyp_tuple ((Some label, ty) :: ltys))
     }
@@ -5043,11 +4998,11 @@ value_constant:
   | FLOAT             { let (f, m) = $1 in Pconst_float (f, m) }
 ;
 unboxed_constant:
-  | HASH_INT          { unboxed_int $sloc $sloc Positive $1 }
-  | HASH_FLOAT        { unboxed_float Positive $1 }
+  | HASH_INT          { mkconst ~loc:$sloc (unboxed_int $sloc $sloc Positive $1) }
+  | HASH_FLOAT        { mkconst ~loc:$sloc (unboxed_float Positive $1) }
 ;
 constant:
-    value_constant    { $1 }
+    value_constant    { mkconst ~loc:$sloc $1 }
   | unboxed_constant  { $1 }
 ;
 signed_value_constant:
@@ -5067,11 +5022,10 @@ signed_constant:
                    mkconst ~loc:$sloc (Pconst_integer (n, m)) }
   | PLUS FLOAT   { let (f, m) = $2 in
                    mkconst ~loc:$sloc (Pconst_float(f, m)) }
-  | unboxed_constant      { $1 }
-  | MINUS HASH_INT        { unboxed_int $sloc $loc($2) Negative $2 }
-  | MINUS HASH_FLOAT      { unboxed_float Negative $2 }
-  | PLUS HASH_INT         { unboxed_int $sloc $loc($2) Positive $2 }
-  | PLUS HASH_FLOAT       { unboxed_float Positive $2 }
+  | MINUS HASH_INT        { mkconst ~loc:$sloc (unboxed_int $sloc $loc($2) Negative $2) }
+  | MINUS HASH_FLOAT      { mkconst ~loc:$sloc (unboxed_float Negative $2) }
+  | PLUS HASH_INT         { mkconst ~loc:$sloc (unboxed_int $sloc $loc($2) Positive $2) }
+  | PLUS HASH_FLOAT       { mkconst ~loc:$sloc (unboxed_float Positive $2) }
 ;
 
 /* Identifiers and long identifiers */
