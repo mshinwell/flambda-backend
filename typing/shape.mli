@@ -51,6 +51,7 @@
 
 module Layout = Jkind_types.Sort.Const
 type base_layout = Jkind_types.Sort.base
+
 (** A [Uid.t] is associated to every declaration in signatures and
     implementations. They uniquely identify bindings in the program. When
     associated with these bindings' locations they are useful to external tools

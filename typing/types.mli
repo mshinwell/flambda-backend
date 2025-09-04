@@ -1225,7 +1225,8 @@ val record_form_to_string : _ record_form -> string
 (* Constructor and record label descriptions inserted held in typing
    environments *)
 
-type constructor_description =
+(* DUPLICATE REMOVED - see line 1145 for the actual definition *)
+(*type constructor_description =
   { cstr_name: string;                  (* Constructor name *)
     cstr_res: type_expr;                (* Type of the result *)
     cstr_existentials: type_expr list;  (* list of existentials *)
@@ -1240,23 +1241,18 @@ type constructor_description =
     cstr_attributes: Parsetree.attributes;
     cstr_inlined: type_declaration option;
     cstr_uid: Uid.t;
-   }
+   }*)
 
-and constructor_tag =
+(*and constructor_tag =
     Cstr_constant of int                (* Constant constructor (an int) *)
   | Cstr_block of int                   (* Regular constructor (a block) *)
   | Cstr_unboxed                        (* Constructor of an unboxed type *)
   | Cstr_extension of Path.t * bool     (* Extension constructor
-                                           true if a constant false if a block*)
+                                           true if a constant false if a block*)*)
 
-(* Constructors are the same *)
-val equal_tag :  constructor_tag -> constructor_tag -> bool
+(* equal_tag and may_equal_constr are already defined earlier *)
 
-(* Constructors may be the same, given potential rebinding *)
-val may_equal_constr :
-    constructor_description ->  constructor_description -> bool
-
-type label_description =
+(*type label_description =
   { lbl_name: string;                   (* Short name *)
     lbl_res: type_expr;                 (* Type of the result *)
     lbl_arg: type_expr;                 (* Type of the argument *)
@@ -1268,7 +1264,8 @@ type label_description =
     lbl_loc: Location.t;
     lbl_attributes: Parsetree.attributes;
     lbl_uid: Uid.t;
-  }
+  }*)
+  
 (** Extracts the list of "value" identifiers bound by a signature.
     "Value" identifiers are identifiers for signature components that
     correspond to a run-time value: values, extensions, modules, classes.

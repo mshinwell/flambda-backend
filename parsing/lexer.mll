@@ -426,11 +426,6 @@ let uchar_for_uchar_escape lexbuf =
       illegal_escape lexbuf
         (Printf.sprintf "%X is not a Unicode scalar value" cp)
 
-let is_keyword name =
-  match lookup_keyword name with
-  | LIDENT _ -> false
-  | _ -> true
-
 let validate_encoding lexbuf raw_name =
   match Utf8_lexeme.normalize raw_name with
   | Error _ -> error lexbuf (Invalid_encoding raw_name)
@@ -467,7 +462,7 @@ let lax_delim raw_name =
 let is_keyword name =
   Hashtbl.mem keyword_table name
 
-let find_keyword lexbuf name =
+let _find_keyword lexbuf name =
   match Hashtbl.find keyword_table name with
   | Some x -> x
   | None -> error lexbuf (Unknown_keyword name)

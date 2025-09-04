@@ -68,7 +68,7 @@ let compilation_unit_from_source ~for_pack_prefix source_file =
 let stem source_file =
   source_file |> Filename.basename |> basename_chop_extensions
 
-let start_char = function
+let _start_char = function
   | 'A' .. 'Z' -> true
   | _ -> false
 
@@ -149,10 +149,6 @@ let annot f = mk_artifact ".annot" f
 let companion_obj f = companion_artifact Config.ext_obj f
 let companion_cmt f = companion_artifact ".cmt" f
 let companion_cms f = companion_artifact ".cms" f
-
-let companion_cmi f =
-  let prefix = Misc.chop_extensions f.Artifact.filename in
-  { f with Artifact.filename = prefix ^ ".cmi"}
 
 let companion_cmi f =
   let prefix = Misc.chop_extensions f.Artifact.filename in

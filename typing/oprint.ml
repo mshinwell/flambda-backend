@@ -124,16 +124,6 @@ let escape_string s =
     Bytes.to_string s'
   end
 
-let rec print_typlist print_elem sep ppf =
-  function
-    [] -> ()
-  | [ty] -> print_elem ppf ty
-  | ty :: tyl ->
-      print_elem ppf ty;
-      pp_print_string ppf sep;
-      pp_print_space ppf ();
-      print_typlist print_elem sep ppf tyl
-
 let print_label_type ppf =
   function
   | Some s ->
@@ -684,7 +674,10 @@ and print_out_jkind ppf ojkind =
     | Ojkind_const jkind -> print_out_jkind_const ppf jkind
     | Ojkind_product ts ->
       let pp_sep ppf () = fprintf ppf "@ & " in
-      Misc.pp_nested_list ~nested ~pp_element ~pp_sep ppf ts
+      let print_list ppf = 
+        pp_print_list ~pp_sep (pp_element ~nested:true) ppf in
+      if nested then fprintf ppf "(%a)" print_list ts
+      else print_list ppf ts
   in
   pp_element ~nested:false ppf ojkind
 
@@ -703,13 +696,17 @@ and pr_var_jkinds jks =
 
 let out_label = ref print_out_label
 
-let out_modality = ref print_out_modality
+let out_modality = ref (fun (ppf : Format.formatter) m -> 
+  Format.pp_print_string ppf (asprintf "%a" print_out_modality m))
 
-let out_modes_new = ref print_out_modes_new
+let out_modes_new = ref (fun (ppf : Format.formatter) modes ->
+  Format.pp_print_string ppf (asprintf "%a" print_out_modes_new modes))
 
-let out_jkind_const = ref print_out_jkind_const
+let out_jkind_const = ref (fun (ppf : Format.formatter) jk ->
+  Format.pp_print_string ppf (asprintf "%a" print_out_jkind_const jk))
 
-let out_jkind = ref print_out_jkind
+let out_jkind = ref (fun (ppf : Format.formatter) jk ->
+  Format.pp_print_string ppf (asprintf "%a" print_out_jkind jk))
 
 let out_type = ref print_out_type
 
@@ -731,7 +728,7 @@ let type_parameter ~in_parens ppf
     | _ -> format_string
   in
   fprintf ppf format_string
-    (match var with Covariant -> "+" | Contravariant -> "-" | NoVariance ->  "")
+    (match var with Covariant -> "+" | Contravariant -> "-" | NoVariance ->  "" | Bivariant -> "+/-")
     (match inj with Injective -> "!" | NoInjectivity -> "")
     (print_type_parameter ~non_gen) ty
     print_out_jkind_annot lay
@@ -760,8 +757,6 @@ let rec print_out_class_type ppf =
       fprintf ppf "@[%t ->@ %a@]"
         (fun ppf -> print_arg_label_and_out_type ppf lab ty ~print_type)
         print_out_class_type cty
-      fprintf ppf "@[%a%a ->@ %a@]" print_arg_label lab
-        print_out_type_2 ty print_out_class_type cty
   | Octy_signature (self_ty, csil) ->
       let pr_param ppf =
         function
@@ -1074,7 +1069,16 @@ and print_simple_out_gf_type ppf (ty, gf) =
   print_out_modalities_new ppf m_new
 
 and print_out_constr_args ppf tyl =
-  print_typlist print_simple_out_gf_type " *" ppf tyl
+  let rec print_gf_typlist ppf = function
+    | [] -> ()
+    | [ty] -> print_simple_out_gf_type ppf ty
+    | ty :: tyl ->
+        print_simple_out_gf_type ppf ty;
+        pp_print_string ppf " *";
+        pp_print_space ppf ();
+        print_gf_typlist ppf tyl
+  in
+  print_gf_typlist ppf tyl
 
 and print_out_constr ppf constr =
   let {
@@ -1152,7 +1156,8 @@ and print_out_type_extension ppf te =
      te.otyext_constructors
 
 let out_constr = ref print_out_constr
-let out_constr_args = ref print_out_constr_args
+let out_constr_args = ref (fun (ppf : Format.formatter) args ->
+  Format.pp_print_string ppf (asprintf "%a" print_out_constr_args args))
 let _ = out_module_type := print_out_module_type
 let _ = out_signature := print_out_signature
 let _ = out_sig_item := print_out_sig_item

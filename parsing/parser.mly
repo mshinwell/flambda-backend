@@ -583,13 +583,6 @@ let wrap_type_annotation ~loc ?(typloc=loc) ~modes newtypes core_type body =
 
 let pexp_extension ~id e = Pexp_extension (id, PStr [mkstrexp e []])
 
-let mkexp_attrs ~loc desc (ext, attrs) =
-  (* todo: keep exact location for the entire attribute *)
-  match ext with
-  | None -> mkexp ~loc ~attrs desc
-  | Some id ->
-     mkexp ~loc (pexp_extension ~id (ghexp ~loc ~attrs desc))
-
 let wrap_exp_attrs ~loc body (ext, attrs) =
   let ghexp = ghexp ~loc in
   (* todo: keep exact location for the entire attribute *)
@@ -826,18 +819,6 @@ let mkfunction ~loc ~attrs params body_constraint body =
                 ~loc)
             attrs
     end
-
-let mk_functor_typ args mty_mm =
-  let mty, _ =
-    List.fold_left (fun (mty, mm) (startpos, arg) ->
-      let mty =
-        mkmty ~loc:(startpos, mty.pmty_loc.loc_end) (Pmty_functor (arg, mty, mm))
-      in
-      let mm = [] in
-      mty, mm)
-    mty_mm args
-  in
-  mty
 
 let mk_functor_typ args mty =
   List.fold_left (fun acc (startpos, arg) ->

@@ -235,16 +235,6 @@ let ident_of_name ppf i =
 
 let constr ppf l = Format_doc.compat Doc.constr ppf l
 
-let ident_of_name_loc ppf s = ident_of_name ppf s.txt
-
-let protect_longident ppf print_longident longprefix txt =
-    if not (needs_parens ~kind:Other txt) then
-      fprintf ppf "%a.%a" print_longident longprefix ident_of_name txt
-    else if needs_spaces txt then
-      fprintf ppf "%a.(@;%s@;)" print_longident longprefix txt
-    else
-      fprintf ppf "%a.(%s)" print_longident longprefix txt
-
 let is_curry_attr attr =
   attr.attr_name.txt = Builtin_attributes.curry_attr_name
 
@@ -2409,7 +2399,7 @@ and tuple_component ctxt f (l,e) =
   (* Unlabeled component *)
   | _, None  -> expression2 ctxt f e (* level 2*)
 
-and tuple_expr_component ctxt f (l,e) =
+and _tuple_expr_component ctxt f (l,e) =
   let simple_name = match e with
     | {pexp_desc=Pexp_ident {txt=Lident l;_}; pexp_attributes=[]} -> Some l
     | _ -> None

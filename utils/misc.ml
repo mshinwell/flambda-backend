@@ -1592,7 +1592,7 @@ and column =
   { mutable header : string;
     entries : cell array;
     mutable char_width : int
-  }
+  } [@@warning "-69"]
 
 and cell = string list
 
@@ -1601,7 +1601,7 @@ let make_table ~headers:col_headers ~entries:rows =
   assert (col_headers <> []);
   assert (List.for_all (fun r -> List.length r = List.length col_headers) rows);
   let columns = Array.of_list col_headers in
-  let num_cols = Array.length columns in
+  let _num_cols = Array.length columns in
   let num_rows = List.length rows in
   let rows = Array.of_list rows in
   let columns =

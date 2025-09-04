@@ -57,7 +57,7 @@ let fmt_char_option f = function
   | None -> fprintf f "None"
   | Some c -> fprintf f "Some %c" c
 
-let fmt_constant f x =
+let _fmt_constant f x =
   match x with
   | Pconst_integer (i,m) -> fprintf f "PConst_int (%s,%a)" i fmt_char_option m
   | Pconst_unboxed_integer (i,m) -> fprintf f "PConst_unboxed_int (%s,%c)" i m
@@ -169,10 +169,6 @@ let modes i ppf modes =
 let include_kind i ppf = function
   | Structure -> line i ppf "Structure\n"
   | Functor -> line i ppf "Functor\n"
-
-let labeled_tuple_element f i ppf (l, ct) =
-  option i string ppf l;
-  f i ppf ct
 
 let labeled_tuple_element f i ppf (l, ct) =
   option i string ppf l;
