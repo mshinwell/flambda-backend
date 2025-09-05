@@ -3915,14 +3915,17 @@ module Debug_printers = struct
   let rec annotation_context :
       type l r. _ -> (l * r) History.annotation_context -> unit =
    fun ppf -> function
-    | Type_declaration p -> fprintf ppf "Type_declaration %a" Path.print p
+    | Type_declaration p -> fprintf ppf "Type_declaration %a" 
+        (fun ppf p -> Format_doc.compat Path.print ppf p) p
     | Type_parameter (p, var) ->
-      fprintf ppf "Type_parameter (%a, %a)" Path.print p
+      fprintf ppf "Type_parameter (%a, %a)" 
+        (fun ppf p -> Format_doc.compat Path.print ppf p) p
         (Misc.Stdlib.Option.print Misc.Stdlib.String.print)
         var
     | Newtype_declaration name -> fprintf ppf "Newtype_declaration %s" name
     | Constructor_type_parameter (cstr, name) ->
-      fprintf ppf "Constructor_type_parameter (%a, %S)" Path.print cstr name
+      fprintf ppf "Constructor_type_parameter (%a, %S)" 
+        (fun ppf p -> Format_doc.compat Path.print ppf p) cstr name
     | Existential_unpack name -> fprintf ppf "Existential_unpack %s" name
     | Univar name -> fprintf ppf "Univar %S" name
     | Type_variable name -> fprintf ppf "Type_variable %S" name
@@ -3934,7 +3937,8 @@ module Debug_printers = struct
         context
 
   let any_creation_reason ppf : History.any_creation_reason -> unit = function
-    | Missing_cmi p -> fprintf ppf "Missing_cmi %a" Path.print p
+    | Missing_cmi p -> fprintf ppf "Missing_cmi %a" 
+        (fun ppf p -> Format_doc.compat Path.print ppf p) p
     | Initial_typedecl_env -> fprintf ppf "Initial_typedecl_env"
     | Dummy_jkind -> fprintf ppf "Dummy_jkind"
     | Wildcard -> fprintf ppf "Wildcard"
@@ -4052,7 +4056,8 @@ module Debug_printers = struct
     | Abbreviation -> fprintf ppf "Abbreviation"
 
   let interact_reason ppf : History.interact_reason -> _ = function
-    | Gadt_equation p -> fprintf ppf "Gadt_equation %a" Path.print p
+    | Gadt_equation p -> fprintf ppf "Gadt_equation %a" 
+        (fun ppf p -> Format_doc.compat Path.print ppf p) p
     | Tyvar_refinement_intersection ->
       fprintf ppf "Tyvar_refinement_intersection"
     | Subjkind -> fprintf ppf "Subjkind"
@@ -4110,7 +4115,7 @@ let report_error ~loc : Error.t -> _ = function
       (* CR layouts v2.9: use the context to produce a better error message.
          When RAE tried this, some types got printed like [t/2], but the
          [/2] shouldn't be there. Investigate and fix. *)
-      "@[<v>Unknown layout %a@]" Pprintast.jkind_annotation jkind
+      "@[<v>Unknown layout %a@]" (fun ppf j -> Format_doc.compat Pprintast.jkind_annotation ppf j) jkind
   | Multiple_jkinds { from_annotation; from_attribute } ->
     Location.errorf ~loc
       "@[<v>A type declaration's layout can be given at most once.@;\

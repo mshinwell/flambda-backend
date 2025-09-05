@@ -580,7 +580,7 @@ let rec print_type_shape : type a. Format.formatter -> a ts -> unit =
       shapes
   | Ts_constr ((uid, path, _), shapes) ->
     Format.fprintf ppf "Ts_constr uid=%a path=%a (%a)" Uid.print uid
-      Path.print path
+      (fun ppf p -> Format_doc.compat Path.print ppf p) path
       (Format.pp_print_list
           ~pp_sep:(fun ppf () -> Format.pp_print_string ppf ", ")
           print_type_shape)
@@ -674,7 +674,7 @@ let print_tds_desc ppf = function
   | Tds_other -> Format.fprintf ppf "Tds_other"
 
 let print_type_decl_shape ppf t =
-  Format.fprintf ppf "path=%a, definition=(%a)" Path.print t.path print_tds_desc
+  Format.fprintf ppf "path=%a, definition=(%a)" (Format_doc.compat Path.print) t.path print_tds_desc
     t.definition
 
 
@@ -812,12 +812,14 @@ let of_path ~find_shape ~namespace path =
   aux namespace path
 
 let for_persistent_unit s =
-  comp_unit ~uid:(Compilation_unit s) s
-  { uid = Some (Uid.of_compilation_unit_id (Ident.create_persistent s));
-    desc = Comp_unit s; approximated = false }
+  let comp_unit = Compilation_unit.create Compilation_unit.Prefix.empty (Compilation_unit.Name.of_string s) in
+  { hash = Hashtbl.hash s; 
+    uid = Some (Uid.of_compilation_unit_id comp_unit);
+    desc = Comp_unit s; 
+    approximated = false }
 
 let leaf_for_unpack = leaf' None
-let leaf_for_unpack = { uid = None; desc = Leaf; approximated = false }
+let leaf_for_unpack = { hash = 0; uid = None; desc = Leaf; approximated = false }
 
 let set_uid_if_none t uid =
   match t.uid with

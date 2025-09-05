@@ -593,5 +593,5 @@ let report_error ppf =
 
 let () =
   Location.register_error_of_exn (function
-    | Error (loc, err) -> Some (Location.error_of_printer ~loc report_error err)
+    | Error (loc, err) -> Some (Location.error_of_printer ~loc (fun ppf e -> Format_doc.compat report_error ppf e) err)
     | _ -> None)

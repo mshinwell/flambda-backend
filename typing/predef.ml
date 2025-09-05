@@ -130,7 +130,6 @@ and ident_int32x16 = ident_create "int32x16"
 and ident_int64x8 = ident_create "int64x8"
 and ident_float32x16 = ident_create "float32x16"
 and ident_float64x8 = ident_create "float64x8"
-and ident_iarray = ident_create "iarray"
 
 let ident_of_type_constr : type_constr -> Ident.t = function
   | `Int -> ident_int
@@ -569,6 +568,15 @@ let mk_add_extension add_extension id args =
       ext_uid = Uid.of_predef_id id;
     }
 
+let cstr id args =
+  { cd_id = id;
+    cd_args = Cstr_tuple args;
+    cd_res = None;
+    cd_loc = Location.none;
+    cd_attributes = [];
+    cd_uid = Uid.of_predef_id id;
+  }
+
 let variant constrs =
   let mk_elt { cd_args } =
     let sorts = match cd_args with
@@ -711,6 +719,7 @@ let build_initial_env add_type add_extension empty_env =
                ld_id=id;
                ld_mutable=Immutable;
                ld_modalities=Mode.Modality.Value.Const.id;
+               ld_atomic=Nonatomic;
                ld_type=field_type;
                ld_sort=Jkind.Sort.Const.value;
                ld_loc=Location.none;
@@ -767,7 +776,6 @@ let build_initial_env add_type add_extension empty_env =
   |> add_extension ident_match_failure
        [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
        Jkind.Sort.Const.value]
-       [newgenty (Ttuple[type_string; type_int; type_int])]
   |> add_extension ident_not_found []
   |> add_extension ident_out_of_memory []
   |> add_extension ident_stack_overflow []
@@ -870,9 +878,20 @@ let add_or_null add_type env =
   ~kind:or_null_kind
   ~param_jkind:(Jkind.for_or_null_argument ident_or_null)
   ~jkind:or_null_jkind
-       [newgenty (Ttuple[type_string; type_int; type_int])]
+       [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
+        Jkind.Sort.Const.value]
 
 let builtin_values =
   List.map (fun id -> (Ident.name id, id)) all_predef_exns
 
 let builtin_idents = List.rev !builtin_idents
+
+let find_type_constr path =
+  (* For now, return None - this needs proper implementation *)
+  None
+
+let type_eff eff =
+  newgenconstr path_eff [eff]
+
+let type_continuation answer_type =
+  newgenconstr path_continuation [answer_type]

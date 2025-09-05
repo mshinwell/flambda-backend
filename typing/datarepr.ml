@@ -208,21 +208,17 @@ let extension_descr ~current_unit path_ext ext =
         Some type_ret -> type_ret
       | None -> newgenconstr ext.ext_type_path ext.ext_type_params
   in
-  let cstr_tag = Extension path_ext in
   let existentials, cstr_args, cstr_inlined =
     constructor_args ~current_unit ext.ext_private ext.ext_args ext.ext_ret_type
       Path.(Pextra_ty (path_ext, Pext_ty))
-      (Record_inlined (cstr_tag, ext.ext_shape, Variant_extensible))
+      (Record_inlined (Extension path_ext, ext.ext_shape, Variant_extensible))
   in
-    { cstr_name = Path.last path_ext;
+    { Data_types.cstr_name = Path.last path_ext;
       cstr_res = ty_res;
       cstr_existentials = existentials;
-      cstr_args;
+      cstr_args = List.map (fun ca -> ca.ca_type) cstr_args;
       cstr_arity = List.length cstr_args;
-      cstr_tag;
-      cstr_repr = Variant_extensible;
-      cstr_shape = ext.ext_shape;
-      cstr_constant = ext.ext_constant;
+      cstr_tag = Cstr_extension (path_ext, ext.ext_constant);
       cstr_consts = -1;
       cstr_nonconsts = -1;
       cstr_private = ext.ext_private;
@@ -246,7 +242,6 @@ let dummy_label (type rep) (record_form : rep record_form)
   { lbl_name = ""; lbl_res = none; lbl_arg = none;
     lbl_mut = Immutable; lbl_modalities = Mode.Modality.Value.Const.id;
     lbl_sort = Jkind.Sort.Const.void;
-    lbl_atomic = Nonatomic;
     lbl_pos = -1; lbl_all = [||];
     lbl_repres = repres;
     lbl_private = Public;
@@ -267,7 +262,6 @@ let label_descrs record_form ty_res lbls repres priv =
             lbl_mut = l.ld_mutable;
             lbl_modalities = l.ld_modalities;
             lbl_sort = l.ld_sort;
-            lbl_atomic = l.ld_atomic;
             lbl_pos = pos;
             lbl_all = all_labels;
             lbl_repres = repres;
@@ -286,11 +280,11 @@ let find_constr ~constant tag cstrs =
   try
     List.find
       (function
-        | (({cstr_tag=Ordinary {runtime_tag=tag'}; cstr_constant},_),_) ->
+        | ((({cstr_tag=Ordinary {runtime_tag=tag'}; cstr_constant} : Types.constructor_description),_),_) ->
           tag' = tag && cstr_constant = constant
-        | (({cstr_tag=Null; cstr_constant}, _),_) ->
+        | ((({cstr_tag=Null; cstr_constant} : Types.constructor_description), _),_) ->
           tag = -1 && cstr_constant = constant
-        | (({cstr_tag=Extension _},_),_) -> false)
+        | ((({cstr_tag=Extension _} : Types.constructor_description),_),_) -> false)
       cstrs
   with
   | Not_found -> raise Constr_not_found
@@ -308,8 +302,41 @@ let constructors_of_type ~current_unit ty_path decl =
 let labels_of_type ty_path decl =
   match decl.type_kind with
   | Type_record(labels, rep, _) ->
-      label_descrs Legacy (newgenconstr ty_path decl.type_params)
-        labels rep decl.type_private
+      let gen_labels = label_descrs Legacy (newgenconstr ty_path decl.type_params)
+        labels rep decl.type_private in
+      (* Convert gen_label_description to Data_types.label_description *)
+      let convert_labels all_converted (id, gen_lbl) =
+        let converted_lbl = {
+          Data_types.lbl_name = gen_lbl.lbl_name;
+          lbl_res = gen_lbl.lbl_res;
+          lbl_arg = gen_lbl.lbl_arg;
+          lbl_mut = (match gen_lbl.lbl_mut with
+            | Immutable -> Immutable
+            | Mutable _ -> Mutable);
+          lbl_atomic = Nonatomic; (* Default since gen_label doesn't have this *)
+          lbl_pos = gen_lbl.lbl_pos;
+          lbl_all = all_converted;
+          lbl_repres = gen_lbl.lbl_repres;
+          lbl_private = gen_lbl.lbl_private;
+          lbl_loc = gen_lbl.lbl_loc;
+          lbl_attributes = gen_lbl.lbl_attributes;
+          lbl_uid = gen_lbl.lbl_uid;
+        } in
+        (id, converted_lbl)
+      in
+      let all_converted = Array.make (List.length gen_labels)
+        (snd (List.hd gen_labels) |> fun (gl : _ gen_label_description) ->
+          { Data_types.lbl_name = ""; lbl_res = gl.lbl_res; lbl_arg = gl.lbl_arg;
+            lbl_mut = Immutable; lbl_atomic = Nonatomic; lbl_pos = -1;
+            lbl_all = [||]; lbl_repres = gl.lbl_repres; lbl_private = Public;
+            lbl_loc = Location.none; lbl_attributes = []; 
+            lbl_uid = Uid.internal_not_actually_unique }) in
+      let result = List.mapi (fun i lbl_pair ->
+        let converted = convert_labels all_converted lbl_pair in
+        all_converted.(i) <- snd converted;
+        converted
+      ) gen_labels in
+      result
   | Type_record_unboxed_product _
   | Type_variant _ | Type_abstract _ | Type_open -> []
 

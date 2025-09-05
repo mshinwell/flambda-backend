@@ -18,7 +18,6 @@
 
 open Format
 open Types
-open Asttypes
 let longident = Pprintast.longident
 
 let raw_list pr ppf = function
@@ -51,6 +50,11 @@ let print_name ppf = function
     None -> fprintf ppf "None"
   | Some name -> fprintf ppf "\"%s\"" name
 
+let string_of_label : Types.arg_label -> string = function
+    Nolabel -> ""
+  | Labelled s | Position s -> s
+  | Optional s -> "?"^s
+
 let path = Format_doc.compat Path.print
 
 let visited = ref []
@@ -77,8 +81,8 @@ and raw_lid_type_list tl =
              fprintf ppf "(@,%a,@,%a)" longident lid raw_type typ)
     tl
 and raw_type_desc ppf = function
-    Tvar name -> fprintf ppf "Tvar %a" print_name name
-  | Tarrow(l,t1,t2,c) ->
+    Tvar { name; jkind = _ } -> fprintf ppf "Tvar %a" print_name name
+  | Tarrow((l, _, _),t1,t2,c) ->
       fprintf ppf "@[<hov1>Tarrow(\"%s\",@,%a,@,%a,@,%s)@]"
         (string_of_label l) raw_type t1 raw_type t2
         (if is_commu_ok c then "Cok" else "Cunknown")
@@ -103,7 +107,7 @@ and raw_type_desc ppf = function
   | Tsubst (t, None) -> fprintf ppf "@[<1>Tsubst@,(%a,None)@]" raw_type t
   | Tsubst (t, Some t') ->
       fprintf ppf "@[<1>Tsubst@,(%a,@ Some%a)@]" raw_type t raw_type t'
-  | Tunivar name -> fprintf ppf "Tunivar %a" print_name name
+  | Tunivar { name; jkind = _ } -> fprintf ppf "Tunivar %a" print_name name
   | Tpoly (t, tl) ->
       fprintf ppf "@[<hov1>Tpoly(@,%a,@,%a)@]"
         raw_type t
@@ -128,12 +132,18 @@ and raw_type_desc ppf = function
     fprintf ppf "@[<hov1>Tpackage(@,%a,@,%a)@]"
       path pack.pack_path
       raw_lid_type_list pack.pack_cstrs
+  | Tunboxed_tuple tl ->
+      fprintf ppf "@[<hov1>Tunboxed_tuple(@,%a)@]" 
+        labeled_type_list tl
+  | Tof_kind _k ->
+      fprintf ppf "Tof_kind(...)"
 and raw_row_fixed ppf = function
 | None -> fprintf ppf "None"
 | Some Types.Fixed_private -> fprintf ppf "Some Fixed_private"
 | Some Types.Rigid -> fprintf ppf "Some Rigid"
 | Some Types.Univar t -> fprintf ppf "Some(Univar(%a))" raw_type t
 | Some Types.Reified p -> fprintf ppf "Some(Reified(%a))" path p
+| Some Types.Fixed_existential -> fprintf ppf "Some Fixed_existential"
 
 and raw_field ppf rf =
   match_row_field

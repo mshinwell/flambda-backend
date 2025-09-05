@@ -110,6 +110,7 @@ end
 
 let generic_level = Ident.highest_scope
 let lowest_level = Ident.lowest_scope
+let pivot_level = -1
 
 (**** leveled type pool ****)
 (* This defines a stack of pools of type nodes indexed by the level
@@ -365,7 +366,7 @@ let fold_type_expr f init ty =
   | Tpoly (ty, tyl)     ->
     let result = f init ty in
     List.fold_left f result tyl
-  | Tpackage (_, fl)  ->
+  | Tpackage {pack_path = _; pack_cstrs = fl}  ->
     List.fold_left (fun result (_n, ty) -> f result ty) init fl
   | Tof_kind _ -> init
 
@@ -576,7 +577,8 @@ let rec copy_type_desc ?(keep_names=false) f = function
   | Tpoly (ty, tyl)     ->
       let tyl = List.map f tyl in
       Tpoly (f ty, tyl)
-  | Tpackage (p, fl)  -> Tpackage (p, List.map (fun (n, ty) -> (n, f ty)) fl)
+  | Tpackage {pack_path = p; pack_cstrs = fl}  -> 
+      Tpackage {pack_path = p; pack_cstrs = List.map (fun (n, ty) -> (n, f ty)) fl}
   | Tof_kind jk -> Tof_kind jk
 
 (* Utilities for copying *)
@@ -872,20 +874,21 @@ let logged_mark_node ty =
 let try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
 let try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
 
-let rec mark_type ty =
+let rec mark_type mark ty =
   if not_marked_node ty then begin
     flip_mark_node ty;
-    iter_type_expr mark_type ty
+    iter_type_expr (mark_type mark) ty
   end
 
-let mark_type_params ty =
-  iter_type_expr mark_type ty
+let mark_type_params mark ty =
+  iter_type_expr (mark_type mark) ty
 
 let type_iterators =
   let it_type_expr it ty =
     if try_mark_node ty then it.it_do_type_expr it ty
   in
-  {type_iterators with it_type_expr}
+  let it_do_type_expr it ty = iter_type_expr (mark_type (fun ty -> ())) ty in
+  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
 
 (* Remove marks from a type. *)
@@ -898,7 +901,8 @@ let rec unmark_type ty =
 
 let unmark_iterators =
   let it_type_expr _it ty = unmark_type ty in
-  {type_iterators with it_type_expr}
+  let it_do_type_expr it ty = () in
+  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
 let unmark_type_decl decl =
   unmark_iterators.it_type_declaration unmark_iterators decl
@@ -940,20 +944,21 @@ let logged_mark_node ty =
 let try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
 let try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
 
-let rec mark_type ty =
+let rec mark_type mark ty =
   if not_marked_node ty then begin
     flip_mark_node ty;
-    iter_type_expr mark_type ty
+    iter_type_expr (mark_type mark) ty
   end
 
-let mark_type_params ty =
-  iter_type_expr mark_type ty
+let mark_type_params mark ty =
+  iter_type_expr (mark_type mark) ty
 
 let type_iterators =
   let it_type_expr it ty =
     if try_mark_node ty then it.it_do_type_expr it ty
   in
-  {type_iterators with it_type_expr}
+  let it_do_type_expr it ty = iter_type_expr (mark_type (fun ty -> ())) ty in
+  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
 
 (* Remove marks from a type. *)
@@ -966,7 +971,8 @@ let rec unmark_type ty =
 
 let unmark_iterators =
   let it_type_expr _it ty = unmark_type ty in
-  {type_iterators with it_type_expr}
+  let it_do_type_expr it ty = () in
+  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
 let unmark_type_decl decl =
   unmark_iterators.it_type_declaration unmark_iterators decl
