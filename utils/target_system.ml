@@ -121,14 +121,39 @@ let assembler () =
   | Generic_BSD | Solaris | GNU | Dragonfly | BeOS | Unknown ->
     GAS_like
 
-type machine_width =
-  | Thirty_two
-  | Sixty_four
+module Machine_width = struct
+  type t =
+    | Thirty_two
+    | Sixty_four
+
+  let print ppf = function
+    | Thirty_two -> Format.fprintf ppf "Thirty_two"
+    | Sixty_four -> Format.fprintf ppf "Sixty_four"
+
+  let equal t1 t2 =
+    match t1, t2 with
+    | Thirty_two, Thirty_two
+    | Sixty_four, Sixty_four -> true
+    | Thirty_two, Sixty_four
+    | Sixty_four, Thirty_two -> false
+
+  let is_32_bit = function
+    | Thirty_two -> true
+    | Sixty_four -> false
+
+  let is_64_bit = function
+    | Thirty_two -> false
+    | Sixty_four -> true
+
+  let size_in_bytes = function
+    | Thirty_two -> 4
+    | Sixty_four -> 8
+end
 
 let machine_width () =
   match Targetint.size with
-  | 32 -> Thirty_two
-  | 64 -> Sixty_four
+  | 32 -> Machine_width.Thirty_two
+  | 64 -> Machine_width.Sixty_four
   | bits -> Misc.fatal_errorf "Unknown machine width: %d" bits
 
 type windows_system =

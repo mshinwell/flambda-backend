@@ -20,26 +20,22 @@ type repr =
   | Int32 of int32
   | Int64 of int64
 
-type num_bits =
-  | Thirty_two
-  | Sixty_four
-
 module type S = sig
   type t
 
   type targetint = t
 
-  val num_bits : num_bits
-
   val repr : t -> repr
 
   include Container_types.S with type t := t
 
-  val zero : t
+  val machine_width : t -> Target_system.Machine_width.t
 
-  val one : t
+  val zero : Target_system.Machine_width.t -> t
 
-  val minus_one : t
+  val one : Target_system.Machine_width.t -> t
+
+  val minus_one : Target_system.Machine_width.t -> t
 
   val neg : t -> t
 
@@ -71,9 +67,9 @@ module type S = sig
 
   val cross_product : Set.t -> Set.t -> Pair.Set.t
 
-  val max_int : t
+  val max_int : Target_system.Machine_width.t -> t
 
-  val min_int : t
+  val min_int : Target_system.Machine_width.t -> t
 
   val rem : t -> t -> t
 
@@ -93,17 +89,17 @@ module type S = sig
 
   val swap_byte_endianness : t -> t
 
-  val of_int_exn : int -> t
+  val of_int_exn : Target_system.Machine_width.t -> int -> t
 
-  val of_int : int -> t
+  val of_int : Target_system.Machine_width.t -> int -> t
 
-  val of_int32 : int32 -> t
+  val of_int32 : Target_system.Machine_width.t -> int32 -> t
 
-  val of_int64 : int64 -> t
+  val of_int64 : Target_system.Machine_width.t -> int64 -> t
 
-  val of_float : float -> t
+  val of_float : Target_system.Machine_width.t -> float -> t
 
-  val of_string : string -> t
+  val of_string : Target_system.Machine_width.t -> string -> t
 
   val to_int : t -> int
 
@@ -124,18 +120,32 @@ module type S = sig
   module Targetint_set = Set
 end
 
-let size = Sys.word_size
-(* Later, this will be set by the configure script in order to support
-   cross-compilation. *)
-
 module Int32 = struct
   include Int32
 
   type targetint = t
 
-  let of_int_exn =
+  let machine_width _ = Target_system.Machine_width.Thirty_two
+
+  let zero _machine_width = zero
+
+  let one _machine_width = one
+
+  let minus_one _machine_width = minus_one
+
+  let max_int _machine_width = max_int
+
+  let min_int _machine_width = min_int
+
+  let of_int _machine_width = of_int
+
+  let of_float _machine_width = of_float
+
+  let of_string _machine_width = of_string
+
+  let of_int_exn _machine_width =
     match Sys.word_size with
-    (* size of [int] *)
+    (* size of [int] on the host *)
     | 32 -> Int32.of_int
     | 64 ->
       fun n ->
@@ -144,13 +154,11 @@ module Int32 = struct
         else Int32.of_int n
     | _ -> assert false
 
-  let num_bits = Thirty_two
-
-  let of_int32 x = x
+  let of_int32 _machine_width x = x
 
   let to_int32 x = x
 
-  let of_int64 = Int64.to_int32
+  let of_int64 _machine_width = Int64.to_int32
 
   let to_int64 = Int64.of_int32
 
@@ -205,11 +213,29 @@ module Int64 = struct
 
   type targetint = t
 
-  let num_bits = Sixty_four
+  let machine_width _ = Target_system.Machine_width.Sixty_four
 
-  let of_int_exn = Int64.of_int
+  let zero _machine_width = zero
 
-  let of_int64 x = x
+  let one _machine_width = one
+
+  let minus_one _machine_width = minus_one
+
+  let max_int _machine_width = max_int
+
+  let min_int _machine_width = min_int
+
+  let of_int _machine_width = of_int
+
+  let of_int_exn _machine_width = Int64.of_int
+
+  let of_float _machine_width = of_float
+
+  let of_string _machine_width = of_string
+
+  let of_int32 _machine_width = of_int32
+
+  let of_int64 _machine_width x = x
 
   let to_int64 x = x
 
@@ -259,14 +285,14 @@ module Int64 = struct
   external swap_byte_endianness : t -> t = "%bswap_int64"
 end
 
-include (val match size with
+include (val match Sys.word_size with
              | 32 -> (module Int32)
              | 64 -> (module Int64)
              | _ -> assert false : S)
 
-let to_int_checked t =
+let to_int_checked machine_width t =
   let i = to_int t in
-  let t' = of_int i in
+  let t' = of_int machine_width i in
   if not (equal t t')
   then
     Misc.fatal_errorf "Cannot translate Targetint_32_64 %a to an OCaml integer"

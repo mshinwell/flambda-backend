@@ -82,6 +82,7 @@ let compile_from_typed i typed ~unix ~pipeline ~as_arg_for =
 type flambda2 =
   ppf_dump:Format.formatter ->
   prefixname:string ->
+  machine_width:Target_system.Machine_width.t ->
   keep_symbol_tables:bool ->
   Lambda.program ->
   Cmm.phrase list
@@ -112,8 +113,10 @@ let starting_point_of_compiler_pass start_from  =
 let implementation_aux unix ~(flambda2 : flambda2) ~start_from
       ~source_file ~output_prefix ~keep_symbol_tables
       ~(compilation_unit : Compile_common.compilation_unit_or_inferred) =
+  (* TODO: Determine machine_width properly from target configuration *)
+  let machine_width = Target_system.Machine_width.Sixty_four in
   let pipeline : Asmgen.pipeline =
-    Direct_to_cmm (flambda2 ~keep_symbol_tables)
+    Direct_to_cmm (flambda2 ~machine_width ~keep_symbol_tables)
   in
   with_info ~source_file ~output_prefix ~dump_ext:"cmx" ~compilation_unit
     ~kind:Impl
