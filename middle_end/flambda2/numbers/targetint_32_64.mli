@@ -34,13 +34,13 @@ type t
 type targetint = t
 
 (** The target integer 0.*)
-val zero : t
+val zero : Target_system.machine_width -> t
 
 (** The target integer 1.*)
-val one : t
+val one : Target_system.machine_width -> t
 
 (** The target integer -1.*)
-val minus_one : t
+val minus_one : Target_system.machine_width -> t
 
 (** Unary negation. *)
 val neg : t -> t
@@ -85,8 +85,6 @@ val pred : t -> t
 (** Return the absolute value of its argument. *)
 val abs : t -> t
 
-(** The size in bits of a target native integer. *)
-val size : int
 
 (** The possible numbers of bits of a target native integer. *)
 type num_bits =
@@ -99,11 +97,11 @@ val num_bits : num_bits
 
 (** The greatest representable target integer, either 2{^31} - 1 on a 32-bit
     platform, or 2{^63} - 1 on a 64-bit platform. *)
-val max_int : t
+val max_int : Target_system.machine_width -> t
 
 (** The smallest representable target integer, either -2{^31} on a 32-bit
     platform, or -2{^63} on a 64-bit platform. *)
-val min_int : t
+val min_int : Target_system.machine_width -> t
 
 (** Bitwise logical and. *)
 val logand : t -> t -> t
@@ -142,18 +140,18 @@ val shift_right_logical : t -> int -> t
 
 (** Convert the given integer (type [int]) to a target integer (type [t]),
     modulo the target word size. *)
-val of_int : int -> t
+val of_int : Target_system.machine_width -> int -> t
 
 (** Convert the given integer (type [int]) to a target integer (type [t]).
     Raises a fatal error if the conversion is not exact. *)
-val of_int_exn : int -> t
+val of_int_exn : Target_system.machine_width -> int -> t
 
 (** Convert the given target integer (type [t]) to an integer (type [int]). The
     high-order bit is lost during the conversion. *)
 val to_int : t -> int
 
 (** Like [to_int] but will raise an exception if the integer doesn't fit. *)
-val to_int_checked : t -> int
+val to_int_checked : Target_system.machine_width -> t -> int
 
 (** Convert the given floating-point number to a target integer, discarding the
     fractional part (truncate towards 0).
@@ -161,13 +159,13 @@ val to_int_checked : t -> int
     The result of the conversion is undefined if, after truncation, the number
     is outside the range \[{!Targetint_32_64.min_int},
     {!Targetint_32_64.max_int}\]. *)
-val of_float : float -> t
+val of_float : Target_system.machine_width -> float -> t
 
 (** Convert the given target integer to a floating-point number. *)
 val to_float : t -> float
 
 (** Convert the given 32-bit integer (type [int32]) to a target integer. *)
-val of_int32 : int32 -> t
+val of_int32 : Target_system.machine_width -> int32 -> t
 
 (** Convert the given target integer to a 32-bit integer (type [int32]).
 
@@ -177,7 +175,7 @@ val to_int32 : t -> int32
 
 (** Convert the given 64-bit integer (type [int64]) to a target integer, modulo
     the target word size. *)
-val of_int64 : int64 -> t
+val of_int64 : Target_system.machine_width -> int64 -> t
 
 (** Convert the given target integer to a 64-bit integer (type [int64]). *)
 val to_int64 : t -> int64
@@ -190,7 +188,7 @@ val to_int64 : t -> int64
     Raise [Failure "int_of_string"] if the given string is not a valid
     representation of an integer, or if the integer represented exceeds the
     range of integers representable in type [nativeint]. *)
-val of_string : string -> t
+val of_string : Target_system.machine_width -> string -> t
 
 (** Return the string representation of its argument, in decimal. *)
 val to_string : t -> string
