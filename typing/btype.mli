@@ -319,3 +319,10 @@ val method_type : label -> class_signature -> type_expr
 (* Return the type of an instance variable.
    @raises [Assert_failure] if the class has no such method. *)
 val instance_variable_type : label -> class_signature -> type_expr
+
+(* Unmark type expressions after marking *)
+val unmark_type : type_expr -> unit
+
+(* Mark function and marking node *)
+val mark_type : (type_expr -> bool) -> type_expr -> unit
+val flip_mark_node : type_expr -> bool

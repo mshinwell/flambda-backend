@@ -591,7 +591,15 @@ let report_error ppf =
     in
     fprintf ppf "Unrecognized %s %s." annot_type_str modifier
 
+let report_error_for_exn ppf err =
+  let buf = Buffer.create 128 in
+  let fmt = Format.formatter_of_buffer buf in
+  report_error fmt err;
+  Format.pp_print_flush fmt ();
+  Format_doc.pp_print_string ppf (Buffer.contents buf)
+
 let () =
   Location.register_error_of_exn (function
-    | Error (loc, err) -> Some (Location.error_of_printer ~loc (fun ppf e -> Format_doc.compat report_error ppf e) err)
+    | Error (loc, err) -> 
+        Some (Location.error_of_printer ~loc report_error_for_exn err)
     | _ -> None)

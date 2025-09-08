@@ -19,6 +19,8 @@ open Path
 open Types
 open Btype
 
+let newgenconstr path tyl = newgenty (Tconstr (path, tyl, ref Mnil))
+
 let builtin_idents = ref []
 
 let wrap create s =
@@ -58,7 +60,7 @@ type type_constr = [
   | data_type_constr
 ]
 
-let all_type_constrs : type_constr list = [
+let _all_type_constrs : type_constr list = [
   `Int;
   `Char;
   `String;
@@ -131,7 +133,7 @@ and ident_int64x8 = ident_create "int64x8"
 and ident_float32x16 = ident_create "float32x16"
 and ident_float64x8 = ident_create "float64x8"
 
-let ident_of_type_constr : type_constr -> Ident.t = function
+let _ident_of_type_constr : type_constr -> Ident.t = function
   | `Int -> ident_int
   | `Char -> ident_char
   | `String -> ident_string
@@ -231,7 +233,6 @@ and path_unboxed_int32x16 = Path.unboxed_version path_int32x16
 and path_unboxed_int64x8 = Path.unboxed_version path_int64x8
 and path_unboxed_float32x16 = Path.unboxed_version path_float32x16
 and path_unboxed_float64x8 = Path.unboxed_version path_float64x8
-and path_iarray = Pident ident_iarray
 let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
 and type_int8 = newgenty (Tconstr(path_int8, [], ref Mnil))
 and type_int16 = newgenty (Tconstr(path_int16, [], ref Mnil))
@@ -326,24 +327,6 @@ and type_unboxed_float32x16 =
   newgenty (Tconstr(path_unboxed_float32x16, [], ref Mnil))
 and type_unboxed_float64x8 =
   newgenty (Tconstr(path_unboxed_float64x8, [], ref Mnil))
-let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
-and type_char = newgenty (Tconstr(path_char, [], ref Mnil))
-and type_bytes = newgenty (Tconstr(path_bytes, [], ref Mnil))
-and type_float = newgenty (Tconstr(path_float, [], ref Mnil))
-and type_bool = newgenty (Tconstr(path_bool, [], ref Mnil))
-and type_unit = newgenty (Tconstr(path_unit, [], ref Mnil))
-and type_exn = newgenty (Tconstr(path_exn, [], ref Mnil))
-and type_array t = newgenty (Tconstr(path_array, [t], ref Mnil))
-and type_list t = newgenty (Tconstr(path_list, [t], ref Mnil))
-and type_option t = newgenty (Tconstr(path_option, [t], ref Mnil))
-and type_nativeint = newgenty (Tconstr(path_nativeint, [], ref Mnil))
-and type_int32 = newgenty (Tconstr(path_int32, [], ref Mnil))
-and type_int64 = newgenty (Tconstr(path_int64, [], ref Mnil))
-and type_lazy_t t = newgenty (Tconstr(path_lazy_t, [t], ref Mnil))
-and type_string = newgenty (Tconstr(path_string, [], ref Mnil))
-and type_extension_constructor =
-      newgenty (Tconstr(path_extension_constructor, [], ref Mnil))
-and type_floatarray = newgenty (Tconstr(path_floatarray, [], ref Mnil))
 
 let ident_match_failure = ident_create "Match_failure"
 and ident_out_of_memory = ident_create "Out_of_memory"
@@ -878,20 +861,18 @@ let add_or_null add_type env =
   ~kind:or_null_kind
   ~param_jkind:(Jkind.for_or_null_argument ident_or_null)
   ~jkind:or_null_jkind
-       [newgenty (Ttuple[None, type_string; None, type_int; None, type_int]),
-        Jkind.Sort.Const.value]
 
 let builtin_values =
   List.map (fun id -> (Ident.name id, id)) all_predef_exns
 
 let builtin_idents = List.rev !builtin_idents
 
-let find_type_constr path =
+let find_type_constr _path =
   (* For now, return None - this needs proper implementation *)
   None
 
 let type_eff eff =
   newgenconstr path_eff [eff]
 
-let type_continuation answer_type =
-  newgenconstr path_continuation [answer_type]
+let type_continuation effect_type answer_type =
+  newgenconstr path_continuation [effect_type; answer_type]

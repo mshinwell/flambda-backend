@@ -37,7 +37,7 @@
 
 val compile_letrec :
   (Ident.t *
-   Lambda.debug_uid *
+   Shape.Uid.t *
    Value_rec_types.recursive_binding_kind *
    Lambda.lambda) list ->
   Lambda.lambda ->

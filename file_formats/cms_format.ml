@@ -117,12 +117,12 @@ let save_cms target modname binary_annots initial_env shape
         let source_digest = Option.map Digest.file sourcefile in
         let cms_ident_occurrences, cms_initial_env =
           if !Clflags.store_occurrences then
-            let cms_ident_occurrences = Cmt_format.index_occurrences binary_annots in
+            let cms_ident_occurrences = Array.of_list (Cmt_format.index_occurrences binary_annots) in
             let cms_initial_env = if Cmt_format.need_to_clear_env
               then Env.keep_only_summary initial_env else initial_env in
             cms_ident_occurrences, Some cms_initial_env
           else
-            [| |], None
+            [||], None
         in
         let cms_uid_to_loc, cms_uid_to_attributes =
           uid_tables_of_binary_annots binary_annots

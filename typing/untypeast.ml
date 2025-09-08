@@ -134,13 +134,6 @@ let constant = function
   | Const_unboxed_int32 i -> Pconst_unboxed_integer (Int32.to_string i, 'l')
   | Const_unboxed_int64 i -> Pconst_unboxed_integer (Int64.to_string i, 'L')
   | Const_unboxed_nativeint i -> Pconst_unboxed_integer (Nativeint.to_string i, 'n')
-  | Const_char c -> Pconst_char c
-  | Const_string (s,loc,d) -> Pconst_string (s,loc,d)
-  | Const_int i -> Pconst_integer (Int.to_string i, None)
-  | Const_int32 i -> Pconst_integer (Int32.to_string i, Some 'l')
-  | Const_int64 i -> Pconst_integer (Int64.to_string i, Some 'L')
-  | Const_nativeint i -> Pconst_integer (Nativeint.to_string i, Some 'n')
-  | Const_float f -> Pconst_float (f,None)
 
 let attribute sub a = {
     attr_name = map_loc sub a.attr_name;
@@ -354,13 +347,13 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
        This avoids transforming a warning 27 into a 26.
      *)
     | Tpat_alias ({pat_desc = Tpat_any; pat_loc}, _id, name, _uid, _mode, _ty)
-    | Tpat_alias ({pat_desc = Tpat_any; pat_loc}, _id, name)
          when pat_loc = pat.pat_loc ->
        Ppat_var name
 
     | Tpat_alias (pat, _id, name, _uid, _mode, _ty) ->
         Ppat_alias (sub.pat sub pat, name)
-    | Tpat_constant cst -> Ppat_constant (constant cst)
+    | Tpat_constant cst -> 
+        Ppat_constant { pconst_desc = constant cst; pconst_loc = pat.pat_loc }
     | Tpat_tuple list ->
         Ppat_tuple
           ( List.map (fun (label, p) -> label, sub.pat sub p) list
@@ -403,7 +396,6 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
             map_loc sub lid, sub.pat sub pat) list, closed)
     | Tpat_array (am, _, list) ->
         Ppat_array (mutable_ am, List.map (sub.pat sub) list)
-    | Tpat_array list -> Ppat_array (List.map (sub.pat sub) list)
     | Tpat_lazy p -> Ppat_lazy (sub.pat sub p)
 
     | Tpat_exception p -> Ppat_exception (sub.pat sub p)

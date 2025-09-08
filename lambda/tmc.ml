@@ -975,8 +975,6 @@ let rec choice ctx t =
     | Punboxed_nativeint_array_set_vec _
     | Pget_header _
     | Pctconst _
-    | Pbswap16
-    | Pbbswap _
     | Pint_as_pointer _
     | Psequand | Psequor
     | Ppoll

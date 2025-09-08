@@ -56,6 +56,7 @@ let in_printing_env f = Env.without_cmis f !printing_env
     | Type
     | Constructor
     | Label
+    | Unboxed_label
     | Module
     | Module_type
     | Extension_constructor
@@ -71,7 +72,7 @@ module Namespace = struct
     | Module_type -> 2
     | Class -> 3
     | Class_type -> 4
-    | Extension_constructor | Value | Constructor | Label -> 5
+    | Extension_constructor | Value | Constructor | Label | Unboxed_label -> 5
      (* we do not handle those component *)
 
   let size = 1 + id Value
@@ -91,7 +92,7 @@ module Namespace = struct
     | Some Module_type -> to_lookup Env.find_modtype_by_name
     | Some Class -> to_lookup Env.find_class_by_name
     | Some Class_type -> to_lookup Env.find_cltype_by_name
-    | None | Some(Value|Extension_constructor|Constructor|Label) ->
+    | None | Some(Value|Extension_constructor|Constructor|Label|Unboxed_label) ->
          fun _ -> raise Not_found
 
   let location namespace id =
@@ -103,7 +104,7 @@ module Namespace = struct
         | Some Module_type -> (in_printing_env @@ Env.find_modtype path).mtd_loc
         | Some Class -> (in_printing_env @@ Env.find_class path).cty_loc
         | Some Class_type -> (in_printing_env @@ Env.find_cltype path).clty_loc
-        | Some (Extension_constructor|Value|Constructor|Label) | None ->
+        | Some (Extension_constructor|Value|Constructor|Label|Unboxed_label) | None ->
             Location.none
       ) with Not_found -> None
 
@@ -290,7 +291,7 @@ let indexed_name namespace id =
     | Module_type -> Env.find_modtype_index id env
     | Class -> Env.find_class_index id env
     | Class_type-> Env.find_cltype_index id env
-    | Value | Extension_constructor | Constructor | Label -> None
+    | Value | Extension_constructor | Constructor | Label | Unboxed_label -> None
   in
   let index =
     match M.find_opt (Ident.name id) !bound_in_recursion with
@@ -421,6 +422,8 @@ let rec tree_of_path ?(disambiguation=true) namespace p =
           Oide_dot (tree_of_path (Some Type) p, s)
       | Pext_ty ->
           tree_of_path None p
+      | Punboxed_ty ->
+          tree_of_path None p
     end
 
 let tree_of_path ?disambiguation namespace p =
@@ -463,7 +466,7 @@ type best_path = Paths of Path.t list | Best of Path.t
     cache for short-paths
  *)
 let printing_old = ref Env.empty
-let printing_pers = ref String.Set.empty
+let printing_pers = ref Compilation_unit.Name.Set.empty
 (** {!printing_old} and  {!printing_pers} are the keys of the one-slot cache *)
 
 let printing_depth = ref 0
@@ -524,11 +527,11 @@ let rec path_size = function
   | Papply (p1, p2) ->
       let (l, b) = path_size p1 in
       (l + fst (path_size p2), b)
-  | Pextra_ty (p, _) -> path_size p
+  | Pextra_ty (p, (Pext_ty | Punboxed_ty)) -> path_size p
 
 let same_printing_env env =
   let used_pers = Env.used_persistent () in
-  Env.same_types !printing_old env && String.Set.equal !printing_pers used_pers
+  Env.same_types !printing_old env && Compilation_unit.Name.Set.equal !printing_pers used_pers
 
 let set_printing_env env =
   printing_env := env;
@@ -576,7 +579,7 @@ let rec lid_of_path = function
   | Path.Papply (p1, p2) ->
       Longident.Lapply
         (Location.mknoloc (lid_of_path p1), Location.mknoloc (lid_of_path p2))
-  | Path.Pextra_ty (p, Pext_ty) -> lid_of_path p
+  | Path.Pextra_ty (p, (Pext_ty | Punboxed_ty)) -> lid_of_path p
 
 let is_unambiguous path env =
   let l = Env.find_shadowed_types path env in
@@ -803,9 +806,9 @@ end = struct
 
   let add_named_var tty =
     match tty.desc with
-      Tvar (Some name) | Tunivar (Some name) ->
-        if List.mem name !named_vars then () else
-        named_vars := name :: !named_vars
+      Tvar { name = Some n; _ } | Tunivar { name = Some n; _ } ->
+        if List.mem n !named_vars then () else
+        named_vars := n :: !named_vars
     | _ -> ()
 
   let rec add_named_vars ty =
@@ -863,7 +866,7 @@ end = struct
       try TransientTypeMap.find t !weak_var_map with Not_found ->
       let name =
         match t.desc with
-          Tvar (Some name) | Tunivar (Some name) ->
+          Tvar { name = Some name; _ } | Tunivar { name = Some name; _ } ->
             (* Some part of the type we've already printed has assigned another
              * unification variable to that name. We want to keep the name, so
              * try adding a number until we find a name that's not taken. *)
@@ -1041,9 +1044,16 @@ let rec tree_of_typexp mode ty =
         let non_gen = is_non_gen mode ty in
         let name_gen = Variable_names.new_var_name ~non_gen ty in
         Otyp_var (non_gen, Variable_names.name_of_type name_gen tty)
-    | Tarrow(l, ty1, ty2, _) ->
+    | Tarrow((l, _, _), ty1, ty2, _) ->
         let lab =
-          if !print_labels || is_optional l then l else Nolabel
+          match l with
+          | Types.Nolabel -> Outcometree.Nolabel
+          | Types.Labelled s -> Outcometree.Labelled s
+          | Types.Optional s -> Outcometree.Optional s
+          | Types.Position s -> Outcometree.Position s
+        in
+        let lab =
+          if !print_labels || is_optional l then lab else Outcometree.Nolabel
         in
         let t1 =
           if is_optional l then
@@ -1053,7 +1063,7 @@ let rec tree_of_typexp mode ty =
                 tree_of_typexp mode ty
             | _ -> Otyp_stuff "<hidden>"
           else tree_of_typexp mode ty1 in
-        Otyp_arrow (lab, t1, tree_of_typexp mode ty2)
+        Otyp_arrow (lab, [], t1, tree_of_typexp mode ty2)
     | Ttuple tyl ->
         Otyp_tuple (tree_of_labeled_typlist mode tyl)
     | Tconstr(p, tyl, _abbrev) ->
@@ -1121,7 +1131,8 @@ let rec tree_of_typexp mode ty =
              printed once when used as proxy *)
           List.iter Aliases.add_delayed tyl;
           let tl = List.map Variable_names.(name_of_type new_name) tyl in
-          let tr = Otyp_poly (tl, tree_of_typexp mode ty) in
+          let tl_with_jkinds = List.map (fun name -> (name, None)) tl in
+          let tr = Otyp_poly (tl_with_jkinds, tree_of_typexp mode ty) in
           (* Forget names when we leave scope *)
           Variable_names.remove_names tyl;
           Aliases.delayed := old_delayed; tr

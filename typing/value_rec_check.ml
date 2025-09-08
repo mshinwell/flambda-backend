@@ -173,7 +173,7 @@ let classify_expression : Typedtree.expression -> sd =
     | Texp_exclave e ->
         classify_expression env e
 
-    | Texp_construct (_, {cstr_repr = Variant_unboxed}, [e], _) ->
+    | Texp_construct (_, {cstr_repr = Variant_unboxed; _}, [e], _) ->
         classify_expression env e
     | Texp_construct _ ->
         Static
@@ -962,7 +962,7 @@ let rec expression : Typedtree.expression -> term_judg =
       modexp mexp
     | Texp_object (clsstrct, _) ->
       class_structure clsstrct
-    | Texp_try (e, cases) ->
+    | Texp_try (e, cases, effect_cases) ->
       (*
         G |- e: m      (Gi; _ |- pi -> ei : m)^i
         --------------------------------------------
@@ -976,6 +976,7 @@ let rec expression : Typedtree.expression -> term_judg =
       join [
         expression e;
         list case_env cases;
+        list case_env effect_cases;
       ]
     | Texp_override (pth, fields) ->
       (*

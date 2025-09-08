@@ -489,8 +489,6 @@ let expr sub x =
     match x.exp_desc with
     | Texp_ident (path, lid, vd, idk, uu) ->
         Texp_ident (path, map_loc sub lid, vd, idk, uu)
-    | Texp_ident (path, lid, vd) ->
-        Texp_ident (path, map_loc sub lid, vd)
     | Texp_constant _ as d -> d
     | Texp_let (rec_flag, list, exp) ->
         let (rec_flag, list) = sub.value_bindings sub (rec_flag, list) in
@@ -513,11 +511,12 @@ let expr sub x =
           pos, am, za
           List.map (tuple2 id (Option.map (sub.expr sub))) list
         )
-    | Texp_match (exp, sort, cases, p) ->
+    | Texp_match (exp, sort, comp_cases, val_cases, p) ->
         Texp_match (
           sub.expr sub exp,
           sort,
-          List.map (sub.case sub) cases,
+          List.map (sub.case sub) comp_cases,
+          List.map (sub.case sub) val_cases,
           p
         )
     | Texp_try (exp, exn_cases, eff_cases) ->
@@ -533,15 +532,11 @@ let expr sub x =
           (List.map (fun (label, e, s) -> label, sub.expr sub e, s) list)
     | Texp_construct (lid, cd, args, am) ->
         Texp_construct (map_loc sub lid, cd, List.map (sub.expr sub) args, am)
-    | Texp_tuple list ->
-        Texp_tuple (List.map (sub.expr sub) list)
-    | Texp_construct (lid, cd, args) ->
-        Texp_construct (map_loc sub lid, cd, List.map (sub.expr sub) args)
+    | Texp_tuple (list, am) ->
+        Texp_tuple (List.map (fun (lbl, e) -> (lbl, sub.expr sub e)) list, am)
     | Texp_variant (l, expo) ->
         Texp_variant (l, Option.map (fun (e, am) -> (sub.expr sub e, am)) expo)
     | Texp_record { fields; representation; extended_expression; alloc_mode } ->
-        Texp_variant (l, Option.map (sub.expr sub) expo)
-    | Texp_record { fields; representation; extended_expression } ->
         let fields = Array.map (function
             | label, Kept (t, mut) -> label, Kept (t, mut)
             | label, Overridden (lid, exp) ->
@@ -549,7 +544,7 @@ let expr sub x =
             fields
         in
         Texp_record {
-          fields = map_fields fields; representation;
+          fields; representation;
           extended_expression =
             Option.map (fun (exp, sort, ubr) -> (sub.expr sub exp, sort, ubr))
               extended_expression;
@@ -587,8 +582,8 @@ let expr sub x =
         Texp_list_comprehension (map_comprehension comp)
     | Texp_array_comprehension (amut, sort, comp) ->
         Texp_array_comprehension (amut, sort, map_comprehension comp)
-    | Texp_array list ->
-        Texp_array (List.map (sub.expr sub) list)
+    | Texp_array (amut, sort, list, am) ->
+        Texp_array (amut, sort, List.map (sub.expr sub) list, am)
     | Texp_ifthenelse (exp1, exp2, expo) ->
         Texp_ifthenelse (
           sub.expr sub exp1,

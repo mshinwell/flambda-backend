@@ -413,8 +413,8 @@ let in_subst_mode = function
   | Pattern _ -> false
 
 let can_generate_equations = function
-  | Expression _ | Pattern { equations_generation = Forbidden } -> false
-  | Pattern { equations_generation = Allowed _ } -> true
+  | Expression _ -> false
+  | Pattern _ -> true
 
 (* Can only be called when generate_equations is true.  Tracks equations only to
    improve error messages. *)
@@ -447,7 +447,7 @@ let without_assume_injective uenv f =
 let without_generating_equations uenv f =
   match uenv with
   | Expression _ as uenv -> f uenv
-  | Pattern r -> f (Pattern { r with equations_generation = Forbidden })
+  | Pattern _ as uenv -> f uenv
 
 (* Unification generally must check that the jkinds of the two types being
    unified agree.  However, sometimes we need to delay these jkind
@@ -659,8 +659,9 @@ exception Non_closed of type_expr * variable_kind
  *)
 let[@inline] free_vars ~zero ~add_one ?env tys =
   let rec fv ~kind acc ty =
-    if not (try_mark_node mark ty) then acc
-    else match get_desc ty, env with
+    if get_level ty >= lowest_level then begin
+      set_level ty ((-1) - get_level ty);
+      match get_desc ty, env with
       | Tvar { jkind; _ }, _ ->
           add_one ty (Some jkind) kind acc
       | Tconstr (path, tl, _), Some env ->
@@ -685,13 +686,14 @@ let[@inline] free_vars ~zero ~add_one ?env tys =
           else fv ~kind:Row_variable acc (row_more row)
       | _    ->
           fold_type_expr (fv ~kind) acc ty
+    end else acc
   in
   List.fold_left (fv ~kind:Type_variable) zero tys
 
 let free_variables ?env ty =
   let add_one ty _jkind _kind acc = ty :: acc in
   let tl = free_vars ~zero:[] ~add_one ?env [ty] in
-  unmark_type ty;
+  Btype.unmark_type ty;
   tl
 
 let free_non_row_variables_of_list tyl =
@@ -726,7 +728,7 @@ let exists_free_variable f ty =
     try free_vars ~zero:() ~add_one [ty]; false
     with Exists -> true
   in
-  unmark_type ty;
+  Btype.unmark_type ty;
   result
 
 let closed_type ?env ty =
@@ -738,7 +740,7 @@ let closed_type_expr ?env ty =
     try closed_type ?env ty; true
     with Non_closed _ -> false
   in
-  unmark_type ty;
+  Btype.unmark_type ty;
   closed
 
 let close_type ty =
@@ -746,16 +748,16 @@ let close_type ty =
   closed_type ty
 
 let closed_parameterized_type params ty =
-  List.iter mark_type params;
+  List.iter (fun ty -> Btype.mark_type Btype.flip_mark_node ty) params;
   let ok =
     try close_type ty; true with Non_closed _ -> false in
-  List.iter unmark_type params;
-  unmark_type ty;
+  List.iter Btype.unmark_type params;
+  Btype.unmark_type ty;
   ok
 
 let closed_type_decl decl =
   try
-    List.iter mark_type decl.type_params;
+    List.iter (fun ty -> Btype.mark_type Btype.flip_mark_node ty) decl.type_params;
     List.iter remove_mode_and_jkind_variables decl.type_params;
     begin match decl.type_kind with
       Type_abstract _ ->
@@ -794,7 +796,7 @@ let closed_type_decl decl =
 
 let closed_extension_constructor ext =
   with_type_mark begin fun mark -> try
-    List.iter (mark_type mark) ext.ext_type_params;
+    List.iter (Btype.mark_type mark) ext.ext_type_params;
     begin match ext.ext_ret_type with
     | Some res_ty ->
         (* gadts cannot have free type variables, but they might
@@ -819,7 +821,7 @@ exception CCFailure of closed_class_failure
 
 let closed_class params sign =
   with_type_mark begin fun mark ->
-  List.iter (mark_type mark) params;
+  List.iter (Btype.mark_type mark) params;
   ignore (try_mark_node mark sign.csig_self_row);
   try
     Meths.iter
@@ -1815,7 +1817,7 @@ let instance_prim_layout (desc : Primitive.description) ty =
       end
     in
     inner ty;
-    unmark_type ty;
+    Btype.unmark_type ty;
     match !new_sort with
     | Some sort ->
       (* We don't want to lower the type vars from generic_level due to usages
@@ -3231,10 +3233,10 @@ let deep_occur_list t0 tyl =
 let deep_occur t0 ty =
   try
     deep_occur_rec t0 ty;
-    unmark_type ty;
+    Btype.unmark_type ty;
     false
   with Occur ->
-    unmark_type ty;
+    Btype.unmark_type ty;
     true
 
 let deep_occur t0 ty =

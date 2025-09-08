@@ -235,7 +235,7 @@ and expression_desc =
       Longident.t loc * constructor_description * expression list * alloc_mode option
   | Texp_variant of label * (expression * alloc_mode) option
   | Texp_record of {
-      fields : ( Data_types.label_description * record_label_definition ) array;
+      fields : ( Types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : (expression * Jkind.sort * Unique_barrier.t) option;
       alloc_mode : alloc_mode option
@@ -1388,3 +1388,7 @@ let min_mode_with_locks = (Mode.Value.(disallow_right legacy), None)
 let mode_without_locks_exn = function
   | (_, Some _) -> assert false
   | (m, None) -> m
+
+let map_apply_arg f = function
+  | Arg x -> Arg (f x)
+  | Omitted om -> Omitted om

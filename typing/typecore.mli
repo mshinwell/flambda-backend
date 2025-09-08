@@ -70,12 +70,10 @@ type pattern_variable =
     pv_id: Ident.t;
     pv_uid: Uid.t;
     pv_mode: Mode.Value.l;
-    pv_kind: value_kind;
+    pv_kind: pattern_variable_kind;
     pv_type: type_expr;
     pv_loc: Location.t;
-    pv_kind: pattern_variable_kind;
     pv_attributes: Typedtree.attributes;
-    pv_uid : Uid.t;
   }
 
 val mk_expected:
@@ -364,10 +362,6 @@ type error =
       { some_args_ok : bool; ty_fun : type_expr; jkind : jkind_lr }
   | Overwrite_of_invalid_term
   | Unexpected_hole
-  | Constructor_labeled_arg
-  | Partial_tuple_pattern_bad_type
-  | Extra_tuple_label of string option * type_expr
-  | Missing_tuple_label of string option * type_expr
   | Repeated_tuple_exp_label of string
   | Repeated_tuple_pat_label of string
 

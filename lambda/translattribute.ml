@@ -75,6 +75,12 @@ let parse_id_payload txt loc options ~default ~empty payload =
   | Ok a -> a
   | Error () -> default
 
+let get_payload get_from_exp =
+  let open Parsetree in
+  function
+  | PStr [{pstr_desc = Pstr_eval (e, [])}] -> get_from_exp e
+  | _ -> Result.Error ()
+
 let get_optional_payload get_from_exp =
   let open Parsetree in
   function

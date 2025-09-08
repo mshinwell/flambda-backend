@@ -47,7 +47,12 @@ module Global = struct
     match g with
     | Glob_compunit cu ->
         fprintf ppf "compilation unit %a"
-          (Style.as_inline_code Compilation_unit.print) cu
+          (Style.as_inline_code (fun ppf cu ->
+            let buf = Buffer.create 64 in
+            let fmt = Format.formatter_of_buffer buf in
+            Compilation_unit.print fmt cu;
+            Format.pp_print_flush fmt ();
+            pp_print_string ppf (Buffer.contents buf))) cu
     | Glob_predef (Predef_exn exn) ->
         fprintf ppf "predefined exception %a"
           Style.inline_code (quote exn)

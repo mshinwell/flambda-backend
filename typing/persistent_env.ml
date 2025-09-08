@@ -23,6 +23,21 @@ module CU = Compilation_unit
 module Consistbl_data = Import_info.Intf.Nonalias.Kind
 module Consistbl = Consistbl.Make (CU.Name) (Consistbl_data)
 
+(* Helper functions to convert Format printers to Format_doc printers *)
+let wrap_global_module_name_print ppf name =
+  let buf = Buffer.create 64 in
+  let fmt = Format.formatter_of_buffer buf in
+  Global_module.Name.print fmt name;
+  Format.pp_print_flush fmt ();
+  Format_doc.pp_print_string ppf (Buffer.contents buf)
+
+let wrap_global_module_with_precision_print ppf gm =
+  let buf = Buffer.create 64 in
+  let fmt = Format.formatter_of_buffer buf in
+  Global_module.With_precision.print fmt gm;
+  Format.pp_print_flush fmt ();
+  Format_doc.pp_print_string ppf (Buffer.contents buf)
+
 let add_delayed_check_forward = ref (fun _ -> assert false)
 
 type error =
@@ -445,15 +460,15 @@ let remember_global { globals; _ } global ~precision ~mentioned_by =
             | Current ->
                 Format.fprintf ppf "this compilation unit"
             | Other modname ->
-                Style.as_inline_code Global_module.Name.print ppf modname
+                Format.fprintf ppf "%a" Global_module.Name.print modname
           in
           Misc.fatal_errorf
             "@[<hov>The name %a@ was bound to %a@ by %a@ \
              but it is instead bound to %a@ by %a.@]"
-            (Style.as_inline_code Global_module.Name.print) global_name
-            (Style.as_inline_code Global_module.With_precision.print) old_global
+            Global_module.Name.print global_name
+            Global_module.With_precision.print old_global
             pp_mentioned_by first_mentioned_by
-            (Style.as_inline_code Global_module.With_precision.print) new_global
+            Global_module.With_precision.print new_global
             pp_mentioned_by mentioned_by
 
 let rec approximate_global_by_name penv global_name =
@@ -913,13 +928,13 @@ let check_pers_struct ~allow_hidden penv f ~loc name =
               describe_prefix prefix
         | Illegal_import_of_parameter (name, _) ->
             Format.asprintf "%a is a parameter"
-              (Style.as_inline_code Global_module.Name.print) name
+              (Style.as_inline_code wrap_global_module_name_print) name
         | Not_compiled_as_parameter name ->
             Format.asprintf "%a should be a parameter but isn't"
-              (Style.as_inline_code Global_module.Name.print) name
+              (Style.as_inline_code wrap_global_module_name_print) name
         | Imported_module_has_unset_parameter { imported; parameter } ->
             Format.asprintf "%a requires argument for %a"
-              (Style.as_inline_code Global_module.Name.print) imported
+              (Style.as_inline_code wrap_global_module_name_print) imported
               (Style.as_inline_code Global_module.Parameter_name.print)
               parameter
         | Imported_module_has_no_such_parameter { imported; parameter; _ } ->
@@ -929,15 +944,15 @@ let check_pers_struct ~allow_hidden penv f ~loc name =
               parameter
         | Not_compiled_as_argument { value; _ } ->
             Format.asprintf "%a is not compiled as an argument"
-              (Style.as_inline_code Global_module.Name.print) value
+              (Style.as_inline_code wrap_global_module_name_print) value
         | Argument_type_mismatch { value; expected; actual; _ } ->
             Format.asprintf "%a implements %a, not %a"
-              (Style.as_inline_code Global_module.Name.print) value
+              (Style.as_inline_code wrap_global_module_name_print) value
               (Style.as_inline_code Global_module.Parameter_name.print) actual
               (Style.as_inline_code Global_module.Parameter_name.print) expected
         | Unbound_module_as_argument_value { value; _ } ->
             Format.asprintf "Can't find argument %a"
-              (Style.as_inline_code Global_module.Name.print) value
+              (Style.as_inline_code wrap_global_module_name_print) value
       in
       let msg = Format_doc.(asprintf "%a" pp_doc) msg in
       let warn = Warnings.No_cmi_file(name_as_string, Some msg) in
@@ -1141,8 +1156,8 @@ let report_error_doc ppf =
            @[<hov>Compile the current unit with \
            @{<inline_code>-parameter %a@}.@]@]"
         (Style.as_inline_code Location.print_filename) filename
-        (Style.as_inline_code Global_module.Name.print) modname
-        Global_module.Name.print modname
+        (Style.as_inline_code wrap_global_module_name_print) modname
+        wrap_global_module_name_print modname
   | Not_compiled_as_parameter modname ->
       fprintf ppf
         "@[<hov>The module %a@ is a parameter but is not declared as such for the \
@@ -1150,8 +1165,8 @@ let report_error_doc ppf =
          @[<hov>@{<hint>Hint@}: \
            @[<hov>Compile the current unit with @{<inline_code>-parameter \
            %a@}.@]@]"
-        (Style.as_inline_code Global_module.Name.print) modname
-        Global_module.Name.print modname
+        (Style.as_inline_code wrap_global_module_name_print) modname
+        wrap_global_module_name_print modname
   | Imported_module_has_unset_parameter
         { imported = modname; parameter = param } ->
       fprintf ppf
@@ -1160,7 +1175,7 @@ let report_error_doc ppf =
          @[<hov>@{<hint>Hint@}: \
            @[<hov>Pass @{<inline_code>-parameter %a@}@ to add %a@ as a parameter@ \
            of the current unit.@]@]"
-        (Style.as_inline_code Global_module.Name.print) modname
+        (Style.as_inline_code wrap_global_module_name_print) modname
         (Style.as_inline_code Global_module.Parameter_name.print) param
         Global_module.Parameter_name.print param
         (Style.as_inline_code Global_module.Parameter_name.print) param
@@ -1195,7 +1210,7 @@ let report_error_doc ppf =
            %a.@]@.\
          @[<hov>@{<hint>Hint@}: \
            @[<hov>Compile %a@ with @{<inline_code>-as-argument-for %a@}.@]@]"
-        (Style.as_inline_code Global_module.Name.print) value
+        (Style.as_inline_code wrap_global_module_name_print) value
         (Style.as_inline_code Global_module.Parameter_name.print) param
         (Style.as_inline_code Location.print_filename) filename
         Global_module.Parameter_name.print param
@@ -1206,17 +1221,17 @@ let report_error_doc ppf =
          @[<hov>@{<hint>Hint@}: \
            @[<hov>%a@ was compiled with \
              @{<inline_code>-as-argument-for %a@}.@]@]"
-        (Style.as_inline_code Global_module.Name.print) value
+        (Style.as_inline_code wrap_global_module_name_print) value
         (Style.as_inline_code Global_module.Parameter_name.print) expected
-        (Style.as_inline_code Global_module.Name.print) value
+        (Style.as_inline_code wrap_global_module_name_print) value
         (Style.as_inline_code Global_module.Parameter_name.print) actual
         (Style.as_inline_code Location.print_filename) filename
         Global_module.Parameter_name.print expected
   | Unbound_module_as_argument_value { instance; value } ->
       fprintf ppf
         "@[<hov>Unbound module %a@ in instance %a@]"
-        (Style.as_inline_code Global_module.Name.print) value
-        (Style.as_inline_code Global_module.Name.print) instance
+        (Style.as_inline_code wrap_global_module_name_print) value
+        (Style.as_inline_code wrap_global_module_name_print) instance
 
 let () =
   Location.register_error_of_exn

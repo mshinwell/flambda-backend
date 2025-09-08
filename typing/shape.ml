@@ -181,9 +181,6 @@ module Item = struct
     let name (name, _) = name
     let kind (_, kind) = kind
 
-    let name (name, _) = name
-    let kind (_, kind) = kind
-
     let make str ns = str, ns
 
     let value id = Ident.name id, Sig_component_kind.Value
@@ -691,9 +688,6 @@ let hash_app = 6
 let hash_comp_unit = 7
 let hash_alias = 8
 let hash_error = 9
-let rec strip_head_aliases = function
-  | { desc = Alias t; _ } -> strip_head_aliases t
-  | t -> t
 
 let fresh_var ?(name="shape-var") uid =
   let var = Ident.create_local name in
@@ -818,7 +812,6 @@ let for_persistent_unit s =
     desc = Comp_unit s; 
     approximated = false }
 
-let leaf_for_unpack = leaf' None
 let leaf_for_unpack = { hash = 0; uid = None; desc = Leaf; approximated = false }
 
 let set_uid_if_none t uid =

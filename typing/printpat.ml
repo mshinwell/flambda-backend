@@ -17,7 +17,7 @@
 
 open Asttypes
 open Typedtree
-open Data_types
+open Types
 open Format_doc
 
 let is_cons = function
@@ -59,23 +59,28 @@ let rec pretty_val : type k . _ -> k general_pattern -> _ = fun ppf v ->
        pretty_extra ppf extra
          pretty_val { v with pat_extra = rem }
     | [] ->
-  let pretty_record ~unboxed lvs =
+  let pretty_record_generic hash lvs get_lbl_all =
     let filtered_lvs = List.filter
         (function
           | (_,_,{pat_desc=Tpat_any}) -> false (* do not show lbl=_ *)
           | _ -> true) lvs in
-    let hash = if unboxed then "#" else "" in
     begin match filtered_lvs with
     | [] -> fprintf ppf "%s{ _ }" hash
     | (_, lbl, _) :: q ->
         let elision_mark ppf =
           (* we assume that there is no label repetitions here *)
-            if Array.length lbl.lbl_all > 1 + List.length q then
+            if Array.length (get_lbl_all lbl) > 1 + List.length q then
               fprintf ppf ";@ _@ "
             else () in
         fprintf ppf "@[%s{%a%t}@]"
           hash pretty_lvals filtered_lvs elision_mark
     end
+  in
+  let pretty_record lvs = 
+    pretty_record_generic "" lvs (fun lbl -> lbl.lbl_all)
+  in
+  let pretty_record_unboxed lvs = 
+    pretty_record_generic "#" lvs (fun lbl -> lbl.lbl_all)
   in
   match v.pat_desc with
   | Tpat_any -> fprintf ppf "_"
@@ -107,8 +112,8 @@ let rec pretty_val : type k . _ -> k general_pattern -> _ = fun ppf v ->
       fprintf ppf "`%s" l
   | Tpat_variant (l, Some w, _) ->
       fprintf ppf "@[<2>`%s@ %a@]" l pretty_arg w
-  | Tpat_record (lvs,_) -> pretty_record ~unboxed:false lvs
-  | Tpat_record_unboxed_product (lvs,_) -> pretty_record ~unboxed:true lvs
+  | Tpat_record (lvs,_) -> pretty_record lvs
+  | Tpat_record_unboxed_product (lvs,_) -> pretty_record_unboxed lvs
   | Tpat_array (am, _arg_sort, vs) ->
       let punct = if Types.is_mutable am then '|' else ':' in
       fprintf ppf "@[[%c %a %c]@]" punct (pretty_vals " ;") vs punct
@@ -169,8 +174,7 @@ and pretty_labeled_val_sort ppf (l, p, _) =
   end;
   pretty_val ppf p
 
-and pretty_lvals : 'a. _ -> (_ * 'a gen_label_description * _) list -> _ =
-  fun ppf -> function
+and pretty_lvals ppf = function
   | [] -> ()
   | [_,lbl,v] ->
       fprintf ppf "%s=%a" lbl.lbl_name pretty_val v

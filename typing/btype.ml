@@ -178,7 +178,7 @@ let newgenstub ~scope jkind =
 let is_Tvar ty = match get_desc ty with Tvar _ -> true | _ -> false
 let is_Tunivar ty = match get_desc ty with Tunivar _ -> true | _ -> false
 let is_Tconstr ty = match get_desc ty with Tconstr _ -> true | _ -> false
-let is_Tpoly ty = match get_desc ty with Tpoly _ -> true | _ -> false
+let _is_Tpoly ty = match get_desc ty with Tpoly _ -> true | _ -> false
 let is_poly_Tpoly ty =
   match get_desc ty with Tpoly (_, _ :: _) -> true | _ -> false
 
@@ -871,8 +871,8 @@ let flip_mark_node ty =
 let logged_mark_node ty =
   set_level ty (pivot_level - get_level ty)
 
-let try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
-let try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
+let _try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
+let _try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
 
 let rec mark_type mark ty =
   if not_marked_node ty then begin
@@ -880,15 +880,6 @@ let rec mark_type mark ty =
     iter_type_expr (mark_type mark) ty
   end
 
-let mark_type_params mark ty =
-  iter_type_expr (mark_type mark) ty
-
-let type_iterators =
-  let it_type_expr it ty =
-    if try_mark_node ty then it.it_do_type_expr it ty
-  in
-  let it_do_type_expr it ty = iter_type_expr (mark_type (fun ty -> ())) ty in
-  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
 
 (* Remove marks from a type. *)
@@ -901,99 +892,20 @@ let rec unmark_type ty =
 
 let unmark_iterators =
   let it_type_expr _it ty = unmark_type ty in
-  let it_do_type_expr it ty = () in
+  let it_do_type_expr _it _ty = () in
   {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
 
-let unmark_type_decl decl =
+let _unmark_type_decl decl =
   unmark_iterators.it_type_declaration unmark_iterators decl
 
-let unmark_extension_constructor ext =
+let _unmark_extension_constructor ext =
   List.iter unmark_type ext.ext_type_params;
   iter_type_expr_cstr_args unmark_type ext.ext_args;
   Option.iter unmark_type ext.ext_ret_type
 
-let unmark_class_signature sign =
+let _unmark_class_signature sign =
   unmark_type sign.csig_self;
   unmark_type sign.csig_self_row;
   Vars.iter (fun _l (_m, _v, t) -> unmark_type t) sign.csig_vars;
   Meths.iter (fun _l (_m, _v, t) -> unmark_type t) sign.csig_meths
 
-let unmark_class_type cty =
-  unmark_iterators.it_class_type unmark_iterators cty
-
-(**** Type information getter ****)
-
-let cstr_type_path cstr =
-  match get_desc cstr.cstr_res with
-  | Tconstr (p, _, _) -> p
-  | _ -> assert false
-
-                  (**********************************)
-                  (*  Utilities for level-marking   *)
-                  (**********************************)
-
-let not_marked_node ty = get_level ty >= lowest_level
-    (* type nodes with negative levels are "marked" *)
-
-let flip_mark_node ty =
-  let ty = Transient_expr.repr ty in
-  Transient_expr.set_level ty (pivot_level - ty.level)
-let logged_mark_node ty =
-  set_level ty (pivot_level - get_level ty)
-
-let try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
-let try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
-
-let rec mark_type mark ty =
-  if not_marked_node ty then begin
-    flip_mark_node ty;
-    iter_type_expr (mark_type mark) ty
-  end
-
-let mark_type_params mark ty =
-  iter_type_expr (mark_type mark) ty
-
-let type_iterators =
-  let it_type_expr it ty =
-    if try_mark_node ty then it.it_do_type_expr it ty
-  in
-  let it_do_type_expr it ty = iter_type_expr (mark_type (fun ty -> ())) ty in
-  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
-
-
-(* Remove marks from a type. *)
-let rec unmark_type ty =
-  if get_level ty < lowest_level then begin
-    (* flip back the marked level *)
-    flip_mark_node ty;
-    iter_type_expr unmark_type ty
-  end
-
-let unmark_iterators =
-  let it_type_expr _it ty = unmark_type ty in
-  let it_do_type_expr it ty = () in
-  {type_iterators_without_type_expr with it_type_expr; it_do_type_expr}
-
-let unmark_type_decl decl =
-  unmark_iterators.it_type_declaration unmark_iterators decl
-
-let unmark_extension_constructor ext =
-  List.iter unmark_type ext.ext_type_params;
-  iter_type_expr_cstr_args unmark_type ext.ext_args;
-  Option.iter unmark_type ext.ext_ret_type
-
-let unmark_class_signature sign =
-  unmark_type sign.csig_self;
-  unmark_type sign.csig_self_row;
-  Vars.iter (fun _l (_m, _v, t) -> unmark_type t) sign.csig_vars;
-  Meths.iter (fun _l (_m, _v, t) -> unmark_type t) sign.csig_meths
-
-let unmark_class_type cty =
-  unmark_iterators.it_class_type unmark_iterators cty
-
-(**** Type information getter ****)
-
-let cstr_type_path cstr =
-  match get_desc cstr.cstr_res with
-  | Tconstr (p, _, _) -> p
-  | _ -> assert false

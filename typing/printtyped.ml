@@ -280,7 +280,6 @@ let rec core_type i ppf x =
   | Ttyp_unboxed_tuple l ->
       line i ppf "Ttyp_unboxed_tuple\n";
       list i labeled_core_type ppf l;
-      list i core_type ppf l;
   | Ttyp_constr (li, _, l) ->
       line i ppf "Ttyp_constr %a\n" fmt_path li;
       list i core_type ppf l;
@@ -324,10 +323,6 @@ let rec core_type i ppf x =
   | Ttyp_of_kind jkind ->
       line i ppf "Ttyp_of_kind %a\n" (jkind_annotation i) jkind;
   | Ttyp_call_pos -> line i ppf "Ttyp_call_pos\n";
-
-and labeled_core_type i ppf (l, t) =
-  tuple_component_label i ppf l;
-  core_type i ppf t
 
 and labeled_core_type i ppf (l, t) =
   tuple_component_label i ppf l;
@@ -383,8 +378,6 @@ and pattern : type k . _ -> _ -> k general_pattern -> unit = fun i ppf x ->
   | Tpat_array (am, arg_sort, l) ->
       line i ppf "Tpat_array %a\n" fmt_mutable_mode_flag am;
       line i ppf "%a\n" Jkind.Sort.format arg_sort;
-  | Tpat_array (l) ->
-      line i ppf "Tpat_array\n";
       list i pattern ppf l;
   | Tpat_lazy p ->
       line i ppf "Tpat_lazy\n";

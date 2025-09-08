@@ -183,7 +183,7 @@ and 'k pattern_desc =
             Invariant: n >= 2
          *)
   | Tpat_construct :
-      Longident.t loc * Data_types.constructor_description *
+      Longident.t loc * Types.constructor_description *
         value general_pattern list *
         ((Ident.t loc * Parsetree.jkind_annotation option) list * core_type)
           option ->
@@ -208,7 +208,7 @@ and 'k pattern_desc =
          *)
   | Tpat_record :
       (Longident.t loc
-       * Data_types.label_description
+       * Types.label_description
        * value general_pattern
       ) list
       * closed_flag
@@ -219,7 +219,7 @@ and 'k pattern_desc =
             Invariant: n > 0
          *)
   | Tpat_record_unboxed_product :
-      (Longident.t loc * Data_types.unboxed_label_description * value general_pattern) list *
+      (Longident.t loc * Types.unboxed_label_description * value general_pattern) list *
         closed_flag ->
       value pattern_desc
         (** #{ l1=P1; ...; ln=Pn }     (flag = Closed)
@@ -403,7 +403,7 @@ and expression_desc =
                 when [el] is [(Some L1, E1, s1); (None, E2, s2)]
           *)
   | Texp_construct of
-      Longident.t loc * Data_types.constructor_description *
+      Longident.t loc * Types.constructor_description *
       expression list * alloc_mode option
         (** C                []
             C E              [E]
@@ -419,7 +419,7 @@ and expression_desc =
             in which case it does not need allocation.
           *)
   | Texp_record of {
-      fields : ( Data_types.label_description * record_label_definition ) array;
+      fields : ( Types.label_description * record_label_definition ) array;
       representation : Types.record_representation;
       extended_expression : (expression * Jkind.sort * Unique_barrier.t) option;
       alloc_mode : alloc_mode option
@@ -439,7 +439,7 @@ and expression_desc =
             in which case it does not need allocation.
           *)
   | Texp_record_unboxed_product of {
-      fields : ( Data_types.unboxed_label_description * record_label_definition ) array;
+      fields : ( Types.unboxed_label_description * record_label_definition ) array;
       representation : Types.record_unboxed_product_representation;
       extended_expression : (expression * Jkind.sort) option;
     }
@@ -455,20 +455,20 @@ and expression_desc =
                 extended_expression = Some E0 }
           *)
   | Texp_atomic_loc of
-      expression * Jkind.sort * Longident.t loc * Data_types.label_description *
+      expression * Jkind.sort * Longident.t loc * Types.label_description *
       alloc_mode
   | Texp_field of expression * Jkind.sort * Longident.t loc *
-      Data_types.label_description * texp_field_boxing * Unique_barrier.t
+      Types.label_description * texp_field_boxing * Unique_barrier.t
     (** - The sort is the sort of the whole record (which may be non-value if
           the record is @@unboxed).
         - [texp_field_boxing] provides extra information depending on if the
           projection requires boxing. *)
   | Texp_unboxed_field of
-      expression * Jkind.sort * Longident.t loc * Data_types.unboxed_label_description *
+      expression * Jkind.sort * Longident.t loc * Types.unboxed_label_description *
         unique_use
   | Texp_setfield of
       expression * Mode.Locality.l * Longident.t loc *
-      Data_types.label_description * expression
+      Types.label_description * expression
     (** [alloc_mode] translates to the [modify_mode] of the record *)
   | Texp_array of Types.mutability * Jkind.Sort.t * expression list * alloc_mode
   | Texp_idx of block_access * unboxed_access list
@@ -621,11 +621,6 @@ and ident_kind =
   | Id_value
   | Id_prim of Mode.Locality.l option * Jkind.Sort.t option
 
-and meth =
-    Tmeth_name of string
-  | Tmeth_val of Ident.t
-  | Tmeth_ancestor of Ident.t * Path.t
-
 and block_access =
   | Baccess_field of Longident.t loc * Types.label_description
   | Baccess_array of {
@@ -676,13 +671,6 @@ and comprehension_iterator =
   | Texp_comp_in of
       { pattern  : pattern
       ; sequence : expression }
-
-and 'k case =
-    {
-     c_lhs: 'k general_pattern;
-     c_guard: expression option;
-     c_rhs: expression;
-    }
 
 and record_label_definition =
   | Kept of Types.type_expr * Types.mutability * unique_use

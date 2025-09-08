@@ -302,41 +302,8 @@ let constructors_of_type ~current_unit ty_path decl =
 let labels_of_type ty_path decl =
   match decl.type_kind with
   | Type_record(labels, rep, _) ->
-      let gen_labels = label_descrs Legacy (newgenconstr ty_path decl.type_params)
-        labels rep decl.type_private in
-      (* Convert gen_label_description to Data_types.label_description *)
-      let convert_labels all_converted (id, gen_lbl) =
-        let converted_lbl = {
-          Data_types.lbl_name = gen_lbl.lbl_name;
-          lbl_res = gen_lbl.lbl_res;
-          lbl_arg = gen_lbl.lbl_arg;
-          lbl_mut = (match gen_lbl.lbl_mut with
-            | Immutable -> Immutable
-            | Mutable _ -> Mutable);
-          lbl_atomic = Nonatomic; (* Default since gen_label doesn't have this *)
-          lbl_pos = gen_lbl.lbl_pos;
-          lbl_all = all_converted;
-          lbl_repres = gen_lbl.lbl_repres;
-          lbl_private = gen_lbl.lbl_private;
-          lbl_loc = gen_lbl.lbl_loc;
-          lbl_attributes = gen_lbl.lbl_attributes;
-          lbl_uid = gen_lbl.lbl_uid;
-        } in
-        (id, converted_lbl)
-      in
-      let all_converted = Array.make (List.length gen_labels)
-        (snd (List.hd gen_labels) |> fun (gl : _ gen_label_description) ->
-          { Data_types.lbl_name = ""; lbl_res = gl.lbl_res; lbl_arg = gl.lbl_arg;
-            lbl_mut = Immutable; lbl_atomic = Nonatomic; lbl_pos = -1;
-            lbl_all = [||]; lbl_repres = gl.lbl_repres; lbl_private = Public;
-            lbl_loc = Location.none; lbl_attributes = []; 
-            lbl_uid = Uid.internal_not_actually_unique }) in
-      let result = List.mapi (fun i lbl_pair ->
-        let converted = convert_labels all_converted lbl_pair in
-        all_converted.(i) <- snd converted;
-        converted
-      ) gen_labels in
-      result
+      label_descrs Legacy (newgenconstr ty_path decl.type_params)
+        labels rep decl.type_private
   | Type_record_unboxed_product _
   | Type_variant _ | Type_abstract _ | Type_open -> []
 

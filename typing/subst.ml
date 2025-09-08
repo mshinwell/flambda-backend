@@ -105,8 +105,8 @@ let add_module id p s =
 
 let add_modtype_gen p ty s =
   { s with modtypes = Path.Map.add p ty s.modtypes; last_compose = None }
-let add_modtype_path p p' s = add_modtype_gen p (Mty_ident p') s
-let add_modtype id p s = add_modtype_path (Pident id) p s
+let add_modtype_path p mty s = add_modtype_gen p mty s
+let add_modtype id mty s = add_modtype_path (Pident id) mty s
 
 type additional_action_config =
   | Duplicate_variables
@@ -819,7 +819,7 @@ let rename_bound_idents scoping s sg =
     | Sig_modtype(id, mtd, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
-          (add_modtype id (Pident id') s)
+          (add_modtype id (Mty_ident (Pident id')) s)
           (Sig_modtype(id', mtd, vis) :: sg)
           rest
     | Sig_class(id, cd, rs, vis) :: rest ->
@@ -1071,6 +1071,16 @@ let modtype_declaration sc s decl =
 let module_declaration scoping s decl =
   Lazy.(decl |> of_module_decl |> module_decl scoping s |> force_module_decl)
 
+let add_type_path path1 path2 s =
+  { s with types = Path.Map.add path1 (Path path2) s.types; last_compose = None }
+
+let add_module_path path1 path2 s =
+  { s with modules = Path.Map.add path1 path2 s.modules; last_compose = None }
+
+let for_saving s = s
+
+let reset_for_saving () = ()
+
 module Unsafe = struct
 
   type t = unsafe subst
@@ -1117,7 +1127,12 @@ let () =
   Location.register_error_of_exn
     (function
       | Error (loc, err) ->
-          Some (Location.error_of_printer ~loc report_error err)
+          Some (Location.error_of_printer ~loc (fun ppf err ->
+            let buf = Buffer.create 128 in
+            let fmt = Format.formatter_of_buffer buf in
+            report_error fmt err;
+            Format.pp_print_flush fmt ();
+            Format_doc.pp_print_string ppf (Buffer.contents buf)) err)
       | _ ->
           None
     )

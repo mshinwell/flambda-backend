@@ -191,7 +191,7 @@ module Style = Misc.Style
 let pp_parameters ppf params =
   fprintf ppf "@[<hov>%a@]"
     (pp_print_list ~pp_sep:pp_print_space
-       (Style.as_inline_code Global_module.Parameter_name.print))
+       Global_module.Parameter_name.print)
     params
 
 let report_error ppf = function

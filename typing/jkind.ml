@@ -4095,7 +4095,8 @@ module Debug_printers = struct
        ; ran_out_of_fuel_during_normalize = %a@,\
        ; quality = %s@,\
       \ }@]" Jkind_desc.Debug_printers.t jkind
-      (pp_print_option Pprintast.jkind_annotation)
+      (pp_print_option (fun fmt ann ->
+        Pprintast.jkind_annotation fmt ann))
       a history h pp_print_bool roofdn
       (match q with Best -> "Best" | Not_best -> "Not_best")
 
@@ -4115,19 +4116,34 @@ let report_error ~loc : Error.t -> _ = function
       (* CR layouts v2.9: use the context to produce a better error message.
          When RAE tried this, some types got printed like [t/2], but the
          [/2] shouldn't be there. Investigate and fix. *)
-      "@[<v>Unknown layout %a@]" (fun ppf j -> Format_doc.compat Pprintast.jkind_annotation ppf j) jkind
+      "@[<v>Unknown layout %a@]" 
+        (fun ppf jkind -> 
+          let buf = Buffer.create 64 in
+          let fmt = Format.formatter_of_buffer buf in
+          Pprintast.jkind_annotation fmt jkind;
+          Format.pp_print_flush fmt ();
+          Format_doc.pp_print_string ppf (Buffer.contents buf)) jkind
   | Multiple_jkinds { from_annotation; from_attribute } ->
     Location.errorf ~loc
       "@[<v>A type declaration's layout can be given at most once.@;\
        This declaration has an layout annotation (%a) and a layout attribute \
        ([@@@@%s]).@]"
-      Pprintast.jkind_annotation from_annotation
+      (fun ppf ann ->
+        let buf = Buffer.create 64 in
+        let fmt = Format.formatter_of_buffer buf in
+        Pprintast.jkind_annotation fmt ann;
+        Format.pp_print_flush fmt ();
+        Format_doc.pp_print_string ppf (Buffer.contents buf)) from_annotation
       (Builtin_attributes.jkind_attribute_to_string from_attribute.txt)
   | Insufficient_level { jkind; required_layouts_level } -> (
     let hint ppf =
-      Format.fprintf ppf "You must enable -extension %s to use this feature."
+      let buf = Buffer.create 128 in
+      let fmt = Format.formatter_of_buffer buf in
+      Format.fprintf fmt "You must enable -extension %s to use this feature."
         (Language_extension.to_command_line_string Layouts
-           required_layouts_level)
+           required_layouts_level);
+      Format.pp_print_flush fmt ();
+      Format_doc.pp_print_string ppf (Buffer.contents buf)
     in
     match Language_extension.is_enabled Layouts with
     | false ->
@@ -4141,7 +4157,12 @@ let report_error ~loc : Error.t -> _ = function
         "@[<v>Layout %a is more experimental than allowed by the enabled \
          layouts extension.@;\
          %t@]"
-        Pprintast.jkind_annotation jkind hint)
+        (fun ppf jkind ->
+          let buf = Buffer.create 64 in
+          let fmt = Format.formatter_of_buffer buf in
+          Pprintast.jkind_annotation fmt jkind;
+          Format.pp_print_flush fmt ();
+          Format_doc.pp_print_string ppf (Buffer.contents buf)) jkind hint)
   | Unimplemented_syntax ->
     Location.errorf ~loc "@[<v>Unimplemented kind syntax@]"
   | With_on_right ->

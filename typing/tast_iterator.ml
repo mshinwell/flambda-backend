@@ -270,11 +270,9 @@ let pat
   match pat_desc with
   | Tpat_any  -> ()
   | Tpat_var (_, s, _, _) -> iter_loc sub s
-  | Tpat_var (_, s) -> iter_loc sub s
   | Tpat_constant _ -> ()
   | Tpat_tuple l -> List.iter (fun (_, p) -> sub.pat sub p) l
   | Tpat_unboxed_tuple l -> List.iter (fun (_, p, _) -> sub.pat sub p) l
-  | Tpat_tuple l -> List.iter (sub.pat sub) l
   | Tpat_construct (lid, _, l, vto) ->
       iter_loc_lid sub lid;
       List.iter (sub.pat sub) l;
@@ -292,9 +290,6 @@ let pat
       List.iter (fun (lid, _, i) -> iter_loc sub lid; sub.pat sub i) l
   | Tpat_array (_, _, l) -> List.iter (sub.pat sub) l
   | Tpat_alias (p, _, s, _, _, _) -> sub.pat sub p; iter_loc sub s
-      List.iter (fun (lid, _, i) -> iter_loc sub lid; sub.pat sub i) l
-  | Tpat_array l -> List.iter (sub.pat sub) l
-  | Tpat_alias (p, _, s) -> sub.pat sub p; iter_loc sub s
   | Tpat_lazy p -> sub.pat sub p
   | Tpat_value p -> sub.pat sub (p :> pattern)
   | Tpat_exception p -> sub.pat sub p
@@ -365,7 +360,6 @@ let expr sub {exp_loc; exp_extra; exp_desc; exp_env; exp_attributes; _} =
   in
   match exp_desc with
   | Texp_ident (_, lid, _, _, _)  -> iter_loc sub lid
-  | Texp_ident (_, lid, _)  -> iter_loc sub lid
   | Texp_constant _ -> ()
   | Texp_let (rec_flag, list, exp) ->
       sub.value_bindings sub (rec_flag, list);
@@ -382,22 +376,16 @@ let expr sub {exp_loc; exp_extra; exp_desc; exp_env; exp_attributes; _} =
         | (_, Arg (exp, _)) -> sub.expr sub exp
         | (_, Omitted _) -> ())
         list
-  | Texp_match (exp, _, cases, _) ->
-      List.iter (fun (_, o) -> Option.iter (sub.expr sub) o) list
-  | Texp_match (exp, cases, _) ->
+  | Texp_match (exp, _, comp_cases, val_cases, _) ->
       sub.expr sub exp;
-      List.iter (sub.case sub) cases;
-      List.iter (sub.case sub) effs
+      List.iter (sub.case sub) comp_cases;
+      List.iter (sub.case sub) val_cases
   | Texp_try (exp, cases, effs) ->
       sub.expr sub exp;
       List.iter (sub.case sub) cases
   | Texp_tuple (list, _) -> List.iter (fun (_,e) -> sub.expr sub e) list
   | Texp_unboxed_tuple list -> List.iter (fun (_,e,_) -> sub.expr sub e) list
   | Texp_construct (lid, _, args, _) ->
-      iter_loc sub lid;
-      List.iter (sub.case sub) cases
-  | Texp_tuple list -> List.iter (sub.expr sub) list
-  | Texp_construct (lid, _, args) ->
       iter_loc sub lid;
       List.iter (sub.expr sub) args
   | Texp_variant (_, expo) ->
@@ -415,15 +403,13 @@ let expr sub {exp_loc; exp_extra; exp_desc; exp_env; exp_attributes; _} =
         | _, Overridden (lid, exp) -> iter_loc sub lid; sub.expr sub exp)
         fields;
       Option.iter (sub.expr sub) extended_expression;
-  | Texp_field (exp, lid, _) ->
+  | Texp_field (exp, _, lid, _, _, _) ->
       iter_loc sub lid;
       sub.expr sub exp
   | Texp_unboxed_field (exp, _, lid, _, _) ->
       iter_loc sub lid;
       sub.expr sub exp
   | Texp_setfield (exp1, _, lid, _, exp2) ->
-      iter_loc sub lid;
-  | Texp_setfield (exp1, lid, _, exp2) ->
       iter_loc sub lid;
       sub.expr sub exp1;
       sub.expr sub exp2

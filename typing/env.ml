@@ -671,7 +671,7 @@ let in_signature_flag = 0x01
 type t = {
   values: (lock, value_entry, value_data) IdTbl.t;
   constrs: (lock, constructor_data) TycompTbl.t;
-  labels: (empty, label_data) TycompTbl.t;
+  labels: (empty, label_description) TycompTbl.t;
   unboxed_labels: (empty, unboxed_label_description) TycompTbl.t;
   types: (empty, type_data, type_data) IdTbl.t;
   modules: (lock, module_entry, module_data) IdTbl.t;
@@ -715,7 +715,7 @@ and module_components_failure =
 and structure_components = {
   mutable comp_values: value_data NameMap.t;
   mutable comp_constrs: constructor_data list NameMap.t;
-  mutable comp_labels: label_data list NameMap.t;
+  mutable comp_labels: label_description list NameMap.t;
   mutable comp_unboxed_labels: unboxed_label_description list NameMap.t;
   mutable comp_types: type_data NameMap.t;
   mutable comp_modules: module_data NameMap.t;
@@ -885,8 +885,8 @@ let mode_default mode = {
 let env_labels (type rep) (record_form : rep record_form) env
     : (empty, rep gen_label_description) TycompTbl.t  =
   match record_form with
-  | Legacy -> env.labels
-  | Unboxed_product -> env.unboxed_labels
+  | Legacy -> (env.labels : (empty, label_data) TycompTbl.t :> (empty, record_representation gen_label_description) TycompTbl.t)
+  | Unboxed_product -> (env.unboxed_labels : (empty, record_unboxed_product_representation gen_label_description) TycompTbl.t)
 
 let add_label (type rep) (record_form : rep record_form) env lbl_id
       (lbl : rep gen_label_description) =

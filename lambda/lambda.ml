@@ -132,10 +132,6 @@ type lazy_block_tag =
   | Lazy_tag
   | Forward_tag
 
-type lazy_block_tag =
-  | Lazy_tag
-  | Forward_tag
-
 let tag_of_lazy_tag = function
   | Lazy_tag -> Config.lazy_tag
   | Forward_tag -> Obj.forward_tag
@@ -1446,7 +1442,7 @@ let transl_class_path loc env path =
 
 let transl_prim modname field =
   let mod_ident = Ident.create_persistent modname in
-  let env = Env.add_persistent_structure mod_ident Env.initial in
+  let env = Env.add_persistent_structure mod_ident (Lazy.force Env.initial) in
   match Env.open_pers_signature modname env with
   | Error `Not_found ->
       fatal_errorf "Module %s unavailable." modname
