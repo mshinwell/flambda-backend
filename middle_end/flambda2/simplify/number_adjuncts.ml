@@ -90,7 +90,7 @@ module type Num_common = sig
 
   val to_naked_int64 : t -> Numeric_types.Int64.t
 
-  val to_naked_nativeint : t -> Targetint_32_64.t
+  val to_naked_nativeint : t -> Target_system.Machine_width.t -> Targetint_32_64.t
 end
 
 module type Number_kind_common = sig
@@ -244,7 +244,7 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let to_naked_int64 t = Target_ocaml_int.to_int64 t
 
-    let to_naked_nativeint t = Target_ocaml_int.to_targetint t
+    let to_naked_nativeint t _machine_width = Target_ocaml_int.to_targetint t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Tagged_immediate
@@ -316,7 +316,7 @@ module For_naked_immediates : Int_number_kind = struct
 
     let to_naked_int64 = Target_ocaml_int.to_int64
 
-    let to_naked_nativeint = Target_ocaml_int.to_targetint
+    let to_naked_nativeint t _machine_width = Target_ocaml_int.to_targetint t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_immediate
@@ -363,7 +363,7 @@ module For_float32s : Boxable_number_kind = struct
 
     let to_naked_int64 t = Int64.of_float (to_float t)
 
-    let to_naked_nativeint t = Targetint_32_64.of_float (to_float t)
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_float machine_width (to_float t)
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_float32
@@ -416,7 +416,7 @@ module For_floats : Boxable_number_kind = struct
 
     let to_naked_int64 t = Int64.of_float (to_float t)
 
-    let to_naked_nativeint t = Targetint_32_64.of_float (to_float t)
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_float machine_width (to_float t)
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_float
@@ -520,7 +520,7 @@ module For_int8s : Int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int (to_int t)
 
-    let to_naked_nativeint t = Targetint_32_64.of_int (to_int t)
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_int machine_width (to_int t)
 
     module Pair = struct
       type nonrec t = t * t
@@ -628,7 +628,7 @@ module For_int16s : Int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int (to_int t)
 
-    let to_naked_nativeint t = Targetint_32_64.of_int (to_int t)
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_int machine_width (to_int t)
 
     module Pair = struct
       type nonrec t = t * t
@@ -709,7 +709,7 @@ module For_int32s : Boxable_int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int32 t
 
-    let to_naked_nativeint t = Targetint_32_64.of_int32 t
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_int32 machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_int32
@@ -784,7 +784,7 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let to_naked_int64 t = t
 
-    let to_naked_nativeint t = Targetint_32_64.of_int64 t
+    let to_naked_nativeint t machine_width = Targetint_32_64.of_int64 machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_int64
@@ -861,7 +861,7 @@ module For_nativeints : Boxable_int_number_kind = struct
 
     let to_naked_int64 t = Targetint_32_64.to_int64 t
 
-    let to_naked_nativeint t = t
+    let to_naked_nativeint t _machine_width = t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_nativeint

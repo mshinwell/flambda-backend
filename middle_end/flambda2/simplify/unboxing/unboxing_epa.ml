@@ -161,9 +161,9 @@ let extra_args_for_const_ctor_of_variant
 (* *************************** *)
 
 let compute_extra_arg_for_number kind unboxer epa rewrite_id ~typing_env_at_use
-    arg_being_unboxed : U.decision =
+    ~machine_width arg_being_unboxed : U.decision =
   let extra_arg, _new_arg_being_unboxed =
-    unbox_arg unboxer ~typing_env_at_use arg_being_unboxed
+    unbox_arg (unboxer machine_width) ~typing_env_at_use arg_being_unboxed
   in
   let epa = Extra_param_and_args.update_param_args epa rewrite_id extra_arg in
   Unbox (Number (kind, epa))
@@ -211,10 +211,10 @@ let access_kind_and_dummy_const tag shape fields index :
 (* ****************************** *)
 
 let rec compute_extra_args_for_one_decision_and_use ~(pass : U.pass) rewrite_id
-    ~typing_env_at_use arg_being_unboxed decision : U.decision =
+    ~typing_env_at_use ~machine_width arg_being_unboxed decision : U.decision =
   try
     compute_extra_args_for_one_decision_and_use_aux ~pass rewrite_id
-      ~typing_env_at_use arg_being_unboxed decision
+      ~typing_env_at_use ~machine_width arg_being_unboxed decision
   with Prevent_current_unboxing -> (
     match pass with
     | Filter -> Do_not_unbox Not_enough_information_at_use
@@ -222,22 +222,22 @@ let rec compute_extra_args_for_one_decision_and_use ~(pass : U.pass) rewrite_id
       Misc.fatal_errorf "This case should have been filtered out before.")
 
 and compute_extra_args_for_one_decision_and_use_aux ~(pass : U.pass) rewrite_id
-    ~typing_env_at_use arg_being_unboxed (decision : U.decision) : U.decision =
+    ~typing_env_at_use ~machine_width arg_being_unboxed (decision : U.decision) : U.decision =
   match decision with
   | Do_not_unbox _ -> decision
   | Unbox (Unique_tag_and_size { tag; shape; fields }) ->
     compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
-      arg_being_unboxed tag shape fields
+      ~machine_width arg_being_unboxed tag shape fields
   | Unbox (Closure_single_entry { function_slot; vars_within_closure }) ->
     compute_extra_args_for_closure ~pass rewrite_id ~typing_env_at_use
-      arg_being_unboxed function_slot vars_within_closure
+      ~machine_width arg_being_unboxed function_slot vars_within_closure
   | Unbox
       (Variant { tag; const_ctors = const_ctors_from_decision; fields_by_tag })
     -> (
     match type_of_arg_being_unboxed arg_being_unboxed with
     | None ->
       compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
-        arg_being_unboxed ~tag_from_decision:tag ~const_ctors_from_decision
+        ~machine_width arg_being_unboxed ~tag_from_decision:tag ~const_ctors_from_decision
         ~fields_by_tag_from_decision:fields_by_tag
         ~const_ctors_at_use:(Or_unknown.Known Target_ocaml_int.Set.empty)
         ~non_const_ctors_with_sizes_at_use:Tag.Scannable.Map.empty
@@ -247,42 +247,42 @@ and compute_extra_args_for_one_decision_and_use_aux ~(pass : U.pass) rewrite_id
       | Invalid -> raise Invalid_apply_cont
       | Known_result { const_ctors; non_const_ctors_with_sizes } ->
         compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
-          arg_being_unboxed ~tag_from_decision:tag ~const_ctors_from_decision
+          ~machine_width arg_being_unboxed ~tag_from_decision:tag ~const_ctors_from_decision
           ~fields_by_tag_from_decision:fields_by_tag
           ~const_ctors_at_use:const_ctors
           ~non_const_ctors_with_sizes_at_use:non_const_ctors_with_sizes))
   | Unbox (Number (Naked_float32, epa)) ->
     compute_extra_arg_for_number Naked_float32 Unboxers.Float32.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_float, epa)) ->
     compute_extra_arg_for_number Naked_float Unboxers.Float.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number ((Naked_int8 | Naked_int16), _epa)) ->
     U.Do_not_unbox U.Not_beneficial
   | Unbox (Number (Naked_int32, epa)) ->
     compute_extra_arg_for_number Naked_int32 Unboxers.Int32.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_int64, epa)) ->
     compute_extra_arg_for_number Naked_int64 Unboxers.Int64.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_nativeint, epa)) ->
     compute_extra_arg_for_number Naked_nativeint Unboxers.Nativeint.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_immediate, epa)) ->
     compute_extra_arg_for_number Naked_immediate Unboxers.Immediate.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_vec128, epa)) ->
     compute_extra_arg_for_number Naked_vec128 Unboxers.Vec128.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_vec256, epa)) ->
     compute_extra_arg_for_number Naked_vec256 Unboxers.Vec256.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
   | Unbox (Number (Naked_vec512, epa)) ->
     compute_extra_arg_for_number Naked_vec512 Unboxers.Vec512.unboxer epa
-      rewrite_id ~typing_env_at_use arg_being_unboxed
+      rewrite_id ~typing_env_at_use ~machine_width arg_being_unboxed
 
 and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
-    arg_being_unboxed tag (shape : K.Block_shape.t) fields : U.decision =
+    ~machine_width arg_being_unboxed tag (shape : K.Block_shape.t) fields : U.decision =
   let _, fields =
     List.fold_left_map
       (fun field_nth ({ epa; decision; kind } : U.field_decision) :
@@ -302,7 +302,7 @@ and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
         in
         let decision =
           compute_extra_args_for_one_decision_and_use ~pass rewrite_id
-            ~typing_env_at_use new_arg_being_unboxed decision
+            ~typing_env_at_use ~machine_width new_arg_being_unboxed decision
         in
         Target_ocaml_int.(add one field_nth), { epa; decision; kind })
       Target_ocaml_int.zero fields
@@ -310,7 +310,7 @@ and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
   Unbox (Unique_tag_and_size { tag; shape; fields })
 
 and compute_extra_args_for_closure ~pass rewrite_id ~typing_env_at_use
-    arg_being_unboxed function_slot vars_within_closure : U.decision =
+    ~machine_width arg_being_unboxed function_slot vars_within_closure : U.decision =
   let vars_within_closure =
     Value_slot.Map.mapi
       (fun var ({ epa; decision; kind } : U.field_decision) : U.field_decision ->
@@ -323,7 +323,7 @@ and compute_extra_args_for_closure ~pass rewrite_id ~typing_env_at_use
         in
         let decision =
           compute_extra_args_for_one_decision_and_use ~pass rewrite_id
-            ~typing_env_at_use new_arg_being_unboxed decision
+            ~typing_env_at_use ~machine_width new_arg_being_unboxed decision
         in
         { epa; decision; kind })
       vars_within_closure
@@ -331,7 +331,7 @@ and compute_extra_args_for_closure ~pass rewrite_id ~typing_env_at_use
   Unbox (Closure_single_entry { function_slot; vars_within_closure })
 
 and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
-    arg_being_unboxed ~tag_from_decision ~const_ctors_from_decision
+    ~machine_width arg_being_unboxed ~tag_from_decision ~const_ctors_from_decision
     ~fields_by_tag_from_decision ~const_ctors_at_use
     ~non_const_ctors_with_sizes_at_use : U.decision =
   let are_there_const_ctors_at_use =
@@ -370,7 +370,7 @@ and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
       | Some (tag, _) -> tag
   in
   let tag_extra_arg =
-    tag_at_use_site |> Tag.Scannable.to_targetint
+    tag_at_use_site |> Tag.Scannable.to_targetint machine_width
     |> Target_ocaml_int.of_targetint |> Const.untagged_const_int |> Simple.const
     |> fun x -> EPA.Extra_arg.Already_in_scope x
   in

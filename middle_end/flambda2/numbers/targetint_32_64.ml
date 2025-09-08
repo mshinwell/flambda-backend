@@ -35,11 +35,11 @@ module type S = sig
 
   include Container_types.S with type t := t
 
-  val zero : Target_system.machine_width -> t
+  val zero : Target_system.Machine_width.t -> t
 
-  val one : Target_system.machine_width -> t
+  val one : Target_system.Machine_width.t -> t
 
-  val minus_one : Target_system.machine_width -> t
+  val minus_one : Target_system.Machine_width.t -> t
 
   val neg : t -> t
 
@@ -71,9 +71,9 @@ module type S = sig
 
   val cross_product : Set.t -> Set.t -> Pair.Set.t
 
-  val max_int : Target_system.machine_width -> t
+  val max_int : Target_system.Machine_width.t -> t
 
-  val min_int : Target_system.machine_width -> t
+  val min_int : Target_system.Machine_width.t -> t
 
   val rem : t -> t -> t
 
@@ -93,17 +93,17 @@ module type S = sig
 
   val swap_byte_endianness : t -> t
 
-  val of_int_exn : Target_system.machine_width -> int -> t
+  val of_int_exn : Target_system.Machine_width.t -> int -> t
 
-  val of_int : Target_system.machine_width -> int -> t
+  val of_int : Target_system.Machine_width.t -> int -> t
 
-  val of_int32 : Target_system.machine_width -> int32 -> t
+  val of_int32 : Target_system.Machine_width.t -> int32 -> t
 
-  val of_int64 : Target_system.machine_width -> int64 -> t
+  val of_int64 : Target_system.Machine_width.t -> int64 -> t
 
-  val of_float : Target_system.machine_width -> float -> t
+  val of_float : Target_system.Machine_width.t -> float -> t
 
-  val of_string : Target_system.machine_width -> string -> t
+  val of_string : Target_system.Machine_width.t -> string -> t
 
   val to_int : t -> int
 

@@ -71,7 +71,7 @@ module Scannable : sig
 
   val to_int : t -> int
 
-  val to_targetint : t -> Targetint_32_64.t
+  val to_targetint : Target_system.Machine_width.t -> t -> Targetint_32_64.t
 
   val to_tag : t -> tag
 

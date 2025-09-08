@@ -129,7 +129,7 @@ type flambda_result =
     reachable_names : NO.t
   }
 
-let lambda_to_flambda ~ppf_dump:ppf ~prefixname (program : Lambda.program) =
+let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda.program) =
   let compilation_unit = program.compilation_unit in
   let module_block_size_in_words =
     Lambda.main_module_block_size program.main_module_block_format
@@ -173,7 +173,7 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname (program : Lambda.program) =
         metadata = close_program_metadata
       } =
     Profile.record_call "lambda_to_flambda" (fun () ->
-        Lambda_to_flambda.lambda_to_flambda ~mode ~big_endian:Arch.big_endian
+        Lambda_to_flambda.lambda_to_flambda ~mode ~machine_width ~big_endian:Arch.big_endian
           ~cmx_loader ~compilation_unit ~module_block_size_in_words
           module_initializer)
   in
@@ -199,7 +199,7 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname (program : Lambda.program) =
             unit = flambda
           } =
         Profile.record_call ~accumulate:true "simplify" (fun () ->
-            Simplify.run ~cmx_loader ~round ~code_slot_offsets raw_flambda)
+            Simplify.run ~cmx_loader ~machine_width ~round ~code_slot_offsets raw_flambda)
       in
       (if Flambda_features.inlining_report ()
       then
@@ -247,11 +247,11 @@ let reset_symbol_tables () =
   Flambda2_identifiers.Continuation.reset ();
   Flambda2_identifiers.Int_ids.reset ()
 
-let lambda_to_cmm ~ppf_dump ~prefixname ~keep_symbol_tables
+let lambda_to_cmm ~ppf_dump ~prefixname ~machine_width ~keep_symbol_tables
     (program : Lambda.program) =
   let run () =
     let { flambda; all_code; offsets; reachable_names } =
-      lambda_to_flambda ~ppf_dump ~prefixname program
+      lambda_to_flambda ~ppf_dump ~prefixname ~machine_width program
     in
     let cmm =
       Flambda2_to_cmm.To_cmm.unit flambda ~all_code ~offsets ~reachable_names

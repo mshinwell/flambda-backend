@@ -42,12 +42,20 @@ type assembler =
 
 val assembler : unit -> assembler
 
-type machine_width =
-  | Thirty_two
-  | Sixty_four
+module Machine_width : sig
+  type t =
+    | Thirty_two
+    | Sixty_four
+
+  val print : Format.formatter -> t -> unit
+  
+  val is_32_bit : t -> bool
+  
+  val is_64_bit : t -> bool
+end
 
 (** The natural machine width of the target system. *)
-val machine_width : unit -> machine_width
+val machine_width : unit -> Machine_width.t
 
 type windows_system = private
   | Cygwin

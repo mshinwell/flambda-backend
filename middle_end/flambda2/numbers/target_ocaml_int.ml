@@ -23,9 +23,18 @@
 module T0 = struct
   include Targetint_32_64
 
-  let ten = Targetint_32_64.of_int 10
+  (* TODO: This should not be hardcoded - machine_width should flow through properly *)
+  let machine_width = Target_system.Machine_width.Sixty_four
 
-  let hex_ff = Targetint_32_64.of_int 0xff
+  let zero = Targetint_32_64.zero machine_width
+  
+  let one = Targetint_32_64.one machine_width
+  
+  let minus_one = Targetint_32_64.minus_one machine_width
+  
+  let ten = Targetint_32_64.of_int machine_width 10
+
+  let hex_ff = Targetint_32_64.of_int machine_width 0xff
 
   let bool_true = one
 
@@ -33,9 +42,9 @@ module T0 = struct
 
   let bool b = if b then bool_true else bool_false
 
-  let min_value = Targetint_32_64.min_int
+  let min_value = Targetint_32_64.min_int machine_width
 
-  let max_value = Targetint_32_64.max_int
+  let max_value = Targetint_32_64.max_int machine_width
 
   let bottom_byte_to_int t =
     Targetint_32_64.to_int (Targetint_32_64.logand t hex_ff)
@@ -48,7 +57,15 @@ module T0 = struct
 
   let mod_ = Targetint_32_64.rem
 
-  let of_char c = Targetint_32_64.of_int (Char.code c)
+  let of_int i = Targetint_32_64.of_int machine_width i
+  
+  let of_int32 i = Targetint_32_64.of_int32 machine_width i
+  
+  let of_int64 i = Targetint_32_64.of_int64 machine_width i
+  
+  let of_float f = Targetint_32_64.of_float machine_width f
+  
+  let of_char c = Targetint_32_64.of_int machine_width (Char.code c)
 
   let of_int_option i = Some (of_int i)
 
@@ -60,9 +77,9 @@ module T0 = struct
 
   let min t1 t2 = if Targetint_32_64.compare t1 t2 < 0 then t1 else t2
 
-  let of_int8 i = Targetint_32_64.of_int (Numeric_types.Int8.to_int i)
+  let of_int8 i = Targetint_32_64.of_int machine_width (Numeric_types.Int8.to_int i)
 
-  let of_int16 i = Targetint_32_64.of_int (Numeric_types.Int16.to_int i)
+  let of_int16 i = Targetint_32_64.of_int machine_width (Numeric_types.Int16.to_int i)
 
   let ( <= ) t1 t2 = Stdlib.( <= ) (Targetint_32_64.compare t1 t2) 0
 
@@ -73,8 +90,8 @@ module T0 = struct
   let ( > ) t1 t2 = Stdlib.( > ) (Targetint_32_64.compare t1 t2) 0
 
   let to_int_option t =
-    let min_int_as_int64 = Targetint_32_64.of_int Stdlib.min_int in
-    let max_int_as_int64 = Targetint_32_64.of_int Stdlib.max_int in
+    let min_int_as_int64 = Targetint_32_64.of_int machine_width Stdlib.min_int in
+    let max_int_as_int64 = Targetint_32_64.of_int machine_width Stdlib.max_int in
     if min_int_as_int64 <= t && t <= max_int_as_int64
     then Some (to_int t)
     else None
@@ -90,7 +107,7 @@ module T0 = struct
     let least_significant_byte = Targetint_32_64.logand t hex_ff in
     let second_to_least_significant_byte =
       Targetint_32_64.shift_right_logical
-        (Targetint_32_64.logand t (Targetint_32_64.of_int 0xff00))
+        (Targetint_32_64.logand t (Targetint_32_64.of_int machine_width 0xff00))
         8
     in
     Targetint_32_64.logor second_to_least_significant_byte
@@ -112,7 +129,7 @@ include Self
 
 let all_bools = Set.of_list [bool_true; bool_false]
 
-let zero_one_and_minus_one = Set.of_list [zero; one; minus_one]
+let zero_one_and_minus_one = Set.of_list [T0.zero; T0.one; T0.minus_one]
 
 module Pair = struct
   type nonrec t = t * t

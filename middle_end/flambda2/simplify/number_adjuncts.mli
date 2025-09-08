@@ -61,7 +61,7 @@ module type Num_common = sig
 
   val to_naked_int64 : t -> Numeric_types.Int64.t
 
-  val to_naked_nativeint : t -> Targetint_32_64.t
+  val to_naked_nativeint : t -> Target_system.Machine_width.t -> Targetint_32_64.t
 end
 
 module type Number_kind_common = sig

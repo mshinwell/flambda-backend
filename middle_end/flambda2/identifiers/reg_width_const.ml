@@ -14,6 +14,9 @@
 (*                                                                        *)
 (**************************************************************************)
 
+(* TODO: This should not be hardcoded - machine_width should flow through properly *)
+let machine_width = Target_system.Machine_width.Sixty_four
+
 include Int_ids.Const
 
 let of_descr (descr : Descr.t) =
@@ -77,7 +80,7 @@ let of_int_of_kind (kind : Flambda_kind.t) i =
   | Naked_number Naked_int16 -> naked_int16 (Numeric_types.Int16.of_int i)
   | Naked_number Naked_int32 -> naked_int32 (Int32.of_int i)
   | Naked_number Naked_int64 -> naked_int64 (Int64.of_int i)
-  | Naked_number Naked_nativeint -> naked_nativeint (Targetint_32_64.of_int i)
+  | Naked_number Naked_nativeint -> naked_nativeint (Targetint_32_64.of_int machine_width i)
   | Naked_number Naked_vec128 ->
     let i = Int64.of_int i in
     naked_vec128

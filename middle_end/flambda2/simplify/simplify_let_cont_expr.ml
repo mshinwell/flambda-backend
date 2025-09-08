@@ -973,6 +973,7 @@ let create_handler_to_rebuild
       invariant_extra_args
   in
   let extra_params_and_args =
+    let machine_width = DE.machine_width (DA.denv data.dacc_after_body) in
     let arg_types_by_use_id = Continuation_uses.get_arg_types_by_use_id uses in
     let _, arg_types_by_use_id =
       Misc.Stdlib.List.split_at
@@ -988,7 +989,7 @@ let create_handler_to_rebuild
         @ arg_types_by_use_id_for_lifting data.lifted_params
             (Continuation_uses.get_uses uses)
       in
-      Unbox_continuation_params.compute_extra_params_and_args
+      Unbox_continuation_params.compute_extra_params_and_args ~machine_width
         handler.unbox_decisions ~arg_types_by_use_id
         handler.extra_params_and_args
     | Rec _ ->
@@ -997,7 +998,7 @@ let create_handler_to_rebuild
          invariant params, and this decision as well as the extra args required
          have all been put into the EPA for invariant params (this is why the
          unboxing decision for invariant params is not propagated up to here) *)
-      Unbox_continuation_params.compute_extra_params_and_args
+      Unbox_continuation_params.compute_extra_params_and_args ~machine_width
         handler.unbox_decisions ~arg_types_by_use_id
         handler.extra_params_and_args
   in
@@ -1675,8 +1676,9 @@ and simplify_handlers ~simplify_expr ~down_to_up ~denv_for_join ~rebuild_body
     let arg_types_by_use_id_including_lifted =
       arg_types_by_use_id @ arg_types_by_use_id_for_lifting lifted_params uses
     in
+    let machine_width = DE.machine_width denv in
     let invariant_epa =
-      Unbox_continuation_params.compute_extra_params_and_args unbox_decisions
+      Unbox_continuation_params.compute_extra_params_and_args ~machine_width unbox_decisions
         extra_params_and_args
         ~arg_types_by_use_id:arg_types_by_use_id_including_lifted
     in

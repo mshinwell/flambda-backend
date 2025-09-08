@@ -88,7 +88,7 @@ module Scannable = struct
 
   let to_int t = t
 
-  let to_targetint t = Targetint_32_64.of_int (to_int t)
+  let to_targetint machine_width t = Targetint_32_64.of_int machine_width (to_int t)
 
   let to_tag t = t
 
