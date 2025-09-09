@@ -200,25 +200,22 @@ module For_tagged_immediates : Int_number_kind = struct
 
     (* Shift functions inherit correct signature from Target_ocaml_int *)
 
-    let strictly_negative t =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      t < Target_ocaml_int.zero machine_width
+    let strictly_negative t = t < Target_ocaml_int.zero (machine_width t)
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
     let div t1 t2 =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero (machine_width t1))
       then None
       else Some (div t1 t2)
 
     let mod_ t1 t2 =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero (machine_width t1))
       then None
       else Some (mod_ t1 t2)
 
@@ -227,26 +224,20 @@ module For_tagged_immediates : Int_number_kind = struct
     let integer_bit_width = if Target_system.is_32_bit () then 32 else 64
 
     let shift_left t shift =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
       with_shift shift
-        (Target_ocaml_int.zero machine_width)
+        (Target_ocaml_int.zero (machine_width t))
         (fun shift_int -> Target_ocaml_int.shift_left t shift_int)
         ~integer_bit_width
 
     let shift_right t shift =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
       with_shift shift
-        (Target_ocaml_int.zero machine_width)
+        (Target_ocaml_int.zero (machine_width t))
         (fun shift_int -> Target_ocaml_int.shift_right t shift_int)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
       with_shift shift
-        (Target_ocaml_int.zero machine_width)
+        (Target_ocaml_int.zero (machine_width t))
         (fun shift_int -> Target_ocaml_int.shift_right_logical t shift_int)
         ~integer_bit_width
 
@@ -299,25 +290,22 @@ module For_naked_immediates : Int_number_kind = struct
 
     let minus_one machine_width = Target_ocaml_int.minus_one machine_width
 
-    let strictly_negative t =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      t < Target_ocaml_int.zero machine_width
+    let strictly_negative t = t < Target_ocaml_int.zero (machine_width t)
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
     let div t1 t2 =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero (machine_width t1))
       then None
       else Some (div t1 t2)
 
     let mod_ t1 t2 =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero (machine_width t1))
       then None
       else Some (mod_ t1 t2)
 

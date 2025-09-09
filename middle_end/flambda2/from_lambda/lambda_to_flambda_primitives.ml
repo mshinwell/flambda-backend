@@ -1308,11 +1308,11 @@ let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_fl
     in
     let indexes =
       (* Reminder: all of the unarized components are machine word width. *)
-      compute_array_indexes ~index:(Prim index) ~num_elts:(List.length unarized)
+      compute_array_indexes ~machine_width ~index:(Prim index) ~num_elts:(List.length unarized)
     in
     List.concat_map
       (fun (index, array_ref_kind) ->
-        array_load_unsafe ~array ~index ~mut array_kind array_ref_kind
+        array_load_unsafe ~machine_width ~array ~index ~mut array_kind array_ref_kind
           ~current_region)
       (List.combine indexes unarized)
   | No_float_array_opt
@@ -1337,11 +1337,11 @@ let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_fl
 
 let array_load_unsafe ~array ~index ~mut array_kind array_load_kind
     ~current_region =
-  array_load_unsafe ~array ~index ~mut array_kind array_load_kind
+  array_load_unsafe ~machine_width ~array ~index ~mut array_kind array_load_kind
     ~current_region
   |> H.maybe_create_unboxed_product
 
-let rec array_set_unsafe dbg ~array ~index array_kind
+let rec array_set_unsafe ~machine_width dbg ~array ~index array_kind
     (array_set_kind : Array_set_kind.t) ~new_values : H.expr_primitive list =
   let[@local] normal_case array_set_kind new_values =
     match new_values with
@@ -1383,7 +1383,7 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     in
     let indexes =
       (* Reminder: all of the unarized components are machine word width. *)
-      compute_array_indexes ~index:(Prim index) ~num_elts:(List.length unarized)
+      compute_array_indexes ~machine_width ~index:(Prim index) ~num_elts:(List.length unarized)
     in
     if List.compare_lengths indexes new_values <> 0
     then
@@ -1394,7 +1394,7 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     [ H.Sequence
         (List.concat_map
            (fun (index, (array_set_kind, new_value)) ->
-             array_set_unsafe dbg ~array ~index array_kind array_set_kind
+             array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind
                ~new_values:[new_value])
            (List.combine indexes (List.combine unarized new_values))) ]
   | No_float_array_opt
@@ -1414,8 +1414,8 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     | Naked_vec512s -> normal_case Naked_vec512s new_values
     | Unboxed_product _ -> assert false)
 
-let array_set_unsafe dbg ~array ~index array_kind array_set_kind ~new_values =
-  array_set_unsafe dbg ~array ~index array_kind array_set_kind ~new_values
+let array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind ~new_values =
+  array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind ~new_values
   |> H.maybe_create_unboxed_product
 
 let[@inline always] match_on_array_ref_kind ~array array_ref_kind f :
@@ -2543,7 +2543,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
        CSE the two accesses to the array's header word in the [Pgenarray]
        case. *)
     [ match_on_array_ref_kind ~array array_ref_kind
-        (array_load_unsafe ~array ~mut
+        (array_load_unsafe ~machine_width ~array ~mut
            ~index:(convert_index_to_tagged_int ~index ~index_kind)
            ~current_region) ]
   | Parrayrefs (array_ref_kind, index_kind, mut), [[array]; [index]] ->
@@ -2551,12 +2551,12 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
         ~machine_width
         (match_on_array_ref_kind ~array array_ref_kind
-           (array_load_unsafe ~array ~mut
+           (array_load_unsafe ~machine_width ~array ~mut
               ~index:(convert_index_to_tagged_int ~index ~index_kind)
               ~current_region)) ]
   | Parraysetu (array_set_kind, index_kind), [[array]; [index]; new_values] ->
     [ match_on_array_set_kind ~array array_set_kind
-        (array_set_unsafe dbg ~array
+        (array_set_unsafe ~machine_width dbg ~array
            ~index:(convert_index_to_tagged_int ~index ~index_kind)
            ~new_values) ]
   | Parraysets (array_set_kind, index_kind), [[array]; [index]; new_values] ->
@@ -2564,7 +2564,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
         ~machine_width
         (match_on_array_set_kind ~array array_set_kind
-           (array_set_unsafe dbg ~array
+           (array_set_unsafe ~machine_width dbg ~array
               ~index:(convert_index_to_tagged_int ~index ~index_kind)
               ~new_values)) ]
   | Pbytessetu (* unsafe *), [[bytes]; [index]; [new_value]] ->
