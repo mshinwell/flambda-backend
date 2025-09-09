@@ -33,13 +33,13 @@ type t
 
 type targetint = t
 
-(** The target integer 0.*)
+(** The target integer 0. *)
 val zero : Target_system.Machine_width.t -> t
 
-(** The target integer 1.*)
+(** The target integer 1. *)
 val one : Target_system.Machine_width.t -> t
 
-(** The target integer -1.*)
+(** The target integer -1. *)
 val minus_one : Target_system.Machine_width.t -> t
 
 (** Unary negation. *)
@@ -84,16 +84,6 @@ val pred : t -> t
 
 (** Return the absolute value of its argument. *)
 val abs : t -> t
-
-
-(** The possible numbers of bits of a target native integer. *)
-type num_bits =
-  | Thirty_two
-  | Sixty_four
-(**)
-
-val num_bits : num_bits
-(* The number of bits of a target native integer. *)
 
 (** The greatest representable target integer, either 2{^31} - 1 on a 32-bit
     platform, or 2{^63} - 1 on a 64-bit platform. *)
@@ -197,7 +187,7 @@ val to_string : t -> string
     integers. *)
 val unsigned_compare : t -> t -> int
 
-type repr =
+type repr = private
   | Int32 of int32
   | Int64 of int64
 

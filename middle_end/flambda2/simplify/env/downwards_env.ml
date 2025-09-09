@@ -293,7 +293,8 @@ let bump_current_level_scope t =
   { t with typing_env = TE.bump_current_level_scope t.typing_env }
 
 let enter_set_of_closures
-    { round;
+    { machine_width;
+      round;
       typing_env;
       inlined_debuginfo = _;
       disable_inlining;
@@ -320,7 +321,8 @@ let enter_set_of_closures
   let disable_inlining : Disable_inlining.t =
     if in_stub then Disable_inlining Stub else disable_inlining
   in
-  { round;
+  { machine_width;
+    round;
     typing_env = TE.closure_env typing_env;
     inlined_debuginfo = Inlined_debuginfo.none;
     disable_inlining;

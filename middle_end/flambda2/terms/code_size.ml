@@ -275,11 +275,11 @@ let binary_int_arith_primitive ~machine_width kind op =
   | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ),
       Div ) ->
-    divmod_bi_check 1 kind + 1
+    divmod_bi_check ~machine_width 1 kind + 1
   | ( ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ),
       Mod ) ->
-    divmod_bi_check 0 kind + 1
+    divmod_bi_check ~machine_width 0 kind + 1
 
 let binary_int_shift_primitive ~machine_width kind op =
   match
@@ -306,7 +306,7 @@ let binary_int_shift_primitive ~machine_width kind op =
       Asr ) ->
     1
 
-let binary_int_comp_primitive kind cmp =
+let binary_int_comp_primitive ~machine_width kind cmp =
   match
     ( (kind : Flambda_kind.Standard_int.t),
       (cmp : Flambda_primitive.signed_or_unsigned Flambda_primitive.comparison)
@@ -396,7 +396,7 @@ let unary_prim_size ~machine_width prim =
     | Unboxed_int64_as_tagged_int63 -> (* Needs a logical OR. *) 1
     | Unboxed_int64_as_unboxed_float64 | Unboxed_float64_as_unboxed_int64 ->
       (* Needs a move between register classes. *) 1)
-  | Unbox_number k -> unbox_number k
+  | Unbox_number k -> unbox_number ~machine_width k
   | Untag_immediate -> 1 (* 1 shift *)
   | Box_number (k, _alloc_mode) -> box_number k
   | Tag_immediate -> 2 (* 1 shift + add *)
@@ -422,7 +422,7 @@ let binary_prim_size ~machine_width prim =
   | Phys_equal _op -> 2
   | Int_arith (kind, op) -> binary_int_arith_primitive ~machine_width kind op
   | Int_shift (kind, op) -> binary_int_shift_primitive ~machine_width kind op
-  | Int_comp (kind, Yielding_bool cmp) -> binary_int_comp_primitive kind cmp
+  | Int_comp (kind, Yielding_bool cmp) -> binary_int_comp_primitive ~machine_width kind cmp
   | Int_comp (kind, Yielding_int_like_compare_functions signedness) ->
     int_comparison_like_compare_functions kind signedness
   | Float_arith (width, op) -> binary_float_arith_primitive width op

@@ -369,15 +369,16 @@ let rebuild_switch_with_single_arg_to_same_destination uacc ~dacc_before_switch
       (Named.free_names load_from_block)
       (NO.remove_var free_names_of_body ~var:final_arg_var)
   in
+  let machine_width = DE.machine_width (DA.denv dacc_before_switch) in
   let increase_in_code_size =
     (* Very likely negative. *)
     Code_size.( - )
       (Code_size.( + )
-         (Code_size.prim load_from_block_prim)
+         (Code_size.prim ~machine_width load_from_block_prim)
          (Code_size.( + )
             (Code_size.apply_cont apply_cont)
             (match must_untag_lookup_table_result with
-            | Must_untag -> Code_size.prim untag_arg_prim
+            | Must_untag -> Code_size.prim ~machine_width untag_arg_prim
             | Leave_as_tagged_immediate -> Code_size.zero)))
       (Code_size.switch original)
   in

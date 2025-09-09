@@ -1391,7 +1391,7 @@ module Named = struct
     | Static_consts _ -> true
     | Rec_info _ -> true
 
-  let dummy_value (kind : K.t) : t =
+  let dummy_value ~machine_width (kind : K.t) : t =
     let simple =
       match kind with
       | Value -> Simple.const_zero
@@ -1413,7 +1413,7 @@ module Named = struct
       | Naked_number Naked_int64 ->
         Simple.const (Reg_width_const.naked_int64 Int64.zero)
       | Naked_number Naked_nativeint ->
-        Simple.const (Reg_width_const.naked_nativeint Targetint_32_64.zero)
+        Simple.const (Reg_width_const.naked_nativeint (Targetint_32_64.zero machine_width))
       | Naked_number Naked_vec128 ->
         Simple.const
           (Reg_width_const.naked_vec128 Vector_types.Vec128.Bit_pattern.zero)

@@ -126,7 +126,7 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
     register_const acc dbg (SC.boxed_int64 (Const c)) "int64"
   | Const_base (Const_nativeint c) ->
     (* CR pchambart: this should be pushed further to lambda *)
-    let c = Targetint_32_64.of_int64 (Int64.of_nativeint c) in
+    let c = Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c) in
     register_const acc dbg (SC.boxed_nativeint (Const c)) "nativeint"
   | Const_base (Const_unboxed_int32 c) ->
     acc, reg_width (RWC.naked_int32 c), "unboxed_int32"

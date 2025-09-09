@@ -20,16 +20,10 @@ type repr =
   | Int32 of int32
   | Int64 of int64
 
-type num_bits =
-  | Thirty_two
-  | Sixty_four
-
 module type S = sig
   type t
 
   type targetint = t
-
-  val num_bits : num_bits
 
   val repr : t -> repr
 
@@ -130,12 +124,19 @@ module Int32 = struct
   type targetint = t
 
   let zero _machine_width = zero
+
   let one _machine_width = one
+
   let minus_one _machine_width = minus_one
+
   let max_int _machine_width = max_int
+
   let min_int _machine_width = min_int
+
   let of_int _machine_width = of_int
+
   let of_float _machine_width = of_float
+
   let of_string _machine_width = of_string
 
   let of_int_exn _machine_width =
@@ -148,8 +149,6 @@ module Int32 = struct
         then Misc.fatal_errorf "Targetint_32_64.of_int_exn: 0x%x out of range" n
         else Int32.of_int n
     | _ -> assert false
-
-  let num_bits = Thirty_two
 
   let of_int32 _machine_width x = x
 
@@ -210,17 +209,24 @@ module Int64 = struct
 
   type targetint = t
 
-  let num_bits = Sixty_four
-
   let zero _machine_width = zero
+
   let one _machine_width = one
+
   let minus_one _machine_width = minus_one
+
   let max_int _machine_width = max_int
+
   let min_int _machine_width = min_int
+
   let of_int _machine_width = of_int
+
   let of_int_exn _machine_width = Int64.of_int
+
   let of_float _machine_width = of_float
+
   let of_string _machine_width = of_string
+
   let of_int32 _machine_width = of_int32
 
   let of_int64 _machine_width x = x

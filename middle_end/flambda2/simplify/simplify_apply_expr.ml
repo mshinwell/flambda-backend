@@ -624,8 +624,9 @@ let simplify_direct_partial_application ~simplify_expr dacc apply
                         { project_from = wrapper_function_slot; value_slot },
                       Simple.var my_closure )
                 in
+                let machine_width = DE.machine_width (DA.denv dacc) in
                 let cost_metrics_of_defining_expr =
-                  Cost_metrics.from_size (Code_size.prim prim)
+                  Cost_metrics.from_size (Code_size.prim ~machine_width prim)
                 in
                 let free_names =
                   NO.add_value_slot_in_projection free_names value_slot

@@ -244,8 +244,11 @@ let find_region env (r : Fexpr.region) =
 
 let find_code_id env code_id = fresh_or_existing_code_id env code_id
 
+(* TODO: This should not be hardcoded - machine_width should flow through properly *)
+let machine_width = Target_system.Machine_width.Sixty_four
+
 let targetint (i : Fexpr.targetint) : Targetint_32_64.t =
-  Targetint_32_64.of_int64 i
+  Targetint_32_64.of_int64 machine_width i
 
 let targetint_31_63 (i : Fexpr.targetint) : Target_ocaml_int.t =
   Target_ocaml_int.of_int64 i
@@ -263,7 +266,8 @@ let tag_scannable (tag : Fexpr.tag_scannable) : Tag.Scannable.t =
   Tag.Scannable.create_exn tag
 
 let immediate i =
-  i |> Targetint_32_64.of_string |> Target_ocaml_int.of_targetint
+  (* TODO: This should not be hardcoded - machine_width should flow through properly *)
+  i |> Targetint_32_64.of_string machine_width |> Target_ocaml_int.of_targetint
 
 let float32 f = f |> Numeric_types.Float32_by_bit_pattern.create
 

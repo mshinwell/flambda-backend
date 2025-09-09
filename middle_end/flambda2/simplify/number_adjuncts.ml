@@ -487,7 +487,7 @@ module For_int8s : Int_number_kind = struct
 
     let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 zero then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
 
     let shift_left t shift =
       with_shift shift zero
@@ -595,7 +595,7 @@ module For_int16s : Int_number_kind = struct
 
     let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 zero then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
 
     let shift_left t shift =
       with_shift shift zero
@@ -676,7 +676,7 @@ module For_int32s : Boxable_int_number_kind = struct
 
     let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 zero then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
 
     let shift_left t shift =
       with_shift shift zero
@@ -751,7 +751,7 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 zero then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
 
     let shift_left t shift =
       with_shift shift zero
@@ -810,10 +810,13 @@ module For_int64s : Boxable_int_number_kind = struct
 end
 
 module For_nativeints : Boxable_int_number_kind = struct
+  (* TODO: This should not be hardcoded - machine_width should flow through properly *)
+  let machine_width = Target_system.Machine_width.Sixty_four
+  
   module Num = struct
     include Targetint_32_64
 
-    let strictly_negative t = compare t zero < 0
+    let strictly_negative t = compare t (zero machine_width) < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
@@ -824,22 +827,22 @@ module For_nativeints : Boxable_int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 (zero machine_width) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 zero then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
 
     let integer_bit_width = if Target_system.is_32_bit () then 32 else 64
 
     let shift_left t shift =
-      with_shift shift zero (fun shift -> shift_left t shift) ~integer_bit_width
+      with_shift shift (zero machine_width) (fun shift -> shift_left t shift) ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift (zero machine_width)
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift (zero machine_width)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
