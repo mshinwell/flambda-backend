@@ -103,9 +103,17 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
   in
   match const with
   | Const_base (Const_int c) ->
-    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_int (Acc.machine_width acc) c)), "int"
+    ( acc,
+      reg_width
+        (RWC.tagged_immediate
+           (Target_ocaml_int.of_int (Acc.machine_width acc) c)),
+      "int" )
   | Const_base (Const_char c) ->
-    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_char (Acc.machine_width acc) c)), "char"
+    ( acc,
+      reg_width
+        (RWC.tagged_immediate
+           (Target_ocaml_int.of_char (Acc.machine_width acc) c)),
+      "char" )
   | Const_base (Const_unboxed_float c) ->
     let c = Numeric_types.Float_by_bit_pattern.of_string c in
     acc, reg_width (RWC.naked_float c), "unboxed_float"
@@ -126,7 +134,9 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
     register_const acc dbg (SC.boxed_int64 (Const c)) "int64"
   | Const_base (Const_nativeint c) ->
     (* CR pchambart: this should be pushed further to lambda *)
-    let c = Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c) in
+    let c =
+      Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c)
+    in
     register_const acc dbg (SC.boxed_nativeint (Const c)) "nativeint"
   | Const_base (Const_unboxed_int32 c) ->
     acc, reg_width (RWC.naked_int32 c), "unboxed_int32"
@@ -134,7 +144,9 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
     acc, reg_width (RWC.naked_int64 c), "unboxed_int64"
   | Const_base (Const_unboxed_nativeint c) ->
     (* CR pchambart: this should be pushed further to lambda *)
-    let c = Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c) in
+    let c =
+      Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c)
+    in
     acc, reg_width (RWC.naked_nativeint c), "unboxed_nativeint"
   | Const_immstring c ->
     register_const acc dbg (SC.immutable_string c) "immstring"
@@ -564,13 +576,15 @@ let rec unarize_const_sort_for_extern_repr (sort : Jkind.Sort.Const.t) =
         } ])
   | Product sorts -> List.concat_map unarize_const_sort_for_extern_repr sorts
 
-let unarize_extern_repr alloc_mode (extern_repr : Lambda.extern_repr) =
+let unarize_extern_repr ~machine_width alloc_mode
+    (extern_repr : Lambda.extern_repr) =
   match extern_repr with
   | Same_as_ocaml_repr (Base Void) -> []
   | Same_as_ocaml_repr (Base _ as sort) ->
     let kind =
       Typeopt.layout_of_non_void_sort sort
       |> K.With_subkind.from_lambda_values_and_unboxed_numbers_only
+           ~machine_width
       |> K.With_subkind.kind
     in
     [{ kind; arg_transformer = None; return_transformer = None }]
@@ -686,13 +700,14 @@ let close_c_call acc env ~loc ~let_bound_ids_with_kinds
     | Some alloc_mode ->
       Alloc_mode.For_allocations.from_lambda alloc_mode ~current_region
   in
+  let machine_width = Acc.machine_width acc in
   let unarized_params =
     List.concat_map
-      (unarize_extern_repr alloc_mode)
+      (unarize_extern_repr alloc_mode ~machine_width)
       (List.map snd prim_native_repr_args)
   in
   let unarized_results =
-    unarize_extern_repr alloc_mode (snd prim_native_repr_res)
+    unarize_extern_repr alloc_mode ~machine_width (snd prim_native_repr_res)
   in
   let args = List.flatten args in
   if List.compare_lengths unarized_params args <> 0
@@ -1770,8 +1785,8 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
       let acc, action = action acc in
       let machine_width = Acc.machine_width acc in
       Expr_with_acc.create_switch acc
-        (Switch.if_then_else ~machine_width ~condition_dbg ~scrutinee ~if_true:action
-           ~if_false:default_action)
+        (Switch.if_then_else ~machine_width ~condition_dbg ~scrutinee
+           ~if_true:action ~if_false:default_action)
     in
     let acc, body =
       Let_with_acc.create acc
@@ -1861,13 +1876,15 @@ let variables_for_unboxing boxed_variable_name (k : Function_decl.unboxing_kind)
           Flambda_debug_uid.none,
           Flambda_kind.With_subkind.naked_float ))
 
-let unboxing_primitive ~machine_width (k : Function_decl.unboxing_kind) boxed_variable i =
+let unboxing_primitive ~machine_width (k : Function_decl.unboxing_kind)
+    boxed_variable i =
   match k with
   | Fields_of_block_with_tag_zero kinds ->
     let block_access_kind : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
-          size = Known (Target_ocaml_int.of_int machine_width (List.length kinds));
+          size =
+            Known (Target_ocaml_int.of_int machine_width (List.length kinds));
           field_kind = Any_value
         }
     in
@@ -1878,7 +1895,8 @@ let unboxing_primitive ~machine_width (k : Function_decl.unboxing_kind) boxed_va
     Flambda_primitive.Unary (Unbox_number bn, Simple.var boxed_variable)
   | Unboxed_float_record num_fields ->
     let block_access_kind : P.Block_access_kind.t =
-      Naked_floats { size = Known (Target_ocaml_int.of_int machine_width num_fields) }
+      Naked_floats
+        { size = Known (Target_ocaml_int.of_int machine_width num_fields) }
     in
     Flambda_primitive.Unary
       ( Block_load { kind = block_access_kind; mut = Immutable; field = i },
@@ -2022,7 +2040,8 @@ let compute_body_of_unboxed_function acc my_region my_closure
                   (Bound_pattern.singleton
                      (Bound_var.create var var_duid Name_mode.normal))
                   (Named.create_prim
-                     (unboxing_primitive ~machine_width:(Acc.machine_width acc) k boxed_variable i)
+                     (unboxing_primitive ~machine_width:(Acc.machine_width acc)
+                        k boxed_variable i)
                      Debuginfo.none)
                   ~body:expr,
                 Target_ocaml_int.(add (one (Acc.machine_width acc)) i) ))
@@ -2119,7 +2138,9 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
               (fun (body, free_names_of_body, i) (var, var_duid, _kind) ->
                 let named =
                   Named.create_prim
-                    (unboxing_primitive ~machine_width:(Acc.machine_width acc) k (Bound_parameter.var param) i)
+                    (unboxing_primitive ~machine_width:(Acc.machine_width acc) k
+                       (Bound_parameter.var param)
+                       i)
                     Debuginfo.none
                 in
                 ( Expr.create_let
@@ -2131,7 +2152,9 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
                   Name_occurrences.union (Named.free_names named)
                     (Name_occurrences.remove_var free_names_of_body ~var),
                   Target_ocaml_int.(add (one (Acc.machine_width acc)) i) ))
-              (body, free_names_of_body, Target_ocaml_int.zero (Acc.machine_width acc))
+              ( body,
+                free_names_of_body,
+                Target_ocaml_int.zero (Acc.machine_width acc) )
               vars_with_kinds
           in
           body, free_names_of_body
@@ -3722,7 +3745,10 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
     let block_access : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
-          size = Known (Target_ocaml_int.of_int (Acc.machine_width acc) module_block_size_in_words);
+          size =
+            Known
+              (Target_ocaml_int.of_int (Acc.machine_width acc)
+                 module_block_size_in_words);
           field_kind = Any_value
         }
     in
@@ -3765,10 +3791,10 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
     ~handler_params:load_fields_handler_param ~handler:load_fields_body ~body
     ~is_exn_handler:false ~is_cold:false
 
-let close_program (type mode) ~(mode : mode Flambda_features.mode) ~machine_width ~big_endian
-    ~cmx_loader ~compilation_unit ~module_block_size_in_words ~program
-    ~prog_return_cont ~exn_continuation ~toplevel_my_region
-    ~toplevel_my_ghost_region : mode close_program_result =
+let close_program (type mode) ~(mode : mode Flambda_features.mode)
+    ~machine_width ~big_endian ~cmx_loader ~compilation_unit
+    ~module_block_size_in_words ~program ~prog_return_cont ~exn_continuation
+    ~toplevel_my_region ~toplevel_my_ghost_region : mode close_program_result =
   let env = Env.create ~big_endian in
   let module_symbol =
     Symbol.create_wrapped
@@ -3873,8 +3899,8 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~machine_widt
     in
     let reachable_names, cmx =
       Flambda_cmx.prepare_cmx_from_approx ~machine_width:(Acc.machine_width acc)
-        ~approxs:symbols_approximations
-        ~module_symbol ~exported_offsets ~used_value_slots all_code
+        ~approxs:symbols_approximations ~module_symbol ~exported_offsets
+        ~used_value_slots all_code
     in
     let unit =
       Flambda_unit.create ~return_continuation:return_cont ~exn_continuation

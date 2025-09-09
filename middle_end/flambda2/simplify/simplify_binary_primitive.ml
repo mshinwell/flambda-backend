@@ -213,8 +213,9 @@ end = struct
                       "Cannot use [Negation_of_the_other_side] with floats; \
                        use the float version instead"
                 in
+                let machine_width = DE.machine_width denv in
                 let zero =
-                  Simple.const_int_of_kind
+                  Simple.const_int_of_kind ~machine_width
                     (K.Standard_int.to_kind standard_int_kind)
                     0
                 in

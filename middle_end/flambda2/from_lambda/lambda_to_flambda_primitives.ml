@@ -128,7 +128,7 @@ let convert_init_or_assign (i_or_a : L.initialization_or_assignment) :
   | Root_initialization ->
     Misc.fatal_error "[Root_initialization] should not appear in Flambda input"
 
-let convert_block_shape (shape : L.block_shape) ~num_fields =
+let convert_block_shape ~machine_width (shape : L.block_shape) ~num_fields =
   match shape with
   | None -> List.init num_fields (fun _field -> K.With_subkind.any_value)
   | Some shape ->
@@ -139,7 +139,7 @@ let convert_block_shape (shape : L.block_shape) ~num_fields =
         "Flambda_arity.of_block_shape: num_fields is %d yet the shape has %d \
          fields"
         num_fields shape_length;
-    List.map K.With_subkind.from_lambda_value_kind shape
+    List.map (K.With_subkind.from_lambda_value_kind ~machine_width) shape
 
 let check_float_array_optimisation_enabled name =
   if not (Flambda_features.flat_float_array ())
@@ -1214,8 +1214,7 @@ let bigarray_indexing ~machine_width layout b args =
                 ( Int_arith (I.Tagged_immediate, Sub),
                   idx,
                   H.Simple
-                    (Simple.const_int
-                       (Target_ocaml_int.one machine_width)) )))
+                    (Simple.const_int (Target_ocaml_int.one machine_width)) )))
          args)
 
 let bigarray_access ~machine_width ~dbg ~unsafe ~access layout b indexes =
@@ -1267,9 +1266,9 @@ let compute_array_indexes ~machine_width ~index ~num_elts =
                  (Simple.const_int
                     (Target_ocaml_int.of_int machine_width offset)) )))
 
-let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_flag) array_kind
-    (array_ref_kind : Array_ref_kind.t) ~current_region : H.expr_primitive list
-    =
+let rec array_load_unsafe ~machine_width ~array ~index
+    ~(mut : Lambda.mutable_flag) array_kind (array_ref_kind : Array_ref_kind.t)
+    ~current_region : H.expr_primitive list =
   (* CR mshinwell/ncourant: can we avoid taking [array_kind] here? *)
   let mut' : Mutability.t =
     match mut with
@@ -1308,12 +1307,13 @@ let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_fl
     in
     let indexes =
       (* Reminder: all of the unarized components are machine word width. *)
-      compute_array_indexes ~machine_width ~index:(Prim index) ~num_elts:(List.length unarized)
+      compute_array_indexes ~machine_width ~index:(Prim index)
+        ~num_elts:(List.length unarized)
     in
     List.concat_map
       (fun (index, array_ref_kind) ->
-        array_load_unsafe ~machine_width ~array ~index ~mut array_kind array_ref_kind
-          ~current_region)
+        array_load_unsafe ~machine_width ~array ~index ~mut array_kind
+          array_ref_kind ~current_region)
       (List.combine indexes unarized)
   | No_float_array_opt
       (( Immediates | Values | Naked_floats | Naked_float32s | Naked_int32s
@@ -1335,8 +1335,8 @@ let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_fl
     in
     [Binary (Array_load (array_kind, array_load_kind, mut'), array, index)]
 
-let array_load_unsafe ~array ~index ~mut array_kind array_load_kind
-    ~current_region =
+let array_load_unsafe ~machine_width ~array ~index ~mut array_kind
+    array_load_kind ~current_region =
   array_load_unsafe ~machine_width ~array ~index ~mut array_kind array_load_kind
     ~current_region
   |> H.maybe_create_unboxed_product
@@ -1383,7 +1383,8 @@ let rec array_set_unsafe ~machine_width dbg ~array ~index array_kind
     in
     let indexes =
       (* Reminder: all of the unarized components are machine word width. *)
-      compute_array_indexes ~machine_width ~index:(Prim index) ~num_elts:(List.length unarized)
+      compute_array_indexes ~machine_width ~index:(Prim index)
+        ~num_elts:(List.length unarized)
     in
     if List.compare_lengths indexes new_values <> 0
     then
@@ -1394,8 +1395,8 @@ let rec array_set_unsafe ~machine_width dbg ~array ~index array_kind
     [ H.Sequence
         (List.concat_map
            (fun (index, (array_set_kind, new_value)) ->
-             array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind
-               ~new_values:[new_value])
+             array_set_unsafe ~machine_width dbg ~array ~index array_kind
+               array_set_kind ~new_values:[new_value])
            (List.combine indexes (List.combine unarized new_values))) ]
   | No_float_array_opt
       (( Immediates | Values _ | Naked_floats | Naked_float32s | Naked_int32s
@@ -1414,8 +1415,10 @@ let rec array_set_unsafe ~machine_width dbg ~array ~index array_kind
     | Naked_vec512s -> normal_case Naked_vec512s new_values
     | Unboxed_product _ -> assert false)
 
-let array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind ~new_values =
-  array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind ~new_values
+let array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind
+    ~new_values =
+  array_set_unsafe ~machine_width dbg ~array ~index array_kind array_set_kind
+    ~new_values
   |> H.maybe_create_unboxed_product
 
 let[@inline always] match_on_array_ref_kind ~array array_ref_kind f :
@@ -1456,11 +1459,11 @@ let[@inline always] match_on_array_set_kind ~array array_set_kind f :
            a singleton. *)
         [K.With_subkind.tagged_immediate] )
 
-let const ~machine_width width i = 
+let const ~machine_width width i =
   Simple.const_int_of_kind ~machine_width (I.to_kind width) i
 
-let check_zero_division ~machine_width width arg1 arg2 (operator : P.binary_int_arith_op) dbg :
-    H.expr_primitive =
+let check_zero_division ~machine_width width arg1 arg2
+    (operator : P.binary_int_arith_op) dbg : H.expr_primitive =
   (* CR gbury: try and avoid the unboxing duplication of arg2. (the simplifier
      might cse the duplication away, but it won't be the case for classic
      mode). *)
@@ -1468,14 +1471,18 @@ let check_zero_division ~machine_width width arg1 arg2 (operator : P.binary_int_
     { primitive = Binary (Int_arith (width, operator), arg1, arg2);
       validity_conditions =
         [ Binary
-            (Int_comp (width, Yielding_bool Neq), arg2, Simple (const ~machine_width width 0))
-        ];
+            ( Int_comp (width, Yielding_bool Neq),
+              arg2,
+              Simple (const ~machine_width width 0) ) ];
       failure = Division_by_zero;
       dbg
     }
 
-let opaque layout arg ~middle_end_only : H.expr_primitive list =
-  let kinds = Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout]) in
+let opaque ~machine_width layout arg ~middle_end_only : H.expr_primitive list =
+  let kinds =
+    Flambda_arity.unarize
+      (Flambda_arity.from_lambda_list [layout] ~machine_width)
+  in
   if List.compare_lengths kinds arg <> 0
   then
     Misc.fatal_error
@@ -1687,7 +1694,9 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     let args = List.flatten args in
     let mode = Alloc_mode.For_allocations.from_lambda mode ~current_region in
     let tag = Tag.Scannable.create_exn tag in
-    let shape = convert_block_shape shape ~num_fields:(List.length args) in
+    let shape =
+      convert_block_shape ~machine_width shape ~num_fields:(List.length args)
+    in
     let mutability = Mutability.from_lambda mutability in
     [Variadic (Make_block (Values (tag, shape), mutability, mode), args)]
   | Pmakelazyblock lazy_tag, [[arg]] -> [Unary (Make_lazy lazy_tag, arg)]
@@ -1706,13 +1715,15 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     let field_arity_component =
       (* N.B. The arity of the field being projected may in itself be an unboxed
          product. *)
-      layouts_array.(n) |> Flambda_arity.Component_for_creation.from_lambda
+      layouts_array.(n)
+      |> Flambda_arity.Component_for_creation.from_lambda ~machine_width
     in
     let field_arity = Flambda_arity.create [field_arity_component] in
     let num_fields_prior_to_projected_fields =
       Misc.Stdlib.List.split_at n layouts
       |> fst
-      |> List.map Flambda_arity.Component_for_creation.from_lambda
+      |> List.map
+           (Flambda_arity.Component_for_creation.from_lambda ~machine_width)
       |> Flambda_arity.create |> Flambda_arity.cardinal_unarized
     in
     let num_projected_fields = Flambda_arity.cardinal_unarized field_arity in
@@ -1959,8 +1970,10 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     Misc.fatal_error
       "Lambda_to_flambda_primitives.convert_lprim: Pmakearray_dynamic and \
        Parrayblit should have been expanded in [Lambda_to_lambda_transforms]"
-  | Popaque layout, [arg] -> opaque layout arg ~middle_end_only:false
-  | Pobj_magic layout, [arg] -> opaque layout arg ~middle_end_only:true
+  | Popaque layout, [arg] ->
+    opaque ~machine_width layout arg ~middle_end_only:false
+  | Pobj_magic layout, [arg] ->
+    opaque ~machine_width layout arg ~middle_end_only:true
   | Pduprecord (repr, num_fields), [[arg]] ->
     let kind : P.Duplicate_block_kind.t =
       match repr with
@@ -2023,9 +2036,15 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
       let result : H.expr_primitive =
         match op with
         | Bswap -> Unary (Int_arith (width, Swap_byte_endianness), arg)
-        | Neg -> Binary (Int_arith (width, Sub), Simple (const ~machine_width width 0), arg)
-        | Succ -> Binary (Int_arith (width, Add), arg, Simple (const ~machine_width width 1))
-        | Pred -> Binary (Int_arith (width, Sub), arg, Simple (const ~machine_width width 1))
+        | Neg ->
+          Binary
+            (Int_arith (width, Sub), Simple (const ~machine_width width 0), arg)
+        | Succ ->
+          Binary
+            (Int_arith (width, Add), arg, Simple (const ~machine_width width 1))
+        | Pred ->
+          Binary
+            (Int_arith (width, Sub), arg, Simple (const ~machine_width width 1))
       in
       [to_expr (maybe_wrap (Prim result))]
     | Floating (outer, op) ->
@@ -2707,7 +2726,8 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
         | [] -> Misc.fatal_errorf "Pbigarrayset is missing its arguments"
       in
       let unbox = bigarray_unbox_or_untag_value_to_store kind in
-      [bigarray_set ~machine_width ~dbg ~unsafe kind layout b indexes (unbox value)]
+      [ bigarray_set ~machine_width ~dbg ~unsafe kind layout b indexes
+          (unbox value) ]
     | None, _ ->
       Misc.fatal_errorf
         "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
@@ -2928,7 +2948,8 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     needs_64_bit_target prim dbg;
     let offsets = block_index_access_offsets layout idx in
     let kinds =
-      Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout])
+      Flambda_arity.unarize
+        (Flambda_arity.from_lambda_list [layout] ~machine_width)
     in
     let reads =
       List.map2
@@ -2942,7 +2963,8 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     let mode = Alloc_mode.For_assignments.from_lambda mode in
     let offsets = block_index_access_offsets layout idx in
     let kinds =
-      Flambda_arity.unarize (Flambda_arity.from_lambda_list [layout])
+      Flambda_arity.unarize
+        (Flambda_arity.from_lambda_list [layout] ~machine_width)
     in
     let writes =
       Misc.Stdlib.List.map3

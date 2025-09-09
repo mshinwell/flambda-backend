@@ -251,7 +251,7 @@ let reify ~allowed_if_free_vars_defined_in ~var_is_defined_at_toplevel
           | Some (tag, shape, size, field_types, alloc_mode) -> (
             assert (
               Target_ocaml_int.to_int size
-                = (TG.Product.Int_indexed.width field_types));
+              = TG.Product.Int_indexed.width field_types);
             let field_types = TG.Product.Int_indexed.components field_types in
             let field_types_and_expected_kinds =
               match shape with
@@ -605,9 +605,9 @@ let reify ~allowed_if_free_vars_defined_in ~var_is_defined_at_toplevel
           }) -> (
       match Provers.meet_equals_single_tagged_immediate env length with
       | Known_result length -> (
-        (* TODO: machine_width should be passed through properly here *)
-        let machine_width = Target_system.Machine_width.Sixty_four in
-        if not (Target_ocaml_int.equal length (Target_ocaml_int.zero machine_width))
+        if not
+             (Target_ocaml_int.equal length
+                (Target_ocaml_int.zero (TE.machine_width env)))
         then try_canonical_simple ()
         else
           match element_kind with

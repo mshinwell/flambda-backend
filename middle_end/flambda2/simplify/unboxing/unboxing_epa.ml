@@ -91,27 +91,24 @@ type variant_argument =
         arg_being_unboxed : unboxed_arg
       }
 
-let extra_arg_for_is_int = function
+let extra_arg_for_is_int ~machine_width variant_arg =
+  match variant_arg with
   | Maybe_constant_constructor { is_int; _ } ->
     EPA.Extra_arg.Already_in_scope is_int
   | Not_a_constant_constructor ->
-    (* TODO: machine_width should be passed through properly here *)
-    let machine_width = Target_system.Machine_width.Sixty_four in
     EPA.Extra_arg.Already_in_scope (Simple.untagged_const_false machine_width)
 
-let extra_arg_for_ctor ~typing_env_at_use = function
+let extra_arg_for_ctor ~typing_env_at_use variant_arg =
+  let machine_width = TE.machine_width typing_env_at_use in
+  match variant_arg with
   | Not_a_constant_constructor ->
     EPA.Extra_arg.Already_in_scope
-      (* TODO: machine_width should be passed through properly here *)
-      (let machine_width = Target_system.Machine_width.Sixty_four in
-       Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
+      (Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
   | Maybe_constant_constructor { arg_being_unboxed; _ } -> (
     match type_of_arg_being_unboxed arg_being_unboxed with
     | None ->
       EPA.Extra_arg.Already_in_scope
-        (* TODO: machine_width should be passed through properly here *)
-        (let machine_width = Target_system.Machine_width.Sixty_four in
-         Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
+        (Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
     | Some arg_type -> (
       match
         T.meet_tagging_of_simple typing_env_at_use
@@ -124,6 +121,7 @@ let extra_arg_for_ctor ~typing_env_at_use = function
 let extra_args_for_const_ctor_of_variant
     (const_ctors_decision : U.const_ctors_decision) ~typing_env_at_use
     rewrite_id variant_arg : U.const_ctors_decision =
+  let machine_width = TE.machine_width typing_env_at_use in
   match const_ctors_decision with
   | Zero -> (
     match variant_arg with
@@ -132,13 +130,13 @@ let extra_args_for_const_ctor_of_variant
   | At_least_one { ctor = Do_not_unbox reason; is_int } ->
     let is_int =
       Extra_param_and_args.update_param_args is_int rewrite_id
-        (extra_arg_for_is_int variant_arg)
+        (extra_arg_for_is_int variant_arg ~machine_width)
     in
     At_least_one { ctor = Do_not_unbox reason; is_int }
   | At_least_one { ctor = Unbox (Number (Naked_immediate, ctor)); is_int } -> (
     let is_int =
       Extra_param_and_args.update_param_args is_int rewrite_id
-        (extra_arg_for_is_int variant_arg)
+        (extra_arg_for_is_int variant_arg ~machine_width)
     in
     try
       let ctor =
