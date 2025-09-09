@@ -48,10 +48,12 @@ module Machine_width : sig
     | Sixty_four
 
   val print : Format.formatter -> t -> unit
-  
+
   val is_32_bit : t -> bool
-  
+
   val is_64_bit : t -> bool
+
+  val size_in_bytes : t -> int
 end
 
 (** The natural machine width of the target system. *)

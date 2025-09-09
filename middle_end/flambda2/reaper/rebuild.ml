@@ -1330,8 +1330,8 @@ let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
             let tag =
               match kind with
               | Values (tag, _) | Mixed (tag, _) ->
-                Tag.to_targetint_31_63 (Tag.Scannable.to_tag tag)
-              | Naked_floats -> Tag.to_targetint_31_63 Tag.double_array_tag
+                Tag.to_targetint_31_63 env.machine_width (Tag.Scannable.to_tag tag)
+              | Naked_floats -> Tag.to_targetint_31_63 env.machine_width Tag.double_array_tag
             in
             match uf with
             | Not_unboxed (ff, _) ->
@@ -1340,7 +1340,7 @@ let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
           | Is_int -> (
             match uf with
             | Not_unboxed (ff, _) ->
-              Int.Map.add ff (rewrite_simple env Simple.const_one) mp
+              Int.Map.add ff (rewrite_simple env (Simple.const_one env.machine_width)) mp
             | Unboxed _ -> Misc.fatal_errorf "trying to unbox simple")
           | Value_slot _ | Function_slot _ | Code_of_closure | Apply _
           | Code_id_of_call_witness _ ->
@@ -1350,7 +1350,7 @@ let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
     let args =
       List.init size (fun i ->
           match Int.Map.find_opt i mp with
-          | None -> Simple.const_zero
+          | None -> Simple.const_zero env.machine_width
           | Some x -> x)
     in
     let named =

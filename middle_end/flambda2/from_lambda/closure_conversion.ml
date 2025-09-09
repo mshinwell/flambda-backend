@@ -1788,7 +1788,7 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
       | Some (default, dbg, trap_action, args) ->
         Numeric_types.Int.Set.fold
           (fun case (acc, cases) ->
-            let case = Target_ocaml_int.of_int case in
+            let case = Target_ocaml_int.of_int (Acc.machine_width acc) case in
             if Target_ocaml_int.Map.mem case cases
             then acc, cases
             else
@@ -1867,7 +1867,7 @@ let unboxing_primitive (k : Function_decl.unboxing_kind) boxed_variable i =
     let block_access_kind : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
-          size = Known (Target_ocaml_int.of_int (List.length kinds));
+          size = Known (Target_ocaml_int.of_int (Acc.machine_width acc) (List.length kinds));
           field_kind = Any_value
         }
     in

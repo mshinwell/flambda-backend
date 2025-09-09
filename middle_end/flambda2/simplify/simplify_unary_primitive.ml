@@ -647,9 +647,11 @@ let simplify_is_boxed_float dacc ~original_term ~arg:_ ~arg_ty ~result_var =
   (* CR mshinwell: see CRs in lambda_to_flambda_primitives.ml
 
      assert (Flambda_features.flat_float_array ()); *)
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
   match T.prove_is_or_is_not_a_boxed_float (DA.typing_env dacc) arg_ty with
   | Proved is_a_boxed_float ->
-    let imm = Target_ocaml_int.bool is_a_boxed_float in
+    let imm = Target_ocaml_int.bool machine_width is_a_boxed_float in
     let ty = T.this_naked_immediate imm in
     let dacc = DA.add_variable dacc result_var ty in
     SPR.create original_term ~try_reify:true dacc
@@ -661,9 +663,11 @@ let simplify_is_flat_float_array dacc ~original_term ~arg:_ ~arg_ty ~result_var
   (* CR mshinwell: see CRs in lambda_to_flambda_primitives.ml
 
      assert (Flambda_features.flat_float_array ()); *)
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
   match T.meet_is_flat_float_array (DA.typing_env dacc) arg_ty with
   | Known_result is_flat_float_array ->
-    let imm = Target_ocaml_int.bool is_flat_float_array in
+    let imm = Target_ocaml_int.bool machine_width is_flat_float_array in
     let ty = T.this_naked_immediate imm in
     let dacc = DA.add_variable dacc result_var ty in
     SPR.create
@@ -678,12 +682,16 @@ let simplify_opaque_identity dacc ~kind ~original_term ~arg:_ ~arg_ty:_
   SPR.create_unknown dacc ~result_var kind ~original_term
 
 let simplify_end_region dacc ~original_term ~arg:_ ~arg_ty:_ ~result_var =
-  let ty = T.this_tagged_immediate Target_ocaml_int.zero in
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
+  let ty = T.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
   let dacc = DA.add_variable dacc result_var ty in
   SPR.create original_term ~try_reify:false dacc
 
 let simplify_end_try_region dacc ~original_term ~arg:_ ~arg_ty:_ ~result_var =
-  let ty = T.this_tagged_immediate Target_ocaml_int.zero in
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
+  let ty = T.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
   let dacc = DA.add_variable dacc result_var ty in
   SPR.create original_term ~try_reify:false dacc
 
@@ -815,6 +823,8 @@ let[@inline always] simplify_immutable_block_load0
     ~original_term _dbg ~arg:block ~arg_ty:block_ty ~result_var =
   let result_kind = P.Block_access_kind.element_kind_for_load access_kind in
   let result_var' = Bound_var.var result_var in
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
   let typing_env = DA.typing_env dacc in
   match
     T.meet_block_field_simple typing_env ~min_name_mode ~field_kind:result_kind
@@ -827,7 +837,7 @@ let[@inline always] simplify_immutable_block_load0
     in
     SPR.create (Named.create_simple simple) ~try_reify:false dacc
   | Need_meet -> (
-    let n = Target_ocaml_int.add field Target_ocaml_int.one in
+    let n = Target_ocaml_int.add field (Target_ocaml_int.one machine_width) in
     (* CR-someday mshinwell: We should be able to use the size in the
        [access_kind] to constrain the type of the block *)
     let tag, shape =
@@ -842,7 +852,7 @@ let[@inline always] simplify_immutable_block_load0
                seem that the frontend currently emits code to create such
                blocks) and so it isn't clear whether such blocks should have tag
                zero (like zero-sized naked float arrays) or another tag. *)
-            if Target_ocaml_int.equal size Target_ocaml_int.zero
+            if Target_ocaml_int.equal size (Target_ocaml_int.zero machine_width)
             then Or_unknown.Unknown
             else Or_unknown.Known Tag.double_array_tag
           | Unknown -> Or_unknown.Unknown),

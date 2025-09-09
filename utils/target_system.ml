@@ -129,14 +129,18 @@ module Machine_width = struct
   let print ppf = function
     | Thirty_two -> Format.fprintf ppf "Thirty_two"
     | Sixty_four -> Format.fprintf ppf "Sixty_four"
-  
+
   let is_32_bit = function
     | Thirty_two -> true
     | Sixty_four -> false
-  
+
   let is_64_bit = function
     | Thirty_two -> false
     | Sixty_four -> true
+
+  let size_in_bytes = function
+    | Thirty_two -> 4
+    | Sixty_four -> 8
 end
 
 let machine_width () =
