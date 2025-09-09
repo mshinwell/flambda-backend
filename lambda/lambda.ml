@@ -2259,6 +2259,14 @@ let layout_of_extern_repr : extern_repr -> _ = function
     layout_boxed_int Boxed_nativeint
   | Same_as_ocaml_repr s -> layout_of_const_sort s
 
+let extern_repr_involves_unboxed_products extern_repr =
+  match extern_repr with
+  | Same_as_ocaml_repr (Product _) -> true
+  | Same_as_ocaml_repr (Base _)
+  | Unboxed_vector _ | Unboxed_float _
+  | Unboxed_or_untagged_integer _ ->
+    false
+
 let rec layout_of_scannable_kinds kinds =
   Punboxed_product (List.map layout_of_scannable_kind kinds)
 
@@ -2374,7 +2382,7 @@ let will_be_reordered (mbe : _ mixed_block_element) =
   acc.last_value_after_flat
 
 let primitive_result_layout (p : primitive) =
-  assert !Clflags.native_code;
+  assert (!Clflags.native_code || Clflags.is_flambda2 ());
   match p with
   | Pphys_equal (Eq | Noteq) -> layout_int
   | Pscalar op ->

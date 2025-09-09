@@ -636,7 +636,7 @@ let unarize_extern_repr alloc_mode (extern_repr : Lambda.extern_repr) =
         return_transformer = Some P.Tag_immediate
       } ]
 
-let close_c_call acc env ~loc ~let_bound_ids_with_kinds
+let close_c_call0 acc env ~loc ~let_bound_ids_with_kinds
     (({ prim_name;
         prim_arity;
         prim_alloc;
@@ -897,6 +897,66 @@ let close_c_call acc env ~loc ~let_bound_ids_with_kinds
   else
     let code_after_call, handler_params = box_unboxed_returns () in
     wrap_c_call acc ~handler_params ~code_after_call call
+
+let close_c_call acc env ~loc ~let_bound_ids_with_kinds
+    (({ prim_name;
+        prim_arity = _;
+        prim_alloc;
+        prim_c_builtin;
+        prim_effects;
+        prim_coeffects;
+        prim_native_name;
+        prim_native_repr_args;
+        prim_native_repr_res;
+        prim_is_layout_poly
+      } :
+       Lambda.external_call_description) as prim_desc) ~args exn_continuation
+    dbg ~current_region ~current_ghost_region k =
+  let prim_desc =
+    match !Clflags.jsir with
+    | false -> prim_desc
+    | true ->
+      (* [close_c_call0] checks [prim_native_name] to see whether we should
+         invoke the bytecode name or native name; for JavaScript compilation, we
+         should use the bytecode name unless it involves unboxed products, for
+         the following reason:
+
+         The expected type for JS stubs with unboxed products are different from
+         bytecode C stubs and bytecode-compiled JSOO stubs. Suppose an external
+         takes an unboxed product, e.g. [#(int * int)]. In bytecode, this is
+         passed as a single argument, containing a pointer to a pair; however,
+         in JSIR, this will be passed as two arguments, in the same way as for
+         native compilation.
+
+         In addition, if the return type for an external is a nested unboxed
+         product such as [#(#(int * int) * int)], bytecode stubs need to return
+         a nested tuple, while JSIR stubs need to return a single flat (i.e.
+         non-nested) tuple containing the unarised arguments. Unlike the
+         parameter passing case above, this is different from native code
+         compilation, where multiple return values are supported to some extent.
+
+         Also note that [@untagged] and [@unboxed] on externals are irrelevant
+         for what JS stubs should look like, since there is no tagging in JSIR
+         and naked integers look just like boxed ones. *)
+      let has_unboxed_products =
+        List.exists
+          (fun (_mode, repr) ->
+            Lambda.extern_repr_involves_unboxed_products repr)
+          prim_native_repr_args
+        || Lambda.extern_repr_involves_unboxed_products
+             (snd prim_native_repr_res)
+      in
+      let prim_native_name =
+        match has_unboxed_products with false -> "" | true -> prim_native_name
+      in
+      Primitive.make ~name:prim_name ~alloc:prim_alloc ~c_builtin:prim_c_builtin
+        ~effects:prim_effects ~coeffects:prim_coeffects
+        ~native_name:prim_native_name ~native_repr_args:prim_native_repr_args
+        ~native_repr_res:prim_native_repr_res
+        ~is_layout_poly:prim_is_layout_poly
+  in
+  close_c_call0 acc env ~loc ~let_bound_ids_with_kinds prim_desc ~args
+    exn_continuation dbg ~current_region ~current_ghost_region k
 
 let close_exn_continuation acc env (exn_continuation : IR.exn_continuation) =
   let acc, extra_args =
@@ -1679,22 +1739,32 @@ let close_exact_or_unknown_apply acc env
   in
   if Flambda_features.classic_mode ()
   then
-    match Inlining.inlinable env apply callee_approx with
-    | Not_inlinable ->
+    if !Clflags.jsir
+    then
       let apply =
         Apply.with_inlined_attribute apply
           (Inlined_attribute.with_use_info (Apply.inlined apply)
-             Unused_because_function_unknown)
+             Jsir_inlining_disabled)
       in
       Expr_with_acc.create_apply acc apply
-    | Inlinable func_desc ->
-      let acc = Acc.mark_continuation_as_untrackable continuation acc in
-      let acc =
-        Acc.mark_continuation_as_untrackable
-          (Exn_continuation.exn_handler apply_exn_continuation)
-          acc
-      in
-      Inlining.inline acc ~apply ~apply_depth:(Env.current_depth env) ~func_desc
+    else
+      match Inlining.inlinable env apply callee_approx with
+      | Not_inlinable ->
+        let apply =
+          Apply.with_inlined_attribute apply
+            (Inlined_attribute.with_use_info (Apply.inlined apply)
+               Unused_because_function_unknown)
+        in
+        Expr_with_acc.create_apply acc apply
+      | Inlinable func_desc ->
+        let acc = Acc.mark_continuation_as_untrackable continuation acc in
+        let acc =
+          Acc.mark_continuation_as_untrackable
+            (Exn_continuation.exn_handler apply_exn_continuation)
+            acc
+        in
+        Inlining.inline acc ~apply ~apply_depth:(Env.current_depth env)
+          ~func_desc
   else Expr_with_acc.create_apply acc apply
 
 let close_apply_cont acc env ~dbg cont trap_action args : Expr_with_acc.t =
