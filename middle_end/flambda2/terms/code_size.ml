@@ -58,7 +58,7 @@ let array_length_size = 2
 
 (* Helper functions for computing sizes of primitives *)
 
-let unary_int_prim_size ~machine_width kind op =
+let unary_int_prim_size ~machine_width:_ kind op =
   match
     ( (kind : Flambda_kind.Standard_int.t),
       (op : Flambda_primitive.unary_int_arith_op) )
@@ -398,7 +398,7 @@ let unary_prim_size ~machine_width prim =
       (* Needs a move between register classes. *) 1)
   | Unbox_number k -> unbox_number ~machine_width k
   | Untag_immediate -> 1 (* 1 shift *)
-  | Box_number (k, _alloc_mode) -> box_number k
+  | Box_number (k, _alloc_mode) -> box_number ~machine_width k
   | Tag_immediate -> 2 (* 1 shift + add *)
   | Project_function_slot _ -> 1 (* caddv *)
   | Project_value_slot _ -> 1 (* load *)

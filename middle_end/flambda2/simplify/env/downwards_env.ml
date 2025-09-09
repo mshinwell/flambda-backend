@@ -719,6 +719,7 @@ let denv_for_lifted_continuation ~denv_for_join ~denv =
      And we need to decide which parts of denv to use to simplify the handler of
      k' after they are lifted out from the handler of k. *)
   { (* denv *)
+    machine_width = denv.machine_width;
     inlined_debuginfo = denv.inlined_debuginfo;
     disable_inlining = denv.disable_inlining;
     inlining_state = denv.inlining_state;

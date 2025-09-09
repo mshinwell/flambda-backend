@@ -736,7 +736,7 @@ let actual_max_length_for_string_like_access_as_nativeint ~machine_width ~size_i
       | Two_fifty_six _ -> 31
       | Five_twelve _ -> 63
     in
-    Targetint_32_64.of_int offset
+    Targetint_32_64.of_int machine_width offset
   in
   (* We need to convert the length into a naked_nativeint because the optimised
      version of the max_with_zero function needs to be on machine-width integers
@@ -1004,7 +1004,7 @@ let multiple_word_array_access_validity_condition array ~machine_width ~size_int
                Simple
                  (Simple.const
                     (Reg_width_const.naked_nativeint
-                       (Targetint_32_64.of_int width_in_scalars_per_access))) ))
+                       (Targetint_32_64.of_int machine_width width_in_scalars_per_access))) ))
     in
     check_bound ~index_kind ~bound_kind:Naked_nativeint ~index
       ~bound:nativeint_bound
@@ -2528,7 +2528,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
   | Parrayrefs (array_ref_kind, index_kind, mut), [[array]; [index]] ->
     let array_length_kind = convert_array_ref_kind_for_length array_ref_kind in
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
-        ~size_int
+        ~machine_width ~size_int
         (match_on_array_ref_kind ~array array_ref_kind
            (array_load_unsafe ~array ~mut
               ~index:(convert_index_to_tagged_int ~index ~index_kind)
@@ -2541,16 +2541,16 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
   | Parraysets (array_set_kind, index_kind), [[array]; [index]; new_values] ->
     let array_length_kind = convert_array_set_kind_for_length array_set_kind in
     [ check_array_access ~dbg ~array array_length_kind ~index ~index_kind
-        ~size_int
+        ~machine_width ~size_int
         (match_on_array_set_kind ~array array_set_kind
            (array_set_unsafe dbg ~array
               ~index:(convert_index_to_tagged_int ~index ~index_kind)
               ~new_values)) ]
   | Pbytessetu (* unsafe *), [[bytes]; [index]; [new_value]] ->
-    [ bytes_like_set ~unsafe:true ~dbg ~size_int ~access_size:Eight Bytes
+    [ bytes_like_set ~unsafe:true ~dbg ~machine_width ~size_int ~access_size:Eight Bytes
         ~boxed:false bytes ~index_kind:Ptagged_int_index index new_value ]
   | Pbytessets, [[bytes]; [index]; [new_value]] ->
-    [ bytes_like_set ~unsafe:false ~dbg ~size_int ~access_size:Eight Bytes
+    [ bytes_like_set ~unsafe:false ~dbg ~machine_width ~size_int ~access_size:Eight Bytes
         ~boxed:false bytes ~index_kind:Ptagged_int_index index new_value ]
   | Poffsetref n, [[block]] ->
     let block_access : P.Block_access_kind.t =
@@ -3044,8 +3044,9 @@ let convert_and_bind acc ~big_endian exn_cont ~register_const0
     ~current_region ~current_ghost_region
     (cont : Acc.t -> Flambda.Named.t list -> Expr_with_acc.t) : Expr_with_acc.t
     =
+  let machine_width = Acc.machine_width acc in
   let exprs =
-    convert_lprim ~big_endian prim args dbg ~current_region
+    convert_lprim ~machine_width ~big_endian prim args dbg ~current_region
       ~current_ghost_region
   in
   H.bind_recs acc exn_cont ~register_const0

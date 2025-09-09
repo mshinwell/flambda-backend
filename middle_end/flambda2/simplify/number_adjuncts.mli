@@ -29,11 +29,11 @@ module type Num_common = sig
 
   val cross_product : Set.t -> Set.t -> Pair.Set.t
 
-  val zero : t
+  val zero : Target_system.Machine_width.t -> t
 
-  val one : t
+  val one : Target_system.Machine_width.t -> t
 
-  val minus_one : t
+  val minus_one : Target_system.Machine_width.t -> t
 
   val add : t -> t -> t
 

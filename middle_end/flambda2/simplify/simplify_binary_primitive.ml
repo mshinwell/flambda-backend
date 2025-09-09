@@ -57,10 +57,10 @@ module type Binary_arith_like_sig = sig
   val op : op -> Lhs.t -> Rhs.t -> Result.t option
 
   val op_lhs_unknown :
-    op -> rhs:Rhs.t -> Result.t binary_arith_outcome_for_one_side_only
+    machine_width:Target_system.Machine_width.t -> op -> rhs:Rhs.t -> Result.t binary_arith_outcome_for_one_side_only
 
   val op_rhs_unknown :
-    op -> lhs:Lhs.t -> Result.t binary_arith_outcome_for_one_side_only
+    machine_width:Target_system.Machine_width.t -> op -> lhs:Lhs.t -> Result.t binary_arith_outcome_for_one_side_only
 end
 
 module Binary_arith_like (N : Binary_arith_like_sig) : sig
@@ -237,13 +237,15 @@ end = struct
         check_possible_results ~possible_results
     | Known_result nums1, Need_meet when N.ok_to_evaluate denv ->
       assert (not (N.Lhs.Set.is_empty nums1));
+      let machine_width = DE.machine_width denv in
       only_one_side_known
-        (fun i -> N.op_rhs_unknown op ~lhs:i)
+        (fun i -> N.op_rhs_unknown ~machine_width op ~lhs:i)
         nums1 ~folder:N.Lhs.Set.fold ~other_side:arg2
     | Need_meet, Known_result nums2 when N.ok_to_evaluate denv ->
       assert (not (N.Rhs.Set.is_empty nums2));
+      let machine_width = DE.machine_width denv in
       only_one_side_known
-        (fun i -> N.op_lhs_unknown op ~rhs:i)
+        (fun i -> N.op_lhs_unknown ~machine_width op ~rhs:i)
         nums2 ~folder:N.Rhs.Set.fold ~other_side:arg1
     | (Known_result _ | Need_meet), (Known_result _ | Need_meet) ->
       result_unknown ()
@@ -320,43 +322,43 @@ end = struct
 
   module Num = I.Num
 
-  let symmetric_op_one_side_unknown (op : symmetric_op) ~this_side :
+  let symmetric_op_one_side_unknown ~machine_width (op : symmetric_op) ~this_side :
       Num.t binary_arith_outcome_for_one_side_only =
     match op with
     | Add ->
-      if Num.equal this_side Num.zero then The_other_side else Cannot_simplify
+      if Num.equal this_side (Num.zero machine_width) then The_other_side else Cannot_simplify
     | Mul ->
-      if Num.equal this_side Num.zero
-      then Exactly Num.zero
-      else if Num.equal this_side Num.one
+      if Num.equal this_side (Num.zero machine_width)
+      then Exactly (Num.zero machine_width)
+      else if Num.equal this_side (Num.one machine_width)
       then The_other_side
-      else if Num.equal this_side Num.minus_one
+      else if Num.equal this_side (Num.minus_one machine_width)
       then Negation_of_the_other_side
       else Cannot_simplify
     | And ->
-      if Num.equal this_side Num.minus_one
+      if Num.equal this_side (Num.minus_one machine_width)
       then The_other_side
-      else if Num.equal this_side Num.zero
-      then Exactly Num.zero
+      else if Num.equal this_side (Num.zero machine_width)
+      then Exactly (Num.zero machine_width)
       else Cannot_simplify
     | Or ->
-      if Num.equal this_side Num.minus_one
-      then Exactly Num.minus_one
-      else if Num.equal this_side Num.zero
+      if Num.equal this_side (Num.minus_one machine_width)
+      then Exactly (Num.minus_one machine_width)
+      else if Num.equal this_side (Num.zero machine_width)
       then The_other_side
       else Cannot_simplify
     | Xor ->
-      if Num.equal this_side Num.zero then The_other_side else Cannot_simplify
+      if Num.equal this_side (Num.zero machine_width) then The_other_side else Cannot_simplify
 
-  let op_lhs_unknown (op : P.binary_int_arith_op) ~rhs :
+  let op_lhs_unknown ~machine_width (op : P.binary_int_arith_op) ~rhs :
       Num.t binary_arith_outcome_for_one_side_only =
     match op with
-    | Add -> symmetric_op_one_side_unknown Add ~this_side:rhs
-    | Mul -> symmetric_op_one_side_unknown Mul ~this_side:rhs
-    | And -> symmetric_op_one_side_unknown And ~this_side:rhs
-    | Or -> symmetric_op_one_side_unknown Or ~this_side:rhs
-    | Xor -> symmetric_op_one_side_unknown Xor ~this_side:rhs
-    | Sub -> if Num.equal rhs Num.zero then The_other_side else Cannot_simplify
+    | Add -> symmetric_op_one_side_unknown ~machine_width Add ~this_side:rhs
+    | Mul -> symmetric_op_one_side_unknown ~machine_width Mul ~this_side:rhs
+    | And -> symmetric_op_one_side_unknown ~machine_width And ~this_side:rhs
+    | Or -> symmetric_op_one_side_unknown ~machine_width Or ~this_side:rhs
+    | Xor -> symmetric_op_one_side_unknown ~machine_width Xor ~this_side:rhs
+    | Sub -> if Num.equal rhs (Num.zero machine_width) then The_other_side else Cannot_simplify
     | Div ->
       (* Division ("safe" division, strictly speaking, in Lambda terminology) is
          translated to a conditional on the denominator followed by an unsafe
@@ -364,35 +366,35 @@ end = struct
          denominator turns out to be zero here, via the typing or whatever, then
          we're in unreachable code. *)
       (* CR-someday mshinwell: Should we expose unsafe division to the user? *)
-      if Num.equal rhs Num.zero
+      if Num.equal rhs (Num.zero machine_width)
       then Invalid
-      else if Num.equal rhs Num.one
+      else if Num.equal rhs (Num.one machine_width)
       then The_other_side
-      else if Num.equal rhs Num.minus_one
+      else if Num.equal rhs (Num.minus_one machine_width)
       then
         Negation_of_the_other_side
         (* CR mshinwell: Add 0 / x = 0 when x <> 0 *)
       else Cannot_simplify
     | Mod ->
       (* CR mshinwell: We could be more clever for Mod and And *)
-      if Num.equal rhs Num.zero
+      if Num.equal rhs (Num.zero machine_width)
       then Invalid
-      else if Num.equal rhs Num.one
-      then Exactly Num.zero
-      else if Num.equal rhs Num.minus_one
-      then Exactly Num.zero
+      else if Num.equal rhs (Num.one machine_width)
+      then Exactly (Num.zero machine_width)
+      else if Num.equal rhs (Num.minus_one machine_width)
+      then Exactly (Num.zero machine_width)
       else Cannot_simplify
 
-  let op_rhs_unknown (op : P.binary_int_arith_op) ~lhs :
+  let op_rhs_unknown ~machine_width (op : P.binary_int_arith_op) ~lhs :
       Num.t binary_arith_outcome_for_one_side_only =
     match op with
-    | Add -> symmetric_op_one_side_unknown Add ~this_side:lhs
-    | Mul -> symmetric_op_one_side_unknown Mul ~this_side:lhs
-    | And -> symmetric_op_one_side_unknown And ~this_side:lhs
-    | Or -> symmetric_op_one_side_unknown Or ~this_side:lhs
-    | Xor -> symmetric_op_one_side_unknown Xor ~this_side:lhs
+    | Add -> symmetric_op_one_side_unknown ~machine_width Add ~this_side:lhs
+    | Mul -> symmetric_op_one_side_unknown ~machine_width Mul ~this_side:lhs
+    | And -> symmetric_op_one_side_unknown ~machine_width And ~this_side:lhs
+    | Or -> symmetric_op_one_side_unknown ~machine_width Or ~this_side:lhs
+    | Xor -> symmetric_op_one_side_unknown ~machine_width Xor ~this_side:lhs
     | Sub ->
-      if Num.equal lhs Num.zero
+      if Num.equal lhs (Num.zero machine_width)
       then Negation_of_the_other_side
       else Cannot_simplify
     | Div | Mod -> Cannot_simplify
@@ -489,7 +491,7 @@ end = struct
     | Lsr -> always_some Num.shift_right_logical
     | Asr -> always_some Num.shift_right
 
-  let op_lhs_unknown (op : P.int_shift_op) ~rhs :
+  let op_lhs_unknown ~machine_width:_ (op : P.int_shift_op) ~rhs :
       Num.t binary_arith_outcome_for_one_side_only =
     let module O = Target_ocaml_int in
     let rhs = rhs in
@@ -503,7 +505,7 @@ end = struct
          to only one possible case which it would be wrong to take.) *)
       if O.equal rhs O.zero then The_other_side else Cannot_simplify
 
-  let op_rhs_unknown (op : P.int_shift_op) ~lhs :
+  let op_rhs_unknown ~machine_width:_ (op : P.int_shift_op) ~lhs :
       Num.t binary_arith_outcome_for_one_side_only =
     (* In these cases we are giving a semantics for some cases where the
        right-hand side may be less than zero or greater than or equal to
@@ -626,9 +628,9 @@ end = struct
         then Some (int 0)
         else Some (int 1))
 
-  let op_lhs_unknown _op ~rhs:_ = Cannot_simplify
+  let op_lhs_unknown ~machine_width:_ _op ~rhs:_ = Cannot_simplify
 
-  let op_rhs_unknown _op ~lhs:_ = Cannot_simplify
+  let op_rhs_unknown ~machine_width:_ _op ~lhs:_ = Cannot_simplify
 end
 [@@inline always]
 
@@ -742,7 +744,7 @@ end = struct
         [@z3 check_float_binary_opposite `Mul (-1.0) `Right]
       else Cannot_simplify
 
-  let op_lhs_unknown (op : op) ~rhs : F.t binary_arith_outcome_for_one_side_only
+  let op_lhs_unknown ~machine_width:_ (op : op) ~rhs : F.t binary_arith_outcome_for_one_side_only
       =
     match op with
     | Add -> symmetric_op_one_side_unknown Add ~this_side:rhs
@@ -757,7 +759,7 @@ end = struct
         [@z3 check_float_binary_opposite `Div (-1.0) `Right]
       else Cannot_simplify
 
-  let op_rhs_unknown (op : op) ~lhs : F.t binary_arith_outcome_for_one_side_only
+  let op_rhs_unknown ~machine_width:_ (op : op) ~lhs : F.t binary_arith_outcome_for_one_side_only
       =
     match op with
     | Add -> symmetric_op_one_side_unknown Add ~this_side:lhs
@@ -891,7 +893,7 @@ end = struct
     | Neq -> Exactly Target_ocaml_int.bool_true
     | Eq | Lt () | Gt () | Le () | Ge () -> Exactly Target_ocaml_int.bool_false
 
-  let op_lhs_unknown (op : op) ~rhs : _ binary_arith_outcome_for_one_side_only =
+  let op_lhs_unknown ~machine_width:_ (op : op) ~rhs : _ binary_arith_outcome_for_one_side_only =
     match op with
     | Yielding_bool op ->
       if F.is_any_nan rhs
@@ -899,7 +901,7 @@ end = struct
       else Cannot_simplify
     | Yielding_int_like_compare_functions () -> Cannot_simplify
 
-  let op_rhs_unknown (op : op) ~lhs : _ binary_arith_outcome_for_one_side_only =
+  let op_rhs_unknown ~machine_width:_ (op : op) ~lhs : _ binary_arith_outcome_for_one_side_only =
     match op with
     | Yielding_bool op ->
       if F.is_any_nan lhs

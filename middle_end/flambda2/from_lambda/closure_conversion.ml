@@ -134,7 +134,7 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
     acc, reg_width (RWC.naked_int64 c), "unboxed_int64"
   | Const_base (Const_unboxed_nativeint c) ->
     (* CR pchambart: this should be pushed further to lambda *)
-    let c = Targetint_32_64.of_int64 (Int64.of_nativeint c) in
+    let c = Targetint_32_64.of_int64 (Acc.machine_width acc) (Int64.of_nativeint c) in
     acc, reg_width (RWC.naked_nativeint c), "unboxed_nativeint"
   | Const_immstring c ->
     register_const acc dbg (SC.immutable_string c) "immstring"
@@ -3764,7 +3764,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
     ~handler_params:load_fields_handler_param ~handler:load_fields_body ~body
     ~is_exn_handler:false ~is_cold:false
 
-let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
+let close_program (type mode) ~(mode : mode Flambda_features.mode) ~machine_width ~big_endian
     ~cmx_loader ~compilation_unit ~module_block_size_in_words ~program
     ~prog_return_cont ~exn_continuation ~toplevel_my_region
     ~toplevel_my_ghost_region : mode close_program_result =
@@ -3782,7 +3782,7 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~big_endian
     Env.add_var_like env toplevel_my_ghost_region Not_user_visible
       Flambda_kind.With_subkind.region
   in
-  let acc = Acc.create ~cmx_loader in
+  let acc = Acc.create ~cmx_loader ~machine_width in
   let acc, body =
     wrap_final_module_block acc env ~program ~prog_return_cont
       ~module_block_size_in_words ~return_cont ~module_symbol

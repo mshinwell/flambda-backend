@@ -62,7 +62,8 @@ let print_param_decision ppf param_decision =
       fields
 
 type env =
-  { uses : DS.result;
+  { machine_width : Target_system.Machine_width.t;
+    uses : DS.result;
     code_deps : Traverse_acc.code_dep Code_id.Map.t;
     get_code_metadata : Code_id.t -> Code_metadata.t;
     (* TODO change names *)
@@ -525,7 +526,7 @@ let rewrite_static_const (env : env) (sc : SC.t) =
   | Boxed_int32 n -> SC.boxed_int32 (rewrite_or_variable Int32.zero env n)
   | Boxed_int64 n -> SC.boxed_int64 (rewrite_or_variable Int64.zero env n)
   | Boxed_nativeint n ->
-    SC.boxed_nativeint (rewrite_or_variable Targetint_32_64.zero env n)
+    SC.boxed_nativeint (rewrite_or_variable (Targetint_32_64.zero env.machine_width) env n)
   | Boxed_vec128 n ->
     SC.boxed_vec128
       (rewrite_or_variable Vector_types.Vec128.Bit_pattern.zero env n)
@@ -549,7 +550,7 @@ let rewrite_static_const (env : env) (sc : SC.t) =
     SC.immutable_int64_array (rewrite_or_variables Int64.zero env fields)
   | Immutable_nativeint_array fields ->
     SC.immutable_nativeint_array
-      (rewrite_or_variables Targetint_32_64.zero env fields)
+      (rewrite_or_variables (Targetint_32_64.zero env.machine_width) env fields)
   | Immutable_vec128_array fields ->
     SC.immutable_vec128_array
       (rewrite_or_variables Vector_types.Vec128.Bit_pattern.zero env fields)
@@ -1955,7 +1956,7 @@ type result =
     slot_offsets : Slot_offsets.t
   }
 
-let rebuild ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
+let rebuild ~machine_width ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
     ~(continuation_info : Traverse_acc.continuation_info Continuation.Map.t)
     ~fixed_arity_continuations kinds (solved_dep : DS.result) get_code_metadata
     holed =
@@ -2054,7 +2055,8 @@ let rebuild ~(code_deps : Traverse_acc.code_dep Code_id.Map.t)
       continuation_info
   in
   let env =
-    { uses = solved_dep;
+    { machine_width;
+      uses = solved_dep;
       code_deps;
       get_code_metadata;
       cont_params_to_keep;

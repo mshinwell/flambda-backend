@@ -191,7 +191,7 @@ module For_tagged_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
-    let strictly_negative t = t < zero
+    let strictly_negative t = t < Target_ocaml_int.zero
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
@@ -211,15 +211,15 @@ module For_tagged_immediates : Int_number_kind = struct
     let integer_bit_width = if Target_system.is_32_bit () then 32 else 64
 
     let shift_left t shift =
-      with_shift shift zero (fun shift -> shift_left t shift) ~integer_bit_width
+      with_shift shift Target_ocaml_int.zero (fun shift -> shift_left t shift) ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift Target_ocaml_int.zero
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift Target_ocaml_int.zero
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
@@ -265,7 +265,7 @@ module For_naked_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
-    let strictly_negative t = t < zero
+    let strictly_negative t = t < Target_ocaml_int.zero
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
@@ -283,15 +283,15 @@ module For_naked_immediates : Int_number_kind = struct
     let integer_bit_width = if Target_system.is_32_bit () then 31 else 63
 
     let shift_left t shift =
-      with_shift shift zero (fun shift -> shift_left t shift) ~integer_bit_width
+      with_shift shift Target_ocaml_int.zero (fun shift -> shift_left t shift) ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift Target_ocaml_int.zero
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift Target_ocaml_int.zero
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
@@ -448,11 +448,11 @@ module For_int8s : Int_number_kind = struct
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
-    let zero = of_int 0
+    let zero _machine_width = of_int 0
 
-    let one = of_int 1
+    let one _machine_width = of_int 1
 
-    let minus_one = of_int (-1)
+    let minus_one _machine_width = of_int (-1)
 
     let neg x = of_int (Int.neg (to_int x))
 
@@ -485,22 +485,22 @@ module For_int8s : Int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_left t shift)
         ~integer_bit_width:8
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right t shift)
         ~integer_bit_width:8
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:8
 
@@ -556,11 +556,11 @@ module For_int16s : Int_number_kind = struct
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
-    let zero = of_int 0
+    let zero _machine_width = of_int 0
 
-    let one = of_int 1
+    let one _machine_width = of_int 1
 
-    let minus_one = of_int (-1)
+    let minus_one _machine_width = of_int (-1)
 
     let neg x = of_int (Int.neg (to_int x))
 
@@ -593,22 +593,22 @@ module For_int16s : Int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_left t shift)
         ~integer_bit_width:16
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right t shift)
         ~integer_bit_width:16
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:16
 
@@ -674,22 +674,22 @@ module For_int32s : Boxable_int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_left t shift)
         ~integer_bit_width:32
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right t shift)
         ~integer_bit_width:32
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:32
 
@@ -749,22 +749,22 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 zero then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_left t shift)
         ~integer_bit_width:64
 
     let shift_right t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right t shift)
         ~integer_bit_width:64
 
     let shift_right_logical t shift =
-      with_shift shift zero
+      with_shift shift (of_int 0)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:64
 
@@ -816,7 +816,9 @@ module For_nativeints : Boxable_int_number_kind = struct
   module Num = struct
     include Targetint_32_64
 
-    let strictly_negative t = compare t (zero machine_width) < 0
+    let strictly_negative t = 
+      let zero_val = zero machine_width in
+      compare t zero_val < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative

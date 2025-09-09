@@ -555,7 +555,7 @@ let create_let_symbols uacc lifted_constant ~body =
             | Project_value_slot { project_from; value_slot } ->
               Unary (Project_value_slot { project_from; value_slot }, symbol)
           in
-          let machine_width = DE.machine_width (UA.uenv uacc) in
+          let machine_width = UE.machine_width (UA.uenv uacc) in
           ( Named.create_prim prim Debuginfo.none,
             coercion_from_proj_to_var,
             Code_size.prim ~machine_width prim )
@@ -722,7 +722,7 @@ let no_rewrite_apply_cont uenv apply_cont =
 let rewrite_apply_cont0 uacc rewrite ~ctx id apply_cont :
     rewrite_apply_cont_result =
   let args = Apply_cont.args apply_cont in
-  let machine_width = DE.machine_width (UA.uenv uacc) in
+  let machine_width = UE.machine_width (UA.uenv uacc) in
   match Apply_cont_rewrite.make_rewrite rewrite ~machine_width ~ctx id args with
   | Invalid -> Invalid { message = "" }
   | Ok (extra_lets, args) -> (

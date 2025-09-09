@@ -24,7 +24,8 @@ type t =
   }
 
 let create ?(extra_bindings = []) named ~try_reify dacc =
-  { simplified_named = Ok (Simplified_named.create named);
+  let machine_width = Downwards_env.machine_width (Downwards_acc.denv dacc) in
+  { simplified_named = Ok (Simplified_named.create ~machine_width named);
     try_reify;
     dacc;
     extra_bindings

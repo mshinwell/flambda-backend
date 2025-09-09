@@ -1501,6 +1501,7 @@ and cps_function env ~fid ~fuid ~(recursive : Recursive.t)
   in
   let new_env =
     Env.create ~current_unit:(Env.current_unit env)
+      ~machine_width:(Env.machine_width env)
       ~return_continuation:body_cont ~exn_continuation:body_exn_cont
       ~my_region:my_region_stack_elt
   in
@@ -1779,6 +1780,6 @@ let lambda_to_flambda ~mode ~machine_width ~big_endian ~cmx_loader ~compilation_
   let program acc ccenv =
     cps_tail acc env ccenv lam return_continuation exn_continuation
   in
-  CC.close_program ~mode ~big_endian ~cmx_loader ~compilation_unit
+  CC.close_program ~mode ~machine_width ~big_endian ~cmx_loader ~compilation_unit
     ~module_block_size_in_words ~program ~prog_return_cont:return_continuation
     ~exn_continuation ~toplevel_my_region ~toplevel_my_ghost_region
