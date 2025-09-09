@@ -29,6 +29,8 @@ module type S = sig
 
   include Container_types.S with type t := t
 
+  val machine_width : t -> Target_system.Machine_width.t
+
   val zero : Target_system.Machine_width.t -> t
 
   val one : Target_system.Machine_width.t -> t
@@ -123,6 +125,8 @@ module Int32 = struct
 
   type targetint = t
 
+  let machine_width _ = Target_system.Machine_width.Thirty_two
+
   let zero _machine_width = zero
 
   let one _machine_width = one
@@ -208,6 +212,8 @@ module Int64 = struct
   include Int64
 
   type targetint = t
+
+  let machine_width _ = Target_system.Machine_width.Sixty_four
 
   let zero _machine_width = zero
 

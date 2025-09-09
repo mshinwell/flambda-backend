@@ -76,7 +76,7 @@ module type Num_common = sig
 
   val to_const : t -> Reg_width_const.t
 
-  val to_immediate : t -> Target_ocaml_int.t
+  val to_immediate : t -> Target_system.Machine_width.t -> Target_ocaml_int.t
 
   val to_naked_float32 : t -> Numeric_types.Float32_by_bit_pattern.t
 
@@ -90,7 +90,8 @@ module type Num_common = sig
 
   val to_naked_int64 : t -> Numeric_types.Int64.t
 
-  val to_naked_nativeint : t -> Target_system.Machine_width.t -> Targetint_32_64.t
+  val to_naked_nativeint :
+    t -> Target_system.Machine_width.t -> Targetint_32_64.t
 end
 
 module type Number_kind_common = sig
@@ -199,7 +200,7 @@ module For_tagged_immediates : Int_number_kind = struct
 
     (* Shift functions inherit correct signature from Target_ocaml_int *)
 
-    let strictly_negative t = 
+    let strictly_negative t =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
       t < Target_ocaml_int.zero machine_width
@@ -228,19 +229,24 @@ module For_tagged_immediates : Int_number_kind = struct
     let shift_left t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
-      with_shift shift (Target_ocaml_int.zero machine_width) (fun shift_int -> Target_ocaml_int.shift_left t shift_int) ~integer_bit_width
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
+        (fun shift_int -> Target_ocaml_int.shift_left t shift_int)
+        ~integer_bit_width
 
     let shift_right t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
-      with_shift shift (Target_ocaml_int.zero machine_width)
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
         (fun shift_int -> Target_ocaml_int.shift_right t shift_int)
         ~integer_bit_width
 
     let shift_right_logical t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
-      with_shift shift (Target_ocaml_int.zero machine_width)
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
         (fun shift_int -> Target_ocaml_int.shift_right_logical t shift_int)
         ~integer_bit_width
 
@@ -249,7 +255,7 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let to_const t = Reg_width_const.tagged_immediate t
 
-    let to_immediate t = t
+    let to_immediate t _machine_width = t
 
     let to_naked_float32 t =
       Float32_by_bit_pattern.create (Target_ocaml_int.to_float t)
@@ -265,7 +271,8 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let to_naked_int64 t = Target_ocaml_int.to_int64 t
 
-    let to_naked_nativeint t machine_width = Target_ocaml_int.to_targetint machine_width t
+    let to_naked_nativeint t machine_width =
+      Target_ocaml_int.to_targetint machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Tagged_immediate
@@ -292,7 +299,7 @@ module For_naked_immediates : Int_number_kind = struct
 
     let minus_one machine_width = Target_ocaml_int.minus_one machine_width
 
-    let strictly_negative t = 
+    let strictly_negative t =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
       t < Target_ocaml_int.zero machine_width
@@ -317,15 +324,23 @@ module For_naked_immediates : Int_number_kind = struct
     let integer_bit_width = if Target_system.is_32_bit () then 31 else 63
 
     let shift_left t shift =
-      with_shift shift Target_ocaml_int.zero (fun shift -> shift_left t shift) ~integer_bit_width
+      let machine_width = Target_ocaml_int.machine_width t in
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
+        (fun shift -> shift_left t shift)
+        ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift Target_ocaml_int.zero
+      let machine_width = Target_ocaml_int.machine_width t in
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift Target_ocaml_int.zero
+      let machine_width = Target_ocaml_int.machine_width t in
+      with_shift shift
+        (Target_ocaml_int.zero machine_width)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
@@ -334,7 +349,7 @@ module For_naked_immediates : Int_number_kind = struct
 
     let to_const t = Reg_width_const.naked_immediate t
 
-    let to_immediate t = t
+    let to_immediate t _machine_width = t
 
     let to_naked_float32 t =
       Float32_by_bit_pattern.create (Target_ocaml_int.to_float t)
@@ -350,7 +365,8 @@ module For_naked_immediates : Int_number_kind = struct
 
     let to_naked_int64 = Target_ocaml_int.to_int64
 
-    let to_naked_nativeint t machine_width = Target_ocaml_int.to_targetint machine_width t
+    let to_naked_nativeint t machine_width =
+      Target_ocaml_int.to_targetint machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_immediate
@@ -389,7 +405,8 @@ module For_float32s : Boxable_number_kind = struct
 
     let to_const t = Reg_width_const.naked_float32 t
 
-    let to_immediate t = Target_ocaml_int.of_float (to_float t)
+    let to_immediate t machine_width =
+      Target_ocaml_int.of_float machine_width (to_float t)
 
     let to_naked_float32 t = t
 
@@ -403,7 +420,8 @@ module For_float32s : Boxable_number_kind = struct
 
     let to_naked_int64 t = Int64.of_float (to_float t)
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_float machine_width (to_float t)
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_float machine_width (to_float t)
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_float32
@@ -448,7 +466,8 @@ module For_floats : Boxable_number_kind = struct
 
     let to_const t = Reg_width_const.naked_float t
 
-    let to_immediate t = Target_ocaml_int.of_float (to_float t)
+    let to_immediate t machine_width =
+      (Target_ocaml_int.of_float machine_width) (to_float t)
 
     let to_naked_float32 t = Float32_by_bit_pattern.create (to_float t)
 
@@ -462,7 +481,8 @@ module For_floats : Boxable_number_kind = struct
 
     let to_naked_int64 t = Int64.of_float (to_float t)
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_float machine_width (to_float t)
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_float machine_width (to_float t)
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_float
@@ -552,7 +572,8 @@ module For_int8s : Int_number_kind = struct
 
     let to_const t = Reg_width_const.naked_int8 t
 
-    let to_immediate t = Target_ocaml_int.of_int (to_int t)
+    let to_immediate t machine_width =
+      Target_ocaml_int.of_int machine_width (to_int t)
 
     let to_naked_float32 t = Float32_by_bit_pattern.create (to_float t)
 
@@ -566,7 +587,8 @@ module For_int8s : Int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int (to_int t)
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_int machine_width (to_int t)
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_int machine_width (to_int t)
 
     module Pair = struct
       type nonrec t = t * t
@@ -660,7 +682,8 @@ module For_int16s : Int_number_kind = struct
 
     let to_const t = Reg_width_const.naked_int16 t
 
-    let to_immediate t = Target_ocaml_int.of_int (to_int t)
+    let to_immediate t machine_width =
+      Target_ocaml_int.of_int machine_width (to_int t)
 
     let to_naked_float32 t = Float32_by_bit_pattern.create (to_float t)
 
@@ -674,7 +697,8 @@ module For_int16s : Int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int (to_int t)
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_int machine_width (to_int t)
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_int machine_width (to_int t)
 
     module Pair = struct
       type nonrec t = t * t
@@ -747,7 +771,7 @@ module For_int32s : Boxable_int_number_kind = struct
 
     let to_const t = Reg_width_const.naked_int32 t
 
-    let to_immediate t = Target_ocaml_int.of_int32 t
+    let to_immediate t machine_width = Target_ocaml_int.of_int32 machine_width t
 
     let to_naked_float32 t = Float32_by_bit_pattern.create (Int32.to_float t)
 
@@ -761,7 +785,8 @@ module For_int32s : Boxable_int_number_kind = struct
 
     let to_naked_int64 t = Int64.of_int32 t
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_int32 machine_width t
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_int32 machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_int32
@@ -828,7 +853,7 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let to_const t = Reg_width_const.naked_int64 t
 
-    let to_immediate t = Target_ocaml_int.of_int64 t
+    let to_immediate t machine_width = Target_ocaml_int.of_int64 machine_width t
 
     let to_naked_float32 t = Float32_by_bit_pattern.create (Int64.to_float t)
 
@@ -842,7 +867,8 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let to_naked_int64 t = t
 
-    let to_naked_nativeint t machine_width = Targetint_32_64.of_int64 machine_width t
+    let to_naked_nativeint t machine_width =
+      Targetint_32_64.of_int64 machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_int64
@@ -868,14 +894,11 @@ module For_int64s : Boxable_int_number_kind = struct
 end
 
 module For_nativeints : Boxable_int_number_kind = struct
-  (* TODO: This should not be hardcoded - machine_width should flow through properly *)
-  let machine_width = Target_system.Machine_width.Sixty_four
-  
   module Num = struct
     include Targetint_32_64
 
-    let strictly_negative t = 
-      let zero_val = zero machine_width in
+    let strictly_negative t =
+      let zero_val = zero (machine_width t) in
       compare t zero_val < 0
 
     let compare_unsigned t1 t2 =
@@ -887,28 +910,40 @@ module For_nativeints : Boxable_int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 (zero machine_width) then None else Some (div t1 t2)
+    let div t1 t2 =
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if equal t2 (zero (machine_width t1)) then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (zero machine_width) then None else Some (rem t1 t2)
+    let mod_ t1 t2 =
+      assert (
+        Target_system.Machine_width.equal (machine_width t1) (machine_width t2));
+      if equal t2 (zero (machine_width t1)) then None else Some (rem t1 t2)
 
     let integer_bit_width = if Target_system.is_32_bit () then 32 else 64
 
     let shift_left t shift =
-      with_shift shift (zero machine_width) (fun shift -> shift_left t shift) ~integer_bit_width
+      with_shift shift
+        (zero (machine_width t))
+        (fun shift -> shift_left t shift)
+        ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift (zero machine_width)
+      with_shift shift
+        (zero (machine_width t))
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift (zero machine_width)
+      with_shift shift
+        (zero (machine_width t))
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
     let to_const t = Reg_width_const.naked_nativeint t
 
-    let to_immediate t = Target_ocaml_int.of_targetint t
+    let to_immediate t machine_width =
+      Target_ocaml_int.of_targetint machine_width t
 
     let to_naked_float32 t =
       Float32_by_bit_pattern.create (Targetint_32_64.to_float t)

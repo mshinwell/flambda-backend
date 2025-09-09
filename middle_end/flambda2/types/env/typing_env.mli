@@ -80,9 +80,12 @@ end
 val print : Format.formatter -> t -> unit
 
 val create :
+  machine_width:Target_system.Machine_width.t ->
   resolver:(Compilation_unit.t -> Serializable.t option) ->
   get_imported_names:(unit -> Name.Set.t) ->
   t
+
+val machine_width : t -> Target_system.Machine_width.t
 
 val is_bottom : t -> bool
 

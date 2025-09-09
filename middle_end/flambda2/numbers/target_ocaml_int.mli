@@ -22,6 +22,8 @@ type t
 
 include Container_types.S with type t := t
 
+val machine_width : t -> Target_system.Machine_width.t
+
 (** The minimum integer representable on the target. *)
 val min_value : Target_system.Machine_width.t -> t
 

@@ -33,6 +33,8 @@ type t
 
 type targetint = t
 
+val machine_width : t -> Target_system.Machine_width.t
+
 (** The target integer 0. *)
 val zero : Target_system.Machine_width.t -> t
 

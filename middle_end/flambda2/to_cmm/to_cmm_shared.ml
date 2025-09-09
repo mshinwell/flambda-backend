@@ -158,9 +158,8 @@ let targetint ~dbg t =
   | Int32 i -> int32 ~dbg i
   | Int64 i -> int64 ~dbg i
 
-let tag_targetint t = 
-  let machine_width = Target_system.machine_width () in
-  Targetint_32_64.(add (shift_left t 1) (one machine_width))
+let tag_targetint t =
+  Targetint_32_64.(add (shift_left t 1) (one (machine_width t)))
 
 (* We shouldn't really be converting to [nativeint] but the definition of the
    Cmm term language currently requires this. *)
@@ -191,12 +190,13 @@ let name env name = name0 env name
 
 let const ~dbg cst =
   match Reg_width_const.descr cst with
-  | Naked_immediate i -> 
+  | Naked_immediate i ->
     let machine_width = Target_system.machine_width () in
     targetint ~dbg (Target_ocaml_int.to_targetint machine_width i)
   | Tagged_immediate i ->
     let machine_width = Target_system.machine_width () in
-    targetint ~dbg (tag_targetint (Target_ocaml_int.to_targetint machine_width i))
+    targetint ~dbg
+      (tag_targetint (Target_ocaml_int.to_targetint machine_width i))
   | Naked_float32 f ->
     float32 ~dbg (Numeric_types.Float32_by_bit_pattern.to_float f)
   | Naked_float f -> float ~dbg (Numeric_types.Float_by_bit_pattern.to_float f)
@@ -228,7 +228,7 @@ let const ~dbg cst =
     in
     vec512 ~dbg { word0; word1; word2; word3; word4; word5; word6; word7 }
   | Naked_nativeint t -> targetint ~dbg t
-  | Null -> 
+  | Null ->
     let machine_width = Target_system.machine_width () in
     targetint ~dbg (Targetint_32_64.zero machine_width)
 
@@ -257,7 +257,9 @@ let const_static cst : Cmm.data_item list =
   match Reg_width_const.descr cst with
   | Naked_immediate i ->
     let machine_width = Target_system.machine_width () in
-    [cint (nativeint_of_targetint (Target_ocaml_int.to_targetint machine_width i))]
+    [ cint
+        (nativeint_of_targetint (Target_ocaml_int.to_targetint machine_width i))
+    ]
   | Tagged_immediate i ->
     let machine_width = Target_system.machine_width () in
     [ cint

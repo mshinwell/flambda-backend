@@ -707,6 +707,8 @@ let simplify_duplicate_array ~kind:_ ~(source_mutability : Mutability.t)
     ~(destination_mutability : Mutability.t) dacc ~original_term ~arg:_ ~arg_ty
     ~result_var =
   (* This simplification should eliminate bounds checks on array literals. *)
+  let denv = DA.denv dacc in
+  let machine_width = DE.machine_width denv in
   match source_mutability, destination_mutability with
   | Immutable, Mutable -> (
     match T.meet_is_immutable_array (DA.typing_env dacc) arg_ty with
@@ -716,7 +718,7 @@ let simplify_duplicate_array ~kind:_ ~(source_mutability : Mutability.t)
       SPR.create original_term ~try_reify:false dacc
     | Known_result (element_kind, fields, alloc_mode) ->
       let length =
-        T.this_tagged_immediate (Array.length fields |> Target_ocaml_int.of_int)
+        T.this_tagged_immediate (Array.length fields |> Target_ocaml_int.of_int machine_width)
       in
       let ty = T.mutable_array ~element_kind ~length alloc_mode in
       let dacc = DA.add_variable dacc result_var ty in

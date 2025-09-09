@@ -49,6 +49,8 @@ module Machine_width : sig
 
   val print : Format.formatter -> t -> unit
 
+  val equal : t -> t -> bool
+
   val is_32_bit : t -> bool
 
   val is_64_bit : t -> bool

@@ -130,6 +130,13 @@ module Machine_width = struct
     | Thirty_two -> Format.fprintf ppf "Thirty_two"
     | Sixty_four -> Format.fprintf ppf "Sixty_four"
 
+  let equal t1 t2 =
+    match t1, t2 with
+    | Thirty_two, Thirty_two
+    | Sixty_four, Sixty_four -> true
+    | Thirty_two, Sixty_four
+    | Sixty_four, Thirty_two -> false
+
   let is_32_bit = function
     | Thirty_two -> true
     | Sixty_four -> false

@@ -1861,13 +1861,13 @@ let variables_for_unboxing boxed_variable_name (k : Function_decl.unboxing_kind)
           Flambda_debug_uid.none,
           Flambda_kind.With_subkind.naked_float ))
 
-let unboxing_primitive (k : Function_decl.unboxing_kind) boxed_variable i =
+let unboxing_primitive ~machine_width (k : Function_decl.unboxing_kind) boxed_variable i =
   match k with
   | Fields_of_block_with_tag_zero kinds ->
     let block_access_kind : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
-          size = Known (Target_ocaml_int.of_int (Acc.machine_width acc) (List.length kinds));
+          size = Known (Target_ocaml_int.of_int machine_width (List.length kinds));
           field_kind = Any_value
         }
     in
@@ -1878,7 +1878,7 @@ let unboxing_primitive (k : Function_decl.unboxing_kind) boxed_variable i =
     Flambda_primitive.Unary (Unbox_number bn, Simple.var boxed_variable)
   | Unboxed_float_record num_fields ->
     let block_access_kind : P.Block_access_kind.t =
-      Naked_floats { size = Known (Target_ocaml_int.of_int num_fields) }
+      Naked_floats { size = Known (Target_ocaml_int.of_int machine_width num_fields) }
     in
     Flambda_primitive.Unary
       ( Block_load { kind = block_access_kind; mut = Immutable; field = i },
@@ -2022,11 +2022,11 @@ let compute_body_of_unboxed_function acc my_region my_closure
                   (Bound_pattern.singleton
                      (Bound_var.create var var_duid Name_mode.normal))
                   (Named.create_prim
-                     (unboxing_primitive k boxed_variable i)
+                     (unboxing_primitive ~machine_width:(Acc.machine_width acc) k boxed_variable i)
                      Debuginfo.none)
                   ~body:expr,
-                Target_ocaml_int.(add one i) ))
-            ((acc, apply_cont), Target_ocaml_int.zero)
+                Target_ocaml_int.(add (one (Acc.machine_width acc)) i) ))
+            ((acc, apply_cont), Target_ocaml_int.zero (Acc.machine_width acc))
             vars_with_kinds
         in
         acc, expr
@@ -2119,7 +2119,7 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
               (fun (body, free_names_of_body, i) (var, var_duid, _kind) ->
                 let named =
                   Named.create_prim
-                    (unboxing_primitive k (Bound_parameter.var param) i)
+                    (unboxing_primitive ~machine_width:(Acc.machine_width acc) k (Bound_parameter.var param) i)
                     Debuginfo.none
                 in
                 ( Expr.create_let
@@ -2130,8 +2130,8 @@ let make_unboxed_function_wrapper acc function_slot ~unarized_params:params
                        ~free_names_of_body:(Known free_names_of_body)),
                   Name_occurrences.union (Named.free_names named)
                     (Name_occurrences.remove_var free_names_of_body ~var),
-                  Target_ocaml_int.(add one i) ))
-              (body, free_names_of_body, Target_ocaml_int.zero)
+                  Target_ocaml_int.(add (one (Acc.machine_width acc)) i) ))
+              (body, free_names_of_body, Target_ocaml_int.zero (Acc.machine_width acc))
               vars_with_kinds
           in
           body, free_names_of_body
@@ -3722,7 +3722,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
     let block_access : P.Block_access_kind.t =
       Values
         { tag = Known Tag.Scannable.zero;
-          size = Known (Target_ocaml_int.of_int module_block_size_in_words);
+          size = Known (Target_ocaml_int.of_int (Acc.machine_width acc) module_block_size_in_words);
           field_kind = Any_value
         }
     in
@@ -3730,7 +3730,7 @@ let wrap_final_module_block acc env ~program ~prog_return_cont
       (fun (acc, body) (pos, var, var_duid) ->
         let var = VB.create var var_duid Name_mode.normal in
         let pat = Bound_pattern.singleton var in
-        let pos = Target_ocaml_int.of_int pos in
+        let pos = Target_ocaml_int.of_int (Acc.machine_width acc) pos in
         let block = module_block_simple in
         match simplify_block_load acc env ~block ~field:pos with
         | Unknown | Not_a_block | Block_but_cannot_simplify _ ->

@@ -104,7 +104,8 @@ end = struct
 end
 
 type t =
-  { resolver : Compilation_unit.t -> serializable option;
+  { machine_width : Target_system.Machine_width.t;
+    resolver : Compilation_unit.t -> serializable option;
     binding_time_resolver : Name.t -> Binding_time.With_name_mode.t;
     get_imported_names : unit -> Name.Set.t;
     defined_symbols : Symbol.Set.t;
@@ -347,8 +348,9 @@ let code_age_relation_resolver t comp_unit =
 
 let current_scope t = One_level.scope t.current_level
 
-let create ~resolver ~get_imported_names =
-  { resolver;
+let create ~machine_width ~resolver ~get_imported_names =
+  { machine_width;
+    resolver;
     binding_time_resolver = binding_time_resolver resolver;
     get_imported_names;
     prev_levels = [];
@@ -362,6 +364,8 @@ let create ~resolver ~get_imported_names =
     min_binding_time = Binding_time.earliest_var;
     is_bottom = false
   }
+
+let machine_width t = t.machine_width
 
 let increment_scope t =
   let current_scope = current_scope t in
