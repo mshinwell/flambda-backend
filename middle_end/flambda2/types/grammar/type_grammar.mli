@@ -564,6 +564,7 @@ module Row_like_for_blocks : sig
   val all_tags : t -> Tag.Set.t Or_unknown.t
 
   val all_tags_and_sizes :
+    machine_width:Target_system.Machine_width.t ->
     t ->
     (Target_ocaml_int.t * Flambda_kind.Block_shape.t) Tag.Map.t Or_unknown.t
 

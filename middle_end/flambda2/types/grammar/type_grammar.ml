@@ -3385,7 +3385,7 @@ module Row_like_for_blocks = struct
     (* CR-someday mshinwell: add invariant check? *)
     { known_tags; other_tags; alloc_mode }
 
-  let all_tags_and_sizes t :
+  let all_tags_and_sizes ~machine_width t :
       (Target_ocaml_int.t * K.Block_shape.t) Tag.Map.t Or_unknown.t =
     match t.other_tags with
     | Ok _ -> Unknown
@@ -3397,9 +3397,8 @@ module Row_like_for_blocks = struct
             match (case : _ Or_unknown.t) with
             | Unknown ->
               any_unknown := true;
-              (* result (and hence the machine width) doesn't matter as the
-                 result is unused - see below *)
-              ( Target_ocaml_int.zero Sixty_four,
+              (* result doesn't matter as it's unused - see below *)
+              ( Target_ocaml_int.zero machine_width,
                 K.Block_shape.Scannable Value_only )
             | Known { index = { domain; shape }; _ } -> (
               match domain with

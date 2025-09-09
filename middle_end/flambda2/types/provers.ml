@@ -483,7 +483,7 @@ let prove_variant_like_generic_value env
     match blocks_imms.blocks with
     | Unknown -> Unknown
     | Known blocks -> (
-      match TG.Row_like_for_blocks.all_tags_and_sizes blocks with
+      match TG.Row_like_for_blocks.all_tags_and_sizes ~machine_width:(TE.machine_width env) blocks with
       | Unknown -> Unknown
       | Known non_const_ctors_with_sizes -> (
         let non_const_ctors_with_sizes =

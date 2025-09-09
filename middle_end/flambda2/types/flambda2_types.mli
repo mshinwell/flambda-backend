@@ -132,6 +132,7 @@ module Typing_env : sig
     val create : Pre_serializable.t -> reachable_names:Name_occurrences.t -> t
 
     val create_from_closure_conversion_approx :
+      machine_width:Target_system.Machine_width.t ->
       'a Value_approximation.t Symbol.Map.t -> t
 
     val predefined_exceptions : Symbol.Set.t -> t
@@ -159,6 +160,8 @@ module Typing_env : sig
     resolver:(Compilation_unit.t -> Serializable.t option) ->
     get_imported_names:(unit -> Name.Set.t) ->
     t
+
+  val machine_width : t -> Target_system.Machine_width.t
 
   val closure_env : t -> t
 

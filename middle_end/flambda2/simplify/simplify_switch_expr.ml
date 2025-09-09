@@ -319,6 +319,7 @@ let rebuild_switch_with_single_arg_to_same_destination uacc ~dacc_before_switch
                  (Simple.const (Reg_width_const.const_int const)))
              consts)
         Alloc_mode.For_types.heap
+        ~machine_width:(DE.machine_width (DA.denv dacc_before_switch))
     in
     UA.add_lifted_constant uacc
       (LC.create_definition

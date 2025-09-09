@@ -1090,6 +1090,7 @@ module Serializable : sig
   val create : Pre_serializable.t -> reachable_names:Name_occurrences.t -> t
 
   val create_from_closure_conversion_approx :
+    machine_width:Target_system.Machine_width.t ->
     'a Value_approximation.t Symbol.Map.t -> t
 
   val predefined_exceptions : Symbol.Set.t -> t
@@ -1138,7 +1139,7 @@ end = struct
       just_after_level = Cached_level.empty
     }
 
-  let create_from_closure_conversion_approx
+  let create_from_closure_conversion_approx ~machine_width
       (symbols : _ Value_approximation.t Symbol.Map.t) : t =
     (* By using Cached_level.add_or_replace_binding below, we ensure that all
        symbols have an equation (that may be Unknown). *)
@@ -1152,7 +1153,7 @@ end = struct
         TG.alias_type_of Flambda_kind.value (Simple.symbol symbol)
       | Block_approximation (tag, shape, fields, alloc_mode) ->
         let fields = List.map type_from_approx (Array.to_list fields) in
-        MTC.immutable_block ~is_unique:false (Tag.Scannable.to_tag tag)
+        MTC.immutable_block ~machine_width ~is_unique:false (Tag.Scannable.to_tag tag)
           ~shape:(Scannable shape) ~fields alloc_mode
       | Closure_approximation { code_id; function_slot; code = _; symbol } ->
         MTC.static_closure_with_this_code ~this_function_slot:function_slot

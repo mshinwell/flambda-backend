@@ -876,7 +876,8 @@ let[@inline always] simplify_immutable_block_load0
         ~deconstructing:block_ty
         ~shape:
           (T.immutable_block_with_size_at_least ~tag ~n ~shape
-             ~field_n_minus_one:result_var')
+             ~field_n_minus_one:result_var'
+             ~machine_width:(DE.machine_width (DA.denv dacc)))
         ~result_var ~result_kind
     in
     match result.simplified_named with

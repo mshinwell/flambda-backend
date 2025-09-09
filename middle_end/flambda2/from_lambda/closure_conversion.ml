@@ -3872,7 +3872,8 @@ let close_program (type mode) ~(mode : mode Flambda_features.mode) ~machine_widt
         ~used_slots
     in
     let reachable_names, cmx =
-      Flambda_cmx.prepare_cmx_from_approx ~approxs:symbols_approximations
+      Flambda_cmx.prepare_cmx_from_approx ~machine_width:(Acc.machine_width acc)
+        ~approxs:symbols_approximations
         ~module_symbol ~exported_offsets ~used_value_slots all_code
     in
     let unit =

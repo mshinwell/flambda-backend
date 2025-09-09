@@ -464,7 +464,8 @@ let add_parameters_with_unknown_types ~extra ?alloc_modes ?name_mode t params =
   in
   let param_types =
     ListLabels.map2 params alloc_modes ~f:(fun param alloc_mode ->
-        T.unknown_with_subkind ~alloc_mode (BP.kind param))
+        T.unknown_with_subkind ~alloc_mode (BP.kind param)
+          ~machine_width:t.machine_width)
   in
   add_parameters ~extra ?name_mode t params' ~param_types
 
