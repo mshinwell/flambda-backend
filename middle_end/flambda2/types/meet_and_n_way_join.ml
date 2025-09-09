@@ -1097,8 +1097,9 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
       if Tag.Set.is_empty tags
       then Bottom (New_result ())
       else
+        let machine_width = TE.machine_width env in
         match
-          MTC.blocks_with_these_tags tags (Alloc_mode.For_types.unknown ())
+          MTC.blocks_with_these_tags ~machine_width tags (Alloc_mode.For_types.unknown ())
         with
         | Known shape ->
           meet_with_shape

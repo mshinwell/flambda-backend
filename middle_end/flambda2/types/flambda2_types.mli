@@ -458,9 +458,11 @@ val boxed_float32_alias_to :
 
 val boxed_float_alias_to : naked_float:Variable.t -> Alloc_mode.For_types.t -> t
 
-val tagged_int8_alias_to : naked_int8:Variable.t -> t
+val tagged_int8_alias_to :
+  naked_int8:Variable.t -> machine_width:Target_system.Machine_width.t -> t
 
-val tagged_int16_alias_to : naked_int16:Variable.t -> t
+val tagged_int16_alias_to :
+  naked_int16:Variable.t -> machine_width:Target_system.Machine_width.t -> t
 
 val boxed_int32_alias_to : naked_int32:Variable.t -> Alloc_mode.For_types.t -> t
 
@@ -530,9 +532,11 @@ val variant :
   Alloc_mode.For_types.t ->
   t
 
-val this_immutable_string : string -> t
+val this_immutable_string :
+  string -> machine_width:Target_system.Machine_width.t -> t
 
-val mutable_string : size:int -> t
+val mutable_string :
+  size:int -> machine_width:Target_system.Machine_width.t -> t
 
 val exactly_this_closure :
   Function_slot.t ->
@@ -575,6 +579,7 @@ val immutable_array :
   element_kind:Flambda_kind.With_subkind.t Or_unknown_or_bottom.t ->
   fields:flambda_type list ->
   Alloc_mode.For_types.t ->
+  machine_width:Target_system.Machine_width.t ->
   flambda_type
 
 (** Construct a type equal to the type of the given name. (The name must be
