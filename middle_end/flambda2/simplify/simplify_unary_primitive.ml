@@ -233,7 +233,8 @@ let simplify_is_int ~variant_only dacc ~original_term ~arg:scrutinee
   else
     match T.prove_is_int (DA.typing_env dacc) scrutinee_ty with
     | Proved b ->
-      let ty = T.this_naked_immediate (Target_ocaml_int.bool b) in
+      let machine_width = DE.machine_width (DA.denv dacc) in
+      let ty = T.this_naked_immediate (Target_ocaml_int.bool machine_width b) in
       let dacc = DA.add_variable dacc result_var ty in
       SPR.create original_term ~try_reify:false dacc
     | Unknown ->

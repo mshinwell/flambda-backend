@@ -491,7 +491,7 @@ end = struct
     | Lsr -> always_some Num.shift_right_logical
     | Asr -> always_some Num.shift_right
 
-  let op_lhs_unknown ~machine_width:_ (op : P.int_shift_op) ~rhs :
+  let op_lhs_unknown ~machine_width (op : P.int_shift_op) ~rhs :
       Num.t binary_arith_outcome_for_one_side_only =
     let module O = Target_ocaml_int in
     let rhs = rhs in
@@ -503,7 +503,7 @@ end = struct
          However note that we cannot produce [Invalid] unless the code is type
          unsafe, which it is not here. (Otherwise a GADT match might be reduced
          to only one possible case which it would be wrong to take.) *)
-      if O.equal rhs O.zero then The_other_side else Cannot_simplify
+      if O.equal rhs (O.zero machine_width) then The_other_side else Cannot_simplify
 
   let op_rhs_unknown ~machine_width (op : P.int_shift_op) ~lhs :
       Num.t binary_arith_outcome_for_one_side_only =

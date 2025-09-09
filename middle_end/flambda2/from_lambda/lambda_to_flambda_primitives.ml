@@ -701,7 +701,7 @@ let max_with_zero ~machine_width ~size_int x =
     H.Simple
       (Simple.const
          (Reg_width_const.naked_immediate
-            (Target_ocaml_int.of_int ((size_int * 8) - 1))))
+            (Target_ocaml_int.of_int machine_width ((size_int * 8) - 1))))
   in
   let sign =
     H.Prim
@@ -778,13 +778,13 @@ let bigstring_access_validity_condition ~machine_width ~size_int big_str access_
   string_like_access_validity_condition ~index_kind index ~machine_width ~size_int ~access_size
     ~length:(bigarray_dim_bound big_str 1)
 
-let bigstring_alignment_validity_condition bstr alignment tagged_index :
+let bigstring_alignment_validity_condition ~machine_width bstr alignment tagged_index :
     H.expr_primitive =
   Binary
     ( Int_comp (I.Naked_immediate, Yielding_bool Eq),
       Prim
         (Binary (Bigarray_get_alignment alignment, bstr, untag_int tagged_index)),
-      Simple Simple.untagged_const_zero )
+      Simple (Simple.untagged_const_zero machine_width) )
 
 let checked_string_or_bytes_access ~dbg ~machine_width ~size_int ~access_size ~primitive kind
     string ~index_kind index =
@@ -811,17 +811,17 @@ let checked_bigstring_access ~dbg ~machine_width ~size_int ~access_size ~primiti
     | One_twenty_eight { aligned = true } ->
       checked_alignment ~dbg ~primitive
         ~conditions:
-          [ bigstring_alignment_validity_condition arg1 16
+          [ bigstring_alignment_validity_condition ~machine_width arg1 16
               (convert_index_to_tagged_int ~index:arg2 ~index_kind) ]
     | Two_fifty_six { aligned = true } ->
       checked_alignment ~dbg ~primitive
         ~conditions:
-          [ bigstring_alignment_validity_condition arg1 32
+          [ bigstring_alignment_validity_condition ~machine_width arg1 32
               (convert_index_to_tagged_int ~index:arg2 ~index_kind) ]
     | Five_twelve { aligned = true } ->
       checked_alignment ~dbg ~primitive
         ~conditions:
-          [ bigstring_alignment_validity_condition arg1 64
+          [ bigstring_alignment_validity_condition ~machine_width arg1 64
               (convert_index_to_tagged_int ~index:arg2 ~index_kind) ]
     | Eight | Sixteen | Thirty_two | Single | Sixty_four
     | One_twenty_eight { aligned = false }
@@ -976,7 +976,7 @@ let multiple_word_array_access_validity_condition array ~machine_width ~size_int
                length_untagged,
                Simple
                  (Simple.untagged_const_int
-                    (Target_ocaml_int.of_int
+                    (Target_ocaml_int.of_int machine_width
                        (num_consecutive_elements_being_accessed - 1))) ))
     in
     (* We need to convert the length into a naked_nativeint because the
@@ -1206,7 +1206,9 @@ let bigarray_indexing layout b args =
              (Binary
                 ( Int_arith (I.Tagged_immediate, Sub),
                   idx,
-                  H.Simple (Simple.const_int Target_ocaml_int.one) )))
+                  H.Simple (Simple.const_int 
+                    (* TODO: machine_width should be passed through properly here *)
+                    (Target_ocaml_int.one Target_system.Machine_width.Sixty_four)) )))
          args)
 
 let bigarray_access ~dbg ~unsafe ~access layout b indexes =
@@ -1254,7 +1256,9 @@ let compute_array_indexes ~index ~num_elts =
           (Binary
              ( Int_arith (Tagged_immediate, Add),
                index,
-               Simple (Simple.const_int (Target_ocaml_int.of_int offset)) )))
+               Simple (Simple.const_int 
+                 (* TODO: machine_width should be passed through properly here *)
+                 (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four offset)) )))
 
 let rec array_load_unsafe ~array ~index ~(mut : Lambda.mutable_flag) array_kind
     (array_ref_kind : Array_ref_kind.t) ~current_region : H.expr_primitive list

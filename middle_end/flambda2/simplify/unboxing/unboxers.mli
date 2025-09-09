@@ -45,7 +45,7 @@ end
 module Closure_field : sig
   val unboxing_prim : Function_slot.t -> closure:Simple.t -> Value_slot.t -> P.t
 
-  val unboxer : Function_slot.t -> Value_slot.t -> unboxer
+  val unboxer : Target_system.Machine_width.t -> Function_slot.t -> Value_slot.t -> unboxer
 end
 
 (* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

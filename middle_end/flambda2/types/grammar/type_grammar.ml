@@ -3173,10 +3173,8 @@ module Product = struct
     let top = { function_slot_components_by_index = Function_slot.Map.empty }
 
     let width t =
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
-      Target_ocaml_int.of_int machine_width
-        (Function_slot.Map.cardinal t.function_slot_components_by_index)
+      (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
+      Function_slot.Map.cardinal t.function_slot_components_by_index
   end
 
   module Value_slot_indexed = struct
@@ -3188,8 +3186,8 @@ module Product = struct
     let top = { value_slot_components_by_index = Value_slot.Map.empty }
 
     let width t =
-      Target_ocaml_int.of_int
-        (Value_slot.Map.cardinal t.value_slot_components_by_index)
+      (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
+      Value_slot.Map.cardinal t.value_slot_components_by_index
   end
 
   module Int_indexed = struct
@@ -3201,7 +3199,9 @@ module Product = struct
 
     let create_top () = [||]
 
-    let width t = Target_ocaml_int.of_int (Array.length t)
+    let width t = 
+      (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
+      Array.length t
 
     let components t = Array.to_list t
   end

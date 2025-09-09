@@ -237,7 +237,9 @@ let immutable_block ~is_unique tag ~shape alloc_mode ~fields =
       ~extensions:No_extensions
 
 let immutable_block_non_null ~is_unique tag ~shape alloc_mode ~fields =
-  match Target_ocaml_int.of_int_option (List.length fields) with
+  (* TODO: machine_width should be passed through properly here *)
+  let machine_width = Target_system.Machine_width.Sixty_four in
+  match Target_ocaml_int.of_int_option machine_width (List.length fields) with
   | None ->
     (* CR-someday mshinwell: This should be a special kind of error. *)
     Misc.fatal_error "Block too long for target"

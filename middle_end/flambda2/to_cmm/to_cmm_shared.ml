@@ -191,9 +191,12 @@ let name env name = name0 env name
 
 let const ~dbg cst =
   match Reg_width_const.descr cst with
-  | Naked_immediate i -> targetint ~dbg (Target_ocaml_int.to_targetint i)
+  | Naked_immediate i -> 
+    let machine_width = Target_system.machine_width () in
+    targetint ~dbg (Target_ocaml_int.to_targetint machine_width i)
   | Tagged_immediate i ->
-    targetint ~dbg (tag_targetint (Target_ocaml_int.to_targetint i))
+    let machine_width = Target_system.machine_width () in
+    targetint ~dbg (tag_targetint (Target_ocaml_int.to_targetint machine_width i))
   | Naked_float32 f ->
     float32 ~dbg (Numeric_types.Float32_by_bit_pattern.to_float f)
   | Naked_float f -> float ~dbg (Numeric_types.Float_by_bit_pattern.to_float f)
@@ -253,11 +256,13 @@ let name_static res name =
 let const_static cst : Cmm.data_item list =
   match Reg_width_const.descr cst with
   | Naked_immediate i ->
-    [cint (nativeint_of_targetint (Target_ocaml_int.to_targetint i))]
+    let machine_width = Target_system.machine_width () in
+    [cint (nativeint_of_targetint (Target_ocaml_int.to_targetint machine_width i))]
   | Tagged_immediate i ->
+    let machine_width = Target_system.machine_width () in
     [ cint
         (nativeint_of_targetint
-           (tag_targetint (Target_ocaml_int.to_targetint i))) ]
+           (tag_targetint (Target_ocaml_int.to_targetint machine_width i))) ]
   | Naked_float f -> [cfloat (Numeric_types.Float_by_bit_pattern.to_float f)]
   | Naked_float32 f ->
     (* Statically-allocated float32 values are zero padded. We must explicitly

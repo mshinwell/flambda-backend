@@ -83,7 +83,8 @@ let simplify_make_array (array_kind : P.Array_kind.t)
     ~args_with_tys ~result_var =
   let args, tys = List.split args_with_tys in
   let length =
-    match Target_ocaml_int.of_int_option (List.length args) with
+    let machine_width = DE.machine_width (DA.denv dacc) in
+    match Target_ocaml_int.of_int_option machine_width (List.length args) with
     | Some ti -> T.this_tagged_immediate ti
     | None -> T.unknown K.value
   in

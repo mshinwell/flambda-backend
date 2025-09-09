@@ -1087,7 +1087,9 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
       let tags =
         I.Set.fold
           (fun tag tags ->
-            match Tag.create_from_targetint tag with
+            (* TODO: machine_width should be passed through properly here *)
+            let machine_width = Target_system.Machine_width.Sixty_four in
+            match Tag.create_from_targetint machine_width tag with
             | Some tag -> Tag.Set.add tag tags
             | None -> tags (* No blocks exist with this tag *))
           immediates Tag.Set.empty

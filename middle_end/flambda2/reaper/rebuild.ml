@@ -594,7 +594,8 @@ let rebuild_named_default_case env (named : Named.t) =
         Named.create_prim
           (P.Unary
              ( Block_load
-                 { field = Target_ocaml_int.of_int field;
+                 { (* TODO: machine_width should be passed through properly here *)
+                   field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field;
                    kind;
                    mut = Immutable
                  },
@@ -1102,7 +1103,8 @@ let load_field_from_value_which_is_being_unboxed env ~to_bind field arg dbg
             Named.create_prim
               (P.Unary
                  ( Block_load
-                     { field = Target_ocaml_int.of_int field;
+                     { (* TODO: machine_width should be passed through properly here *)
+                   field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field;
                        kind;
                        mut = Immutable
                      },

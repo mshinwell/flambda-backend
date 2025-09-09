@@ -191,11 +191,11 @@ module For_tagged_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
-    let zero _machine_width = Target_ocaml_int.zero
+    let zero machine_width = Target_ocaml_int.zero machine_width
 
-    let one _machine_width = Target_ocaml_int.one
+    let one machine_width = Target_ocaml_int.one machine_width
 
-    let minus_one _machine_width = Target_ocaml_int.minus_one
+    let minus_one machine_width = Target_ocaml_int.minus_one machine_width
 
     let strictly_negative t = 
       (* TODO: machine_width should be passed through properly here *)
@@ -206,12 +206,16 @@ module For_tagged_immediates : Int_number_kind = struct
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
     let div t1 t2 =
-      if Target_ocaml_int.equal t2 Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
       then None
       else Some (div t1 t2)
 
     let mod_ t1 t2 =
-      if Target_ocaml_int.equal t2 Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
       then None
       else Some (mod_ t1 t2)
 
@@ -220,15 +224,21 @@ module For_tagged_immediates : Int_number_kind = struct
     let integer_bit_width = if Target_system.is_32_bit () then 32 else 64
 
     let shift_left t shift =
-      with_shift shift Target_ocaml_int.zero (fun shift -> shift_left t shift) ~integer_bit_width
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      with_shift shift (Target_ocaml_int.zero machine_width) (fun shift -> shift_left t shift) ~integer_bit_width
 
     let shift_right t shift =
-      with_shift shift Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      with_shift shift (Target_ocaml_int.zero machine_width)
         (fun shift -> shift_right t shift)
         ~integer_bit_width
 
     let shift_right_logical t shift =
-      with_shift shift Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      with_shift shift (Target_ocaml_int.zero machine_width)
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width
 
@@ -253,7 +263,7 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let to_naked_int64 t = Target_ocaml_int.to_int64 t
 
-    let to_naked_nativeint t _machine_width = Target_ocaml_int.to_targetint t
+    let to_naked_nativeint t machine_width = Target_ocaml_int.to_targetint machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Tagged_immediate
@@ -274,11 +284,11 @@ module For_naked_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
-    let zero _machine_width = Target_ocaml_int.zero
+    let zero machine_width = Target_ocaml_int.zero machine_width
 
-    let one _machine_width = Target_ocaml_int.one
+    let one machine_width = Target_ocaml_int.one machine_width
 
-    let minus_one _machine_width = Target_ocaml_int.minus_one
+    let minus_one machine_width = Target_ocaml_int.minus_one machine_width
 
     let strictly_negative t = 
       (* TODO: machine_width should be passed through properly here *)
@@ -289,12 +299,16 @@ module For_naked_immediates : Int_number_kind = struct
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
     let div t1 t2 =
-      if Target_ocaml_int.equal t2 Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
       then None
       else Some (div t1 t2)
 
     let mod_ t1 t2 =
-      if Target_ocaml_int.equal t2 Target_ocaml_int.zero
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      if Target_ocaml_int.equal t2 (Target_ocaml_int.zero machine_width)
       then None
       else Some (mod_ t1 t2)
 
@@ -334,7 +348,7 @@ module For_naked_immediates : Int_number_kind = struct
 
     let to_naked_int64 = Target_ocaml_int.to_int64
 
-    let to_naked_nativeint t _machine_width = Target_ocaml_int.to_targetint t
+    let to_naked_nativeint t machine_width = Target_ocaml_int.to_targetint machine_width t
   end
 
   let standard_int_or_float_kind : K.Standard_int_or_float.t = Naked_immediate

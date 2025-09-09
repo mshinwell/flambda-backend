@@ -388,7 +388,9 @@ module Fold_prims = struct
           (* We only consider for unboxing vluaes which are aliases to a single
              makeblock. In particular, for variants, this means that we only
              consider for unboxing variant values which are blocks. *)
-          let bound_to = Simple.untagged_const_bool false in
+          (* TODO: machine_width should be passed through properly here *)
+          let machine_width = Target_system.Machine_width.Sixty_four in
+          let bound_to = Simple.untagged_const_bool machine_width false in
           let rewrite =
             Named_rewrite.prim_rewrite
               (Named_rewrite.Prim_rewrite.replace_by_binding ~var ~bound_to)

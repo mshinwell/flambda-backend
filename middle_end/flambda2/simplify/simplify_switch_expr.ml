@@ -174,8 +174,10 @@ let rebuild_arm uacc arm (action, use_id, arity, env_at_use)
             then
               let identity_arms = TI.Map.add arm action identity_arms in
               maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
-            else if (TI.equal arm TI.bool_true && TI.equal arg TI.bool_false)
-                    || (TI.equal arm TI.bool_false && TI.equal arg TI.bool_true)
+            else 
+              let machine_width = UE.machine_width (UA.uenv uacc) in
+              if (TI.equal arm (TI.bool_true machine_width) && TI.equal arg (TI.bool_false machine_width))
+                    || (TI.equal arm (TI.bool_false machine_width) && TI.equal arg (TI.bool_true machine_width))
             then
               let not_arms = TI.Map.add arm action not_arms in
               maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
@@ -226,7 +228,7 @@ type must_untag_lookup_table_result =
 (* Recognise sufficiently-large Switch expressions where all of the arms provide
    a single argument to a unique destination. These expressions can be compiled
    using lookup tables, which dramatically reduces code size. *)
-let recognize_switch_with_single_arg_to_same_destination0 ~arms =
+let recognize_switch_with_single_arg_to_same_destination0 machine_width ~arms =
   let check_arm discr dest dest_and_args_rev_and_expected_discr =
     let dest' = AC.continuation dest in
     match dest_and_args_rev_and_expected_discr with
@@ -251,10 +253,10 @@ let recognize_switch_with_single_arg_to_same_destination0 ~arms =
             ~name:(fun _ ~coercion:_ ->
               (* Aliases should have been followed by now. *) None)
             ~const:(fun const ->
-              let expected_discr = TI.add TI.one expected_discr in
+              let expected_discr = TI.add (TI.one machine_width) expected_discr in
               Some (Some dest', const :: args_rev, expected_discr))))
   in
-  match TI.Map.fold check_arm arms (Some (None, [], TI.zero)) with
+  match TI.Map.fold check_arm arms (Some (None, [], TI.zero machine_width)) with
   | None | Some (None, _, _) | Some (_, [], _) -> None
   | Some (Some dest, args_rev, _) -> (
     let args = List.rev args_rev in
@@ -282,11 +284,11 @@ let recognize_switch_with_single_arg_to_same_destination0 ~arms =
     | Naked_vec256 _ | Naked_vec512 _ | Null ->
       None)
 
-let recognize_switch_with_single_arg_to_same_destination ~arms =
+let recognize_switch_with_single_arg_to_same_destination machine_width ~arms =
   (* Switch must be large enough. *)
   if TI.Map.cardinal arms < 3
   then None
-  else recognize_switch_with_single_arg_to_same_destination0 ~arms
+  else recognize_switch_with_single_arg_to_same_destination0 machine_width ~arms
 
 let rebuild_switch_with_single_arg_to_same_destination uacc ~dacc_before_switch
     ~original ~tagged_scrutinee ~dest ~consts ~must_untag_lookup_table_result
@@ -390,7 +392,7 @@ let rebuild_switch_with_single_arg_to_same_destination uacc ~dacc_before_switch
   in
   expr, uacc
 
-let recognize_affine_switch_to_same_destination consts =
+let recognize_affine_switch_to_same_destination machine_width consts =
   match consts with
   | [] | [_] -> None
   | const0 :: const1 :: other_consts ->
@@ -399,9 +401,9 @@ let recognize_affine_switch_to_same_destination consts =
       | [] -> Some (offset, slope)
       | const :: _ when not TI.(equal const (add (mul index slope) offset)) ->
         None
-      | _ :: consts -> check offset slope TI.(add index one) consts
+      | _ :: consts -> check offset slope TI.(add index (one machine_width)) consts
     in
-    check const0 slope (TI.of_int 2) other_consts
+    check const0 slope (TI.of_int machine_width 2) other_consts
 
 (* Tiny DSL to preserve sanity while rebuilding expressions. *)
 
@@ -517,8 +519,9 @@ let rebuild_switch ~original ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
       |> List.map Apply_cont.continuation
       |> Continuation.Set.of_list |> Continuation.Set.get_singleton
   in
+  let machine_width = DE.machine_width (DA.denv dacc) in
   let switch_is_single_arg_to_same_destination =
-    recognize_switch_with_single_arg_to_same_destination ~arms
+    recognize_switch_with_single_arg_to_same_destination machine_width ~arms
   in
   let body, uacc =
     if TI.Map.cardinal arms < 1
@@ -558,7 +561,7 @@ let rebuild_switch ~original ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
           with
           | None -> normal_case0 uacc
           | Some tagged_scrutinee -> (
-            match recognize_affine_switch_to_same_destination consts with
+            match recognize_affine_switch_to_same_destination machine_width consts with
             | None ->
               rebuild_switch_with_single_arg_to_same_destination uacc
                 ~dacc_before_switch ~original ~tagged_scrutinee ~dest ~consts

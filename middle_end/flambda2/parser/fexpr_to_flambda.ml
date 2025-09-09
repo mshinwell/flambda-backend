@@ -376,7 +376,7 @@ let field_of_block env (v : Fexpr.field_of_block) =
     | Tagged_immediate i ->
       let i = Targetint_32_64.of_string machine_width i in
       Simple.const
-        (Reg_width_const.tagged_immediate (Target_ocaml_int.of_targetint i))
+        (Reg_width_const.tagged_immediate (Target_ocaml_int.of_targetint machine_width i))
     | Dynamically_computed var ->
       let var = find_var env var in
       Simple.var var

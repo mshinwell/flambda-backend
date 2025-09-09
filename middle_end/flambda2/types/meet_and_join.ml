@@ -1979,7 +1979,9 @@ and join_head_of_kind_naked_immediate env
       (* Slightly better than Unknown *)
       let head =
         TG.Head_of_kind_naked_immediate.create_naked_immediates
-          (I.Set.add I.zero (I.Set.add I.one is_int))
+          (* TODO: machine_width should be passed through properly here *)
+          (let machine_width = Target_system.Machine_width.Sixty_four in
+           I.Set.add (I.zero machine_width) (I.Set.add (I.one machine_width) is_int))
       in
       match head with
       | Ok head -> Known head

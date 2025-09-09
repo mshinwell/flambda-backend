@@ -433,7 +433,7 @@ module Product : sig
 
     val create : flambda_type Function_slot.Map.t -> t
 
-    val width : t -> Target_ocaml_int.t
+    val width : t -> int  (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
   end
 
   module Value_slot_indexed : sig
@@ -443,7 +443,7 @@ module Product : sig
 
     val create : flambda_type Value_slot.Map.t -> t
 
-    val width : t -> Target_ocaml_int.t
+    val width : t -> int  (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
   end
 
   module Int_indexed : sig
@@ -455,7 +455,7 @@ module Product : sig
 
     val create_from_array : flambda_type array -> t
 
-    val width : t -> Target_ocaml_int.t
+    val width : t -> int  (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
 
     val components : t -> flambda_type list
   end

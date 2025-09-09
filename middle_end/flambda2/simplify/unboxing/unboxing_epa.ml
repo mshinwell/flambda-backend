@@ -95,17 +95,23 @@ let extra_arg_for_is_int = function
   | Maybe_constant_constructor { is_int; _ } ->
     EPA.Extra_arg.Already_in_scope is_int
   | Not_a_constant_constructor ->
-    EPA.Extra_arg.Already_in_scope Simple.untagged_const_false
+    (* TODO: machine_width should be passed through properly here *)
+    let machine_width = Target_system.Machine_width.Sixty_four in
+    EPA.Extra_arg.Already_in_scope (Simple.untagged_const_false machine_width)
 
 let extra_arg_for_ctor ~typing_env_at_use = function
   | Not_a_constant_constructor ->
     EPA.Extra_arg.Already_in_scope
-      (Simple.untagged_const_int (Target_ocaml_int.of_int 0))
+      (* TODO: machine_width should be passed through properly here *)
+      (let machine_width = Target_system.Machine_width.Sixty_four in
+       Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
   | Maybe_constant_constructor { arg_being_unboxed; _ } -> (
     match type_of_arg_being_unboxed arg_being_unboxed with
     | None ->
       EPA.Extra_arg.Already_in_scope
-        (Simple.untagged_const_int (Target_ocaml_int.of_int 0))
+        (* TODO: machine_width should be passed through properly here *)
+      (let machine_width = Target_system.Machine_width.Sixty_four in
+       Simple.untagged_const_int (Target_ocaml_int.of_int machine_width 0))
     | Some arg_type -> (
       match
         T.meet_tagging_of_simple typing_env_at_use
@@ -171,9 +177,9 @@ let compute_extra_arg_for_number kind unboxer epa rewrite_id ~typing_env_at_use
 (* Helpers for the block case *)
 (* ************************** *)
 
-let access_kind_and_dummy_const tag shape fields index :
+let access_kind_and_dummy_const machine_width tag shape fields index :
     P.Block_access_kind.t * _ =
-  let size = Or_unknown.Known (Target_ocaml_int.of_int (List.length fields)) in
+  let size = Or_unknown.Known (Target_ocaml_int.of_int machine_width (List.length fields)) in
   match (shape : K.Block_shape.t) with
   | Scannable Value_only ->
     ( Values
@@ -181,7 +187,7 @@ let access_kind_and_dummy_const tag shape fields index :
           tag = Known (Option.get (Tag.Scannable.of_tag tag));
           field_kind = Any_value
         },
-      Const.const_zero )
+      Const.const_zero machine_width )
   | Float_record ->
     ( Naked_floats { size },
       Const.naked_float Numeric_types.Float_by_bit_pattern.zero )
@@ -192,7 +198,7 @@ let access_kind_and_dummy_const tag shape fields index :
         (* CR vlaviron: we're not trying to infer if this can only be an
            immediate. In most cases it should be fine, as the primitive will get
            simplified away. *)
-        P.Mixed_block_access_field_kind.Value_prefix Any_value, Const.const_zero
+        P.Mixed_block_access_field_kind.Value_prefix Any_value, Const.const_zero machine_width
       else
         let field_kind =
           let flat_suffix_index =
@@ -202,7 +208,7 @@ let access_kind_and_dummy_const tag shape fields index :
           (K.Mixed_block_shape.flat_suffix shape).(flat_suffix_index)
         in
         ( P.Mixed_block_access_field_kind.Flat_suffix field_kind,
-          Const.of_int_of_kind (K.Flat_suffix_element.kind field_kind) 0 )
+          Const.of_int_of_kind machine_width (K.Flat_suffix_element.kind field_kind) 0 )
     in
     let tag = Or_unknown.Known (Option.get (Tag.Scannable.of_tag tag)) in
     Mixed { tag; size; shape; field_kind }, const
@@ -288,7 +294,7 @@ and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
       (fun field_nth ({ epa; decision; kind } : U.field_decision) :
            (_ * U.field_decision) ->
         let bak, poison_const =
-          access_kind_and_dummy_const tag shape fields
+          access_kind_and_dummy_const machine_width tag shape fields
             (Target_ocaml_int.to_int field_nth)
         in
         let unboxer =
@@ -304,8 +310,8 @@ and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
           compute_extra_args_for_one_decision_and_use ~pass rewrite_id
             ~typing_env_at_use ~machine_width new_arg_being_unboxed decision
         in
-        Target_ocaml_int.(add one field_nth), { epa; decision; kind })
-      Target_ocaml_int.zero fields
+        Target_ocaml_int.(add (one machine_width) field_nth), { epa; decision; kind })
+      (Target_ocaml_int.zero machine_width) fields
   in
   Unbox (Unique_tag_and_size { tag; shape; fields })
 
@@ -314,7 +320,7 @@ and compute_extra_args_for_closure ~pass rewrite_id ~typing_env_at_use
   let vars_within_closure =
     Value_slot.Map.mapi
       (fun var ({ epa; decision; kind } : U.field_decision) : U.field_decision ->
-        let unboxer = Unboxers.Closure_field.unboxer function_slot var in
+        let unboxer = Unboxers.Closure_field.unboxer machine_width function_slot var in
         let new_extra_arg, new_arg_being_unboxed =
           unbox_arg unboxer ~typing_env_at_use arg_being_unboxed
         in
@@ -352,7 +358,7 @@ and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
       extra_args_for_const_ctor_of_variant const_ctors_from_decision
         ~typing_env_at_use rewrite_id
         (Maybe_constant_constructor
-           { arg_being_unboxed; is_int = Simple.untagged_const_true })
+           { arg_being_unboxed; is_int = Simple.untagged_const_true machine_width })
     else
       (* CR-someday gbury: one might want to try and use the cse at use to allow
          unboxing when the tag is not known statically but can be recovered
@@ -387,7 +393,7 @@ and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
             (fun (new_decisions, field_nth)
                  ({ epa; decision; kind } : U.field_decision) ->
               let bak, poison_const =
-                access_kind_and_dummy_const
+                access_kind_and_dummy_const machine_width
                   (Tag.Scannable.to_tag tag_decision)
                   shape block_fields
                   (Target_ocaml_int.to_int field_nth)

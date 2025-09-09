@@ -583,7 +583,7 @@ binop_app:
     block = simple; DOT;
     LPAREN; field = tag; RPAREN;
     init = init_or_assign;
-    v = simple
+    v = simple;
     { Binary
         (Block_set
            { kind; init; field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field }, block, v) }
