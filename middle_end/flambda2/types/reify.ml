@@ -605,7 +605,9 @@ let reify ~allowed_if_free_vars_defined_in ~var_is_defined_at_toplevel
           }) -> (
       match Provers.meet_equals_single_tagged_immediate env length with
       | Known_result length -> (
-        if not (Target_ocaml_int.equal length Target_ocaml_int.zero)
+        (* TODO: machine_width should be passed through properly here *)
+        let machine_width = Target_system.Machine_width.Sixty_four in
+        if not (Target_ocaml_int.equal length (Target_ocaml_int.zero machine_width))
         then try_canonical_simple ()
         else
           match element_kind with

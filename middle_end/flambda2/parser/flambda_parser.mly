@@ -586,7 +586,7 @@ binop_app:
     v = simple
     { Binary
         (Block_set
-           { kind; init; field = Target_ocaml_int.of_int field }, block, v) }
+           { kind; init; field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field }, block, v) }
   | op = prefix_binop; LPAREN; arg1 = simple; COMMA; arg2 = simple; RPAREN
     { Binary (op, arg1, arg2) }
   | arg1 = simple; op = infix_binop; arg2 = simple

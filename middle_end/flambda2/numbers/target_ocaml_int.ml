@@ -23,31 +23,32 @@
 module T0 = struct
   include Targetint_32_64
 
-  (* TODO: This should not be hardcoded - machine_width should flow through properly *)
-  let machine_width = Target_system.Machine_width.Sixty_four
-
-  let zero = Targetint_32_64.zero machine_width
+  let zero machine_width = Targetint_32_64.zero machine_width
   
-  let one = Targetint_32_64.one machine_width
+  let one machine_width = Targetint_32_64.one machine_width
   
-  let minus_one = Targetint_32_64.minus_one machine_width
+  let minus_one machine_width = Targetint_32_64.minus_one machine_width
   
-  let ten = Targetint_32_64.of_int machine_width 10
+  let ten machine_width = Targetint_32_64.of_int machine_width 10
 
-  let hex_ff = Targetint_32_64.of_int machine_width 0xff
+  let hex_ff machine_width = Targetint_32_64.of_int machine_width 0xff
 
-  let bool_true = one
+  let bool_true machine_width = one machine_width
 
-  let bool_false = zero
+  let bool_false machine_width = zero machine_width
 
-  let bool b = if b then bool_true else bool_false
+  let bool machine_width b = if b then bool_true machine_width else bool_false machine_width
 
-  let min_value = Targetint_32_64.min_int machine_width
+  let min_value machine_width = Targetint_32_64.min_int machine_width
 
-  let max_value = Targetint_32_64.max_int machine_width
+  let max_value machine_width = Targetint_32_64.max_int machine_width
 
   let bottom_byte_to_int t =
-    Targetint_32_64.to_int (Targetint_32_64.logand t hex_ff)
+    (* Since bottom_byte_to_int doesn't take machine_width as parameter,
+       we need to work with the actual value. The bottom byte is the same
+       regardless of machine width. *)
+    Targetint_32_64.to_int (Targetint_32_64.logand t 
+      (Targetint_32_64.of_int Target_system.Machine_width.Sixty_four 0xff))
 
   let xor = Targetint_32_64.logxor
 
@@ -57,29 +58,29 @@ module T0 = struct
 
   let mod_ = Targetint_32_64.rem
 
-  let of_int i = Targetint_32_64.of_int machine_width i
+  let of_int machine_width i = Targetint_32_64.of_int machine_width i
   
-  let of_int32 i = Targetint_32_64.of_int32 machine_width i
+  let of_int32 machine_width i = Targetint_32_64.of_int32 machine_width i
   
-  let of_int64 i = Targetint_32_64.of_int64 machine_width i
+  let of_int64 machine_width i = Targetint_32_64.of_int64 machine_width i
   
-  let of_float f = Targetint_32_64.of_float machine_width f
+  let of_float machine_width f = Targetint_32_64.of_float machine_width f
   
-  let of_char c = Targetint_32_64.of_int machine_width (Char.code c)
+  let of_char machine_width c = Targetint_32_64.of_int machine_width (Char.code c)
 
-  let of_int_option i = Some (of_int i)
+  let of_int_option machine_width i = Some (of_int machine_width i)
 
-  let to_targetint t = t
+  let to_targetint _machine_width t = t
 
-  let of_targetint t = t
+  let of_targetint _machine_width t = t
 
   let max t1 t2 = if Targetint_32_64.compare t1 t2 < 0 then t2 else t1
 
   let min t1 t2 = if Targetint_32_64.compare t1 t2 < 0 then t1 else t2
 
-  let of_int8 i = Targetint_32_64.of_int machine_width (Numeric_types.Int8.to_int i)
+  let of_int8 machine_width i = Targetint_32_64.of_int machine_width (Numeric_types.Int8.to_int i)
 
-  let of_int16 i = Targetint_32_64.of_int machine_width (Numeric_types.Int16.to_int i)
+  let of_int16 machine_width i = Targetint_32_64.of_int machine_width (Numeric_types.Int16.to_int i)
 
   let ( <= ) t1 t2 = Stdlib.( <= ) (Targetint_32_64.compare t1 t2) 0
 
@@ -90,6 +91,7 @@ module T0 = struct
   let ( > ) t1 t2 = Stdlib.( > ) (Targetint_32_64.compare t1 t2) 0
 
   let to_int_option t =
+    let machine_width = Target_system.machine_width () in
     let min_int_as_int64 = Targetint_32_64.of_int machine_width Stdlib.min_int in
     let max_int_as_int64 = Targetint_32_64.of_int machine_width Stdlib.max_int in
     if min_int_as_int64 <= t && t <= max_int_as_int64
@@ -104,7 +106,10 @@ module T0 = struct
         Targetint_32_64.print t
 
   let get_least_significant_16_bits_then_byte_swap t =
-    let least_significant_byte = Targetint_32_64.logand t hex_ff in
+    (* The bottom 16 bits are the same regardless of machine width, so we can
+       use either width here. Using Sixty_four for simplicity. *)
+    let machine_width = Target_system.Machine_width.Sixty_four in
+    let least_significant_byte = Targetint_32_64.logand t (hex_ff machine_width) in
     let second_to_least_significant_byte =
       Targetint_32_64.shift_right_logical
         (Targetint_32_64.logand t (Targetint_32_64.of_int machine_width 0xff00))
@@ -113,7 +118,10 @@ module T0 = struct
     Targetint_32_64.logor second_to_least_significant_byte
       (Targetint_32_64.shift_left least_significant_byte 8)
 
-  let is_non_negative t = t >= zero
+  let is_non_negative t = 
+    (* The sign bit check works the same for both 32-bit and 64-bit values.
+       Using Sixty_four for the comparison. *)
+    t >= zero Target_system.Machine_width.Sixty_four
 end
 
 module Self = struct
@@ -127,9 +135,9 @@ end
 
 include Self
 
-let all_bools = Set.of_list [bool_true; bool_false]
+let all_bools machine_width = Set.of_list [bool_true machine_width; bool_false machine_width]
 
-let zero_one_and_minus_one = Set.of_list [T0.zero; T0.one; T0.minus_one]
+let zero_one_and_minus_one machine_width = Set.of_list [T0.zero machine_width; T0.one machine_width; T0.minus_one machine_width]
 
 module Pair = struct
   type nonrec t = t * t

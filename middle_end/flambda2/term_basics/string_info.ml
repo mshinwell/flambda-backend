@@ -53,7 +53,9 @@ include Container_types.Make (struct
         Target_ocaml_int.print size
     | Contents s ->
       let s, dots =
-        let max_size = Target_ocaml_int.ten in
+        (* TODO: machine_width should be passed through properly here *)
+        let machine_width = Target_system.Machine_width.Sixty_four in
+        let max_size = Target_ocaml_int.ten machine_width in
         let long = Target_ocaml_int.compare size max_size > 0 in
         if long then String.sub s 0 8, "..."
         else s, ""

@@ -107,9 +107,15 @@ let these_tagged_immediates0 imms =
 
 let these_tagged_immediates imms = these_tagged_immediates0 imms
 
-let any_tagged_bool = these_tagged_immediates Target_ocaml_int.all_bools
+let any_tagged_bool = 
+  (* TODO: machine_width should be passed through properly here *)
+  let machine_width = Target_system.Machine_width.Sixty_four in
+  these_tagged_immediates (Target_ocaml_int.all_bools machine_width)
 
-let any_naked_bool = TG.these_naked_immediates Target_ocaml_int.all_bools
+let any_naked_bool = 
+  (* TODO: machine_width should be passed through properly here *)
+  let machine_width = Target_system.Machine_width.Sixty_four in
+  TG.these_naked_immediates (Target_ocaml_int.all_bools machine_width)
 
 let this_boxed_float32 f alloc_mode =
   TG.box_float32 (TG.this_naked_float32 f) alloc_mode
@@ -216,7 +222,9 @@ let blocks_with_these_tags tags alloc_mode : _ Or_unknown.t =
          ~extensions:No_extensions)
 
 let immutable_block ~is_unique tag ~shape alloc_mode ~fields =
-  match Target_ocaml_int.of_int_option (List.length fields) with
+  (* TODO: machine_width should be passed through properly here *)
+  let machine_width = Target_system.Machine_width.Sixty_four in
+  match Target_ocaml_int.of_int_option machine_width (List.length fields) with
   | None ->
     (* CR-someday mshinwell: This should be a special kind of error. *)
     Misc.fatal_error "Block too long for target"

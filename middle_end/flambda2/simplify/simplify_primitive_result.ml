@@ -44,7 +44,8 @@ let create_invalid dacc =
 let create_unit dacc ~result_var ~original_term =
   (* CR gbury: would it make sense to have a Flambda2_types.unit instead of this
      ? *)
-  let ty = Flambda2_types.this_tagged_immediate Target_ocaml_int.zero in
+  let machine_width = DE.machine_width (DA.denv dacc) in
+  let ty = Flambda2_types.this_tagged_immediate (Target_ocaml_int.zero machine_width) in
   let dacc = Downwards_acc.add_variable dacc result_var ty in
   create original_term ~try_reify:false dacc
 

@@ -197,7 +197,10 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let minus_one _machine_width = Target_ocaml_int.minus_one
 
-    let strictly_negative t = t < Target_ocaml_int.zero
+    let strictly_negative t = 
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      t < Target_ocaml_int.zero machine_width
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
@@ -277,7 +280,10 @@ module For_naked_immediates : Int_number_kind = struct
 
     let minus_one _machine_width = Target_ocaml_int.minus_one
 
-    let strictly_negative t = t < Target_ocaml_int.zero
+    let strictly_negative t = 
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      t < Target_ocaml_int.zero machine_width
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative

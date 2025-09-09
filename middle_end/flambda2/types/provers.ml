@@ -235,17 +235,23 @@ let prove_naked_immediates_generic env t : Target_ocaml_int.Set.t generic_proof
   | Naked_immediate (Ok (Is_int scrutinee_ty)) -> (
     match prove_is_int_generic ~variant_only:true env scrutinee_ty with
     | Proved true ->
-      Proved (Target_ocaml_int.Set.singleton Target_ocaml_int.bool_true)
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      Proved (Target_ocaml_int.Set.singleton (Target_ocaml_int.bool_true machine_width))
     | Proved false ->
-      Proved (Target_ocaml_int.Set.singleton Target_ocaml_int.bool_false)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      Proved (Target_ocaml_int.Set.singleton (Target_ocaml_int.bool_false machine_width))
     | Unknown -> Unknown
     | Invalid -> Invalid)
   | Naked_immediate (Ok (Is_null scrutinee_ty)) -> (
     match prove_is_null_generic env scrutinee_ty with
     | Proved true ->
-      Proved (Target_ocaml_int.Set.singleton Target_ocaml_int.bool_true)
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      Proved (Target_ocaml_int.Set.singleton (Target_ocaml_int.bool_true machine_width))
     | Proved false ->
-      Proved (Target_ocaml_int.Set.singleton Target_ocaml_int.bool_false)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      Proved (Target_ocaml_int.Set.singleton (Target_ocaml_int.bool_false machine_width))
     | Unknown -> Unknown
     | Invalid -> Invalid)
   | Naked_immediate (Ok (Get_tag block_ty)) -> (
@@ -254,7 +260,9 @@ let prove_naked_immediates_generic env t : Target_ocaml_int.Set.t generic_proof
       let is =
         Tag.Set.fold
           (fun tag is ->
-            Target_ocaml_int.Set.add (Tag.to_targetint_31_63 tag) is)
+            (* TODO: machine_width should be passed through properly here *)
+            let machine_width = Target_system.Machine_width.Sixty_four in
+            Target_ocaml_int.Set.add (Tag.to_targetint_31_63 machine_width tag) is)
           tags Target_ocaml_int.Set.empty
       in
       Proved is

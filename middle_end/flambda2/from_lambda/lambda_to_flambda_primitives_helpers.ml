@@ -59,7 +59,9 @@ and simple_or_prim =
 
 let simple_untagged_int x : simple_or_prim =
   Simple
-    (Simple.const (Reg_width_const.naked_immediate (Target_ocaml_int.of_int x)))
+    (* TODO: machine_width should be passed through properly here *)
+    (Simple.const (Reg_width_const.naked_immediate 
+      (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four x)))
 
 let simple_i64 x : simple_or_prim =
   Simple (Simple.const (Reg_width_const.naked_int64 x))

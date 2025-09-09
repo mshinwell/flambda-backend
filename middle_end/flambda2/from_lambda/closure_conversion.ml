@@ -103,9 +103,9 @@ let rec declare_const acc dbg (const : Lambda.structured_constant) =
   in
   match const with
   | Const_base (Const_int c) ->
-    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_int c)), "int"
+    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_int (Acc.machine_width acc) c)), "int"
   | Const_base (Const_char c) ->
-    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_char c)), "char"
+    acc, reg_width (RWC.tagged_immediate (Target_ocaml_int.of_char (Acc.machine_width acc) c)), "char"
   | Const_base (Const_unboxed_float c) ->
     let c = Numeric_types.Float_by_bit_pattern.of_string c in
     acc, reg_width (RWC.naked_float c), "unboxed_float"

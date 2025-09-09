@@ -976,7 +976,10 @@ module With_subkind = struct
         | [], _ :: _ | _ :: _, [] | _ :: _, _ :: _ ->
           let consts =
             Target_ocaml_int.Set.of_list
-              (List.map (fun const -> Target_ocaml_int.of_int const) consts)
+              (List.map (fun const -> 
+                (* TODO: machine_width should be passed through properly here *)
+                let machine_width = Target_system.Machine_width.Sixty_four in
+                Target_ocaml_int.of_int machine_width const) consts)
           in
           let non_consts =
             List.fold_left

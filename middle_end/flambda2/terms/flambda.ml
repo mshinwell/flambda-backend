@@ -1394,9 +1394,9 @@ module Named = struct
   let dummy_value ~machine_width (kind : K.t) : t =
     let simple =
       match kind with
-      | Value -> Simple.const_zero
+      | Value -> Simple.const_zero machine_width
       | Naked_number Naked_immediate ->
-        Simple.const (Reg_width_const.naked_immediate Target_ocaml_int.zero)
+        Simple.const (Reg_width_const.naked_immediate (Target_ocaml_int.zero machine_width))
       | Naked_number Naked_float ->
         Simple.const
           (Reg_width_const.naked_float Numeric_types.Float_by_bit_pattern.zero)

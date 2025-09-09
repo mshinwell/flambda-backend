@@ -3173,7 +3173,9 @@ module Product = struct
     let top = { function_slot_components_by_index = Function_slot.Map.empty }
 
     let width t =
-      Target_ocaml_int.of_int
+      (* TODO: machine_width should be passed through properly here *)
+      let machine_width = Target_system.Machine_width.Sixty_four in
+      Target_ocaml_int.of_int machine_width
         (Function_slot.Map.cardinal t.function_slot_components_by_index)
   end
 

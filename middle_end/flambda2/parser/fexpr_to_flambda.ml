@@ -251,7 +251,8 @@ let targetint (i : Fexpr.targetint) : Targetint_32_64.t =
   Targetint_32_64.of_int64 machine_width i
 
 let targetint_31_63 (i : Fexpr.targetint) : Target_ocaml_int.t =
-  Target_ocaml_int.of_int64 i
+  (* TODO: machine_width should be passed through properly here *)
+  Target_ocaml_int.of_int64 Target_system.Machine_width.Sixty_four i
 
 let vec128 bits : Vector_types.Vec128.Bit_pattern.t =
   Vector_types.Vec128.Bit_pattern.of_bits bits
@@ -267,7 +268,7 @@ let tag_scannable (tag : Fexpr.tag_scannable) : Tag.Scannable.t =
 
 let immediate i =
   (* TODO: This should not be hardcoded - machine_width should flow through properly *)
-  i |> Targetint_32_64.of_string machine_width |> Target_ocaml_int.of_targetint
+  i |> Targetint_32_64.of_string machine_width |> Target_ocaml_int.of_targetint machine_width
 
 let float32 f = f |> Numeric_types.Float32_by_bit_pattern.create
 
