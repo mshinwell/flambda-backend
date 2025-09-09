@@ -115,9 +115,7 @@ module T0 = struct
         Targetint_32_64.print t
 
   let get_least_significant_16_bits_then_byte_swap t =
-    (* The bottom 16 bits are the same regardless of machine width, so we can
-       use either width here. Using Sixty_four for simplicity. *)
-    let machine_width = Target_system.Machine_width.Sixty_four in
+    let machine_width = machine_width t in
     let least_significant_byte =
       Targetint_32_64.logand t (hex_ff machine_width)
     in
@@ -129,10 +127,7 @@ module T0 = struct
     Targetint_32_64.logor second_to_least_significant_byte
       (Targetint_32_64.shift_left least_significant_byte 8)
 
-  let is_non_negative t =
-    (* The sign bit check works the same for both 32-bit and 64-bit values.
-       Using Sixty_four for the comparison. *)
-    t >= zero Target_system.Machine_width.Sixty_four
+  let is_non_negative t = t >= zero (machine_width t)
 end
 
 module Self = struct

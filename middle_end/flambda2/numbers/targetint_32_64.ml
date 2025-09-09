@@ -145,7 +145,7 @@ module Int32 = struct
 
   let of_int_exn _machine_width =
     match Sys.word_size with
-    (* size of [int] *)
+    (* size of [int] on the host *)
     | 32 -> Int32.of_int
     | 64 ->
       fun n ->
