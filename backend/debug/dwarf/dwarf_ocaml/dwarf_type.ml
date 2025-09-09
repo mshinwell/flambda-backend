@@ -1427,7 +1427,7 @@ let rec type_shape_to_dwarf_die (type_shape : Shape.t)
     | Poly_variant fields ->
       type_shape_to_dwarf_die_poly_variant ~reference ?name ~parent_proto_die
         ~fallback_value_die ~constructors:fields ~rec_env ()
-    | Arrow _ ->
+    | Arrow ->
       type_shape_to_dwarf_die_arrow ~reference ?name ~parent_proto_die
         ~fallback_value_die ()
     | Record { fields; kind = Record_boxed | Record_floats } ->
@@ -1808,8 +1808,8 @@ let rec flatten_shape (type_shape : Shape.t) (type_layout : Layout.t) =
       Misc.fatal_errorf "predefined type must have base layout, but got: %a"
         Layout.format type_layout
     else unknown_base_layouts type_layout
-  | Arrow _, Base Value -> known_value
-  | Arrow _, _ ->
+  | Arrow, Base Value -> known_value
+  | Arrow, _ ->
     if !Clflags.dwarf_pedantic
     then
       Misc.fatal_errorf "arrow must have value layout, but got: %a"
@@ -1914,14 +1914,24 @@ let rec flatten_shape (type_shape : Shape.t) (type_layout : Layout.t) =
     unknown_base_layouts type_layout
 
 module With_cms_reduce = Shape_reduce.Make (struct
-  let fuel = 10
+  let fuel () = !Clflags.gdwarf_config_shape_reduce_fuel
+
+  let fuel_for_compilation_units () =
+    !Clflags.gdwarf_config_max_cms_files_per_variable
+  (* Every variable gets to look up at most N compilation units. *)
+
+  let max_shape_reduce_steps_per_variable () =
+    Misc.Maybe_bounded.of_option
+      !Clflags.gdwarf_config_max_shape_reduce_steps_per_variable
+
+  let max_compilation_unit_depth () = !Clflags.gdwarf_config_shape_reduce_depth
 
   let projection_rules_for_merlin_enabled = false
 
   let cms_file_cache = String.Tbl.create 264
 
-  let max_number_of_cms_files = ref 20
-  (* A single compilation may not read more than 20 .cms files. *)
+  let cms_files_read_counter = ref 0
+  (* Track the number of .cms files read during compilation. *)
   (* CR sspies: Investigate the performance some more and the balance between
      different variables. *)
 
@@ -1958,8 +1968,8 @@ module With_cms_reduce = Shape_reduce.Make (struct
       Shape_reduce.Diagnostics.count_cms_file_cached diagnostics;
       shape
     | None ->
-      if !max_number_of_cms_files <= 0
-         (* CR sspies: This needs a command line flag. *)
+      if !cms_files_read_counter
+         >= !Clflags.gdwarf_config_max_cms_files_per_unit
       then None
       else
         let filename = String.uncapitalize_ascii unit_name in
@@ -1973,7 +1983,7 @@ module With_cms_reduce = Shape_reduce.Make (struct
         let shape_opt =
           match shape_opt_opt with
           | Some shape_opt ->
-            decr max_number_of_cms_files;
+            incr cms_files_read_counter;
             Shape_reduce.Diagnostics.count_cms_file_loaded diagnostics;
             shape_opt
           | None ->
