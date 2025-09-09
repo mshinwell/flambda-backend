@@ -3336,7 +3336,7 @@ module Row_like_for_blocks = struct
           Known tag)
     in
     let product = Array.of_list field_tys in
-    let size = Target_ocaml_int.of_int (List.length field_tys) in
+    let size = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four (List.length field_tys) in
     match open_or_closed with
     | Open _ -> (
       match tag with
@@ -3367,7 +3367,7 @@ module Row_like_for_blocks = struct
         (fun (shape, field_tys) ->
           check_field_tys ~shape ~field_tys;
           let maps_to = Array.of_list field_tys in
-          let size = Target_ocaml_int.of_int (List.length field_tys) in
+          let size = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four (List.length field_tys) in
           Or_unknown.Known
             { maps_to;
               index = { domain = Known size; shape };

@@ -1198,8 +1198,8 @@ and switch env res switch =
   in
   let wrap, env, res = Env.flush_delayed_lets ~mode:Branching_point env res in
   let prepare_discriminant ~must_tag d =
-    let targetint_d = Target_ocaml_int.to_targetint d in
-    let machine_width = Target_system.machine_width () in
+    let machine_width = Target_system.Machine_width.Sixty_four in
+    let targetint_d = Target_ocaml_int.to_targetint machine_width d in
     Targetint_32_64.to_int_checked machine_width
       (if must_tag then C.tag_targetint targetint_d else targetint_d)
   in

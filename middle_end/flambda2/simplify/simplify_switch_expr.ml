@@ -508,10 +508,11 @@ let rebuild_switch ~original ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
       |> List.map Apply_cont.continuation
       |> Continuation.Set.of_list |> Continuation.Set.get_singleton
   in
+  let machine_width = DE.machine_width (DA.denv dacc_before_switch) in
   let switch_is_boolean_not =
     let arm_discrs = TI.Map.keys arms in
     let not_arms_discrs = TI.Map.keys not_arms in
-    if (not (TI.Set.equal arm_discrs TI.all_bools))
+    if (not (TI.Set.equal arm_discrs (TI.all_bools machine_width)))
        || not (TI.Set.equal arm_discrs not_arms_discrs)
     then None
     else
@@ -519,7 +520,6 @@ let rebuild_switch ~original ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
       |> List.map Apply_cont.continuation
       |> Continuation.Set.of_list |> Continuation.Set.get_singleton
   in
-  let machine_width = DE.machine_width (DA.denv dacc) in
   let switch_is_single_arg_to_same_destination =
     recognize_switch_with_single_arg_to_same_destination machine_width ~arms
   in

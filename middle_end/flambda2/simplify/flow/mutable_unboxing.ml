@@ -403,8 +403,10 @@ module Fold_prims = struct
         ~f:(fun ~block ~tag ~fields_kinds:_ ->
           ignore block;
           (* ensure that only the canonical alias of block is in scope *)
+          (* TODO: machine_width should be passed through properly here *)
+          let machine_width = Target_system.Machine_width.Sixty_four in
           let bound_to =
-            Simple.untagged_const_int (Tag.to_targetint_31_63 tag)
+            Simple.untagged_const_int (Tag.to_targetint_31_63 machine_width tag)
           in
           let rewrite =
             Named_rewrite.prim_rewrite

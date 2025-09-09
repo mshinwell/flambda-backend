@@ -1293,7 +1293,7 @@ let rec array_load_unsafe ~array ~index ~(mut : Lambda.mutable_flag) array_kind
     let unarized = List.concat_map unarize_kind array_ref_kinds in
     let index : H.expr_primitive =
       let multiplier =
-        List.length unarized |> Target_ocaml_int.of_int |> Simple.const_int
+        List.length unarized |> Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four |> Simple.const_int
       in
       Binary (Int_arith (Tagged_immediate, Mul), index, Simple multiplier)
     in
@@ -1366,7 +1366,7 @@ let rec array_set_unsafe dbg ~array ~index array_kind
     let unarized = List.concat_map unarize_kind array_set_kinds in
     let index : H.expr_primitive =
       let multiplier =
-        List.length unarized |> Target_ocaml_int.of_int |> Simple.const_int
+        List.length unarized |> Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four |> Simple.const_int
       in
       Binary (Int_arith (Tagged_immediate, Mul), index, Simple multiplier)
     in
@@ -1718,7 +1718,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
     (* This is implemented as a unary primitive, but from our point of view it's
        actually nullary. *)
     let num_bytes = L.array_element_size_in_bytes array_kind in
-    [Simple (Simple.const_int (Target_ocaml_int.of_int num_bytes))]
+    [Simple (Simple.const_int (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four num_bytes))]
   | Pmake_idx_field pos, [] ->
     needs_64_bit_target prim dbg;
     let idx_raw_value = Int64.mul (Int64.of_int pos) 8L in
@@ -1952,7 +1952,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
       | Record_boxed _ ->
         Values
           { tag = Tag.Scannable.zero;
-            length = Target_ocaml_int.of_int num_fields
+            length = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four num_fields
           }
       | Record_float | Record_ufloat ->
         Naked_floats { length = Target_ocaml_int.of_int num_fields }
@@ -1963,7 +1963,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
             Variant_boxed _ ) ->
         Values
           { tag = Tag.Scannable.create_exn runtime_tag;
-            length = Target_ocaml_int.of_int num_fields
+            length = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four num_fields
           }
       | Record_inlined (Extension _, shape, Variant_extensible) -> (
         match shape with

@@ -1168,7 +1168,7 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
             | Is_int -> Left Simple.untagged_const_false
             | Get_tag ->
               let tag, _ = P.Block_kind.to_shape kind in
-              Left (Simple.untagged_const_int (Tag.to_targetint_31_63 tag))
+              Left (Simple.untagged_const_int (Tag.to_targetint_31_63 Target_system.Machine_width.Sixty_four tag))
             | Value_slot _ | Function_slot _ | Code_of_closure | Apply _
             | Code_id_of_call_witness _ ->
               assert false
