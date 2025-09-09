@@ -48,12 +48,11 @@ module Immediate = struct
 
   let unboxing_prim simple = P.(Unary (Untag_immediate, simple))
 
-  let unboxer _machine_width =
+  let unboxer machine_width =
     { var_name = "naked_immediate";
       var_kind = K.naked_immediate;
-      (* TODO: machine_width should be passed through properly here *)
-      poison_const = Const.naked_immediate 
-        (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four 0xabcd);
+      poison_const =
+        Const.naked_immediate (Target_ocaml_int.of_int machine_width 0xabcd);
       unboxing_prim;
       prove_simple = T.meet_tagging_of_simple
     }
@@ -229,7 +228,8 @@ module Closure_field = struct
   let unboxer machine_width function_slot value_slot =
     { var_name = "closure_field_at_use";
       var_kind = Value_slot.kind value_slot;
-      poison_const = Const.of_int_of_kind machine_width (Value_slot.kind value_slot) 0;
+      poison_const =
+        Const.of_int_of_kind machine_width (Value_slot.kind value_slot) 0;
       unboxing_prim =
         (fun closure -> unboxing_prim function_slot ~closure value_slot);
       prove_simple =

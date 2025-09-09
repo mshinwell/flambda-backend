@@ -1625,7 +1625,7 @@ let extract_block_index_offset idx =
 
 (* Given an index that points to data of some layout, produce the list of
    offsets needed to access each element *)
-let block_index_access_offsets layout idx =
+let block_index_access_offsets ~machine_width layout idx =
   assert (Target_system.is_64_bit ());
   let module MPB = Mixed_product_bytes in
   let mbe = L.mixed_block_element_of_layout layout in
@@ -1634,7 +1634,7 @@ let block_index_access_offsets layout idx =
   then
     let offset = extract_block_index_offset idx in
     let gap =
-      let shift = H.simple_untagged_int block_index_mask_size in
+      let shift = H.simple_untagged_int ~machine_width block_index_mask_size in
       H.Binary (Int_shift (Naked_int64, Lsr), idx, shift)
     in
     let f (to_left : MPB.t) (mbe : unit L.mixed_block_element) =
@@ -1858,7 +1858,9 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     | Mixed_product_to_all_flats ->
       (* offset += gap + left value + right value + left flat; gap = 0 *)
       let offset = extract_block_index_offset idx in
-      let shifter = H.simple_untagged_int block_index_mask_size in
+      let shifter =
+        H.simple_untagged_int block_index_mask_size ~machine_width
+      in
       let gap = H.Binary (Int_shift (Naked_int64, Lsr), idx, shifter) in
       let to_add =
         Int64.of_int
@@ -2946,7 +2948,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
     [Binary (Poke kind, ptr, new_value)]
   | Pget_idx (layout, mut), [[ptr]; [idx]] ->
     needs_64_bit_target prim dbg;
-    let offsets = block_index_access_offsets layout idx in
+    let offsets = block_index_access_offsets ~machine_width layout idx in
     let kinds =
       Flambda_arity.unarize
         (Flambda_arity.from_lambda_list [layout] ~machine_width)
@@ -2961,7 +2963,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
   | Pset_idx (layout, mode), [[ptr]; [idx]; new_values] ->
     needs_64_bit_target prim dbg;
     let mode = Alloc_mode.For_assignments.from_lambda mode in
-    let offsets = block_index_access_offsets layout idx in
+    let offsets = block_index_access_offsets ~machine_width layout idx in
     let kinds =
       Flambda_arity.unarize
         (Flambda_arity.from_lambda_list [layout] ~machine_width)

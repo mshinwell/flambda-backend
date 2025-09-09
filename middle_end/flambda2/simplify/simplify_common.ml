@@ -89,10 +89,7 @@ let project_tuple ~machine_width ~dbg ~size ~field tuple =
       }
   in
   let mutability : Mutability.t = Immutable in
-  (* TODO: machine_width should be passed through properly here *)
-  let field =
-    Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field
-  in
+  let field = Target_ocaml_int.of_int machine_width field in
   let prim =
     P.Unary (Block_load { kind = bak; mut = mutability; field }, tuple)
   in
@@ -397,9 +394,7 @@ let patch_unused_exn_bucket uacc apply_cont =
       else
         (* The raise argument must be present, if it is unused, we replace it by
            a dummy value to avoid keeping a useless value alive *)
-        (* TODO: machine_width should be passed through properly here *)
-        let machine_width = Target_system.Machine_width.Sixty_four in
-        let dummy_value = Simple.const_zero machine_width in
+        let dummy_value = Simple.const_zero (UE.machine_width (UA.uenv uacc)) in
         AC.update_args ~args:(dummy_value :: other_args) apply_cont
   else apply_cont
 
