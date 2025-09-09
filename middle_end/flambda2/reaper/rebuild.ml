@@ -114,7 +114,8 @@ let is_name_used (env : env) name =
 (* XXX so which is it? *)
 let poison_value = 0 (* 123456789 *)
 
-let poison kind = Simple.const_int_of_kind kind poison_value
+let poison ~machine_width kind = 
+  Simple.const_int_of_kind ~machine_width kind poison_value
 
 let rec fold_unboxed_with_kind (f : K.t -> 'a -> 'b -> 'b)
     (fields : 'a DS.unboxed_fields Field.Map.t) acc =
@@ -322,7 +323,7 @@ let name_poison env name =
       then K.value
       else Misc.fatal_errorf "Unbound name %a" Name.print name
   in
-  poison kind
+  poison ~machine_width:env.machine_width kind
 
 let rewrite_simple (env : env) simple =
   Simple.pattern_match simple
@@ -727,7 +728,7 @@ let make_apply_wrapper env
             | Delete, _ -> Ok (i + 1, rev_args)
             | Keep (_, _), Keep (v, _) -> Ok (i + 1, Simple.var v :: rev_args)
             | Keep (_, kind), Delete ->
-              Ok (i + 1, poison (KS.kind kind) :: rev_args)
+              Ok (i + 1, poison ~machine_width:env.machine_width (KS.kind kind) :: rev_args)
             | Unbox fields_apply, Unbox fields_func ->
               Ok
                 ( i + 1,
@@ -1157,8 +1158,8 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
                   let arg = List.nth args nth in
                   if K.equal field_kind (get_simple_kind env arg)
                   then arg
-                  else poison field_kind
-                else poison field_kind
+                  else poison ~machine_width:env.machine_width field_kind
+                else poison ~machine_width:env.machine_width field_kind
               in
               if simple_is_unboxable env arg
               then Right (get_simple_unboxable env arg)
@@ -1435,7 +1436,7 @@ let rebuild_make_block_default_case env (bp : Bound_pattern.t)
         let f = GFG.Field.Block (i, kind) in
         if DS.field_used env.uses bound_name f
         then rewrite_simple env field
-        else poison kind)
+        else poison ~machine_width:env.machine_width kind)
       fields
   in
   RE.create_let bp

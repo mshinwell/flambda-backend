@@ -43,9 +43,7 @@ let const_one machine_width = const (RWC.const_one machine_width)
 
 let const_unit machine_width = const (RWC.const_unit machine_width)
 
-let const_int_of_kind kind i = 
-  (* TODO: machine_width should be passed through properly here *)
-  let machine_width = Target_system.Machine_width.Sixty_four in
+let const_int_of_kind ~machine_width kind i = 
   const (RWC.of_int_of_kind machine_width kind i)
 
 let[@inline always] is_var t =

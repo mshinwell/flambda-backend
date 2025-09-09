@@ -1171,7 +1171,7 @@ let bigarray_unbox_or_untag_value_to_store kind =
    is done in the validity check, and one in the final offset computation,
    whereas cmmgen let-binds this access. It might matter for the performance,
    although the processor cache might make it not matter at all. *)
-let bigarray_indexing layout b args =
+let bigarray_indexing ~machine_width layout b args =
   let num_dim = List.length args in
   let rec aux dim delta_dim = function
     | [] -> assert false
@@ -1215,31 +1215,28 @@ let bigarray_indexing layout b args =
                   idx,
                   H.Simple
                     (Simple.const_int
-                       (* TODO: machine_width should be passed through properly
-                          here *)
-                       (Target_ocaml_int.one
-                          Target_system.Machine_width.Sixty_four)) )))
+                       (Target_ocaml_int.one machine_width)) )))
          args)
 
-let bigarray_access ~dbg ~unsafe ~access layout b indexes =
+let bigarray_access ~machine_width ~dbg ~unsafe ~access layout b indexes =
   let num_dim = List.length indexes in
-  let checks, offset = bigarray_indexing layout b indexes in
+  let checks, offset = bigarray_indexing ~machine_width layout b indexes in
   let primitive = access num_dim offset in
   if unsafe
   then primitive
   else checked_access ~dbg ~conditions:checks ~primitive
 
-let bigarray_load ~dbg ~unsafe kind layout b indexes =
+let bigarray_load ~machine_width ~dbg ~unsafe kind layout b indexes =
   let access num_dim offset =
     H.Binary (Bigarray_load (num_dim, kind, layout), b, offset)
   in
-  bigarray_access ~dbg ~unsafe ~access layout b indexes
+  bigarray_access ~machine_width ~dbg ~unsafe ~access layout b indexes
 
-let bigarray_set ~dbg ~unsafe kind layout b indexes value =
+let bigarray_set ~machine_width ~dbg ~unsafe kind layout b indexes value =
   let access num_dim offset =
     H.Ternary (Bigarray_set (num_dim, kind, layout), b, offset, value)
   in
-  bigarray_access ~dbg ~unsafe ~access layout b indexes
+  bigarray_access ~machine_width ~dbg ~unsafe ~access layout b indexes
 
 (* Array accesses *)
 let array_access_validity_condition array array_kind index
@@ -1255,7 +1252,7 @@ let check_array_access ~dbg ~array array_kind ~index ~index_kind ~machine_width
          ~machine_width)
     ~dbg
 
-let compute_array_indexes ~index ~num_elts =
+let compute_array_indexes ~machine_width ~index ~num_elts =
   if num_elts <= 0 then Misc.fatal_errorf "Illegal num_elts value: %d" num_elts;
   List.init num_elts (fun offset ->
       assert (offset >= 0);
@@ -1268,12 +1265,9 @@ let compute_array_indexes ~index ~num_elts =
                index,
                Simple
                  (Simple.const_int
-                    (* TODO: machine_width should be passed through properly
-                       here *)
-                    (Target_ocaml_int.of_int
-                       Target_system.Machine_width.Sixty_four offset)) )))
+                    (Target_ocaml_int.of_int machine_width offset)) )))
 
-let rec array_load_unsafe ~array ~index ~(mut : Lambda.mutable_flag) array_kind
+let rec array_load_unsafe ~machine_width ~array ~index ~(mut : Lambda.mutable_flag) array_kind
     (array_ref_kind : Array_ref_kind.t) ~current_region : H.expr_primitive list
     =
   (* CR mshinwell/ncourant: can we avoid taking [array_kind] here? *)
@@ -1462,9 +1456,10 @@ let[@inline always] match_on_array_set_kind ~array array_set_kind f :
            a singleton. *)
         [K.With_subkind.tagged_immediate] )
 
-let const width i = Simple.const_int_of_kind (I.to_kind width) i
+let const ~machine_width width i = 
+  Simple.const_int_of_kind ~machine_width (I.to_kind width) i
 
-let check_zero_division width arg1 arg2 (operator : P.binary_int_arith_op) dbg :
+let check_zero_division ~machine_width width arg1 arg2 (operator : P.binary_int_arith_op) dbg :
     H.expr_primitive =
   (* CR gbury: try and avoid the unboxing duplication of arg2. (the simplifier
      might cse the duplication away, but it won't be the case for classic
@@ -1473,7 +1468,7 @@ let check_zero_division width arg1 arg2 (operator : P.binary_int_arith_op) dbg :
     { primitive = Binary (Int_arith (width, operator), arg1, arg2);
       validity_conditions =
         [ Binary
-            (Int_comp (width, Yielding_bool Neq), arg2, Simple (const width 0))
+            (Int_comp (width, Yielding_bool Neq), arg2, Simple (const ~machine_width width 0))
         ];
       failure = Division_by_zero;
       dbg
@@ -2028,9 +2023,9 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
       let result : H.expr_primitive =
         match op with
         | Bswap -> Unary (Int_arith (width, Swap_byte_endianness), arg)
-        | Neg -> Binary (Int_arith (width, Sub), Simple (const width 0), arg)
-        | Succ -> Binary (Int_arith (width, Add), arg, Simple (const width 1))
-        | Pred -> Binary (Int_arith (width, Sub), arg, Simple (const width 1))
+        | Neg -> Binary (Int_arith (width, Sub), Simple (const ~machine_width width 0), arg)
+        | Succ -> Binary (Int_arith (width, Add), arg, Simple (const ~machine_width width 1))
+        | Pred -> Binary (Int_arith (width, Sub), arg, Simple (const ~machine_width width 1))
       in
       [to_expr (maybe_wrap (Prim result))]
     | Floating (outer, op) ->
@@ -2075,8 +2070,8 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
         | Xor -> Binary (Int_arith (width, Xor), arg1, arg2)
         | Div Unsafe -> Binary (Int_arith (width, Div), arg1, arg2)
         | Mod Unsafe -> Binary (Int_arith (width, Mod), arg1, arg2)
-        | Div Safe -> check_zero_division width arg1 arg2 Div dbg
-        | Mod Safe -> check_zero_division width arg1 arg2 Mod dbg
+        | Div Safe -> check_zero_division ~machine_width width arg1 arg2 Div dbg
+        | Mod Safe -> check_zero_division ~machine_width width arg1 arg2 Mod dbg
       in
       [to_expr (maybe_wrap (Prim result))]
     | Shift (outer, op, rhs) ->
@@ -2678,7 +2673,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
         bigarray_box_or_tag_raw_value_to_read kind
           Alloc_mode.For_allocations.heap
       in
-      [box (bigarray_load ~dbg ~unsafe kind layout b indexes)]
+      [box (bigarray_load ~machine_width ~dbg ~unsafe kind layout b indexes)]
     | None, _ ->
       Misc.fatal_errorf
         "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
@@ -2712,7 +2707,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive)
         | [] -> Misc.fatal_errorf "Pbigarrayset is missing its arguments"
       in
       let unbox = bigarray_unbox_or_untag_value_to_store kind in
-      [bigarray_set ~dbg ~unsafe kind layout b indexes (unbox value)]
+      [bigarray_set ~machine_width ~dbg ~unsafe kind layout b indexes (unbox value)]
     | None, _ ->
       Misc.fatal_errorf
         "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \

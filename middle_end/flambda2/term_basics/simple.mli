@@ -72,7 +72,7 @@ val const_unit : Target_system.Machine_width.t -> t
 
 val const_from_descr : Reg_width_const.Descr.t -> t
 
-val const_int_of_kind : Flambda_kind.t -> int -> t
+val const_int_of_kind : machine_width:Target_system.Machine_width.t -> Flambda_kind.t -> int -> t
 
 val is_const : t -> bool
 
