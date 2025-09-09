@@ -29,6 +29,7 @@ let
     in
     [
       "--cache-file=/dev/null"
+      "--with-objcopy=${pkgs.llvm}/bin/llvm-objcopy"
       (mkFlag addressSanitizer "address-sanitizer")
       (mkFlag dev "dev")
       (mkFlag flambdaInvariants "flambda-invariants")
@@ -192,6 +193,10 @@ myStdenv.mkDerivation {
     ]
     ++ (if pkgs.stdenv.isDarwin then [ pkgs.cctools ] else [ pkgs.libtool ]) # cctools provides Apple libtool on macOS
     ++ lib.optional oxcamlLldb pkgs.python312;
+
+  buildInputs = [
+    pkgs.llvm # llvm-objcopy is used for debuginfo
+  ];
 
   preConfigure = ''
     rm -rf _build _install _runtest
