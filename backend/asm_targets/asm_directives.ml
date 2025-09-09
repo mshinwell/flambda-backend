@@ -492,7 +492,7 @@ module Directive = struct
     | New_label (label, Code) -> bprintf buf "%s:" label
     | New_label (label, Machine_width_data) -> (
       match TS.machine_width () with
-      | Thirty_two -> bprintf buf "%s LABEL DWORD" label
+      | Thirty_two | Thirty_two_no_gc_tag_bit -> bprintf buf "%s LABEL DWORD" label
       | Sixty_four -> bprintf buf "%s LABEL QWORD" label)
     | New_line -> ()
     | Cfi_adjust_cfa_offset _ -> unsupported "Cfi_adjust_cfa_offset"
@@ -664,7 +664,7 @@ let const ?comment constant
 
 let const_machine_width ?comment constant =
   match TS.machine_width () with
-  | Thirty_two -> const ?comment constant Thirty_two
+  | Thirty_two | Thirty_two_no_gc_tag_bit -> const ?comment constant Thirty_two
   | Sixty_four -> const ?comment constant Sixty_four
 
 let float32_core f f_int32 =
@@ -684,7 +684,7 @@ let float64_core f f_int64 =
       if !Clflags.keep_asm_file then Some (Printf.sprintf "%.17g" f) else None
     in
     const ?comment (Signed_int f_int64) Sixty_four
-  | Thirty_two ->
+  | Thirty_two | Thirty_two_no_gc_tag_bit ->
     let comment_lo =
       if !Clflags.keep_asm_file
       then Some (Printf.sprintf "low part of %.17g" f)

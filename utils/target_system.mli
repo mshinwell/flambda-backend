@@ -44,8 +44,9 @@ val assembler : unit -> assembler
 
 module Machine_width : sig
   type t =
-    | Thirty_two
-    | Sixty_four
+    | Thirty_two  (* Traditional 32-bit OCaml with GC tag bit (31 bits usable) *)
+    | Thirty_two_no_gc_tag_bit  (* JavaScript mode with full 32-bit integers *)
+    | Sixty_four  (* Traditional 64-bit OCaml with GC tag bit (63 bits usable) *)
 
   val print : Format.formatter -> t -> unit
 

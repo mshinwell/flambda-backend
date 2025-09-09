@@ -59,7 +59,7 @@ let exttype_of_kind (k : Flambda_kind.t) : Cmm.exttype =
   | Naked_number Naked_int8 -> XInt8
   | Naked_number (Naked_immediate | Naked_nativeint) -> (
     match Target_system.machine_width () with
-    | Thirty_two -> XInt32
+    | Thirty_two | Thirty_two_no_gc_tag_bit -> XInt32
     | Sixty_four -> XInt64)
   | Naked_number Naked_vec128 -> XVec128
   | Naked_number Naked_vec256 -> XVec256

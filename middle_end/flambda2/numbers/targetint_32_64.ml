@@ -101,7 +101,9 @@ end
 
 (* Helper function to extract machine width from a t value *)
 let machine_width t =
-  match t with Int32 _ -> MW.Thirty_two | Int64 _ -> MW.Sixty_four
+  match t with 
+  | Int32 _ -> MW.Thirty_two  (* For targetint_32_64, Int32 always means traditional 32-bit *)
+  | Int64 _ -> MW.Sixty_four
 
 (* Print function *)
 let print ppf t =
@@ -112,27 +114,27 @@ let print ppf t =
 (* Creation functions *)
 let zero machine_width =
   match machine_width with
-  | MW.Thirty_two -> Int32 Int32.zero
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 Int32.zero
   | MW.Sixty_four -> Int64 Int64.zero
 
 let one machine_width =
   match machine_width with
-  | MW.Thirty_two -> Int32 Int32.one
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 Int32.one
   | MW.Sixty_four -> Int64 Int64.one
 
 let minus_one machine_width =
   match machine_width with
-  | MW.Thirty_two -> Int32 Int32.minus_one
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 Int32.minus_one
   | MW.Sixty_four -> Int64 Int64.minus_one
 
 let max_int machine_width =
   match machine_width with
-  | MW.Thirty_two -> Int32 Int32.max_int
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 Int32.max_int
   | MW.Sixty_four -> Int64 Int64.max_int
 
 let min_int machine_width =
   match machine_width with
-  | MW.Thirty_two -> Int32 Int32.min_int
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 Int32.min_int
   | MW.Sixty_four -> Int64 Int64.min_int
 
 (* Unary operations *)
@@ -294,12 +296,12 @@ let max t1 t2 =
 (* Conversion functions *)
 let of_int machine_width n =
   match machine_width with
-  | MW.Thirty_two -> Int32 (Int32.of_int n)
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 (Int32.of_int n)
   | MW.Sixty_four -> Int64 (Int64.of_int n)
 
 let of_int_exn machine_width n =
   match machine_width with
-  | MW.Thirty_two -> Int32 (Int32.of_int_exn n)
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 (Int32.of_int_exn n)
   | MW.Sixty_four -> Int64 (Int64.of_int_exn n)
 
 let to_int t =
@@ -307,21 +309,21 @@ let to_int t =
 
 let of_int32 machine_width x =
   match machine_width with
-  | MW.Thirty_two -> Int32 x
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 x
   | MW.Sixty_four -> Int64 (Int64.of_int32 x)
 
 let to_int32 t = match t with Int32 x -> x | Int64 x -> Int64.to_int32 x
 
 let of_int64 machine_width x =
   match machine_width with
-  | MW.Thirty_two -> Int32 (Int64.to_int32 x)
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 (Int64.to_int32 x)
   | MW.Sixty_four -> Int64 x
 
 let to_int64 t = match t with Int32 x -> Int32.to_int64 x | Int64 x -> x
 
 let of_float machine_width f =
   match machine_width with
-  | MW.Thirty_two -> Int32 (Int32.of_float f)
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 (Int32.of_float f)
   | MW.Sixty_four -> Int64 (Int64.of_float f)
 
 let to_float t =
@@ -329,7 +331,7 @@ let to_float t =
 
 let of_string machine_width s =
   match machine_width with
-  | MW.Thirty_two -> Int32 (Int32.of_string s)
+  | MW.Thirty_two | MW.Thirty_two_no_gc_tag_bit -> Int32 (Int32.of_string s)
   | MW.Sixty_four -> Int64 (Int64.of_string s)
 
 let to_string t =

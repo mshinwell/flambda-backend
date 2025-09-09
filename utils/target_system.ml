@@ -123,36 +123,38 @@ let assembler () =
 
 module Machine_width = struct
   type t =
-    | Thirty_two
-    | Sixty_four
+    | Thirty_two  (* Traditional 32-bit OCaml with GC tag bit (31 bits usable) *)
+    | Thirty_two_no_gc_tag_bit  (* JavaScript mode with full 32-bit integers *)
+    | Sixty_four  (* Traditional 64-bit OCaml with GC tag bit (63 bits usable) *)
 
   let print ppf = function
     | Thirty_two -> Format.fprintf ppf "Thirty_two"
+    | Thirty_two_no_gc_tag_bit -> Format.fprintf ppf "Thirty_two_no_gc_tag_bit"
     | Sixty_four -> Format.fprintf ppf "Sixty_four"
 
   let equal t1 t2 =
     match t1, t2 with
     | Thirty_two, Thirty_two
+    | Thirty_two_no_gc_tag_bit, Thirty_two_no_gc_tag_bit
     | Sixty_four, Sixty_four -> true
-    | Thirty_two, Sixty_four
-    | Sixty_four, Thirty_two -> false
+    | _ -> false
 
   let is_32_bit = function
-    | Thirty_two -> true
+    | Thirty_two | Thirty_two_no_gc_tag_bit -> true
     | Sixty_four -> false
 
   let is_64_bit = function
-    | Thirty_two -> false
+    | Thirty_two | Thirty_two_no_gc_tag_bit -> false
     | Sixty_four -> true
 
   let size_in_bytes = function
-    | Thirty_two -> 4
+    | Thirty_two | Thirty_two_no_gc_tag_bit -> 4
     | Sixty_four -> 8
 end
 
 let machine_width () =
   match Targetint.size with
-  | 32 -> Machine_width.Thirty_two
+  | 32 -> Machine_width.Thirty_two  (* TODO: Add detection for JavaScript mode (Thirty_two_no_gc_tag_bit) *)
   | 64 -> Machine_width.Sixty_four
   | bits -> Misc.fatal_errorf "Unknown machine width: %d" bits
 
