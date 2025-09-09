@@ -991,8 +991,7 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
     then bottom_other_side is_null_side
     else
       let rebuild = TG.Head_of_kind_naked_immediate.create_is_null in
-      (* TODO: machine_width should be passed through properly here *)
-      let machine_width = Target_system.Machine_width.Sixty_four in
+      let machine_width = TE.machine_width env in
       match I.Set.mem (I.zero machine_width) immediates, I.Set.mem (I.one machine_width) immediates with
       | false, false -> Bottom (New_result ())
       | true, true -> keep_side is_null_side
@@ -1017,8 +1016,9 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
       if Tag.Set.is_empty tags
       then Bottom (New_result ())
       else
+        let machine_width = TE.machine_width env in
         match
-          MTC.blocks_with_these_tags tags (Alloc_mode.For_types.unknown ())
+          MTC.blocks_with_these_tags ~machine_width tags (Alloc_mode.For_types.unknown ())
         with
         | Known shape ->
           meet_with_shape

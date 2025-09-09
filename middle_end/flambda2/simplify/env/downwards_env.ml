@@ -206,7 +206,7 @@ let create ~round ~machine_width ~(resolver : resolver)
     ~(get_imported_code : get_imported_code) ~propagating_float_consts
     ~unit_toplevel_exn_continuation ~unit_toplevel_return_continuation
     ~toplevel_my_region ~toplevel_my_ghost_region =
-  let typing_env = TE.create ~resolver ~get_imported_names in
+  let typing_env = TE.create ~machine_width ~resolver ~get_imported_names in
   let t =
     { round;
       machine_width;

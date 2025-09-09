@@ -145,7 +145,7 @@ let [@ocamlformat "disable"] print ppf
       ({ resolver = _; binding_time_resolver = _;get_imported_names = _;
          prev_levels; current_level; next_binding_time = _;
          defined_symbols; code_age_relation; min_binding_time;
-         is_bottom;
+         is_bottom; machine_width = _
        } as t) =
   if is_empty t then
     Format.pp_print_string ppf "Empty"

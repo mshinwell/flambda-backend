@@ -3199,7 +3199,7 @@ module Product = struct
 
     let create_top () = [||]
 
-    let width t = 
+    let width t =
       (* TODO: Should return Target_ocaml_int.t with proper machine_width *)
       Array.length t
 
@@ -3304,7 +3304,7 @@ module Row_like_for_blocks = struct
               Flambda_kind.print field_kind Flambda_kind.print shape_kind)
         field_tys
 
-  let create ~(shape : K.Block_shape.t) ~field_tys
+  let create ~machine_width ~(shape : K.Block_shape.t) ~field_tys
       (open_or_closed : open_or_closed) alloc_mode =
     check_field_tys ~shape ~field_tys;
     let tag : _ Or_unknown.t =
@@ -3336,7 +3336,7 @@ module Row_like_for_blocks = struct
           Known tag)
     in
     let product = Array.of_list field_tys in
-    let size = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four (List.length field_tys) in
+    let size = Target_ocaml_int.of_int machine_width (List.length field_tys) in
     match open_or_closed with
     | Open _ -> (
       match tag with
@@ -3348,26 +3348,30 @@ module Row_like_for_blocks = struct
       | Unknown -> assert false)
   (* see above *)
 
-  let create_blocks_with_these_tags tags alloc_mode =
+  let create_blocks_with_these_tags ~machine_width tags alloc_mode =
     let maps_to = Product.Int_indexed.create_top () in
     let case shape =
       Or_unknown.map
         ~f:(fun shape ->
           { maps_to;
-            index = { domain = At_least Target_ocaml_int.zero; shape };
+            index =
+              { domain = At_least (Target_ocaml_int.zero machine_width); shape };
             env_extension = { equations = Name.Map.empty }
           })
         shape
     in
     { known_tags = Tag.Map.map case tags; other_tags = Bottom; alloc_mode }
 
-  let create_exactly_multiple ~shape_and_field_tys_by_tag alloc_mode =
+  let create_exactly_multiple ~machine_width ~shape_and_field_tys_by_tag
+      alloc_mode =
     let known_tags =
       Tag.Map.map
         (fun (shape, field_tys) ->
           check_field_tys ~shape ~field_tys;
           let maps_to = Array.of_list field_tys in
-          let size = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four (List.length field_tys) in
+          let size =
+            Target_ocaml_int.of_int machine_width (List.length field_tys)
+          in
           Or_unknown.Known
             { maps_to;
               index = { domain = Known size; shape };
@@ -3393,8 +3397,10 @@ module Row_like_for_blocks = struct
             match (case : _ Or_unknown.t) with
             | Unknown ->
               any_unknown := true;
-              (* result doesn't matter as it is unused *)
-              Target_ocaml_int.zero, K.Block_shape.Scannable Value_only
+              (* result (and hence the machine width) doesn't matter as the
+                 result is unused - see below *)
+              ( Target_ocaml_int.zero Sixty_four,
+                K.Block_shape.Scannable Value_only )
             | Known { index = { domain; shape }; _ } -> (
               match domain with
               | Known size -> size, shape
@@ -3754,7 +3760,7 @@ let box_float (t : t) alloc_mode : t =
   | Naked_vec256 _ | Naked_vec512 _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [box_float]: %a" print t
 
-let tag_int8 (t : t) : t =
+let tag_int8 (t : t) ~machine_width : t =
   match t with
   | Naked_int8 head -> (
     match TD.descr head with
@@ -3771,7 +3777,9 @@ let tag_int8 (t : t) : t =
       let ints =
         Int8.Set.fold
           (fun x acc ->
-            Target_ocaml_int.Set.add (Target_ocaml_int.of_int8 x) acc)
+            Target_ocaml_int.Set.add
+              (Target_ocaml_int.of_int8 machine_width x)
+              acc)
           ints Target_ocaml_int.Set.empty
       in
       non_null_value
@@ -3786,7 +3794,7 @@ let tag_int8 (t : t) : t =
   | Naked_vec128 _ | Naked_vec256 _ | Naked_vec512 _ | Rec_info _ | Region _ ->
     Misc.fatal_errorf "Type of wrong kind for [tag_int8]: %a" print t
 
-let tag_int16 (t : t) : t =
+let tag_int16 (t : t) ~machine_width : t =
   match t with
   | Naked_int16 head -> (
     match TD.descr head with
@@ -3803,7 +3811,9 @@ let tag_int16 (t : t) : t =
       let ints =
         Int16.Set.fold
           (fun x acc ->
-            Target_ocaml_int.Set.add (Target_ocaml_int.of_int16 x) acc)
+            Target_ocaml_int.Set.add
+              (Target_ocaml_int.of_int16 machine_width x)
+              acc)
           ints Target_ocaml_int.Set.empty
       in
       non_null_value
@@ -3933,16 +3943,16 @@ let boxed_vec256_alias_to ~naked_vec256 =
 let boxed_vec512_alias_to ~naked_vec512 =
   box_vec512 (Naked_vec512 (TD.create_equals (Simple.var naked_vec512)))
 
-let this_immutable_string str =
-  let size = Target_ocaml_int.of_int (String.length str) in
+let this_immutable_string str ~machine_width =
+  let size = Target_ocaml_int.of_int machine_width (String.length str) in
   let string_info =
     String_info.Set.singleton
       (String_info.create ~contents:(Contents str) ~size)
   in
   non_null_value (String string_info)
 
-let mutable_string ~size =
-  let size = Target_ocaml_int.of_int size in
+let mutable_string ~size ~machine_width =
+  let size = Target_ocaml_int.of_int machine_width size in
   let string_info =
     String_info.Set.singleton
       (String_info.create ~contents:Unknown_or_mutable ~size)
@@ -3957,12 +3967,13 @@ let mutable_array ~element_kind ~length alloc_mode =
   non_null_value
     (Array { element_kind; length; contents = Known Mutable; alloc_mode })
 
-let immutable_array ~element_kind ~fields alloc_mode =
+let immutable_array ~element_kind ~fields alloc_mode ~machine_width =
   non_null_value
     (Array
        { element_kind;
          length =
-           this_tagged_immediate (Target_ocaml_int.of_int (List.length fields));
+           this_tagged_immediate
+             (Target_ocaml_int.of_int machine_width (List.length fields));
          contents = Known (Immutable { fields = Array.of_list fields });
          alloc_mode
        })
@@ -4219,7 +4230,7 @@ module Head_of_kind_naked_vec256 =
 module Head_of_kind_naked_vec512 =
   Make_head_of_kind_naked_number (Vector_types.Vec512.Bit_pattern)
 
-let rec must_be_singleton t : RWC.t option =
+let rec must_be_singleton t ~machine_width : RWC.t option =
   match t with
   | Value ty -> (
     match TD.descr ty with
@@ -4254,7 +4265,7 @@ let rec must_be_singleton t : RWC.t option =
           match immediates with
           | Unknown -> None
           | Known immediates -> (
-            match must_be_singleton immediates with
+            match must_be_singleton immediates ~machine_width with
             | None -> None
             | Some const -> (
               match RWC.descr const with
@@ -4297,7 +4308,8 @@ let rec must_be_singleton t : RWC.t option =
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
       match Int8.Set.get_singleton is with
-      | Some i -> Some (RWC.naked_immediate (Target_ocaml_int.of_int8 i))
+      | Some i ->
+        Some (RWC.naked_immediate (Target_ocaml_int.of_int8 machine_width i))
       | None -> None))
   | Naked_int16 ty -> (
     match TD.descr ty with
@@ -4305,7 +4317,8 @@ let rec must_be_singleton t : RWC.t option =
     | Ok (Equals simple) -> Simple.must_be_const simple
     | Ok (No_alias is) -> (
       match Int16.Set.get_singleton is with
-      | Some i -> Some (RWC.naked_immediate (Target_ocaml_int.of_int16 i))
+      | Some i ->
+        Some (RWC.naked_immediate (Target_ocaml_int.of_int16 machine_width i))
       | None -> None))
   | Naked_int32 ty -> (
     match TD.descr ty with
