@@ -341,12 +341,13 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
             let dacc = DA.add_variable dacc result_var ty in
             SPR.create original_term ~try_reify:true dacc
         end in
+        let machine_width = DE.machine_width (DA.denv dacc) in
         match dst with
         | Tagged_immediate ->
           let module M = For_kind [@inlined hint] (struct
             module Result_num = Target_ocaml_int
 
-            let num_to_result_num = Num.to_immediate
+            let num_to_result_num t = Num.to_immediate t machine_width
 
             let these = T.these_tagged_immediates
           end) in
@@ -355,7 +356,7 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           let module M = For_kind [@inlined hint] (struct
             module Result_num = Target_ocaml_int
 
-            let num_to_result_num = Num.to_immediate
+            let num_to_result_num t = Num.to_immediate t machine_width
 
             let these = T.these_naked_immediates
           end) in
@@ -455,7 +456,8 @@ let simplify_boolean_not dacc ~original_term ~arg:_ ~arg_ty ~result_var =
         (fun imm ->
           if Target_ocaml_int.equal imm (Target_ocaml_int.zero machine_width)
           then Some (Target_ocaml_int.one machine_width)
-          else if Target_ocaml_int.equal imm (Target_ocaml_int.one machine_width)
+          else if Target_ocaml_int.equal imm
+                    (Target_ocaml_int.one machine_width)
           then Some (Target_ocaml_int.zero machine_width)
           else None)
         imms
@@ -470,7 +472,9 @@ let simplify_boolean_not dacc ~original_term ~arg:_ ~arg_ty ~result_var =
     (* CR-someday mshinwell: This could say something like (in the type) "when
        the input is 0, the value is 1" and vice-versa. *)
     let machine_width = DE.machine_width denv in
-    let ty = T.these_tagged_immediates (Target_ocaml_int.all_bools machine_width) in
+    let ty =
+      T.these_tagged_immediates (Target_ocaml_int.all_bools machine_width)
+    in
     let dacc = DA.add_variable dacc result_var ty in
     SPR.create original_term ~try_reify:false dacc
   | Invalid -> SPR.create_invalid dacc
@@ -548,7 +552,8 @@ Make_simplify_reinterpret_64_bit_word (struct
   (* This primitive is logical OR with 1 on machine words, but here, we are
      working in the tagged world. As such a different computation is
      required. *)
-  let convert ~machine_width i = Target_ocaml_int.of_int64 machine_width (Int64.shift_right_logical i 1)
+  let convert ~machine_width i =
+    Target_ocaml_int.of_int64 machine_width (Int64.shift_right_logical i 1)
 
   let these = T.these_tagged_immediates
 
@@ -564,7 +569,8 @@ Make_simplify_reinterpret_64_bit_word (struct
 
   (* This primitive is the identity on machine words, but as above, we are
      working in the tagged world. *)
-  let convert ~machine_width:_ i = Int64.add (Int64.mul (Target_ocaml_int.to_int64 i) 2L) 1L
+  let convert ~machine_width:_ i =
+    Int64.add (Int64.mul (Target_ocaml_int.to_int64 i) 2L) 1L
 
   let these = T.these_naked_int64s
 
@@ -718,7 +724,8 @@ let simplify_duplicate_array ~kind:_ ~(source_mutability : Mutability.t)
       SPR.create original_term ~try_reify:false dacc
     | Known_result (element_kind, fields, alloc_mode) ->
       let length =
-        T.this_tagged_immediate (Array.length fields |> Target_ocaml_int.of_int machine_width)
+        T.this_tagged_immediate
+          (Array.length fields |> Target_ocaml_int.of_int machine_width)
       in
       let ty = T.mutable_array ~element_kind ~length alloc_mode in
       let dacc = DA.add_variable dacc result_var ty in
@@ -773,7 +780,8 @@ let simplify_obj_dup dbg dacc ~original_term ~arg ~arg_ty ~result_var =
           { Expr_builder.let_bound =
               Bound_pattern.singleton
                 (Bound_var.create contents_var contents_var_duid NM.normal);
-            simplified_defining_expr = Simplified_named.create ~machine_width contents_expr;
+            simplified_defining_expr =
+              Simplified_named.create ~machine_width contents_expr;
             original_defining_expr = None
           }
         in

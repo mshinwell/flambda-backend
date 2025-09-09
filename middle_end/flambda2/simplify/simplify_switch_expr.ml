@@ -174,14 +174,16 @@ let rebuild_arm uacc arm (action, use_id, arity, env_at_use)
             then
               let identity_arms = TI.Map.add arm action identity_arms in
               maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
-            else 
+            else
               let machine_width = UE.machine_width (UA.uenv uacc) in
-              if (TI.equal arm (TI.bool_true machine_width) && TI.equal arg (TI.bool_false machine_width))
-                    || (TI.equal arm (TI.bool_false machine_width) && TI.equal arg (TI.bool_true machine_width))
-            then
-              let not_arms = TI.Map.add arm action not_arms in
-              maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
-            else maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
+              if TI.equal arm (TI.bool_true machine_width)
+                 && TI.equal arg (TI.bool_false machine_width)
+                 || TI.equal arm (TI.bool_false machine_width)
+                    && TI.equal arg (TI.bool_true machine_width)
+              then
+                let not_arms = TI.Map.add arm action not_arms in
+                maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
+              else maybe_mergeable ~mergeable_arms ~identity_arms ~not_arms
           | Naked_immediate _ | Naked_float _ | Naked_float32 _ | Naked_int8 _
           | Naked_int16 _ | Naked_int32 _ | Naked_int64 _ | Naked_vec128 _
           | Naked_vec256 _ | Naked_vec512 _ | Naked_nativeint _ | Null ->
@@ -253,7 +255,9 @@ let recognize_switch_with_single_arg_to_same_destination0 machine_width ~arms =
             ~name:(fun _ ~coercion:_ ->
               (* Aliases should have been followed by now. *) None)
             ~const:(fun const ->
-              let expected_discr = TI.add (TI.one machine_width) expected_discr in
+              let expected_discr =
+                TI.add (TI.one machine_width) expected_discr
+              in
               Some (Some dest', const :: args_rev, expected_discr))))
   in
   match TI.Map.fold check_arm arms (Some (None, [], TI.zero machine_width)) with
@@ -401,7 +405,8 @@ let recognize_affine_switch_to_same_destination machine_width consts =
       | [] -> Some (offset, slope)
       | const :: _ when not TI.(equal const (add (mul index slope) offset)) ->
         None
-      | _ :: consts -> check offset slope TI.(add index (one machine_width)) consts
+      | _ :: consts ->
+        check offset slope (TI.add index (TI.one machine_width)) consts
     in
     check const0 slope (TI.of_int machine_width 2) other_consts
 
@@ -561,7 +566,9 @@ let rebuild_switch ~original ~arms ~condition_dbg ~scrutinee ~scrutinee_ty
           with
           | None -> normal_case0 uacc
           | Some tagged_scrutinee -> (
-            match recognize_affine_switch_to_same_destination machine_width consts with
+            match
+              recognize_affine_switch_to_same_destination machine_width consts
+            with
             | None ->
               rebuild_switch_with_single_arg_to_same_destination uacc
                 ~dacc_before_switch ~original ~tagged_scrutinee ~dest ~consts

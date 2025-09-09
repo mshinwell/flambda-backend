@@ -318,7 +318,7 @@ and compute_extra_args_for_block ~pass rewrite_id ~typing_env_at_use
           compute_extra_args_for_one_decision_and_use ~pass rewrite_id
             ~typing_env_at_use ~machine_width new_arg_being_unboxed decision
         in
-        ( Target_ocaml_int.(add (one machine_width) field_nth),
+        ( Target_ocaml_int.add (Target_ocaml_int.one machine_width) field_nth,
           { epa; decision; kind } ))
       (Target_ocaml_int.zero machine_width)
       fields
@@ -439,7 +439,9 @@ and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
               let field_decision : U.field_decision = { epa; decision; kind } in
               let new_decisions = field_decision :: new_decisions in
               ( new_decisions,
-                Target_ocaml_int.(add (one machine_width) field_nth) ))
+                Target_ocaml_int.add
+                  (Target_ocaml_int.one machine_width)
+                  field_nth ))
             ([], Target_ocaml_int.zero machine_width)
             block_fields
         in
