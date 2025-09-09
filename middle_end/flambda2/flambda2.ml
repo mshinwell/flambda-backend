@@ -219,7 +219,7 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda
         then (
           let flambda, free_names, all_code, slot_offsets =
             Profile.record_call ~accumulate:true "reaper" (fun () ->
-                Flambda2_reaper.Reaper.run ~cmx_loader ~all_code flambda)
+                Flambda2_reaper.Reaper.run ~machine_width ~cmx_loader ~all_code flambda)
           in
           print_flexpect "reaper" ppf ~raw_flambda flambda;
           flambda, free_names, all_code, slot_offsets, "reaper")

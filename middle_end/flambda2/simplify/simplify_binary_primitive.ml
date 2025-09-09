@@ -505,7 +505,7 @@ end = struct
          to only one possible case which it would be wrong to take.) *)
       if O.equal rhs O.zero then The_other_side else Cannot_simplify
 
-  let op_rhs_unknown ~machine_width:_ (op : P.int_shift_op) ~lhs :
+  let op_rhs_unknown ~machine_width (op : P.int_shift_op) ~lhs :
       Num.t binary_arith_outcome_for_one_side_only =
     (* In these cases we are giving a semantics for some cases where the
        right-hand side may be less than zero or greater than or equal to
@@ -515,12 +515,12 @@ end = struct
        in [op_lhs_unknown], above, where there would be no such benefit.) *)
     match op with
     | Lsl | Lsr ->
-      if Num.equal lhs Num.zero then Exactly Num.zero else Cannot_simplify
+      if Num.equal lhs (Num.zero machine_width) then Exactly (Num.zero machine_width) else Cannot_simplify
     | Asr ->
-      if Num.equal lhs Num.zero
-      then Exactly Num.zero
-      else if Num.equal lhs Num.minus_one
-      then Exactly Num.minus_one
+      if Num.equal lhs (Num.zero machine_width)
+      then Exactly (Num.zero machine_width)
+      else if Num.equal lhs (Num.minus_one machine_width)
+      then Exactly (Num.minus_one machine_width)
       else Cannot_simplify
 end
 [@@inline always]

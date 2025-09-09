@@ -385,7 +385,8 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
     in
     env, res, updates
   | Block_like symbol, Boxed_nativeint v ->
-    let default = Targetint_32_64.zero in
+    let machine_width = Target_system.machine_width () in
+    let default = Targetint_32_64.zero machine_width in
     let transl = C.nativeint_of_targetint in
     let structured i = Cmmgen_state.Const_nativeint i in
     let res, env, updates =

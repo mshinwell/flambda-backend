@@ -414,10 +414,11 @@ module Make_simplify_int_conv (N : A.Number_kind) = struct
           end) in
           M.result
         | Naked_nativeint ->
+          let machine_width = DE.machine_width (DA.denv dacc) in
           let module M = For_kind [@inlined hint] (struct
             module Result_num = Targetint_32_64
 
-            let num_to_result_num = Num.to_naked_nativeint
+            let num_to_result_num n = Num.to_naked_nativeint n machine_width
 
             let these = T.these_naked_nativeints
           end) in
@@ -752,11 +753,12 @@ let simplify_obj_dup dbg dacc ~original_term ~arg ~arg_ty ~result_var =
         let contents_expr =
           Named.create_prim (Unary (Unbox_number boxable_number, arg)) dbg
         in
+        let machine_width = DE.machine_width (DA.denv dacc) in
         let bind_contents =
           { Expr_builder.let_bound =
               Bound_pattern.singleton
                 (Bound_var.create contents_var contents_var_duid NM.normal);
-            simplified_defining_expr = Simplified_named.create contents_expr;
+            simplified_defining_expr = Simplified_named.create ~machine_width contents_expr;
             original_defining_expr = None
           }
         in

@@ -604,6 +604,7 @@ let add_lets_around_handler cont at_unit_toplevel uacc handler =
   handler, uacc, free_names, cost_metrics
 
 let add_phantom_params_bindings uacc handler new_phantom_params =
+  let machine_width = UE.machine_width (UA.uenv uacc) in
   let new_phantom_param_bindings_outermost_first =
     List.map
       (fun param ->
@@ -613,7 +614,7 @@ let add_phantom_params_bindings uacc handler new_phantom_params =
         let let_bound = Bound_pattern.singleton var in
         let prim = Flambda_primitive.(Nullary (Optimised_out kind)) in
         let named = Named.create_prim prim Debuginfo.none in
-        let simplified_defining_expr = Simplified_named.create named in
+        let simplified_defining_expr = Simplified_named.create ~machine_width named in
         { Expr_builder.let_bound;
           simplified_defining_expr;
           original_defining_expr = Some named

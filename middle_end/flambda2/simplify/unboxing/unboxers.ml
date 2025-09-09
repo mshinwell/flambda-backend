@@ -36,7 +36,7 @@ module type Number_S = sig
 
   val unboxing_prim : Simple.t -> P.t
 
-  val unboxer : unboxer
+  val unboxer : Target_system.Machine_width.t -> unboxer
 end
 
 module Immediate = struct

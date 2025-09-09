@@ -85,6 +85,7 @@ let check_units members =
 type flambda2 =
   ppf_dump:Format.formatter ->
   prefixname:string ->
+  machine_width:Target_system.Machine_width.t ->
   keep_symbol_tables:bool ->
   Lambda.program ->
   Cmm.phrase list
@@ -138,8 +139,9 @@ let make_package_object unix ~ppf_dump members target coercion
         required_globals;
       }
     in
+    let machine_width = Target_system.machine_width () in
     let pipeline : Asmgen.pipeline =
-      Direct_to_cmm (flambda2 ~keep_symbol_tables:true)
+      Direct_to_cmm (flambda2 ~machine_width ~keep_symbol_tables:true)
     in
     Asmgen.compile_implementation ~pipeline unix
       ~sourcefile:(Unit_info.Artifact.original_source_file target)

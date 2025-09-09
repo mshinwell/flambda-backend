@@ -410,7 +410,7 @@ and compute_extra_args_for_variant ~pass rewrite_id ~typing_env_at_use
               in
               let decision =
                 compute_extra_args_for_one_decision_and_use ~pass rewrite_id
-                  ~typing_env_at_use new_arg_being_unboxed decision
+                  ~typing_env_at_use ~machine_width new_arg_being_unboxed decision
               in
               let field_decision : U.field_decision = { epa; decision; kind } in
               let new_decisions = field_decision :: new_decisions in

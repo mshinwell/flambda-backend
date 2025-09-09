@@ -58,11 +58,11 @@ module type Num_common = sig
 
   val cross_product : Set.t -> Set.t -> Pair.Set.t
 
-  val zero : t
+  val zero : Target_system.Machine_width.t -> t
 
-  val one : t
+  val one : Target_system.Machine_width.t -> t
 
-  val minus_one : t
+  val minus_one : Target_system.Machine_width.t -> t
 
   val add : t -> t -> t
 
@@ -191,6 +191,12 @@ module For_tagged_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
+    let zero _machine_width = Target_ocaml_int.zero
+
+    let one _machine_width = Target_ocaml_int.one
+
+    let minus_one _machine_width = Target_ocaml_int.minus_one
+
     let strictly_negative t = t < Target_ocaml_int.zero
 
     let compare_unsigned t1 t2 =
@@ -265,6 +271,12 @@ module For_naked_immediates : Int_number_kind = struct
   module Num = struct
     include Target_ocaml_int
 
+    let zero _machine_width = Target_ocaml_int.zero
+
+    let one _machine_width = Target_ocaml_int.one
+
+    let minus_one _machine_width = Target_ocaml_int.minus_one
+
     let strictly_negative t = t < Target_ocaml_int.zero
 
     let compare_unsigned t1 t2 =
@@ -337,6 +349,12 @@ module For_float32s : Boxable_number_kind = struct
   module Num = struct
     include Float32_by_bit_pattern
 
+    let zero _machine_width = Float32_by_bit_pattern.zero
+
+    let one _machine_width = Float32_by_bit_pattern.one
+
+    let minus_one _machine_width = Float32_by_bit_pattern.minus_one
+
     let add = IEEE_semantics.add
 
     let sub = IEEE_semantics.sub
@@ -389,6 +407,12 @@ end
 module For_floats : Boxable_number_kind = struct
   module Num = struct
     include Float_by_bit_pattern
+
+    let zero _machine_width = Float_by_bit_pattern.zero
+
+    let one _machine_width = Float_by_bit_pattern.one
+
+    let minus_one _machine_width = Float_by_bit_pattern.minus_one
 
     let add = IEEE_semantics.add
 
@@ -443,16 +467,16 @@ module For_int8s : Int_number_kind = struct
   module Num = struct
     include Int8
 
-    let strictly_negative t = compare t zero < 0
+    let strictly_negative t = compare t Int8.zero < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
-    let zero _machine_width = of_int 0
+    let zero _machine_width = Int8.zero
 
-    let one _machine_width = of_int 1
+    let one _machine_width = Int8.one
 
-    let minus_one _machine_width = of_int (-1)
+    let minus_one _machine_width = Int8.of_int (-1)
 
     let neg x = of_int (Int.neg (to_int x))
 
@@ -495,12 +519,12 @@ module For_int8s : Int_number_kind = struct
         ~integer_bit_width:8
 
     let shift_right t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int8.zero
         (fun shift -> shift_right t shift)
         ~integer_bit_width:8
 
     let shift_right_logical t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int8.zero
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:8
 
@@ -551,16 +575,16 @@ module For_int16s : Int_number_kind = struct
   module Num = struct
     include Int16
 
-    let strictly_negative t = compare t zero < 0
+    let strictly_negative t = compare t Int16.zero < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
 
-    let zero _machine_width = of_int 0
+    let zero _machine_width = Int16.zero
 
-    let one _machine_width = of_int 1
+    let one _machine_width = Int16.one
 
-    let minus_one _machine_width = of_int (-1)
+    let minus_one _machine_width = Int16.of_int (-1)
 
     let neg x = of_int (Int.neg (to_int x))
 
@@ -593,22 +617,22 @@ module For_int16s : Int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 Int16.zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 Int16.zero then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int16.zero
         (fun shift -> shift_left t shift)
         ~integer_bit_width:16
 
     let shift_right t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int16.zero
         (fun shift -> shift_right t shift)
         ~integer_bit_width:16
 
     let shift_right_logical t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int16.zero
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:16
 
@@ -663,10 +687,16 @@ module For_int32s : Boxable_int_number_kind = struct
   module Num = struct
     include Int32
 
-    let strictly_negative t = compare t zero < 0
+    let strictly_negative t = compare t Int32.zero < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
+
+    let zero _machine_width = Int32.zero
+
+    let one _machine_width = Int32.one
+
+    let minus_one _machine_width = Int32.minus_one
 
     let xor = logxor
 
@@ -738,10 +768,16 @@ module For_int64s : Boxable_int_number_kind = struct
   module Num = struct
     include Int64
 
-    let strictly_negative t = compare t zero < 0
+    let strictly_negative t = compare t Int64.zero < 0
 
     let compare_unsigned t1 t2 =
       compare_unsigned_generic t1 t2 ~compare ~strictly_negative
+
+    let zero _machine_width = Int64.zero
+
+    let one _machine_width = Int64.one
+
+    let minus_one _machine_width = Int64.minus_one
 
     let xor = logxor
 
@@ -749,22 +785,22 @@ module For_int64s : Boxable_int_number_kind = struct
 
     let and_ = logand
 
-    let div t1 t2 = if equal t2 (of_int 0) then None else Some (div t1 t2)
+    let div t1 t2 = if equal t2 Int64.zero then None else Some (div t1 t2)
 
-    let mod_ t1 t2 = if equal t2 (of_int 0) then None else Some (rem t1 t2)
+    let mod_ t1 t2 = if equal t2 Int64.zero then None else Some (rem t1 t2)
 
     let shift_left t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int64.zero
         (fun shift -> shift_left t shift)
         ~integer_bit_width:64
 
     let shift_right t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int64.zero
         (fun shift -> shift_right t shift)
         ~integer_bit_width:64
 
     let shift_right_logical t shift =
-      with_shift shift (of_int 0)
+      with_shift shift Int64.zero
         (fun shift -> shift_right_logical t shift)
         ~integer_bit_width:64
 
