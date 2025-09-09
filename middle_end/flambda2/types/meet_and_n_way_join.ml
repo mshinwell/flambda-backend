@@ -1057,7 +1057,10 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
     else
       let rebuild = TG.Head_of_kind_naked_immediate.create_is_int in
       let machine_width = TE.machine_width (ME.typing_env env) in
-      match I.Set.mem (I.zero machine_width) immediates, I.Set.mem (I.one machine_width) immediates with
+      match
+        ( I.Set.mem (I.zero machine_width) immediates,
+          I.Set.mem (I.one machine_width) immediates )
+      with
       | false, false -> Bottom (New_result ())
       | true, true -> keep_side is_int_side
       | true, false ->
@@ -1071,7 +1074,10 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
     else
       let rebuild = TG.Head_of_kind_naked_immediate.create_is_null in
       let machine_width = TE.machine_width (ME.typing_env env) in
-      match I.Set.mem (I.zero machine_width) immediates, I.Set.mem (I.one machine_width) immediates with
+      match
+        ( I.Set.mem (I.zero machine_width) immediates,
+          I.Set.mem (I.one machine_width) immediates )
+      with
       | false, false -> Bottom (New_result ())
       | true, true -> keep_side is_null_side
       | true, false ->
@@ -1096,7 +1102,8 @@ and meet_head_of_kind_naked_immediate env (t1 : TG.head_of_kind_naked_immediate)
       else
         let machine_width = TE.machine_width (ME.typing_env env) in
         match
-          MTC.blocks_with_these_tags ~machine_width tags (Alloc_mode.For_types.unknown ())
+          MTC.blocks_with_these_tags ~machine_width tags
+            (Alloc_mode.For_types.unknown ())
         with
         | Known shape ->
           meet_with_shape
@@ -2356,7 +2363,9 @@ and n_way_join_head_of_kind_naked_immediate env
     (* Slightly better than Unknown *)
     let head =
       TG.Head_of_kind_naked_immediate.create_naked_immediates
-        (I.Set.add (I.zero Target_system.Machine_width.Sixty_four) (I.Set.add (I.one Target_system.Machine_width.Sixty_four) immediates))
+        (I.Set.add
+           (I.zero Target_system.Machine_width.Sixty_four)
+           (I.Set.add (I.one Target_system.Machine_width.Sixty_four) immediates))
     in
     match head with
     | Ok head -> Known head, env

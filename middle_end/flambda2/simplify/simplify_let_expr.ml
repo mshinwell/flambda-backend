@@ -94,7 +94,8 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               let machine_width = UE.machine_width (UA.uenv uacc) in
               { binding with
                 simplified_defining_expr =
-                  Simplified_named.create ~machine_width (Named.create_prim prim dbg)
+                  Simplified_named.create ~machine_width
+                    (Named.create_prim prim dbg)
               }))
         | Simple _ | Set_of_closures _ | Rec_info _ -> binding)
       bindings
@@ -126,7 +127,8 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               let binding =
                 { binding with
                   simplified_defining_expr =
-                    Simplified_named.create ~machine_width (Named.create_prim prim dbg)
+                    Simplified_named.create ~machine_width
+                      (Named.create_prim prim dbg)
                 }
               in
               [binding]
@@ -137,7 +139,8 @@ let rebuild_let simplify_named_result removed_operations ~rewrite_id
               let binding =
                 { binding with
                   simplified_defining_expr =
-                    Simplified_named.create ~machine_width (Named.create_simple bound_to)
+                    Simplified_named.create ~machine_width
+                      (Named.create_simple bound_to)
                 }
               in
               [binding]

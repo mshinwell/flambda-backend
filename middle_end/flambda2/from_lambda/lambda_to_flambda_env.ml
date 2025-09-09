@@ -93,7 +93,8 @@ type t =
     ident_stamp_upon_starting : int
   }
 
-let create ~current_unit ~machine_width ~return_continuation ~exn_continuation ~my_region =
+let create ~current_unit ~machine_width ~return_continuation ~exn_continuation
+    ~my_region =
   let mutables_needed_by_continuations =
     Continuation.Map.of_list
       [return_continuation, Ident.Set.empty; exn_continuation, Ident.Set.empty]

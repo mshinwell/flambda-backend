@@ -40,7 +40,8 @@ let create ~machine_width (named : Named.t) =
     | Simple simple ->
       Simple simple, Cost_metrics.from_size (Code_size.simple simple)
     | Prim (prim, dbg) ->
-      Prim (prim, dbg), Cost_metrics.from_size (Code_size.prim ~machine_width prim)
+      ( Prim (prim, dbg),
+        Cost_metrics.from_size (Code_size.prim ~machine_width prim) )
     | Set_of_closures _ ->
       Misc.fatal_errorf
         "Cannot use [Simplified_named.create] on [Set_of_closures];@ use \
@@ -58,14 +59,15 @@ let create ~machine_width (named : Named.t) =
     free_names = Named.free_names named
   }
 
-let create_with_known_free_names ~machine_width ~find_code_characteristics (named : Named.t)
-    ~free_names =
+let create_with_known_free_names ~machine_width ~find_code_characteristics
+    (named : Named.t) ~free_names =
   let (simplified_named : simplified_named), cost_metrics =
     match named with
     | Simple simple ->
       Simple simple, Cost_metrics.from_size (Code_size.simple simple)
     | Prim (prim, dbg) ->
-      Prim (prim, dbg), Cost_metrics.from_size (Code_size.prim ~machine_width prim)
+      ( Prim (prim, dbg),
+        Cost_metrics.from_size (Code_size.prim ~machine_width prim) )
     | Set_of_closures set ->
       ( Set_of_closures set,
         Cost_metrics.set_of_closures ~find_code_characteristics set )

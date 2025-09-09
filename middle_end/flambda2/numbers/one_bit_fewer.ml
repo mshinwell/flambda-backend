@@ -49,7 +49,10 @@ module type S = sig
 
   val of_char : Target_system.Machine_width.t -> char -> t
 
-  val of_int : Target_system.Machine_width.t -> int -> t (* CR mshinwell: clarify semantics *)
+  val of_int :
+    Target_system.Machine_width.t ->
+    int ->
+    t (* CR mshinwell: clarify semantics *)
 
   val of_int_option : Target_system.Machine_width.t -> int -> t option
 
@@ -154,7 +157,7 @@ module Make (I : S) : S with type t = I.t = struct
 
   let ( > ) = I.( > )
 
-  let _is_in_range machine_width n = 
+  let _is_in_range machine_width n =
     I.( >= ) n (min_value machine_width) && I.( <= ) n (max_value machine_width)
 
   let bottom_byte_to_int = I.bottom_byte_to_int
@@ -163,7 +166,8 @@ module Make (I : S) : S with type t = I.t = struct
 
   let of_int machine_width t = sign_extend (I.of_int machine_width t)
 
-  let of_int_option machine_width t = Option.map sign_extend (I.of_int_option machine_width t)
+  let of_int_option machine_width t =
+    Option.map sign_extend (I.of_int_option machine_width t)
 
   let of_int32 machine_width t =
     let x = I.of_int32 machine_width t in
@@ -199,8 +203,9 @@ module Make (I : S) : S with type t = I.t = struct
 
   let get_least_significant_16_bits_then_byte_swap t =
     let res = I.get_least_significant_16_bits_then_byte_swap t in
-    (* TODO: The range check would require machine_width, which is not available here.
-       The operation itself is safe as it only operates on the bottom 16 bits. *)
+    (* TODO: The range check would require machine_width, which is not available
+       here. The operation itself is safe as it only operates on the bottom 16
+       bits. *)
     (* assert (is_in_range machine_width res); *)
     res
 

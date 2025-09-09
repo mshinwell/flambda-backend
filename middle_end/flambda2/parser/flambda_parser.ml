@@ -1036,7 +1036,7 @@ module Tables = struct
       (Fexpr.alloc_mode_for_allocations)
 # 1038 "flambda_parser_in.ml"
         ) = 
-# 529 "flambda_parser.mly"
+# 530 "flambda_parser.mly"
     ( Heap )
 # 1042 "flambda_parser_in.ml"
          in
@@ -1076,7 +1076,7 @@ module Tables = struct
       (Fexpr.alloc_mode_for_allocations)
 # 1078 "flambda_parser_in.ml"
         ) = 
-# 530 "flambda_parser.mly"
+# 531 "flambda_parser.mly"
                          ( Local { region } )
 # 1082 "flambda_parser_in.ml"
          in
@@ -1098,7 +1098,7 @@ module Tables = struct
       (Fexpr.alloc_mode_for_applications)
 # 1100 "flambda_parser_in.ml"
         ) = 
-# 533 "flambda_parser.mly"
+# 534 "flambda_parser.mly"
     ( Heap )
 # 1104 "flambda_parser_in.ml"
          in
@@ -1156,7 +1156,7 @@ module Tables = struct
       (Fexpr.alloc_mode_for_applications)
 # 1158 "flambda_parser_in.ml"
         ) = 
-# 534 "flambda_parser.mly"
+# 535 "flambda_parser.mly"
                                                      ( Local { region; ghost_region } )
 # 1162 "flambda_parser_in.ml"
          in
@@ -1199,7 +1199,7 @@ module Tables = struct
         let _startpos = _startpos_cont_ in
         let _endpos = _endpos_args_ in
         let _v : 'tv_apply_cont_expr = 
-# 940 "flambda_parser.mly"
+# 941 "flambda_parser.mly"
     ( { cont; args; trap_action } )
 # 1205 "flambda_parser_in.ml"
          in
@@ -1273,7 +1273,7 @@ module Tables = struct
         let _startpos = _startpos_call_kind_ in
         let _endpos = _endpos_e_ in
         let _v : 'tv_apply_expr = 
-# 866 "flambda_parser.mly"
+# 867 "flambda_parser.mly"
      ( let (func, arities) = func in {
        func;
           continuation = r;
@@ -1304,7 +1304,7 @@ module Tables = struct
       (Fexpr.array_kind)
 # 1306 "flambda_parser_in.ml"
         ) = 
-# 482 "flambda_parser.mly"
+# 483 "flambda_parser.mly"
     ( (Values : array_kind) )
 # 1310 "flambda_parser_in.ml"
          in
@@ -1333,7 +1333,7 @@ module Tables = struct
       (Fexpr.array_kind)
 # 1335 "flambda_parser_in.ml"
         ) = 
-# 483 "flambda_parser.mly"
+# 484 "flambda_parser.mly"
             ( (Immediates : array_kind) )
 # 1339 "flambda_parser_in.ml"
          in
@@ -1362,7 +1362,7 @@ module Tables = struct
       (Fexpr.array_kind)
 # 1364 "flambda_parser_in.ml"
         ) = 
-# 484 "flambda_parser.mly"
+# 485 "flambda_parser.mly"
               ( (Naked_floats : array_kind) )
 # 1368 "flambda_parser_in.ml"
          in
@@ -1395,7 +1395,7 @@ module Tables = struct
       (Fexpr.array_kind_for_length)
 # 1397 "flambda_parser_in.ml"
         ) = 
-# 487 "flambda_parser.mly"
+# 488 "flambda_parser.mly"
                       ( Array_kind kind )
 # 1401 "flambda_parser_in.ml"
          in
@@ -1424,7 +1424,7 @@ module Tables = struct
       (Fexpr.array_kind_for_length)
 # 1426 "flambda_parser_in.ml"
         ) = 
-# 488 "flambda_parser.mly"
+# 489 "flambda_parser.mly"
                 ( Float_array_opt_dynamic )
 # 1430 "flambda_parser_in.ml"
          in
@@ -1449,7 +1449,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_atomic_expr = 
-# 798 "flambda_parser.mly"
+# 799 "flambda_parser.mly"
             ( Invalid { message = "halt-and-catch-fire" } )
 # 1455 "flambda_parser_in.ml"
          in
@@ -1474,7 +1474,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_atomic_expr = 
-# 799 "flambda_parser.mly"
+# 800 "flambda_parser.mly"
                     ( Invalid { message =  "treat-as-unreachable" } )
 # 1480 "flambda_parser_in.ml"
          in
@@ -1510,7 +1510,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_message_ in
         let _v : 'tv_atomic_expr = 
-# 800 "flambda_parser.mly"
+# 801 "flambda_parser.mly"
                                   ( Invalid { message } )
 # 1516 "flambda_parser_in.ml"
          in
@@ -1542,7 +1542,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_ac_ in
         let _v : 'tv_atomic_expr = 
-# 801 "flambda_parser.mly"
+# 802 "flambda_parser.mly"
                                    ( Apply_cont ac )
 # 1548 "flambda_parser_in.ml"
          in
@@ -1581,7 +1581,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_cases_ in
         let _v : 'tv_atomic_expr = 
-# 802 "flambda_parser.mly"
+# 803 "flambda_parser.mly"
                                                    ( Switch {scrutinee; cases} )
 # 1587 "flambda_parser_in.ml"
          in
@@ -1613,7 +1613,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_e_ in
         let _v : 'tv_atomic_expr = 
-# 803 "flambda_parser.mly"
+# 804 "flambda_parser.mly"
                              ( Apply e )
 # 1619 "flambda_parser_in.ml"
          in
@@ -1652,7 +1652,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__3_ in
         let _v : 'tv_atomic_expr = 
-# 804 "flambda_parser.mly"
+# 805 "flambda_parser.mly"
                              ( e )
 # 1658 "flambda_parser_in.ml"
          in
@@ -1677,7 +1677,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_begin_region = 
-# 660 "flambda_parser.mly"
+# 661 "flambda_parser.mly"
                       ( Begin_region { ghost = false } )
 # 1683 "flambda_parser_in.ml"
          in
@@ -1702,7 +1702,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_begin_region = 
-# 661 "flambda_parser.mly"
+# 662 "flambda_parser.mly"
                             ( Begin_region { ghost = true } )
 # 1708 "flambda_parser_in.ml"
          in
@@ -1727,7 +1727,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_begin_region = 
-# 662 "flambda_parser.mly"
+# 663 "flambda_parser.mly"
                           ( Begin_try_region { ghost = false } )
 # 1733 "flambda_parser_in.ml"
          in
@@ -1752,7 +1752,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_begin_region = 
-# 663 "flambda_parser.mly"
+# 664 "flambda_parser.mly"
                                 ( Begin_try_region { ghost = true } )
 # 1758 "flambda_parser_in.ml"
          in
@@ -1781,7 +1781,7 @@ module Tables = struct
       (Fexpr.binary_float_arith_op)
 # 1783 "flambda_parser_in.ml"
         ) = 
-# 551 "flambda_parser.mly"
+# 552 "flambda_parser.mly"
             ( Add )
 # 1787 "flambda_parser_in.ml"
          in
@@ -1810,7 +1810,7 @@ module Tables = struct
       (Fexpr.binary_float_arith_op)
 # 1812 "flambda_parser_in.ml"
         ) = 
-# 552 "flambda_parser.mly"
+# 553 "flambda_parser.mly"
              ( Sub )
 # 1816 "flambda_parser_in.ml"
          in
@@ -1839,7 +1839,7 @@ module Tables = struct
       (Fexpr.binary_float_arith_op)
 # 1841 "flambda_parser_in.ml"
         ) = 
-# 553 "flambda_parser.mly"
+# 554 "flambda_parser.mly"
             ( Mul )
 # 1845 "flambda_parser_in.ml"
          in
@@ -1868,7 +1868,7 @@ module Tables = struct
       (Fexpr.binary_float_arith_op)
 # 1870 "flambda_parser_in.ml"
         ) = 
-# 554 "flambda_parser.mly"
+# 555 "flambda_parser.mly"
              ( Div )
 # 1874 "flambda_parser_in.ml"
          in
@@ -1897,7 +1897,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 1899 "flambda_parser_in.ml"
         ) = 
-# 541 "flambda_parser.mly"
+# 542 "flambda_parser.mly"
          ( Add )
 # 1903 "flambda_parser_in.ml"
          in
@@ -1926,7 +1926,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 1928 "flambda_parser_in.ml"
         ) = 
-# 542 "flambda_parser.mly"
+# 543 "flambda_parser.mly"
           ( Sub )
 # 1932 "flambda_parser_in.ml"
          in
@@ -1955,7 +1955,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 1957 "flambda_parser_in.ml"
         ) = 
-# 543 "flambda_parser.mly"
+# 544 "flambda_parser.mly"
          ( Mul )
 # 1961 "flambda_parser_in.ml"
          in
@@ -1984,7 +1984,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 1986 "flambda_parser_in.ml"
         ) = 
-# 544 "flambda_parser.mly"
+# 545 "flambda_parser.mly"
           ( Div )
 # 1990 "flambda_parser_in.ml"
          in
@@ -2013,7 +2013,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 2015 "flambda_parser_in.ml"
         ) = 
-# 545 "flambda_parser.mly"
+# 546 "flambda_parser.mly"
             ( Mod )
 # 2019 "flambda_parser_in.ml"
          in
@@ -2042,7 +2042,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 2044 "flambda_parser_in.ml"
         ) = 
-# 546 "flambda_parser.mly"
+# 547 "flambda_parser.mly"
              ( And )
 # 2048 "flambda_parser_in.ml"
          in
@@ -2071,7 +2071,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 2073 "flambda_parser_in.ml"
         ) = 
-# 547 "flambda_parser.mly"
+# 548 "flambda_parser.mly"
             ( Or )
 # 2077 "flambda_parser_in.ml"
          in
@@ -2100,7 +2100,7 @@ module Tables = struct
       (Fexpr.binary_int_arith_op)
 # 2102 "flambda_parser_in.ml"
         ) = 
-# 548 "flambda_parser.mly"
+# 549 "flambda_parser.mly"
              ( Xor )
 # 2106 "flambda_parser_in.ml"
          in
@@ -2181,10 +2181,10 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_binop_app = 
-# 588 "flambda_parser.mly"
-    ( Binary
-        (Block_set
-           { kind; init; field = (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field) }, block, v) )
+# 589 "flambda_parser.mly"
+    ( let mw = Target_system.Machine_width.Sixty_four in
+      let field = Target_ocaml_int.of_int mw field in
+      Binary (Block_set { kind; init; field }, block, v) )
 # 2189 "flambda_parser_in.ml"
          in
         {
@@ -2243,7 +2243,7 @@ module Tables = struct
         let _startpos = _startpos_op_ in
         let _endpos = _endpos__6_ in
         let _v : 'tv_binop_app = 
-# 593 "flambda_parser.mly"
+# 594 "flambda_parser.mly"
     ( Binary (op, arg1, arg2) )
 # 2249 "flambda_parser_in.ml"
          in
@@ -2286,7 +2286,7 @@ module Tables = struct
         let _startpos = _startpos_arg1_ in
         let _endpos = _endpos_arg2_ in
         let _v : 'tv_binop_app = 
-# 595 "flambda_parser.mly"
+# 596 "flambda_parser.mly"
     ( Binary (Infix op, arg1, arg2) )
 # 2292 "flambda_parser_in.ml"
          in
@@ -2368,7 +2368,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__8_ in
         let _v : 'tv_binop_app = 
-# 599 "flambda_parser.mly"
+# 600 "flambda_parser.mly"
     (
     let array_load_kind : array_load_kind =
       match ak with
@@ -2445,7 +2445,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_arg2_ in
         let _v : 'tv_binop_app = 
-# 618 "flambda_parser.mly"
+# 619 "flambda_parser.mly"
     ( Binary (Int_arith (i, c), arg1, arg2) )
 # 2451 "flambda_parser_in.ml"
          in
@@ -2513,7 +2513,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_arg2_ in
         let _v : 'tv_binop_app = 
-# 622 "flambda_parser.mly"
+# 623 "flambda_parser.mly"
     ( Binary (Int_comp (i, c s), arg1, arg2) )
 # 2519 "flambda_parser_in.ml"
          in
@@ -2570,7 +2570,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_arg2_ in
         let _v : 'tv_binop_app = 
-# 625 "flambda_parser.mly"
+# 626 "flambda_parser.mly"
     ( Binary (Int_shift (i, s), arg1, arg2) )
 # 2576 "flambda_parser_in.ml"
          in
@@ -2595,7 +2595,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_blank_or_kinds_with_subkinds_ = 
-# 1064 "flambda_parser.mly"
+# 1065 "flambda_parser.mly"
           ( None )
 # 2601 "flambda_parser_in.ml"
          in
@@ -2624,7 +2624,7 @@ module Tables = struct
         let _startpos = _startpos_a_ in
         let _endpos = _endpos_a_ in
         let _v : 'tv_blank_or_kinds_with_subkinds_ = 
-# 1065 "flambda_parser.mly"
+# 1066 "flambda_parser.mly"
           ( Some a )
 # 2630 "flambda_parser_in.ml"
          in
@@ -2649,7 +2649,7 @@ module Tables = struct
         let _startpos = _startpos_r_ in
         let _endpos = _endpos_r_ in
         let _v : 'tv_block = 
-# 667 "flambda_parser.mly"
+# 668 "flambda_parser.mly"
                      ( Variadic (r, []) )
 # 2655 "flambda_parser_in.ml"
          in
@@ -2730,7 +2730,7 @@ module Tables = struct
 # 2731 "flambda_parser_in.ml"
            in
           (
-# 670 "flambda_parser.mly"
+# 671 "flambda_parser.mly"
     ( Variadic (Make_block (t, m, alloc), elts) )
 # 2736 "flambda_parser_in.ml"
            : 'tv_block)
@@ -2753,7 +2753,7 @@ module Tables = struct
       (Fexpr.block_access_field_kind)
 # 2755 "flambda_parser_in.ml"
         ) = 
-# 501 "flambda_parser.mly"
+# 502 "flambda_parser.mly"
     ( Any_value )
 # 2759 "flambda_parser_in.ml"
          in
@@ -2782,7 +2782,7 @@ module Tables = struct
       (Fexpr.block_access_field_kind)
 # 2784 "flambda_parser_in.ml"
         ) = 
-# 502 "flambda_parser.mly"
+# 503 "flambda_parser.mly"
             ( Immediate )
 # 2788 "flambda_parser_in.ml"
          in
@@ -2825,7 +2825,7 @@ module Tables = struct
         let _startpos = _startpos_field_kind_ in
         let _endpos = _endpos_size_ in
         let _v : 'tv_block_access_kind = 
-# 495 "flambda_parser.mly"
+# 496 "flambda_parser.mly"
     ( (Values { field_kind; tag; size } : block_access_kind) )
 # 2831 "flambda_parser_in.ml"
          in
@@ -2857,7 +2857,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_size_ in
         let _v : 'tv_block_access_kind = 
-# 497 "flambda_parser.mly"
+# 498 "flambda_parser.mly"
     ( (Naked_floats { size } : block_access_kind) )
 # 2863 "flambda_parser_in.ml"
          in
@@ -3011,7 +3011,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_bytes_or_bigstring_set = 
-# 629 "flambda_parser.mly"
+# 630 "flambda_parser.mly"
                    ( Bytes )
 # 3017 "flambda_parser_in.ml"
          in
@@ -3036,7 +3036,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_bytes_or_bigstring_set = 
-# 630 "flambda_parser.mly"
+# 631 "flambda_parser.mly"
                        ( Bigstring )
 # 3042 "flambda_parser_in.ml"
          in
@@ -3065,7 +3065,7 @@ module Tables = struct
         let _startpos = _startpos_alloc_ in
         let _endpos = _endpos_alloc_ in
         let _v : 'tv_call_kind = 
-# 879 "flambda_parser.mly"
+# 880 "flambda_parser.mly"
                                              ( Function (Indirect alloc) )
 # 3071 "flambda_parser_in.ml"
          in
@@ -3129,7 +3129,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__6_ in
         let _v : 'tv_call_kind = 
-# 885 "flambda_parser.mly"
+# 886 "flambda_parser.mly"
     ( Function (Direct { code_id; function_slot; alloc }) )
 # 3135 "flambda_parser_in.ml"
          in
@@ -3161,7 +3161,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_noalloc_ in
         let _v : 'tv_call_kind = 
-# 887 "flambda_parser.mly"
+# 888 "flambda_parser.mly"
     ( C_call { alloc = not noalloc } )
 # 3167 "flambda_parser_in.ml"
          in
@@ -3403,7 +3403,7 @@ module Tables = struct
         let _startpos = _startpos_v_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_code_id = 
-# 1096 "flambda_parser.mly"
+# 1097 "flambda_parser.mly"
                  ( v )
 # 3409 "flambda_parser_in.ml"
          in
@@ -3428,7 +3428,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : 'tv_code_size = 
-# 1100 "flambda_parser.mly"
+# 1101 "flambda_parser.mly"
                   ( i )
 # 3434 "flambda_parser_in.ml"
          in
@@ -3453,7 +3453,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_coercion = 
-# 1076 "flambda_parser.mly"
+# 1077 "flambda_parser.mly"
            ( Id )
 # 3459 "flambda_parser_in.ml"
          in
@@ -3507,7 +3507,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_to__ in
         let _v : 'tv_coercion = 
-# 1078 "flambda_parser.mly"
+# 1079 "flambda_parser.mly"
     ( Change_depth { from; to_; } )
 # 3513 "flambda_parser_in.ml"
          in
@@ -3540,7 +3540,7 @@ module Tables = struct
       (Fexpr.const)
 # 3542 "flambda_parser_in.ml"
         ) = 
-# 1050 "flambda_parser.mly"
+# 1051 "flambda_parser.mly"
             ( make_const_int c )
 # 3546 "flambda_parser_in.ml"
          in
@@ -3573,7 +3573,7 @@ module Tables = struct
       (Fexpr.const)
 # 3575 "flambda_parser_in.ml"
         ) = 
-# 1051 "flambda_parser.mly"
+# 1052 "flambda_parser.mly"
               ( Naked_float c )
 # 3579 "flambda_parser_in.ml"
          in
@@ -3595,7 +3595,7 @@ module Tables = struct
       (Fexpr.is_cont_recursive)
 # 3597 "flambda_parser_in.ml"
         ) = 
-# 957 "flambda_parser.mly"
+# 958 "flambda_parser.mly"
     ( Nonrecursive )
 # 3601 "flambda_parser_in.ml"
          in
@@ -3631,7 +3631,7 @@ module Tables = struct
       (Fexpr.is_cont_recursive)
 # 3633 "flambda_parser_in.ml"
         ) = 
-# 959 "flambda_parser.mly"
+# 960 "flambda_parser.mly"
     ( (Recursive params : Fexpr.is_cont_recursive) )
 # 3637 "flambda_parser_in.ml"
          in
@@ -3660,7 +3660,7 @@ module Tables = struct
       (Fexpr.continuation)
 # 3662 "flambda_parser_in.ml"
         ) = 
-# 1124 "flambda_parser.mly"
+# 1125 "flambda_parser.mly"
                         ( Named e )
 # 3666 "flambda_parser_in.ml"
          in
@@ -3693,7 +3693,7 @@ module Tables = struct
       (Fexpr.continuation)
 # 3695 "flambda_parser_in.ml"
         ) = 
-# 1125 "flambda_parser.mly"
+# 1126 "flambda_parser.mly"
                              ( Special s )
 # 3699 "flambda_parser_in.ml"
          in
@@ -3750,7 +3750,7 @@ module Tables = struct
         let _startpos = _startpos_name_ in
         let _endpos = _endpos_handler_ in
         let _v : 'tv_continuation_binding = 
-# 971 "flambda_parser.mly"
+# 972 "flambda_parser.mly"
     ( { name; params; handler; sort } )
 # 3756 "flambda_parser_in.ml"
          in
@@ -3775,7 +3775,7 @@ module Tables = struct
         let _startpos = _startpos_l_ in
         let _endpos = _endpos_l_ in
         let _v : 'tv_continuation_body = 
-# 793 "flambda_parser.mly"
+# 794 "flambda_parser.mly"
                                     ( l )
 # 3781 "flambda_parser_in.ml"
          in
@@ -3800,7 +3800,7 @@ module Tables = struct
         let _startpos = _startpos_a_ in
         let _endpos = _endpos_a_ in
         let _v : 'tv_continuation_body = 
-# 794 "flambda_parser.mly"
+# 795 "flambda_parser.mly"
                     ( a )
 # 3806 "flambda_parser_in.ml"
          in
@@ -3832,7 +3832,7 @@ module Tables = struct
           let _endpos = _endpos_e_ in
           let _startpos = _startpos_e_ in
           (
-# 1120 "flambda_parser.mly"
+# 1121 "flambda_parser.mly"
               ( make_located e (_startpos, _endpos) )
 # 3838 "flambda_parser_in.ml"
            : 'tv_continuation_id)
@@ -3855,7 +3855,7 @@ module Tables = struct
       (Fexpr.continuation_sort option)
 # 3857 "flambda_parser_in.ml"
         ) = 
-# 963 "flambda_parser.mly"
+# 964 "flambda_parser.mly"
     ( None )
 # 3861 "flambda_parser_in.ml"
          in
@@ -3884,7 +3884,7 @@ module Tables = struct
       (Fexpr.continuation_sort option)
 # 3886 "flambda_parser_in.ml"
         ) = 
-# 964 "flambda_parser.mly"
+# 965 "flambda_parser.mly"
             ( Some Exn )
 # 3890 "flambda_parser_in.ml"
          in
@@ -3913,7 +3913,7 @@ module Tables = struct
       (Fexpr.continuation_sort option)
 # 3915 "flambda_parser_in.ml"
         ) = 
-# 965 "flambda_parser.mly"
+# 966 "flambda_parser.mly"
                            ( Some Define_root_symbol )
 # 3919 "flambda_parser_in.ml"
          in
@@ -3949,7 +3949,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 3951 "flambda_parser_in.ml"
         ) = 
-# 516 "flambda_parser.mly"
+# 517 "flambda_parser.mly"
                        ( Tagged_immediate )
 # 3955 "flambda_parser_in.ml"
          in
@@ -3978,7 +3978,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 3980 "flambda_parser_in.ml"
         ) = 
-# 517 "flambda_parser.mly"
+# 518 "flambda_parser.mly"
             ( Naked_immediate )
 # 3984 "flambda_parser_in.ml"
          in
@@ -4007,7 +4007,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 4009 "flambda_parser_in.ml"
         ) = 
-# 518 "flambda_parser.mly"
+# 519 "flambda_parser.mly"
               ( Naked_float )
 # 4013 "flambda_parser_in.ml"
          in
@@ -4036,7 +4036,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 4038 "flambda_parser_in.ml"
         ) = 
-# 519 "flambda_parser.mly"
+# 520 "flambda_parser.mly"
               ( Naked_int32 )
 # 4042 "flambda_parser_in.ml"
          in
@@ -4065,7 +4065,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 4067 "flambda_parser_in.ml"
         ) = 
-# 520 "flambda_parser.mly"
+# 521 "flambda_parser.mly"
               ( Naked_int64 )
 # 4071 "flambda_parser_in.ml"
          in
@@ -4094,7 +4094,7 @@ module Tables = struct
       (Fexpr.standard_int_or_float)
 # 4096 "flambda_parser_in.ml"
         ) = 
-# 521 "flambda_parser.mly"
+# 522 "flambda_parser.mly"
                   ( Naked_nativeint )
 # 4100 "flambda_parser_in.ml"
          in
@@ -4112,7 +4112,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_ctors = 
-# 740 "flambda_parser.mly"
+# 741 "flambda_parser.mly"
     ( [], [] )
 # 4118 "flambda_parser_in.ml"
          in
@@ -4137,7 +4137,7 @@ module Tables = struct
         let _startpos = _startpos_ctors_ in
         let _endpos = _endpos_ctors_ in
         let _v : 'tv_ctors = 
-# 741 "flambda_parser.mly"
+# 742 "flambda_parser.mly"
                            ( ctors )
 # 4143 "flambda_parser_in.ml"
          in
@@ -4162,7 +4162,7 @@ module Tables = struct
         let _startpos = _startpos_tag_ in
         let _endpos = _endpos_tag_ in
         let _v : 'tv_ctors_nonempty = 
-# 743 "flambda_parser.mly"
+# 744 "flambda_parser.mly"
                     ( [ tag ], [] )
 # 4168 "flambda_parser_in.ml"
          in
@@ -4201,7 +4201,7 @@ module Tables = struct
         let _startpos = _startpos_tag_ in
         let _endpos = _endpos_ctors_ in
         let _v : 'tv_ctors_nonempty = 
-# 745 "flambda_parser.mly"
+# 746 "flambda_parser.mly"
       ( let (c, nc) = ctors in (tag :: c, nc) )
 # 4207 "flambda_parser_in.ml"
          in
@@ -4226,7 +4226,7 @@ module Tables = struct
         let _startpos = _startpos_nonconsts_ in
         let _endpos = _endpos_nonconsts_ in
         let _v : 'tv_ctors_nonempty = 
-# 746 "flambda_parser.mly"
+# 747 "flambda_parser.mly"
                                         ( [], nonconsts )
 # 4232 "flambda_parser_in.ml"
          in
@@ -4287,7 +4287,7 @@ module Tables = struct
       (Fexpr.empty_array_kind)
 # 4289 "flambda_parser_in.ml"
         ) = 
-# 491 "flambda_parser.mly"
+# 492 "flambda_parser.mly"
     ( Values_or_immediates_or_naked_floats )
 # 4293 "flambda_parser_in.ml"
          in
@@ -4430,7 +4430,7 @@ module Tables = struct
         let _startpos = _startpos_l_ in
         let _endpos = _endpos_l_ in
         let _v : 'tv_expr = 
-# 772 "flambda_parser.mly"
+# 773 "flambda_parser.mly"
                        ( l )
 # 4436 "flambda_parser_in.ml"
          in
@@ -4455,7 +4455,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : 'tv_expr = 
-# 773 "flambda_parser.mly"
+# 774 "flambda_parser.mly"
                    ( i )
 # 4461 "flambda_parser_in.ml"
          in
@@ -4484,7 +4484,7 @@ module Tables = struct
       (Fexpr.field_of_block)
 # 4486 "flambda_parser_in.ml"
         ) = 
-# 1031 "flambda_parser.mly"
+# 1032 "flambda_parser.mly"
                ( Symbol s )
 # 4490 "flambda_parser_in.ml"
          in
@@ -4513,7 +4513,7 @@ module Tables = struct
       (Fexpr.field_of_block)
 # 4515 "flambda_parser_in.ml"
         ) = 
-# 1032 "flambda_parser.mly"
+# 1033 "flambda_parser.mly"
                  ( Dynamically_computed v )
 # 4519 "flambda_parser_in.ml"
          in
@@ -4545,7 +4545,7 @@ module Tables = struct
           let _endpos = _endpos_i_ in
           let _startpos = _startpos_i_ in
           (
-# 1033 "flambda_parser.mly"
+# 1034 "flambda_parser.mly"
             ( Tagged_immediate ( make_tagged_immediate ~loc:(_startpos, _endpos) i ) )
 # 4551 "flambda_parser_in.ml"
            : (
@@ -4615,7 +4615,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4617 "flambda_parser_in.ml"
         ) = 
-# 566 "flambda_parser.mly"
+# 567 "flambda_parser.mly"
              ( Yielding_bool Eq )
 # 4621 "flambda_parser_in.ml"
          in
@@ -4644,7 +4644,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4646 "flambda_parser_in.ml"
         ) = 
-# 567 "flambda_parser.mly"
+# 568 "flambda_parser.mly"
                 ( Yielding_bool Neq )
 # 4650 "flambda_parser_in.ml"
          in
@@ -4673,7 +4673,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4675 "flambda_parser_in.ml"
         ) = 
-# 568 "flambda_parser.mly"
+# 569 "flambda_parser.mly"
             ( Yielding_bool ( Lt ()) )
 # 4679 "flambda_parser_in.ml"
          in
@@ -4702,7 +4702,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4704 "flambda_parser_in.ml"
         ) = 
-# 569 "flambda_parser.mly"
+# 570 "flambda_parser.mly"
                ( Yielding_bool ( Gt ()) )
 # 4708 "flambda_parser_in.ml"
          in
@@ -4731,7 +4731,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4733 "flambda_parser_in.ml"
         ) = 
-# 570 "flambda_parser.mly"
+# 571 "flambda_parser.mly"
                  ( Yielding_bool (Le()) )
 # 4737 "flambda_parser_in.ml"
          in
@@ -4760,7 +4760,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4762 "flambda_parser_in.ml"
         ) = 
-# 571 "flambda_parser.mly"
+# 572 "flambda_parser.mly"
                     ( Yielding_bool (Ge ()) )
 # 4766 "flambda_parser_in.ml"
          in
@@ -4789,7 +4789,7 @@ module Tables = struct
       (unit Fexpr.comparison_behaviour)
 # 4791 "flambda_parser_in.ml"
         ) = 
-# 572 "flambda_parser.mly"
+# 573 "flambda_parser.mly"
              ( (Yielding_int_like_compare_functions ()) )
 # 4795 "flambda_parser_in.ml"
          in
@@ -4822,7 +4822,7 @@ module Tables = struct
       (float Fexpr.or_variable)
 # 4824 "flambda_parser_in.ml"
         ) = 
-# 1011 "flambda_parser.mly"
+# 1012 "flambda_parser.mly"
               ( Const f )
 # 4828 "flambda_parser_in.ml"
          in
@@ -4851,7 +4851,7 @@ module Tables = struct
       (float Fexpr.or_variable)
 # 4853 "flambda_parser_in.ml"
         ) = 
-# 1012 "flambda_parser.mly"
+# 1013 "flambda_parser.mly"
                  ( Var v )
 # 4857 "flambda_parser_in.ml"
          in
@@ -4901,7 +4901,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_alloc_ in
         let _v : 'tv_fun_decl = 
-# 855 "flambda_parser.mly"
+# 856 "flambda_parser.mly"
     ( { code_id; function_slot; alloc; } )
 # 4907 "flambda_parser_in.ml"
          in
@@ -4926,7 +4926,7 @@ module Tables = struct
         let _startpos = _startpos_s_ in
         let _endpos = _endpos_s_ in
         let _v : 'tv_func_name_with_optional_arities = 
-# 1055 "flambda_parser.mly"
+# 1056 "flambda_parser.mly"
                ( s, None )
 # 4932 "flambda_parser_in.ml"
          in
@@ -4997,7 +4997,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__7_ in
         let _v : 'tv_func_name_with_optional_arities = 
-# 1060 "flambda_parser.mly"
+# 1061 "flambda_parser.mly"
     ( s, Some ({ params_arity; ret_arity } : function_arities) )
 # 5003 "flambda_parser_in.ml"
          in
@@ -5022,7 +5022,7 @@ module Tables = struct
         let _startpos = _startpos_v_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_function_slot = 
-# 1103 "flambda_parser.mly"
+# 1104 "flambda_parser.mly"
                  ( v )
 # 5028 "flambda_parser_in.ml"
          in
@@ -5040,7 +5040,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_function_slot_opt = 
-# 1107 "flambda_parser.mly"
+# 1108 "flambda_parser.mly"
     ( None )
 # 5046 "flambda_parser_in.ml"
          in
@@ -5072,7 +5072,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_cid_ in
         let _v : 'tv_function_slot_opt = 
-# 1108 "flambda_parser.mly"
+# 1109 "flambda_parser.mly"
                             ( Some cid )
 # 5078 "flambda_parser_in.ml"
          in
@@ -5105,7 +5105,7 @@ module Tables = struct
       (Fexpr.infix_binop)
 # 5107 "flambda_parser_in.ml"
         ) = 
-# 440 "flambda_parser.mly"
+# 441 "flambda_parser.mly"
                             ( Int_arith o )
 # 5111 "flambda_parser_in.ml"
          in
@@ -5138,7 +5138,7 @@ module Tables = struct
       (Fexpr.infix_binop)
 # 5140 "flambda_parser_in.ml"
         ) = 
-# 441 "flambda_parser.mly"
+# 442 "flambda_parser.mly"
                  ( Int_comp (c Signed) )
 # 5144 "flambda_parser_in.ml"
          in
@@ -5167,7 +5167,7 @@ module Tables = struct
       (Fexpr.infix_binop)
 # 5169 "flambda_parser_in.ml"
         ) = 
-# 442 "flambda_parser.mly"
+# 443 "flambda_parser.mly"
                   ( Int_shift s )
 # 5173 "flambda_parser_in.ml"
          in
@@ -5200,7 +5200,7 @@ module Tables = struct
       (Fexpr.infix_binop)
 # 5202 "flambda_parser_in.ml"
         ) = 
-# 443 "flambda_parser.mly"
+# 444 "flambda_parser.mly"
                               ( Float_arith (Float64, o) )
 # 5206 "flambda_parser_in.ml"
          in
@@ -5233,7 +5233,7 @@ module Tables = struct
       (Fexpr.infix_binop)
 # 5235 "flambda_parser_in.ml"
         ) = 
-# 444 "flambda_parser.mly"
+# 445 "flambda_parser.mly"
                    ( Float_comp (Float64, c) )
 # 5239 "flambda_parser_in.ml"
          in
@@ -5258,7 +5258,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_init_or_assign = 
-# 524 "flambda_parser.mly"
+# 525 "flambda_parser.mly"
           ( Initialization )
 # 5264 "flambda_parser_in.ml"
          in
@@ -5283,7 +5283,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_init_or_assign = 
-# 525 "flambda_parser.mly"
+# 526 "flambda_parser.mly"
               ( Assignment Heap )
 # 5289 "flambda_parser_in.ml"
          in
@@ -5315,7 +5315,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__2_ in
         let _v : 'tv_init_or_assign = 
-# 526 "flambda_parser.mly"
+# 527 "flambda_parser.mly"
                   ( Assignment Local )
 # 5321 "flambda_parser_in.ml"
          in
@@ -5361,7 +5361,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inline = 
-# 891 "flambda_parser.mly"
+# 892 "flambda_parser.mly"
                                         ( Always_inline )
 # 5367 "flambda_parser_in.ml"
          in
@@ -5407,7 +5407,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inline = 
-# 892 "flambda_parser.mly"
+# 893 "flambda_parser.mly"
                                            ( Available_inline )
 # 5413 "flambda_parser_in.ml"
          in
@@ -5453,7 +5453,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inline = 
-# 893 "flambda_parser.mly"
+# 894 "flambda_parser.mly"
                                        ( Never_inline )
 # 5459 "flambda_parser_in.ml"
          in
@@ -5499,7 +5499,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inline = 
-# 894 "flambda_parser.mly"
+# 895 "flambda_parser.mly"
                                              ( Inline_attribute.Unroll i )
 # 5505 "flambda_parser_in.ml"
          in
@@ -5545,7 +5545,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inline = 
-# 895 "flambda_parser.mly"
+# 896 "flambda_parser.mly"
                                          ( Default_inline )
 # 5551 "flambda_parser_in.ml"
          in
@@ -5591,7 +5591,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlined = 
-# 898 "flambda_parser.mly"
+# 899 "flambda_parser.mly"
                                          ( Always_inlined )
 # 5597 "flambda_parser_in.ml"
          in
@@ -5637,7 +5637,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlined = 
-# 899 "flambda_parser.mly"
+# 900 "flambda_parser.mly"
                                        ( Hint_inlined )
 # 5643 "flambda_parser_in.ml"
          in
@@ -5683,7 +5683,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlined = 
-# 900 "flambda_parser.mly"
+# 901 "flambda_parser.mly"
                                         ( Never_inlined )
 # 5689 "flambda_parser_in.ml"
          in
@@ -5729,7 +5729,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlined = 
-# 901 "flambda_parser.mly"
+# 902 "flambda_parser.mly"
                                              ( Unroll i )
 # 5735 "flambda_parser_in.ml"
          in
@@ -5775,7 +5775,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlined = 
-# 902 "flambda_parser.mly"
+# 903 "flambda_parser.mly"
                                           ( Default_inlined )
 # 5781 "flambda_parser_in.ml"
          in
@@ -5821,7 +5821,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlining_state = 
-# 906 "flambda_parser.mly"
+# 907 "flambda_parser.mly"
     (
       (* CR poechsel: Parse the inlining arguments *)
       { depth }
@@ -5870,7 +5870,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_inlining_state_depth = 
-# 912 "flambda_parser.mly"
+# 913 "flambda_parser.mly"
                                             ( i )
 # 5876 "flambda_parser_in.ml"
          in
@@ -5895,7 +5895,7 @@ module Tables = struct
         let _startpos = _startpos_w_ in
         let _endpos = _endpos_w_ in
         let _v : 'tv_inner_expr = 
-# 782 "flambda_parser.mly"
+# 783 "flambda_parser.mly"
                    ( w )
 # 5901 "flambda_parser_in.ml"
          in
@@ -5920,7 +5920,7 @@ module Tables = struct
         let _startpos = _startpos_a_ in
         let _endpos = _endpos_a_ in
         let _v : 'tv_inner_expr = 
-# 783 "flambda_parser.mly"
+# 784 "flambda_parser.mly"
                     ( a )
 # 5926 "flambda_parser_in.ml"
          in
@@ -5949,7 +5949,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 5951 "flambda_parser_in.ml"
         ) = 
-# 557 "flambda_parser.mly"
+# 558 "flambda_parser.mly"
          ( fun s -> Yielding_bool (Lt s) )
 # 5955 "flambda_parser_in.ml"
          in
@@ -5978,7 +5978,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 5980 "flambda_parser_in.ml"
         ) = 
-# 558 "flambda_parser.mly"
+# 559 "flambda_parser.mly"
             ( fun s -> Yielding_bool (Gt s) )
 # 5984 "flambda_parser_in.ml"
          in
@@ -6007,7 +6007,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 6009 "flambda_parser_in.ml"
         ) = 
-# 559 "flambda_parser.mly"
+# 560 "flambda_parser.mly"
               ( fun s -> Yielding_bool (Le s) )
 # 6013 "flambda_parser_in.ml"
          in
@@ -6036,7 +6036,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 6038 "flambda_parser_in.ml"
         ) = 
-# 560 "flambda_parser.mly"
+# 561 "flambda_parser.mly"
                  ( fun s -> Yielding_bool (Ge s) )
 # 6042 "flambda_parser_in.ml"
          in
@@ -6065,7 +6065,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 6067 "flambda_parser_in.ml"
         ) = 
-# 561 "flambda_parser.mly"
+# 562 "flambda_parser.mly"
           ( fun _ -> Yielding_bool Eq )
 # 6071 "flambda_parser_in.ml"
          in
@@ -6094,7 +6094,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 6096 "flambda_parser_in.ml"
         ) = 
-# 562 "flambda_parser.mly"
+# 563 "flambda_parser.mly"
              ( fun _ -> Yielding_bool Neq )
 # 6100 "flambda_parser_in.ml"
          in
@@ -6123,7 +6123,7 @@ module Tables = struct
       (Fexpr.signed_or_unsigned -> Fexpr.signed_or_unsigned Fexpr.comparison_behaviour)
 # 6125 "flambda_parser_in.ml"
         ) = 
-# 563 "flambda_parser.mly"
+# 564 "flambda_parser.mly"
           ( fun s -> Yielding_int_like_compare_functions s )
 # 6129 "flambda_parser_in.ml"
          in
@@ -6148,7 +6148,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_int_shift = 
-# 576 "flambda_parser.mly"
+# 577 "flambda_parser.mly"
             ( Lsl )
 # 6154 "flambda_parser_in.ml"
          in
@@ -6173,7 +6173,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_int_shift = 
-# 577 "flambda_parser.mly"
+# 578 "flambda_parser.mly"
             ( Lsr )
 # 6179 "flambda_parser_in.ml"
          in
@@ -6198,7 +6198,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_int_shift = 
-# 578 "flambda_parser.mly"
+# 579 "flambda_parser.mly"
             ( Asr )
 # 6204 "flambda_parser_in.ml"
          in
@@ -6231,7 +6231,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind)
 # 6233 "flambda_parser_in.ml"
         ) = 
-# 711 "flambda_parser.mly"
+# 712 "flambda_parser.mly"
                             ( Naked_number nnk )
 # 6237 "flambda_parser_in.ml"
          in
@@ -6264,7 +6264,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind)
 # 6266 "flambda_parser_in.ml"
         ) = 
-# 712 "flambda_parser.mly"
+# 713 "flambda_parser.mly"
                       ( Value subkind )
 # 6270 "flambda_parser_in.ml"
          in
@@ -6293,7 +6293,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind)
 # 6295 "flambda_parser_in.ml"
         ) = 
-# 713 "flambda_parser.mly"
+# 714 "flambda_parser.mly"
                ( Region )
 # 6299 "flambda_parser_in.ml"
          in
@@ -6322,7 +6322,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind)
 # 6324 "flambda_parser_in.ml"
         ) = 
-# 714 "flambda_parser.mly"
+# 715 "flambda_parser.mly"
                  ( Rec_info )
 # 6328 "flambda_parser_in.ml"
          in
@@ -6340,7 +6340,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_kind_with_subkind_opt = 
-# 1041 "flambda_parser.mly"
+# 1042 "flambda_parser.mly"
     ( None )
 # 6346 "flambda_parser_in.ml"
          in
@@ -6376,7 +6376,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_kind_ in
         let _v : 'tv_kind_with_subkind_opt = 
-# 1042 "flambda_parser.mly"
+# 1043 "flambda_parser.mly"
                                     ( Some kind )
 # 6382 "flambda_parser_in.ml"
          in
@@ -6394,7 +6394,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_kinded_args = 
-# 975 "flambda_parser.mly"
+# 976 "flambda_parser.mly"
     ( [] )
 # 6400 "flambda_parser_in.ml"
          in
@@ -6433,7 +6433,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__3_ in
         let _v : 'tv_kinded_args = 
-# 976 "flambda_parser.mly"
+# 977 "flambda_parser.mly"
                                                                          ( vs )
 # 6439 "flambda_parser_in.ml"
          in
@@ -6465,7 +6465,7 @@ module Tables = struct
         let _startpos = _startpos_param_ in
         let _endpos = _endpos_kind_ in
         let _v : 'tv_kinded_variable = 
-# 1037 "flambda_parser.mly"
+# 1038 "flambda_parser.mly"
                                                    ( { param; kind } )
 # 6471 "flambda_parser_in.ml"
          in
@@ -6494,7 +6494,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind list)
 # 6496 "flambda_parser_in.ml"
         ) = 
-# 717 "flambda_parser.mly"
+# 718 "flambda_parser.mly"
              ( [] )
 # 6500 "flambda_parser_in.ml"
          in
@@ -6523,7 +6523,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind list)
 # 6525 "flambda_parser_in.ml"
         ) = 
-# 718 "flambda_parser.mly"
+# 719 "flambda_parser.mly"
                                                           ( ks )
 # 6529 "flambda_parser_in.ml"
          in
@@ -6552,7 +6552,7 @@ module Tables = struct
       (Fexpr.kind_with_subkind list)
 # 6554 "flambda_parser_in.ml"
         ) = 
-# 736 "flambda_parser.mly"
+# 737 "flambda_parser.mly"
                                                            ( sks )
 # 6558 "flambda_parser_in.ml"
          in
@@ -6598,7 +6598,7 @@ module Tables = struct
         let _startpos = _startpos_bindings_ in
         let _endpos = _endpos_body_ in
         let _v : 'tv_let__continuation_body_ = 
-# 831 "flambda_parser.mly"
+# 832 "flambda_parser.mly"
     ( ({ bindings; value_slots; body } : let_) )
 # 6604 "flambda_parser_in.ml"
          in
@@ -6644,7 +6644,7 @@ module Tables = struct
         let _startpos = _startpos_bindings_ in
         let _endpos = _endpos_body_ in
         let _v : 'tv_let__expr_ = 
-# 831 "flambda_parser.mly"
+# 832 "flambda_parser.mly"
     ( ({ bindings; value_slots; body } : let_) )
 # 6650 "flambda_parser_in.ml"
          in
@@ -6687,7 +6687,7 @@ module Tables = struct
         let _startpos = _startpos_var_ in
         let _endpos = _endpos_defining_expr_ in
         let _v : 'tv_let_binding = 
-# 836 "flambda_parser.mly"
+# 837 "flambda_parser.mly"
     ( { var; defining_expr } )
 # 6693 "flambda_parser_in.ml"
          in
@@ -6719,7 +6719,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_l_ in
         let _v : 'tv_let_expr_continuation_body_ = 
-# 777 "flambda_parser.mly"
+# 778 "flambda_parser.mly"
                            ( Let l )
 # 6725 "flambda_parser_in.ml"
          in
@@ -6744,7 +6744,7 @@ module Tables = struct
         let _startpos = _startpos_ls_ in
         let _endpos = _endpos_ls_ in
         let _v : 'tv_let_expr_continuation_body_ = 
-# 778 "flambda_parser.mly"
+# 779 "flambda_parser.mly"
                           ( Let_symbol ls )
 # 6750 "flambda_parser_in.ml"
          in
@@ -6776,7 +6776,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_l_ in
         let _v : 'tv_let_expr_expr_ = 
-# 777 "flambda_parser.mly"
+# 778 "flambda_parser.mly"
                            ( Let l )
 # 6782 "flambda_parser_in.ml"
          in
@@ -6801,7 +6801,7 @@ module Tables = struct
         let _startpos = _startpos_ls_ in
         let _endpos = _endpos_ls_ in
         let _v : 'tv_let_expr_expr_ = 
-# 778 "flambda_parser.mly"
+# 779 "flambda_parser.mly"
                           ( Let_symbol ls )
 # 6807 "flambda_parser_in.ml"
          in
@@ -6936,7 +6936,7 @@ module Tables = struct
       (Fexpr.loopify_attribute)
 # 6938 "flambda_parser_in.ml"
         ) = 
-# 921 "flambda_parser.mly"
+# 922 "flambda_parser.mly"
                ( Always_loopify )
 # 6942 "flambda_parser_in.ml"
          in
@@ -6965,7 +6965,7 @@ module Tables = struct
       (Fexpr.loopify_attribute)
 # 6967 "flambda_parser_in.ml"
         ) = 
-# 922 "flambda_parser.mly"
+# 923 "flambda_parser.mly"
               ( Never_loopify )
 # 6971 "flambda_parser_in.ml"
          in
@@ -6994,7 +6994,7 @@ module Tables = struct
       (Fexpr.loopify_attribute)
 # 6996 "flambda_parser_in.ml"
         ) = 
-# 923 "flambda_parser.mly"
+# 924 "flambda_parser.mly"
              ( Already_loopified )
 # 7000 "flambda_parser_in.ml"
          in
@@ -7030,7 +7030,7 @@ module Tables = struct
       (Fexpr.loopify_attribute)
 # 7032 "flambda_parser_in.ml"
         ) = 
-# 924 "flambda_parser.mly"
+# 925 "flambda_parser.mly"
                             ( Default_loopify_and_tailrec )
 # 7036 "flambda_parser_in.ml"
          in
@@ -7059,7 +7059,7 @@ module Tables = struct
       (Fexpr.loopify_attribute)
 # 7061 "flambda_parser_in.ml"
         ) = 
-# 925 "flambda_parser.mly"
+# 926 "flambda_parser.mly"
                 ( Default_loopify_and_not_tailrec )
 # 7065 "flambda_parser_in.ml"
          in
@@ -7077,7 +7077,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_loopify_opt = 
-# 916 "flambda_parser.mly"
+# 917 "flambda_parser.mly"
     ( None )
 # 7083 "flambda_parser_in.ml"
          in
@@ -7127,7 +7127,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_loopify_opt = 
-# 917 "flambda_parser.mly"
+# 918 "flambda_parser.mly"
                                             ( Some l )
 # 7133 "flambda_parser_in.ml"
          in
@@ -7482,7 +7482,7 @@ module Tables = struct
       (Fexpr.mutability)
 # 7484 "flambda_parser_in.ml"
         ) = 
-# 461 "flambda_parser.mly"
+# 462 "flambda_parser.mly"
                 ( Mutable )
 # 7488 "flambda_parser_in.ml"
          in
@@ -7511,7 +7511,7 @@ module Tables = struct
       (Fexpr.mutability)
 # 7513 "flambda_parser_in.ml"
         ) = 
-# 462 "flambda_parser.mly"
+# 463 "flambda_parser.mly"
                          ( Immutable_unique )
 # 7517 "flambda_parser_in.ml"
          in
@@ -7533,7 +7533,7 @@ module Tables = struct
       (Fexpr.mutability)
 # 7535 "flambda_parser_in.ml"
         ) = 
-# 463 "flambda_parser.mly"
+# 464 "flambda_parser.mly"
     ( Immutable )
 # 7539 "flambda_parser_in.ml"
          in
@@ -7562,7 +7562,7 @@ module Tables = struct
       (Flambda_kind.Naked_number_kind.t)
 # 7564 "flambda_parser_in.ml"
         ) = 
-# 696 "flambda_parser.mly"
+# 697 "flambda_parser.mly"
             ( Naked_immediate )
 # 7568 "flambda_parser_in.ml"
          in
@@ -7591,7 +7591,7 @@ module Tables = struct
       (Flambda_kind.Naked_number_kind.t)
 # 7593 "flambda_parser_in.ml"
         ) = 
-# 697 "flambda_parser.mly"
+# 698 "flambda_parser.mly"
               ( Naked_float )
 # 7597 "flambda_parser_in.ml"
          in
@@ -7620,7 +7620,7 @@ module Tables = struct
       (Flambda_kind.Naked_number_kind.t)
 # 7622 "flambda_parser_in.ml"
         ) = 
-# 698 "flambda_parser.mly"
+# 699 "flambda_parser.mly"
               ( Naked_int32 )
 # 7626 "flambda_parser_in.ml"
          in
@@ -7649,7 +7649,7 @@ module Tables = struct
       (Flambda_kind.Naked_number_kind.t)
 # 7651 "flambda_parser_in.ml"
         ) = 
-# 699 "flambda_parser.mly"
+# 700 "flambda_parser.mly"
               ( Naked_int64 )
 # 7655 "flambda_parser_in.ml"
          in
@@ -7678,7 +7678,7 @@ module Tables = struct
       (Flambda_kind.Naked_number_kind.t)
 # 7680 "flambda_parser_in.ml"
         ) = 
-# 700 "flambda_parser.mly"
+# 701 "flambda_parser.mly"
                   ( Naked_nativeint )
 # 7684 "flambda_parser_in.ml"
          in
@@ -7707,7 +7707,7 @@ module Tables = struct
       (Fexpr.named)
 # 7709 "flambda_parser_in.ml"
         ) = 
-# 674 "flambda_parser.mly"
+# 675 "flambda_parser.mly"
                ( Simple s )
 # 7713 "flambda_parser_in.ml"
          in
@@ -7747,7 +7747,7 @@ module Tables = struct
       (Fexpr.named)
 # 7749 "flambda_parser_in.ml"
         ) = 
-# 675 "flambda_parser.mly"
+# 676 "flambda_parser.mly"
                         ( Prim (Unary (u, a)) )
 # 7753 "flambda_parser_in.ml"
          in
@@ -7776,7 +7776,7 @@ module Tables = struct
       (Fexpr.named)
 # 7778 "flambda_parser_in.ml"
         ) = 
-# 676 "flambda_parser.mly"
+# 677 "flambda_parser.mly"
                   ( Prim b )
 # 7782 "flambda_parser_in.ml"
          in
@@ -7805,7 +7805,7 @@ module Tables = struct
       (Fexpr.named)
 # 7807 "flambda_parser_in.ml"
         ) = 
-# 677 "flambda_parser.mly"
+# 678 "flambda_parser.mly"
                    ( Prim t )
 # 7811 "flambda_parser_in.ml"
          in
@@ -7834,7 +7834,7 @@ module Tables = struct
       (Fexpr.named)
 # 7836 "flambda_parser_in.ml"
         ) = 
-# 678 "flambda_parser.mly"
+# 679 "flambda_parser.mly"
               ( Prim b )
 # 7840 "flambda_parser_in.ml"
          in
@@ -7863,7 +7863,7 @@ module Tables = struct
       (Fexpr.named)
 # 7865 "flambda_parser_in.ml"
         ) = 
-# 679 "flambda_parser.mly"
+# 680 "flambda_parser.mly"
                  ( Closure c )
 # 7869 "flambda_parser_in.ml"
          in
@@ -7903,7 +7903,7 @@ module Tables = struct
       (Fexpr.named)
 # 7905 "flambda_parser_in.ml"
         ) = 
-# 685 "flambda_parser.mly"
+# 686 "flambda_parser.mly"
                                      ( Rec_info ri )
 # 7909 "flambda_parser_in.ml"
          in
@@ -7992,7 +7992,7 @@ module Tables = struct
         let _startpos = _startpos_tag_ in
         let _endpos = _endpos_kinds_ in
         let _v : 'tv_nonconst_ctor = 
-# 751 "flambda_parser.mly"
+# 752 "flambda_parser.mly"
                                                             ( tag, kinds )
 # 7998 "flambda_parser_in.ml"
          in
@@ -8017,7 +8017,7 @@ module Tables = struct
         let _startpos = _startpos_ctors_ in
         let _endpos = _endpos_ctors_ in
         let _v : 'tv_nonconst_ctors_nonempty = 
-# 748 "flambda_parser.mly"
+# 749 "flambda_parser.mly"
                                                          ( ctors )
 # 8023 "flambda_parser_in.ml"
          in
@@ -8347,7 +8347,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : 'tv_plain_int = 
-# 1027 "flambda_parser.mly"
+# 1028 "flambda_parser.mly"
           ( make_plain_int i )
 # 8353 "flambda_parser_in.ml"
          in
@@ -8379,7 +8379,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_saw_ in
         let _v : 'tv_prefix_binop = 
-# 450 "flambda_parser.mly"
+# 451 "flambda_parser.mly"
     ( String_or_bigstring_load (Bigstring, saw) )
 # 8385 "flambda_parser_in.ml"
          in
@@ -8411,7 +8411,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_saw_ in
         let _v : 'tv_prefix_binop = 
-# 453 "flambda_parser.mly"
+# 454 "flambda_parser.mly"
     ( String_or_bigstring_load (Bytes, saw) )
 # 8417 "flambda_parser_in.ml"
          in
@@ -8443,7 +8443,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_saw_ in
         let _v : 'tv_prefix_binop = 
-# 456 "flambda_parser.mly"
+# 457 "flambda_parser.mly"
     ( String_or_bigstring_load (String, saw) )
 # 8449 "flambda_parser_in.ml"
          in
@@ -8468,7 +8468,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_prefix_binop = 
-# 457 "flambda_parser.mly"
+# 458 "flambda_parser.mly"
                  ( Phys_equal Eq )
 # 8474 "flambda_parser_in.ml"
          in
@@ -8493,7 +8493,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_prefix_binop = 
-# 458 "flambda_parser.mly"
+# 459 "flambda_parser.mly"
                  ( Phys_equal Neq )
 # 8499 "flambda_parser_in.ml"
          in
@@ -8518,7 +8518,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_raise_kind = 
-# 952 "flambda_parser.mly"
+# 953 "flambda_parser.mly"
                 ( Regular )
 # 8524 "flambda_parser_in.ml"
          in
@@ -8543,7 +8543,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_raise_kind = 
-# 953 "flambda_parser.mly"
+# 954 "flambda_parser.mly"
                 ( Reraise )
 # 8549 "flambda_parser_in.ml"
          in
@@ -8568,7 +8568,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_raise_kind = 
-# 954 "flambda_parser.mly"
+# 955 "flambda_parser.mly"
                 ( No_trace )
 # 8574 "flambda_parser_in.ml"
          in
@@ -8601,7 +8601,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8603 "flambda_parser_in.ml"
         ) = 
-# 1090 "flambda_parser.mly"
+# 1091 "flambda_parser.mly"
                        ( ri )
 # 8607 "flambda_parser_in.ml"
          in
@@ -8641,7 +8641,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8643 "flambda_parser_in.ml"
         ) = 
-# 1091 "flambda_parser.mly"
+# 1092 "flambda_parser.mly"
                                  ( Succ ri )
 # 8647 "flambda_parser_in.ml"
          in
@@ -8688,7 +8688,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8690 "flambda_parser_in.ml"
         ) = 
-# 1092 "flambda_parser.mly"
+# 1093 "flambda_parser.mly"
                                                   ( Unroll (d, ri) )
 # 8694 "flambda_parser_in.ml"
          in
@@ -8717,7 +8717,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8719 "flambda_parser_in.ml"
         ) = 
-# 1082 "flambda_parser.mly"
+# 1083 "flambda_parser.mly"
                   ( Depth i )
 # 8723 "flambda_parser_in.ml"
          in
@@ -8746,7 +8746,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8748 "flambda_parser_in.ml"
         ) = 
-# 1083 "flambda_parser.mly"
+# 1084 "flambda_parser.mly"
             ( Infinity )
 # 8752 "flambda_parser_in.ml"
          in
@@ -8775,7 +8775,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8777 "flambda_parser_in.ml"
         ) = 
-# 1084 "flambda_parser.mly"
+# 1085 "flambda_parser.mly"
                       ( Do_not_inline )
 # 8781 "flambda_parser_in.ml"
          in
@@ -8804,7 +8804,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8806 "flambda_parser_in.ml"
         ) = 
-# 1085 "flambda_parser.mly"
+# 1086 "flambda_parser.mly"
                   ( Var dv )
 # 8810 "flambda_parser_in.ml"
          in
@@ -8851,7 +8851,7 @@ module Tables = struct
       (Fexpr.rec_info)
 # 8853 "flambda_parser_in.ml"
         ) = 
-# 1086 "flambda_parser.mly"
+# 1087 "flambda_parser.mly"
                                   ( ri )
 # 8857 "flambda_parser_in.ml"
          in
@@ -8931,7 +8931,7 @@ module Tables = struct
       (Fexpr.region)
 # 8933 "flambda_parser_in.ml"
         ) = 
-# 929 "flambda_parser.mly"
+# 930 "flambda_parser.mly"
                  ( Named v )
 # 8937 "flambda_parser_in.ml"
          in
@@ -8960,7 +8960,7 @@ module Tables = struct
       (Fexpr.region)
 # 8962 "flambda_parser_in.ml"
         ) = 
-# 930 "flambda_parser.mly"
+# 931 "flambda_parser.mly"
                  ( Toplevel )
 # 8966 "flambda_parser_in.ml"
          in
@@ -8989,7 +8989,7 @@ module Tables = struct
         let _startpos = _startpos_c_ in
         let _endpos = _endpos_c_ in
         let _v : 'tv_result_continuation = 
-# 934 "flambda_parser.mly"
+# 935 "flambda_parser.mly"
                      ( Return c )
 # 8995 "flambda_parser_in.ml"
          in
@@ -9014,7 +9014,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_result_continuation = 
-# 935 "flambda_parser.mly"
+# 936 "flambda_parser.mly"
               ( Never_returns )
 # 9020 "flambda_parser_in.ml"
          in
@@ -9032,7 +9032,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_return_arity = 
-# 754 "flambda_parser.mly"
+# 755 "flambda_parser.mly"
     ( None )
 # 9038 "flambda_parser_in.ml"
          in
@@ -9068,7 +9068,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_k_ in
         let _v : 'tv_return_arity = 
-# 755 "flambda_parser.mly"
+# 756 "flambda_parser.mly"
                                   ( Some k )
 # 9074 "flambda_parser_in.ml"
          in
@@ -9958,7 +9958,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_signed_or_unsigned = 
-# 537 "flambda_parser.mly"
+# 538 "flambda_parser.mly"
     ( Signed )
 # 9964 "flambda_parser_in.ml"
          in
@@ -9983,7 +9983,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__1_ in
         let _v : 'tv_signed_or_unsigned = 
-# 538 "flambda_parser.mly"
+# 539 "flambda_parser.mly"
                  ( Unsigned )
 # 9989 "flambda_parser_in.ml"
          in
@@ -10008,7 +10008,7 @@ module Tables = struct
         let _startpos = _startpos_s_ in
         let _endpos = _endpos_s_ in
         let _v : 'tv_simple = 
-# 1069 "flambda_parser.mly"
+# 1070 "flambda_parser.mly"
                ( Symbol s )
 # 10014 "flambda_parser_in.ml"
          in
@@ -10033,7 +10033,7 @@ module Tables = struct
         let _startpos = _startpos_v_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_simple = 
-# 1070 "flambda_parser.mly"
+# 1071 "flambda_parser.mly"
                  ( Var v )
 # 10039 "flambda_parser_in.ml"
          in
@@ -10062,7 +10062,7 @@ module Tables = struct
         let _startpos = _startpos_c_ in
         let _endpos = _endpos_c_ in
         let _v : 'tv_simple = 
-# 1071 "flambda_parser.mly"
+# 1072 "flambda_parser.mly"
               ( Const c )
 # 10068 "flambda_parser_in.ml"
          in
@@ -10101,7 +10101,7 @@ module Tables = struct
         let _startpos = _startpos_s_ in
         let _endpos = _endpos_c_ in
         let _v : 'tv_simple = 
-# 1072 "flambda_parser.mly"
+# 1073 "flambda_parser.mly"
                                     ( Coerce (s, c) )
 # 10107 "flambda_parser_in.ml"
          in
@@ -10119,7 +10119,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_simple_args = 
-# 1045 "flambda_parser.mly"
+# 1046 "flambda_parser.mly"
     ( [] )
 # 10125 "flambda_parser_in.ml"
          in
@@ -10158,7 +10158,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__3_ in
         let _v : 'tv_simple_args = 
-# 1046 "flambda_parser.mly"
+# 1047 "flambda_parser.mly"
                                                               ( s )
 # 10164 "flambda_parser_in.ml"
          in
@@ -10176,7 +10176,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_size_opt = 
-# 505 "flambda_parser.mly"
+# 506 "flambda_parser.mly"
     ( None )
 # 10182 "flambda_parser_in.ml"
          in
@@ -10222,7 +10222,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_size_opt = 
-# 506 "flambda_parser.mly"
+# 507 "flambda_parser.mly"
                                                ( Some size )
 # 10228 "flambda_parser_in.ml"
          in
@@ -10251,7 +10251,7 @@ module Tables = struct
       (Fexpr.special_continuation)
 # 10253 "flambda_parser_in.ml"
         ) = 
-# 1129 "flambda_parser.mly"
+# 1130 "flambda_parser.mly"
              ( Done )
 # 10257 "flambda_parser_in.ml"
          in
@@ -10280,7 +10280,7 @@ module Tables = struct
       (Fexpr.special_continuation)
 # 10282 "flambda_parser_in.ml"
         ) = 
-# 1130 "flambda_parser.mly"
+# 1131 "flambda_parser.mly"
               ( Error )
 # 10286 "flambda_parser_in.ml"
          in
@@ -10302,7 +10302,7 @@ module Tables = struct
       (Fexpr.standard_int)
 # 10304 "flambda_parser_in.ml"
         ) = 
-# 509 "flambda_parser.mly"
+# 510 "flambda_parser.mly"
     ( Tagged_immediate )
 # 10308 "flambda_parser_in.ml"
          in
@@ -10331,7 +10331,7 @@ module Tables = struct
       (Fexpr.standard_int)
 # 10333 "flambda_parser_in.ml"
         ) = 
-# 510 "flambda_parser.mly"
+# 511 "flambda_parser.mly"
             ( Naked_immediate )
 # 10337 "flambda_parser_in.ml"
          in
@@ -10360,7 +10360,7 @@ module Tables = struct
       (Fexpr.standard_int)
 # 10362 "flambda_parser_in.ml"
         ) = 
-# 511 "flambda_parser.mly"
+# 512 "flambda_parser.mly"
               ( Naked_int32 )
 # 10366 "flambda_parser_in.ml"
          in
@@ -10389,7 +10389,7 @@ module Tables = struct
       (Fexpr.standard_int)
 # 10391 "flambda_parser_in.ml"
         ) = 
-# 512 "flambda_parser.mly"
+# 513 "flambda_parser.mly"
               ( Naked_int64 )
 # 10395 "flambda_parser_in.ml"
          in
@@ -10418,7 +10418,7 @@ module Tables = struct
       (Fexpr.standard_int)
 # 10420 "flambda_parser_in.ml"
         ) = 
-# 513 "flambda_parser.mly"
+# 514 "flambda_parser.mly"
                   ( Naked_nativeint )
 # 10424 "flambda_parser_in.ml"
          in
@@ -10527,7 +10527,7 @@ module Tables = struct
 # 10528 "flambda_parser_in.ml"
            in
           (
-# 987 "flambda_parser.mly"
+# 988 "flambda_parser.mly"
     ( (Block { tag; mutability = m; elements } : static_data) )
 # 10533 "flambda_parser_in.ml"
            : (
@@ -10565,7 +10565,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10567 "flambda_parser_in.ml"
         ) = 
-# 988 "flambda_parser.mly"
+# 989 "flambda_parser.mly"
               ( Boxed_float (Const f) )
 # 10571 "flambda_parser_in.ml"
          in
@@ -10598,7 +10598,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10600 "flambda_parser_in.ml"
         ) = 
-# 989 "flambda_parser.mly"
+# 990 "flambda_parser.mly"
             ( make_boxed_const_int i )
 # 10604 "flambda_parser_in.ml"
          in
@@ -10645,7 +10645,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10647 "flambda_parser_in.ml"
         ) = 
-# 990 "flambda_parser.mly"
+# 991 "flambda_parser.mly"
                                               ( k v )
 # 10651 "flambda_parser_in.ml"
          in
@@ -10697,7 +10697,7 @@ module Tables = struct
 # 10698 "flambda_parser_in.ml"
            in
           (
-# 994 "flambda_parser.mly"
+# 995 "flambda_parser.mly"
     ( Immutable_float_block fs )
 # 10703 "flambda_parser_in.ml"
            : (
@@ -10754,7 +10754,7 @@ module Tables = struct
 # 10755 "flambda_parser_in.ml"
            in
           (
-# 998 "flambda_parser.mly"
+# 999 "flambda_parser.mly"
     ( Immutable_float_array fs )
 # 10760 "flambda_parser_in.ml"
            : (
@@ -10799,7 +10799,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10801 "flambda_parser_in.ml"
         ) = 
-# 999 "flambda_parser.mly"
+# 1000 "flambda_parser.mly"
                                                    ( Empty_array kind )
 # 10805 "flambda_parser_in.ml"
          in
@@ -10839,7 +10839,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10841 "flambda_parser_in.ml"
         ) = 
-# 1000 "flambda_parser.mly"
+# 1001 "flambda_parser.mly"
                             ( Mutable_string { initial_value = s } )
 # 10845 "flambda_parser_in.ml"
          in
@@ -10872,7 +10872,7 @@ module Tables = struct
       (Fexpr.static_data)
 # 10874 "flambda_parser_in.ml"
         ) = 
-# 1001 "flambda_parser.mly"
+# 1002 "flambda_parser.mly"
                ( Immutable_string s )
 # 10878 "flambda_parser_in.ml"
          in
@@ -10919,7 +10919,7 @@ module Tables = struct
       (Fexpr.static_data_binding)
 # 10921 "flambda_parser_in.ml"
         ) = 
-# 981 "flambda_parser.mly"
+# 982 "flambda_parser.mly"
     ( { symbol = s; defining_expr = sp } )
 # 10925 "flambda_parser_in.ml"
          in
@@ -10955,7 +10955,7 @@ module Tables = struct
       (Fexpr.variable -> Fexpr.static_data)
 # 10957 "flambda_parser_in.ml"
         ) = 
-# 1005 "flambda_parser.mly"
+# 1006 "flambda_parser.mly"
                         ( fun v -> Boxed_float (Var v) )
 # 10961 "flambda_parser_in.ml"
          in
@@ -10991,7 +10991,7 @@ module Tables = struct
       (Fexpr.variable -> Fexpr.static_data)
 # 10993 "flambda_parser_in.ml"
         ) = 
-# 1006 "flambda_parser.mly"
+# 1007 "flambda_parser.mly"
                         ( fun v -> Boxed_int32 (Var v) )
 # 10997 "flambda_parser_in.ml"
          in
@@ -11027,7 +11027,7 @@ module Tables = struct
       (Fexpr.variable -> Fexpr.static_data)
 # 11029 "flambda_parser_in.ml"
         ) = 
-# 1007 "flambda_parser.mly"
+# 1008 "flambda_parser.mly"
                         ( fun v -> Boxed_int64 (Var v) )
 # 11033 "flambda_parser_in.ml"
          in
@@ -11063,7 +11063,7 @@ module Tables = struct
       (Fexpr.variable -> Fexpr.static_data)
 # 11065 "flambda_parser_in.ml"
         ) = 
-# 1008 "flambda_parser.mly"
+# 1009 "flambda_parser.mly"
                             ( fun v -> Boxed_nativeint (Var v) )
 # 11069 "flambda_parser_in.ml"
          in
@@ -11138,7 +11138,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : 'tv_string_accessor_width = 
-# 467 "flambda_parser.mly"
+# 468 "flambda_parser.mly"
     ( let (i,c) = i in
       match int_of_string i, c with
       | 8, None -> Eight
@@ -11179,7 +11179,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11181 "flambda_parser_in.ml"
         ) = 
-# 721 "flambda_parser.mly"
+# 722 "flambda_parser.mly"
             ( Anything )
 # 11185 "flambda_parser_in.ml"
          in
@@ -11215,7 +11215,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11217 "flambda_parser_in.ml"
         ) = 
-# 722 "flambda_parser.mly"
+# 723 "flambda_parser.mly"
                         ( Boxed_float )
 # 11221 "flambda_parser_in.ml"
          in
@@ -11251,7 +11251,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11253 "flambda_parser_in.ml"
         ) = 
-# 723 "flambda_parser.mly"
+# 724 "flambda_parser.mly"
                         ( Boxed_int32 )
 # 11257 "flambda_parser_in.ml"
          in
@@ -11287,7 +11287,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11289 "flambda_parser_in.ml"
         ) = 
-# 724 "flambda_parser.mly"
+# 725 "flambda_parser.mly"
                         ( Boxed_int64 )
 # 11293 "flambda_parser_in.ml"
          in
@@ -11323,7 +11323,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11325 "flambda_parser_in.ml"
         ) = 
-# 725 "flambda_parser.mly"
+# 726 "flambda_parser.mly"
                             ( Boxed_nativeint )
 # 11329 "flambda_parser_in.ml"
          in
@@ -11359,7 +11359,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11361 "flambda_parser_in.ml"
         ) = 
-# 726 "flambda_parser.mly"
+# 727 "flambda_parser.mly"
                        ( Tagged_immediate )
 # 11365 "flambda_parser_in.ml"
          in
@@ -11402,7 +11402,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11404 "flambda_parser_in.ml"
         ) = 
-# 727 "flambda_parser.mly"
+# 728 "flambda_parser.mly"
                                              ( Float_block { num_fields } )
 # 11408 "flambda_parser_in.ml"
          in
@@ -11445,7 +11445,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11447 "flambda_parser_in.ml"
         ) = 
-# 729 "flambda_parser.mly"
+# 730 "flambda_parser.mly"
     ( let consts, non_consts = ctors in Variant { consts; non_consts; })
 # 11451 "flambda_parser_in.ml"
          in
@@ -11481,7 +11481,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11483 "flambda_parser_in.ml"
         ) = 
-# 730 "flambda_parser.mly"
+# 731 "flambda_parser.mly"
                         ( Float_array )
 # 11487 "flambda_parser_in.ml"
          in
@@ -11517,7 +11517,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11519 "flambda_parser_in.ml"
         ) = 
-# 731 "flambda_parser.mly"
+# 732 "flambda_parser.mly"
                       ( Immediate_array )
 # 11523 "flambda_parser_in.ml"
          in
@@ -11553,7 +11553,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11555 "flambda_parser_in.ml"
         ) = 
-# 732 "flambda_parser.mly"
+# 733 "flambda_parser.mly"
                       ( Value_array )
 # 11559 "flambda_parser_in.ml"
          in
@@ -11589,7 +11589,7 @@ module Tables = struct
       (Fexpr.subkind)
 # 11591 "flambda_parser_in.ml"
         ) = 
-# 733 "flambda_parser.mly"
+# 734 "flambda_parser.mly"
                       ( Generic_array )
 # 11595 "flambda_parser_in.ml"
          in
@@ -11627,7 +11627,7 @@ module Tables = struct
 # 11628 "flambda_parser_in.ml"
            in
           (
-# 693 "flambda_parser.mly"
+# 694 "flambda_parser.mly"
                                                          ( cs )
 # 11633 "flambda_parser_in.ml"
            : 'tv_switch)
@@ -11667,7 +11667,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_ac_ in
         let _v : 'tv_switch_case = 
-# 689 "flambda_parser.mly"
+# 690 "flambda_parser.mly"
                                                 ( i,ac )
 # 11673 "flambda_parser_in.ml"
          in
@@ -11699,7 +11699,7 @@ module Tables = struct
           let _endpos = _endpos_e_ in
           let _startpos = _startpos_e_ in
           (
-# 1112 "flambda_parser.mly"
+# 1113 "flambda_parser.mly"
                ( make_located e (_startpos, _endpos) )
 # 11705 "flambda_parser_in.ml"
            : 'tv_symbol)
@@ -11881,7 +11881,7 @@ module Tables = struct
           let _endpos = _endpos_tag_ in
           let _startpos = _startpos_tag_ in
           (
-# 1018 "flambda_parser.mly"
+# 1019 "flambda_parser.mly"
             ( make_tag ~loc:(make_loc (_startpos, _endpos)) tag )
 # 11887 "flambda_parser_in.ml"
            : 'tv_tag)
@@ -11928,7 +11928,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_tag_opt = 
-# 1022 "flambda_parser.mly"
+# 1023 "flambda_parser.mly"
                                       ( Some tag )
 # 11934 "flambda_parser_in.ml"
          in
@@ -11946,7 +11946,7 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_tag_opt = 
-# 1023 "flambda_parser.mly"
+# 1024 "flambda_parser.mly"
     ( None )
 # 11952 "flambda_parser_in.ml"
          in
@@ -11975,7 +11975,7 @@ module Tables = struct
         let _startpos = _startpos_i_ in
         let _endpos = _endpos_i_ in
         let _v : 'tv_targetint = 
-# 1015 "flambda_parser.mly"
+# 1016 "flambda_parser.mly"
           ( make_targetint i )
 # 11981 "flambda_parser_in.ml"
          in
@@ -12060,7 +12060,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_ternop_app = 
-# 636 "flambda_parser.mly"
+# 637 "flambda_parser.mly"
     (
       let array_set_kind : array_set_kind =
         match ak with
@@ -12151,7 +12151,7 @@ module Tables = struct
         let _startpos = _startpos_blv_ in
         let _endpos = _endpos_v_ in
         let _v : 'tv_ternop_app = 
-# 656 "flambda_parser.mly"
+# 657 "flambda_parser.mly"
     ( Ternary (Bytes_or_bigstring_set (blv, saw), block, ix, v) )
 # 12157 "flambda_parser_in.ml"
          in
@@ -12201,7 +12201,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__4_ in
         let _v : 'tv_trap_action = 
-# 944 "flambda_parser.mly"
+# 945 "flambda_parser.mly"
                                                          ( Push { exn_handler } )
 # 12207 "flambda_parser_in.ml"
          in
@@ -12258,7 +12258,7 @@ module Tables = struct
         let _startpos = _startpos__1_ in
         let _endpos = _endpos__5_ in
         let _v : 'tv_trap_action = 
-# 948 "flambda_parser.mly"
+# 949 "flambda_parser.mly"
     ( Pop { exn_handler; raise_kind } )
 # 12264 "flambda_parser_in.ml"
          in
@@ -13316,8 +13316,9 @@ module Tables = struct
         ) = 
 # 436 "flambda_parser.mly"
     ( (* TODO: Should get machine_width from fexpr context when available *)
-      Block_load { kind; mut; field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field } )
-# 13321 "flambda_parser_in.ml"
+      let mw = Target_system.Machine_width.Sixty_four in
+      Block_load { kind; mut; field = Target_ocaml_int.of_int mw field } )
+# 13322 "flambda_parser_in.ml"
          in
         {
           CamlinternalMenhirLib.EngineTypes.state = _menhir_s;
@@ -13354,9 +13355,9 @@ module Tables = struct
         let _startpos = _startpos_var_ in
         let _endpos = _endpos_value_ in
         let _v : 'tv_value_slot = 
-# 848 "flambda_parser.mly"
+# 849 "flambda_parser.mly"
                                                             ( { var; value; } )
-# 13360 "flambda_parser_in.ml"
+# 13361 "flambda_parser_in.ml"
          in
         {
           CamlinternalMenhirLib.EngineTypes.state = _menhir_s;
@@ -13377,7 +13378,7 @@ module Tables = struct
         let e : (
 # 73 "flambda_parser.mly"
        (string)
-# 13381 "flambda_parser_in.ml"
+# 13382 "flambda_parser_in.ml"
         ) = Obj.magic e in
         let _endpos__0_ = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _startpos = _startpos_e_ in
@@ -13386,9 +13387,9 @@ module Tables = struct
           let _endpos = _endpos_e_ in
           let _startpos = _startpos_e_ in
           (
-# 1134 "flambda_parser.mly"
+# 1135 "flambda_parser.mly"
               ( make_located e (_startpos, _endpos) )
-# 13392 "flambda_parser_in.ml"
+# 13393 "flambda_parser_in.ml"
            : 'tv_value_slot_for_projection)
         in
         {
@@ -13410,7 +13411,7 @@ module Tables = struct
         let e : (
 # 73 "flambda_parser.mly"
        (string)
-# 13414 "flambda_parser_in.ml"
+# 13415 "flambda_parser_in.ml"
         ) = Obj.magic e in
         let _endpos__0_ = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _startpos = _startpos_e_ in
@@ -13419,9 +13420,9 @@ module Tables = struct
           let _endpos = _endpos_e_ in
           let _startpos = _startpos_e_ in
           (
-# 1116 "flambda_parser.mly"
+# 1117 "flambda_parser.mly"
               ( make_located e (_startpos, _endpos) )
-# 13425 "flambda_parser_in.ml"
+# 13426 "flambda_parser_in.ml"
            : 'tv_variable)
         in
         {
@@ -13462,7 +13463,7 @@ module Tables = struct
         let recursive : (
 # 282 "flambda_parser.mly"
       (Fexpr.is_cont_recursive)
-# 13466 "flambda_parser_in.ml"
+# 13467 "flambda_parser_in.ml"
         ) = Obj.magic recursive in
         let _2 : unit = Obj.magic _2 in
         let body : 'tv_inner_expr = Obj.magic body in
@@ -13473,12 +13474,12 @@ module Tables = struct
           let bindings = 
 # 241 "<standard.mly>"
     ( xs )
-# 13477 "flambda_parser_in.ml"
+# 13478 "flambda_parser_in.ml"
            in
           (
-# 789 "flambda_parser.mly"
+# 790 "flambda_parser.mly"
     ( Let_cont { recursive; body; bindings } )
-# 13482 "flambda_parser_in.ml"
+# 13483 "flambda_parser_in.ml"
            : 'tv_where_expr)
         in
         {
@@ -13495,9 +13496,9 @@ module Tables = struct
         let _startpos = _menhir_stack.CamlinternalMenhirLib.EngineTypes.endp in
         let _endpos = _startpos in
         let _v : 'tv_with_value_slots_opt = 
-# 840 "flambda_parser.mly"
+# 841 "flambda_parser.mly"
     ( None )
-# 13501 "flambda_parser_in.ml"
+# 13502 "flambda_parser_in.ml"
          in
         {
           CamlinternalMenhirLib.EngineTypes.state = _menhir_s;
@@ -13544,12 +13545,12 @@ module Tables = struct
           let elements = 
 # 241 "<standard.mly>"
     ( xs )
-# 13548 "flambda_parser_in.ml"
+# 13549 "flambda_parser_in.ml"
            in
           (
-# 844 "flambda_parser.mly"
+# 845 "flambda_parser.mly"
     ( Some elements )
-# 13553 "flambda_parser_in.ml"
+# 13554 "flambda_parser_in.ml"
            : 'tv_with_value_slots_opt)
         in
         {
@@ -13580,7 +13581,7 @@ let flambda_unit =
   fun lexer lexbuf : (
 # 255 "flambda_parser.mly"
       (Fexpr.flambda_unit)
-# 13584 "flambda_parser_in.ml"
+# 13585 "flambda_parser_in.ml"
   ) ->
     Obj.magic (MenhirInterpreter.entry `Legacy 621 lexer lexbuf)
 
@@ -13588,7 +13589,7 @@ and expect_test_spec =
   fun lexer lexbuf : (
 # 253 "flambda_parser.mly"
       (Fexpr.expect_test_spec)
-# 13592 "flambda_parser_in.ml"
+# 13593 "flambda_parser_in.ml"
   ) ->
     Obj.magic (MenhirInterpreter.entry `Legacy 0 lexer lexbuf)
 
@@ -13598,7 +13599,7 @@ module Incremental = struct
     fun initial_position : (
 # 255 "flambda_parser.mly"
       (Fexpr.flambda_unit)
-# 13602 "flambda_parser_in.ml"
+# 13603 "flambda_parser_in.ml"
     ) MenhirInterpreter.checkpoint ->
       Obj.magic (MenhirInterpreter.start 621 initial_position)
   
@@ -13606,13 +13607,13 @@ module Incremental = struct
     fun initial_position : (
 # 253 "flambda_parser.mly"
       (Fexpr.expect_test_spec)
-# 13610 "flambda_parser_in.ml"
+# 13611 "flambda_parser_in.ml"
     ) MenhirInterpreter.checkpoint ->
       Obj.magic (MenhirInterpreter.start 0 initial_position)
   
 end
 
-# 1137 "flambda_parser.mly"
+# 1138 "flambda_parser.mly"
   
 
-# 13619 "flambda_parser_in.ml"
+# 13620 "flambda_parser_in.ml"

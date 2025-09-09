@@ -370,12 +370,16 @@ let const c : Fexpr.const =
     Naked_immediate
       (* TODO: machine_width should be passed through properly here *)
       (let machine_width = Target_system.Machine_width.Sixty_four in
-       imm |> Target_ocaml_int.to_targetint machine_width |> Targetint_32_64.to_string)
+       imm
+       |> Target_ocaml_int.to_targetint machine_width
+       |> Targetint_32_64.to_string)
   | Tagged_immediate imm ->
     Tagged_immediate
       (* TODO: machine_width should be passed through properly here *)
       (let machine_width = Target_system.Machine_width.Sixty_four in
-       imm |> Target_ocaml_int.to_targetint machine_width |> Targetint_32_64.to_string)
+       imm
+       |> Target_ocaml_int.to_targetint machine_width
+       |> Targetint_32_64.to_string)
   | Naked_float f -> Naked_float (f |> float)
   | Naked_float32 f -> Naked_float32 (f |> float32)
   | Naked_int32 i -> Naked_int32 i
@@ -747,8 +751,10 @@ let field_of_block env field =
       | Tagged_immediate imm ->
         Tagged_immediate
           (* TODO: machine_width should be passed through properly here *)
-      (let machine_width = Target_system.Machine_width.Sixty_four in
-       imm |> Target_ocaml_int.to_targetint machine_width |> Targetint_32_64.to_string)
+          (let machine_width = Target_system.Machine_width.Sixty_four in
+           imm
+           |> Target_ocaml_int.to_targetint machine_width
+           |> Targetint_32_64.to_string)
       | _ -> Misc.fatal_error "Mixed blocks not supported yet in fexpr")
 
 let or_variable f env (ov : _ Or_variable.t) : _ Fexpr.or_variable =
@@ -1203,7 +1209,9 @@ and switch_expr env switch : Fexpr.expr =
         let tag =
           (* TODO: machine_width should be passed through properly here *)
           let machine_width = Target_system.Machine_width.Sixty_four in
-          imm |> Target_ocaml_int.to_targetint machine_width |> Targetint_32_64.to_int
+          imm
+          |> Target_ocaml_int.to_targetint machine_width
+          |> Targetint_32_64.to_int
         in
         let app_cont = apply_cont env app_cont in
         tag, app_cont)

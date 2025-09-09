@@ -1076,7 +1076,9 @@ module Let_with_acc = struct
     else
       let cost_metrics_of_defining_expr =
         match (named : Named.t) with
-        | Prim (prim, _) -> Code_size.prim ~machine_width:(Acc.machine_width acc) prim |> Cost_metrics.from_size
+        | Prim (prim, _) ->
+          Code_size.prim ~machine_width:(Acc.machine_width acc) prim
+          |> Cost_metrics.from_size
         | Simple simple -> Code_size.simple simple |> Cost_metrics.from_size
         | Static_consts _consts -> Cost_metrics.zero
         | Set_of_closures set_of_closures ->

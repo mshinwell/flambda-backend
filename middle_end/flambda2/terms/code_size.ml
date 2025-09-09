@@ -106,8 +106,10 @@ let arith_conversion_size ~machine_width src dst =
       ( Naked_int8 | Naked_int16 | Naked_int32 | Naked_int64 | Naked_nativeint
       | Naked_immediate ) ) ->
     1
-  | (Naked_nativeint | Naked_immediate), Naked_int32 -> if Target_system.Machine_width.is_32_bit machine_width then 0 else 1
-  | (Naked_nativeint | Naked_immediate), Naked_int64 -> if Target_system.Machine_width.is_64_bit machine_width then 0 else 1
+  | (Naked_nativeint | Naked_immediate), Naked_int32 ->
+    if Target_system.Machine_width.is_32_bit machine_width then 0 else 1
+  | (Naked_nativeint | Naked_immediate), Naked_int64 ->
+    if Target_system.Machine_width.is_64_bit machine_width then 0 else 1
   | Naked_int16, Naked_int8
   | Naked_int32, (Naked_int8 | Naked_int16)
   | Naked_nativeint, Naked_immediate
@@ -141,7 +143,8 @@ let unbox_number ~machine_width kind =
   match (kind : Flambda_kind.Boxable_number.t) with
   | Naked_float | Naked_float32 | Naked_vec128 | Naked_vec256 | Naked_vec512 ->
     1 (* 1 load *)
-  | Naked_int64 when Target_system.Machine_width.is_32_bit machine_width -> 4 (* 2 Cadda + 2 loads *)
+  | Naked_int64 when Target_system.Machine_width.is_32_bit machine_width ->
+    4 (* 2 Cadda + 2 loads *)
   | Naked_int32 | Naked_int64 | Naked_nativeint -> 2
 (* Cadda + load *)
 
@@ -149,7 +152,9 @@ let box_number ~machine_width kind =
   match (kind : Flambda_kind.Boxable_number.t) with
   | Naked_float | Naked_float32 | Naked_vec128 | Naked_vec256 | Naked_vec512 ->
     alloc_size (* 1 alloc *)
-  | Naked_int32 when not (Target_system.Machine_width.is_32_bit machine_width) -> 1 + alloc_size (* shift/sextend + alloc *)
+  | Naked_int32 when not (Target_system.Machine_width.is_32_bit machine_width)
+    ->
+    1 + alloc_size (* shift/sextend + alloc *)
   | Naked_int32 | Naked_int64 | Naked_nativeint -> alloc_size (* alloc *)
 
 let block_load (kind : Flambda_primitive.Block_access_kind.t) =
@@ -202,7 +207,10 @@ let string_or_bigstring_load ~machine_width kind width =
     (* 7 (not allow_unaligned_access) *)
     | Thirty_two | Single -> 2 (* add, load (allow_unaligned_access) *)
     (* 17 (not allow_unaligned_access) *)
-    | Sixty_four -> if Target_system.Machine_width.is_32_bit machine_width then does_not_need_caml_c_call_extcall_size else 2
+    | Sixty_four ->
+      if Target_system.Machine_width.is_32_bit machine_width
+      then does_not_need_caml_c_call_extcall_size
+      else 2
     (* add, load (allow_unaligned_access) *)
     (* 37 (not allow_unaligned_access) *)
     | One_twenty_eight _ -> 2 (* add, load (alignment handled explicitly) *)
@@ -218,7 +226,8 @@ let bytes_like_set ~machine_width kind width =
   | Bytes -> string_or_bigstring_load ~machine_width Bytes width
   | Bigstring -> string_or_bigstring_load ~machine_width Bigstring width
 
-let divmod_bi_check ~machine_width else_branch_size (bi : Flambda_kind.Standard_int.t) =
+let divmod_bi_check ~machine_width else_branch_size
+    (bi : Flambda_kind.Standard_int.t) =
   (* CR gbury: we should allow check Arch.division_crashed_on_overflow, but
      that's likely a dependency we want to avoid ? *)
   if Target_system.Machine_width.is_32_bit machine_width
@@ -236,11 +245,14 @@ let binary_int_arith_primitive ~machine_width kind op =
       (op : Flambda_primitive.binary_int_arith_op) )
   with
   (* Int64 bits ints on 32-bit archs *)
-  | (Naked_int64, Add | Naked_int64, Sub | Naked_int64, Mul) when Target_system.Machine_width.is_32_bit machine_width ->
+  | (Naked_int64, Add | Naked_int64, Sub | Naked_int64, Mul)
+    when Target_system.Machine_width.is_32_bit machine_width ->
     does_not_need_caml_c_call_extcall_size + 2
-  | (Naked_int64, Div | Naked_int64, Mod) when Target_system.Machine_width.is_32_bit machine_width ->
+  | (Naked_int64, Div | Naked_int64, Mod)
+    when Target_system.Machine_width.is_32_bit machine_width ->
     needs_caml_c_call_extcall_size + 2
-  | (Naked_int64, And | Naked_int64, Or | Naked_int64, Xor) when Target_system.Machine_width.is_32_bit machine_width ->
+  | (Naked_int64, And | Naked_int64, Or | Naked_int64, Xor)
+    when Target_system.Machine_width.is_32_bit machine_width ->
     does_not_need_caml_c_call_extcall_size + 2
   (* Tagged integers *)
   | Tagged_immediate, Add -> 2
@@ -286,10 +298,12 @@ let binary_int_shift_primitive ~machine_width kind op =
     (kind : Flambda_kind.Standard_int.t), (op : Flambda_primitive.int_shift_op)
   with
   (* Int64 special case *)
-  | (Naked_int64, Lsl | Naked_int64, Lsr | Naked_int64, Asr) when Target_system.Machine_width.is_32_bit machine_width ->
+  | (Naked_int64, Lsl | Naked_int64, Lsr | Naked_int64, Asr)
+    when Target_system.Machine_width.is_32_bit machine_width ->
     does_not_need_caml_c_call_extcall_size + 2
   (* Int32 special case *)
-  | Naked_int32, Lsr when Target_system.Machine_width.is_64_bit machine_width -> 2
+  | Naked_int32, Lsr when Target_system.Machine_width.is_64_bit machine_width ->
+    2
   (* Tagged integers *)
   | Tagged_immediate, Lsl -> 3
   | Tagged_immediate, Lsr -> 2
@@ -422,7 +436,8 @@ let binary_prim_size ~machine_width prim =
   | Phys_equal _op -> 2
   | Int_arith (kind, op) -> binary_int_arith_primitive ~machine_width kind op
   | Int_shift (kind, op) -> binary_int_shift_primitive ~machine_width kind op
-  | Int_comp (kind, Yielding_bool cmp) -> binary_int_comp_primitive ~machine_width kind cmp
+  | Int_comp (kind, Yielding_bool cmp) ->
+    binary_int_comp_primitive ~machine_width kind cmp
   | Int_comp (kind, Yielding_int_like_compare_functions signedness) ->
     int_comparison_like_compare_functions kind signedness
   | Float_arith (width, op) -> binary_float_arith_primitive width op
@@ -437,7 +452,8 @@ let binary_prim_size ~machine_width prim =
 let ternary_prim_size ~machine_width prim =
   match (prim : Flambda_primitive.ternary_primitive) with
   | Array_set (_kind, set_kind) -> array_set set_kind
-  | Bytes_or_bigstring_set (kind, width) -> bytes_like_set ~machine_width kind width
+  | Bytes_or_bigstring_set (kind, width) ->
+    bytes_like_set ~machine_width kind width
   | Bigarray_set (_dims, (Complex32 | Complex64), _layout) ->
     5 (* ~ 3 block_load + 2 block_set *)
   | Bigarray_set (_dims, _kind, _layout) -> 2

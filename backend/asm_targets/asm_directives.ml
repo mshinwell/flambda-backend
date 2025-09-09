@@ -492,7 +492,8 @@ module Directive = struct
     | New_label (label, Code) -> bprintf buf "%s:" label
     | New_label (label, Machine_width_data) -> (
       match TS.machine_width () with
-      | Thirty_two | Thirty_two_no_gc_tag_bit -> bprintf buf "%s LABEL DWORD" label
+      | Thirty_two | Thirty_two_no_gc_tag_bit ->
+        bprintf buf "%s LABEL DWORD" label
       | Sixty_four -> bprintf buf "%s LABEL QWORD" label)
     | New_line -> ()
     | Cfi_adjust_cfa_offset _ -> unsupported "Cfi_adjust_cfa_offset"

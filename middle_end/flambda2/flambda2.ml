@@ -129,7 +129,8 @@ type flambda_result =
     reachable_names : NO.t
   }
 
-let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda.program) =
+let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width
+    (program : Lambda.program) =
   let compilation_unit = program.compilation_unit in
   let module_block_size_in_words =
     Lambda.main_module_block_size program.main_module_block_format
@@ -173,9 +174,9 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda
         metadata = close_program_metadata
       } =
     Profile.record_call "lambda_to_flambda" (fun () ->
-        Lambda_to_flambda.lambda_to_flambda ~mode ~machine_width ~big_endian:Arch.big_endian
-          ~cmx_loader ~compilation_unit ~module_block_size_in_words
-          module_initializer)
+        Lambda_to_flambda.lambda_to_flambda ~mode ~machine_width
+          ~big_endian:Arch.big_endian ~cmx_loader ~compilation_unit
+          ~module_block_size_in_words module_initializer)
   in
   Compiler_hooks.execute Raw_flambda2 raw_flambda;
   print_rawflambda ppf raw_flambda;
@@ -199,7 +200,8 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda
             unit = flambda
           } =
         Profile.record_call ~accumulate:true "simplify" (fun () ->
-            Simplify.run ~cmx_loader ~machine_width ~round ~code_slot_offsets raw_flambda)
+            Simplify.run ~cmx_loader ~machine_width ~round ~code_slot_offsets
+              raw_flambda)
       in
       (if Flambda_features.inlining_report ()
       then
@@ -219,7 +221,8 @@ let lambda_to_flambda ~ppf_dump:ppf ~prefixname ~machine_width (program : Lambda
         then (
           let flambda, free_names, all_code, slot_offsets =
             Profile.record_call ~accumulate:true "reaper" (fun () ->
-                Flambda2_reaper.Reaper.run ~machine_width ~cmx_loader ~all_code flambda)
+                Flambda2_reaper.Reaper.run ~machine_width ~cmx_loader ~all_code
+                  flambda)
           in
           print_flexpect "reaper" ppf ~raw_flambda flambda;
           flambda, free_names, all_code, slot_offsets, "reaper")

@@ -614,7 +614,9 @@ let add_phantom_params_bindings uacc handler new_phantom_params =
         let let_bound = Bound_pattern.singleton var in
         let prim = Flambda_primitive.(Nullary (Optimised_out kind)) in
         let named = Named.create_prim prim Debuginfo.none in
-        let simplified_defining_expr = Simplified_named.create ~machine_width named in
+        let simplified_defining_expr =
+          Simplified_named.create ~machine_width named
+        in
         { Expr_builder.let_bound;
           simplified_defining_expr;
           original_defining_expr = Some named
@@ -1679,8 +1681,8 @@ and simplify_handlers ~simplify_expr ~down_to_up ~denv_for_join ~rebuild_body
     in
     let machine_width = DE.machine_width denv in
     let invariant_epa =
-      Unbox_continuation_params.compute_extra_params_and_args ~machine_width unbox_decisions
-        extra_params_and_args
+      Unbox_continuation_params.compute_extra_params_and_args ~machine_width
+        unbox_decisions extra_params_and_args
         ~arg_types_by_use_id:arg_types_by_use_id_including_lifted
     in
     let common_denv = DA.denv dacc in

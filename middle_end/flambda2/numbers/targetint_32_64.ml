@@ -101,8 +101,10 @@ end
 
 (* Helper function to extract machine width from a t value *)
 let machine_width t =
-  match t with 
-  | Int32 _ -> MW.Thirty_two  (* For targetint_32_64, Int32 always means traditional 32-bit *)
+  match t with
+  | Int32 _ ->
+    MW.Thirty_two
+    (* For targetint_32_64, Int32 always means traditional 32-bit *)
   | Int64 _ -> MW.Sixty_four
 
 (* Print function *)

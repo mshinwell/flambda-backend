@@ -265,7 +265,9 @@ let simplify_static_const_of_kind_value dacc (static_const : Static_const.t)
       dacc )
   | Mutable_string { initial_value } ->
     let machine_width = DE.machine_width (DA.denv dacc) in
-    let str_ty = T.mutable_string ~size:(String.length initial_value) ~machine_width in
+    let str_ty =
+      T.mutable_string ~size:(String.length initial_value) ~machine_width
+    in
     let dacc = bind_result_sym str_ty in
     ( Rebuilt_static_const.create_mutable_string
         (DA.are_rebuilding_terms dacc)

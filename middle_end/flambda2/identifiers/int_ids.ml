@@ -368,29 +368,29 @@ module Const = struct
 
   let naked_vec512 i = create (Naked_vec512 i)
 
-  let const_true machine_width = 
+  let const_true machine_width =
     tagged_immediate (Target_ocaml_int.bool_true machine_width)
 
-  let const_false machine_width = 
+  let const_false machine_width =
     tagged_immediate (Target_ocaml_int.bool_false machine_width)
 
-  let untagged_const_true machine_width = 
+  let untagged_const_true machine_width =
     naked_immediate (Target_ocaml_int.bool_true machine_width)
 
-  let untagged_const_false machine_width = 
+  let untagged_const_false machine_width =
     naked_immediate (Target_ocaml_int.bool_false machine_width)
 
-  let untagged_const_zero machine_width = 
+  let untagged_const_zero machine_width =
     naked_immediate (Target_ocaml_int.zero machine_width)
 
   let untagged_const_int i = naked_immediate i
 
   let const_int i = tagged_immediate i
 
-  let const_zero machine_width = 
+  let const_zero machine_width =
     tagged_immediate (Target_ocaml_int.zero machine_width)
 
-  let const_one machine_width = 
+  let const_one machine_width =
     tagged_immediate (Target_ocaml_int.one machine_width)
 
   let const_unit machine_width = const_zero machine_width

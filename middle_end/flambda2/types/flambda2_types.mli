@@ -133,7 +133,8 @@ module Typing_env : sig
 
     val create_from_closure_conversion_approx :
       machine_width:Target_system.Machine_width.t ->
-      'a Value_approximation.t Symbol.Map.t -> t
+      'a Value_approximation.t Symbol.Map.t ->
+      t
 
     val predefined_exceptions : Symbol.Set.t -> t
 

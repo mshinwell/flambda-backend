@@ -22,11 +22,13 @@ type tag = t
 
 val create_exn : int -> t
 
-val create_from_targetint : Target_system.Machine_width.t -> Target_ocaml_int.t -> t option
+val create_from_targetint :
+  Target_system.Machine_width.t -> Target_ocaml_int.t -> t option
 
 val to_int : t -> int
 
-val to_targetint_31_63 : Target_system.Machine_width.t -> t -> Target_ocaml_int.t
+val to_targetint_31_63 :
+  Target_system.Machine_width.t -> t -> Target_ocaml_int.t
 
 val zero : t
 

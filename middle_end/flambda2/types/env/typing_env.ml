@@ -1091,7 +1091,8 @@ module Serializable : sig
 
   val create_from_closure_conversion_approx :
     machine_width:Target_system.Machine_width.t ->
-    'a Value_approximation.t Symbol.Map.t -> t
+    'a Value_approximation.t Symbol.Map.t ->
+    t
 
   val predefined_exceptions : Symbol.Set.t -> t
 
@@ -1153,8 +1154,8 @@ end = struct
         TG.alias_type_of Flambda_kind.value (Simple.symbol symbol)
       | Block_approximation (tag, shape, fields, alloc_mode) ->
         let fields = List.map type_from_approx (Array.to_list fields) in
-        MTC.immutable_block ~machine_width ~is_unique:false (Tag.Scannable.to_tag tag)
-          ~shape:(Scannable shape) ~fields alloc_mode
+        MTC.immutable_block ~machine_width ~is_unique:false
+          (Tag.Scannable.to_tag tag) ~shape:(Scannable shape) ~fields alloc_mode
       | Closure_approximation { code_id; function_slot; code = _; symbol } ->
         MTC.static_closure_with_this_code ~this_function_slot:function_slot
           ~closure_symbol:symbol ~code_id

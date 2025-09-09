@@ -114,7 +114,7 @@ let is_name_used (env : env) name =
 (* XXX so which is it? *)
 let poison_value = 0 (* 123456789 *)
 
-let poison ~machine_width kind = 
+let poison ~machine_width kind =
   Simple.const_int_of_kind ~machine_width kind poison_value
 
 let rec fold_unboxed_with_kind (f : K.t -> 'a -> 'b -> 'b)
@@ -527,7 +527,8 @@ let rewrite_static_const (env : env) (sc : SC.t) =
   | Boxed_int32 n -> SC.boxed_int32 (rewrite_or_variable Int32.zero env n)
   | Boxed_int64 n -> SC.boxed_int64 (rewrite_or_variable Int64.zero env n)
   | Boxed_nativeint n ->
-    SC.boxed_nativeint (rewrite_or_variable (Targetint_32_64.zero env.machine_width) env n)
+    SC.boxed_nativeint
+      (rewrite_or_variable (Targetint_32_64.zero env.machine_width) env n)
   | Boxed_vec128 n ->
     SC.boxed_vec128
       (rewrite_or_variable Vector_types.Vec128.Bit_pattern.zero env n)
@@ -728,7 +729,10 @@ let make_apply_wrapper env
             | Delete, _ -> Ok (i + 1, rev_args)
             | Keep (_, _), Keep (v, _) -> Ok (i + 1, Simple.var v :: rev_args)
             | Keep (_, kind), Delete ->
-              Ok (i + 1, poison ~machine_width:env.machine_width (KS.kind kind) :: rev_args)
+              Ok
+                ( i + 1,
+                  poison ~machine_width:env.machine_width (KS.kind kind)
+                  :: rev_args )
             | Unbox fields_apply, Unbox fields_func ->
               Ok
                 ( i + 1,
@@ -1167,7 +1171,9 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
             | Is_int -> Left (Simple.untagged_const_false env.machine_width)
             | Get_tag ->
               let tag, _ = P.Block_kind.to_shape kind in
-              Left (Simple.untagged_const_int (Tag.to_targetint_31_63 env.machine_width tag))
+              Left
+                (Simple.untagged_const_int
+                   (Tag.to_targetint_31_63 env.machine_width tag))
             | Value_slot _ | Function_slot _ | Code_of_closure | Apply _
             | Code_id_of_call_witness _ ->
               assert false
@@ -1331,8 +1337,10 @@ let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
             let tag =
               match kind with
               | Values (tag, _) | Mixed (tag, _) ->
-                Tag.to_targetint_31_63 env.machine_width (Tag.Scannable.to_tag tag)
-              | Naked_floats -> Tag.to_targetint_31_63 env.machine_width Tag.double_array_tag
+                Tag.to_targetint_31_63 env.machine_width
+                  (Tag.Scannable.to_tag tag)
+              | Naked_floats ->
+                Tag.to_targetint_31_63 env.machine_width Tag.double_array_tag
             in
             match uf with
             | Not_unboxed (ff, _) ->
@@ -1341,7 +1349,9 @@ let rebuild_singleton_binding_whose_representation_is_being_changed env bp bv
           | Is_int -> (
             match uf with
             | Not_unboxed (ff, _) ->
-              Int.Map.add ff (rewrite_simple env (Simple.const_one env.machine_width)) mp
+              Int.Map.add ff
+                (rewrite_simple env (Simple.const_one env.machine_width))
+                mp
             | Unboxed _ -> Misc.fatal_errorf "trying to unbox simple")
           | Value_slot _ | Function_slot _ | Code_of_closure | Apply _
           | Code_id_of_call_witness _ ->

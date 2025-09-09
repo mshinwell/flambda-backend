@@ -1396,7 +1396,9 @@ module Named = struct
       match kind with
       | Value -> Simple.const_zero machine_width
       | Naked_number Naked_immediate ->
-        Simple.const (Reg_width_const.naked_immediate (Target_ocaml_int.zero machine_width))
+        Simple.const
+          (Reg_width_const.naked_immediate
+             (Target_ocaml_int.zero machine_width))
       | Naked_number Naked_float ->
         Simple.const
           (Reg_width_const.naked_float Numeric_types.Float_by_bit_pattern.zero)
@@ -1413,7 +1415,8 @@ module Named = struct
       | Naked_number Naked_int64 ->
         Simple.const (Reg_width_const.naked_int64 Int64.zero)
       | Naked_number Naked_nativeint ->
-        Simple.const (Reg_width_const.naked_nativeint (Targetint_32_64.zero machine_width))
+        Simple.const
+          (Reg_width_const.naked_nativeint (Targetint_32_64.zero machine_width))
       | Naked_number Naked_vec128 ->
         Simple.const
           (Reg_width_const.naked_vec128 Vector_types.Vec128.Bit_pattern.zero)

@@ -177,6 +177,7 @@ let try_to_reify dacc dbg (term : Simplified_named.t) ~bound_to
       DA.with_denv dacc denv
     in
     let machine_width = DE.machine_width (DA.denv dacc) in
-    Ok (Simplified_named.create ~machine_width (Named.create_simple simple)), dacc
+    ( Ok (Simplified_named.create ~machine_width (Named.create_simple simple)),
+      dacc )
   | Cannot_reify -> Ok term, dacc
   | Invalid -> Invalid, dacc

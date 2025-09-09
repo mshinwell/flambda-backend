@@ -37,7 +37,8 @@ let create_have_lifted_set_of_closures dacc bound_vars_to_symbols
         (fun i (var, sym) ->
           { Expr_builder.let_bound = Bound_pattern.singleton var;
             simplified_defining_expr =
-              Simplified_named.create ~machine_width (Named.create_simple (Simple.symbol sym));
+              Simplified_named.create ~machine_width
+                (Named.create_simple (Simple.symbol sym));
             original_defining_expr =
               (if i = 0 then Some original_defining_expr else None)
           })

@@ -258,7 +258,8 @@ let default_load ppf (program : Lambda.program) =
   (* TODO: Determine machine_width properly from target configuration *)
   let machine_width = Target_system.Machine_width.Sixty_four in
   let pipeline : Asmgen.pipeline =
-    Direct_to_cmm (Flambda2.lambda_to_cmm ~machine_width ~keep_symbol_tables:true)
+    Direct_to_cmm
+      (Flambda2.lambda_to_cmm ~machine_width ~keep_symbol_tables:true)
   in
   Asmgen.compile_implementation
     (module Unix : Compiler_owee.Unix_intf.S)

@@ -3172,8 +3172,7 @@ module Product = struct
 
     let top = { function_slot_components_by_index = Function_slot.Map.empty }
 
-    let width t =
-      Function_slot.Map.cardinal t.function_slot_components_by_index
+    let width t = Function_slot.Map.cardinal t.function_slot_components_by_index
   end
 
   module Value_slot_indexed = struct
@@ -3184,8 +3183,7 @@ module Product = struct
 
     let top = { value_slot_components_by_index = Value_slot.Map.empty }
 
-    let width t =
-      Value_slot.Map.cardinal t.value_slot_components_by_index
+    let width t = Value_slot.Map.cardinal t.value_slot_components_by_index
   end
 
   module Int_indexed = struct

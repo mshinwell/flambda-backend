@@ -229,7 +229,10 @@ module Acc : sig
 
   type t
 
-  val create : cmx_loader:Flambda_cmx.loader -> machine_width:Target_system.Machine_width.t -> t
+  val create :
+    cmx_loader:Flambda_cmx.loader ->
+    machine_width:Target_system.Machine_width.t ->
+    t
 
   val manufacture_symbol_short_name : t -> t * Linkage_name.t
 

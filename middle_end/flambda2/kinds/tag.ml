@@ -50,7 +50,8 @@ let create_from_targetint machine_width ti =
 
 let to_int t = t
 
-let to_targetint_31_63 machine_width t = Target_ocaml_int.of_int machine_width (to_int t)
+let to_targetint_31_63 machine_width t =
+  Target_ocaml_int.of_int machine_width (to_int t)
 
 let zero = 0
 
@@ -88,7 +89,8 @@ module Scannable = struct
 
   let to_int t = t
 
-  let to_targetint machine_width t = Targetint_32_64.of_int machine_width (to_int t)
+  let to_targetint machine_width t =
+    Targetint_32_64.of_int machine_width (to_int t)
 
   let to_tag t = t
 
