@@ -594,8 +594,7 @@ let rebuild_named_default_case env (named : Named.t) =
         Named.create_prim
           (P.Unary
              ( Block_load
-                 { (* TODO: machine_width should be passed through properly here *)
-                   field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field;
+                 { field = Target_ocaml_int.of_int env.machine_width field;
                    kind;
                    mut = Immutable
                  },
@@ -1103,8 +1102,7 @@ let load_field_from_value_which_is_being_unboxed env ~to_bind field arg dbg
             Named.create_prim
               (P.Unary
                  ( Block_load
-                     { (* TODO: machine_width should be passed through properly here *)
-                   field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field;
+                     { field = Target_ocaml_int.of_int env.machine_width field;
                        kind;
                        mut = Immutable
                      },
@@ -1165,10 +1163,10 @@ let rebuild_singleton_binding_which_is_being_unboxed env bv
               if simple_is_unboxable env arg
               then Right (get_simple_unboxable env arg)
               else Left arg
-            | Is_int -> Left Simple.untagged_const_false
+            | Is_int -> Left (Simple.untagged_const_false env.machine_width)
             | Get_tag ->
               let tag, _ = P.Block_kind.to_shape kind in
-              Left (Simple.untagged_const_int (Tag.to_targetint_31_63 Target_system.Machine_width.Sixty_four tag))
+              Left (Simple.untagged_const_int (Tag.to_targetint_31_63 env.machine_width tag))
             | Value_slot _ | Function_slot _ | Code_of_closure | Apply _
             | Code_id_of_call_witness _ ->
               assert false

@@ -50,11 +50,11 @@ module type Binary_arith_like_sig = sig
 
   type op
 
-  val unknown : op -> T.t
+  val unknown : machine_width:Target_system.Machine_width.t -> op -> T.t
 
   val these : Result.Set.t -> T.t * Simple.t option
 
-  val op : op -> Lhs.t -> Rhs.t -> Result.t option
+  val op : machine_width:Target_system.Machine_width.t -> op -> Lhs.t -> Rhs.t -> Result.t option
 
   val op_lhs_unknown :
     machine_width:Target_system.Machine_width.t -> op -> rhs:Rhs.t -> Result.t binary_arith_outcome_for_one_side_only
@@ -129,7 +129,8 @@ end = struct
     let proof2 = N.prover_rhs typing_env arg2_ty in
     let kind = N.result_kind in
     let[@inline always] result_unknown () =
-      let dacc = DA.add_variable dacc result_var (N.unknown op) in
+      let machine_width = DE.machine_width denv in
+      let dacc = DA.add_variable dacc result_var (N.unknown ~machine_width op) in
       SPR.create original_term ~try_reify:false dacc
     in
     let[@inline always] result_invalid () =
@@ -161,7 +162,9 @@ end = struct
           else
             match PR.Set.get_singleton possible_results with
             | Some (Simple simple) -> T.alias_type_of kind simple, Some simple
-            | Some (Exactly _) | Some (Prim _) | None -> N.unknown op, None
+            | Some (Exactly _) | Some (Prim _) | None -> 
+              let machine_width = DE.machine_width denv in
+              N.unknown ~machine_width op, None
         in
         let dacc = DA.add_variable dacc result_var ty in
         match simple_opt with
@@ -229,7 +232,8 @@ end = struct
         let possible_results =
           N.Pair.Set.fold
             (fun (i1, i2) possible_results ->
-              match N.op op i1 i2 with
+              let machine_width = DE.machine_width denv in
+              match N.op ~machine_width op i1 i2 with
               | None -> possible_results
               | Some result -> PR.Set.add (Exactly result) possible_results)
             all_pairs PR.Set.empty
@@ -274,7 +278,7 @@ end = struct
 
   let prover_rhs = I.unboxed_prover
 
-  let unknown _ =
+  let unknown ~machine_width:_ _ =
     match arg_kind with
     | Tagged_immediate -> T.any_tagged_immediate
     | Naked_immediate -> T.any_naked_immediate
@@ -444,7 +448,7 @@ end = struct
 
   let prover_rhs = T.meet_naked_immediates
 
-  let unknown _ =
+  let unknown ~machine_width:_ _ =
     match arg_kind with
     | Tagged_immediate -> T.any_tagged_immediate
     | Naked_immediate -> T.any_naked_immediate
@@ -570,11 +574,11 @@ end = struct
 
   let prover_rhs = I.unboxed_prover
 
-  let unknown (op : op) =
+  let unknown ~machine_width (op : op) =
     match op with
-    | Yielding_bool _ -> T.these_naked_immediates Target_ocaml_int.all_bools
+    | Yielding_bool _ -> T.these_naked_immediates (Target_ocaml_int.all_bools machine_width)
     | Yielding_int_like_compare_functions _signedness ->
-      T.these_naked_immediates Target_ocaml_int.zero_one_and_minus_one
+      T.these_naked_immediates (Target_ocaml_int.zero_one_and_minus_one machine_width)
 
   let these s =
     let ty = T.these_naked_immediates s in
@@ -594,10 +598,10 @@ end = struct
 
   module Num = I.Num
 
-  let op (op : P.signed_or_unsigned P.comparison_behaviour) n1 n2 =
+  let op ~machine_width (op : P.signed_or_unsigned P.comparison_behaviour) n1 n2 =
     match op with
     | Yielding_bool op -> (
-      let bool b = Target_ocaml_int.bool b in
+      let bool b = Target_ocaml_int.bool machine_width b in
       match op with
       | Eq -> Some (bool (Num.compare n1 n2 = 0))
       | Neq -> Some (bool (Num.compare n1 n2 <> 0))
@@ -612,7 +616,7 @@ end = struct
     | Yielding_int_like_compare_functions signed_or_unsigned -> (
       match signed_or_unsigned with
       | Signed ->
-        let int i = Target_ocaml_int.of_int i in
+        let int i = Target_ocaml_int.of_int machine_width i in
         let c = Num.compare n1 n2 in
         if c < 0
         then Some (int (-1))
@@ -620,7 +624,7 @@ end = struct
         then Some (int 0)
         else Some (int 1)
       | Unsigned ->
-        let int i = Target_ocaml_int.of_int i in
+        let int i = Target_ocaml_int.of_int machine_width i in
         let c = Num.compare_unsigned n1 n2 in
         if c < 0
         then Some (int (-1))
@@ -691,7 +695,7 @@ end = struct
 
   let prover_rhs = FP.prover
 
-  let unknown _ = FP.unknown
+  let unknown ~machine_width:_ _ = FP.unknown
 
   let these s =
     let ty = FP.these s in
@@ -779,7 +783,7 @@ module Float_ops_for_binary_arith = Float_ops_for_binary_arith_gen (struct
 
   let prover = T.meet_naked_floats
 
-  let unknown = T.any_naked_float
+  let unknown ~machine_width:_ _op = T.any_naked_float
 
   let these = T.these_naked_floats
 
@@ -797,7 +801,7 @@ module Float32_ops_for_binary_arith = Float_ops_for_binary_arith_gen (struct
 
   let prover = T.meet_naked_float32s
 
-  let unknown = T.any_naked_float32
+  let unknown ~machine_width:_ _op = T.any_naked_float32
 
   let these = T.these_naked_float32s
 
@@ -833,11 +837,11 @@ end = struct
 
   let prover_rhs = FP.prover
 
-  let unknown (op : op) =
+  let unknown ~machine_width (op : op) =
     match op with
-    | Yielding_bool _ -> T.these_naked_immediates Target_ocaml_int.all_bools
+    | Yielding_bool _ -> T.these_naked_immediates (Target_ocaml_int.all_bools machine_width)
     | Yielding_int_like_compare_functions () ->
-      T.these_naked_immediates Target_ocaml_int.zero_one_and_minus_one
+      T.these_naked_immediates (Target_ocaml_int.zero_one_and_minus_one machine_width)
 
   let these s =
     let ty = T.these_naked_immediates s in

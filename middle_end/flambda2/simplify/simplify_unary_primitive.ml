@@ -446,16 +446,17 @@ module Simplify_int_conv_naked_nativeint =
 let simplify_boolean_not dacc ~original_term ~arg:_ ~arg_ty ~result_var =
   let denv = DA.denv dacc in
   let typing_env = DE.typing_env denv in
+  let machine_width = DE.machine_width denv in
   let proof = T.meet_equals_tagged_immediates typing_env arg_ty in
   match proof with
   | Known_result imms ->
     let imms =
       Target_ocaml_int.Set.filter_map
         (fun imm ->
-          if Target_ocaml_int.equal imm Target_ocaml_int.zero
-          then Some Target_ocaml_int.one
-          else if Target_ocaml_int.equal imm Target_ocaml_int.one
-          then Some Target_ocaml_int.zero
+          if Target_ocaml_int.equal imm (Target_ocaml_int.zero machine_width)
+          then Some (Target_ocaml_int.one machine_width)
+          else if Target_ocaml_int.equal imm (Target_ocaml_int.one machine_width)
+          then Some (Target_ocaml_int.zero machine_width)
           else None)
         imms
     in
@@ -468,7 +469,8 @@ let simplify_boolean_not dacc ~original_term ~arg:_ ~arg_ty ~result_var =
   | Need_meet ->
     (* CR-someday mshinwell: This could say something like (in the type) "when
        the input is 0, the value is 1" and vice-versa. *)
-    let ty = T.these_tagged_immediates Target_ocaml_int.all_bools in
+    let machine_width = DE.machine_width denv in
+    let ty = T.these_tagged_immediates (Target_ocaml_int.all_bools machine_width) in
     let dacc = DA.add_variable dacc result_var ty in
     SPR.create original_term ~try_reify:false dacc
   | Invalid -> SPR.create_invalid dacc
@@ -480,7 +482,7 @@ module Make_simplify_reinterpret_64_bit_word (P : sig
 
   val prover : TE.t -> T.t -> Src.Set.t meet_shortcut
 
-  val convert : Src.t -> Dst.t
+  val convert : machine_width:Target_system.Machine_width.t -> Src.t -> Dst.t
 
   val these : Dst.Set.t -> T.t
 
@@ -488,13 +490,15 @@ module Make_simplify_reinterpret_64_bit_word (P : sig
 end) =
 struct
   let simplify dacc ~original_term ~arg:_ ~arg_ty ~result_var =
-    let typing_env = DE.typing_env (DA.denv dacc) in
+    let denv = DA.denv dacc in
+    let typing_env = DE.typing_env denv in
+    let machine_width = DE.machine_width denv in
     let proof = P.prover typing_env arg_ty in
     match proof with
     | Known_result src ->
       let dst =
         P.Src.Set.fold
-          (fun src dst -> P.Dst.Set.add (P.convert src) dst)
+          (fun src dst -> P.Dst.Set.add (P.convert ~machine_width src) dst)
           src P.Dst.Set.empty
       in
       let ty = P.these dst in
@@ -513,7 +517,7 @@ Make_simplify_reinterpret_64_bit_word (struct
 
   let prover = T.meet_naked_int64s
 
-  let convert = Float.of_bits
+  let convert ~machine_width:_ = Float.of_bits
 
   let these = T.these_naked_floats
 
@@ -527,7 +531,7 @@ Make_simplify_reinterpret_64_bit_word (struct
 
   let prover = T.meet_naked_floats
 
-  let convert = Float.to_bits
+  let convert ~machine_width:_ = Float.to_bits
 
   let these = T.these_naked_int64s
 
@@ -544,7 +548,7 @@ Make_simplify_reinterpret_64_bit_word (struct
   (* This primitive is logical OR with 1 on machine words, but here, we are
      working in the tagged world. As such a different computation is
      required. *)
-  let convert i = Target_ocaml_int.of_int64 (Int64.shift_right_logical i 1)
+  let convert ~machine_width i = Target_ocaml_int.of_int64 machine_width (Int64.shift_right_logical i 1)
 
   let these = T.these_tagged_immediates
 
@@ -560,7 +564,7 @@ Make_simplify_reinterpret_64_bit_word (struct
 
   (* This primitive is the identity on machine words, but as above, we are
      working in the tagged world. *)
-  let convert i = Int64.add (Int64.mul (Target_ocaml_int.to_int64 i) 2L) 1L
+  let convert ~machine_width:_ i = Int64.add (Int64.mul (Target_ocaml_int.to_int64 i) 2L) 1L
 
   let these = T.these_naked_int64s
 

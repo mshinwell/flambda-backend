@@ -420,7 +420,9 @@ let block_access_kind (ak : Fexpr.block_access_kind) :
   let size s : _ Or_unknown.t =
     match s with
     | None -> Unknown
-    | Some s -> Known (s |> Target_ocaml_int.of_int64)
+    | Some s -> 
+      (* TODO: Should get machine_width from fexpr context when available *)
+      Known (s |> Target_ocaml_int.of_int64 Target_system.Machine_width.Sixty_four)
   in
   match ak with
   | Values { field_kind; tag; size = s } ->
@@ -735,7 +737,8 @@ let rec expr env (e : Fexpr.expr) : Flambda.Expr.t =
     let arms =
       List.map
         (fun (case, apply) ->
-          Target_ocaml_int.of_int case, apply_cont env apply)
+          (* TODO: Should get machine_width from fexpr context when available *)
+          Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four case, apply_cont env apply)
         cases
       |> Target_ocaml_int.Map.of_list
     in

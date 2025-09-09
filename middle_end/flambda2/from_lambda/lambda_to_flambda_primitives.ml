@@ -1952,10 +1952,10 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
       | Record_boxed _ ->
         Values
           { tag = Tag.Scannable.zero;
-            length = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four num_fields
+            length = Target_ocaml_int.of_int machine_width num_fields
           }
       | Record_float | Record_ufloat ->
-        Naked_floats { length = Target_ocaml_int.of_int num_fields }
+        Naked_floats { length = Target_ocaml_int.of_int machine_width num_fields }
       | Record_inlined (_, Constructor_mixed _, _) | Record_mixed _ -> Mixed
       | Record_inlined
           ( Ordinary { runtime_tag; _ },
@@ -1963,7 +1963,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
             Variant_boxed _ ) ->
         Values
           { tag = Tag.Scannable.create_exn runtime_tag;
-            length = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four num_fields
+            length = Target_ocaml_int.of_int machine_width num_fields
           }
       | Record_inlined (Extension _, shape, Variant_extensible) -> (
         match shape with
@@ -1972,7 +1972,7 @@ let convert_lprim ~machine_width ~big_endian (prim : L.primitive) (args : Simple
             { tag = Tag.Scannable.zero;
               (* The "+1" is because there is an extra field containing the
                  hashed constructor. *)
-              length = Target_ocaml_int.of_int (num_fields + 1)
+              length = Target_ocaml_int.of_int machine_width (num_fields + 1)
             }
         | Constructor_mixed _ ->
           (* CR layouts v5.9: support this *)

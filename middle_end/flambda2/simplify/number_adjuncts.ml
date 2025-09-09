@@ -197,6 +197,8 @@ module For_tagged_immediates : Int_number_kind = struct
 
     let minus_one machine_width = Target_ocaml_int.minus_one machine_width
 
+    (* Shift functions inherit correct signature from Target_ocaml_int *)
+
     let strictly_negative t = 
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
@@ -226,20 +228,20 @@ module For_tagged_immediates : Int_number_kind = struct
     let shift_left t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
-      with_shift shift (Target_ocaml_int.zero machine_width) (fun shift -> shift_left t shift) ~integer_bit_width
+      with_shift shift (Target_ocaml_int.zero machine_width) (fun shift_int -> Target_ocaml_int.shift_left t shift_int) ~integer_bit_width
 
     let shift_right t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
       with_shift shift (Target_ocaml_int.zero machine_width)
-        (fun shift -> shift_right t shift)
+        (fun shift_int -> Target_ocaml_int.shift_right t shift_int)
         ~integer_bit_width
 
     let shift_right_logical t shift =
       (* TODO: machine_width should be passed through properly here *)
       let machine_width = Target_system.Machine_width.Sixty_four in
       with_shift shift (Target_ocaml_int.zero machine_width)
-        (fun shift -> shift_right_logical t shift)
+        (fun shift_int -> Target_ocaml_int.shift_right_logical t shift_int)
         ~integer_bit_width
 
     let swap_byte_endianness =

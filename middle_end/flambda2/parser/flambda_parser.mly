@@ -433,7 +433,8 @@ unop:
     mut = mutability;
     kind = block_access_kind;
     LPAREN; field = tag; RPAREN;
-    { Block_load { kind; mut; field = Target_ocaml_int.of_int field } }
+    { (* TODO: Should get machine_width from fexpr context when available *)
+      Block_load { kind; mut; field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field } }
 
 infix_binop:
   | o = binary_int_arith_op { Int_arith o }
@@ -586,7 +587,8 @@ binop_app:
     v = simple;
     { Binary
         (Block_set
-           { kind; init; field = Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field }, block, v) }
+           { kind; init; field = (Target_ocaml_int.of_int Target_system.Machine_width.Sixty_four field) }, block, v) }
+           (* TODO: Should get machine_width from fexpr context when available *)
   | op = prefix_binop; LPAREN; arg1 = simple; COMMA; arg2 = simple; RPAREN
     { Binary (op, arg1, arg2) }
   | arg1 = simple; op = infix_binop; arg2 = simple

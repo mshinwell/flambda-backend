@@ -1736,7 +1736,7 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
           Apply_cont_with_acc.create acc ?trap_action ~args_approx cont ~args
             ~dbg
         in
-        acc, (Target_ocaml_int.of_int case, action))
+        acc, (Target_ocaml_int.of_int (Acc.machine_width acc) case, action))
       acc sw.consts
   in
   match arms, sw.failaction with
@@ -1768,8 +1768,9 @@ let close_switch acc env ~condition_dbg scrutinee (sw : IR.switch) :
     let acc, switch =
       let scrutinee = Simple.var comparison_result in
       let acc, action = action acc in
+      let machine_width = Acc.machine_width acc in
       Expr_with_acc.create_switch acc
-        (Switch.if_then_else ~condition_dbg ~scrutinee ~if_true:action
+        (Switch.if_then_else ~machine_width ~condition_dbg ~scrutinee ~if_true:action
            ~if_false:default_action)
     in
     let acc, body =
