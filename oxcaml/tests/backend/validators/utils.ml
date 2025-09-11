@@ -98,6 +98,7 @@ module Cfg_desc = struct
         ~fun_poll:Lambda.Default_poll
         ~next_instruction_id:(InstructionId.make_sequence ())
         ~fun_ret_type
+        ~fun_params:[]
     in
     List.iter
       (fun (block : Block.t) ->

@@ -1854,7 +1854,7 @@ let emit_instr ~first ~fallthrough i =
     emit_call func;
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> I.jmp (arg i 0)
-  | Lcall_op (Ltailcall_imm { func }) ->
+  | Lcall_op (Ltailcall_imm { func; is_poll = _ }) ->
     if String.equal func.sym_name !function_name
     then
       match !tailrec_entry_point with

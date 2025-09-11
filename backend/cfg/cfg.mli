@@ -105,9 +105,11 @@ type t =
         (** Precomputed at register allocation time *)
     fun_poll : Lambda.poll_attribute; (* Whether to insert polling points. *)
     next_instruction_id : InstructionId.sequence; (* Next instruction id. *)
-    fun_ret_type : Cmm.machtype
+    fun_ret_type : Cmm.machtype;
         (** Function return type. As in [fun_args], this value is not used when starting
             from Linear. *)
+    fun_params : Cmm.machtype list
+        (** Function parameter types from Cmm.fundecl. *)
   }
 
 val create :
@@ -120,6 +122,7 @@ val create :
   fun_poll:Lambda.poll_attribute ->
   next_instruction_id:InstructionId.sequence ->
   fun_ret_type:Cmm.machtype ->
+  fun_params:Cmm.machtype list ->
   t
 
 val fun_name : t -> string

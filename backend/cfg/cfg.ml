@@ -89,11 +89,12 @@ type t =
     fun_num_stack_slots : int Stack_class.Tbl.t;
     fun_poll : Lambda.poll_attribute;
     next_instruction_id : InstructionId.sequence;
-    fun_ret_type : Cmm.machtype
+    fun_ret_type : Cmm.machtype;
+    fun_params : Cmm.machtype list
   }
 
 let create ~fun_name ~fun_args ~fun_codegen_options ~fun_dbg ~fun_contains_calls
-    ~fun_num_stack_slots ~fun_poll ~next_instruction_id ~fun_ret_type =
+    ~fun_num_stack_slots ~fun_poll ~next_instruction_id ~fun_ret_type ~fun_params =
   { fun_name;
     fun_args;
     fun_codegen_options;
@@ -106,14 +107,15 @@ let create ~fun_name ~fun_args ~fun_codegen_options ~fun_dbg ~fun_contains_calls
     fun_num_stack_slots;
     fun_poll;
     next_instruction_id;
-    fun_ret_type
+    fun_ret_type;
+    fun_params
   }
 
 let mem_block t label = Label.Tbl.mem t.blocks label
 
 let successor_labels_normal ti =
   match ti.desc with
-  | Tailcall_self { destination } -> Label.Set.singleton destination
+  | Tailcall_self { destination; needs_poll = _ } -> Label.Set.singleton destination
   | Switch labels -> Array.to_seq labels |> Label.Set.of_seq
   | Return | Raise _ | Tailcall_func _ -> Label.Set.empty
   | Call_no_return _ -> Label.Set.empty
@@ -172,8 +174,8 @@ let replace_successor_labels t ~normal ~exn block ~f =
       | Float_test { width; lt; eq; gt; uo } ->
         Float_test { width; lt = f lt; eq = f eq; gt = f gt; uo = f uo }
       | Switch labels -> Switch (Array.map f labels)
-      | Tailcall_self { destination } ->
-        Tailcall_self { destination = f destination }
+      | Tailcall_self { destination; needs_poll } ->
+        Tailcall_self { destination = f destination; needs_poll }
       | Tailcall_func Indirect
       | Tailcall_func (Direct _)
       | Return | Raise _ | Call_no_return _ ->
@@ -343,20 +345,21 @@ let dump_terminator' ?(print_reg = Printreg.reg) ?(res = [||]) ?(args = [||])
     fprintf ppf "Call_no_return %s%a" func_symbol print_args args
   | Return -> fprintf ppf "Return%a" print_args args
   | Raise _ -> fprintf ppf "Raise%a" print_args args
-  | Tailcall_self { destination } ->
+  | Tailcall_self { destination; needs_poll = _ } ->
     dump_linear_call_op ppf
       (Linear.Ltailcall_imm
          { func =
              { sym_name =
                  Printf.sprintf "self(%s)" (Label.to_string destination);
                sym_global = Local
-             }
+             };
+           is_poll = false
          })
   | Tailcall_func call ->
     dump_linear_call_op ppf
       (match call with
       | Indirect -> Linear.Ltailcall_ind
-      | Direct func -> Linear.Ltailcall_imm { func })
+      | Direct func -> Linear.Ltailcall_imm { func; is_poll = false })
   | Call { op = call; label_after } ->
     Format.fprintf ppf "%t%a" print_res dump_linear_call_op
       (match call with

@@ -61,7 +61,7 @@ and call_operation =
   | Lcall_ind
   | Lcall_imm of { func : Cmm.symbol }
   | Ltailcall_ind
-  | Ltailcall_imm of { func : Cmm.symbol }
+  | Ltailcall_imm of { func : Cmm.symbol; is_poll : bool }
   | Lextcall of
       { func : string;
         ty_res : Cmm.machtype;
@@ -93,6 +93,7 @@ let has_fallthrough = function
 
 type fundecl =
   { fun_name : string;
+    fun_params : Cmm.machtype list;
     fun_args : Reg.Set.t;
     fun_body : instruction;
     fun_fast : bool;

@@ -580,8 +580,9 @@ end = struct
     (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
       when Stdlib.compare rk1 rk2 = 0 ->
       ()
-    | Tailcall_self { destination = l1 }, Tailcall_self { destination = l2 } ->
-      compare_label l1 l2
+    | Tailcall_self { destination = l1; needs_poll = np1 }, Tailcall_self { destination = l2; needs_poll = np2 } ->
+      compare_label l1 l2;
+      if not (Bool.equal np1 np2) then failwith "Tailcall_self: needs_poll mismatch"
     | Tailcall_func call1, Tailcall_func call2
     (* CR-someday azewierzejew: Avoid using polymorphic comparison. *)
       when Stdlib.compare call1 call2 = 0 ->

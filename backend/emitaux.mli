@@ -136,3 +136,12 @@ val add_stack_checks_if_needed :
   stack_threshold_size:int ->
   trap_size:int ->
   Linear.fundecl
+
+(** [live_parameters params] creates a liveness set containing one register
+    per parameter component. Each element of [params] represents a parameter's
+    machtype (which may have multiple components). The function uses
+    [Proc.loc_parameters] to determine register locations, then creates new
+    registers with the correct machtypes at those locations.
+    @raise Misc.Fatal_error if the number of components doesn't match the
+    number of locations returned by [Proc.loc_parameters]. *)
+val live_parameters : Cmm.machtype list -> Reg.Set.t

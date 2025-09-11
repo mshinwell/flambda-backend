@@ -940,6 +940,9 @@ let function_name = ref ""
 (* Entry point for tail recursive calls *)
 let tailrec_entry_point = ref None
 
+(* Function parameters for current function *)
+let fun_params = ref []
+
 (* Pending floating-point literals *)
 let float32_literals = ref ([] : (int32 * L.t) list)
 
@@ -1435,8 +1438,8 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
       DSL.labeled_ins lbl_frame I.ADD
         [| DSL.emit_reg i.res.(0); DSL.emit_reg reg_alloc_ptr; DSL.imm 8 |])
 
-let assembly_code_for_poll i ~far ~return_label =
-  let lbl_frame = record_frame_label i.live (Dbg_alloc []) in
+let assembly_code_for_poll ~live ~far ~return_label =
+  let lbl_frame = record_frame_label live (Dbg_alloc []) in
   let lbl_call_gc = L.create Text in
   let lbl_after_poll =
     match return_label with None -> L.create Text | Some lbl -> lbl
@@ -1727,14 +1730,24 @@ let emit_instr i =
     DSL.ins I.BL [| DSL.emit_symbol (S.create func.sym_name) |];
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> DSL.ins I.BR [| DSL.emit_reg i.arg.(0) |]
-  | Lcall_op (Ltailcall_imm { func }) ->
+  | Lcall_op (Ltailcall_imm { func; is_poll }) ->
     if String.equal func.sym_name !function_name
-    then
+    then (
+      (if is_poll
+      then
+        (* Get the live parameters for the poll instruction *)
+        let live_params = Emitaux.live_parameters !fun_params in
+        assembly_code_for_poll ~live:live_params ~far:false ~return_label:None);
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
       | Some tailrec_entry_point ->
-        DSL.ins I.B [| DSL.emit_label tailrec_entry_point |]
-    else DSL.ins I.B [| DSL.emit_symbol (S.create func.sym_name) |]
+        DSL.ins I.B [| DSL.emit_label tailrec_entry_point |])
+    else (
+      if is_poll
+      then
+        Misc.fatal_errorf
+          "is_poll=true in Ltailcall_imm to non-self function %s" func.sym_name;
+      DSL.ins I.B [| DSL.emit_symbol (S.create func.sym_name) |])
   | Lcall_op (Lextcall { func; alloc; stack_ofs; _ }) ->
     if Config.runtime5 && stack_ofs > 0
     then (
@@ -1928,10 +1941,11 @@ let emit_instr i =
       [| DSL.emit_reg i.arg.(0);
          DSL.emit_addressing (Iindexed offset) reg_domain_state_ptr
       |]
-  | Lop Poll -> assembly_code_for_poll i ~far:false ~return_label:None
+  | Lop Poll ->
+    assembly_code_for_poll ~live:i.live ~far:false ~return_label:None
   | Lop Pause -> DSL.ins I.YIELD [||]
   | Lop (Specific Ifar_poll) ->
-    assembly_code_for_poll i ~far:true ~return_label:None
+    assembly_code_for_poll ~live:i.live ~far:true ~return_label:None
   | Lop (Intop_imm (Iadd, n)) -> emit_addimm i.res.(0) i.arg.(0) n
   | Lop (Intop_imm (Isub, n)) -> emit_subimm i.res.(0) i.arg.(0) n
   | Lop (Intop (Icomp cmp)) ->
@@ -2368,6 +2382,7 @@ let fundecl fundecl =
     | Some { fun_end_label; fundecl } -> Some fun_end_label, fundecl
   in
   function_name := fundecl.fun_name;
+  fun_params := fundecl.fun_params;
   fastcode_flag := fundecl.fun_fast;
   tailrec_entry_point
     := Option.map

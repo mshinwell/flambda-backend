@@ -577,3 +577,25 @@ let add_stack_checks_if_needed (fundecl : Linear.fundecl) ~stack_offset
       in
       { fundecl with fun_body }
     else fundecl
+
+let live_parameters (params : Cmm.machtype list) : Reg.Set.t =
+  (* Concatenate all machtype components from the parameter list *)
+  let all_components = Array.concat params in
+  (* Get the locations using Proc.loc_parameters *)
+  let param_locs = Proc.loc_parameters all_components in
+  (* Check that arrays have the same length *)
+  if Array.length all_components <> Array.length param_locs
+  then
+    Misc.fatal_errorf
+      "live_parameters: machtype array length %d does not match parameter \
+       locations length %d"
+      (Array.length all_components)
+      (Array.length param_locs);
+  (* Create new registers with the correct machtypes and build the set *)
+  Misc.Stdlib.Array.fold_left2
+    (fun acc component loc ->
+      (* Create a new register with the correct machtype at the same location *)
+      let new_reg = Reg.create component in
+      new_reg.Reg.loc <- loc.Reg.loc;
+      Reg.Set.add new_reg acc)
+    Reg.Set.empty all_components param_locs

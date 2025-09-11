@@ -33,7 +33,7 @@ let call_operation ?(print_reg = Printreg.reg) ppf op arg =
   | Lcall_ind -> fprintf ppf "call %a" regs arg
   | Lcall_imm { func } -> fprintf ppf "call \"%s\" %a" func.sym_name regs arg
   | Ltailcall_ind -> fprintf ppf "tailcall %a" regs arg
-  | Ltailcall_imm { func } ->
+  | Ltailcall_imm { func; is_poll = _ } ->
     fprintf ppf "tailcall \"%s\" %a" func.sym_name regs arg
   | Lextcall { func; alloc; _ } ->
     fprintf ppf "extcall \"%s\" %a%s" func regs arg

@@ -1263,7 +1263,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         if String.equal func.sym_name !SU.current_function_name
            && SU.trap_stack_is_empty env
         then (
-          let call = Cfg.Tailcall_self { destination = env.SU.tailrec_label } in
+          let call = Cfg.Tailcall_self { destination = env.SU.tailrec_label; needs_poll = false } in
           let loc_arg' =
             assert (stack_ofs >= 0);
             if stack_ofs = 0 then loc_arg else Proc.loc_parameters (Reg.typv r1)
@@ -1509,6 +1509,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         ~fun_dbg:f.Cmm.fun_dbg ~fun_contains_calls:true
         ~fun_num_stack_slots:(Stack_class.Tbl.make 0) ~fun_poll:f.Cmm.fun_poll
         ~next_instruction_id:Sub_cfg.instr_id ~fun_ret_type:f.Cmm.fun_ret_type
+        ~fun_params:(List.map snd f.Cmm.fun_args)
     in
     let layout = DLL.make_empty () in
     let entry_block =

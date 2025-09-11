@@ -145,10 +145,10 @@ let linearize_terminator cfg_with_layout (func : string) start
     | Raise kind -> [L.Lraise kind], None
     | Tailcall_func Indirect -> [L.Lcall_op Ltailcall_ind], None
     | Tailcall_func (Direct func_symbol) ->
-      [L.Lcall_op (Ltailcall_imm { func = func_symbol })], None
-    | Tailcall_self { destination } ->
+      [L.Lcall_op (Ltailcall_imm { func = func_symbol; is_poll = false })], None
+    | Tailcall_self { destination; needs_poll } ->
       ( [ L.Lcall_op
-            (Ltailcall_imm { func = { sym_name = func; sym_global = Local } })
+            (Ltailcall_imm { func = { sym_name = func; sym_global = Local }; is_poll = needs_poll })
         ],
         Some destination )
     | Call_no_return
@@ -467,5 +467,6 @@ let run cfg_with_layout =
     fun_num_stack_slots;
     fun_frame_required;
     fun_prologue_required;
-    fun_section_name
+    fun_section_name;
+    fun_params = cfg.fun_params
   }
