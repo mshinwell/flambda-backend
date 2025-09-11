@@ -2414,8 +2414,8 @@ let emit_instr fundecl ~first ~fallthrough i =
       ~save_registers:(not first)
       ~save_simd:(must_save_simd_regs i.live)
 
-let emit_instr ~first ~fallthrough i =
-  try emit_instr ~first ~fallthrough i with
+let emit_instr fundecl ~first ~fallthrough i =
+  try emit_instr fundecl ~first ~fallthrough i with
   | I.Extension_disabled _ as exn -> raise exn
   | exn ->
     Format.eprintf "Exception whilst emitting instruction:@ %a\n"
