@@ -941,7 +941,7 @@ let function_name = ref ""
 let tailrec_entry_point = ref None
 
 (* Function parameters for current function *)
-let fun_params = ref []
+(* fun_params removed - now passed via fundecl parameter *)
 
 (* Pending floating-point literals *)
 let float32_literals = ref ([] : (int32 * L.t) list)
@@ -1646,7 +1646,7 @@ let emit_static_cast (cast : Cmm.static_cast) i =
 
 (* Output the assembly code for an instruction *)
 
-let emit_instr i =
+let emit_instr fundecl i =
   emit_debug_info i.dbg;
   match i.desc with
   | Lend -> ()
@@ -1736,7 +1736,7 @@ let emit_instr i =
       (if is_poll
       then
         (* Get the live parameters for the poll instruction *)
-        let live_params = Emitaux.live_parameters !fun_params in
+        let live_params = Emitaux.live_parameters fundecl.fun_params in
         assembly_code_for_poll ~live:live_params ~far:false ~return_label:None);
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
@@ -2356,8 +2356,8 @@ let emit_instr i =
              sc_max_frame_size_in_bytes = max_frame_size_bytes
            }
 
-let emit_instr i =
-  try emit_instr i
+let emit_instr fundecl i =
+  try emit_instr fundecl i
   with exn ->
     Format.eprintf "Exception whilst emitting instruction:@ %a\n"
       Printlinear.instr i;
@@ -2365,13 +2365,13 @@ let emit_instr i =
 
 (* Emission of an instruction sequence *)
 
-let rec emit_all i =
+let rec emit_all fundecl i =
   (* CR-soon xclerc for xclerc: get rid of polymorphic compare. *)
   if Stdlib.compare i.desc Lend = 0
   then ()
   else (
-    emit_instr i;
-    emit_all i.next)
+    emit_instr fundecl i;
+    emit_all fundecl i.next)
 
 (* Emission of a function declaration *)
 
@@ -2382,7 +2382,6 @@ let fundecl fundecl =
     | Some { fun_end_label; fundecl } -> Some fun_end_label, fundecl
   in
   function_name := fundecl.fun_name;
-  fun_params := fundecl.fun_params;
   fastcode_flag := fundecl.fun_fast;
   tailrec_entry_point
     := Option.map
@@ -2408,7 +2407,7 @@ let fundecl fundecl =
   let num_call_gc = num_call_gc_points fundecl.fun_body in
   let max_out_of_line_code_offset = max_out_of_line_code_offset ~num_call_gc in
   BR.relax fundecl.fun_body ~max_out_of_line_code_offset;
-  emit_all fundecl.fun_body;
+  emit_all fundecl fundecl.fun_body;
   List.iter emit_call_gc !call_gc_sites;
   List.iter emit_local_realloc !local_realloc_sites;
   emit_stack_realloc ();

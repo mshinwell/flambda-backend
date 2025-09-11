@@ -1747,8 +1747,25 @@ let prologue_stack_offset () =
   assert !frame_required;
   frame_size () - 8 - if fp then 8 else 0
 
+(* Emit assembly code for a poll instruction *)
+let assembly_code_for_poll ~live ~dbg =
+  I.cmp (domain_field Domainstate.Domain_young_limit) r15;
+  let gc_call_label = L.create Text in
+  let lbl_after_poll = L.create Text in
+  let lbl_frame = record_frame_label live (Dbg_alloc []) in
+  I.jbe (emit_asm_label_arg gc_call_label);
+  call_gc_sites
+    := { gc_lbl = gc_call_label;
+         gc_return_lbl = lbl_after_poll;
+         gc_dbg = dbg;
+         gc_frame = lbl_frame;
+         gc_save_simd = must_save_simd_regs live
+       }
+       :: !call_gc_sites;
+  D.define_label lbl_after_poll
+
 (* Emit an instruction *)
-let emit_instr ~first ~fallthrough i =
+let emit_instr fundecl ~first ~fallthrough i =
   let open Simd_instrs in
   emit_debug_info_linear i;
   match i.desc with
@@ -1854,14 +1871,21 @@ let emit_instr ~first ~fallthrough i =
     emit_call func;
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> I.jmp (arg i 0)
-  | Lcall_op (Ltailcall_imm { func; is_poll = _ }) ->
+  | Lcall_op (Ltailcall_imm { func; is_poll }) ->
     if String.equal func.sym_name !function_name
-    then
+    then (
+      if is_poll then (
+        let live_params = Emitaux.live_parameters fundecl.fun_params in
+        assembly_code_for_poll ~live:live_params ~dbg:i.dbg
+      );
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
       | Some tailrec_entry_point ->
-        I.jmp (emit_label_arg ~section:Text tailrec_entry_point)
+        I.jmp (emit_label_arg ~section:Text tailrec_entry_point))
     else (
+      if is_poll then
+        Misc.fatal_errorf "is_poll=true in Ltailcall_imm to non-self function %s"
+          func.sym_name;
       add_used_symbol func.sym_name;
       emit_jump func)
   | Lcall_op (Lextcall { func; alloc; stack_ofs; stack_align; _ }) ->
@@ -2043,21 +2067,7 @@ let emit_instr ~first ~fallthrough i =
            lr_save_simd = must_save_simd_regs i.live
          }
          :: !local_realloc_sites
-  | Lop Poll ->
-    I.cmp (domain_field Domainstate.Domain_young_limit) r15;
-    let gc_call_label = L.create Text in
-    let lbl_after_poll = L.create Text in
-    let lbl_frame = record_frame_label i.live (Dbg_alloc []) in
-    I.jbe (emit_asm_label_arg gc_call_label);
-    call_gc_sites
-      := { gc_lbl = gc_call_label;
-           gc_return_lbl = lbl_after_poll;
-           gc_dbg = i.dbg;
-           gc_frame = lbl_frame;
-           gc_save_simd = must_save_simd_regs i.live
-         }
-         :: !call_gc_sites;
-    D.define_label lbl_after_poll
+  | Lop Poll -> assembly_code_for_poll ~live:i.live ~dbg:i.dbg
   | Lop Pause -> I.pause ()
   | Lop (Intop (Icomp cmp)) ->
     I.cmp (arg i 1) (arg i 0);
@@ -2412,7 +2422,7 @@ let emit_instr ~first ~fallthrough i =
       Printlinear.instr i;
     raise exn
 
-let rec emit_all ~first ~fallthrough i =
+let rec emit_all fundecl ~first ~fallthrough i =
   match i.desc with
   | Lend -> ()
   | Lprologue | Lepilogue_open | Lepilogue_close | Lreloadretaddr | Lreturn
@@ -2421,13 +2431,13 @@ let rec emit_all ~first ~fallthrough i =
   | Lcondbranch3 (_, _, _)
   | Lswitch _ | Ladjust_stack_offset _ | Lpushtrap _ | Lraise _ | Lstackcheck _
     ->
-    (try emit_instr ~first ~fallthrough i with
+    (try emit_instr fundecl ~first ~fallthrough i with
     | I.Extension_disabled _ as exn -> raise exn
     | exn ->
       Format.eprintf "Exception whilst emitting instruction:@ %a\n"
         Printlinear.instr i;
       raise exn);
-    emit_all ~first:false ~fallthrough:(Linear.has_fallthrough i.desc) i.next
+    emit_all fundecl ~first:false ~fallthrough:(Linear.has_fallthrough i.desc) i.next
 
 let all_functions = ref []
 
@@ -2490,7 +2500,7 @@ let fundecl fundecl =
      && (not Config.no_stack_checks)
      && String.equal !Clflags.runtime_variant "d"
   then emit_call (Cmm.global_symbol "caml_assert_stack_invariants");
-  emit_all ~first:true ~fallthrough:true fundecl.fun_body;
+  emit_all fundecl ~first:true ~fallthrough:true fundecl.fun_body;
   List.iter emit_call_gc !call_gc_sites;
   List.iter emit_local_realloc !local_realloc_sites;
   emit_call_safety_errors ();
