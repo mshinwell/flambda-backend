@@ -317,9 +317,8 @@ let instr_cfg_with_layout :
       if needs_poll
       then (
         let after = Cfg.get_block_exn cfg src in
-        let poll = Cfg.make_instruction
-            ~desc:(Cfg.Op Poll)
-            ~id:(next_instruction_id ())
+        let poll =
+          Cfg.make_instruction ~desc:(Cfg.Op Poll) ~id:(next_instruction_id ())
             ~dbg:after.terminator.dbg
             ~stack_offset:after.terminator.stack_offset ()
         in
@@ -328,7 +327,27 @@ let instr_cfg_with_layout :
                (Cfg.successor_labels after ~normal:true ~exn:false),
              after.exn )
          with
-        | 1, None -> DLL.add_end after.body poll
+        | 1, None -> (
+          (* Check if the terminator is Tailcall_self *)
+          match after.terminator.desc with
+          | Tailcall_self { destination; needs_poll } ->
+            (* Set needs_poll flag instead of adding a poll instruction *)
+            if needs_poll
+            then
+              Misc.fatal_errorf
+                "Cfg_polling: Tailcall_self already has needs_poll=true at \
+                 destination %a"
+                Label.print destination;
+            let terminator = after.terminator in
+            after.terminator
+              <- { terminator with
+                   desc = Tailcall_self { destination; needs_poll = true }
+                 }
+          | Never | Always _ | Parity_test _ | Truth_test _ | Float_test _
+          | Int_test _ | Switch _ | Return | Raise _ | Tailcall_func _
+          | Call_no_return _ | Call _ | Prim _ ->
+            (* For other terminators, add the poll instruction as before *)
+            DLL.add_end after.body poll)
         | _ ->
           let before = Some (Cfg.get_block_exn cfg dst) in
           let instrs = DLL.of_list [poll] in

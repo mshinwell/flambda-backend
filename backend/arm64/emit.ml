@@ -1069,7 +1069,14 @@ let num_call_gc_points instr =
         | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
         | Name_for_debugger _ )
     | Lprologue | Lepilogue_open | Lepilogue_close | Lreloadretaddr | Lreturn
-    | Lentertrap | Lpoptrap _ | Lcall_op _ | Llabel _ | Lbranch _
+    | Lentertrap | Lpoptrap _ | Llabel _ | Lbranch _
+    | Lcall_op (Ltailcall_imm { is_poll = false; _ })
+    | Lcall_op (Lcall_imm _ | Lcall_ind | Ltailcall_ind | Lextcall _ | Lprobe _)
+      ->
+      loop instr.next call_gc
+    | Lcall_op (Ltailcall_imm { is_poll = true; _ }) ->
+      (* Ltailcall_imm with is_poll=true emits a poll instruction *)
+      loop instr.next (call_gc + 1)
     | Lcondbranch (_, _)
     | Lcondbranch3 (_, _, _)
     | Lswitch _ | Ladjust_stack_offset _ | Lpushtrap _ | Lraise _
@@ -1185,8 +1192,13 @@ module BR = Branch_relaxation.Make (struct
     | Lcall_op Lcall_ind -> 1
     | Lcall_op (Lcall_imm _) -> 1
     | Lcall_op Ltailcall_ind -> epilogue_size ()
-    | Lcall_op (Ltailcall_imm { func; _ }) ->
-      if String.equal func.sym_name !function_name then 1 else epilogue_size ()
+    | Lcall_op (Ltailcall_imm { func; is_poll }) ->
+      let base_size =
+        if String.equal func.sym_name !function_name
+        then 1
+        else epilogue_size ()
+      in
+      if is_poll then base_size + 3 (* poll instruction size *) else base_size
     | Lcall_op
         (Lextcall
           { alloc;
@@ -1733,12 +1745,10 @@ let emit_instr fundecl i =
   | Lcall_op (Ltailcall_imm { func; is_poll }) ->
     if String.equal func.sym_name !function_name
     then (
-      if is_poll
-      then (
+      (if is_poll
+      then
         (* Get the live parameters for the poll instruction *)
         let live_params = Emitaux.live_parameters fundecl.fun_params in
-        Format.eprintf "New live_params for tailcall poll: %a, i.live=%a\n%!"
-          Printreg.regset live_params Printreg.regset i.live;
         assembly_code_for_poll ~live:live_params ~far:false ~return_label:None);
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
