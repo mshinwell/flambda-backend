@@ -1733,10 +1733,12 @@ let emit_instr fundecl i =
   | Lcall_op (Ltailcall_imm { func; is_poll }) ->
     if String.equal func.sym_name !function_name
     then (
-      (if is_poll
-      then
+      if is_poll
+      then (
         (* Get the live parameters for the poll instruction *)
         let live_params = Emitaux.live_parameters fundecl.fun_params in
+        Format.eprintf "New live_params for tailcall poll: %a, i.live=%a\n%!"
+          Printreg.regset live_params Printreg.regset i.live;
         assembly_code_for_poll ~live:live_params ~far:false ~return_label:None);
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
