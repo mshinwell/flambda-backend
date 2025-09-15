@@ -417,6 +417,23 @@ let traverse_apply denv acc apply : rev_expr =
   let expr = Apply apply in
   { expr; holed_expr = denv.parent }
 
+let traverse_apply_cont denv acc apply_cont : rev_expr =
+  let expr = Apply_cont apply_cont in
+  apply_cont_deps denv acc apply_cont;
+  { expr; holed_expr = denv.parent }
+
+let traverse_switch denv acc switch : rev_expr =
+  let expr = Switch switch in
+  Acc.used ~denv (Switch_expr.scrutinee switch) acc;
+  Target_ocaml_int.Map.iter
+    (fun _ apply_cont -> apply_cont_deps denv acc apply_cont)
+    (Switch_expr.arms switch);
+  { expr; holed_expr = denv.parent }
+
+and traverse_invalid denv _acc ~message =
+  let expr = Invalid { message } in
+  { expr; holed_expr = denv.parent }
+
 let rec traverse (denv : denv) (acc : acc) (expr : Expr.t) : rev_expr =
   match Expr.descr expr with
   | Let let_expr -> traverse_let denv acc let_expr
@@ -694,23 +711,6 @@ and traverse_cont_handler :
       let expr = traverse denv acc handler in
       let handler = { bound_parameters; expr; is_exn_handler; is_cold } in
       k handler acc)
-
-and traverse_apply_cont denv acc apply_cont : rev_expr =
-  let expr = Apply_cont apply_cont in
-  apply_cont_deps denv acc apply_cont;
-  { expr; holed_expr = denv.parent }
-
-and traverse_switch denv acc switch : rev_expr =
-  let expr = Switch switch in
-  Acc.used ~denv (Switch_expr.scrutinee switch) acc;
-  Target_ocaml_int.Map.iter
-    (fun _ apply_cont -> apply_cont_deps denv acc apply_cont)
-    (Switch_expr.arms switch);
-  { expr; holed_expr = denv.parent }
-
-and traverse_invalid denv _acc ~message =
-  let expr = Invalid { message } in
-  { expr; holed_expr = denv.parent }
 
 and traverse_code (acc : acc) (code_id : Code_id.t) (code : Code.t)
     ~le_monde_exterieur ~all_constants : rev_code =
