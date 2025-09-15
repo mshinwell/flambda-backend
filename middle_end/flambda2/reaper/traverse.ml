@@ -226,12 +226,15 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
   | prim ->
     let () =
       match Flambda_primitive.effects_and_coeffects prim with
-      | Arbitrary_effects, _, _ ->
+      | Arbitrary_effects, (No_coeffects | Has_coeffects), (Delay | Strict) ->
         let bound_to = Bound_pattern.free_names bound_pattern in
         Name_occurrences.fold_names bound_to
           ~f:(fun () bound_to -> Acc.used ~denv (Simple.name bound_to) acc)
           ~init:()
-      | _ -> ()
+      | ( (Only_generative_effects _ | No_effects),
+          (No_coeffects | Has_coeffects),
+          (Delay | Strict) ) ->
+        ()
     in
     default_bp (fun to_ ->
         Graph.add_use_dep (Acc.graph acc)
