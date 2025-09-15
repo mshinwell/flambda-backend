@@ -430,7 +430,7 @@ let traverse_switch denv acc switch : rev_expr =
     (Switch_expr.arms switch);
   { expr; holed_expr = denv.parent }
 
-and traverse_invalid denv _acc ~message =
+let traverse_invalid denv _acc ~message =
   let expr = Invalid { message } in
   { expr; holed_expr = denv.parent }
 
