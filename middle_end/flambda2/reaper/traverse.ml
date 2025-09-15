@@ -261,6 +261,162 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
   in
   record_set_of_closures_deps denv names_and_function_slots set_of_closures acc
 
+let traverse_call_kind denv acc apply ~exn_arg ~return_args ~default_acc =
+  let calls_are_not_pure = Variable.create "not_pure" Flambda_kind.value in
+  Acc.used ~denv (Simple.var calls_are_not_pure) acc;
+  let add_call_widget (function_call : Call_kind.Function_call.t) =
+    let args, closure_entry_point =
+      match function_call with
+      | Indirect_unknown_arity ->
+        ( Flambda_arity.group_by_parameter (Apply.args_arity apply)
+            (Apply.args apply),
+          Global_flow_graph.Indirect_code_pointer )
+      | Indirect_known_arity | Direct _ ->
+        [Apply.args apply], Global_flow_graph.Direct_code_pointer
+    in
+    (* List.iter (fun arg -> Acc.used ~denv arg acc) (Apply.args apply); *)
+    let callee =
+      match Apply.callee apply with
+      | None -> assert false
+      | Some callee ->
+        Code_id_or_name.name (Acc.simple_to_name acc ~denv callee)
+    in
+    let rec add_deps callee args calls_are_not_pure =
+      match args with
+      | [] -> Misc.fatal_error "add_deps: no args"
+      | first :: rest -> (
+        List.iteri
+          (fun i arg ->
+            Graph.add_coaccessor_dep (Acc.graph acc)
+              ~to_:(Code_id_or_name.name (Acc.simple_to_name acc ~denv arg))
+              (Param (closure_entry_point, i))
+              ~base:callee)
+          first;
+        Graph.add_accessor_dep (Acc.graph acc)
+          ~to_:(Code_id_or_name.var calls_are_not_pure)
+          Code_of_closure ~base:callee;
+        Graph.add_accessor_dep (Acc.graph acc)
+          ~to_:(Code_id_or_name.var exn_arg)
+          (Apply (closure_entry_point, Exn))
+          ~base:callee;
+        match rest with
+        | [] -> (
+          match return_args with
+          | None -> ()
+          | Some return_args ->
+            List.iteri
+              (fun i return_arg ->
+                Graph.add_accessor_dep (Acc.graph acc)
+                  ~to_:(Code_id_or_name.var return_arg)
+                  (Apply (closure_entry_point, Normal i))
+                  ~base:callee)
+              return_args)
+        | _ :: _ ->
+          let v = Variable.create "partial_apply" Flambda_kind.value in
+          Graph.add_accessor_dep (Acc.graph acc) ~to_:(Code_id_or_name.var v)
+            (Apply (closure_entry_point, Normal 0))
+            ~base:callee;
+          let calls_are_not_pure =
+            Variable.create "not_pure" Flambda_kind.value
+          in
+          Acc.used ~denv (Simple.var calls_are_not_pure) acc;
+          add_deps (Code_id_or_name.var v) rest calls_are_not_pure)
+    in
+    add_deps callee args calls_are_not_pure
+  in
+  match Apply.call_kind apply with
+  | Function { function_call = Direct code_id as function_call; _ } ->
+    (* CR ncourant: think about cross-module propagation *)
+    (* if Compilation_unit.is_current (Code_id.get_compilation_unit code_id)
+       then ( let apply_dep = { Traverse_acc.function_containing_apply_expr =
+       denv.current_code_id; apply_code_id = code_id; apply_args = Apply.args
+       apply; apply_closure = Apply.callee apply; params_of_apply_return_cont =
+       return_args; param_of_apply_exn_cont = exn_arg; not_pure_call_witness =
+       calls_are_not_pure } in Acc.add_apply apply_dep acc; if Option.is_some
+       (Apply.callee apply) then add_call_widget function_call) else default_acc
+       acc *)
+    if Option.is_some (Apply.callee apply) then add_call_widget function_call;
+    if Compilation_unit.is_current (Code_id.get_compilation_unit code_id)
+       && (Option.is_none (Apply.callee apply)
+          || denv.should_preserve_direct_calls)
+    then
+      let apply_dep =
+        { Traverse_acc.function_containing_apply_expr = denv.current_code_id;
+          apply_code_id = code_id;
+          apply_args = Apply.args apply;
+          apply_closure = Apply.callee apply;
+          params_of_apply_return_cont = return_args;
+          param_of_apply_exn_cont = exn_arg;
+          not_pure_call_witness = calls_are_not_pure
+        }
+      in
+      Acc.add_apply apply_dep acc
+    else if Option.is_none (Apply.callee apply)
+    then default_acc acc
+  | Function
+      { function_call =
+          (Indirect_unknown_arity | Indirect_known_arity) as function_call;
+        _
+      } ->
+    add_call_widget function_call
+  | Method _ | C_call _ | Effect _ -> default_acc acc
+
+let traverse_apply denv acc apply : rev_expr =
+  let return_args =
+    match Apply.continuation apply with
+    | Never_returns -> None
+    | Return cont -> (
+      match Continuation.Map.find cont denv.conts with
+      | Normal params -> Some params)
+  in
+  let exn_arg =
+    let exn = Apply.exn_continuation apply in
+    let extra_args = Exn_continuation.extra_args exn in
+    let (Normal exn_params) =
+      Continuation.Map.find (Exn_continuation.exn_handler exn) denv.conts
+    in
+    match exn_params with
+    | [] -> assert false
+    | exn_param :: extra_params ->
+      List.iter2
+        (fun param (arg, _kind) -> Acc.alias_dep ~denv param arg acc)
+        extra_params extra_args;
+      exn_param
+  in
+  let default_acc acc =
+    (* CR ncourant: track regions properly *)
+    List.iter (fun arg -> Acc.used ~denv arg acc) (Apply.args apply);
+    (match Apply.callee apply with
+    | None -> ()
+    | Some callee -> Acc.used ~denv callee acc);
+    Acc.alias_dep ~denv exn_arg (Simple.name denv.le_monde_exterieur) acc;
+    List.iter
+      (fun param ->
+        Acc.alias_dep ~denv param (Simple.name denv.le_monde_exterieur) acc)
+      (match return_args with None -> [] | Some l -> l);
+    match Apply.call_kind apply with
+    | Function _ -> ()
+    | Method { obj; kind = _; alloc_mode = _ } -> Acc.used ~denv obj acc
+    | C_call _ -> ()
+    | Effect (Perform { eff }) -> Acc.used ~denv eff acc
+    | Effect (Reperform { eff; cont; last_fiber }) ->
+      Acc.used ~denv eff acc;
+      Acc.used ~denv cont acc;
+      Acc.used ~denv last_fiber acc
+    | Effect (Run_stack { stack; f; arg }) ->
+      Acc.used ~denv stack acc;
+      Acc.used ~denv f acc;
+      Acc.used ~denv arg acc
+    | Effect (Resume { stack; f; arg; last_fiber }) ->
+      Acc.used ~denv stack acc;
+      Acc.used ~denv f acc;
+      Acc.used ~denv arg acc;
+      Acc.used ~denv last_fiber acc
+  in
+  traverse_call_kind denv acc apply ~exn_arg ~return_args ~default_acc;
+  let expr = Apply apply in
+  { expr; holed_expr = denv.parent }
+
 let rec traverse (denv : denv) (acc : acc) (expr : Expr.t) : rev_expr =
   match Expr.descr expr with
   | Let let_expr -> traverse_let denv acc let_expr
@@ -538,162 +694,6 @@ and traverse_cont_handler :
       let expr = traverse denv acc handler in
       let handler = { bound_parameters; expr; is_exn_handler; is_cold } in
       k handler acc)
-
-and traverse_apply denv acc apply : rev_expr =
-  let return_args =
-    match Apply.continuation apply with
-    | Never_returns -> None
-    | Return cont -> (
-      match Continuation.Map.find cont denv.conts with
-      | Normal params -> Some params)
-  in
-  let exn_arg =
-    let exn = Apply.exn_continuation apply in
-    let extra_args = Exn_continuation.extra_args exn in
-    let (Normal exn_params) =
-      Continuation.Map.find (Exn_continuation.exn_handler exn) denv.conts
-    in
-    match exn_params with
-    | [] -> assert false
-    | exn_param :: extra_params ->
-      List.iter2
-        (fun param (arg, _kind) -> Acc.alias_dep ~denv param arg acc)
-        extra_params extra_args;
-      exn_param
-  in
-  let default_acc acc =
-    (* CR ncourant: track regions properly *)
-    List.iter (fun arg -> Acc.used ~denv arg acc) (Apply.args apply);
-    (match Apply.callee apply with
-    | None -> ()
-    | Some callee -> Acc.used ~denv callee acc);
-    Acc.alias_dep ~denv exn_arg (Simple.name denv.le_monde_exterieur) acc;
-    List.iter
-      (fun param ->
-        Acc.alias_dep ~denv param (Simple.name denv.le_monde_exterieur) acc)
-      (match return_args with None -> [] | Some l -> l);
-    match Apply.call_kind apply with
-    | Function _ -> ()
-    | Method { obj; kind = _; alloc_mode = _ } -> Acc.used ~denv obj acc
-    | C_call _ -> ()
-    | Effect (Perform { eff }) -> Acc.used ~denv eff acc
-    | Effect (Reperform { eff; cont; last_fiber }) ->
-      Acc.used ~denv eff acc;
-      Acc.used ~denv cont acc;
-      Acc.used ~denv last_fiber acc
-    | Effect (Run_stack { stack; f; arg }) ->
-      Acc.used ~denv stack acc;
-      Acc.used ~denv f acc;
-      Acc.used ~denv arg acc
-    | Effect (Resume { stack; f; arg; last_fiber }) ->
-      Acc.used ~denv stack acc;
-      Acc.used ~denv f acc;
-      Acc.used ~denv arg acc;
-      Acc.used ~denv last_fiber acc
-  in
-  traverse_call_kind denv acc apply ~exn_arg ~return_args ~default_acc;
-  let expr = Apply apply in
-  { expr; holed_expr = denv.parent }
-
-and traverse_call_kind denv acc apply ~exn_arg ~return_args ~default_acc =
-  let calls_are_not_pure = Variable.create "not_pure" Flambda_kind.value in
-  Acc.used ~denv (Simple.var calls_are_not_pure) acc;
-  let add_call_widget (function_call : Call_kind.Function_call.t) =
-    let args, closure_entry_point =
-      match function_call with
-      | Indirect_unknown_arity ->
-        ( Flambda_arity.group_by_parameter (Apply.args_arity apply)
-            (Apply.args apply),
-          Global_flow_graph.Indirect_code_pointer )
-      | Indirect_known_arity | Direct _ ->
-        [Apply.args apply], Global_flow_graph.Direct_code_pointer
-    in
-    (* List.iter (fun arg -> Acc.used ~denv arg acc) (Apply.args apply); *)
-    let callee =
-      match Apply.callee apply with
-      | None -> assert false
-      | Some callee ->
-        Code_id_or_name.name (Acc.simple_to_name acc ~denv callee)
-    in
-    let rec add_deps callee args calls_are_not_pure =
-      match args with
-      | [] -> Misc.fatal_error "add_deps: no args"
-      | first :: rest -> (
-        List.iteri
-          (fun i arg ->
-            Graph.add_coaccessor_dep (Acc.graph acc)
-              ~to_:(Code_id_or_name.name (Acc.simple_to_name acc ~denv arg))
-              (Param (closure_entry_point, i))
-              ~base:callee)
-          first;
-        Graph.add_accessor_dep (Acc.graph acc)
-          ~to_:(Code_id_or_name.var calls_are_not_pure)
-          Code_of_closure ~base:callee;
-        Graph.add_accessor_dep (Acc.graph acc)
-          ~to_:(Code_id_or_name.var exn_arg)
-          (Apply (closure_entry_point, Exn))
-          ~base:callee;
-        match rest with
-        | [] -> (
-          match return_args with
-          | None -> ()
-          | Some return_args ->
-            List.iteri
-              (fun i return_arg ->
-                Graph.add_accessor_dep (Acc.graph acc)
-                  ~to_:(Code_id_or_name.var return_arg)
-                  (Apply (closure_entry_point, Normal i))
-                  ~base:callee)
-              return_args)
-        | _ :: _ ->
-          let v = Variable.create "partial_apply" Flambda_kind.value in
-          Graph.add_accessor_dep (Acc.graph acc) ~to_:(Code_id_or_name.var v)
-            (Apply (closure_entry_point, Normal 0))
-            ~base:callee;
-          let calls_are_not_pure =
-            Variable.create "not_pure" Flambda_kind.value
-          in
-          Acc.used ~denv (Simple.var calls_are_not_pure) acc;
-          add_deps (Code_id_or_name.var v) rest calls_are_not_pure)
-    in
-    add_deps callee args calls_are_not_pure
-  in
-  match Apply.call_kind apply with
-  | Function { function_call = Direct code_id as function_call; _ } ->
-    (* CR ncourant: think about cross-module propagation *)
-    (* if Compilation_unit.is_current (Code_id.get_compilation_unit code_id)
-       then ( let apply_dep = { Traverse_acc.function_containing_apply_expr =
-       denv.current_code_id; apply_code_id = code_id; apply_args = Apply.args
-       apply; apply_closure = Apply.callee apply; params_of_apply_return_cont =
-       return_args; param_of_apply_exn_cont = exn_arg; not_pure_call_witness =
-       calls_are_not_pure } in Acc.add_apply apply_dep acc; if Option.is_some
-       (Apply.callee apply) then add_call_widget function_call) else default_acc
-       acc *)
-    if Option.is_some (Apply.callee apply) then add_call_widget function_call;
-    if Compilation_unit.is_current (Code_id.get_compilation_unit code_id)
-       && (Option.is_none (Apply.callee apply)
-          || denv.should_preserve_direct_calls)
-    then
-      let apply_dep =
-        { Traverse_acc.function_containing_apply_expr = denv.current_code_id;
-          apply_code_id = code_id;
-          apply_args = Apply.args apply;
-          apply_closure = Apply.callee apply;
-          params_of_apply_return_cont = return_args;
-          param_of_apply_exn_cont = exn_arg;
-          not_pure_call_witness = calls_are_not_pure
-        }
-      in
-      Acc.add_apply apply_dep acc
-    else if Option.is_none (Apply.callee apply)
-    then default_acc acc
-  | Function
-      { function_call =
-          (Indirect_unknown_arity | Indirect_known_arity) as function_call;
-        _
-      } ->
-    add_call_widget function_call
-  | Method _ | C_call _ | Effect _ -> default_acc acc
 
 and traverse_apply_cont denv acc apply_cont : rev_expr =
   let expr = Apply_cont apply_cont in
