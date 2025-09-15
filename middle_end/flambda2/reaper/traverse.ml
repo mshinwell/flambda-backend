@@ -201,9 +201,9 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
           ~base:block)
   | Unary (Block_load { kind; mut; field }, block) -> (
     (* Loads from mutable blocks are also tracked here. This is ok because
-       stores automatically escape the block. CR ncourant: think about whether
-       we can make stores only escape the corresponding fields of the block
-       instead of the whole block. *)
+       stores automatically escape the block. *)
+    (* CR ncourant: think about whether we can make stores only escape the
+       corresponding fields of the block instead of the whole block. *)
     let kind = Flambda_primitive.Block_access_kind.element_kind_for_load kind in
     let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
     default_bp (fun to_ ->
