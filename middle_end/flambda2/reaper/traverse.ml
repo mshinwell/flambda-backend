@@ -663,6 +663,7 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group :
         | Immutable_value_array _ -> Flambda_kind.value
         | _ -> assert false
       in
+      let graph = Acc.graph acc in
       match[@ocaml.warning "-4"] static_const with
       | Block (_, _, _, fields) | Immutable_value_array fields ->
         List.iteri
@@ -671,22 +672,17 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group :
             let field_name =
               Acc.simple_to_name acc ~denv (Simple.With_debuginfo.simple field)
             in
-            Graph.add_constructor_dep (Acc.graph acc)
-              ~base:(Code_id_or_name.name name)
+            Graph.add_constructor_dep_names graph ~base:name
               (Block (i, kind))
-              ~from:(Code_id_or_name.name field_name))
+              ~from:field_name)
           fields;
-        Graph.add_constructor_dep (Acc.graph acc)
-          ~base:(Code_id_or_name.name name)
-          Is_int
-          ~from:(Code_id_or_name.name denv.all_constants);
-        Graph.add_constructor_dep (Acc.graph acc)
-          ~base:(Code_id_or_name.name name)
-          Get_tag
-          ~from:(Code_id_or_name.name denv.all_constants)
+        Graph.add_constructor_dep_names graph ~base:name Is_int
+          ~from:denv.all_constants;
+        Graph.add_constructor_dep_names graph ~base:name Get_tag
+          ~from:denv.all_constants
       | Set_of_closures _ -> assert false
       | _ ->
-        Graph.add_alias (Acc.graph acc)
+        Graph.add_alias graph
           ~to_:(Code_id_or_name.name name)
           ~from:(Code_id_or_name.name denv.all_constants));
   (* Build the [rev_named] *)
