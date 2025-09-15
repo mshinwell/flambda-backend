@@ -13,7 +13,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-type result =
+type result = private
   { holed : Rev_expr.t;
     deps : Global_flow_graph.graph;
     kinds : Flambda_kind.t Name.Map.t;
