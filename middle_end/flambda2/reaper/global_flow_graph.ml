@@ -361,6 +361,12 @@ let add_constructor_dep t ~base relation ~from =
          [base; encode_field t relation; from]
          () t.constructor_rel
 
+let add_constructor_dep_names t ~base relation ~from =
+  add_constructor_dep t
+    ~base:(Code_id_or_name.name base)
+    relation
+    ~from:(Code_id_or_name.name from)
+
 let add_accessor_dep t ~to_ relation ~base =
   t.accessor_rel
     <- Accessor_rel.add_or_replace

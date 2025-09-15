@@ -130,31 +130,30 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
   Function_slot.Lmap.iter
     (fun function_slot name ->
       Acc.kind name Flambda_kind.value acc;
-      let code_id =
-        (Function_slot.Map.find function_slot funs
-          : Function_declarations.code_id_in_function_declaration)
-      in
-      match code_id with
+      match Function_slot.Map.find function_slot funs with
       | Deleted _ -> ()
       | Code_id { code_id; only_full_applications } ->
         Acc.add_set_of_closures_dep name code_id ~only_full_applications acc)
     names_and_function_slots;
   Function_slot.Lmap.iter
-    (fun _function_slot function_slot_name ->
+    (fun _function_slot function_name ->
+      let graph = Acc.graph acc in
+      (* Record dependencies of function slots on value slots and the contents
+         of such slots *)
       Value_slot.Map.iter
-        (fun value_slot simple ->
-          let name = Acc.simple_to_name acc ~denv simple in
-          Graph.add_constructor_dep (Acc.graph acc)
-            ~base:(Code_id_or_name.name function_slot_name)
-            (Value_slot value_slot)
-            ~from:(Code_id_or_name.name name))
+        (fun value_slot value_slot_contents ->
+          let value_slot_contents =
+            Acc.simple_to_name acc ~denv value_slot_contents
+          in
+          Graph.add_constructor_dep_names graph ~base:function_name
+            (Value_slot value_slot) ~from:value_slot_contents)
         (Set_of_closures.value_slots set_of_closures);
+      (* Record dependencies of function slots on each other, via the let-bound
+         names *)
       Function_slot.Lmap.iter
-        (fun function_slot name ->
-          Graph.add_constructor_dep (Acc.graph acc)
-            ~base:(Code_id_or_name.name function_slot_name)
-            (Function_slot function_slot)
-            ~from:(Code_id_or_name.name name))
+        (fun function_slot function_name' ->
+          Graph.add_constructor_dep_names graph ~base:function_name
+            (Function_slot function_slot) ~from:function_name')
         names_and_function_slots)
     names_and_function_slots
 

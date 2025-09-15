@@ -119,6 +119,9 @@ val add_propagate_dep :
 val add_constructor_dep :
   graph -> base:Code_id_or_name.t -> Field.t -> from:Code_id_or_name.t -> unit
 
+val add_constructor_dep_names :
+  graph -> base:Name.t -> Field.t -> from:Name.t -> unit
+
 val add_accessor_dep :
   graph -> to_:Code_id_or_name.t -> Field.t -> base:Code_id_or_name.t -> unit
 
