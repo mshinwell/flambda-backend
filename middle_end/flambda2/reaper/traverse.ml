@@ -434,6 +434,62 @@ and traverse_invalid denv _acc ~message =
   let expr = Invalid { message } in
   { expr; holed_expr = denv.parent }
 
+let traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
+  let bound_static =
+    match bound_pattern with
+    | Static b -> b
+    | Singleton _ | Set_of_closures _ -> assert false
+  in
+  Static_const_group.match_against_bound_static group bound_static ~init:()
+    ~code:(fun () -> prepare_code ~denv acc)
+    ~deleted_code:(fun _ _ -> ())
+    ~set_of_closures:(fun _ ~closure_symbols:_ _ -> ())
+    ~block_like:(fun _ _ _ -> ());
+  Static_const_group.match_against_bound_static group bound_static ~init:()
+    ~code:(fun () _code_id _code -> ())
+    ~deleted_code:(fun () _ -> ())
+    ~set_of_closures:(fun () ~closure_symbols set_of_closures ->
+      let names_and_function_slots =
+        Function_slot.Lmap.map Name.symbol closure_symbols
+      in
+      record_set_of_closures_deps denv names_and_function_slots set_of_closures
+        acc)
+    ~block_like:(fun () symbol static_const ->
+      let name = Name.symbol symbol in
+      let[@inline always] block_field_kind i =
+        match[@ocaml.warning "-4"] static_const with
+        | Block (_, _, shape, _) ->
+          Flambda_kind.Scannable_block_shape.element_kind shape i
+        | Immutable_value_array _ -> Flambda_kind.value
+        | _ -> assert false
+      in
+      match[@ocaml.warning "-4"] static_const with
+      | Block (_, _, _, fields) | Immutable_value_array fields ->
+        List.iteri
+          (fun i (field : Simple.With_debuginfo.t) ->
+            let kind = block_field_kind i in
+            let field_name =
+              Acc.simple_to_name acc ~denv (Simple.With_debuginfo.simple field)
+            in
+            Graph.add_constructor_dep (Acc.graph acc)
+              ~base:(Code_id_or_name.name name)
+              (Block (i, kind))
+              ~from:(Code_id_or_name.name field_name))
+          fields;
+        Graph.add_constructor_dep (Acc.graph acc)
+          ~base:(Code_id_or_name.name name)
+          Is_int
+          ~from:(Code_id_or_name.name denv.all_constants);
+        Graph.add_constructor_dep (Acc.graph acc)
+          ~base:(Code_id_or_name.name name)
+          Get_tag
+          ~from:(Code_id_or_name.name denv.all_constants)
+      | Set_of_closures _ -> assert false
+      | _ ->
+        Graph.add_alias (Acc.graph acc)
+          ~to_:(Code_id_or_name.name name)
+          ~from:(Code_id_or_name.name denv.all_constants))
+
 let rec traverse (denv : denv) (acc : acc) (expr : Expr.t) : rev_expr =
   match Expr.descr expr with
   | Let let_expr -> traverse_let denv acc let_expr
@@ -529,62 +585,6 @@ and traverse_let denv acc let_expr : rev_expr =
       all_constants = denv.all_constants
     }
     acc body
-
-and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
-  let bound_static =
-    match bound_pattern with
-    | Static b -> b
-    | Singleton _ | Set_of_closures _ -> assert false
-  in
-  Static_const_group.match_against_bound_static group bound_static ~init:()
-    ~code:(fun () -> prepare_code ~denv acc)
-    ~deleted_code:(fun _ _ -> ())
-    ~set_of_closures:(fun _ ~closure_symbols:_ _ -> ())
-    ~block_like:(fun _ _ _ -> ());
-  Static_const_group.match_against_bound_static group bound_static ~init:()
-    ~code:(fun () _code_id _code -> ())
-    ~deleted_code:(fun () _ -> ())
-    ~set_of_closures:(fun () ~closure_symbols set_of_closures ->
-      let names_and_function_slots =
-        Function_slot.Lmap.map Name.symbol closure_symbols
-      in
-      record_set_of_closures_deps denv names_and_function_slots set_of_closures
-        acc)
-    ~block_like:(fun () symbol static_const ->
-      let name = Name.symbol symbol in
-      let[@inline always] block_field_kind i =
-        match[@ocaml.warning "-4"] static_const with
-        | Block (_, _, shape, _) ->
-          Flambda_kind.Scannable_block_shape.element_kind shape i
-        | Immutable_value_array _ -> Flambda_kind.value
-        | _ -> assert false
-      in
-      match[@ocaml.warning "-4"] static_const with
-      | Block (_, _, _, fields) | Immutable_value_array fields ->
-        List.iteri
-          (fun i (field : Simple.With_debuginfo.t) ->
-            let kind = block_field_kind i in
-            let field_name =
-              Acc.simple_to_name acc ~denv (Simple.With_debuginfo.simple field)
-            in
-            Graph.add_constructor_dep (Acc.graph acc)
-              ~base:(Code_id_or_name.name name)
-              (Block (i, kind))
-              ~from:(Code_id_or_name.name field_name))
-          fields;
-        Graph.add_constructor_dep (Acc.graph acc)
-          ~base:(Code_id_or_name.name name)
-          Is_int
-          ~from:(Code_id_or_name.name denv.all_constants);
-        Graph.add_constructor_dep (Acc.graph acc)
-          ~base:(Code_id_or_name.name name)
-          Get_tag
-          ~from:(Code_id_or_name.name denv.all_constants)
-      | Set_of_closures _ -> assert false
-      | _ ->
-        Graph.add_alias (Acc.graph acc)
-          ~to_:(Code_id_or_name.name name)
-          ~from:(Code_id_or_name.name denv.all_constants))
 
 and traverse_let_cont denv acc (let_cont : Let_cont.t) : rev_expr =
   match let_cont with
