@@ -242,8 +242,14 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
           ~to_);
     default acc
 
+let make_rev_set_of_closures set_of_closures : rev_set_of_closures =
+  let function_decls = Set_of_closures.function_decls set_of_closures in
+  let value_slots = Set_of_closures.value_slots set_of_closures in
+  let alloc_mode = Set_of_closures.alloc_mode set_of_closures in
+  { function_decls; value_slots; alloc_mode }
+
 let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
-    set_of_closures =
+    set_of_closures : rev_named =
   let names_and_function_slots =
     let bound_vars =
       match bound_pattern with
@@ -261,7 +267,8 @@ let traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
          (Function_slot.Lmap.keys funs)
          bound_vars)
   in
-  record_set_of_closures_deps denv names_and_function_slots set_of_closures acc
+  record_set_of_closures_deps denv names_and_function_slots set_of_closures acc;
+  Set_of_closures (make_rev_set_of_closures set_of_closures)
 
 let traverse_call_kind denv acc apply ~exn_arg ~return_args ~default_acc =
   let calls_are_not_pure = Variable.create "not_pure" Flambda_kind.value in
@@ -466,58 +473,26 @@ and traverse_let denv acc let_expr : rev_expr =
       ~init:()
       (Named.free_names defining_expr)
   in
-  (match defining_expr with
-  | Set_of_closures set_of_closures ->
-    traverse_set_of_closures denv acc ~bound_pattern set_of_closures
-  | Static_consts group -> traverse_static_consts denv acc ~bound_pattern group
-  | Prim (prim, _dbg) ->
-    traverse_prim denv acc ~bound_pattern prim ~default ~default_bp
-  | Simple s ->
-    Acc.alias_kind
-      (Name.var (Bound_var.var (Bound_pattern.must_be_singleton bound_pattern)))
-      s acc;
-    let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv s) in
-    default_bp (fun to_ -> Graph.add_alias (Acc.graph acc) ~to_ ~from:name)
-  | Rec_info _ -> default acc);
-  let make_set_of_closures set_of_closures =
-    let function_decls = Set_of_closures.function_decls set_of_closures in
-    let value_slots = Set_of_closures.value_slots set_of_closures in
-    let alloc_mode = Set_of_closures.alloc_mode set_of_closures in
-    { function_decls; value_slots; alloc_mode }
-  in
   let named : rev_named =
     match defining_expr with
     | Set_of_closures set_of_closures ->
-      Set_of_closures (make_set_of_closures set_of_closures)
+      traverse_set_of_closures denv acc ~bound_pattern set_of_closures
     | Static_consts group ->
-      let bound_static =
-        match bound_pattern with
-        | Static b -> b
-        | Singleton _ | Set_of_closures _ -> assert false
-      in
-      let rev_group =
-        Static_const_group.match_against_bound_static group bound_static
-          ~init:[]
-          ~code:(fun rev_group code_id code ->
-            let code =
-              traverse_code acc code_id code
-                ~le_monde_exterieur:denv.le_monde_exterieur
-                ~all_constants:denv.all_constants
-            in
-            Code code :: rev_group)
-          ~deleted_code:(fun rev_group _ -> Deleted_code :: rev_group)
-          ~set_of_closures:(fun rev_group ~closure_symbols:_ set_of_closures ->
-            Static_const
-              (Set_of_closures (make_set_of_closures set_of_closures))
-            :: rev_group)
-          ~block_like:(fun rev_group _symbol static_const ->
-            Static_const (Other static_const) :: rev_group)
-      in
-      let group = List.rev rev_group in
-      Static_consts group
-    | Prim _ -> Named defining_expr
-    | Simple _ -> Named defining_expr
-    | Rec_info _ as defining_expr -> Named defining_expr
+      traverse_static_consts denv acc ~bound_pattern group
+    | Prim (prim, _dbg) ->
+      traverse_prim denv acc ~bound_pattern prim ~default ~default_bp;
+      Named defining_expr
+    | Simple s ->
+      Acc.alias_kind
+        (Name.var
+           (Bound_var.var (Bound_pattern.must_be_singleton bound_pattern)))
+        s acc;
+      let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv s) in
+      default_bp (fun to_ -> Graph.add_alias (Acc.graph acc) ~to_ ~from:name);
+      Named defining_expr
+    | Rec_info _ ->
+      default acc;
+      Named defining_expr
   in
   let let_acc =
     Let { bound_pattern; defining_expr = named; parent = denv.parent }
@@ -658,7 +633,8 @@ and traverse_cont_handler :
       let handler = { bound_parameters; expr; is_exn_handler; is_cold } in
       k handler acc)
 
-and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
+and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group :
+    rev_named =
   let bound_static =
     match bound_pattern with
     | Static b -> b
@@ -712,10 +688,30 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group =
       | _ ->
         Graph.add_alias (Acc.graph acc)
           ~to_:(Code_id_or_name.name name)
-          ~from:(Code_id_or_name.name denv.all_constants))
+          ~from:(Code_id_or_name.name denv.all_constants));
+  (* Build the [rev_named] *)
+  let rev_group =
+    Static_const_group.match_against_bound_static group bound_static ~init:[]
+      ~code:(fun rev_group code_id code ->
+        (* CR mshinwell: see if it's possible to combine [prepare_code] and
+           [traverse_code] now *)
+        let code = traverse_code acc code_id code denv in
+        Code code :: rev_group)
+      ~deleted_code:(fun rev_group _ -> Deleted_code :: rev_group)
+      ~set_of_closures:(fun rev_group ~closure_symbols:_ set_of_closures ->
+        Static_const
+          (Set_of_closures (make_rev_set_of_closures set_of_closures))
+        :: rev_group)
+      ~block_like:(fun rev_group _symbol static_const ->
+        Static_const (Other static_const) :: rev_group)
+  in
+  let group = List.rev rev_group in
+  Static_consts group
 
 and traverse_code (acc : acc) (code_id : Code_id.t) (code : Code.t)
-    ~le_monde_exterieur ~all_constants : rev_code =
+    (denv : denv) : rev_code =
+  let le_monde_exterieur = denv.le_monde_exterieur in
+  let all_constants = denv.all_constants in
   let params_and_body = Code.params_and_body code in
   Function_params_and_body.pattern_match params_and_body
     ~f:(fun
