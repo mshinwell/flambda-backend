@@ -158,6 +158,88 @@ let record_set_of_closures_deps denv names_and_function_slots set_of_closures
         names_and_function_slots)
     names_and_function_slots
 
+let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
+    ~(default_bp : (Code_id_or_name.t -> unit) -> unit) =
+  let () =
+    let kind = Flambda_primitive.result_kind' prim in
+    let name =
+      Name.var (Bound_var.var (Bound_pattern.must_be_singleton bound_pattern))
+    in
+    Acc.kind name kind acc
+  in
+  match[@ocaml.warning "-4"] prim with
+  | Variadic (Make_block (block_kind, _mutability, _), fields) ->
+    let _tag, block_shape = Flambda_primitive.Block_kind.to_shape block_kind in
+    List.iteri
+      (fun i field ->
+        let kind = Flambda_kind.Block_shape.element_kind block_shape i in
+        let name = Acc.simple_to_name acc ~denv field in
+        default_bp (fun base ->
+            Graph.add_constructor_dep (Acc.graph acc) ~base
+              (Block (i, kind))
+              ~from:(Code_id_or_name.name name)))
+      fields;
+    default_bp (fun base ->
+        Graph.add_constructor_dep (Acc.graph acc) ~base Is_int
+          ~from:(Code_id_or_name.name denv.all_constants);
+        Graph.add_constructor_dep (Acc.graph acc) ~base Get_tag
+          ~from:(Code_id_or_name.name denv.all_constants))
+  | Unary (Opaque_identity { middle_end_only = true; _ }, arg)
+    when reaper_test_opaque ->
+    (* XXX TO REMOVE !!! *)
+    let arg = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
+    default_bp (fun to_ -> Graph.add_alias (Acc.graph acc) ~to_ ~from:arg)
+  | Unary (Project_function_slot { move_from = _; move_to }, block) ->
+    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
+    default_bp (fun to_ ->
+        Graph.add_accessor_dep (Acc.graph acc) ~to_ (Function_slot move_to)
+          ~base:block)
+  | Unary (Project_value_slot { project_from = _; value_slot }, block) ->
+    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
+    default_bp (fun to_ ->
+        Graph.add_accessor_dep (Acc.graph acc) ~to_ (Value_slot value_slot)
+          ~base:block)
+  | Unary (Block_load { kind; mut; field }, block) -> (
+    (* Loads from mutable blocks are also tracked here. This is ok because
+       stores automatically escape the block. CR ncourant: think about whether
+       we can make stores only escape the corresponding fields of the block
+       instead of the whole block. *)
+    let kind = Flambda_primitive.Block_access_kind.element_kind_for_load kind in
+    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
+    default_bp (fun to_ ->
+        Graph.add_accessor_dep (Acc.graph acc) ~to_
+          (Block (Target_ocaml_int.to_int field, kind))
+          ~base:block);
+    match mut with
+    | Immutable | Immutable_unique -> ()
+    | Mutable ->
+      default_bp (fun to_ ->
+          Graph.add_alias (Acc.graph acc) ~to_
+            ~from:(Code_id_or_name.name denv.le_monde_exterieur)))
+  | Unary (Is_int { variant_only = true }, arg) ->
+    let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
+    default_bp (fun to_ ->
+        Graph.add_accessor_dep (Acc.graph acc) ~to_ Is_int ~base:name)
+  | Unary (Get_tag, arg) ->
+    let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
+    default_bp (fun to_ ->
+        Graph.add_accessor_dep (Acc.graph acc) ~to_ Get_tag ~base:name)
+  | prim ->
+    let () =
+      match Flambda_primitive.effects_and_coeffects prim with
+      | Arbitrary_effects, _, _ ->
+        let bound_to = Bound_pattern.free_names bound_pattern in
+        Name_occurrences.fold_names bound_to
+          ~f:(fun () bound_to -> Acc.used ~denv (Simple.name bound_to) acc)
+          ~init:()
+      | _ -> ()
+    in
+    default_bp (fun to_ ->
+        Graph.add_use_dep (Acc.graph acc)
+          ~from:(Code_id_or_name.name denv.le_monde_exterieur)
+          ~to_);
+    default acc
+
 let rec traverse (denv : denv) (acc : acc) (expr : Expr.t) : rev_expr =
   match Expr.descr expr with
   | Let let_expr -> traverse_let denv acc let_expr
@@ -253,88 +335,6 @@ and traverse_let denv acc let_expr : rev_expr =
       all_constants = denv.all_constants
     }
     acc body
-
-and traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
-    ~(default_bp : (Code_id_or_name.t -> unit) -> unit) =
-  let () =
-    let kind = Flambda_primitive.result_kind' prim in
-    let name =
-      Name.var (Bound_var.var (Bound_pattern.must_be_singleton bound_pattern))
-    in
-    Acc.kind name kind acc
-  in
-  match[@ocaml.warning "-4"] prim with
-  | Variadic (Make_block (block_kind, _mutability, _), fields) ->
-    let _tag, block_shape = Flambda_primitive.Block_kind.to_shape block_kind in
-    List.iteri
-      (fun i field ->
-        let kind = Flambda_kind.Block_shape.element_kind block_shape i in
-        let name = Acc.simple_to_name acc ~denv field in
-        default_bp (fun base ->
-            Graph.add_constructor_dep (Acc.graph acc) ~base
-              (Block (i, kind))
-              ~from:(Code_id_or_name.name name)))
-      fields;
-    default_bp (fun base ->
-        Graph.add_constructor_dep (Acc.graph acc) ~base Is_int
-          ~from:(Code_id_or_name.name denv.all_constants);
-        Graph.add_constructor_dep (Acc.graph acc) ~base Get_tag
-          ~from:(Code_id_or_name.name denv.all_constants))
-  | Unary (Opaque_identity { middle_end_only = true; _ }, arg)
-    when reaper_test_opaque ->
-    (* XXX TO REMOVE !!! *)
-    let arg = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
-    default_bp (fun to_ -> Graph.add_alias (Acc.graph acc) ~to_ ~from:arg)
-  | Unary (Project_function_slot { move_from = _; move_to }, block) ->
-    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
-    default_bp (fun to_ ->
-        Graph.add_accessor_dep (Acc.graph acc) ~to_ (Function_slot move_to)
-          ~base:block)
-  | Unary (Project_value_slot { project_from = _; value_slot }, block) ->
-    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
-    default_bp (fun to_ ->
-        Graph.add_accessor_dep (Acc.graph acc) ~to_ (Value_slot value_slot)
-          ~base:block)
-  | Unary (Block_load { kind; mut; field }, block) -> (
-    (* Loads from mutable blocks are also tracked here. This is ok because
-       stores automatically escape the block. CR ncourant: think about whether
-       we can make stores only escape the corresponding fields of the block
-       instead of the whole block. *)
-    let kind = Flambda_primitive.Block_access_kind.element_kind_for_load kind in
-    let block = Code_id_or_name.name (Acc.simple_to_name acc ~denv block) in
-    default_bp (fun to_ ->
-        Graph.add_accessor_dep (Acc.graph acc) ~to_
-          (Block (Target_ocaml_int.to_int field, kind))
-          ~base:block);
-    match mut with
-    | Immutable | Immutable_unique -> ()
-    | Mutable ->
-      default_bp (fun to_ ->
-          Graph.add_alias (Acc.graph acc) ~to_
-            ~from:(Code_id_or_name.name denv.le_monde_exterieur)))
-  | Unary (Is_int { variant_only = true }, arg) ->
-    let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
-    default_bp (fun to_ ->
-        Graph.add_accessor_dep (Acc.graph acc) ~to_ Is_int ~base:name)
-  | Unary (Get_tag, arg) ->
-    let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
-    default_bp (fun to_ ->
-        Graph.add_accessor_dep (Acc.graph acc) ~to_ Get_tag ~base:name)
-  | prim ->
-    let () =
-      match Flambda_primitive.effects_and_coeffects prim with
-      | Arbitrary_effects, _, _ ->
-        let bound_to = Bound_pattern.free_names bound_pattern in
-        Name_occurrences.fold_names bound_to
-          ~f:(fun () bound_to -> Acc.used ~denv (Simple.name bound_to) acc)
-          ~init:()
-      | _ -> ()
-    in
-    default_bp (fun to_ ->
-        Graph.add_use_dep (Acc.graph acc)
-          ~from:(Code_id_or_name.name denv.le_monde_exterieur)
-          ~to_);
-    default acc
 
 and traverse_set_of_closures denv acc ~(bound_pattern : Bound_pattern.t)
     set_of_closures =
