@@ -666,14 +666,21 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group :
     ~block_like:(fun () symbol static_const ->
       let name = Name.symbol symbol in
       let[@inline always] block_field_kind i =
-        match[@ocaml.warning "-4"] static_const with
+        match static_const with
         | Block (_, _, shape, _) ->
           Flambda_kind.Scannable_block_shape.element_kind shape i
         | Immutable_value_array _ -> Flambda_kind.value
-        | _ -> assert false
+        | Set_of_closures _ | Boxed_float32 _ | Boxed_float _ | Boxed_int32 _
+        | Boxed_int64 _ | Boxed_nativeint _ | Boxed_vec128 _ | Boxed_vec256 _
+        | Boxed_vec512 _ | Immutable_float_block _ | Immutable_float_array _
+        | Immutable_float32_array _ | Immutable_int32_array _
+        | Immutable_int64_array _ | Immutable_nativeint_array _
+        | Immutable_vec128_array _ | Immutable_vec256_array _
+        | Immutable_vec512_array _ | Empty_array _ | Mutable_string _
+        | Immutable_string _ -> assert false
       in
       let graph = Acc.graph acc in
-      match[@ocaml.warning "-4"] static_const with
+      match static_const with
       | Block (_, _, _, fields) | Immutable_value_array fields ->
         List.iteri
           (fun i (field : Simple.With_debuginfo.t) ->
@@ -690,7 +697,14 @@ and traverse_static_consts denv acc ~(bound_pattern : Bound_pattern.t) group :
         Graph.add_constructor_dep_names graph ~base:name Get_tag
           ~from:denv.all_constants
       | Set_of_closures _ -> assert false
-      | _ ->
+      | Boxed_float32 _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+      | Boxed_nativeint _ | Boxed_vec128 _ | Boxed_vec256 _ | Boxed_vec512 _
+      | Immutable_float_block _ | Immutable_float_array _
+      | Immutable_float32_array _ | Immutable_int32_array _
+      | Immutable_int64_array _ | Immutable_nativeint_array _
+      | Immutable_vec128_array _ | Immutable_vec256_array _
+      | Immutable_vec512_array _ | Empty_array _ | Mutable_string _
+      | Immutable_string _ ->
         Graph.add_alias graph
           ~to_:(Code_id_or_name.name name)
           ~from:(Code_id_or_name.name denv.all_constants));
