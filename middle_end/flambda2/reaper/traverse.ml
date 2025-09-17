@@ -166,7 +166,7 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
     in
     Acc.kind name kind acc
   in
-  match[@ocaml.warning "-4"] prim with
+  match prim with
   | Variadic (Make_block (block_kind, _mutability, _), fields) ->
     let _tag, block_shape = Flambda_primitive.Block_kind.to_shape block_kind in
     List.iteri
@@ -223,7 +223,16 @@ let traverse_prim denv acc ~bound_pattern (prim : Flambda_primitive.t) ~default
     let name = Code_id_or_name.name (Acc.simple_to_name acc ~denv arg) in
     default_bp (fun to_ ->
         Graph.add_accessor_dep (Acc.graph acc) ~to_ Get_tag ~base:name)
-  | prim ->
+  | Nullary _
+  | Unary ((Duplicate_block _ | Duplicate_array _ | Is_int { variant_only = false }
+           | Is_null | Array_length _ | Bigarray_length _ | String_length _
+           | Int_as_pointer _ | Opaque_identity _ | Get_header | Obj_dup
+           | Boolean_not | Int_arith _ | Float_arith _ | Num_conv _
+           | Reinterpret_64_bit_word _ | Unbox_number _ | Box_number _
+           | Untag_immediate | Tag_immediate | Is_boxed_float | Is_flat_float_array
+           | End_region _ | End_try_region _ | Peek _ | Make_lazy _), _)
+  | Binary _ | Ternary _ | Quaternary _
+  | Variadic ((Begin_region _ | Begin_try_region _ | Make_array _), _) ->
     let () =
       match Flambda_primitive.effects_and_coeffects prim with
       | Arbitrary_effects, (No_coeffects | Has_coeffects), (Delay | Strict) ->
