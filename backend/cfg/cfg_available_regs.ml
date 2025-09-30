@@ -289,23 +289,78 @@ module Transfer = struct
                      found in [avail_before]. In that case we shouldn't
                      propagate anything. *)
                   None
-                | arg_reg ->
-                  if Option.is_some (RD.debug_info arg_reg)
+                | arg_reg_with_info ->
+                  if Option.is_some (RD.debug_info arg_reg_with_info)
                   then
                     Some
                       (RD.create_copying_debug_info ~reg:result_reg
-                         ~debug_info_from:arg_reg)
+                         ~debug_info_from:arg_reg_with_info)
                   else None)
               instr.arg instr.res
           in
           let avail_across = RD.Set.diff avail_before made_unavailable in
+          (* For non-same-location moves, remove source registers with debug info
+             that are in hard registers (not stack), since hard registers can be
+             reused. Stack slots are never reused, so we keep those. *)
+          let avail_after_removing_moved_sources =
+            if move_to_same_location
+            then avail_across
+            else
+              Array.fold_left
+                (fun acc arg_reg ->
+                  match RD.Set.find_reg_exn avail_across arg_reg with
+                  | exception Not_found -> acc
+                  | arg_with_info ->
+                    if Option.is_some (RD.debug_info arg_with_info)
+                       && not (RD.assigned_to_stack arg_with_info)
+                    then RD.Set.remove arg_with_info acc
+                    else acc)
+                avail_across instr.arg
+          in
           let avail_after =
             Array.fold_left
               (fun avail_after reg_opt ->
                 match reg_opt with
                 | None -> avail_after
-                | Some reg -> RD.Set.add reg avail_after)
-              avail_across results
+                | Some new_reg ->
+                  (* When adding a register with debug info, check if another
+                     register with the same debug info already exists in the set.
+                     If so, prefer stack registers over hard registers. *)
+                  match RD.debug_info new_reg with
+                  | None -> RD.Set.add new_reg avail_after
+                  | Some new_debug_info ->
+                    let same_var_different_loc =
+                      RD.Set.filter
+                        (fun existing ->
+                          match RD.debug_info existing with
+                          | None -> false
+                          | Some existing_debug_info ->
+                            V.same
+                              (RD.Debug_info.holds_value_of new_debug_info)
+                              (RD.Debug_info.holds_value_of existing_debug_info)
+                            && RD.Debug_info.part_of_value new_debug_info
+                               = RD.Debug_info.part_of_value existing_debug_info)
+                        avail_after
+                    in
+                    if RD.Set.is_empty same_var_different_loc
+                    then RD.Set.add new_reg avail_after
+                    else
+                      let existing = RD.Set.choose same_var_different_loc in
+                      (* Prefer stack registers over hard registers *)
+                      let keep_new = RD.assigned_to_stack new_reg in
+                      let keep_existing = RD.assigned_to_stack existing in
+                      match keep_new, keep_existing with
+                      | true, false ->
+                        (* New is stack, existing is not - replace *)
+                        RD.Set.add new_reg (RD.Set.remove existing avail_after)
+                      | false, true ->
+                        (* Existing is stack, new is not - keep existing *)
+                        avail_after
+                      | _, _ ->
+                        (* Both stack or both non-stack - add new one anyway,
+                           but remove old one first to avoid duplicates *)
+                        RD.Set.add new_reg (RD.Set.remove existing avail_after))
+              avail_after_removing_moved_sources results
           in
           Some (ok avail_across), ok avail_after
         | Op
