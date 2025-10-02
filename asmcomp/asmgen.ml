@@ -424,8 +424,8 @@ let compile_cfg ppf_dump ~funcnames fd_cmm cfg_with_layout =
           ~stack_slots:(fun x ->
             (Cfg_with_layout.cfg x).Cfg.fun_num_stack_slots)
           ~f:Cfg_available_regs.run)
-  ++ pass_dump_cfg_if ppf_dump (ref true)
-      "After cfg_available_regs"
+  ++ pass_dump_cfg_if ppf_dump Oxcaml_flags.dump_cfg
+        "After cfg_available_regs"
   ++ Profile.record ~accumulate:true "cfg_to_linear" Cfg_to_linear.run
 
 let compile_via_llvm ~ppf_dump ~funcnames cfg_with_layout =
