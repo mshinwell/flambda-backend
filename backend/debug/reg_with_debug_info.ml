@@ -178,6 +178,20 @@ module Set = struct
     match elements (filter (fun t -> Reg.same_loc t.reg reg) t) with
     | [] -> raise Not_found
     | reg::_ -> reg
+
+  let print_el ppf t =
+    let print_reg = Printreg.reg in
+    match t.debug_info with
+    | None -> Format.fprintf ppf "%a" print_reg t.reg
+    | Some debug_info ->
+      Format.fprintf ppf "%a(%a)" print_reg t.reg Debug_info.print debug_info
+
+  let print ppf t =
+    Format.pp_print_list
+      ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
+      print_el
+      ppf
+      (elements t)
 end
 
 let print ~print_reg ppf t =

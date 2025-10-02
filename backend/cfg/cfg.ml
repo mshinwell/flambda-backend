@@ -400,8 +400,8 @@ let print_basic' ?print_reg ppf (instruction : basic instruction) =
       dbg = Debuginfo.none;
       fdo = None;
       live = Reg.Set.empty;
-      available_before = None;
-      available_across = None
+      available_before = instruction.available_before;
+      available_across = instruction.available_across
     }
   in
   Printlinear.instr' ?print_reg ppf instruction

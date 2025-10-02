@@ -83,6 +83,8 @@ module Map_distinguishing_names_and_locations : Map.S with type key = t
 module Set : sig
   include Set.S with type elt = t
 
+  val print : Format.formatter -> t -> unit
+
   val of_array : reg_with_debug_info array -> t
 
   val mem_reg : t -> Reg.t -> bool

@@ -414,6 +414,7 @@ let simplify_lets lam =
   let optimize =
     !Clflags.native_code || Clflags.is_flambda2 () || not !Clflags.debug
   in
+  let optimize' = not !Clflags.debug in
 
   (* First pass: count the occurrences of all let-bound identifiers *)
 
@@ -638,7 +639,7 @@ let simplify_lets lam =
   | Llet(Alias, kind, v, duid, l1, l2) ->
       begin match count_var v with
         0 -> simplif l2
-      | 1 when optimize -> Hashtbl.add subst v (simplif l1); simplif l2
+      | 1 when optimize' -> Hashtbl.add subst v (simplif l1); simplif l2
       | _ -> Llet(Alias, kind, v, duid, simplif l1, simplif l2)
       end
   | Llet(StrictOpt, kind, v, duid, l1, l2) ->

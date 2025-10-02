@@ -90,13 +90,11 @@ module Domain = struct
     | Some left_ras, Some right_ras ->
       { avail_before = Some (RAS.inter left_ras right_ras) }
 
-  let less_equal { avail_before = left_avail } { avail_before = right_avail } :
-      bool =
-    match left_avail, right_avail with
-    | None, None -> true
-    | None, Some _ -> true
-    | Some _, None -> false
-    | Some left_ras, Some right_ras -> RAS.subset right_ras left_ras
+  let less_equal x y =
+    match join y x with
+    | { avail_before = joined } ->
+      let { avail_before = y } = y in
+      Option.equal RAS.equal joined y
 end
 
 (* [Transfer] calculates, given the registers "available before" an instruction
@@ -260,6 +258,7 @@ module Transfer = struct
              given hard register holds the value of multiple pseudoregisters
              (all of which have the same value). This makes us match up properly
              with [Cfg_liveness]. *)
+          Format.eprintf "Instruction: %a\n%!" Cfg.print_basic instr;
           let move_to_same_location =
             let move_to_same_location = ref true in
             for i = 0 to Array.length instr.arg - 1 do
@@ -272,6 +271,7 @@ module Transfer = struct
             done;
             !move_to_same_location
           in
+          Format.eprintf "...move_to_same_location %b\n%!" move_to_same_location;
           let made_unavailable =
             if move_to_same_location
             then RD.Set.empty
@@ -279,6 +279,7 @@ module Transfer = struct
               RD.Set.made_unavailable_by_clobber avail_before
                 ~regs_clobbered:instr.res
           in
+          Format.eprintf "...made_unavailable %a\n%!" RD.Set.print made_unavailable;
           let results =
             Array.map2
               (fun arg_reg result_reg ->
@@ -299,8 +300,16 @@ module Transfer = struct
                          ~debug_info_from:arg_reg)
                   else None)
               instr.arg instr.res
-          in
+          in 
+          Format.eprintf "...results (%a)\n%!"
+            (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
+               (fun ppf reg_opt ->
+                  Misc.Stdlib.Option.print (RD.print ~print_reg:Printreg.reg) ppf reg_opt
+               ))
+            (Array.to_list results);
           let avail_across = RD.Set.diff avail_before made_unavailable in
+          Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+          Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_across;
           let avail_after =
             Array.fold_left
               (fun avail_after reg_opt ->
@@ -309,6 +318,7 @@ module Transfer = struct
                 | Some reg -> RD.Set.add reg avail_after)
               avail_across results
           in
+          Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
           Some (ok avail_across), ok avail_after
         | Op
             ( Const_int _ | Const_float32 _ | Const_float _ | Const_symbol _
