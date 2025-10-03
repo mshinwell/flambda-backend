@@ -145,10 +145,14 @@ module Set = struct
       (* ~init:*) empty
 
   let mem_reg t (reg : Reg.t) = exists (fun t -> Reg.same t.reg reg) t
-  let mem_reg_by_loc t (reg : Reg.t) = exists (fun t -> Reg.same_loc t.reg reg) t
+
+  let mem_reg_by_loc t (reg : Reg.t) =
+    exists (fun t -> Reg.same_loc t.reg reg) t
 
   let filter_reg t (reg : Reg.t) = filter (fun t -> not (Reg.same t.reg reg)) t
-  let filter_reg_by_loc t (reg : Reg.t) = filter (fun t -> not (Reg.same_loc t.reg reg)) t
+
+  let filter_reg_by_loc t (reg : Reg.t) =
+    filter (fun t -> not (Reg.same_loc t.reg reg)) t
 
   (* CR-someday mshinwell: Well, it looks like we should have used a map.
      mshinwell: Also see @chambart's suggestion on GPR#856. *)
@@ -181,7 +185,7 @@ module Order_distinguishing_names_and_locations = struct
 
   let compare t1 t2 =
     match t1.debug_info, t2.debug_info with
-    | None, None -> 0
+    | None, None -> Stdlib.compare t1.reg.loc t2.reg.loc
     | None, Some _ -> -1
     | Some _, None -> 1
     | Some di1, Some di2 ->
@@ -199,8 +203,7 @@ module Set_distinguishing_names_and_locations = struct
 
   let to_set (t : t) : Set.t = fold Set.add t Set.empty
 
-  let mem_reg_by_loc t (r : Reg.t) =
-    exists (fun t -> Reg.same_loc t.reg r) t
+  let mem_reg_by_loc t (r : Reg.t) = exists (fun t -> Reg.same_loc t.reg r) t
 
   let filter_reg_by_loc t (r : Reg.t) =
     filter (fun t -> not (Reg.same_loc t.reg r)) t
