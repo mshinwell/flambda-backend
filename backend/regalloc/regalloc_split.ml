@@ -254,6 +254,46 @@ let insert_after_skipping_name_for_debugger cell instr =
   let insertion_cell = find_insertion_point cell in
   DLL.insert_after insertion_cell instr
 
+(* Add spill at beginning of block, skipping over Name_for_debugger instructions *)
+let add_begin_skipping_name_for_debugger list instr =
+  match DLL.hd_cell list with
+  | None -> DLL.add_begin list instr
+  | Some cell ->
+    let rec find_insertion_point curr_cell =
+      match DLL.next curr_cell with
+      | None -> curr_cell
+      | Some next_cell -> (
+        let next_instr : Cfg.basic Cfg.instruction = DLL.value next_cell in
+        match next_instr.desc with
+        | Op (Name_for_debugger _) -> find_insertion_point next_cell
+        | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _
+        | Stack_check _
+        | Op
+            ( Move | Spill | Reload | Opaque | Begin_region | End_region
+            | Dls_get | Poll | Pause | Const_int _ | Const_float32 _
+            | Const_float _ | Const_symbol _ | Const_vec128 _ | Const_vec256 _
+            | Const_vec512 _ | Stackoffset _ | Load _ | Store (_, _, _)
+            | Intop _ | Intop_imm (_, _) | Intop_atomic _ | Floatop (_, _)
+            | Csel _ | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _
+            | Specific _ | Alloc _ ) ->
+          curr_cell)
+    in
+    let first_instr : Cfg.basic Cfg.instruction = DLL.value cell in
+    match first_instr.desc with
+    | Op (Name_for_debugger _) ->
+      let insertion_cell = find_insertion_point cell in
+      DLL.insert_after insertion_cell instr
+    | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _
+    | Stack_check _
+    | Op
+        ( Move | Spill | Reload | Opaque | Begin_region | End_region | Dls_get
+        | Poll | Pause | Const_int _ | Const_float32 _ | Const_float _
+        | Const_symbol _ | Const_vec128 _ | Const_vec256 _ | Const_vec512 _
+        | Stackoffset _ | Load _ | Store (_, _, _) | Intop _ | Intop_imm (_, _)
+        | Intop_atomic _ | Floatop (_, _) | Csel _ | Reinterpret_cast _
+        | Static_cast _ | Probe_is_enabled _ | Specific _ | Alloc _ ) ->
+      DLL.add_begin list instr
+
 (* Inserts the spills in a block, as early as possible (i.e. immediately after
    the register is last set), to reduce live ranges. *)
 let insert_spills_in_block :
@@ -279,12 +319,10 @@ let insert_spills_in_block :
       (match DLL.hd block.body with
       | None -> dummy_instr_of_terminator block.terminator
       | Some hd -> hd)
-    ~add_default:DLL.add_begin ~move_cell:DLL.prev ~block_subst ~stack_subst
-    block cell live_at_destruction_point
+    ~add_default:add_begin_skipping_name_for_debugger ~move_cell:DLL.prev
+    ~block_subst ~stack_subst block cell live_at_destruction_point
 
 (* Inserts spills in all blocks. *)
-(* CR mshinwell: Add special handling for [Iname_for_debugger] (see
-   [Spill.add_spills]). *)
 let insert_spills :
     State.t -> Cfg_with_infos.t -> Substitution.map -> Substitution.t =
  fun state cfg_with_infos substs ->
