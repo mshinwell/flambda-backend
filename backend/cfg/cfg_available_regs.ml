@@ -504,8 +504,8 @@ let run : Cfg_with_layout.t -> Cfg_with_layout.t =
     | Error () ->
       Misc.fatal_errorf "Cfg_available_regs.run: dataflow analysis failed"
     | Ok (_ : Domain.t Label.Tbl.t) ->
-      if String.equal fun_name
+(*      if String.equal fun_name
            "camlAsync_kernel__Scheduler1__run_jobs_216_418_code"
-      then Cfg_with_layout.save_as_dot cfg_with_layout "avail";
+      then Cfg_with_layout.save_as_dot cfg_with_layout "avail"; *)
       ());
   cfg_with_layout
