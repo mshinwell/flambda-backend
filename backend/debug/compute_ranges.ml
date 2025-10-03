@@ -253,6 +253,14 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
       KS.diff available_across
         (KS.union known_available_after_prev_insn available_before)
     in
+    (* 1(c) [key] is in [S.available_before insn] but it is not in
+       [S.available_across insn]. A new range is created with the starting
+       position being the first machine instruction of [insn] and the ending
+       position being the next machine address after that.
+
+       1(d) [key] is in [S.available_before insn] and it is also in
+       [S.available_across insn]. A new range is created with the starting
+       position being the first machine instruction of [insn] and left open. *)
     let case_1c =
       KS.diff available_before
         (KS.union known_available_after_prev_insn available_across)

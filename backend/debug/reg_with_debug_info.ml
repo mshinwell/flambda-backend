@@ -199,6 +199,7 @@ let _compare_stack_location sl1 sl2 =
 
 let _compare_location (loc1 : Reg.location) (loc2 : Reg.location) =
   match loc1, loc2 with
+  (* XXX this should never see Unknown *)
   | Reg.Unknown, Reg.Unknown -> 0
   | Reg.Reg r1, Reg.Reg r2 -> Int.compare r1 r2
   | Reg.Stack sl1, Reg.Stack sl2 -> _compare_stack_location sl1 sl2
