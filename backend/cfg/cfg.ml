@@ -408,8 +408,38 @@ let print_basic' ?print_reg ppf (instruction : basic instruction) =
 
 let print_basic ppf i = print_basic' ppf i
 
-let print_terminator' ?print_reg ppf (ti : terminator instruction) =
-  dump_terminator' ?print_reg ~res:ti.res ~args:ti.arg ~sep:"\n" ppf ti.desc
+let print_terminator' ?(print_reg = Printreg.reg) ppf
+    (ti : terminator instruction) =
+  (if !Oxcaml_flags.davail
+  then
+    let module RAS = Reg_availability_set in
+    let ras_is_nonempty (set : RAS.t) =
+      match set with
+      | Ok set -> not (Reg_with_debug_info.Set.is_empty set)
+      | Unreachable -> true
+    in
+    if (match ti.available_before with
+       | None -> false
+       | Some available_before -> ras_is_nonempty available_before)
+       ||
+       match ti.available_across with
+       | None -> false
+       | Some available_across -> ras_is_nonempty available_across
+    then
+      if Option.equal RAS.equal ti.available_before ti.available_across
+      then
+        Format.fprintf ppf "@[<1>AB=AA={%a}@]@,"
+          (Misc.Stdlib.Option.print (RAS.print ~print_reg))
+          ti.available_before
+      else (
+        Format.fprintf ppf "@[<1>AB={%a}"
+          (Misc.Stdlib.Option.print (RAS.print ~print_reg))
+          ti.available_before;
+        Format.fprintf ppf ",AA={%a}"
+          (Misc.Stdlib.Option.print (RAS.print ~print_reg))
+          ti.available_across;
+        Format.fprintf ppf "@]@,"));
+  dump_terminator' ~print_reg ~res:ti.res ~args:ti.arg ~sep:"\n" ppf ti.desc
 
 let print_terminator ppf ti = print_terminator' ppf ti
 
