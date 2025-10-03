@@ -5,6 +5,7 @@ module DLL = Oxcaml_utils.Doubly_linked_list
 module R = Reg
 module RAS = Reg_availability_set
 module RD = Reg_with_debug_info
+module RD_Set = Reg_with_debug_info.Set_distinguishing_names_and_locations
 (*module V = Backend_var*)
 
 (* If permitted to do so by the command line flags, this pass will extend live
@@ -158,11 +159,11 @@ module Transfer = struct
 
   let unreachable = RAS.Unreachable
 
-  let ok set = RAS.of_rd_set set
+  let ok set = RAS.Ok set
 
   let[@inline] common :
       type a.
-      avail_before:RD.Set.t ->
+      avail_before:RD_Set.t ->
       destroyed_at:(a -> Reg.t array) ->
       is_interesting_constructor:(a -> bool) ->
       is_end_region:(a -> bool) ->
@@ -176,7 +177,7 @@ module Transfer = struct
        the operation writing out its results. *)
     let made_unavailable_1 =
       let regs_clobbered = Array.append (destroyed_at instr.desc) instr.res in
-      RD.Set.made_unavailable_by_clobber avail_before ~regs_clobbered
+      RD_Set.made_unavailable_by_clobber avail_before ~regs_clobbered
     in
     (* Second: the cases of (a) allocations, (b) other polling points, (c) OCaml
        to OCaml function calls and (d) end-region operations. In these cases,
@@ -189,7 +190,7 @@ module Transfer = struct
     let made_unavailable_2 =
       match is_interesting_constructor instr.desc with
       | true ->
-        RD.Set.filter
+        RD_Set.filter
           (fun reg ->
             let holds_immediate = RD.holds_non_pointer reg in
             let on_stack = RD.assigned_to_stack reg in
@@ -208,29 +209,29 @@ module Transfer = struct
                || (not (extend_live ()))
                || is_end_region instr.desc
                || (not (RD.assigned_to_stack reg))
-               || RD.Set.mem reg made_unavailable_1
+               || RD_Set.mem reg made_unavailable_1
                || reg_is_of_type_addr
             then not remains_available
             else (
               instr.live <- Reg.Set.add (RD.reg reg) instr.live;
               false))
           avail_before
-      | false -> RD.Set.empty
+      | false -> RD_Set.empty
     in
-    let made_unavailable = RD.Set.union made_unavailable_1 made_unavailable_2 in
-    let avail_across = RD.Set.diff avail_before made_unavailable in
+    let made_unavailable = RD_Set.union made_unavailable_1 made_unavailable_2 in
+    let avail_across = RD_Set.diff avail_before made_unavailable in
     let avail_after =
       (* If a result register will never be named, we can forget about it for
          the purposes of this analysis. *)
       let res = Reg.inter_set_array !all_regs_that_might_be_named instr.res in
-      RD.Set.union (RD.Set.without_debug_info res) avail_across
+      RD_Set.union (RD_Set.without_debug_info res) avail_across
     in
     if !Clflags.verbose
-    then Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+    then Format.eprintf "...avail_before %a\n%!" RD_Set.print avail_before;
     if !Clflags.verbose
-    then Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_across;
+    then Format.eprintf "...avail_across %a\n%!" RD_Set.print avail_across;
     if !Clflags.verbose
-    then Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
+    then Format.eprintf "...avail_after %a\n%!" RD_Set.print avail_after;
     Some (ok avail_across), ok avail_after
 
   let basic ({ avail_before } : domain) (instr : Cfg.basic Cfg.instruction) () :
@@ -245,9 +246,9 @@ module Transfer = struct
     if !Dwarf_flags.ddebug_invariants
     then check_invariants instr ~print_instr:Cfg.print_basic ~avail_before;
     let avail_across, avail_after =
-      match RAS.to_rd_set avail_before with
-      | None -> None, unreachable
-      | Some avail_before -> (
+      match avail_before with
+      | Unreachable -> None, unreachable
+      | Ok avail_before -> (
         match instr.desc with
         | Op
             (Name_for_debugger
@@ -285,25 +286,25 @@ module Transfer = struct
             if RD.Set.mem_reg forgetting_ident reg
                then
             *)
-            if RD.Set.mem_reg_by_loc avail_before reg
+            if RD_Set.mem_reg_by_loc avail_before reg
             then
               let regd =
                 RD.create ~reg ~holds_value_of:ident ~part_of_value
                   ~num_parts_of_value ~which_parameter ~provenance
               in
               avail_after
-                := RD.Set.add regd (RD.Set.filter_reg_by_loc !avail_after reg)
+                := RD_Set.add regd (RD_Set.filter_reg_by_loc !avail_after reg)
           done;
           if !Clflags.verbose
           then Format.eprintf "...ident = %a\n%!" Ident.print_with_scope ident;
           if !Clflags.verbose
           then Format.eprintf "...regd = %a\n%!" Ident.print_with_scope ident;
           if !Clflags.verbose
-          then Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+          then Format.eprintf "...avail_before %a\n%!" RD_Set.print avail_before;
           if !Clflags.verbose
-          then Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_before;
+          then Format.eprintf "...avail_across %a\n%!" RD_Set.print avail_before;
           if !Clflags.verbose
-          then Format.eprintf "...avail_after %a\n%!" RD.Set.print !avail_after;
+          then Format.eprintf "...avail_after %a\n%!" RD_Set.print !avail_after;
           Some (ok avail_before), ok !avail_after
         | Op (Move | Reload | Spill) ->
           (* Moves are special: they enable us to propagate names. No-op moves
@@ -329,14 +330,14 @@ module Transfer = struct
               move_to_same_location;
           let made_unavailable =
             if move_to_same_location
-            then RD.Set.empty
+            then RD_Set.empty
             else
-              RD.Set.made_unavailable_by_clobber avail_before
+              RD_Set.made_unavailable_by_clobber avail_before
                 ~regs_clobbered:instr.res
           in
           if !Clflags.verbose
           then
-            Format.eprintf "...made_unavailable %a\n%!" RD.Set.print
+            Format.eprintf "...made_unavailable %a\n%!" RD_Set.print
               made_unavailable;
           let results =
             Array.map2
@@ -349,7 +350,7 @@ module Transfer = struct
                    [avail_before]). All that we need here, though, is the debug
                    info from any register with the same location. *)
                 match
-                  RD.Set.find_reg_with_same_location_exn avail_before arg_reg
+                  RD_Set.find_reg_with_same_location_exn avail_before arg_reg
                 with
                 | exception Not_found -> None
                 | arg_reg ->
@@ -371,21 +372,21 @@ module Transfer = struct
                      (RD.print ~print_reg:Printreg.reg)
                      ppf reg_opt))
               (Array.to_list results);
-          let avail_across = RD.Set.diff avail_before made_unavailable in
+          let avail_across = RD_Set.diff avail_before made_unavailable in
           if !Clflags.verbose
-          then Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+          then Format.eprintf "...avail_before %a\n%!" RD_Set.print avail_before;
           if !Clflags.verbose
-          then Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_across;
+          then Format.eprintf "...avail_across %a\n%!" RD_Set.print avail_across;
           let avail_after =
             Array.fold_left
               (fun avail_after reg_opt ->
                 match reg_opt with
                 | None -> avail_after
-                | Some reg -> RD.Set.add reg avail_after)
+                | Some reg -> RD_Set.add reg avail_after)
               avail_across results
           in
           if !Clflags.verbose
-          then Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
+          then Format.eprintf "...avail_after %a\n%!" RD_Set.print avail_after;
           Some (ok avail_across), ok avail_after
         | Op
             ( Const_int _ | Const_float32 _ | Const_float _ | Const_symbol _
@@ -416,9 +417,9 @@ module Transfer = struct
     if !Dwarf_flags.ddebug_invariants
     then check_invariants term ~print_instr:Cfg.print_terminator ~avail_before;
     let avail_across, avail_after =
-      match RAS.to_rd_set avail_before with
-      | None -> None, unreachable
-      | Some avail_before -> (
+      match avail_before with
+      | Unreachable -> None, unreachable
+      | Ok avail_before -> (
         match term.desc with
         | Never -> assert false
         | Tailcall_self _ ->
@@ -443,14 +444,14 @@ module Transfer = struct
     in
     term.available_across <- avail_across;
     let avail_before_handler =
-      match RAS.to_rd_set avail_after with
-      | None -> unreachable
-      | Some avail_at_raise ->
+      match avail_after with
+      | Unreachable -> unreachable
+      | Ok avail_at_raise ->
         let without_exn_bucket =
-          RD.Set.filter_reg avail_at_raise Proc.loc_exn_bucket
+          RD_Set.filter_reg_by_loc avail_at_raise Proc.loc_exn_bucket
         in
         let with_anonymous_exn_bucket =
-          RD.Set.add
+          RD_Set.add
             (RD.create_without_debug_info ~reg:Proc.loc_exn_bucket)
             without_exn_bucket
         in
@@ -497,7 +498,7 @@ let run : Cfg_with_layout.t -> Cfg_with_layout.t =
     let fun_args = R.set_of_array cfg.fun_args in
     let fun_name = Cfg.fun_name cfg in
     if !Clflags.verbose then Format.eprintf "Function %s\n%!" fun_name;
-    let avail_before = RAS.of_rd_set (RD.Set.without_debug_info fun_args) in
+    let avail_before = RAS.Ok (RD_Set.without_debug_info fun_args) in
     all_regs_that_might_be_named := compute_all_regs_that_might_be_named cfg;
     let init : Domain.t = { Domain.avail_before = Some avail_before } in
     match Analysis.run cfg ~init ~handlers_are_entry_points:false () with

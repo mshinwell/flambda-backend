@@ -112,6 +112,18 @@ module Set_distinguishing_names_and_locations : sig
   val of_set : Set.t -> t
 
   val to_set : t -> Set.t
+
+  val mem_reg_by_loc : t -> Reg.t -> bool
+
+  val filter_reg_by_loc : t -> Reg.t -> t
+
+  val without_debug_info : Reg.Set.t -> t
+
+  val made_unavailable_by_clobber : t -> regs_clobbered:Reg.t array -> t
+
+  val print : Format.formatter -> t -> unit
+
+  val find_reg_with_same_location_exn : t -> Reg.t -> elt
 end
 
 module Map_distinguishing_names_and_locations : Map.S with type key = t

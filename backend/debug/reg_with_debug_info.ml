@@ -198,6 +198,37 @@ module Set_distinguishing_names_and_locations = struct
   let of_set (s : Set.t) : t = Set.fold add s empty
 
   let to_set (t : t) : Set.t = fold Set.add t Set.empty
+
+  let mem_reg_by_loc t (r : Reg.t) =
+    exists (fun t -> Reg.same_loc t.reg r) t
+
+  let filter_reg_by_loc t (r : Reg.t) =
+    filter (fun t -> not (Reg.same_loc t.reg r)) t
+
+  let without_debug_info regs =
+    Reg.Set.fold
+      (fun reg acc -> add (create_without_debug_info ~reg) acc)
+      regs empty
+
+  let made_unavailable_by_clobber t ~regs_clobbered =
+    Reg.Set.fold
+      (fun reg acc ->
+        let made_unavailable =
+          filter (fun reg' -> regs_at_same_location reg'.reg reg) t
+        in
+        union made_unavailable acc)
+      (Reg.set_of_array regs_clobbered)
+      empty
+
+  let print ppf t =
+    Format.pp_print_list
+      ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
+      Set.print_el ppf (elements t)
+
+  let find_reg_with_same_location_exn t (r : Reg.t) =
+    match elements (filter (fun t -> Reg.same_loc t.reg r) t) with
+    | [] -> raise Not_found
+    | reg :: _ -> reg
 end
 
 module Map_distinguishing_names_and_locations =
