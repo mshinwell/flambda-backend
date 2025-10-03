@@ -45,7 +45,7 @@ let inter t1 t2 =
     let result =
       RD.Set.fold
         (fun reg1 result ->
-          match RD.Set.find_reg_exn avail2 (RD.reg reg1) with
+          match RD.Set.find_reg_with_same_location_exn avail2 (RD.reg reg1) with
           | exception Not_found -> result
           | reg2 ->
             let debug_info1 = RD.debug_info reg1 in
