@@ -230,6 +230,30 @@ let rec insert_spills_or_reloads_in_block :
         ~occur_check ~insert ~copy_default ~add_default ~move_cell ~block_subst
         ~stack_subst block cell live_at_interesting_point)
 
+(* Skip over any Name_for_debugger instructions when inserting spills *)
+let insert_after_skipping_name_for_debugger cell instr =
+  let rec find_insertion_point curr_cell =
+    match DLL.next curr_cell with
+    | None -> curr_cell
+    | Some next_cell -> (
+      let next_instr : Cfg.basic Cfg.instruction = DLL.value next_cell in
+      match next_instr.desc with
+      | Op (Name_for_debugger _) -> find_insertion_point next_cell
+      | Reloadretaddr | Prologue | Epilogue | Pushtrap _ | Poptrap _
+      | Stack_check _
+      | Op
+          ( Move | Spill | Reload | Opaque | Begin_region | End_region | Dls_get
+          | Poll | Pause | Const_int _ | Const_float32 _ | Const_float _
+          | Const_symbol _ | Const_vec128 _ | Const_vec256 _ | Const_vec512 _
+          | Stackoffset _ | Load _ | Store (_, _, _) | Intop _
+          | Intop_imm (_, _) | Intop_atomic _ | Floatop (_, _) | Csel _
+          | Reinterpret_cast _ | Static_cast _ | Probe_is_enabled _ | Specific _
+          | Alloc _ ) ->
+        curr_cell)
+  in
+  let insertion_cell = find_insertion_point cell in
+  DLL.insert_after insertion_cell instr
+
 (* Inserts the spills in a block, as early as possible (i.e. immediately after
    the register is last set), to reduce live ranges. *)
 let insert_spills_in_block :
@@ -250,7 +274,7 @@ let insert_spills_in_block :
          explicitly set, but also if it is destroyed by the instruction. *)
       occurs_array instr.res reg
       || occurs_array (Proc.destroyed_at_basic instr.desc) reg)
-    ~insert:DLL.insert_after
+    ~insert:insert_after_skipping_name_for_debugger
     ~copy_default:
       (match DLL.hd block.body with
       | None -> dummy_instr_of_terminator block.terminator
