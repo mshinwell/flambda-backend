@@ -76,10 +76,6 @@ val assigned_to_stack : t -> bool
 
 val clear_debug_info : t -> t
 
-module Set_distinguishing_names_and_locations : Set.S with type elt = t
-
-module Map_distinguishing_names_and_locations : Map.S with type key = t
-
 module Set : sig
   include Set.S with type elt = t
 
@@ -107,6 +103,18 @@ module Set : sig
       registers.) *)
   val made_unavailable_by_clobber : t -> regs_clobbered:Reg.t array -> t
 end
+
+module Set_distinguishing_names_and_locations : sig
+  include Stdlib.Set.S with type elt = t
+
+  val forget_debug_info : t -> Reg.Set.t
+
+  val of_set : Set.t -> t
+
+  val to_set : t -> Set.t
+end
+
+module Map_distinguishing_names_and_locations : Map.S with type key = t
 
 val print :
   print_reg:(Format.formatter -> Reg.t -> unit) -> Format.formatter -> t -> unit

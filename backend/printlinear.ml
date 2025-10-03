@@ -54,7 +54,9 @@ let instr' ?(print_reg = Printreg.reg) ppf i =
     let module RAS = Reg_availability_set in
     let ras_is_nonempty (set : RAS.t) =
       match set with
-      | Ok set -> not (Reg_with_debug_info.Set.is_empty set)
+      | Ok set ->
+        not (Reg_with_debug_info.Set_distinguishing_names_and_locations.is_empty
+               set)
       | Unreachable -> true
     in
     if (match i.available_before with

@@ -121,24 +121,6 @@ let debug_info t = t.debug_info
 
 let clear_debug_info t = { t with debug_info = None }
 
-module Order_distinguishing_names_and_locations = struct
-  type nonrec t = t
-
-  let compare t1 t2 =
-    match t1.debug_info, t2.debug_info with
-    | None, None -> 0
-    | None, Some _ -> -1
-    | Some _, None -> 1
-    | Some di1, Some di2 ->
-      let c = V.compare di1.holds_value_of di2.holds_value_of in
-      if c <> 0 then c else Stdlib.compare t1.reg.loc t2.reg.loc
-end
-
-module Set_distinguishing_names_and_locations =
-  Set.Make (Order_distinguishing_names_and_locations)
-module Map_distinguishing_names_and_locations =
-  Map.Make (Order_distinguishing_names_and_locations)
-
 module Set = struct
   include Set.Make (T)
 
@@ -193,6 +175,33 @@ module Set = struct
       ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
       print_el ppf (elements t)
 end
+
+module Order_distinguishing_names_and_locations = struct
+  type nonrec t = t
+
+  let compare t1 t2 =
+    match t1.debug_info, t2.debug_info with
+    | None, None -> 0
+    | None, Some _ -> -1
+    | Some _, None -> 1
+    | Some di1, Some di2 ->
+      let c = V.compare di1.holds_value_of di2.holds_value_of in
+      if c <> 0 then c else Stdlib.compare t1.reg.loc t2.reg.loc
+end
+
+module Set_distinguishing_names_and_locations = struct
+  include Stdlib.Set.Make (Order_distinguishing_names_and_locations)
+
+  let forget_debug_info t =
+    fold (fun t acc -> Reg.Set.add (reg t) acc) t Reg.Set.empty
+
+  let of_set (s : Set.t) : t = Set.fold add s empty
+
+  let to_set (t : t) : Set.t = fold Set.add t Set.empty
+end
+
+module Map_distinguishing_names_and_locations =
+  Map.Make (Order_distinguishing_names_and_locations)
 
 let print ~print_reg ppf t =
   match t.debug_info with

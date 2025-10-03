@@ -44,7 +44,9 @@ let make_instr desc arg res dbg =
     ls_order = 0;
     (* CR mshinwell/xclerc: should this be [None]? *)
     available_before =
-      Some (Reg_availability_set.Ok Reg_with_debug_info.Set.empty);
+      Some
+        (Reg_availability_set.Ok
+           Reg_with_debug_info.Set_distinguishing_names_and_locations.empty);
     available_across = None
   }
 

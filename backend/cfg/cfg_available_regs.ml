@@ -34,7 +34,10 @@ let check_invariants :
     (* Every register that is live across an instruction should also be
        available before the instruction. *)
     let live = R.Set.inter instr.live !all_regs_that_might_be_named in
-    if not (R.Set.subset live (RD.Set.forget_debug_info avail_before))
+    if not
+         (R.Set.subset live
+            (RD.Set_distinguishing_names_and_locations.forget_debug_info
+               avail_before))
     then
       Misc.fatal_errorf
         "Named live registers not a subset of available registers: live={%a}  \
@@ -42,11 +45,15 @@ let check_invariants :
         Printreg.regset live
         (RAS.print ~print_reg:Printreg.reg)
         (RAS.Ok avail_before) Printreg.regset
-        (R.Set.diff live (RD.Set.forget_debug_info avail_before))
+        (R.Set.diff live
+           (RD.Set_distinguishing_names_and_locations.forget_debug_info
+              avail_before))
         print_instr instr;
     (* Every register that is an input to an instruction should be available. *)
     let args = R.inter_set_array !all_regs_that_might_be_named instr.arg in
-    let avail_before_fdi = RD.Set.forget_debug_info avail_before in
+    let avail_before_fdi =
+      RD.Set_distinguishing_names_and_locations.forget_debug_info avail_before
+    in
     if not (R.Set.subset args avail_before_fdi)
     then
       Misc.fatal_errorf
@@ -151,7 +158,7 @@ module Transfer = struct
 
   let unreachable = RAS.Unreachable
 
-  let ok set = RAS.Ok set
+  let ok set = RAS.of_rd_set set
 
   let[@inline] common :
       type a.
@@ -238,9 +245,9 @@ module Transfer = struct
     if !Dwarf_flags.ddebug_invariants
     then check_invariants instr ~print_instr:Cfg.print_basic ~avail_before;
     let avail_across, avail_after =
-      match avail_before with
-      | Unreachable -> None, unreachable
-      | Ok avail_before -> (
+      match RAS.to_rd_set avail_before with
+      | None -> None, unreachable
+      | Some avail_before -> (
         match instr.desc with
         | Op
             (Name_for_debugger
@@ -409,9 +416,9 @@ module Transfer = struct
     if !Dwarf_flags.ddebug_invariants
     then check_invariants term ~print_instr:Cfg.print_terminator ~avail_before;
     let avail_across, avail_after =
-      match avail_before with
-      | Unreachable -> None, unreachable
-      | Ok avail_before -> (
+      match RAS.to_rd_set avail_before with
+      | None -> None, unreachable
+      | Some avail_before -> (
         match term.desc with
         | Never -> assert false
         | Tailcall_self _ ->
@@ -436,9 +443,9 @@ module Transfer = struct
     in
     term.available_across <- avail_across;
     let avail_before_handler =
-      match avail_after with
-      | Unreachable -> unreachable
-      | Ok avail_at_raise ->
+      match RAS.to_rd_set avail_after with
+      | None -> unreachable
+      | Some avail_at_raise ->
         let without_exn_bucket =
           RD.Set.filter_reg avail_at_raise Proc.loc_exn_bucket
         in
@@ -490,7 +497,7 @@ let run : Cfg_with_layout.t -> Cfg_with_layout.t =
     let fun_args = R.set_of_array cfg.fun_args in
     let fun_name = Cfg.fun_name cfg in
     if !Clflags.verbose then Format.eprintf "Function %s\n%!" fun_name;
-    let avail_before = RAS.Ok (RD.Set.without_debug_info fun_args) in
+    let avail_before = RAS.of_rd_set (RD.Set.without_debug_info fun_args) in
     all_regs_that_might_be_named := compute_all_regs_that_might_be_named cfg;
     let init : Domain.t = { Domain.avail_before = Some avail_before } in
     match Analysis.run cfg ~init ~handlers_are_entry_points:false () with

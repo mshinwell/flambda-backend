@@ -21,7 +21,7 @@ module Key = struct
 
   type key = t
 
-  module Raw_set = Reg_with_debug_info.Set
+  module Raw_set = Reg_with_debug_info.Set_distinguishing_names_and_locations
 
   module Set = struct
     include Reg_availability_set
