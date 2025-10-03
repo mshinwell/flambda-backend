@@ -32,9 +32,14 @@ module Debug_info = struct
     if c <> 0
     then c
     else
-      Stdlib.compare
-        (t1.part_of_value, t1.num_parts_of_value, t1.which_parameter)
-        (t2.part_of_value, t2.num_parts_of_value, t2.which_parameter)
+      let c = Int.compare t1.part_of_value t2.part_of_value in
+      if c <> 0
+      then c
+      else
+        let c = Int.compare t1.num_parts_of_value t2.num_parts_of_value in
+        if c <> 0
+        then c
+        else Option.compare Int.compare t1.which_parameter t2.which_parameter
 
   let holds_value_of t = t.holds_value_of
 
@@ -180,17 +185,37 @@ module Set = struct
       print_el ppf (elements t)
 end
 
+let compare_stack_location sl1 sl2 =
+  match sl1, sl2 with
+  | Reg.Local i1, Reg.Local i2 -> Int.compare i1 i2
+  | Reg.Incoming i1, Reg.Incoming i2 -> Int.compare i1 i2
+  | Reg.Outgoing i1, Reg.Outgoing i2 -> Int.compare i1 i2
+  | Reg.Domainstate i1, Reg.Domainstate i2 -> Int.compare i1 i2
+  | Reg.Local _, (Reg.Incoming _ | Reg.Outgoing _ | Reg.Domainstate _) -> -1
+  | Reg.Incoming _, (Reg.Local _ | Reg.Outgoing _ | Reg.Domainstate _) -> 1
+  | Reg.Outgoing _, (Reg.Local _ | Reg.Incoming _ | Reg.Domainstate _) -> 1
+  | Reg.Domainstate _, (Reg.Local _ | Reg.Incoming _ | Reg.Outgoing _) -> 1
+
+let compare_location (loc1 : Reg.location) (loc2 : Reg.location) =
+  match loc1, loc2 with
+  | Reg.Unknown, Reg.Unknown -> 0
+  | Reg.Reg r1, Reg.Reg r2 -> Int.compare r1 r2
+  | Reg.Stack sl1, Reg.Stack sl2 -> compare_stack_location sl1 sl2
+  | Reg.Unknown, (Reg.Reg _ | Reg.Stack _) -> -1
+  | Reg.Reg _, (Reg.Unknown | Reg.Stack _) -> 1
+  | Reg.Stack _, (Reg.Unknown | Reg.Reg _) -> 1
+
 module Order_distinguishing_names_and_locations = struct
   type nonrec t = t
 
   let compare t1 t2 =
     match t1.debug_info, t2.debug_info with
-    | None, None -> Stdlib.compare t1.reg.loc t2.reg.loc
+    | None, None -> compare_location t1.reg.loc t2.reg.loc
     | None, Some _ -> -1
     | Some _, None -> 1
     | Some di1, Some di2 ->
       let c = V.compare di1.holds_value_of di2.holds_value_of in
-      if c <> 0 then c else Stdlib.compare t1.reg.loc t2.reg.loc
+      if c <> 0 then c else compare_location t1.reg.loc t2.reg.loc
 end
 
 module Set_distinguishing_names_and_locations = struct
