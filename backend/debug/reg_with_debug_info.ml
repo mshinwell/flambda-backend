@@ -163,8 +163,10 @@ module Set = struct
       (* ~init:*) empty
 
   let mem_reg t (reg : Reg.t) = exists (fun t -> Reg.same t.reg reg) t
+  let mem_reg_by_loc t (reg : Reg.t) = exists (fun t -> Reg.same_loc t.reg reg) t
 
   let filter_reg t (reg : Reg.t) = filter (fun t -> not (Reg.same t.reg reg)) t
+  let filter_reg_by_loc t (reg : Reg.t) = filter (fun t -> not (Reg.same_loc t.reg reg)) t
 
   (* CR-someday mshinwell: Well, it looks like we should have used a map.
      mshinwell: Also see @chambart's suggestion on GPR#856. *)
