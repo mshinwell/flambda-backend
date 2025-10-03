@@ -40,6 +40,7 @@ module Debug_info = struct
         if c <> 0
         then c
         else Option.compare Int.compare t1.which_parameter t2.which_parameter
+               (* XXX should compare provenance *)
 
   let holds_value_of t = t.holds_value_of
 
@@ -185,7 +186,7 @@ module Set = struct
       print_el ppf (elements t)
 end
 
-let compare_stack_location sl1 sl2 =
+let _compare_stack_location sl1 sl2 =
   match sl1, sl2 with
   | Reg.Local i1, Reg.Local i2 -> Int.compare i1 i2
   | Reg.Incoming i1, Reg.Incoming i2 -> Int.compare i1 i2
@@ -196,19 +197,22 @@ let compare_stack_location sl1 sl2 =
   | Reg.Outgoing _, (Reg.Local _ | Reg.Incoming _ | Reg.Domainstate _) -> 1
   | Reg.Domainstate _, (Reg.Local _ | Reg.Incoming _ | Reg.Outgoing _) -> 1
 
-let compare_location (loc1 : Reg.location) (loc2 : Reg.location) =
+let _compare_location (loc1 : Reg.location) (loc2 : Reg.location) =
   match loc1, loc2 with
   | Reg.Unknown, Reg.Unknown -> 0
   | Reg.Reg r1, Reg.Reg r2 -> Int.compare r1 r2
-  | Reg.Stack sl1, Reg.Stack sl2 -> compare_stack_location sl1 sl2
+  | Reg.Stack sl1, Reg.Stack sl2 -> _compare_stack_location sl1 sl2
   | Reg.Unknown, (Reg.Reg _ | Reg.Stack _) -> -1
   | Reg.Reg _, (Reg.Unknown | Reg.Stack _) -> 1
   | Reg.Stack _, (Reg.Unknown | Reg.Reg _) -> 1
+
+let compare_location = Stdlib.compare
 
 module Order_distinguishing_names_and_locations = struct
   type nonrec t = t
 
   let compare t1 t2 =
+    let result =
     match t1.debug_info, t2.debug_info with
     | None, None -> compare_location t1.reg.loc t2.reg.loc
     | None, Some _ -> -1
@@ -216,6 +220,13 @@ module Order_distinguishing_names_and_locations = struct
     | Some di1, Some di2 ->
       let c = V.compare di1.holds_value_of di2.holds_value_of in
       if c <> 0 then c else compare_location t1.reg.loc t2.reg.loc
+    in
+    (*
+    Format.eprintf "compare %a and %a = %d\n%!"
+      (Set.print_el t1)
+      (Set.print_el t2)
+      result; *)
+    result
 end
 
 module Set_distinguishing_names_and_locations = struct

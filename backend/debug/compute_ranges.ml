@@ -295,6 +295,9 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
         case result
     in
     if !Oxcaml_flags.dranges
+    then Format.fprintf ppf_dump "union of known-avail-after and across:@ %a\n" KS.print
+           (KS.union known_available_after_prev_insn available_across);
+    if !Oxcaml_flags.dranges
     then Format.fprintf ppf_dump "1c:@ %a\n" KS.print case_1c;
     if !Oxcaml_flags.dranges
     then Format.fprintf ppf_dump "1d:@ %a\n" KS.print case_1d;
