@@ -81,20 +81,39 @@ module Domain = struct
 
   let bot = { avail_before = Some Unreachable }
 
+  let ras_print = RAS.print ~print_reg:Printreg.reg
+
+  let raso_print ppf x =
+    match x with
+    | None -> Format.fprintf ppf "None"
+    | Some ras -> ras_print ppf ras
+
   let join ({ avail_before = left_avail } as left)
       ({ avail_before = right_avail } as right) : t =
-    match left_avail, right_avail with
-    | None, None -> left
-    | None, Some _ -> right
-    | Some _, None -> left
-    | Some left_ras, Some right_ras ->
-      { avail_before = Some (RAS.inter left_ras right_ras) }
+    let res =
+      match left_avail, right_avail with
+      | None, None -> left
+      | None, Some _ -> right
+      | Some _, None -> left
+      | Some left_ras, Some right_ras ->
+          { avail_before = Some (RAS.inter left_ras right_ras) }
+    in
+    if !Clflags.verbose
+      then Format.eprintf "JOIN: %a\n%a\n->%a\n%!" raso_print left_avail raso_print right_avail
+          raso_print res.avail_before;
+    res
 
   let less_equal x y =
-    match join y x with
-    | { avail_before = joined } ->
-      let { avail_before = y } = y in
+    let res =
+      match join y x with
+      | { avail_before = joined } ->
+        let { avail_before = y } = y in
       Option.equal RAS.equal joined y
+    in
+    if !Clflags.verbose
+      then Format.eprintf "LESS_EQUAL: %a\n%a\n->%b\n%!"
+          raso_print x.avail_before  raso_print y.avail_before res;
+    res
 end
 
 (* [Transfer] calculates, given the registers "available before" an instruction
@@ -199,6 +218,12 @@ module Transfer = struct
       let res = Reg.inter_set_array !all_regs_that_might_be_named instr.res in
       RD.Set.union (RD.Set.without_debug_info res) avail_across
     in
+    if !Clflags.verbose
+    then Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+    if !Clflags.verbose
+    then Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_across;
+    if !Clflags.verbose
+    then Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
     Some (ok avail_across), ok avail_after
 
   let basic ({ avail_before } : domain) (instr : Cfg.basic Cfg.instruction) () :
@@ -236,6 +261,10 @@ module Transfer = struct
                     else reg)
                 avail_before
           in
+          if !Clflags.verbose
+          then Format.eprintf "...ident = %a\n%!" Ident.print_with_scope ident;
+          if !Clflags.verbose
+          then Format.eprintf "...is_assignment = %b\n%!" is_assignment;
           let avail_after = ref forgetting_ident in
           let num_parts_of_value = Array.length regs in
           (* Add debug info about [ident], but only for registers that are known
@@ -255,6 +284,14 @@ module Transfer = struct
               avail_after
                 := RD.Set.add regd (RD.Set.filter_reg !avail_after reg)
           done;
+          if !Clflags.verbose
+          then Format.eprintf "...regd = %a\n%!" Ident.print_with_scope ident;
+          if !Clflags.verbose
+          then Format.eprintf "...avail_before %a\n%!" RD.Set.print avail_before;
+          if !Clflags.verbose
+          then Format.eprintf "...avail_across %a\n%!" RD.Set.print avail_before;
+          if !Clflags.verbose
+          then Format.eprintf "...avail_after %a\n%!" RD.Set.print !avail_after;
           Some (ok avail_before), ok !avail_after
         | Op (Move | Reload | Spill) ->
           (* Moves are special: they enable us to propagate names. No-op moves
@@ -335,8 +372,8 @@ module Transfer = struct
                 | Some reg -> RD.Set.add reg avail_after)
               avail_across results
           in
-          if !Clflags.verbose then
-          Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
+          if !Clflags.verbose
+          then Format.eprintf "...avail_after %a\n%!" RD.Set.print avail_after;
           Some (ok avail_across), ok avail_after
         | Op
             ( Const_int _ | Const_float32 _ | Const_float _ | Const_symbol _
@@ -447,9 +484,7 @@ let run : Cfg_with_layout.t -> Cfg_with_layout.t =
     let cfg = Cfg_with_layout.cfg cfg_with_layout in
     let fun_args = R.set_of_array cfg.fun_args in
     let fun_name = Cfg.fun_name cfg in
-    if !Clflags.verbose
-    then
-      Format.eprintf "Function %s\n%!" fun_name;
+    if !Clflags.verbose then Format.eprintf "Function %s\n%!" fun_name;
     let avail_before = RAS.Ok (RD.Set.without_debug_info fun_args) in
     all_regs_that_might_be_named := compute_all_regs_that_might_be_named cfg;
     let init : Domain.t = { Domain.avail_before = Some avail_before } in
