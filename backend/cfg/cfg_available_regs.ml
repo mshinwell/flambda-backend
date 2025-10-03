@@ -5,7 +5,7 @@ module DLL = Oxcaml_utils.Doubly_linked_list
 module R = Reg
 module RAS = Reg_availability_set
 module RD = Reg_with_debug_info
-module V = Backend_var
+(*module V = Backend_var*)
 
 (* If permitted to do so by the command line flags, this pass will extend live
    ranges for otherwise dead but available registers across allocations, polls
@@ -244,7 +244,8 @@ module Transfer = struct
         match instr.desc with
         | Op
             (Name_for_debugger
-              { ident; which_parameter; provenance; is_assignment; regs }) ->
+               { ident; which_parameter; provenance; is_assignment = _; regs }) ->
+          (*
           (* First forget about any existing debug info to do with [ident] if
              the naming corresponds to an assignment operation. *)
           let forgetting_ident : RD.Set.t =
@@ -260,30 +261,34 @@ module Transfer = struct
                     then RD.clear_debug_info reg
                     else reg)
                 avail_before
-          in
-          if !Clflags.verbose
-          then Format.eprintf "...ident = %a\n%!" Ident.print_with_scope ident;
-          if !Clflags.verbose
-          then Format.eprintf "...is_assignment = %b\n%!" is_assignment;
-          let avail_after = ref forgetting_ident in
+             in
+
+             *)
+          let avail_after = ref avail_before (* forgetting_ident *) in
           let num_parts_of_value = Array.length regs in
           (* Add debug info about [ident], but only for registers that are known
              to be available. *)
           for part_of_value = 0 to num_parts_of_value - 1 do
             let reg = regs.(part_of_value) in
+            (*
             (* CR sspies: In the previous version of this PR, this conditional
                has prevented DWARF information from being generated for local
                variables. It currently seems to work reasonably well even with
                this conditional, but further investigation is needed. *)
             if RD.Set.mem_reg forgetting_ident reg
+               then
+            *)
+            if RD.Set.mem_reg_by_loc avail_before reg
             then
               let regd =
                 RD.create ~reg ~holds_value_of:ident ~part_of_value
                   ~num_parts_of_value ~which_parameter ~provenance
               in
               avail_after
-                := RD.Set.add regd (RD.Set.filter_reg !avail_after reg)
+                := RD.Set.add regd (RD.Set.filter_reg_by_loc !avail_after reg)
           done;
+          if !Clflags.verbose
+          then Format.eprintf "...ident = %a\n%!" Ident.print_with_scope ident;
           if !Clflags.verbose
           then Format.eprintf "...regd = %a\n%!" Ident.print_with_scope ident;
           if !Clflags.verbose
