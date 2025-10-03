@@ -29,11 +29,7 @@ module Key = struct
     let print ppf t = print ~print_reg:Printreg.reg ppf t
   end
 
-  module Map = Map.Make (struct
-    type t = Reg_with_debug_info.t
-
-    let compare = Reg_with_debug_info.compare
-  end)
+  module Map = Reg_with_debug_info.Map_distinguishing_names_and_locations
 
   let print ppf t = Reg_with_debug_info.print ~print_reg:Printreg.reg ppf t
 
