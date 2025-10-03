@@ -14,7 +14,7 @@
 
 [@@@ocaml.warning "+a-4-9-30-40-41-42"]
 
-open! Int_replace_polymorphic_compare
+(*open! Int_replace_polymorphic_compare*)
 module RD = Reg_with_debug_info
 module RD_Set = Reg_with_debug_info.Set_distinguishing_names_and_locations
 module V = Backend_var
@@ -41,13 +41,14 @@ let union t1 t2 =
   | Ok avail1, Ok avail2 -> Ok (RD_Set.union avail1 avail2)
   | Unreachable, _ | _, Unreachable -> Unreachable
 
-(* This is intersection on the [Reg.t] values with the additional semantics that
+(* not any more: This is intersection on the [Reg.t] values with the additional semantics that
    conflicting debug info values are erased (see comment below). *)
 let inter t1 t2 =
   match t1, t2 with
   | Unreachable, _ -> t2
   | _, Unreachable -> t1
-  | Ok avail1, Ok avail2 ->
+  | Ok avail1, Ok avail2 -> Ok (RD_Set.inter avail1 avail2)
+                              (*
     let result =
       RD_Set.fold
         (fun reg1 result ->
@@ -78,7 +79,7 @@ let inter t1 t2 =
         avail1 RD_Set.empty
     in
     Ok result
-
+*)
 (* This ignores the debug info values completely. *)
 let diff t1 t2 =
   match t1, t2 with

@@ -244,7 +244,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
     | Close_subrange_one_byte_after ->
       Format.fprintf ppf "Close_subrange_one_byte_after"
 
-  let actions_at_instruction0 ~(insn : L.instruction)
+  let actions_at_instruction0 ppf_dump ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) ~known_available_after_prev_insn
       ~available_before ~available_across =
     ignore insn;
@@ -294,6 +294,10 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
             (key :: S.Key.all_parents key))
         case result
     in
+    if !Oxcaml_flags.dranges
+    then Format.fprintf ppf_dump "1c:@ %a\n" KS.print case_1c;
+    if !Oxcaml_flags.dranges
+    then Format.fprintf ppf_dump "1d:@ %a\n" KS.print case_1d;
     (* Ranges must be closed before they are opened---otherwise, when a variable
        moves between registers at a range boundary, we might end up with no open
        range for that variable. Note that the pipeline below constructs the
@@ -310,6 +314,11 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
 
   let actions_at_instruction ~ppf_dump ~(insn : L.instruction)
       ~(prev_insn : L.instruction option) ~known_available_after_prev_insn =
+    if !Oxcaml_flags.dranges
+    then
+      Format.fprintf ppf_dump "known_available_after_prev_insn:@ %a\n"
+        KS.print
+        known_available_after_prev_insn;
     let available_before = S.available_before insn in
     let available_across = S.available_across insn in
     if !Oxcaml_flags.dranges
@@ -328,7 +337,7 @@ module Make (S : Compute_ranges_intf.S_functor) = struct
          just skip to the next instruction. *)
       []
     | Some available_before, Some available_across ->
-      actions_at_instruction0 ~insn ~prev_insn ~known_available_after_prev_insn
+      actions_at_instruction0 ppf_dump ~insn ~prev_insn ~known_available_after_prev_insn
         ~available_before ~available_across
 
   let rec process_instruction t (fundecl : L.fundecl) ~fun_contains_calls
