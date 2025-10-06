@@ -1,7 +1,7 @@
 [@@@ocaml.warning "+a-40-41-42"]
 
 open! Int_replace_polymorphic_compare [@@ocaml.warning "-66"]
-module DLL = Oxcaml_utils.Doubly_linked_list
+(* module DLL = Oxcaml_utils.Doubly_linked_list *)
 module R = Reg
 module RAS = Reg_availability_set
 module RD = Reg_with_debug_info
@@ -20,7 +20,9 @@ let extend_live () = false
    compuation and re-enable the flag. *)
 
 (* CR xclerc for xclerc: consider passing this value through the context. *)
-let all_regs_that_might_be_named = ref Reg.Set.empty
+(* CR mshinwell: this seems broken, I think a backwards dataflow pass may be
+   necessary to compute this *)
+(* let all_regs_that_might_be_named = ref Reg.Set.empty *)
 
 let check_invariants :
     type a.
@@ -34,7 +36,7 @@ let check_invariants :
   | Ok avail_before ->
     (* Every register that is live across an instruction should also be
        available before the instruction. *)
-    let live = R.Set.inter instr.live !all_regs_that_might_be_named in
+    let live = (* R.Set.inter *) instr.live (* !all_regs_that_might_be_named *) in
     if not
          (R.Set.subset live
             (RD.Set_distinguishing_names_and_locations.forget_debug_info
@@ -51,7 +53,7 @@ let check_invariants :
               avail_before))
         print_instr instr;
     (* Every register that is an input to an instruction should be available. *)
-    let args = R.inter_set_array !all_regs_that_might_be_named instr.arg in
+    let args = R.set_of_array instr.arg (* R.inter_set_array !all_regs_that_might_be_named instr.arg *) in
     let avail_before_fdi =
       RD.Set_distinguishing_names_and_locations.forget_debug_info avail_before
     in
@@ -194,7 +196,10 @@ module Transfer = struct
           (fun reg ->
             let holds_immediate = RD.holds_non_pointer reg in
             let on_stack = RD.assigned_to_stack reg in
-            let live_across = Reg.Set.mem (RD.reg reg) instr.live in
+            let live_across =
+              Reg.Set.exists (fun live_reg -> Reg.same_loc live_reg (RD.reg reg))
+                instr.live
+            in
             let remains_available =
               live_across || (holds_immediate && on_stack)
             in
@@ -223,7 +228,8 @@ module Transfer = struct
     let avail_after =
       (* If a result register will never be named, we can forget about it for
          the purposes of this analysis. *)
-      let res = Reg.inter_set_array !all_regs_that_might_be_named instr.res in
+(*      let res = Reg.inter_set_array !all_regs_that_might_be_named instr.res in *)
+      let res = Reg.set_of_array instr.res in
       RD_Set.union (RD_Set.without_debug_info res) avail_across
     in
     if !Clflags.verbose
@@ -342,13 +348,8 @@ module Transfer = struct
           let results =
             Array.map2
               (fun arg_reg result_reg ->
-                (* We have to use [find_reg_with_same_location_exn] and not just
-                   [find_reg_exn] because the register allocator can elide
-                   moves, meaning that [arg_reg] might have one register stamp
-                   at [instr] but a different register stamp on the previous
-                   occurrence (from which we would have computed
-                   [avail_before]). All that we need here, though, is the debug
-                   info from any register with the same location. *)
+                (* We need to find any register in [avail_before] with the same
+                   location, ignoring any associated debug info. *)
                 match
                   RD_Set.find_reg_with_same_location_exn avail_before arg_reg
                 with
@@ -359,7 +360,10 @@ module Transfer = struct
                     Some
                       (RD.create_copying_debug_info ~reg:result_reg
                          ~debug_info_from:arg_reg)
-                  else None)
+                  else
+                    (* Still need to return [Some] even if there is no debug info, to ensure
+                       availability sets are correct *)
+                    Some (RD.create_without_debug_info ~reg:result_reg) (* None *))
               instr.arg instr.res
           in
           if !Clflags.verbose
@@ -464,6 +468,7 @@ end
 
 module Analysis = Cfg_dataflow.Forward (Domain) (Transfer)
 
+(*
 let get_name_for_debugger_regs (b : Cfg.basic) =
   match b with
   | Op (Name_for_debugger { regs; _ }) -> Some regs
@@ -482,6 +487,7 @@ let get_name_for_debugger_regs (b : Cfg.basic) =
       | Specific _ | Alloc _ ) ->
     None
 
+
 let compute_all_regs_that_might_be_named : Cfg.t -> Reg.Set.t =
  fun cfg ->
   Cfg.fold_blocks cfg ~init:Reg.Set.empty ~f:(fun _label block acc ->
@@ -489,6 +495,7 @@ let compute_all_regs_that_might_be_named : Cfg.t -> Reg.Set.t =
           match get_name_for_debugger_regs instr.Cfg.desc with
           | Some regs -> Reg.add_set_array acc regs
           | None -> acc))
+*)
 
 let run : Cfg_with_layout.t -> Cfg_with_layout.t =
  fun cfg_with_layout ->
@@ -499,7 +506,7 @@ let run : Cfg_with_layout.t -> Cfg_with_layout.t =
     let fun_name = Cfg.fun_name cfg in
     if !Clflags.verbose then Format.eprintf "Function %s\n%!" fun_name;
     let avail_before = RAS.Ok (RD_Set.without_debug_info fun_args) in
-    all_regs_that_might_be_named := compute_all_regs_that_might_be_named cfg;
+    (* all_regs_that_might_be_named := compute_all_regs_that_might_be_named cfg; *)
     let init : Domain.t = { Domain.avail_before = Some avail_before } in
     match Analysis.run cfg ~init ~handlers_are_entry_points:false () with
     | Error () ->
