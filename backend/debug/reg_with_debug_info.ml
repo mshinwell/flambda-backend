@@ -32,9 +32,15 @@ module Debug_info = struct
     if c <> 0
     then c
     else
-      Stdlib.compare
-        (t1.part_of_value, t1.num_parts_of_value, t1.which_parameter)
-        (t2.part_of_value, t2.num_parts_of_value, t2.which_parameter)
+      let c = Int.compare t1.part_of_value t2.part_of_value in
+      if c <> 0
+      then c
+      else
+        let c = Int.compare t1.num_parts_of_value t2.num_parts_of_value in
+        if c <> 0
+        then c
+        else Option.compare Int.compare t1.which_parameter t2.which_parameter
+               (* XXX should compare provenance *)
 
   let holds_value_of t = t.holds_value_of
 
@@ -121,24 +127,6 @@ let debug_info t = t.debug_info
 
 let clear_debug_info t = { t with debug_info = None }
 
-module Order_distinguishing_names_and_locations = struct
-  type nonrec t = t
-
-  let compare t1 t2 =
-    match t1.debug_info, t2.debug_info with
-    | None, None -> 0
-    | None, Some _ -> -1
-    | Some _, None -> 1
-    | Some di1, Some di2 ->
-      let c = V.compare di1.holds_value_of di2.holds_value_of in
-      if c <> 0 then c else Stdlib.compare t1.reg.loc t2.reg.loc
-end
-
-module Set_distinguishing_names_and_locations =
-  Set.Make (Order_distinguishing_names_and_locations)
-module Map_distinguishing_names_and_locations =
-  Map.Make (Order_distinguishing_names_and_locations)
-
 module Set = struct
   include Set.Make (T)
 
@@ -164,7 +152,13 @@ module Set = struct
 
   let mem_reg t (reg : Reg.t) = exists (fun t -> Reg.same t.reg reg) t
 
+  let mem_reg_by_loc t (reg : Reg.t) =
+    exists (fun t -> Reg.same_loc t.reg reg) t
+
   let filter_reg t (reg : Reg.t) = filter (fun t -> not (Reg.same t.reg reg)) t
+
+  let filter_reg_by_loc t (reg : Reg.t) =
+    filter (fun t -> not (Reg.same_loc t.reg reg)) t
 
   (* CR-someday mshinwell: Well, it looks like we should have used a map.
      mshinwell: Also see @chambart's suggestion on GPR#856. *)
@@ -178,7 +172,107 @@ module Set = struct
     match elements (filter (fun t -> Reg.same_loc t.reg reg) t) with
     | [] -> raise Not_found
     | reg :: _ -> reg
+
+  let print_el ppf t =
+    let print_reg = Printreg.reg in
+    match t.debug_info with
+    | None -> Format.fprintf ppf "%a" print_reg t.reg
+    | Some debug_info ->
+      Format.fprintf ppf "%a(%a)" print_reg t.reg Debug_info.print debug_info
+
+  let print ppf t =
+    Format.pp_print_list
+      ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
+      print_el ppf (elements t)
 end
+
+let _compare_stack_location sl1 sl2 =
+  match sl1, sl2 with
+  | Reg.Local i1, Reg.Local i2 -> Int.compare i1 i2
+  | Reg.Incoming i1, Reg.Incoming i2 -> Int.compare i1 i2
+  | Reg.Outgoing i1, Reg.Outgoing i2 -> Int.compare i1 i2
+  | Reg.Domainstate i1, Reg.Domainstate i2 -> Int.compare i1 i2
+  | Reg.Local _, (Reg.Incoming _ | Reg.Outgoing _ | Reg.Domainstate _) -> -1
+  | Reg.Incoming _, (Reg.Local _ | Reg.Outgoing _ | Reg.Domainstate _) -> 1
+  | Reg.Outgoing _, (Reg.Local _ | Reg.Incoming _ | Reg.Domainstate _) -> 1
+  | Reg.Domainstate _, (Reg.Local _ | Reg.Incoming _ | Reg.Outgoing _) -> 1
+
+let _compare_location (loc1 : Reg.location) (loc2 : Reg.location) =
+  match loc1, loc2 with
+  (* XXX this should never see Unknown *)
+  | Reg.Unknown, Reg.Unknown -> 0
+  | Reg.Reg r1, Reg.Reg r2 -> Int.compare r1 r2
+  | Reg.Stack sl1, Reg.Stack sl2 -> _compare_stack_location sl1 sl2
+  | Reg.Unknown, (Reg.Reg _ | Reg.Stack _) -> -1
+  | Reg.Reg _, (Reg.Unknown | Reg.Stack _) -> 1
+  | Reg.Stack _, (Reg.Unknown | Reg.Reg _) -> 1
+
+let compare_location = Stdlib.compare
+
+module Order_distinguishing_names_and_locations = struct
+  type nonrec t = t
+
+  let compare t1 t2 =
+    let result =
+    match t1.debug_info, t2.debug_info with
+    | None, None -> compare_location t1.reg.loc t2.reg.loc
+    | None, Some _ -> -1
+    | Some _, None -> 1
+    | Some di1, Some di2 ->
+      let c = V.compare di1.holds_value_of di2.holds_value_of in
+      if c <> 0 then c else compare_location t1.reg.loc t2.reg.loc
+    in
+    (*
+    Format.eprintf "compare %a and %a = %d\n%!"
+      (Set.print_el t1)
+      (Set.print_el t2)
+      result; *)
+    result
+end
+
+module Set_distinguishing_names_and_locations = struct
+  include Stdlib.Set.Make (Order_distinguishing_names_and_locations)
+
+  let forget_debug_info t =
+    fold (fun t acc -> Reg.Set.add (reg t) acc) t Reg.Set.empty
+
+  let of_set (s : Set.t) : t = Set.fold add s empty
+
+  let to_set (t : t) : Set.t = fold Set.add t Set.empty
+
+  let mem_reg_by_loc t (r : Reg.t) = exists (fun t -> Reg.same_loc t.reg r) t
+
+  let filter_reg_by_loc t (r : Reg.t) =
+    filter (fun t -> not (Reg.same_loc t.reg r)) t
+
+  let without_debug_info regs =
+    Reg.Set.fold
+      (fun reg acc -> add (create_without_debug_info ~reg) acc)
+      regs empty
+
+  let made_unavailable_by_clobber t ~regs_clobbered =
+    Reg.Set.fold
+      (fun reg acc ->
+        let made_unavailable =
+          filter (fun reg' -> regs_at_same_location reg'.reg reg) t
+        in
+        union made_unavailable acc)
+      (Reg.set_of_array regs_clobbered)
+      empty
+
+  let print ppf t =
+    Format.pp_print_list
+      ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ")
+      Set.print_el ppf (elements t)
+
+  let find_reg_with_same_location_exn t (r : Reg.t) =
+    match elements (filter (fun t -> Reg.same_loc t.reg r) t) with
+    | [] -> raise Not_found
+    | reg :: _ -> reg
+end
+
+module Map_distinguishing_names_and_locations =
+  Map.Make (Order_distinguishing_names_and_locations)
 
 let print ~print_reg ppf t =
   match t.debug_info with

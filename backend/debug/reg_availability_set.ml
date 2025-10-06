@@ -14,38 +14,45 @@
 
 [@@@ocaml.warning "+a-4-9-30-40-41-42"]
 
-open! Int_replace_polymorphic_compare
+(*open! Int_replace_polymorphic_compare*)
 module RD = Reg_with_debug_info
+module RD_Set = Reg_with_debug_info.Set_distinguishing_names_and_locations
 module V = Backend_var
 
 type t =
-  | Ok of RD.Set.t
+  | Ok of RD_Set.t
   | Unreachable
 
-let of_list rds = Ok (RD.Set.of_list rds)
+let of_list rds = Ok (RD_Set.of_list rds)
+
+let of_rd_set (s : RD.Set.t) : t =
+  Ok (RD.Set_distinguishing_names_and_locations.of_set s)
+
+let to_rd_set (t : t) : RD.Set.t option =
+  match t with
+  | Unreachable -> None
+  | Ok s -> Some (RD.Set_distinguishing_names_and_locations.to_set s)
 
 (* CR mshinwell: The implementations below probably aren't really adequate, but
    will suffice for now. We should aim to improve them soon *)
 
 let union t1 t2 =
-  (* Since [RD.Set]'s comparison function just looks at the [Reg.t] values, this
-     will arbitrarily pick between debug info values in the case where [t1] and
-     [t2] both contain the same [Reg.t]. That seems ok, at least for now. *)
   match t1, t2 with
-  | Ok avail1, Ok avail2 -> Ok (RD.Set.union avail1 avail2)
+  | Ok avail1, Ok avail2 -> Ok (RD_Set.union avail1 avail2)
   | Unreachable, _ | _, Unreachable -> Unreachable
 
-(* This is intersection on the [Reg.t] values with the additional semantics that
+(* not any more: This is intersection on the [Reg.t] values with the additional semantics that
    conflicting debug info values are erased (see comment below). *)
 let inter t1 t2 =
   match t1, t2 with
   | Unreachable, _ -> t2
   | _, Unreachable -> t1
-  | Ok avail1, Ok avail2 ->
+  | Ok avail1, Ok avail2 -> Ok (RD_Set.inter avail1 avail2)
+                              (*
     let result =
-      RD.Set.fold
+      RD_Set.fold
         (fun reg1 result ->
-          match RD.Set.find_reg_exn avail2 (RD.reg reg1) with
+          match RD_Set.find reg1 avail2 with
           | exception Not_found -> result
           | reg2 ->
             let debug_info1 = RD.debug_info reg1 in
@@ -68,29 +75,29 @@ let inter t1 t2 =
             let reg =
               RD.create_with_debug_info ~reg:(RD.reg reg1) ~debug_info
             in
-            RD.Set.add reg result)
-        avail1 RD.Set.empty
+            RD_Set.add reg result)
+        avail1 RD_Set.empty
     in
     Ok result
-
+*)
 (* This ignores the debug info values completely. *)
 let diff t1 t2 =
   match t1, t2 with
   | Unreachable, (Ok _ | Unreachable) -> Unreachable
-  | Ok avail1, Ok avail2 -> Ok (RD.Set.diff avail1 avail2)
-  | Ok _, Unreachable -> Ok RD.Set.empty
+  | Ok avail1, Ok avail2 -> Ok (RD_Set.diff avail1 avail2)
+  | Ok _, Unreachable -> Ok RD_Set.empty
 
 let fold f t init =
   match t with
   | Unreachable -> init
-  | Ok availability -> RD.Set.fold f availability init
+  | Ok availability -> RD_Set.fold f availability init
 
 let canonicalise availability =
   match availability with
   | Unreachable -> Unreachable
   | Ok availability ->
     let regs_by_ident = V.Tbl.create 42 in
-    RD.Set.iter
+    RD_Set.iter
       (fun reg ->
         match RD.debug_info reg with
         | None -> ()
@@ -117,8 +124,8 @@ let canonicalise availability =
       availability;
     let result =
       V.Tbl.fold
-        (fun _ident reg availability -> RD.Set.add reg availability)
-        regs_by_ident RD.Set.empty
+        (fun _ident reg availability -> RD_Set.add reg availability)
+        regs_by_ident RD_Set.empty
     in
     Ok result
 
@@ -127,14 +134,14 @@ let equal t1 t2 =
   match t1, t2 with
   | Unreachable, Unreachable -> true
   | Unreachable, Ok _ | Ok _, Unreachable -> false
-  | Ok regs1, Ok regs2 -> RD.Set.equal regs1 regs2
+  | Ok regs1, Ok regs2 -> RD_Set.equal regs1 regs2
 
 let subset t1 t2 =
   match t1, t2 with
   | Unreachable, Unreachable -> true
   | Unreachable, Ok _ -> false
   | Ok _, Unreachable -> false
-  | Ok regs1, Ok regs2 -> RD.Set.subset regs1 regs2
+  | Ok regs1, Ok regs2 -> RD_Set.subset regs1 regs2
 
 let print ~print_reg ppf = function
   | Unreachable -> Format.fprintf ppf "<unreachable>"
@@ -143,4 +150,4 @@ let print ~print_reg ppf = function
       (Format.pp_print_list
          ~pp_sep:(fun ppf () -> Format.fprintf ppf ",@ ")
          (Reg_with_debug_info.print ~print_reg))
-      (RD.Set.elements availability)
+      (RD_Set.elements availability)
