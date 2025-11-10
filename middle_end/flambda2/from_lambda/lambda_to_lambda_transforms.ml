@@ -817,8 +817,11 @@ type apply_transform_result =
 
 let transform_apply (apply : L.lambda_apply) : apply_transform_result =
   match Config.probes, apply.ap_probe with
-  | _, None | true, Some _ -> Apply apply
-  | false, Some { name; enabled_at_init = _ } ->
+  | _, None -> Apply apply
+  | true, Some _ -> Apply apply
+  | false, Some (L.Behaves_like_direct_call _ as probe) ->
+    Apply { apply with ap_probe = Some probe }
+  | false, Some (L.Optimized { name; enabled_at_init = _ }) ->
     (* Slower implementation of probes where there isn't clever
        architecture-specific codegen. Just read the semaphore each time. Two
        notes:

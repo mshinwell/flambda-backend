@@ -628,7 +628,10 @@ type inlined_attribute =
 val equal_inline_attribute : inline_attribute -> inline_attribute -> bool
 val equal_inlined_attribute : inlined_attribute -> inlined_attribute -> bool
 
-type probe_desc = { name: string; enabled_at_init: bool; }
+type probe_desc =
+  | Optimized of { name: string; enabled_at_init: bool; }
+  | Behaves_like_direct_call of { name: string; enabled_at_init: bool; }
+
 type probe = probe_desc option
 
 type specialise_attribute =

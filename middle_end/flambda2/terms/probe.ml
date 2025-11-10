@@ -20,7 +20,9 @@ type t = desc option
 let from_lambda (p : Lambda.probe) =
   match p with
   | None -> None
-  | Some { name : string; enabled_at_init : bool } ->
+  | Some (Lambda.Optimized { name; enabled_at_init }) ->
+    Some { name; enabled_at_init }
+  | Some (Lambda.Behaves_like_direct_call { name; enabled_at_init }) ->
     Some { name; enabled_at_init }
 
 let print ppf t =

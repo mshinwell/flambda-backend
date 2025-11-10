@@ -1277,7 +1277,7 @@ and transl_exp0 ~in_new_scope ~scopes sort e =
           ap_tailcall = Default_tailcall;
           ap_inlined = Never_inlined;
           ap_specialised = Always_specialise;
-          ap_probe = Some {name; enabled_at_init};
+          ap_probe = Some (Optimized {name; enabled_at_init});
         }
       in
       Llet(Strict, Lambda.layout_function, funcid, funcid_duid, handler,
