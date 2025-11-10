@@ -821,18 +821,17 @@ let transform_apply (apply : L.lambda_apply) : apply_transform_result =
   | true, Some _ -> Apply apply
   | false, Some (L.Behaves_like_direct_call _ as probe) ->
     Apply { apply with ap_probe = Some probe }
-  | false, Some (L.Optimized { name; enabled_at_init = _ }) ->
+  | false, Some (L.Optimized { name; enabled_at_init }) ->
     (* Slower implementation of probes where there isn't clever
-       architecture-specific codegen. Just read the semaphore each time. Two
-       notes:
-
-       1. We don't need to do anything with [enabled_at_init] because the
-       semaphore will already have been initialized to the correct state.
-
-       2. Probe bodies have [layout_unit] (see translcore.ml). *)
+       architecture-specific codegen. Just read the semaphore each time. *)
     Transformed
       (Lifthenelse
          ( Lprim (Pprobe_is_enabled { name }, [], apply.ap_loc),
-           Lapply { apply with ap_probe = None },
+           (* Note: probe bodies have type [unit] *)
+           Lapply
+             { apply with
+               ap_probe =
+                 Some (Behaves_like_direct_call { name; enabled_at_init })
+             },
            L.lambda_unit,
            L.layout_unit ))
