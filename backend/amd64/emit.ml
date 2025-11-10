@@ -1111,38 +1111,11 @@ let probe_handler_wrapper_name probe_label =
 
 let probes = ref []
 
-let probe_semaphores = ref String.Map.empty
-
 let stapsdt_base_emitted = ref false
 
 let reset_probes () =
   probes := [];
-  probe_semaphores := String.Map.empty
-
-let find_or_add_semaphore name enabled_at_init dbg =
-  match String.Map.find_opt name !probe_semaphores with
-  | Some (label, symbol, e) ->
-    (match e, enabled_at_init with
-    | None, None -> ()
-    | None, Some _ ->
-      let d = label, symbol, enabled_at_init in
-      probe_semaphores
-        := String.Map.remove name !probe_semaphores |> String.Map.add name d
-    | Some _, None ->
-      (* [find_or_add_semaphore] is called with None for Iprobe_is_enabled
-         during code emission only. [find_or_add_semaphore] us called with Some
-         to emit probe notes only after all code is emitted. *)
-      assert false
-    | Some b, Some b' ->
-      if not (Bool.equal b b')
-      then raise (Emitaux.Error (Inconsistent_probe_init (name, dbg))));
-    label
-  | None ->
-    let sym = "caml_probes_semaphore_" ^ name in
-    let symbol = S.Predef.caml_probes_semaphore ~name in
-    let d = sym, symbol, enabled_at_init in
-    probe_semaphores := String.Map.add name d !probe_semaphores;
-    sym
+  Probe_emission.reset ()
 
 let emit_call_probe_handler_wrapper i ~enabled_at_init ~probe_label =
   assert !frame_required;
@@ -2313,7 +2286,7 @@ let emit_instr ~first ~fallthrough i =
        See [emit_probe_handler_wrapper] below. *)
     emit_call_probe_handler_wrapper i ~enabled_at_init ~probe_label
   | Lop (Probe_is_enabled { name }) ->
-    let semaphore_sym = find_or_add_semaphore name None i.dbg in
+    let semaphore_sym = Probe_emission.find_or_add_semaphore name None i.dbg in
     (* Load unsigned 2-byte integer value of the semaphore. According to the
        documentation [1], semaphores are of type unsigned short. [1]
        https://sourceware.org/systemtap/wiki/UserSpaceProbeImplementation *)
@@ -2945,7 +2918,8 @@ let emit_probe_notes0 () =
       |> String.concat " "
     in
     let semsym =
-      find_or_add_semaphore probe_name (Some enabled_at_init) p.probe_insn.dbg
+      Probe_emission.find_or_add_semaphore probe_name (Some enabled_at_init)
+        p.probe_insn.dbg
     in
     let semaphore_label = S.create semsym in
     let emit_desc () =
@@ -2971,17 +2945,14 @@ let emit_dummy_probe_notes () =
     in
     emit_elf_note ~section:Stapsdt_note ~owner:"stapsdt" ~typ:3l ~emit_desc
   in
-  let semaphores_without_probes =
-    List.fold_left
-      (fun acc probe -> String.Map.remove probe.probe_name acc)
-      !probe_semaphores !probes
-  in
-  if not (String.Map.is_empty semaphores_without_probes)
-  then (
-    D.switch_to_section Stapsdt_note;
-    String.Map.iter
-      (fun probe_name (sym, _, _) -> describe_dummy_probe ~probe_name sym)
-      semaphores_without_probes)
+  let probe_names = List.map (fun probe -> probe.probe_name) !probes in
+  let has_dummy_probes = ref false in
+  Probe_emission.iter_excluding probe_names (fun probe_name (sym, _, _) ->
+      if not !has_dummy_probes
+      then (
+        D.switch_to_section Stapsdt_note;
+        has_dummy_probes := true);
+      describe_dummy_probe ~probe_name sym)
 
 let emit_probe_semaphores () =
   (match Target_system.is_macos () with
@@ -2990,8 +2961,7 @@ let emit_probe_semaphores () =
     D.switch_to_section Probes
   | true -> D.switch_to_section Probes);
   D.align ~fill_x86_bin_emitter:Zero ~bytes:2;
-  String.Map.iter
-    (fun _ (label, label_sym, enabled_at_init) ->
+  Probe_emission.iter (fun _ (label, label_sym, enabled_at_init) ->
       (* Unresolved weak symbols have a zero value regardless of the following
          initialization. *)
       let enabled_at_init = Option.value enabled_at_init ~default:false in
@@ -3003,11 +2973,10 @@ let emit_probe_semaphores () =
       D.int16 (Numbers.Int16.of_int_exn (Bool.to_int enabled_at_init));
       (* for ocaml probes *)
       add_def_symbol label)
-    !probe_semaphores
 
 let emit_probe_notes () =
   (match !probes with [] -> () | _ -> emit_probe_notes0 ());
-  if not (String.Map.is_empty !probe_semaphores)
+  if not (Probe_emission.is_empty ())
   then (
     emit_dummy_probe_notes ();
     emit_probe_semaphores ())
