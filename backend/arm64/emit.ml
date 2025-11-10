@@ -1304,8 +1304,10 @@ module BR = Branch_relaxation.Make (struct
     | Lop (Specific Imove32) -> 1
     | Lop (Specific (Isignext _)) -> 1
     | Lop (Name_for_debugger _) -> 0
-    | Lcall_op (Lprobe _) | Lop (Probe_is_enabled _) ->
-      fatal_error "Probes not supported."
+    | Lcall_op (Lprobe (Optimized _)) ->
+      fatal_error "Optimized probes not supported on arm64."
+    | Lcall_op (Lprobe (Behaves_like_direct_call _)) -> 1
+    | Lop (Probe_is_enabled _) -> 3
     | Lop Dls_get -> 1
     | Lop Tls_get -> 1
     | Lreloadretaddr -> 0
@@ -2139,8 +2141,36 @@ let emit_instr i =
       |]
   | Lop (Specific (Isimd simd)) -> DSL.simd_instr simd i
   | Lop (Name_for_debugger _) -> ()
-  | Lcall_op (Lprobe _) | Lop (Probe_is_enabled _) ->
-    fatal_error "Probes not supported."
+  | Lcall_op (Lprobe (Optimized _)) ->
+    fatal_error "Optimized probes not supported on arm64."
+  | Lcall_op
+      (Lprobe
+        (Behaves_like_direct_call { enabled_at_init; name; handler_code_sym }))
+    ->
+    (* Register the semaphore so it gets emitted *)
+    let _ =
+      Probe_emission.find_or_add_semaphore name (Some enabled_at_init) i.dbg
+    in
+    (* Emit direct call to probe handler *)
+    DSL.ins I.BL [| DSL.emit_symbol (S.create handler_code_sym) |];
+    record_frame i.live (Dbg_other i.dbg)
+  | Lop (Probe_is_enabled { name }) ->
+    let semaphore_sym = Probe_emission.find_or_add_semaphore name None i.dbg in
+    (* Load unsigned 2-byte integer value of the semaphore from offset 2 *)
+    let base =
+      DSL.ins I.ADRP
+        [| DSL.emit_reg reg_tmp1;
+           DSL.emit_symbol ~offset:2 (S.create semaphore_sym)
+        |];
+      reg_tmp1
+    in
+    DSL.ins I.LDRH
+      [| DSL.emit_reg_w i.res.(0);
+         DSL.emit_addressing (Ibased (semaphore_sym, 2)) base
+      |];
+    (* Compare with 0 and set result to 1 if non-zero, 0 if zero *)
+    DSL.ins I.CMP [| DSL.emit_reg_w i.res.(0); DSL.imm 0 |];
+    DSL.ins I.CSET [| DSL.emit_reg i.res.(0); DSL.cond NE |]
   | Lop Dls_get ->
     if Config.runtime5
     then
