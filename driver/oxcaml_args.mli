@@ -83,7 +83,6 @@ module type Oxcaml_options = sig
   val long_frames_threshold : int -> unit
   val caml_apply_inline_fast_path : unit -> unit
   val internal_assembler : unit -> unit
-  val verify_binary_emitter : unit -> unit
   val dissector : unit -> unit
   val dissector_partition_size : float -> unit
   val ddissector : unit -> unit
@@ -91,6 +90,8 @@ module type Oxcaml_options = sig
   val ddissector_verbose : unit -> unit
   val ddissector_partitions : unit -> unit
   val ddissector_inputs : string -> unit
+  val save_binary_sections : unit -> unit
+  val verify_binary_emitter : unit -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
   val dllvmir : unit -> unit
