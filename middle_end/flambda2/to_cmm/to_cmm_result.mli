@@ -33,12 +33,18 @@ val create : module_symbol:Symbol.t -> reachable_names:Name_occurrences.t -> t
 (** Translate an existing [Symbol.t] to a Cmm symbol. *)
 val symbol : t -> Symbol.t -> Cmm.symbol
 
+(** Translate an existing [Symbol.t] to a Cmm symbol, for a definition of a
+    symbol. *)
+val symbol_definition : t -> Symbol.t -> Cmm.symbol_definition
+
 (** Produce the Cmm function symbol for a piece of code. *)
 val symbol_of_code_id :
   t -> Code_id.t -> currently_in_inlined_body:bool -> Cmm.symbol
 
-(** Create a Cmm symbol, not arising from a [Symbol.t]. *)
-val raw_symbol : t -> global:Cmm.is_global -> string -> t * Cmm.symbol
+(** Create a Cmm symbol definition, for a symbol in the current unit, but not
+    arising from a [Symbol.t]. *)
+val raw_symbol_definition :
+  t -> global:Cmm.is_global -> string -> t * Cmm.symbol_definition
 
 (** Archive the current data into the list of already-translated data. *)
 val archive_data : t -> t

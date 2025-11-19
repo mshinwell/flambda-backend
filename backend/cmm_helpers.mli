@@ -688,38 +688,44 @@ val plugin_header : Cmxs_format.dynunit list -> phrase
 (** Emit constant symbols *)
 
 (** Produce the data_item list corresponding to a symbol definition *)
-val cdefine_symbol : symbol -> data_item list
+val cdefine_symbol : symbol_definition -> data_item list
 
 (** [emit_block symb white_header cont] prepends to [cont] the header and symbol
     for the block. [cont] must already contain the fields of the block (and may
     contain additional data items afterwards). *)
-val emit_block : symbol -> nativeint -> data_item list -> data_item list
+val emit_block :
+  symbol_definition -> nativeint -> data_item list -> data_item list
 
 (** Emit specific kinds of constant blocks as data items *)
-val emit_float32_constant : symbol -> float -> data_item list -> data_item list
+val emit_float32_constant :
+  symbol_definition -> float -> data_item list -> data_item list
 
-val emit_float_constant : symbol -> float -> data_item list -> data_item list
+val emit_float_constant :
+  symbol_definition -> float -> data_item list -> data_item list
 
-val emit_string_constant : symbol -> string -> data_item list -> data_item list
+val emit_string_constant :
+  symbol_definition -> string -> data_item list -> data_item list
 
-val emit_int32_constant : symbol -> int32 -> data_item list -> data_item list
+val emit_int32_constant :
+  symbol_definition -> int32 -> data_item list -> data_item list
 
-val emit_int64_constant : symbol -> int64 -> data_item list -> data_item list
+val emit_int64_constant :
+  symbol_definition -> int64 -> data_item list -> data_item list
 
 val emit_nativeint_constant :
-  symbol -> nativeint -> data_item list -> data_item list
+  symbol_definition -> nativeint -> data_item list -> data_item list
 
 val emit_vec128_constant :
-  symbol -> Cmm.vec128_bits -> data_item list -> data_item list
+  symbol_definition -> Cmm.vec128_bits -> data_item list -> data_item list
 
 val emit_vec256_constant :
-  symbol -> Cmm.vec256_bits -> data_item list -> data_item list
+  symbol_definition -> Cmm.vec256_bits -> data_item list -> data_item list
 
 val emit_vec512_constant :
-  symbol -> Cmm.vec512_bits -> data_item list -> data_item list
+  symbol_definition -> Cmm.vec512_bits -> data_item list -> data_item list
 
 val emit_float_array_constant :
-  symbol -> float list -> data_item list -> data_item list
+  symbol_definition -> float list -> data_item list -> data_item list
 
 (** {1} Helper functions and values used by Flambda 2. *)
 
@@ -1063,14 +1069,14 @@ val symbol_address : symbol -> data_item
 val symbol_offset : symbol -> int -> data_item
 
 (** Definition for a static symbol. *)
-val define_symbol : symbol -> data_item list
+val define_symbol : symbol_definition -> data_item list
 
 (** {2 Static structure helpers} *)
 
 (** [fundecl name args body codegen_options dbg] creates a cmm function
     declaration for a function [name] with binding [args] over [body]. *)
 val fundecl :
-  symbol ->
+  symbol_definition ->
   (Backend_var.With_provenance.t * machtype) list ->
   expression ->
   codegen_option list ->

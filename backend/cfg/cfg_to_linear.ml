@@ -154,8 +154,13 @@ let linearize_terminator cfg_with_layout (func : string) start
       [L.Lcall_op (Ltailcall_imm { func = func_symbol })], None
     | Tailcall_self { destination } ->
       ( [ L.Lcall_op
-            (Ltailcall_imm { func = { sym_name = func; sym_global = Local } })
-        ],
+            (Ltailcall_imm
+               { func =
+                   { sym_name = func;
+                     sym_global = Local;
+                     sym_defined_in_current_unit = true
+                   }
+               }) ],
         Some destination )
     | Call_no_return
         { func_symbol;

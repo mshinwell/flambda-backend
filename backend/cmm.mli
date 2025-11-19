@@ -467,6 +467,13 @@ val equal_is_global : is_global -> is_global -> bool
    be resolved early) *)
 type symbol =
   { sym_name : string;
+    sym_global : is_global;
+    sym_defined_in_current_unit : bool
+        (* XXX we only need this in-current-unit thing if is_global = Global *)
+  }
+
+type symbol_definition =
+  { sym_name : string;
     sym_global : is_global
   }
 
@@ -495,7 +502,11 @@ type vec512_bits =
     word7 : int64
   }
 
+(* CR mshinwell: bad name.  Also maybe this could take a variant *)
+(* The symbol is assumed to be defined in another compilation unit. *)
 val global_symbol : string -> symbol
+
+val global_symbol_definition_in_current_unit : string -> symbol_definition
 
 type ccatch_flag =
   | Normal
@@ -560,7 +571,7 @@ type codegen_option =
       }
 
 type fundecl =
-  { fun_name : symbol;
+  { fun_name : symbol_definition;
     fun_args : (Backend_var.With_provenance.t * machtype) list;
     fun_body : expression;
     fun_codegen_options : codegen_option list;
@@ -577,7 +588,7 @@ type fundecl =
       zero-initialization of the data section to achieve this.
 *)
 type data_item =
-  | Cdefine_symbol of symbol
+  | Cdefine_symbol of symbol_definition
   | Cint8 of int
   | Cint16 of int
   | Cint32 of nativeint
@@ -669,3 +680,5 @@ val is_int : machtype_component -> bool
 val is_addr : machtype_component -> bool
 
 val is_exn_handler : ccatch_flag -> bool
+
+val symbol_reference_for_large_code_model : symbol -> expression list

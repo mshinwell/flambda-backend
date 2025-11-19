@@ -2355,13 +2355,18 @@ let curry_function_sym_name function_kind arity result =
 
 let curry_function_sym function_kind arity result =
   { sym_name = curry_function_sym_name function_kind arity result;
-    sym_global = Global
+    sym_global = Global;
+    (* XXX this should be [true] when generating the startup file *)
+    sym_defined_in_current_unit = false
   }
 
 let fail_if_called_indirectly_name = "caml_fail_if_called_indirectly"
 
 let fail_if_called_indirectly_sym =
-  { sym_name = fail_if_called_indirectly_name; sym_global = Global }
+  { sym_name = fail_if_called_indirectly_name;
+    sym_global = Global;
+    sym_defined_in_current_unit = false
+  }
 
 (* Big arrays *)
 
@@ -2937,7 +2942,12 @@ let make_switch arg cases actions dbg =
       (Const_table
          ( Local,
            Array.to_list (Array.map (fun act -> const_actions.(act)) cases) ));
-    let table_sym = { sym_name = table; sym_global = Local } in
+    let table_sym =
+      { sym_name = table;
+        sym_global = Local;
+        sym_defined_in_current_unit = true
+      }
+    in
     addr_array_ref (Cconst_symbol (table_sym, dbg)) (tag_int arg dbg) dbg
   in
   let make_affine_computation ~offset ~slope arg dbg =
@@ -3491,6 +3501,9 @@ let send_function (arity, result, mode) =
   in
   let body = Clet (VP.create clos', clos, body) in
   let fun_name = send_function_name arity result mode in
+  let fun_name : Cmm.symbol_definition =
+    { sym_name = fun_name.sym_name; sym_global = fun_name.sym_global }
+  in
   let fun_args =
     [obj, typ_val; tag, typ_int; cache, typ_val; pos, typ_int]
     @ List.combine (List.tl args) arity
@@ -3509,7 +3522,10 @@ let send_function (arity, result, mode) =
 let apply_function (arity, result, mode) =
   let args, clos, body = apply_function_body arity result mode in
   let all_args = List.combine args arity @ [clos, typ_val] in
-  let fun_name = global_symbol (apply_function_name arity result mode) in
+  let fun_name =
+    Cmm.global_symbol_definition_in_current_unit
+      (apply_function_name arity result mode)
+  in
   let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
   Cfunction
     { fun_name;
@@ -3542,7 +3558,10 @@ let tuplify_function arity return =
       get_field_gen Asttypes.Mutable (Cvar arg) i (dbg ())
       :: access_components (i + 1)
   in
-  let fun_name = global_symbol (tuplify_function_name arity return) in
+  let fun_name =
+    Cmm.global_symbol_definition_in_current_unit
+      (tuplify_function_name arity return)
+  in
   let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
   Cfunction
     { fun_name;
@@ -3714,7 +3733,7 @@ let final_curry_function nlocal arity result =
   let last_clos = V.create_local "clos" in
   let narity = List.length arity in
   let fun_name =
-    global_symbol
+    Cmm.global_symbol_definition_in_current_unit
       (curry_function_sym_name (Lambda.Curried { nlocal }) arity result
       ^ "_"
       ^ Int.to_string (narity - 1))
@@ -3758,7 +3777,7 @@ let intermediate_curry_functions ~nlocal ~arity result =
       let has_nary = curry_clos_has_nary_application ~narity (num + 1) in
       let function_slot_size = if has_nary then 3 else 2 in
       Cfunction
-        { fun_name = global_symbol name2;
+        { fun_name = Cmm.global_symbol_definition_in_current_unit name2;
           fun_args =
             List.map (fun (arg, t) -> VP.create arg, [| t |]) args
             @ [VP.create clos, typ_val];
@@ -3809,7 +3828,8 @@ let intermediate_curry_functions ~nlocal ~arity result =
             (direct_args @ [clos, typ_val])
         in
         let fun_name =
-          global_symbol (name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app")
+          Cmm.global_symbol_definition_in_current_unit
+            (name1 ^ "_" ^ Int.to_string (num + 1) ^ "_app")
         in
         let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
         let cf =
@@ -4085,10 +4105,16 @@ let make_symbol ?compilation_unit name =
 
 let fail_if_called_indirectly_function () =
   let message = "This function should never be called indirectly" in
-  let message_symbol =
+  let message_symbol_def : Cmm.symbol_definition =
     { sym_name = "caml_fail_if_called_indirectly_message"; sym_global = Local }
   in
-  let string_data = emit_string_constant message_symbol message [] in
+  let message_symbol : Cmm.symbol =
+    { sym_name = "caml_fail_if_called_indirectly_message";
+      sym_global = Local;
+      sym_defined_in_current_unit = true
+    }
+  in
+  let string_data = emit_string_constant message_symbol_def message [] in
   let fun_body =
     Cop
       ( Cextcall
@@ -4105,7 +4131,10 @@ let fail_if_called_indirectly_function () =
         Debuginfo.none )
   in
   let fn : Cmm.fundecl =
-    { fun_name = fail_if_called_indirectly_sym;
+    { fun_name =
+        { sym_name = fail_if_called_indirectly_sym.sym_name;
+          sym_global = fail_if_called_indirectly_sym.sym_global
+        };
       fun_args = [];
       fun_body;
       fun_codegen_options = [];
@@ -4151,6 +4180,9 @@ let entry_point namelist =
               dbg () ) ],
         dbg () )
   in
+  let table_symbol_def =
+    global_symbol_definition_in_current_unit "caml_globals_entry_functions"
+  in
   let table_symbol = global_symbol "caml_globals_entry_functions" in
   let call i =
     let f =
@@ -4174,7 +4206,7 @@ let entry_point namelist =
           (global_symbol (make_symbol ~compilation_unit:name "entry")))
       namelist
   in
-  let data = Cdefine_symbol table_symbol :: data in
+  let data = Cdefine_symbol table_symbol_def :: data in
   let raise_num = Lambda.next_raise_count () in
   let high = cconst_int (List.length namelist) in
   let body =
@@ -4211,7 +4243,7 @@ let entry_point namelist =
         dbg,
         false )
   in
-  let fun_name = global_symbol "caml_program" in
+  let fun_name = global_symbol_definition_in_current_unit "caml_program" in
   let fun_dbg = placeholder_fun_dbg ~human_name:fun_name in
   [ Cdata data;
     Cfunction
@@ -4234,7 +4266,8 @@ let global_table namelist =
       (global_symbol (make_symbol ~compilation_unit:name "gc_roots"))
   in
   Cdata
-    ((Cdefine_symbol (global_symbol "caml_globals") :: List.map mksym namelist)
+    (Cdefine_symbol (global_symbol_definition_in_current_unit "caml_globals")
+     :: List.map mksym namelist
     @ [cint_zero])
 
 let reference_symbols namelist =
@@ -4255,7 +4288,7 @@ let frame_table namelist =
       (global_symbol (make_symbol ~compilation_unit:name "frametable"))
   in
   Cdata
-    (Cdefine_symbol (global_symbol "caml_frametable")
+    (Cdefine_symbol (global_symbol_definition_in_current_unit "caml_frametable")
      :: List.map mksym namelist
     @ [cint_zero])
 
@@ -4269,7 +4302,7 @@ let segment_table namelist symbol begname endname =
     :: lst
   in
   Cdata
-    (Cdefine_symbol (global_symbol symbol)
+    (Cdefine_symbol (global_symbol_definition_in_current_unit symbol)
     :: List.fold_right addsyms namelist [cint_zero])
 
 let data_segment_table namelist =
@@ -4281,11 +4314,17 @@ let code_segment_table namelist =
 (* Initialize a predefined exception *)
 
 let predef_exception i name =
-  let name_sym =
+  let name_sym_def =
     { sym_name = Compilenv.new_const_symbol (); sym_global = Local }
   in
-  let data_items = emit_string_constant name_sym name [] in
-  let exn_sym = global_symbol ("caml_exn_" ^ name) in
+  let name_sym =
+    { sym_name = name_sym_def.sym_name;
+      sym_global = name_sym_def.sym_global;
+      sym_defined_in_current_unit = true
+    }
+  in
+  let data_items = emit_string_constant name_sym_def name [] in
+  let exn_sym = global_symbol_definition_in_current_unit ("caml_exn_" ^ name) in
   let tag = Obj.object_tag in
   let size = 2 in
   let fields = Csymbol_address name_sym :: cint_const (-i - 1) :: data_items in
@@ -4302,7 +4341,9 @@ let plugin_header units =
 (* Build the NULL terminated array of gc roots *)
 
 let emit_gc_roots_table ~symbols cont =
-  let table_symbol = global_symbol (make_symbol "gc_roots") in
+  let table_symbol =
+    Cmm.global_symbol_definition_in_current_unit (make_symbol "gc_roots")
+  in
   Cdata
     (Cdefine_symbol table_symbol
      :: List.map (fun s -> Csymbol_address s) symbols

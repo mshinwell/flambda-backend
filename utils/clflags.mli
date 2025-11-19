@@ -362,3 +362,5 @@ val zero_alloc_assert : Zero_alloc_annotations.Assert.t ref
 val no_auto_include_otherlibs : bool ref
 
 val prepend_directory : string -> string
+
+val large_code_model : bool ref

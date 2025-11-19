@@ -110,7 +110,7 @@ module Make_layout_filler (P : sig
 
   val term_of_symbol : dbg:Debuginfo.t -> Cmm.symbol -> cmm_term
 
-  val define_symbol : Cmm.symbol -> cmm_term list
+  val define_symbol : Cmm.symbol_definition -> cmm_term list
 end) : sig
   val fill_layout :
     for_static_sets option ->
@@ -236,7 +236,9 @@ end = struct
           let function_symbol =
             Function_slot.Map.find function_slot closure_symbols
           in
-          List.rev_append (P.define_symbol (R.symbol res function_symbol)) acc
+          List.rev_append
+            (P.define_symbol (R.symbol_definition res function_symbol))
+            acc
       in
       match code_id with
       | Code_id { code_id; only_full_applications } -> (
@@ -561,6 +563,9 @@ let params_and_body0 env res code_id ~result_arity ~fun_dbg
   let fun_sym =
     R.symbol_of_code_id res code_id ~currently_in_inlined_body:false
   in
+  let fun_sym_def : Cmm.symbol_definition =
+    { sym_name = fun_sym.sym_name; sym_global = fun_sym.sym_global }
+  in
   let fun_poll =
     Env.get_code_metadata env code_id
     |> Code_metadata.poll_attribute |> Poll_attribute.to_lambda
@@ -570,7 +575,8 @@ let params_and_body0 env res code_id ~result_arity ~fun_dbg
     |> Code_metadata.result_arity |> C.extended_machtype_of_return_arity
     |> C.Extended_machtype.to_machtype
   in
-  ( C.fundecl fun_sym fun_params fun_body fun_flags fun_dbg fun_poll fun_ret_type,
+  ( C.fundecl fun_sym_def fun_params fun_body fun_flags fun_dbg fun_poll
+      fun_ret_type,
     res )
 
 let params_and_body env res code_id p ~result_arity ~fun_dbg

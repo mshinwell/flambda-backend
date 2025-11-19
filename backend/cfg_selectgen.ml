@@ -277,6 +277,7 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     | Capply _ -> (
       match[@ocaml.warning "-fragile-match"] args with
       | Cconst_symbol (func, _dbg) :: rem ->
+        let rem = Cmm.symbol_reference_for_large_code_model func @ rem in
         Terminator (Call { op = Direct func; label_after }), rem
       | _ -> Terminator (Call { op = Indirect; label_after }), args)
     | Cextcall { func; alloc; ty; ty_args; returns; builtin; effects } ->

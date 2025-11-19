@@ -25,6 +25,13 @@ module UK = C.Update_kind
 module MBS = Flambda_kind.Mixed_block_shape
 module Tags = C.Unboxed_array_tags
 
+let symbol_of_symbol_definition_in_current_unit
+    (sym_def : Cmm.symbol_definition) : Cmm.symbol =
+  { sym_name = sym_def.sym_name;
+    sym_global = sym_def.sym_global;
+    sym_defined_in_current_unit = true
+  }
+
 let static_field res field field_kind =
   Simple.pattern_match'
     (Simple.With_debuginfo.simple field)
@@ -60,7 +67,8 @@ let or_variable f default v cont =
   | Const c -> f c cont
   | Var _ -> f default cont
 
-let update_field symb env res acc i update_kind field =
+let update_field sym_def env res acc i update_kind field =
+  let symb = symbol_of_symbol_definition_in_current_unit sym_def in
   Simple.pattern_match'
     (Simple.With_debuginfo.simple field)
     ~var:(fun var ~coercion:_ ->
@@ -72,11 +80,11 @@ let update_field symb env res acc i update_kind field =
     ~symbol:(fun _sym ~coercion:_ -> env, res, acc)
     ~const:(fun _cst -> env, res, acc)
 
-let rec static_block_updates symb env res acc i = function
+let rec static_block_updates sym_def env res acc i = function
   | [] -> env, res, acc
   | (simple, update_kind) :: r ->
-    let env, res, acc = update_field symb env res acc i update_kind simple in
-    static_block_updates symb env res acc
+    let env, res, acc = update_field sym_def env res acc i update_kind simple in
+    static_block_updates sym_def env res acc
       (i + UK.field_size_in_words update_kind)
       r
 
@@ -87,23 +95,25 @@ type maybe_int32 =
 
 (* The index [i] is always in the units of the size of the integer concerned,
    not units of 64-bit words. *)
-let rec static_unboxed_array_updates symb env res acc update_kind i = function
+let rec static_unboxed_array_updates sym_def env res acc update_kind i =
+  function
   | [] -> env, res, acc
   | sv :: r -> (
     match (sv : _ Or_variable.t) with
     | Const _ ->
-      static_unboxed_array_updates symb env res acc update_kind (i + 1) r
+      static_unboxed_array_updates sym_def env res acc update_kind (i + 1) r
     | Var (var, dbg) ->
       let env, res, acc =
+        let symb = symbol_of_symbol_definition_in_current_unit sym_def in
         C.make_update env res dbg update_kind ~symbol:(C.symbol ~dbg symb) var
           ~index:i ~prev_updates:acc
       in
-      static_unboxed_array_updates symb env res acc update_kind (i + 1) r)
+      static_unboxed_array_updates sym_def env res acc update_kind (i + 1) r)
 
 let static_boxed_number ~kind ~env ~symbol ~default ~emit ~transl ~structured v
     res updates =
-  let symbol = R.symbol res symbol in
-  let aux x cont = emit symbol (transl x) cont in
+  let sym_def = R.symbol_definition res symbol in
+  let aux x cont = emit sym_def (transl x) cont in
   let env, res, updates =
     match (v : _ Or_variable.t) with
     | Const c ->
@@ -111,9 +121,11 @@ let static_boxed_number ~kind ~env ~symbol ~default ~emit ~transl ~structured v
          functions in cmm_helpers can short-circuit Unboxing of boxed constant
          symbols, particularly in Classic mode. *)
       let structured_constant = structured (transl c) in
+      let symbol = symbol_of_symbol_definition_in_current_unit sym_def in
       Cmmgen_state.add_structured_constant symbol structured_constant;
       env, res, updates
     | Var (v, dbg) ->
+      let symbol = symbol_of_symbol_definition_in_current_unit sym_def in
       C.make_update env res dbg kind ~symbol:(C.symbol ~dbg symbol) v ~index:0
         ~prev_updates:updates
   in
@@ -168,7 +180,7 @@ let immutable_unboxed_int_array_payload maybe_int32 num_fields ~elts ~to_int64 =
 
 let immutable_unboxed_int_array env res updates maybe_int32 ~symbol ~elts
     ~to_int64 =
-  let sym = R.symbol res symbol in
+  let sym = R.symbol_definition res symbol in
   let num_elts = List.length elts in
   let num_fields, update_kind, tag =
     match maybe_int32 with
@@ -196,7 +208,7 @@ let immutable_unboxed_int_array env res updates maybe_int32 ~symbol ~elts
   env, R.set_data res block, updates
 
 let immutable_unboxed_float32_array env res updates ~symbol ~elts =
-  let sym = R.symbol res symbol in
+  let sym = R.symbol_definition res symbol in
   let num_elts = List.length elts in
   let num_fields = (1 + num_elts) / 2 in
   let tag =
@@ -226,7 +238,7 @@ let immutable_unboxed_float32_array env res updates ~symbol ~elts =
 
 let immutable_unboxed_vector_array ~default ~to_cmm ~update_kind ~tag
     ~words_per_element env res updates ~symbol ~elts =
-  let sym = R.symbol res symbol in
+  let sym = R.symbol_definition res symbol in
   let num_elts = List.length elts in
   let num_fields = num_elts * words_per_element in
   let header =
@@ -298,7 +310,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
         "Symbol %a: the GC does not currently support mutable fields in \
          statically-allocated values"
         Symbol.print s);
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let res = R.check_for_module_symbol res s in
     let field_kinds, header =
       let tag = Tag.Scannable.to_int tag in
@@ -465,7 +477,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
         ~f:Numeric_types.Float_by_bit_pattern.to_float
     in
     let static_fields = List.map aux fields in
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let float_array = C.emit_float_array_constant sym static_fields in
     let env, res, e =
       static_unboxed_array_updates sym env res updates UK.naked_floats 0 fields
@@ -490,7 +502,7 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
   | Block_like symbol, Immutable_vec512_array elts ->
     immutable_unboxed_vec512_array env res updates ~symbol ~elts
   | Block_like s, Immutable_value_array fields ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 (List.length fields) in
     let field_kinds =
       List.init (List.length fields) (fun _ -> Flambda_kind.value)
@@ -509,48 +521,48 @@ let static_const0 env res ~updates (bound_static : Bound_static.Pattern.t)
       Empty_array (Values_or_immediates_or_naked_floats | Unboxed_products) ) ->
     (* Recall: empty arrays have tag zero, even if their kind is naked float.
        Likewise arrays of unboxed products have tag zero. *)
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_float32s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int32s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_int64s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_nativeints ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec128s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec256s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Empty_array Naked_vec512s ->
-    let sym = R.symbol res s in
+    let sym = R.symbol_definition res s in
     let header = C.black_block_header 0 0 in
     let block = C.emit_block sym header [] in
     env, R.set_data res block, updates
   | Block_like s, Mutable_string { initial_value = str }
   | Block_like s, Immutable_string str ->
-    let data = C.emit_string_constant (R.symbol res s) str in
+    let data = C.emit_string_constant (R.symbol_definition res s) str in
     env, R.update_data res data, updates
   | Block_like _, Set_of_closures _ ->
     Misc.fatal_errorf

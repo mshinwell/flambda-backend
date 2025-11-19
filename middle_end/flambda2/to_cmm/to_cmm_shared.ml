@@ -348,7 +348,7 @@ let invalid res ~message =
       in
       let res =
         Cmm_helpers.emit_string_constant
-          (To_cmm_result.symbol res message_sym)
+          (To_cmm_result.symbol_definition res message_sym)
           message []
         |> To_cmm_result.add_archive_data_items res
       in

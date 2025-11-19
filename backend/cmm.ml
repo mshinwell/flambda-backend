@@ -489,6 +489,12 @@ let equal_is_global g g' =
 
 type symbol =
   { sym_name : string;
+    sym_global : is_global;
+    sym_defined_in_current_unit : bool
+  }
+
+type symbol_definition =
+  { sym_name : string;
     sym_global : is_global
   }
 
@@ -515,7 +521,11 @@ type vec512_bits =
     word7 : int64
   }
 
-let global_symbol sym_name = { sym_name; sym_global = Global }
+let global_symbol sym_name =
+  { sym_name; sym_global = Global; sym_defined_in_current_unit = false }
+
+let global_symbol_definition_in_current_unit sym_name =
+  { sym_name; sym_global = Global }
 
 type ccatch_flag =
   | Normal
@@ -578,7 +588,7 @@ type codegen_option =
       }
 
 type fundecl =
-  { fun_name : symbol;
+  { fun_name : symbol_definition;
     fun_args : (Backend_var.With_provenance.t * machtype) list;
     fun_body : expression;
     fun_codegen_options : codegen_option list;
@@ -588,7 +598,7 @@ type fundecl =
   }
 
 type data_item =
-  | Cdefine_symbol of symbol
+  | Cdefine_symbol of symbol_definition
   | Cint8 of int
   | Cint16 of int
   | Cint32 of nativeint
@@ -1038,3 +1048,11 @@ let is_addr (m : machtype_component) =
 
 let is_exn_handler (flag : ccatch_flag) =
   match flag with Exn_handler -> true | Normal | Recursive -> false
+
+let symbol_reference_for_large_code_model (sym : symbol) =
+  if not !Clflags.large_code_model
+  then []
+  else
+    match sym.sym_global with
+    | Local -> []
+    | Global -> if sym.sym_defined_in_current_unit then [] else []

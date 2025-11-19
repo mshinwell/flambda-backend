@@ -78,7 +78,8 @@ let is_global ppf = function
   | Global -> fprintf ppf "G"
   | Local -> fprintf ppf "L"
 
-let symbol ppf s = fprintf ppf "%a:\"%s\"" is_global s.sym_global s.sym_name
+let symbol ppf (s : Cmm.symbol) =
+  fprintf ppf "%a:\"%s\"" is_global s.sym_global s.sym_name
 
 let integer_comparison = function
   | Ceq -> "=="
