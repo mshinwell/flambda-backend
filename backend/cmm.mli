@@ -446,6 +446,7 @@ type operation =
   | Ctls_get
   | Cpoll
   | Cpause
+  | Cgot
 
 type is_global =
   | Global
@@ -681,4 +682,7 @@ val is_addr : machtype_component -> bool
 
 val is_exn_handler : ccatch_flag -> bool
 
-val symbol_reference_for_large_code_model : symbol -> expression list
+val symbol_base_address_for_large_code_model :
+  symbol -> Debuginfo.t -> expression list
+
+val needs_symbol_base_address_for_large_code_model : symbol -> bool

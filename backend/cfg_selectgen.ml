@@ -276,8 +276,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     match[@ocaml.warning "+fragile-match"] op with
     | Capply _ -> (
       match[@ocaml.warning "-fragile-match"] args with
-      | Cconst_symbol (func, _dbg) :: rem ->
-        let rem = Cmm.symbol_reference_for_large_code_model func @ rem in
+      | Cconst_symbol (func, dbg) :: rem ->
+        let rem = Cmm.symbol_base_address_for_large_code_model func dbg @ rem in
         Terminator (Call { op = Direct func; label_after }), rem
       | _ -> Terminator (Call { op = Indirect; label_after }), args)
     | Cextcall { func; alloc; ty; ty_args; returns; builtin; effects } ->
@@ -292,6 +292,15 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
           stack_ofs = -1;
           stack_align = Align_16
         }
+      in
+      let func_sym : Cmm.symbol =
+        { sym_name = func;
+          sym_global = Global;
+          sym_defined_in_current_unit = false
+        }
+      in
+      let args =
+        Cmm.symbol_base_address_for_large_code_model func_sym dbg @ args
       in
       if returns
       then Terminator (Prim { op = External external_call; label_after }), args
@@ -590,8 +599,13 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
     let* l = emit_tuple_not_flattened env sub_cfg exp_list in
     Ok (Array.concat l)
 
-  and emit_extcall_args env sub_cfg ty_args args dbg =
+  and emit_extcall_args env sub_cfg ty_args args dbg ~has_sym_base_arg =
     let* args = emit_tuple_not_flattened env sub_cfg args in
+    let sym_base_arg, args =
+      if not has_sym_base_arg
+      then [], args
+      else [[| args.(0) |]], Array.sub args 1 (Array.length args - 1)
+    in
     let ty_args =
       match ty_args with
       | [] -> List.map (fun _ -> Cmm.XInt) args
@@ -605,7 +619,8 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
       (fun i arg ->
         insert_move_extcall_arg env sub_cfg ty_args.(i) arg locs.(i) dbg)
       args;
-    Ok (Array.concat (Array.to_list locs), stack_ofs, align)
+    let loc_arg = Array.concat (sym_base_arg @ Array.to_list locs) in
+    Ok (loc_arg, stack_ofs, align)
 
   and emit_stores env sub_cfg dbg (args : Cmm.expression list) regs_addr =
     let byte_offset = ref (-Arch.size_int) in
@@ -891,10 +906,21 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         SU.insert_move_results env sub_cfg loc_res rd stack_ofs;
         SU.set_traps_for_raise env;
         Ok rd
-      | Terminator (Call { op = Direct _; label_after } as term) ->
+      | Terminator (Call { op = Direct func; label_after } as term) ->
+        let has_sym_base_arg =
+          Cmm.needs_symbol_base_address_for_large_code_model func
+        in
         let* r1 = emit_tuple env sub_cfg new_args in
+        let sym_base_arg, r1_without_sym_base_arg =
+          if not has_sym_base_arg
+          then [||], r1
+          else [| r1.(0) |], Array.sub r1 1 (Array.length r1 - 1)
+        in
         let rd = Reg.createv ty in
-        let loc_arg, stack_ofs_args = Proc.loc_arguments (Reg.typv r1) in
+        let loc_arg, stack_ofs_args =
+          Proc.loc_arguments (Reg.typv r1_without_sym_base_arg)
+        in
+        let loc_arg = Array.concat [sym_base_arg; loc_arg] in
         let loc_res, stack_ofs_res = Proc.loc_results_call (Reg.typv rd) in
         let stack_ofs = Stdlib.Int.max stack_ofs_args stack_ofs_res in
         SU.insert_move_args env sub_cfg r1 loc_arg stack_ofs;
@@ -906,8 +932,17 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         Ok rd
       | Terminator
           (Prim { op = External ({ ty_args; ty_res; _ } as r); label_after }) ->
+        let func_sym : Cmm.symbol =
+          { sym_name = func;
+            sym_global = Global;
+            sym_defined_in_current_unit = false
+          }
+        in
+        let has_sym_base_arg =
+          Cmm.needs_symbol_base_address_for_large_code_model func
+        in
         let* loc_arg, stack_ofs, stack_align =
-          emit_extcall_args env sub_cfg ty_args new_args dbg
+          emit_extcall_args env sub_cfg ty_args new_args dbg ~has_sym_base_arg
         in
         let rd = Reg.createv ty_res in
         let term =
@@ -931,8 +966,11 @@ module Make (Target : Cfg_selectgen_target_intf.S) = struct
         Sub_cfg.add_never_block sub_cfg ~label:label_after;
         Ok rd
       | Terminator (Call_no_return ({ func_symbol; ty_args; _ } as r)) ->
+        let has_sym_base_arg =
+          Cmm.needs_symbol_base_address_for_large_code_model func
+        in
         let* loc_arg, stack_ofs, stack_align =
-          emit_extcall_args env sub_cfg ty_args new_args dbg
+          emit_extcall_args env sub_cfg ty_args new_args dbg ~has_sym_base_arg
         in
         let keep_for_checking =
           !SU.current_function_is_check_enabled

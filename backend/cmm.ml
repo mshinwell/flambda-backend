@@ -477,6 +477,7 @@ type operation =
   | Ctls_get
   | Cpoll
   | Cpause
+  | Cgot
 
 type is_global =
   | Global
@@ -668,7 +669,8 @@ let iter_shallow_tail f = function
         | Cdivf _ | Creinterpret_cast _ | Cstatic_cast _
         | Ccmpf (_, _)
         | Cprobe _ | Cprobe_is_enabled _
-        | Ctuple_field (_, _) ),
+        | Ctuple_field (_, _)
+        | Cgot ),
         _,
         _ ) ->
     false
@@ -702,7 +704,8 @@ let map_shallow_tail f = function
           | Cmulf _ | Cdivf _ | Creinterpret_cast _ | Cstatic_cast _
           | Ccmpf (_, _)
           | Cprobe _ | Cprobe_is_enabled _
-          | Ctuple_field (_, _) ),
+          | Ctuple_field (_, _)
+          | Cgot ),
           _,
           _ ) ) as cmm ->
     cmm
@@ -1049,10 +1052,16 @@ let is_addr (m : machtype_component) =
 let is_exn_handler (flag : ccatch_flag) =
   match flag with Exn_handler -> true | Normal | Recursive -> false
 
-let symbol_reference_for_large_code_model (sym : symbol) =
+let symbol_base_address_for_large_code_model (sym : symbol) dbg =
   if not !Clflags.large_code_model
   then []
   else
     match sym.sym_global with
     | Local -> []
-    | Global -> if sym.sym_defined_in_current_unit then [] else []
+    | Global ->
+      if sym.sym_defined_in_current_unit then [] else [Cop (Cgot, [], dbg)]
+
+let needs_symbol_base_address_for_large_code_model sym =
+  match symbol_base_address_for_large_code_model sym Debuginfo.none with
+  | [] -> false
+  | _ :: _ -> true
