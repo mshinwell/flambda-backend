@@ -362,7 +362,8 @@ let dump_terminator' ?(print_reg = Printreg.reg) ?(res = [||]) ?(args = [||])
          { func =
              { sym_name =
                  Printf.sprintf "self(%s)" (Label.to_string destination);
-               sym_global = Local
+               sym_global = Local;
+               sym_defined_in_current_unit = true
              }
          })
   | Tailcall_func call ->
