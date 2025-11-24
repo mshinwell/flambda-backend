@@ -183,6 +183,13 @@ module GP_reg_name = struct
     | SP -> "sp"
     | LR -> "lr"
     | FP -> "fp"
+
+  let encode_for_binary (type a) (t : a t) index =
+    match t with
+    | W | X -> index
+    | WZR | XZR | WSP | SP -> 31
+    | LR -> 30
+    | FP -> 29
 end
 
 (* Register representation *)
@@ -200,6 +207,11 @@ module Reg_name = struct
     match t with
     | GP rn -> GP_reg_name.name rn index
     | Neon rn -> Neon_reg_name.name rn index
+
+  let encode_for_binary (type a) (t : a t) index =
+    match t with
+    | GP rn -> GP_reg_name.encode_for_binary rn index
+    | Neon _ -> index
 end
 
 module Reg = struct
@@ -213,6 +225,9 @@ module Reg = struct
     { reg_name; index }
 
   let name (type a) (t : a t) = Reg_name.name t.reg_name t.index
+
+  let encode_for_binary (type a) (t : a t) =
+    Reg_name.encode_for_binary t.reg_name t.index
 
   (* for special GP registers we use the last index *)
   (* CR mshinwell: why is this? *)
@@ -2224,5 +2239,35 @@ module DSL = struct
     (* MOV to SP -> ADD SP, <Xn>, #0 *)
     let ins_mov_to_sp ~src:rn =
       ins ADD_immediate (reg_op (Reg.sp ()), rn, imm 0, None)
+  end
+
+  module Binary_encoder = struct
+    [@@@ocaml.warning "-4"]
+
+    let encode_instruction : type operands. operands Instruction_name.t -> operands -> int32 =
+      fun instr operands ->
+        let open Int32 in
+        match instr, operands with
+        | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+          if imm12 < 0 || imm12 > 4095 then
+            Misc.fatal_errorf "ADD immediate out of range: %d" imm12 ();
+          let rd_bits = Reg.encode_for_binary rd in
+          let rn_bits = Reg.encode_for_binary rn in
+          let sh_bit = match shift_opt with
+            | None -> 0
+            | Some Lsl_by_twelve -> 1
+          in
+          let sf = 1 in
+          let result = zero in
+          let result = logor result (shift_left (of_int sf) 31) in
+          let result = logor result (shift_left (of_int 0b10001) 24) in
+          let result = logor result (shift_left (of_int sh_bit) 22) in
+          let result = logor result (shift_left (of_int imm12) 10) in
+          let result = logor result (shift_left (of_int rn_bits) 5) in
+          let result = logor result (of_int rd_bits) in
+          result
+        | _ -> Misc.fatal_error "Encoding not yet implemented for this instruction"
+
+    [@@@ocaml.warning "+4"]
   end
 end

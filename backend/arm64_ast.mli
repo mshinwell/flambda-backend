@@ -1100,4 +1100,9 @@ module DSL : sig
     val ins_mov_to_sp :
       src:[< `Reg of [< `GP of [< `X | `FP]]] Operand.t -> unit
   end
+
+  module Binary_encoder : sig
+    val encode_instruction :
+      'operands Instruction_name.t -> 'operands -> int32
+  end
 end
