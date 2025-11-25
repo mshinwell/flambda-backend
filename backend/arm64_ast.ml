@@ -2274,6 +2274,94 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
+    (* Logical (immediate) encoding - C4.1.92.6
+       Used for AND, ORR, EOR, ANDS with bitmask immediates *)
+    let _encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int opc) 29) in
+      let result = logor result (shift_left (of_int 0b100100) 23) in
+      let result = logor result (shift_left (of_int n) 22) in
+      let result = logor result (shift_left (of_int immr) 16) in
+      let result = logor result (shift_left (of_int imms) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Move wide (immediate) encoding - C4.1.92.7
+       Used for MOVN, MOVZ, MOVK *)
+    let encode_move_wide ~sf ~opc ~hw ~imm16 ~rd =
+      let open Int32 in
+      if imm16 < 0 || imm16 > 0xFFFF
+      then Misc.fatal_errorf "MOVZ/MOVN/MOVK immediate out of range: %d" imm16 ();
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int opc) 29) in
+      let result = logor result (shift_left (of_int 0b100101) 23) in
+      let result = logor result (shift_left (of_int hw) 21) in
+      let result = logor result (shift_left (of_int imm16) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Bitfield encoding - C4.1.92.8
+       Used for SBFM, BFM, UBFM *)
+    let encode_bitfield ~sf ~opc ~n ~immr ~imms ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int opc) 29) in
+      let result = logor result (shift_left (of_int 0b100110) 23) in
+      let result = logor result (shift_left (of_int n) 22) in
+      let result = logor result (shift_left (of_int immr) 16) in
+      let result = logor result (shift_left (of_int imms) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Data-processing (2 source) - C4.1.94.1 *)
+    let encode_data_proc_2_source ~sf ~s ~opcode ~rm ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int s) 29) in
+      let result = logor result (shift_left (of_int 0b11010110) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int opcode) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Data-processing (3 source) - C4.1.94.13 *)
+    let encode_data_proc_3_source ~sf ~op54 ~op31 ~o0 ~rm ~ra ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int op54) 29) in
+      let result = logor result (shift_left (of_int 0b11011) 24) in
+      let result = logor result (shift_left (of_int op31) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int o0) 15) in
+      let result = logor result (shift_left (of_int ra) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Logical (shifted register) - C4.1.94.3 *)
+    let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int opc) 29) in
+      let result = logor result (shift_left (of_int 0b01010) 24) in
+      let result = logor result (shift_left (of_int shift) 22) in
+      let result = logor result (shift_left (of_int n) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int imm6) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
     let encode_instruction :
         type operands. operands Instruction_name.t -> operands -> int32 =
      fun instr operands ->
@@ -2293,6 +2381,14 @@ module DSL = struct
           match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
         in
         encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
+          ~rd:rd_bits
+      | SUBS_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits
           ~rd:rd_bits
       | ADD_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
         let rd_bits = Reg.encoding rd in
@@ -2323,6 +2419,149 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         let shift_type = encode_shift_type kind in
         encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( SUBS_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | MOVZ, (Reg rd, Imm_nativeint imm, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Nativeint.to_int imm land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d" sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+      | MOVN, (Reg rd, Imm (Twelve imm), None) ->
+        let rd_bits = Reg.encoding rd in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits
+      | MOVN, (Reg rd, Imm_nativeint imm, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Nativeint.to_int imm land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg rd, Imm_nativeint imm, Shift { kind = LSL; amount = Six sh })
+        ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Nativeint.to_int imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | SDIV, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b000011 ~rm:rm_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | LSLV, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001000 ~rm:rm_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | LSRV, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001001 ~rm:rm_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | ASRV, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001010 ~rm:rm_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | MADD, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:0 ~rm:rm_bits
+          ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
+      | MSUB, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:1 ~rm:rm_bits
+          ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
+      | AND_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( AND_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ORR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( ORR_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | EOR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( EOR_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | _ ->
         Misc.fatal_error "Encoding not yet implemented for this instruction"
