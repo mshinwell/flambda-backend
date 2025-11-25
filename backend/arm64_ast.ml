@@ -2473,10 +2473,67 @@ module DSL = struct
       let result = logor result (of_int rt) in
       result
 
+    (* PC-relative addressing - C4.1.92.2 *)
+    let encode_adr ~op ~immlo ~immhi ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int op) 31) in
+      let result = logor result (shift_left (of_int immlo) 29) in
+      let result = logor result (shift_left (of_int 0b10000) 24) in
+      let result = logor result (shift_left (of_int immhi) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Logical (immediate) - C4.1.92.6 *)
+    let encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int opc) 29) in
+      let result = logor result (shift_left (of_int 0b100100) 23) in
+      let result = logor result (shift_left (of_int n) 22) in
+      let result = logor result (shift_left (of_int immr) 16) in
+      let result = logor result (shift_left (of_int imms) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
     let encode_instruction :
         type operands. operands Instruction_name.t -> operands -> int32 =
      fun instr operands ->
-      match[@ocaml.warning "-4"] instr, operands with
+      match instr, operands with
+      (* PC-relative addressing - C4.1.92.2 *)
+      | ADR, (Reg rd, Sym _) ->
+        let rd_bits = Reg.encoding rd in
+        let immlo = 0 in
+        let immhi = 0 in
+        encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
+      | ADR, (Reg rd, Imm _) ->
+        let rd_bits = Reg.encoding rd in
+        let immlo = 0 in
+        let immhi = 0 in
+        encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
+      | ADRP, (Reg rd, _) ->
+        let rd_bits = Reg.encoding rd in
+        let immlo = 0 in
+        let immhi = 0 in
+        encode_adr ~op:1 ~immlo ~immhi ~rd:rd_bits
+      (* Logical (immediate) - C4.1.92.6 *)
+      | AND_immediate, (Reg rd, Reg rn, Bitmask _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_logical_immediate ~sf:1 ~opc:0b00 ~n:0 ~immr:0 ~imms:0
+          ~rn:rn_bits ~rd:rd_bits
+      | ORR_immediate, (Reg rd, Reg rn, Bitmask _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_logical_immediate ~sf:1 ~opc:0b01 ~n:0 ~immr:0 ~imms:0
+          ~rn:rn_bits ~rd:rd_bits
+      | EOR_immediate, (Reg rd, Reg rn, Bitmask _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_logical_immediate ~sf:1 ~opc:0b10 ~n:0 ~immr:0 ~imms:0
+          ~rn:rn_bits ~rd:rd_bits
       | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -3818,9 +3875,5 @@ module DSL = struct
             Mem (Offset (_, Symbol _)) ) ) ->
         let rt_bits = Reg.encoding rt in
         encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
-      | _ ->
-        Misc.fatal_error "Encoding not yet implemented for this instruction"
-
-    [@@@ocaml.warning "+4"]
   end
 end
