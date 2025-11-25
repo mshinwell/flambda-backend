@@ -184,7 +184,7 @@ module GP_reg_name = struct
     | LR -> "lr"
     | FP -> "fp"
 
-  let encode_for_binary (type a) (t : a t) index =
+  let encoding (type a) (t : a t) index =
     match t with
     | W | X -> index
     | WZR | XZR | WSP | SP -> 31
@@ -208,10 +208,8 @@ module Reg_name = struct
     | GP rn -> GP_reg_name.name rn index
     | Neon rn -> Neon_reg_name.name rn index
 
-  let encode_for_binary (type a) (t : a t) index =
-    match t with
-    | GP rn -> GP_reg_name.encode_for_binary rn index
-    | Neon _ -> index
+  let encoding (type a) (t : a t) index =
+    match t with GP rn -> GP_reg_name.encoding rn index | Neon _ -> index
 end
 
 module Reg = struct
@@ -226,8 +224,7 @@ module Reg = struct
 
   let name (type a) (t : a t) = Reg_name.name t.reg_name t.index
 
-  let encode_for_binary (type a) (t : a t) =
-    Reg_name.encode_for_binary t.reg_name t.index
+  let encoding (type a) (t : a t) = Reg_name.encoding t.reg_name t.index
 
   (* for special GP registers we use the last index *)
   (* CR mshinwell: why is this? *)
@@ -2242,31 +2239,93 @@ module DSL = struct
   end
 
   module Binary_encoder = struct
-    [@@@ocaml.warning "-4"]
+    let encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
+      match kind with LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
 
-    let encode_instruction : type operands. operands Instruction_name.t -> operands -> int32 =
-      fun instr operands ->
-        let open Int32 in
-        match instr, operands with
-        | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
-          if imm12 < 0 || imm12 > 4095 then
-            Misc.fatal_errorf "ADD immediate out of range: %d" imm12 ();
-          let rd_bits = Reg.encode_for_binary rd in
-          let rn_bits = Reg.encode_for_binary rn in
-          let sh_bit = match shift_opt with
-            | None -> 0
-            | Some Lsl_by_twelve -> 1
-          in
-          let sf = 1 in
-          let result = zero in
-          let result = logor result (shift_left (of_int sf) 31) in
-          let result = logor result (shift_left (of_int 0b10001) 24) in
-          let result = logor result (shift_left (of_int sh_bit) 22) in
-          let result = logor result (shift_left (of_int imm12) 10) in
-          let result = logor result (shift_left (of_int rn_bits) 5) in
-          let result = logor result (of_int rd_bits) in
-          result
-        | _ -> Misc.fatal_error "Encoding not yet implemented for this instruction"
+    let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
+      let open Int32 in
+      if imm12 < 0 || imm12 > 4095
+      then Misc.fatal_errorf "ADD/SUB immediate out of range: %d" imm12 ();
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int op) 30) in
+      let result = logor result (shift_left (of_int s) 29) in
+      let result = logor result (shift_left (of_int 0b100010) 23) in
+      let result = logor result (shift_left (of_int sh) 22) in
+      let result = logor result (shift_left (of_int imm12) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
+      let open Int32 in
+      let max_shift = if sf = 1 then 63 else 31 in
+      if imm6 < 0 || imm6 > max_shift
+      then Misc.fatal_errorf "ADD/SUB shift amount out of range: %d" imm6 ();
+      let result = zero in
+      let result = logor result (shift_left (of_int sf) 31) in
+      let result = logor result (shift_left (of_int op) 30) in
+      let result = logor result (shift_left (of_int s) 29) in
+      let result = logor result (shift_left (of_int 0b01011) 24) in
+      let result = logor result (shift_left (of_int shift) 22) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int imm6) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    let encode_instruction :
+        type operands. operands Instruction_name.t -> operands -> int32 =
+     fun instr operands ->
+      match[@ocaml.warning "-4"] instr, operands with
+      | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
+          ~rd:rd_bits
+      | SUB_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
+          ~rd:rd_bits
+      | ADD_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( ADD_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | SUB_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:0 ~rm:rm_bits
+          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+      | ( SUB_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | _ ->
+        Misc.fatal_error "Encoding not yet implemented for this instruction"
 
     [@@@ocaml.warning "+4"]
   end
