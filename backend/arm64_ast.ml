@@ -2274,8 +2274,8 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
-    (* Logical (immediate) encoding - C4.1.92.6
-       Used for AND, ORR, EOR, ANDS with bitmask immediates *)
+    (* Logical (immediate) encoding - C4.1.92.6 Used for AND, ORR, EOR, ANDS
+       with bitmask immediates *)
     let _encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
       let open Int32 in
       let result = zero in
@@ -2289,12 +2289,12 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
-    (* Move wide (immediate) encoding - C4.1.92.7
-       Used for MOVN, MOVZ, MOVK *)
+    (* Move wide (immediate) encoding - C4.1.92.7 Used for MOVN, MOVZ, MOVK *)
     let encode_move_wide ~sf ~opc ~hw ~imm16 ~rd =
       let open Int32 in
       if imm16 < 0 || imm16 > 0xFFFF
-      then Misc.fatal_errorf "MOVZ/MOVN/MOVK immediate out of range: %d" imm16 ();
+      then
+        Misc.fatal_errorf "MOVZ/MOVN/MOVK immediate out of range: %d" imm16 ();
       let result = zero in
       let result = logor result (shift_left (of_int sf) 31) in
       let result = logor result (shift_left (of_int opc) 29) in
@@ -2304,8 +2304,7 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
-    (* Bitfield encoding - C4.1.92.8
-       Used for SBFM, BFM, UBFM *)
+    (* Bitfield encoding - C4.1.92.8 Used for SBFM, BFM, UBFM *)
     let encode_bitfield ~sf ~opc ~n ~immr ~imms ~rn ~rd =
       let open Int32 in
       let result = zero in
@@ -2463,6 +2462,17 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
+    (* Load register (literal) - C4.1.96.19 *)
+    let encode_load_literal ~opc ~v ~imm19 ~rt =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int opc) 30) in
+      let result = logor result (shift_left (of_int 0b011) 27) in
+      let result = logor result (shift_left (of_int v) 26) in
+      let result = logor result (shift_left (of_int imm19) 5) in
+      let result = logor result (of_int rt) in
+      result
+
     let encode_instruction :
         type operands. operands Instruction_name.t -> operands -> int32 =
      fun instr operands ->
@@ -2544,7 +2554,9 @@ module DSL = struct
           | None -> 0
           | Some (Shift { kind = LSL; amount = Six sh }) ->
             if sh mod 16 <> 0 || sh < 0 || sh > 48
-            then Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d" sh ();
+            then
+              Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
             sh / 16
           | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
         in
@@ -2560,7 +2572,9 @@ module DSL = struct
           | None -> 0
           | Some (Shift { kind = LSL; amount = Six sh }) ->
             if sh mod 16 <> 0 || sh < 0 || sh > 48
-            then Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+            then
+              Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
             sh / 16
           | _ -> Misc.fatal_error "MOVN: invalid shift amount"
         in
@@ -2570,7 +2584,8 @@ module DSL = struct
         let rd_bits = Reg.encoding rd in
         let imm16 = Nativeint.to_int imm land 0xFFFF in
         if sh mod 16 <> 0 || sh < 0 || sh > 48
-        then Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
         let hw = sh / 16 in
         encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
       | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
@@ -2623,8 +2638,8 @@ module DSL = struct
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
-        encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
-          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+        encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0
+          ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits
       | ( AND_shifted_register,
           (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
         ->
@@ -2638,8 +2653,8 @@ module DSL = struct
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
-        encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_bits
-          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+        encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0
+          ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits
       | ( ORR_shifted_register,
           (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
         ->
@@ -2653,8 +2668,8 @@ module DSL = struct
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
-        encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
-          ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+        encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0
+          ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits
       | ( EOR_shifted_register,
           (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
         ->
@@ -2702,990 +2717,786 @@ module DSL = struct
         encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm:rm_bits
           ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( ADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( SUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
       | ( AND_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( AND_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( ORR_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( ORR_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( EOR_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( EOR_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( SMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( UMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( MUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10011
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( UQSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00101
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( SSHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V16B); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) )
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V8H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( USHL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b01000
           ~rn:rn_bits ~rd:rd_bits
       | ( FADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FADD_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FSUB_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b11010
           ~rn:rn_bits ~rd:rd_bits
       | ( FMUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011
           ~rn:rn_bits ~rd:rd_bits
       | ( FMUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011
           ~rn:rn_bits ~rd:rd_bits
       | ( FMUL_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11011
           ~rn:rn_bits ~rd:rd_bits
       | ( FDIV_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111
           ~rn:rn_bits ~rd:rd_bits
       | ( FDIV_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111
           ~rn:rn_bits ~rd:rd_bits
       | ( FDIV_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11111
           ~rn:rn_bits ~rd:rd_bits
       | ( FMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110
           ~rn:rn_bits ~rd:rd_bits
       | ( FMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110
           ~rn:rn_bits ~rd:rd_bits
       | ( FMAX_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11110
           ~rn:rn_bits ~rd:rd_bits
       | ( FMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V2S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110
           ~rn:rn_bits ~rd:rd_bits
       | ( FMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V4S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110
           ~rn:rn_bits ~rd:rd_bits
       | ( FMIN_vector,
-          ( Reg ({ reg_name = Neon (Vector V2D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+          (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3706,190 +3517,130 @@ module DSL = struct
         let rd_bits = Reg.encoding rd in
         let imm8 = 0 in
         encode_fp_immediate ~ftype:0b11 ~imm8 ~rd:rd_bits
-      | ( FADD,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FADD, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FADD,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FADD, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FADD,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FADD, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FSUB,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FSUB, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FSUB,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FSUB, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FSUB,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FSUB, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMUL,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMUL, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMUL,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMUL, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMUL,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FDIV,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FDIV, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FDIV,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FDIV, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FDIV,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FDIV, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMAX,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMAX, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMAX,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMAX, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMAX,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMAX, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMIN,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMIN, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMIN,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMIN, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FMIN,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FMIN, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FNMUL,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FNMUL, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm)
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FNMUL,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FNMUL, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm)
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
           ~rd:rd_bits
-      | ( FNMUL,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm ) ) ->
+      | FNMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm)
+        ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3929,10 +3680,8 @@ module DSL = struct
         encode_fp_cond_select ~ftype:0b11 ~rm:rm_bits ~cond:cond_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMADD,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3940,10 +3689,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMADD,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3951,10 +3698,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMADD,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3962,10 +3707,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMSUB,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3973,10 +3716,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMSUB,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3984,10 +3725,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FMSUB,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -3995,10 +3734,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMADD,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -4006,10 +3743,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMADD,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -4017,10 +3752,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMADD,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -4028,10 +3761,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMSUB,
-          ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -4039,10 +3770,8 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMSUB,
-          ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
@@ -4050,16 +3779,45 @@ module DSL = struct
         encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | ( FNMSUB,
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Reg ra ) ) ->
+          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+        ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         let ra_bits = Reg.encoding ra in
         encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
+      (* Load register (literal) - C4.1.96.19 *)
+      (* XXX these need more work *)
+      | LDR, (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))) ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b00 ~v:0 ~imm19:0 ~rt:rt_bits
+      | LDR, (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))) ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
+      | LDR, (Reg ({ reg_name = GP LR; _ } as rt), Mem (Offset (_, Symbol _)))
+        ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
+      | LDRSW, (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _)))
+        ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b10 ~v:0 ~imm19:0 ~rt:rt_bits
+      | ( LDR_simd_and_fp,
+          ( Reg ({ reg_name = Neon (Scalar S); _ } as rt),
+            Mem (Offset (_, Symbol _)) ) ) ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b00 ~v:1 ~imm19:0 ~rt:rt_bits
+      | ( LDR_simd_and_fp,
+          ( Reg ({ reg_name = Neon (Scalar D); _ } as rt),
+            Mem (Offset (_, Symbol _)) ) ) ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b01 ~v:1 ~imm19:0 ~rt:rt_bits
+      | ( LDR_simd_and_fp,
+          ( Reg ({ reg_name = Neon (Scalar Q); _ } as rt),
+            Mem (Offset (_, Symbol _)) ) ) ->
+        let rt_bits = Reg.encoding rt in
+        encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
       | _ ->
         Misc.fatal_error "Encoding not yet implemented for this instruction"
 
