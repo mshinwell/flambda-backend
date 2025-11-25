@@ -2377,6 +2377,90 @@ module DSL = struct
       let result = logor result (of_int rd) in
       result
 
+    (* Floating-point immediate - C4.1.95.36 *)
+    let encode_fp_immediate ~ftype ~imm8 ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int 0b11110) 24) in
+      let result = logor result (shift_left (of_int ftype) 22) in
+      let result = logor result (shift_left (of_int 0b1) 21) in
+      let result = logor result (shift_left (of_int imm8) 13) in
+      let result = logor result (shift_left (of_int 0b100) 10) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Floating-point data-processing (2 source) - C4.1.95.38 *)
+    let encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int 0b11110) 24) in
+      let result = logor result (shift_left (of_int ftype) 22) in
+      let result = logor result (shift_left (of_int 0b1) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int opcode) 12) in
+      let result = logor result (shift_left (of_int 0b10) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Floating-point conditional select - C4.1.95.39 *)
+    let encode_fp_cond_select ~ftype ~rm ~cond ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int 0b11110) 24) in
+      let result = logor result (shift_left (of_int ftype) 22) in
+      let result = logor result (shift_left (of_int 0b1) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int cond) 12) in
+      let result = logor result (shift_left (of_int 0b11) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    (* Floating-point data-processing (3 source) - C4.1.95.40 *)
+    let encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
+      let open Int32 in
+      let result = zero in
+      let result = logor result (shift_left (of_int 0b11111) 24) in
+      let result = logor result (shift_left (of_int ftype) 22) in
+      let result = logor result (shift_left (of_int o1) 21) in
+      let result = logor result (shift_left (of_int rm) 16) in
+      let result = logor result (shift_left (of_int o0) 15) in
+      let result = logor result (shift_left (of_int ra) 10) in
+      let result = logor result (shift_left (of_int rn) 5) in
+      let result = logor result (of_int rd) in
+      result
+
+    let encode_condition (cond : Cond.t) : int =
+      match cond with
+      | EQ -> 0b0000
+      | NE -> 0b0001
+      | CS -> 0b0010
+      | CC -> 0b0011
+      | MI -> 0b0100
+      | PL -> 0b0101
+      | VS -> 0b0110
+      | VC -> 0b0111
+      | HI -> 0b1000
+      | LS -> 0b1001
+      | GE -> 0b1010
+      | LT -> 0b1011
+      | GT -> 0b1100
+      | LE -> 0b1101
+
+    let ftype_from_scalar_reg (type a) (reg : a Reg.t) : int =
+      match reg.reg_name with
+      | Neon (Scalar S) -> 0b00
+      | Neon (Scalar D) -> 0b01
+      | Neon (Scalar H) -> 0b11
+      | GP _ -> Misc.fatal_error "ftype_from_scalar_reg: not a scalar FP register"
+      | Neon (Vector _) ->
+        Misc.fatal_error "ftype_from_scalar_reg: not a scalar FP register"
+      | Neon (Lane _) ->
+        Misc.fatal_error "ftype_from_scalar_reg: not a scalar FP register"
+      | Neon (Scalar B | Scalar Q) ->
+        Misc.fatal_error "ftype_from_scalar_reg: not a valid FP type"
+
     (* Logical (shifted register) - C4.1.94.3 *)
     let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
       let open Int32 in
@@ -2959,6 +3043,100 @@ module DSL = struct
           | _ -> Misc.fatal_error "FMIN_vector: invalid arrangement"
         in
         encode_simd_three_same ~q ~u:0 ~size ~rm:rm_bits ~opcode:0b11110
+          ~rn:rn_bits ~rd:rd_bits
+      | FMOV_scalar_immediate, (Reg rd, Imm_float _f) ->
+        let rd_bits = Reg.encoding rd in
+        let ftype = ftype_from_scalar_reg rd in
+        let imm8 = 0 in
+        encode_fp_immediate ~ftype ~imm8 ~rd:rd_bits
+      | FADD, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
+          ~rd:rd_bits
+      | FSUB, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
+          ~rd:rd_bits
+      | FMUL, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
+          ~rd:rd_bits
+      | FDIV, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
+          ~rd:rd_bits
+      | FMAX, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
+          ~rd:rd_bits
+      | FMIN, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
+          ~rd:rd_bits
+      | FNMUL, (Reg rd, Reg rn, Reg rm) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_2_source ~ftype ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
+          ~rd:rd_bits
+      | FCSEL, (Reg rd, Reg rn, Reg rm, Cond cond) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ftype = ftype_from_scalar_reg rd in
+        let cond_bits = encode_condition cond in
+        encode_fp_cond_select ~ftype ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
+          ~rd:rd_bits
+      | FMADD, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_3_source ~ftype ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | FMSUB, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_3_source ~ftype ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | FNMADD, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_3_source ~ftype ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+          ~rn:rn_bits ~rd:rd_bits
+      | FNMSUB, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let ra_bits = Reg.encoding ra in
+        let ftype = ftype_from_scalar_reg rd in
+        encode_fp_3_source ~ftype ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
           ~rn:rn_bits ~rd:rd_bits
       | _ ->
         Misc.fatal_error "Encoding not yet implemented for this instruction"
