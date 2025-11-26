@@ -2542,6 +2542,22 @@ module DSL = struct
         in
         encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
           ~rd:rd_bits
+      | ADD_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:imm6
+          ~rn:rn_bits ~rd:rd_bits
+      | ADD_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:0
+          ~rn:rn_bits ~rd:rd_bits
       | SUB_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2550,6 +2566,22 @@ module DSL = struct
         in
         encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
           ~rd:rd_bits
+      | SUB_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:imm6
+          ~rn:rn_bits ~rd:rd_bits
+      | SUB_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:0
+          ~rn:rn_bits ~rd:rd_bits
       | SUBS_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2558,6 +2590,22 @@ module DSL = struct
         in
         encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits
           ~rd:rd_bits
+      | SUBS_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:imm6
+          ~rn:rn_bits ~rd:rd_bits
+      | SUBS_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let sh_bit =
+          match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1
+        in
+        encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:0
+          ~rn:rn_bits ~rd:rd_bits
       | ADD_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2571,6 +2619,16 @@ module DSL = struct
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         let shift_type = encode_shift_type kind in
+        encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( ADD_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
         encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | SUB_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
@@ -2588,6 +2646,16 @@ module DSL = struct
         let shift_type = encode_shift_type kind in
         encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( SUB_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2601,6 +2669,16 @@ module DSL = struct
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         let shift_type = encode_shift_type kind in
+        encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( SUBS_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
         encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | MOVZ, (Reg rd, Imm_nativeint imm, shift_opt) ->
@@ -2618,9 +2696,150 @@ module DSL = struct
           | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+      | MOVZ, (Reg rd, Sym _, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = 0 in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+      | MOVZ, (Reg rd, Imm (Six imm), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+      | MOVZ, (Reg rd, Imm (Twelve imm), shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+      | MOVZ, (Reg rd, Imm_float f, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVN, (Reg rd, Imm (Twelve imm), None) ->
         let rd_bits = Reg.encoding rd in
         encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits
+      | ( MOVN,
+          ( Reg rd,
+            Imm (Twelve imm),
+            Some (Shift { kind = LSL; amount = Six sh }) ) ) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | ( MOVN,
+          ( Reg rd,
+            Imm (Twelve imm),
+            Some (Shift { kind = LSL; amount = Twelve sh }) ) ) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | MOVN, (Reg _, Imm (Twelve _), Some (Shift { kind = _; _ })) ->
+        Misc.fatal_error "MOVN: only LSL shift is supported"
+      | MOVN, (Reg rd, Imm (Six imm), None) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16 ~rd:rd_bits
+      | ( MOVN,
+          (Reg rd, Imm (Six imm), Some (Shift { kind = LSL; amount = Six sh }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | ( MOVN,
+          ( Reg rd,
+            Imm (Six imm),
+            Some (Shift { kind = LSL; amount = Twelve sh }) ) ) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = _; _ })) ->
+        Misc.fatal_error "MOVN: only LSL shift is supported"
+      | MOVN, (Reg rd, Sym _, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = 0 in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+      | MOVN, (Reg rd, Imm_float f, shift_opt) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+        let hw =
+          match shift_opt with
+          | None -> 0
+          | Some (Shift { kind = LSL; amount = Six sh }) ->
+            if sh mod 16 <> 0 || sh < 0 || sh > 48
+            then
+              Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
+                sh ();
+            sh / 16
+          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+        in
+        encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
       | MOVN, (Reg rd, Imm_nativeint imm, shift_opt) ->
         let rd_bits = Reg.encoding rd in
         let imm16 = Nativeint.to_int imm land 0xFFFF in
@@ -2645,14 +2864,162 @@ module DSL = struct
           Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
         let hw = sh / 16 in
         encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | ( MOVK,
+          (Reg rd, Imm_nativeint imm, Shift { kind = LSL; amount = Twelve sh })
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Nativeint.to_int imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg _, Imm_nativeint _, Shift { kind = _; _ }) ->
+        Misc.fatal_error "MOVK: only LSL shift is supported"
+      | MOVK, (Reg rd, Sym _, Shift { kind = LSL; amount = Six sh }) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = 0 in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg rd, Sym _, Shift { kind = LSL; amount = Twelve sh }) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = 0 in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg _, Sym _, Shift { kind = _; _ }) ->
+        Misc.fatal_error "MOVK: only LSL shift is supported"
+      | MOVK, (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Six sh }) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Twelve sh })
+        ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Six sh })
+        ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | ( MOVK,
+          (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Twelve sh }) )
+        ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = imm land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg _, Imm _, Shift { kind = _; _ }) ->
+        Misc.fatal_error "MOVK: only LSL shift is supported"
+      | MOVK, (Reg rd, Imm_float f, Shift { kind = LSL; amount = Six sh }) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg rd, Imm_float f, Shift { kind = LSL; amount = Twelve sh }) ->
+        let rd_bits = Reg.encoding rd in
+        let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+        if sh mod 16 <> 0 || sh < 0 || sh > 48
+        then
+          Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+        let hw = sh / 16 in
+        encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+      | MOVK, (Reg _, Imm_float _, Shift { kind = _; _ }) ->
+        Misc.fatal_error "MOVK: only LSL shift is supported"
       | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let imms = imms land 0x3F in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let immr = immr land 0x3F in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let immr = immr land 0x3F in
+        let imms = imms land 0x3F in
         encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
       | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
         encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let imms = imms land 0x3F in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let immr = immr land 0x3F in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let immr = immr land 0x3F in
+        let imms = imms land 0x3F in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Imm _, Sym _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Sym _, Imm _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
+      | UBFM, (Reg rd, Reg rn, Sym _, Sym _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Imm _, Sym _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Sym _, Imm _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
+      | SBFM, (Reg rd, Reg rn, Sym _, Sym _) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+          ~rd:rd_bits
       | SDIV, (Reg rd, Reg rn, Reg rm) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2706,6 +3073,16 @@ module DSL = struct
         let shift_type = encode_shift_type kind in
         encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( AND_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
+        encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | ORR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2721,6 +3098,16 @@ module DSL = struct
         let shift_type = encode_shift_type kind in
         encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( ORR_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
+        encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | EOR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2734,6 +3121,16 @@ module DSL = struct
         let rn_bits = Reg.encoding rn in
         let rm_bits = Reg.encoding rm in
         let shift_type = encode_shift_type kind in
+        encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
+          ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+      | ( EOR_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 }))
+        ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        let shift_type = encode_shift_type kind in
+        let imm6 = imm12 land 0x3F in
         encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
           ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
       | RBIT, (Reg rd, Reg rn) ->
@@ -2817,6 +3214,13 @@ module DSL = struct
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
           ~rn:rn_bits ~rd:rd_bits
       | ( SQADD_vector,
+          (Reg ({ reg_name = Neon (Vector V1D); _ } as rd), Reg rn, Reg rm) ) ->
+        let rd_bits = Reg.encoding rd in
+        let rn_bits = Reg.encoding rn in
+        let rm_bits = Reg.encoding rm in
+        encode_simd_three_same ~q:0 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
+          ~rn:rn_bits ~rd:rd_bits
+      | ( SQADD_vector,
           (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
         let rn_bits = Reg.encoding rn in
@@ -2873,6 +3277,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
+      | ADD_vector, (Reg { reg_name = _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( SUB_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -2923,6 +3329,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
           ~rn:rn_bits ~rd:rd_bits
+      | SUB_vector, (Reg { reg_name = _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( AND_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -2938,6 +3346,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
+      | AND_vector, (Reg { reg_name = _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( ORR_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -2953,6 +3363,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
+      | ORR_vector, (Reg { reg_name = _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( EOR_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -2968,6 +3380,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
           ~rn:rn_bits ~rd:rd_bits
+      | EOR_vector, (Reg { reg_name = _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( SMAX_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -3054,6 +3468,8 @@ module DSL = struct
         let rm_bits = Reg.encoding rm in
         encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
           ~rn:rn_bits ~rd:rd_bits
+      | SQADD_vector, (Reg { reg_name = Neon _; _ }, _, _) ->
+        assert false (* TODO XXX *)
       | ( UMAX_vector,
           (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
         let rd_bits = Reg.encoding rd in
@@ -3875,5 +4291,6 @@ module DSL = struct
             Mem (Offset (_, Symbol _)) ) ) ->
         let rt_bits = Reg.encoding rt in
         encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
+      | _ -> assert false (* XXX TODO *)
   end
 end
