@@ -2693,7 +2693,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVZ, (Reg rd, Sym _, shift_opt) ->
@@ -2708,7 +2711,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVZ, (Reg rd, Imm (Six imm), shift_opt) ->
@@ -2723,7 +2729,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVZ, (Reg rd, Imm (Twelve imm), shift_opt) ->
@@ -2738,7 +2747,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVZ, (Reg rd, Imm_float f, shift_opt) ->
@@ -2753,7 +2765,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVZ: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVZ: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
       | MOVN, (Reg rd, Imm (Twelve imm), None) ->
@@ -2808,7 +2823,8 @@ module DSL = struct
           Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
         let hw = sh / 16 in
         encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
-      | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = _; _ })) ->
+      | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = ASR; _ }))
+      | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = LSR; _ })) ->
         Misc.fatal_error "MOVN: only LSL shift is supported"
       | MOVN, (Reg rd, Sym _, shift_opt) ->
         let rd_bits = Reg.encoding rd in
@@ -2822,7 +2838,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVN: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
       | MOVN, (Reg rd, Imm_float f, shift_opt) ->
@@ -2837,7 +2856,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVN: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
       | MOVN, (Reg rd, Imm_nativeint imm, shift_opt) ->
@@ -2852,7 +2874,10 @@ module DSL = struct
               Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
                 sh ();
             sh / 16
-          | _ -> Misc.fatal_error "MOVN: invalid shift amount"
+          | Some (Shift { kind = LSL; amount = Twelve _ })
+          | Some (Shift { kind = ASR; _ })
+          | Some (Shift { kind = LSR; _ }) ->
+            Misc.fatal_error "MOVN: invalid shift amount"
         in
         encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
       | MOVK, (Reg rd, Imm_nativeint imm, Shift { kind = LSL; amount = Six sh })
@@ -4291,6 +4316,130 @@ module DSL = struct
             Mem (Offset (_, Symbol _)) ) ) ->
         let rt_bits = Reg.encoding rt in
         encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
-      | _ -> assert false (* XXX TODO *)
+      | SMAX_vector, _ -> assert false (* XXX TODO *)
+      | SMIN_vector, _ -> assert false (* XXX TODO *)
+      | SQADD_vector, _ -> assert false (* XXX TODO *)
+      | UMAX_vector, _ -> assert false (* XXX TODO *)
+      | UMIN_vector, _ -> assert false (* XXX TODO *)
+      | MUL_vector, _ -> assert false (* XXX TODO *)
+      | SQSUB_vector, _ -> assert false (* XXX TODO *)
+      | UQADD_vector, _ -> assert false (* XXX TODO *)
+      | UQSUB_vector, _ -> assert false (* XXX TODO *)
+      | SSHL_vector, _ -> assert false (* XXX TODO *)
+      | USHL_vector, _ -> assert false (* XXX TODO *)
+      | FADD_vector, _ -> assert false (* XXX TODO *)
+      | FSUB_vector, _ -> assert false (* XXX TODO *)
+      | FMUL_vector, _ -> assert false (* XXX TODO *)
+      | FDIV_vector, _ -> assert false (* XXX TODO *)
+      | FMAX_vector, _ -> assert false (* XXX TODO *)
+      | FMIN_vector, _ -> assert false (* XXX TODO *)
+      | FMOV_scalar_immediate, _ -> assert false (* XXX TODO *)
+      | FADD, _ -> assert false (* XXX TODO *)
+      | FSUB, _ -> assert false (* XXX TODO *)
+      | FMUL, _ -> assert false (* XXX TODO *)
+      | FDIV, _ -> assert false (* XXX TODO *)
+      | FMAX, _ -> assert false (* XXX TODO *)
+      | FMIN, _ -> assert false (* XXX TODO *)
+      | FNMUL, _ -> assert false (* XXX TODO *)
+      | FMADD, _ -> assert false (* XXX TODO *)
+      | FMSUB, _ -> assert false (* XXX TODO *)
+      | FNMADD, _ -> assert false (* XXX TODO *)
+      | FNMSUB, _ -> assert false (* XXX TODO *)
+      | FABS, _ -> assert false (* XXX TODO *)
+      | FNEG, _ -> assert false (* XXX TODO *)
+      | FSQRT, _ -> assert false (* XXX TODO *)
+      | FCVT, _ -> assert false (* XXX TODO *)
+      | FCVTZS, _ -> assert false (* XXX TODO *)
+      | FCVTNS, _ -> assert false (* XXX TODO *)
+      | SCVTF, _ -> assert false (* XXX TODO *)
+      | FCMP, _ -> assert false (* XXX TODO *)
+      | FCSEL, _ -> assert false (* XXX TODO *)
+      | FMOV_general_or_register, _ -> assert false (* XXX TODO *)
+      | LDR, _ -> assert false (* XXX TODO *)
+      | STR, _ -> assert false (* XXX TODO *)
+      | LDP, _ -> assert false (* XXX TODO *)
+      | STP, _ -> assert false (* XXX TODO *)
+      | LDRB, _ -> assert false (* XXX TODO *)
+      | LDRH, _ -> assert false (* XXX TODO *)
+      | LDRSB, _ -> assert false (* XXX TODO *)
+      | LDRSH, _ -> assert false (* XXX TODO *)
+      | STRB, _ -> assert false (* XXX TODO *)
+      | STRH, _ -> assert false (* XXX TODO *)
+      | LDAR, _ -> assert false (* XXX TODO *)
+      | STR_simd_and_fp, _ -> assert false (* XXX TODO *)
+      | LDRSW, _ -> assert false (* XXX TODO *)
+      | ABS_vector, _ -> assert false (* XXX TODO *)
+      | ADDP_vector, _ -> assert false (* XXX TODO *)
+      | ADDV, _ -> assert false (* XXX TODO *)
+      | MVN_vector, _ -> assert false (* XXX TODO *)
+      | NEG_vector, _ -> assert false (* XXX TODO *)
+      | MOV_vector, _ -> assert false (* XXX TODO *)
+      | MULL_vector, _ -> assert false (* XXX TODO *)
+      | UMULL_vector, _ -> assert false (* XXX TODO *)
+      | SMULL_vector, _ -> assert false (* XXX TODO *)
+      | UMULL2_vector, _ -> assert false (* XXX TODO *)
+      | SMULL2_vector, _ -> assert false (* XXX TODO *)
+      | FADDP_vector, _ -> assert false (* XXX TODO *)
+      | FNEG_vector, _ -> assert false (* XXX TODO *)
+      | FSQRT_vector, _ -> assert false (* XXX TODO *)
+      | FCVTZS_vector, _ -> assert false (* XXX TODO *)
+      | FCVTNS_vector, _ -> assert false (* XXX TODO *)
+      | SCVTF_vector, _ -> assert false (* XXX TODO *)
+      | FCVTN_vector, _ -> assert false (* XXX TODO *)
+      | FCVTL_vector, _ -> assert false (* XXX TODO *)
+      | FMOV_vector_immediate, _ -> assert false (* XXX TODO *)
+      | FRECPE_vector, _ -> assert false (* XXX TODO *)
+      | FRSQRTE_vector, _ -> assert false (* XXX TODO *)
+      | (FRINT _), _ -> assert false (* XXX TODO *)
+      | (FRINT_vector _), _ -> assert false (* XXX TODO *)
+      | (FCM_register _), _ -> assert false (* XXX TODO *)
+      | (FCM_zero _), _ -> assert false (* XXX TODO *)
+      | (CM_register _), _ -> assert false (* XXX TODO *)
+      | (CM_zero _), _ -> assert false (* XXX TODO *)
+      | LDR_simd_and_fp, _ -> assert false (* XXX TODO *)
+      | CVT_vector, _ -> assert false (* XXX TODO *)
+      | CNT_vector, _ -> assert false (* XXX TODO *)
+      | SQXTN, _ -> assert false (* XXX TODO *)
+      | SQXTN2, _ -> assert false (* XXX TODO *)
+      | UQXTN, _ -> assert false (* XXX TODO *)
+      | UQXTN2, _ -> assert false (* XXX TODO *)
+      | XTN, _ -> assert false (* XXX TODO *)
+      | XTN2, _ -> assert false (* XXX TODO *)
+      | SXTL, _ -> assert false (* XXX TODO *)
+      | UXTL, _ -> assert false (* XXX TODO *)
+      | SHL, _ -> assert false (* XXX TODO *)
+      | SSHR, _ -> assert false (* XXX TODO *)
+      | USHR, _ -> assert false (* XXX TODO *)
+      | DUP, _ -> assert false (* XXX TODO *)
+      | INS, _ -> assert false (* XXX TODO *)
+      | INS_V, _ -> assert false (* XXX TODO *)
+      | UMOV, _ -> assert false (* XXX TODO *)
+      | SMOV, _ -> assert false (* XXX TODO *)
+      | EXT, _ -> assert false (* XXX TODO *)
+      | ZIP1, _ -> assert false (* XXX TODO *)
+      | ZIP2, _ -> assert false (* XXX TODO *)
+      | UADDLP_vector, _ -> assert false (* XXX TODO *)
+      | ADDS, _ -> assert false (* XXX TODO *)
+      | CSEL, _ -> assert false (* XXX TODO *)
+      | CSINC, _ -> assert false (* XXX TODO *)
+      | TST, _ -> assert false (* XXX TODO *)
+      | B, _ -> assert false (* XXX TODO *)
+      | BL, _ -> assert false (* XXX TODO *)
+      | BR, _ -> assert false (* XXX TODO *)
+      | BLR, _ -> assert false (* XXX TODO *)
+      | (B_cond _), _ -> assert false (* XXX TODO *)
+      | (B_cond_float _), _ -> assert false (* XXX TODO *)
+      | CBZ, _ -> assert false (* XXX TODO *)
+      | CBNZ, _ -> assert false (* XXX TODO *)
+      | TBZ, _ -> assert false (* XXX TODO *)
+      | TBNZ, _ -> assert false (* XXX TODO *)
+      | RET, _ -> assert false (* XXX TODO *)
+      | NOP, _ -> assert false (* XXX TODO *)
+      | YIELD, _ -> assert false (* XXX TODO *)
+      | (DMB _), _ -> assert false (* XXX TODO *)
+      | (DSB _), _ -> assert false (* XXX TODO *)
+      | MOV, _ -> assert false (* XXX TODO *)
+      | MOVI, _ -> assert false (* XXX TODO *)
+      | CTZ, _ -> assert false (* XXX TODO *)
   end
 end
