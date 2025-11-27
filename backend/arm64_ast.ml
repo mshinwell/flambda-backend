@@ -4316,23 +4316,194 @@ module DSL = struct
             Mem (Offset (_, Symbol _)) ) ) ->
         let rt_bits = Reg.encoding rt in
         encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
-      | SMAX_vector, _ -> assert false (* XXX TODO *)
-      | SMIN_vector, _ -> assert false (* XXX TODO *)
-      | SQADD_vector, _ -> assert false (* XXX TODO *)
-      | UMAX_vector, _ -> assert false (* XXX TODO *)
-      | UMIN_vector, _ -> assert false (* XXX TODO *)
-      | MUL_vector, _ -> assert false (* XXX TODO *)
-      | SQSUB_vector, _ -> assert false (* XXX TODO *)
-      | UQADD_vector, _ -> assert false (* XXX TODO *)
-      | UQSUB_vector, _ -> assert false (* XXX TODO *)
-      | SSHL_vector, _ -> assert false (* XXX TODO *)
-      | USHL_vector, _ -> assert false (* XXX TODO *)
-      | FADD_vector, _ -> assert false (* XXX TODO *)
-      | FSUB_vector, _ -> assert false (* XXX TODO *)
-      | FMUL_vector, _ -> assert false (* XXX TODO *)
-      | FDIV_vector, _ -> assert false (* XXX TODO *)
-      | FMAX_vector, _ -> assert false (* XXX TODO *)
-      | FMIN_vector, _ -> assert false (* XXX TODO *)
+      | SMAX_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMAX_vector, (Reg {reg_name=Neon (Vector V2D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMAX_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMAX_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMAX_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMIN_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMIN_vector, (Reg {reg_name=Neon (Vector V2D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMIN_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMIN_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SMIN_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SQADD_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMAX_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMAX_vector, (Reg {reg_name=Neon (Vector V2D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMAX_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMAX_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMAX_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMIN_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMIN_vector, (Reg {reg_name=Neon (Vector V2D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMIN_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMIN_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UMIN_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | MUL_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | MUL_vector, (Reg {reg_name=Neon (Vector V2D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | MUL_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | MUL_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | MUL_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SQSUB_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SQSUB_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SQSUB_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SQSUB_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQADD_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQADD_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQADD_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQADD_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQSUB_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQSUB_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQSUB_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | UQSUB_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SSHL_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SSHL_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SSHL_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | SSHL_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | USHL_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | USHL_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | USHL_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | USHL_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FADD_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FSUB_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMUL_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FDIV_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMAX_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Vector V8B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Vector V16B); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Vector V4H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Vector V8H); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Vector V1D); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Scalar _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=Neon (Lane _); _ }, _, _) ->
+        assert false (* XXX TODO *)
+      | FMIN_vector, (Reg {reg_name=GP _; _ }, _, _) ->
+        assert false (* XXX TODO *)
       | FMOV_scalar_immediate, _ -> assert false (* XXX TODO *)
       | FADD, _ -> assert false (* XXX TODO *)
       | FSUB, _ -> assert false (* XXX TODO *)
