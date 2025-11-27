@@ -123,32 +123,25 @@ module DSL : sig
     Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Arm64_ast.Operand.t
 
   val reg_v2s :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V2S]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
 
   val reg_v4s :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V4S]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
 
   val reg_v2d :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V2D]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
 
   val reg_v16b :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V16B]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
 
   val reg_v8h :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V8H]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
 
   val reg_v8b :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V8B]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V8B]]]] Arm64_ast.Operand.t
 
   val reg_v4h :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V4H]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t
 
   val reglane_b :
     Reg.t ->
@@ -178,12 +171,10 @@ module DSL : sig
     Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `Q]]]] Arm64_ast.Operand.t
 
   val reg_v2d_operand :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V2D]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
 
   val reg_v16b_operand :
-    Reg.t ->
-    [> `Reg of [> `Neon of [> `Vector of [> `V16B]]]] Arm64_ast.Operand.t
+    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
 
   val shift_operand :
     'op Arm64_ast.Operand.Shift.Kind.t ->
