@@ -78,11 +78,11 @@ module Neon_reg_name = struct
 
   module Scalar = struct
     type _ t =
-      | B : [> `B] t
-      | H : [> `H] t
-      | S : [> `S] t
-      | D : [> `D] t
-      | Q : [> `Q] t
+      | B : [`B] t
+      | H : [`H] t
+      | S : [`S] t
+      | D : [`D] t
+      | Q : [`Q] t
 
     let num_lanes : type a. a t -> int = function
       | B -> 16
@@ -105,8 +105,8 @@ module Neon_reg_name = struct
     (** Support representation with and without the optional number of lanes, for
         example Vn.4S[1] and Vn.S[1]. *)
     type 'a r =
-      | V : 'a Vector.t -> [> `Vector of 'a] r
-      | S : 'a Scalar.t -> [> `Scalar of 'a] r
+      | V : 'a Vector.t -> [`Vector of 'a] r
+      | S : 'a Scalar.t -> [`Scalar of 'a] r
 
     type 'a t =
       { r : 'a r;
@@ -134,9 +134,9 @@ module Neon_reg_name = struct
   end
 
   type _ t =
-    | Vector : 'v Vector.t -> [> `Vector of 'v] t
-    | Scalar : 's Scalar.t -> [> `Scalar of 's] t
-    | Lane : 'l Lane.t -> [> `Lane of 'l] t
+    | Vector : 'v Vector.t -> [`Vector of 'v] t
+    | Scalar : 's Scalar.t -> [`Scalar of 's] t
+    | Lane : 'l Lane.t -> [`Lane of 'l] t
 
   let last = 31
 
@@ -154,14 +154,14 @@ end
 (* General-purpose register description *)
 module GP_reg_name = struct
   type _ t =
-    | W : [> `W] t
-    | X : [> `X] t
-    | WZR : [> `WZR] t
-    | XZR : [> `XZR] t
-    | WSP : [> `WSP] t
-    | SP : [> `SP] t
-    | LR : [> `LR] t
-    | FP : [> `FP] t
+    | W : [`W] t
+    | X : [`X] t
+    | WZR : [`WZR] t
+    | XZR : [`XZR] t
+    | WSP : [`WSP] t
+    | SP : [`SP] t
+    | LR : [`LR] t
+    | FP : [`FP] t
   [@@ocaml.warning "-37"]
 
   let last_numbered = 30
@@ -195,8 +195,8 @@ end
 (* Register representation *)
 module Reg_name = struct
   type _ t =
-    | GP : 'a GP_reg_name.t -> [> `GP of 'a] t
-    | Neon : 'a Neon_reg_name.t -> [> `Neon of 'a] t
+    | GP : 'a GP_reg_name.t -> [`GP of 'a] t
+    | Neon : 'a Neon_reg_name.t -> [`Neon of 'a] t
 
   let check_index (type a) (t : a t) index =
     match t with
@@ -404,14 +404,14 @@ end
 
 module Symbol = struct
   type _ reloc_directive =
-    | LOWER_TWELVE : [> `Twelve] reloc_directive
-    | GOT_PAGE : [> `Twenty_one] reloc_directive
-    | GOT_PAGE_OFF : [> `Twelve] reloc_directive
-    | GOT : [> `Sixty_four] reloc_directive
+    | LOWER_TWELVE : [`Twelve] reloc_directive
+    | GOT_PAGE : [`Twenty_one] reloc_directive
+    | GOT_PAGE_OFF : [`Twelve] reloc_directive
+    | GOT : [`Sixty_four] reloc_directive
     (* XXX is Sixty_four correct? *)
-    | GOT_LOWER_TWELVE : [> `Twelve] reloc_directive
-    | PAGE : [> `Twenty_one] reloc_directive
-    | PAGE_OFF : [> `Twelve] reloc_directive
+    | GOT_LOWER_TWELVE : [`Twelve] reloc_directive
+    | PAGE : [`Twenty_one] reloc_directive
+    | PAGE_OFF : [`Twelve] reloc_directive
 
   type 'width t =
     { name : string;
@@ -466,8 +466,8 @@ module Operand = struct
   module Imm = struct
     (* int is big enough for all instruction encodings *)
     type 'width t =
-      | Six : int -> [> `Six] t
-      | Twelve : int -> [> `Twelve] t
+      | Six : int -> [`Six] t
+      | Twelve : int -> [`Twelve] t
 
     let print : type w. Format.formatter -> w t -> unit =
      fun ppf t ->
@@ -533,17 +533,17 @@ module Operand = struct
   end
 
   type _ t =
-    | Sym : 'w Symbol.t -> [> `Imm of 'w] t
-    | Imm : 'w Imm.t -> [> `Imm of 'w] t
-    | Imm_float : float -> [> `Imm of [> `Sixty_four]] t
-    | Imm_nativeint : nativeint -> [> `Imm of [> `Sixty_four]] t
-    | Reg : 'a Reg.t -> [> `Reg of 'a] t
-    | Lsl_by_twelve : [> `Fixed_shift of [> `Lsl_by_twelve]] t
-    | Shift : ('op, 'amount) Shift.t -> [> `Shift of 'op * 'amount] t
-    | Cond : Cond.t -> [> `Cond] t
-    | Float_cond : Float_cond.t -> [> `Float_cond] t
-    | Mem : Addressing_mode.t -> [> `Mem] t
-    | Bitmask : Bitmask.t -> [> `Bitmask] t
+    | Sym : 'w Symbol.t -> [`Imm of 'w] t
+    | Imm : 'w Imm.t -> [`Imm of 'w] t
+    | Imm_float : float -> [`Imm of [`Sixty_four]] t
+    | Imm_nativeint : nativeint -> [`Imm of [`Sixty_four]] t
+    | Reg : 'a Reg.t -> [`Reg of 'a] t
+    | Lsl_by_twelve : [`Fixed_shift of [`Lsl_by_twelve]] t
+    | Shift : ('op, 'amount) Shift.t -> [`Shift of 'op * 'amount] t
+    | Cond : Cond.t -> [`Cond] t
+    | Float_cond : Float_cond.t -> [`Float_cond] t
+    | Mem : Addressing_mode.t -> [`Mem] t
+    | Bitmask : Bitmask.t -> [`Bitmask] t
   [@@ocaml.warning "-37"]
 
   type 'a operand = 'a t

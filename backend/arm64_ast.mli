@@ -47,36 +47,36 @@ end
 module Reg : sig
   type 'a t
 
-  val reg_x : int -> [> `GP of [> `X]] t
+  val reg_x : int -> [`GP of [`X]] t
 
-  val reg_w : int -> [> `GP of [> `W]] t
+  val reg_w : int -> [`GP of [`W]] t
 
-  val reg_d : int -> [> `Neon of [> `Scalar of [> `D]]] t
+  val reg_d : int -> [`Neon of [`Scalar of [`D]]] t
 
-  val reg_s : int -> [> `Neon of [> `Scalar of [> `S]]] t
+  val reg_s : int -> [`Neon of [`Scalar of [`S]]] t
 
-  val reg_q : int -> [> `Neon of [> `Scalar of [> `Q]]] t
+  val reg_q : int -> [`Neon of [`Scalar of [`Q]]] t
 
-  val reg_v2d : int -> [> `Neon of [> `Vector of [`V2D]]] t
+  val reg_v2d : int -> [`Neon of [`Vector of [`V2D]]] t
 
-  val reg_v16b : int -> [> `Neon of [> `Vector of [`V16B]]] t
+  val reg_v16b : int -> [`Neon of [`Vector of [`V16B]]] t
 
-  val reg_v8b : int -> [> `Neon of [> `Vector of [`V8B]]] t
+  val reg_v8b : int -> [`Neon of [`Vector of [`V8B]]] t
 
-  val reg_b : int -> [> `Neon of [> `Scalar of [> `B]]] t
+  val reg_b : int -> [`Neon of [`Scalar of [`B]]] t
 
-  val sp : unit -> [> `GP of [> `SP]] t
+  val sp : unit -> [`GP of [`SP]] t
 end
 
 module Symbol : sig
   type _ reloc_directive =
-    | LOWER_TWELVE : [> `Twelve] reloc_directive
-    | GOT_PAGE : [> `Twenty_one] reloc_directive
-    | GOT_PAGE_OFF : [> `Twelve] reloc_directive
-    | GOT : [> `Sixty_four] reloc_directive
-    | GOT_LOWER_TWELVE : [> `Twelve] reloc_directive
-    | PAGE : [> `Twenty_one] reloc_directive
-    | PAGE_OFF : [> `Twelve] reloc_directive
+    | LOWER_TWELVE : [`Twelve] reloc_directive
+    | GOT_PAGE : [`Twenty_one] reloc_directive
+    | GOT_PAGE_OFF : [`Twelve] reloc_directive
+    | GOT : [`Sixty_four] reloc_directive
+    | GOT_LOWER_TWELVE : [`Twelve] reloc_directive
+    | PAGE : [`Twenty_one] reloc_directive
+    | PAGE_OFF : [`Twelve] reloc_directive
 
   type 'width t
 
@@ -1440,113 +1440,110 @@ module Instruction_name : sig
 end
 
 module DSL : sig
-  val reg_op : 'a Reg.t -> [> `Reg of 'a] Operand.t
+  val reg_op : 'a Reg.t -> [`Reg of 'a] Operand.t
 
-  val imm : int -> [> `Imm of [> `Twelve]] Operand.t
+  val imm : int -> [`Imm of [`Twelve]] Operand.t
 
-  val imm_six : int -> [> `Imm of [> `Six]] Operand.t
+  val imm_six : int -> [`Imm of [`Six]] Operand.t
 
-  val imm_float : float -> [> `Imm of [> `Sixty_four]] Operand.t
+  val imm_float : float -> [`Imm of [`Sixty_four]] Operand.t
 
-  val imm_nativeint : nativeint -> [> `Imm of [> `Sixty_four]] Operand.t
+  val imm_nativeint : nativeint -> [`Imm of [`Sixty_four]] Operand.t
 
-  val bitmask : nativeint -> [> `Bitmask] Operand.t
+  val bitmask : nativeint -> [`Bitmask] Operand.t
 
-  val symbol : 'w Symbol.t -> [> `Imm of 'w] Operand.t
+  val symbol : 'w Symbol.t -> [`Imm of 'w] Operand.t
 
   val shift :
     kind:'op Operand.Shift.Kind.t ->
     amount:int ->
-    [> `Shift of 'op * [`Six]] Operand.t
+    [`Shift of 'op * [`Six]] Operand.t
 
-  val mem : base:[< `GP of [< `X | `SP]] Reg.t -> [> `Mem] Operand.t
+  val mem : base:[< `GP of [< `X | `SP]] Reg.t -> [`Mem] Operand.t
 
   val mem_offset :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [> `Mem] Operand.t
+    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_symbol :
-    base:[< `GP of [< `X | `SP]] Reg.t ->
-    symbol:'w Symbol.t ->
-    [> `Mem] Operand.t
+    base:[< `GP of [< `X | `SP]] Reg.t -> symbol:'w Symbol.t -> [`Mem] Operand.t
 
   val mem_pre :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [> `Mem] Operand.t
+    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_post :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [> `Mem] Operand.t
+    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
-  val cond : Cond.t -> [> `Cond] Operand.t
+  val cond : Cond.t -> [`Cond] Operand.t
 
-  val float_cond : Float_cond.t -> [> `Float_cond] Operand.t
+  val float_cond : Float_cond.t -> [`Float_cond] Operand.t
 
   (** The functions below are shorthands for composing [reg_op] and the
       respective function from [Reg] *)
-  val reg_v2d : int -> [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Operand.t
+  val reg_v2d : int -> [`Reg of [`Neon of [`Vector of [`V2D]]]] Operand.t
 
-  val reg_v2s : int -> [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Operand.t
+  val reg_v2s : int -> [`Reg of [`Neon of [`Vector of [`V2S]]]] Operand.t
 
-  val reg_v4s : int -> [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Operand.t
+  val reg_v4s : int -> [`Reg of [`Neon of [`Vector of [`V4S]]]] Operand.t
 
-  val reg_v8b : int -> [> `Reg of [> `Neon of [> `Vector of [`V8B]]]] Operand.t
+  val reg_v8b : int -> [`Reg of [`Neon of [`Vector of [`V8B]]]] Operand.t
 
-  val reg_v16b :
-    int -> [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Operand.t
+  val reg_v16b : int -> [`Reg of [`Neon of [`Vector of [`V16B]]]] Operand.t
 
-  val reg_v8h : int -> [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Operand.t
+  val reg_v8h : int -> [`Reg of [`Neon of [`Vector of [`V8H]]]] Operand.t
 
-  val reg_v4h : int -> [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Operand.t
+  val reg_v4h : int -> [`Reg of [`Neon of [`Vector of [`V4H]]]] Operand.t
 
-  val reg_b : int -> [> `Reg of [> `Neon of [> `Scalar of [> `B]]]] Operand.t
+  val reg_b : int -> [`Reg of [`Neon of [`Scalar of [`B]]]] Operand.t
 
-  val reg_s : int -> [> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Operand.t
+  val reg_s : int -> [`Reg of [`Neon of [`Scalar of [`S]]]] Operand.t
 
-  val reg_d : int -> [> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Operand.t
+  val reg_d : int -> [`Reg of [`Neon of [`Scalar of [`D]]]] Operand.t
 
-  val reg_q : int -> [> `Reg of [> `Neon of [> `Scalar of [> `Q]]]] Operand.t
+  val reg_q : int -> [`Reg of [`Neon of [`Scalar of [`Q]]]] Operand.t
 
-  val reg_x : int -> [> `Reg of [> `GP of [> `X]]] Operand.t
+  val reg_x : int -> [`Reg of [`GP of [`X]]] Operand.t
 
-  val reg_w : int -> [> `Reg of [> `GP of [> `W]]] Operand.t
+  val reg_w : int -> [`Reg of [`GP of [`W]]] Operand.t
 
-  val sp : unit -> [> `Reg of [> `GP of [> `SP]]] Operand.t
+  val sp : unit -> [`Reg of [`GP of [`SP]]] Operand.t
 
-  val lr : unit -> [> `Reg of [> `GP of [> `LR]]] Operand.t
+  val lr : unit -> [`Reg of [`GP of [`LR]]] Operand.t
 
-  val fp : unit -> [> `Reg of [> `GP of [> `FP]]] Operand.t
+  val fp : unit -> [`Reg of [`GP of [`FP]]] Operand.t
 
-  val xzr : unit -> [> `Reg of [> `GP of [> `XZR]]] Operand.t
+  val xzr : unit -> [`Reg of [`GP of [`XZR]]] Operand.t
 
-  val wzr : unit -> [> `Reg of [> `GP of [> `WZR]]] Operand.t
+  val wzr : unit -> [`Reg of [`GP of [`WZR]]] Operand.t
 
   val reglane_v4s :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Vector of [`V4S]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Vector of [`V4S]]]]] Operand.t
 
   val reglane_v2d :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Vector of [`V2D]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Vector of [`V2D]]]]] Operand.t
 
   val reglane_b :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `B]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`B]]]]] Operand.t
 
   val reglane_h :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `H]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`H]]]]] Operand.t
 
   val reglane_s :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `S]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`S]]]]] Operand.t
 
   val reglane_d :
     int ->
     lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]] Operand.t
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Operand.t
 
   val print_ins : 'operands Instruction_name.t -> 'operands -> string
 
