@@ -108,7 +108,7 @@ module Neon_reg_name = struct
 
      (* let create (type a b) (s : a Scalar.t) (v : b Vector.t) : (a Scalar.t *
      b Vector.t) t = match[@warning "-4"] s, v with | B, (V8B | V16B) -> Equal_B
-     | H, (V4H | V8H) -> Equal_H | S, (V2S | V4S) -> Equal_S | D, (V1D | V2D) ->
+     | (V4H | V8H), H -> Equal_H | S, (V2S | V4S) -> Equal_S | D, (V1D | V2D) ->
      Equal_D | _, _ -> assert false *) end *)
 
   module Scalar = struct
@@ -2914,108 +2914,149 @@ module Binary_encoder = struct
    fun instr operands ->
     match operands, instr with
     (* PC-relative addressing - C4.1.92.2 *)
-    | (Reg rd, Sym _), ADR ->
+    | Pair (Reg rd, Sym _), ADR ->
       let rd_bits = Reg.encoding rd in
       let immlo = 0 in
       let immhi = 0 in
       encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
-    | (Reg rd, Imm _), ADR ->
+    | Pair (Reg rd, Imm _), ADR ->
       let rd_bits = Reg.encoding rd in
       let immlo = 0 in
       let immhi = 0 in
       encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
-    | (Reg rd, _), ADRP ->
+    | Pair (Reg rd, _), ADRP ->
       let rd_bits = Reg.encoding rd in
       let immlo = 0 in
       let immhi = 0 in
       encode_adr ~op:1 ~immlo ~immhi
         ~rd:rd_bits (* Logical (immediate) - C4.1.92.6 *)
-    | (Reg rd, Reg rn, Bitmask _), AND_immediate ->
+    | Triple (Reg rd, Reg rn, Bitmask _), AND_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_logical_immediate ~sf:1 ~opc:0b00 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Bitmask _), ORR_immediate ->
+    | Triple (Reg rd, Reg rn, Bitmask _), ORR_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_logical_immediate ~sf:1 ~opc:0b01 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Bitmask _), EOR_immediate ->
+    | Triple (Reg rd, Reg rn, Bitmask _), EOR_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_logical_immediate ~sf:1 ~opc:0b10 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), ADD_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), ADD_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six imm6), shift_opt), ADD_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Six imm6), shift_opt), ADD_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:imm6
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, shift_opt), ADD_immediate ->
+    | Quad (Reg rd, Reg rn, Sym _, shift_opt), ADD_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), SUB_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), SUB_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six imm6), shift_opt), SUB_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Six imm6), shift_opt), SUB_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:imm6
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, shift_opt), SUB_immediate ->
+    | Quad (Reg rd, Reg rn, Sym _, shift_opt), SUB_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), SUBS_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt), SUBS_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six imm6), shift_opt), SUBS_immediate ->
+    | Quad (Reg rd, Reg rn, Imm (Six imm6), shift_opt), SUBS_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:imm6
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, shift_opt), SUBS_immediate ->
+    | Quad (Reg rd, Reg rn, Sym _, shift_opt), SUBS_immediate ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
-      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      let sh_bit =
+        match shift_opt with
+        | Optional None -> 0
+        | Optional (Some Lsl_by_twelve) -> 1
+      in
       encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), ADD_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), ADD_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | ( ADD_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+    | Quad
+        ( ADD_shifted_register,
+          (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) )
+      ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | ( ADD_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
-      ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Twelve imm12 })) ),
+        ADD_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3023,23 +3064,30 @@ module Binary_encoder = struct
       let imm6 = imm12 land 0x3F in
       encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), SUB_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), SUB_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | ( SUB_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Six imm6 })) ),
+        SUB_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | ( SUB_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
-      ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Twelve imm12 })) ),
+        SUB_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3047,23 +3095,30 @@ module Binary_encoder = struct
       let imm6 = imm12 land 0x3F in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), SUBS_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), SUBS_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | ( SUBS_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Six imm6 })) ),
+        SUBS_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | ( SUBS_shifted_register,
-        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
-      ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Twelve imm12 })) ),
+        SUBS_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3071,7 +3126,7 @@ module Binary_encoder = struct
       let imm6 = imm12 land 0x3F in
       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Imm_nativeint imm, shift_opt), MOVZ ->
+    | Triple (Reg rd, Imm_nativeint imm, shift_opt), MOVZ ->
       let rd_bits = Reg.encoding rd in
       let imm16 = Nativeint.to_int imm land 0xFFFF in
       let hw =
@@ -3089,7 +3144,7 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Sym _, shift_opt), MOVZ ->
+    | Triple (Reg rd, Sym _, shift_opt), MOVZ ->
       let rd_bits = Reg.encoding rd in
       let imm16 = 0 in
       let hw =
@@ -3107,11 +3162,11 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift\n       amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm (Six imm), shift_opt), MOVZ ->
+    | Triple (Reg rd, Imm (Six imm), Optional shift), MOVZ ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       let hw =
-        match shift_opt with
+        match shift with
         | None -> 0
         | Some (Shift { kind = LSL; amount = Six sh }) ->
           if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3125,11 +3180,11 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm (Twelve imm), shift_opt), MOVZ ->
+    | Triple (Reg rd, Imm (Twelve imm), Optional shift), MOVZ ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       let hw =
-        match shift_opt with
+        match shift with
         | None -> 0
         | Some (Shift { kind = LSL; amount = Six sh }) ->
           if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3143,11 +3198,11 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm_float f, shift_opt), MOVZ ->
+    | Triple (Reg rd, Imm_float f, Optional shift), MOVZ ->
       let rd_bits = Reg.encoding rd in
       let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
       let hw =
-        match shift_opt with
+        match shift with
         | None -> 0
         | Some (Shift { kind = LSL; amount = Six sh }) ->
           if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3161,12 +3216,14 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm (Twelve imm), None), MOVN ->
+    | Triple (Reg rd, Imm (Twelve imm), Optional None), MOVN ->
       let rd_bits = Reg.encoding rd in
       encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits
-    | ( MOVN,
-        (Reg rd, Imm (Twelve imm), Some (Shift { kind = LSL; amount = Six sh }))
-      ) ->
+    | ( Triple
+          ( Reg rd,
+            Imm (Twelve imm),
+            Optional (Some (Shift { kind = LSL; amount = Six sh })) ),
+        MOVN ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3175,10 +3232,11 @@ module Binary_encoder = struct
           sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
-    | ( MOVN,
-        ( Reg rd,
-          Imm (Twelve imm),
-          Some (Shift { kind = LSL; amount = Twelve sh }) ) ) ->
+    | ( Triple
+          ( Reg rd,
+            Imm (Twelve imm),
+            Some (Shift { kind = LSL; amount = Twelve sh }) ),
+        MOVN ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3319,7 +3377,8 @@ module Binary_encoder = struct
           sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Twelve sh }), MOVK ->
+    | ( Triple (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Twelve sh }),
+        MOVK ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3327,7 +3386,8 @@ module Binary_encoder = struct
         Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Six sh }), MOVK ->
+    | ( Triple (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Six sh }),
+        MOVK ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3335,8 +3395,9 @@ module Binary_encoder = struct
         Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
-    | MOVK, (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Twelve sh })
-      ->
+    | ( Triple
+          (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Twelve sh }),
+        MOVK ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = imm land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3345,9 +3406,10 @@ module Binary_encoder = struct
           sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
-    | (Reg _, Imm _, Shift { kind = _; _ }), MOVK ->
+    | Triple (Reg _, Imm _, Shift { kind = _; _ }), MOVK ->
       Misc.fatal_error "MOVK: only LSL shift is supported"
-    | (Reg rd, Imm_float f, Shift { kind = LSL; amount = Six sh }), MOVK ->
+    | Triple (Reg rd, Imm_float f, Shift { kind = LSL; amount = Six sh }), MOVK
+      ->
       let rd_bits = Reg.encoding rd in
       let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3355,7 +3417,8 @@ module Binary_encoder = struct
         Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
       let hw = sh / 16 in
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
-    | (Reg rd, Imm_float f, Shift { kind = LSL; amount = Twelve sh }), MOVK ->
+    | ( Triple (Reg rd, Imm_float f, Shift { kind = LSL; amount = Twelve sh }),
+        MOVK ) ->
       let rd_bits = Reg.encoding rd in
       let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
       if sh mod 16 <> 0 || sh < 0 || sh > 48
@@ -3365,130 +3428,138 @@ module Binary_encoder = struct
       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
     | (Reg _, Imm_float _, Shift { kind = _; _ }), MOVK ->
       Misc.fatal_error "MOVK: only LSL\n       shift is supported"
-    | (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), UBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)), UBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let imms = imms land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)), UBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let immr = immr land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)), UBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let immr = immr land 0x3F in
       let imms = imms land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), SBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)), SBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let imms = imms land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)), SBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let immr = immr land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)), SBFM ->
+    | Quad (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let immr = immr land 0x3F in
       let imms = imms land 0x3F in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm _, Sym _), UBFM ->
+    | Quad (Reg rd, Reg rn, Imm _, Sym _), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, Imm _), UBFM ->
+    | Quad (Reg rd, Reg rn, Sym _, Imm _), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, Sym _), UBFM ->
+    | Quad (Reg rd, Reg rn, Sym _, Sym _), UBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Imm _, Sym _), SBFM ->
+    | Quad (Reg rd, Reg rn, Imm _, Sym _), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, Imm _), SBFM ->
+    | Quad (Reg rd, Reg rn, Sym _, Imm _), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Sym _, Sym _), SBFM ->
+    | Quad (Reg rd, Reg rn, Sym _, Sym _), SBFM ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm), SDIV ->
+    | Triple (Reg rd, Reg rn, Reg rm), SDIV ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b000011 ~rm:rm_bits
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm), LSLV ->
+    | Triple (Reg rd, Reg rn, Reg rm), LSLV ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001000 ~rm:rm_bits
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm), LSRV ->
+    | Triple (Reg rd, Reg rn, Reg rm), LSRV ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001001 ~rm:rm_bits
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm), ASRV ->
+    | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001010 ~rm:rm_bits
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
+    | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let ra_bits = Reg.encoding ra in
       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:0 ~rm:rm_bits
         ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Reg ra), MSUB ->
+    | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MSUB ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let ra_bits = Reg.encoding ra in
       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:1 ~rm:rm_bits
         ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), AND_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), AND_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })),
-      AND_shifted_register ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Six imm6 })) ),
+        AND_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })),
-      AND_shifted_register ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Twelve imm12 })) ),
+        AND_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3496,22 +3567,30 @@ module Binary_encoder = struct
       let imm6 = imm12 land 0x3F in
       encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), ORR_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), ORR_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })),
-      ORR_shifted_register ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Six imm6 })) ),
+        ORR_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })),
-      ORR_shifted_register ->
+    | ( Quad
+          ( Reg rd,
+            Reg rn,
+            Reg rm,
+            Optional (Some (Shift { kind; amount = Twelve imm12 })) ),
+        ORR_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3519,22 +3598,24 @@ module Binary_encoder = struct
       let imm6 = imm12 land 0x3F in
       encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, None), EOR_shifted_register ->
+    | Quad (Reg rd, Reg rn, Reg rm, Optional None), EOR_shifted_register ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
         ~imm6:0 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })),
-      EOR_shifted_register ->
+    | Quad
+        ( (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })),
+          EOR_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       let shift_type = encode_shift_type kind in
       encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
         ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
-    | (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })),
-      EOR_shifted_register ->
+    | Quad
+        ( (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })),
+          EOR_shifted_register ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -3579,201 +3660,209 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm:rm_bits
         ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V1D); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V1D); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-      SQADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
+        SQADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-      ADD_vector ->
+    | ( (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
+        ADD_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
     | (Reg { reg_name = _; _ }, _, _), ADD_vector -> assert false (* TODO XXX *)
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | Triple
+        ( (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+          SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | Triple
+        ( (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+          SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | Triple
+        ( (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
+          SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | Triple
+        ( (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
+          SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | Triple
+        ( (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
+          SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
+        SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-      SUB_vector ->
+    | ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
+        SUB_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg { reg_name = _; _ }, _, _), SUB_vector -> assert false (* TODO XXX *)
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      AND_vector ->
+    | Triple (Reg { reg_name = _; _ }, _, _), SUB_vector ->
+      assert false (* TODO XXX *)
+    | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+        AND_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      AND_vector ->
+    | ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+        AND_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg { reg_name = _; _ }, _, _), AND_vector -> assert false (* TODO XXX *)
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      ORR_vector ->
+    | Triple (Reg { reg_name = _; _ }, _, _), AND_vector ->
+      assert false (* TODO XXX *)
+    | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+        ORR_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      ORR_vector ->
+    | ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+        ORR_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg { reg_name = _; _ }, _, _), ORR_vector -> assert false (* TODO XXX *)
-    | (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-      EOR_vector ->
+    | Triple (Reg { reg_name = _; _ }, _, _), ORR_vector ->
+      assert false (* TODO XXX *)
+    | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
+        EOR_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
         ~rn:rn_bits ~rd:rd_bits
-    | (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-      EOR_vector ->
+    | ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
+        EOR_vector ) ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
@@ -4904,7 +4993,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FADD ->
       assert false (* XXX TODO *)
-    | FADD, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FADD -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FSUB ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar Q); _ }, _, _), FSUB ->
@@ -4913,7 +5002,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FSUB ->
       assert false (* XXX TODO *)
-    | FSUB, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FSUB -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FMUL ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar Q); _ }, _, _), FMUL ->
@@ -4922,7 +5011,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | FMUL, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false
     (* XXX TODO *)
-    | FMUL, (Reg { reg_name = GP _; _ }, _, _) -> assert false
+    | (Reg { reg_name = GP _; _ }, _, _), FMUL -> assert false
     (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FDIV ->
       assert false (* XXX TODO *)
@@ -4932,7 +5021,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FDIV ->
       assert false (* XXX TODO *)
-    | FDIV, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FDIV -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FMAX ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar Q); _ }, _, _), FMAX ->
@@ -4941,7 +5030,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FMAX ->
       assert false (* XXX TODO *)
-    | FMAX, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FMAX -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FMIN ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar Q); _ }, _, _), FMIN ->
@@ -4950,7 +5039,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FMIN ->
       assert false (* XXX TODO *)
-    | FMIN, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FMIN -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _), FNMUL ->
       assert false (* XXX TODO *)
     | FNMUL, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) -> assert false
@@ -4959,7 +5048,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _), FNMUL ->
       assert false (* XXX TODO *)
-    | FNMUL, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _, _), FNMUL -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _, _), FMADD ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar Q); _ }, _, _, _), FMADD ->
@@ -4978,7 +5067,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _, _, _), FMSUB ->
       assert false (* XXX TODO *)
-    | FMSUB, (Reg { reg_name = GP _; _ }, _, _, _) -> assert false
+    | (Reg { reg_name = GP _; _ }, _, _, _), FMSUB -> assert false
     (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _, _, _), FNMADD ->
       assert false (* XXX TODO *)
@@ -5014,7 +5103,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _), FABS ->
       assert false (* XXX TODO *)
-    | FABS, (Reg { reg_name = GP _; _ }, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _), FABS -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _), FNEG ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar H); _ }, _), FNEG ->
@@ -5029,7 +5118,7 @@ module Binary_encoder = struct
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Lane _); _ }, _), FNEG ->
       assert false (* XXX TODO *)
-    | FNEG, (Reg { reg_name = GP _; _ }, _) -> assert false (* XXX TODO *)
+    | (Reg { reg_name = GP _; _ }, _), FNEG -> assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar B); _ }, _), FSQRT ->
       assert false (* XXX TODO *)
     | (Reg { reg_name = Neon (Scalar H); _ }, _), FSQRT ->
