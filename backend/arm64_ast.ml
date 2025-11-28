@@ -634,575 +634,727 @@ module Instruction_name = struct
   type (_, _) t =
     | ABS_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ADDP_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ADDS
         : ( quad,
-            [`Reg of [`GP of [`X | `XZR]]]
-            * [`Reg of [`GP of [`X | `SP]]]
-            * [`Imm of [`Twelve]]
-            * [`Fixed_shift of [`Lsl_by_twelve]] option )
+            [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
           t
     | ADDV
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`B]]]]
-            * [`Reg of [`Neon of [`Vector of _]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | ADD_immediate
         : ( quad,
-            [`Reg of [`GP of [`X | `SP | `FP]]]
-            * [`Reg of [`GP of [`X | `SP | `FP]]]
-            * [`Imm of [`Twelve]]
-            * [`Fixed_shift of [`Lsl_by_twelve]] option )
+            [< `Reg of [< `GP of [< `X | `SP | `FP]]]
+            * [< `Reg of [< `GP of [< `X | `SP | `FP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
           t
     | ADD_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | ADD_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | ADR : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Twenty_one]]) t
-    | ADRP : (pair, [`Reg of [`GP of [`X]]] * _) t
+    | ADR
+        : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Twenty_one]]) t
+    | ADRP : (pair, [< `Reg of [< `GP of [< `X]]] * _) t
     | AND_immediate
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]] * [`Bitmask] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Bitmask] )
           t
     | AND_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | AND_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ASRV
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
-    | B : (singleton, [`Imm of _]) t
-    | BL : (singleton, [`Imm of _]) t
-    | BLR : (singleton, [`Reg of [`GP of [`X]]]) t
-    | BR : (singleton, [`Reg of [`GP of [`X]]]) t
-    | B_cond : Cond.t -> (singleton, [`Imm of _]) t
-    | B_cond_float : Float_cond.t -> (singleton, [`Imm of _]) t
-    | CBNZ : (pair, [`Reg of [`GP of [`X]]] * [`Imm of _]) t
-    | CBZ : (pair, [`Reg of [`GP of [`X]]] * [`Imm of _]) t
-    | CLZ : (pair, [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]]) t
+    | B : (singleton, [< `Imm of _]) t
+    | BL : (singleton, [< `Imm of _]) t
+    | BLR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | BR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | B_cond : Cond.t -> (singleton, [< `Imm of _]) t
+    | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
+    | CBNZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CBZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CLZ
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+          t
     | CM_register :
         Cond.t
         -> ( triple,
-             [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | CM_zero :
         Cond.t
         -> ( pair,
-             [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
-    | CNT : (pair, [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]]) t
+    | CNT
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+          t
     | CNT_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of _]]]
-            * [`Reg of [`Neon of [`Vector of _]]] )
+            [< `Reg of [< `Neon of [< `Vector of _]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | CSEL
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Cond] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Cond] )
           t
     | CSINC
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X | `XZR]]]
-            * [`Reg of [`GP of [`X | `XZR]]]
-            * [`Cond] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Cond] )
           t
-    | CTZ : (pair, [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]]) t
+    | CTZ
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+          t
     | CVT_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | DMB : Memory_barrier.t -> (singleton, unit) t
     | DSB : Memory_barrier.t -> (singleton, unit) t
     | DUP
         : ( triple,
             Neon_reg_name.Lane_index.t
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | EOR_immediate
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]] * [`Bitmask] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Bitmask] )
           t
     | EOR_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | EOR_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | EXT
         : ( quad,
-            [`Reg of [`Neon of [`Vector of [`V16B]]]]
-            * [`Reg of [`Neon of [`Vector of [`V16B]]]]
-            * [`Reg of [`Neon of [`Vector of [`V16B]]]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Imm of [< `Six]] )
           t
     | FABS
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FADD
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FADDP_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FADD_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCMP
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCM_register :
         Float_cond.t
         -> ( triple,
-             [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FCM_zero :
         Float_cond.t
         -> ( pair,
-             [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FCSEL
         : ( quad,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Cond] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Cond] )
           t
     | FCVT
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTL_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCVTNS
         : ( pair,
-            [`Reg of [`GP of [`X]]] * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-          )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTNS_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCVTN_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     (* Binary vector operations with min/max *)
     | FCVTZS
         : ( pair,
-            [`Reg of [`GP of [`X]]] * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-          )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTZS_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FDIV
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FDIV_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMADD
         : ( quad,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMAX
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMAX_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMIN
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMIN_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMOV_general_or_register
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]] | `GP of [`X | `W]]]
-            * [ `Reg of
-                [ `Neon of [`Scalar of [`S | `D]]
-                | `GP of [`X | `XZR | `W | `WZR] ] ] )
+            [< `Reg of
+               [< `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Scalar of [< `S | `D]]
+                 | `GP of [< `X | `XZR | `W | `WZR] ] ] )
           t
     | FMOV_scalar_immediate
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]] * [`Imm of [`Sixty_four]]
-          )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Imm of [< `Sixty_four]] )
           t
     | FMOV_vector_immediate
         : ( pair,
-            [`Reg of [`Neon of [`Vector of _]]] * [`Imm of [`Sixty_four]] )
+            [< `Reg of [< `Neon of [< `Vector of _]]]
+            * [< `Imm of [< `Sixty_four]] )
           t
     | FMSUB
         : ( quad,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMUL
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMUL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FNEG
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNEG_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FNMADD
         : ( quad,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNMSUB
         : ( quad,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNMUL
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FRECPE_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FRINT :
         Rounding_mode.t
         -> ( pair,
-             [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-             * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+             [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+             * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
            t
     | FRINT_vector :
         Rounding_mode.t
         -> ( pair,
-             [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-             * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FRSQRTE_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FSQRT
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FSQRT_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FSUB
         : ( triple,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]]
-            * [`Reg of [`Neon of [`Scalar of [`S | `D]]]] )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FSUB_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | INS
         : ( triple,
             Neon_reg_name.Lane_index.t
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`GP of [`W | `X] | `Neon of [`Scalar of [`D]]]] )
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+          )
           t
     | INS_V
         : ( quad,
             Neon_reg_name.Lane_index.t
             * Neon_reg_name.Lane_index.t
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | LDAR : (pair, [`Reg of [`GP of [`X | `W]]] * [`Mem]) t
+    | LDAR : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem]) t
     | LDP
         : ( triple,
-            [`Reg of [`GP of [`X | `W | `LR]]]
-            * [`Reg of [`GP of [`X | `W | `LR]]]
-            * [`Mem] )
+            [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            * [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            * [< `Mem] )
           t
-    | LDR : (pair, [`Reg of [`GP of [`X | `W | `LR]]] * [`Mem]) t
-    | LDRB : (pair, [`Reg of [`GP of [`W]]] * [`Mem]) t
-    | LDRH : (pair, [`Reg of [`GP of [`W]]] * [`Mem]) t
-    | LDRSB : (pair, [`Reg of [`GP of [`X]]] * [`Mem]) t
-    | LDRSH : (pair, [`Reg of [`GP of [`X]]] * [`Mem]) t
-    | LDRSW : (pair, [`Reg of [`GP of [`X]]] * [`Mem]) t
+    | LDR : (pair, [< `Reg of [< `GP of [< `X | `W | `LR]]] * [< `Mem]) t
+    | LDRB : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
+    | LDRH : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
+    | LDRSB : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
+    | LDRSH : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
+    | LDRSW : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
     | LDR_simd_and_fp
-        : (pair, [`Reg of [`Neon of [`Scalar of [`D | `S | `Q]]]] * [`Mem]) t
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] * [< `Mem]
+          )
+          t
     | LSLV
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | LSRV
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | MADD
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X | `XZR]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]] )
           t
     | MOV
         : ( pair,
-            [ `Reg of
-              [ `GP of
-                [`X | `W]
-                (* | `Neon of [< `Scalar of _ | `Vector of
-                   Neon_reg_name.Vector.t] *) ] ]
-            * [ `Reg of
-                [ `GP of
-                  [`X | `W | `XZR | `WZR]
+            [< `Reg of
+               [< `GP of
+                  [< `X | `W]
                   (* | `Neon of [< `Scalar of _ | `Vector of
-                     Neon_reg_name.Vector.t] *) ]
+                     Neon_reg_name.Vector.t] *) ] ]
+            * [< `Reg of
+                 [< `GP of
+                    [< `X | `W | `XZR | `WZR]
+                    (* | `Neon of [< `Scalar of _ | `Vector of
+                       Neon_reg_name.Vector.t] *) ]
               | `Imm of _ ] )
           t
-    | MOVI : (pair, [`Reg of [`Neon of _]] * [`Imm of [`Twelve]]) t
+    | MOVI : (pair, [< `Reg of [< `Neon of _]] * [< `Imm of [< `Twelve]]) t
     | MOVK
         : ( triple,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Imm of [`Sixty_four]]
-            * [`Shift of [`Lsl] * [`Six]] )
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Imm of [< `Sixty_four]]
+            * [< `Shift of [< `Lsl] * [< `Six]] )
           t
     (* Typed vector SIMD instructions *)
     (* Binary vector operations - same format for all operands *)
     | MOVN
         : ( triple,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Imm of [`Twelve | `Sixty_four]]
-            * [`Shift of [`Lsl] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Imm of [< `Twelve | `Sixty_four]]
+            * [< `Shift of [< `Lsl] * [< `Six]] option )
           t
     | MOVZ
         : ( triple,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Imm of [`Sixty_four]]
-            * [`Shift of [`Lsl] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Imm of [< `Sixty_four]]
+            * [< `Shift of [< `Lsl] * [< `Six]] option )
           t
     | MOV_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of _]]]
-            * [`Reg of [`Neon of [`Vector of _]]] )
+            [< `Reg of [< `Neon of [< `Vector of _]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | MSUB
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | MULL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     (* Unary vector operations *)
     | MUL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | MVN_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | NEG_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | NOP : (singleton, unit) t
     | ORR_immediate
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X | `XZR]]] * [`Bitmask]
-          )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Bitmask] )
           t
     | ORR_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X | `XZR]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | ORR_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | RBIT : (pair, [`Reg of [`GP of [`X]]] * [`Reg of [`GP of [`X]]]) t
+    | RBIT
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+          t
     | RET : (singleton, unit) t
     | REV
-        : (pair, [`Reg of [`GP of [`X | `W]]] * [`Reg of [`GP of [`X | `W]]]) t
+        : ( pair,
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `W]]] )
+          t
     | REV16
-        : (pair, [`Reg of [`GP of [`X | `W]]] * [`Reg of [`GP of [`X | `W]]]) t
+        : ( pair,
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `W]]] )
+          t
     | SBFM
         : ( quad,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Reg of [`GP of [`X | `W]]]
-            * [`Imm of [`Six]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Imm of [< `Six]]
+            * [< `Imm of [< `Six]] )
           t
     | SCVTF
         : ( pair,
-            [`Reg of [`Neon of [`Scalar of [`S | `D]]]] * [`Reg of [`GP of [`X]]]
-          )
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | SCVTF_vector
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SDIV
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`V8B] | `GP of [`X]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `V8B] | `GP of [< `X]] )
           t
     | SHL
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | SMAX_vector
         : ( triple,
-            [ `Reg of
-              [ `Neon of
-                [ `Vector of
-                  [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width ] ] ]
-            * [ `Reg of
-                [ `Neon of
-                  [ `Vector of
-                    [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width ] ]
-              ]
-            * [ `Reg of
-                [ `Neon of
-                  [ `Vector of
-                    [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width ] ]
-              ] )
+            [< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | SMIN_vector
         : ( triple,
@@ -1225,248 +1377,350 @@ module Instruction_name = struct
     | SMOV
         : ( triple,
             Neon_reg_name.Lane_index.t
-            * [`Reg of [`GP of [`W | `X] | `Neon of [`Scalar of [`D]]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SMULH
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | SMULL2_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SMULL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQADD_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQSUB_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQXTN
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQXTN2
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SSHL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SSHR
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | STP
         : ( triple,
-            [`Reg of [`GP of [`X | `W | `LR]]]
-            * [`Reg of [`GP of [`X | `W | `LR]]]
-            * [`Mem] )
+            [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            * [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            * [< `Mem] )
           t
-    | STR : (pair, [`Reg of [`GP of [`X | `W | `LR]]] * [`Mem]) t
-    | STRB : (pair, [`Reg of [`GP of [`W]]] * [`Mem]) t
-    | STRH : (pair, [`Reg of [`GP of [`W]]] * [`Mem]) t
+    | STR : (pair, [< `Reg of [< `GP of [< `X | `W | `LR]]] * [< `Mem]) t
+    | STRB : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
+    | STRH : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
     | STR_simd_and_fp
-        : (pair, [`Reg of [`Neon of [`Scalar of [`D | `S | `Q]]]] * [`Mem]) t
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] * [< `Mem]
+          )
+          t
     | SUBS_immediate
         : ( quad,
-            [`Reg of [`GP of [`W | `WZR | `X | `XZR]]]
-            * [`Reg of [`GP of [`W | `X | `SP]]]
-            * [`Imm of [`Twelve]]
-            * [`Fixed_shift of [`Lsl_by_twelve]] option )
+            [< `Reg of [< `GP of [< `W | `WZR | `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `W | `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
           t
     | SUBS_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X | `XZR]]]
-            * [`Reg of [`GP of [`X | `SP]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X | `SP]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | SUB_immediate
         : ( quad,
-            [`Reg of [`GP of [`X | `SP]]]
-            * [`Reg of [`GP of [`X | `SP]]]
-            * [`Imm of [`Twelve]]
-            * [`Fixed_shift of [`Lsl_by_twelve]] option )
+            [< `Reg of [< `GP of [< `X | `SP]]]
+            * [< `Reg of [< `GP of [< `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
           t
     | SUB_shifted_register
         : ( quad,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Shift of [`Lsl | `Lsr | `Asr] * [`Six]] option )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
           t
     | SUB_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SXTL
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | TBNZ
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Imm of [`Six]]
-            * [`Imm of _] )
+            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
+          )
           t
     | TBZ
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Imm of [`Six]]
-            * [`Imm of _] )
+            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
+          )
           t
-    | TST : (pair, [`Reg of [`GP of [`X]]] * [`Bitmask]) t
+    | TST : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Bitmask]) t
     | UADDLP_vector
         : ( pair,
-            [`Reg of
-              [`Neon of
-                [`Vector of
-                  [`V4H | `V8H | `V2S | `V4S | `V1D | `V2D] * any_width]]]
-            * [`Reg of
-                [`Neon of
-                  [`Vector of
-                    [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width]]] )
+            [< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | UBFM
         : ( quad,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Reg of [`GP of [`X | `W]]]
-            * [`Imm of [`Six]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Imm of [< `Six]]
+            * [< `Imm of [< `Six]] )
           t
     | UMAX_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]]]
-            * [`Reg of [`Neon of [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]]]
-            * [`Reg of [`Neon of [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]]] )
+            [< `Reg of
+               [< `Neon of
+                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
+            ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]
+                 ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]
+                 ] ] )
           t
     (* Other binary vector operations *)
     | UMIN_vector
         : ( triple,
-            [`Reg of
-              [`Neon of
-                [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width]]]
-            * [`Reg of
-                [`Neon of
-                  [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width]]]
-            * [`Reg of
-                [`Neon of
-                  [`Vector of [`V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * any_width]]] )
+            [< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | UMOV
         : ( triple,
             Neon_reg_name.Lane_index.t
-            * [`Reg of [`GP of [`W | `X] | `Neon of [`Scalar of [`D]]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UMULH
         : ( triple,
-            [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]]
-            * [`Reg of [`GP of [`X]]] )
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | UMULL2_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UMULL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQADD_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQSUB_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     (* Lane-indexed operations *)
     | UQXTN
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQXTN2
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     (* Binary vector operations with saturating arithmetic *)
     | USHL_vector
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | USHR
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Imm of [`Six]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | UXTL
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | XTN
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | XTN2
         : ( pair,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | YIELD : (singleton, unit) t
     | ZIP1
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ZIP2
         : ( triple,
-            [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]]
-            * [`Reg of [`Neon of [`Vector of any_vector * any_width]]] )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
 
   type ('num_operands, 'operands) instr = ('num_operands, 'operands) t
