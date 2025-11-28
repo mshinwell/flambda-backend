@@ -630,6 +630,13 @@ type triple = [`Triple]
 
 type quad = [`Quad]
 
+type (_, _) many =
+  | Singleton : 'a Operand.t -> (singleton, 'a) many
+  | Pair : 'a Operand.t * 'b Operand.t -> (pair, 'a * 'b) many
+  | Triple :
+      'a Operand.t * 'b Operand.t * 'c Operand.t
+      -> (triple, 'a * 'b * 'c) many
+
 module Instruction_name = struct
   type (_, _) t =
     | ABS_vector
@@ -1886,8 +1893,8 @@ module Instruction_name = struct
   end
 
   module Untyped = struct
-    let operands_as_array (type operands) (instr : (_, operands) t)
-        (ops : operands Operand.t) =
+    let operands_as_array (type num operands) (instr : (num, operands) t)
+        (ops : (num, operands) many) =
       let o = Operand.Wrapped.create in
       let _imm n = Operand.Imm (Operand.Imm.Twelve n) (* XXX duplicate *) in
       (* Helper to convert a vector register operand to a lane-indexed scalar *)
@@ -1910,160 +1917,508 @@ module Instruction_name = struct
           failwith "vector_to_lane_operand: not a register operand"
       in
       match instr with
-      (* | ABS_vector -> let rd, rs = ops in [| o rd; o rs |] | ADDP_vector ->
-         let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] | ADDS -> ( let rd,
-         rn, imm, shift_opt = ops in match shift_opt with | None -> [| o rd; o
-         rn; o imm |] | Some shift -> [| o rd; o rn; o imm; o shift |]) | ADDV
-         -> let rd, src = ops in [| o rd; o src |] | ADD_immediate -> ( let rd,
-         rs, imm, shift_opt = ops in match shift_opt with | None -> [| o rd; o
-         rs; o imm |] | Some shift -> [| o rd; o rs; o imm; o shift |]) |
-         ADD_shifted_register -> ( let rd, rs, reg, shift_opt = ops in match
-         shift_opt with | None -> [| o rd; o rs; o reg |] | Some shift -> [| o
-         rd; o rs; o reg; o shift |]) | ADD_vector -> let rd, rs1, rs2 = ops in
-         [| o rd; o rs1; o rs2 |] | ADR -> let rd, label = ops in [| o rd; o
-         label |] | ADRP -> let rd, symbol = ops in [| o rd; o symbol |] |
-         AND_immediate -> let rd, rs, bitmask = ops in [| o rd; o rs; o bitmask
-         |] | AND_shifted_register -> ( let rd, rs, reg, shift_opt = ops in
-         match shift_opt with | None -> [| o rd; o rs; o reg |] | Some shift ->
-         [| o rd; o rs; o reg; o shift |]) | AND_vector -> let rd, rs1, rs2 =
-         ops in [| o rd; o rs1; o rs2 |] | ASRV -> let rd, rn, rm = ops in [| o
-         rd; o rn; o rm |] | B -> let target = ops in [| o target |] | BL -> let
-         target = ops in [| o target |] | BLR -> let rn = ops in [| o rn |] | BR
-         -> let rn = ops in [| o rn |] | B_cond _ -> let target = ops in [| o
-         target |] | B_cond_float _ -> let target = ops in [| o target |] | CBNZ
-         -> let reg, target = ops in [| o reg; o target |] | CBZ -> let reg,
-         target = ops in [| o reg; o target |] | CLZ -> let rd, rn = ops in [| o
-         rd; o rn |] | CM_register _cond -> let rd, rn, rm = ops in [| o rd; o
-         rn; o rm |] | CM_zero _cond -> let rd, rn = ops in [| o rd; o rn; o
-         (imm 0) |] | CNT -> let rd, rn = ops in [| o rd; o rn |] | CNT_vector
-         -> let rd, src = ops in [| o rd; o src |] | CSEL -> let rd, rn, rm,
-         cond = ops in [| o rd; o rn; o rm; o cond |] | CSINC -> let rd, rn, rm,
-         cond = ops in [| o rd; o rn; o rm; o cond |] | CTZ -> let rd, rn = ops
-         in [| o rd; o rn |] | CVT_vector -> let rd, rs = ops in [| o rd; o rs
-         |] | DMB _ -> [||] | DSB _ -> [||] | DUP -> let lane, rd, rs = ops in
-         [| o rd; vector_to_lane_operand rs lane |] | EOR_immediate -> let rd,
-         rs, bitmask = ops in [| o rd; o rs; o bitmask |] | EOR_shifted_register
-         -> ( let rd, rs, reg, shift_opt = ops in match shift_opt with | None ->
-         [| o rd; o rs; o reg |] | Some shift -> [| o rd; o rs; o reg; o shift
-         |]) | EOR_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |]
-         | EXT -> let rd, rs1, rs2, idx = ops in [| o rd; o rs1; o rs2; o idx |]
-         | FABS -> let rd, rn = ops in [| o rd; o rn |] | FADD -> let rd, rn, rm
-         = ops in [| o rd; o rn; o rm |] | FADDP_vector -> let rd, rs1, rs2 =
-         ops in [| o rd; o rs1; o rs2 |] | FADD_vector -> let rd, rs1, rs2 = ops
-         in [| o rd; o rs1; o rs2 |] | FCMP -> let rn, rm = ops in [| o rn; o rm
-         |] | FCM_register _cond -> let rd, rn, rm = ops in [| o rd; o rn; o rm
-         |] | FCM_zero _cond -> let rd, rn = ops in [| o rd; o rn; o
-         (Operand.Imm_float 0.) |] | FCSEL -> let rd, rn, rm, cond = ops in [| o
-         rd; o rn; o rm; o cond |] | FCVT -> let rd, rn = ops in [| o rd; o rn
-         |] | FCVTL_vector -> let rd, rs = ops in [| o rd; o rs |] | FCVTNS ->
-         let rd, rn = ops in [| o rd; o rn |] | FCVTNS_vector -> let rd, rs =
-         ops in [| o rd; o rs |] | FCVTN_vector -> let rd, rs = ops in [| o rd;
-         o rs |] | FCVTZS -> let rd, rn = ops in [| o rd; o rn |] |
-         FCVTZS_vector -> let rd, rs = ops in [| o rd; o rs |] | FDIV -> let rd,
-         rn, rm = ops in [| o rd; o rn; o rm |] | FDIV_vector -> let rd, rs1,
-         rs2 = ops in [| o rd; o rs1; o rs2 |] | FMADD -> let rd, rn, rm, ra =
-         ops in [| o rd; o rn; o rm; o ra |] | FMAX -> let rd, rn, rm = ops in
-         [| o rd; o rn; o rm |] | FMAX_vector -> let rd, rs1, rs2 = ops in [| o
-         rd; o rs1; o rs2 |] | FMIN -> let rd, rn, rm = ops in [| o rd; o rn; o
-         rm |] | FMIN_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2
-         |] | FMOV_general_or_register -> let rd, rs = ops in [| o rd; o rs |] |
-         FMOV_scalar_immediate -> let rd, imm = ops in [| o rd; o imm |] |
-         FMOV_vector_immediate -> let rd, imm = ops in [| o rd; o imm |] | FMSUB
-         -> let rd, rn, rm, ra = ops in [| o rd; o rn; o rm; o ra |] | FMUL ->
-         let rd, rn, rm = ops in [| o rd; o rn; o rm |] | FMUL_vector -> let rd,
-         rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] | FNEG -> let rd, rn = ops
-         in [| o rd; o rn |] | FNEG_vector -> let rd, rs = ops in [| o rd; o rs
-         |] | FNMADD -> let rd, rn, rm, ra = ops in [| o rd; o rn; o rm; o ra |]
-         | FNMSUB -> let rd, rn, rm, ra = ops in [| o rd; o rn; o rm; o ra |] |
-         FNMUL -> let rd, rn, rm = ops in [| o rd; o rn; o rm |] | FRECPE_vector
-         -> let rd, rs = ops in [| o rd; o rs |] | FRINT _ -> let rd, rn = ops
-         in [| o rd; o rn |] | FRINT_vector _ -> let rd, rn = ops in [| o rd; o
-         rn |] | FRSQRTE_vector -> let rd, rs = ops in [| o rd; o rs |] | FSQRT
-         -> let rd, rn = ops in [| o rd; o rn |] | FSQRT_vector -> let rd, rs =
-         ops in [| o rd; o rs |] | FSUB -> let rd, rn, rm = ops in [| o rd; o
-         rn; o rm |] | FSUB_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1;
-         o rs2 |] | INS -> let lane, rd, rs = ops in [| vector_to_lane_operand
-         rd lane; o rs |] | INS_V -> let dst_lane, src_lane, rd, rs = ops in [|
-         vector_to_lane_operand rd dst_lane; vector_to_lane_operand rs src_lane
-         |] | LDAR -> let rt, addr = ops in [| o rt; o addr |] | LDP -> let rt1,
-         rt2, addr = ops in [| o rt1; o rt2; o addr |] | LDR -> let rt, addr =
-         ops in [| o rt; o addr |] | LDRB -> let rt, addr = ops in [| o rt; o
-         addr |] | LDRH -> let rt, addr = ops in [| o rt; o addr |] | LDRSB ->
-         let rt, addr = ops in [| o rt; o addr |] | LDRSH -> let rt, addr = ops
-         in [| o rt; o addr |] | LDRSW -> let rt, addr = ops in [| o rt; o addr
-         |] | LDR_simd_and_fp -> let rt, addr = ops in [| o rt; o addr |] | LSLV
-         -> let rd, rn, rm = ops in [| o rd; o rn; o rm |] | LSRV -> let rd, rn,
-         rm = ops in [| o rd; o rn; o rm |] | MADD -> let rd, rn, rm, ra = ops
-         in [| o rd; o rn; o rm; o ra |] | MOV -> let rd, src = ops in [| o rd;
-         o src |] | MOVI -> let rd, imm = ops in [| o rd; o imm |] | MOVK -> let
-         rd, imm, shift = ops in [| o rd; o imm; o shift |] | MOVN -> ( let rd,
-         imm, shift_opt = ops in match shift_opt with | None -> [| o rd; o imm
-         |] | Some shift -> [| o rd; o imm; o shift |]) | MOVZ -> ( let rd, imm,
-         shift_opt = ops in match shift_opt with | None -> [| o rd; o imm |] |
-         Some shift -> [| o rd; o imm; o shift |]) | MOV_vector -> let rd, src =
-         ops in [| o rd; o src |] | MSUB -> let rd, rn, rm, ra = ops in [| o rd;
-         o rn; o rm; o ra |] | MULL_vector -> let rd, rs1, rs2 = ops in [| o rd;
-         o rs1; o rs2 |] | MUL_vector -> let rd, rs1, rs2 = ops in [| o rd; o
-         rs1; o rs2 |] | MVN_vector -> let rd, rs = ops in [| o rd; o rs |] |
-         NEG_vector -> let rd, rs = ops in [| o rd; o rs |] | NOP -> [||] |
-         ORR_immediate -> let rd, rs, bitmask = ops in [| o rd; o rs; o bitmask
-         |] | ORR_shifted_register -> ( let rd, rs, reg, shift_opt = ops in
-         match shift_opt with | None -> [| o rd; o rs; o reg |] | Some shift ->
-         [| o rd; o rs; o reg; o shift |]) | ORR_vector -> let rd, rs1, rs2 =
-         ops in [| o rd; o rs1; o rs2 |] | RBIT -> let rd, rn = ops in [| o rd;
-         o rn |] | RET -> [||] | REV -> let rd, rn = ops in [| o rd; o rn |] |
-         REV16 -> let rd, rn = ops in [| o rd; o rn |] | SBFM -> let rd, rn,
-         immr, imms = ops in [| o rd; o rn; o immr; o imms |] | SCVTF -> let rd,
-         rn = ops in [| o rd; o rn |] | SCVTF_vector -> let rd, rs = ops in [| o
-         rd; o rs |] | SDIV -> let rd, rn, rm = ops in [| o rd; o rn; o rm |] |
-         SHL -> let rd, rs, imm = ops in [| o rd; o rs; o imm |] | SMAX_vector
-         -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] *)
+      | ABS_vector ->
+        let (Pair (rd, rs)) = ops in
+        [| o rd; o rs |]
+      | ADDP_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | ADDS -> (
+        let rd, rn, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rn; o imm |]
+        | Some shift -> [| o rd; o rn; o imm; o shift |])
+      | ADDV ->
+        let rd, src = ops in
+        [| o rd; o src |]
+      | ADD_immediate -> (
+        let rd, rs, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o imm |]
+        | Some shift -> [| o rd; o rs; o imm; o shift |])
+      | ADD_shifted_register -> (
+        let rd, rs, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o reg |]
+        | Some shift -> [| o rd; o rs; o reg; o shift |])
+      | ADD_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | ADR ->
+        let rd, label = ops in
+        [| o rd; o label |]
+      | ADRP ->
+        let rd, symbol = ops in
+        [| o rd; o symbol |]
+      | AND_immediate ->
+        let rd, rs, bitmask = ops in
+        [| o rd; o rs; o bitmask |]
+      | AND_shifted_register -> (
+        let rd, rs, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o reg |]
+        | Some shift -> [| o rd; o rs; o reg; o shift |])
+      | AND_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | ASRV ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | B ->
+        let target = ops in
+        [| o target |]
+      | BL ->
+        let target = ops in
+        [| o target |]
+      | BLR ->
+        let rn = ops in
+        [| o rn |]
+      | BR ->
+        let rn = ops in
+        [| o rn |]
+      | B_cond _ ->
+        let target = ops in
+        [| o target |]
+      | B_cond_float _ ->
+        let target = ops in
+        [| o target |]
+      | CBNZ ->
+        let reg, target = ops in
+        [| o reg; o target |]
+      | CBZ ->
+        let reg, target = ops in
+        [| o reg; o target |]
+      | CLZ ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | CM_register _cond ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | CM_zero _cond ->
+        let rd, rn = ops in
+        [| o rd; o rn; o (imm 0) |]
+      | CNT ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | CNT_vector ->
+        let rd, src = ops in
+        [| o rd; o src |]
+      | CSEL ->
+        let rd, rn, rm, cond = ops in
+        [| o rd; o rn; o rm; o cond |]
+      | CSINC ->
+        let rd, rn, rm, cond = ops in
+        [| o rd; o rn; o rm; o cond |]
+      | CTZ ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | CVT_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | DMB _ -> [||]
+      | DSB _ -> [||]
+      | DUP ->
+        let lane, rd, rs = ops in
+        [| o rd; vector_to_lane_operand rs lane |]
+      | EOR_immediate ->
+        let rd, rs, bitmask = ops in
+        [| o rd; o rs; o bitmask |]
+      | EOR_shifted_register -> (
+        let rd, rs, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o reg |]
+        | Some shift -> [| o rd; o rs; o reg; o shift |])
+      | EOR_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | EXT ->
+        let rd, rs1, rs2, idx = ops in
+        [| o rd; o rs1; o rs2; o idx |]
+      | FABS ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FADD ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FADDP_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FADD_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FCMP ->
+        let rn, rm = ops in
+        [| o rn; o rm |]
+      | FCM_register _cond ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FCM_zero _cond ->
+        let rd, rn = ops in
+        [| o rd; o rn; o (Operand.Imm_float 0.) |]
+      | FCSEL ->
+        let rd, rn, rm, cond = ops in
+        [| o rd; o rn; o rm; o cond |]
+      | FCVT ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FCVTL_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FCVTNS ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FCVTNS_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FCVTN_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FCVTZS ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FCVTZS_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FDIV ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FDIV_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FMADD ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | FMAX ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FMAX_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FMIN ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FMIN_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FMOV_general_or_register ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FMOV_scalar_immediate ->
+        let rd, imm = ops in
+        [| o rd; o imm |]
+      | FMOV_vector_immediate ->
+        let rd, imm = ops in
+        [| o rd; o imm |]
+      | FMSUB ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | FMUL ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FMUL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | FNEG ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FNEG_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FNMADD ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | FNMSUB ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | FNMUL ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FRECPE_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FRINT _ ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FRINT_vector _ ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FRSQRTE_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FSQRT ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | FSQRT_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | FSUB ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | FSUB_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | INS ->
+        let lane, rd, rs = ops in
+        [| vector_to_lane_operand rd lane; o rs |]
+      | INS_V ->
+        let dst_lane, src_lane, rd, rs = ops in
+        [| vector_to_lane_operand rd dst_lane;
+           vector_to_lane_operand rs src_lane
+        |]
+      | LDAR ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDP ->
+        let rt1, rt2, addr = ops in
+        [| o rt1; o rt2; o addr |]
+      | LDR ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDRB ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDRH ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDRSB ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDRSH ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDRSW ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LDR_simd_and_fp ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | LSLV ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | LSRV ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | MADD ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | MOV ->
+        let rd, src = ops in
+        [| o rd; o src |]
+      | MOVI ->
+        let rd, imm = ops in
+        [| o rd; o imm |]
+      | MOVK ->
+        let rd, imm, shift = ops in
+        [| o rd; o imm; o shift |]
+      | MOVN -> (
+        let rd, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o imm |]
+        | Some shift -> [| o rd; o imm; o shift |])
+      | MOVZ -> (
+        let rd, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o imm |]
+        | Some shift -> [| o rd; o imm; o shift |])
+      | MOV_vector ->
+        let rd, src = ops in
+        [| o rd; o src |]
+      | MSUB ->
+        let rd, rn, rm, ra = ops in
+        [| o rd; o rn; o rm; o ra |]
+      | MULL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | MUL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | MVN_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | NEG_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | NOP -> [||]
+      | ORR_immediate ->
+        let rd, rs, bitmask = ops in
+        [| o rd; o rs; o bitmask |]
+      | ORR_shifted_register -> (
+        let rd, rs, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o reg |]
+        | Some shift -> [| o rd; o rs; o reg; o shift |])
+      | ORR_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | RBIT ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | RET -> [||]
+      | REV ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | REV16 ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | SBFM ->
+        let rd, rn, immr, imms = ops in
+        [| o rd; o rn; o immr; o imms |]
+      | SCVTF ->
+        let rd, rn = ops in
+        [| o rd; o rn |]
+      | SCVTF_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | SDIV ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | SHL ->
+        let rd, rs, imm = ops in
+        [| o rd; o rs; o imm |]
+      | SMAX_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
       | SMIN_vector ->
-        let rd (*, rs1, rs2 *) = ops in
-        [| o rd (* o rs1; o rs2 *) |]
-    (* | SMOV -> let lane, rd, rs = ops in [| o rd; vector_to_lane_operand rs
-       lane |] | SMULH -> let rd, rn, rm = ops in [| o rd; o rn; o rm |] |
-       SMULL2_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] |
-       SMULL_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] |
-       SQADD_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] |
-       SQSUB_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] |
-       SQXTN -> let rd, rs = ops in [| o rd; o rs |] | SQXTN2 -> let rd, rs =
-       ops in [| o rd; o rs |] | SSHL_vector -> let rd, rs1, rs2 = ops in [| o
-       rd; o rs1; o rs2 |] | SSHR -> let rd, rs, imm = ops in [| o rd; o rs; o
-       imm |] | STP -> let rt1, rt2, addr = ops in [| o rt1; o rt2; o addr |] |
-       STR -> let rt, addr = ops in [| o rt; o addr |] | STRB -> let rt, addr =
-       ops in [| o rt; o addr |] | STRH -> let rt, addr = ops in [| o rt; o addr
-       |] | STR_simd_and_fp -> let rt, addr = ops in [| o rt; o addr |] |
-       SUBS_immediate -> ( let rd, rn, imm, shift_opt = ops in match shift_opt
-       with | None -> [| o rd; o rn; o imm |] | Some shift -> [| o rd; o rn; o
-       imm; o shift |]) | SUBS_shifted_register -> ( let rd, rn, reg, shift_opt
-       = ops in match shift_opt with | None -> [| o rd; o rn; o reg |] | Some
-       shift -> [| o rd; o rn; o reg; o shift |]) | SUB_immediate -> ( let rd,
-       rs, imm, shift_opt = ops in match shift_opt with | None -> [| o rd; o rs;
-       o imm |] | Some shift -> [| o rd; o rs; o imm; o shift |]) |
-       SUB_shifted_register -> ( let rd, rs, reg, shift_opt = ops in match
-       shift_opt with | None -> [| o rd; o rs; o reg |] | Some shift -> [| o rd;
-       o rs; o reg; o shift |]) | SUB_vector -> let rd, rs1, rs2 = ops in [| o
-       rd; o rs1; o rs2 |] | SXTL -> let rd, rs = ops in [| o rd; o rs |] | TBNZ
-       -> let reg, bit, target = ops in [| o reg; o bit; o target |] | TBZ ->
-       let reg, bit, target = ops in [| o reg; o bit; o target |] | TST -> let
-       rn, op2 = ops in [| o rn; o op2 |] | UADDLP_vector -> let rd, rs = ops in
-       [| o rd; o rs |] | UBFM -> let rd, rn, immr, imms = ops in [| o rd; o rn;
-       o immr; o imms |] | UMAX_vector -> let rd, rs1, rs2 = ops in [| o rd; o
-       rs1; o rs2 |] | UMIN_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1;
-       o rs2 |] | UMOV -> let lane, rd, rs = ops in [| o rd;
-       vector_to_lane_operand rs lane |] | UMULH -> let rd, rn, rm = ops in [| o
-       rd; o rn; o rm |] | UMULL2_vector -> let rd, rs1, rs2 = ops in [| o rd; o
-       rs1; o rs2 |] | UMULL_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1;
-       o rs2 |] | UQADD_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o
-       rs2 |] | UQSUB_vector -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2
-       |] | UQXTN -> let rd, rs = ops in [| o rd; o rs |] | UQXTN2 -> let rd, rs
-       = ops in [| o rd; o rs |] | USHL_vector -> let rd, rs1, rs2 = ops in [| o
-       rd; o rs1; o rs2 |] | USHR -> let rd, rs, imm = ops in [| o rd; o rs; o
-       imm |] | UXTL -> let rd, rs = ops in [| o rd; o rs |] | XTN -> let rd, rs
-       = ops in [| o rd; o rs |] | XTN2 -> let rd, rs = ops in [| o rd; o rs |]
-       | YIELD -> [||] | ZIP1 -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2
-       |] | ZIP2 -> let rd, rs1, rs2 = ops in [| o rd; o rs1; o rs2 |] *)
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1 o rs2 |]
+      | SMOV ->
+        let lane, rd, rs = ops in
+        [| o rd; vector_to_lane_operand rs lane |]
+      | SMULH ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | SMULL2_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SMULL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SQADD_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SQSUB_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SQXTN ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | SQXTN2 ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | SSHL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SSHR ->
+        let rd, rs, imm = ops in
+        [| o rd; o rs; o imm |]
+      | STP ->
+        let rt1, rt2, addr = ops in
+        [| o rt1; o rt2; o addr |]
+      | STR ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | STRB ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | STRH ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | STR_simd_and_fp ->
+        let rt, addr = ops in
+        [| o rt; o addr |]
+      | SUBS_immediate -> (
+        let rd, rn, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rn; o imm |]
+        | Some shift -> [| o rd; o rn; o imm; o shift |])
+      | SUBS_shifted_register -> (
+        let rd, rn, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rn; o reg |]
+        | Some shift -> [| o rd; o rn; o reg; o shift |])
+      | SUB_immediate -> (
+        let rd, rs, imm, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o imm |]
+        | Some shift -> [| o rd; o rs; o imm; o shift |])
+      | SUB_shifted_register -> (
+        let rd, rs, reg, shift_opt = ops in
+        match shift_opt with
+        | None -> [| o rd; o rs; o reg |]
+        | Some shift -> [| o rd; o rs; o reg; o shift |])
+      | SUB_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | SXTL ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | TBNZ ->
+        let reg, bit, target = ops in
+        [| o reg; o bit; o target |]
+      | TBZ ->
+        let reg, bit, target = ops in
+        [| o reg; o bit; o target |]
+      | TST ->
+        let rn, op2 = ops in
+        [| o rn; o op2 |]
+      | UADDLP_vector ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | UBFM ->
+        let rd, rn, immr, imms = ops in
+        [| o rd; o rn; o immr; o imms |]
+      | UMAX_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UMIN_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UMOV ->
+        let lane, rd, rs = ops in
+        [| o rd; vector_to_lane_operand rs lane |]
+      | UMULH ->
+        let rd, rn, rm = ops in
+        [| o rd; o rn; o rm |]
+      | UMULL2_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UMULL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UQADD_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UQSUB_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | UQXTN ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | UQXTN2 ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | USHL_vector ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | USHR ->
+        let rd, rs, imm = ops in
+        [| o rd; o rs; o imm |]
+      | UXTL ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | XTN ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | XTN2 ->
+        let rd, rs = ops in
+        [| o rd; o rs |]
+      | YIELD -> [||]
+      | ZIP1 ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
+      | ZIP2 ->
+        let rd, rs1, rs2 = ops in
+        [| o rd; o rs1; o rs2 |]
   end
 end
 (* module Instruction = struct type t = { name : Instruction_name.Wrapped.t;
@@ -2512,48 +2867,17 @@ module Binary_encoder = struct
     let result = logor result (of_int rd) in
     result
 
-  type (_, _) many =
-    | Singleton : 'a Operand.t -> (singleton, 'a) many
-    | Pair : 'a Operand.t * 'b Operand.t -> (pair, 'a * 'b) many
-    | Triple :
-        'a Operand.t * 'b Operand.t * 'c Operand.t
-        -> (triple, 'a * 'b * 'c) many
-
-  let encode_instruction' :
-      type operands num.
-      (operands, num) many -> (operands, num) Instruction_name.t -> int32 =
-   fun operands instr ->
-    match[@ocaml.warning "-4"] operands, instr with
-    | ( Triple
-          ( Reg
-              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
-                _
-              },
-            Reg
-              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
-                _
-              },
-            Reg
-              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
-                _
-              } ),
-        SMIN_vector ) ->
-      failwith "foo"
-  (* let encode_instruction : type operands. operands many -> operands
-     Instruction_name.t -> int32 = fun operands instr -> match operands, instr
-     with (* | ( Pair ( (*Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H |
-     V2S | V4S)); _ }, *) Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H |
-     V2S | V4S)); _ }, Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H | V2S
-     | V4S)); _ } ), SMIN_vector ) -> failwith "foo" *) | ( Triple ( Reg {
-     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg {
-     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg {
-     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ } ),
-     SMIN_vector ) -> failwith "foo" (* | Reg { reg_name = Neon (Vector
-     (V2D|V1D)); _ } -> . *) *)
+  (* let encode_instruction_example : type operands num. (operands, num) many ->
+     (operands, num) Instruction_name.t -> int32 = fun operands instr ->
+     match[@ocaml.warning "-4"] operands, instr with | ( Triple ( Reg { reg_name
+     = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg { reg_name =
+     Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg { reg_name =
+     Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ } ), SMIN_vector ) ->
+     failwith "foo" *)
 
   let encode_instruction :
-      type operands num.
-      (operands, num) many -> (operands, num) Instruction_name.t -> int32 =
+      type num operands.
+      (num, operands) many -> (num, operands) Instruction_name.t -> int32 =
    fun instr operands ->
     match instr, operands with
     (* PC-relative addressing - C4.1.92.2 *)
