@@ -148,6 +148,43 @@ module Neon_reg_name = struct
     let name t index = Printf.sprintf "%s%d" (to_string t) index
   end
 
+  module Lane_index : sig
+    type t
+
+    type lane_index = t
+
+    val create : int -> t
+
+    module Src_and_dest : sig
+      type t
+
+      val create : src:lane_index -> dest:lane_index -> t
+
+      val dest_index : t -> lane_index
+
+      val src_index : t -> lane_index
+    end
+  end = struct
+    type t = int
+
+    type lane_index = t
+
+    let create i = i
+
+    module Src_and_dest = struct
+      type nonrec t =
+        { src : t;
+          dest : t
+        }
+
+      let create ~src ~dest = { src; dest }
+
+      let dest_index t = t.dest
+
+      let src_index t = t.src
+    end
+  end
+
   module Lane = struct
     (** Support representation with and without the optional number of lanes, for
         example Vn.4S[1] and Vn.S[1]. *)
@@ -157,7 +194,7 @@ module Neon_reg_name = struct
 
     type 'a t =
       { r : 'a r;
-        lane : int
+        lane : Lane_index.t
       }
 
     let num_lanes (type a) (r : a r) =
@@ -172,12 +209,6 @@ module Neon_reg_name = struct
         match t.r with V v -> Vector.to_string v | S s -> Scalar.to_string s
       in
       Printf.sprintf "V%d.%s[%d]" index suffix t.lane
-  end
-
-  module Lane_index = struct
-    type t = int
-
-    let create i = i
   end
 
   type _ t =
@@ -595,7 +626,7 @@ module Operand = struct
     | Float_cond : Float_cond.t -> [`Float_cond] t
     | Mem : Addressing_mode.t -> [`Mem] t
     | Bitmask : Bitmask.t -> [`Bitmask] t
-    | Optional : 'a t option -> 'a option t
+    | Optional : 'a t option -> [`Optional of 'a option] t
   [@@ocaml.warning "-37"]
 
   type 'a operand = 'a t
@@ -680,14 +711,15 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `X | `SP | `FP]]]
             * [< `Reg of [< `GP of [< `X | `SP | `FP]]]
             * [< `Imm of [< `Twelve]]
-            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADD_shifted_register
         : ( quad,
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | ADD_vector
         : ( triple,
@@ -713,7 +745,8 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | AND_vector
         : ( triple,
@@ -800,15 +833,15 @@ module Instruction_name = struct
           t
     | DMB : Memory_barrier.t -> (singleton, unit) t
     | DSB : Memory_barrier.t -> (singleton, unit) t
-    | DUP
-        : ( triple,
-            Neon_reg_name.Lane_index.t
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
+    | DUP :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | EOR_immediate
         : ( triple,
             [< `Reg of [< `GP of [< `X]]]
@@ -820,7 +853,8 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | EOR_vector
         : ( triple,
@@ -1139,24 +1173,23 @@ module Instruction_name = struct
                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
           )
           t
-    | INS
-        : ( triple,
-            Neon_reg_name.Lane_index.t
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
-          )
-          t
-    | INS_V
-        : ( quad,
-            Neon_reg_name.Lane_index.t
-            * Neon_reg_name.Lane_index.t
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
+    | INS :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]
+               ] )
+           t
+    | INS_V :
+        Neon_reg_name.Lane_index.Src_and_dest.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | LDAR : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem]) t
     | LDP
         : ( triple,
@@ -1221,13 +1254,13 @@ module Instruction_name = struct
         : ( triple,
             [< `Reg of [< `GP of [< `X | `W]]]
             * [< `Imm of [< `Twelve | `Sixty_four]]
-            * [< `Shift of [< `Lsl] * [< `Six]] option )
+            * [< `Optional of [< `Shift of [< `Lsl] * [< `Six]] option] )
           t
     | MOVZ
         : ( triple,
             [< `Reg of [< `GP of [< `X | `W]]]
             * [< `Imm of [< `Sixty_four]]
-            * [< `Shift of [< `Lsl] * [< `Six]] option )
+            * [< `Optional of [< `Shift of [< `Lsl] * [< `Six]] option] )
           t
     | MOV_vector
         : ( pair,
@@ -1290,7 +1323,8 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X | `XZR]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | ORR_vector
         : ( triple,
@@ -1387,14 +1421,14 @@ module Instruction_name = struct
                        [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
                        * [< any_width] ] ] ] )
           t
-    | SMOV
-        : ( triple,
-            Neon_reg_name.Lane_index.t
-            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
+    | SMOV :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | SMULH
         : ( triple,
             [< `Reg of [< `GP of [< `X]]]
@@ -1494,28 +1528,30 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `W | `WZR | `X | `XZR]]]
             * [< `Reg of [< `GP of [< `W | `X | `SP]]]
             * [< `Imm of [< `Twelve]]
-            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | SUBS_shifted_register
         : ( quad,
             [< `Reg of [< `GP of [< `X | `XZR]]]
             * [< `Reg of [< `GP of [< `X | `SP]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | SUB_immediate
         : ( quad,
             [< `Reg of [< `GP of [< `X | `SP]]]
             * [< `Reg of [< `GP of [< `X | `SP]]]
             * [< `Imm of [< `Twelve]]
-            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | SUB_shifted_register
         : ( quad,
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option )
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | SUB_vector
         : ( triple,
@@ -1600,14 +1636,14 @@ module Instruction_name = struct
                        [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
                        * [< any_width] ] ] ] )
           t
-    | UMOV
-        : ( triple,
-            Neon_reg_name.Lane_index.t
-            * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
+    | UMOV :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | UMULH
         : ( triple,
             [< `Reg of [< `GP of [< `X]]]
@@ -1773,7 +1809,7 @@ module Instruction_name = struct
         | CVT_vector -> "cvt"
         | DMB b -> "dmb\t" ^ Memory_barrier.to_string b
         | DSB b -> "dsb\t" ^ Memory_barrier.to_string b
-        | DUP -> "dup"
+        | DUP _ -> "dup"
         | EOR_immediate | EOR_shifted_register | EOR_vector -> "eor"
         | EXT -> "ext"
         | FABS -> "fabs"
@@ -1817,8 +1853,8 @@ module Instruction_name = struct
         | FSQRT_vector -> "fsqrt"
         | FSUB -> "fsub"
         | FSUB_vector -> "fsub"
-        | INS -> "ins"
-        | INS_V -> "ins"
+        | INS _ -> "ins"
+        | INS_V _ -> "ins"
         | LDAR -> "ldar"
         | LDP -> "ldp"
         | LDR -> "ldr"
@@ -1855,7 +1891,7 @@ module Instruction_name = struct
         | SHL -> "shl"
         | SMAX_vector -> "smax"
         | SMIN_vector -> "smin"
-        | SMOV -> "smov"
+        | SMOV _ -> "smov"
         | SMULH -> "smulh"
         | SMULL2_vector -> "smull2"
         | SMULL_vector -> "smull"
@@ -1880,7 +1916,7 @@ module Instruction_name = struct
         | UBFM -> "ubfm"
         | UMAX_vector -> "umax"
         | UMIN_vector -> "umin"
-        | UMOV -> "umov"
+        | UMOV _ -> "umov"
         | UMULH -> "umulh"
         | UMULL2_vector -> "umull2"
         | UMULL_vector -> "umull"
@@ -1902,9 +1938,10 @@ module Instruction_name = struct
     let operands_as_array (type num operands) (instr : (num, operands) t)
         (ops : (num, operands) many) =
       let o = Operand.Wrapped.create in
-      let _imm n = Operand.Imm (Operand.Imm.Twelve n) (* XXX duplicate *) in
+      let imm n = Operand.Imm (Operand.Imm.Twelve n) (* XXX duplicate *) in
       (* Helper to convert a vector register operand to a lane-indexed scalar *)
-      let _vector_to_lane_operand (type a) (reg_op : a Operand.t) lane =
+      let vector_to_lane_operand (type a) (reg_op : a Operand.t)
+          (lane : Neon_reg_name.Lane_index.t) =
         match reg_op with
         | Reg reg -> (
           let index = reg.index in
@@ -1940,13 +1977,13 @@ module Instruction_name = struct
       | ADD_immediate -> (
         let (Quad (rd, rs, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o imm |]
-        | Some shift -> [| o rd; o rs; o imm; o shift |])
+        | Optional None -> [| o rd; o rs; o imm |]
+        | Optional (Some shift) -> [| o rd; o rs; o imm; o shift |])
       | ADD_shifted_register -> (
         let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o reg |]
-        | Some shift -> [| o rd; o rs; o reg; o shift |])
+        | Optional None -> [| o rd; o rs; o reg |]
+        | Optional (Some shift) -> [| o rd; o rs; o reg; o shift |])
       | ADD_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
@@ -1962,8 +1999,8 @@ module Instruction_name = struct
       | AND_shifted_register -> (
         let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o reg |]
-        | Some shift -> [| o rd; o rs; o reg; o shift |])
+        | Optional None -> [| o rd; o rs; o reg |]
+        | Optional (Some shift) -> [| o rd; o rs; o reg; o shift |])
       | AND_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
@@ -2023,17 +2060,17 @@ module Instruction_name = struct
         [| o rd; o rs |]
       | DMB _ -> [||]
       | DSB _ -> [||]
-      | DUP ->
-        let (Triple (lane, rd, rs)) = ops in
+      | DUP lane ->
+        let (Pair (rd, rs)) = ops in
         [| o rd; vector_to_lane_operand rs lane |]
       | EOR_immediate ->
         let (Triple (rd, rs, bitmask)) = ops in
         [| o rd; o rs; o bitmask |]
       | EOR_shifted_register -> (
-        let rd, rs, reg, shift_opt = ops in
+        let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o reg |]
-        | Some shift -> [| o rd; o rs; o reg; o shift |])
+        | Optional None -> [| o rd; o rs; o reg |]
+        | Optional (Some shift) -> [| o rd; o rs; o reg; o shift |])
       | EOR_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
@@ -2163,13 +2200,15 @@ module Instruction_name = struct
       | FSUB_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
-      | INS ->
-        let (Triple (lane, rd, rs)) = ops in
+      | INS lane ->
+        let (Pair (rd, rs)) = ops in
         [| vector_to_lane_operand rd lane; o rs |]
-      | INS_V ->
-        let (Quad (dst_lane, src_lane, rd, rs)) = ops in
-        [| vector_to_lane_operand rd dst_lane;
-           vector_to_lane_operand rs src_lane
+      | INS_V lanes ->
+        let (Pair (rd, rs)) = ops in
+        [| vector_to_lane_operand rd
+             (Neon_reg_name.Lane_index.Src_and_dest.dest_index lanes);
+           vector_to_lane_operand rs
+             (Neon_reg_name.Lane_index.Src_and_dest.src_index lanes)
         |]
       | LDAR ->
         let (Pair (rt, addr)) = ops in
@@ -2217,15 +2256,15 @@ module Instruction_name = struct
         let (Triple (rd, imm, shift)) = ops in
         [| o rd; o imm; o shift |]
       | MOVN -> (
-        let rd, imm, shift_opt = ops in
+        let (Triple (rd, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o imm |]
-        | Some shift -> [| o rd; o imm; o shift |])
+        | Optional None -> [| o rd; o imm |]
+        | Optional (Some shift) -> [| o rd; o imm; o shift |])
       | MOVZ -> (
-        let rd, imm, shift_opt = ops in
+        let (Triple (rd, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o imm |]
-        | Some shift -> [| o rd; o imm; o shift |])
+        | Optional None -> [| o rd; o imm |]
+        | Optional (Some shift) -> [| o rd; o imm; o shift |])
       | MOV_vector ->
         let (Pair (rd, src)) = ops in
         [| o rd; o src |]
@@ -2249,10 +2288,10 @@ module Instruction_name = struct
         let (Triple (rd, rs, bitmask)) = ops in
         [| o rd; o rs; o bitmask |]
       | ORR_shifted_register -> (
-        let rd, rs, reg, shift_opt = ops in
+        let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o reg |]
-        | Some shift -> [| o rd; o rs; o reg; o shift |])
+        | Optional None -> [| o rd; o rs; o reg |]
+        | Optional (Some shift) -> [| o rd; o rs; o reg; o shift |])
       | ORR_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
@@ -2287,8 +2326,8 @@ module Instruction_name = struct
       | SMIN_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
-      | SMOV ->
-        let (Triple (lane, rd, rs)) = ops in
+      | SMOV lane ->
+        let (Pair (rd, rs)) = ops in
         [| o rd; vector_to_lane_operand rs lane |]
       | SMULH ->
         let (Triple (rd, rn, rm)) = ops in
@@ -2335,23 +2374,23 @@ module Instruction_name = struct
       | SUBS_immediate -> (
         let (Quad (rd, rn, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rn; o imm |]
-        | Some shift -> [| o rd; o rn; o imm; o shift |])
+        | Optional None -> [| o rd; o rn; o imm |]
+        | Optional (Some shift) -> [| o rd; o rn; o imm; o shift |])
       | SUBS_shifted_register -> (
         let (Quad (rd, rn, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rn; o reg |]
-        | Some shift -> [| o rd; o rn; o reg; o shift |])
+        | Optional None -> [| o rd; o rn; o reg |]
+        | Optional (Some shift) -> [| o rd; o rn; o reg; o shift |])
       | SUB_immediate -> (
         let (Quad (rd, rs, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o imm |]
-        | Some shift -> [| o rd; o rs; o imm; o shift |])
+        | Optional None -> [| o rd; o rs; o imm |]
+        | Optional (Some shift) -> [| o rd; o rs; o imm; o shift |])
       | SUB_shifted_register -> (
         let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rs; o reg |]
-        | Some shift -> [| o rd; o rs; o reg; o shift |])
+        | Optional None -> [| o rd; o rs; o reg |]
+        | Optional (Some shift) -> [| o rd; o rs; o reg; o shift |])
       | SUB_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
@@ -2379,8 +2418,8 @@ module Instruction_name = struct
       | UMIN_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
-      | UMOV ->
-        let (Triple (lane, rd, rs)) = ops in
+      | UMOV lane ->
+        let (Pair (rd, rs)) = ops in
         [| o rd; vector_to_lane_operand rs lane |]
       | UMULH ->
         let (Triple (rd, rn, rm)) = ops in
@@ -2427,18 +2466,6 @@ module Instruction_name = struct
         [| o rd; o rs1; o rs2 |]
   end
 end
-(* module Instruction = struct type t = { name : Instruction_name.Wrapped.t;
-   operands : Operand.Wrapped.t array }
-
-   let create (type a) (name : a Instruction_name.t) ~(operands : a) = { name =
-   Instruction_name.Wrapped.I name; operands =
-   Instruction_name.Untyped.operands_as_array name operands }
-
-   let print ppf t = let { name; operands } = t in let pp_sep =
-   Operand.print_separator in if Array.length operands = 0 then Format.fprintf
-   ppf "%s" (Instruction_name.Wrapped.to_string name) else Format.fprintf ppf
-   "%s\t%a" (Instruction_name.Wrapped.to_string name) (Format.pp_print_seq
-   ~pp_sep Operand.Wrapped.print) (Array.to_seq operands) end *)
 
 module DSL = struct
   let symbol (type w) (s : w Symbol.t) = Operand.Sym s
