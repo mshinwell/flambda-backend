@@ -2910,9 +2910,9 @@ module Binary_encoder = struct
 
   let encode_instruction :
       type num operands.
-      (num, operands) many -> (num, operands) Instruction_name.t -> int32 =
+      (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
    fun instr operands ->
-    match instr, operands with
+    match operands, instr with
     (* PC-relative addressing - C4.1.92.2 *)
     | ADR, (Reg rd, Sym _) ->
       let rd_bits = Reg.encoding rd in
