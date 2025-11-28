@@ -40,18 +40,18 @@ let check_index first last index =
 (* Float/SIMD register description *)
 module Neon_reg_name = struct
   module Vector = struct
-    type _ t =
-      | V8B : [`V8B] t
-      | V16B : [`V16B] t
-      | V4H : [`V4H] t
-      | V8H : [`V8H] t
-      | V2S : [`V2S] t
-      | V4S : [`V4S] t
-      | V1D : [`V1D] t
-      | V2D : [`V2D] t
+    type (_, _) t =
+      | V8B : ([`V8B], [`B]) t
+      | V16B : ([`V16B], [`B]) t
+      | V4H : ([`V4H], [`H]) t
+      | V8H : ([`V8H], [`H]) t
+      | V2S : ([`V2S], [`S]) t
+      | V4S : ([`V4S], [`S]) t
+      | V1D : ([`V1D], [`D]) t
+      | V2D : ([`V2D], [`D]) t
     [@@ocaml.warning "-37"]
 
-    let to_string (type a) (t : a t) =
+    let to_string (type v s) (t : (v, s) t) =
       match t with
       | V8B -> "8B"
       | V16B -> "16B"
@@ -62,7 +62,7 @@ module Neon_reg_name = struct
       | V1D -> "1D"
       | V2D -> "2D"
 
-    let num_lanes (type a) (t : a t) =
+    let num_lanes (type v s) (t : (v, s) t) =
       match t with
       | V8B -> 8
       | V16B -> 16
@@ -75,6 +75,15 @@ module Neon_reg_name = struct
 
     let name t index = Printf.sprintf "V%d.%s" index (to_string t)
   end
+
+  (* module Scalar_vector_equality = struct type ('scalar, 'vector) t = |
+     Equal_B : ([`B], [`V8B | `V16B]) t | Equal_H : ([`H], [`V4H | `V8H]) t |
+     Equal_S : ([`S], [`V2S | `V4S]) t | Equal_D : ([`D], [`V1D | `V2D]) t
+
+     (* let create (type a b) (s : a Scalar.t) (v : b Vector.t) : (a Scalar.t *
+     b Vector.t) t = match[@warning "-4"] s, v with | B, (V8B | V16B) -> Equal_B
+     | H, (V4H | V8H) -> Equal_H | S, (V2S | V4S) -> Equal_S | D, (V1D | V2D) ->
+     Equal_D | _, _ -> assert false *) end *)
 
   module Scalar = struct
     type _ t =
@@ -98,6 +107,18 @@ module Neon_reg_name = struct
       | D -> "d"
       | Q -> "q"
 
+    let of_vector : type v s. (v, s) Vector.t -> s t =
+     fun vec ->
+      match vec with
+      | V8B -> B
+      | V16B -> B
+      | V4H -> H
+      | V8H -> H
+      | V2S -> S
+      | V4S -> S
+      | V1D -> D
+      | V2D -> D
+
     let name t index = Printf.sprintf "%s%d" (to_string t) index
   end
 
@@ -105,8 +126,8 @@ module Neon_reg_name = struct
     (** Support representation with and without the optional number of lanes, for
         example Vn.4S[1] and Vn.S[1]. *)
     type 'a r =
-      | V : 'a Vector.t -> [`Vector of 'a] r
-      | S : 'a Scalar.t -> [`Scalar of 'a] r
+      | V : ('v, 's) Vector.t -> [`Vector of 'v * 's] r
+      | S : 's Scalar.t -> [`Scalar of 's] r
 
     type 'a t =
       { r : 'a r;
@@ -134,7 +155,7 @@ module Neon_reg_name = struct
   end
 
   type _ t =
-    | Vector : 'v Vector.t -> [`Vector of 'v] t
+    | Vector : ('v, 's) Vector.t -> [`Vector of 'v] t
     | Scalar : 's Scalar.t -> [`Scalar of 's] t
     | Lane : 'l Lane.t -> [`Lane of 'l] t
 
@@ -149,6 +170,10 @@ module Neon_reg_name = struct
     | Vector v -> Vector.name v index
     | Scalar s -> Scalar.name s index
     | Lane l -> Lane.name l index
+
+  let lane_of_vector vector ~lane =
+    let scalar_type = Scalar.of_vector vector in
+    Lane { r = S scalar_type; lane }
 end
 
 (* General-purpose register description *)
@@ -2015,25 +2040,18 @@ module Instruction_name = struct
       (* Helper to convert a vector register operand to a lane-indexed scalar *)
       let vector_to_lane_operand (type a) (reg_op : a Operand.t) lane =
         match reg_op with
-        | Reg reg ->
+        | Reg reg -> (
           let index = reg.index in
-          let scalar_type : _ Neon_reg_name.Scalar.t =
-            match reg.reg_name with
-            | Neon (Vector V16B) -> B
-            | Neon (Vector V8B) -> B
-            | Neon (Vector V8H) -> H
-            | Neon (Vector V4H) -> H
-            | Neon (Vector V4S) -> S
-            | Neon (Vector V2S) -> S
-            | Neon (Vector V2D) -> D
-            | Neon (Vector V1D) -> D
-            | GP _ | Neon (Scalar _) | Neon (Lane _) ->
-              failwith "vector_to_lane_operand: not a vector register"
-          in
-          let lane_reg_name =
-            Reg_name.Neon (Lane { r = S scalar_type; lane })
-          in
-          Operand.Wrapped.create (Operand.Reg (Reg.create lane_reg_name index))
+          match reg.reg_name with
+          | Neon (Vector vector) ->
+            let scalar_type = Neon_reg_name.Scalar.of_vector vector in
+            let lane_reg_name =
+              Reg_name.Neon (Lane { r = S scalar_type; lane })
+            in
+            Operand.Wrapped.create
+              (Operand.Reg (Reg.create lane_reg_name index))
+          | GP _ | Neon (Scalar _) | Neon (Lane _) ->
+            failwith "vector_to_lane_operand: not a vector register")
         | Sym _ | Imm _ | Imm_float _ | Imm_nativeint _ | Lsl_by_twelve
         | Shift _ | Cond _ | Float_cond _ | Mem _ | Bitmask _ ->
           failwith "vector_to_lane_operand: not a register operand"
