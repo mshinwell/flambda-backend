@@ -37,6 +37,22 @@ let check_index first last index =
   if index < first || index > last
   then Misc.fatal_errorf "Illegal register index %d" index ()
 
+type any_vector =
+  [ `V8B
+  | `V16B
+  | `V4H
+  | `V8H
+  | `V2S
+  | `V4S
+  | `V1D
+  | `V2D ]
+
+type any_width =
+  [ `B
+  | `H
+  | `S
+  | `D ]
+
 (* Float/SIMD register description *)
 module Neon_reg_name = struct
   module Vector = struct
@@ -599,22 +615,16 @@ end
 module Instruction_name = struct
   type _ t =
     | ABS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
           * 'r Operand.t)
           t
     | ADDP_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -644,11 +654,8 @@ module Instruction_name = struct
           * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
           t
     | ADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -672,11 +679,8 @@ module Instruction_name = struct
           * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
           t
     | AND_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -704,38 +708,23 @@ module Instruction_name = struct
           t
     | CM_register :
         Cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t)
            t
     | CM_zero :
         Cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t)
            t
     | CNT
@@ -763,11 +752,8 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | CVT_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -778,10 +764,7 @@ module Instruction_name = struct
     | DUP
         : (Neon_reg_name.Lane_index.t
           * ([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              as
              'r)
             Operand.t
@@ -799,11 +782,8 @@ module Instruction_name = struct
           * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
           t
     | EOR_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -826,11 +806,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FADDP_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -838,11 +815,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -855,38 +829,23 @@ module Instruction_name = struct
           t
     | FCM_register :
         Float_cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t)
            t
     | FCM_zero :
         Float_cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
            * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              Operand.t)
            t
     | FCSEL
@@ -900,17 +859,10 @@ module Instruction_name = struct
           * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
           t
     | FCVTL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | FCVTNS
@@ -918,28 +870,18 @@ module Instruction_name = struct
           * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
           t
     | FCVTNS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
           * 'r Operand.t)
           t
     | FCVTN_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     (* Binary vector operations with min/max *)
@@ -948,11 +890,8 @@ module Instruction_name = struct
           * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
           t
     | FCVTZS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -964,11 +903,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FDIV_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -987,11 +923,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FMAX_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1004,11 +937,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FMIN_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1044,11 +974,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FMUL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1060,11 +987,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FNEG_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1088,11 +1012,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FRECPE_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1107,21 +1028,15 @@ module Instruction_name = struct
     | FRINT_vector :
         Rounding_mode.t
         -> (([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              as
              'r)
             Operand.t
            * 'r Operand.t)
            t
     | FRSQRTE_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1132,11 +1047,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FSQRT_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1148,11 +1060,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | FSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1161,11 +1070,8 @@ module Instruction_name = struct
           t
     | INS
         : (Neon_reg_name.Lane_index.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
           * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
              as
@@ -1176,10 +1082,7 @@ module Instruction_name = struct
         : (Neon_reg_name.Lane_index.t
           * Neon_reg_name.Lane_index.t
           * ([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
              as
              'r)
             Operand.t
@@ -1268,11 +1171,8 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | MULL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1281,11 +1181,8 @@ module Instruction_name = struct
           t
     (* Unary vector operations *)
     | MUL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1293,22 +1190,16 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | MVN_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
           * 'r Operand.t)
           t
     | NEG_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1327,11 +1218,8 @@ module Instruction_name = struct
           * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
           t
     | ORR_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1362,11 +1250,8 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | SCVTF_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1378,25 +1263,19 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | SHL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
           * [< `Imm of [< `Six]] Operand.t)
           t
     | SMAX_vector
         : (([< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             as
             'r)
            Operand.t
@@ -1406,8 +1285,9 @@ module Instruction_name = struct
     | SMIN_vector
         : (([< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             as
             'r)
            Operand.t
@@ -1419,8 +1299,9 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t
           * [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             Operand.t)
           t
     | SMULH
@@ -1429,51 +1310,28 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | SMULL2_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | SMULL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | SQADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1481,11 +1339,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | SQSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1493,39 +1348,22 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | SQXTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | SQXTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | SSHL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1533,17 +1371,10 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | SSHR
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
           * [< `Imm of [< `Six]] Operand.t)
           t
@@ -1587,11 +1418,8 @@ module Instruction_name = struct
           * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
           t
     | SUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1599,17 +1427,10 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | SXTL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | TBNZ
@@ -1626,12 +1447,15 @@ module Instruction_name = struct
     | UADDLP_vector
         : ([< `Reg of
               [< `Neon of
-                 [< `Vector of [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]] ] ]
+                 [< `Vector of
+                    [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D] * [< any_width]
+                 ] ] ]
            Operand.t
           * [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             Operand.t)
           t
     | UBFM
@@ -1655,8 +1479,9 @@ module Instruction_name = struct
     | UMIN_vector
         : (([< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             as
             'r)
            Operand.t
@@ -1669,11 +1494,8 @@ module Instruction_name = struct
              as
              'rd)
             Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | UMULH
@@ -1682,51 +1504,28 @@ module Instruction_name = struct
           * [< `Reg of [< `GP of [< `X]]] Operand.t)
           t
     | UMULL2_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | UMULL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | UQADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1734,11 +1533,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | UQSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1747,40 +1543,23 @@ module Instruction_name = struct
           t
     (* Lane-indexed operations *)
     | UQXTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | UQXTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     (* Binary vector operations with saturating arithmetic *)
     | USHL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1788,69 +1567,38 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | USHR
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t
           * [< `Imm of [< `Six]] Operand.t)
           t
     | UXTL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | XTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | XTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             Operand.t)
           t
     | YIELD : unit t
     | ZIP1
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -1858,11 +1606,8 @@ module Instruction_name = struct
           * 'r Operand.t)
           t
     | ZIP2
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             as
             'r)
            Operand.t
@@ -5320,6 +5065,13 @@ module DSL = struct
       | DSB _, _ -> assert false (* XXX TODO *)
       | MOV, _ -> assert false (* XXX TODO *)
       | MOVI, _ -> assert false (* XXX TODO *)
-      | CTZ, _ -> assert false (* XXX TODO *)
+      | CTZ, _ -> assert false
+    (* XXX TODO *)
+
+    (* let foo : type operands. operands -> operands Instruction_name.t -> int =
+       fun operands insn -> match[@ocaml.warning "-4"] insn, operands with |
+       SMAX_vector, operands -> ( match insn, operands with | ( SMAX_vector, (
+       Reg { reg_name = GP _ | Neon (Vector (V1D | V2D) | Scalar _ | Lane _); _
+       }, _, _ ) ) -> .) | _ -> 42 *)
   end
 end
