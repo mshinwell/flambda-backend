@@ -37,6 +37,14 @@ let check_index first last index =
   if index < first || index > last
   then Misc.fatal_errorf "Illegal register index %d" index ()
 
+type yes = [`yes]
+
+type no = [`no]
+
+type boolean =
+  [ no
+  | yes ]
+
 type any_vector =
   [ `V8B
   | `V16B
@@ -56,18 +64,118 @@ type any_width =
 (* Float/SIMD register description *)
 module Neon_reg_name = struct
   module Vector = struct
-    type (_, _) t =
-      | V8B : ([`V8B], [`B]) t
-      | V16B : ([`V16B], [`B]) t
-      | V4H : ([`V4H], [`H]) t
-      | V8H : ([`V8H], [`H]) t
-      | V2S : ([`V2S], [`S]) t
-      | V4S : ([`V4S], [`S]) t
-      | V1D : ([`V1D], [`D]) t
-      | V2D : ([`V2D], [`D]) t
+    type 'a vector =
+      < v8b : [< boolean]
+      ; v16b : [< boolean]
+      ; v4h : [< boolean]
+      ; v8h : [< boolean]
+      ; v2s : [< boolean]
+      ; v4s : [< boolean]
+      ; v1d : [< boolean]
+      ; v2d : [< boolean] >
+      as
+      'a
+
+    type v8b =
+      < v8b : yes
+      ; v16b : no
+      ; v4h : no
+      ; v8h : no
+      ; v2s : no
+      ; v4s : no
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v16b =
+      < v8b : no
+      ; v16b : yes
+      ; v4h : no
+      ; v8h : no
+      ; v2s : no
+      ; v4s : no
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v4h =
+      < v8b : no
+      ; v16b : no
+      ; v4h : yes
+      ; v8h : no
+      ; v2s : no
+      ; v4s : no
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v8h =
+      < v8b : no
+      ; v16b : no
+      ; v4h : no
+      ; v8h : yes
+      ; v2s : no
+      ; v4s : no
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v2s =
+      < v8b : no
+      ; v16b : no
+      ; v4h : no
+      ; v8h : no
+      ; v2s : yes
+      ; v4s : no
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v4s =
+      < v8b : no
+      ; v16b : no
+      ; v4h : no
+      ; v8h : no
+      ; v2s : no
+      ; v4s : yes
+      ; v1d : no
+      ; v2d : no >
+      vector
+
+    type v1d =
+      < v8b : no
+      ; v16b : no
+      ; v4h : no
+      ; v8h : no
+      ; v2s : no
+      ; v4s : no
+      ; v1d : yes
+      ; v2d : no >
+      vector
+
+    type v2d =
+      < v8b : no
+      ; v16b : no
+      ; v4h : no
+      ; v8h : no
+      ; v2s : no
+      ; v4s : no
+      ; v1d : no
+      ; v2d : yes >
+      vector
+
+    type _ t =
+      | V8B : v8b t
+      | V16B : v16b t
+      | V4H : v4h t
+      | V8H : v8h t
+      | V2S : v2s t
+      | V4S : v4s t
+      | V1D : v1d t
+      | V2D : v2d t
     [@@ocaml.warning "-37"]
 
-    let to_string (type v s) (t : (v, s) t) =
+    let to_string (type a) (t : a t) =
       match t with
       | V8B -> "8B"
       | V16B -> "16B"
@@ -78,7 +186,7 @@ module Neon_reg_name = struct
       | V1D -> "1D"
       | V2D -> "2D"
 
-    let num_lanes (type v s) (t : (v, s) t) =
+    let num_lanes (type a) (t : a t) =
       match t with
       | V8B -> 8
       | V16B -> 16
@@ -90,6 +198,10 @@ module Neon_reg_name = struct
       | V2D -> 2
 
     let name t index = Printf.sprintf "V%d.%s" index (to_string t)
+
+    type 'a test =
+      (* forbid v1d and v2d *)
+      | I of < v1d : no ; v2d : no ; _ > vector test
   end
 
   (* module Scalar_vector_equality = struct type ('scalar, 'vector) t = |
