@@ -595,11 +595,13 @@ module Operand = struct
     | Float_cond : Float_cond.t -> [`Float_cond] t
     | Mem : Addressing_mode.t -> [`Mem] t
     | Bitmask : Bitmask.t -> [`Bitmask] t
+    | Optional : 'a t option -> 'a option t
   [@@ocaml.warning "-37"]
 
   type 'a operand = 'a t
 
-  let print ppf (type a) (t : a t) =
+  let rec print : type a. Format.formatter -> a t -> unit =
+   fun ppf t ->
     match t with
     | Sym s -> Symbol.print ppf s
     | Imm imm -> Imm.print ppf imm
@@ -612,6 +614,7 @@ module Operand = struct
     | Float_cond c -> Format.fprintf ppf "%s" (Float_cond.to_string c)
     | Mem m -> Format.fprintf ppf "%a" Addressing_mode.print m
     | Bitmask b -> Bitmask.print ppf b
+    | Optional opt -> ( match opt with Some op -> print ppf op | None -> ())
 
   module Wrapped = struct
     type t = O : _ operand -> t
@@ -665,7 +668,7 @@ module Instruction_name = struct
             [< `Reg of [< `GP of [< `X | `XZR]]]
             * [< `Reg of [< `GP of [< `X | `SP]]]
             * [< `Imm of [< `Twelve]]
-            * [< `Fixed_shift of [< `Lsl_by_twelve]] option )
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADDV
         : ( pair,
@@ -1916,7 +1919,7 @@ module Instruction_name = struct
           | GP _ | Neon (Scalar _) | Neon (Lane _) ->
             failwith "vector_to_lane_operand: not a vector register")
         | Sym _ | Imm _ | Imm_float _ | Imm_nativeint _ | Lsl_by_twelve
-        | Shift _ | Cond _ | Float_cond _ | Mem _ | Bitmask _ ->
+        | Shift _ | Cond _ | Float_cond _ | Mem _ | Bitmask _ | Optional _ ->
           failwith "vector_to_lane_operand: not a register operand"
       in
       match instr with
@@ -1929,8 +1932,8 @@ module Instruction_name = struct
       | ADDS -> (
         let (Quad (rd, rn, imm, shift_opt)) = ops in
         match shift_opt with
-        | None -> [| o rd; o rn; o imm |]
-        | Some shift -> [| o rd; o rn; o imm; o shift |])
+        | Optional None -> [| o rd; o rn; o imm |]
+        | Optional (Some shift) -> [| o rd; o rn; o imm; o shift |])
       | ADDV ->
         let (Pair (rd, src)) = ops in
         [| o rd; o src |]
@@ -2330,22 +2333,22 @@ module Instruction_name = struct
         let (Pair (rt, addr)) = ops in
         [| o rt; o addr |]
       | SUBS_immediate -> (
-        let rd, rn, imm, shift_opt = ops in
+        let (Quad (rd, rn, imm, shift_opt)) = ops in
         match shift_opt with
         | None -> [| o rd; o rn; o imm |]
         | Some shift -> [| o rd; o rn; o imm; o shift |])
       | SUBS_shifted_register -> (
-        let rd, rn, reg, shift_opt = ops in
+        let (Quad (rd, rn, reg, shift_opt)) = ops in
         match shift_opt with
         | None -> [| o rd; o rn; o reg |]
         | Some shift -> [| o rd; o rn; o reg; o shift |])
       | SUB_immediate -> (
-        let rd, rs, imm, shift_opt = ops in
+        let (Quad (rd, rs, imm, shift_opt)) = ops in
         match shift_opt with
         | None -> [| o rd; o rs; o imm |]
         | Some shift -> [| o rd; o rs; o imm; o shift |])
       | SUB_shifted_register -> (
-        let rd, rs, reg, shift_opt = ops in
+        let (Quad (rd, rs, reg, shift_opt)) = ops in
         match shift_opt with
         | None -> [| o rd; o rs; o reg |]
         | Some shift -> [| o rd; o rs; o reg; o shift |])
