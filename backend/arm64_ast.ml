@@ -181,7 +181,7 @@ module Neon_reg_name = struct
   end
 
   type _ t =
-    | Vector : ('v, 's) Vector.t -> [`Vector of 'v] t
+    | Vector : ('v, 's) Vector.t -> [`Vector of 'v * 's] t
     | Scalar : 's Scalar.t -> [`Scalar of 's] t
     | Lane : 'l Lane.t -> [`Lane of 'l] t
 
@@ -622,411 +622,1173 @@ module Operand = struct
   end
 end
 
-module Instruction_name = struct
-  type _ t =
-    (* | ABS_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | ADDP_vector : (([<
-       `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as
-       'r) Operand.t * 'r Operand.t * 'r Operand.t) t | ADDS : ([< `Reg of [<
-       `GP of [< `X | `XZR]]] Operand.t * [< `Reg of [< `GP of [< `X | `SP]]]
-       Operand.t * [< `Imm of [< `Twelve]] Operand.t * [< `Fixed_shift of [<
-       `Lsl_by_twelve]] Operand.t option) t | ADDV : ([< `Reg of [< `Neon of [<
-       `Scalar of [< `B]]]] Operand.t * [< `Reg of [< `Neon of [< `Vector of
-       _]]] Operand.t) t | ADD_immediate : ([< `Reg of [< `GP of [< `X | `SP |
-       `FP]]] Operand.t * [< `Reg of [< `GP of [< `X | `SP | `FP]]] Operand.t *
-       [< `Imm of [< `Twelve]] Operand.t * [< `Fixed_shift of [<
-       `Lsl_by_twelve]] Operand.t option) t | ADD_shifted_register : ([< `Reg of
-       [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t *
-       [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Shift of [< `Lsl | `Lsr |
-       `Asr] * [`Six]] Operand.t option) t | ADD_vector : (([< `Reg of [< `Neon
-       of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | ADR : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Imm of [< `Twenty_one]] Operand.t) t | ADRP : ([< `Reg of
-       [< `GP of [< `X]]] Operand.t * _ Operand.t) t | AND_immediate : ([< `Reg
-       of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t
-       * [< `Bitmask] Operand.t) t | AND_shifted_register : ([< `Reg of [< `GP
-       of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg
-       of [< `GP of [< `X]]] Operand.t * [< `Shift of [< `Lsl | `Lsr | `Asr] *
-       [`Six]] Operand.t option) t | AND_vector : (([< `Reg of [< `Neon of [<
-       `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | ASRV : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP
-       of [< `X]]] Operand.t) t | B : [< `Imm of _] Operand.t t | BL : [< `Imm
-       of _] Operand.t t | BLR : [< `Reg of [< `GP of [< `X]]] Operand.t t | BR
-       : [< `Reg of [< `GP of [< `X]]] Operand.t t | B_cond : Cond.t -> [< `Imm
-       of _] Operand.t t | B_cond_float : Float_cond.t -> [< `Imm of _]
-       Operand.t t | CBNZ : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm
-       of _] Operand.t) t | CBZ : ([< `Reg of [< `GP of [< `X]]] Operand.t * [<
-       `Imm of _] Operand.t) t | CLZ : ([< `Reg of [< `GP of [< `X]]] Operand.t
-       * [< `Reg of [< `GP of [< `X]]] Operand.t) t | CM_register : Cond.t ->
-       ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] Operand.t) t | CM_zero : Cond.t -> ([<
-       `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] Operand.t) t | CNT : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t) t | CNT_vector :
-       (([< `Reg of [< `Neon of [< `Vector of _]]] as 'r) Operand.t * 'r
-       Operand.t) t | CSEL : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg
-       of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t
-       * [< `Cond] Operand.t) t | CSINC : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t * [< `Reg of
-       [< `GP of [< `X | `XZR]]] Operand.t * [< `Cond] Operand.t) t | CTZ : ([<
-       `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]]
-       Operand.t) t | CVT_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | DMB
-       : Memory_barrier.t -> unit t | DSB : Memory_barrier.t -> unit t | DUP :
-       (Neon_reg_name.Lane_index.t * ([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t |
-       EOR_immediate : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [<
-       `GP of [< `X]]] Operand.t * [< `Bitmask] Operand.t) t |
-       EOR_shifted_register : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg
-       of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t
-       * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option) t |
-       EOR_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | EXT :
-       ([< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t * [< `Reg of
-       [< `Neon of [< `Vector of [`V16B]]]] Operand.t * [< `Reg of [< `Neon of
-       [< `Vector of [`V16B]]]] Operand.t * [< `Imm of [< `Six]] Operand.t) t |
-       FABS : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r)
-       Operand.t * 'r Operand.t) t | FADD : (([< `Reg of [< `Neon of [< `Scalar
-       of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t |
-       FADDP_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t |
-       FADD_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | FCMP :
-       (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t *
-       'r Operand.t) t | FCM_register : Float_cond.t -> ([< `Reg of [< `Neon of
-       [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t * [< `Reg of
-       [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t *
-       [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       Operand.t) t | FCM_zero : Float_cond.t -> ([< `Reg of [< `Neon of [<
-       `Vector of [< any_vector] * [< any_width]]] ] Operand.t * [< `Reg of [<
-       `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t) t |
-       FCSEL : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r)
-       Operand.t * 'r Operand.t * 'r Operand.t * [< `Cond] Operand.t) t | FCVT :
-       ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t * [< `Reg
-       of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t) t | FCVTL_vector :
-       ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
-       Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] Operand.t) t | FCVTNS : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-       Operand.t) t | FCVTNS_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t |
-       FCVTN_vector : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]]] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] Operand.t) t (* Binary vector operations
-       with min/max *) | FCVTZS : ([< `Reg of [< `GP of [< `X]]] Operand.t * [<
-       `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t) t |
-       FCVTZS_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] *
-       [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | FDIV : (([< `Reg
-       of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | FDIV_vector : (([< `Reg of [< `Neon of [<
-       `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | FMADD : (([< `Reg of [< `Neon of [< `Scalar
-       of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t * 'r Operand.t * 'r
-       Operand.t) t | FMAX : (([< `Reg of [< `Neon of [< `Scalar of [< `S |
-       `D]]]] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | FMAX_vector :
-       (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | FMIN : (([< `Reg of
-       [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t
-       * 'r Operand.t) t | FMIN_vector : (([< `Reg of [< `Neon of [< `Vector of
-       [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r
-       Operand.t) t | FMOV_general_or_register : ([< `Reg of [< `Neon of [<
-       `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ] Operand.t * [< `Reg of [<
-       `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `XZR | `W | `WZR] ]
-       ] Operand.t) t | FMOV_scalar_immediate : ([< `Reg of [< `Neon of [<
-       `Scalar of [< `S | `D]]]] Operand.t * [< `Imm of [< `Sixty_four]]
-       Operand.t) t | FMOV_vector_immediate : ([< `Reg of [< `Neon of [< `Vector
-       of _]]] Operand.t * [< `Imm of [< `Sixty_four]] Operand.t) t | FMSUB :
-       (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t *
-       'r Operand.t * 'r Operand.t * 'r Operand.t) t | FMUL : (([< `Reg of [<
-       `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t *
-       'r Operand.t) t | FMUL_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r
-       Operand.t) t | FNEG : (([< `Reg of [< `Neon of [< `Scalar of [< `S |
-       `D]]]] as 'r) Operand.t * 'r Operand.t) t | FNEG_vector : (([< `Reg of [<
-       `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r)
-       Operand.t * 'r Operand.t) t | FNMADD : (([< `Reg of [< `Neon of [<
-       `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t * 'r Operand.t
-       * 'r Operand.t) t | FNMSUB : (([< `Reg of [< `Neon of [< `Scalar of [< `S
-       | `D]]]] as 'r) Operand.t * 'r Operand.t * 'r Operand.t * 'r Operand.t) t
-       | FNMUL : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r)
-       Operand.t * 'r Operand.t * 'r Operand.t) t | FRECPE_vector : (([< `Reg of
-       [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r)
-       Operand.t * 'r Operand.t) t | FRINT : Rounding_mode.t -> (([< `Reg of [<
-       `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r Operand.t) t
-       | FRINT_vector : Rounding_mode.t -> (([< `Reg of [< `Neon of [< `Vector
-       of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t
-       | FRSQRTE_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector]
-       * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | FSQRT : (([<
-       `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t * 'r
-       Operand.t) t | FSQRT_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | FSUB
-       : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-       * 'r Operand.t * 'r Operand.t) t | FSUB_vector : (([< `Reg of [< `Neon of
-       [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | INS : (Neon_reg_name.Lane_index.t * [< `Reg
-       of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t
-       * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]] as
-       'rs) Operand.t) t | INS_V : (Neon_reg_name.Lane_index.t *
-       Neon_reg_name.Lane_index.t * ([< `Reg of [< `Neon of [< `Vector of [<
-       any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | LDAR
-       : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Mem] Operand.t) t |
-       LDP : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t * [< `Reg of [<
-       `GP of [< `X | `W | `LR]]] Operand.t * [< `Mem] Operand.t) t | LDR : ([<
-       `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t * [< `Mem] Operand.t) t |
-       LDRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t |
-       LDRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t |
-       LDRSB : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
-       | LDRSH : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t)
-       t | LDRSW : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem]
-       Operand.t) t | LDR_simd_and_fp : ([< `Reg of [< `Neon of [< `Scalar of [<
-       `D | `S | `Q]]]] Operand.t * [< `Mem] Operand.t) t | LSLV : ([< `Reg of
-       [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t *
-       [< `Reg of [< `GP of [< `X]]] Operand.t) t | LSRV : ([< `Reg of [< `GP of
-       [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of
-       [< `GP of [< `X]]] Operand.t) t | MADD : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP
-       of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t) t
-       | MOV : ([< `Reg of [< `GP of [< `X | `W] (* | `Neon of [< `Scalar of _ |
-       `Vector of Neon_reg_name.Vector.t] *) ] ] Operand.t * [< `Reg of [< `GP
-       of [< `X | `W | `XZR | `WZR] (* | `Neon of [< `Scalar of _ | `Vector of
-       Neon_reg_name.Vector.t] *) ] | `Imm of _ ] Operand.t) t | MOVI : ([< `Reg
-       of [< `Neon of _]] Operand.t * [< `Imm of [< `Twelve]] Operand.t) t |
-       MOVK : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Imm of [<
-       `Sixty_four]] Operand.t * [< `Shift of [< `Lsl] * [`Six]] Operand.t) t (*
-       Typed vector SIMD instructions *) (* Binary vector operations - same
-       format for all operands *) | MOVN : ([< `Reg of [< `GP of [< `X | `W]]]
-       Operand.t * [< `Imm of [< `Twelve | `Sixty_four]] Operand.t * [< `Shift
-       of [< `Lsl] * [`Six]] Operand.t option) t | MOVZ : ([< `Reg of [< `GP of
-       [< `X | `W]]] Operand.t * [< `Imm of [< `Sixty_four]] Operand.t * [<
-       `Shift of [< `Lsl] * [`Six]] Operand.t option) t | MOV_vector : (([< `Reg
-       of [< `Neon of [< `Vector of _]]] as 'r) Operand.t * 'r Operand.t) t |
-       MSUB : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [<
-       `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [<
-       `GP of [< `X]]] Operand.t) t | MULL_vector : (([< `Reg of [< `Neon of [<
-       `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t (* Unary vector operations *) | MUL_vector :
-       (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | MVN_vector : (([<
-       `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as
-       'r) Operand.t * 'r Operand.t) t | NEG_vector : (([< `Reg of [< `Neon of
-       [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t) t | NOP : unit t | ORR_immediate : ([< `Reg of [< `GP of [<
-       `X]]] Operand.t * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t * [<
-       `Bitmask] Operand.t) t | ORR_shifted_register : ([< `Reg of [< `GP of [<
-       `X]]] Operand.t * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t * [<
-       `Reg of [< `GP of [< `X]]] Operand.t * [< `Shift of [< `Lsl | `Lsr |
-       `Asr] * [`Six]] Operand.t option) t | ORR_vector : (([< `Reg of [< `Neon
-       of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-       Operand.t * 'r Operand.t) t | RBIT : ([< `Reg of [< `GP of [< `X]]]
-       Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t) t | RET : unit t |
-       REV : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Reg of [< `GP
-       of [< `X | `W]]] Operand.t) t | REV16 : ([< `Reg of [< `GP of [< `X |
-       `W]]] Operand.t * [< `Reg of [< `GP of [< `X | `W]]] Operand.t) t | SBFM
-       : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Reg of [< `GP of [<
-       `X | `W]]] Operand.t * [< `Imm of [< `Six]] Operand.t * [< `Imm of [<
-       `Six]] Operand.t) t | SCVTF : ([< `Reg of [< `Neon of [< `Scalar of [< `S
-       | `D]]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t) t |
-       SCVTF_vector : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-       any_width]]] ] as 'r) Operand.t * 'r Operand.t) t | SDIV : ([< `Reg of [<
-       `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [<
-       `Reg of V8B | [< `GP of [< `X]]] Operand.t) t | SHL : ([< `Reg of [<
-       `Neon of [< `Vector of [< any_vector] * [< any_width]]]] Operand.t * [<
-       `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-       Operand.t * [< `Imm of [< `Six]] Operand.t) t | SMAX_vector : (([< `Reg
-       of [< `Neon of [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-       * [< any_width] ] ] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t)
-       t *)
-    | SMIN_vector
-        : ([ `Reg of
-             [ `Neon of
-               [< `Vector of
-                  [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-               ] ] ]
-          * [ `Reg of
-              [ `Neon of
-                [< `Vector of
-                   [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                ] ] ]
-          * [ `Reg of
-              [ `Neon of
-                [< `Vector of
-                   [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                ] ] ])
-          t
-  (* | SMOV : (Neon_reg_name.Lane_index.t * [< `Reg of [< `GP of [< `X]]]
-     Operand.t * [< `Reg of [< `Neon of [< `Vector of [< `V8B | `V16B | `V4H |
-     `V8H | `V2S | `V4S] * [< any_width] ] ] ] Operand.t) t | SMULH : ([< `Reg
-     of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t *
-     [< `Reg of [< `GP of [< `X]]] Operand.t) t | SMULL2_vector : ([< `Reg of [<
-     `Neon of [< `Vector of [< any_vector] * [< any_width]]]] Operand.t * [<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-     Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-     any_width]]] ] Operand.t) t | SMULL_vector : ([< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]]] Operand.t * [< `Reg of [<
-     `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t * [<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-     Operand.t) t | SQADD_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r
-     Operand.t) t | SQSUB_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r
-     Operand.t) t | SQXTN : ([< `Reg of [< `Neon of [< `Vector of [< any_vector]
-     * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] Operand.t) t | SQXTN2 : ([< `Reg of [<
-     `Neon of [< `Vector of [< any_vector] * [< any_width]]]] Operand.t * [<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-     Operand.t) t | SSHL_vector : (([< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r Operand.t * 'r
-     Operand.t) t | SSHR : ([< `Reg of [< `Neon of [< `Vector of [< any_vector]
-     * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] Operand.t * [< `Imm of [< `Six]] Operand.t)
-     t | STP : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t * [< `Reg of
-     [< `GP of [< `X | `W | `LR]]] Operand.t * [< `Mem] Operand.t) t | STR : ([<
-     `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t * [< `Mem] Operand.t) t |
-     STRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t |
-     STRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t |
-     STR_simd_and_fp : ([< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]]
-     Operand.t * [< `Mem] Operand.t) t | SUBS_immediate : ([< `Reg of [< `GP of
-     [< `W | `WZR | `X | `XZR]]] Operand.t * [< `Reg of [< `GP of [< `W | `X |
-     `SP]]] Operand.t * [< `Imm of [< `Twelve]] Operand.t * [< `Fixed_shift of
-     [< `Lsl_by_twelve]] Operand.t option) t | SUBS_shifted_register : ([< `Reg
-     of [< `GP of [< `X | `XZR]]] Operand.t * [< `Reg of [< `GP of [< `X |
-     `SP]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Shift of
-     [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option) t | SUB_immediate : ([<
-     `Reg of [< `GP of [< `X | `SP]]] Operand.t * [< `Reg of [< `GP of [< `X |
-     `SP]]] Operand.t * [< `Imm of [< `Twelve]] Operand.t * [< `Fixed_shift of
-     [< `Lsl_by_twelve]] Operand.t option) t | SUB_shifted_register : ([< `Reg
-     of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t *
-     [< `Reg of [< `GP of [< `X]]] Operand.t * [< `Shift of [< `Lsl | `Lsr |
-     `Asr] * [`Six]] Operand.t option) t | SUB_vector : (([< `Reg of [< `Neon of
-     [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-     Operand.t * 'r Operand.t) t | SXTL : ([< `Reg of [< `Neon of [< `Vector of
-     [< any_vector] * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] Operand.t) t | TBNZ : ([<
-     `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm of [< `Six]] Operand.t * [<
-     `Imm of _] Operand.t) t | TBZ : ([< `Reg of [< `GP of [< `X]]] Operand.t *
-     [< `Imm of [< `Six]] Operand.t * [< `Imm of _] Operand.t) t | TST : ([<
-     `Reg of [< `GP of [< `X]]] Operand.t * [< `Bitmask] Operand.t) t |
-     UADDLP_vector : ([< `Reg of [< `Neon of [< `Vector of [< `V4H | `V8H | `V2S
-     | `V4S | `V1D | `V2D] * [< any_width] ] ] ] Operand.t * [< `Reg of [< `Neon
-     of [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [<
-     any_width] ] ] ] Operand.t) t | UBFM : ([< `Reg of [< `GP of [< `X | `W]]]
-     Operand.t * [< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Imm of [<
-     `Six]] Operand.t * [< `Imm of [< `Six]] Operand.t) t | UMAX_vector : (([<
-     `Reg of [< `Neon of [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S |
-     `V4S]] ] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t (* Other
-     binary vector operations *) | UMIN_vector : (([< `Reg of [< `Neon of [<
-     `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width] ] ]
-     ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t | UMOV :
-     (Neon_reg_name.Lane_index.t * ([< `Reg of [< `GP of [< `W | `X] | `Neon of
-     [< `Scalar of [< `D]]]] as 'rd) Operand.t * [< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] Operand.t) t | UMULH : ([<
-     `Reg of [< `GP of [< `X]]] Operand.t * [< `Reg of [< `GP of [< `X]]]
-     Operand.t * [< `Reg of [< `GP of [< `X]]] Operand.t) t | UMULL2_vector :
-     ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
-     Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-     any_width]]] ] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] Operand.t) t | UMULL_vector : ([< `Reg of
-     [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]] Operand.t * [<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-     Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-     any_width]]] ] Operand.t) t | UQADD_vector : (([< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-     Operand.t * 'r Operand.t) t | UQSUB_vector : (([< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-     Operand.t * 'r Operand.t) t (* Lane-indexed operations *) | UQXTN : ([<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
-     Operand.t * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [<
-     any_width]]] ] Operand.t) t | UQXTN2 : ([< `Reg of [< `Neon of [< `Vector
-     of [< any_vector] * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] Operand.t) t (* Binary vector
-     operations with saturating arithmetic *) | USHL_vector : (([< `Reg of [<
-     `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t
-     * 'r Operand.t * 'r Operand.t) t | USHR : ([< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]]] Operand.t * [< `Reg of [<
-     `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] Operand.t * [<
-     `Imm of [< `Six]] Operand.t) t | UXTL : ([< `Reg of [< `Neon of [< `Vector
-     of [< any_vector] * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [<
-     `Vector of [< any_vector] * [< any_width]]] ] Operand.t) t | XTN : ([< `Reg
-     of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]] Operand.t *
-     [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-     Operand.t) t | XTN2 : ([< `Reg of [< `Neon of [< `Vector of [< any_vector]
-     * [< any_width]]]] Operand.t * [< `Reg of [< `Neon of [< `Vector of [<
-     any_vector] * [< any_width]]] ] Operand.t) t | YIELD : unit t | ZIP1 : (([<
-     `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r)
-     Operand.t * 'r Operand.t * 'r Operand.t) t | ZIP2 : (([< `Reg of [< `Neon
-     of [< `Vector of [< any_vector] * [< any_width]]] ] as 'r) Operand.t * 'r
-     Operand.t * 'r Operand.t) t *)
+type singleton = [`Singleton]
 
-  type 'a instr = 'a t
+type pair = [`Pair]
+
+type triple = [`Triple]
+
+module Instruction_name = struct
+  type (_, _) t =
+    | ABS_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | ADDP_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | ADDS
+        : ([< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
+          * [< `Imm of [< `Twelve]] Operand.t
+          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+          t
+    | ADDV
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `B]]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of _]]] Operand.t)
+          t
+    | ADD_immediate
+        : ([< `Reg of [< `GP of [< `X | `SP | `FP]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `SP | `FP]]] Operand.t
+          * [< `Imm of [< `Twelve]] Operand.t
+          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+          t
+    | ADD_shifted_register
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | ADD_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | ADR
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Imm of [< `Twenty_one]] Operand.t)
+          t
+    | ADRP : ([< `Reg of [< `GP of [< `X]]] Operand.t * _ Operand.t) t
+    | AND_immediate
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Bitmask] Operand.t)
+          t
+    | AND_shifted_register
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | AND_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | ASRV
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | B : [< `Imm of _] Operand.t t
+    | BL : [< `Imm of _] Operand.t t
+    | BLR : [< `Reg of [< `GP of [< `X]]] Operand.t t
+    | BR : [< `Reg of [< `GP of [< `X]]] Operand.t t
+    | B_cond : Cond.t -> [< `Imm of _] Operand.t t
+    | B_cond_float : Float_cond.t -> [< `Imm of _] Operand.t t
+    | CBNZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm of _] Operand.t) t
+    | CBZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm of _] Operand.t) t
+    | CLZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | CM_register :
+        Cond.t
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t)
+           t
+    | CM_zero :
+        Cond.t
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t)
+           t
+    | CNT
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | CNT_vector
+        : (([< `Reg of [< `Neon of [< `Vector of _]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | CSEL
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Cond] Operand.t)
+          t
+    | CSINC
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Cond] Operand.t)
+          t
+    | CTZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | CVT_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | DMB : Memory_barrier.t -> unit t
+    | DSB : Memory_barrier.t -> unit t
+    | DUP
+        : (Neon_reg_name.Lane_index.t
+          * ([< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             as
+             'r)
+            Operand.t
+          * 'r Operand.t)
+          t
+    | EOR_immediate
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Bitmask] Operand.t)
+          t
+    | EOR_shifted_register
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | EOR_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | EXT
+        : ([< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | FABS
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | FADD
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FADDP_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FADD_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FCMP
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | FCM_register :
+        Float_cond.t
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t)
+           t
+    | FCM_zero :
+        Float_cond.t
+        -> ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+           * [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             Operand.t)
+           t
+    | FCSEL
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t
+          * [< `Cond] Operand.t)
+          t
+    | FCVT
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+          t
+    | FCVTL_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | FCVTNS
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+          t
+    | FCVTNS_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FCVTN_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    (* Binary vector operations with min/max *)
+    | FCVTZS
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+          t
+    | FCVTZS_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FDIV
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FDIV_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMADD
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMAX
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMAX_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMIN
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMIN_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMOV_general_or_register
+        : ([< `Reg of
+              [< `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ]
+           Operand.t
+          * [< `Reg of
+               [< `Neon of [< `Scalar of [< `S | `D]]
+               | `GP of [< `X | `XZR | `W | `WZR] ] ]
+            Operand.t)
+          t
+    | FMOV_scalar_immediate
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
+          * [< `Imm of [< `Sixty_four]] Operand.t)
+          t
+    | FMOV_vector_immediate
+        : ([< `Reg of [< `Neon of [< `Vector of _]]] Operand.t
+          * [< `Imm of [< `Sixty_four]] Operand.t)
+          t
+    | FMSUB
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMUL
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FMUL_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FNEG
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | FNEG_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FNMADD
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FNMSUB
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FNMUL
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FRECPE_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FRINT :
+        Rounding_mode.t
+        -> (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r)
+            Operand.t
+           * 'r Operand.t)
+           t
+    | FRINT_vector :
+        Rounding_mode.t
+        -> (([< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             as
+             'r)
+            Operand.t
+           * 'r Operand.t)
+           t
+    | FRSQRTE_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FSQRT
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | FSQRT_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | FSUB
+        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | FSUB_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | INS
+        : (Neon_reg_name.Lane_index.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             as
+             'rs)
+            Operand.t)
+          t
+    | INS_V
+        : (Neon_reg_name.Lane_index.t
+          * Neon_reg_name.Lane_index.t
+          * ([< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             as
+             'r)
+            Operand.t
+          * 'r Operand.t)
+          t
+    | LDAR
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Mem] Operand.t) t
+    | LDP
+        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | LDR
+        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | LDRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
+    | LDRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
+    | LDRSB : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
+    | LDRSH : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
+    | LDRSW : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
+    | LDR_simd_and_fp
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | LSLV
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | LSRV
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | MADD
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t)
+          t
+    | MOV
+        : ([< `Reg of
+              [< `GP of
+                 [< `X | `W]
+                 (* | `Neon of [< `Scalar of _ | `Vector of
+                    Neon_reg_name.Vector.t] *) ] ]
+           Operand.t
+          * [< `Reg of
+               [< `GP of
+                  [< `X | `W | `XZR | `WZR]
+                  (* | `Neon of [< `Scalar of _ | `Vector of
+                     Neon_reg_name.Vector.t] *) ]
+            | `Imm of _ ]
+            Operand.t)
+          t
+    | MOVI
+        : ([< `Reg of [< `Neon of _]] Operand.t
+          * [< `Imm of [< `Twelve]] Operand.t)
+          t
+    | MOVK
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Imm of [< `Sixty_four]] Operand.t
+          * [< `Shift of [< `Lsl] * [`Six]] Operand.t)
+          t
+    (* Typed vector SIMD instructions *)
+    (* Binary vector operations - same format for all operands *)
+    | MOVN
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Imm of [< `Twelve | `Sixty_four]] Operand.t
+          * [< `Shift of [< `Lsl] * [`Six]] Operand.t option)
+          t
+    | MOVZ
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Imm of [< `Sixty_four]] Operand.t
+          * [< `Shift of [< `Lsl] * [`Six]] Operand.t option)
+          t
+    | MOV_vector
+        : (([< `Reg of [< `Neon of [< `Vector of _]]] as 'r) Operand.t
+          * 'r Operand.t)
+          t
+    | MSUB
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | MULL_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    (* Unary vector operations *)
+    | MUL_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | MVN_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | NEG_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | NOP : unit t
+    | ORR_immediate
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Bitmask] Operand.t)
+          t
+    | ORR_shifted_register
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | ORR_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | RBIT
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | RET : unit t
+    | REV
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t)
+          t
+    | REV16
+        : ( pair,
+            [ `Reg of [ `GP of [ `X | `W ] ] ]
+            * [ `Reg of [ `GP of [ `X | `W ] ] ] )
+          t
+    | SBFM
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | SCVTF
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | SCVTF_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t)
+          t
+    | SDIV
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `V8B] | [< `GP of [< `X]]] Operand.t)
+          t
+    | SHL
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | SMAX_vector
+        : (([< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | SMIN_vector
+        : ( triple,
+            [< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
+          t
+    | SMULH
+        : ( triple,
+            [ `Reg of [ `GP of [ `X ] ] ]
+            * [ `Reg of [ `GP of [ `X ] ] ]
+            * [ `Reg of [ `GP of [ `X ] ] ] )
+          t
+    | SMULL2_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | SMULL_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | SQADD_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | SQSUB_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | SQXTN
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | SQXTN2
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | SSHL_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | SSHR
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | STP
+        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | STR
+        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | STRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
+    | STRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
+    | STR_simd_and_fp
+        : ([< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] Operand.t
+          * [< `Mem] Operand.t)
+          t
+    | SUBS_immediate
+        : ([< `Reg of [< `GP of [< `W | `WZR | `X | `XZR]]] Operand.t
+          * [< `Reg of [< `GP of [< `W | `X | `SP]]] Operand.t
+          * [< `Imm of [< `Twelve]] Operand.t
+          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+          t
+    | SUBS_shifted_register
+        : ([< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | SUB_immediate
+        : ([< `Reg of [< `GP of [< `X | `SP]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
+          * [< `Imm of [< `Twelve]] Operand.t
+          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+          t
+    | SUB_shifted_register
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+          t
+    | SUB_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | SXTL
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | TBNZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t
+          * [< `Imm of _] Operand.t)
+          t
+    | TBZ
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t
+          * [< `Imm of _] Operand.t)
+          t
+    | TST : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Bitmask] Operand.t) t
+    | UADDLP_vector
+        : ([< `Reg of
+              [< `Neon of
+                 [< `Vector of
+                    [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D] * [< any_width]
+                 ] ] ]
+           Operand.t
+          * [< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            Operand.t)
+          t
+    | UBFM
+        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | UMAX_vector
+        : (([< `Reg of
+               [< `Neon of
+                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    (* Other binary vector operations *)
+    | UMIN_vector
+        : (([< `Reg of
+               [< `Neon of
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | UMOV
+        : (Neon_reg_name.Lane_index.t
+          * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             as
+             'rd)
+            Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | UMULH
+        : ([< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t
+          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+          t
+    | UMULL2_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | UMULL_vector
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | UQADD_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | UQSUB_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    (* Lane-indexed operations *)
+    | UQXTN
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | UQXTN2
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    (* Binary vector operations with saturating arithmetic *)
+    | USHL_vector
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | USHR
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t
+          * [< `Imm of [< `Six]] Operand.t)
+          t
+    | UXTL
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | XTN
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | XTN2
+        : ([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+           Operand.t
+          * [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            Operand.t)
+          t
+    | YIELD : unit t
+    | ZIP1
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+    | ZIP2
+        : (([< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            as
+            'r)
+           Operand.t
+          * 'r Operand.t
+          * 'r Operand.t)
+          t
+
+  type ('num_operands, 'operands) instr = ('num_operands, 'operands) t
 
   module Wrapped = struct
-    type t = I : 'a instr -> t
+    type t = I : (_, _) instr -> t
 
     let to_string t =
       match t with
       | I instr -> (
         match instr with
-        (* | ABS_vector -> "abs" | ADD_immediate | ADD_shifted_register |
-           ADD_vector -> "add" | ADDP_vector -> "addp" | ADDS -> "adds" | ADDV
-           -> "addv" | ADR -> "adr" | ADRP -> "adrp" | AND_immediate |
-           AND_shifted_register | AND_vector -> "and" | ASRV -> "asrv" | B ->
-           "b" | B_cond c -> "b." ^ Cond.to_string c | B_cond_float c -> "b." ^
-           Float_cond.to_string c | BL -> "bl" | BLR -> "blr" | BR -> "br" |
-           CBNZ -> "cbnz" | CBZ -> "cbz" | CLZ -> "clz" | CM_register cond ->
-           "cm" ^ Cond.to_string cond | CM_zero cond -> "cm" ^ Cond.to_string
-           cond | CNT -> "cnt" | CNT_vector -> "cnt" | CSEL -> "csel" | CSINC ->
-           "csinc" | CTZ -> "ctz" | CVT_vector -> "cvt" | DMB b -> "dmb\t" ^
-           Memory_barrier.to_string b | DSB b -> "dsb\t" ^
-           Memory_barrier.to_string b | DUP -> "dup" | EOR_immediate |
-           EOR_shifted_register | EOR_vector -> "eor" | EXT -> "ext" | FABS ->
-           "fabs" | FADD -> "fadd" | FADD_vector -> "fadd" | FADDP_vector ->
-           "faddp" | FCM_register cond -> "fcm" ^ Float_cond.to_string cond |
-           FCM_zero cond -> "fcm" ^ Float_cond.to_string cond | FCMP -> "fcmp" |
-           FCSEL -> "fcsel" | FCVT -> "fcvt" | FCVTL_vector -> "fcvtl" |
-           FCVTN_vector -> "fcvtn" | FCVTNS -> "fcvtns" | FCVTNS_vector ->
-           "fcvtns" | FCVTZS -> "fcvtzs" | FCVTZS_vector -> "fcvtzs" | FDIV ->
-           "fdiv" | FDIV_vector -> "fdiv" | FMADD -> "fmadd" | FMAX -> "fmax" |
-           FMAX_vector -> "fmax" | FMIN -> "fmin" | FMIN_vector -> "fmin" |
-           FMOV_general_or_register | FMOV_scalar_immediate |
-           FMOV_vector_immediate -> "fmov" | FMSUB -> "fmsub" | FMUL -> "fmul" |
-           FMUL_vector -> "fmul" | FNEG -> "fneg" | FNEG_vector -> "fneg" |
-           FNMADD -> "fnmadd" | FNMSUB -> "fnmsub" | FNMUL -> "fnmul" |
-           FRECPE_vector -> "frecpe" | FRINT rm -> "frint" ^
-           Rounding_mode.to_string rm | FRINT_vector rm -> "frint" ^
-           Rounding_mode.to_string rm | FRSQRTE_vector -> "frsqrte" | FSQRT ->
-           "fsqrt" | FSQRT_vector -> "fsqrt" | FSUB -> "fsub" | FSUB_vector ->
-           "fsub" | INS -> "ins" | INS_V -> "ins" | LDAR -> "ldar" | LDP ->
-           "ldp" | LDR -> "ldr" | LDR_simd_and_fp -> "ldr" | LDRB -> "ldrb" |
-           LDRH -> "ldrh" | LDRSB -> "ldrsb" | LDRSH -> "ldrsh" | LDRSW ->
-           "ldrsw" | LSLV -> "lslv" | LSRV -> "lsrv" | MADD -> "madd" | MOV ->
-           "mov" | MOV_vector -> "mov" | MOVI -> "movi" | MOVK -> "movk" | MOVN
-           -> "movn" | MOVZ -> "movz" | MSUB -> "msub" | MUL_vector -> "mul" |
-           MULL_vector -> "mull" | MVN_vector -> "mvn" | NEG_vector -> "neg" |
-           NOP -> "nop" | ORR_immediate | ORR_shifted_register | ORR_vector ->
-           "orr" | RBIT -> "rbit" | RET -> "ret" | REV -> "rev" | REV16 ->
-           "rev16" | SBFM -> "sbfm" | SCVTF -> "scvtf" | SCVTF_vector -> "scvtf"
-           | SDIV -> "sdiv" | SHL -> "shl" | SMAX_vector -> "smax" *)
-        | SMIN_vector ->
-          "smin"
-          (* | SMOV -> "smov" | SMULH -> "smulh" | SMULL2_vector -> "smull2" |
-             SMULL_vector -> "smull" | SQADD_vector -> "sqadd" | SQSUB_vector ->
-             "sqsub" | SQXTN -> "sqxtn" | SQXTN2 -> "sqxtn2" | SSHL_vector ->
-             "sshl" (* XXX is this right? *) | SSHR -> "sshr" | STP -> "stp" |
-             STR -> "str" | STR_simd_and_fp -> "str" | STRB -> "strb" | STRH ->
-             "strh" | SUB_immediate | SUB_shifted_register | SUB_vector -> "sub"
-             | SUBS_immediate | SUBS_shifted_register -> "subs" | SXTL -> "sxtl"
-             | TBNZ -> "tbnz" | TBZ -> "tbz" | TST -> "tst" | UADDLP_vector ->
-             "uaddlp" | UBFM -> "ubfm" | UMAX_vector -> "umax" | UMIN_vector ->
-             "umin" | UMOV -> "umov" | UMULH -> "umulh" | UMULL2_vector ->
-             "umull2" | UMULL_vector -> "umull" | UQADD_vector -> "uqadd" |
-             UQSUB_vector -> "uqsub" | UQXTN -> "uqxtn" | UQXTN2 -> "uqxtn2" |
-             USHL_vector -> "ushl" | USHR -> "ushr" | UXTL -> "uxtl" | XTN ->
-             "xtn" | XTN2 -> "xtn2" | YIELD -> "yield" | ZIP1 -> "zip1" | ZIP2
-             -> "zip2" *))
+        | ABS_vector -> "abs"
+        | ADD_immediate | ADD_shifted_register | ADD_vector -> "add"
+        | ADDP_vector -> "addp"
+        | ADDS -> "adds"
+        | ADDV -> "addv"
+        | ADR -> "adr"
+        | ADRP -> "adrp"
+        | AND_immediate | AND_shifted_register | AND_vector -> "and"
+        | ASRV -> "asrv"
+        | B -> "b"
+        | B_cond c -> "b." ^ Cond.to_string c
+        | B_cond_float c -> "b." ^ Float_cond.to_string c
+        | BL -> "bl"
+        | BLR -> "blr"
+        | BR -> "br"
+        | CBNZ -> "cbnz"
+        | CBZ -> "cbz"
+        | CLZ -> "clz"
+        | CM_register cond -> "cm" ^ Cond.to_string cond
+        | CM_zero cond -> "cm" ^ Cond.to_string cond
+        | CNT -> "cnt"
+        | CNT_vector -> "cnt"
+        | CSEL -> "csel"
+        | CSINC -> "csinc"
+        | CTZ -> "ctz"
+        | CVT_vector -> "cvt"
+        | DMB b -> "dmb\t" ^ Memory_barrier.to_string b
+        | DSB b -> "dsb\t" ^ Memory_barrier.to_string b
+        | DUP -> "dup"
+        | EOR_immediate | EOR_shifted_register | EOR_vector -> "eor"
+        | EXT -> "ext"
+        | FABS -> "fabs"
+        | FADD -> "fadd"
+        | FADD_vector -> "fadd"
+        | FADDP_vector -> "faddp"
+        | FCM_register cond -> "fcm" ^ Float_cond.to_string cond
+        | FCM_zero cond -> "fcm" ^ Float_cond.to_string cond
+        | FCMP -> "fcmp"
+        | FCSEL -> "fcsel"
+        | FCVT -> "fcvt"
+        | FCVTL_vector -> "fcvtl"
+        | FCVTN_vector -> "fcvtn"
+        | FCVTNS -> "fcvtns"
+        | FCVTNS_vector -> "fcvtns"
+        | FCVTZS -> "fcvtzs"
+        | FCVTZS_vector -> "fcvtzs"
+        | FDIV -> "fdiv"
+        | FDIV_vector -> "fdiv"
+        | FMADD -> "fmadd"
+        | FMAX -> "fmax"
+        | FMAX_vector -> "fmax"
+        | FMIN -> "fmin"
+        | FMIN_vector -> "fmin"
+        | FMOV_general_or_register | FMOV_scalar_immediate
+        | FMOV_vector_immediate ->
+          "fmov"
+        | FMSUB -> "fmsub"
+        | FMUL -> "fmul"
+        | FMUL_vector -> "fmul"
+        | FNEG -> "fneg"
+        | FNEG_vector -> "fneg"
+        | FNMADD -> "fnmadd"
+        | FNMSUB -> "fnmsub"
+        | FNMUL -> "fnmul"
+        | FRECPE_vector -> "frecpe"
+        | FRINT rm -> "frint" ^ Rounding_mode.to_string rm
+        | FRINT_vector rm -> "frint" ^ Rounding_mode.to_string rm
+        | FRSQRTE_vector -> "frsqrte"
+        | FSQRT -> "fsqrt"
+        | FSQRT_vector -> "fsqrt"
+        | FSUB -> "fsub"
+        | FSUB_vector -> "fsub"
+        | INS -> "ins"
+        | INS_V -> "ins"
+        | LDAR -> "ldar"
+        | LDP -> "ldp"
+        | LDR -> "ldr"
+        | LDR_simd_and_fp -> "ldr"
+        | LDRB -> "ldrb"
+        | LDRH -> "ldrh"
+        | LDRSB -> "ldrsb"
+        | LDRSH -> "ldrsh"
+        | LDRSW -> "ldrsw"
+        | LSLV -> "lslv"
+        | LSRV -> "lsrv"
+        | MADD -> "madd"
+        | MOV -> "mov"
+        | MOV_vector -> "mov"
+        | MOVI -> "movi"
+        | MOVK -> "movk"
+        | MOVN -> "movn"
+        | MOVZ -> "movz"
+        | MSUB -> "msub"
+        | MUL_vector -> "mul"
+        | MULL_vector -> "mull"
+        | MVN_vector -> "mvn"
+        | NEG_vector -> "neg"
+        | NOP -> "nop"
+        | ORR_immediate | ORR_shifted_register | ORR_vector -> "orr"
+        | RBIT -> "rbit"
+        | RET -> "ret"
+        | REV -> "rev"
+        | REV16 -> "rev16"
+        | SBFM -> "sbfm"
+        | SCVTF -> "scvtf"
+        | SCVTF_vector -> "scvtf"
+        | SDIV -> "sdiv"
+        | SHL -> "shl"
+        | SMAX_vector -> "smax"
+        | SMIN_vector -> "smin"
+        | SMOV -> "smov"
+        | SMULH -> "smulh"
+        | SMULL2_vector -> "smull2"
+        | SMULL_vector -> "smull"
+        | SQADD_vector -> "sqadd"
+        | SQSUB_vector -> "sqsub"
+        | SQXTN -> "sqxtn"
+        | SQXTN2 -> "sqxtn2"
+        | SSHL_vector -> "sshl" (* XXX is this right? *)
+        | SSHR -> "sshr"
+        | STP -> "stp"
+        | STR -> "str"
+        | STR_simd_and_fp -> "str"
+        | STRB -> "strb"
+        | STRH -> "strh"
+        | SUB_immediate | SUB_shifted_register | SUB_vector -> "sub"
+        | SUBS_immediate | SUBS_shifted_register -> "subs"
+        | SXTL -> "sxtl"
+        | TBNZ -> "tbnz"
+        | TBZ -> "tbz"
+        | TST -> "tst"
+        | UADDLP_vector -> "uaddlp"
+        | UBFM -> "ubfm"
+        | UMAX_vector -> "umax"
+        | UMIN_vector -> "umin"
+        | UMOV -> "umov"
+        | UMULH -> "umulh"
+        | UMULL2_vector -> "umull2"
+        | UMULL_vector -> "umull"
+        | UQADD_vector -> "uqadd"
+        | UQSUB_vector -> "uqsub"
+        | UQXTN -> "uqxtn"
+        | UQXTN2 -> "uqxtn2"
+        | USHL_vector -> "ushl"
+        | USHR -> "ushr"
+        | UXTL -> "uxtl"
+        | XTN -> "xtn"
+        | XTN2 -> "xtn2"
+        | YIELD -> "yield"
+        | ZIP1 -> "zip1"
+        | ZIP2 -> "zip2")
   end
 
   module Untyped = struct
@@ -1656,1311 +2418,2281 @@ module Binary_encoder = struct
     let result = logor result (of_int rd) in
     result
 
-  type _ many =
-    | Singleton : 'a Operand.t -> 'a many
-    | Pair : 'a Operand.t * 'b Operand.t -> ('a * 'b) many
-    | Triple : 'a Operand.t * 'b Operand.t * 'c Operand.t -> ('a * 'b * 'c) many
+  type (_, _) many =
+    | Singleton : 'a Operand.t -> (singleton, 'a) many
+    | Pair : 'a Operand.t * 'b Operand.t -> (pair, 'a * 'b) many
+    | Triple :
+        'a Operand.t * 'b Operand.t * 'c Operand.t
+        -> (triple, 'a * 'b * 'c) many
 
-  let encode_instruction :
-      type operands. operands many -> operands Instruction_name.t -> int32 =
+  let encode_instruction' :
+      type operands num.
+      (operands, num) many -> (operands, num) Instruction_name.t -> int32 =
    fun operands instr ->
-    match operands, instr with
-    (* | ( Pair ( (*Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H | V2S |
-       V4S)); _ }, *) Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H | V2S
-       | V4S)); _ }, Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H | V2S |
-       V4S)); _ } ), SMIN_vector ) -> failwith "foo" *)
+    match[@ocaml.warning "-4"] operands, instr with
     | ( Triple
-          ( Reg { reg_name = Neon (Vector (V16B | V4H | V8H | V2S | V4S)); _ },
-            Reg { reg_name = Neon (Vector (V16B | V4H | V8H | V2S | V4S)); _ },
-            Reg { reg_name = Neon (Vector (V16B | V4H | V8H | V2S | V4S)); _ }
-          ),
+          ( Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              },
+            Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              },
+            Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              } ),
         SMIN_vector ) ->
       failwith "foo"
-  (* | Reg { reg_name = Neon (Vector (V2D|V1D)); _ } -> . *)
+  (* let encode_instruction : type operands. operands many -> operands
+     Instruction_name.t -> int32 = fun operands instr -> match operands, instr
+     with (* | ( Pair ( (*Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H |
+     V2S | V4S)); _ }, *) Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H |
+     V2S | V4S)); _ }, Reg { reg_name = Neon (Vector (V8B|V16B | V4H | V8H | V2S
+     | V4S)); _ } ), SMIN_vector ) -> failwith "foo" *) | ( Triple ( Reg {
+     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg {
+     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }, Reg {
+     reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ } ),
+     SMIN_vector ) -> failwith "foo" (* | Reg { reg_name = Neon (Vector
+     (V2D|V1D)); _ } -> . *) *)
 
   let encode_instruction :
-      type operands. operands Instruction_name.t -> operands Operand.t -> int32
-      =
+      type operands num.
+      (operands, num) many -> (operands, num) Instruction_name.t -> int32 =
    fun instr operands ->
     match instr, operands with
     (* PC-relative addressing - C4.1.92.2 *)
-    (* | ADR, (Reg rd, Sym _) -> let rd_bits = Reg.encoding rd in let immlo = 0
-       in let immhi = 0 in encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits | ADR,
-       (Reg rd, Imm _) -> let rd_bits = Reg.encoding rd in let immlo = 0 in let
-       immhi = 0 in encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits | ADRP, (Reg rd,
-       _) -> let rd_bits = Reg.encoding rd in let immlo = 0 in let immhi = 0 in
-       encode_adr ~op:1 ~immlo ~immhi ~rd:rd_bits (* Logical (immediate) -
-       C4.1.92.6 *) | AND_immediate, (Reg rd, Reg rn, Bitmask _) -> let rd_bits
-       = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_logical_immediate ~sf:1 ~opc:0b00 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-       ~rd:rd_bits | ORR_immediate, (Reg rd, Reg rn, Bitmask _) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_logical_immediate ~sf:1 ~opc:0b01 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-       ~rd:rd_bits | EOR_immediate, (Reg rd, Reg rn, Bitmask _) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_logical_immediate ~sf:1 ~opc:0b10 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-       ~rd:rd_bits | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12),
-       shift_opt) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-       rn in let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve ->
-       1 in encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12
-       ~rn:rn_bits ~rd:rd_bits | ADD_immediate, (Reg rd, Reg rn, Imm (Six imm6),
-       shift_opt) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-       rn in let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve ->
-       1 in encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:imm6
-       ~rn:rn_bits ~rd:rd_bits | ADD_immediate, (Reg rd, Reg rn, Sym _,
-       shift_opt) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-       rn in let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve ->
-       1 in encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:0
-       ~rn:rn_bits ~rd:rd_bits | SUB_immediate, (Reg rd, Reg rn, Imm (Twelve
-       imm12), shift_opt) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let sh_bit = match shift_opt with None -> 0 | Some
-       Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:1 ~s:0
-       ~sh:sh_bit ~imm12 ~rn:rn_bits ~rd:rd_bits | SUB_immediate, (Reg rd, Reg
-       rn, Imm (Six imm6), shift_opt) -> let rd_bits = Reg.encoding rd in let
-       rn_bits = Reg.encoding rn in let sh_bit = match shift_opt with None -> 0
-       | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:1 ~s:0
-       ~sh:sh_bit ~imm12:imm6 ~rn:rn_bits ~rd:rd_bits | SUB_immediate, (Reg rd,
-       Reg rn, Sym _, shift_opt) -> let rd_bits = Reg.encoding rd in let rn_bits
-       = Reg.encoding rn in let sh_bit = match shift_opt with None -> 0 | Some
-       Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:1 ~s:0
-       ~sh:sh_bit ~imm12:0 ~rn:rn_bits ~rd:rd_bits | SUBS_immediate, (Reg rd,
-       Reg rn, Imm (Twelve imm12), shift_opt) -> let rd_bits = Reg.encoding rd
-       in let rn_bits = Reg.encoding rn in let sh_bit = match shift_opt with
-       None -> 0 | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1
-       ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits ~rd:rd_bits | SUBS_immediate,
-       (Reg rd, Reg rn, Imm (Six imm6), shift_opt) -> let rd_bits = Reg.encoding
-       rd in let rn_bits = Reg.encoding rn in let sh_bit = match shift_opt with
-       None -> 0 | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1
-       ~op:1 ~s:1 ~sh:sh_bit ~imm12:imm6 ~rn:rn_bits ~rd:rd_bits |
-       SUBS_immediate, (Reg rd, Reg rn, Sym _, shift_opt) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let sh_bit = match
-       shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
-       encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
-       ~rd:rd_bits | ADD_shifted_register, (Reg rd, Reg rn, Reg rm, None) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0
-       ~shift:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | (
-       ADD_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount
-       = Six imm6 })) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-       encode_shift_type kind in encode_add_sub_shifted_register ~sf:1 ~op:0
-       ~s:0 ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | (
-       ADD_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount
-       = Twelve imm12 })) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-       encode_shift_type kind in let imm6 = imm12 land 0x3F in
-       encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | SUB_shifted_register, (Reg
-       rd, Reg rn, Reg rm, None) -> let rd_bits = Reg.encoding rd in let rn_bits
-       = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:0 ~rm:rm_bits
-       ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( SUB_shifted_register, (Reg rd, Reg
-       rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in let shift_type = encode_shift_type kind in
-       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | ( SUB_shifted_register, (Reg
-       rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in let shift_type = encode_shift_type kind in
-       let imm6 = imm12 land 0x3F in encode_add_sub_shifted_register ~sf:1 ~op:1
-       ~s:0 ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits |
-       SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, None) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1
-       ~shift:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | (
-       SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind;
-       amount = Six imm6 })) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-       encode_shift_type kind in encode_add_sub_shifted_register ~sf:1 ~op:1
-       ~s:1 ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | (
-       SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind;
-       amount = Twelve imm12 })) ) -> let rd_bits = Reg.encoding rd in let
-       rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let
-       shift_type = encode_shift_type kind in let imm6 = imm12 land 0x3F in
-       encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | MOVZ, (Reg rd, Imm_nativeint
-       imm, shift_opt) -> let rd_bits = Reg.encoding rd in let imm16 =
-       Nativeint.to_int imm land 0xFFFF in let hw = match shift_opt with | None
-       -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod 16 <> 0
-       || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ: shift must be 0, 16,
-       32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL; amount =
-       Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift { kind = LSR;
-       _ }) -> Misc.fatal_error "MOVZ: invalid shift amount" in encode_move_wide
-       ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | MOVZ, (Reg rd, Sym _, shift_opt)
-       -> let rd_bits = Reg.encoding rd in let imm16 = 0 in let hw = match
-       shift_opt with | None -> 0 | Some (Shift { kind = LSL; amount = Six sh })
-       -> if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ:
-       shift must be 0, 16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift {
-       kind = LSL; amount = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some
-       (Shift { kind = LSR; _ }) -> Misc.fatal_error "MOVZ: invalid shift
-       amount" in encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits |
-       MOVZ, (Reg rd, Imm (Six imm), shift_opt) -> let rd_bits = Reg.encoding rd
-       in let imm16 = imm land 0xFFFF in let hw = match shift_opt with | None ->
-       0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod 16 <> 0 ||
-       sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32,
-       or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL; amount = Twelve
-       _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift { kind = LSR; _ }) ->
-       Misc.fatal_error "MOVZ: invalid shift amount" in encode_move_wide ~sf:1
-       ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | MOVZ, (Reg rd, Imm (Twelve imm),
-       shift_opt) -> let rd_bits = Reg.encoding rd in let imm16 = imm land
-       0xFFFF in let hw = match shift_opt with | None -> 0 | Some (Shift { kind
-       = LSL; amount = Six sh }) -> if sh mod 16 <> 0 || sh < 0 || sh > 48 then
-       Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d" sh ();
-       sh / 16 | Some (Shift { kind = LSL; amount = Twelve _ }) | Some (Shift {
-       kind = ASR; _ }) | Some (Shift { kind = LSR; _ }) -> Misc.fatal_error
-       "MOVZ: invalid shift amount" in encode_move_wide ~sf:1 ~opc:0b10 ~hw
-       ~imm16 ~rd:rd_bits | MOVZ, (Reg rd, Imm_float f, shift_opt) -> let
-       rd_bits = Reg.encoding rd in let imm16 = Int64.to_int
-       (Int64.bits_of_float f) land 0xFFFF in let hw = match shift_opt with |
-       None -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod 16
-       <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ: shift must be 0,
-       16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL; amount
-       = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift { kind =
-       LSR; _ }) -> Misc.fatal_error "MOVZ: invalid shift amount" in
-       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | MOVN, (Reg rd,
-       Imm (Twelve imm), None) -> let rd_bits = Reg.encoding rd in
-       encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits | ( MOVN, (
-       Reg rd, Imm (Twelve imm), Some (Shift { kind = LSL; amount = Six sh }) )
-       ) -> let rd_bits = Reg.encoding rd in let imm16 = imm land 0xFFFF in if
-       sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVN: shift
-       must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits | ( MOVN, ( Reg
-       rd, Imm (Twelve imm), Some (Shift { kind = LSL; amount = Twelve sh }) ) )
-       -> let rd_bits = Reg.encoding rd in let imm16 = imm land 0xFFFF in if sh
-       mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVN: shift must
-       be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in encode_move_wide
-       ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits | MOVN, (Reg _, Imm (Twelve _),
-       Some (Shift { kind = _; _ })) -> Misc.fatal_error "MOVN: only LSL shift
-       is supported" | MOVN, (Reg rd, Imm (Six imm), None) -> let rd_bits =
-       Reg.encoding rd in let imm16 = imm land 0xFFFF in encode_move_wide ~sf:1
-       ~opc:0b00 ~hw:0 ~imm16 ~rd:rd_bits | ( MOVN, (Reg rd, Imm (Six imm), Some
-       (Shift { kind = LSL; amount = Six sh })) ) -> let rd_bits = Reg.encoding
-       rd in let imm16 = imm land 0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh >
-       48 then Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d"
-       sh (); let hw = sh / 16 in encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16
-       ~rd:rd_bits | ( MOVN, ( Reg rd, Imm (Six imm), Some (Shift { kind = LSL;
-       amount = Twelve sh }) ) ) -> let rd_bits = Reg.encoding rd in let imm16 =
-       imm land 0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then
-       Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
-       let hw = sh / 16 in encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16
-       ~rd:rd_bits | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = ASR; _ }))
-       | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = LSR; _ })) ->
-       Misc.fatal_error "MOVN: only LSL shift is supported" | MOVN, (Reg rd, Sym
-       _, shift_opt) -> let rd_bits = Reg.encoding rd in let imm16 = 0 in let hw
-       = match shift_opt with | None -> 0 | Some (Shift { kind = LSL; amount =
-       Six sh }) -> if sh mod 16 <> 0 || sh < 0 || sh > 48 then
-       Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
-       sh / 16 | Some (Shift { kind = LSL; amount = Twelve _ }) | Some (Shift {
-       kind = ASR; _ }) | Some (Shift { kind = LSR; _ }) -> Misc.fatal_error
-       "MOVN: invalid shift amount" in encode_move_wide ~sf:1 ~opc:0b00 ~hw
-       ~imm16 ~rd:rd_bits | MOVN, (Reg rd, Imm_float f, shift_opt) -> let
-       rd_bits = Reg.encoding rd in let imm16 = Int64.to_int
-       (Int64.bits_of_float f) land 0xFFFF in let hw = match shift_opt with |
-       None -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod 16
-       <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVN: shift must be 0,
-       16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL; amount
-       = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift { kind =
-       LSR; _ }) -> Misc.fatal_error "MOVN: invalid shift amount" in
-       encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits | MOVN, (Reg rd,
-       Imm_nativeint imm, shift_opt) -> let rd_bits = Reg.encoding rd in let
-       imm16 = Nativeint.to_int imm land 0xFFFF in let hw = match shift_opt with
-       | None -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod
-       16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVN: shift must be
-       0, 16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL;
-       amount = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift {
-       kind = LSR; _ }) -> Misc.fatal_error "MOVN: invalid shift amount" in
-       encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg rd,
-       Imm_nativeint imm, Shift { kind = LSL; amount = Six sh }) -> let rd_bits
-       = Reg.encoding rd in let imm16 = Nativeint.to_int imm land 0xFFFF in if
-       sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVK: shift
-       must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | ( MOVK, (Reg
-       rd, Imm_nativeint imm, Shift { kind = LSL; amount = Twelve sh }) ) -> let
-       rd_bits = Reg.encoding rd in let imm16 = Nativeint.to_int imm land 0xFFFF
-       in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVK:
-       shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg _,
-       Imm_nativeint _, Shift { kind = _; _ }) -> Misc.fatal_error "MOVK: only
-       LSL shift is supported" | MOVK, (Reg rd, Sym _, Shift { kind = LSL;
-       amount = Six sh }) -> let rd_bits = Reg.encoding rd in let imm16 = 0 in
-       if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVK:
-       shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg rd,
-       Sym _, Shift { kind = LSL; amount = Twelve sh }) -> let rd_bits =
-       Reg.encoding rd in let imm16 = 0 in if sh mod 16 <> 0 || sh < 0 || sh >
-       48 then Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d"
-       sh (); let hw = sh / 16 in encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16
-       ~rd:rd_bits | MOVK, (Reg _, Sym _, Shift { kind = _; _ }) ->
-       Misc.fatal_error "MOVK: only LSL shift is supported" | MOVK, (Reg rd, Imm
-       (Six imm), Shift { kind = LSL; amount = Six sh }) -> let rd_bits =
-       Reg.encoding rd in let imm16 = imm land 0xFFFF in if sh mod 16 <> 0 || sh
-       < 0 || sh > 48 then Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or
-       48, got %d" sh (); let hw = sh / 16 in encode_move_wide ~sf:1 ~opc:0b11
-       ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg rd, Imm (Six imm), Shift { kind =
-       LSL; amount = Twelve sh }) -> let rd_bits = Reg.encoding rd in let imm16
-       = imm land 0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then
-       Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
-       let hw = sh / 16 in encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16
-       ~rd:rd_bits | MOVK, (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount
-       = Six sh }) -> let rd_bits = Reg.encoding rd in let imm16 = imm land
-       0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf
-       "MOVK: shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | ( MOVK, (Reg
-       rd, Imm (Twelve imm), Shift { kind = LSL; amount = Twelve sh }) ) -> let
-       rd_bits = Reg.encoding rd in let imm16 = imm land 0xFFFF in if sh mod 16
-       <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVK: shift must be 0,
-       16, 32, or 48, got %d" sh (); let hw = sh / 16 in encode_move_wide ~sf:1
-       ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg _, Imm _, Shift { kind = _;
-       _ }) -> Misc.fatal_error "MOVK: only LSL shift is supported" | MOVK, (Reg
-       rd, Imm_float f, Shift { kind = LSL; amount = Six sh }) -> let rd_bits =
-       Reg.encoding rd in let imm16 = Int64.to_int (Int64.bits_of_float f) land
-       0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf
-       "MOVK: shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg rd,
-       Imm_float f, Shift { kind = LSL; amount = Twelve sh }) -> let rd_bits =
-       Reg.encoding rd in let imm16 = Int64.to_int (Int64.bits_of_float f) land
-       0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf
-       "MOVK: shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-       encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | MOVK, (Reg _,
-       Imm_float _, Shift { kind = _; _ }) -> Misc.fatal_error "MOVK: only LSL
-       shift is supported" | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six
-       imms)) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-       in encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits
-       ~rd:rd_bits | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms))
-       -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       imms = imms land 0x3F in encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms
-       ~rn:rn_bits ~rd:rd_bits | UBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm
-       (Six imms)) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let immr = immr land 0x3F in encode_bitfield ~sf:1
-       ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits | UBFM, (Reg rd, Reg
-       rn, Imm (Twelve immr), Imm (Twelve imms)) -> let rd_bits = Reg.encoding
-       rd in let rn_bits = Reg.encoding rn in let immr = immr land 0x3F in let
-       imms = imms land 0x3F in encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms
-       ~rn:rn_bits ~rd:rd_bits | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six
-       imms)) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-       in encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits
-       ~rd:rd_bits | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms))
-       -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       imms = imms land 0x3F in encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms
-       ~rn:rn_bits ~rd:rd_bits | SBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm
-       (Six imms)) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let immr = immr land 0x3F in encode_bitfield ~sf:1
-       ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits | SBFM, (Reg rd, Reg
-       rn, Imm (Twelve immr), Imm (Twelve imms)) -> let rd_bits = Reg.encoding
-       rd in let rn_bits = Reg.encoding rn in let immr = immr land 0x3F in let
-       imms = imms land 0x3F in encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms
-       ~rn:rn_bits ~rd:rd_bits | UBFM, (Reg rd, Reg rn, Imm _, Sym _) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-       ~rd:rd_bits | UBFM, (Reg rd, Reg rn, Sym _, Imm _) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in encode_bitfield ~sf:1
-       ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits ~rd:rd_bits | UBFM, (Reg rd,
-       Reg rn, Sym _, Sym _) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0
-       ~rn:rn_bits ~rd:rd_bits | SBFM, (Reg rd, Reg rn, Imm _, Sym _) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-       ~rd:rd_bits | SBFM, (Reg rd, Reg rn, Sym _, Imm _) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in encode_bitfield ~sf:1
-       ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits ~rd:rd_bits | SBFM, (Reg rd,
-       Reg rn, Sym _, Sym _) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0
-       ~rn:rn_bits ~rd:rd_bits | SDIV, (Reg rd, Reg rn, Reg rm) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b000011
-       ~rm:rm_bits ~rn:rn_bits ~rd:rd_bits | LSLV, (Reg rd, Reg rn, Reg rm) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_data_proc_2_source ~sf:1 ~s:0
-       ~opcode:0b001000 ~rm:rm_bits ~rn:rn_bits ~rd:rd_bits | LSRV, (Reg rd, Reg
-       rn, Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in
-       encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001001 ~rm:rm_bits
-       ~rn:rn_bits ~rd:rd_bits | ASRV, (Reg rd, Reg rn, Reg rm) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001010
-       ~rm:rm_bits ~rn:rn_bits ~rd:rd_bits | MADD, (Reg rd, Reg rn, Reg rm, Reg
-       ra) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:0 ~rm:rm_bits
-       ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | MSUB, (Reg rd, Reg rn, Reg rm, Reg
-       ra) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:1 ~rm:rm_bits
-       ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | AND_shifted_register, (Reg rd, Reg
-       rn, Reg rm, None) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in
-       encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
-       ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( AND_shifted_register, (Reg rd, Reg
-       rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in let shift_type = encode_shift_type kind in
-       encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | ( AND_shifted_register, (Reg
-       rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in let shift_type = encode_shift_type kind in
-       let imm6 = imm12 land 0x3F in encode_logical_shifted_register ~sf:1
-       ~opc:0b00 ~shift:shift_type ~n:0 ~rm:rm_bits ~imm6 ~rn:rn_bits
-       ~rd:rd_bits | ORR_shifted_register, (Reg rd, Reg rn, Reg rm, None) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_logical_shifted_register ~sf:1 ~opc:0b01
-       ~shift:0 ~n:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | (
-       ORR_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount
-       = Six imm6 })) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-       encode_shift_type kind in encode_logical_shifted_register ~sf:1 ~opc:0b01
-       ~shift:shift_type ~n:0 ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | (
-       ORR_shifted_register, (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount
-       = Twelve imm12 })) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-       encode_shift_type kind in let imm6 = imm12 land 0x3F in
-       encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | EOR_shifted_register, (Reg
-       rd, Reg rn, Reg rm, None) -> let rd_bits = Reg.encoding rd in let rn_bits
-       = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-       encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
-       ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( EOR_shifted_register, (Reg rd, Reg
-       rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in let shift_type = encode_shift_type kind in
-       encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
-       ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | ( EOR_shifted_register, (Reg
-       rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in let shift_type = encode_shift_type kind in
-       let imm6 = imm12 land 0x3F in encode_logical_shifted_register ~sf:1
-       ~opc:0b10 ~shift:shift_type ~n:0 ~rm:rm_bits ~imm6 ~rn:rn_bits
-       ~rd:rd_bits | RBIT, (Reg rd, Reg rn) -> let rd_bits = Reg.encoding rd in
-       let rn_bits = Reg.encoding rn in encode_data_proc_1_source ~sf:1 ~s:0
-       ~opcode2:0b00000 ~opcode:0b000000 ~rn:rn_bits ~rd:rd_bits | REV16, (Reg
-       rd, Reg rn) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000
-       ~opcode:0b000001 ~rn:rn_bits ~rd:rd_bits | REV, (Reg rd, Reg rn) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000011
-       ~rn:rn_bits ~rd:rd_bits | CLZ, (Reg rd, Reg rn) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000100
-       ~rn:rn_bits ~rd:rd_bits | CNT, (Reg rd, Reg rn) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in
-       encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000111
-       ~rn:rn_bits ~rd:rd_bits | SMULH, (Reg rd, Reg rn, Reg rm) -> let rd_bits
-       = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010
-       ~o0:0 ~rm:rm_bits ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits | UMULH, (Reg rd,
-       Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits =
-       Reg.encoding rn in let rm_bits = Reg.encoding rm in
-       encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm:rm_bits
-       ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector, (Reg ({ reg_name =
-       Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) -> let rd_bits =
-       Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-       Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V1D); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b11
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( SQADD_vector,
-       (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b11
-       ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( ADD_vector, (Reg
-       ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b11
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ADD_vector, (Reg {
-       reg_name = _; _ }, _, _) -> assert false (* TODO XXX *) | ( SUB_vector,
-       (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b00
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b00
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b01
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b01
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b10
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b10
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( SUB_vector, (Reg
-       ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b11
-       ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | SUB_vector, (Reg {
-       reg_name = _; _ }, _, _) -> assert false (* TODO XXX *) | ( AND_vector,
-       (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | ( AND_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | AND_vector, (Reg {
-       reg_name = _; _ }, _, _) -> assert false (* TODO XXX *) | ( ORR_vector,
-       (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | ( ORR_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | ORR_vector, (Reg {
-       reg_name = _; _ }, _, _) -> assert false (* TODO XXX *) | ( EOR_vector,
-       (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | ( EOR_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b00
-       ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | EOR_vector, (Reg {
-       reg_name = _; _ }, _, _) -> assert false (* TODO XXX *) | ( SMAX_vector,
-       (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
-       let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-       rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | ( SMAX_vector, (Reg
-       ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | ( SMAX_vector, (Reg
-       ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | ( SMAX_vector, (Reg
-       ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b01
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | ( SMAX_vector, (Reg
-       ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | ( SMAX_vector, (Reg
-       ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) -> let
-       rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits
-       = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10
-       ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits *)
-    | SMIN_vector, op -> (
-      match op with
-      | Reg { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ }
-        ->
-        failwith "foo"
-        (* | Reg { reg_name = Neon (Vector (V2D|V1D)); _ } -> . *))
-
-  (* (Reg ({ reg_name = Neon (Vector V8B); _ } as rd)) ) -> failwith "foo" *)
-  (* | ( SMIN_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn,
-     Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     SMIN_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     SMIN_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     SMIN_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     SMIN_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     SMIN_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits *)
-  (* | SQADD_vector, (Reg { reg_name = Neon _; _ }, _, _) -> assert false (*
-     TODO XXX *) | ( UMAX_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as
-     rd), Reg rn, Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( UMAX_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn,
-     Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | (
-     UMAX_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | (
-     UMAX_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | (
-     UMAX_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | (
-     UMAX_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     UMIN_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     MUL_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn,
-     Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SQSUB_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b11 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn,
-     Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQADD_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b11 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn,
-     Reg rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     UQSUB_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b11 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     SSHL_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b11 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     USHL_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b11 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits | (
-     FADD_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FADD_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FADD_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FSUB_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FSUB_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FSUB_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b11 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits | (
-     FMUL_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits | (
-     FMUL_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits | (
-     FMUL_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits | (
-     FDIV_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits | (
-     FDIV_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits | (
-     FDIV_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1
-     ~size:0b01 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits | (
-     FMAX_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMAX_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMAX_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMIN_vector, (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMIN_vector, (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMIN_vector, (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg
-     rm) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b11 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits | (
-     FMOV_scalar_immediate, (Reg ({ reg_name = Neon (Scalar S); _ } as rd),
-     Imm_float _f) ) -> let rd_bits = Reg.encoding rd in let imm8 = 0 in
-     encode_fp_immediate ~ftype:0b00 ~imm8 ~rd:rd_bits | (
-     FMOV_scalar_immediate, (Reg ({ reg_name = Neon (Scalar D); _ } as rd),
-     Imm_float _f) ) -> let rd_bits = Reg.encoding rd in let imm8 = 0 in
-     encode_fp_immediate ~ftype:0b01 ~imm8 ~rd:rd_bits | (
-     FMOV_scalar_immediate, (Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-     Imm_float _f) ) -> let rd_bits = Reg.encoding rd in let imm8 = 0 in
-     encode_fp_immediate ~ftype:0b11 ~imm8 ~rd:rd_bits | FADD, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0010 ~rn:rn_bits ~rd:rd_bits | FADD, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
-     ~rd:rd_bits | FADD, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits ~rd:rd_bits | FSUB, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0011 ~rn:rn_bits ~rd:rd_bits | FSUB, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
-     ~rd:rd_bits | FSUB, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits ~rd:rd_bits | FMUL, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0000 ~rn:rn_bits ~rd:rd_bits | FMUL, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
-     ~rd:rd_bits | FMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits ~rd:rd_bits | FDIV, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0001 ~rn:rn_bits ~rd:rd_bits | FDIV, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
-     ~rd:rd_bits | FDIV, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits ~rd:rd_bits | FMAX, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0100 ~rn:rn_bits ~rd:rd_bits | FMAX, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
-     ~rd:rd_bits | FMAX, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits ~rd:rd_bits | FMIN, (Reg ({ reg_name
-     = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0101 ~rn:rn_bits ~rd:rd_bits | FMIN, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
-     ~rd:rd_bits | FMIN, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn,
-     Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits ~rd:rd_bits | FNMUL, (Reg ({
-     reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b1000 ~rn:rn_bits ~rd:rd_bits | FNMUL, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
-     ~rd:rd_bits | FNMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg
-     rn, Reg rm) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b11
-     ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits ~rd:rd_bits | ( FCSEL, ( Reg ({
-     reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Cond cond ) ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in let cond_bits = encode_condition cond in
-     encode_fp_cond_select ~ftype:0b00 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
-     ~rd:rd_bits | ( FCSEL, ( Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg
-     rn, Reg rm, Cond cond ) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in let cond_bits =
-     encode_condition cond in encode_fp_cond_select ~ftype:0b01 ~rm:rm_bits
-     ~cond:cond_bits ~rn:rn_bits ~rd:rd_bits | ( FCSEL, ( Reg ({ reg_name = Neon
-     (Scalar H); _ } as rd), Reg rn, Reg rm, Cond cond ) ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let cond_bits = encode_condition cond in
-     encode_fp_cond_select ~ftype:0b11 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
-     ~rd:rd_bits | ( FMADD, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg
-     rn, Reg rm, Reg ra) ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in let ra_bits =
-     Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:0
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( FMADD, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let ra_bits = Reg.encoding ra in encode_fp_3_source
-     ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | (
-     FMADD, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg
-     ra) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( FMSUB, (Reg ({ reg_name = Neon (Scalar S); _ }
-     as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits = Reg.encoding rd in let
-     rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let ra_bits =
-     Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:1
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( FMSUB, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let ra_bits = Reg.encoding ra in encode_fp_3_source
-     ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | (
-     FMSUB, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg
-     ra) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( FNMADD, (Reg ({ reg_name = Neon (Scalar S); _ }
-     as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits = Reg.encoding rd in let
-     rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let ra_bits =
-     Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:0
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( FNMADD, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let ra_bits = Reg.encoding ra in encode_fp_3_source
-     ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | (
-     FNMADD, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg
-     ra) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( FNMSUB, (Reg ({ reg_name = Neon (Scalar S); _ }
-     as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits = Reg.encoding rd in let
-     rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let ra_bits =
-     Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:1
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( FNMSUB, (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra) ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let ra_bits = Reg.encoding ra in encode_fp_3_source
-     ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | (
-     FNMSUB, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg
-     ra) ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits (* Load register (literal) - C4.1.96.19 *) (* XXX
-     these need more work *) | LDR, (Reg ({ reg_name = GP W; _ } as rt), Mem
-     (Offset (_, Symbol _))) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b00 ~v:0 ~imm19:0 ~rt:rt_bits | LDR, (Reg ({
-     reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))) -> let rt_bits =
-     Reg.encoding rt in encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
-     | LDR, (Reg ({ reg_name = GP LR; _ } as rt), Mem (Offset (_, Symbol _))) ->
-     let rt_bits = Reg.encoding rt in encode_load_literal ~opc:0b01 ~v:0
-     ~imm19:0 ~rt:rt_bits | LDRSW, (Reg ({ reg_name = GP X; _ } as rt), Mem
-     (Offset (_, Symbol _))) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b10 ~v:0 ~imm19:0 ~rt:rt_bits | (
-     LDR_simd_and_fp, ( Reg ({ reg_name = Neon (Scalar S); _ } as rt), Mem
-     (Offset (_, Symbol _)) ) ) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b00 ~v:1 ~imm19:0 ~rt:rt_bits | (
-     LDR_simd_and_fp, ( Reg ({ reg_name = Neon (Scalar D); _ } as rt), Mem
-     (Offset (_, Symbol _)) ) ) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b01 ~v:1 ~imm19:0 ~rt:rt_bits | (
-     LDR_simd_and_fp, ( Reg ({ reg_name = Neon (Scalar Q); _ } as rt), Mem
-     (Offset (_, Symbol _)) ) ) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits | ( SMAX_vector, (
-     Reg { reg_name = GP _ | Neon (Vector (V1D | V2D) | Scalar _ | Lane _); _ },
-     _, _ ) ) -> assert false *)
-  (* | ( SMIN_vector, ( Reg { reg_name = GP _ | Neon (Vector (V1D | V2D) |
-     Scalar _ | Lane _); _ }, _, _ ) ) -> assert false *)
-  (* | ( UMAX_vector, ( Reg { reg_name = Neon (Vector (V1D | V2D) | Scalar _ |
-     Lane _); _ }, _, _ ) ) | UMAX_vector, (Reg { reg_name = GP _; _ }, _, _) |
-     ( UMIN_vector, ( Reg { reg_name = Neon (Vector (V1D | V2D) | Scalar _ |
-     Lane _); _ }, _, _ ) ) | UMIN_vector, (Reg { reg_name = GP _; _ }, _, _) ->
-     assert false | SQADD_vector, (Reg { reg_name = GP _; _ }, _, _) -> assert
-     false (* XXX TODO *) | MUL_vector, (Reg { reg_name = Neon (Vector V1D); _
-     }, _, _) -> assert false (* XXX TODO *) | MUL_vector, (Reg { reg_name =
-     Neon (Vector V2D); _ }, _, _) -> assert false (* XXX TODO *) | MUL_vector,
-     (Reg { reg_name = Neon (Scalar _); _ }, _, _) -> assert false (* XXX TODO
-     *) | MUL_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert
-     false (* XXX TODO *) | MUL_vector, (Reg { reg_name = GP _; _ }, _, _) ->
-     assert false (* XXX TODO *) | SQSUB_vector, (Reg { reg_name = Neon (Vector
-     V1D); _ }, _, _) -> assert false (* XXX TODO *) | SQSUB_vector, (Reg {
-     reg_name = Neon (Scalar _); _ }, _, _) -> assert false (* XXX TODO *) |
-     SQSUB_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false
-     (* XXX TODO *) | SQSUB_vector, (Reg { reg_name = GP _; _ }, _, _) -> assert
-     false (* XXX TODO *) | UQADD_vector, (Reg { reg_name = Neon (Vector V1D); _
-     }, _, _) -> assert false (* XXX TODO *) | UQADD_vector, (Reg { reg_name =
-     Neon (Scalar _); _ }, _, _) -> assert false (* XXX TODO *) | UQADD_vector,
-     (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false (* XXX TODO *)
-     | UQADD_vector, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX
-     TODO *) | UQSUB_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
-     assert false (* XXX TODO *) | UQSUB_vector, (Reg { reg_name = Neon (Scalar
-     _); _ }, _, _) -> assert false (* XXX TODO *) | UQSUB_vector, (Reg {
-     reg_name = Neon (Lane _); _ }, _, _) -> assert false (* XXX TODO *) |
-     UQSUB_vector, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX
-     TODO *) | SSHL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
-     assert false (* XXX TODO *) | SSHL_vector, (Reg { reg_name = Neon (Scalar
-     _); _ }, _, _) -> assert false (* XXX TODO *) | SSHL_vector, (Reg {
-     reg_name = Neon (Lane _); _ }, _, _) -> assert false (* XXX TODO *) |
-     SSHL_vector, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO
-     *) | USHL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | USHL_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | USHL_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | USHL_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FADD_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FADD_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FADD_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FADD_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FADD_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FADD_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FADD_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FADD_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FSUB_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FSUB_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FSUB_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FSUB_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FSUB_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FSUB_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FSUB_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FSUB_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FMUL_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FMUL_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FMUL_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FMUL_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FMUL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FMUL_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FMUL_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FMUL_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FDIV_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FDIV_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FDIV_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FDIV_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FDIV_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FDIV_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FDIV_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FDIV_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FMAX_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FMAX_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FMAX_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FMAX_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FMAX_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FMAX_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FMAX_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FMAX_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FMIN_vector,
-     (Reg { reg_name = Neon (Vector V8B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FMIN_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FMIN_vector, (Reg { reg_name = Neon (Vector
-     V4H); _ }, _, _) -> assert false (* XXX TODO *) | FMIN_vector, (Reg {
-     reg_name = Neon (Vector V8H); _ }, _, _) -> assert false (* XXX TODO *) |
-     FMIN_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) -> assert
-     false (* XXX TODO *) | FMIN_vector, (Reg { reg_name = Neon (Scalar _); _ },
-     _, _) -> assert false (* XXX TODO *) | FMIN_vector, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FMIN_vector, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) |
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar S); _ }, Sym _) ->
-     assert false (* XXX TODO *) | FMOV_scalar_immediate, (Reg { reg_name = Neon
-     (Scalar S); _ }, Imm _) -> assert false (* XXX TODO *) | (
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar S); _ },
-     Imm_nativeint _) ) -> assert false (* XXX TODO *) | FMOV_scalar_immediate,
-     (Reg { reg_name = Neon (Scalar D); _ }, Sym _) -> assert false (* XXX TODO
-     *) | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar D); _ }, Imm _)
-     -> assert false (* XXX TODO *) | ( FMOV_scalar_immediate, (Reg { reg_name =
-     Neon (Scalar D); _ }, Imm_nativeint _) ) -> assert false (* XXX TODO *) |
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar H); _ }, Sym _) ->
-     assert false (* XXX TODO *) | FMOV_scalar_immediate, (Reg { reg_name = Neon
-     (Scalar H); _ }, Imm _) -> assert false (* XXX TODO *) | (
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar H); _ },
-     Imm_nativeint _) ) -> assert false (* XXX TODO *) | FMOV_scalar_immediate,
-     (Reg { reg_name = Neon (Scalar B); _ }, Sym _) -> assert false (* XXX TODO
-     *) | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar B); _ }, Imm _)
-     -> assert false (* XXX TODO *) | ( FMOV_scalar_immediate, (Reg { reg_name =
-     Neon (Scalar B); _ }, Imm_nativeint _) ) -> assert false (* XXX TODO *) | (
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar B); _ }, Imm_float _)
-     ) -> assert false (* XXX TODO *) | FMOV_scalar_immediate, (Reg { reg_name =
-     Neon (Scalar Q); _ }, Sym _) -> assert false (* XXX TODO *) |
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar Q); _ }, Imm _) ->
-     assert false (* XXX TODO *) | ( FMOV_scalar_immediate, (Reg { reg_name =
-     Neon (Scalar Q); _ }, Imm_nativeint _) ) -> assert false (* XXX TODO *) | (
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar Q); _ }, Imm_float _)
-     ) -> assert false (* XXX TODO *) | FMOV_scalar_immediate, (Reg { reg_name =
-     Neon (Vector _); _ }, _) -> assert false (* XXX TODO *) |
-     FMOV_scalar_immediate, (Reg { reg_name = Neon (Lane _); _ }, _) -> assert
-     false (* XXX TODO *) | FMOV_scalar_immediate, (Reg { reg_name = GP _; _ },
-     _) -> assert false (* XXX TODO *) | FADD, (Reg { reg_name = Neon (Scalar
-     B); _ }, _, _) -> assert false (* XXX TODO *) | FADD, (Reg { reg_name =
-     Neon (Scalar Q); _ }, _, _) -> assert false (* XXX TODO *) | FADD, (Reg {
-     reg_name = Neon (Vector _); _ }, _, _) -> assert false (* XXX TODO *) |
-     FADD, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false (* XXX
-     TODO *) | FADD, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX
-     TODO *) | FSUB, (Reg { reg_name = Neon (Scalar B); _ }, _, _) -> assert
-     false (* XXX TODO *) | FSUB, (Reg { reg_name = Neon (Scalar Q); _ }, _, _)
-     -> assert false (* XXX TODO *) | FSUB, (Reg { reg_name = Neon (Vector _); _
-     }, _, _) -> assert false (* XXX TODO *) | FSUB, (Reg { reg_name = Neon
-     (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FSUB, (Reg { reg_name
-     = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FMUL, (Reg { reg_name =
-     Neon (Scalar B); _ }, _, _) -> assert false (* XXX TODO *) | FMUL, (Reg {
-     reg_name = Neon (Scalar Q); _ }, _, _) -> assert false (* XXX TODO *) |
-     FMUL, (Reg { reg_name = Neon (Vector _); _ }, _, _) -> assert false (* XXX
-     TODO *) | FMUL, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false
-     (* XXX TODO *) | FMUL, (Reg { reg_name = GP _; _ }, _, _) -> assert false
-     (* XXX TODO *) | FDIV, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
-     assert false (* XXX TODO *) | FDIV, (Reg { reg_name = Neon (Scalar Q); _ },
-     _, _) -> assert false (* XXX TODO *) | FDIV, (Reg { reg_name = Neon (Vector
-     _); _ }, _, _) -> assert false (* XXX TODO *) | FDIV, (Reg { reg_name =
-     Neon (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FDIV, (Reg {
-     reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FMAX, (Reg {
-     reg_name = Neon (Scalar B); _ }, _, _) -> assert false (* XXX TODO *) |
-     FMAX, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) -> assert false (* XXX
-     TODO *) | FMAX, (Reg { reg_name = Neon (Vector _); _ }, _, _) -> assert
-     false (* XXX TODO *) | FMAX, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
-     assert false (* XXX TODO *) | FMAX, (Reg { reg_name = GP _; _ }, _, _) ->
-     assert false (* XXX TODO *) | FMIN, (Reg { reg_name = Neon (Scalar B); _ },
-     _, _) -> assert false (* XXX TODO *) | FMIN, (Reg { reg_name = Neon (Scalar
-     Q); _ }, _, _) -> assert false (* XXX TODO *) | FMIN, (Reg { reg_name =
-     Neon (Vector _); _ }, _, _) -> assert false (* XXX TODO *) | FMIN, (Reg {
-     reg_name = Neon (Lane _); _ }, _, _) -> assert false (* XXX TODO *) | FMIN,
-     (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *) | FNMUL,
-     (Reg { reg_name = Neon (Scalar B); _ }, _, _) -> assert false (* XXX TODO
-     *) | FNMUL, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) -> assert false
-     (* XXX TODO *) | FNMUL, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
-     assert false (* XXX TODO *) | FNMUL, (Reg { reg_name = Neon (Lane _); _ },
-     _, _) -> assert false (* XXX TODO *) | FNMUL, (Reg { reg_name = GP _; _ },
-     _, _) -> assert false (* XXX TODO *) | FMADD, (Reg { reg_name = Neon
-     (Scalar B); _ }, _, _, _) -> assert false (* XXX TODO *) | FMADD, (Reg {
-     reg_name = Neon (Scalar Q); _ }, _, _, _) -> assert false (* XXX TODO *) |
-     FMADD, (Reg { reg_name = Neon (Vector _); _ }, _, _, _) -> assert false (*
-     XXX TODO *) | FMADD, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) ->
-     assert false (* XXX TODO *) | FMADD, (Reg { reg_name = GP _; _ }, _, _, _)
-     -> assert false (* XXX TODO *) | FMSUB, (Reg { reg_name = Neon (Scalar B);
-     _ }, _, _, _) -> assert false (* XXX TODO *) | FMSUB, (Reg { reg_name =
-     Neon (Scalar Q); _ }, _, _, _) -> assert false (* XXX TODO *) | FMSUB, (Reg
-     { reg_name = Neon (Vector _); _ }, _, _, _) -> assert false (* XXX TODO *)
-     | FMSUB, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) -> assert false (*
-     XXX TODO *) | FMSUB, (Reg { reg_name = GP _; _ }, _, _, _) -> assert false
-     (* XXX TODO *) | FNMADD, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _)
-     -> assert false (* XXX TODO *) | FNMADD, (Reg { reg_name = Neon (Scalar Q);
-     _ }, _, _, _) -> assert false (* XXX TODO *) | FNMADD, (Reg { reg_name =
-     Neon (Vector _); _ }, _, _, _) -> assert false (* XXX TODO *) | FNMADD,
-     (Reg { reg_name = Neon (Lane _); _ }, _, _, _) -> assert false (* XXX TODO
-     *) | FNMADD, (Reg { reg_name = GP _; _ }, _, _, _) -> assert false (* XXX
-     TODO *) | FNMSUB, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _) ->
-     assert false (* XXX TODO *) | FNMSUB, (Reg { reg_name = Neon (Scalar Q); _
-     }, _, _, _) -> assert false (* XXX TODO *) | FNMSUB, (Reg { reg_name = Neon
-     (Vector _); _ }, _, _, _) -> assert false (* XXX TODO *) | FNMSUB, (Reg {
-     reg_name = Neon (Lane _); _ }, _, _, _) -> assert false (* XXX TODO *) |
-     FNMSUB, (Reg { reg_name = GP _; _ }, _, _, _) -> assert false (* XXX TODO
-     *) | FABS, (Reg { reg_name = Neon (Scalar B); _ }, _) -> assert false (*
-     XXX TODO *) | FABS, (Reg { reg_name = Neon (Scalar H); _ }, _) -> assert
-     false (* XXX TODO *) | FABS, (Reg { reg_name = Neon (Scalar S); _ }, _) ->
-     assert false (* XXX TODO *) | FABS, (Reg { reg_name = Neon (Scalar D); _ },
-     _) -> assert false (* XXX TODO *) | FABS, (Reg { reg_name = Neon (Scalar
-     Q); _ }, _) -> assert false (* XXX TODO *) | FABS, (Reg { reg_name = Neon
-     (Vector _); _ }, _) -> assert false (* XXX TODO *) | FABS, (Reg { reg_name
-     = Neon (Lane _); _ }, _) -> assert false (* XXX TODO *) | FABS, (Reg {
-     reg_name = GP _; _ }, _) -> assert false (* XXX TODO *) | FNEG, (Reg {
-     reg_name = Neon (Scalar B); _ }, _) -> assert false (* XXX TODO *) | FNEG,
-     (Reg { reg_name = Neon (Scalar H); _ }, _) -> assert false (* XXX TODO *) |
-     FNEG, (Reg { reg_name = Neon (Scalar S); _ }, _) -> assert false (* XXX
-     TODO *) | FNEG, (Reg { reg_name = Neon (Scalar D); _ }, _) -> assert false
-     (* XXX TODO *) | FNEG, (Reg { reg_name = Neon (Scalar Q); _ }, _) -> assert
-     false (* XXX TODO *) | FNEG, (Reg { reg_name = Neon (Vector _); _ }, _) ->
-     assert false (* XXX TODO *) | FNEG, (Reg { reg_name = Neon (Lane _); _ },
-     _) -> assert false (* XXX TODO *) | FNEG, (Reg { reg_name = GP _; _ }, _)
-     -> assert false (* XXX TODO *) | FSQRT, (Reg { reg_name = Neon (Scalar B);
-     _ }, _) -> assert false (* XXX TODO *) | FSQRT, (Reg { reg_name = Neon
-     (Scalar H); _ }, _) -> assert false (* XXX TODO *) | FSQRT, (Reg { reg_name
-     = Neon (Scalar S); _ }, _) -> assert false (* XXX TODO *) | FSQRT, (Reg {
-     reg_name = Neon (Scalar D); _ }, _) -> assert false (* XXX TODO *) | FSQRT,
-     (Reg { reg_name = Neon (Scalar Q); _ }, _) -> assert false (* XXX TODO *) |
-     FSQRT, (Reg { reg_name = Neon (Vector _); _ }, _) -> assert false (* XXX
-     TODO *) | FSQRT, (Reg { reg_name = Neon (Lane _); _ }, _) -> assert false
-     (* XXX TODO *) | FSQRT, (Reg { reg_name = GP _; _ }, _) -> assert false (*
-     XXX TODO *) | FCVT, _ -> assert false (* XXX TODO *) | FCVTZS, _ -> assert
-     false (* XXX TODO *) | FCVTNS, _ -> assert false (* XXX TODO *) | SCVTF, _
-     -> assert false (* XXX TODO *) | FCMP, _ -> assert false (* XXX TODO *) |
-     FCSEL, _ -> assert false (* XXX TODO *) | FMOV_general_or_register, _ ->
-     assert false (* XXX TODO *) | LDR, _ -> assert false (* XXX TODO *) | STR,
-     _ -> assert false (* XXX TODO *) | LDP, _ -> assert false (* XXX TODO *) |
-     STP, _ -> assert false (* XXX TODO *) | LDRB, _ -> assert false (* XXX TODO
-     *) | LDRH, _ -> assert false (* XXX TODO *) | LDRSB, _ -> assert false (*
-     XXX TODO *) | LDRSH, _ -> assert false (* XXX TODO *) | STRB, _ -> assert
-     false (* XXX TODO *) | STRH, _ -> assert false (* XXX TODO *) | LDAR, _ ->
-     assert false (* XXX TODO *) | STR_simd_and_fp, _ -> assert false (* XXX
-     TODO *) | LDRSW, _ -> assert false (* XXX TODO *) | ABS_vector, _ -> assert
-     false (* XXX TODO *) | ADDP_vector, _ -> assert false (* XXX TODO *) |
-     ADDV, _ -> assert false (* XXX TODO *) | MVN_vector, _ -> assert false (*
-     XXX TODO *) | NEG_vector, _ -> assert false (* XXX TODO *) | MOV_vector, _
-     -> assert false (* XXX TODO *) | MULL_vector, _ -> assert false (* XXX TODO
-     *) | UMULL_vector, _ -> assert false (* XXX TODO *) | SMULL_vector, _ ->
-     assert false (* XXX TODO *) | UMULL2_vector, _ -> assert false (* XXX TODO
-     *) | SMULL2_vector, _ -> assert false (* XXX TODO *) | FADDP_vector, _ ->
-     assert false (* XXX TODO *) | FNEG_vector, _ -> assert false (* XXX TODO *)
-     | FSQRT_vector, _ -> assert false (* XXX TODO *) | FCVTZS_vector, _ ->
-     assert false (* XXX TODO *) | FCVTNS_vector, _ -> assert false (* XXX TODO
-     *) | SCVTF_vector, _ -> assert false (* XXX TODO *) | FCVTN_vector, _ ->
-     assert false (* XXX TODO *) | FCVTL_vector, _ -> assert false (* XXX TODO
-     *) | FMOV_vector_immediate, _ -> assert false (* XXX TODO *) |
-     FRECPE_vector, _ -> assert false (* XXX TODO *) | FRSQRTE_vector, _ ->
-     assert false (* XXX TODO *) | FRINT _, _ -> assert false (* XXX TODO *) |
-     FRINT_vector _, _ -> assert false (* XXX TODO *) | FCM_register _, _ ->
-     assert false (* XXX TODO *) | FCM_zero _, _ -> assert false (* XXX TODO *)
-     | CM_register _, _ -> assert false (* XXX TODO *) | CM_zero _, _ -> assert
-     false (* XXX TODO *) | LDR_simd_and_fp, _ -> assert false (* XXX TODO *) |
-     CVT_vector, _ -> assert false (* XXX TODO *) | CNT_vector, _ -> assert
-     false (* XXX TODO *) | SQXTN, _ -> assert false (* XXX TODO *) | SQXTN2, _
-     -> assert false (* XXX TODO *) | UQXTN, _ -> assert false (* XXX TODO *) |
-     UQXTN2, _ -> assert false (* XXX TODO *) | XTN, _ -> assert false (* XXX
-     TODO *) | XTN2, _ -> assert false (* XXX TODO *) | SXTL, _ -> assert false
-     (* XXX TODO *) | UXTL, _ -> assert false (* XXX TODO *) | SHL, _ -> assert
-     false (* XXX TODO *) | SSHR, _ -> assert false (* XXX TODO *) | USHR, _ ->
-     assert false (* XXX TODO *) | DUP, _ -> assert false (* XXX TODO *) | INS,
-     _ -> assert false (* XXX TODO *) | INS_V, _ -> assert false (* XXX TODO *)
-     | UMOV, _ -> assert false (* XXX TODO *) | SMOV, _ -> assert false (* XXX
-     TODO *) | EXT, _ -> assert false (* XXX TODO *) | ZIP1, _ -> assert false
-     (* XXX TODO *) | ZIP2, _ -> assert false (* XXX TODO *) | UADDLP_vector, _
-     -> assert false (* XXX TODO *) | ADDS, _ -> assert false (* XXX TODO *) |
-     CSEL, _ -> assert false (* XXX TODO *) | CSINC, _ -> assert false (* XXX
-     TODO *) | TST, _ -> assert false (* XXX TODO *) | B, _ -> assert false (*
-     XXX TODO *) | BL, _ -> assert false (* XXX TODO *) | BR, _ -> assert false
-     (* XXX TODO *) | BLR, _ -> assert false (* XXX TODO *) | B_cond _, _ ->
-     assert false (* XXX TODO *) | B_cond_float _, _ -> assert false (* XXX TODO
-     *) | CBZ, _ -> assert false (* XXX TODO *) | CBNZ, _ -> assert false (* XXX
-     TODO *) | TBZ, _ -> assert false (* XXX TODO *) | TBNZ, _ -> assert false
-     (* XXX TODO *) | RET, _ -> assert false (* XXX TODO *) | NOP, _ -> assert
-     false (* XXX TODO *) | YIELD, _ -> assert false (* XXX TODO *) | DMB _, _
-     -> assert false (* XXX TODO *) | DSB _, _ -> assert false (* XXX TODO *) |
-     MOV, _ -> assert false (* XXX TODO *) | MOVI, _ -> assert false (* XXX TODO
-     *) | CTZ, _ -> assert false *)
+    | ADR, (Reg rd, Sym _) ->
+      let rd_bits = Reg.encoding rd in
+      let immlo = 0 in
+      let immhi = 0 in
+      encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
+    | ADR, (Reg rd, Imm _) ->
+      let rd_bits = Reg.encoding rd in
+      let immlo = 0 in
+      let immhi = 0 in
+      encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
+    | ADRP, (Reg rd, _) ->
+      let rd_bits = Reg.encoding rd in
+      let immlo = 0 in
+      let immhi = 0 in
+      encode_adr ~op:1 ~immlo ~immhi
+        ~rd:rd_bits (* Logical (immediate) - C4.1.92.6 *)
+    | AND_immediate, (Reg rd, Reg rn, Bitmask _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_logical_immediate ~sf:1 ~opc:0b00 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | ORR_immediate, (Reg rd, Reg rn, Bitmask _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_logical_immediate ~sf:1 ~opc:0b01 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | EOR_immediate, (Reg rd, Reg rn, Bitmask _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_logical_immediate ~sf:1 ~opc:0b10 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | ADD_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
+        ~rd:rd_bits
+    | ADD_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:imm6
+        ~rn:rn_bits ~rd:rd_bits
+    | ADD_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SUB_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12 ~rn:rn_bits
+        ~rd:rd_bits
+    | SUB_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:imm6
+        ~rn:rn_bits ~rd:rd_bits
+    | SUB_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SUBS_immediate, (Reg rd, Reg rn, Imm (Twelve imm12), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits
+        ~rd:rd_bits
+    | SUBS_immediate, (Reg rd, Reg rn, Imm (Six imm6), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:imm6
+        ~rn:rn_bits ~rd:rd_bits
+    | SUBS_immediate, (Reg rd, Reg rn, Sym _, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let sh_bit = match shift_opt with None -> 0 | Some Lsl_by_twelve -> 1 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | ADD_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | SUB_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | SUBS_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( SUBS_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( SUBS_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1 ~shift:shift_type
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | MOVZ, (Reg rd, Imm_nativeint imm, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Nativeint.to_int imm land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVZ: shift must be 0, 16,\n       32, or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVZ: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+    | MOVZ, (Reg rd, Sym _, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = 0 in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVZ:\n       shift must be 0, 16, 32, or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVZ: invalid shift\n       amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+    | MOVZ, (Reg rd, Imm (Six imm), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVZ: shift must be 0, 16, 32,\n       or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVZ: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+    | MOVZ, (Reg rd, Imm (Twelve imm), shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d" sh
+              ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVZ: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+    | MOVZ, (Reg rd, Imm_float f, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVZ: shift must be 0,\n       16, 32, or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVZ: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
+    | MOVN, (Reg rd, Imm (Twelve imm), None) ->
+      let rd_bits = Reg.encoding rd in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits
+    | ( MOVN,
+        (Reg rd, Imm (Twelve imm), Some (Shift { kind = LSL; amount = Six sh }))
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVN: shift\n       must be 0, 16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | ( MOVN,
+        ( Reg rd,
+          Imm (Twelve imm),
+          Some (Shift { kind = LSL; amount = Twelve sh }) ) ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVN: shift must\n       be 0, 16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | MOVN, (Reg _, Imm (Twelve _), Some (Shift { kind = _; _ })) ->
+      Misc.fatal_error "MOVN: only LSL shift\n       is supported"
+    | MOVN, (Reg rd, Imm (Six imm), None) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16 ~rd:rd_bits
+    | MOVN, (Reg rd, Imm (Six imm), Some (Shift { kind = LSL; amount = Six sh }))
+      ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | ( MOVN,
+        (Reg rd, Imm (Six imm), Some (Shift { kind = LSL; amount = Twelve sh }))
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = ASR; _ }))
+    | MOVN, (Reg _, Imm (Six _), Some (Shift { kind = LSR; _ })) ->
+      Misc.fatal_error "MOVN: only LSL shift is supported"
+    | MOVN, (Reg rd, Sym _, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = 0 in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf "MOVN: shift must be 0, 16, 32, or 48, got %d" sh
+              ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVN: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | MOVN, (Reg rd, Imm_float f, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVN: shift must be 0,\n       16, 32, or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVN: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | MOVN, (Reg rd, Imm_nativeint imm, shift_opt) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Nativeint.to_int imm land 0xFFFF in
+      let hw =
+        match shift_opt with
+        | None -> 0
+        | Some (Shift { kind = LSL; amount = Six sh }) ->
+          if sh mod 16 <> 0 || sh < 0 || sh > 48
+          then
+            Misc.fatal_errorf
+              "MOVN: shift must be\n       0, 16, 32, or 48, got %d" sh ();
+          sh / 16
+        | Some (Shift { kind = LSL; amount = Twelve _ })
+        | Some (Shift { kind = ASR; _ })
+        | Some (Shift { kind = LSR; _ }) ->
+          Misc.fatal_error "MOVN: invalid shift amount"
+      in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm_nativeint imm, Shift { kind = LSL; amount = Six sh })
+      ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Nativeint.to_int imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift\n       must be 0, 16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm_nativeint imm, Shift { kind = LSL; amount = Twelve sh })
+      ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Nativeint.to_int imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK:\n       shift must be 0, 16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg _, Imm_nativeint _, Shift { kind = _; _ }) ->
+      Misc.fatal_error "MOVK: only\n       LSL shift is supported"
+    | MOVK, (Reg rd, Sym _, Shift { kind = LSL; amount = Six sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = 0 in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK:\n       shift must be 0, 16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Sym _, Shift { kind = LSL; amount = Twelve sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = 0 in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg _, Sym _, Shift { kind = _; _ }) ->
+      Misc.fatal_error "MOVK: only LSL shift is supported"
+    | MOVK, (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Six sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or\n       48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm (Six imm), Shift { kind = LSL; amount = Twelve sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Six sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm (Twelve imm), Shift { kind = LSL; amount = Twelve sh })
+      ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = imm land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0,\n       16, 32, or 48, got %d"
+          sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg _, Imm _, Shift { kind = _; _ }) ->
+      Misc.fatal_error "MOVK: only LSL shift is supported"
+    | MOVK, (Reg rd, Imm_float f, Shift { kind = LSL; amount = Six sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg rd, Imm_float f, Shift { kind = LSL; amount = Twelve sh }) ->
+      let rd_bits = Reg.encoding rd in
+      let imm16 = Int64.to_int (Int64.bits_of_float f) land 0xFFFF in
+      if sh mod 16 <> 0 || sh < 0 || sh > 48
+      then
+        Misc.fatal_errorf "MOVK: shift must be 0, 16, 32, or 48, got %d" sh ();
+      let hw = sh / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits
+    | MOVK, (Reg _, Imm_float _, Shift { kind = _; _ }) ->
+      Misc.fatal_error "MOVK: only LSL\n       shift is supported"
+    | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let imms = imms land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let immr = immr land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let immr = immr land 0x3F in
+      let imms = imms land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Imm (Six immr), Imm (Twelve imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let imms = imms land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Six imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let immr = immr land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Imm (Twelve immr), Imm (Twelve imms)) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let immr = immr land 0x3F in
+      let imms = imms land 0x3F in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms ~rn:rn_bits ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Imm _, Sym _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Sym _, Imm _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | UBFM, (Reg rd, Reg rn, Sym _, Sym _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Imm _, Sym _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Sym _, Imm _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SBFM, (Reg rd, Reg rn, Sym _, Sym _) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
+        ~rd:rd_bits
+    | SDIV, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b000011 ~rm:rm_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | LSLV, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001000 ~rm:rm_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | LSRV, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001001 ~rm:rm_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ASRV, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001010 ~rm:rm_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | MADD, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:0 ~rm:rm_bits
+        ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
+    | MSUB, (Reg rd, Reg rn, Reg rm, Reg ra) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:1 ~rm:rm_bits
+        ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits
+    | AND_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( AND_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( AND_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ORR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( ORR_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( ORR_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | EOR_shifted_register, (Reg rd, Reg rn, Reg rm, None) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
+        ~imm6:0 ~rn:rn_bits ~rd:rd_bits
+    | ( EOR_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Six imm6 })) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | ( EOR_shifted_register,
+        (Reg rd, Reg rn, Reg rm, Some (Shift { kind; amount = Twelve imm12 })) )
+      ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let shift_type = encode_shift_type kind in
+      let imm6 = imm12 land 0x3F in
+      encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
+        ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits
+    | RBIT, (Reg rd, Reg rn) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000000
+        ~rn:rn_bits ~rd:rd_bits
+    | REV16, (Reg rd, Reg rn) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000001
+        ~rn:rn_bits ~rd:rd_bits
+    | REV, (Reg rd, Reg rn) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000011
+        ~rn:rn_bits ~rd:rd_bits
+    | CLZ, (Reg rd, Reg rn) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000100
+        ~rn:rn_bits ~rd:rd_bits
+    | CNT, (Reg rd, Reg rn) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000111
+        ~rn:rn_bits ~rd:rd_bits
+    | SMULH, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010 ~o0:0 ~rm:rm_bits
+        ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits
+    | UMULH, (Reg rd, Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm:rm_bits
+        ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V1D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ADD_vector, (Reg { reg_name = _; _ }, _, _) -> assert false (* TODO XXX *)
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b10000
+        ~rn:rn_bits ~rd:rd_bits
+    | SUB_vector, (Reg { reg_name = _; _ }, _, _) -> assert false (* TODO XXX *)
+    | ( AND_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( AND_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | AND_vector, (Reg { reg_name = _; _ }, _, _) -> assert false (* TODO XXX *)
+    | ( ORR_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( ORR_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | ORR_vector, (Reg { reg_name = _; _ }, _, _) -> assert false (* TODO XXX *)
+    | ( EOR_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( EOR_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011
+        ~rn:rn_bits ~rd:rd_bits
+    | EOR_vector, (Reg { reg_name = _; _ }, _, _) -> assert false (* TODO XXX *)
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | SQADD_vector, (Reg { reg_name = Neon _; _ }, _, _) ->
+      assert false (* TODO XXX *)
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( MUL_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b10011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00001
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( UQSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00101
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( SSHL_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( USHL_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b01000
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FADD_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FADD_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FSUB_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b11010
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMUL_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMUL_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMUL_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11011
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FDIV_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FDIV_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FDIV_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11111
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMAX_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMIN_vector,
+        (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b11110
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMOV_scalar_immediate,
+        (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Imm_float _f) ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm8 = 0 in
+      encode_fp_immediate ~ftype:0b00 ~imm8 ~rd:rd_bits
+    | ( FMOV_scalar_immediate,
+        (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Imm_float _f) ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm8 = 0 in
+      encode_fp_immediate ~ftype:0b01 ~imm8 ~rd:rd_bits
+    | ( FMOV_scalar_immediate,
+        (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Imm_float _f) ) ->
+      let rd_bits = Reg.encoding rd in
+      let imm8 = 0 in
+      encode_fp_immediate ~ftype:0b11 ~imm8 ~rd:rd_bits
+    | FADD, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
+        ~rd:rd_bits
+    | FADD, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
+        ~rd:rd_bits
+    | FADD, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
+        ~rd:rd_bits
+    | FSUB, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
+        ~rd:rd_bits
+    | FSUB, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
+        ~rd:rd_bits
+    | FSUB, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMUL, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMUL, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
+        ~rd:rd_bits
+    | FDIV, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
+        ~rd:rd_bits
+    | FDIV, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
+        ~rd:rd_bits
+    | FDIV, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMAX, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMAX, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMAX, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMIN, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMIN, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
+        ~rd:rd_bits
+    | FMIN, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
+        ~rd:rd_bits
+    | FNMUL, (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b00 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
+        ~rd:rd_bits
+    | FNMUL, (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
+        ~rd:rd_bits
+    | FNMUL, (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
+        ~rd:rd_bits
+    | ( FCSEL,
+        ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
+          Reg rn,
+          Reg rm,
+          Cond cond ) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let cond_bits = encode_condition cond in
+      encode_fp_cond_select ~ftype:0b00 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
+        ~rd:rd_bits
+    | ( FCSEL,
+        ( Reg ({ reg_name = Neon (Scalar D); _ } as rd),
+          Reg rn,
+          Reg rm,
+          Cond cond ) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let cond_bits = encode_condition cond in
+      encode_fp_cond_select ~ftype:0b01 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
+        ~rd:rd_bits
+    | ( FCSEL,
+        ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
+          Reg rn,
+          Reg rm,
+          Cond cond ) ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let cond_bits = encode_condition cond in
+      encode_fp_cond_select ~ftype:0b11 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
+        ~rd:rd_bits
+    | ( FMADD,
+        (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMADD,
+        (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMADD,
+        (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMSUB,
+        (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMSUB,
+        (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FMSUB,
+        (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMADD,
+        (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMADD,
+        (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMADD,
+        (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMSUB,
+        (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b00 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMSUB,
+        (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+    | ( FNMSUB,
+        (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra)
+      ) ->
+      let rd_bits = Reg.encoding rd in
+      let rn_bits = Reg.encoding rn in
+      let rm_bits = Reg.encoding rm in
+      let ra_bits = Reg.encoding ra in
+      encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
+        ~rn:rn_bits ~rd:rd_bits
+      (* Load register (literal) - C4.1.96.19 *)
+      (* XXX these need more work *)
+    | LDR, (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b00 ~v:0 ~imm19:0 ~rt:rt_bits
+    | LDR, (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
+    | LDR, (Reg ({ reg_name = GP LR; _ } as rt), Mem (Offset (_, Symbol _))) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
+    | LDRSW, (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b10 ~v:0 ~imm19:0 ~rt:rt_bits
+    | ( LDR_simd_and_fp,
+        ( Reg ({ reg_name = Neon (Scalar S); _ } as rt),
+          Mem (Offset (_, Symbol _)) ) ) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b00 ~v:1 ~imm19:0 ~rt:rt_bits
+    | ( LDR_simd_and_fp,
+        ( Reg ({ reg_name = Neon (Scalar D); _ } as rt),
+          Mem (Offset (_, Symbol _)) ) ) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b01 ~v:1 ~imm19:0 ~rt:rt_bits
+    | ( LDR_simd_and_fp,
+        ( Reg ({ reg_name = Neon (Scalar Q); _ } as rt),
+          Mem (Offset (_, Symbol _)) ) ) ->
+      let rt_bits = Reg.encoding rt in
+      encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
+    | ( SMAX_vector,
+        ( Reg
+            { reg_name = GP _ | Neon (Vector (V1D | V2D) | Scalar _ | Lane _);
+              _
+            },
+          _,
+          _ ) ) ->
+      assert false
+    | ( SMIN_vector,
+        ( Reg
+            { reg_name = GP _ | Neon (Vector (V1D | V2D) | Scalar _ | Lane _);
+              _
+            },
+          _,
+          _ ) ) ->
+      assert false
+    | ( UMAX_vector,
+        ( Reg { reg_name = Neon (Vector (V1D | V2D) | Scalar _ | Lane _); _ },
+          _,
+          _ ) )
+    | UMAX_vector, (Reg { reg_name = GP _; _ }, _, _)
+    | ( UMIN_vector,
+        ( Reg { reg_name = Neon (Vector (V1D | V2D) | Scalar _ | Lane _); _ },
+          _,
+          _ ) )
+    | UMIN_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false
+    | SQADD_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | MUL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | MUL_vector, (Reg { reg_name = Neon (Vector V2D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | MUL_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | MUL_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | MUL_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SQSUB_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SQSUB_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SQSUB_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false
+    (* XXX TODO *)
+    | SQSUB_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQADD_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQADD_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQADD_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQADD_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQSUB_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQSUB_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQSUB_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | UQSUB_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SSHL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SSHL_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SSHL_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | SSHL_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | USHL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | USHL_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | USHL_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | USHL_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Vector V8B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Vector V16B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Vector V4H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Vector V8H); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Vector V1D); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Scalar _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN_vector, (Reg { reg_name = GP _; _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar S); _ }, Sym _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar S); _ }, Imm _) ->
+      assert false (* XXX TODO *)
+    | ( FMOV_scalar_immediate,
+        (Reg { reg_name = Neon (Scalar S); _ }, Imm_nativeint _) ) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar D); _ }, Sym _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar D); _ }, Imm _) ->
+      assert false (* XXX TODO *)
+    | ( FMOV_scalar_immediate,
+        (Reg { reg_name = Neon (Scalar D); _ }, Imm_nativeint _) ) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar H); _ }, Sym _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar H); _ }, Imm _) ->
+      assert false (* XXX TODO *)
+    | ( FMOV_scalar_immediate,
+        (Reg { reg_name = Neon (Scalar H); _ }, Imm_nativeint _) ) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar B); _ }, Sym _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar B); _ }, Imm _) ->
+      assert false (* XXX TODO *)
+    | ( FMOV_scalar_immediate,
+        (Reg { reg_name = Neon (Scalar B); _ }, Imm_nativeint _) ) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar B); _ }, Imm_float _)
+      ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar Q); _ }, Sym _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar Q); _ }, Imm _) ->
+      assert false (* XXX TODO *)
+    | ( FMOV_scalar_immediate,
+        (Reg { reg_name = Neon (Scalar Q); _ }, Imm_nativeint _) ) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Scalar Q); _ }, Imm_float _)
+      ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Vector _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = Neon (Lane _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FMOV_scalar_immediate, (Reg { reg_name = GP _; _ }, _) ->
+      assert false (* XXX TODO *)
+    | FADD, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FADD, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FSUB, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FSUB, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FMUL, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMUL, (Reg { reg_name = Neon (Lane _); _ }, _, _) -> assert false
+    (* XXX TODO *)
+    | FMUL, (Reg { reg_name = GP _; _ }, _, _) -> assert false
+    (* XXX TODO *)
+    | FDIV, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FDIV, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FMAX, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMAX, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FMIN, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FMIN, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FNMUL, (Reg { reg_name = Neon (Scalar B); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMUL, (Reg { reg_name = Neon (Scalar Q); _ }, _, _) -> assert false
+    (* XXX TODO *)
+    | FNMUL, (Reg { reg_name = Neon (Vector _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMUL, (Reg { reg_name = Neon (Lane _); _ }, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMUL, (Reg { reg_name = GP _; _ }, _, _) -> assert false (* XXX TODO *)
+    | FMADD, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMADD, (Reg { reg_name = Neon (Scalar Q); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMADD, (Reg { reg_name = Neon (Vector _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMADD, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMADD, (Reg { reg_name = GP _; _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMSUB, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMSUB, (Reg { reg_name = Neon (Scalar Q); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMSUB, (Reg { reg_name = Neon (Vector _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMSUB, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FMSUB, (Reg { reg_name = GP _; _ }, _, _, _) -> assert false
+    (* XXX TODO *)
+    | FNMADD, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMADD, (Reg { reg_name = Neon (Scalar Q); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMADD, (Reg { reg_name = Neon (Vector _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMADD, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMADD, (Reg { reg_name = GP _; _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMSUB, (Reg { reg_name = Neon (Scalar B); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMSUB, (Reg { reg_name = Neon (Scalar Q); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMSUB, (Reg { reg_name = Neon (Vector _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMSUB, (Reg { reg_name = Neon (Lane _); _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FNMSUB, (Reg { reg_name = GP _; _ }, _, _, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Scalar B); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Scalar H); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Scalar S); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Scalar D); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Scalar Q); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Vector _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = Neon (Lane _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FABS, (Reg { reg_name = GP _; _ }, _) -> assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Scalar B); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Scalar H); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Scalar S); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Scalar D); _ }, _) -> assert false
+    (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Scalar Q); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Vector _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = Neon (Lane _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FNEG, (Reg { reg_name = GP _; _ }, _) -> assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Scalar B); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Scalar H); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Scalar S); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Scalar D); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Scalar Q); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Vector _); _ }, _) ->
+      assert false (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = Neon (Lane _); _ }, _) -> assert false
+    (* XXX TODO *)
+    | FSQRT, (Reg { reg_name = GP _; _ }, _) -> assert false (* XXX TODO *)
+    | FCVT, _ -> assert false (* XXX TODO *)
+    | FCVTZS, _ -> assert false (* XXX TODO *)
+    | FCVTNS, _ -> assert false (* XXX TODO *)
+    | SCVTF, _ -> assert false (* XXX TODO *)
+    | FCMP, _ -> assert false (* XXX TODO *)
+    | FCSEL, _ -> assert false (* XXX TODO *)
+    | FMOV_general_or_register, _ -> assert false (* XXX TODO *)
+    | LDR, _ -> assert false (* XXX TODO *)
+    | STR, _ -> assert false (* XXX TODO *)
+    | LDP, _ -> assert false (* XXX TODO *)
+    | STP, _ -> assert false (* XXX TODO *)
+    | LDRB, _ -> assert false (* XXX TODO *)
+    | LDRH, _ -> assert false (* XXX TODO *)
+    | LDRSB, _ -> assert false (* XXX TODO *)
+    | LDRSH, _ -> assert false (* XXX TODO *)
+    | STRB, _ -> assert false (* XXX TODO *)
+    | STRH, _ -> assert false (* XXX TODO *)
+    | LDAR, _ -> assert false (* XXX TODO *)
+    | STR_simd_and_fp, _ -> assert false (* XXX TODO *)
+    | LDRSW, _ -> assert false (* XXX TODO *)
+    | ABS_vector, _ -> assert false (* XXX TODO *)
+    | ADDP_vector, _ -> assert false (* XXX TODO *)
+    | ADDV, _ -> assert false (* XXX TODO *)
+    | MVN_vector, _ -> assert false (* XXX TODO *)
+    | NEG_vector, _ -> assert false (* XXX TODO *)
+    | MOV_vector, _ -> assert false (* XXX TODO *)
+    | MULL_vector, _ -> assert false (* XXX TODO *)
+    | UMULL_vector, _ -> assert false (* XXX TODO *)
+    | SMULL_vector, _ -> assert false (* XXX TODO *)
+    | UMULL2_vector, _ -> assert false (* XXX TODO *)
+    | SMULL2_vector, _ -> assert false (* XXX TODO *)
+    | FADDP_vector, _ -> assert false (* XXX TODO *)
+    | FNEG_vector, _ -> assert false (* XXX TODO *)
+    | FSQRT_vector, _ -> assert false (* XXX TODO *)
+    | FCVTZS_vector, _ -> assert false (* XXX TODO *)
+    | FCVTNS_vector, _ -> assert false (* XXX TODO *)
+    | SCVTF_vector, _ -> assert false (* XXX TODO *)
+    | FCVTN_vector, _ -> assert false (* XXX TODO *)
+    | FCVTL_vector, _ -> assert false (* XXX TODO *)
+    | FMOV_vector_immediate, _ -> assert false (* XXX TODO *)
+    | FRECPE_vector, _ -> assert false (* XXX TODO *)
+    | FRSQRTE_vector, _ -> assert false (* XXX TODO *)
+    | FRINT _, _ -> assert false (* XXX TODO *)
+    | FRINT_vector _, _ -> assert false (* XXX TODO *)
+    | FCM_register _, _ -> assert false (* XXX TODO *)
+    | FCM_zero _, _ -> assert false (* XXX TODO *)
+    | CM_register _, _ -> assert false (* XXX TODO *)
+    | CM_zero _, _ -> assert false (* XXX TODO *)
+    | LDR_simd_and_fp, _ -> assert false (* XXX TODO *)
+    | CVT_vector, _ -> assert false (* XXX TODO *)
+    | CNT_vector, _ -> assert false (* XXX TODO *)
+    | SQXTN, _ -> assert false (* XXX TODO *)
+    | SQXTN2, _ -> assert false (* XXX TODO *)
+    | UQXTN, _ -> assert false (* XXX TODO *)
+    | UQXTN2, _ -> assert false (* XXX TODO *)
+    | XTN, _ -> assert false (* XXX TODO *)
+    | XTN2, _ -> assert false (* XXX TODO *)
+    | SXTL, _ -> assert false
+    (* XXX TODO *)
+    | UXTL, _ -> assert false (* XXX TODO *)
+    | SHL, _ -> assert false (* XXX TODO *)
+    | SSHR, _ -> assert false (* XXX TODO *)
+    | USHR, _ -> assert false (* XXX TODO *)
+    | DUP, _ -> assert false (* XXX TODO *)
+    | INS, _ -> assert false (* XXX TODO *)
+    | INS_V, _ -> assert false (* XXX TODO *)
+    | UMOV, _ -> assert false (* XXX TODO *)
+    | SMOV, _ -> assert false (* XXX TODO *)
+    | EXT, _ -> assert false (* XXX TODO *)
+    | ZIP1, _ -> assert false
+    (* XXX TODO *)
+    | ZIP2, _ -> assert false (* XXX TODO *)
+    | UADDLP_vector, _ -> assert false (* XXX TODO *)
+    | ADDS, _ -> assert false (* XXX TODO *)
+    | CSEL, _ -> assert false (* XXX TODO *)
+    | CSINC, _ -> assert false (* XXX TODO *)
+    | TST, _ -> assert false (* XXX TODO *)
+    | B, _ -> assert false (* XXX TODO *)
+    | BL, _ -> assert false (* XXX TODO *)
+    | BR, _ -> assert false
+    (* XXX TODO *)
+    | BLR, _ -> assert false (* XXX TODO *)
+    | B_cond _, _ -> assert false (* XXX TODO *)
+    | B_cond_float _, _ -> assert false (* XXX TODO *)
+    | CBZ, _ -> assert false (* XXX TODO *)
+    | CBNZ, _ -> assert false (* XXX TODO *)
+    | TBZ, _ -> assert false (* XXX TODO *)
+    | TBNZ, _ -> assert false
+    (* XXX TODO *)
+    | RET, _ -> assert false (* XXX TODO *)
+    | NOP, _ -> assert false (* XXX TODO *)
+    | YIELD, _ -> assert false (* XXX TODO *)
+    | DMB _, _ -> assert false (* XXX TODO *)
+    | DSB _, _ -> assert false (* XXX TODO *)
+    | MOV, _ -> assert false (* XXX TODO *)
+    | MOVI, _ -> assert false (* XXX TODO *)
+    | CTZ, _ -> assert false
   (* XXX TODO *)
-
-  (* let foo : type operands. operands -> operands Instruction_name.t -> int =
-     fun operands insn -> match[@ocaml.warning "-4"] insn, operands with |
-     SMAX_vector, operands -> ( match insn, operands with | ( SMAX_vector, ( Reg
-     { reg_name = GP _ | Neon (Vector (V1D | V2D) | Scalar _ | Lane _); _ }, _,
-     _ ) ) -> .) | _ -> 42 *)
 end
