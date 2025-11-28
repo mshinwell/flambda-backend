@@ -840,13 +840,21 @@ module Instruction_name = struct
        [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [<
        any_width] ] ] ] as 'r) Operand.t * 'r Operand.t * 'r Operand.t) t *)
     | SMIN_vector
-        : [ `Reg of
-            [ `Neon of
-              [< `Vector of
-                 [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width] ]
-            ] ]
-          (* as 'r *)
-          (* * 'r * 'r *)
+        : ([ `Reg of
+             [ `Neon of
+               [< `Vector of
+                  [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+               ] ] ]
+          * [ `Reg of
+              [ `Neon of
+                [< `Vector of
+                   [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                ] ] ]
+          * [ `Reg of
+              [ `Neon of
+                [< `Vector of
+                   [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                ] ] ])
           t
   (* | SMOV : (Neon_reg_name.Lane_index.t * [< `Reg of [< `GP of [< `X]]]
      Operand.t * [< `Reg of [< `Neon of [< `Vector of [< `V8B | `V16B | `V4H |
@@ -1647,12 +1655,28 @@ module Binary_encoder = struct
     let result = logor result (of_int rd) in
     result
 
+  type _ many =
+    | Singleton : 'a Operand.t -> 'a many
+    | Pair : 'a Operand.t * 'b Operand.t -> ('a * 'b) many
+    | Triple : 'a Operand.t * 'b Operand.t * 'c Operand.t -> ('a * 'b * 'c) many
+
   let encode_instruction :
-      type operands. operands Operand.t -> operands Instruction_name.t -> int32
-      =
+      type operands. operands many -> operands Instruction_name.t -> int32 =
    fun operands instr ->
     match operands, instr with
-    | ( Reg { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S)); _ },
+    | ( Triple
+          ( Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              },
+            Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              },
+            Reg
+              { reg_name = Neon (Vector (V8B | V16B | V4H | V8H | V2S | V4S));
+                _
+              } ),
         SMIN_vector ) ->
       failwith "foo"
   (* | Reg { reg_name = Neon (Vector (V2D|V1D)); _ } -> . *)
