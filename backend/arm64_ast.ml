@@ -4270,64 +4270,13 @@ module Binary_encoder = struct
       let ra_bits = Reg.encoding ra in
       encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
         ~rn:rn_bits ~rd:rd_bits
-      (* Load register (literal) - C4.1.96.19 *)
-      (* XXX these need more work *)
-    | ( Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDAR ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDAR ) ->
-      assert false
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Imm _))), LDAR
-      ->
-      assert false
-    | Pair (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Imm _))), LDAR
-      ->
-      assert false
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))), LDR
-      ->
-      let rt_bits = Reg.encoding rt in
-      encode_load_literal ~opc:0b00 ~v:0 ~imm19:0 ~rt:rt_bits
-    | Pair (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))), LDR
-      ->
-      let rt_bits = Reg.encoding rt in
-      encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
-    | ( Pair (Reg ({ reg_name = GP LR; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDR ) ->
-      let rt_bits = Reg.encoding rt in
-      encode_load_literal ~opc:0b01 ~v:0 ~imm19:0 ~rt:rt_bits
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Imm _))), LDR ->
-      assert false
-    | Pair (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Imm _))), LDR ->
-      assert false
-    | Pair (Reg ({ reg_name = GP LR; _ } as rt), Mem (Offset (_, Imm _))), LDR
-      ->
-      assert false
-    | ( Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDRB ) ->
-      assert false
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Imm _))), LDRB
-      ->
-      assert false
-    | ( Pair (Reg ({ reg_name = GP X; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDRSW ) ->
-      let rt_bits = Reg.encoding rt in
-      encode_load_literal ~opc:0b10 ~v:0 ~imm19:0 ~rt:rt_bits
-    | ( Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))),
-        LDRH ) ->
-      assert false
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Imm _))), LDRH
-      ->
-      assert false
-    | Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))), STR
-      ->
-      assert false
-    | ( Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))),
-        STRB ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = GP W; _ } as rt), Mem (Offset (_, Symbol _))),
-        STRH ) ->
-      assert false
+    | Pair (Reg rd, addressing), LDAR -> assert false
+    | Pair (Reg rd, addressing), LDR -> assert false
+    | Pair (Reg rd, addressing), LDRB -> assert false
+    | Pair (Reg rd, addressing), LDRH -> assert false
+    | Pair (Reg rd, addressing), STR -> assert false
+    | Pair (Reg rd, addressing), STRB -> assert false
+    | Pair (Reg rd, addressing), STRH -> assert false
     | ( Pair
           ( Reg ({ reg_name = Neon (Scalar S); _ } as rt),
             Mem (Offset (_, Symbol _)) ),
