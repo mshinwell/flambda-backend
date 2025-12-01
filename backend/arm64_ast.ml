@@ -565,9 +565,9 @@ module Operand = struct
       | Six : int -> [`Six] t
       | Twelve : int -> [`Twelve] t
       | Sixteen_unsigned : int -> [`Sixteen_unsigned] t
-      | Sym : 'w Symbol.t -> [`Imm of 'w] t
-      | Float : float -> [`Imm of [`Sixty_four]] t
-      | Nativeint : nativeint -> [`Imm of [`Sixty_four]] t
+      | Sym : 'w Symbol.t -> [`Sym of 'w] t
+      | Float : float -> [`Sixty_four] t
+      | Nativeint : nativeint -> [`Sixty_four] t
 
     let print : type w. Format.formatter -> w t -> unit =
      fun ppf t ->
@@ -748,8 +748,9 @@ module Instruction_name = struct
           )
           t
     | ADR
-        : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Twenty_one]]) t
-    | ADRP : (pair, [< `Reg of [< `GP of [< `X]]] * _) t
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
+    | ADRP
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
     | AND_immediate
         : ( triple,
             [< `Reg of [`GP of [< `X]]]
@@ -1374,8 +1375,8 @@ module Instruction_name = struct
           t
     | SBFM
         : ( quad,
-            [`Reg of [`GP of [< `X | `W]]]
-            * [`Reg of [`GP of [< `X | `W]]]
+            [`Reg of [`GP of [`X | `W]]]
+            * [`Reg of [`GP of [`X | `W]]]
             * [`Imm of [`Six]]
             * [`Imm of [`Six]] )
           t
@@ -2665,6 +2666,26 @@ module DSL = struct
 end
 
 module Binary_encoder = struct
+  type reloc_type =
+    | ADR
+    | ADRP
+
+  type relocation =
+    { offset_bytes : int;
+      symbol_name : string;
+      reloc_type : reloc_type
+    }
+
+  let pending_relocations : relocation list ref = ref []
+
+  let add_relocation ~offset_bytes ~symbol_name ~reloc_type =
+    pending_relocations
+      := { offset_bytes; symbol_name; reloc_type } :: !pending_relocations
+
+  let get_relocations () = List.rev !pending_relocations
+
+  let clear_relocations () = pending_relocations := []
+
   let encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
     match kind with LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
 
@@ -2906,8 +2927,13 @@ module Binary_encoder = struct
     let result = logor result (shift_left (of_int immlo) 29) in
     let result = logor result (shift_left (of_int 0b10000) 24) in
     let result = logor result (shift_left (of_int immhi) 5) in
-    let result = logor result (of_int rd) in
+    let result = logor result (of_int (Reg.gp_encoding rd)) in
     result
+
+  let split_21bit_immediate (imm21 : int) : int * int =
+    let immlo = imm21 land 0b11 in
+    let immhi = (imm21 lsr 2) land 0x7ffff in
+    immlo, immhi
 
   (* Decode bitmask immediate into N, immr, imms fields *)
   let decode_bitmask (bitmask : nativeint) : int * int * int =
@@ -2965,8 +2991,14 @@ module Binary_encoder = struct
       encode_add_sub_immediate ~sf:1 ~op:0 ~s:1 ~sh ~imm12 ~rn ~rd
     | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
     | Pair (Reg _rd, Reg _rn), ADDV -> assert false
-    | Pair (Reg _rd, _), ADR -> assert false
-    | Pair (Reg _rd, _), ADRP -> assert false
+    | Pair (Reg rd, Imm (Sym sym)), ADR ->
+      add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type:ADR;
+      let immlo, immhi = split_21bit_immediate sym.offset in
+      encode_adr ~op:0 ~immlo ~immhi ~rd
+    | Pair (Reg rd, Imm (Sym sym)), ADRP ->
+      add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type:ADRP;
+      let immlo, immhi = split_21bit_immediate sym.offset in
+      encode_adr ~op:1 ~immlo ~immhi ~rd
     | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
       let n, immr, imms = decode_bitmask bitmask in
       encode_logical_immediate ~sf:1 ~opc:0b00 ~n ~immr ~imms ~rn ~rd
