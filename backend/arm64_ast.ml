@@ -4490,4 +4490,720 @@ module Binary_encoder = struct
       assert false
     | Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rd), Imm _), MOVI ->
       assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar H); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar H); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Reg _), ADDV ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Sym _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        ABS_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), ABS_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        CNT_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), CNT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        CVT_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), CVT_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FCVTL_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FCVTNS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FCVTN_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FCVTZS_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FNEG_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FRECPE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FRSQRTE_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FSQRT_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        MOV_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), MOV_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        MVN_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), MVN_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        NEG_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), NEG_vector
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        SCVTF_vector ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), UXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), XTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), XTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), CM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), DUP _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FCM_zero _ ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), FCM_zero _
+      ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), INS _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), INS_V _
+      ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), INS_V _ ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm_float _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm_nativeint _),
+        FMOV_vector_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _),
+        UADDLP_vector ) ->
+      assert false
 end
