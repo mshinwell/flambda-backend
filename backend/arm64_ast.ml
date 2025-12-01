@@ -789,10 +789,7 @@ module Instruction_name = struct
     | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
     | CBNZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
     | CBZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
-    | CLZ
-        : ( pair,
-            [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]] )
-          t
+    | CLZ : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | CM_register :
         Cond.t
         -> ( triple,
@@ -1358,20 +1355,15 @@ module Instruction_name = struct
                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
           )
           t
-    | RBIT
-        : ( pair,
-            [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]] )
-          t
+    | RBIT : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | RET : (singleton, unit) t
     | REV
         : ( pair,
-            [`Reg of [`GP of [< `X | `W]]]
-            * [`Reg of [`GP of [< `X | `W]]] )
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | REV16
         : ( pair,
-            [`Reg of [`GP of [< `X | `W]]]
-            * [`Reg of [`GP of [< `X | `W]]] )
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | SBFM
         : ( quad,
@@ -3005,8 +2997,8 @@ module Binary_encoder = struct
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
     | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
     | Singleton (Imm _), B -> assert false
     | Singleton _, B_cond _ -> assert false
     | Singleton _, B_cond_float _ -> assert false
@@ -3016,8 +3008,9 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Imm _), CBNZ -> assert false
     | Pair (Reg _rd, Imm _), CBZ -> assert false
     | Pair (Reg rd, Reg rn), CLZ ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000100 ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000100 ~rn
+        ~rd
     | Triple (Reg _rd, Reg _rn, Reg _rm), CM_register _ -> assert false
     | Pair (Reg _rd, Reg _rn), CM_zero _ -> assert false
     | Pair (Reg _rd, Reg _rn), CNT -> assert false
@@ -3089,14 +3082,14 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Mem _addressing), LDRSH -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRSW -> assert false
     | Triple (Reg rd, Reg rn, Reg rm), LSLV ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001000 ~rm ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001000 ~rm ~rn ~rd
     | Triple (Reg rd, Reg rn, Reg rm), LSRV ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001001 ~rm ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001001 ~rm ~rn ~rd
     | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
     | Pair (Reg _rd, Imm _), MOV -> assert false
     | Pair (Reg _rd, Reg _rn), MOV -> assert false
     | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
@@ -3114,8 +3107,8 @@ module Binary_encoder = struct
       let hw = encode_six_bit_shift shift_opt in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd
     | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MSUB ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:1 ~rm ~ra ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:1 ~rm ~ra ~rn ~rd
     | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
     | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
@@ -3129,7 +3122,8 @@ module Binary_encoder = struct
     | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
     | Pair (Reg rd, Reg rn), RBIT ->
       let sf = Reg.gp_sf rd in
-      encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000000 ~rn ~rd
+      encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000000 ~rn
+        ~rd
     | _, RET -> assert false
     | Pair (Reg rd, Reg rn), REV ->
       let sf = Reg.gp_sf rd in
@@ -3137,7 +3131,8 @@ module Binary_encoder = struct
       encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode ~rn ~rd
     | Pair (Reg rd, Reg rn), REV16 ->
       let sf = Reg.gp_sf rd in
-      encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000001 ~rn ~rd
+      encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000001 ~rn
+        ~rd
     | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), SBFM ->
       let sf = Reg.gp_sf rd in
       let n = sf in
@@ -3145,8 +3140,8 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), SCVTF -> assert false
     | Pair (Reg _rd, Reg _rn), SCVTF_vector -> assert false
     | Triple (Reg rd, Reg rn, Reg rm), SDIV ->
-    let sf = Reg.gp_sf rd in
-    encode_data_proc_2_source ~sf ~s:0 ~opcode:0b000011 ~rm ~rn ~rd
+      let sf = Reg.gp_sf rd in
+      encode_data_proc_2_source ~sf ~s:0 ~opcode:0b000011 ~rm ~rn ~rd
     | Triple (Reg _rd, Reg _rn, Imm _), SHL -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMIN_vector -> assert false
