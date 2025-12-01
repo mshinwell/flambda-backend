@@ -2911,17 +2911,35 @@ module Binary_encoder = struct
     let result = logor result (of_int rd) in
     result
 
+  (* Add/subtract (immediate) - C4.1.92.3 *)
+  let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int sf) 31) in
+    let result = logor result (shift_left (of_int op) 30) in
+    let result = logor result (shift_left (of_int s) 29) in
+    let result = logor result (shift_left (of_int 0b100010) 23) in
+    let result = logor result (shift_left (of_int sh) 22) in
+    let result = logor result (shift_left (of_int imm12) 10) in
+    let result = logor result (shift_left (of_int (Reg.encoding rn)) 5) in
+    let result = logor result (of_int (Reg.encoding rd)) in
+    result
+
   let encode_instruction :
       type num operands.
       (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
    fun instr operands ->
     match operands, instr with
     | Pair (Reg _rd, Reg _rn), ABS_vector -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADD_immediate -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADD_immediate ->
+      let sh = match shift with Some _ -> 1 | None -> 0 in
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12 ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ADD_shifted_register ->
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ADDP_vector -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADDS -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADDS ->
+      let sh = match shift with Some _ -> 1 | None -> 0 in
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:1 ~sh ~imm12 ~rn ~rd
     | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
     | Pair (Reg _rd, Reg _rn), ADDV -> assert false
     | Pair (Reg _rd, _), ADR -> assert false
@@ -3054,11 +3072,15 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
     | Pair (Reg _rd, Mem _addressing), STRB -> assert false
     | Pair (Reg _rd, Mem _addressing), STRH -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUB_immediate -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUB_immediate ->
+      let sh = match shift with Some _ -> 1 | None -> 0 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh ~imm12 ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register ->
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUBS_immediate -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUBS_immediate ->
+      let sh = match shift with Some _ -> 1 | None -> 0 in
+      encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh ~imm12 ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register ->
       assert false
     | Pair (Reg _rd, Reg _rn), SXTL -> assert false
