@@ -2916,1023 +2916,173 @@ module Binary_encoder = struct
       (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
    fun instr operands ->
     match operands, instr with
-    (* Singleton unit operations *)
-    | _, DMB _ -> assert false
-    | _, DSB _ -> assert false
-    | _, NOP -> assert false
-    | _, RET -> assert false
-    | _, YIELD -> assert false
-    (* Singleton immediate/register operations *)
-    | Singleton (Imm _), B -> assert false
-    | Singleton _, BL -> assert false
-    | Singleton _, B_cond _ -> assert false
-    | Singleton _, B_cond_float _ -> assert false
-    | Singleton (Reg _), BLR -> assert false
-    | Singleton (Reg _), BR -> assert false
-    (* Pair operations *)
     | Pair (Reg _rd, Reg _rn), ABS_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADD_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ADD_shifted_register ->
+      assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), ADDP_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADDS -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), ADDV -> assert false
     | Pair (Reg _rd, _), ADR -> assert false
     | Pair (Reg _rd, _), ADRP -> assert false
-    | Pair (Reg _rd, Reg _rn), ADDV -> assert false
+    | Triple (Reg _rd, Reg _rn, Bitmask _), AND_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), AND_shifted_register ->
+      assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), ASRV -> assert false
+    | Singleton (Imm _), B -> assert false
+    | Singleton _, B_cond _ -> assert false
+    | Singleton _, B_cond_float _ -> assert false
+    | Singleton _, BL -> assert false
+    | Singleton (Reg _), BLR -> assert false
+    | Singleton (Reg _), BR -> assert false
     | Pair (Reg _rd, Imm _), CBNZ -> assert false
     | Pair (Reg _rd, Imm _), CBZ -> assert false
     | Pair (Reg _rd, Reg _rn), CLZ -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), CM_register _ -> assert false
     | Pair (Reg _rd, Reg _rn), CM_zero _ -> assert false
     | Pair (Reg _rd, Reg _rn), CNT -> assert false
     | Pair (Reg _rd, Reg _rn), CNT_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSEL -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSINC -> assert false
     | Pair (Reg _rd, Reg _rn), CTZ -> assert false
     | Pair (Reg _rd, Reg _rn), CVT_vector -> assert false
+    | _, DMB _ -> assert false
+    | _, DSB _ -> assert false
     | Pair (Reg _rd, Reg _rn), DUP _ -> assert false
+    | Triple (Reg _rd, Reg _rn, Bitmask _), EOR_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), EOR_shifted_register ->
+      assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
     | Pair (Reg _rd, Reg _rn), FABS -> assert false
-    | Pair (Reg _rd, Reg _rn), FCMP -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FADD -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FADDP_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FADD_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FCM_register _ -> assert false
     | Pair (Reg _rd, Reg _rn), FCM_zero _ -> assert false
+    | Pair (Reg _rd, Reg _rn), FCMP -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), FCSEL -> assert false
     | Pair (Reg _rd, Reg _rn), FCVT -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTL_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), FCVTN_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTNS -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTNS_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), FCVTN_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTZS -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTZS_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMADD -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMSUB -> assert false
     | Pair (Reg _rd, Reg _rn), FMOV_general_or_register -> assert false
     | Pair (Reg _rd, _), FMOV_scalar_immediate -> assert false
     | Pair (Reg _rd, _), FMOV_vector_immediate -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FNEG -> assert false
     | Pair (Reg _rd, Reg _rn), FNEG_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMADD -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FNMUL -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMSUB -> assert false
     | Pair (Reg _rd, Reg _rn), FRECPE_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FRINT _ -> assert false
     | Pair (Reg _rd, Reg _rn), FRINT_vector _ -> assert false
     | Pair (Reg _rd, Reg _rn), FRSQRTE_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FSQRT -> assert false
     | Pair (Reg _rd, Reg _rn), FSQRT_vector -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB -> assert false
+    | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB_vector -> assert false
     | Pair (Reg _rd, Reg _rn), INS _ -> assert false
     | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
     | Pair (Reg _rd, Mem _addressing), LDAR -> assert false
+    | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
     | Pair (Reg _rd, Mem _addressing), LDR -> assert false
+    | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRH -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRSB -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRSH -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRSW -> assert false
-    | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
-    | Pair (Reg _rd, Reg _rn), MOV -> assert false
-    | Pair (Reg _rd, Imm _), MOV -> assert false
-    | Pair (Reg _rd, Imm _), MOVI -> assert false
-    | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), RBIT -> assert false
-    | Pair (Reg _rd, Reg _rn), REV -> assert false
-    | Pair (Reg _rd, Reg _rn), REV16 -> assert false
-    | Pair (Reg _rd, Reg _rn), SCVTF -> assert false
-    | Pair (Reg _rd, Reg _rn), SCVTF_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), SMOV _ -> assert false
-    | Pair (Reg _rd, Reg _rn), SQXTN -> assert false
-    | Pair (Reg _rd, Reg _rn), SQXTN2 -> assert false
-    | Pair (Reg _rd, Mem _addressing), STR -> assert false
-    | Pair (Reg _rd, Mem _addressing), STRB -> assert false
-    | Pair (Reg _rd, Mem _addressing), STRH -> assert false
-    | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
-    | Pair (Reg _rd, Reg _rn), SXTL -> assert false
-    | Pair (Reg _rd, Bitmask _), TST -> assert false
-    | Pair (Reg _rd, Reg _rn), UADDLP_vector -> assert false
-    | Pair (Reg _rd, Reg _rn), UMOV _ -> assert false
-    | Pair (Reg _rd, Reg _rn), UQXTN -> assert false
-    | Pair (Reg _rd, Reg _rn), UQXTN2 -> assert false
-    | Pair (Reg _rd, Reg _rn), UXTL -> assert false
-    | Pair (Reg _rd, Reg _rn), XTN -> assert false
-    | Pair (Reg _rd, Reg _rn), XTN2 -> assert false
-    (* Triple operations *)
-    | Triple (Reg _rd, Reg _rn, Reg _rm), ADDP_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Bitmask _), AND_immediate -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), ASRV -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), CM_register _ -> assert false
-    | Triple (Reg _rd, Reg _rn, Bitmask _), EOR_immediate -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FADD -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FADDP_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FADD_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FCM_register _ -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FNMUL -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB -> assert false
-    | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB_vector -> assert false
-    | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), LSLV -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), LSRV -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MADD -> assert false
+    | Pair (Reg _rd, Imm _), MOV -> assert false
+    | Pair (Reg _rd, Reg _rn), MOV -> assert false
+    | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
+    | Pair (Reg _rd, Imm _), MOVI -> assert false
     | Triple (Reg _rd, _, Shift _), MOVK -> assert false
     | Triple (Reg _rd, _, Optional _), MOVN -> assert false
     | Triple (Reg _rd, _, Optional _), MOVZ -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MSUB -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
+    | _, NOP -> assert false
     | Triple (Reg _rd, Reg _rn, Bitmask _), ORR_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ORR_shifted_register ->
+      assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), RBIT -> assert false
+    | _, RET -> assert false
+    | Pair (Reg _rd, Reg _rn), REV -> assert false
+    | Pair (Reg _rd, Reg _rn), REV16 -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), SBFM -> assert false
+    | Pair (Reg _rd, Reg _rn), SCVTF -> assert false
+    | Pair (Reg _rd, Reg _rn), SCVTF_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SDIV -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), SHL -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMIN_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), SMOV _ -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMULH -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL2_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SQADD_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), SQXTN -> assert false
+    | Pair (Reg _rd, Reg _rn), SQXTN2 -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SQSUB_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SSHL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), SSHR -> assert false
     | Triple (Reg _rd, Reg _rn, Mem _), STP -> assert false
+    | Pair (Reg _rd, Mem _addressing), STR -> assert false
+    | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
+    | Pair (Reg _rd, Mem _addressing), STRB -> assert false
+    | Pair (Reg _rd, Mem _addressing), STRH -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUB_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register ->
+      assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUBS_immediate -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register ->
+      assert false
+    | Pair (Reg _rd, Reg _rn), SXTL -> assert false
     | Triple (Reg _rd, Imm _, Imm _), TBNZ -> assert false
     | Triple (Reg _rd, Imm _, Imm _), TBZ -> assert false
+    | Pair (Reg _rd, Bitmask _), TST -> assert false
+    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), UBFM -> assert false
+    | Pair (Reg _rd, Reg _rn), UADDLP_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMIN_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), UMOV _ -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMULH -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL2_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UQADD_vector -> assert false
+    | Pair (Reg _rd, Reg _rn), UQXTN -> assert false
+    | Pair (Reg _rd, Reg _rn), UQXTN2 -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UQSUB_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), USHL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), USHR -> assert false
+    | Pair (Reg _rd, Reg _rn), UXTL -> assert false
+    | Pair (Reg _rd, Reg _rn), XTN -> assert false
+    | Pair (Reg _rd, Reg _rn), XTN2 -> assert false
+    | _, YIELD -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP1 -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP2 -> assert false
-    (* Quad operations *)
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADD_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ADD_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADDS -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), AND_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSEL -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSINC -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), EOR_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), FCSEL -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMADD -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMSUB -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMADD -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMSUB -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MADD -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MSUB -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ORR_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), SBFM -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUB_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUBS_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register ->
-      assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), UBFM -> assert false
-
-  (* (* PC-relative addressing - C4.1.92.2 *) | Pair (Reg rd, Imm (Imm.Sym _)),
-     ADR -> let rd_bits = Reg.encoding rd in let immlo = 0 in let immhi = 0 in
-     encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits | Pair (Reg rd, _), ADRP -> let
-     rd_bits = Reg.encoding rd in let immlo = 0 in let immhi = 0 in encode_adr
-     ~op:1 ~immlo ~immhi ~rd:rd_bits (* Logical (immediate) - C4.1.92.6 *) |
-     Triple (Reg rd, Reg rn, Bitmask _), AND_immediate -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_logical_immediate ~sf:1 ~opc:0b00 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Triple (Reg rd, Reg rn, Bitmask _), ORR_immediate -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_logical_immediate ~sf:1 ~opc:0b01 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Triple (Reg rd, Reg rn, Bitmask _), EOR_immediate -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_logical_immediate ~sf:1 ~opc:0b10 ~n:0 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift),
-     ADD_immediate -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let sh_bit = match shift with None -> 0 | Some
-     Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit
-     ~imm12 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Imm.Sym _),
-     Optional shift), ADD_immediate -> let rd_bits = Reg.encoding rd in let
-     rn_bits = Reg.encoding rn in let sh_bit = match shift with None -> 0 | Some
-     Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh:sh_bit
-     ~imm12:0 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Twelve
-     imm12), Optional shift), SUB_immediate -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let sh_bit = match shift with None -> 0 |
-     Some Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:1 ~s:0
-     ~sh:sh_bit ~imm12 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm
-     (Imm.Sym _), Optional shift), SUB_immediate -> let rd_bits = Reg.encoding
-     rd in let rn_bits = Reg.encoding rn in let sh_bit = match shift with None
-     -> 0 | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate ~sf:1 ~op:1 ~s:0
-     ~sh:sh_bit ~imm12:0 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm
-     (Twelve imm12), Optional shift), SUBS_immediate -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let sh_bit = match
-     shift with None -> 0 | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate
-     ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd,
-     Reg rn, Imm (Imm.Sym _), Optional shift), SUBS_immediate -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let sh_bit = match
-     shift with None -> 0 | Some Lsl_by_twelve -> 1 in encode_add_sub_immediate
-     ~sf:1 ~op:1 ~s:1 ~sh:sh_bit ~imm12:0 ~rn:rn_bits ~rd:rd_bits | Quad (Reg
-     rd, Reg rn, Reg rm, Optional None), ADD_shifted_register -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0
-     ~shift:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg
-     rn, Reg rm, Optional (Some (Shift { kind; amount = Six imm6 })) ),
-     ADD_shifted_register ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-     encode_shift_type kind in encode_add_sub_shifted_register ~sf:1 ~op:0 ~s:0
-     ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd,
-     Reg rn, Reg rm, Optional None), SUB_shifted_register -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0
-     ~shift:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg
-     rn, Reg rm, Optional (Some (Shift { kind; amount = Six imm6 })) ),
-     SUB_shifted_register ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-     encode_shift_type kind in encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:0
-     ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd,
-     Reg rn, Reg rm, Optional None), SUBS_shifted_register -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1
-     ~shift:0 ~rm:rm_bits ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg
-     rn, Reg rm, Optional (Some (Shift { kind; amount = Six imm6 })) ),
-     SUBS_shifted_register ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in let shift_type =
-     encode_shift_type kind in encode_add_sub_shifted_register ~sf:1 ~op:1 ~s:1
-     ~shift:shift_type ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Triple (Reg
-     rd, Imm (Imm.Nativeint imm), Optional shift), MOVZ -> let rd_bits =
-     Reg.encoding rd in let imm16 = Nativeint.to_int imm land 0xFFFF in let hw =
-     match shift with | None -> 0 | Some (Shift { kind = LSL; amount = Six sh })
-     -> if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ:
-     shift must be 0, 16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind
-     = LSL; amount = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift
-     { kind = LSR; _ }) -> Misc.fatal_error "MOVZ: invalid shift amount" in
-     encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | Triple (Reg rd,
-     Imm (Imm.Sym sym), Optional shift), MOVZ -> let rd_bits = Reg.encoding rd
-     in ignore sym; (* XXX *) let imm16 = 0 in let hw = match shift with | None
-     -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh mod 16 <> 0 ||
-     sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or
-     48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL; amount = Twelve _ })
-     | Some (Shift { kind = ASR; _ }) | Some (Shift { kind = LSR; _ }) ->
-     Misc.fatal_error "MOVZ: invalid shift amount" in encode_move_wide ~sf:1
-     ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | Triple (Reg rd, Imm (Imm.Float f),
-     Optional shift), MOVZ -> let rd_bits = Reg.encoding rd in let imm16 =
-     Int64.to_int (Int64.bits_of_float f) land 0xFFFF in let hw = match shift
-     with | None -> 0 | Some (Shift { kind = LSL; amount = Six sh }) -> if sh
-     mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf "MOVZ: shift must
-     be 0, 16, 32, or 48, got %d" sh (); sh / 16 | Some (Shift { kind = LSL;
-     amount = Twelve _ }) | Some (Shift { kind = ASR; _ }) | Some (Shift { kind
-     = LSR; _ }) -> Misc.fatal_error "MOVZ: invalid shift amount" in
-     encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits | Triple (Reg rd,
-     Imm (Twelve imm), Optional None), MOVN -> let rd_bits = Reg.encoding rd in
-     encode_move_wide ~sf:1 ~opc:0b00 ~hw:0 ~imm16:imm ~rd:rd_bits | ( Triple (
-     Reg rd, Imm (Twelve imm), Optional (Some (Shift { kind = LSL; amount = Six
-     sh })) ), MOVN ) -> let rd_bits = Reg.encoding rd in let imm16 = imm land
-     0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf
-     "MOVN: shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-     encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd:rd_bits | Triple (Reg rd,
-     Imm (Imm.Nativeint imm), Shift { kind = LSL; amount = Six sh }), MOVK ->
-     let rd_bits = Reg.encoding rd in let imm16 = Nativeint.to_int imm land
-     0xFFFF in if sh mod 16 <> 0 || sh < 0 || sh > 48 then Misc.fatal_errorf
-     "MOVK: shift must be 0, 16, 32, or 48, got %d" sh (); let hw = sh / 16 in
-     encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd:rd_bits | Quad (Reg rd, Reg
-     rn, Imm (Six immr), Imm (Six imms)), UBFM -> let rd_bits = Reg.encoding rd
-     in let rn_bits = Reg.encoding rn in encode_bitfield ~sf:1 ~opc:0b10 ~n:1
-     ~immr ~imms ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Six immr),
-     Imm (Six imms)), SBFM -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr ~imms
-     ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm _, Imm (Imm.Sym _)),
-     UBFM -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Imm.Sym _), Imm _), UBFM -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Imm.Sym _), Sym _), UBFM -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b10 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm _, Imm (Imm.Sym _)), SBFM -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Imm.Sym _), Imm _), SBFM -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Quad (Reg rd, Reg rn, Imm (Imm.Sym _), Sym _), SBFM -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
-     ~rd:rd_bits | Triple (Reg rd, Reg rn, Reg rm), LSLV -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001000
-     ~rm:rm_bits ~rn:rn_bits ~rd:rd_bits | Triple (Reg rd, Reg rn, Reg rm), LSRV
-     -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_data_proc_2_source ~sf:1 ~s:0
-     ~opcode:0b001001 ~rm:rm_bits ~rn:rn_bits ~rd:rd_bits | Triple (Reg rd, Reg
-     rn, Reg rm), ASRV -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b001010 ~rm:rm_bits
-     ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:0 ~rm:rm_bits
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Reg rm, Reg
-     ra), MSUB -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn
-     in let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b000 ~o0:1 ~rm:rm_bits
-     ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Reg rm,
-     Optional None), AND_shifted_register -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:0 ~n:0 ~rm:rm_bits
-     ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg rn, Reg rm, Optional
-     (Some (Shift { kind; amount = Six imm6 })) ), AND_shifted_register ) -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let shift_type = encode_shift_type kind in
-     encode_logical_shifted_register ~sf:1 ~opc:0b00 ~shift:shift_type ~n:0
-     ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Reg rm,
-     Optional None), ORR_shifted_register -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_bits
-     ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg rn, Reg rm, Optional
-     (Some (Shift { kind; amount = Six imm6 })) ), ORR_shifted_register ) -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let shift_type = encode_shift_type kind in
-     encode_logical_shifted_register ~sf:1 ~opc:0b01 ~shift:shift_type ~n:0
-     ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Quad (Reg rd, Reg rn, Reg rm,
-     Optional None), EOR_shifted_register -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:0 ~n:0 ~rm:rm_bits
-     ~imm6:0 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg rd, Reg rn, Reg rm, Optional
-     (Some (Shift { kind; amount = Six imm6 })) ), EOR_shifted_register ) -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let shift_type = encode_shift_type kind in
-     encode_logical_shifted_register ~sf:1 ~opc:0b10 ~shift:shift_type ~n:0
-     ~rm:rm_bits ~imm6 ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, Reg rn), RBIT ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000000
-     ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, Reg rn), REV16 -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000001
-     ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, Reg rn), REV -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000011
-     ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, Reg rn), CLZ -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000100
-     ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, Reg rn), CNT -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in
-     encode_data_proc_1_source ~sf:1 ~s:0 ~opcode2:0b00000 ~opcode:0b000111
-     ~rn:rn_bits ~rd:rd_bits | Triple (Reg rd, Reg rn, Reg rm), SMULH -> let
-     rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010
-     ~o0:0 ~rm:rm_bits ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits | Triple (Reg rd, Reg
-     rn, Reg rm), UMULH -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in
-     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm:rm_bits
-     ~ra:0b11111 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V8B); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V16B); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V4H); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V8H); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V2S); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V4S); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V1D); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b11 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V2D); _ } as rd), Reg rn, Reg rm), SQADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits
-     ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V8B); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V16B); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V4H); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V8H); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V2S); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V4S); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Vector V2D); _ } as rd), Reg rn, Reg rm), ADD_vector ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits
-     ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | Triple (Reg { reg_name = _; _ },
-     _, _), ADD_vector -> assert false (* TODO XXX *) | ( Triple (Reg ({
-     reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b00
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b00
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b01
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b01
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:1 ~size:0b10
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b10
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({
-     reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm), SUB_vector ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:1 ~size:0b11
-     ~rm:rm_bits ~opcode:0b10000 ~rn:rn_bits ~rd:rd_bits | Triple (Reg {
-     reg_name = _; _ }, _, _), SUB_vector -> assert false (* TODO XXX *) | (
-     Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     AND_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-     AND_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits | Triple
-     (Reg { reg_name = _; _ }, _, _), AND_vector -> assert false (* TODO XXX *)
-     | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg
-     rm), ORR_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), ORR_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits |
-     Triple (Reg { reg_name = _; _ }, _, _), ORR_vector -> assert false (* TODO
-     XXX *) | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn,
-     Reg rm), EOR_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), EOR_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00011 ~rn:rn_bits ~rd:rd_bits |
-     Triple (Reg { reg_name = _; _ }, _, _), EOR_vector -> assert false (* TODO
-     XXX *) | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn,
-     Reg rm), SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     SMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     SMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     UMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01100 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     UMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b00 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b01 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:0 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     MUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in encode_simd_three_same ~q:1 ~u:0
-     ~size:0b10 ~rm:rm_bits ~opcode:0b10011 ~rn:rn_bits ~rd:rd_bits | ( Triple
-     (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     SQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     UQADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00001 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     UQSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b00101 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     SSHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V16B); _ } as rd), Reg rn, Reg
-     rm), USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4H); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V8H); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b10 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     USHL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b11 ~rm:rm_bits ~opcode:0b01000 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FADD_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FSUB_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b11010 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FMUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FMUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FMUL_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11011 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FDIV_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FDIV_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b00 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FDIV_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:1 ~size:0b01 ~rm:rm_bits ~opcode:0b11111 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b00 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FMAX_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b01 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2S); _ } as rd), Reg rn, Reg rm),
-     FMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:0 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V4S); _ } as rd), Reg rn, Reg rm),
-     FMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Triple (Reg ({ reg_name = Neon (Vector V2D); _ } as rd), Reg rn, Reg rm),
-     FMIN_vector ) -> let rd_bits = Reg.encoding rd in let rn_bits =
-     Reg.encoding rn in let rm_bits = Reg.encoding rm in encode_simd_three_same
-     ~q:1 ~u:0 ~size:0b11 ~rm:rm_bits ~opcode:0b11110 ~rn:rn_bits ~rd:rd_bits |
-     ( Pair (Reg ({reg_name = Neon (Scalar S); _ } as rd), Imm (Imm.Float _f)),
-     FMOV_scalar_immediate ) -> let rd_bits = Reg.encoding rd in let imm8 = 0 in
-     encode_fp_immediate ~ftype:0b00 ~imm8 ~rd:rd_bits | ( Pair (Reg ({ reg_name
-     = Neon (Scalar D); _ } as rd), Imm (Imm.Float _f), FMOV_scalar_immediate )
-     -> let rd_bits = Reg.encoding rd in let imm8 = 0 in encode_fp_immediate
-     ~ftype:0b01 ~imm8 ~rd:rd_bits | ( Pair (Reg ({ reg_name = Neon (Scalar S);
-     _ } as rd), Imm (Imm.Float _f), FMOV_scalar_immediate ) -> . | ( Triple
-     (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm), FADD ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0010 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FADD ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0010 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FSUB ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0011 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FSUB ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0011 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FMUL ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FMUL ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FDIV ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FDIV ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0001 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FMAX ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0100 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FMAX ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0100 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FMIN ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b0101 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FMIN ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b0101 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm), FNMUL ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b00 ~rm:rm_bits
-     ~opcode:0b1000 ~rn:rn_bits ~rd:rd_bits | ( Triple (Reg ({ reg_name = Neon
-     (Scalar D); _ } as rd), Reg rn, Reg rm), FNMUL ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in encode_fp_2_source ~ftype:0b01 ~rm:rm_bits
-     ~opcode:0b1000 ~rn:rn_bits ~rd:rd_bits | ( Quad ( Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm, Cond cond ), FCSEL ) -> let rd_bits
-     = Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let cond_bits = encode_condition cond in
-     encode_fp_cond_select ~ftype:0b00 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
-     ~rd:rd_bits | ( Quad ( Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg
-     rn, Reg rm, Cond cond ), FCSEL ) -> let rd_bits = Reg.encoding rd in let
-     rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let cond_bits
-     = encode_condition cond in encode_fp_cond_select ~ftype:0b01 ~rm:rm_bits
-     ~cond:cond_bits ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({ reg_name = Neon
-     (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra), FMADD ) -> let rd_bits =
-     Reg.encoding rd in let rn_bits = Reg.encoding rn in let rm_bits =
-     Reg.encoding rm in let ra_bits = Reg.encoding ra in encode_fp_3_source
-     ~ftype:0b00 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | (
-     Quad (Reg ({ reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg
-     ra), FMADD ) -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding
-     rn in let rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({ reg_name = Neon (Scalar S); _ } as
-     rd), Reg rn, Reg rm, Reg ra), FMSUB ) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let
-     ra_bits = Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:0
-     ~rm:rm_bits ~o0:1 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({
-     reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra), FMSUB ) ->
-     let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({ reg_name = Neon (Scalar S); _ } as
-     rd), Reg rn, Reg rm, Reg ra), FNMADD ) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let
-     ra_bits = Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:1
-     ~rm:rm_bits ~o0:0 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({
-     reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra), FNMADD )
-     -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({ reg_name = Neon (Scalar S); _ } as
-     rd), Reg rn, Reg rm, Reg ra), FNMSUB ) -> let rd_bits = Reg.encoding rd in
-     let rn_bits = Reg.encoding rn in let rm_bits = Reg.encoding rm in let
-     ra_bits = Reg.encoding ra in encode_fp_3_source ~ftype:0b00 ~o1:1
-     ~rm:rm_bits ~o0:1 ~ra:ra_bits ~rn:rn_bits ~rd:rd_bits | ( Quad (Reg ({
-     reg_name = Neon (Scalar D); _ } as rd), Reg rn, Reg rm, Reg ra), FNMSUB )
-     -> let rd_bits = Reg.encoding rd in let rn_bits = Reg.encoding rn in let
-     rm_bits = Reg.encoding rm in let ra_bits = Reg.encoding ra in
-     encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-     ~rn:rn_bits ~rd:rd_bits | Pair (Reg rd, addressing), LDAR -> assert false |
-     Pair (Reg rd, addressing), LDR -> assert false | Pair (Reg rd, addressing),
-     LDRB -> assert false | Pair (Reg rd, addressing), LDRH -> assert false |
-     Pair (Reg rd, addressing), STR -> assert false | Pair (Reg rd, addressing),
-     STRB -> assert false | Pair (Reg rd, addressing), STRH -> assert false | (
-     Pair ( Reg ({ reg_name = Neon (Scalar S); _ } as rt), Mem (Offset (_,
-     Symbol _)) ), LDR_simd_and_fp ) -> let rt_bits = Reg.encoding rt in
-     encode_load_literal ~opc:0b00 ~v:1 ~imm19:0 ~rt:rt_bits | ( Pair ( Reg ({
-     reg_name = Neon (Scalar D); _ } as rt), Mem (Offset (_, Symbol _)) ),
-     LDR_simd_and_fp ) -> let rt_bits = Reg.encoding rt in encode_load_literal
-     ~opc:0b01 ~v:1 ~imm19:0 ~rt:rt_bits | ( Pair ( Reg ({ reg_name = Neon
-     (Scalar Q); _ } as rt), Mem (Offset (_, Symbol _)) ), LDR_simd_and_fp ) ->
-     let rt_bits = Reg.encoding rt in encode_load_literal ~opc:0b10 ~v:1
-     ~imm19:0 ~rt:rt_bits | ( Pair ( Reg ({ reg_name = Neon (Scalar _); _ } as
-     _rt), Mem (Offset (_, Symbol _)) ), STR_simd_and_fp ) -> assert false | (
-     Pair ( Reg ({ reg_name = Neon (Scalar _); _ } as _rt), Mem (Offset (_, Imm
-     _)) ), LDR_simd_and_fp ) -> assert false | ( Pair ( Reg ({ reg_name = Neon
-     (Scalar _); _ } as _rt), Mem (Offset (_, Imm _)) ), STR_simd_and_fp ) ->
-     assert false | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rt), Mem
-     (Reg _)), LDR_simd_and_fp ) -> assert false | ( Pair (Reg ({ reg_name =
-     Neon (Scalar _); _ } as _rt), Mem (Reg _)), STR_simd_and_fp ) -> assert
-     false | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rt), Mem (Pre
-     (_, _))), LDR_simd_and_fp ) -> assert false | ( Pair (Reg ({ reg_name =
-     Neon (Scalar _); _ } as _rt), Mem (Pre (_, _))), STR_simd_and_fp ) ->
-     assert false | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rt), Mem
-     (Post (_, _))), LDR_simd_and_fp ) -> assert false | ( Pair (Reg ({ reg_name
-     = Neon (Scalar _); _ } as _rt), Mem (Post (_, _))), STR_simd_and_fp ) ->
-     assert false | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Sym
-     _), FMOV_scalar_immediate ) -> assert false | Pair (Reg ({ reg_name = Neon
-     (Scalar _); _ } as _rd), Imm _), MOVI -> assert false | Pair (Reg ({
-     reg_name = Neon (Vector _); _ } as _rd), Imm _), MOVI -> assert false |
-     Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Imm (Imm.Sym _)),
-     MOVI -> assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as
-     _rd), Sym _), MOVI -> assert false | Pair (Reg ({ reg_name = Neon (Scalar
-     _); _ } as _rd), Reg _), FABS -> assert false | Pair (Reg ({ reg_name =
-     Neon (Scalar _); _ } as _rn), Reg _), FCMP -> assert false | Pair (Reg ({
-     reg_name = Neon (Scalar _); _ } as _rd), Reg _), FCVT -> assert false | (
-     Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Reg _),
-     FMOV_general_or_register ) -> assert false | Pair (Reg ({ reg_name = Neon
-     (Scalar _); _ } as _rd), Reg _), FNEG -> assert false | Pair (Reg ({
-     reg_name = Neon (Scalar _); _ } as _rd), Reg _), FSQRT -> assert false |
-     Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Reg _), SCVTF ->
-     assert false | Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Reg
-     _), FRINT _ -> assert false | ( Pair (Reg ({ reg_name = Neon (Scalar _); _
-     } as _rd), Imm _), FMOV_scalar_immediate ) -> . | ( Pair (Reg ({ reg_name =
-     Neon (Scalar S); _ } as _rd), Imm (Imm.Nativeint _), FMOV_scalar_immediate
-     ) -> assert false | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd),
-     Imm (Imm.Nativeint _), FMOV_scalar_immediate ) -> assert false | Pair (Reg
-     ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), SMOV _ -> assert false
-     | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), UMOV _ ->
-     assert false | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Reg
-     _), ADDV -> assert false | ( Pair (Reg ({ reg_name = Neon (Vector _); _ }
-     as _rd), Sym _), FMOV_vector_immediate ) -> assert false | ( Pair (Reg ({
-     reg_name = Neon (Vector _); _ } as _rd), Imm (Imm.Nativeint _),
-     FMOV_vector_immediate ) -> assert false | ( Pair (Reg ({ reg_name = Neon
-     (Vector _); _ } as _rd), Imm (Imm.Float _), FMOV_vector_immediate ) ->
-     assert false | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Imm
-     _), FMOV_vector_immediate ) -> . | Pair (Reg ({ reg_name = Neon (Vector _);
-     _ } as _rd), Reg _), ABS_vector -> assert false | Pair (Reg ({ reg_name =
-     Neon (Vector _); _ } as _rd), Reg _), CNT_vector -> assert false | Pair
-     (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), CVT_vector ->
-     assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg
-     _), FCVTL_vector -> assert false | ( Pair (Reg ({ reg_name = Neon (Vector
-     _); _ } as _rd), Reg _), FCVTNS_vector ) -> assert false | Pair (Reg ({
-     reg_name = Neon (Vector _); _ } as _rd), Reg _), FCVTN_vector -> assert
-     false | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _),
-     FCVTZS_vector ) -> assert false | Pair (Reg ({ reg_name = Neon (Vector _);
-     _ } as _rd), Reg _), FNEG_vector -> assert false | ( Pair (Reg ({ reg_name
-     = Neon (Vector _); _ } as _rd), Reg _), FRECPE_vector ) -> assert false | (
-     Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _),
-     FRSQRTE_vector ) -> assert false | Pair (Reg ({ reg_name = Neon (Vector _);
-     _ } as _rd), Reg _), FSQRT_vector -> assert false | Pair (Reg ({ reg_name =
-     Neon (Vector _); _ } as _rd), Reg _), MOV_vector -> assert false | Pair
-     (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), MVN_vector ->
-     assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg
-     _), NEG_vector -> assert false | Pair (Reg ({ reg_name = Neon (Vector _); _
-     } as _rd), Reg _), SCVTF_vector -> assert false | Pair (Reg ({ reg_name =
-     Neon (Vector _); _ } as _rd), Reg _), SQXTN -> assert false | Pair (Reg ({
-     reg_name = Neon (Vector _); _ } as _rd), Reg _), SQXTN2 -> assert false |
-     Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), SXTL ->
-     assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg
-     _), UQXTN -> assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as
-     _rd), Reg _), UQXTN2 -> assert false | Pair (Reg ({ reg_name = Neon (Vector
-     _); _ } as _rd), Reg _), UXTL -> assert false | Pair (Reg ({ reg_name =
-     Neon (Vector _); _ } as _rd), Reg _), XTN -> assert false | Pair (Reg ({
-     reg_name = Neon (Vector _); _ } as _rd), Reg _), XTN2 -> assert false |
-     Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), CM_zero _ ->
-     assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg
-     _), DUP _ -> assert false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as
-     _rd), Reg _), FCM_zero _ -> assert false | ( Pair (Reg ({ reg_name = Neon
-     (Vector _); _ } as _rd), Reg _), FRINT_vector _ ) -> assert false | Pair
-     (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), INS _ -> assert
-     false | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Reg _), INS_V
-     _ -> assert false | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd),
-     Reg _), UADDLP_vector ) -> assert false *)
 end
