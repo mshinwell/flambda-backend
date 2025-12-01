@@ -149,7 +149,7 @@ module Neon_reg_name = struct
   end
 
   module Lane_index : sig
-    type t
+    type t = private int
 
     type lane_index = t
 
@@ -2906,7 +2906,7 @@ module Binary_encoder = struct
       type num operands.
       (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
    fun instr operands ->
-    match[@warning "-4"] operands, instr with
+    match operands, instr with
     (* PC-relative addressing - C4.1.92.2 *)
     | Pair (Reg rd, Sym _), ADR ->
       let rd_bits = Reg.encoding rd in
@@ -4295,4 +4295,199 @@ module Binary_encoder = struct
         LDR_simd_and_fp ) ->
       let rt_bits = Reg.encoding rt in
       encode_load_literal ~opc:0b10 ~v:1 ~imm19:0 ~rt:rt_bits
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar S); _ } as _rt),
+            Mem (Offset (_, Symbol _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar D); _ } as _rt),
+            Mem (Offset (_, Symbol _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar Q); _ } as _rt),
+            Mem (Offset (_, Symbol _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar S); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar D); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar Q); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar S); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar D); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair
+          ( Reg ({ reg_name = Neon (Scalar Q); _ } as _rt),
+            Mem (Offset (_, Imm _)) ),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Reg _)),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Reg _)),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Reg _)),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Reg _)),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Reg _)),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Reg _)),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Pre (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Pre (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Pre (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Pre (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Pre (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Pre (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Post (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Post (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Post (_, _))),
+        LDR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rt), Mem (Post (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rt), Mem (Post (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rt), Mem (Post (_, _))),
+        STR_simd_and_fp ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Sym _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Sym _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FABS ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FABS ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rn), Reg _), FCMP ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rn), Reg _), FCMP ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FCVT ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FCVT ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _),
+        FMOV_general_or_register ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _),
+        FMOV_general_or_register ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FNEG ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FNEG ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FSQRT ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FSQRT ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), SCVTF ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), SCVTF ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FRINT _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FRINT _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm _), MOVI ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm_nativeint _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm_nativeint _),
+        FMOV_scalar_immediate ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), SMOV _ ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), UMOV _ ->
+      assert false
+    | ( Pair (Reg ({ reg_name = GP W; _ } as _rt), Mem (Offset (_, Symbol _))),
+        LDAR ) ->
+      assert false
+    | ( Pair (Reg ({ reg_name = GP X; _ } as _rt), Mem (Offset (_, Symbol _))),
+        LDAR ) ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rd), Sym _), MOVI ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rd), Imm _), MOVI ->
+      assert false
 end
