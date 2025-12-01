@@ -3139,6 +3139,7 @@ module Binary_encoder = struct
     | Quad (Reg _rd, Reg _rn, Imm _, Imm _), UBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Imm _), UBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Sym _), UBFM -> assert false
+    | Quad (Reg _rd, Reg _rn, Sym _, Sym _), UBFM -> assert false
 
   (* (* PC-relative addressing - C4.1.92.2 *) | Pair (Reg rd, Sym _), ADR -> let
      rd_bits = Reg.encoding rd in let immlo = 0 in let immhi = 0 in encode_adr
