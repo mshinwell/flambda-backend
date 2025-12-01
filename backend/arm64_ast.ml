@@ -743,8 +743,8 @@ module Instruction_name = struct
     | ADRP : (pair, [< `Reg of [< `GP of [< `X]]] * _) t
     | AND_immediate
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X]]]
             * [< `Bitmask] )
           t
     | AND_shifted_register
@@ -851,8 +851,8 @@ module Instruction_name = struct
            t
     | EOR_immediate
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X]]]
             * [< `Bitmask] )
           t
     | EOR_shifted_register
@@ -1326,8 +1326,8 @@ module Instruction_name = struct
     | NOP : (singleton, unit) t
     | ORR_immediate
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X | `XZR]]]
             * [< `Bitmask] )
           t
     | ORR_shifted_register
@@ -2900,6 +2900,26 @@ module Binary_encoder = struct
     let result = logor result (of_int rd) in
     result
 
+  (* Decode bitmask immediate into N, immr, imms fields *)
+  let decode_bitmask (bitmask : nativeint) : int * int * int =
+    (* Use the existing logical immediate support *)
+    if not (Arm64_logical_immediates.is_logical_immediate bitmask)
+    then Misc.fatal_errorf "Invalid logical immediate: %nd" bitmask ();
+    (* Calculate the element size and pattern *)
+    let len = Arm64_logical_immediates.logical_imm_length bitmask in
+    let pattern = Nativeint.(logand bitmask (sub (shift_left 1n len) 1n)) in
+    (* Count ones and zeros to determine imms and immr *)
+    let rec count_ones p n acc =
+      if n = 0 || Nativeint.equal (Nativeint.logand p 1n) 0n
+      then acc
+      else count_ones (Nativeint.shift_right_logical p 1) (n - 1) (acc + 1)
+    in
+    let ones = count_ones pattern len 0 in
+    let imms = (len lor (ones - 1)) lxor 0x3f in
+    let immr = 0 in  (* rotation, simplified for now *)
+    let n = if len = 64 then 1 else 0 in
+    n, immr, imms
+
   (* Logical (immediate) - C4.1.92.6 *)
   let encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
     let open Int32 in
@@ -2910,8 +2930,8 @@ module Binary_encoder = struct
     let result = logor result (shift_left (of_int n) 22) in
     let result = logor result (shift_left (of_int immr) 16) in
     let result = logor result (shift_left (of_int imms) 10) in
-    let result = logor result (shift_left (of_int rn) 5) in
-    let result = logor result (of_int rd) in
+    let result = logor result (shift_left (of_int (Reg.gp_encoding rn)) 5) in
+    let result = logor result (of_int (Reg.gp_encoding rd)) in
     result
 
   (* Add/subtract (immediate) - C4.1.92.3 *)
@@ -2948,7 +2968,9 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), ADDV -> assert false
     | Pair (Reg _rd, _), ADR -> assert false
     | Pair (Reg _rd, _), ADRP -> assert false
-    | Triple (Reg _rd, Reg _rn, Bitmask _), AND_immediate -> assert false
+    | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
+      let n, immr, imms = decode_bitmask bitmask in
+      encode_logical_immediate ~sf:1 ~opc:0b00 ~n ~immr ~imms ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), AND_shifted_register ->
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
@@ -2973,7 +2995,9 @@ module Binary_encoder = struct
     | _, DMB _ -> assert false
     | _, DSB _ -> assert false
     | Pair (Reg _rd, Reg _rn), DUP _ -> assert false
-    | Triple (Reg _rd, Reg _rn, Bitmask _), EOR_immediate -> assert false
+    | Triple (Reg rd, Reg rn, Bitmask bitmask), EOR_immediate ->
+      let n, immr, imms = decode_bitmask bitmask in
+      encode_logical_immediate ~sf:1 ~opc:0b10 ~n ~immr ~imms ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), EOR_shifted_register ->
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
@@ -3046,7 +3070,9 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
     | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
     | _, NOP -> assert false
-    | Triple (Reg _rd, Reg _rn, Bitmask _), ORR_immediate -> assert false
+    | Triple (Reg rd, Reg rn, Bitmask bitmask), ORR_immediate ->
+      let n, immr, imms = decode_bitmask bitmask in
+      encode_logical_immediate ~sf:1 ~opc:0b01 ~n ~immr ~imms ~rn ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ORR_shifted_register ->
       assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
