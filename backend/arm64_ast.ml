@@ -1610,16 +1610,19 @@ module Instruction_name = struct
         : ( triple,
             [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
             * [< `Reg of
                  [< `Neon of
-                    [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]
-                 ] ]
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
             * [< `Reg of
                  [< `Neon of
-                    [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]]
-                 ] ] )
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     (* Other binary vector operations *)
     | UMIN_vector
@@ -4114,11 +4117,6 @@ module Binary_encoder = struct
       let rd_bits = Reg.encoding rd in
       let imm8 = 0 in
       encode_fp_immediate ~ftype:0b01 ~imm8 ~rd:rd_bits
-    | ( Pair (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Imm_float _f),
-        FMOV_scalar_immediate ) ->
-      let rd_bits = Reg.encoding rd in
-      let imm8 = 0 in
-      encode_fp_immediate ~ftype:0b11 ~imm8 ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FADD ) ->
       let rd_bits = Reg.encoding rd in
@@ -4132,13 +4130,6 @@ module Binary_encoder = struct
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
-        ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FADD ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0010 ~rn:rn_bits
         ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FSUB ) ->
@@ -4154,13 +4145,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
         ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FSUB ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0011 ~rn:rn_bits
-        ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FMUL ) ->
       let rd_bits = Reg.encoding rd in
@@ -4174,13 +4158,6 @@ module Binary_encoder = struct
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
-        ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FMUL ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0000 ~rn:rn_bits
         ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FDIV ) ->
@@ -4196,13 +4173,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
         ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FDIV ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0001 ~rn:rn_bits
-        ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FMAX ) ->
       let rd_bits = Reg.encoding rd in
@@ -4216,13 +4186,6 @@ module Binary_encoder = struct
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
-        ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FMAX ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0100 ~rn:rn_bits
         ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FMIN ) ->
@@ -4238,13 +4201,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
         ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FMIN ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b0101 ~rn:rn_bits
-        ~rd:rd_bits
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FNMUL ) ->
       let rd_bits = Reg.encoding rd in
@@ -4258,13 +4214,6 @@ module Binary_encoder = struct
       let rn_bits = Reg.encoding rn in
       let rm_bits = Reg.encoding rm in
       encode_fp_2_source ~ftype:0b01 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
-        ~rd:rd_bits
-    | ( Triple (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm),
-        FNMUL ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_fp_2_source ~ftype:0b11 ~rm:rm_bits ~opcode:0b1000 ~rn:rn_bits
         ~rd:rd_bits
     | ( Quad
           ( Reg ({ reg_name = Neon (Scalar S); _ } as rd),
@@ -4291,18 +4240,6 @@ module Binary_encoder = struct
       encode_fp_cond_select ~ftype:0b01 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
         ~rd:rd_bits
     | ( Quad
-          ( Reg ({ reg_name = Neon (Scalar H); _ } as rd),
-            Reg rn,
-            Reg rm,
-            Cond cond ),
-        FCSEL ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      let cond_bits = encode_condition cond in
-      encode_fp_cond_select ~ftype:0b11 ~rm:rm_bits ~cond:cond_bits ~rn:rn_bits
-        ~rd:rd_bits
-    | ( Quad
           (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra),
         FMADD ) ->
       let rd_bits = Reg.encoding rd in
@@ -4319,15 +4256,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       let ra_bits = Reg.encoding ra in
       encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-        ~rn:rn_bits ~rd:rd_bits
-    | ( Quad
-          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra),
-        FMADD ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      let ra_bits = Reg.encoding ra in
-      encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:0 ~ra:ra_bits
         ~rn:rn_bits ~rd:rd_bits
     | ( Quad
           (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra),
@@ -4348,15 +4276,6 @@ module Binary_encoder = struct
       encode_fp_3_source ~ftype:0b01 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
         ~rn:rn_bits ~rd:rd_bits
     | ( Quad
-          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra),
-        FMSUB ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      let ra_bits = Reg.encoding ra in
-      encode_fp_3_source ~ftype:0b11 ~o1:0 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-        ~rn:rn_bits ~rd:rd_bits
-    | ( Quad
           (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra),
         FNMADD ) ->
       let rd_bits = Reg.encoding rd in
@@ -4375,15 +4294,6 @@ module Binary_encoder = struct
       encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
         ~rn:rn_bits ~rd:rd_bits
     | ( Quad
-          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra),
-        FNMADD ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      let ra_bits = Reg.encoding ra in
-      encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:0 ~ra:ra_bits
-        ~rn:rn_bits ~rd:rd_bits
-    | ( Quad
           (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm, Reg ra),
         FNMSUB ) ->
       let rd_bits = Reg.encoding rd in
@@ -4400,15 +4310,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       let ra_bits = Reg.encoding ra in
       encode_fp_3_source ~ftype:0b01 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
-        ~rn:rn_bits ~rd:rd_bits
-    | ( Quad
-          (Reg ({ reg_name = Neon (Scalar H); _ } as rd), Reg rn, Reg rm, Reg ra),
-        FNMSUB ) ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      let ra_bits = Reg.encoding ra in
-      encode_fp_3_source ~ftype:0b11 ~o1:1 ~rm:rm_bits ~o0:1 ~ra:ra_bits
         ~rn:rn_bits ~rd:rd_bits
       (* Load register (literal) - C4.1.96.19 *)
       (* XXX these need more work *)
