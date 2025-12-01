@@ -1252,8 +1252,6 @@ module Instruction_name = struct
             * [< `Imm of [< `Sixty_four]]
             * [< `Shift of [< `Lsl] * [< `Six]] )
           t
-    (* Typed vector SIMD instructions *)
-    (* Binary vector operations - same format for all operands *)
     | MOVN
         : ( triple,
             [< `Reg of [< `GP of [< `X | `W]]]
@@ -1288,7 +1286,6 @@ module Instruction_name = struct
                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
           )
           t
-    (* Unary vector operations *)
     | MUL_vector
         : ( triple,
             [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
@@ -1624,7 +1621,6 @@ module Instruction_name = struct
                        [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
                        * [< any_width] ] ] ] )
           t
-    (* Other binary vector operations *)
     | UMIN_vector
         : ( triple,
             [< `Reg of
@@ -1714,7 +1710,6 @@ module Instruction_name = struct
                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
           )
           t
-    (* Binary vector operations with saturating arithmetic *)
     | USHL_vector
         : ( triple,
             [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
@@ -2918,11 +2913,6 @@ module Binary_encoder = struct
       let immlo = 0 in
       let immhi = 0 in
       encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
-    | Pair (Reg rd, Imm _), ADR ->
-      let rd_bits = Reg.encoding rd in
-      let immlo = 0 in
-      let immhi = 0 in
-      encode_adr ~op:0 ~immlo ~immhi ~rd:rd_bits
     | Pair (Reg rd, _), ADRP ->
       let rd_bits = Reg.encoding rd in
       let immlo = 0 in
@@ -3055,45 +3045,11 @@ module Binary_encoder = struct
           Misc.fatal_error "MOVZ: invalid shift amount"
       in
       encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | Triple (Reg rd, Sym _, Optional shift), MOVZ ->
+    | Triple (Reg rd, Sym sym, Optional shift), MOVZ ->
       let rd_bits = Reg.encoding rd in
+      ignore sym;
+      (* XXX *)
       let imm16 = 0 in
-      let hw =
-        match shift with
-        | None -> 0
-        | Some (Shift { kind = LSL; amount = Six sh }) ->
-          if sh mod 16 <> 0 || sh < 0 || sh > 48
-          then
-            Misc.fatal_errorf "MOVZ: shift must be 0, 16, 32, or 48, got %d" sh
-              ();
-          sh / 16
-        | Some (Shift { kind = LSL; amount = Twelve _ })
-        | Some (Shift { kind = ASR; _ })
-        | Some (Shift { kind = LSR; _ }) ->
-          Misc.fatal_error "MOVZ: invalid shift amount"
-      in
-      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | Triple (Reg rd, Imm (Six imm), Optional shift), MOVZ ->
-      let rd_bits = Reg.encoding rd in
-      let imm16 = imm land 0xFFFF in
-      let hw =
-        match shift with
-        | None -> 0
-        | Some (Shift { kind = LSL; amount = Six sh }) ->
-          if sh mod 16 <> 0 || sh < 0 || sh > 48
-          then
-            Misc.fatal_errorf
-              "MOVZ: shift must be 0, 16, 32,\n       or 48, got %d" sh ();
-          sh / 16
-        | Some (Shift { kind = LSL; amount = Twelve _ })
-        | Some (Shift { kind = ASR; _ })
-        | Some (Shift { kind = LSR; _ }) ->
-          Misc.fatal_error "MOVZ: invalid shift amount"
-      in
-      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd:rd_bits
-    | Triple (Reg rd, Imm (Twelve imm), Optional shift), MOVZ ->
-      let rd_bits = Reg.encoding rd in
-      let imm16 = imm land 0xFFFF in
       let hw =
         match shift with
         | None -> 0
@@ -3189,12 +3145,6 @@ module Binary_encoder = struct
       let rn_bits = Reg.encoding rn in
       encode_bitfield ~sf:1 ~opc:0b00 ~n:1 ~immr:0 ~imms:0 ~rn:rn_bits
         ~rd:rd_bits
-    | Triple (Reg rd, Reg rn, Reg rm), SDIV ->
-      let rd_bits = Reg.encoding rd in
-      let rn_bits = Reg.encoding rn in
-      let rm_bits = Reg.encoding rm in
-      encode_data_proc_2_source ~sf:1 ~s:0 ~opcode:0b000011 ~rm:rm_bits
-        ~rn:rn_bits ~rd:rd_bits
     | Triple (Reg rd, Reg rn, Reg rm), LSLV ->
       let rd_bits = Reg.encoding rd in
       let rn_bits = Reg.encoding rn in
@@ -3608,8 +3558,6 @@ module Binary_encoder = struct
       let rm_bits = Reg.encoding rm in
       encode_simd_three_same ~q:1 ~u:0 ~size:0b10 ~rm:rm_bits ~opcode:0b01101
         ~rn:rn_bits ~rd:rd_bits
-    | Triple (Reg { reg_name = Neon _; _ }, _, _), SQADD_vector ->
-      assert false (* TODO XXX *)
     | ( Triple (Reg ({ reg_name = Neon (Vector V8B); _ } as rd), Reg rn, Reg rm),
         UMAX_vector ) ->
       let rd_bits = Reg.encoding rd in
