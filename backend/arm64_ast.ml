@@ -1058,7 +1058,8 @@ module Instruction_name = struct
           t
     | FMOV_vector_immediate
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of _]]]
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
             * [< `Imm of [< `Sixty_four]] )
           t
     | FMSUB
@@ -1245,7 +1246,14 @@ module Instruction_name = struct
                        Neon_reg_name.Vector.t] *) ]
               | `Imm of _ ] )
           t
-    | MOVI : (pair, [< `Reg of [< `Neon of _]] * [< `Imm of [< `Twelve]]) t
+    | MOVI
+        : ( pair,
+            [< `Reg of
+               [< `Neon of
+                  [< `Scalar of _ | `Vector of [< any_vector] * [< any_width]]
+               ] ]
+            * [< `Imm of [< `Twelve]] )
+          t
     | MOVK
         : ( triple,
             [< `Reg of [< `GP of [< `X | `W]]]
@@ -4065,6 +4073,9 @@ module Binary_encoder = struct
       let rd_bits = Reg.encoding rd in
       let imm8 = 0 in
       encode_fp_immediate ~ftype:0b01 ~imm8 ~rd:rd_bits
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Imm_float _f),
+        FMOV_scalar_immediate ) ->
+      .
     | ( Triple (Reg ({ reg_name = Neon (Scalar S); _ } as rd), Reg rn, Reg rm),
         FADD ) ->
       let rd_bits = Reg.encoding rd in
@@ -4400,23 +4411,13 @@ module Binary_encoder = struct
     | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Sym _),
         FMOV_scalar_immediate ) ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Sym _), MOVI ->
+    | Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Imm _), MOVI ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Sym _), MOVI ->
+    | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Imm _), MOVI ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Sym _), MOVI ->
+    | Pair (Reg ({ reg_name = Neon (Scalar _); _ } as _rd), Sym _), MOVI ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Sym _), MOVI ->
+    | Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Sym _), MOVI ->
       assert false
     | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Reg _), FABS ->
       assert false
@@ -4452,24 +4453,12 @@ module Binary_encoder = struct
       assert false
     | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Reg _), FRINT _ ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm _), MOVI ->
-      assert false
+    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm _),
+        FMOV_scalar_immediate ) ->
+      .
+    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm _),
+        FMOV_scalar_immediate ) ->
+      .
     | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm_nativeint _),
         FMOV_scalar_immediate ) ->
       assert false
@@ -4486,68 +4475,20 @@ module Binary_encoder = struct
     | ( Pair (Reg ({ reg_name = GP X; _ } as _rt), Mem (Offset (_, Symbol _))),
         LDAR ) ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar Q); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar H); _ } as _rd), Sym _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Imm _), MOVI ->
-      assert false
-    | Pair (Reg ({ reg_name = Neon (Scalar H); _ } as _rd), Imm _), MOVI ->
-      assert false
     | Pair (Reg ({ reg_name = Neon (Scalar B); _ } as _rd), Reg _), ADDV ->
       assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Sym _),
+    | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Sym _),
         FMOV_vector_immediate ) ->
       assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Sym _),
+    | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Imm_nativeint _),
         FMOV_vector_immediate ) ->
       assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Sym _),
+    | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Imm_float _),
         FMOV_vector_immediate ) ->
       assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Sym _),
+    | ( Pair (Reg ({ reg_name = Neon (Vector _); _ } as _rd), Imm _),
         FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Sym _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Sym _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Sym _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Scalar S); _ } as _rd), Imm _),
-        FMOV_scalar_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Scalar D); _ } as _rd), Imm _),
-        FMOV_scalar_immediate ) ->
-      assert false
+      .
     | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), ABS_vector
       ->
       assert false
@@ -4908,6 +4849,16 @@ module Binary_encoder = struct
     | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
         SCVTF_vector ) ->
       assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), SQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), SQXTN2 ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), SXTL ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), UQXTN ->
+      assert false
+    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), UQXTN2 ->
+      assert false
     | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), SQXTN ->
       assert false
     | Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Reg _), SQXTN ->
@@ -5026,8 +4977,6 @@ module Binary_encoder = struct
       assert false
     | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), XTN2 ->
       assert false
-    | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), XTN ->
-      assert false
     | Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _), CM_zero _
       ->
       assert false
@@ -5092,6 +5041,9 @@ module Binary_encoder = struct
     | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), FCM_zero _
       ->
       assert false
+    | ( Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _),
+        FRINT_vector _ ) ->
+      assert false
     | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Reg _),
         FRINT_vector _ ) ->
       assert false
@@ -5145,48 +5097,6 @@ module Binary_encoder = struct
     | Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Reg _), INS_V _ ->
       assert false
     | Pair (Reg ({ reg_name = Neon (Vector V1D); _ } as _rd), Reg _), INS_V _ ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm_float _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8B); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V16B); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V8H); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2S); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V4S); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
-      assert false
-    | ( Pair (Reg ({ reg_name = Neon (Vector V2D); _ } as _rd), Imm_nativeint _),
-        FMOV_vector_immediate ) ->
       assert false
     | ( Pair (Reg ({ reg_name = Neon (Vector V4H); _ } as _rd), Reg _),
         UADDLP_vector ) ->
