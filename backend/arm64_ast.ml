@@ -315,6 +315,12 @@ module Reg = struct
   let gp_encoding : type a. [`GP of a] t -> int =
    fun t -> match t.reg_name with GP rn -> GP_reg_name.encoding rn t.index
 
+  let gp_sf : type a. [`GP of a] t -> int =
+   fun t ->
+    match t.reg_name with
+    | GP W | GP WZR | GP WSP -> 0
+    | GP X | GP XZR | GP SP | GP LR | GP FP -> 1
+
   (* for special GP registers we use the last index *)
   (* CR mshinwell: why is this? *)
   let sp () = create (GP SP) GP_reg_name.last
@@ -555,8 +561,10 @@ module Operand = struct
   module Imm = struct
     (* int is big enough for all instruction encodings *)
     type 'width t =
+      (* XXX signedness for Six and Twelve? *)
       | Six : int -> [`Six] t
       | Twelve : int -> [`Twelve] t
+      | Sixteen_unsigned : int -> [`Sixteen_unsigned] t
       | Sym : 'w Symbol.t -> [`Imm of 'w] t
       | Float : float -> [`Imm of [`Sixty_four]] t
       | Nativeint : nativeint -> [`Imm of [`Sixty_four]] t
@@ -566,6 +574,7 @@ module Operand = struct
       match t with
       | Six n -> Format.fprintf ppf "#%d" n
       | Twelve n -> Format.fprintf ppf "#%d" n
+      | Sixteen_unsigned n -> Format.fprintf ppf "#%d" n
       | Sym s -> Symbol.print ppf s
       | Float f -> Format.fprintf ppf "#%.7f" f
       | Nativeint n -> Format.fprintf ppf "#%s" (Nativeint.to_string n)
@@ -1259,21 +1268,21 @@ module Instruction_name = struct
           t
     | MOVK
         : ( triple,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Imm of [< `Sixty_four]]
-            * [< `Shift of [< `Lsl] * [< `Six]] )
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [`Shift of [`Lsl] * [`Six]] )
           t
     | MOVN
         : ( triple,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Imm of [< `Twelve | `Sixty_four]]
-            * [< `Optional of [< `Shift of [< `Lsl] * [< `Six]] option] )
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
     | MOVZ
         : ( triple,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Imm of [< `Sixty_four]]
-            * [< `Optional of [< `Shift of [< `Lsl] * [< `Six]] option] )
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
     | MOV_vector
         : ( pair,
@@ -1365,10 +1374,10 @@ module Instruction_name = struct
           t
     | SBFM
         : ( quad,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Imm of [< `Six]]
-            * [< `Imm of [< `Six]] )
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Six]]
+            * [`Imm of [`Six]] )
           t
     | SCVTF
         : ( pair,
@@ -1610,10 +1619,10 @@ module Instruction_name = struct
           t
     | UBFM
         : ( quad,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Imm of [< `Six]]
-            * [< `Imm of [< `Six]] )
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Six]]
+            * [`Imm of [`Six]] )
           t
     | UMAX_vector
         : ( triple,
@@ -2717,7 +2726,7 @@ module Binary_encoder = struct
     let result = logor result (shift_left (of_int 0b100101) 23) in
     let result = logor result (shift_left (of_int hw) 21) in
     let result = logor result (shift_left (of_int imm16) 5) in
-    let result = logor result (of_int rd) in
+    let result = logor result (of_int (Reg.gp_encoding rd)) in
     result
 
   (* Bitfield encoding - C4.1.92.8 Used for SBFM, BFM, UBFM *)
@@ -2730,8 +2739,8 @@ module Binary_encoder = struct
     let result = logor result (shift_left (of_int n) 22) in
     let result = logor result (shift_left (of_int immr) 16) in
     let result = logor result (shift_left (of_int imms) 10) in
-    let result = logor result (shift_left (of_int rn) 5) in
-    let result = logor result (of_int rd) in
+    let result = logor result (shift_left (of_int (Reg.gp_encoding rn)) 5) in
+    let result = logor result (of_int (Reg.gp_encoding rd)) in
     result
 
   (* Data-processing (2 source) - C4.1.94.1 *)
@@ -2902,23 +2911,7 @@ module Binary_encoder = struct
 
   (* Decode bitmask immediate into N, immr, imms fields *)
   let decode_bitmask (bitmask : nativeint) : int * int * int =
-    (* Use the existing logical immediate support *)
-    if not (Arm64_logical_immediates.is_logical_immediate bitmask)
-    then Misc.fatal_errorf "Invalid logical immediate: %nd" bitmask ();
-    (* Calculate the element size and pattern *)
-    let len = Arm64_logical_immediates.logical_imm_length bitmask in
-    let pattern = Nativeint.(logand bitmask (sub (shift_left 1n len) 1n)) in
-    (* Count ones and zeros to determine imms and immr *)
-    let rec count_ones p n acc =
-      if n = 0 || Nativeint.equal (Nativeint.logand p 1n) 0n
-      then acc
-      else count_ones (Nativeint.shift_right_logical p 1) (n - 1) (acc + 1)
-    in
-    let ones = count_ones pattern len 0 in
-    let imms = (len lor (ones - 1)) lxor 0x3f in
-    let immr = 0 in  (* rotation, simplified for now *)
-    let n = if len = 64 then 1 else 0 in
-    n, immr, imms
+    Arm64_logical_immediates.encode_logical_immediate_fields bitmask
 
   (* Logical (immediate) - C4.1.92.6 *)
   let encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
@@ -2947,6 +2940,12 @@ module Binary_encoder = struct
     let result = logor result (shift_left (of_int (Reg.gp_encoding rn)) 5) in
     let result = logor result (of_int (Reg.gp_encoding rd)) in
     result
+
+  let encode_six_bit_shift (shift_opt : [`Shift of _ * [`Six]] Operand.t option)
+      =
+    match shift_opt with
+    | Some (Shift shift) -> (match shift.amount with Six n -> n) / 16
+    | None -> 0
 
   let encode_instruction :
       type num operands.
@@ -3061,9 +3060,18 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), MOV -> assert false
     | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
     | Pair (Reg _rd, Imm _), MOVI -> assert false
-    | Triple (Reg _rd, _, Shift _), MOVK -> assert false
-    | Triple (Reg _rd, _, Optional _), MOVN -> assert false
-    | Triple (Reg _rd, _, Optional _), MOVZ -> assert false
+    | Triple (Reg rd, Imm imm, Shift shift), MOVK ->
+      let imm16 = match imm with Sixteen_unsigned n -> n in
+      let hw = (match shift.amount with Six n -> n) / 16 in
+      encode_move_wide ~sf:1 ~opc:0b11 ~hw ~imm16 ~rd
+    | Triple (Reg rd, Imm imm, Optional shift_opt), MOVN ->
+      let imm16 = match imm with Sixteen_unsigned n -> n in
+      let hw = encode_six_bit_shift shift_opt in
+      encode_move_wide ~sf:1 ~opc:0b00 ~hw ~imm16 ~rd
+    | Triple (Reg rd, Imm imm, Optional shift_opt), MOVZ ->
+      let imm16 = match imm with Sixteen_unsigned n -> n in
+      let hw = encode_six_bit_shift shift_opt in
+      encode_move_wide ~sf:1 ~opc:0b10 ~hw ~imm16 ~rd
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MSUB -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
@@ -3080,7 +3088,10 @@ module Binary_encoder = struct
     | _, RET -> assert false
     | Pair (Reg _rd, Reg _rn), REV -> assert false
     | Pair (Reg _rd, Reg _rn), REV16 -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), SBFM -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), SBFM ->
+      let sf = Reg.gp_sf rd in
+      let n = sf in
+      encode_bitfield ~sf ~opc:0b00 ~n ~immr ~imms ~rn ~rd
     | Pair (Reg _rd, Reg _rn), SCVTF -> assert false
     | Pair (Reg _rd, Reg _rn), SCVTF_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SDIV -> assert false
@@ -3119,7 +3130,10 @@ module Binary_encoder = struct
     | Triple (Reg _rd, Imm _, Imm _), TBNZ -> assert false
     | Triple (Reg _rd, Imm _, Imm _), TBZ -> assert false
     | Pair (Reg _rd, Bitmask _), TST -> assert false
-    | Quad (Reg _rd, Reg _rn, Imm _, Imm _), UBFM -> assert false
+    | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), UBFM ->
+      let sf = Reg.gp_sf rd in
+      let n = sf in
+      encode_bitfield ~sf ~opc:0b10 ~n ~immr ~imms ~rn ~rd
     | Pair (Reg _rd, Reg _rn), UADDLP_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMIN_vector -> assert false
