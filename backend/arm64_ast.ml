@@ -1384,7 +1384,8 @@ module Instruction_name = struct
         : ( triple,
             [< `Reg of [< `GP of [< `X]]]
             * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `V8B] | `GP of [< `X]] )
+            * [< `Reg of [< `Neon of [< `Vector of [< `V8B] * [< `B]]]
+              | `GP of [< `X] ] )
           t
     | SHL
         : ( triple,
@@ -2924,24 +2925,35 @@ module Binary_encoder = struct
     (* Singleton immediate/register operations *)
     | Singleton (Imm _), B -> assert false
     | Singleton (Sym _), B -> assert false
+    | Singleton (Imm_float _), B -> assert false
+    | Singleton (Imm_nativeint _), B -> assert false
     | Singleton (Imm _), BL -> assert false
     | Singleton (Sym _), BL -> assert false
+    | Singleton (Imm_float _), BL -> assert false
+    | Singleton (Imm_nativeint _), BL -> assert false
     | Singleton (Imm _), B_cond _ -> assert false
     | Singleton (Sym _), B_cond _ -> assert false
+    | Singleton (Imm_float _), B_cond _ -> assert false
+    | Singleton (Imm_nativeint _), B_cond _ -> assert false
     | Singleton (Imm _), B_cond_float _ -> assert false
     | Singleton (Sym _), B_cond_float _ -> assert false
+    | Singleton (Imm_float _), B_cond_float _ -> assert false
+    | Singleton (Imm_nativeint _), B_cond_float _ -> assert false
     | Singleton (Reg _), BLR -> assert false
     | Singleton (Reg _), BR -> assert false
     (* Pair operations *)
     | Pair (Reg _rd, Reg _rn), ABS_vector -> assert false
-    | Pair (Reg _rd, Imm _), ADR -> assert false
-    | Pair (Reg _rd, Sym _), ADRP -> assert false
-    | Pair (Reg _rd, Imm _), ADRP -> assert false
+    | Pair (Reg _rd, _), ADR -> assert false
+    | Pair (Reg _rd, _), ADRP -> assert false
     | Pair (Reg _rd, Reg _rn), ADDV -> assert false
     | Pair (Reg _rd, Imm _), CBNZ -> assert false
     | Pair (Reg _rd, Sym _), CBNZ -> assert false
+    | Pair (Reg _rd, Imm_float _), CBNZ -> assert false
+    | Pair (Reg _rd, Imm_nativeint _), CBNZ -> assert false
     | Pair (Reg _rd, Imm _), CBZ -> assert false
     | Pair (Reg _rd, Sym _), CBZ -> assert false
+    | Pair (Reg _rd, Imm_float _), CBZ -> assert false
+    | Pair (Reg _rd, Imm_nativeint _), CBZ -> assert false
     | Pair (Reg _rd, Reg _rn), CLZ -> assert false
     | Pair (Reg _rd, Reg _rn), CM_zero _ -> assert false
     | Pair (Reg _rd, Reg _rn), CNT -> assert false
@@ -2960,8 +2972,8 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), FCVTZS -> assert false
     | Pair (Reg _rd, Reg _rn), FCVTZS_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FMOV_general_or_register -> assert false
-    | Pair (Reg _rd, Imm _), FMOV_scalar_immediate -> assert false
-    | Pair (Reg _rd, Imm _), FMOV_vector_immediate -> assert false
+    | Pair (Reg _rd, _), FMOV_scalar_immediate -> assert false
+    | Pair (Reg _rd, _), FMOV_vector_immediate -> assert false
     | Pair (Reg _rd, Reg _rn), FNEG -> assert false
     | Pair (Reg _rd, Reg _rn), FNEG_vector -> assert false
     | Pair (Reg _rd, Reg _rn), FRECPE_vector -> assert false
@@ -2982,7 +2994,11 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
     | Pair (Reg _rd, Reg _rn), MOV -> assert false
     | Pair (Reg _rd, Imm _), MOV -> assert false
+    | Pair (Reg _rd, Sym _), MOV -> assert false
+    | Pair (Reg _rd, Imm_float _), MOV -> assert false
+    | Pair (Reg _rd, Imm_nativeint _), MOV -> assert false
     | Pair (Reg _rd, Imm _), MOVI -> assert false
+    | Pair (Reg _rd, Sym _), MOVI -> assert false
     | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
     | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
     | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
@@ -3034,19 +3050,16 @@ module Binary_encoder = struct
     | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), LSLV -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), LSRV -> assert false
-    | Triple (Reg _rd, Imm _, Shift _), MOVK -> assert false
-    | Triple (Reg _rd, Imm_nativeint _, Shift _), MOVK -> assert false
-    | Triple (Reg _rd, Imm _, Optional _), MOVN -> assert false
-    | Triple (Reg _rd, Imm _, Optional _), MOVZ -> assert false
-    | Triple (Reg _rd, Sym _, Optional _), MOVZ -> assert false
-    | Triple (Reg _rd, Imm_float _, Optional _), MOVZ -> assert false
-    | Triple (Reg _rd, Imm_nativeint _, Optional _), MOVZ -> assert false
+    | Triple (Reg _rd, _, Shift _), MOVK -> assert false
+    | Triple (Reg _rd, _, Optional _), MOVN -> assert false
+    | Triple (Reg _rd, _, Optional _), MOVZ -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Bitmask _), ORR_immediate -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SDIV -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), SHL -> assert false
+    | Triple (Reg _rd, Reg _rn, Sym _), SHL -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMIN_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SMULH -> assert false
@@ -3056,12 +3069,25 @@ module Binary_encoder = struct
     | Triple (Reg _rd, Reg _rn, Reg _rm), SQSUB_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SSHL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), SSHR -> assert false
+    | Triple (Reg _rd, Reg _rn, Sym _), SSHR -> assert false
     | Triple (Reg _rd, Reg _rn, Mem _), STP -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
     | Triple (Reg _rd, Imm _, Imm _), TBNZ -> assert false
     | Triple (Reg _rd, Imm _, Sym _), TBNZ -> assert false
+    | Triple (Reg _rd, Imm _, Imm_float _), TBNZ -> assert false
+    | Triple (Reg _rd, Imm _, Imm_nativeint _), TBNZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm _), TBNZ -> assert false
+    | Triple (Reg _rd, Sym _, Sym _), TBNZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm_float _), TBNZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm_nativeint _), TBNZ -> assert false
     | Triple (Reg _rd, Imm _, Imm _), TBZ -> assert false
     | Triple (Reg _rd, Imm _, Sym _), TBZ -> assert false
+    | Triple (Reg _rd, Imm _, Imm_float _), TBZ -> assert false
+    | Triple (Reg _rd, Imm _, Imm_nativeint _), TBZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm _), TBZ -> assert false
+    | Triple (Reg _rd, Sym _, Sym _), TBZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm_float _), TBZ -> assert false
+    | Triple (Reg _rd, Sym _, Imm_nativeint _), TBZ -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMAX_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMIN_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), UMULH -> assert false
@@ -3071,18 +3097,24 @@ module Binary_encoder = struct
     | Triple (Reg _rd, Reg _rn, Reg _rm), UQSUB_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), USHL_vector -> assert false
     | Triple (Reg _rd, Reg _rn, Imm _), USHR -> assert false
+    | Triple (Reg _rd, Reg _rn, Sym _), USHR -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP1 -> assert false
     | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP2 -> assert false
     (* Quad operations *)
     | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADD_immediate -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Optional _), ADD_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ADD_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ADD_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Optional _), ADDS -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), AND_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Sym _, Optional _), ADDS -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), AND_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSEL -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSINC -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), EOR_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), EOR_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Sym _), EXT -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), FCSEL -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMADD -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMSUB -> assert false
@@ -3090,21 +3122,23 @@ module Binary_encoder = struct
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMSUB -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MADD -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), MSUB -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ORR_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), ORR_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Imm _), SBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Imm _), SBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Sym _), SBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Sym _), SBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUB_immediate -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Optional _), SUB_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Optional _), SUBS_immediate -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Optional _), SUBS_immediate -> assert false
-    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register -> assert false
+    | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register ->
+      assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Imm _), UBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Sym _, Imm _), UBFM -> assert false
     | Quad (Reg _rd, Reg _rn, Imm _, Sym _), UBFM -> assert false
-    | Quad (Reg _rd, Reg _rn, Sym _, Sym _), UBFM -> assert false
 
   (* (* PC-relative addressing - C4.1.92.2 *) | Pair (Reg rd, Sym _), ADR -> let
      rd_bits = Reg.encoding rd in let immlo = 0 in let immhi = 0 in encode_adr
