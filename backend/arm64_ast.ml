@@ -3142,11 +3142,8 @@ module Binary_encoder = struct
         | GP FP -> 29
       in
       (* Helper to encode base register from addressing mode *)
-      let encode_base_reg (type a) (rn : a Reg.t) =
-        match[@warning "-4"] rn.reg_name with
-        | GP X -> rn.index
-        | GP SP -> 31
-        | _ -> assert false
+      let encode_base_reg (rn : [`GP of [< `X | `SP]] Reg.t) =
+        match rn.reg_name with GP X -> rn.index | GP SP -> 31
       in
       match[@warning "-4"] addressing with
       | Reg rn ->
