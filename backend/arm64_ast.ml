@@ -812,7 +812,7 @@ module Instruction_name = struct
            t
     | CNT
         : ( pair,
-            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | CNT_vector
         : ( pair,
@@ -835,7 +835,7 @@ module Instruction_name = struct
           t
     | CTZ
         : ( pair,
-            [< `Reg of [< `GP of [< `X]]] * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | CVT_vector
         : ( pair,
@@ -2964,6 +2964,47 @@ module Binary_encoder = struct
     | Some (Shift shift) -> (match shift.amount with Six n -> n) / 16
     | None -> 0
 
+  (* Load/store register (unscaled immediate) - C4.1.96.25 *)
+  let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int size) 30) in
+    let result = logor result (shift_left (of_int 0b111) 27) in
+    let result = logor result (shift_left (of_int vr) 26) in
+    let result = logor result (shift_left (of_int opc) 22) in
+    let result = logor result (shift_left (of_int imm9) 12) in
+    let result = logor result (shift_left (of_int rn) 5) in
+    let result = logor result (of_int rt) in
+    result
+
+  (* Load/store register (immediate post-indexed) - C4.1.96.26 *)
+  let encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int size) 30) in
+    let result = logor result (shift_left (of_int 0b111) 27) in
+    let result = logor result (shift_left (of_int vr) 26) in
+    let result = logor result (shift_left (of_int opc) 22) in
+    let result = logor result (shift_left (of_int imm9) 12) in
+    let result = logor result (shift_left (of_int 0b01) 10) in
+    let result = logor result (shift_left (of_int rn) 5) in
+    let result = logor result (of_int rt) in
+    result
+
+  (* Load/store register (immediate pre-indexed) - C4.1.96.28 *)
+  let encode_load_store_pre_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int size) 30) in
+    let result = logor result (shift_left (of_int 0b111) 27) in
+    let result = logor result (shift_left (of_int vr) 26) in
+    let result = logor result (shift_left (of_int opc) 22) in
+    let result = logor result (shift_left (of_int imm9) 12) in
+    let result = logor result (shift_left (of_int 0b11) 10) in
+    let result = logor result (shift_left (of_int rn) 5) in
+    let result = logor result (of_int rt) in
+    result
+
   let encode_instruction :
       type num operands.
       (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
@@ -3013,11 +3054,17 @@ module Binary_encoder = struct
         ~rd
     | Triple (Reg _rd, Reg _rn, Reg _rm), CM_register _ -> assert false
     | Pair (Reg _rd, Reg _rn), CM_zero _ -> assert false
-    | Pair (Reg _rd, Reg _rn), CNT -> assert false
+    | Pair (Reg rd, Reg rn), CNT ->
+    (* FEAT_CSSC required *)
+    let sf = Reg.gp_sf rd in
+    encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000111 ~rn ~rd
     | Pair (Reg _rd, Reg _rn), CNT_vector -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSEL -> assert false
     | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSINC -> assert false
-    | Pair (Reg _rd, Reg _rn), CTZ -> assert false
+    | Pair (Reg rd, Reg rn), CTZ ->
+    (* FEAT_CSSC required *)
+    let sf = Reg.gp_sf rd in
+    encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000110 ~rn ~rd
     | Pair (Reg _rd, Reg _rn), CVT_vector -> assert false
     | _, DMB _ -> assert false
     | _, DSB _ -> assert false
@@ -3074,7 +3121,49 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
     | Pair (Reg _rd, Mem _addressing), LDAR -> assert false
     | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
-    | Pair (Reg _rd, Mem _addressing), LDR -> assert false
+    | Pair (Reg rd, Mem addressing), LDR ->
+    (* Determine size based on register width *)
+    let size = match[@warning "-4"] rd.reg_name with
+      | GP W | GP WZR | GP WSP -> 0b10
+      | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
+    in
+    let vr = 0 in
+    let opc = 0b01 in
+    let rt = match[@warning "-4"] rd.reg_name with
+      | GP W -> rd.index
+      | GP X -> rd.index
+      | GP WZR | GP XZR -> 31
+      | GP WSP | GP SP -> 31
+      | GP LR -> 30
+      | GP FP -> 29
+    in
+    (* Helper to encode base register from addressing mode *)
+    let encode_base_reg (type a) (rn : a Reg.t) =
+      match[@warning "-4"] rn.reg_name with
+      | GP X -> rn.index
+      | GP SP -> 31
+      | _ -> assert false
+    in
+    (match[@warning "-4"] addressing with
+    | Reg rn ->
+      (* Base register only [Xn] - use unscaled with imm9=0 *)
+      encode_load_store_unscaled ~size ~vr ~opc ~imm9:0
+        ~rn:(encode_base_reg rn) ~rt
+    | Offset (rn, Imm (Twelve _imm12)) ->
+      (* TODO: Implement unsigned offset variant - for now use imm9=0 *)
+      encode_load_store_unscaled ~size ~vr ~opc ~imm9:0
+        ~rn:(encode_base_reg rn) ~rt
+    | Pre (rn, Imm (Twelve imm)) ->
+      (* Pre-indexed [Xn, #imm]! *)
+      let imm9 = imm land 0x1FF in
+      encode_load_store_pre_indexed ~size ~vr ~opc ~imm9
+        ~rn:(encode_base_reg rn) ~rt
+    | Post (rn, Imm (Twelve imm)) ->
+      (* Post-indexed [Xn], #imm *)
+      let imm9 = imm land 0x1FF in
+      encode_load_store_post_indexed ~size ~vr ~opc ~imm9
+        ~rn:(encode_base_reg rn) ~rt
+    | _ -> assert false)
     | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRH -> assert false
