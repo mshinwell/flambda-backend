@@ -50,6 +50,27 @@ type any_width =
   | `D ]
 
 module Neon_reg_name : sig
+  module Vector : sig
+    type (_, _) t = private
+      | V8B : ([`V8B], [`B]) t
+      | V16B : ([`V16B], [`B]) t
+      | V4H : ([`V4H], [`H]) t
+      | V8H : ([`V8H], [`H]) t
+      | V2S : ([`V2S], [`S]) t
+      | V4S : ([`V4S], [`S]) t
+      | V1D : ([`V1D], [`D]) t
+      | V2D : ([`V2D], [`D]) t
+  end
+
+  module Scalar : sig
+    type _ t = private
+      | B : [`B] t
+      | H : [`H] t
+      | S : [`S] t
+      | D : [`D] t
+      | Q : [`Q] t
+  end
+
   module Lane_index : sig
     (** Neon vector register lane indices. *)
     type t
@@ -60,12 +81,49 @@ module Neon_reg_name : sig
       type t
     end
   end
+
+  module Lane : sig
+    type 'a r = private
+      | V : ('v, 's) Vector.t -> [`Vector of 'v * 's] r
+      | S : 's Scalar.t -> [`Scalar of 's] r
+
+    type 'a t = private
+      { r : 'a r;
+        lane : Lane_index.t
+      }
+  end
+
+  type _ t = private
+    | Vector : ('v, 's) Vector.t -> [`Vector of 'v * 's] t
+    | Scalar : 's Scalar.t -> [`Scalar of 's] t
+    | Lane : 'l Lane.t -> [`Lane of 'l] t
+end
+
+module GP_reg_name : sig
+  type _ t = private
+    | W : [`W] t
+    | X : [`X] t
+    | WZR : [`WZR] t
+    | XZR : [`XZR] t
+    | WSP : [`WSP] t
+    | SP : [`SP] t
+    | LR : [`LR] t
+    | FP : [`FP] t
+end
+
+module Reg_name : sig
+  type _ t = private
+    | GP : 'a GP_reg_name.t -> [`GP of 'a] t
+    | Neon : 'a Neon_reg_name.t -> [`Neon of 'a] t
 end
 
 (* CR sspies: rename Reg.t, since it conflicts with the registers of the linear
    IR. *)
 module Reg : sig
-  type 'a t
+  type 'a t = private
+    { reg_name : 'a Reg_name.t;
+      index : int
+    }
 
   val reg_x : int -> [`GP of [`X]] t
 
@@ -86,6 +144,12 @@ module Reg : sig
   val reg_b : int -> [`Neon of [`Scalar of [`B]]] t
 
   val sp : unit -> [`GP of [`SP]] t
+
+  val name : _ t -> string
+
+  val gp_encoding : [`GP of _] t -> int
+
+  val gp_sf : [`GP of _] t -> int
 end
 
 module Symbol : sig
@@ -113,19 +177,6 @@ module Symbol : sig
   val create : 'w same_section_or_reloc -> ?offset:int -> string -> 'w t
 
   val print : Format.formatter -> _ t -> unit
-end
-
-module Operand : sig
-  type _ t
-
-  module Shift : sig
-    module Kind : sig
-      type 'op t =
-        | LSL : [`Lsl] t
-        | ASR : [`Asr] t
-        | LSR : [`Lsr] t
-    end
-  end
 end
 
 module Float_cond : sig
@@ -159,9 +210,82 @@ module Cond : sig
     | GT
     | LE
         (** AL and NV are not supported, because NV means AL, but has a
-            different encoding.  Use unconditional branching instead. *)
+          different encoding.  Use unconditional branching instead. *)
 
   val of_float_cond : Float_cond.t -> t
+end
+
+module Operand : sig
+  module Imm : sig
+    type 'width t = private
+      | Six : int -> [`Six] t
+      | Twelve : int -> [`Twelve] t
+      | Seven_signed_scaled : int -> [`Seven_signed] t
+      | Nine_signed_unscaled : int -> [`Nine_signed_unscaled] t
+      | Twelve_unsigned_scaled : int -> [`Twelve_unsigned_scaled] t
+      | Sixteen_unsigned : int -> [`Sixteen_unsigned] t
+      | Sym : 'w Symbol.t -> [`Sym of 'w] t
+      | Float : float -> [`Sixty_four] t
+      | Nativeint : nativeint -> [`Sixty_four] t
+  end
+
+  module Bitmask : sig
+    type t = private nativeint
+
+    val decode_n_immr_imms : t -> int * int * int
+  end
+
+  module Shift : sig
+    module Kind : sig
+      type 'op t =
+        | LSL : [`Lsl] t
+        | ASR : [`Asr] t
+        | LSR : [`Lsr] t
+    end
+
+    type ('op, 'amount) t = private
+      { kind : 'op Kind.t;
+        amount : 'amount Imm.t
+      }
+  end
+
+  module Addressing_mode : sig
+    module Offset : sig
+      type _ t = private
+        | Imm : 'w Imm.t -> 'w t
+        | Symbol_with_reloc : [`Twelve] Symbol.t -> [`Twelve_unsigned_scaled] t
+    end
+
+    type t = private
+      | Reg : [`GP of [< `X | `SP]] Reg.t -> t
+      | Offset :
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
+          -> t
+      | Literal : [`GP of [< `X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
+      | Pre :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t
+          -> t
+      | Post :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t
+          -> t
+      | Offset_pair :
+          [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t
+          -> t
+      | Pre_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Post_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+  end
+
+  type _ t = private
+    | Imm : 'w Imm.t -> [`Imm of 'w] t
+    | Reg : 'a Reg.t -> [`Reg of 'a] t
+    | Lsl_by_twelve : [`Fixed_shift of [`Lsl_by_twelve]] t
+    | Shift : ('op, 'amount) Shift.t -> [`Shift of 'op * 'amount] t
+    | Cond : Cond.t -> [`Cond] t
+    | Float_cond : Float_cond.t -> [`Float_cond] t
+    | Mem : Addressing_mode.t -> [`Mem] t
+    | Bitmask : Bitmask.t -> [`Bitmask] t
+    | Optional : 'a t option -> [`Optional of 'a option] t
+    | Unit : unit t
 end
 
 module Rounding_mode : sig
@@ -1531,7 +1655,3 @@ module DSL : sig
       src:[< `Reg of [`GP of [< `FP | `SP | `X]]] Operand.t -> unit
   end
 end
-
-(* TODO: move to separate file *)
-val encode_instruction :
-  ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> int32

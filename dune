@@ -202,7 +202,7 @@
   ast_invariants
   depend
   parser_types ; manual update: mli only files asttypes parsetree
-  ;; TYPING
+               ;; TYPING
   ident
   path
   jkind
@@ -500,10 +500,7 @@
  (package ocaml))
 
 (install
- (files
-  Makefile.build_config
-  Makefile.config_if_required
-  Makefile.config)
+ (files Makefile.build_config Makefile.config_if_required Makefile.config)
  (section lib)
  (package ocaml))
 
@@ -599,6 +596,7 @@
   x86_masm
   x86_proc
   arm64_ast
+  arm64_binary_emitter
   zero_alloc_checker
   zero_alloc_info
   ;; backend/cfg
@@ -778,12 +776,7 @@
  ; to be built against the system compiler, which won't work.
  (ocamlc_flags unix.cma)
  (ocamlopt_flags unix.cmxa)
- (libraries
-  flambda2
-  flambda2_ui
-  flambda2_to_cmm
-  ocamloptcomp
-  ocamlcommon)
+ (libraries flambda2 flambda2_ui flambda2_to_cmm ocamloptcomp ocamlcommon)
  (modules boot_ocamlopt))
 
 ; The input archives (.a, .cma and .cmxa) to the following three rules
