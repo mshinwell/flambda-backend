@@ -922,8 +922,11 @@ let emit t =
       Asm_section.Tbl.add section_tbl section state;
       state
   in
-  (* First pass: compute offsets of local symbol and label definitions. We
-     nee *)
+  (* First pass: compute offsets of local symbol and label definitions. *)
+  (* FOR CLAUDE: let's assume we start in the text section. Whenever we find a
+     Section directive, we need to get the correct section state using
+     [state_for_section]. Symbol and Label definitions need to be looked out for
+     and recorded in the state. *)
   (* ... *)
   (* Second pass: emit machine code and data *)
   (* ... *)
