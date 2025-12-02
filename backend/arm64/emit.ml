@@ -186,14 +186,14 @@ module DSL : sig
   val reg_s7 : [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
 
   val emit_mem_symbol :
-    ?reloc:'w Arm64_ast.Symbol.reloc_directive ->
+    reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
     ?offset:int ->
     Reg.t ->
     S.t ->
     [> `Mem] Arm64_ast.Operand.t
 
   val emit_mem_label :
-    ?reloc:'w Arm64_ast.Symbol.reloc_directive ->
+    reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
@@ -207,13 +207,13 @@ module DSL : sig
 
   val label :
     ?offset:int ->
-    ?reloc:'w Arm64_ast.Symbol.reloc_directive ->
+    reloc:'w Arm64_ast.Symbol.same_section_or_reloc ->
     L.t ->
     [> `Imm of 'w] Arm64_ast.Operand.t
 
   val symbol :
     ?offset:int ->
-    ?reloc:'w Arm64_ast.Symbol.reloc_directive ->
+    reloc:'w Arm64_ast.Symbol.same_section_or_reloc ->
     S.t ->
     [> `Imm of 'w] Arm64_ast.Operand.t
 
@@ -312,17 +312,21 @@ end = struct
 
   let reglane_d reg ~lane = reglane_d (reg_index reg) ~lane
 
-  let label ?offset ?reloc (lbl : L.t) =
+  let label (type w) ?offset ~(reloc : w Arm64_ast.Symbol.same_section_or_reloc)
+      (lbl : L.t) =
     let sym = L.encode lbl in
-    symbol (Arm64_ast.Symbol.create ?offset ?reloc sym)
+    symbol (Arm64_ast.Symbol.create reloc ?offset sym)
 
-  let symbol ?offset ?reloc s =
+  let symbol (type w) ?offset ~(reloc : w Arm64_ast.Symbol.same_section_or_reloc)
+      s =
     let sym = S.encode s in
-    symbol (Arm64_ast.Symbol.create ?offset ?reloc sym)
+    symbol (Arm64_ast.Symbol.create reloc ?offset sym)
 
-  let emit_mem_symbol ?reloc ?offset r symbol =
+  let emit_mem_symbol
+      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
+      ?offset r sym =
     let index = reg_index r in
-    let symbol = Arm64_ast.Symbol.create ?reloc ?offset (S.encode symbol) in
+    let symbol = Arm64_ast.Symbol.create reloc ?offset (S.encode sym) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
@@ -333,9 +337,11 @@ end = struct
         "emit_mem_symbol: expected integer register for base, got %a"
         Printreg.reg r
 
-  let emit_mem_label ?reloc ?offset r label =
+  let emit_mem_label
+      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
+      ?offset r label =
     let index = reg_index r in
-    let symbol = Arm64_ast.Symbol.create ?reloc ?offset (L.encode label) in
+    let symbol = Arm64_ast.Symbol.create reloc ?offset (L.encode label) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
