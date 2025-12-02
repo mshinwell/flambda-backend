@@ -1326,6 +1326,8 @@ module DSL : sig
 
   val imm_six : int -> [`Imm of [`Six]] Operand.t
 
+  val imm_sixteen : int -> [`Imm of [`Sixteen_unsigned]] Operand.t
+
   val imm_float : float -> [`Imm of [`Sixty_four]] Operand.t
 
   val imm_nativeint : nativeint -> [`Imm of [`Sixty_four]] Operand.t
@@ -1338,6 +1340,13 @@ module DSL : sig
     kind:'op Operand.Shift.Kind.t ->
     amount:int ->
     [`Shift of 'op * [`Six]] Operand.t
+
+  val optional_shift :
+    kind:'op Operand.Shift.Kind.t ->
+    amount:int ->
+    [`Optional of [`Shift of 'op * [`Six]] option] Operand.t
+
+  val optional_none : [`Optional of 'a option] Operand.t
 
   val mem : base:[`GP of [< `X | `SP]] Reg.t -> [`Mem] Operand.t
 

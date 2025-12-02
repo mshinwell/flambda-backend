@@ -2565,6 +2565,11 @@ module DSL = struct
   let shift ~kind ~amount =
     Operand.Shift { kind; amount = Operand.Imm.Six amount }
 
+  let optional_shift ~kind ~amount =
+    Operand.Optional (Some (shift ~kind ~amount))
+
+  let optional_none = Operand.Optional None
+
   let reglane index ~lane r =
     let reg_name = Reg_name.(Neon Neon_reg_name.(Lane { r; lane })) in
     Operand.Reg (Reg.create reg_name index)
@@ -2637,6 +2642,8 @@ module DSL = struct
   let imm n = Operand.Imm (Operand.Imm.Twelve n)
 
   let imm_six n = Operand.Imm (Operand.Imm.Six n)
+
+  let imm_sixteen n = Operand.Imm (Operand.Imm.Sixteen_unsigned n)
 
   let imm_float f = Operand.Imm (Operand.Imm.Float f)
 
