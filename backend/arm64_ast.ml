@@ -621,7 +621,7 @@ module Operand = struct
     module Offset = struct
       type _ t =
         | Imm : 'w Imm.t -> 'w t
-        | Symbol : 'w Symbol.t -> 'w t
+        | Symbol : [`Twelve] Symbol.t -> [`Twelve_unsigned_scaled] t
 
       let print : type a. Format.formatter -> a t -> unit =
        fun ppf t ->
@@ -2674,6 +2674,8 @@ module Binary_encoder = struct
   type reloc_type =
     | ADR
     | ADRP
+    | GOT_PAGE_OFF
+    | PAGE_OFF
 
   type relocation =
     { offset_bytes : int;
@@ -3019,6 +3021,20 @@ module Binary_encoder = struct
     let result = logor result (of_int rt) in
     result
 
+  (* Load/store register (unsigned immediate) - C4.1.96.27 *)
+  let encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt =
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int size) 30) in
+    let result = logor result (shift_left (of_int 0b111) 27) in
+    let result = logor result (shift_left (of_int vr) 26) in
+    let result = logor result (shift_left (of_int 0b01) 24) in
+    let result = logor result (shift_left (of_int opc) 22) in
+    let result = logor result (shift_left (of_int imm12) 10) in
+    let result = logor result (shift_left (of_int rn) 5) in
+    let result = logor result (of_int rt) in
+    result
+
   let encode_instruction :
       type num operands.
       (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
@@ -3151,6 +3167,19 @@ module Binary_encoder = struct
         (* TODO: Implement unsigned offset variant - for now use imm9=0 *)
         let rn = Reg.gp_encoding rn in
         encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+      | Offset (rn, Symbol sym) ->
+        let reloc_type =
+          match sym.reloc with
+          | Some Symbol.GOT_PAGE_OFF -> GOT_PAGE_OFF
+          | Some Symbol.PAGE_OFF -> PAGE_OFF
+          | Some Symbol.LOWER_TWELVE -> PAGE_OFF
+          | Some Symbol.GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+          | None -> failwith "LDR with symbol requires relocation directive"
+        in
+        add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type;
+        let rn = Reg.gp_encoding rn in
+        let imm12 = (sym.offset lsr (if size = 0b11 then 3 else 2)) land 0xFFF in
+        encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt
       | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
         (* Pre-indexed [Xn, #imm]! *)
         let imm9 = imm land 0x1FF in
