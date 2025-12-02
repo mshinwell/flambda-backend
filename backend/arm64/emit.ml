@@ -317,14 +317,14 @@ end = struct
     let sym = L.encode lbl in
     symbol (Arm64_ast.Symbol.create reloc ?offset sym)
 
-  let symbol (type w) ?offset ~(reloc : w Arm64_ast.Symbol.same_section_or_reloc)
-      s =
+  let symbol (type w) ?offset
+      ~(reloc : w Arm64_ast.Symbol.same_section_or_reloc) s =
     let sym = S.encode s in
     symbol (Arm64_ast.Symbol.create reloc ?offset sym)
 
   let emit_mem_symbol
-      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
-      ?offset r sym =
+      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc) ?offset r sym
+      =
     let index = reg_index r in
     let symbol = Arm64_ast.Symbol.create reloc ?offset (S.encode sym) in
     match r.typ with
@@ -337,8 +337,7 @@ end = struct
         "emit_mem_symbol: expected integer register for base, got %a"
         Printreg.reg r
 
-  let emit_mem_label
-      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
+  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
       ?offset r label =
     let index = reg_index r in
     let symbol = Arm64_ast.Symbol.create reloc ?offset (L.encode label) in
