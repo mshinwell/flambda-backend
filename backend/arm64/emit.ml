@@ -107,81 +107,81 @@ module DSL : sig
     include Arm64_ast.Float_cond
   end
 
-  val reg_w : Reg.t -> [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t
+  val reg_w : Reg.t -> [`Reg of [`GP of [`W]]] Arm64_ast.Operand.t
 
-  val reg_x : Reg.t -> [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
+  val reg_x : Reg.t -> [`Reg of [`GP of [`X]]] Arm64_ast.Operand.t
 
   val reg_d :
-    Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t
 
   (** Like [reg_d] but accepts both Float and Float32 registers. Used for
       reinterpret casts where we want to treat both as D registers. *)
   val reg_d_of_float_reg :
-    Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t
 
   val reg_s :
-    Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
 
   val reg_v2s :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Arm64_ast.Operand.t
 
   val reg_v4s :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
 
   val reg_v2d :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
 
   val reg_v16b :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
 
   val reg_v8h :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
 
   val reg_v8b :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V8B]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Arm64_ast.Operand.t
 
   val reg_v4h :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Operand.t
 
   val reglane_b :
     Reg.t ->
-    lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `B]]]]]
+    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`B]]]]]
     Arm64_ast.Operand.t
 
   val reglane_h :
     Reg.t ->
-    lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `H]]]]]
+    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`H]]]]]
     Arm64_ast.Operand.t
 
   val reglane_s :
     Reg.t ->
-    lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `S]]]]]
+    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`S]]]]]
     Arm64_ast.Operand.t
 
   val reglane_d :
     Reg.t ->
-    lane:int ->
-    [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
+    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]]
     Arm64_ast.Operand.t
 
   val reg_q_operand :
-    Reg.t -> [> `Reg of [> `Neon of [> `Scalar of [> `Q]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`Q]]]] Arm64_ast.Operand.t
 
   val reg_v2d_operand :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
 
   val reg_v16b_operand :
-    Reg.t -> [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
 
   val shift_operand :
     'op Arm64_ast.Operand.Shift.Kind.t ->
     int ->
-    [> `Shift of 'op * [`Six]] Arm64_ast.Operand.t
+    [`Shift of 'op * [`Six]] Arm64_ast.Operand.t
 
-  val imm_six : int -> [> `Imm of [`Six]] Arm64_ast.Operand.t
+  val imm_six : int -> [`Imm of [`Six]] Arm64_ast.Operand.t
 
   val reg_s7 : [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
 
@@ -190,32 +190,32 @@ module DSL : sig
     ?offset:int ->
     Reg.t ->
     S.t ->
-    [> `Mem] Arm64_ast.Operand.t
+    [`Mem] Arm64_ast.Operand.t
 
   val emit_mem_label :
     reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
-    [> `Mem] Arm64_ast.Operand.t
+    [`Mem] Arm64_ast.Operand.t
 
-  val mem : Reg.t -> [> `Mem] Arm64_ast.Operand.t
+  val mem : Reg.t -> [`Mem] Arm64_ast.Operand.t
 
-  val addressing : addressing_mode -> Reg.t -> [> `Mem] Arm64_ast.Operand.t
+  val addressing : addressing_mode -> Reg.t -> [`Mem] Arm64_ast.Operand.t
 
-  val stack : Reg.t -> [> `Mem] Arm64_ast.Operand.t
+  val stack : Reg.t -> [`Mem] Arm64_ast.Operand.t
 
   val label :
     ?offset:int ->
     reloc:'w Arm64_ast.Symbol.same_section_or_reloc ->
     L.t ->
-    [> `Imm of 'w] Arm64_ast.Operand.t
+    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
 
   val symbol :
     ?offset:int ->
     reloc:'w Arm64_ast.Symbol.same_section_or_reloc ->
     S.t ->
-    [> `Imm of 'w] Arm64_ast.Operand.t
+    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
 
   type scalar_fp_regs_3 = private
     | S_regs :
@@ -256,9 +256,20 @@ module DSL : sig
       include Arm64_ast.DSL.Acc
     end
 
-    val labeled_ins1 : L.t -> _ Arm64_ast.Instruction_name.t -> _ -> unit
+    val labeled_ins1 :
+      L.t ->
+      (Arm64_ast.singleton, 'a) Arm64_ast.Instruction_name.t ->
+      'a Arm64_ast.Operand.t ->
+      unit
 
-    val labeled_ins4 : L.t -> _ Arm64_ast.Instruction_name.t -> _ -> unit
+    val labeled_ins4 :
+      L.t ->
+      (Arm64_ast.quad, 'a * 'b * 'c * 'd) Arm64_ast.Instruction_name.t ->
+      'a Arm64_ast.Operand.t
+      * 'b Arm64_ast.Operand.t
+      * 'c Arm64_ast.Operand.t
+      * 'd Arm64_ast.Operand.t ->
+      unit
   end
 end = struct
   include Arm64_ast.DSL
