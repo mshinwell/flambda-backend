@@ -679,6 +679,7 @@ module Operand = struct
     | Mem : Addressing_mode.t -> [`Mem] t
     | Bitmask : Bitmask.t -> [`Bitmask] t
     | Optional : 'a t option -> [`Optional of 'a option] t
+    | Unit : unit t
   [@@ocaml.warning "-37"]
 
   type 'a operand = 'a t
@@ -695,6 +696,7 @@ module Operand = struct
     | Mem m -> Format.fprintf ppf "%a" Addressing_mode.print m
     | Bitmask b -> Bitmask.print ppf b
     | Optional opt -> ( match opt with Some op -> print ppf op | None -> ())
+    | Unit -> ()
 
   module Wrapped = struct
     type t = O : _ operand -> t
@@ -2004,7 +2006,7 @@ module Instruction_name = struct
           | GP _ | Neon (Scalar _) | Neon (Lane _) ->
             failwith "vector_to_lane_operand: not a vector register")
         | Imm _ | Lsl_by_twelve | Shift _ | Cond _ | Float_cond _ | Mem _
-        | Bitmask _ | Optional _ ->
+        | Bitmask _ | Optional _ | Unit ->
           failwith "vector_to_lane_operand: not a register operand"
       in
       match instr with
@@ -2570,6 +2572,8 @@ module DSL = struct
 
   let optional_none = Operand.Optional None
 
+  let unit_operand = Operand.Unit
+
   let reglane index ~lane r =
     let reg_name = Reg_name.(Neon Neon_reg_name.(Lane { r; lane })) in
     Operand.Reg (Reg.create reg_name index)
@@ -2683,6 +2687,8 @@ module DSL = struct
     let ins3 name (a, b, c) = ins name (Triple (a, b, c))
 
     let ins4 name (a, b, c, d) = ins name (Quad (a, b, c, d))
+
+    let ins0 name = ins name (Singleton Operand.Unit)
 
     (* Instructions that are expanded into others *)
     let ins_mul rd rn rm = ins MADD (Quad (rd, rn, rm, reg_op (Reg.xzr ())))

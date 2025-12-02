@@ -1906,7 +1906,7 @@ let emit_instr i =
         ( DSL.reg_x reg_stack_arg_end,
           DSL.sp (),
           DSL.imm (Misc.align stack_ofs 16),
-          None );
+          DSL.optional_none );
       emit_load_symbol_addr reg_x8 (S.create func);
       A.ins1 BL (DSL.symbol (S.create "caml_c_call_stack_args"));
       record_frame i.live (Dbg_other i.dbg))
@@ -1939,6 +1939,7 @@ let emit_instr i =
     emit_stack_adjustment (-n);
     stack_offset := !stack_offset + n
   | Lop (Load { memory_chunk; addressing_mode; is_atomic; _ }) -> (
+    let open Arm64_ast.Symbol in
     assert (
       Cmm.equal_memory_chunk memory_chunk Cmm.Word_int
       || Cmm.equal_memory_chunk memory_chunk Cmm.Word_val
@@ -1951,7 +1952,9 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
         A.ins2 ADRP
-          (DSL.reg_x reg_tmp1, DSL.symbol ~reloc:PAGE ~offset:ofs (S.create s));
+          ( DSL.reg_x reg_tmp1,
+            DSL.symbol ~reloc:(Different_section PAGE) ~offset:ofs (S.create s)
+          );
         reg_tmp1
     in
     let default_addressing = DSL.addressing addressing_mode base in
@@ -1969,7 +1972,7 @@ let emit_instr i =
       if is_atomic
       then (
         assert (Arch.equal_addressing_mode addressing_mode (Iindexed 0));
-        A.ins (DMB ISHLD) ();
+        A.ins0 (DMB ISHLD);
         A.ins2 LDAR (DSL.reg_x dst, DSL.mem i.arg.(0)))
       else A.ins2 LDR (DSL.reg_x dst, default_addressing)
     | Double -> A.ins2 LDR_simd_and_fp (DSL.reg_d dst, default_addressing)
@@ -1981,17 +1984,18 @@ let emit_instr i =
       (match addressing_mode with
       | Iindexed n ->
         A.ins4 ADD_immediate
-          (DSL.reg_x reg_tmp1, DSL.reg_x i.arg.(0), DSL.imm n, None)
+          (DSL.reg_x reg_tmp1, DSL.reg_x i.arg.(0), DSL.imm n, DSL.optional_none)
       | Ibased (s, offset) ->
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
         let s = S.create s in
-        A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~reloc:PAGE ~offset s);
+        A.ins2 ADRP
+          (DSL.reg_x reg_tmp1, DSL.symbol ~reloc:(Different_section PAGE) ~offset s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
             DSL.reg_x reg_tmp1,
-            DSL.symbol s ~reloc:LOWER_TWELVE ~offset,
-            None ));
+            DSL.symbol s ~reloc:(Different_section LOWER_TWELVE) ~offset,
+            DSL.optional_none ));
       A.ins2 LDR_simd_and_fp (DSL.reg_q_operand dst, DSL.mem reg_tmp1)
     | Twofiftysix_aligned | Twofiftysix_unaligned | Fivetwelve_aligned
     | Fivetwelve_unaligned ->

@@ -1348,6 +1348,8 @@ module DSL : sig
 
   val optional_none : [`Optional of 'a option] Operand.t
 
+  val unit_operand : unit Operand.t
+
   val mem : base:[`GP of [< `X | `SP]] Reg.t -> [`Mem] Operand.t
 
   val mem_offset :
@@ -1447,6 +1449,7 @@ module DSL : sig
     val ins2 : (pair, 'a * 'b) Instruction_name.t -> 'a Operand.t * 'b Operand.t -> unit
     val ins3 : (triple, 'a * 'b * 'c) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t -> unit
     val ins4 : (quad, 'a * 'b * 'c * 'd) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t * 'd Operand.t -> unit
+    val ins0 : (singleton, unit) Instruction_name.t -> unit
 
     (** Expansion of instructions that are aliases *)
 
