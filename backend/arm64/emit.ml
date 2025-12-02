@@ -380,7 +380,8 @@ end = struct
     | Ibased (s, ofs) ->
       assert (not !Clflags.dlcode);
       (* see selection.ml *)
-      emit_mem_symbol r ~reloc:LOWER_TWELVE (S.create s) ~offset:ofs
+      emit_mem_symbol r
+        ~reloc:(Different_section LOWER_TWELVE) (S.create s) ~offset:ofs
 
   let stack (r : Reg.t) =
     match r.loc with
@@ -1079,18 +1080,26 @@ let emit_literals () =
 (* Emit code to load the address of a symbol *)
 
 let emit_load_symbol_addr dst s =
+  let open Arm64_ast.Symbol in
   if macosx
   then (
-    A.ins ADRP (DSL.reg_x dst, DSL.symbol s ~reloc:GOT_PAGE);
-    A.ins LDR (DSL.reg_x dst, DSL.emit_mem_symbol dst ~reloc:GOT_PAGE_OFF s))
+    A.ins ADRP (DSL.reg_x dst, DSL.symbol s ~reloc:(Different_section GOT_PAGE));
+    A.ins LDR
+      (DSL.reg_x dst,
+       DSL.emit_mem_symbol dst ~reloc:(Different_section GOT_PAGE_OFF) s))
   else if not !Clflags.dlcode
   then (
     A.ins ADRP (DSL.reg_x dst, DSL.symbol s);
     A.ins ADD_immediate
-      (DSL.reg_x dst, DSL.reg_x dst, DSL.symbol s ~reloc:LOWER_TWELVE, None))
+      ( DSL.reg_x dst,
+        DSL.reg_x dst,
+        DSL.symbol s ~reloc:(Different_section LOWER_TWELVE),
+        None ))
   else (
-    A.ins ADRP (DSL.reg_x dst, DSL.symbol ~reloc:GOT s);
-    A.ins LDR (DSL.reg_x dst, DSL.emit_mem_symbol dst ~reloc:GOT_LOWER_TWELVE s))
+    A.ins ADRP (DSL.reg_x dst, DSL.symbol ~reloc:(Different_section GOT) s);
+    A.ins LDR
+      (DSL.reg_x dst,
+       DSL.emit_mem_symbol dst ~reloc:(Different_section GOT_LOWER_TWELVE) s))
 
 (* The following functions are used for calculating the sizes of the call GC and
    bounds check points emitted out-of-line from the function body. See

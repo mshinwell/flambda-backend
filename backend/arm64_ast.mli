@@ -1339,19 +1339,19 @@ module DSL : sig
     amount:int ->
     [`Shift of 'op * [`Six]] Operand.t
 
-  val mem : base:[`GP of [`X | `SP]] Reg.t -> [`Mem] Operand.t
+  val mem : base:[`GP of [< `X | `SP]] Reg.t -> [`Mem] Operand.t
 
   val mem_offset :
-    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_symbol :
-    base:[`GP of [`X | `SP]] Reg.t -> symbol:[`Twelve] Symbol.t -> [`Mem] Operand.t
+    base:[`GP of [< `X | `SP]] Reg.t -> symbol:[`Twelve] Symbol.t -> [`Mem] Operand.t
 
   val mem_pre :
-    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_post :
-    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val cond : Cond.t -> [`Cond] Operand.t
 

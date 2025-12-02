@@ -640,17 +640,17 @@ module Operand = struct
 
     (* ARMARM Section C1.3.3, Table C1-8 *)
     type t =
-      | Reg : [`GP of [`X | `SP]] Reg.t -> t
+      | Reg : [`GP of [< `X | `SP]] Reg.t -> t
       | Offset :
-          [`GP of [`X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
           -> t
-      | Literal : [`GP of [`X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
-      | Pre : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
-      | Post : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
+      | Literal : [`GP of [< `X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
+      | Pre : [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
+      | Post : [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
       (* Addressing modes for load/store pair (LDP/STP) *)
-      | Offset_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
-      | Pre_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
-      | Post_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Offset_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Pre_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Post_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
     [@@warning "-37"]
 
     let print ppf (t : t) =
@@ -2544,21 +2544,21 @@ end
 module DSL = struct
   let symbol (type w) (s : w Symbol.t) = Operand.Imm (Operand.Imm.Sym s)
 
-  let mem ~(base : [< `GP of [< `X | `SP]] Reg.t) = Operand.Mem (Reg base)
+  let mem ~(base : [`GP of [< `X | `SP]] Reg.t) = Operand.Mem (Reg base)
 
-  let mem_offset ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
+  let mem_offset ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset]. We should probably call this [offset_in_bytes] to
        avoid any confusion. It must be zero mod transfer size *)
     Operand.Mem (Offset (base, Imm (Twelve_unsigned_scaled offset)))
 
-  let mem_symbol ~(base : [< `GP of [< `X | `SP]] Reg.t) ~symbol =
+  let mem_symbol ~(base : [`GP of [< `X | `SP]] Reg.t) ~symbol =
     Operand.Mem (Offset (base, Symbol_with_reloc symbol))
 
-  let mem_pre ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
+  let mem_pre ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset] *)
     Operand.Mem (Pre (base, Imm (Nine_signed_unscaled offset)))
 
-  let mem_post ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
+  let mem_post ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset] *)
     Operand.Mem (Post (base, Imm (Nine_signed_unscaled offset)))
 
