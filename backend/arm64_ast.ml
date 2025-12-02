@@ -646,15 +646,9 @@ module Operand = struct
       | Pre : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
       | Post : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
       (* Addressing modes for load/store pair (LDP/STP) *)
-      | Offset_pair :
-          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
-          -> t
-      | Pre_pair :
-          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
-          -> t
-      | Post_pair :
-          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
-          -> t
+      | Offset_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Pre_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Post_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
 
     let print ppf (t : t) =
       let open Format in
@@ -2946,6 +2940,7 @@ let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
 
 (* Load register (literal) - C4.1.96.19 *)
 let encode_load_literal ~opc ~v ~imm19 ~rt =
+  assert (imm19 >= 0 && imm19 <= 0x7ffff);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int opc) 30) in
@@ -2967,6 +2962,12 @@ let encode_adr ~op ~immlo ~immhi ~rd =
   result
 
 let split_21bit_immediate (imm21 : int) : int * int =
+  if imm21 < -0x100000 || imm21 > 0xfffff
+  then
+    Misc.fatal_errorf
+      "Immediate value %d (0x%x) out of range for 21-bit signed immediate (max \
+       ±0x100000)"
+      imm21 imm21;
   let immlo = imm21 land 0b11 in
   let immhi = (imm21 lsr 2) land 0x7ffff in
   immlo, immhi
@@ -3010,6 +3011,7 @@ let encode_six_bit_shift (shift_opt : [`Shift of _ * [`Six]] Operand.t option) =
 
 (* Load/store register (unscaled immediate) - C4.1.96.25 *)
 let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
+  assert (imm9 >= 0 && imm9 <= 0x1ff);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int size) 30) in
@@ -3023,6 +3025,7 @@ let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
 
 (* Load/store register (immediate post-indexed) - C4.1.96.26 *)
 let encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
+  assert (imm9 >= 0 && imm9 <= 0x1ff);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int size) 30) in
@@ -3037,6 +3040,7 @@ let encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
 
 (* Load/store register (immediate pre-indexed) - C4.1.96.28 *)
 let encode_load_store_pre_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
+  assert (imm9 >= 0 && imm9 <= 0x1ff);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int size) 30) in
@@ -3051,6 +3055,7 @@ let encode_load_store_pre_indexed ~size ~vr ~opc ~imm9 ~rn ~rt =
 
 (* Load/store register (unsigned immediate) - C4.1.96.27 *)
 let encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt =
+  assert (imm12 >= 0 && imm12 <= 0xfff);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int size) 30) in
@@ -3063,9 +3068,10 @@ let encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (post-indexed) - C4.1.96.15
-   Encoding: opc[1:0] | 101 | V | 001 | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (post-indexed) - C4.1.96.15 Encoding: opc[1:0] | 101 | V |
+   001 | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int opc) 30) in
@@ -3079,9 +3085,10 @@ let encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (pre-indexed) - C4.1.96.17
-   Encoding: opc[1:0] | 101 | V | 011 | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (pre-indexed) - C4.1.96.17 Encoding: opc[1:0] | 101 | V | 011
+   | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int opc) 30) in
@@ -3095,9 +3102,10 @@ let encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (signed offset) - C4.1.96.16
-   Encoding: opc[1:0] | 101 | V | 010 | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (signed offset) - C4.1.96.16 Encoding: opc[1:0] | 101 | V |
+   010 | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int opc) 30) in
@@ -3145,10 +3153,17 @@ let encode_load_store_gp :
         Misc.fatal_errorf
           "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
           instr_name pc_relative_offset sym.name;
-      let imm19 = pc_relative_offset / 4 land 0x7FFFF in
+      let imm19_unmasked = pc_relative_offset / 4 in
+      if imm19_unmasked < -0x40000 || imm19_unmasked > 0x3ffff
+      then
+        Misc.fatal_errorf
+          "%s (literal) offset %d to symbol '%s' out of range (max ±1MB)"
+          instr_name pc_relative_offset sym.name;
+      let imm19 = imm19_unmasked land 0x7FFFF in
       let v = 0 in
       encode_load_literal ~opc ~v ~imm19 ~rt)
   | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
+    let max_imm12 = 0xfff in
     let reg_size_bytes = if size = 0b11 then 8 else 4 in
     if imm12 mod reg_size_bytes <> 0
     then
@@ -3156,11 +3171,18 @@ let encode_load_store_gp :
         "%s offset %d must be aligned to %d-byte register size (rd=%s, rn=%s)"
         instr_name imm12 reg_size_bytes (Reg.name rd) (Reg.name rn);
     let rn = Reg.gp_encoding rn in
-    let imm12_scaled = imm12 / reg_size_bytes land 0xFFF in
+    let imm12_scaled = imm12 / reg_size_bytes in
+    if imm12_scaled < 0 || imm12_scaled > max_imm12
+    then
+      Misc.fatal_errorf
+        "%s offset %d (scaled: %d) out of range (max 0x%x * %d = 0x%x bytes)"
+        instr_name imm12 imm12_scaled max_imm12 reg_size_bytes
+        (max_imm12 * reg_size_bytes);
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
   | Offset (rn, Symbol_with_reloc sym) -> (
     match sym.reloc with
     | Different_section reloc ->
+      let max_imm12 = 0xfff in
       let reloc_type =
         match reloc with
         | GOT_PAGE_OFF -> GOT_PAGE_OFF
@@ -3171,7 +3193,14 @@ let encode_load_store_gp :
       add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
         ~reloc_type;
       let rn = Reg.gp_encoding rn in
-      let imm12 = (sym.offset lsr if size = 0b11 then 3 else 2) land 0xFFF in
+      let shift = if size = 0b11 then 3 else 2 in
+      let imm12_unmasked = sym.offset lsr shift in
+      if imm12_unmasked < 0 || imm12_unmasked > max_imm12
+      then
+        Misc.fatal_errorf
+          "%s symbol offset %d (shifted by %d) out of range (max 0x%x)"
+          instr_name sym.offset shift max_imm12;
+      let imm12 = imm12_unmasked land 0xFFF in
       encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
     let imm9 = imm land 0x1FF in
@@ -3186,9 +3215,8 @@ let encode_load_store_gp :
       "%s: pair addressing modes not supported for single-register load/store"
       instr_name
 
-(* Encode LDP/STP instructions for GP registers.
-   l=1 for load (LDP), l=0 for store (STP).
-   opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
+(* Encode LDP/STP instructions for GP registers. l=1 for load (LDP), l=0 for
+   store (STP). opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
 let encode_load_store_pair_gp :
     type a b.
     instr_name:string ->
@@ -3208,7 +3236,8 @@ let encode_load_store_pair_gp :
   let rt1_enc = Reg.gp_encoding rt1 in
   let rt2_enc = Reg.gp_encoding rt2 in
   let encode_with_alignment_check encode_fn rn imm =
-    if imm mod scale <> 0 then
+    if imm mod scale <> 0
+    then
       Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
         imm scale;
     let imm7 = imm / scale in
