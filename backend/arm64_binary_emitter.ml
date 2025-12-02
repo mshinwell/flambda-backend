@@ -922,7 +922,8 @@ let emit t =
       Asm_section.Tbl.add section_tbl section state;
       state
   in
-  (* First pass: compute offsets of local symbol and label definitions *)
+  (* First pass: compute offsets of local symbol and label definitions. We
+     nee *)
   (* ... *)
   (* Second pass: emit machine code and data *)
   (* ... *)
