@@ -621,11 +621,11 @@ module Operand = struct
     end
 
     type t =
-      | Reg : [< `GP of [`X | `SP]] Reg.t -> t
+      | Reg : [`GP of [`X | `SP]] Reg.t -> t
       (* CR mshinwell: Offset -> Unsigned_offset? *)
-      | Offset : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
-      | Pre : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
-      | Post : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Offset : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Pre : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Post : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
 
     let print ppf (t : t) =
       let open Format in
