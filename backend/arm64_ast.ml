@@ -572,7 +572,7 @@ module Operand = struct
       (* XXX signedness for Six and Twelve? *)
       | Six : int -> [`Six] t
       | Twelve : int -> [`Twelve] t
-      | Seven_signed : int -> [`Seven_signed] t
+      | Seven_signed_scaled : int -> [`Seven_signed] t
       | Nine_signed_unscaled : int -> [`Nine_signed_unscaled] t
       | Twelve_unsigned_scaled : int -> [`Twelve_unsigned_scaled] t
       | Sixteen_unsigned : int -> [`Sixteen_unsigned] t
@@ -585,7 +585,7 @@ module Operand = struct
       match t with
       | Six n -> Format.fprintf ppf "#%d" n
       | Twelve n -> Format.fprintf ppf "#%d" n
-      | Seven_signed n -> Format.fprintf ppf "#%d" n
+      | Seven_signed_scaled n -> Format.fprintf ppf "#%d" n
       | Nine_signed_unscaled n -> Format.fprintf ppf "#%d" n
       | Twelve_unsigned_scaled n -> Format.fprintf ppf "#%d" n
       | Sixteen_unsigned n -> Format.fprintf ppf "#%d" n
@@ -645,6 +645,16 @@ module Operand = struct
       | Literal : [`GP of [`X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
       | Pre : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
       | Post : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
+      (* Addressing modes for load/store pair (LDP/STP) *)
+      | Offset_pair :
+          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
+          -> t
+      | Pre_pair :
+          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
+          -> t
+      | Post_pair :
+          [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t
+          -> t
 
     let print ppf (t : t) =
       let open Format in
@@ -654,6 +664,12 @@ module Operand = struct
       | Literal (r, sym) -> fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
       | Pre (r, off) -> fprintf ppf "[%s, %a]!" (Reg.name r) Offset.print off
       | Post (r, off) -> fprintf ppf "[%s], %a" (Reg.name r) Offset.print off
+      | Offset_pair (r, off) ->
+        fprintf ppf "[%s, %a]" (Reg.name r) Offset.print off
+      | Pre_pair (r, off) ->
+        fprintf ppf "[%s, %a]!" (Reg.name r) Offset.print off
+      | Post_pair (r, off) ->
+        fprintf ppf "[%s], %a" (Reg.name r) Offset.print off
   end
 
   type _ t =
@@ -1228,8 +1244,8 @@ module Instruction_name = struct
     | LDAR : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem]) t
     | LDP
         : ( triple,
-            [< `Reg of [< `GP of [< `X | `W | `LR]]]
-            * [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Reg of [`GP of [< `X | `W | `LR]]]
             * [< `Mem] )
           t
     | LDR : (pair, [< `Reg of [`GP of [< `X | `W | `LR]]] * [< `Mem]) t
@@ -3047,6 +3063,54 @@ let encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
+(* Load/store pair (post-indexed) - C4.1.96.15
+   Encoding: opc[1:0] | 101 | V | 001 | L | imm7 | Rt2 | Rn | Rt *)
+let encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int opc) 30) in
+  let result = logor result (shift_left (of_int 0b101) 27) in
+  let result = logor result (shift_left (of_int v) 26) in
+  let result = logor result (shift_left (of_int 0b001) 23) in
+  let result = logor result (shift_left (of_int l) 22) in
+  let result = logor result (shift_left (of_int (imm7 land 0x7F)) 15) in
+  let result = logor result (shift_left (of_int rt2) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rt) in
+  result
+
+(* Load/store pair (pre-indexed) - C4.1.96.17
+   Encoding: opc[1:0] | 101 | V | 011 | L | imm7 | Rt2 | Rn | Rt *)
+let encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int opc) 30) in
+  let result = logor result (shift_left (of_int 0b101) 27) in
+  let result = logor result (shift_left (of_int v) 26) in
+  let result = logor result (shift_left (of_int 0b011) 23) in
+  let result = logor result (shift_left (of_int l) 22) in
+  let result = logor result (shift_left (of_int (imm7 land 0x7F)) 15) in
+  let result = logor result (shift_left (of_int rt2) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rt) in
+  result
+
+(* Load/store pair (signed offset) - C4.1.96.16
+   Encoding: opc[1:0] | 101 | V | 010 | L | imm7 | Rt2 | Rn | Rt *)
+let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int opc) 30) in
+  let result = logor result (shift_left (of_int 0b101) 27) in
+  let result = logor result (shift_left (of_int v) 26) in
+  let result = logor result (shift_left (of_int 0b010) 23) in
+  let result = logor result (shift_left (of_int l) 22) in
+  let result = logor result (shift_left (of_int (imm7 land 0x7F)) 15) in
+  let result = logor result (shift_left (of_int rt2) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rt) in
+  result
+
 let encode_load_store_gp :
     type a.
     instr_name:string ->
@@ -3117,6 +3181,64 @@ let encode_load_store_gp :
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
+  | Offset_pair _ | Pre_pair _ | Post_pair _ ->
+    Misc.fatal_errorf
+      "%s: pair addressing modes not supported for single-register load/store"
+      instr_name
+
+(* Encode LDP/STP instructions for GP registers.
+   l=1 for load (LDP), l=0 for store (STP).
+   opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
+let encode_load_store_pair_gp :
+    type a b.
+    instr_name:string ->
+    l:int ->
+    rt1:[`GP of a] Reg.t ->
+    rt2:[`GP of b] Reg.t ->
+    Operand.Addressing_mode.t ->
+    int32 =
+ fun ~instr_name ~l ~rt1 ~rt2 addressing ->
+  let opc =
+    match rt1.reg_name with
+    | GP W | GP WZR | GP WSP -> 0b00
+    | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b10
+  in
+  let scale = if opc = 0b10 then 8 else 4 in
+  let v = 0 in
+  let rt1_enc = Reg.gp_encoding rt1 in
+  let rt2_enc = Reg.gp_encoding rt2 in
+  match addressing with
+  | Offset_pair (rn, Imm (Seven_signed_scaled imm)) ->
+    if imm mod scale <> 0
+    then
+      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
+        imm scale;
+    let imm7 = imm / scale in
+    let rn = Reg.gp_encoding rn in
+    encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
+      ~rt:rt1_enc
+  | Pre_pair (rn, Imm (Seven_signed_scaled imm)) ->
+    if imm mod scale <> 0
+    then
+      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
+        imm scale;
+    let imm7 = imm / scale in
+    let rn = Reg.gp_encoding rn in
+    encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
+      ~rt:rt1_enc
+  | Post_pair (rn, Imm (Seven_signed_scaled imm)) ->
+    if imm mod scale <> 0
+    then
+      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
+        imm scale;
+    let imm7 = imm / scale in
+    let rn = Reg.gp_encoding rn in
+    encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
+      ~rt:rt1_enc
+  | Reg _ | Literal _ | Offset _ | Pre _ | Post _ ->
+    Misc.fatal_errorf
+      "%s: single-register addressing modes not supported for pair load/store"
+      instr_name
 
 let encode_instruction :
     type num operands.
@@ -3233,7 +3355,8 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), INS _ -> assert false
   | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
   | Pair (Reg _rd, Mem _addressing), LDAR -> assert false
-  | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
+  | Triple (Reg rt1, Reg rt2, Mem addressing), LDP ->
+    encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
     encode_load_store_gp ~instr_name:"LDR" ~opc:0b01 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
