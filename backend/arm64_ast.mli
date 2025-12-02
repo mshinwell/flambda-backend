@@ -77,11 +77,11 @@ module Reg : sig
 
   val reg_q : int -> [`Neon of [`Scalar of [`Q]]] t
 
-  val reg_v2d : int -> [`Neon of [`Vector of [`V2D]]] t
+  val reg_v2d : int -> [`Neon of [`Vector of [`V2D] * [`D]]] t
 
-  val reg_v16b : int -> [`Neon of [`Vector of [`V16B]]] t
+  val reg_v16b : int -> [`Neon of [`Vector of [`V16B] * [`B]]] t
 
-  val reg_v8b : int -> [`Neon of [`Vector of [`V8B]]] t
+  val reg_v8b : int -> [`Neon of [`Vector of [`V8B] * [`B]]] t
 
   val reg_b : int -> [`Neon of [`Scalar of [`B]]] t
 
@@ -1425,14 +1425,14 @@ module DSL : sig
     lane:int ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Operand.t
 
-  val print_ins : 'operands Instruction_name.t -> 'operands -> string
+  val print_ins : ('num, 'operands) Instruction_name.t -> 'operands -> string
 
   module Acc : sig
     val set_emit_string : emit_string:(string -> unit) -> unit
 
     (** Passes the instruction to the function provided to [set_emit_string].
         (Can't directly reference [Emitaux] due to a circular dependency.) *)
-    val ins : 'operands Instruction_name.t -> 'operands -> unit
+    val ins : ('num, 'operands) Instruction_name.t -> 'operands -> unit
 
     (** Expansion of instructions that are aliases *)
 
@@ -1498,6 +1498,6 @@ module DSL : sig
   end
 
   module Binary_encoder : sig
-    val encode_instruction : 'operands Instruction_name.t -> 'operands -> int32
+    val encode_instruction : ('num, 'operands) Instruction_name.t -> 'operands -> int32
   end
 end

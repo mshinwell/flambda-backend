@@ -379,7 +379,7 @@ type _ operand_shape =
 
 type simd_operation_with_operand_regs =
   | S :
-      'a Arm64_ast.Instruction_name.t * 'a operand_shape
+      ('num, 'a) Arm64_ast.Instruction_name.t * 'a operand_shape
       -> simd_operation_with_operand_regs
   | Transformed_in_emit
 

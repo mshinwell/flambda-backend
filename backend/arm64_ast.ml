@@ -2512,6 +2512,32 @@ module Instruction_name = struct
   end
 end
 
+module Instruction = struct
+  type t =
+    | I :
+        { name : ('num, 'operands) Instruction_name.t;
+          operands : ('num, 'operands) many
+        }
+        -> t
+
+  let create name ~operands = I { name; operands }
+
+  let print ppf (I { name; operands }) =
+    let name_str = Instruction_name.Wrapped.to_string (I name) in
+    let operands_arr =
+      Instruction_name.Untyped.operands_as_array name operands
+    in
+    if Array.length operands_arr = 0
+    then Format.fprintf ppf "%s" name_str
+    else (
+      Format.fprintf ppf "%s\t" name_str;
+      Array.iteri
+        (fun i op ->
+          if i > 0 then Format.fprintf ppf ", ";
+          Operand.Wrapped.print ppf op)
+        operands_arr)
+end
+
 module DSL = struct
   let symbol (type w) (s : w Symbol.t) = Operand.Imm (Operand.Imm.Sym s)
 
@@ -2634,13 +2660,14 @@ module DSL = struct
 
     let set_emit_string ~emit_string:emit = emit_string := Some emit
 
-    let ins (type a) (name : a Instruction_name.t) (operands : a) =
+    let ins (type num a) (name : (num, a) Instruction_name.t)
+        (operands : (num, a) many) =
       let instr = Instruction.create name ~operands in
       let str = Format.asprintf "\t%a\n" Instruction.print instr in
       match !emit_string with None -> () | Some emit_string -> emit_string str
 
     (* Instructions that are expanded into others *)
-    let ins_mul rd rn rm = ins MADD (rd, rn, rm, reg_op (Reg.xzr ()))
+    let ins_mul rd rn rm = ins MADD (Quad (rd, rn, rm, reg_op (Reg.xzr ())))
 
     (* LSL <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #(-<shift> MOD 64),
        #(63-<shift>) *)
@@ -2650,61 +2677,62 @@ module DSL = struct
       let n' = if n < 0 then n + 64 else n in
       let immr = Operand.Imm (Six n') in
       let imms = Operand.Imm (Six (63 - shift_in_bits)) in
-      ins UBFM (rd, rn, immr, imms)
+      ins UBFM (Quad (rd, rn, immr, imms))
 
     (* LSR <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #<shift>, #63 *)
     let ins_lsr_immediate rd rn ~shift_in_bits =
       (* CR mshinwell: range checks on shift? *)
       let immr = Operand.Imm (Six shift_in_bits) in
       let imms = Operand.Imm (Six 63) in
-      ins UBFM (rd, rn, immr, imms)
+      ins UBFM (Quad (rd, rn, immr, imms))
 
     (* ASR <Xd>, <Xn>, #<shift> -> SBFM <Xd>, <Xn>, #<shift>, #63 *)
     let ins_asr_immediate rd rn ~shift_in_bits =
       (* CR mshinwell: range checks on shift? *)
       let immr = Operand.Imm (Six shift_in_bits) in
       let imms = Operand.Imm (Six 63) in
-      ins SBFM (rd, rn, immr, imms)
+      ins SBFM (Quad (rd, rn, immr, imms))
 
     (* UXTB <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #7 *)
     let ins_uxtb wd wn =
       let immr = Operand.Imm (Six 0) in
       let imms = Operand.Imm (Six 7) in
-      ins UBFM (wd, wn, immr, imms)
+      ins UBFM (Quad (wd, wn, immr, imms))
 
     (* UXTH <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #15 *)
     let ins_uxth wd wn =
       let immr = Operand.Imm (Six 0) in
       let imms = Operand.Imm (Six 15) in
-      ins UBFM (wd, wn, immr, imms)
+      ins UBFM (Quad (wd, wn, immr, imms))
 
     (* CMP <Xn|SP>, #<imm>{, <shift>} -> SUBS XZR, <Xn|SP>, #<imm>{, <shift>} *)
     let ins_cmp rn imm shift_opt =
-      ins SUBS_immediate (reg_op (Reg.xzr ()), rn, imm, shift_opt)
+      ins SUBS_immediate (Quad (reg_op (Reg.xzr ()), rn, imm, shift_opt))
 
     (* CMP <Xn>, <Xm>{, <shift>} -> SUBS XZR, <Xn>, <Xm>{, <shift>} *)
     let ins_cmp_reg rn rm shift_opt =
-      ins SUBS_shifted_register (reg_op (Reg.xzr ()), rn, rm, shift_opt)
+      ins SUBS_shifted_register (Quad (reg_op (Reg.xzr ()), rn, rm, shift_opt))
 
     (* CMN <Xn|SP>, #<imm>{, <shift>} -> ADDS XZR, <Xn|SP>, #<imm>{, <shift>} *)
     let ins_cmn rn imm shift_opt =
-      ins ADDS (reg_op (Reg.xzr ()), rn, imm, shift_opt)
+      ins ADDS (Quad (reg_op (Reg.xzr ()), rn, imm, shift_opt))
 
     (* CSET <Xd>, <invcond> -> CSINC <Xd>, XZR, XZR, <cond> *)
     let ins_cset rd invcond =
       ins CSINC
-        ( rd,
-          reg_op (Reg.xzr ()),
-          reg_op (Reg.xzr ()),
-          Operand.Cond (Cond.invert invcond) )
+        (Quad
+           ( rd,
+             reg_op (Reg.xzr ()),
+             reg_op (Reg.xzr ()),
+             Operand.Cond (Cond.invert invcond) ))
 
     (* MOV from SP -> ADD <Xd>, SP, #0 *)
     let ins_mov_from_sp ~dst:rd =
-      ins ADD_immediate (rd, reg_op (Reg.sp ()), imm 0, None)
+      ins ADD_immediate (Quad (rd, reg_op (Reg.sp ()), imm 0, Optional None))
 
     (* MOV to SP -> ADD SP, <Xn>, #0 *)
     let ins_mov_to_sp ~src:rn =
-      ins ADD_immediate (reg_op (Reg.sp ()), rn, imm 0, None)
+      ins ADD_immediate (Quad (reg_op (Reg.sp ()), rn, imm 0, Optional None))
   end
 end
 
