@@ -2624,70 +2624,88 @@ module DSL = struct
 
   (* CR sspies: probably these should be part of the instruction name instead *)
   let float_cond c = Operand.Float_cond c
-  (* let print_ins name operands = Format.asprintf "%a" Instruction.print
-     (Instruction.create name ~operands)
 
-     (* CR mshinwell: Acc should not be in this file *) module Acc = struct let
-     emit_string = ref None
+  let print_ins name operands =
+    Format.asprintf "%a" Instruction.print (Instruction.create name ~operands)
 
-     let set_emit_string ~emit_string:emit = emit_string := Some emit
+  (* CR mshinwell: Acc should not be in this file *)
+  module Acc = struct
+    let emit_string = ref None
 
-     let ins (type a) (name : a Instruction_name.t) (operands : a) = let instr =
-     Instruction.create name ~operands in let str = Format.asprintf "\t%a\n"
-     Instruction.print instr in match !emit_string with None -> () | Some
-     emit_string -> emit_string str *)
+    let set_emit_string ~emit_string:emit = emit_string := Some emit
 
-  (* Instructions that are expanded into others *)
-  (* let ins_mul rd rn rm = ins MADD (rd, rn, rm, reg_op (Reg.xzr ()))
+    let ins (type a) (name : a Instruction_name.t) (operands : a) =
+      let instr = Instruction.create name ~operands in
+      let str = Format.asprintf "\t%a\n" Instruction.print instr in
+      match !emit_string with None -> () | Some emit_string -> emit_string str
 
-     (* LSL <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #(-<shift> MOD 64),
-     #(63-<shift>) *) let ins_lsl_immediate rd rn ~shift_in_bits = (* CR
-     mshinwell: range checks on shift? *) let n = -shift_in_bits in let n' = if
-     n < 0 then n + 64 else n in let immr = Operand.Imm (Six n') in let imms =
-     Operand.Imm (Six (63 - shift_in_bits)) in ins UBFM (rd, rn, immr, imms)
+    (* Instructions that are expanded into others *)
+    let ins_mul rd rn rm = ins MADD (rd, rn, rm, reg_op (Reg.xzr ()))
 
-     (* LSR <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #<shift>, #63 *) let
-     ins_lsr_immediate rd rn ~shift_in_bits = (* CR mshinwell: range checks on
-     shift? *) let immr = Operand.Imm (Six shift_in_bits) in let imms =
-     Operand.Imm (Six 63) in ins UBFM (rd, rn, immr, imms)
+    (* LSL <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #(-<shift> MOD 64),
+       #(63-<shift>) *)
+    let ins_lsl_immediate rd rn ~shift_in_bits =
+      (* CR mshinwell: range checks on shift? *)
+      let n = -shift_in_bits in
+      let n' = if n < 0 then n + 64 else n in
+      let immr = Operand.Imm (Six n') in
+      let imms = Operand.Imm (Six (63 - shift_in_bits)) in
+      ins UBFM (rd, rn, immr, imms)
 
-     (* ASR <Xd>, <Xn>, #<shift> -> SBFM <Xd>, <Xn>, #<shift>, #63 *) let
-     ins_asr_immediate rd rn ~shift_in_bits = (* CR mshinwell: range checks on
-     shift? *) let immr = Operand.Imm (Six shift_in_bits) in let imms =
-     Operand.Imm (Six 63) in ins SBFM (rd, rn, immr, imms)
+    (* LSR <Xd>, <Xn>, #<shift> -> UBFM <Xd>, <Xn>, #<shift>, #63 *)
+    let ins_lsr_immediate rd rn ~shift_in_bits =
+      (* CR mshinwell: range checks on shift? *)
+      let immr = Operand.Imm (Six shift_in_bits) in
+      let imms = Operand.Imm (Six 63) in
+      ins UBFM (rd, rn, immr, imms)
 
-     (* UXTB <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #7 *) let ins_uxtb wd wn = let
-     immr = Operand.Imm (Six 0) in let imms = Operand.Imm (Six 7) in ins UBFM
-     (wd, wn, immr, imms)
+    (* ASR <Xd>, <Xn>, #<shift> -> SBFM <Xd>, <Xn>, #<shift>, #63 *)
+    let ins_asr_immediate rd rn ~shift_in_bits =
+      (* CR mshinwell: range checks on shift? *)
+      let immr = Operand.Imm (Six shift_in_bits) in
+      let imms = Operand.Imm (Six 63) in
+      ins SBFM (rd, rn, immr, imms)
 
-     (* UXTH <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #15 *) let ins_uxth wd wn = let
-     immr = Operand.Imm (Six 0) in let imms = Operand.Imm (Six 15) in ins UBFM
-     (wd, wn, immr, imms)
+    (* UXTB <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #7 *)
+    let ins_uxtb wd wn =
+      let immr = Operand.Imm (Six 0) in
+      let imms = Operand.Imm (Six 7) in
+      ins UBFM (wd, wn, immr, imms)
 
-     [@@@ocaml.warning "-18"] (* CR mshinwell: deal with non-principal warnings
-     *)
+    (* UXTH <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #15 *)
+    let ins_uxth wd wn =
+      let immr = Operand.Imm (Six 0) in
+      let imms = Operand.Imm (Six 15) in
+      ins UBFM (wd, wn, immr, imms)
 
-     (* CMP <Xn|SP>, #<imm>{, <shift>} -> SUBS XZR, <Xn|SP>, #<imm>{, <shift>}
-     *) let ins_cmp rn imm shift_opt = ins SUBS_immediate (reg_op (Reg.xzr ()),
-     rn, imm, shift_opt)
+    (* CMP <Xn|SP>, #<imm>{, <shift>} -> SUBS XZR, <Xn|SP>, #<imm>{, <shift>} *)
+    let ins_cmp rn imm shift_opt =
+      ins SUBS_immediate (reg_op (Reg.xzr ()), rn, imm, shift_opt)
 
-     (* CMP <Xn>, <Xm>{, <shift>} -> SUBS XZR, <Xn>, <Xm>{, <shift>} *) let
-     ins_cmp_reg rn rm shift_opt = ins SUBS_shifted_register (reg_op (Reg.xzr
-     ()), rn, rm, shift_opt)
+    (* CMP <Xn>, <Xm>{, <shift>} -> SUBS XZR, <Xn>, <Xm>{, <shift>} *)
+    let ins_cmp_reg rn rm shift_opt =
+      ins SUBS_shifted_register (reg_op (Reg.xzr ()), rn, rm, shift_opt)
 
-     (* CMN <Xn|SP>, #<imm>{, <shift>} -> ADDS XZR, <Xn|SP>, #<imm>{, <shift>}
-     *) let ins_cmn rn imm shift_opt = ins ADDS (reg_op (Reg.xzr ()), rn, imm,
-     shift_opt)
+    (* CMN <Xn|SP>, #<imm>{, <shift>} -> ADDS XZR, <Xn|SP>, #<imm>{, <shift>} *)
+    let ins_cmn rn imm shift_opt =
+      ins ADDS (reg_op (Reg.xzr ()), rn, imm, shift_opt)
 
-     (* CSET <Xd>, <invcond> -> CSINC <Xd>, XZR, XZR, <cond> *) let ins_cset rd
-     invcond = ins CSINC ( rd, reg_op (Reg.xzr ()), reg_op (Reg.xzr ()),
-     Operand.Cond (Cond.invert invcond) )
+    (* CSET <Xd>, <invcond> -> CSINC <Xd>, XZR, XZR, <cond> *)
+    let ins_cset rd invcond =
+      ins CSINC
+        ( rd,
+          reg_op (Reg.xzr ()),
+          reg_op (Reg.xzr ()),
+          Operand.Cond (Cond.invert invcond) )
 
-     (* MOV from SP -> ADD <Xd>, SP, #0 *) let ins_mov_from_sp ~dst:rd = ins
-     ADD_immediate (rd, reg_op (Reg.sp ()), imm 0, None)
+    (* MOV from SP -> ADD <Xd>, SP, #0 *)
+    let ins_mov_from_sp ~dst:rd =
+      ins ADD_immediate (rd, reg_op (Reg.sp ()), imm 0, None)
 
-     (* MOV to SP -> ADD SP, <Xn>, #0 *) let ins_mov_to_sp ~src:rn = ins
-     ADD_immediate (reg_op (Reg.sp ()), rn, imm 0, None) *)
+    (* MOV to SP -> ADD SP, <Xn>, #0 *)
+    let ins_mov_to_sp ~src:rn =
+      ins ADD_immediate (reg_op (Reg.sp ()), rn, imm 0, None)
+  end
 end
 
 type reloc_type =

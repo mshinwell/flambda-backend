@@ -33,12 +33,32 @@
     instructions. The name determines the type of data the instruction operates
     on. *)
 
+type any_vector =
+  [ `V8B
+  | `V16B
+  | `V4H
+  | `V8H
+  | `V2S
+  | `V4S
+  | `V1D
+  | `V2D ]
+
+type any_width =
+  [ `B
+  | `H
+  | `S
+  | `D ]
+
 module Neon_reg_name : sig
   module Lane_index : sig
     (** Neon vector register lane indices. *)
-    type t = private int
+    type t
 
     val create : int -> t
+
+    module Src_and_dest : sig
+      type t
+    end
   end
 end
 
@@ -74,11 +94,20 @@ module Symbol : sig
     | GOT_PAGE : [`Twenty_one] reloc_directive
     | GOT_PAGE_OFF : [`Twelve] reloc_directive
     | GOT : [`Sixty_four] reloc_directive
+    (* XXX is Sixty_four correct? *)
     | GOT_LOWER_TWELVE : [`Twelve] reloc_directive
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
 
-  type 'width t
+  type 'w same_section_or_reloc =
+    | Same_section : [`Nineteen] same_section_or_reloc
+    | Different_section : 'w reloc_directive -> 'w same_section_or_reloc
+
+  type 'w t = private
+    { name : string;
+      offset : int;
+      reloc : 'w same_section_or_reloc
+    }
 
   (** Any OS-specific escaping/etc must have been applied first. *)
   val create : ?reloc:'w reloc_directive -> ?offset:int -> string -> 'w t
@@ -165,6 +194,24 @@ module Memory_barrier : sig
     | OSHST  (** waits only for stores and only to the outer shareable domain *)
 end
 
+type singleton = [`Singleton]
+
+type pair = [`Pair]
+
+type triple = [`Triple]
+
+type quad = [`Quad]
+
+type (_, _) many =
+  | Singleton : 'a Operand.t -> (singleton, 'a) many
+  | Pair : 'a Operand.t * 'b Operand.t -> (pair, 'a * 'b) many
+  | Triple :
+      'a Operand.t * 'b Operand.t * 'c Operand.t
+      -> (triple, 'a * 'b * 'c) many
+  | Quad :
+      'a Operand.t * 'b Operand.t * 'c Operand.t * 'd Operand.t
+      -> (quad, 'a * 'b * 'c * 'd) many
+
 module Instruction_name : sig
   (* CR mshinwell: a few of these e.g. ABS_vector don't follow the below
      convention, we should fix the names. *)
@@ -174,1268 +221,1101 @@ module Instruction_name : sig
 
       Names such as "ADD_immediate" are intended to correspond to the titles
       such as "ADD (immediate)" in the ARM Architecture Reference Manual. *)
-  type _ t =
+
+  type (_, _) t =
     | ABS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ADDP_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ADDS
-        : ([< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
-          * [< `Imm of [< `Twelve]] Operand.t
-          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+        : ( quad,
+            [< `Reg of [`GP of [< `X | `XZR]]]
+            * [< `Reg of [`GP of [< `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADDV
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `B]]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Vector of _]]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | ADD_immediate
-        : ([< `Reg of [< `GP of [< `X | `SP | `FP]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `SP | `FP]]] Operand.t
-          * [< `Imm of [< `Twelve]] Operand.t
-          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+        : ( quad,
+            [< `Reg of [`GP of [< `X | `SP | `FP]]]
+            * [< `Reg of [`GP of [< `X | `SP | `FP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADD_shifted_register
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | ADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ADR
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Imm of [< `Twenty_one]] Operand.t)
-          t
-    (* CR mshinwell: try to improve constraint on ADRP second operand? *)
-    | ADRP : ([< `Reg of [< `GP of [< `X]]] Operand.t * _ Operand.t) t
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
+    | ADRP
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
     | AND_immediate
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Bitmask] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X]]]
+            * [< `Bitmask] )
           t
     | AND_shifted_register
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | AND_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ASRV
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]] )
           t
-    | B : [< `Imm of _] Operand.t t
-    | BL : [< `Imm of _] Operand.t t
-    | BLR : [< `Reg of [< `GP of [< `X]]] Operand.t t
-    | BR : [< `Reg of [< `GP of [< `X]]] Operand.t t
-    | B_cond : Cond.t -> [< `Imm of _] Operand.t t
-    | B_cond_float : Float_cond.t -> [< `Imm of _] Operand.t t
-    | CBNZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm of _] Operand.t) t
-    | CBZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Imm of _] Operand.t) t
-    | CLZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
-          t
+    | B : (singleton, [< `Imm of _]) t
+    | BL : (singleton, [< `Imm of _]) t
+    | BLR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | BR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | B_cond : Cond.t -> (singleton, [< `Imm of _]) t
+    | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
+    | CBNZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CBZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CLZ : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | CM_register :
         Cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t)
+        -> ( triple,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | CM_zero :
         Cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t)
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | CNT
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( pair,
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | CNT_vector
-        : (([< `Reg of [< `Neon of [< `Vector of _]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of _]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | CSEL
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Cond] Operand.t)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Cond] )
           t
     | CSINC
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Cond] Operand.t)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Cond] )
           t
     | CTZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( pair,
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | CVT_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | DMB : Memory_barrier.t -> unit t
-    | DSB : Memory_barrier.t -> unit t
-    | DUP
-        : (Neon_reg_name.Lane_index.t
-          * ([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             as
-             'r)
-            Operand.t
-          * 'r Operand.t)
-          t
+    | DMB : Memory_barrier.t -> (singleton, unit) t
+    | DSB : Memory_barrier.t -> (singleton, unit) t
+    | DUP :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | EOR_immediate
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Bitmask] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X]]]
+            * [< `Bitmask] )
           t
     | EOR_shifted_register
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | EOR_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | EXT
-        : ([< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Vector of [`V16B]]]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+            * [< `Imm of [< `Six]] )
           t
     | FABS
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FADD
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FADDP_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCMP
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCM_register :
         Float_cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t)
+        -> ( triple,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FCM_zero :
         Float_cond.t
-        -> ([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-           * [< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             Operand.t)
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FCSEL
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t
-          * [< `Cond] Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Cond] )
           t
     | FCVT
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCVTNS
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTNS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FCVTN_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
+    (* Binary vector operations with min/max *)
     | FCVTZS
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FCVTZS_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FDIV
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FDIV_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMADD
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMAX
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMAX_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMIN
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMIN_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FMOV_general_or_register
-      (* CR mshinwell: ideally this would enforce that only one of the two
-         operands is a GP (resp. Neon) reg. *)
-        : ([< `Reg of
-              [< `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of [< `Scalar of [< `S | `D]]
-               | `GP of [< `X | `XZR | `W | `WZR] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of
+               [< `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Scalar of [< `S | `D]]
+                 | `GP of [< `X | `XZR | `W | `WZR] ] ] )
           t
     | FMOV_scalar_immediate
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
-          * [< `Imm of [< `Sixty_four]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Imm of [< `Sixty_four]] )
           t
     | FMOV_vector_immediate
-        : ([< `Reg of [< `Neon of [< `Vector of _]]] Operand.t
-          * [< `Imm of [< `Sixty_four]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Imm of [< `Sixty_four]] )
           t
     | FMSUB
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMUL
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FMUL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FNEG
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNEG_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FNMADD
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNMSUB
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( quad,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FNMUL
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FRECPE_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FRINT :
         Rounding_mode.t
-        -> (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r)
-            Operand.t
-           * 'r Operand.t)
+        -> ( pair,
+             [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+             * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
            t
     | FRINT_vector :
         Rounding_mode.t
-        -> (([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             as
-             'r)
-            Operand.t
-           * 'r Operand.t)
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
            t
     | FRSQRTE_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FSQRT
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FSQRT_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | FSUB
-        : (([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] as 'r) Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
           t
     | FSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | INS
-        : (Neon_reg_name.Lane_index.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
-             as
-             'rs)
-            Operand.t)
-          t
-    | INS_V
-        : (Neon_reg_name.Lane_index.t
-          * Neon_reg_name.Lane_index.t
-          * ([< `Reg of
-                [< `Neon of
-                   [< `Vector of
-                      [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                   ] ] ]
-             as
-             'r)
-            Operand.t
-          * 'r Operand.t)
-          t
-    | LDAR
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t * [< `Mem] Operand.t) t
+    | INS :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]
+               ] )
+           t
+    | INS_V :
+        Neon_reg_name.Lane_index.Src_and_dest.t
+        -> ( pair,
+             [< `Reg of
+                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
+    | LDAR : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem]) t
     | LDP
-        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Mem] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Mem] )
           t
-    | LDR
-        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Mem] Operand.t)
-          t
-    | LDRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
-    | LDRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
-    | LDRSB : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
-    | LDRSH : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
-    | LDRSW : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Mem] Operand.t) t
+    | LDR : (pair, [< `Reg of [`GP of [< `X | `W | `LR]]] * [< `Mem]) t
+    | LDRB : (pair, [< `Reg of [`GP of [< `W]]] * [< `Mem]) t
+    | LDRH : (pair, [< `Reg of [`GP of [< `W]]] * [< `Mem]) t
+    | LDRSB : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
+    | LDRSH : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
+    | LDRSW : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
     | LDR_simd_and_fp
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] Operand.t
-          * [< `Mem] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] * [< `Mem]
+          )
           t
     | LSLV
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]] )
           t
     | LSRV
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]] )
           t
     | MADD
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t)
+        : ( quad,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
           t
     | MOV
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W | `XZR | `WZR]] | `Imm of _]
-            Operand.t)
+        : ( pair,
+            [< `Reg of
+               [< `GP of
+                  [< `X | `W]
+                  (* | `Neon of [< `Scalar of _ | `Vector of
+                     Neon_reg_name.Vector.t] *) ] ]
+            * [< `Reg of
+                 [< `GP of
+                    [< `X | `W | `XZR | `WZR]
+                    (* | `Neon of [< `Scalar of _ | `Vector of
+                       Neon_reg_name.Vector.t] *) ]
+              | `Imm of _ ] )
           t
     | MOVI
-        : ([< `Reg of [< `Neon of _]] Operand.t
-          * [< `Imm of [< `Twelve]] Operand.t)
+        : ( pair,
+            [< `Reg of
+               [< `Neon of
+                  [< `Scalar of _ | `Vector of [< any_vector] * [< any_width]]
+               ] ]
+            * [< `Imm of [< `Twelve]] )
           t
     | MOVK
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Imm of [< `Sixty_four]] Operand.t
-          * [< `Shift of [< `Lsl] * [`Six]] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [`Shift of [`Lsl] * [`Six]] )
           t
     | MOVN
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Imm of [< `Twelve | `Sixty_four]] Operand.t
-          * [< `Shift of [< `Lsl] * [`Six]] Operand.t option)
+        : ( triple,
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
     | MOVZ
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Imm of [< `Sixty_four]] Operand.t
-          * [< `Shift of [< `Lsl] * [`Six]] Operand.t option)
+        : ( triple,
+            [< `Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Sixteen_unsigned]]
+            * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
     | MOV_vector
-        : (([< `Reg of [< `Neon of [< `Vector of _]]] as 'r) Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of _]]]
+            * [< `Reg of [< `Neon of [< `Vector of _]]] )
           t
     | MSUB
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( quad,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
           t
-        (** LDR and STR do not quite follow the ARMARM nomenclature: the
-            details of the particular addressing mode are hidden within a
-            [ `Mem] Operand.t. *)
     | MULL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | MUL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | MVN_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | NEG_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | NOP : unit t
+    | NOP : (singleton, unit) t
     | ORR_immediate
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Bitmask] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X]]]
+            * [< `Reg of [`GP of [< `X | `XZR]]]
+            * [< `Bitmask] )
           t
     | ORR_shifted_register
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | ORR_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | RBIT
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
-          t
-    | RET : unit t
+    | RBIT : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
+    | RET : (singleton, unit) t
     | REV
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t)
+        : ( pair,
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
     | REV16
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t)
+        : ( pair,
+            [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
-      (* CR mshinwell: we should try to constrain the width/relocs on the
-         immediate for B and BL *)
     | SBFM
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( quad,
+            [`Reg of [`GP of [`X | `W]]]
+            * [`Reg of [`GP of [`X | `W]]]
+            * [`Imm of [`Six]]
+            * [`Imm of [`Six]] )
           t
     | SCVTF
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | SCVTF_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SDIV
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]] )
           t
     | SHL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | SMAX_vector
-        : (([< `Reg of
+        : ( triple,
+            [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | SMIN_vector
-        : (([< `Reg of
+        : ( triple,
+            [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
-    | SMOV
-        : (Neon_reg_name.Lane_index.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            Operand.t)
-          t
+    | SMOV :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | SMULH
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | SMULL2_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SMULL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQXTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SQXTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SSHL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SSHR
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | STP
-        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Mem] Operand.t)
+        : ( triple,
+            [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Mem] )
           t
-    | STR
-        : ([< `Reg of [< `GP of [< `X | `W | `LR]]] Operand.t
-          * [< `Mem] Operand.t)
-          t
-    | STRB : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
-    | STRH : ([< `Reg of [< `GP of [< `W]]] Operand.t * [< `Mem] Operand.t) t
+    | STR : (pair, [< `Reg of [`GP of [< `X | `W | `LR]]] * [< `Mem]) t
+    | STRB : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
+    | STRH : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
     | STR_simd_and_fp
-        : ([< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] Operand.t
-          * [< `Mem] Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] * [< `Mem]
+          )
           t
     | SUBS_immediate
-        : ([< `Reg of [< `GP of [< `W | `WZR | `X | `XZR]]] Operand.t
-          * [< `Reg of [< `GP of [< `W | `X | `SP]]] Operand.t
-          * [< `Imm of [< `Twelve]] Operand.t
-          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+        : ( quad,
+            [< `Reg of [`GP of [< `W | `WZR | `X | `XZR]]]
+            * [< `Reg of [`GP of [< `W | `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | SUBS_shifted_register
-        : ([< `Reg of [< `GP of [< `X | `XZR]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X | `XZR]]]
+            * [< `Reg of [< `GP of [< `X | `SP]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | SUB_immediate
-        : ([< `Reg of [< `GP of [< `X | `SP]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `SP]]] Operand.t
-          * [< `Imm of [< `Twelve]] Operand.t
-          * [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option)
+        : ( quad,
+            [< `Reg of [`GP of [< `X | `SP]]]
+            * [< `Reg of [`GP of [< `X | `SP]]]
+            * [< `Imm of [< `Twelve]]
+            * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | SUB_shifted_register
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option)
+        : ( quad,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Optional of
+                 [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
     | SUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | SXTL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | TBNZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t
-          * [< `Imm of _] Operand.t)
+        : ( triple,
+            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
+          )
           t
     | TBZ
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t
-          * [< `Imm of _] Operand.t)
+        : ( triple,
+            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
+          )
           t
-    | TST : ([< `Reg of [< `GP of [< `X]]] Operand.t * [< `Bitmask] Operand.t) t
+    | TST : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Bitmask]) t
     | UADDLP_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]] ] ]
-           Operand.t
-          * [< `Reg of
+        : ( pair,
+            [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            Operand.t)
+                  [< `Vector of
+                     [< `V4H | `V8H | `V2S | `V4S | `V1D | `V2D] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | UBFM
-        : ([< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Reg of [< `GP of [< `X | `W]]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( quad,
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Imm of [`Six]]
+            * [`Imm of [`Six]] )
           t
     | UMAX_vector
-        : (([< `Reg of
+        : ( triple,
+            [< `Reg of
                [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+                  [< `Vector of
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
+                  ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
     | UMIN_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]] ]
-            ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
-          t
-    | UMOV
-        : (Neon_reg_name.Lane_index.t
-          * ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
-             as
-             'rd)
-            Operand.t
-          * [< `Reg of
+        : ( triple,
+            [< `Reg of
                [< `Neon of
                   [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
+                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
                   ] ] ]
-            Operand.t)
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ]
+            * [< `Reg of
+                 [< `Neon of
+                    [< `Vector of
+                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
+                       * [< any_width] ] ] ] )
           t
+    | UMOV :
+        Neon_reg_name.Lane_index.t
+        -> ( pair,
+             [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+             * [< `Reg of
+                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+           )
+           t
     | UMULH
-        : ([< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t
-          * [< `Reg of [< `GP of [< `X]]] Operand.t)
+        : ( triple,
+            [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]]
+            * [< `Reg of [< `GP of [< `X]]] )
           t
     | UMULL2_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UMULL_vector
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQADD_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQSUB_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
+    (* Lane-indexed operations *)
     | UQXTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | UQXTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | USHL_vector
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | USHR
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t
-          * [< `Imm of [< `Six]] Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Imm of [< `Six]] )
           t
     | UXTL
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | XTN
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | XTN2
-        : ([< `Reg of
-              [< `Neon of
-                 [< `Vector of
-                    [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                 ] ] ]
-           Operand.t
-          * [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            Operand.t)
+        : ( pair,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
-    | YIELD : unit t
+    | YIELD : (singleton, unit) t
     | ZIP1
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
     | ZIP2
-        : (([< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S | `V1D | `V2D]
-                  ] ] ]
-            as
-            'r)
-           Operand.t
-          * 'r Operand.t
-          * 'r Operand.t)
+        : ( triple,
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
+            ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            * [< `Reg of
+                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+          )
           t
 end
 
