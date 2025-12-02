@@ -110,7 +110,7 @@ module Symbol : sig
     }
 
   (** Any OS-specific escaping/etc must have been applied first. *)
-  val create : ?reloc:'w reloc_directive -> ?offset:int -> string -> 'w t
+  val create : 'w same_section_or_reloc -> ?offset:int -> string -> 'w t
 
   val print : Format.formatter -> _ t -> unit
 end
@@ -1332,26 +1332,26 @@ module DSL : sig
 
   val bitmask : nativeint -> [`Bitmask] Operand.t
 
-  val symbol : 'w Symbol.t -> [`Imm of 'w] Operand.t
+  val symbol : 'w Symbol.t -> [`Imm of [`Sym of 'w]] Operand.t
 
   val shift :
     kind:'op Operand.Shift.Kind.t ->
     amount:int ->
     [`Shift of 'op * [`Six]] Operand.t
 
-  val mem : base:[< `GP of [< `X | `SP]] Reg.t -> [`Mem] Operand.t
+  val mem : base:[`GP of [`X | `SP]] Reg.t -> [`Mem] Operand.t
 
   val mem_offset :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_symbol :
-    base:[< `GP of [< `X | `SP]] Reg.t -> symbol:'w Symbol.t -> [`Mem] Operand.t
+    base:[`GP of [`X | `SP]] Reg.t -> symbol:[`Twelve] Symbol.t -> [`Mem] Operand.t
 
   val mem_pre :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_post :
-    base:[< `GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
+    base:[`GP of [`X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val cond : Cond.t -> [`Cond] Operand.t
 
@@ -1359,19 +1359,19 @@ module DSL : sig
 
   (** The functions below are shorthands for composing [reg_op] and the
       respective function from [Reg] *)
-  val reg_v2d : int -> [`Reg of [`Neon of [`Vector of [`V2D]]]] Operand.t
+  val reg_v2d : int -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Operand.t
 
-  val reg_v2s : int -> [`Reg of [`Neon of [`Vector of [`V2S]]]] Operand.t
+  val reg_v2s : int -> [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Operand.t
 
-  val reg_v4s : int -> [`Reg of [`Neon of [`Vector of [`V4S]]]] Operand.t
+  val reg_v4s : int -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Operand.t
 
-  val reg_v8b : int -> [`Reg of [`Neon of [`Vector of [`V8B]]]] Operand.t
+  val reg_v8b : int -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Operand.t
 
-  val reg_v16b : int -> [`Reg of [`Neon of [`Vector of [`V16B]]]] Operand.t
+  val reg_v16b : int -> [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Operand.t
 
-  val reg_v8h : int -> [`Reg of [`Neon of [`Vector of [`V8H]]]] Operand.t
+  val reg_v8h : int -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Operand.t
 
-  val reg_v4h : int -> [`Reg of [`Neon of [`Vector of [`V4H]]]] Operand.t
+  val reg_v4h : int -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Operand.t
 
   val reg_b : int -> [`Reg of [`Neon of [`Scalar of [`B]]]] Operand.t
 
@@ -1397,107 +1397,106 @@ module DSL : sig
 
   val reglane_v4s :
     int ->
-    lane:int ->
-    [`Reg of [`Neon of [`Lane of [`Vector of [`V4S]]]]] Operand.t
+    lane:Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Vector of [`V4S] * [`S]]]]] Operand.t
 
   val reglane_v2d :
     int ->
-    lane:int ->
-    [`Reg of [`Neon of [`Lane of [`Vector of [`V2D]]]]] Operand.t
+    lane:Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Vector of [`V2D] * [`D]]]]] Operand.t
 
   val reglane_b :
     int ->
-    lane:int ->
+    lane:Neon_reg_name.Lane_index.t ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`B]]]]] Operand.t
 
   val reglane_h :
     int ->
-    lane:int ->
+    lane:Neon_reg_name.Lane_index.t ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`H]]]]] Operand.t
 
   val reglane_s :
     int ->
-    lane:int ->
+    lane:Neon_reg_name.Lane_index.t ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`S]]]]] Operand.t
 
   val reglane_d :
     int ->
-    lane:int ->
+    lane:Neon_reg_name.Lane_index.t ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Operand.t
 
-  val print_ins : ('num, 'operands) Instruction_name.t -> 'operands -> string
+  val print_ins : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> string
 
   module Acc : sig
     val set_emit_string : emit_string:(string -> unit) -> unit
 
     (** Passes the instruction to the function provided to [set_emit_string].
         (Can't directly reference [Emitaux] due to a circular dependency.) *)
-    val ins : ('num, 'operands) Instruction_name.t -> 'operands -> unit
+    val ins : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> unit
 
     (** Expansion of instructions that are aliases *)
 
     val ins_mul :
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       unit
 
     val ins_lsl_immediate :
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       shift_in_bits:int ->
       unit
 
     val ins_lsr_immediate :
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       shift_in_bits:int ->
       unit
 
     val ins_asr_immediate :
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [`Reg of [`GP of [`W | `X]]] Operand.t ->
+      [`Reg of [`GP of [`W | `X]]] Operand.t ->
       shift_in_bits:int ->
       unit
 
     val ins_uxtb :
-      [< `Reg of [< `GP of [< `W]]] Operand.t ->
-      [< `Reg of [< `GP of [< `W]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       unit
 
     val ins_uxth :
-      [< `Reg of [< `GP of [< `W]]] Operand.t ->
-      [< `Reg of [< `GP of [< `W]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       unit
 
     val ins_cmp :
-      [< `Reg of [< `GP of [< `W | `X | `SP]]] Operand.t ->
+      [< `Reg of [`GP of [< `SP | `W | `X]]] Operand.t ->
       [< `Imm of [< `Twelve]] Operand.t ->
-      [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option ->
+      [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] Operand.t ->
       unit
 
     val ins_cmp_reg :
-      [< `Reg of [< `GP of [< `X | `SP]]] Operand.t ->
+      [< `Reg of [< `GP of [< `SP | `X]]] Operand.t ->
       [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Shift of [< `Lsl | `Lsr | `Asr] * [`Six]] Operand.t option ->
+      [< `Optional of [< `Shift of [< `Asr | `Lsl | `Lsr] * [< `Six]] option] Operand.t ->
       unit
 
     val ins_cmn :
-      [< `Reg of [< `GP of [< `X | `SP]]] Operand.t ->
+      [< `Reg of [`GP of [< `SP | `X]]] Operand.t ->
       [< `Imm of [< `Twelve]] Operand.t ->
-      [< `Fixed_shift of [< `Lsl_by_twelve]] Operand.t option ->
+      [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] Operand.t ->
       unit
 
     val ins_cset : [< `Reg of [< `GP of [< `X]]] Operand.t -> Cond.t -> unit
 
     val ins_mov_from_sp :
-      dst:[< `Reg of [< `GP of [< `X | `FP]]] Operand.t -> unit
+      dst:[< `Reg of [`GP of [< `FP | `SP | `X]]] Operand.t -> unit
 
     val ins_mov_to_sp :
-      src:[< `Reg of [< `GP of [< `X | `FP]]] Operand.t -> unit
-  end
-
-  module Binary_encoder : sig
-    val encode_instruction : ('num, 'operands) Instruction_name.t -> 'operands -> int32
+      src:[< `Reg of [`GP of [< `FP | `SP | `X]]] Operand.t -> unit
   end
 end
+
+(* TODO: move to separate file *)
+val encode_instruction : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> int32

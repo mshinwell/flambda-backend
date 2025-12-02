@@ -91,14 +91,15 @@ module Neon_reg_name = struct
 
     let name t index = Printf.sprintf "V%d.%s" index (to_string t)
 
-    type _ testi = I : [< `V8B | `V16B] testi
+    type _ testi = I : [< `V8B | `V16B] testi [@@warning "-37"]
 
     type _ testo =
       | O_V8B : [`V8B] testo
       | O_V16B : [`V16B] testo
       | O_V4H : [`V4H] testo
+    [@@warning "-37"]
 
-    let foo : type v. v testi -> v testo -> int =
+    let _foo : type v. v testi -> v testo -> int =
      fun i o -> match i, o with I, O_V8B -> 42 | I, O_V16B -> 42
   end
 
@@ -160,7 +161,7 @@ module Neon_reg_name = struct
     module Src_and_dest : sig
       type t
 
-      val create : src:lane_index -> dest:lane_index -> t
+      val _create : src:lane_index -> dest:lane_index -> t
 
       val dest_index : t -> lane_index
 
@@ -181,7 +182,7 @@ module Neon_reg_name = struct
           dest : t
         }
 
-      let create ~src ~dest = { src; dest }
+      let _create ~src ~dest = { src; dest }
 
       let dest_index t = t.dest
 
@@ -232,7 +233,7 @@ module Neon_reg_name = struct
     | Scalar s -> Scalar.name s index
     | Lane l -> Lane.name l index
 
-  let lane_of_vector vector ~lane =
+  let _lane_of_vector vector ~lane =
     let scalar_type = Scalar.of_vector vector in
     Lane { r = S scalar_type; lane }
 end
@@ -310,7 +311,7 @@ module Reg = struct
 
   let name (type a) (t : a t) = Reg_name.name t.reg_name t.index
 
-  let encoding (type a) (t : a t) = Reg_name.encoding t.reg_name t.index
+  let _encoding (type a) (t : a t) = Reg_name.encoding t.reg_name t.index
 
   let gp_encoding : type a. [`GP of a] t -> int =
    fun t -> match t.reg_name with GP rn -> GP_reg_name.encoding rn t.index
@@ -579,6 +580,7 @@ module Operand = struct
       | Sym : 'w Symbol.t -> [`Sym of 'w] t
       | Float : float -> [`Sixty_four] t
       | Nativeint : nativeint -> [`Sixty_four] t
+    [@@warning "-37"]
 
     let print : type w. Format.formatter -> w t -> unit =
      fun ppf t ->
@@ -621,7 +623,7 @@ module Operand = struct
       Format.fprintf ppf "%s %a" (Kind.to_string kind) Imm.print amount
   end
 
-  let print_separator ppf () = Format.fprintf ppf ", "
+  let _print_separator ppf () = Format.fprintf ppf ", "
 
   module Addressing_mode = struct
     module Offset = struct
@@ -649,6 +651,7 @@ module Operand = struct
       | Offset_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
       | Pre_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
       | Post_pair : [`GP of [`X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+    [@@warning "-37"]
 
     let print ppf (t : t) =
       let open Format in
@@ -2695,12 +2698,14 @@ module DSL = struct
 
     (* UXTB <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #7 *)
     let ins_uxtb wd wn =
+      (* XXX is this wrong for X regs? *)
       let immr = Operand.Imm (Six 0) in
       let imms = Operand.Imm (Six 7) in
       ins UBFM (Quad (wd, wn, immr, imms))
 
     (* UXTH <Wd>, <Wn> -> UBFM <Wd>, <Wn>, #0, #15 *)
     let ins_uxth wd wn =
+      (* XXX is this wrong for X regs? *)
       let immr = Operand.Imm (Six 0) in
       let imms = Operand.Imm (Six 15) in
       ins UBFM (Quad (wd, wn, immr, imms))
@@ -2709,6 +2714,7 @@ module DSL = struct
     let ins_cmp rn imm shift_opt =
       ins SUBS_immediate (Quad (reg_op (Reg.xzr ()), rn, imm, shift_opt))
 
+    (* XXX why does this allow SP but the rewrite rule does not? *)
     (* CMP <Xn>, <Xm>{, <shift>} -> SUBS XZR, <Xn>, <Xm>{, <shift>} *)
     let ins_cmp_reg rn rm shift_opt =
       ins SUBS_shifted_register (Quad (reg_op (Reg.xzr ()), rn, rm, shift_opt))
@@ -2747,6 +2753,7 @@ type relocation =
     symbol_name : string;
     reloc_type : reloc_type
   }
+[@@warning "-69"]
 
 let current_offset_bytes : int ref = ref 0
 
@@ -2758,14 +2765,14 @@ let add_relocation ~offset_bytes ~symbol_name ~reloc_type =
   pending_relocations
     := { offset_bytes; symbol_name; reloc_type } :: !pending_relocations
 
-let get_relocations () = List.rev !pending_relocations
+let _get_relocations () = List.rev !pending_relocations
 
-let clear_relocations () = pending_relocations := []
+let _clear_relocations () = pending_relocations := []
 
-let encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
+let _encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
   match kind with LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
 
-let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
+let _encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
   let open Int32 in
   if imm12 < 0 || imm12 > 4095
   then Misc.fatal_errorf "ADD/SUB immediate out of range: %d" imm12 ();
@@ -2780,7 +2787,7 @@ let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
+let _encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let max_shift = if sf = 1 then 63 else 31 in
   if imm6 < 0 || imm6 > max_shift
@@ -2883,7 +2890,7 @@ let encode_data_proc_1_source ~sf ~s ~opcode2 ~opcode ~rn ~rd =
   result
 
 (* Advanced SIMD three same - C4.1.95.24 *)
-let encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
+let _encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int q) 31) in
@@ -2899,7 +2906,7 @@ let encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
   result
 
 (* Floating-point immediate - C4.1.95.36 *)
-let encode_fp_immediate ~ftype ~imm8 ~rd =
+let _encode_fp_immediate ~ftype ~imm8 ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int 0b11110) 24) in
@@ -2911,7 +2918,7 @@ let encode_fp_immediate ~ftype ~imm8 ~rd =
   result
 
 (* Floating-point data-processing (2 source) - C4.1.95.38 *)
-let encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
+let _encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int 0b11110) 24) in
@@ -2925,7 +2932,7 @@ let encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
   result
 
 (* Floating-point conditional select - C4.1.95.39 *)
-let encode_fp_cond_select ~ftype ~rm ~cond ~rn ~rd =
+let _encode_fp_cond_select ~ftype ~rm ~cond ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int 0b11110) 24) in
@@ -2939,7 +2946,7 @@ let encode_fp_cond_select ~ftype ~rm ~cond ~rn ~rd =
   result
 
 (* Floating-point data-processing (3 source) - C4.1.95.40 *)
-let encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
+let _encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int 0b11111) 24) in
@@ -2952,7 +2959,7 @@ let encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-let encode_condition (cond : Cond.t) : int =
+let _encode_condition (cond : Cond.t) : int =
   match cond with
   | EQ -> 0b0000
   | NE -> 0b0001
@@ -2970,7 +2977,7 @@ let encode_condition (cond : Cond.t) : int =
   | LE -> 0b1101
 
 (* Logical (shifted register) - C4.1.94.3 *)
-let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
+let _encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int sf) 31) in
@@ -3037,7 +3044,7 @@ let encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
   result
 
 (* Add/subtract (immediate) - C4.1.92.3 *)
-let encode_add_sub_immediate (type rn rd) ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
+let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int sf) 31) in
