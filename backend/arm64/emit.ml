@@ -256,7 +256,9 @@ module DSL : sig
       include Arm64_ast.DSL.Acc
     end
 
-    val labeled_ins : L.t -> 'a Arm64_ast.Instruction_name.t -> 'a -> unit
+    val labeled_ins1 : L.t -> _ Arm64_ast.Instruction_name.t -> _ -> unit
+
+    val labeled_ins4 : L.t -> _ Arm64_ast.Instruction_name.t -> _ -> unit
   end
 end = struct
   include Arm64_ast.DSL
@@ -556,9 +558,13 @@ end = struct
   module Acc = struct
     include Arm64_ast.DSL.Acc
 
-    let labeled_ins lbl instr ops =
+    let labeled_ins1 lbl instr op =
       D.define_label lbl;
-      ins instr ops
+      ins1 instr op
+
+    let labeled_ins4 lbl instr ops =
+      D.define_label lbl;
+      ins4 instr ops
   end
 end
 
@@ -783,8 +789,8 @@ type gc_call =
 let call_gc_sites = ref ([] : gc_call list)
 
 let emit_call_gc gc =
-  A.labeled_ins gc.gc_lbl BL (DSL.symbol (S.create "caml_call_gc"));
-  A.labeled_ins gc.gc_frame_lbl B (DSL.label gc.gc_return_lbl)
+  A.labeled_ins1 gc.gc_lbl BL (DSL.symbol (S.create "caml_call_gc"));
+  A.labeled_ins1 gc.gc_frame_lbl B (DSL.label gc.gc_return_lbl)
 
 (* Record calls to local stack reallocation *)
 
@@ -1503,7 +1509,7 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
         A.ins1 (B_cond CS) (DSL.label lbl);
         A.ins1 B (DSL.label lbl_call_gc);
         D.define_label lbl);
-      A.labeled_ins lbl_after_alloc ADD_immediate
+      A.labeled_ins4 lbl_after_alloc ADD_immediate
         (DSL.reg_x i.res.(0), DSL.reg_x reg_alloc_ptr, DSL.imm 8, None);
       call_gc_sites
         := { gc_lbl = lbl_call_gc;
@@ -1519,7 +1525,7 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
       | _ ->
         emit_intconst reg_x8 (Nativeint.of_int n);
         A.ins1 BL (DSL.symbol (S.create "caml_allocN")));
-      A.labeled_ins lbl_frame ADD_immediate
+      A.labeled_ins4 lbl_frame ADD_immediate
         (DSL.reg_x i.res.(0), DSL.reg_x reg_alloc_ptr, DSL.imm 8, None))
 
 let assembly_code_for_poll i ~far ~return_label =
@@ -1551,7 +1557,7 @@ let assembly_code_for_poll i ~far ~return_label =
       let lbl = L.create Text in
       A.ins1 (B_cond LS) (DSL.label lbl);
       A.ins1 B (DSL.label return_label);
-      A.labeled_ins lbl B (DSL.label lbl_call_gc));
+      A.labeled_ins1 lbl B (DSL.label lbl_call_gc));
   call_gc_sites
     := { gc_lbl = lbl_call_gc;
          gc_return_lbl = lbl_after_poll;
