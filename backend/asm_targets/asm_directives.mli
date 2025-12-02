@@ -374,6 +374,8 @@ module Directive : sig
       | Sixty_four
 
     val width_in_bytes : t -> width_in_bytes
+
+    val width_in_bytes_int : width_in_bytes -> int
   end
 
   type thing_after_label = private
