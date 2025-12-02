@@ -621,11 +621,11 @@ module Operand = struct
     end
 
     type t =
-      | Reg : [< `GP of [< `X | `SP]] Reg.t -> t
+      | Reg : [< `GP of [`X | `SP]] Reg.t -> t
       (* CR mshinwell: Offset -> Unsigned_offset? *)
-      | Offset : [< `GP of [< `X | `SP]] Reg.t * _ Offset.t -> t
-      | Pre : [< `GP of [< `X | `SP]] Reg.t * _ Offset.t -> t
-      | Post : [< `GP of [< `X | `SP]] Reg.t * _ Offset.t -> t
+      | Offset : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Pre : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Post : [< `GP of [`X | `SP]] Reg.t * _ Offset.t -> t
 
     let print ppf (t : t) =
       let open Format in
@@ -1212,12 +1212,12 @@ module Instruction_name = struct
             * [< `Reg of [< `GP of [< `X | `W | `LR]]]
             * [< `Mem] )
           t
-    | LDR : (pair, [< `Reg of [< `GP of [< `X | `W | `LR]]] * [< `Mem]) t
-    | LDRB : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
-    | LDRH : (pair, [< `Reg of [< `GP of [< `W]]] * [< `Mem]) t
-    | LDRSB : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
-    | LDRSH : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
-    | LDRSW : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Mem]) t
+    | LDR : (pair, [< `Reg of [`GP of [< `X | `W | `LR]]] * [< `Mem]) t
+    | LDRB : (pair, [< `Reg of [`GP of [< `W]]] * [< `Mem]) t
+    | LDRH : (pair, [< `Reg of [`GP of [< `W]]] * [< `Mem]) t
+    | LDRSB : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
+    | LDRSH : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
+    | LDRSW : (pair, [< `Reg of [`GP of [< `X]]] * [< `Mem]) t
     | LDR_simd_and_fp
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]] * [< `Mem]
@@ -3124,46 +3124,29 @@ module Binary_encoder = struct
     | Pair (Reg _rd, Mem _addressing), LDAR -> assert false
     | Triple (Reg _rd, Reg _rn, Mem _), LDP -> assert false
     | Pair (Reg rd, Mem addressing), LDR -> (
-      (* Determine size based on register width *)
-      let size =
-        match rd.reg_name with
-        | GP W | GP WZR | GP WSP -> 0b10
-        | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
-      in
+      let size = match rd.reg_name with GP W -> 0b10 | GP X | GP LR -> 0b11 in
       let vr = 0 in
       let opc = 0b01 in
-      let rt =
-        match rd.reg_name with
-        | GP W -> rd.index
-        | GP X -> rd.index
-        | GP WZR | GP XZR -> 31
-        | GP WSP | GP SP -> 31
-        | GP LR -> 30
-        | GP FP -> 29
-      in
-      (* Helper to encode base register from addressing mode *)
-      let encode_base_reg (rn : [`GP of [< `X | `SP]] Reg.t) =
-        match rn.reg_name with GP X -> rn.index | GP SP -> 31
-      in
+      let rt = Reg.gp_encoding rd in
       match[@warning "-4"] addressing with
       | Reg rn ->
         (* Base register only [Xn] - use unscaled with imm9=0 *)
-        encode_load_store_unscaled ~size ~vr ~opc ~imm9:0
-          ~rn:(encode_base_reg rn) ~rt
+        let rn = Reg.gp_encoding rn in
+        encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
       | Offset (rn, Imm (Twelve _imm12)) ->
         (* TODO: Implement unsigned offset variant - for now use imm9=0 *)
-        encode_load_store_unscaled ~size ~vr ~opc ~imm9:0
-          ~rn:(encode_base_reg rn) ~rt
+        let rn = Reg.gp_encoding rn in
+        encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
       | Pre (rn, Imm (Twelve imm)) ->
         (* Pre-indexed [Xn, #imm]! *)
         let imm9 = imm land 0x1FF in
-        encode_load_store_pre_indexed ~size ~vr ~opc ~imm9
-          ~rn:(encode_base_reg rn) ~rt
+        let rn = Reg.gp_encoding rn in
+        encode_load_store_pre_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
       | Post (rn, Imm (Twelve imm)) ->
         (* Post-indexed [Xn], #imm *)
         let imm9 = imm land 0x1FF in
-        encode_load_store_post_indexed ~size ~vr ~opc ~imm9
-          ~rn:(encode_base_reg rn) ~rt
+        let rn = Reg.gp_encoding rn in
+        encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
       | _ -> assert false)
     | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
