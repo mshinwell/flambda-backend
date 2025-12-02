@@ -561,9 +561,14 @@ module Operand = struct
   module Imm = struct
     (* int is big enough for all instruction encodings *)
     type 'width t =
+      (* XXX maybe this should be split into two types, one for offsets for
+         addressing modes, and one for the remainder *)
       (* XXX signedness for Six and Twelve? *)
       | Six : int -> [`Six] t
       | Twelve : int -> [`Twelve] t
+      | Seven_signed : int -> [`Seven_signed] t
+      | Nine_signed_unscaled : int -> [`Nine_signed_unscaled] t
+      | Twelve_unsigned_scaled : int -> [`Twelve_unsigned_scaled] t
       | Sixteen_unsigned : int -> [`Sixteen_unsigned] t
       | Sym : 'w Symbol.t -> [`Sym of 'w] t
       | Float : float -> [`Sixty_four] t
@@ -574,6 +579,9 @@ module Operand = struct
       match t with
       | Six n -> Format.fprintf ppf "#%d" n
       | Twelve n -> Format.fprintf ppf "#%d" n
+      | Seven_signed n -> Format.fprintf ppf "#%d" n
+      | Nine_signed_unscaled n -> Format.fprintf ppf "#%d" n
+      | Twelve_unsigned_scaled n -> Format.fprintf ppf "#%d" n
       | Sixteen_unsigned n -> Format.fprintf ppf "#%d" n
       | Sym s -> Symbol.print ppf s
       | Float f -> Format.fprintf ppf "#%.7f" f
@@ -612,20 +620,22 @@ module Operand = struct
   module Addressing_mode = struct
     module Offset = struct
       type _ t =
-        | Imm : 'w Imm.t -> [`Imm of 'w] t
-        | Symbol : 'w Symbol.t -> [`Symbol of 'w] t
+        | Imm : 'w Imm.t -> 'w t
+        | Symbol : 'w Symbol.t -> 'w t
 
       let print : type a. Format.formatter -> a t -> unit =
        fun ppf t ->
         match t with Imm i -> Imm.print ppf i | Symbol s -> Symbol.print ppf s
     end
 
+    (* ARMARM Section C1.3.3, Table C1-8 *)
     type t =
       | Reg : [`GP of [`X | `SP]] Reg.t -> t
-      (* CR mshinwell: Offset -> Unsigned_offset? *)
-      | Offset : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
-      | Pre : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
-      | Post : [`GP of [`X | `SP]] Reg.t * _ Offset.t -> t
+      | Offset :
+          [`GP of [`X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
+          -> t
+      | Pre : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
+      | Post : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
 
     let print ppf (t : t) =
       let open Format in
@@ -2488,16 +2498,20 @@ module DSL = struct
   let mem ~(base : [< `GP of [< `X | `SP]] Reg.t) = Operand.Mem (Reg base)
 
   let mem_offset ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
-    Operand.Mem (Offset (base, Imm (Operand.Imm.Twelve offset)))
+    (* XXX validate [offset]. We should probably call this [offset_in_bytes] to
+       avoid any confusion. It must be zero mod transfer size *)
+    Operand.Mem (Offset (base, Imm (Twelve_unsigned_scaled offset)))
 
   let mem_symbol ~(base : [< `GP of [< `X | `SP]] Reg.t) ~symbol =
     Operand.Mem (Offset (base, Symbol symbol))
 
   let mem_pre ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
-    Operand.Mem (Pre (base, Imm (Operand.Imm.Twelve offset)))
+    (* XXX validate [offset] *)
+    Operand.Mem (Pre (base, Imm (Nine_signed_unscaled offset)))
 
   let mem_post ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
-    Operand.Mem (Post (base, Imm (Operand.Imm.Twelve offset)))
+    (* XXX validate [offset] *)
+    Operand.Mem (Post (base, Imm (Nine_signed_unscaled offset)))
 
   let shift ~kind ~amount =
     Operand.Shift { kind; amount = Operand.Imm.Six amount }
@@ -3128,26 +3142,25 @@ module Binary_encoder = struct
       let vr = 0 in
       let opc = 0b01 in
       let rt = Reg.gp_encoding rd in
-      match[@warning "-4"] addressing with
+      match addressing with
       | Reg rn ->
         (* Base register only [Xn] - use unscaled with imm9=0 *)
         let rn = Reg.gp_encoding rn in
         encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
-      | Offset (rn, Imm (Twelve _imm12)) ->
+      | Offset (rn, Imm (Twelve_unsigned_scaled _imm12)) ->
         (* TODO: Implement unsigned offset variant - for now use imm9=0 *)
         let rn = Reg.gp_encoding rn in
         encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
-      | Pre (rn, Imm (Twelve imm)) ->
+      | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
         (* Pre-indexed [Xn, #imm]! *)
         let imm9 = imm land 0x1FF in
         let rn = Reg.gp_encoding rn in
         encode_load_store_pre_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
-      | Post (rn, Imm (Twelve imm)) ->
+      | Post (rn, Imm (Nine_signed_unscaled imm)) ->
         (* Post-indexed [Xn], #imm *)
         let imm9 = imm land 0x1FF in
         let rn = Reg.gp_encoding rn in
-        encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
-      | _ -> assert false)
+        encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt)
     | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
     | Pair (Reg _rd, Mem _addressing), LDRH -> assert false
