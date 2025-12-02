@@ -417,34 +417,26 @@ let select_operation_cfg op args dbg =
   select_simd_instr op args dbg
   |> Option.map (fun (op, args) -> Operation.Specific (Isimd op), args)
 
-let pseudoregs_for_operation (simd_op : Simd.operation) arg res =
-  let check_shape (type a) (shape : a Simd_proc.operand_shape) =
-    match shape with
-    (* XXX make sure this list of special cases matches the old code *)
-    | V4S_V2D | V8H_V4S | V16B_V8H | V16B_W _ | V8H_W _ | V4S_W _ | V2D_X _
-    | V2D_V2D_lanes _ ->
-      let arg = Array.copy arg in
-      let res = Array.copy res in
-      assert (not (Reg.is_preassigned arg.(0)));
-      arg.(0) <- res.(0);
-      arg, res
-    | V2S_V2S_V2S | V4S_V4S_V4S | V2D_V2D_V2D | V16B_V16B_V16B | V8H_V8H_V8H
-    | V4S_V8H_V8H | V4S_V4H_V4H | V4S_V4S | V2D_V2S | V2S_V2D_cvt | V16B_V16B
-    | V2D_V2D | V2D_V2D_imm6 _ | V4S_V4S_imm6 _ | V8H_V8H_imm6 _
-    | V16B_V16B_imm6 _ | V16B_V16B_V16B_imm6 _ | V8H_V8H | V2S_V2D_narrow
-    | V4H_V4S | V8B_V8H | V4S_V4H | V8H_V8B | RegD_RegD_RegD | RegS_RegS_RegS
-    | RegD_RegD | RegS_RegS | RegD_RegX | RegS_RegX | Reg_LaneB _ | Reg_LaneH _
-    | Reg_LaneS _ | Reg_LaneD _ | RegX_V16B _ | RegX_V8H _ | RegX_V4S _
-    | LaneB_W _ | LaneH_W _ | LaneS_W _ | LaneD_Reg _ | LaneD_LaneD _
-    | V16B_LaneB _ | V8H_LaneH _ | V4S_LaneS _ | V2D_LaneD _ | RegX_RegD
-    | RegX_RegS | RegX_V2D _ | DUP_V16B _ | DUP_V8H _ | DUP_V4S _ | DUP_V2D _ ->
-      arg, res
-  in
-  match Simd_proc.simd_operation_with_operand_regs simd_op with
-  | S (_instr, shape) -> check_shape shape
-  | Transformed_in_emit ->
-    (* None of these currently need special handling here. *)
-    arg, res
+let pseudoregs_for_operation (_simd_op : Simd.operation) _arg _res =
+  assert false
+(* XXX let check_shape (type a) (shape : a Simd_proc.operand_shape) = match
+   shape with (* XXX make sure this list of special cases matches the old code
+   *) | V4S_V2D | V8H_V4S | V16B_V8H | V16B_W _ | V8H_W _ | V4S_W _ | V2D_X _ |
+   V2D_V2D_lanes _ -> let arg = Array.copy arg in let res = Array.copy res in
+   assert (not (Reg.is_preassigned arg.(0))); arg.(0) <- res.(0); arg, res |
+   V2S_V2S_V2S | V4S_V4S_V4S | V2D_V2D_V2D | V16B_V16B_V16B | V8H_V8H_V8H |
+   V4S_V8H_V8H | V4S_V4H_V4H | V4S_V4S | V2D_V2S | V2S_V2D_cvt | V16B_V16B |
+   V2D_V2D | V2D_V2D_imm6 _ | V4S_V4S_imm6 _ | V8H_V8H_imm6 _ | V16B_V16B_imm6 _
+   | V16B_V16B_V16B_imm6 _ | V8H_V8H | V2S_V2D_narrow | V4H_V4S | V8B_V8H |
+   V4S_V4H | V8H_V8B | RegD_RegD_RegD | RegS_RegS_RegS | RegD_RegD | RegS_RegS |
+   RegD_RegX | RegS_RegX | Reg_LaneB _ | Reg_LaneH _ | Reg_LaneS _ | Reg_LaneD _
+   | RegX_V16B _ | RegX_V8H _ | RegX_V4S _ | LaneB_W _ | LaneH_W _ | LaneS_W _ |
+   LaneD_Reg _ | LaneD_LaneD _ | V16B_LaneB _ | V8H_LaneH _ | V4S_LaneS _ |
+   V2D_LaneD _ | RegX_RegD | RegX_RegS | RegX_V2D _ | DUP_V16B _ | DUP_V8H _ |
+   DUP_V4S _ | DUP_V2D _ -> arg, res in match
+   Simd_proc.simd_operation_with_operand_regs simd_op with | S (_instr, shape)
+   -> check_shape shape | Transformed_in_emit -> (* None of these currently need
+   special handling here. *) arg, res *)
 
 (* See `amd64/simd_selection.ml`. *)
 

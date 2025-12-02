@@ -597,342 +597,141 @@ let simd_instr_size (op : Simd.operation) =
   | Movn_high_s16 | Movn_s16 | Mullq_s16 | Mullq_u16 | Mullq_high_s16
   | Mullq_high_u16 | Movl_s16 | Movl_u16 | Movl_s8 | Movl_u8 ->
     1
-
-(* Given a SIMD operand shape and a Linear instruction, check that the Reg.t
+(* (* Given a SIMD operand shape and a Linear instruction, check that the Reg.t
    values for the operands satisfy the required register constraints, and return
-   the typed operands. *)
-let simd_operands : type a. a Simd_proc.operand_shape -> Linear.instruction -> a
-    =
- fun behaviour i ->
-  let module Lane_index = Arm64_ast.Neon_reg_name.Lane_index in
-  (* CR mshinwell: we should sort these cases, but into which order? *)
-  match behaviour with
-  | V2S_V2S_V2S ->
-    let op0 = DSL.reg_v2s i.res.(0) in
-    let op1 = DSL.reg_v2s i.arg.(0) in
-    let op2 = DSL.reg_v2s i.arg.(1) in
-    op0, op1, op2
-  | V4S_V4S_V4S ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    let op2 = DSL.reg_v4s i.arg.(1) in
-    op0, op1, op2
-  | V2D_V2D_V2D ->
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    let op2 = DSL.reg_v2d i.arg.(1) in
-    op0, op1, op2
-  | V16B_V16B_V16B ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    let op2 = DSL.reg_v16b i.arg.(1) in
-    op0, op1, op2
-  | V8H_V8H_V8H ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    let op2 = DSL.reg_v8h i.arg.(1) in
-    op0, op1, op2
-  | V4S_V8H_V8H ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    let op2 = DSL.reg_v8h i.arg.(1) in
-    op0, op1, op2
-  | V4S_V4H_V4H ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4h i.arg.(0) in
-    let op2 = DSL.reg_v4h i.arg.(1) in
-    op0, op1, op2
-  | V4S_V4S ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    op0, op1
-  | V2D_V2S ->
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2s i.arg.(0) in
-    op0, op1
-  | V2S_V2D_cvt ->
-    let op0 = DSL.reg_v2s i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    op0, op1
-  | V16B_V16B ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    op0, op1
-  | V2D_V2D ->
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    op0, op1
-  | V2D_V2D_imm6 n ->
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    let op2 = Arm64_ast.DSL.imm_six n in
-    op0, op1, op2
-  | V4S_V4S_imm6 n ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    let op2 = Arm64_ast.DSL.imm_six n in
-    op0, op1, op2
-  | V8H_V8H_imm6 n ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    let op2 = Arm64_ast.DSL.imm_six n in
-    op0, op1, op2
-  | V16B_V16B_imm6 n ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    let op2 = Arm64_ast.DSL.imm_six n in
-    op0, op1, op2
-  | V16B_V16B_V16B_imm6 n ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    let op2 = DSL.reg_v16b i.arg.(1) in
-    let op3 = Arm64_ast.DSL.imm_six n in
-    op0, op1, op2, op3
-  | V8H_V8H ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    op0, op1
-  | V2S_V2D_narrow ->
-    let op0 = DSL.reg_v2s i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    op0, op1
-  | V4H_V4S ->
-    let op0 = DSL.reg_v4h i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    op0, op1
-  | V8B_V8H ->
-    let op0 = DSL.reg_v8b i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    op0, op1
-  | V4S_V4H ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4h i.arg.(0) in
-    op0, op1
-  | V8H_V8B ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v8b i.arg.(0) in
-    op0, op1
-  | V4S_V2D ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(1) in
-    op0, op1
-  | V8H_V4S ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(1) in
-    op0, op1
-  | V16B_V8H ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(1) in
-    op0, op1
-  | RegD_RegD_RegD ->
-    let op0 = DSL.reg_d i.res.(0) in
-    let op1 = DSL.reg_d i.arg.(0) in
-    let op2 = DSL.reg_d i.arg.(1) in
-    op0, op1, op2
-  | RegS_RegS_RegS ->
-    let op0 = DSL.reg_s i.res.(0) in
-    let op1 = DSL.reg_s i.arg.(0) in
-    let op2 = DSL.reg_s i.arg.(1) in
-    op0, op1, op2
-  | RegD_RegD ->
-    let op0 = DSL.reg_d i.res.(0) in
-    let op1 = DSL.reg_d i.arg.(0) in
-    op0, op1
-  | RegS_RegS ->
-    let op0 = DSL.reg_s i.res.(0) in
-    let op1 = DSL.reg_s i.arg.(0) in
-    op0, op1
-  | RegD_RegX ->
-    let op0 = DSL.reg_d i.res.(0) in
-    let op1 = DSL.reg_x i.arg.(0) in
-    op0, op1
-  | RegS_RegX ->
-    let op0 = DSL.reg_s i.res.(0) in
-    let op1 = DSL.reg_x i.arg.(0) in
-    op0, op1
-  | RegX_RegD ->
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_d i.arg.(0) in
-    op0, op1
-  | RegX_RegS ->
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_s i.arg.(0) in
-    op0, op1
-  | Reg_LaneB lane ->
-    let op0 = DSL.reg_w i.res.(0) in
-    let op1 = DSL.reglane_b i.arg.(0) ~lane in
-    op0, op1
-  | Reg_LaneH lane ->
-    let op0 = DSL.reg_w i.res.(0) in
-    let op1 = DSL.reglane_h i.arg.(0) ~lane in
-    op0, op1
-  | Reg_LaneS lane ->
-    let op0 = DSL.reg_w i.res.(0) in
-    let op1 = DSL.reglane_s i.arg.(0) ~lane in
-    op0, op1
-  | Reg_LaneD lane ->
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reglane_d i.arg.(0) ~lane in
-    op0, op1
-  | RegX_V16B lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    lane_idx, op0, op1
-  | RegX_V8H lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    lane_idx, op0, op1
-  | RegX_V4S lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    lane_idx, op0, op1
-  | LaneB_W lane ->
-    let op0 = DSL.reglane_b i.res.(0) ~lane in
-    let op1 = DSL.reg_w i.arg.(1) in
-    op0, op1
-  | LaneH_W lane ->
-    let op0 = DSL.reglane_h i.res.(0) ~lane in
-    let op1 = DSL.reg_w i.arg.(1) in
-    op0, op1
-  | LaneS_W lane ->
-    let op0 = DSL.reglane_s i.res.(0) ~lane in
-    let op1 = DSL.reg_w i.arg.(1) in
-    op0, op1
-  | LaneD_Reg lane ->
-    let op0 = DSL.reglane_d i.res.(0) ~lane in
-    let op1 = DSL.reg_x i.arg.(1) in
-    op0, op1
-  | LaneD_LaneD (src_lane, dst_lane) ->
-    let op0 = DSL.reglane_d i.res.(0) ~lane:dst_lane in
-    let op1 = DSL.reglane_d i.arg.(1) ~lane:src_lane in
-    op0, op1
-  | V16B_LaneB lane ->
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reglane_b i.arg.(0) ~lane in
-    op0, op1
-  | V8H_LaneH lane ->
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reglane_h i.arg.(0) ~lane in
-    op0, op1
-  | V4S_LaneS lane ->
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reglane_s i.arg.(0) ~lane in
-    op0, op1
-  | V2D_LaneD lane ->
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reglane_d i.arg.(0) ~lane in
-    op0, op1
-  | RegX_V2D lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_x i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    lane_idx, op0, op1
-  | V16B_W lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_w i.arg.(1) in
-    lane_idx, op0, op1
-  | V8H_W lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_w i.arg.(1) in
-    lane_idx, op0, op1
-  | V4S_W lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_w i.arg.(1) in
-    lane_idx, op0, op1
-  | V2D_X lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_x i.arg.(1) in
-    lane_idx, op0, op1
-  | V2D_V2D_lanes (src_lane, dst_lane) ->
-    let src_idx = Lane_index.create src_lane in
-    let dst_idx = Lane_index.create dst_lane in
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    dst_idx, src_idx, op0, op1
-  | DUP_V16B lane ->
-    (* CR mshinwell: remove "DUP" prefixes? Unsure *)
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v16b i.res.(0) in
-    let op1 = DSL.reg_v16b i.arg.(0) in
-    lane_idx, op0, op1
-  | DUP_V8H lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v8h i.res.(0) in
-    let op1 = DSL.reg_v8h i.arg.(0) in
-    lane_idx, op0, op1
-  | DUP_V4S lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v4s i.res.(0) in
-    let op1 = DSL.reg_v4s i.arg.(0) in
-    lane_idx, op0, op1
-  | DUP_V2D lane ->
-    let lane_idx = Lane_index.create lane in
-    let op0 = DSL.reg_v2d i.res.(0) in
-    let op1 = DSL.reg_v2d i.arg.(0) in
-    lane_idx, op0, op1
+   the typed operands. *) let simd_operands : type a. a Simd_proc.operand_shape
+   -> Linear.instruction -> a = fun behaviour i -> let module Lane_index =
+   Arm64_ast.Neon_reg_name.Lane_index in (* CR mshinwell: we should sort these
+   cases, but into which order? *) match behaviour with | V2S_V2S_V2S -> let op0
+   = DSL.reg_v2s i.res.(0) in let op1 = DSL.reg_v2s i.arg.(0) in let op2 =
+   DSL.reg_v2s i.arg.(1) in op0, op1, op2 | V4S_V4S_V4S -> let op0 = DSL.reg_v4s
+   i.res.(0) in let op1 = DSL.reg_v4s i.arg.(0) in let op2 = DSL.reg_v4s
+   i.arg.(1) in op0, op1, op2 | V2D_V2D_V2D -> let op0 = DSL.reg_v2d i.res.(0)
+   in let op1 = DSL.reg_v2d i.arg.(0) in let op2 = DSL.reg_v2d i.arg.(1) in op0,
+   op1, op2 | V16B_V16B_V16B -> let op0 = DSL.reg_v16b i.res.(0) in let op1 =
+   DSL.reg_v16b i.arg.(0) in let op2 = DSL.reg_v16b i.arg.(1) in op0, op1, op2 |
+   V8H_V8H_V8H -> let op0 = DSL.reg_v8h i.res.(0) in let op1 = DSL.reg_v8h
+   i.arg.(0) in let op2 = DSL.reg_v8h i.arg.(1) in op0, op1, op2 | V4S_V8H_V8H
+   -> let op0 = DSL.reg_v4s i.res.(0) in let op1 = DSL.reg_v8h i.arg.(0) in let
+   op2 = DSL.reg_v8h i.arg.(1) in op0, op1, op2 | V4S_V4H_V4H -> let op0 =
+   DSL.reg_v4s i.res.(0) in let op1 = DSL.reg_v4h i.arg.(0) in let op2 =
+   DSL.reg_v4h i.arg.(1) in op0, op1, op2 | V4S_V4S -> let op0 = DSL.reg_v4s
+   i.res.(0) in let op1 = DSL.reg_v4s i.arg.(0) in op0, op1 | V2D_V2S -> let op0
+   = DSL.reg_v2d i.res.(0) in let op1 = DSL.reg_v2s i.arg.(0) in op0, op1 |
+   V2S_V2D_cvt -> let op0 = DSL.reg_v2s i.res.(0) in let op1 = DSL.reg_v2d
+   i.arg.(0) in op0, op1 | V16B_V16B -> let op0 = DSL.reg_v16b i.res.(0) in let
+   op1 = DSL.reg_v16b i.arg.(0) in op0, op1 | V2D_V2D -> let op0 = DSL.reg_v2d
+   i.res.(0) in let op1 = DSL.reg_v2d i.arg.(0) in op0, op1 | V2D_V2D_imm6 n ->
+   let op0 = DSL.reg_v2d i.res.(0) in let op1 = DSL.reg_v2d i.arg.(0) in let op2
+   = Arm64_ast.DSL.imm_six n in op0, op1, op2 | V4S_V4S_imm6 n -> let op0 =
+   DSL.reg_v4s i.res.(0) in let op1 = DSL.reg_v4s i.arg.(0) in let op2 =
+   Arm64_ast.DSL.imm_six n in op0, op1, op2 | V8H_V8H_imm6 n -> let op0 =
+   DSL.reg_v8h i.res.(0) in let op1 = DSL.reg_v8h i.arg.(0) in let op2 =
+   Arm64_ast.DSL.imm_six n in op0, op1, op2 | V16B_V16B_imm6 n -> let op0 =
+   DSL.reg_v16b i.res.(0) in let op1 = DSL.reg_v16b i.arg.(0) in let op2 =
+   Arm64_ast.DSL.imm_six n in op0, op1, op2 | V16B_V16B_V16B_imm6 n -> let op0 =
+   DSL.reg_v16b i.res.(0) in let op1 = DSL.reg_v16b i.arg.(0) in let op2 =
+   DSL.reg_v16b i.arg.(1) in let op3 = Arm64_ast.DSL.imm_six n in op0, op1, op2,
+   op3 | V8H_V8H -> let op0 = DSL.reg_v8h i.res.(0) in let op1 = DSL.reg_v8h
+   i.arg.(0) in op0, op1 | V2S_V2D_narrow -> let op0 = DSL.reg_v2s i.res.(0) in
+   let op1 = DSL.reg_v2d i.arg.(0) in op0, op1 | V4H_V4S -> let op0 =
+   DSL.reg_v4h i.res.(0) in let op1 = DSL.reg_v4s i.arg.(0) in op0, op1 |
+   V8B_V8H -> let op0 = DSL.reg_v8b i.res.(0) in let op1 = DSL.reg_v8h i.arg.(0)
+   in op0, op1 | V4S_V4H -> let op0 = DSL.reg_v4s i.res.(0) in let op1 =
+   DSL.reg_v4h i.arg.(0) in op0, op1 | V8H_V8B -> let op0 = DSL.reg_v8h
+   i.res.(0) in let op1 = DSL.reg_v8b i.arg.(0) in op0, op1 | V4S_V2D -> let op0
+   = DSL.reg_v4s i.res.(0) in let op1 = DSL.reg_v2d i.arg.(1) in op0, op1 |
+   V8H_V4S -> let op0 = DSL.reg_v8h i.res.(0) in let op1 = DSL.reg_v4s i.arg.(1)
+   in op0, op1 | V16B_V8H -> let op0 = DSL.reg_v16b i.res.(0) in let op1 =
+   DSL.reg_v8h i.arg.(1) in op0, op1 | RegD_RegD_RegD -> let op0 = DSL.reg_d
+   i.res.(0) in let op1 = DSL.reg_d i.arg.(0) in let op2 = DSL.reg_d i.arg.(1)
+   in op0, op1, op2 | RegS_RegS_RegS -> let op0 = DSL.reg_s i.res.(0) in let op1
+   = DSL.reg_s i.arg.(0) in let op2 = DSL.reg_s i.arg.(1) in op0, op1, op2 |
+   RegD_RegD -> let op0 = DSL.reg_d i.res.(0) in let op1 = DSL.reg_d i.arg.(0)
+   in op0, op1 | RegS_RegS -> let op0 = DSL.reg_s i.res.(0) in let op1 =
+   DSL.reg_s i.arg.(0) in op0, op1 | RegD_RegX -> let op0 = DSL.reg_d i.res.(0)
+   in let op1 = DSL.reg_x i.arg.(0) in op0, op1 | RegS_RegX -> let op0 =
+   DSL.reg_s i.res.(0) in let op1 = DSL.reg_x i.arg.(0) in op0, op1 | RegX_RegD
+   -> let op0 = DSL.reg_x i.res.(0) in let op1 = DSL.reg_d i.arg.(0) in op0, op1
+   | RegX_RegS -> let op0 = DSL.reg_x i.res.(0) in let op1 = DSL.reg_s i.arg.(0)
+   in op0, op1 | Reg_LaneB lane -> let op0 = DSL.reg_w i.res.(0) in let op1 =
+   DSL.reglane_b i.arg.(0) ~lane in op0, op1 | Reg_LaneH lane -> let op0 =
+   DSL.reg_w i.res.(0) in let op1 = DSL.reglane_h i.arg.(0) ~lane in op0, op1 |
+   Reg_LaneS lane -> let op0 = DSL.reg_w i.res.(0) in let op1 = DSL.reglane_s
+   i.arg.(0) ~lane in op0, op1 | Reg_LaneD lane -> let op0 = DSL.reg_x i.res.(0)
+   in let op1 = DSL.reglane_d i.arg.(0) ~lane in op0, op1 | RegX_V16B lane ->
+   let lane_idx = Lane_index.create lane in let op0 = DSL.reg_x i.res.(0) in let
+   op1 = DSL.reg_v16b i.arg.(0) in lane_idx, op0, op1 | RegX_V8H lane -> let
+   lane_idx = Lane_index.create lane in let op0 = DSL.reg_x i.res.(0) in let op1
+   = DSL.reg_v8h i.arg.(0) in lane_idx, op0, op1 | RegX_V4S lane -> let lane_idx
+   = Lane_index.create lane in let op0 = DSL.reg_x i.res.(0) in let op1 =
+   DSL.reg_v4s i.arg.(0) in lane_idx, op0, op1 | LaneB_W lane -> let op0 =
+   DSL.reglane_b i.res.(0) ~lane in let op1 = DSL.reg_w i.arg.(1) in op0, op1 |
+   LaneH_W lane -> let op0 = DSL.reglane_h i.res.(0) ~lane in let op1 =
+   DSL.reg_w i.arg.(1) in op0, op1 | LaneS_W lane -> let op0 = DSL.reglane_s
+   i.res.(0) ~lane in let op1 = DSL.reg_w i.arg.(1) in op0, op1 | LaneD_Reg lane
+   -> let op0 = DSL.reglane_d i.res.(0) ~lane in let op1 = DSL.reg_x i.arg.(1)
+   in op0, op1 | LaneD_LaneD (src_lane, dst_lane) -> let op0 = DSL.reglane_d
+   i.res.(0) ~lane:dst_lane in let op1 = DSL.reglane_d i.arg.(1) ~lane:src_lane
+   in op0, op1 | V16B_LaneB lane -> let op0 = DSL.reg_v16b i.res.(0) in let op1
+   = DSL.reglane_b i.arg.(0) ~lane in op0, op1 | V8H_LaneH lane -> let op0 =
+   DSL.reg_v8h i.res.(0) in let op1 = DSL.reglane_h i.arg.(0) ~lane in op0, op1
+   | V4S_LaneS lane -> let op0 = DSL.reg_v4s i.res.(0) in let op1 =
+   DSL.reglane_s i.arg.(0) ~lane in op0, op1 | V2D_LaneD lane -> let op0 =
+   DSL.reg_v2d i.res.(0) in let op1 = DSL.reglane_d i.arg.(0) ~lane in op0, op1
+   | RegX_V2D lane -> let lane_idx = Lane_index.create lane in let op0 =
+   DSL.reg_x i.res.(0) in let op1 = DSL.reg_v2d i.arg.(0) in lane_idx, op0, op1
+   | V16B_W lane -> let lane_idx = Lane_index.create lane in let op0 =
+   DSL.reg_v16b i.res.(0) in let op1 = DSL.reg_w i.arg.(1) in lane_idx, op0, op1
+   | V8H_W lane -> let lane_idx = Lane_index.create lane in let op0 =
+   DSL.reg_v8h i.res.(0) in let op1 = DSL.reg_w i.arg.(1) in lane_idx, op0, op1
+   | V4S_W lane -> let lane_idx = Lane_index.create lane in let op0 =
+   DSL.reg_v4s i.res.(0) in let op1 = DSL.reg_w i.arg.(1) in lane_idx, op0, op1
+   | V2D_X lane -> let lane_idx = Lane_index.create lane in let op0 =
+   DSL.reg_v2d i.res.(0) in let op1 = DSL.reg_x i.arg.(1) in lane_idx, op0, op1
+   | V2D_V2D_lanes (src_lane, dst_lane) -> let src_idx = Lane_index.create
+   src_lane in let dst_idx = Lane_index.create dst_lane in let op0 = DSL.reg_v2d
+   i.res.(0) in let op1 = DSL.reg_v2d i.arg.(0) in dst_idx, src_idx, op0, op1 |
+   DUP_V16B lane -> (* CR mshinwell: remove "DUP" prefixes? Unsure *) let
+   lane_idx = Lane_index.create lane in let op0 = DSL.reg_v16b i.res.(0) in let
+   op1 = DSL.reg_v16b i.arg.(0) in lane_idx, op0, op1 | DUP_V8H lane -> let
+   lane_idx = Lane_index.create lane in let op0 = DSL.reg_v8h i.res.(0) in let
+   op1 = DSL.reg_v8h i.arg.(0) in lane_idx, op0, op1 | DUP_V4S lane -> let
+   lane_idx = Lane_index.create lane in let op0 = DSL.reg_v4s i.res.(0) in let
+   op1 = DSL.reg_v4s i.arg.(0) in lane_idx, op0, op1 | DUP_V2D lane -> let
+   lane_idx = Lane_index.create lane in let op0 = DSL.reg_v2d i.res.(0) in let
+   op1 = DSL.reg_v2d i.arg.(0) in lane_idx, op0, op1
 
-let simd_instr (op : Simd.operation) (i : Linear.instruction) =
-  let ins = DSL.Acc.ins in
-  match[@ocaml.warning "-4"] op with
-  (* Two special cases for min/max scalar: generate a sequence that matches the
-     weird semantics of amd64 instruction "minss", even when the flag [FPCR.AH]
-     is not set. *)
-  | Min_scalar_f32 | Min_scalar_f64 -> (
-    match DSL.reg_fp_operand_3 i.res.(0) i.arg.(0) i.arg.(1) with
-    | S_regs (rd, rn, rm) ->
-      ins FCMP (rn, rm);
-      ins FCSEL (rd, rn, rm, DSL.cond MI)
-    | D_regs (rd, rn, rm) ->
-      ins FCMP (rn, rm);
-      ins FCSEL (rd, rn, rm, DSL.cond MI))
-  | Max_scalar_f32 | Max_scalar_f64 -> (
-    match DSL.reg_fp_operand_3 i.res.(0) i.arg.(0) i.arg.(1) with
-    | S_regs (rd, rn, rm) ->
-      ins FCMP (rn, rm);
-      ins FCSEL (rd, rn, rm, DSL.cond GT)
-    | D_regs (rd, rn, rm) ->
-      ins FCMP (rn, rm);
-      ins FCSEL (rd, rn, rm, DSL.cond GT))
-  | Cntq_u16 ->
-    (* Population count for 16-bit elements: CNT on bytes then UADDLP to sum
-       pairs *)
-    (* XXX check that this is ok *)
-    let rd = DSL.reg_v8h i.res.(0) in
-    let rs = DSL.reg_v16b i.arg.(0) in
-    ins CNT_vector (rs, rs);
-    ins UADDLP_vector (rd, rs)
-  | _ -> (
-    (* The default case: one [Simd.operation] yields one instruction, together
-       with an operand shape. We ensure the operands match such shape and then
-       the instruction is emitted. *)
-    (match[@ocaml.warning "-fragile-match"] op with
-    | Copyq_laneq_s64 _ | Setq_lane_s8 _ | Setq_lane_s16 _ | Setq_lane_s32 _
-    | Setq_lane_s64 _ ->
-      (* Check that register constraint has been applied during selection *)
-      if not (Reg.same_loc i.res.(0) i.arg.(0))
-      then
-        Misc.fatal_errorf
-          "simd_instr: Instruction %s requires res and arg0 to be the same \
-           register"
-          (Simd.print_name op)
-    | _ -> ());
-    match Simd_proc.simd_operation_with_operand_regs op with
-    | S (instr, shape) ->
-      let operands = simd_operands shape i in
-      ins instr operands
-    | Transformed_in_emit ->
-      (* This probably means that a case is missing just above. *)
-      Misc.fatal_errorf
-        "simd_instr: Instruction %s should have been transformed earlier in \
-         Emit"
-        (Simd.print_name op))
+   let simd_instr (op : Simd.operation) (i : Linear.instruction) = let ins =
+   DSL.Acc.ins in match[@ocaml.warning "-4"] op with (* Two special cases for
+   min/max scalar: generate a sequence that matches the weird semantics of amd64
+   instruction "minss", even when the flag [FPCR.AH] is not set. *) |
+   Min_scalar_f32 | Min_scalar_f64 -> ( match DSL.reg_fp_operand_3 i.res.(0)
+   i.arg.(0) i.arg.(1) with | S_regs (rd, rn, rm) -> ins FCMP (rn, rm); ins
+   FCSEL (rd, rn, rm, DSL.cond MI) | D_regs (rd, rn, rm) -> ins FCMP (rn, rm);
+   ins FCSEL (rd, rn, rm, DSL.cond MI)) | Max_scalar_f32 | Max_scalar_f64 -> (
+   match DSL.reg_fp_operand_3 i.res.(0) i.arg.(0) i.arg.(1) with | S_regs (rd,
+   rn, rm) -> ins FCMP (rn, rm); ins FCSEL (rd, rn, rm, DSL.cond GT) | D_regs
+   (rd, rn, rm) -> ins FCMP (rn, rm); ins FCSEL (rd, rn, rm, DSL.cond GT)) |
+   Cntq_u16 -> (* Population count for 16-bit elements: CNT on bytes then UADDLP
+   to sum pairs *) (* XXX check that this is ok *) let rd = DSL.reg_v8h
+   i.res.(0) in let rs = DSL.reg_v16b i.arg.(0) in ins CNT_vector (rs, rs); ins
+   UADDLP_vector (rd, rs) | _ -> ( (* The default case: one [Simd.operation]
+   yields one instruction, together with an operand shape. We ensure the
+   operands match such shape and then the instruction is emitted. *)
+   (match[@ocaml.warning "-fragile-match"] op with | Copyq_laneq_s64 _ |
+   Setq_lane_s8 _ | Setq_lane_s16 _ | Setq_lane_s32 _ | Setq_lane_s64 _ -> (*
+   Check that register constraint has been applied during selection *) if not
+   (Reg.same_loc i.res.(0) i.arg.(0)) then Misc.fatal_errorf "simd_instr:
+   Instruction %s requires res and arg0 to be the same \ register"
+   (Simd.print_name op) | _ -> ()); match
+   Simd_proc.simd_operation_with_operand_regs op with | S (instr, shape) -> let
+   operands = simd_operands shape i in ins instr operands | Transformed_in_emit
+   -> (* This probably means that a case is missing just above. *)
+   Misc.fatal_errorf "simd_instr: Instruction %s should have been transformed
+   earlier in \ Emit" (Simd.print_name op)) *)
+
+let simd_instr _ _ = assert false (* XXX *)
 
 (* Record live pointers at call points *)
 
