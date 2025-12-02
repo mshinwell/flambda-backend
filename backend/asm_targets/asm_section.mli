@@ -57,6 +57,8 @@ type t =
 
 val to_string : t -> string
 
+val of_names : string list -> t option
+
 type section_details = private
   { names : string list;
     flags : string option;

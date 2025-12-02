@@ -37,6 +37,8 @@ type reloc_type =
   | GOT_PAGE_OFF
   | PAGE_OFF
 
+(* TODO: Asm_directives uses strings for labels and symbols. We should change it
+   to use Asm_label.t and Asm_symbol.t, and update this module accordingly. *)
 module Section_state : sig
   type t
 
@@ -47,11 +49,17 @@ module Section_state : sig
   val add_relocation_at_current_offset :
     t -> symbol_name:string -> reloc_type:reloc_type -> unit
 
-  val find_symbol_offset_in_bytes : t -> S.t -> int option
+  val define_symbol : t -> string -> unit
 
-  val find_label_offset_in_bytes : t -> L.t -> int option
+  val define_label : t -> string -> unit
+
+  val find_symbol_offset_in_bytes : t -> string -> int option
+
+  val find_label_offset_in_bytes : t -> string -> int option
 
   val offset_in_bytes : t -> int
+
+  val set_offset_in_bytes : t -> int -> unit
 end = struct
   type relocation =
     { offset_in_bytes : int;
@@ -63,16 +71,16 @@ end = struct
   type t =
     { buffer : Buffer.t;
       mutable offset_in_bytes : int;
-      symbol_offset_tbl : int S.Tbl.t;
-      label_offset_tbl : int L.Tbl.t;
+      symbol_offset_tbl : (string, int) Hashtbl.t;
+      label_offset_tbl : (string, int) Hashtbl.t;
       mutable relocations : relocation list
     }
 
   let create () =
     { buffer = Buffer.create 1024;
       offset_in_bytes = 0;
-      symbol_offset_tbl = S.Tbl.create 16;
-      label_offset_tbl = L.Tbl.create 16;
+      symbol_offset_tbl = Hashtbl.create 16;
+      label_offset_tbl = Hashtbl.create 16;
       relocations = []
     }
 
@@ -80,18 +88,24 @@ end = struct
 
   let offset_in_bytes t = t.offset_in_bytes
 
+  let set_offset_in_bytes t offset = t.offset_in_bytes <- offset
+
   let add_relocation_at_current_offset t ~symbol_name ~reloc_type =
     t.relocations
       <- { offset_in_bytes = t.offset_in_bytes; symbol_name; reloc_type }
          :: t.relocations
 
-  let set_offset_in_bytes t ~offset_in_bytes =
-    t.offset_in_bytes <- offset_in_bytes
+  let define_symbol t name =
+    Hashtbl.replace t.symbol_offset_tbl name t.offset_in_bytes
 
-  let find_symbol_offset_in_bytes t sym = S.Tbl.find_opt t.symbol_offset_tbl sym
+  let define_label t name =
+    Hashtbl.replace t.label_offset_tbl name t.offset_in_bytes
 
-  let find_label_offset_in_bytes t label =
-    L.Tbl.find_opt t.label_offset_tbl label
+  let find_symbol_offset_in_bytes t name =
+    Hashtbl.find_opt t.symbol_offset_tbl name
+
+  let find_label_offset_in_bytes t name =
+    Hashtbl.find_opt t.label_offset_tbl name
 end
 
 let _encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
@@ -516,7 +530,7 @@ let encode_load_store_gp :
   | Literal (_rn, sym) -> (
     (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
     (* XXX sym should be a L.t or a S.t, not a Symbol.t *)
-    match Symbol_state.find_symbol_offset_in_bytes state sym with
+    match Section_state.find_symbol_offset_in_bytes state sym.name with
     | None ->
       Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
         instr_name sym.name (Reg.name rd)
@@ -897,22 +911,32 @@ let add_instruction t i = enqueue t (Instruction i)
 
 let add_directive t d = enqueue t (Directive d)
 
-let iter t ~insn ~directive t =
-  let (_ : int) =
-    List.fold_left
-      (fun offset_in_bytes insn_or_directive ->
-        match insn_or_directive with
-        | Instruction i ->
-          insn i ~offset_in_bytes;
-          offset_in_bytes + 4
-        | Directive d ->
-          directive d ~offset_in_bytes;
-          D.Directive.increment_offset_in_bytes d ~offset_in_bytes)
-      0 (enqueued t)
-  in
-  ()
+let iter emitter ~state_for_section ~on_insn ~on_directive =
+  let current_state = ref (state_for_section Asm_section.Text) in
+  List.iter
+    (fun insn_or_directive ->
+      match insn_or_directive with
+      | Instruction i ->
+        on_insn !current_state i;
+        let offset = Section_state.offset_in_bytes !current_state in
+        Section_state.set_offset_in_bytes !current_state (offset + 4)
+      | Directive d ->
+        (match d with
+        | D.Directive.Section { names; _ } -> (
+          match Asm_section.of_names names with
+          | Some section -> current_state := state_for_section section
+          | None ->
+            Misc.fatal_errorf "Unknown section: %s" (String.concat ", " names))
+        | _ -> ());
+        on_directive !current_state d;
+        let offset_in_bytes = Section_state.offset_in_bytes !current_state in
+        let new_offset =
+          D.Directive.increment_offset_in_bytes d ~offset_in_bytes
+        in
+        Section_state.set_offset_in_bytes !current_state new_offset)
+    (enqueued emitter)
 
-let emit t =
+let emit emitter =
   let section_tbl = Asm_section.Tbl.create 10 in
   let state_for_section section =
     match Asm_section.Tbl.find_opt section_tbl section with
@@ -923,11 +947,23 @@ let emit t =
       state
   in
   (* First pass: compute offsets of local symbol and label definitions. *)
-  (* FOR CLAUDE: let's assume we start in the text section. Whenever we find a
-     Section directive, we need to get the correct section state using
-     [state_for_section]. Symbol and Label definitions need to be looked out for
-     and recorded in the state. *)
-  (* ... *)
+  iter emitter ~state_for_section
+    ~on_insn:(fun _state _insn -> ())
+    ~on_directive:(fun state directive ->
+      match directive with
+      | D.Directive.New_label (name, _) -> Section_state.define_label state name
+      | D.Directive.Global name -> Section_state.define_symbol state name
+      | _ -> ());
+  (* Reset offsets for second pass *)
+  Asm_section.Tbl.iter
+    (fun _section state -> Section_state.set_offset_in_bytes state 0)
+    section_tbl;
   (* Second pass: emit machine code and data *)
   (* ... *)
-  section_tbl
+  (* Convert Section_state.t table to Buffer.t table *)
+  let buffer_tbl = Asm_section.Tbl.create 10 in
+  Asm_section.Tbl.iter
+    (fun section state ->
+      Asm_section.Tbl.add buffer_tbl section (Section_state.buffer state))
+    section_tbl;
+  buffer_tbl

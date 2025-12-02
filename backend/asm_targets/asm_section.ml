@@ -244,3 +244,47 @@ let to_string t =
     details t ~first_occurrence:true
   in
   String.concat " " names
+
+let of_names names =
+  match names with
+  | [".text"] -> Some Text
+  | [".data"] -> Some Data
+  | [".rodata"] -> Some Read_only_data
+  | [".rodata.cst8"] -> Some Eight_byte_literals
+  | [".rodata.cst16"] -> Some Sixteen_byte_literals
+  | [".rodata.cst32"] -> Some Thirtytwo_byte_literals
+  | [".rodata.cst64"] -> Some Sixtyfour_byte_literals
+  | [".debug_info"] -> Some (DWARF Debug_info)
+  | [".debug_abbrev"] -> Some (DWARF Debug_abbrev)
+  | [".debug_aranges"] -> Some (DWARF Debug_aranges)
+  | [".debug_addr"] -> Some (DWARF Debug_addr)
+  | [".debug_loc"] -> Some (DWARF Debug_loc)
+  | [".debug_ranges"] -> Some (DWARF Debug_ranges)
+  | [".debug_loclists"] -> Some (DWARF Debug_loclists)
+  | [".debug_rnglists"] -> Some (DWARF Debug_rnglists)
+  | [".debug_str"] -> Some (DWARF Debug_str)
+  | [".debug_line"] -> Some (DWARF Debug_line)
+  | [".stapsdt.base"] -> Some Stapsdt_base
+  | [".note.stapsdt"] -> Some Stapsdt_note
+  | [".probes"] -> Some Probes
+  | [".note.ocaml_eh"] -> Some Note_ocaml_eh
+  (* macOS *)
+  | ["__TEXT"; "__text"] -> Some Text
+  | ["__DATA"; "__data"] -> Some Data
+  | ["__TEXT"; "__literal8"] -> Some Eight_byte_literals
+  | ["__TEXT"; "__literal16"] -> Some Sixteen_byte_literals
+  | ["__TEXT"; "__probes"] -> Some Probes
+  | ["__DWARF"; "__debug_info"] -> Some (DWARF Debug_info)
+  | ["__DWARF"; "__debug_abbrev"] -> Some (DWARF Debug_abbrev)
+  | ["__DWARF"; "__debug_aranges"] -> Some (DWARF Debug_aranges)
+  | ["__DWARF"; "__debug_addr"] -> Some (DWARF Debug_addr)
+  | ["__DWARF"; "__debug_loc"] -> Some (DWARF Debug_loc)
+  | ["__DWARF"; "__debug_ranges"] -> Some (DWARF Debug_ranges)
+  | ["__DWARF"; "__debug_loclists"] -> Some (DWARF Debug_loclists)
+  | ["__DWARF"; "__debug_rnglists"] -> Some (DWARF Debug_rnglists)
+  | ["__DWARF"; "__debug_str"] -> Some (DWARF Debug_str)
+  | ["__DWARF"; "__debug_line"] -> Some (DWARF Debug_line)
+  | ["__DATA"; "__note_stapsdt"] -> Some Stapsdt_note
+  (* Windows *)
+  | [".rdata"] -> Some Read_only_data
+  | _ -> None
