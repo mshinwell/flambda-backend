@@ -2692,6 +2692,10 @@ type relocation =
     reloc_type : reloc_type
   }
 
+let current_offset_bytes : int ref = ref 0
+
+let symbol_definitions : (string, int) Hashtbl.t = Hashtbl.create 64
+
 let pending_relocations : relocation list ref = ref []
 
 let add_relocation ~offset_bytes ~symbol_name ~reloc_type =
@@ -3062,13 +3066,24 @@ let encode_load_store_gp :
   | Reg rn ->
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
-  | Literal (rn, sym) -> (
-    match sym.reloc with
-    | Same_section ->
-      (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
-      Misc.fatal_errorf
-        "%s with symbol '%s' requires relocation directive (rd=%s, rn=%s)"
-        instr_name sym.name (Reg.name rd) (Reg.name rn))
+  | Literal (_rn, sym) -> (
+    (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
+    match Hashtbl.find_opt symbol_definitions sym.name with
+    | None ->
+      Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
+        instr_name sym.name (Reg.name rd)
+    | Some target_offset ->
+      (* XXX what do we do about forward references? *)
+      let pc_relative_offset = target_offset - !current_offset_bytes in
+      assert (pc_relative_offset > 0);
+      if pc_relative_offset mod 4 <> 0
+      then
+        Misc.fatal_errorf
+          "%s (literal) offset %d to symbol '%s' must be 4-byte aligned"
+          instr_name pc_relative_offset sym.name;
+      let imm19 = pc_relative_offset / 4 land 0x7FFFF in
+      let v = 0 in
+      encode_load_literal ~opc ~v ~imm19 ~rt)
   | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
     let reg_size_bytes = if size = 0b11 then 8 else 4 in
     if imm12 mod reg_size_bytes <> 0
@@ -3089,7 +3104,8 @@ let encode_load_store_gp :
         | LOWER_TWELVE -> PAGE_OFF
         | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
       in
-      add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type;
+      add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+        ~reloc_type;
       let rn = Reg.gp_encoding rn in
       let imm12 = (sym.offset lsr if size = 0b11 then 3 else 2) land 0xFFF in
       encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
@@ -3120,11 +3136,13 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
   | Pair (Reg _rd, Reg _rn), ADDV -> assert false
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
-    add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type:ADR;
+    add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+      ~reloc_type:ADR;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
-    add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type:ADRP;
+    add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+      ~reloc_type:ADRP;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:1 ~immlo ~immhi ~rd
   | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
