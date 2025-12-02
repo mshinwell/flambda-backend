@@ -1561,8 +1561,8 @@ module Instruction_name = struct
           t
     | STP
         : ( triple,
-            [< `Reg of [< `GP of [< `X | `W | `LR]]]
-            * [< `Reg of [< `GP of [< `X | `W | `LR]]]
+            [< `Reg of [`GP of [< `X | `W | `LR]]]
+            * [< `Reg of [`GP of [< `X | `W | `LR]]]
             * [< `Mem] )
           t
     | STR : (pair, [< `Reg of [`GP of [< `X | `W | `LR]]] * [< `Mem]) t
@@ -3424,7 +3424,8 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), SQSUB_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), SSHL_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Imm _), SSHR -> assert false
-  | Triple (Reg _rd, Reg _rn, Mem _), STP -> assert false
+  | Triple (Reg rt1, Reg rt2, Mem addressing), STP ->
+    encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
     encode_load_store_gp ~instr_name:"STR" ~opc:0b00 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
