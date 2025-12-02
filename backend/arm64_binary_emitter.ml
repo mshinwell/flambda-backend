@@ -1,4 +1,32 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
 open Arm64_ast
+module D = Asm_targets.Asm_directives
 
 type reloc_type =
   | ADR
@@ -805,3 +833,35 @@ let encode_instruction :
   | _, YIELD -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP1 -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP2 -> assert false
+
+type instruction_or_directive =
+  | Instruction of Instruction.t
+  | Directive of D.Directive.t
+
+type t = { mutable enqueued_rev : instruction_or_directive list }
+
+let create () = { enqueued_rev = [] }
+
+let enqueue t insn_or_directive =
+  t.enqueued_rev <- insn_or_directive :: t.enqueued_rev
+
+let enqueued t = List.rev t.enqueued_rev
+
+let add_instruction t i = enqueue t (Instruction i)
+
+let add_directive t d = enqueue t (Directive d)
+
+let iter t ~insn ~directive t =
+  let (_ : int) =
+    List.fold_left
+      (fun offset_in_bytes insn_or_directive ->
+        match insn_or_directive with
+        | Instruction i ->
+          insn i ~offset_in_bytes;
+          offset_in_bytes + 4
+        | Directive d ->
+          directive d ~offset_in_bytes;
+          D.Directive.increment_offset_in_bytes d ~offset_in_bytes)
+      0 (enqueued t)
+  in
+  ()

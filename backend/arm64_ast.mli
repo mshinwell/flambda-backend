@@ -1443,6 +1443,15 @@ module Instruction_name : sig
           t
 end
 
+module Instruction : sig
+  type t =
+    | I :
+        { name : ('num, 'operands) Instruction_name.t;
+          operands : ('num, 'operands) many
+        }
+        -> t
+end
+
 module DSL : sig
   val reg_op : 'a Reg.t -> [`Reg of 'a] Operand.t
 

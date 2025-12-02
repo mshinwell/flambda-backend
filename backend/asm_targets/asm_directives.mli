@@ -466,6 +466,8 @@ module Directive : sig
   (** Translate the given directive to textual form.  This produces output
       suitable for either gas or MASM as appropriate. *)
   val print : Buffer.t -> t -> unit
+
+  val increment_offset_in_bytes : t -> offset_in_bytes:int -> int
 end
 
 (** To be called by the emitter at the very start of code generation.
