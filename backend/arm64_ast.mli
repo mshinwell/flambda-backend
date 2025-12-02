@@ -1434,6 +1434,11 @@ module DSL : sig
         (Can't directly reference [Emitaux] due to a circular dependency.) *)
     val ins : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> unit
 
+    val ins1 : (singleton, 'a) Instruction_name.t -> 'a Operand.t -> unit
+    val ins2 : (pair, 'a * 'b) Instruction_name.t -> 'a Operand.t * 'b Operand.t -> unit
+    val ins3 : (triple, 'a * 'b * 'c) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t -> unit
+    val ins4 : (quad, 'a * 'b * 'c * 'd) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t * 'd Operand.t -> unit
+
     (** Expansion of instructions that are aliases *)
 
     val ins_mul :
