@@ -26,13 +26,10 @@
  ******************************************************************************)
 
 open Arm64_ast
+module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 module L = Asm_targets.Asm_label
 module S = Asm_targets.Asm_symbol
-
-type section_state = {
-
-}
 
 type reloc_type =
   | ADR
@@ -40,26 +37,62 @@ type reloc_type =
   | GOT_PAGE_OFF
   | PAGE_OFF
 
-type relocation =
-  { offset_bytes : int;
-    symbol_name : string;
-    reloc_type : reloc_type
-  }
-[@@warning "-69"]
+module Section_state : sig
+  type t
 
-let current_offset_bytes : int ref = ref 0
+  val create : unit -> t
 
-let symbol_definitions : (string, int) Hashtbl.t = Hashtbl.create 64
+  val buffer : t -> Buffer.t
 
-let pending_relocations : relocation list ref = ref []
+  val add_relocation_at_current_offset :
+    t -> symbol_name:string -> reloc_type:reloc_type -> unit
 
-let add_relocation ~offset_bytes ~symbol_name ~reloc_type =
-  pending_relocations
-    := { offset_bytes; symbol_name; reloc_type } :: !pending_relocations
+  val find_symbol_offset_in_bytes : t -> S.t -> int option
 
-let _get_relocations () = List.rev !pending_relocations
+  val find_label_offset_in_bytes : t -> L.t -> int option
 
-let _clear_relocations () = pending_relocations := []
+  val offset_in_bytes : t -> int
+end = struct
+  type relocation =
+    { offset_in_bytes : int;
+      symbol_name : string;
+      reloc_type : reloc_type
+    }
+  [@@warning "-69"]
+
+  type t =
+    { buffer : Buffer.t;
+      mutable offset_in_bytes : int;
+      symbol_offset_tbl : int S.Tbl.t;
+      label_offset_tbl : int L.Tbl.t;
+      mutable relocations : relocation list
+    }
+
+  let create () =
+    { buffer = Buffer.create 1024;
+      offset_in_bytes = 0;
+      symbol_offset_tbl = S.Tbl.create 16;
+      label_offset_tbl = L.Tbl.create 16;
+      relocations = []
+    }
+
+  let buffer t = t.buffer
+
+  let offset_in_bytes t = t.offset_in_bytes
+
+  let add_relocation_at_current_offset t ~symbol_name ~reloc_type =
+    t.relocations
+      <- { offset_in_bytes = t.offset_in_bytes; symbol_name; reloc_type }
+         :: t.relocations
+
+  let set_offset_in_bytes t ~offset_in_bytes =
+    t.offset_in_bytes <- offset_in_bytes
+
+  let find_symbol_offset_in_bytes t sym = S.Tbl.find_opt t.symbol_offset_tbl sym
+
+  let find_label_offset_in_bytes t label =
+    L.Tbl.find_opt t.label_offset_tbl label
+end
 
 let _encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
   match kind with LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
@@ -462,12 +495,13 @@ let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
 
 let encode_load_store_gp :
     type a.
+    Section_state.t ->
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
     Operand.Addressing_mode.t ->
     int32 =
- fun ~instr_name ~opc ~rd addressing ->
+ fun state ~instr_name ~opc ~rd addressing ->
   let size =
     match rd.reg_name with
     | GP W | GP WZR | GP WSP -> 0b10
@@ -481,13 +515,16 @@ let encode_load_store_gp :
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
   | Literal (_rn, sym) -> (
     (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
-    match Hashtbl.find_opt symbol_definitions sym.name with
+    (* XXX sym should be a L.t or a S.t, not a Symbol.t *)
+    match Symbol_state.find_symbol_offset_in_bytes state sym with
     | None ->
       Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
         instr_name sym.name (Reg.name rd)
     | Some target_offset ->
-      (* XXX what do we do about forward references? *)
-      let pc_relative_offset = target_offset - !current_offset_bytes in
+      let pc_relative_offset =
+        (* XXX should this be the starting or ending addr of the insn? *)
+        target_offset - Section_state.offset_in_bytes state
+      in
       assert (pc_relative_offset > 0);
       if pc_relative_offset mod 4 <> 0
       then
@@ -531,7 +568,7 @@ let encode_load_store_gp :
         | LOWER_TWELVE -> PAGE_OFF
         | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
       in
-      add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_type;
       let rn = Reg.gp_encoding rn in
       let shift = if size = 0b11 then 3 else 2 in
@@ -599,8 +636,11 @@ let encode_load_store_pair_gp :
 
 let encode_instruction :
     type num operands.
-    (num, operands) Instruction_name.t -> (num, operands) many -> int32 =
- fun instr operands ->
+    Section_state.t ->
+    (num, operands) Instruction_name.t ->
+    (num, operands) many ->
+    int32 =
+ fun state instr operands ->
   match operands, instr with
   | Pair (Reg _rd, Reg _rn), ABS_vector -> assert false
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADD_immediate ->
@@ -615,12 +655,12 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
   | Pair (Reg _rd, Reg _rn), ADDV -> assert false
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
-    add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+    Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
       ~reloc_type:ADR;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
-    add_relocation ~offset_bytes:!current_offset_bytes ~symbol_name:sym.name
+    Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
       ~reloc_type:ADRP;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:1 ~immlo ~immhi ~rd
@@ -715,7 +755,7 @@ let encode_instruction :
   | Triple (Reg rt1, Reg rt2, Mem addressing), LDP ->
     encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
-    encode_load_store_gp ~instr_name:"LDR" ~opc:0b01 ~rd addressing
+    encode_load_store_gp state ~instr_name:"LDR" ~opc:0b01 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
   | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
   | Pair (Reg _rd, Mem _addressing), LDRH -> assert false
@@ -797,7 +837,7 @@ let encode_instruction :
   | Triple (Reg rt1, Reg rt2, Mem addressing), STP ->
     encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
-    encode_load_store_gp ~instr_name:"STR" ~opc:0b00 ~rd addressing
+    encode_load_store_gp state ~instr_name:"STR" ~opc:0b00 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
   | Pair (Reg _rd, Mem _addressing), STRB -> assert false
   | Pair (Reg _rd, Mem _addressing), STRH -> assert false
@@ -873,10 +913,15 @@ let iter t ~insn ~directive t =
   ()
 
 let emit t =
-  let section_tbl = Asm_targets.Asm_section.Tbl.create 10 in
-  let _offset_in_bytes_tbl = Asm_targets.Asm_section.Tbl.create 10 in
-  let _symbol_offset_tbl = S.Tbl.create 100 in
-  let _label_offset_tbl = L.Tbl.create 100 in
+  let section_tbl = Asm_section.Tbl.create 10 in
+  let state_for_section section =
+    match Asm_section.Tbl.find_opt section_tbl section with
+    | Some state -> state
+    | None ->
+      let state = Section_state.create () in
+      Asm_section.Tbl.add section_tbl section state;
+      state
+  in
   (* First pass: compute offsets of local symbol and label definitions *)
   (* ... *)
   (* Second pass: emit machine code and data *)
