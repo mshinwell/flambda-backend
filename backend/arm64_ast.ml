@@ -3207,34 +3207,21 @@ let encode_load_store_pair_gp :
   let v = 0 in
   let rt1_enc = Reg.gp_encoding rt1 in
   let rt2_enc = Reg.gp_encoding rt2 in
+  let encode_with_alignment_check encode_fn rn imm =
+    if imm mod scale <> 0 then
+      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
+        imm scale;
+    let imm7 = imm / scale in
+    let rn = Reg.gp_encoding rn in
+    encode_fn ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn ~rt:rt1_enc
+  in
   match addressing with
   | Offset_pair (rn, Imm (Seven_signed_scaled imm)) ->
-    if imm mod scale <> 0
-    then
-      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
-        imm scale;
-    let imm7 = imm / scale in
-    let rn = Reg.gp_encoding rn in
-    encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
-      ~rt:rt1_enc
+    encode_with_alignment_check encode_load_store_pair_signed_offset rn imm
   | Pre_pair (rn, Imm (Seven_signed_scaled imm)) ->
-    if imm mod scale <> 0
-    then
-      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
-        imm scale;
-    let imm7 = imm / scale in
-    let rn = Reg.gp_encoding rn in
-    encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
-      ~rt:rt1_enc
+    encode_with_alignment_check encode_load_store_pair_pre_indexed rn imm
   | Post_pair (rn, Imm (Seven_signed_scaled imm)) ->
-    if imm mod scale <> 0
-    then
-      Misc.fatal_errorf "%s offset %d must be aligned to %d bytes" instr_name
-        imm scale;
-    let imm7 = imm / scale in
-    let rn = Reg.gp_encoding rn in
-    encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2:rt2_enc ~rn
-      ~rt:rt1_enc
+    encode_with_alignment_check encode_load_store_pair_post_indexed rn imm
   | Reg _ | Literal _ | Offset _ | Pre _ | Post _ ->
     Misc.fatal_errorf
       "%s: single-register addressing modes not supported for pair load/store"
