@@ -34,3 +34,5 @@ val create : unit -> t
 val add_instruction : t -> Instruction.t -> unit
 
 val add_directive : t -> Asm_targets.Asm_directives.Directive.t -> unit
+
+val emit : t -> Buffer.t Asm_targets.Asm_section.Tbl.t

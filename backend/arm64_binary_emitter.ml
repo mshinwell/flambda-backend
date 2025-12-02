@@ -27,6 +27,12 @@
 
 open Arm64_ast
 module D = Asm_targets.Asm_directives
+module L = Asm_targets.Asm_label
+module S = Asm_targets.Asm_symbol
+
+type section_state = {
+
+}
 
 type reloc_type =
   | ADR
@@ -865,3 +871,14 @@ let iter t ~insn ~directive t =
       0 (enqueued t)
   in
   ()
+
+let emit t =
+  let section_tbl = Asm_targets.Asm_section.Tbl.create 10 in
+  let _offset_in_bytes_tbl = Asm_targets.Asm_section.Tbl.create 10 in
+  let _symbol_offset_tbl = S.Tbl.create 100 in
+  let _label_offset_tbl = L.Tbl.create 100 in
+  (* First pass: compute offsets of local symbol and label definitions *)
+  (* ... *)
+  (* Second pass: emit machine code and data *)
+  (* ... *)
+  section_tbl

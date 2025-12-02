@@ -114,6 +114,16 @@ let compare t1 t2 = Stdlib.compare t1 t2
 
 let equal t1 t2 = Stdlib.compare t1 t2 = 0
 
+let hash t = Hashtbl.hash t
+
+module Tbl = Hashtbl.Make (struct
+  type nonrec t = t
+
+  let equal = equal
+
+  let hash = hash
+end)
+
 let section_is_text = function
   | Text -> true
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals

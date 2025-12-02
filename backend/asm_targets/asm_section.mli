@@ -81,5 +81,9 @@ val compare : t -> t -> int
 
 val equal : t -> t -> bool
 
+val hash : t -> int
+
+module Tbl : Hashtbl.S with type key = t
+
 (** Whether the section holds code. *)
 val section_is_text : t -> bool
