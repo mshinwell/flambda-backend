@@ -3163,10 +3163,17 @@ module Binary_encoder = struct
         (* Base register only [Xn] - use unscaled with imm9=0 *)
         let rn = Reg.gp_encoding rn in
         encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
-      | Offset (rn, Imm (Twelve_unsigned_scaled _imm12)) ->
-        (* TODO: Implement unsigned offset variant - for now use imm9=0 *)
+      | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
+        let reg_size_bytes = if size = 0b11 then 8 else 4 in
+        if imm12 mod reg_size_bytes <> 0 then
+          Misc.fatal_errorf
+            "LDR offset %d must be aligned to %d-byte register size (rd=%s, \
+             rn=%s)"
+            imm12 reg_size_bytes (Reg.name rd) (Reg.name rn);
         let rn = Reg.gp_encoding rn in
-        encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+        let imm12_scaled = (imm12 / reg_size_bytes) land 0xFFF in
+        encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled
+          ~rn ~rt
       | Offset (rn, Symbol sym) ->
         let reloc_type =
           match sym.reloc with
@@ -3174,7 +3181,11 @@ module Binary_encoder = struct
           | Some Symbol.PAGE_OFF -> PAGE_OFF
           | Some Symbol.LOWER_TWELVE -> PAGE_OFF
           | Some Symbol.GOT_LOWER_TWELVE -> GOT_PAGE_OFF
-          | None -> failwith "LDR with symbol requires relocation directive"
+          | None ->
+            Misc.fatal_errorf
+              "LDR with symbol '%s' requires relocation directive (rd=%s, \
+               rn=%s)"
+              sym.name (Reg.name rd) (Reg.name rn)
         in
         add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type;
         let rn = Reg.gp_encoding rn in
