@@ -645,10 +645,16 @@ module Operand = struct
           [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
           -> t
       | Literal : [`GP of [< `X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
-      | Pre : [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
-      | Post : [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
+      | Pre :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t
+          -> t
+      | Post :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t
+          -> t
       (* Addressing modes for load/store pair (LDP/STP) *)
-      | Offset_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
+      | Offset_pair :
+          [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t
+          -> t
       | Pre_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
       | Post_pair : [`GP of [< `X | `SP]] Reg.t * [`Seven_signed] Offset.t -> t
     [@@warning "-37"]
@@ -1402,8 +1408,8 @@ module Instruction_name = struct
           t
     | SBFM
         : ( quad,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Reg of [`GP of [`X | `W]]]
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
             * [`Imm of [`Six]]
             * [`Imm of [`Six]] )
           t

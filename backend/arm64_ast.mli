@@ -898,8 +898,8 @@ module Instruction_name : sig
           t
     | SBFM
         : ( quad,
-            [`Reg of [`GP of [`X | `W]]]
-            * [`Reg of [`GP of [`X | `W]]]
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
             * [`Imm of [`Six]]
             * [`Imm of [`Six]] )
           t
@@ -1356,7 +1356,9 @@ module DSL : sig
     base:[`GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
 
   val mem_symbol :
-    base:[`GP of [< `X | `SP]] Reg.t -> symbol:[`Twelve] Symbol.t -> [`Mem] Operand.t
+    base:[`GP of [< `X | `SP]] Reg.t ->
+    symbol:[`Twelve] Symbol.t ->
+    [`Mem] Operand.t
 
   val mem_pre :
     base:[`GP of [< `X | `SP]] Reg.t -> offset:int -> [`Mem] Operand.t
@@ -1378,7 +1380,8 @@ module DSL : sig
 
   val reg_v8b : int -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Operand.t
 
-  val reg_v16b : int -> [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Operand.t
+  val reg_v16b :
+    int -> [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Operand.t
 
   val reg_v8h : int -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Operand.t
 
@@ -1436,19 +1439,32 @@ module DSL : sig
     lane:Neon_reg_name.Lane_index.t ->
     [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Operand.t
 
-  val print_ins : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> string
+  val print_ins :
+    ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> string
 
   module Acc : sig
     val set_emit_string : emit_string:(string -> unit) -> unit
 
     (** Passes the instruction to the function provided to [set_emit_string].
         (Can't directly reference [Emitaux] due to a circular dependency.) *)
-    val ins : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> unit
+    val ins :
+      ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> unit
 
     val ins1 : (singleton, 'a) Instruction_name.t -> 'a Operand.t -> unit
-    val ins2 : (pair, 'a * 'b) Instruction_name.t -> 'a Operand.t * 'b Operand.t -> unit
-    val ins3 : (triple, 'a * 'b * 'c) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t -> unit
-    val ins4 : (quad, 'a * 'b * 'c * 'd) Instruction_name.t -> 'a Operand.t * 'b Operand.t * 'c Operand.t * 'd Operand.t -> unit
+
+    val ins2 :
+      (pair, 'a * 'b) Instruction_name.t -> 'a Operand.t * 'b Operand.t -> unit
+
+    val ins3 :
+      (triple, 'a * 'b * 'c) Instruction_name.t ->
+      'a Operand.t * 'b Operand.t * 'c Operand.t ->
+      unit
+
+    val ins4 :
+      (quad, 'a * 'b * 'c * 'd) Instruction_name.t ->
+      'a Operand.t * 'b Operand.t * 'c Operand.t * 'd Operand.t ->
+      unit
+
     val ins0 : (singleton, unit) Instruction_name.t -> unit
 
     (** Expansion of instructions that are aliases *)
@@ -1472,8 +1488,8 @@ module DSL : sig
       unit
 
     val ins_asr_immediate :
-      [`Reg of [`GP of [`W | `X]]] Operand.t ->
-      [`Reg of [`GP of [`W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
+      [`Reg of [`GP of [< `W | `X]]] Operand.t ->
       shift_in_bits:int ->
       unit
 
@@ -1496,7 +1512,8 @@ module DSL : sig
     val ins_cmp_reg :
       [< `Reg of [< `GP of [< `SP | `X]]] Operand.t ->
       [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Optional of [< `Shift of [< `Asr | `Lsl | `Lsr] * [< `Six]] option] Operand.t ->
+      [< `Optional of [< `Shift of [< `Asr | `Lsl | `Lsr] * [< `Six]] option]
+      Operand.t ->
       unit
 
     val ins_cmn :
@@ -1516,4 +1533,5 @@ module DSL : sig
 end
 
 (* TODO: move to separate file *)
-val encode_instruction : ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> int32
+val encode_instruction :
+  ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> int32
