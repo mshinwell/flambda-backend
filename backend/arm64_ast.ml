@@ -508,38 +508,41 @@ module Symbol = struct
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
 
-  type 'width t =
+  type 'w same_section_or_reloc =
+    | Same_section : [`Nineteen] same_section_or_reloc
+    | Different_section : 'w reloc_directive -> 'w same_section_or_reloc
+
+  type 'w t =
     { name : string;
       offset : int;
-      reloc : 'width reloc_directive option
+      reloc : 'w same_section_or_reloc
     }
 
-  let create (type w) ?(reloc : w reloc_directive option) ?(offset = 0) name :
-      w t =
+  let create (type w) (reloc : w same_section_or_reloc) ?(offset = 0) name : w t
+      =
     { name; offset; reloc }
 
   let print_with_reloc_directive :
-      type w. Format.formatter -> string * w reloc_directive option -> unit =
+      type w. Format.formatter -> string * w reloc_directive -> unit =
    fun ppf (s, reloc) ->
     let macosx = Target_system.is_macos () in
     match reloc with
-    | None -> Format.pp_print_string ppf s
-    | Some LOWER_TWELVE -> Format.fprintf ppf ":lo12:%s" s
-    | Some GOT -> Format.fprintf ppf ":got:%s" s
-    | Some GOT_LOWER_TWELVE -> Format.fprintf ppf ":got_lo12:%s" s
-    | Some GOT_PAGE ->
+    | LOWER_TWELVE -> Format.fprintf ppf ":lo12:%s" s
+    | GOT -> Format.fprintf ppf ":got:%s" s
+    | GOT_LOWER_TWELVE -> Format.fprintf ppf ":got_lo12:%s" s
+    | GOT_PAGE ->
       if macosx
       then Format.fprintf ppf "%s@GOTPAGE" s
       else Format.fprintf ppf ":got:%s" s
-    | Some GOT_PAGE_OFF ->
+    | GOT_PAGE_OFF ->
       if macosx
       then Format.fprintf ppf "%s@GOTPAGEOFF" s
       else Format.fprintf ppf ":got_lo12:%s" s
-    | Some PAGE ->
+    | PAGE ->
       if macosx
       then Format.fprintf ppf "%s@PAGE" s
       else Format.fprintf ppf "%s" s
-    | Some PAGE_OFF ->
+    | PAGE_OFF ->
       if macosx
       then Format.fprintf ppf "%s@PAGEOFF" s
       else Format.fprintf ppf ":lo12:%s" s
@@ -553,8 +556,11 @@ module Symbol = struct
 
   let print : type w. Format.formatter -> w t -> unit =
    fun ppf { name; offset; reloc } ->
-    Format.fprintf ppf "%a%a" print_with_reloc_directive (name, reloc)
-      print_int_offset offset
+    match reloc with
+    | Same_section -> Format.fprintf ppf "%s%a" name print_int_offset offset
+    | Different_section reloc ->
+      Format.fprintf ppf "%a%a" print_with_reloc_directive (name, reloc)
+        print_int_offset offset
 end
 
 module Operand = struct
@@ -621,11 +627,13 @@ module Operand = struct
     module Offset = struct
       type _ t =
         | Imm : 'w Imm.t -> 'w t
-        | Symbol : [`Twelve] Symbol.t -> [`Twelve_unsigned_scaled] t
+        | Symbol_with_reloc : [`Twelve] Symbol.t -> [`Twelve_unsigned_scaled] t
 
       let print : type a. Format.formatter -> a t -> unit =
        fun ppf t ->
-        match t with Imm i -> Imm.print ppf i | Symbol s -> Symbol.print ppf s
+        match t with
+        | Imm i -> Imm.print ppf i
+        | Symbol_with_reloc s -> Symbol.print ppf s
     end
 
     (* ARMARM Section C1.3.3, Table C1-8 *)
@@ -634,6 +642,7 @@ module Operand = struct
       | Offset :
           [`GP of [`X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
           -> t
+      | Literal : [`GP of [`X | `SP]] Reg.t * [`Nineteen] Symbol.t -> t
       | Pre : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
       | Post : [`GP of [`X | `SP]] Reg.t * [`Nine_signed_unscaled] Offset.t -> t
 
@@ -642,6 +651,7 @@ module Operand = struct
       match t with
       | Reg r -> fprintf ppf "[%s]" (Reg.name r)
       | Offset (r, off) -> fprintf ppf "[%s, %a]" (Reg.name r) Offset.print off
+      | Literal (r, sym) -> fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
       | Pre (r, off) -> fprintf ppf "[%s, %a]!" (Reg.name r) Offset.print off
       | Post (r, off) -> fprintf ppf "[%s], %a" (Reg.name r) Offset.print off
   end
@@ -2503,7 +2513,7 @@ module DSL = struct
     Operand.Mem (Offset (base, Imm (Twelve_unsigned_scaled offset)))
 
   let mem_symbol ~(base : [< `GP of [< `X | `SP]] Reg.t) ~symbol =
-    Operand.Mem (Offset (base, Symbol symbol))
+    Operand.Mem (Offset (base, Symbol_with_reloc symbol))
 
   let mem_pre ~(base : [< `GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset] *)
@@ -3052,6 +3062,13 @@ let encode_load_store_gp :
   | Reg rn ->
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+  | Literal (rn, sym) -> (
+    match sym.reloc with
+    | Same_section ->
+      (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
+      Misc.fatal_errorf
+        "%s with symbol '%s' requires relocation directive (rd=%s, rn=%s)"
+        instr_name sym.name (Reg.name rd) (Reg.name rn))
   | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
     let reg_size_bytes = if size = 0b11 then 8 else 4 in
     if imm12 mod reg_size_bytes <> 0
@@ -3062,22 +3079,20 @@ let encode_load_store_gp :
     let rn = Reg.gp_encoding rn in
     let imm12_scaled = imm12 / reg_size_bytes land 0xFFF in
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
-  | Offset (rn, Symbol sym) ->
-    let reloc_type =
-      match sym.reloc with
-      | Some GOT_PAGE_OFF -> GOT_PAGE_OFF
-      | Some PAGE_OFF -> PAGE_OFF
-      | Some LOWER_TWELVE -> PAGE_OFF
-      | Some GOT_LOWER_TWELVE -> GOT_PAGE_OFF
-      | None ->
-        Misc.fatal_errorf
-          "%s with symbol '%s' requires relocation directive (rd=%s, rn=%s)"
-          instr_name sym.name (Reg.name rd) (Reg.name rn)
-    in
-    add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type;
-    let rn = Reg.gp_encoding rn in
-    let imm12 = (sym.offset lsr if size = 0b11 then 3 else 2) land 0xFFF in
-    encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt
+  | Offset (rn, Symbol_with_reloc sym) -> (
+    match sym.reloc with
+    | Different_section reloc ->
+      let reloc_type =
+        match reloc with
+        | GOT_PAGE_OFF -> GOT_PAGE_OFF
+        | PAGE_OFF -> PAGE_OFF
+        | LOWER_TWELVE -> PAGE_OFF
+        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+      in
+      add_relocation ~offset_bytes:0 ~symbol_name:sym.name ~reloc_type;
+      let rn = Reg.gp_encoding rn in
+      let imm12 = (sym.offset lsr if size = 0b11 then 3 else 2) land 0xFFF in
+      encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
