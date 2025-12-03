@@ -936,6 +936,18 @@ let iter emitter ~state_for_section ~on_insn ~on_directive =
         Section_state.set_offset_in_bytes !current_state new_offset)
     (enqueued emitter)
 
+let eval_constant state c =
+  let this () = Int64.of_int (Section_state.offset_in_bytes state) in
+  let lookup name =
+    match Section_state.find_label_offset_in_bytes state name with
+    | Some offset -> Some (Int64.of_int offset)
+    | None -> (
+      match Section_state.find_symbol_offset_in_bytes state name with
+      | Some offset -> Some (Int64.of_int offset)
+      | None -> None)
+  in
+  D.Directive.Constant.eval ~this ~lookup c
+
 let emit emitter =
   let section_tbl = Asm_section.Tbl.create 10 in
   let state_for_section section =
@@ -959,7 +971,62 @@ let emit emitter =
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
     section_tbl;
   (* Second pass: emit machine code and data *)
-  (* ... *)
+  iter emitter ~state_for_section
+    ~on_insn:(fun state (Instruction.I { name; operands }) ->
+      let encoded = encode_instruction state name operands in
+      let buf = Section_state.buffer state in
+      (* Emit as little-endian 32-bit *)
+      Buffer.add_char buf (Char.chr (Int32.to_int encoded land 0xff));
+      Buffer.add_char buf
+        (Char.chr
+           (Int32.to_int (Int32.shift_right_logical encoded 8) land 0xff));
+      Buffer.add_char buf
+        (Char.chr
+           (Int32.to_int (Int32.shift_right_logical encoded 16) land 0xff));
+      Buffer.add_char buf
+        (Char.chr
+           (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
+    ~on_directive:(fun state directive ->
+      let buf = Section_state.buffer state in
+      match directive with
+      | D.Directive.Bytes { str; _ } -> Buffer.add_string buf str
+      | D.Directive.Space { bytes } ->
+        for _ = 1 to bytes do
+          Buffer.add_char buf '\x00'
+        done
+      | D.Directive.Align { bytes; _ } ->
+        let offset = Section_state.offset_in_bytes state in
+        let remainder = offset mod bytes in
+        if remainder <> 0
+        then
+          let padding = bytes - remainder in
+          for _ = 1 to padding do
+            Buffer.add_char buf '\x00'
+          done
+      | D.Directive.Const { constant; _ } -> (
+        let c = D.Directive.Constant_with_width.constant constant in
+        let width = D.Directive.Constant_with_width.width_in_bytes constant in
+        let width_bytes =
+          D.Directive.Constant_with_width.width_in_bytes_int width
+        in
+        match eval_constant state c with
+        | Some value -> D.Directive.emit_int_le buf ~width_bytes value
+        | None ->
+          (* External reference - emit zeros and would need relocation *)
+          for _ = 1 to width_bytes do
+            Buffer.add_char buf '\x00'
+          done)
+      | D.Directive.Sleb128 { constant; _ } -> (
+        match eval_constant state constant with
+        | Some value -> D.Directive.emit_sleb128 buf value
+        | None -> Misc.fatal_error "Cannot emit SLEB128 for external symbol")
+      | D.Directive.Uleb128 { constant; _ } -> (
+        match eval_constant state constant with
+        | Some value -> D.Directive.emit_uleb128 buf value
+        | None -> Misc.fatal_error "Cannot emit ULEB128 for external symbol")
+      | _ ->
+        (* Other directives don't emit data *)
+        ());
   (* Convert Section_state.t table to Buffer.t table *)
   let buffer_tbl = Asm_section.Tbl.create 10 in
   Asm_section.Tbl.iter

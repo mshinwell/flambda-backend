@@ -141,6 +141,23 @@ module Directive = struct
     let print = print_aux ~force_decimal:false
 
     let print_using_decimals = print_aux ~force_decimal:true
+
+    (* Evaluate a constant expression to a 64-bit value. Returns None if the
+       constant references an undefined symbol or if [lookup] returns None. *)
+    let rec eval ~this ~lookup t =
+      match t with
+      | Signed_int n -> Some n
+      | Unsigned_int n -> Some (Uint64.to_int64 n)
+      | This -> Some (this ())
+      | Named_thing name -> lookup name
+      | Add (a, b) -> (
+        match eval ~this ~lookup a, eval ~this ~lookup b with
+        | Some va, Some vb -> Some (Int64.add va vb)
+        | _ -> None)
+      | Sub (a, b) -> (
+        match eval ~this ~lookup a, eval ~this ~lookup b with
+        | Some va, Some vb -> Some (Int64.sub va vb)
+        | _ -> None)
   end
 
   module Constant_with_width = struct
@@ -540,6 +557,47 @@ module Directive = struct
     if Int64.compare i (-64L) >= 0 && Int64.compare i 64L < 0
     then 1
     else 1 + sleb128_size (Int64.shift_right i 7)
+
+  (* Emit ULEB128 encoded value to a buffer *)
+  let emit_uleb128 buf (value : int64) =
+    let rec loop v =
+      let byte = Int64.to_int (Int64.logand v 0x7FL) in
+      let v' = Int64.shift_right_logical v 7 in
+      if Int64.equal v' 0L
+      then Buffer.add_char buf (Char.chr byte)
+      else (
+        Buffer.add_char buf (Char.chr (byte lor 0x80));
+        loop v')
+    in
+    loop value
+
+  (* Emit SLEB128 encoded value to a buffer *)
+  let emit_sleb128 buf (value : int64) =
+    let rec loop v =
+      let byte = Int64.to_int (Int64.logand v 0x7FL) in
+      let v' = Int64.shift_right v 7 in
+      let more =
+        not
+          ((Int64.equal v' 0L && byte land 0x40 = 0)
+          || (Int64.equal v' (-1L) && byte land 0x40 <> 0))
+      in
+      if more
+      then (
+        Buffer.add_char buf (Char.chr (byte lor 0x80));
+        loop v')
+      else Buffer.add_char buf (Char.chr byte)
+    in
+    loop value
+
+  (* Emit a little-endian integer value of the given width *)
+  let emit_int_le buf ~width_bytes (value : int64) =
+    for i = 0 to width_bytes - 1 do
+      let byte =
+        Int64.to_int
+          (Int64.logand (Int64.shift_right_logical value (i * 8)) 0xFFL)
+      in
+      Buffer.add_char buf (Char.chr byte)
+    done
 
   let increment_offset_in_bytes t ~offset_in_bytes =
     match t with
