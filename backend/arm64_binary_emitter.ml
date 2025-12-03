@@ -473,6 +473,26 @@ let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
 let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
  fun amount -> match amount with Six n -> n | _ -> assert false
 
+(* Helper to encode add/sub shifted register instructions.
+   op: 0=ADD, 1=SUB; s: 0=no flags, 1=set flags *)
+let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
+  let sf = Reg.gp_sf rd in
+  let rd_enc = Reg.gp_encoding rd in
+  let rn_enc = Reg.gp_encoding rn in
+  let rm_enc = Reg.gp_encoding rm in
+  encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm:rm_enc ~imm6 ~rn:rn_enc
+    ~rd:rd_enc
+
+(* Helper to encode logical shifted register instructions.
+   opc: 00=AND, 01=ORR, 10=EOR, 11=ANDS *)
+let encode_logical_shifted_reg ~opc ~shift ~imm6 ~rd ~rn ~rm =
+  let sf = Reg.gp_sf rd in
+  let rd_enc = Reg.gp_encoding rd in
+  let rn_enc = Reg.gp_encoding rn in
+  let rm_enc = Reg.gp_encoding rm in
+  encode_logical_shifted_register ~sf ~opc ~shift ~n:0 ~rm:rm_enc ~imm6
+    ~rn:rn_enc ~rd:rd_enc
+
 (* Load/store register (unscaled immediate) - C4.1.96.25 *)
 let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
   assert (imm9 >= 0 && imm9 <= 0x1ff);
@@ -910,18 +930,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       ADD_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_add_sub_shifted_register ~sf ~op:0 ~s:0 ~shift ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_add_sub_shifted_reg ~op:0 ~s:0 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), ADDP_vector -> assert false
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADDS ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
@@ -947,18 +962,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       AND_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_logical_shifted_register ~sf ~opc:0b00 ~shift ~n:0 ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_logical_shifted_reg ~opc:0b00 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
   | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
     let sf = Reg.gp_sf rd in
@@ -1018,18 +1028,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       EOR_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_logical_shifted_register ~sf ~opc:0b10 ~shift ~n:0 ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_logical_shifted_reg ~opc:0b10 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
   | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
   | Pair (Reg _rd, Reg _rn), FABS -> assert false
@@ -1156,18 +1161,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       ORR_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_logical_shifted_register ~sf ~opc:0b01 ~shift ~n:0 ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_logical_shifted_reg ~opc:0b01 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
   | Pair (Reg rd, Reg rn), RBIT ->
     let sf = Reg.gp_sf rd in
@@ -1242,18 +1242,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       SUB_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_add_sub_shifted_register ~sf ~op:1 ~s:0 ~shift ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_add_sub_shifted_reg ~op:1 ~s:0 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUBS_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
@@ -1264,18 +1259,13 @@ let encode_instruction :
           Reg ({ reg_name = GP _; _ } as rm),
           Optional shift_opt ),
       SUBS_shifted_register ) ->
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rn_enc = Reg.gp_encoding rn in
-    let rm_enc = Reg.gp_encoding rm in
     let shift, imm6 =
       match shift_opt with
       | None -> 0, 0
       | Some (Shift { kind; amount }) ->
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
-    encode_add_sub_shifted_register ~sf ~op:1 ~s:1 ~shift ~rm:rm_enc ~imm6
-      ~rn:rn_enc ~rd:rd_enc
+    encode_add_sub_shifted_reg ~op:1 ~s:1 ~shift ~imm6 ~rd ~rn ~rm
   | Pair (Reg _rd, Reg _rn), SXTL -> assert false
   | ( Triple (Reg ({ reg_name = GP _; _ } as rt), Imm (Six bit), Imm (Sym sym)),
       TBNZ ) ->
