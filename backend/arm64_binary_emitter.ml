@@ -715,6 +715,50 @@ let encode_load_store_pair_gp :
       "%s: single-register addressing modes not supported for pair load/store"
       instr_name
 
+(* Helper to compute a 26-bit PC-relative offset for B/BL instructions *)
+let compute_branch_imm26 state ~instr_name (sym : _ Symbol.t) =
+  let symbol_name = sym.name in
+  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  | None ->
+    Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
+      symbol_name
+  | Some target_offset ->
+    let pc_relative_offset =
+      target_offset - Section_state.offset_in_bytes state
+    in
+    if pc_relative_offset mod 4 <> 0
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
+        instr_name pc_relative_offset symbol_name;
+    let imm26 = pc_relative_offset / 4 in
+    if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±128MB)"
+        instr_name pc_relative_offset symbol_name;
+    imm26
+
+(* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)
+let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
+  let symbol_name = sym.name in
+  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  | None ->
+    Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
+      symbol_name
+  | Some target_offset ->
+    let pc_relative_offset =
+      target_offset - Section_state.offset_in_bytes state
+    in
+    if pc_relative_offset mod 4 <> 0
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
+        instr_name pc_relative_offset symbol_name;
+    let imm19 = pc_relative_offset / 4 in
+    if imm19 < -0x40000 || imm19 > 0x3FFFF
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±1MB)"
+        instr_name pc_relative_offset symbol_name;
+    imm19
+
 let encode_instruction :
     type num operands.
     Section_state.t ->
@@ -754,88 +798,30 @@ let encode_instruction :
   | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
-  | Singleton (Imm (Sym sym)), B -> (
-    match Section_state.find_symbol_offset_in_bytes state sym.name with
-    | None -> Misc.fatal_errorf "B references undefined symbol '%s'" sym.name
-    | Some target_offset ->
-      let pc_relative_offset =
-        target_offset - Section_state.offset_in_bytes state
-      in
-      if pc_relative_offset mod 4 <> 0
-      then
-        Misc.fatal_errorf "B offset %d to symbol '%s' must be 4-byte aligned"
-          pc_relative_offset sym.name;
-      let imm26 = pc_relative_offset / 4 in
-      if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
-      then
-        Misc.fatal_errorf "B offset %d to symbol '%s' out of range (max ±128MB)"
-          pc_relative_offset sym.name;
-      encode_branch_immediate ~op:0 ~imm26)
+  | Singleton (Imm (Sym sym)), B ->
+    let imm26 = compute_branch_imm26 state ~instr_name:"B" sym in
+    encode_branch_immediate ~op:0 ~imm26
   | Singleton (Imm _), B ->
     Misc.fatal_error "B only supports Sym immediates in binary emitter"
   | Singleton _, B_cond _ -> assert false
   | Singleton _, B_cond_float _ -> assert false
-  | Singleton (Imm (Sym sym)), BL -> (
-    match Section_state.find_symbol_offset_in_bytes state sym.name with
-    | None -> Misc.fatal_errorf "BL references undefined symbol '%s'" sym.name
-    | Some target_offset ->
-      let pc_relative_offset =
-        target_offset - Section_state.offset_in_bytes state
-      in
-      if pc_relative_offset mod 4 <> 0
-      then
-        Misc.fatal_errorf "BL offset %d to symbol '%s' must be 4-byte aligned"
-          pc_relative_offset sym.name;
-      let imm26 = pc_relative_offset / 4 in
-      if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
-      then
-        Misc.fatal_errorf
-          "BL offset %d to symbol '%s' out of range (max ±128MB)"
-          pc_relative_offset sym.name;
-      encode_branch_immediate ~op:1 ~imm26)
+  | Singleton (Imm (Sym sym)), BL ->
+    let imm26 = compute_branch_imm26 state ~instr_name:"BL" sym in
+    encode_branch_immediate ~op:1 ~imm26
   | Singleton (Imm _), BL ->
     Misc.fatal_error "BL only supports Sym immediates in binary emitter"
   | Singleton (Reg rn), BLR -> encode_branch_register ~opc:0b0001 ~rn
   | Singleton (Reg rn), BR -> encode_branch_register ~opc:0b0000 ~rn
-  | Pair (Reg rt, Imm (Sym sym)), CBNZ -> (
-    match Section_state.find_symbol_offset_in_bytes state sym.name with
-    | None -> Misc.fatal_errorf "CBNZ references undefined symbol '%s'" sym.name
-    | Some target_offset ->
-      let pc_relative_offset =
-        target_offset - Section_state.offset_in_bytes state
-      in
-      if pc_relative_offset mod 4 <> 0
-      then
-        Misc.fatal_errorf "CBNZ offset %d to symbol '%s' must be 4-byte aligned"
-          pc_relative_offset sym.name;
-      let sf = Reg.gp_sf rt in
-      let rt = Reg.gp_encoding rt in
-      let imm19 = pc_relative_offset / 4 in
-      if imm19 < -0x40000 || imm19 > 0x3FFFF
-      then
-        Misc.fatal_errorf
-          "CBNZ offset %d to symbol '%s' out of range (max ±1MB)"
-          pc_relative_offset sym.name;
-      encode_compare_branch ~sf ~op:1 ~imm19 ~rt)
-  | Pair (Reg rt, Imm (Sym sym)), CBZ -> (
-    match Section_state.find_symbol_offset_in_bytes state sym.name with
-    | None -> Misc.fatal_errorf "CBZ references undefined symbol '%s'" sym.name
-    | Some target_offset ->
-      let pc_relative_offset =
-        target_offset - Section_state.offset_in_bytes state
-      in
-      if pc_relative_offset mod 4 <> 0
-      then
-        Misc.fatal_errorf "CBZ offset %d to symbol '%s' must be 4-byte aligned"
-          pc_relative_offset sym.name;
-      let sf = Reg.gp_sf rt in
-      let rt = Reg.gp_encoding rt in
-      let imm19 = pc_relative_offset / 4 in
-      if imm19 < -0x40000 || imm19 > 0x3FFFF
-      then
-        Misc.fatal_errorf "CBZ offset %d to symbol '%s' out of range (max ±1MB)"
-          pc_relative_offset sym.name;
-      encode_compare_branch ~sf ~op:0 ~imm19 ~rt)
+  | Pair (Reg rt, Imm (Sym sym)), CBNZ ->
+    let imm19 = compute_branch_imm19 state ~instr_name:"CBNZ" sym in
+    let sf = Reg.gp_sf rt in
+    let rt = Reg.gp_encoding rt in
+    encode_compare_branch ~sf ~op:1 ~imm19 ~rt
+  | Pair (Reg rt, Imm (Sym sym)), CBZ ->
+    let imm19 = compute_branch_imm19 state ~instr_name:"CBZ" sym in
+    let sf = Reg.gp_sf rt in
+    let rt = Reg.gp_encoding rt in
+    encode_compare_branch ~sf ~op:0 ~imm19 ~rt
   | Pair (Reg _, Imm _), CBZ ->
     Misc.fatal_error "CBZ only supports Sym immediates in binary emitter"
   | Pair (Reg _, Imm _), CBNZ ->
