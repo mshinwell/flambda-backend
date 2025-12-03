@@ -323,8 +323,23 @@ let _encode_fp_immediate ~ftype ~imm8 ~rd =
   let result = logor result (of_int rd) in
   result
 
+(* Floating-point data-processing (1 source) - C4.1.95.34 Format: M=0 | 0 | S=0
+   | 11110 | ftype | 1 | opcode | 10000 | Rn | Rd opcode: 000001=FABS,
+   000010=FNEG, 000011=FSQRT *)
+let encode_fp_1_source ~ftype ~opcode ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int 0b11110) 24) in
+  let result = logor result (shift_left (of_int ftype) 22) in
+  let result = logor result (shift_left (of_int 0b1) 21) in
+  let result = logor result (shift_left (of_int opcode) 15) in
+  let result = logor result (shift_left (of_int 0b10000) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
 (* Floating-point data-processing (2 source) - C4.1.95.38 *)
-let _encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
+let encode_fp_2_source ~ftype ~rm ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int 0b11110) 24) in
@@ -1037,8 +1052,32 @@ let encode_instruction :
     encode_logical_shifted_reg ~opc:0b10 ~shift ~imm6 ~rd ~rn ~rm
   | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
   | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
-  | Pair (Reg _rd, Reg _rn), FABS -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FADD -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn } ),
+      FABS ) ->
+    encode_fp_1_source ~ftype:0 ~opcode:0b000001 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn } ),
+      FABS ) ->
+    encode_fp_1_source ~ftype:1 ~opcode:0b000001 ~rn ~rd
+  | Pair (Reg _, Reg _), FABS ->
+    Misc.fatal_error "FABS: mismatched operand types"
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FADD ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0010 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FADD ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0010 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FADD ->
+    Misc.fatal_error "FADD: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FADDP_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), FADD_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), FCM_register _ -> assert false
@@ -1052,20 +1091,83 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), FCVTNS_vector -> assert false
   | Pair (Reg _rd, Reg _rn), FCVTZS -> assert false
   | Pair (Reg _rd, Reg _rn), FCVTZS_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FDIV ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0001 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FDIV ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0001 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FDIV ->
+    Misc.fatal_error "FDIV: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FDIV_vector -> assert false
   | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMADD -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FMAX ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0100 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FMAX ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0100 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FMAX ->
+    Misc.fatal_error "FMAX: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FMAX_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FMIN ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0101 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FMIN ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0101 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FMIN ->
+    Misc.fatal_error "FMIN: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FMIN_vector -> assert false
   | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FMSUB -> assert false
   | Pair (Reg _rd, Reg _rn), FMOV_general_or_register -> assert false
   | Pair (Reg _rd, _), FMOV_scalar_immediate -> assert false
   | Pair (Reg _rd, _), FMOV_vector_immediate -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FMUL ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0000 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FMUL ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0000 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FMUL ->
+    Misc.fatal_error "FMUL: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL_vector -> assert false
-  | Pair (Reg _rd, Reg _rn), FNEG -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn } ),
+      FNEG ) ->
+    encode_fp_1_source ~ftype:0 ~opcode:0b000010 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn } ),
+      FNEG ) ->
+    encode_fp_1_source ~ftype:1 ~opcode:0b000010 ~rn ~rd
+  | Pair (Reg _, Reg _), FNEG ->
+    Misc.fatal_error "FNEG: mismatched operand types"
   | Pair (Reg _rd, Reg _rn), FNEG_vector -> assert false
   | Quad (Reg _rd, Reg _rn, Reg _rm, Reg _ra), FNMADD -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), FNMUL -> assert false
@@ -1074,9 +1176,33 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), FRINT _ -> assert false
   | Pair (Reg _rd, Reg _rn), FRINT_vector _ -> assert false
   | Pair (Reg _rd, Reg _rn), FRSQRTE_vector -> assert false
-  | Pair (Reg _rd, Reg _rn), FSQRT -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn } ),
+      FSQRT ) ->
+    encode_fp_1_source ~ftype:0 ~opcode:0b000011 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn } ),
+      FSQRT ) ->
+    encode_fp_1_source ~ftype:1 ~opcode:0b000011 ~rn ~rd
+  | Pair (Reg _, Reg _), FSQRT ->
+    Misc.fatal_error "FSQRT: mismatched operand types"
   | Pair (Reg _rd, Reg _rn), FSQRT_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn },
+          Reg { reg_name = Neon (Scalar S); index = rm } ),
+      FSUB ) ->
+    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0011 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn },
+          Reg { reg_name = Neon (Scalar D); index = rm } ),
+      FSUB ) ->
+    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0011 ~rn ~rd
+  | Triple (Reg _, Reg _, Reg _), FSUB ->
+    Misc.fatal_error "FSUB: mismatched operand types"
   | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB_vector -> assert false
   | Pair (Reg _rd, Reg _rn), INS _ -> assert false
   | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
