@@ -473,8 +473,8 @@ let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
 let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
  fun amount -> match amount with Six n -> n | _ -> assert false
 
-(* Helper to encode add/sub shifted register instructions.
-   op: 0=ADD, 1=SUB; s: 0=no flags, 1=set flags *)
+(* Helper to encode add/sub shifted register instructions. op: 0=ADD, 1=SUB; s:
+   0=no flags, 1=set flags *)
 let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
@@ -483,8 +483,8 @@ let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm:rm_enc ~imm6 ~rn:rn_enc
     ~rd:rd_enc
 
-(* Helper to encode logical shifted register instructions.
-   opc: 00=AND, 01=ORR, 10=EOR, 11=ANDS *)
+(* Helper to encode logical shifted register instructions. opc: 00=AND, 01=ORR,
+   10=EOR, 11=ANDS *)
 let encode_logical_shifted_reg ~opc ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
@@ -1287,6 +1287,7 @@ let encode_instruction :
   | Triple (Reg _, Imm _, Imm _), TBZ ->
     Misc.fatal_error "TBZ requires register, 6-bit immediate, and symbol target"
   | Pair (Reg ({ reg_name = GP _; _ } as rn), Bitmask bitmask), TST ->
+    (* XXX this shouldn't be here *)
     (* TST is an alias for ANDS with XZR/WZR as destination (rd=31) *)
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
     let rn_enc = Reg.gp_encoding rn in
