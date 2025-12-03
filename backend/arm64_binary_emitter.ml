@@ -199,6 +199,73 @@ let encode_data_proc_2_source ~sf ~s ~opcode ~rm ~rn ~rd =
   let result = logor result (of_int (Reg.gp_encoding rd)) in
   result
 
+(* Unconditional branch (register) - C4.1.93.13 Encoding: 1101011 | opc[3:0] |
+   op2[4:0] | op3[5:0] | Rn | op4[4:0] *)
+let encode_branch_register ~opc ~rn =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int 0b1101011) 25) in
+  let result = logor result (shift_left (of_int opc) 21) in
+  let result = logor result (shift_left (of_int 0b11111) 16) in
+  (* op2 = 11111 *)
+  let result = logor result (shift_left (of_int 0b000000) 10) in
+  (* op3 = 000000 *)
+  let result = logor result (shift_left (of_int (Reg.gp_encoding rn)) 5) in
+  let result = logor result (of_int 0b00000) in
+  (* op4 = 00000 *)
+  result
+
+(* Unconditional branch (immediate) - C4.1.93.14 Encoding: op | 00101 | imm26 *)
+let encode_branch_immediate ~op ~imm26 =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int op) 31) in
+  let result = logor result (shift_left (of_int 0b00101) 26) in
+  let result = logor result (of_int (imm26 land 0x3FFFFFF)) in
+  result
+
+(* Compare and branch (immediate) - C4.1.93.15 Encoding: sf | 011010 | op |
+   imm19 | Rt *)
+let encode_compare_branch ~sf ~op ~imm19 ~rt =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int sf) 31) in
+  let result = logor result (shift_left (of_int 0b011010) 25) in
+  let result = logor result (shift_left (of_int op) 24) in
+  let result = logor result (shift_left (of_int (imm19 land 0x7FFFF)) 5) in
+  let result = logor result (of_int rt) in
+  result
+
+(* Test and branch (immediate) - C4.1.93.16 Encoding: b5 | 011011 | op | b40 |
+   imm14 | Rt *)
+let encode_test_branch ~b5 ~op ~b40 ~imm14 ~rt =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int b5) 31) in
+  let result = logor result (shift_left (of_int 0b011011) 25) in
+  let result = logor result (shift_left (of_int op) 24) in
+  let result = logor result (shift_left (of_int b40) 19) in
+  let result = logor result (shift_left (of_int (imm14 land 0x3FFF)) 5) in
+  let result = logor result (of_int rt) in
+  result
+
+(* Conditional select - C4.1.94.12 Encoding: sf | op | S | 11010100 | Rm | cond
+   | op2 | Rn | Rd *)
+let encode_conditional_select ~sf ~op ~op2 ~rm ~cond ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int sf) 31) in
+  let result = logor result (shift_left (of_int op) 30) in
+  let result = logor result (shift_left (of_int 0b0) 29) in
+  (* S = 0 *)
+  let result = logor result (shift_left (of_int 0b11010100) 21) in
+  let result = logor result (shift_left (of_int (Reg.gp_encoding rm)) 16) in
+  let result = logor result (shift_left (of_int cond) 12) in
+  let result = logor result (shift_left (of_int op2) 10) in
+  let result = logor result (shift_left (of_int (Reg.gp_encoding rn)) 5) in
+  let result = logor result (of_int (Reg.gp_encoding rd)) in
+  result
+
 (* Data-processing (3 source) - C4.1.94.13 *)
 let encode_data_proc_3_source ~sf ~op54 ~op31 ~o0 ~rm ~ra ~rn ~rd =
   let open Int32 in
@@ -298,7 +365,7 @@ let _encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-let _encode_condition (cond : Cond.t) : int =
+let encode_condition (cond : Cond.t) : int =
   match cond with
   | EQ -> 0b0000
   | NE -> 0b0001
@@ -687,14 +754,92 @@ let encode_instruction :
   | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
-  | Singleton (Imm _), B -> assert false
+  | Singleton (Imm (Sym sym)), B -> (
+    match Section_state.find_symbol_offset_in_bytes state sym.name with
+    | None -> Misc.fatal_errorf "B references undefined symbol '%s'" sym.name
+    | Some target_offset ->
+      let pc_relative_offset =
+        target_offset - Section_state.offset_in_bytes state
+      in
+      if pc_relative_offset mod 4 <> 0
+      then
+        Misc.fatal_errorf "B offset %d to symbol '%s' must be 4-byte aligned"
+          pc_relative_offset sym.name;
+      let imm26 = pc_relative_offset / 4 in
+      if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
+      then
+        Misc.fatal_errorf "B offset %d to symbol '%s' out of range (max ±128MB)"
+          pc_relative_offset sym.name;
+      encode_branch_immediate ~op:0 ~imm26)
+  | Singleton (Imm _), B ->
+    Misc.fatal_error "B only supports Sym immediates in binary emitter"
   | Singleton _, B_cond _ -> assert false
   | Singleton _, B_cond_float _ -> assert false
-  | Singleton _, BL -> assert false
-  | Singleton (Reg _), BLR -> assert false
-  | Singleton (Reg _), BR -> assert false
-  | Pair (Reg _rd, Imm _), CBNZ -> assert false
-  | Pair (Reg _rd, Imm _), CBZ -> assert false
+  | Singleton (Imm (Sym sym)), BL -> (
+    match Section_state.find_symbol_offset_in_bytes state sym.name with
+    | None -> Misc.fatal_errorf "BL references undefined symbol '%s'" sym.name
+    | Some target_offset ->
+      let pc_relative_offset =
+        target_offset - Section_state.offset_in_bytes state
+      in
+      if pc_relative_offset mod 4 <> 0
+      then
+        Misc.fatal_errorf "BL offset %d to symbol '%s' must be 4-byte aligned"
+          pc_relative_offset sym.name;
+      let imm26 = pc_relative_offset / 4 in
+      if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
+      then
+        Misc.fatal_errorf
+          "BL offset %d to symbol '%s' out of range (max ±128MB)"
+          pc_relative_offset sym.name;
+      encode_branch_immediate ~op:1 ~imm26)
+  | Singleton (Imm _), BL ->
+    Misc.fatal_error "BL only supports Sym immediates in binary emitter"
+  | Singleton (Reg rn), BLR -> encode_branch_register ~opc:0b0001 ~rn
+  | Singleton (Reg rn), BR -> encode_branch_register ~opc:0b0000 ~rn
+  | Pair (Reg rt, Imm (Sym sym)), CBNZ -> (
+    match Section_state.find_symbol_offset_in_bytes state sym.name with
+    | None -> Misc.fatal_errorf "CBNZ references undefined symbol '%s'" sym.name
+    | Some target_offset ->
+      let pc_relative_offset =
+        target_offset - Section_state.offset_in_bytes state
+      in
+      if pc_relative_offset mod 4 <> 0
+      then
+        Misc.fatal_errorf "CBNZ offset %d to symbol '%s' must be 4-byte aligned"
+          pc_relative_offset sym.name;
+      let sf = Reg.gp_sf rt in
+      let rt = Reg.gp_encoding rt in
+      let imm19 = pc_relative_offset / 4 in
+      if imm19 < -0x40000 || imm19 > 0x3FFFF
+      then
+        Misc.fatal_errorf
+          "CBNZ offset %d to symbol '%s' out of range (max ±1MB)"
+          pc_relative_offset sym.name;
+      encode_compare_branch ~sf ~op:1 ~imm19 ~rt)
+  | Pair (Reg rt, Imm (Sym sym)), CBZ -> (
+    match Section_state.find_symbol_offset_in_bytes state sym.name with
+    | None -> Misc.fatal_errorf "CBZ references undefined symbol '%s'" sym.name
+    | Some target_offset ->
+      let pc_relative_offset =
+        target_offset - Section_state.offset_in_bytes state
+      in
+      if pc_relative_offset mod 4 <> 0
+      then
+        Misc.fatal_errorf "CBZ offset %d to symbol '%s' must be 4-byte aligned"
+          pc_relative_offset sym.name;
+      let sf = Reg.gp_sf rt in
+      let rt = Reg.gp_encoding rt in
+      let imm19 = pc_relative_offset / 4 in
+      if imm19 < -0x40000 || imm19 > 0x3FFFF
+      then
+        Misc.fatal_errorf "CBZ offset %d to symbol '%s' out of range (max ±1MB)"
+          pc_relative_offset sym.name;
+      encode_compare_branch ~sf ~op:0 ~imm19 ~rt)
+  | Pair (Reg _, Imm _), CBZ ->
+    Misc.fatal_error "CBZ only supports Sym immediates in binary emitter"
+  | Pair (Reg _, Imm _), CBNZ ->
+    Misc.fatal_error "CBNZ only supports Sym immediates in binary emitter"
   | Pair (Reg rd, Reg rn), CLZ ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000100 ~rn ~rd
@@ -705,8 +850,14 @@ let encode_instruction :
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000111 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), CNT_vector -> assert false
-  | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSEL -> assert false
-  | Quad (Reg _rd, Reg _rn, Reg _rm, Cond _), CSINC -> assert false
+  | Quad (Reg rd, Reg rn, Reg rm, Cond cond), CSEL ->
+    let sf = Reg.gp_sf rd in
+    let cond = encode_condition cond in
+    encode_conditional_select ~sf ~op:0 ~op2:0b00 ~rm ~cond ~rn ~rd
+  | Quad (Reg rd, Reg rn, Reg rm, Cond cond), CSINC ->
+    let sf = Reg.gp_sf rd in
+    let cond = encode_condition cond in
+    encode_conditional_select ~sf ~op:0 ~op2:0b01 ~rm ~cond ~rn ~rd
   | Pair (Reg rd, Reg rn), CTZ ->
     (* FEAT_CSSC required *)
     let sf = Reg.gp_sf rd in
@@ -818,7 +969,23 @@ let encode_instruction :
   | Pair (Reg rd, Reg rn), RBIT ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000000 ~rn ~rd
-  | _, RET -> assert false
+  | _, RET ->
+    (* RET defaults to X30 (LR). Encoding is same as BR/BLR but with opc=0010
+       and Rn=11111 (X30) encoded in bits 9:5 *)
+    let open Int32 in
+    let result = zero in
+    let result = logor result (shift_left (of_int 0b1101011) 25) in
+    let result = logor result (shift_left (of_int 0b0010) 21) in
+    (* opc = 0010 *)
+    let result = logor result (shift_left (of_int 0b11111) 16) in
+    (* op2 = 11111 *)
+    let result = logor result (shift_left (of_int 0b000000) 10) in
+    (* op3 = 000000 *)
+    let result = logor result (shift_left (of_int 30) 5) in
+    (* Rn = X30 = 11110 *)
+    let result = logor result (of_int 0b00000) in
+    (* op4 = 00000 *)
+    result
   | Pair (Reg rd, Reg rn), REV ->
     let sf = Reg.gp_sf rd in
     let opcode = if sf = 1 then 0b000011 else 0b000010 in
@@ -839,7 +1006,11 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMAX_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMIN_vector -> assert false
   | Pair (Reg _rd, Reg _rn), SMOV _ -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SMULH -> assert false
+  | Triple (Reg rd, Reg rn, Reg rm), SMULH ->
+    (* SMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
+    (* Encoding: sf=1 op54=00 11011 op31=010 Rm o0=0 Ra=11111 Rn Rd *)
+    let ra = Arm64_ast.Reg.reg_x 31 in
+    encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010 ~o0:0 ~rm ~ra ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL2_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), SQADD_vector -> assert false
@@ -878,7 +1049,11 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMAX_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMIN_vector -> assert false
   | Pair (Reg _rd, Reg _rn), UMOV _ -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), UMULH -> assert false
+  | Triple (Reg rd, Reg rn, Reg rm), UMULH ->
+    (* UMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
+    (* Encoding: sf=1 op54=00 11011 op31=110 Rm o0=0 Ra=11111 Rn Rd *)
+    let ra = Arm64_ast.Reg.reg_x 31 in
+    encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm ~ra ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL2_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), UQADD_vector -> assert false

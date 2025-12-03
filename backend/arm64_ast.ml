@@ -827,12 +827,12 @@ module Instruction_name = struct
           t
     | B : (singleton, [< `Imm of _]) t
     | BL : (singleton, [< `Imm of _]) t
-    | BLR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
-    | BR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | BLR : (singleton, [`Reg of [`GP of [`X]]]) t
+    | BR : (singleton, [`Reg of [`GP of [`X]]]) t
     | B_cond : Cond.t -> (singleton, [< `Imm of _]) t
     | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
-    | CBNZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
-    | CBZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CBNZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [< `Imm of _]) t
+    | CBZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [< `Imm of _]) t
     | CLZ : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | CM_register :
         Cond.t
@@ -865,17 +865,17 @@ module Instruction_name = struct
           t
     | CSEL
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Cond] )
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Cond] )
           t
     | CSINC
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Cond] )
+            [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Cond] )
           t
     | CTZ
         : ( pair,
@@ -1489,9 +1489,9 @@ module Instruction_name = struct
            t
     | SMULH
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]] )
           t
     | SMULL2_vector
         : ( triple,
@@ -1706,9 +1706,9 @@ module Instruction_name = struct
            t
     | UMULH
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]] )
           t
     | UMULL2_vector
         : ( triple,

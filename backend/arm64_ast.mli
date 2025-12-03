@@ -438,12 +438,12 @@ module Instruction_name : sig
           t
     | B : (singleton, [< `Imm of _]) t
     | BL : (singleton, [< `Imm of _]) t
-    | BLR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
-    | BR : (singleton, [< `Reg of [< `GP of [< `X]]]) t
+    | BLR : (singleton, [`Reg of [`GP of [`X]]]) t
+    | BR : (singleton, [`Reg of [`GP of [`X]]]) t
     | B_cond : Cond.t -> (singleton, [< `Imm of _]) t
     | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
-    | CBNZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
-    | CBZ : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Imm of _]) t
+    | CBNZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [< `Imm of _]) t
+    | CBZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [< `Imm of _]) t
     | CLZ : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | CM_register :
         Cond.t
@@ -476,17 +476,17 @@ module Instruction_name : sig
           t
     | CSEL
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Cond] )
+            [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Reg of [`GP of [< `X | `W]]]
+            * [`Cond] )
           t
     | CSINC
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Cond] )
+            [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]]
+            * [`Cond] )
           t
     | CTZ
         : ( pair,
@@ -1100,9 +1100,9 @@ module Instruction_name : sig
            t
     | SMULH
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]] )
           t
     | SMULL2_vector
         : ( triple,
@@ -1317,9 +1317,9 @@ module Instruction_name : sig
            t
     | UMULH
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X]]] )
+            [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]]
+            * [`Reg of [`GP of [`X]]] )
           t
     | UMULL2_vector
         : ( triple,
@@ -1655,7 +1655,8 @@ module DSL : sig
       [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] Operand.t ->
       unit
 
-    val ins_cset : [< `Reg of [< `GP of [< `X]]] Operand.t -> Cond.t -> unit
+    val ins_cset :
+      [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] Operand.t -> Cond.t -> unit
 
     val ins_mov_from_sp :
       dst:[< `Reg of [`GP of [< `FP | `SP | `X]]] Operand.t -> unit
