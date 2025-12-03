@@ -948,29 +948,25 @@ let eval_constant state c =
   in
   D.Directive.Constant.eval ~this ~lookup c
 
-let emit emitter =
-  let section_tbl = Asm_section.Tbl.create 10 in
-  let state_for_section section =
-    match Asm_section.Tbl.find_opt section_tbl section with
-    | Some state -> state
-    | None ->
-      let state = Section_state.create () in
-      Asm_section.Tbl.add section_tbl section state;
-      state
-  in
-  (* First pass: compute offsets of local symbol and label definitions *)
+(* First pass: compute offsets of local symbol and label definitions *)
+let compute_label_offsets emitter ~state_for_section =
   iter emitter ~state_for_section
     ~on_insn:(fun _state _insn -> ())
     ~on_directive:(fun state directive ->
       match directive with
       | New_label (name, _) -> Section_state.define_label state name
       | Global name -> Section_state.define_symbol state name
-      | _ -> ());
-  (* Reset offsets for second pass *)
-  Asm_section.Tbl.iter
-    (fun _section state -> Section_state.set_offset_in_bytes state 0)
-    section_tbl;
-  (* Second pass: emit machine code and data *)
+      (* Directives that don't define labels or symbols *)
+      | Align _ | Bytes _ | Cfi_adjust_cfa_offset _ | Cfi_def_cfa_offset _
+      | Cfi_endproc | Cfi_offset _ | Cfi_startproc | Cfi_remember_state
+      | Cfi_restore_state | Cfi_def_cfa_register _ | Comment _ | Const _
+      | Direct_assignment _ | File _ | Indirect_symbol _ | Loc _ | New_line
+      | Private_extern _ | Section _ | Size _ | Sleb128 _ | Space _ | Type _
+      | Uleb128 _ | Protected _ | Hidden _ | Weak _ | External _ | Reloc _ ->
+        ())
+
+(* Second pass: emit machine code and data *)
+let emit_code_and_data emitter ~state_for_section =
   iter emitter ~state_for_section
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
       let encoded = encode_instruction state name operands in
@@ -1023,9 +1019,31 @@ let emit emitter =
         match eval_constant state constant with
         | Some value -> D.Directive.emit_uleb128 buf value
         | None -> Misc.fatal_error "Cannot emit ULEB128 for external symbol")
-      | _ ->
-        (* Other directives don't emit data *)
-        ());
+      (* Directives that don't emit data *)
+      | Cfi_adjust_cfa_offset _ | Cfi_def_cfa_offset _ | Cfi_endproc
+      | Cfi_offset _ | Cfi_startproc | Cfi_remember_state | Cfi_restore_state
+      | Cfi_def_cfa_register _ | Comment _ | Direct_assignment _ | File _
+      | Global _ | Indirect_symbol _ | Loc _ | New_label _ | New_line
+      | Private_extern _ | Section _ | Size _ | Type _ | Protected _ | Hidden _
+      | Weak _ | External _ | Reloc _ ->
+        ())
+
+let emit emitter =
+  let section_tbl = Asm_section.Tbl.create 10 in
+  let state_for_section section =
+    match Asm_section.Tbl.find_opt section_tbl section with
+    | Some state -> state
+    | None ->
+      let state = Section_state.create () in
+      Asm_section.Tbl.add section_tbl section state;
+      state
+  in
+  compute_label_offsets emitter ~state_for_section;
+  (* Reset offsets for second pass *)
+  Asm_section.Tbl.iter
+    (fun _section state -> Section_state.set_offset_in_bytes state 0)
+    section_tbl;
+  emit_code_and_data emitter ~state_for_section;
   (* Convert Section_state.t table to Buffer.t table *)
   let buffer_tbl = Asm_section.Tbl.create 10 in
   Asm_section.Tbl.iter
