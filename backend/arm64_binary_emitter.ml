@@ -126,7 +126,7 @@ let _encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-let _encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
+let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let max_shift = if sf = 1 then 63 else 31 in
   if imm6 < 0 || imm6 > max_shift
@@ -383,7 +383,7 @@ let encode_condition (cond : Cond.t) : int =
   | LE -> 0b1101
 
 (* Logical (shifted register) - C4.1.94.3 *)
-let _encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
+let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int sf) 31) in
@@ -463,6 +463,15 @@ let encode_six_bit_shift (shift_opt : [`Shift of _ * [`Six]] Operand.t option) =
   match shift_opt with
   | Some (Shift shift) -> (match shift.amount with Six n -> n) / 16
   | None -> 0
+
+(* Decode shift type and amount for add/sub shifted register instructions.
+   Returns (shift_type, amount) where shift_type is 00=LSL, 01=LSR, 10=ASR. *)
+let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
+ fun kind ->
+  match kind with Operand.Shift.Kind.LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
+
+let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
+ fun amount -> match amount with Six n -> n | _ -> assert false
 
 (* Load/store register (unscaled immediate) - C4.1.96.25 *)
 let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
@@ -575,8 +584,8 @@ let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   result
 
 (* Generalized load/store encoding for byte/halfword/word/doubleword operations.
-   size: 00=byte, 01=halfword, 10=word, 11=doubleword
-   opc encodes the operation (load/store and signed extension) *)
+   size: 00=byte, 01=halfword, 10=word, 11=doubleword opc encodes the operation
+   (load/store and signed extension) *)
 let encode_load_store_gp_sized :
     type a.
     Section_state.t ->
@@ -712,6 +721,69 @@ let encode_load_store_halfword :
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
 
+(* Load-Acquire (LDAR) encoding. Format: size[31:30] | 001000 | L[22] | 1 |
+   Rs=11111 | o0[15] | Rt2=11111 | Rn[9:5] | Rt[4:0] For LDAR: L=1, o0=1 size:
+   10 for 32-bit, 11 for 64-bit *)
+let encode_load_acquire :
+    type a. rd:[`GP of a] Reg.t -> rn:[`GP of _] Reg.t -> int32 =
+ fun ~rd ~rn ->
+  let size =
+    match rd.reg_name with
+    | GP W | GP WZR | GP WSP -> 0b10
+    | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
+  in
+  let rt = Reg.gp_encoding rd in
+  let rn_enc = Reg.gp_encoding rn in
+  let l = 1 in
+  let o0 = 1 in
+  let rs = 0b11111 in
+  let rt2 = 0b11111 in
+  (* size[31:30] | 001000 | L[22] | 1[21] | Rs[20:16] | o0[15] | Rt2[14:10] |
+     Rn[9:5] | Rt[4:0] *)
+  let open Int32 in
+  let result = shift_left (of_int size) 30 in
+  let result = logor result (shift_left (of_int 0b001000) 24) in
+  let result = logor result (shift_left (of_int l) 22) in
+  let result = logor result (shift_left (of_int 1) 21) in
+  let result = logor result (shift_left (of_int rs) 16) in
+  let result = logor result (shift_left (of_int o0) 15) in
+  let result = logor result (shift_left (of_int rt2) 10) in
+  let result = logor result (shift_left (of_int rn_enc) 5) in
+  let result = logor result (of_int rt) in
+  result
+
+(* Memory barrier encoding. Format: 1101 0101 0000 0011 0011 | CRm[11:8] |
+   op2[7:5] | 11111 DMB: op2=101, DSB: op2=100 *)
+let encode_memory_barrier ~op2 (barrier : Memory_barrier.t) =
+  let crm =
+    match barrier with
+    | SY -> 0b1111
+    | ST -> 0b1110
+    | LD -> 0b1101
+    | ISH -> 0b1011
+    | ISHST -> 0b1010
+    | ISHLD -> 0b1001
+    | NSH -> 0b0111
+    | NSHST -> 0b0110
+    | NSHLD -> 0b0101
+    | OSH -> 0b0011
+    | OSHST -> 0b0010
+    | OSHLD -> 0b0001
+  in
+  let open Int32 in
+  (* 1101 0101 0000 0011 0011 = 0xD503_30 shifted appropriately *)
+  let result = of_int 0b11010101000000110011 in
+  let result = shift_left result 12 in
+  let result = logor result (shift_left (of_int crm) 8) in
+  let result = logor result (shift_left (of_int op2) 5) in
+  let result = logor result (of_int 0b11111) in
+  result
+
+(* NOP encoding: 1101 0101 0000 0011 0010 0000 000 11111 = 0xD503201F *)
+let encode_nop () = Int32.of_int 0xD503201F
+
+(* YIELD encoding: 1101 0101 0000 0011 0010 0000 001 11111 = 0xD503203F *)
+let encode_yield () = Int32.of_int 0xD503203F
 
 (* Encode LDP/STP instructions for GP registers. l=1 for load (LDP), l=0 for
    store (STP). opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
@@ -798,6 +870,28 @@ let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
         instr_name pc_relative_offset symbol_name;
     imm19
 
+(* Helper to compute a 14-bit PC-relative offset for TBZ/TBNZ instructions *)
+let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
+  let symbol_name = sym.name in
+  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  | None ->
+    Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
+      symbol_name
+  | Some target_offset ->
+    let pc_relative_offset =
+      target_offset - Section_state.offset_in_bytes state
+    in
+    if pc_relative_offset mod 4 <> 0
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' must be 4-byte aligned"
+        instr_name pc_relative_offset symbol_name;
+    let imm14 = pc_relative_offset / 4 in
+    if imm14 < -0x2000 || imm14 > 0x1FFF
+    then
+      Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±32KB)"
+        instr_name pc_relative_offset symbol_name;
+    imm14
+
 let encode_instruction :
     type num operands.
     Section_state.t ->
@@ -880,8 +974,8 @@ let encode_instruction :
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000110 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), CVT_vector -> assert false
-  | _, DMB _ -> assert false
-  | _, DSB _ -> assert false
+  | _, DMB barrier -> encode_memory_barrier ~op2:0b101 barrier
+  | _, DSB barrier -> encode_memory_barrier ~op2:0b100 barrier
   | Pair (Reg _rd, Reg _rn), DUP _ -> assert false
   | Triple (Reg rd, Reg rn, Bitmask bitmask), EOR_immediate ->
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
@@ -933,7 +1027,11 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB_vector -> assert false
   | Pair (Reg _rd, Reg _rn), INS _ -> assert false
   | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
-  | Pair (Reg _rd, Mem _addressing), LDAR -> assert false
+  | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem (Reg rn)), LDAR ->
+    encode_load_acquire ~rd ~rn
+  | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem _), LDAR ->
+    Misc.fatal_errorf "LDAR only supports base register addressing (rd=%s)"
+      (Reg.name rd)
   | Triple (Reg rt1, Reg rt2, Mem addressing), LDP ->
     encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
@@ -945,9 +1043,17 @@ let encode_instruction :
   | Pair (Reg rd, Mem addressing), LDRH ->
     (* LDRH: size=01, opc=01 *)
     encode_load_store_halfword state ~instr_name:"LDRH" ~opc:0b01 ~rd addressing
-  | Pair (Reg _rd, Mem _addressing), LDRSB -> assert false
-  | Pair (Reg _rd, Mem _addressing), LDRSH -> assert false
-  | Pair (Reg _rd, Mem _addressing), LDRSW -> assert false
+  | Pair (Reg rd, Mem addressing), LDRSB ->
+    (* LDRSB (sign-extend byte to 64-bit): size=00, opc=10 *)
+    encode_load_store_byte state ~instr_name:"LDRSB" ~opc:0b10 ~rd addressing
+  | Pair (Reg rd, Mem addressing), LDRSH ->
+    (* LDRSH (sign-extend halfword to 64-bit): size=01, opc=10 *)
+    encode_load_store_halfword state ~instr_name:"LDRSH" ~opc:0b10 ~rd
+      addressing
+  | Pair (Reg rd, Mem addressing), LDRSW ->
+    (* LDRSW (sign-extend word to 64-bit): size=10, opc=10 *)
+    encode_load_store_gp_sized state ~instr_name:"LDRSW" ~size:0b10 ~opc:0b10
+      ~rd addressing
   | Triple (Reg rd, Reg rn, Reg rm), LSLV ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001000 ~rm ~rn ~rd
@@ -957,8 +1063,20 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
-  | Pair (Reg _rd, Imm _), MOV -> assert false
-  | Pair (Reg _rd, Reg _rn), MOV -> assert false
+  | Pair (Reg ({ reg_name = GP _; _ } as rd), Imm imm), MOV ->
+    (* MOV (wide immediate): alias of MOVZ *)
+    let imm16 = match imm with Sixteen_unsigned n -> n | _ -> assert false in
+    let sf = Reg.gp_sf rd in
+    encode_move_wide ~sf ~opc:0b10 ~hw:0 ~imm16 ~rd
+  | ( Pair
+        (Reg ({ reg_name = GP _; _ } as rd), Reg ({ reg_name = GP _; _ } as rm)),
+      MOV ) ->
+    (* MOV (register): alias for ORR Rd, XZR, Rm *)
+    let sf = Reg.gp_sf rd in
+    let rd_enc = Reg.gp_encoding rd in
+    let rm_enc = Reg.gp_encoding rm in
+    encode_logical_shifted_register ~sf ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_enc
+      ~imm6:0 ~rn:31 ~rd:rd_enc
   | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
   | Pair (Reg _rd, Imm _), MOVI -> assert false
   | Triple (Reg rd, Imm imm, Shift shift), MOVK ->
@@ -980,7 +1098,7 @@ let encode_instruction :
   | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
   | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
   | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
-  | _, NOP -> assert false
+  | _, NOP -> encode_nop ()
   | Triple (Reg rd, Reg rn, Bitmask bitmask), ORR_immediate ->
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
     encode_logical_immediate ~sf:1 ~opc:0b01 ~n ~immr ~imms ~rn ~rd
@@ -1054,18 +1172,82 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUB_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh ~imm12 ~rn ~rd
-  | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUB_shifted_register ->
-    assert false
+  | ( Quad
+        ( Reg ({ reg_name = GP _; _ } as rd),
+          Reg ({ reg_name = GP _; _ } as rn),
+          Reg ({ reg_name = GP _; _ } as rm),
+          Optional shift_opt ),
+      SUB_shifted_register ) ->
+    let sf = Reg.gp_sf rd in
+    let rd_enc = Reg.gp_encoding rd in
+    let rn_enc = Reg.gp_encoding rn in
+    let rm_enc = Reg.gp_encoding rm in
+    let shift, imm6 =
+      match shift_opt with
+      | None -> 0, 0
+      | Some (Shift { kind; amount }) ->
+        decode_shift_kind_int kind, decode_shift_amount_six amount
+    in
+    encode_add_sub_shifted_register ~sf ~op:1 ~s:0 ~shift ~rm:rm_enc ~imm6
+      ~rn:rn_enc ~rd:rd_enc
   | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUBS_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh ~imm12 ~rn ~rd
-  | Quad (Reg _rd, Reg _rn, Reg _rm, Optional _), SUBS_shifted_register ->
-    assert false
+  | ( Quad
+        ( Reg ({ reg_name = GP _; _ } as rd),
+          Reg ({ reg_name = GP _; _ } as rn),
+          Reg ({ reg_name = GP _; _ } as rm),
+          Optional shift_opt ),
+      SUBS_shifted_register ) ->
+    let sf = Reg.gp_sf rd in
+    let rd_enc = Reg.gp_encoding rd in
+    let rn_enc = Reg.gp_encoding rn in
+    let rm_enc = Reg.gp_encoding rm in
+    let shift, imm6 =
+      match shift_opt with
+      | None -> 0, 0
+      | Some (Shift { kind; amount }) ->
+        decode_shift_kind_int kind, decode_shift_amount_six amount
+    in
+    encode_add_sub_shifted_register ~sf ~op:1 ~s:1 ~shift ~rm:rm_enc ~imm6
+      ~rn:rn_enc ~rd:rd_enc
   | Pair (Reg _rd, Reg _rn), SXTL -> assert false
-  | Triple (Reg _rd, Imm _, Imm _), TBNZ -> assert false
-  | Triple (Reg _rd, Imm _, Imm _), TBZ -> assert false
-  | Pair (Reg _rd, Bitmask _), TST -> assert false
+  | ( Triple (Reg ({ reg_name = GP _; _ } as rt), Imm (Six bit), Imm (Sym sym)),
+      TBNZ ) ->
+    let imm14 = compute_branch_imm14 state ~instr_name:"TBNZ" sym in
+    let b5 = (bit lsr 5) land 1 in
+    let b40 = bit land 0b11111 in
+    let rt_enc = Reg.gp_encoding rt in
+    encode_test_branch ~b5 ~op:1 ~b40 ~imm14 ~rt:rt_enc
+  | Triple (Reg _, Imm _, Imm _), TBNZ ->
+    Misc.fatal_error
+      "TBNZ requires register, 6-bit immediate, and symbol target"
+  | ( Triple (Reg ({ reg_name = GP _; _ } as rt), Imm (Six bit), Imm (Sym sym)),
+      TBZ ) ->
+    let imm14 = compute_branch_imm14 state ~instr_name:"TBZ" sym in
+    let b5 = (bit lsr 5) land 1 in
+    let b40 = bit land 0b11111 in
+    let rt_enc = Reg.gp_encoding rt in
+    encode_test_branch ~b5 ~op:0 ~b40 ~imm14 ~rt:rt_enc
+  | Triple (Reg _, Imm _, Imm _), TBZ ->
+    Misc.fatal_error "TBZ requires register, 6-bit immediate, and symbol target"
+  | Pair (Reg ({ reg_name = GP _; _ } as rn), Bitmask bitmask), TST ->
+    (* TST is an alias for ANDS with XZR/WZR as destination (rd=31) *)
+    let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
+    let rn_enc = Reg.gp_encoding rn in
+    let open Int32 in
+    let result = zero in
+    (* sf=1 for 64-bit, opc=11 for ANDS *)
+    let result = logor result (shift_left (of_int 1) 31) in
+    let result = logor result (shift_left (of_int 0b11) 29) in
+    let result = logor result (shift_left (of_int 0b100100) 23) in
+    let result = logor result (shift_left (of_int n) 22) in
+    let result = logor result (shift_left (of_int immr) 16) in
+    let result = logor result (shift_left (of_int imms) 10) in
+    let result = logor result (shift_left (of_int rn_enc) 5) in
+    let result = logor result (of_int 31) in
+    result
   | Quad (Reg rd, Reg rn, Imm (Six immr), Imm (Six imms)), UBFM ->
     let sf = Reg.gp_sf rd in
     let n = sf in
@@ -1090,7 +1272,7 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), UXTL -> assert false
   | Pair (Reg _rd, Reg _rn), XTN -> assert false
   | Pair (Reg _rd, Reg _rn), XTN2 -> assert false
-  | _, YIELD -> assert false
+  | _, YIELD -> encode_yield ()
   | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP1 -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), ZIP2 -> assert false
 
