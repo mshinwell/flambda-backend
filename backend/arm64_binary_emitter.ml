@@ -958,13 +958,13 @@ let emit emitter =
       Asm_section.Tbl.add section_tbl section state;
       state
   in
-  (* First pass: compute offsets of local symbol and label definitions. *)
+  (* First pass: compute offsets of local symbol and label definitions *)
   iter emitter ~state_for_section
     ~on_insn:(fun _state _insn -> ())
     ~on_directive:(fun state directive ->
       match directive with
-      | D.Directive.New_label (name, _) -> Section_state.define_label state name
-      | D.Directive.Global name -> Section_state.define_symbol state name
+      | New_label (name, _) -> Section_state.define_label state name
+      | Global name -> Section_state.define_symbol state name
       | _ -> ());
   (* Reset offsets for second pass *)
   Asm_section.Tbl.iter
@@ -989,12 +989,12 @@ let emit emitter =
     ~on_directive:(fun state directive ->
       let buf = Section_state.buffer state in
       match directive with
-      | D.Directive.Bytes { str; _ } -> Buffer.add_string buf str
-      | D.Directive.Space { bytes } ->
+      | Bytes { str; _ } -> Buffer.add_string buf str
+      | Space { bytes } ->
         for _ = 1 to bytes do
           Buffer.add_char buf '\x00'
         done
-      | D.Directive.Align { bytes; _ } ->
+      | Align { bytes; _ } ->
         let offset = Section_state.offset_in_bytes state in
         let remainder = offset mod bytes in
         if remainder <> 0
@@ -1003,12 +1003,11 @@ let emit emitter =
           for _ = 1 to padding do
             Buffer.add_char buf '\x00'
           done
-      | D.Directive.Const { constant; _ } -> (
-        let c = D.Directive.Constant_with_width.constant constant in
-        let width = D.Directive.Constant_with_width.width_in_bytes constant in
-        let width_bytes =
-          D.Directive.Constant_with_width.width_in_bytes_int width
-        in
+      | Const { constant; _ } -> (
+        let module C = D.Directive.Constant_with_width in
+        let c = C.constant constant in
+        let width = C.width_in_bytes constant in
+        let width_bytes = C.width_in_bytes_int width in
         match eval_constant state c with
         | Some value -> D.Directive.emit_int_le buf ~width_bytes value
         | None ->
@@ -1016,11 +1015,11 @@ let emit emitter =
           for _ = 1 to width_bytes do
             Buffer.add_char buf '\x00'
           done)
-      | D.Directive.Sleb128 { constant; _ } -> (
+      | Sleb128 { constant; _ } -> (
         match eval_constant state constant with
         | Some value -> D.Directive.emit_sleb128 buf value
         | None -> Misc.fatal_error "Cannot emit SLEB128 for external symbol")
-      | D.Directive.Uleb128 { constant; _ } -> (
+      | Uleb128 { constant; _ } -> (
         match eval_constant state constant with
         | Some value -> D.Directive.emit_uleb128 buf value
         | None -> Misc.fatal_error "Cannot emit ULEB128 for external symbol")
