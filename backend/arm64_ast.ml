@@ -1060,10 +1060,10 @@ module Instruction_name = struct
           t
     | FMADD
         : ( quad,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FMAX
         : ( triple,
@@ -1118,10 +1118,10 @@ module Instruction_name = struct
           t
     | FMSUB
         : ( quad,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FMUL
         : ( triple,
@@ -1154,23 +1154,23 @@ module Instruction_name = struct
           t
     | FNMADD
         : ( quad,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FNMSUB
         : ( quad,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FNMUL
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FRECPE_vector
         : ( pair,

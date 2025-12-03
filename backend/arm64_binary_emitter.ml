@@ -1120,8 +1120,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = ra } ),
       FMADD ) ->
     encode_fp_3_source ~ftype:1 ~o1:0 ~rm ~o0:0 ~ra ~rn ~rd
-  | Quad (Reg _, Reg _, Reg _, Reg _), FMADD ->
-    Misc.fatal_error "FMADD: mismatched operand types"
   | ( Triple
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1166,8 +1164,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = ra } ),
       FMSUB ) ->
     encode_fp_3_source ~ftype:1 ~o1:0 ~rm ~o0:1 ~ra ~rn ~rd
-  | Quad (Reg _, Reg _, Reg _, Reg _), FMSUB ->
-    Misc.fatal_error "FMSUB: mismatched operand types"
   | Pair (Reg _rd, Reg _rn), FMOV_general_or_register -> assert false
   | Pair (Reg _rd, _), FMOV_scalar_immediate -> assert false
   | Pair (Reg _rd, _), FMOV_vector_immediate -> assert false
@@ -1213,8 +1209,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = ra } ),
       FNMADD ) ->
     encode_fp_3_source ~ftype:1 ~o1:1 ~rm ~o0:0 ~ra ~rn ~rd
-  | Quad (Reg _, Reg _, Reg _, Reg _), FNMADD ->
-    Misc.fatal_error "FNMADD: mismatched operand types"
   | ( Triple
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1227,8 +1221,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rm } ),
       FNMUL ) ->
     encode_fp_2_source ~ftype:1 ~rm ~opcode:0b1000 ~rn ~rd
-  | Triple (Reg _, Reg _, Reg _), FNMUL ->
-    Misc.fatal_error "FNMUL: mismatched operand types"
   | ( Quad
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1243,8 +1235,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = ra } ),
       FNMSUB ) ->
     encode_fp_3_source ~ftype:1 ~o1:1 ~rm ~o0:1 ~ra ~rn ~rd
-  | Quad (Reg _, Reg _, Reg _, Reg _), FNMSUB ->
-    Misc.fatal_error "FNMSUB: mismatched operand types"
   | Pair (Reg _rd, Reg _rn), FRECPE_vector -> assert false
   | Pair (Reg _rd, Reg _rn), FRINT _ -> assert false
   | Pair (Reg _rd, Reg _rn), FRINT_vector _ -> assert false
