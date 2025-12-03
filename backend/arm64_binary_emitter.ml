@@ -574,20 +574,19 @@ let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-let encode_load_store_gp :
+(* Generalized load/store encoding for byte/halfword/word/doubleword operations.
+   size: 00=byte, 01=halfword, 10=word, 11=doubleword
+   opc encodes the operation (load/store and signed extension) *)
+let encode_load_store_gp_sized :
     type a.
     Section_state.t ->
     instr_name:string ->
+    size:int ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~opc ~rd addressing ->
-  let size =
-    match rd.reg_name with
-    | GP W | GP WZR | GP WSP -> 0b10
-    | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
-  in
+ fun state ~instr_name ~size ~opc ~rd addressing ->
   let vr = 0 in
   let rt = Reg.gp_encoding rd in
   match addressing with
@@ -595,15 +594,15 @@ let encode_load_store_gp :
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
   | Literal (_rn, sym) -> (
-    (* This is encoded as "LDR (literal)" (ARMARM C6.2.192) *)
-    (* XXX sym should be a L.t or a S.t, not a Symbol.t *)
+    (* This is encoded as "LDR (literal)" - only valid for word/doubleword *)
+    if size < 0b10
+    then Misc.fatal_errorf "%s does not support literal addressing" instr_name;
     match Section_state.find_symbol_offset_in_bytes state sym.name with
     | None ->
       Misc.fatal_errorf "%s (literal) references undefined symbol '%s' (rd=%s)"
         instr_name sym.name (Reg.name rd)
     | Some target_offset ->
       let pc_relative_offset =
-        (* XXX should this be the starting or ending addr of the insn? *)
         target_offset - Section_state.offset_in_bytes state
       in
       assert (pc_relative_offset > 0);
@@ -623,20 +622,20 @@ let encode_load_store_gp :
       encode_load_literal ~opc ~v ~imm19 ~rt)
   | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
     let max_imm12 = 0xfff in
-    let reg_size_bytes = if size = 0b11 then 8 else 4 in
-    if imm12 mod reg_size_bytes <> 0
+    (* Scale depends on size: byte=1, half=2, word=4, double=8 *)
+    let scale = 1 lsl size in
+    if imm12 mod scale <> 0
     then
       Misc.fatal_errorf
-        "%s offset %d must be aligned to %d-byte register size (rd=%s, rn=%s)"
-        instr_name imm12 reg_size_bytes (Reg.name rd) (Reg.name rn);
+        "%s offset %d must be aligned to %d-byte access size (rd=%s, rn=%s)"
+        instr_name imm12 scale (Reg.name rd) (Reg.name rn);
     let rn = Reg.gp_encoding rn in
-    let imm12_scaled = imm12 / reg_size_bytes in
+    let imm12_scaled = imm12 / scale in
     if imm12_scaled < 0 || imm12_scaled > max_imm12
     then
       Misc.fatal_errorf
         "%s offset %d (scaled: %d) out of range (max 0x%x * %d = 0x%x bytes)"
-        instr_name imm12 imm12_scaled max_imm12 reg_size_bytes
-        (max_imm12 * reg_size_bytes);
+        instr_name imm12 imm12_scaled max_imm12 scale (max_imm12 * scale);
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
   | Offset (rn, Symbol_with_reloc sym) -> (
     match sym.reloc with
@@ -652,13 +651,12 @@ let encode_load_store_gp :
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_type;
       let rn = Reg.gp_encoding rn in
-      let shift = if size = 0b11 then 3 else 2 in
-      let imm12_unmasked = sym.offset lsr shift in
+      let imm12_unmasked = sym.offset lsr size in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
       then
         Misc.fatal_errorf
           "%s symbol offset %d (shifted by %d) out of range (max 0x%x)"
-          instr_name sym.offset shift max_imm12;
+          instr_name sym.offset size max_imm12;
       let imm12 = imm12_unmasked land 0xFFF in
       encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
@@ -673,6 +671,47 @@ let encode_load_store_gp :
     Misc.fatal_errorf
       "%s: pair addressing modes not supported for single-register load/store"
       instr_name
+
+let encode_load_store_gp :
+    type a.
+    Section_state.t ->
+    instr_name:string ->
+    opc:int ->
+    rd:[`GP of a] Reg.t ->
+    Operand.Addressing_mode.t ->
+    int32 =
+ fun state ~instr_name ~opc ~rd addressing ->
+  let size =
+    match rd.reg_name with
+    | GP W | GP WZR | GP WSP -> 0b10
+    | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
+  in
+  encode_load_store_gp_sized state ~instr_name ~size ~opc ~rd addressing
+
+(* Byte load/store - size=00 *)
+let encode_load_store_byte :
+    type a.
+    Section_state.t ->
+    instr_name:string ->
+    opc:int ->
+    rd:[`GP of a] Reg.t ->
+    Operand.Addressing_mode.t ->
+    int32 =
+ fun state ~instr_name ~opc ~rd addressing ->
+  encode_load_store_gp_sized state ~instr_name ~size:0b00 ~opc ~rd addressing
+
+(* Halfword load/store - size=01 *)
+let encode_load_store_halfword :
+    type a.
+    Section_state.t ->
+    instr_name:string ->
+    opc:int ->
+    rd:[`GP of a] Reg.t ->
+    Operand.Addressing_mode.t ->
+    int32 =
+ fun state ~instr_name ~opc ~rd addressing ->
+  encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
+
 
 (* Encode LDP/STP instructions for GP registers. l=1 for load (LDP), l=0 for
    store (STP). opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
@@ -801,15 +840,11 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), B ->
     let imm26 = compute_branch_imm26 state ~instr_name:"B" sym in
     encode_branch_immediate ~op:0 ~imm26
-  | Singleton (Imm _), B ->
-    Misc.fatal_error "B only supports Sym immediates in binary emitter"
   | Singleton _, B_cond _ -> assert false
   | Singleton _, B_cond_float _ -> assert false
   | Singleton (Imm (Sym sym)), BL ->
     let imm26 = compute_branch_imm26 state ~instr_name:"BL" sym in
     encode_branch_immediate ~op:1 ~imm26
-  | Singleton (Imm _), BL ->
-    Misc.fatal_error "BL only supports Sym immediates in binary emitter"
   | Singleton (Reg rn), BLR -> encode_branch_register ~opc:0b0001 ~rn
   | Singleton (Reg rn), BR -> encode_branch_register ~opc:0b0000 ~rn
   | Pair (Reg rt, Imm (Sym sym)), CBNZ ->
@@ -822,10 +857,6 @@ let encode_instruction :
     let sf = Reg.gp_sf rt in
     let rt = Reg.gp_encoding rt in
     encode_compare_branch ~sf ~op:0 ~imm19 ~rt
-  | Pair (Reg _, Imm _), CBZ ->
-    Misc.fatal_error "CBZ only supports Sym immediates in binary emitter"
-  | Pair (Reg _, Imm _), CBNZ ->
-    Misc.fatal_error "CBNZ only supports Sym immediates in binary emitter"
   | Pair (Reg rd, Reg rn), CLZ ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000100 ~rn ~rd
@@ -908,8 +939,12 @@ let encode_instruction :
   | Pair (Reg rd, Mem addressing), LDR ->
     encode_load_store_gp state ~instr_name:"LDR" ~opc:0b01 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), LDR_simd_and_fp -> assert false
-  | Pair (Reg _rd, Mem _addressing), LDRB -> assert false
-  | Pair (Reg _rd, Mem _addressing), LDRH -> assert false
+  | Pair (Reg rd, Mem addressing), LDRB ->
+    (* LDRB: size=00, opc=01 *)
+    encode_load_store_byte state ~instr_name:"LDRB" ~opc:0b01 ~rd addressing
+  | Pair (Reg rd, Mem addressing), LDRH ->
+    (* LDRH: size=01, opc=01 *)
+    encode_load_store_halfword state ~instr_name:"LDRH" ~opc:0b01 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), LDRSB -> assert false
   | Pair (Reg _rd, Mem _addressing), LDRSH -> assert false
   | Pair (Reg _rd, Mem _addressing), LDRSW -> assert false
@@ -1010,8 +1045,12 @@ let encode_instruction :
   | Pair (Reg rd, Mem addressing), STR ->
     encode_load_store_gp state ~instr_name:"STR" ~opc:0b00 ~rd addressing
   | Pair (Reg _rd, Mem _addressing), STR_simd_and_fp -> assert false
-  | Pair (Reg _rd, Mem _addressing), STRB -> assert false
-  | Pair (Reg _rd, Mem _addressing), STRH -> assert false
+  | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem addressing), STRB ->
+    (* STRB: size=00, opc=00 *)
+    encode_load_store_byte state ~instr_name:"STRB" ~opc:0b00 ~rd addressing
+  | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem addressing), STRH ->
+    (* STRH: size=01, opc=00 *)
+    encode_load_store_halfword state ~instr_name:"STRH" ~opc:0b00 ~rd addressing
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUB_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh ~imm12 ~rn ~rd
