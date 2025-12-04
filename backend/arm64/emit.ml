@@ -1678,10 +1678,9 @@ let move (src : Reg.t) (dst : Reg.t) =
   if distinct
   then
     match src.typ, src.loc, dst.typ, dst.loc with
-    | Float, Reg _, Float, Reg _ ->
-      A.ins2 FMOV_general_or_register (DSL.reg_d dst, DSL.reg_d src)
+    | Float, Reg _, Float, Reg _ -> A.ins2 FMOV_fp (DSL.reg_d dst, DSL.reg_d src)
     | Float32, Reg _, Float32, Reg _ ->
-      A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_s src)
+      A.ins2 FMOV_fp (DSL.reg_s dst, DSL.reg_s src)
     | (Vec128 | Valx2), Reg _, (Vec128 | Valx2), Reg _ ->
       A.ins2 MOV_vector (DSL.reg_v16b_operand dst, DSL.reg_v16b_operand src)
     | (Vec256 | Vec512), _, _, _ | _, _, (Vec256 | Vec512), _ ->
@@ -1725,30 +1724,24 @@ let emit_reinterpret_cast (cast : Cmm.reinterpret_cast) i =
   let dst = i.res.(0) in
   let distinct = not (Reg.same_loc src dst) in
   match cast with
-  | Int64_of_float ->
-    A.ins2 FMOV_general_or_register (DSL.reg_x dst, DSL.reg_d src)
-  | Float_of_int64 ->
-    A.ins2 FMOV_general_or_register (DSL.reg_d dst, DSL.reg_x src)
-  | Float32_of_int32 ->
-    A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_w src)
-  | Int32_of_float32 ->
-    A.ins2 FMOV_general_or_register (DSL.reg_w dst, DSL.reg_s src)
+  | Int64_of_float -> A.ins2 FMOV_fp_to_gp_64 (DSL.reg_x dst, DSL.reg_d src)
+  | Float_of_int64 -> A.ins2 FMOV_gp_to_fp_64 (DSL.reg_d dst, DSL.reg_x src)
+  | Float32_of_int32 -> A.ins2 FMOV_gp_to_fp_32 (DSL.reg_s dst, DSL.reg_w src)
+  | Int32_of_float32 -> A.ins2 FMOV_fp_to_gp_32 (DSL.reg_w dst, DSL.reg_s src)
   | Float32_of_float ->
     (* Reinterpret cast: treat both as d registers for FMOV if distinct. *)
     if distinct
     then (
       assert (Cmm.equal_machtype_component src.typ Float);
       assert (Cmm.equal_machtype_component dst.typ Float32);
-      A.ins2 FMOV_general_or_register
-        (DSL.reg_d_of_float_reg dst, DSL.reg_d_of_float_reg src))
+      A.ins2 FMOV_fp (DSL.reg_d_of_float_reg dst, DSL.reg_d_of_float_reg src))
   | Float_of_float32 ->
     (* Reinterpret cast: treat both as d registers for FMOV if distinct. *)
     if distinct
     then (
       assert (Cmm.equal_machtype_component src.typ Float32);
       assert (Cmm.equal_machtype_component dst.typ Float);
-      A.ins2 FMOV_general_or_register
-        (DSL.reg_d_of_float_reg dst, DSL.reg_d_of_float_reg src))
+      A.ins2 FMOV_fp (DSL.reg_d_of_float_reg dst, DSL.reg_d_of_float_reg src))
   | V128_of_vec Vec128 ->
     if distinct
     then A.ins2 MOV_vector (DSL.reg_v16b_operand dst, DSL.reg_v16b_operand src)
@@ -1771,33 +1764,27 @@ let emit_static_cast (cast : Cmm.static_cast) i =
     match v with
     | Int8x16 ->
       (* Note this uses [reg_s] even though the source is wider *)
-      A.ins2 FMOV_general_or_register (DSL.reg_w dst, DSL.reg_s src);
+      A.ins2 FMOV_fp_to_gp_32 (DSL.reg_w dst, DSL.reg_s src);
       A.ins_uxtb (DSL.reg_w dst) (DSL.reg_w dst)
     | Int16x8 ->
-      A.ins2 FMOV_general_or_register (DSL.reg_w dst, DSL.reg_s src);
+      A.ins2 FMOV_fp_to_gp_32 (DSL.reg_w dst, DSL.reg_s src);
       A.ins_uxth (DSL.reg_w dst) (DSL.reg_w dst)
-    | Int32x4 -> A.ins2 FMOV_general_or_register (DSL.reg_w dst, DSL.reg_s src)
-    | Int64x2 -> A.ins2 FMOV_general_or_register (DSL.reg_x dst, DSL.reg_d src)
+    | Int32x4 -> A.ins2 FMOV_fp_to_gp_32 (DSL.reg_w dst, DSL.reg_s src)
+    | Int64x2 -> A.ins2 FMOV_fp_to_gp_64 (DSL.reg_x dst, DSL.reg_d src)
     | Float16x8 -> Misc.fatal_error "float16 scalar type not supported"
-    | Float32x4 ->
-      if distinct
-      then A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_s src)
-    | Float64x2 ->
-      if distinct
-      then A.ins2 FMOV_general_or_register (DSL.reg_d dst, DSL.reg_d src))
+    | Float32x4 -> if distinct then A.ins2 FMOV_fp (DSL.reg_s dst, DSL.reg_s src)
+    | Float64x2 -> if distinct then A.ins2 FMOV_fp (DSL.reg_d dst, DSL.reg_d src)
+    )
   | V128_of_scalar v -> (
     match v with
-    | Int8x16 -> A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_w src)
-    | Int16x8 -> A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_w src)
-    | Int32x4 -> A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_w src)
-    | Int64x2 -> A.ins2 FMOV_general_or_register (DSL.reg_d dst, DSL.reg_x src)
+    | Int8x16 -> A.ins2 FMOV_gp_to_fp_32 (DSL.reg_s dst, DSL.reg_w src)
+    | Int16x8 -> A.ins2 FMOV_gp_to_fp_32 (DSL.reg_s dst, DSL.reg_w src)
+    | Int32x4 -> A.ins2 FMOV_gp_to_fp_32 (DSL.reg_s dst, DSL.reg_w src)
+    | Int64x2 -> A.ins2 FMOV_gp_to_fp_64 (DSL.reg_d dst, DSL.reg_x src)
     | Float16x8 -> Misc.fatal_error "float16 scalar type not supported"
-    | Float32x4 ->
-      if distinct
-      then A.ins2 FMOV_general_or_register (DSL.reg_s dst, DSL.reg_s src)
-    | Float64x2 ->
-      if distinct
-      then A.ins2 FMOV_general_or_register (DSL.reg_d dst, DSL.reg_d src))
+    | Float32x4 -> if distinct then A.ins2 FMOV_fp (DSL.reg_s dst, DSL.reg_s src)
+    | Float64x2 -> if distinct then A.ins2 FMOV_fp (DSL.reg_d dst, DSL.reg_d src)
+    )
   | V256_of_scalar _ | Scalar_of_v256 _ | V512_of_scalar _ | Scalar_of_v512 _ ->
     Misc.fatal_error "arm64: got 256/512 bit vector"
 
@@ -1844,7 +1831,7 @@ let emit_instr i =
   | Lop (Const_int n) -> emit_intconst i.res.(0) n
   | Lop (Const_float32 f) ->
     if Int32.equal f 0l
-    then A.ins2 FMOV_general_or_register (DSL.reg_s i.res.(0), DSL.wzr ())
+    then A.ins2 FMOV_gp_to_fp_32 (DSL.reg_s i.res.(0), DSL.wzr ())
     else if is_immediate_float32 f
     then
       A.ins2 FMOV_scalar_immediate
@@ -1858,7 +1845,7 @@ let emit_instr i =
       emit_load_literal i.res.(0) lbl
   | Lop (Const_float f) ->
     if Int64.equal f 0L
-    then A.ins2 FMOV_general_or_register (DSL.reg_d i.res.(0), DSL.xzr ())
+    then A.ins2 FMOV_gp_to_fp_64 (DSL.reg_d i.res.(0), DSL.xzr ())
     else if is_immediate_float f
     then
       A.ins2 FMOV_scalar_immediate
@@ -2110,10 +2097,10 @@ let emit_instr i =
       let tmp_v8b = DSL.reg_op (DSL.Reg.reg_v8b tmp) in
       let tmp_b = DSL.reg_op (DSL.Reg.reg_b tmp) in
       let tmp_d = DSL.reg_op (DSL.Reg.reg_d tmp) in
-      A.ins2 FMOV_general_or_register (tmp_d, DSL.reg_x i.arg.(0));
+      A.ins2 FMOV_gp_to_fp_64 (tmp_d, DSL.reg_x i.arg.(0));
       A.ins2 CNT_vector (tmp_v8b, tmp_v8b);
       A.ins2 ADDV (tmp_b, tmp_v8b);
-      A.ins2 FMOV_general_or_register (DSL.reg_x i.res.(0), tmp_d)
+      A.ins2 FMOV_fp_to_gp_64 (DSL.reg_x i.res.(0), tmp_d)
   | Lop (Intop (Ictz _)) ->
     (* [ctz Rd, Rn] is optionally supported from Armv8.7, but rbit and clz are
        supported in all ARMv8 CPUs. *)

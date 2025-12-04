@@ -1268,8 +1268,6 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rm } ),
       FCMP ) ->
     encode_fp_compare ~ftype:1 ~rm ~opc2:0b00000 ~rn
-  | Pair (Reg _, Reg _), FCMP ->
-    Misc.fatal_error "FCMP: mixed precision operands not supported"
   | ( Quad
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1286,8 +1284,6 @@ let encode_instruction :
       FCSEL ) ->
     let cond = encode_condition cond in
     encode_fp_cond_select ~ftype:1 ~rm ~cond ~rn ~rd
-  | Quad (Reg _, Reg _, Reg _, Cond _), FCSEL ->
-    Misc.fatal_error "FCSEL: mixed precision operands not supported"
   (* FCVT: convert between single and double precision *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar D); index = rd },
@@ -1405,47 +1401,58 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = ra } ),
       FMSUB ) ->
     encode_fp_3_source ~ftype:1 ~o1:0 ~rm ~o0:1 ~ra ~rn ~rd
-  (* FMOV register-to-register (FP to FP, same precision) *)
+  (* FMOV_fp: FP-to-FP (single precision) *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_fp ) ->
     encode_fp_1_source ~ftype:0 ~opcode:0b000000 ~rn ~rd
+  (* FMOV_fp: FP-to-FP (double precision) *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar D); index = rd },
           Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_fp ) ->
     encode_fp_1_source ~ftype:1 ~opcode:0b000000 ~rn ~rd
-  (* FMOV GP to FP: FMOV Sd, Wn or FMOV Dd, Xn *)
+  (* FMOV_gp_to_fp_32: GP-to-FP (W to S) *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = GP W; index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_gp_to_fp_32 ) ->
     (* sf=0, ftype=00, rmode=00, opcode=111 for GP->FP single *)
     encode_fp_int_conv ~sf:0 ~ftype:0 ~rmode:0b00 ~opcode:0b111 ~rn ~rd
+  (* FMOV_gp_to_fp_32: GP-to-FP (WZR to S) *)
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = GP WZR; index = rn } ),
+      FMOV_gp_to_fp_32 ) ->
+    encode_fp_int_conv ~sf:0 ~ftype:0 ~rmode:0b00 ~opcode:0b111 ~rn ~rd
+  (* FMOV_gp_to_fp_64: GP-to-FP (X to D) *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar D); index = rd },
           Reg { reg_name = GP X; index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_gp_to_fp_64 ) ->
     (* sf=1, ftype=01, rmode=00, opcode=111 for GP->FP double *)
     encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b111 ~rn ~rd
-  (* FMOV FP to GP: FMOV Wd, Sn or FMOV Xd, Dn *)
+  (* FMOV_gp_to_fp_64: GP-to-FP (XZR to D) *)
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = GP XZR; index = rn } ),
+      FMOV_gp_to_fp_64 ) ->
+    encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b111 ~rn ~rd
+  (* FMOV_fp_to_gp_32: FP-to-GP (S to W) *)
   | ( Pair
         ( Reg { reg_name = GP W; index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_fp_to_gp_32 ) ->
     (* sf=0, ftype=00, rmode=00, opcode=110 for FP->GP single *)
     encode_fp_int_conv ~sf:0 ~ftype:0 ~rmode:0b00 ~opcode:0b110 ~rn ~rd
+  (* FMOV_fp_to_gp_64: FP-to-GP (D to X) *)
   | ( Pair
         ( Reg { reg_name = GP X; index = rd },
           Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FMOV_general_or_register ) ->
+      FMOV_fp_to_gp_64 ) ->
     (* sf=1, ftype=01, rmode=00, opcode=110 for FP->GP double *)
     encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b110 ~rn ~rd
-  (* Catch-all for unsupported FMOV combinations *)
-  | Pair (Reg _, Reg _), FMOV_general_or_register ->
-    Misc.fatal_error
-      "FMOV_general_or_register: unsupported register combination"
   (* FMOV scalar immediate - Float case *)
   | ( Pair (Reg { reg_name = Neon (Scalar S); index = rd }, Imm (Float f)),
       FMOV_scalar_immediate ) ->
@@ -1575,8 +1582,6 @@ let encode_instruction :
       | Rounding_mode.X -> 0b001110
     in
     encode_fp_1_source ~ftype:1 ~opcode ~rn ~rd
-  | Pair (Reg _, Reg _), FRINT _ ->
-    Misc.fatal_error "FRINT: mixed precision operands not supported"
   | Pair (Reg _rd, Reg _rn), FRINT_vector _ -> assert false
   | Pair (Reg _rd, Reg _rn), FRSQRTE_vector -> assert false
   | ( Pair

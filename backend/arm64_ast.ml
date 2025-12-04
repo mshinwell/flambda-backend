@@ -1018,8 +1018,8 @@ module Instruction_name = struct
           t
     | FCMP
         : ( pair,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FCM_register :
         Float_cond.t
@@ -1043,10 +1043,10 @@ module Instruction_name = struct
            t
     | FCSEL
         : ( quad,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Cond] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Cond] )
           t
     | FCVT
         : ( pair,
@@ -1151,13 +1151,33 @@ module Instruction_name = struct
                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
           )
           t
-    | FMOV_general_or_register
+    (* FMOV FP-to-FP: same precision copy *)
+    | FMOV_fp
         : ( pair,
-            [< `Reg of
-               [< `Neon of [< `Scalar of [< `S | `D]] | `GP of [< `X | `W]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Scalar of [< `S | `D]]
-                 | `GP of [< `X | `XZR | `W | `WZR] ] ] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
+          t
+    (* FMOV GP-to-FP: move from GP register to FP register *)
+    | FMOV_gp_to_fp_32
+        : ( pair,
+            [`Reg of [`Neon of [`Scalar of [`S]]]]
+            * [< `Reg of [< `GP of [< `W | `WZR]]] )
+          t
+    | FMOV_gp_to_fp_64
+        : ( pair,
+            [`Reg of [`Neon of [`Scalar of [`D]]]]
+            * [< `Reg of [< `GP of [< `X | `XZR]]] )
+          t
+    (* FMOV FP-to-GP: move from FP register to GP register *)
+    | FMOV_fp_to_gp_32
+        : ( pair,
+            [`Reg of [`GP of [`W]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `S]]]] )
+          t
+    | FMOV_fp_to_gp_64
+        : ( pair,
+            [`Reg of [`GP of [`X]]]
+            * [< `Reg of [< `Neon of [< `Scalar of [< `D]]]] )
           t
     | FMOV_scalar_immediate
         : ( pair,
@@ -1237,8 +1257,8 @@ module Instruction_name = struct
     | FRINT :
         Rounding_mode.t
         -> ( pair,
-             [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-             * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+             [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+             * [`Reg of [`Neon of [`Scalar of 'p]]] )
            t
     | FRINT_vector :
         Rounding_mode.t
@@ -2050,8 +2070,8 @@ module Instruction_name = struct
         | FMAX_vector -> "fmax"
         | FMIN -> "fmin"
         | FMIN_vector -> "fmin"
-        | FMOV_general_or_register | FMOV_scalar_immediate
-        | FMOV_vector_immediate ->
+        | FMOV_fp | FMOV_gp_to_fp_32 | FMOV_gp_to_fp_64 | FMOV_fp_to_gp_32
+        | FMOV_fp_to_gp_64 | FMOV_scalar_immediate | FMOV_vector_immediate ->
           "fmov"
         | FMSUB -> "fmsub"
         | FMUL -> "fmul"
@@ -2359,7 +2379,19 @@ module Instruction_name = struct
       | FMIN_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
-      | FMOV_general_or_register ->
+      | FMOV_fp ->
+        let (Pair (rd, rs)) = ops in
+        [| o rd; o rs |]
+      | FMOV_gp_to_fp_32 ->
+        let (Pair (rd, rs)) = ops in
+        [| o rd; o rs |]
+      | FMOV_gp_to_fp_64 ->
+        let (Pair (rd, rs)) = ops in
+        [| o rd; o rs |]
+      | FMOV_fp_to_gp_32 ->
+        let (Pair (rd, rs)) = ops in
+        [| o rd; o rs |]
+      | FMOV_fp_to_gp_64 ->
         let (Pair (rd, rs)) = ops in
         [| o rd; o rs |]
       | FMOV_scalar_immediate ->
