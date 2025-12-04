@@ -295,8 +295,29 @@ let encode_data_proc_1_source ~sf ~s ~opcode2 ~opcode ~rn ~rd =
   let result = logor result (of_int (Reg.gp_encoding rd)) in
   result
 
+(* Helper to extract Q (vector width) and size (element size) from vector type *)
+let vector_q_size (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int =
+  match vec with
+  | V8B -> 0, 0b00  (* 64-bit, B elements *)
+  | V16B -> 1, 0b00 (* 128-bit, B elements *)
+  | V4H -> 0, 0b01  (* 64-bit, H elements *)
+  | V8H -> 1, 0b01  (* 128-bit, H elements *)
+  | V2S -> 0, 0b10  (* 64-bit, S elements *)
+  | V4S -> 1, 0b10  (* 128-bit, S elements *)
+  | V1D -> 0, 0b11  (* 64-bit, D elements *)
+  | V2D -> 1, 0b11  (* 128-bit, D elements *)
+
+(* Helper for FP vector operations - returns Q and the FP precision bit (sz) *)
+let vector_q_fp_sz (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int =
+  match vec with
+  | V2S -> 0, 0  (* 64-bit, single-precision *)
+  | V4S -> 1, 0  (* 128-bit, single-precision *)
+  | V2D -> 1, 1  (* 128-bit, double-precision *)
+  | V8B | V16B | V4H | V8H | V1D ->
+    Misc.fatal_error "FP vector operations only support S and D element types"
+
 (* Advanced SIMD three same - C4.1.95.24 *)
-let _encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
+let encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
   let result = logor result (shift_left (of_int q) 31) in
@@ -1130,7 +1151,13 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADDS ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:0 ~s:1 ~sh ~imm12 ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Reg _rm), ADD_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      ADD_vector ) ->
+    let q, size = vector_q_size vec in
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b10000 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), ADDV -> assert false
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
@@ -1158,7 +1185,14 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_logical_shifted_reg ~opc:0b00 ~shift ~imm6 ~rd ~rn ~rm
-  | Triple (Reg _rd, Reg _rn, Reg _rm), AND_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      AND_vector ) ->
+    let q, _ = vector_q_size vec in
+    (* AND: U=0, size=00, opcode=00011 *)
+    encode_simd_three_same ~q ~u:0 ~size:0b00 ~rm ~opcode:0b00011 ~rn ~rd
   | Triple (Reg rd, Reg rn, Reg rm), ASRV ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
@@ -1230,7 +1264,14 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_logical_shifted_reg ~opc:0b10 ~shift ~imm6 ~rd ~rn ~rm
-  | Triple (Reg _rd, Reg _rn, Reg _rm), EOR_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      EOR_vector ) ->
+    let q, _ = vector_q_size vec in
+    (* EOR: U=1, size=00, opcode=00011 *)
+    encode_simd_three_same ~q ~u:1 ~size:0b00 ~rm ~opcode:0b00011 ~rn ~rd
   | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
@@ -1255,7 +1296,14 @@ let encode_instruction :
       FADD ) ->
     encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0010 ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), FADDP_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FADD_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      FADD_vector ) ->
+    let q, sz = vector_q_fp_sz vec in
+    (* FADD: U=0, size=0x, opcode=11010 *)
+    encode_simd_three_same ~q ~u:0 ~size:sz ~rm ~opcode:0b11010 ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), FCM_register _ -> assert false
   | Pair (Reg _rd, Reg _rn), FCM_zero _ -> assert false
   | ( Pair
@@ -1501,7 +1549,14 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rm } ),
       FMUL ) ->
     encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0000 ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FMUL_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      FMUL_vector ) ->
+    let q, sz = vector_q_fp_sz vec in
+    (* FMUL: U=1, size=0x, opcode=11011 *)
+    encode_simd_three_same ~q ~u:1 ~size:sz ~rm ~opcode:0b11011 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn } ),
@@ -1607,7 +1662,14 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rm } ),
       FSUB ) ->
     encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0011 ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Reg _rm), FSUB_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      FSUB_vector ) ->
+    let q, sz = vector_q_fp_sz vec in
+    (* FSUB: U=0, size=1x, opcode=11010 *)
+    encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11010 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), INS _ -> assert false
   | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem (Reg rn)), LDAR ->
@@ -1678,7 +1740,14 @@ let encode_instruction :
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:1 ~rm ~ra ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), MUL_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      MUL_vector ) ->
+    let q, size = vector_q_size vec in
+    (* MUL: U=0, opcode=10011 *)
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b10011 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), MVN_vector -> assert false
   | Pair (Reg _rd, Reg _rn), NEG_vector -> assert false
   | _, NOP -> encode_nop ()
@@ -1698,7 +1767,14 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_logical_shifted_reg ~opc:0b01 ~shift ~imm6 ~rd ~rn ~rm
-  | Triple (Reg _rd, Reg _rn, Reg _rm), ORR_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      ORR_vector ) ->
+    let q, _ = vector_q_size vec in
+    (* ORR: U=0, size=10, opcode=00011 *)
+    encode_simd_three_same ~q ~u:0 ~size:0b10 ~rm ~opcode:0b00011 ~rn ~rd
   | Pair (Reg rd, Reg rn), RBIT ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000000 ~rn ~rd
@@ -1748,8 +1824,22 @@ let encode_instruction :
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b000011 ~rm ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Imm _), SHL -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SMAX_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SMIN_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      SMAX_vector ) ->
+    let q, size = vector_q_size vec in
+    (* SMAX: U=0, opcode=01100 *)
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b01100 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      SMIN_vector ) ->
+    let q, size = vector_q_size vec in
+    (* SMIN: U=0, opcode=01101 *)
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b01101 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), SMOV _ -> assert false
   | Triple (Reg rd, Reg rn, Reg rm), SMULH ->
     (* SMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
@@ -1758,10 +1848,24 @@ let encode_instruction :
     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010 ~o0:0 ~rm ~ra ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL2_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), SMULL_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SQADD_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      SQADD_vector ) ->
+    let q, size = vector_q_size vec in
+    (* SQADD: U=0, opcode=00001 *)
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b00001 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), SQXTN -> assert false
   | Pair (Reg _rd, Reg _rn), SQXTN2 -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SQSUB_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      SQSUB_vector ) ->
+    let q, size = vector_q_size vec in
+    (* SQSUB: U=0, opcode=00101 *)
+    encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b00101 ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), SSHL_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Imm _), SSHR -> assert false
   | Triple (Reg rt1, Reg rt2, Mem addressing), STP ->
@@ -1794,7 +1898,14 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_add_sub_shifted_reg ~op:1 ~s:0 ~shift ~imm6 ~rd ~rn ~rm
-  | Triple (Reg _rd, Reg _rn, Reg _rm), SUB_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      SUB_vector ) ->
+    let q, size = vector_q_size vec in
+    (* SUB: U=1, opcode=10000 *)
+    encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b10000 ~rn ~rd
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUBS_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh ~imm12 ~rn ~rd
@@ -1848,8 +1959,22 @@ let encode_instruction :
     let n = sf in
     encode_bitfield ~sf ~opc:0b10 ~n ~immr ~imms ~rn ~rd
   | Pair (Reg _rd, Reg _rn), UADDLP_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), UMAX_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), UMIN_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      UMAX_vector ) ->
+    let q, size = vector_q_size vec in
+    (* UMAX: U=1, opcode=01100 *)
+    encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b01100 ~rn ~rd
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      UMIN_vector ) ->
+    let q, size = vector_q_size vec in
+    (* UMIN: U=1, opcode=01101 *)
+    encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b01101 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), UMOV _ -> assert false
   | Triple (Reg rd, Reg rn, Reg rm), UMULH ->
     (* UMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
@@ -1858,10 +1983,24 @@ let encode_instruction :
     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm ~ra ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL2_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Reg _rm), UMULL_vector -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), UQADD_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      UQADD_vector ) ->
+    let q, size = vector_q_size vec in
+    (* UQADD: U=1, opcode=00001 *)
+    encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b00001 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), UQXTN -> assert false
   | Pair (Reg _rd, Reg _rn), UQXTN2 -> assert false
-  | Triple (Reg _rd, Reg _rn, Reg _rm), UQSUB_vector -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Reg { reg_name = Neon (Vector _); index = rm } ),
+      UQSUB_vector ) ->
+    let q, size = vector_q_size vec in
+    (* UQSUB: U=1, opcode=00101 *)
+    encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b00101 ~rn ~rd
   | Triple (Reg _rd, Reg _rn, Reg _rm), USHL_vector -> assert false
   | Triple (Reg _rd, Reg _rn, Imm _), USHR -> assert false
   | Pair (Reg _rd, Reg _rn), UXTL -> assert false
