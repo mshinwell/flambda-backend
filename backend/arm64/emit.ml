@@ -191,20 +191,20 @@ module DSL : sig
     ?offset:int ->
     Reg.t ->
     S.t ->
-    [`Mem] Arm64_ast.Operand.t
+    [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
   val emit_mem_label :
     reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
-    [`Mem] Arm64_ast.Operand.t
+    [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
-  val mem : Reg.t -> [`Mem] Arm64_ast.Operand.t
+  val mem : Reg.t -> [`Mem of [> `Base_reg]] Arm64_ast.Operand.t
 
-  val addressing : addressing_mode -> Reg.t -> [`Mem] Arm64_ast.Operand.t
+  val addressing : addressing_mode -> Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
-  val stack : Reg.t -> [`Mem] Arm64_ast.Operand.t
+  val stack : Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
   val label :
     ?offset:int -> ?reloc:'w Arm64_ast.Symbol.same_section_or_reloc -> L.t -> 'a
@@ -838,12 +838,12 @@ let emit_stack_realloc () =
     A.ins3 STP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
-        DSL.mem_pre ~base:(DSL.Reg.sp ()) ~offset:(-16) );
+        DSL.mem_pre_pair ~base:(DSL.Reg.sp ()) ~offset:(-16) );
     A.ins1 BL (DSL.symbol (S.create "caml_call_realloc_stack"));
     A.ins3 LDP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
-        DSL.mem_post ~base:(DSL.Reg.sp ()) ~offset:16 );
+        DSL.mem_post_pair ~base:(DSL.Reg.sp ()) ~offset:16 );
     A.ins1 B (DSL.label sc_return)
 
 (* Names of various instructions *)
@@ -2437,7 +2437,7 @@ let emit_instr i =
     A.ins3 STP
       ( DSL.reg_x reg_trap_ptr,
         DSL.reg_x reg_tmp1,
-        DSL.mem_pre ~base:(DSL.Reg.sp ()) ~offset:(-16) );
+        DSL.mem_pre_pair ~base:(DSL.Reg.sp ()) ~offset:(-16) );
     D.cfi_adjust_cfa_offset ~bytes:16;
     A.ins_mov_from_sp ~dst:(DSL.reg_x reg_trap_ptr)
   | Lpoptrap _ ->
@@ -2460,7 +2460,7 @@ let emit_instr i =
       A.ins3 LDP
         ( DSL.reg_x reg_trap_ptr,
           DSL.reg_x reg_tmp1,
-          DSL.mem_post ~base:(DSL.Reg.sp ()) ~offset:16 );
+          DSL.mem_post_pair ~base:(DSL.Reg.sp ()) ~offset:16 );
       A.ins1 BR (DSL.reg_x reg_tmp1))
   | Lstackcheck { max_frame_size_bytes } ->
     let overflow = L.create Text and ret = L.create Text in

@@ -628,7 +628,7 @@ let encode_load_store_gp_sized :
     size:int ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~size ~opc ~rd addressing ->
   let vr = 0 in
@@ -711,10 +711,6 @@ let encode_load_store_gp_sized :
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
-  | Offset_pair _ | Pre_pair _ | Post_pair _ ->
-    Misc.fatal_errorf
-      "%s: pair addressing modes not supported for single-register load/store"
-      instr_name
 
 let encode_load_store_gp :
     type a.
@@ -722,7 +718,7 @@ let encode_load_store_gp :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   let size =
@@ -739,7 +735,7 @@ let encode_load_store_byte :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b00 ~opc ~rd addressing
@@ -751,7 +747,7 @@ let encode_load_store_halfword :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    Operand.Addressing_mode.t ->
+    [< `Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
@@ -828,7 +824,7 @@ let encode_load_store_pair_gp :
     l:int ->
     rt1:[`GP of a] Reg.t ->
     rt2:[`GP of b] Reg.t ->
-    Operand.Addressing_mode.t ->
+    [< `Offset_pair | `Pre_pair | `Post_pair] Operand.Addressing_mode.t ->
     int32 =
  fun ~instr_name ~l ~rt1 ~rt2 addressing ->
   let opc =
@@ -856,10 +852,6 @@ let encode_load_store_pair_gp :
     encode_with_alignment_check encode_load_store_pair_pre_indexed rn imm
   | Post_pair (rn, Imm (Seven_signed_scaled imm)) ->
     encode_with_alignment_check encode_load_store_pair_post_indexed rn imm
-  | Reg _ | Literal _ | Offset _ | Pre _ | Post _ ->
-    Misc.fatal_errorf
-      "%s: single-register addressing modes not supported for pair load/store"
-      instr_name
 
 (* Helper to compute a 26-bit PC-relative offset for B/BL instructions *)
 let compute_branch_imm26 state ~instr_name (sym : _ Symbol.t) =
@@ -1253,9 +1245,6 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem (Reg rn)), LDAR ->
     encode_load_acquire ~rd ~rn
-  | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem _), LDAR ->
-    Misc.fatal_errorf "LDAR only supports base register addressing (rd=%s)"
-      (Reg.name rd)
   | Triple (Reg rt1, Reg rt2, Mem addressing), LDP ->
     encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
