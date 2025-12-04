@@ -441,10 +441,11 @@ let sxtl_immh (type v s) (vec : (v, s) Neon_reg_name.Vector.t) =
   | V8B | V16B | V4H | V2S | V1D ->
     Misc.fatal_error "SXTL/UXTL requires H, S, or D destination elements"
 
-(* Helper to compute imm5 for SIMD copy instructions (DUP, INS, SMOV, UMOV) *)
-(* imm5 encodes element size and lane index: B: xxxx1 (index in bits 4:1), H:
-   xxx10 (index in bits 4:2), S: xx100 (index in bits 4:3), D: x1000 (index in
-   bit 4) *)
+(* Helper to compute imm5 for SIMD copy instructions (DUP, INS, SMOV, UMOV).
+   imm5 encodes element size and lane index:
+
+   - B: xxxx1 (index in bits 4:1) - H: xxx10 (index in bits 4:2) - S: xx100
+   (index in bits 4:3) - D: x1000 (index in bit 4) *)
 let simd_copy_imm5 (type v s) (vec : (v, s) Neon_reg_name.Vector.t) lane_idx =
   match vec with
   | V8B | V16B -> (lane_idx lsl 1) lor 0b00001
@@ -1457,9 +1458,10 @@ let encode_instruction :
           Reg { index = rm; _ } ),
       CM_register cond ) ->
     let q, size = vector_q_size vec in
-    (* Integer vector compares (register): CMGT: U=0, opcode=00110 CMGE: U=0,
-       opcode=00111 CMEQ: U=1, opcode=10001 CMHI: U=1, opcode=00110 CMHS: U=1,
-       opcode=00111 *)
+    (* Integer vector compares (register):
+
+       - CMGT: U=0, opcode=00110 - CMGE: U=0, opcode=00111 - CMEQ: U=1,
+       opcode=10001 - CMHI: U=1, opcode=00110 - CMHS: U=1, opcode=00111 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b00110
@@ -1580,8 +1582,10 @@ let encode_instruction :
           Reg { index = rm; _ } ),
       FCM_register cond ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FP vector compares (register): FCMEQ: U=0, size=0x, opcode=11100 FCMGE:
-       U=1, size=0x, opcode=11100 FCMGT: U=1, size=1x, opcode=11100 *)
+    (* FP vector compares (register):
+
+       - FCMEQ: U=0, size=0x, opcode=11100 - FCMGE: U=1, size=0x, opcode=11100 -
+       FCMGT: U=1, size=1x, opcode=11100 *)
     let u, size_hi =
       match cond with
       | Float_cond.EQ -> 0, 0
