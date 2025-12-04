@@ -397,6 +397,34 @@ let encode_condition (cond : Cond.t) : int =
   | GT -> 0b1100
   | LE -> 0b1101
 
+(* Floating-point condition codes use the same encoding as integer conditions.
+   The difference is semantic: after FCMP, the flags have different meanings. *)
+let encode_float_condition (cond : Float_cond.t) : int =
+  match cond with
+  | EQ -> 0b0000
+  | NE -> 0b0001
+  | CS -> 0b0010
+  | CC -> 0b0011
+  | HI -> 0b1000
+  | LS -> 0b1001
+  | GE -> 0b1010
+  | LT -> 0b1011
+  | GT -> 0b1100
+  | LE -> 0b1101
+
+(* Conditional branch (immediate) - C4.1.93.1
+   Encoding: 0101010 | 0 | imm19 | o0 | cond
+   o0=0 for B.cond *)
+let encode_conditional_branch ~imm19 ~cond =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int 0b01010100) 24) in
+  let result = logor result (shift_left (of_int (imm19 land 0x7FFFF)) 5) in
+  let result = logor result (shift_left (of_int 0) 4) in
+  (* o0 = 0 for B.cond *)
+  let result = logor result (of_int cond) in
+  result
+
 (* Logical (shifted register) - C4.1.94.3 *)
 let encode_logical_shifted_register ~sf ~opc ~shift ~n ~rm ~imm6 ~rn ~rd =
   let open Int32 in
@@ -983,8 +1011,14 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), B ->
     let imm26 = compute_branch_imm26 state ~instr_name:"B" sym in
     encode_branch_immediate ~op:0 ~imm26
-  | Singleton _, B_cond _ -> assert false
-  | Singleton _, B_cond_float _ -> assert false
+  | Singleton (Imm (Sym sym)), B_cond cond ->
+    let imm19 = compute_branch_imm19 state ~instr_name:"B.cond" sym in
+    let cond = encode_condition cond in
+    encode_conditional_branch ~imm19 ~cond
+  | Singleton (Imm (Sym sym)), B_cond_float cond ->
+    let imm19 = compute_branch_imm19 state ~instr_name:"B.cond" sym in
+    let cond = encode_float_condition cond in
+    encode_conditional_branch ~imm19 ~cond
   | Singleton (Imm (Sym sym)), BL ->
     let imm26 = compute_branch_imm26 state ~instr_name:"BL" sym in
     encode_branch_immediate ~op:1 ~imm26

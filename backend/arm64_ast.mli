@@ -463,8 +463,8 @@ module Instruction_name : sig
     | BL : (singleton, [`Imm of [`Sym of _]]) t
     | BLR : (singleton, [`Reg of [`GP of [`X]]]) t
     | BR : (singleton, [`Reg of [`GP of [`X]]]) t
-    | B_cond : Cond.t -> (singleton, [< `Imm of _]) t
-    | B_cond_float : Float_cond.t -> (singleton, [< `Imm of _]) t
+    | B_cond : Cond.t -> (singleton, [`Imm of [`Sym of _]]) t
+    | B_cond_float : Float_cond.t -> (singleton, [`Imm of [`Sym of _]]) t
     | CBNZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [`Imm of [`Sym of _]]) t
     | CBZ : (pair, [`Reg of [`GP of [< `X | `W]]] * [`Imm of [`Sym of _]]) t
     | CLZ : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
