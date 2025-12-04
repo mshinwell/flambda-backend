@@ -407,21 +407,16 @@ module Instruction_name : sig
   type (_, _) t =
     | ABS_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ADDP_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ADDS
         : ( quad,
@@ -452,13 +447,10 @@ module Instruction_name : sig
           t
     | ADD_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ADR
         : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
@@ -480,13 +472,10 @@ module Instruction_name : sig
           t
     | AND_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ASRV
         : ( triple,
@@ -506,22 +495,17 @@ module Instruction_name : sig
     | CM_register :
         Cond.t
         -> ( triple,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | CM_zero :
         Cond.t
         -> ( pair,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | CNT
         : ( pair,
@@ -529,8 +513,9 @@ module Instruction_name : sig
           t
     | CNT_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of _]]]
-            * [< `Reg of [< `Neon of [< `Vector of _]]] )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | CSEL
         : ( quad,
@@ -555,11 +540,9 @@ module Instruction_name : sig
     | DUP :
         Neon_reg_name.Lane_index.t
         -> ( pair,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | EOR_immediate
         : ( triple,
@@ -577,13 +560,10 @@ module Instruction_name : sig
           t
     | EOR_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | EXT
         : ( quad,
@@ -605,23 +585,17 @@ module Instruction_name : sig
           t
     | FADDP_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FADD_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FCMP
         : ( pair,
@@ -631,22 +605,17 @@ module Instruction_name : sig
     | FCM_register :
         Float_cond.t
         -> ( triple,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | FCM_zero :
         Float_cond.t
         -> ( pair,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | FCSEL
         : ( quad,
@@ -675,11 +644,9 @@ module Instruction_name : sig
           t
     | FCVTNS_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FCVTN_vector
         : ( pair,
@@ -697,11 +664,9 @@ module Instruction_name : sig
           t
     | FCVTZS_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FDIV
         : ( triple,
@@ -711,13 +676,10 @@ module Instruction_name : sig
           t
     | FDIV_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FMADD
         : ( quad,
@@ -734,13 +696,10 @@ module Instruction_name : sig
           t
     | FMAX_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FMIN
         : ( triple,
@@ -750,13 +709,10 @@ module Instruction_name : sig
           t
     | FMIN_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     (* FMOV FP-to-FP: same precision copy *)
     | FMOV_fp
@@ -806,13 +762,10 @@ module Instruction_name : sig
           t
     | FMUL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FNEG
         : ( pair,
@@ -821,11 +774,9 @@ module Instruction_name : sig
           t
     | FNEG_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FNMADD
         : ( quad,
@@ -849,11 +800,9 @@ module Instruction_name : sig
           t
     | FRECPE_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FRINT :
         Rounding_mode.t
@@ -864,18 +813,15 @@ module Instruction_name : sig
     | FRINT_vector :
         Rounding_mode.t
         -> ( pair,
-             [< `Reg of
-                [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-             * [< `Reg of
-                  [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-           )
+             [`Reg of
+                [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
            t
     | FRSQRTE_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
           )
           t
     | FSQRT
@@ -885,11 +831,9 @@ module Instruction_name : sig
           t
     | FSQRT_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | FSUB
         : ( triple,
@@ -899,13 +843,10 @@ module Instruction_name : sig
           t
     | FSUB_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | INS :
         Neon_reg_name.Lane_index.t
@@ -1070,8 +1011,9 @@ module Instruction_name : sig
           t
     | MOV_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of _]]]
-            * [< `Reg of [< `Neon of [< `Vector of _]]] )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | MSUB
         : ( quad,
@@ -1082,29 +1024,22 @@ module Instruction_name : sig
           t
     | MUL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | MVN_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | NEG_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | NOP : (singleton, unit) t
     | ORR_immediate
@@ -1123,13 +1058,10 @@ module Instruction_name : sig
           t
     | ORR_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | RBIT : (pair, [`Reg of [`GP of [< `X]]] * [`Reg of [`GP of [< `X]]]) t
     | RET : (singleton, unit) t
@@ -1155,11 +1087,9 @@ module Instruction_name : sig
           t
     | SCVTF_vector
         : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SDIV
         : ( triple,
@@ -1177,39 +1107,23 @@ module Instruction_name : sig
           t
     | SMAX_vector
         : ( triple,
-            [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                  ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ] )
+            [`Reg of
+               [`Neon of
+                  [`Vector of
+                     ([< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] as 'v)
+                     * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SMIN_vector
         : ( triple,
-            [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                  ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ] )
+            [`Reg of
+               [`Neon of
+                  [`Vector of
+                     ([< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] as 'v)
+                     * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SMOV :
         Neon_reg_name.Lane_index.t
@@ -1227,43 +1141,33 @@ module Instruction_name : sig
           t
     | SMULL2_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+            * [`Reg of
+                 [`Neon of
+                    [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SMULL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+            * [`Reg of
+                 [`Neon of
+                    [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SQADD_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SQSUB_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SQXTN
         : ( pair,
@@ -1283,13 +1187,10 @@ module Instruction_name : sig
           t
     | SSHL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SSHR
         : ( triple,
@@ -1381,13 +1282,10 @@ module Instruction_name : sig
           t
     | SUB_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | SXTL
         : ( pair,
@@ -1430,39 +1328,23 @@ module Instruction_name : sig
           t
     | UMAX_vector
         : ( triple,
-            [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                  ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ] )
+            [`Reg of
+               [`Neon of
+                  [`Vector of
+                     ([< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] as 'v)
+                     * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | UMIN_vector
         : ( triple,
-            [< `Reg of
-               [< `Neon of
-                  [< `Vector of
-                     [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] * [< any_width]
-                  ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ]
-            * [< `Reg of
-                 [< `Neon of
-                    [< `Vector of
-                       [< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S]
-                       * [< any_width] ] ] ] )
+            [`Reg of
+               [`Neon of
+                  [`Vector of
+                     ([< `V8B | `V16B | `V4H | `V8H | `V2S | `V4S] as 'v)
+                     * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | UMOV :
         Neon_reg_name.Lane_index.t
@@ -1480,43 +1362,33 @@ module Instruction_name : sig
           t
     | UMULL2_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+            * [`Reg of
+                 [`Neon of
+                    [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | UMULL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]]
+            * [`Reg of
+                 [`Neon of
+                    [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | UQADD_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | UQSUB_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     (* Lane-indexed operations *)
     | UQXTN
@@ -1537,13 +1409,10 @@ module Instruction_name : sig
           t
     | USHL_vector
         : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
+            [`Reg of
+               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
+            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | USHR
         : ( triple,
