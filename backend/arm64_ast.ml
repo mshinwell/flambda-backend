@@ -1631,13 +1631,11 @@ module Instruction_name = struct
           t
     | TBNZ
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
-          )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
           t
     | TBZ
         : ( triple,
-            [< `Reg of [< `GP of [< `X]]] * [< `Imm of [< `Six]] * [< `Imm of _]
-          )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
           t
     | TST : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Bitmask]) t
     | UADDLP_vector

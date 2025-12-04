@@ -1445,9 +1445,6 @@ let encode_instruction :
     let b40 = bit land 0b11111 in
     let rt_enc = Reg.gp_encoding rt in
     encode_test_branch ~b5 ~op:1 ~b40 ~imm14 ~rt:rt_enc
-  | Triple (Reg _, Imm _, Imm _), TBNZ ->
-    Misc.fatal_error
-      "TBNZ requires register, 6-bit immediate, and symbol target"
   | ( Triple (Reg ({ reg_name = GP _; _ } as rt), Imm (Six bit), Imm (Sym sym)),
       TBZ ) ->
     let imm14 = compute_branch_imm14 state ~instr_name:"TBZ" sym in
@@ -1455,8 +1452,6 @@ let encode_instruction :
     let b40 = bit land 0b11111 in
     let rt_enc = Reg.gp_encoding rt in
     encode_test_branch ~b5 ~op:0 ~b40 ~imm14 ~rt:rt_enc
-  | Triple (Reg _, Imm _, Imm _), TBZ ->
-    Misc.fatal_error "TBZ requires register, 6-bit immediate, and symbol target"
   | Pair (Reg ({ reg_name = GP _; _ } as rn), Bitmask bitmask), TST ->
     (* XXX this shouldn't be here *)
     (* TST is an alias for ANDS with XZR/WZR as destination (rd=31) *)
