@@ -258,20 +258,37 @@ module Operand : sig
 
     (* Type tags for addressing modes *)
     type base_reg = [`Base_reg]
+
     type offset = [`Offset]
+
     type literal = [`Literal]
+
     type pre = [`Pre]
+
     type post = [`Post]
+
     type offset_pair = [`Offset_pair]
+
     type pre_pair = [`Pre_pair]
+
     type post_pair = [`Post_pair]
 
     (* Combined type for instructions that accept multiple addressing modes *)
     type any_single =
-      [ `Base_reg | `Offset | `Literal | `Pre | `Post ]
+      [ `Base_reg
+      | `Offset
+      | `Literal
+      | `Pre
+      | `Post ]
+
     type any_pair =
-      [ `Offset_pair | `Pre_pair | `Post_pair ]
-    type any = [ any_single | any_pair ]
+      [ `Offset_pair
+      | `Pre_pair
+      | `Post_pair ]
+
+    type any =
+      [ any_single
+      | any_pair ]
 
     type _ t = private
       | Reg : [`GP of [< `X | `SP]] Reg.t -> [> `Base_reg] t
@@ -884,10 +901,7 @@ module Instruction_name : sig
            )
            t
     | LDAR
-        : ( pair,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Mem of [`Base_reg]] )
-          t
+        : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem of [`Base_reg]]) t
     | LDP
         : ( triple,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
@@ -1305,11 +1319,13 @@ module Instruction_name : sig
           t
     | TBNZ
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]]
+          )
           t
     | TBZ
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]]
+          )
           t
     | TST : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Bitmask]) t
     | UADDLP_vector
@@ -1544,7 +1560,8 @@ module DSL : sig
 
   val unit_operand : unit Operand.t
 
-  val mem : base:[`GP of [< `X | `SP]] Reg.t -> [`Mem of [> `Base_reg]] Operand.t
+  val mem :
+    base:[`GP of [< `X | `SP]] Reg.t -> [`Mem of [> `Base_reg]] Operand.t
 
   val mem_offset :
     base:[`GP of [< `X | `SP]] Reg.t ->

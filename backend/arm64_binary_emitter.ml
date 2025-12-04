@@ -380,10 +380,9 @@ let encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-(* Floating-point compare - C4.1.95.35
-   Format: M=0 | 0 | S=0 | 11110 | ftype | 1 | Rm | op=00 | 1000 | Rn | opcode2
-   opcode2: 00000=FCMP(reg), 01000=FCMP(zero), 10000=FCMPE(reg), 11000=FCMPE(zero)
-*)
+(* Floating-point compare - C4.1.95.35 Format: M=0 | 0 | S=0 | 11110 | ftype | 1
+   | Rm | op=00 | 1000 | Rn | opcode2 opcode2: 00000=FCMP(reg),
+   01000=FCMP(zero), 10000=FCMPE(reg), 11000=FCMPE(zero) *)
 let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let open Int32 in
   let result = zero in
@@ -397,19 +396,14 @@ let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let result = logor result (of_int opc2) in
   result
 
-(* Floating-point <-> integer conversion - C4.1.95.33
-   Format: sf | 0 | S=0 | 11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
-   Common opcodes:
-   - SCVTF (int->FP): rmode=00, opcode=010
-   - UCVTF (int->FP): rmode=00, opcode=011
-   - FCVTNS (FP->int, nearest): rmode=00, opcode=000
-   - FCVTPS (FP->int, +inf): rmode=01, opcode=000
-   - FCVTMS (FP->int, -inf): rmode=10, opcode=000
-   - FCVTZS (FP->int, zero): rmode=11, opcode=000
-   - FCVTNU (FP->int, nearest unsigned): rmode=00, opcode=001
-   - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
-   - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111
-*)
+(* Floating-point <-> integer conversion - C4.1.95.33 Format: sf | 0 | S=0 |
+   11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd Common opcodes: - SCVTF
+   (int->FP): rmode=00, opcode=010 - UCVTF (int->FP): rmode=00, opcode=011 -
+   FCVTNS (FP->int, nearest): rmode=00, opcode=000 - FCVTPS (FP->int, +inf):
+   rmode=01, opcode=000 - FCVTMS (FP->int, -inf): rmode=10, opcode=000 - FCVTZS
+   (FP->int, zero): rmode=11, opcode=000 - FCVTNU (FP->int, nearest unsigned):
+   rmode=00, opcode=001 - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
+   - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
 let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
@@ -423,8 +417,8 @@ let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-(* Floating-point immediate - C4.1.95.36
-   Format: M=0 | 0 | S=0 | 11110 | ftype | 1 | imm8 | 100 | imm5=00000 | Rd *)
+(* Floating-point immediate - C4.1.95.36 Format: M=0 | 0 | S=0 | 11110 | ftype |
+   1 | imm8 | 100 | imm5=00000 | Rd *)
 let encode_fp_immediate ~ftype ~imm8 ~rd =
   let open Int32 in
   let result = zero in
@@ -468,9 +462,8 @@ let encode_float_condition (cond : Float_cond.t) : int =
   | GT -> 0b1100
   | LE -> 0b1101
 
-(* Conditional branch (immediate) - C4.1.93.1
-   Encoding: 0101010 | 0 | imm19 | o0 | cond
-   o0=0 for B.cond *)
+(* Conditional branch (immediate) - C4.1.93.1 Encoding: 0101010 | 0 | imm19 | o0
+   | cond o0=0 for B.cond *)
 let encode_conditional_branch ~imm19 ~cond =
   let open Int32 in
   let result = zero in
@@ -937,10 +930,9 @@ let encode_load_store_pair_gp :
   | Post_pair (rn, Imm (Seven_signed_scaled imm)) ->
     encode_with_alignment_check encode_load_store_pair_post_indexed rn imm
 
-(* Encode load/store for SIMD&FP registers.
-   For LDR: S->opc=01, D->opc=01, Q->opc=11
-   For STR: S->opc=00, D->opc=00, Q->opc=10
-   size: S->10, D->11, Q->00 *)
+(* Encode load/store for SIMD&FP registers. For LDR: S->opc=01, D->opc=01,
+   Q->opc=11 For STR: S->opc=00, D->opc=00, Q->opc=10 size: S->10, D->11,
+   Q->00 *)
 let encode_load_store_simd_fp :
     type s.
     Section_state.t ->
@@ -998,14 +990,13 @@ let encode_load_store_simd_fp :
   | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
     if imm12 mod scale <> 0
     then
-      Misc.fatal_errorf
-        "%s offset %d must be aligned to %d-byte access size"
+      Misc.fatal_errorf "%s offset %d must be aligned to %d-byte access size"
         instr_name imm12 scale;
     let imm12_scaled = imm12 / scale in
     if imm12_scaled < 0 || imm12_scaled > 0xfff
     then
-      Misc.fatal_errorf "%s offset %d (scaled: %d) out of range"
-        instr_name imm12 imm12_scaled;
+      Misc.fatal_errorf "%s offset %d (scaled: %d) out of range" instr_name
+        imm12 imm12_scaled;
     let rn = Reg.gp_encoding rn in
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
@@ -1253,6 +1244,8 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rm } ),
       FCMP ) ->
     encode_fp_compare ~ftype:1 ~rm ~opc2:0b00000 ~rn
+  | Pair (Reg _, Reg _), FCMP ->
+    Misc.fatal_error "FCMP: mixed precision operands not supported"
   | ( Quad
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1269,6 +1262,8 @@ let encode_instruction :
       FCSEL ) ->
     let cond = encode_condition cond in
     encode_fp_cond_select ~ftype:1 ~rm ~cond ~rn ~rd
+  | Quad (Reg _, Reg _, Reg _, Cond _), FCSEL ->
+    Misc.fatal_error "FCSEL: mixed precision operands not supported"
   (* FCVT: convert between single and double precision *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar D); index = rd },
@@ -1282,6 +1277,17 @@ let encode_instruction :
       FCVT ) ->
     (* FCVT Sd, Dn: ftype=01 (source=double), opcode=000100 (to single) *)
     encode_fp_1_source ~ftype:1 ~opcode:0b000100 ~rn ~rd
+  (* FCVT same-precision conversions: use FMOV instead *)
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar S); index = rd },
+          Reg { reg_name = Neon (Scalar S); index = rn } ),
+      FCVT ) ->
+    encode_fp_1_source ~ftype:0 ~opcode:0b000000 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar D); index = rd },
+          Reg { reg_name = Neon (Scalar D); index = rn } ),
+      FCVT ) ->
+    encode_fp_1_source ~ftype:1 ~opcode:0b000000 ~rn ~rd
   | Pair (Reg _rd, Reg _rn), FCVTL_vector -> assert false
   | Pair (Reg _rd, Reg _rn), FCVTN_vector -> assert false
   (* FCVTNS: FP to signed int, round to nearest with ties to even *)
@@ -1412,42 +1418,42 @@ let encode_instruction :
       FMOV_general_or_register ) ->
     (* sf=1, ftype=01, rmode=00, opcode=110 for FP->GP double *)
     encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b110 ~rn ~rd
+  (* Catch-all for unsupported FMOV combinations *)
+  | Pair (Reg _, Reg _), FMOV_general_or_register ->
+    Misc.fatal_error
+      "FMOV_general_or_register: unsupported register combination"
   (* FMOV scalar immediate - Float case *)
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Imm (Float f) ),
+  | ( Pair (Reg { reg_name = Neon (Scalar S); index = rd }, Imm (Float f)),
       FMOV_scalar_immediate ) ->
     let bits = Int64.bits_of_float f in
-    (* Extract imm8 from double-precision IEEE bits:
-       imm8 = sign(1) | NOT(exp[10])(1) | exp[9:7](3) | frac[51:49](3)
-       For single, we convert from double representation *)
+    (* Extract imm8 from double-precision IEEE bits: imm8 = sign(1) |
+       NOT(exp[10])(1) | exp[9:7](3) | frac[51:49](3) For single, we convert
+       from double representation *)
     let sign = Int64.(to_int (logand (shift_right_logical bits 63) 1L)) in
     let exp10 = Int64.(to_int (logand (shift_right_logical bits 62) 1L)) in
     let exp9_7 = Int64.(to_int (logand (shift_right_logical bits 59) 7L)) in
     let frac = Int64.(to_int (logand (shift_right_logical bits 48) 0xFL)) in
-    let imm8 = (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac in
+    let imm8 =
+      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac
+    in
     encode_fp_immediate ~ftype:0 ~imm8 ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Imm (Float f) ),
+  | ( Pair (Reg { reg_name = Neon (Scalar D); index = rd }, Imm (Float f)),
       FMOV_scalar_immediate ) ->
     let bits = Int64.bits_of_float f in
     let sign = Int64.(to_int (logand (shift_right_logical bits 63) 1L)) in
     let exp10 = Int64.(to_int (logand (shift_right_logical bits 62) 1L)) in
     let exp9_7 = Int64.(to_int (logand (shift_right_logical bits 59) 7L)) in
     let frac = Int64.(to_int (logand (shift_right_logical bits 48) 0xFL)) in
-    let imm8 = (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac in
+    let imm8 =
+      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac
+    in
     encode_fp_immediate ~ftype:1 ~imm8 ~rd
   (* FMOV scalar immediate - Nativeint case (raw bits) *)
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Imm (Nativeint n) ),
+  | ( Pair (Reg { reg_name = Neon (Scalar S); index = rd }, Imm (Nativeint n)),
       FMOV_scalar_immediate ) ->
     let imm8 = Nativeint.to_int n land 0xFF in
     encode_fp_immediate ~ftype:0 ~imm8 ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Imm (Nativeint n) ),
+  | ( Pair (Reg { reg_name = Neon (Scalar D); index = rd }, Imm (Nativeint n)),
       FMOV_scalar_immediate ) ->
     let imm8 = Nativeint.to_int n land 0xFF in
     encode_fp_immediate ~ftype:1 ~imm8 ~rd
@@ -1517,8 +1523,8 @@ let encode_instruction :
       FNMSUB ) ->
     encode_fp_3_source ~ftype:1 ~o1:1 ~rm ~o0:1 ~ra ~rn ~rd
   | Pair (Reg _rd, Reg _rn), FRECPE_vector -> assert false
-  (* FRINT: round FP to integer in FP format
-     opcodes: N=001000, P=001001, M=001010, Z=001011, A=001100, X=001110 *)
+  (* FRINT: round FP to integer in FP format opcodes: N=001000, P=001001,
+     M=001010, Z=001011, A=001100, X=001110 *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn } ),
@@ -1545,6 +1551,8 @@ let encode_instruction :
       | Rounding_mode.X -> 0b001110
     in
     encode_fp_1_source ~ftype:1 ~opcode ~rn ~rd
+  | Pair (Reg _, Reg _), FRINT _ ->
+    Misc.fatal_error "FRINT: mixed precision operands not supported"
   | Pair (Reg _rd, Reg _rn), FRINT_vector _ -> assert false
   | Pair (Reg _rd, Reg _rn), FRSQRTE_vector -> assert false
   | ( Pair
@@ -1579,8 +1587,8 @@ let encode_instruction :
     encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
     encode_load_store_gp state ~instr_name:"LDR" ~opc:0b01 ~rd addressing
-  | Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
-    LDR_simd_and_fp ->
+  | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
+      LDR_simd_and_fp ) ->
     encode_load_store_simd_fp state ~instr_name:"LDR" ~is_load:true ~rd
       addressing
   | Pair (Reg rd, Mem addressing), LDRB ->
@@ -1731,8 +1739,8 @@ let encode_instruction :
     encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
     encode_load_store_gp state ~instr_name:"STR" ~opc:0b00 ~rd addressing
-  | Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
-    STR_simd_and_fp ->
+  | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
+      STR_simd_and_fp ) ->
     encode_load_store_simd_fp state ~instr_name:"STR" ~is_load:false ~rd
       addressing
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem addressing), STRB ->

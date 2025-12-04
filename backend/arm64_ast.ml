@@ -643,20 +643,37 @@ module Operand = struct
 
     (* Type tags for addressing modes *)
     type base_reg = [`Base_reg]
+
     type offset = [`Offset]
+
     type literal = [`Literal]
+
     type pre = [`Pre]
+
     type post = [`Post]
+
     type offset_pair = [`Offset_pair]
+
     type pre_pair = [`Pre_pair]
+
     type post_pair = [`Post_pair]
 
     (* Combined type for instructions that accept multiple addressing modes *)
     type any_single =
-      [ `Base_reg | `Offset | `Literal | `Pre | `Post ]
+      [ `Base_reg
+      | `Offset
+      | `Literal
+      | `Pre
+      | `Post ]
+
     type any_pair =
-      [ `Offset_pair | `Pre_pair | `Post_pair ]
-    type any = [ any_single | any_pair ]
+      [ `Offset_pair
+      | `Pre_pair
+      | `Post_pair ]
+
+    type any =
+      [ any_single
+      | any_pair ]
 
     (* ARMARM Section C1.3.3, Table C1-8 *)
     type _ t =
@@ -1274,10 +1291,7 @@ module Instruction_name = struct
            )
            t
     | LDAR
-        : ( pair,
-            [< `Reg of [< `GP of [< `X | `W]]]
-            * [< `Mem of [`Base_reg]] )
-          t
+        : (pair, [< `Reg of [< `GP of [< `X | `W]]] * [< `Mem of [`Base_reg]]) t
     | LDP
         : ( triple,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
@@ -1695,11 +1709,13 @@ module Instruction_name = struct
           t
     | TBNZ
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]]
+          )
           t
     | TBZ
         : ( triple,
-            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]] )
+            [`Reg of [`GP of [`X]]] * [`Imm of [`Six]] * [`Imm of [`Sym of _]]
+          )
           t
     | TST : (pair, [< `Reg of [< `GP of [< `X]]] * [< `Bitmask]) t
     | UADDLP_vector

@@ -202,7 +202,8 @@ module DSL : sig
 
   val mem : Reg.t -> [`Mem of [> `Base_reg]] Arm64_ast.Operand.t
 
-  val addressing : addressing_mode -> Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
+  val addressing :
+    addressing_mode -> Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
   val stack : Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
 
