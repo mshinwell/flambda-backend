@@ -705,7 +705,8 @@ let encode_load_store_gp_sized :
     size:int ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~size ~opc ~rd addressing ->
   let vr = 0 in
@@ -741,7 +742,7 @@ let encode_load_store_gp_sized :
       let imm19 = imm19_unmasked land 0x7FFFF in
       let v = 0 in
       encode_load_literal ~opc ~v ~imm19 ~rt)
-  | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
+  | Offset_imm (rn, Twelve_unsigned_scaled imm12) ->
     let max_imm12 = 0xfff in
     (* Scale depends on size: byte=1, half=2, word=4, double=8 *)
     let scale = 1 lsl size in
@@ -758,7 +759,7 @@ let encode_load_store_gp_sized :
         "%s offset %d (scaled: %d) out of range (max 0x%x * %d = 0x%x bytes)"
         instr_name imm12 imm12_scaled max_imm12 scale (max_imm12 * scale);
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
-  | Offset (rn, Symbol_with_reloc sym) -> (
+  | Offset_sym (rn, sym) -> (
     match sym.reloc with
     | Different_section reloc ->
       let max_imm12 = 0xfff in
@@ -795,7 +796,8 @@ let encode_load_store_gp :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   let size =
@@ -812,7 +814,8 @@ let encode_load_store_byte :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b00 ~opc ~rd addressing
@@ -824,7 +827,8 @@ let encode_load_store_halfword :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [< `Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
@@ -939,7 +943,8 @@ let encode_load_store_simd_fp :
     instr_name:string ->
     is_load:bool ->
     rd:[`Neon of [`Scalar of s]] Reg.t ->
-    [`Base_reg | `Offset | `Literal | `Pre | `Post] Operand.Addressing_mode.t ->
+    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~is_load ~rd addressing ->
   let vr = 1 in
@@ -987,7 +992,7 @@ let encode_load_store_simd_fp :
             instr_name
       in
       encode_load_literal ~opc:opc_lit ~v:1 ~imm19 ~rt)
-  | Offset (rn, Imm (Twelve_unsigned_scaled imm12)) ->
+  | Offset_imm (rn, Twelve_unsigned_scaled imm12) ->
     if imm12 mod scale <> 0
     then
       Misc.fatal_errorf "%s offset %d must be aligned to %d-byte access size"
@@ -999,6 +1004,28 @@ let encode_load_store_simd_fp :
         imm12 imm12_scaled;
     let rn = Reg.gp_encoding rn in
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
+  | Offset_sym (rn, sym) -> (
+    match sym.reloc with
+    | Different_section reloc ->
+      let max_imm12 = 0xfff in
+      let reloc_type =
+        match reloc with
+        | GOT_PAGE_OFF -> GOT_PAGE_OFF
+        | PAGE_OFF -> PAGE_OFF
+        | LOWER_TWELVE -> PAGE_OFF
+        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+      in
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+        ~reloc_type;
+      let rn = Reg.gp_encoding rn in
+      let imm12_unmasked = sym.offset / scale in
+      if imm12_unmasked < 0 || imm12_unmasked > max_imm12
+      then
+        Misc.fatal_errorf
+          "%s symbol offset %d (scaled by %d) out of range (max 0x%x)"
+          instr_name sym.offset scale max_imm12;
+      let imm12 = imm12_unmasked land 0xFFF in
+      encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
@@ -1007,9 +1034,6 @@ let encode_load_store_simd_fp :
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
-  | Offset (_, Symbol_with_reloc _) ->
-    Misc.fatal_errorf "%s does not support symbol relocation addressing"
-      instr_name
 
 (* Helper to compute a 26-bit PC-relative offset for B/BL instructions *)
 let compute_branch_imm26 state ~instr_name (sym : _ Symbol.t) =

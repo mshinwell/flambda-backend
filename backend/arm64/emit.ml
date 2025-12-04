@@ -191,21 +191,23 @@ module DSL : sig
     ?offset:int ->
     Reg.t ->
     S.t ->
-    [`Mem of [> `Offset]] Arm64_ast.Operand.t
+    [`Mem of [> `Offset_sym]] Arm64_ast.Operand.t
 
   val emit_mem_label :
     reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
-    [`Mem of [> `Offset]] Arm64_ast.Operand.t
+    [`Mem of [> `Offset_sym]] Arm64_ast.Operand.t
 
   val mem : Reg.t -> [`Mem of [> `Base_reg]] Arm64_ast.Operand.t
 
   val addressing :
-    addressing_mode -> Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
+    addressing_mode ->
+    Reg.t ->
+    [`Mem of [> `Offset_imm | `Offset_sym]] Arm64_ast.Operand.t
 
-  val stack : Reg.t -> [`Mem of [> `Offset]] Arm64_ast.Operand.t
+  val stack : Reg.t -> [`Mem of [> `Offset_imm]] Arm64_ast.Operand.t
 
   val label :
     ?offset:int -> ?reloc:'w Arm64_ast.Symbol.same_section_or_reloc -> L.t -> 'a

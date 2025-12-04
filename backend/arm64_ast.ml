@@ -633,6 +633,7 @@ module Operand = struct
       type _ t =
         | Imm : 'w Imm.t -> 'w t
         | Symbol_with_reloc : [`Twelve] Symbol.t -> [`Twelve_unsigned_scaled] t
+      [@@warning "-37"]
 
       let print : type a. Format.formatter -> a t -> unit =
        fun ppf t ->
@@ -644,7 +645,13 @@ module Operand = struct
     (* Type tags for addressing modes *)
     type base_reg = [`Base_reg]
 
-    type offset = [`Offset]
+    type offset_imm = [`Offset_imm]
+
+    type offset_sym = [`Offset_sym]
+
+    type offset =
+      [ `Offset_imm
+      | `Offset_sym ]
 
     type literal = [`Literal]
 
@@ -661,7 +668,8 @@ module Operand = struct
     (* Combined type for instructions that accept multiple addressing modes *)
     type any_single =
       [ `Base_reg
-      | `Offset
+      | `Offset_imm
+      | `Offset_sym
       | `Literal
       | `Pre
       | `Post ]
@@ -678,9 +686,12 @@ module Operand = struct
     (* ARMARM Section C1.3.3, Table C1-8 *)
     type _ t =
       | Reg : [`GP of [< `X | `SP]] Reg.t -> [> `Base_reg] t
-      | Offset :
-          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
-          -> [> `Offset] t
+      | Offset_imm :
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Imm.t
+          -> [> `Offset_imm] t
+      | Offset_sym :
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve] Symbol.t
+          -> [> `Offset_sym] t
       | Literal :
           [`GP of [< `X | `SP]] Reg.t * [`Nineteen] Symbol.t
           -> [> `Literal] t
@@ -707,7 +718,9 @@ module Operand = struct
       let open Format in
       match t with
       | Reg r -> fprintf ppf "[%s]" (Reg.name r)
-      | Offset (r, off) -> fprintf ppf "[%s, %a]" (Reg.name r) Offset.print off
+      | Offset_imm (r, imm) -> fprintf ppf "[%s, %a]" (Reg.name r) Imm.print imm
+      | Offset_sym (r, sym) ->
+        fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
       | Literal (r, sym) -> fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
       | Pre (r, off) -> fprintf ppf "[%s, %a]!" (Reg.name r) Offset.print off
       | Post (r, off) -> fprintf ppf "[%s], %a" (Reg.name r) Offset.print off
@@ -1301,37 +1314,79 @@ module Instruction_name = struct
     | LDR
         : ( pair,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRB
         : ( pair,
             [< `Reg of [`GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRH
         : ( pair,
             [< `Reg of [`GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSB
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSH
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSW
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDR_simd_and_fp
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LSLV
         : ( triple,
@@ -1642,22 +1697,46 @@ module Instruction_name = struct
     | STR
         : ( pair,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STRB
         : ( pair,
             [< `Reg of [< `GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STRH
         : ( pair,
             [< `Reg of [< `GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STR_simd_and_fp
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | SUBS_immediate
         : ( quad,
@@ -2638,10 +2717,10 @@ module DSL = struct
   let mem_offset ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset]. We should probably call this [offset_in_bytes] to
        avoid any confusion. It must be zero mod transfer size *)
-    Operand.Mem (Offset (base, Imm (Twelve_unsigned_scaled offset)))
+    Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
 
   let mem_symbol ~(base : [`GP of [< `X | `SP]] Reg.t) ~symbol =
-    Operand.Mem (Offset (base, Symbol_with_reloc symbol))
+    Operand.Mem (Offset_sym (base, symbol))
 
   let mem_pre ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* XXX validate [offset] *)

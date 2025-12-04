@@ -259,7 +259,13 @@ module Operand : sig
     (* Type tags for addressing modes *)
     type base_reg = [`Base_reg]
 
-    type offset = [`Offset]
+    type offset_imm = [`Offset_imm]
+
+    type offset_sym = [`Offset_sym]
+
+    type offset =
+      [ `Offset_imm
+      | `Offset_sym ]
 
     type literal = [`Literal]
 
@@ -276,7 +282,8 @@ module Operand : sig
     (* Combined type for instructions that accept multiple addressing modes *)
     type any_single =
       [ `Base_reg
-      | `Offset
+      | `Offset_imm
+      | `Offset_sym
       | `Literal
       | `Pre
       | `Post ]
@@ -292,9 +299,12 @@ module Operand : sig
 
     type _ t = private
       | Reg : [`GP of [< `X | `SP]] Reg.t -> [> `Base_reg] t
-      | Offset :
-          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Offset.t
-          -> [> `Offset] t
+      | Offset_imm :
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Imm.t
+          -> [> `Offset_imm] t
+      | Offset_sym :
+          [`GP of [< `X | `SP]] Reg.t * [`Twelve] Symbol.t
+          -> [> `Offset_sym] t
       | Literal :
           [`GP of [< `X | `SP]] Reg.t * [`Nineteen] Symbol.t
           -> [> `Literal] t
@@ -911,37 +921,79 @@ module Instruction_name : sig
     | LDR
         : ( pair,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRB
         : ( pair,
             [< `Reg of [`GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRH
         : ( pair,
             [< `Reg of [`GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSB
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSH
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDRSW
         : ( pair,
             [< `Reg of [`GP of [< `X]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LDR_simd_and_fp
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | LSLV
         : ( triple,
@@ -1252,22 +1304,46 @@ module Instruction_name : sig
     | STR
         : ( pair,
             [< `Reg of [`GP of [< `X | `W | `LR]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STRB
         : ( pair,
             [< `Reg of [< `GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STRH
         : ( pair,
             [< `Reg of [< `GP of [< `W]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | STR_simd_and_fp
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `D | `S | `Q]]]]
-            * [< `Mem of [`Base_reg | `Offset | `Literal | `Pre | `Post]] )
+            * [< `Mem of
+                 [ `Base_reg
+                 | `Offset_imm
+                 | `Offset_sym
+                 | `Literal
+                 | `Pre
+                 | `Post ] ] )
           t
     | SUBS_immediate
         : ( quad,
@@ -1566,12 +1642,12 @@ module DSL : sig
   val mem_offset :
     base:[`GP of [< `X | `SP]] Reg.t ->
     offset:int ->
-    [`Mem of [> `Offset]] Operand.t
+    [`Mem of [> `Offset_imm]] Operand.t
 
   val mem_symbol :
     base:[`GP of [< `X | `SP]] Reg.t ->
     symbol:[`Twelve] Symbol.t ->
-    [`Mem of [> `Offset]] Operand.t
+    [`Mem of [> `Offset_sym]] Operand.t
 
   val mem_pre :
     base:[`GP of [< `X | `SP]] Reg.t ->
