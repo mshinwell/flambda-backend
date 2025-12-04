@@ -544,14 +544,14 @@ module Instruction_name : sig
           t
     | FABS
         : ( pair,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FADD
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FADDP_vector
         : ( triple,
@@ -655,9 +655,9 @@ module Instruction_name : sig
           t
     | FDIV
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FDIV_vector
         : ( triple,
@@ -678,9 +678,9 @@ module Instruction_name : sig
           t
     | FMAX
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FMAX_vector
         : ( triple,
@@ -694,9 +694,9 @@ module Instruction_name : sig
           t
     | FMIN
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FMIN_vector
         : ( triple,
@@ -736,9 +736,9 @@ module Instruction_name : sig
           t
     | FMUL
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FMUL_vector
         : ( triple,
@@ -752,8 +752,8 @@ module Instruction_name : sig
           t
     | FNEG
         : ( pair,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FNEG_vector
         : ( pair,
@@ -816,8 +816,8 @@ module Instruction_name : sig
           t
     | FSQRT
         : ( pair,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FSQRT_vector
         : ( pair,
@@ -829,9 +829,9 @@ module Instruction_name : sig
           t
     | FSUB
         : ( triple,
-            [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]] )
+            [`Reg of [`Neon of [`Scalar of ([< `S | `D] as 'p)]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]]
+            * [`Reg of [`Neon of [`Scalar of 'p]]] )
           t
     | FSUB_vector
         : ( triple,
