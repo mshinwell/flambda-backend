@@ -1009,12 +1009,6 @@ module Instruction_name : sig
             * [`Imm of [`Sixteen_unsigned]]
             * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
-    | MOV_vector
-        : ( pair,
-            [`Reg of
-               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
-            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
-          t
     | MSUB
         : ( quad,
             [`Reg of [`GP of [< `X | `W]]]
@@ -1711,5 +1705,21 @@ module DSL : sig
 
     val ins_mov_to_sp :
       src:[< `Reg of [`GP of [< `FP | `SP | `X]]] Operand.t -> unit
+
+    val ins_mov_vector :
+      [`Reg of [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
+      Operand.t ->
+      [`Reg of [`Neon of [`Vector of 'v * 'w]]] Operand.t ->
+      unit
+
+    val ins_mov_reg :
+      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      unit
+
+    val ins_mov_imm :
+      [< `Reg of [`GP of [< `X | `W]]] Operand.t ->
+      [`Imm of [`Sixteen_unsigned]] Operand.t ->
+      unit
   end
 end

@@ -1393,12 +1393,6 @@ module Instruction_name = struct
             * [`Imm of [`Sixteen_unsigned]]
             * [< `Optional of [`Shift of [`Lsl] * [`Six]] option] )
           t
-    | MOV_vector
-        : ( pair,
-            [`Reg of
-               [`Neon of [`Vector of ([< any_vector] as 'v) * ([< any_width] as 'w)]]]
-            * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
-          t
     | MSUB
         : ( quad,
             [`Reg of [`GP of [< `X | `W]]]
@@ -1947,7 +1941,6 @@ module Instruction_name = struct
         | LSRV -> "lsrv"
         | MADD -> "madd"
         | MOV -> "mov"
-        | MOV_vector -> "mov"
         | MOVI -> "movi"
         | MOVK -> "movk"
         | MOVN -> "movn"
@@ -2349,9 +2342,6 @@ module Instruction_name = struct
         match shift_opt with
         | Optional None -> [| o rd; o imm |]
         | Optional (Some shift) -> [| o rd; o imm; o shift |])
-      | MOV_vector ->
-        let (Pair (rd, src)) = ops in
-        [| o rd; o src |]
       | MSUB ->
         let (Quad (rd, rn, rm, ra)) = ops in
         [| o rd; o rn; o rm; o ra |]
@@ -2803,5 +2793,16 @@ module DSL = struct
     (* MOV to SP -> ADD SP, <Xn>, #0 *)
     let ins_mov_to_sp ~src:rn =
       ins ADD_immediate (Quad (reg_op (Reg.sp ()), rn, imm 0, Optional None))
+
+    (* MOV <Vd>, <Vn> -> ORR <Vd>, <Vn>, <Vn> *)
+    let ins_mov_vector rd rn = ins ORR_vector (Triple (rd, rn, rn))
+
+    (* MOV <Xd>, <Xm> -> ORR <Xd>, XZR, <Xm> *)
+    let ins_mov_reg rd rm =
+      ins ORR_shifted_register (Quad (rd, xzr (), rm, Optional None))
+
+    (* MOV <Xd>, #<imm16> -> MOVZ <Xd>, #<imm16>, LSL #0
+       MOV <Wd>, #<imm16> -> MOVZ <Wd>, #<imm16>, LSL #0 *)
+    let ins_mov_imm rd imm16 = ins MOVZ (Triple (rd, imm16, Optional None))
   end
 end

@@ -2051,11 +2051,15 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
+  (* TODO: MOV is an alias; this should be removed from Instruction_name.t
+     and handled via a rewrite rule. *)
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Imm imm), MOV ->
     (* MOV (wide immediate): alias of MOVZ *)
     let imm16 = match imm with Sixteen_unsigned n -> n | _ -> assert false in
     let sf = Reg.gp_sf rd in
     encode_move_wide ~sf ~opc:0b10 ~hw:0 ~imm16 ~rd
+  (* TODO: MOV is an alias; this should be removed from Instruction_name.t
+     and handled via a rewrite rule. *)
   | ( Pair
         (Reg ({ reg_name = GP _; _ } as rd), Reg ({ reg_name = GP _; _ } as rm)),
       MOV ) ->
@@ -2065,12 +2069,6 @@ let encode_instruction :
     let rm_enc = Reg.gp_encoding rm in
     encode_logical_shifted_register ~sf ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_enc
       ~imm6:0 ~rn:31 ~rd:rd_enc
-  | ( Pair
-        (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
-      MOV_vector ) ->
-    let q, _ = vector_q_size vec in
-    (* MOV is alias for ORR with rm=rn: U=0, size=10, opcode=00011 *)
-    encode_simd_three_same ~q ~u:0 ~size:0b10 ~rm:rn ~opcode:0b00011 ~rn ~rd
   | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
     let q, _ = vector_q_size vec in
@@ -2360,6 +2358,8 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_add_sub_shifted_reg ~op:1 ~s:1 ~shift ~imm6 ~rd ~rn ~rm
+  (* TODO: SXTL is an alias; this should be removed from Instruction_name.t
+     and handled via a rewrite rule. *)
   | ( Pair
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       SXTL ) ->
@@ -2380,8 +2380,9 @@ let encode_instruction :
     let b40 = bit land 0b11111 in
     let rt_enc = Reg.gp_encoding rt in
     encode_test_branch ~b5 ~op:0 ~b40 ~imm14 ~rt:rt_enc
+  (* TODO: TST is an alias; this should be removed from Instruction_name.t
+     and handled via a rewrite rule. *)
   | Pair (Reg ({ reg_name = GP _; _ } as rn), Bitmask bitmask), TST ->
-    (* XXX this shouldn't be here *)
     (* TST is an alias for ANDS with XZR/WZR as destination (rd=31) *)
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
     let rn_enc = Reg.gp_encoding rn in
@@ -2506,6 +2507,8 @@ let encode_instruction :
     let immh, immb = shr_immh_immb vec shift in
     (* USHR: U=1, opcode=00000 *)
     encode_simd_shift_imm ~q ~u:1 ~immh ~immb ~opcode:0b00000 ~rn ~rd
+  (* TODO: UXTL is an alias; this should be removed from Instruction_name.t
+     and handled via a rewrite rule. *)
   | ( Pair
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       UXTL ) ->

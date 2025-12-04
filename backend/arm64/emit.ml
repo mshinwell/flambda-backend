@@ -1682,7 +1682,7 @@ let move (src : Reg.t) (dst : Reg.t) =
     | Float32, Reg _, Float32, Reg _ ->
       A.ins2 FMOV_fp (DSL.reg_s dst, DSL.reg_s src)
     | (Vec128 | Valx2), Reg _, (Vec128 | Valx2), Reg _ ->
-      A.ins2 MOV_vector (DSL.reg_v16b_operand dst, DSL.reg_v16b_operand src)
+      A.ins_mov_vector (DSL.reg_v16b_operand dst) (DSL.reg_v16b_operand src)
     | (Vec256 | Vec512), _, _, _ | _, _, (Vec256 | Vec512), _ ->
       Misc.fatal_error "arm64: got 256/512 bit vector"
     | (Int | Val | Addr), Reg _, (Int | Val | Addr), Reg _ ->
@@ -1744,7 +1744,7 @@ let emit_reinterpret_cast (cast : Cmm.reinterpret_cast) i =
       A.ins2 FMOV_fp (DSL.reg_d_of_float_reg dst, DSL.reg_d_of_float_reg src))
   | V128_of_vec Vec128 ->
     if distinct
-    then A.ins2 MOV_vector (DSL.reg_v16b_operand dst, DSL.reg_v16b_operand src)
+    then A.ins_mov_vector (DSL.reg_v16b_operand dst) (DSL.reg_v16b_operand src)
   | V128_of_vec (Vec256 | Vec512) | V256_of_vec _ | V512_of_vec _ ->
     Misc.fatal_error "arm64: got 256/512 bit vector"
   | Int_of_value | Value_of_int -> move src dst
