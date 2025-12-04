@@ -622,13 +622,19 @@ let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let result = logor result (of_int opc2) in
   result
 
-(* Floating-point <-> integer conversion - C4.1.95.33 Format: sf | 0 | S=0 |
-   11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd Common opcodes: - SCVTF
-   (int->FP): rmode=00, opcode=010 - UCVTF (int->FP): rmode=00, opcode=011 -
-   FCVTNS (FP->int, nearest): rmode=00, opcode=000 - FCVTPS (FP->int, +inf):
-   rmode=01, opcode=000 - FCVTMS (FP->int, -inf): rmode=10, opcode=000 - FCVTZS
-   (FP->int, zero): rmode=11, opcode=000 - FCVTNU (FP->int, nearest unsigned):
-   rmode=00, opcode=001 - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
+(* Floating-point <-> integer conversion - C4.1.95.33
+   Format: sf | 0 | S=0 | 11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
+
+   Common opcodes:
+
+   - SCVTF (int->FP): rmode=00, opcode=010
+   - UCVTF (int->FP): rmode=00, opcode=011
+   - FCVTNS (FP->int, nearest): rmode=00, opcode=000
+   - FCVTPS (FP->int, +inf): rmode=01, opcode=000
+   - FCVTMS (FP->int, -inf): rmode=10, opcode=000
+   - FCVTZS (FP->int, zero): rmode=11, opcode=000
+   - FCVTNU (FP->int, nearest unsigned): rmode=00, opcode=001
+   - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
    - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
 let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let open Int32 in
@@ -791,8 +797,10 @@ let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
 let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
  fun amount -> match amount with Six n -> n | _ -> assert false
 
-(* Helper to encode add/sub shifted register instructions. op: 0=ADD, 1=SUB; s:
-   0=no flags, 1=set flags *)
+(* Helper to encode add/sub shifted register instructions.
+
+   - op: 0=ADD, 1=SUB
+   - s: 0=no flags, 1=set flags *)
 let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
@@ -801,8 +809,9 @@ let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm:rm_enc ~imm6 ~rn:rn_enc
     ~rd:rd_enc
 
-(* Helper to encode logical shifted register instructions. opc: 00=AND, 01=ORR,
-   10=EOR, 11=ANDS *)
+(* Helper to encode logical shifted register instructions.
+
+   - opc: 00=AND, 01=ORR, 10=EOR, 11=ANDS *)
 let encode_logical_shifted_reg ~opc ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
@@ -1090,8 +1099,11 @@ let encode_load_acquire :
   let result = logor result (of_int rt) in
   result
 
-(* Memory barrier encoding. Format: 1101 0101 0000 0011 0011 | CRm[11:8] |
-   op2[7:5] | 11111 DMB: op2=101, DSB: op2=100 *)
+(* Memory barrier encoding.
+   Format: 1101 0101 0000 0011 0011 | CRm[11:8] | op2[7:5] | 11111
+
+   - DMB: op2=101
+   - DSB: op2=100 *)
 let encode_memory_barrier ~op2 (barrier : Memory_barrier.t) =
   let crm =
     match barrier with
@@ -1160,9 +1172,13 @@ let encode_load_store_pair_gp :
   | Post_pair (rn, Imm (Seven_signed_scaled imm)) ->
     encode_with_alignment_check encode_load_store_pair_post_indexed rn imm
 
-(* Encode load/store for SIMD&FP registers. For LDR: S->opc=01, D->opc=01,
-   Q->opc=11 For STR: S->opc=00, D->opc=00, Q->opc=10 size: S->10, D->11,
-   Q->00 *)
+(* Encode load/store for SIMD&FP registers.
+
+   For LDR: S->opc=01, D->opc=01, Q->opc=11
+
+   For STR: S->opc=00, D->opc=00, Q->opc=10
+
+   size: S->10, D->11, Q->00 *)
 let encode_load_store_simd_fp :
     type s.
     Section_state.t ->
@@ -1476,9 +1492,13 @@ let encode_instruction :
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       CM_zero cond ) ->
     let q, size = vector_q_size vec in
-    (* Integer vector compares (zero): CMGT (zero): U=0, opcode=01000 CMEQ
-       (zero): U=0, opcode=01001 CMLT (zero): U=0, opcode=01010 CMGE (zero):
-       U=1, opcode=01000 CMLE (zero): U=1, opcode=01001 *)
+    (* Integer vector compares (zero):
+
+       - CMGT (zero): U=0, opcode=01000
+       - CMEQ (zero): U=0, opcode=01001
+       - CMLT (zero): U=0, opcode=01010
+       - CMGE (zero): U=1, opcode=01000
+       - CMLE (zero): U=1, opcode=01001 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b01000
@@ -1584,8 +1604,9 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FP vector compares (register):
 
-       - FCMEQ: U=0, size=0x, opcode=11100 - FCMGE: U=1, size=0x, opcode=11100 -
-       FCMGT: U=1, size=1x, opcode=11100 *)
+       - FCMEQ: U=0, size=0x, opcode=11100
+       - FCMGE: U=1, size=0x, opcode=11100
+       - FCMGT: U=1, size=1x, opcode=11100 *)
     let u, size_hi =
       match cond with
       | Float_cond.EQ -> 0, 0
@@ -1599,10 +1620,13 @@ let encode_instruction :
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       FCM_zero cond ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FP vector compares (zero): FCMGT (zero): U=0, size=1x, opcode=01100 FCMEQ
-       (zero): U=0, size=1x, opcode=01101 FCMLT (zero): U=0, size=1x,
-       opcode=01110 FCMGE (zero): U=1, size=1x, opcode=01100 FCMLE (zero): U=1,
-       size=1x, opcode=01101 *)
+    (* FP vector compares (zero):
+
+       - FCMGT (zero): U=0, size=1x, opcode=01100
+       - FCMEQ (zero): U=0, size=1x, opcode=01101
+       - FCMLT (zero): U=0, size=1x, opcode=01110
+       - FCMGE (zero): U=1, size=1x, opcode=01100
+       - FCMLE (zero): U=1, size=1x, opcode=01101 *)
     let u, opcode =
       match cond with
       | Float_cond.GT -> 0, 0b01100
@@ -1889,8 +1913,9 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FRECPE: U=0, size=1x, opcode=11101 *)
     encode_simd_two_reg_misc ~q ~u:0 ~size:(0b10 lor sz) ~opcode:0b11101 ~rn ~rd
-  (* FRINT: round FP to integer in FP format opcodes: N=001000, P=001001,
-     M=001010, Z=001011, A=001100, X=001110 *)
+  (* FRINT: round FP to integer in FP format.
+
+     Opcodes: N=001000, P=001001, M=001010, Z=001011, A=001100, X=001110 *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
           Reg { index = rn; _ } ),
@@ -1909,9 +1934,13 @@ let encode_instruction :
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       FRINT_vector rm ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FRINT(mode) vector - encoding depends on rounding mode: N: U=0, size=0x,
-       opcode=11000 M: U=0, size=0x, opcode=11001 P: U=0, size=1x, opcode=11000
-       Z: U=0, size=1x, opcode=11001 X: U=1, size=0x, opcode=11001 *)
+    (* FRINT(mode) vector - encoding depends on rounding mode:
+
+       - N: U=0, size=0x, opcode=11000
+       - M: U=0, size=0x, opcode=11001
+       - P: U=0, size=1x, opcode=11000
+       - Z: U=0, size=1x, opcode=11001
+       - X: U=1, size=0x, opcode=11001 *)
     let u, size_hi, opcode =
       match rm with
       | Rounding_mode.N -> 0, 0, 0b11000
@@ -2045,9 +2074,10 @@ let encode_instruction :
   | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
     let q, _ = vector_q_size vec in
-    (* MOVI with byte replication: op=0, cmode=1110 imm8 = abcdefgh (8-bit
-       immediate replicated to all bytes) For zeroing, imm=0, abc=000,
-       defgh=00000 *)
+    (* MOVI with byte replication: op=0, cmode=1110
+       imm8 = abcdefgh (8-bit immediate replicated to all bytes)
+
+       For zeroing, imm=0, abc=000, defgh=00000 *)
     let imm8 = imm land 0xFF in
     let abc = (imm8 lsr 5) land 0b111 in
     let defgh = imm8 land 0b11111 in
