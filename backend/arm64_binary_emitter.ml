@@ -1326,6 +1326,10 @@ let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
         instr_name pc_relative_offset symbol_name;
     imm14
 
+(* Helper to extract ftype from scalar precision: S=0, D=1 *)
+let scalar_ftype (type a) (s : [`Scalar of a] Neon_reg_name.t) : int =
+  match s with Scalar S -> 0 | Scalar D -> 1 | _ -> assert false
+
 let encode_instruction :
     type num operands.
     Section_state.t ->
@@ -1546,27 +1550,18 @@ let encode_instruction :
     (* EXT is 128-bit only (V16B), so Q=1 *)
     encode_simd_extract ~q:1 ~rm:rm.index ~imm4 ~rn:rn.index ~rd:rd.index
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FABS ) ->
-    encode_fp_1_source ~ftype:0 ~opcode:0b000001 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FABS ) ->
-    encode_fp_1_source ~ftype:1 ~opcode:0b000001 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_1_source ~ftype ~opcode:0b000001 ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FADD ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0010 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FADD ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0010 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0010 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -1622,31 +1617,20 @@ let encode_instruction :
     (* size=1x *)
     encode_simd_two_reg_misc ~q ~u ~size ~opcode ~rn ~rd
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rn },
+          Reg { index = rm; _ } ),
       FCMP ) ->
-    encode_fp_compare ~ftype:0 ~rm ~opc2:0b00000 ~rn
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FCMP ) ->
-    encode_fp_compare ~ftype:1 ~rm ~opc2:0b00000 ~rn
+    let ftype = scalar_ftype scalar in
+    encode_fp_compare ~ftype ~rm ~opc2:0b00000 ~rn
   | ( Quad
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm },
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ },
           Cond cond ),
       FCSEL ) ->
+    let ftype = scalar_ftype scalar in
     let cond = encode_condition cond in
-    encode_fp_cond_select ~ftype:0 ~rm ~cond ~rn ~rd
-  | ( Quad
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm },
-          Cond cond ),
-      FCSEL ) ->
-    let cond = encode_condition cond in
-    encode_fp_cond_select ~ftype:1 ~rm ~cond ~rn ~rd
+    encode_fp_cond_select ~ftype ~rm ~cond ~rn ~rd
   (* FCVT: convert between single and double precision *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar D); index = rd },
@@ -1662,15 +1646,11 @@ let encode_instruction :
     encode_fp_1_source ~ftype:1 ~opcode:0b000100 ~rn ~rd
   (* FCVT same-precision conversions: use FMOV instead *)
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FCVT ) ->
-    encode_fp_1_source ~ftype:0 ~opcode:0b000000 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FCVT ) ->
-    encode_fp_1_source ~ftype:1 ~opcode:0b000000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_1_source ~ftype ~opcode:0b000000 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -1700,14 +1680,10 @@ let encode_instruction :
   (* FCVTNS: FP to signed int, round to nearest with ties to even *)
   | ( Pair
         ( Reg { reg_name = GP X; index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+          Reg { reg_name = Neon (Scalar _ as scalar); index = rn } ),
       FCVTNS ) ->
-    encode_fp_int_conv ~sf:1 ~ftype:0 ~rmode:0b00 ~opcode:0b000 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = GP X; index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FCVTNS ) ->
-    encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_int_conv ~sf:1 ~ftype ~rmode:0b00 ~opcode:0b000 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -1718,14 +1694,10 @@ let encode_instruction :
   (* FCVTZS: FP to signed int, round toward zero *)
   | ( Pair
         ( Reg { reg_name = GP X; index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+          Reg { reg_name = Neon (Scalar _ as scalar); index = rn } ),
       FCVTZS ) ->
-    encode_fp_int_conv ~sf:1 ~ftype:0 ~rmode:0b11 ~opcode:0b000 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = GP X; index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FCVTZS ) ->
-    encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b11 ~opcode:0b000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_int_conv ~sf:1 ~ftype ~rmode:0b11 ~opcode:0b000 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -1734,17 +1706,12 @@ let encode_instruction :
     (* FCVTZS (vector, integer): U=0, size=1x, opcode=11011 *)
     encode_simd_two_reg_misc ~q ~u:0 ~size:(0b10 lor sz) ~opcode:0b11011 ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FDIV ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0001 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FDIV ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0001 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0001 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -1754,31 +1721,20 @@ let encode_instruction :
     (* FDIV: U=1, size=0x, opcode=11111 *)
     encode_simd_three_same ~q ~u:1 ~size:sz ~rm ~opcode:0b11111 ~rn ~rd
   | ( Quad
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm },
-          Reg { reg_name = Neon (Scalar S); index = ra } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ },
+          Reg { index = ra; _ } ),
       FMADD ) ->
-    encode_fp_3_source ~ftype:0 ~o1:0 ~rm ~o0:0 ~ra ~rn ~rd
-  | ( Quad
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm },
-          Reg { reg_name = Neon (Scalar D); index = ra } ),
-      FMADD ) ->
-    encode_fp_3_source ~ftype:1 ~o1:0 ~rm ~o0:0 ~ra ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_3_source ~ftype ~o1:0 ~rm ~o0:0 ~ra ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FMAX ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0100 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FMAX ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0100 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0100 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -1788,17 +1744,12 @@ let encode_instruction :
     (* FMAX: U=0, size=0x, opcode=11110 *)
     encode_simd_three_same ~q ~u:0 ~size:sz ~rm ~opcode:0b11110 ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FMIN ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0101 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FMIN ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0101 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0101 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -1809,31 +1760,19 @@ let encode_instruction :
     encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11110 ~rn
       ~rd
   | ( Quad
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm },
-          Reg { reg_name = Neon (Scalar S); index = ra } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ },
+          Reg { index = ra; _ } ),
       FMSUB ) ->
-    encode_fp_3_source ~ftype:0 ~o1:0 ~rm ~o0:1 ~ra ~rn ~rd
-  | ( Quad
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm },
-          Reg { reg_name = Neon (Scalar D); index = ra } ),
-      FMSUB ) ->
-    encode_fp_3_source ~ftype:1 ~o1:0 ~rm ~o0:1 ~ra ~rn ~rd
-  (* FMOV_fp: FP-to-FP (single precision) *)
+    let ftype = scalar_ftype scalar in
+    encode_fp_3_source ~ftype ~o1:0 ~rm ~o0:1 ~ra ~rn ~rd
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FMOV_fp ) ->
-    encode_fp_1_source ~ftype:0 ~opcode:0b000000 ~rn ~rd
-  (* FMOV_fp: FP-to-FP (double precision) *)
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FMOV_fp ) ->
-    encode_fp_1_source ~ftype:1 ~opcode:0b000000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_1_source ~ftype ~opcode:0b000000 ~rn ~rd
   (* FMOV_gp_to_fp_32: GP-to-FP (W to S) *)
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
@@ -1875,8 +1814,10 @@ let encode_instruction :
     (* sf=1, ftype=01, rmode=00, opcode=110 for FP->GP double *)
     encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b110 ~rn ~rd
   (* FMOV scalar immediate - Float case *)
-  | ( Pair (Reg { reg_name = Neon (Scalar S); index = rd }, Imm (Float f)),
+  | ( Pair
+        (Reg { reg_name = Neon (Scalar _ as scalar); index = rd }, Imm (Float f)),
       FMOV_scalar_immediate ) ->
+    let ftype = scalar_ftype scalar in
     let bits = Int64.bits_of_float f in
     (* Extract imm8 from double-precision IEEE bits: imm8 = sign(1) |
        NOT(exp[10])(1) | exp[9:7](3) | frac[51:49](3) For single, we convert
@@ -1888,39 +1829,22 @@ let encode_instruction :
     let imm8 =
       (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac
     in
-    encode_fp_immediate ~ftype:0 ~imm8 ~rd
-  | ( Pair (Reg { reg_name = Neon (Scalar D); index = rd }, Imm (Float f)),
-      FMOV_scalar_immediate ) ->
-    let bits = Int64.bits_of_float f in
-    let sign = Int64.(to_int (logand (shift_right_logical bits 63) 1L)) in
-    let exp10 = Int64.(to_int (logand (shift_right_logical bits 62) 1L)) in
-    let exp9_7 = Int64.(to_int (logand (shift_right_logical bits 59) 7L)) in
-    let frac = Int64.(to_int (logand (shift_right_logical bits 48) 0xFL)) in
-    let imm8 =
-      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac
-    in
-    encode_fp_immediate ~ftype:1 ~imm8 ~rd
+    encode_fp_immediate ~ftype ~imm8 ~rd
   (* FMOV scalar immediate - Nativeint case (raw bits) *)
-  | ( Pair (Reg { reg_name = Neon (Scalar S); index = rd }, Imm (Nativeint n)),
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Imm (Nativeint n) ),
       FMOV_scalar_immediate ) ->
+    let ftype = scalar_ftype scalar in
     let imm8 = Nativeint.to_int n land 0xFF in
-    encode_fp_immediate ~ftype:0 ~imm8 ~rd
-  | ( Pair (Reg { reg_name = Neon (Scalar D); index = rd }, Imm (Nativeint n)),
-      FMOV_scalar_immediate ) ->
-    let imm8 = Nativeint.to_int n land 0xFF in
-    encode_fp_immediate ~ftype:1 ~imm8 ~rd
+    encode_fp_immediate ~ftype ~imm8 ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FMUL ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0000 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FMUL ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0000 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -1930,15 +1854,11 @@ let encode_instruction :
     (* FMUL: U=1, size=0x, opcode=11011 *)
     encode_simd_three_same ~q ~u:1 ~size:sz ~rm ~opcode:0b11011 ~rn ~rd
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FNEG ) ->
-    encode_fp_1_source ~ftype:0 ~opcode:0b000010 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FNEG ) ->
-    encode_fp_1_source ~ftype:1 ~opcode:0b000010 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_1_source ~ftype ~opcode:0b000010 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -1947,45 +1867,28 @@ let encode_instruction :
     (* FNEG: U=1, size=1x, opcode=01111 *)
     encode_simd_two_reg_misc ~q ~u:1 ~size:(0b10 lor sz) ~opcode:0b01111 ~rn ~rd
   | ( Quad
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm },
-          Reg { reg_name = Neon (Scalar S); index = ra } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ },
+          Reg { index = ra; _ } ),
       FNMADD ) ->
-    encode_fp_3_source ~ftype:0 ~o1:1 ~rm ~o0:0 ~ra ~rn ~rd
-  | ( Quad
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm },
-          Reg { reg_name = Neon (Scalar D); index = ra } ),
-      FNMADD ) ->
-    encode_fp_3_source ~ftype:1 ~o1:1 ~rm ~o0:0 ~ra ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_3_source ~ftype ~o1:1 ~rm ~o0:0 ~ra ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FNMUL ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b1000 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FNMUL ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b1000 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b1000 ~rn ~rd
   | ( Quad
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm },
-          Reg { reg_name = Neon (Scalar S); index = ra } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ },
+          Reg { index = ra; _ } ),
       FNMSUB ) ->
-    encode_fp_3_source ~ftype:0 ~o1:1 ~rm ~o0:1 ~ra ~rn ~rd
-  | ( Quad
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm },
-          Reg { reg_name = Neon (Scalar D); index = ra } ),
-      FNMSUB ) ->
-    encode_fp_3_source ~ftype:1 ~o1:1 ~rm ~o0:1 ~ra ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_3_source ~ftype ~o1:1 ~rm ~o0:1 ~ra ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -1996,9 +1899,10 @@ let encode_instruction :
   (* FRINT: round FP to integer in FP format opcodes: N=001000, P=001001,
      M=001010, Z=001011, A=001100, X=001110 *)
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FRINT rmode ) ->
+    let ftype = scalar_ftype scalar in
     let opcode =
       match rmode with
       | Rounding_mode.N -> 0b001000
@@ -2007,20 +1911,7 @@ let encode_instruction :
       | Rounding_mode.Z -> 0b001011
       | Rounding_mode.X -> 0b001110
     in
-    encode_fp_1_source ~ftype:0 ~opcode ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FRINT rmode ) ->
-    let opcode =
-      match rmode with
-      | Rounding_mode.N -> 0b001000
-      | Rounding_mode.P -> 0b001001
-      | Rounding_mode.M -> 0b001010
-      | Rounding_mode.Z -> 0b001011
-      | Rounding_mode.X -> 0b001110
-    in
-    encode_fp_1_source ~ftype:1 ~opcode ~rn ~rd
+    encode_fp_1_source ~ftype ~opcode ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -2047,15 +1938,11 @@ let encode_instruction :
     (* FRSQRTE: U=1, size=1x, opcode=11101 *)
     encode_simd_two_reg_misc ~q ~u:1 ~size:(0b10 lor sz) ~opcode:0b11101 ~rn ~rd
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ } ),
       FSQRT ) ->
-    encode_fp_1_source ~ftype:0 ~opcode:0b000011 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn } ),
-      FSQRT ) ->
-    encode_fp_1_source ~ftype:1 ~opcode:0b000011 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_1_source ~ftype ~opcode:0b000011 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
@@ -2064,17 +1951,12 @@ let encode_instruction :
     (* FSQRT: U=1, size=1x, opcode=11111 *)
     encode_simd_two_reg_misc ~q ~u:1 ~size:(0b10 lor sz) ~opcode:0b11111 ~rn ~rd
   | ( Triple
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
-          Reg { reg_name = Neon (Scalar S); index = rn },
-          Reg { reg_name = Neon (Scalar S); index = rm } ),
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
+          Reg { index = rn; _ },
+          Reg { index = rm; _ } ),
       FSUB ) ->
-    encode_fp_2_source ~ftype:0 ~rm ~opcode:0b0011 ~rn ~rd
-  | ( Triple
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = Neon (Scalar D); index = rn },
-          Reg { reg_name = Neon (Scalar D); index = rm } ),
-      FSUB ) ->
-    encode_fp_2_source ~ftype:1 ~rm ~opcode:0b0011 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    encode_fp_2_source ~ftype ~rm ~opcode:0b0011 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -2285,17 +2167,12 @@ let encode_instruction :
     encode_bitfield ~sf ~opc:0b00 ~n ~immr ~imms ~rn ~rd
   (* SCVTF: signed integer to FP conversion *)
   | ( Pair
-        ( Reg { reg_name = Neon (Scalar S); index = rd },
+        ( Reg { reg_name = Neon (Scalar _ as scalar); index = rd },
           Reg { reg_name = GP X; index = rn } ),
       SCVTF ) ->
-    (* sf=1 (64-bit int), ftype=00 (single), rmode=00, opcode=010 *)
-    encode_fp_int_conv ~sf:1 ~ftype:0 ~rmode:0b00 ~opcode:0b010 ~rn ~rd
-  | ( Pair
-        ( Reg { reg_name = Neon (Scalar D); index = rd },
-          Reg { reg_name = GP X; index = rn } ),
-      SCVTF ) ->
-    (* sf=1 (64-bit int), ftype=01 (double), rmode=00, opcode=010 *)
-    encode_fp_int_conv ~sf:1 ~ftype:1 ~rmode:0b00 ~opcode:0b010 ~rn ~rd
+    let ftype = scalar_ftype scalar in
+    (* sf=1 (64-bit int), rmode=00, opcode=010 *)
+    encode_fp_int_conv ~sf:1 ~ftype ~rmode:0b00 ~opcode:0b010 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),
