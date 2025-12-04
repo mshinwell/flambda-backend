@@ -550,14 +550,6 @@ module Instruction_name : sig
         : ( pair,
             [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
-    | CVT_vector
-        : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
     | DMB : Memory_barrier.t -> (singleton, unit) t
     | DSB : Memory_barrier.t -> (singleton, unit) t
     | DUP :
@@ -797,12 +789,6 @@ module Instruction_name : sig
     | FMOV_scalar_immediate
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Imm of [< `Sixty_four]] )
-          t
-    | FMOV_vector_immediate
-        : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
             * [< `Imm of [< `Sixty_four]] )
           t
     | FMSUB
@@ -1093,16 +1079,6 @@ module Instruction_name : sig
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
-          t
-    | MULL_vector
-        : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
           t
     | MUL_vector
         : ( triple,

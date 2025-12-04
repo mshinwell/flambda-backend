@@ -1508,7 +1508,6 @@ let encode_instruction :
     (* FEAT_CSSC required *)
     let sf = Reg.gp_sf rd in
     encode_data_proc_1_source ~sf ~s:0 ~opcode2:0b00000 ~opcode:0b000110 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), CVT_vector -> assert false
   | _, DMB barrier -> encode_memory_barrier ~op2:0b101 barrier
   | _, DSB barrier -> encode_memory_barrier ~op2:0b100 barrier
   | ( Pair
@@ -1910,7 +1909,6 @@ let encode_instruction :
       FMOV_scalar_immediate ) ->
     let imm8 = Nativeint.to_int n land 0xFF in
     encode_fp_immediate ~ftype:1 ~imm8 ~rd
-  | Pair (Reg _rd, _), FMOV_vector_immediate -> assert false
   | ( Triple
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -2207,7 +2205,6 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MSUB ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:1 ~rm ~ra ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Reg _rm), MULL_vector -> assert false
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },

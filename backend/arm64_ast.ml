@@ -935,14 +935,6 @@ module Instruction_name = struct
         : ( pair,
             [`Reg of [`GP of [< `X | `W]]] * [`Reg of [`GP of [< `X | `W]]] )
           t
-    | CVT_vector
-        : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
-          t
     | DMB : Memory_barrier.t -> (singleton, unit) t
     | DSB : Memory_barrier.t -> (singleton, unit) t
     | DUP :
@@ -1182,12 +1174,6 @@ module Instruction_name = struct
     | FMOV_scalar_immediate
         : ( pair,
             [< `Reg of [< `Neon of [< `Scalar of [< `S | `D]]]]
-            * [< `Imm of [< `Sixty_four]] )
-          t
-    | FMOV_vector_immediate
-        : ( pair,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
             * [< `Imm of [< `Sixty_four]] )
           t
     | FMSUB
@@ -1478,16 +1464,6 @@ module Instruction_name = struct
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
-          t
-    | MULL_vector
-        : ( triple,
-            [< `Reg of [< `Neon of [< `Vector of [< any_vector] * [< any_width]]]
-            ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-            * [< `Reg of
-                 [< `Neon of [< `Vector of [< any_vector] * [< any_width]]] ]
-          )
           t
     | MUL_vector
         : ( triple,
@@ -2042,7 +2018,6 @@ module Instruction_name = struct
         | CSEL -> "csel"
         | CSINC -> "csinc"
         | CTZ -> "ctz"
-        | CVT_vector -> "cvt"
         | DMB b -> "dmb\t" ^ Memory_barrier.to_string b
         | DSB b -> "dsb\t" ^ Memory_barrier.to_string b
         | DUP _ -> "dup"
@@ -2071,7 +2046,7 @@ module Instruction_name = struct
         | FMIN -> "fmin"
         | FMIN_vector -> "fmin"
         | FMOV_fp | FMOV_gp_to_fp_32 | FMOV_gp_to_fp_64 | FMOV_fp_to_gp_32
-        | FMOV_fp_to_gp_64 | FMOV_scalar_immediate | FMOV_vector_immediate ->
+        | FMOV_fp_to_gp_64 | FMOV_scalar_immediate ->
           "fmov"
         | FMSUB -> "fmsub"
         | FMUL -> "fmul"
@@ -2111,7 +2086,6 @@ module Instruction_name = struct
         | MOVZ -> "movz"
         | MSUB -> "msub"
         | MUL_vector -> "mul"
-        | MULL_vector -> "mull"
         | MVN_vector -> "mvn"
         | NEG_vector -> "neg"
         | NOP -> "nop"
@@ -2291,9 +2265,6 @@ module Instruction_name = struct
       | CTZ ->
         let (Pair (rd, rn)) = ops in
         [| o rd; o rn |]
-      | CVT_vector ->
-        let (Pair (rd, rs)) = ops in
-        [| o rd; o rs |]
       | DMB _ -> [||]
       | DSB _ -> [||]
       | DUP lane ->
@@ -2395,9 +2366,6 @@ module Instruction_name = struct
         let (Pair (rd, rs)) = ops in
         [| o rd; o rs |]
       | FMOV_scalar_immediate ->
-        let (Pair (rd, imm)) = ops in
-        [| o rd; o imm |]
-      | FMOV_vector_immediate ->
         let (Pair (rd, imm)) = ops in
         [| o rd; o imm |]
       | FMSUB ->
@@ -2519,9 +2487,6 @@ module Instruction_name = struct
       | MSUB ->
         let (Quad (rd, rn, rm, ra)) = ops in
         [| o rd; o rn; o rm; o ra |]
-      | MULL_vector ->
-        let (Triple (rd, rs1, rs2)) = ops in
-        [| o rd; o rs1; o rs2 |]
       | MUL_vector ->
         let (Triple (rd, rs1, rs2)) = ops in
         [| o rd; o rs1; o rs2 |]
