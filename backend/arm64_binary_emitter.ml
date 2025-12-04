@@ -295,36 +295,40 @@ let encode_data_proc_1_source ~sf ~s ~opcode2 ~opcode ~rn ~rd =
   let result = logor result (of_int (Reg.gp_encoding rd)) in
   result
 
-(* Helper to extract Q (vector width) and size (element size) from vector type *)
+(* Helper to extract Q (vector width) and size (element size) from vector
+   type *)
 let vector_q_size (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int =
   match vec with
-  | V8B -> 0, 0b00  (* 64-bit, B elements *)
+  | V8B -> 0, 0b00 (* 64-bit, B elements *)
   | V16B -> 1, 0b00 (* 128-bit, B elements *)
-  | V4H -> 0, 0b01  (* 64-bit, H elements *)
-  | V8H -> 1, 0b01  (* 128-bit, H elements *)
-  | V2S -> 0, 0b10  (* 64-bit, S elements *)
-  | V4S -> 1, 0b10  (* 128-bit, S elements *)
-  | V1D -> 0, 0b11  (* 64-bit, D elements *)
-  | V2D -> 1, 0b11  (* 128-bit, D elements *)
+  | V4H -> 0, 0b01 (* 64-bit, H elements *)
+  | V8H -> 1, 0b01 (* 128-bit, H elements *)
+  | V2S -> 0, 0b10 (* 64-bit, S elements *)
+  | V4S -> 1, 0b10 (* 128-bit, S elements *)
+  | V1D -> 0, 0b11 (* 64-bit, D elements *)
+  | V2D -> 1, 0b11 (* 128-bit, D elements *)
 
 (* Helper for FP vector operations - returns Q and the FP precision bit (sz) *)
-let vector_q_fp_sz (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int =
+let vector_q_fp_sz (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int
+    =
   match vec with
-  | V2S -> 0, 0  (* 64-bit, single-precision *)
-  | V4S -> 1, 0  (* 128-bit, single-precision *)
-  | V2D -> 1, 1  (* 128-bit, double-precision *)
+  | V2S -> 0, 0 (* 64-bit, single-precision *)
+  | V4S -> 1, 0 (* 128-bit, single-precision *)
+  | V2D -> 1, 1 (* 128-bit, double-precision *)
   | V8B | V16B | V4H | V8H | V1D ->
     Misc.fatal_error "FP vector operations only support S and D element types"
 
 (* Helper for widening operations - returns source element size from dest type *)
 (* For SMULL/UMULL: dest has 2x wider elements than source *)
-let vector_widening_size (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int =
+let vector_widening_size (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int
+    =
   match vec with
-  | V8H -> 0b00  (* 16-bit dest -> 8-bit source *)
-  | V4S -> 0b01  (* 32-bit dest -> 16-bit source *)
-  | V2D -> 0b10  (* 64-bit dest -> 32-bit source *)
+  | V8H -> 0b00 (* 16-bit dest -> 8-bit source *)
+  | V4S -> 0b01 (* 32-bit dest -> 16-bit source *)
+  | V2D -> 0b10 (* 64-bit dest -> 32-bit source *)
   | V8B | V16B | V4H | V2S | V1D ->
-    Misc.fatal_error "Widening operations require H, S, or D destination elements"
+    Misc.fatal_error
+      "Widening operations require H, S, or D destination elements"
 
 (* Advanced SIMD two-register miscellaneous - C4.1.95.21 *)
 let encode_simd_two_reg_misc ~q ~u ~size ~opcode ~rn ~rd =
@@ -371,6 +375,145 @@ let encode_simd_three_different ~q ~u ~size ~rm ~opcode ~rn ~rd =
   let result = logor result (shift_left (of_int rm) 16) in
   let result = logor result (shift_left (of_int opcode) 12) in
   (* bits 11-10 = 00 *)
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Advanced SIMD shift by immediate - C4.1.95.26 *)
+(* Encoding: 0 Q U 01111 0 immh immb opcode 1 Rn Rd *)
+(* immh encodes element size: 0001=8b, 001x=16b, 01xx=32b, 1xxx=64b *)
+let encode_simd_shift_imm ~q ~u ~immh ~immb ~opcode ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  (* bit 31 = 0 (implicit), Q at bit 30, U at bit 29 *)
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int u) 29) in
+  let result = logor result (shift_left (of_int 0b01111) 24) in
+  (* bit 23 = 0 *)
+  let result = logor result (shift_left (of_int immh) 19) in
+  let result = logor result (shift_left (of_int immb) 16) in
+  let result = logor result (shift_left (of_int opcode) 11) in
+  let result = logor result (shift_left (of_int 0b1) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Helper to compute immh and immb for SHL instruction *)
+(* For SHL: shift = (immh:immb) - element_width *)
+(* So (immh:immb) = shift + element_width *)
+let shl_immh_immb (type v s) (vec : (v, s) Neon_reg_name.Vector.t) shift =
+  let esize, immh_base =
+    match vec with
+    | V8B | V16B -> 8, 0b0001
+    | V4H | V8H -> 16, 0b0010
+    | V2S | V4S -> 32, 0b0100
+    | V1D | V2D -> 64, 0b1000
+  in
+  let immh_immb = shift + esize in
+  let immh = (immh_immb lsr 3) lor immh_base in
+  let immb = immh_immb land 0b111 in
+  immh, immb
+
+(* Helper to compute immh and immb for SSHR/USHR instructions *)
+(* For SSHR/USHR: shift = element_width*2 - (immh:immb) *)
+(* So (immh:immb) = element_width*2 - shift *)
+let shr_immh_immb (type v s) (vec : (v, s) Neon_reg_name.Vector.t) shift =
+  let esize =
+    match vec with
+    | V8B | V16B -> 8
+    | V4H | V8H -> 16
+    | V2S | V4S -> 32
+    | V1D | V2D -> 64
+  in
+  let immh_immb = (esize * 2) - shift in
+  let immh = immh_immb lsr 3 in
+  let immb = immh_immb land 0b111 in
+  immh, immb
+
+(* Helper to compute immh for SXTL/UXTL (SSHLL/USHLL with shift=0) *)
+(* immh encodes source element size: 0001=8b, 0010=16b, 0100=32b *)
+(* Destination has 2x wider elements than source *)
+let sxtl_immh (type v s) (vec : (v, s) Neon_reg_name.Vector.t) =
+  match vec with
+  | V8H -> 0b0001 (* 16-bit dest -> 8-bit source *)
+  | V4S -> 0b0010 (* 32-bit dest -> 16-bit source *)
+  | V2D -> 0b0100 (* 64-bit dest -> 32-bit source *)
+  | V8B | V16B | V4H | V2S | V1D ->
+    Misc.fatal_error "SXTL/UXTL requires H, S, or D destination elements"
+
+(* Helper to compute imm5 for SIMD copy instructions (DUP, INS, SMOV, UMOV) *)
+(* imm5 encodes element size and lane index: B: xxxx1 (index in bits 4:1), H:
+   xxx10 (index in bits 4:2), S: xx100 (index in bits 4:3), D: x1000 (index in
+   bit 4) *)
+let simd_copy_imm5 (type v s) (vec : (v, s) Neon_reg_name.Vector.t) lane_idx =
+  match vec with
+  | V8B | V16B -> (lane_idx lsl 1) lor 0b00001
+  | V4H | V8H -> (lane_idx lsl 2) lor 0b00010
+  | V2S | V4S -> (lane_idx lsl 3) lor 0b00100
+  | V1D | V2D -> (lane_idx lsl 4) lor 0b01000
+
+(* Advanced SIMD copy - C4.1.95.17 *)
+(* Encoding: 0 Q op 01110 00 imm5 0 imm4 1 Rn Rd *)
+let encode_simd_copy ~q ~op ~imm5 ~imm4 ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  (* bit 31 = 0, Q at bit 30, op at bit 29 *)
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int op) 29) in
+  let result = logor result (shift_left (of_int 0b01110) 24) in
+  (* bits 23:22 = 00 *)
+  let result = logor result (shift_left (of_int imm5) 16) in
+  (* bit 15 = 0 *)
+  let result = logor result (shift_left (of_int imm4) 11) in
+  let result = logor result (shift_left (of_int 0b1) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Advanced SIMD extract - C4.1.95.16 *)
+(* Encoding: 0 Q 101110 op2 0 Rm 0 imm4 0 Rn Rd *)
+let encode_simd_extract ~q ~rm ~imm4 ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int 0b101110) 24) in
+  (* op2=00, bit 21=0 *)
+  let result = logor result (shift_left (of_int rm) 16) in
+  (* bit 15=0 *)
+  let result = logor result (shift_left (of_int imm4) 11) in
+  (* bit 10=0 *)
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Advanced SIMD modified immediate - C4.1.95.19 *)
+(* Encoding: 0 Q op 0111100000 a b c cmode 01 d e f g h Rd *)
+(* For MOVI: op=0, cmode determines the variant *)
+let encode_simd_modified_imm ~q ~op ~abc ~cmode ~defgh ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int op) 29) in
+  let result = logor result (shift_left (of_int 0b0111100000) 19) in
+  let result = logor result (shift_left (of_int abc) 16) in
+  let result = logor result (shift_left (of_int cmode) 12) in
+  let result = logor result (shift_left (of_int 0b01) 10) in
+  let result = logor result (shift_left (of_int defgh) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Advanced SIMD across lanes - C4.1.95.22 *)
+(* Encoding: 0 Q U 01110 size 11000 opcode 10 Rn Rd *)
+let encode_simd_across_lanes ~q ~u ~size ~opcode ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int u) 29) in
+  let result = logor result (shift_left (of_int 0b01110) 24) in
+  let result = logor result (shift_left (of_int size) 22) in
+  let result = logor result (shift_left (of_int 0b11000) 17) in
+  let result = logor result (shift_left (of_int opcode) 12) in
+  let result = logor result (shift_left (of_int 0b10) 10) in
   let result = logor result (shift_left (of_int rn) 5) in
   let result = logor result (of_int rd) in
   result
@@ -1232,7 +1375,13 @@ let encode_instruction :
       ADD_vector ) ->
     let q, size = vector_q_size vec in
     encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b10000 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), ADDV -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar _); index = rd },
+          Reg { reg_name = Neon (Vector vec); index = rn } ),
+      ADDV ) ->
+    let q, size = vector_q_size vec in
+    (* ADDV: U=0, opcode=11011 *)
+    encode_simd_across_lanes ~q ~u:0 ~size ~opcode:0b11011 ~rn ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
       ~reloc_type:ADR;
@@ -1305,12 +1454,9 @@ let encode_instruction :
           Reg { reg_name = Neon (Vector _); index = rm } ),
       CM_register cond ) ->
     let q, size = vector_q_size vec in
-    (* Integer vector compares (register):
-       CMGT: U=0, opcode=00110
-       CMGE: U=0, opcode=00111
-       CMEQ: U=1, opcode=10001
-       CMHI: U=1, opcode=00110
-       CMHS: U=1, opcode=00111 *)
+    (* Integer vector compares (register): CMGT: U=0, opcode=00110 CMGE: U=0,
+       opcode=00111 CMEQ: U=1, opcode=10001 CMHI: U=1, opcode=00110 CMHS: U=1,
+       opcode=00111 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b00110
@@ -1326,12 +1472,9 @@ let encode_instruction :
           Reg { reg_name = Neon (Vector _); index = rn } ),
       CM_zero cond ) ->
     let q, size = vector_q_size vec in
-    (* Integer vector compares (zero):
-       CMGT (zero): U=0, opcode=01000
-       CMEQ (zero): U=0, opcode=01001
-       CMLT (zero): U=0, opcode=01010
-       CMGE (zero): U=1, opcode=01000
-       CMLE (zero): U=1, opcode=01001 *)
+    (* Integer vector compares (zero): CMGT (zero): U=0, opcode=01000 CMEQ
+       (zero): U=0, opcode=01001 CMLT (zero): U=0, opcode=01010 CMGE (zero):
+       U=1, opcode=01000 CMLE (zero): U=1, opcode=01001 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b01000
@@ -1368,7 +1511,14 @@ let encode_instruction :
   | Pair (Reg _rd, Reg _rn), CVT_vector -> assert false
   | _, DMB barrier -> encode_memory_barrier ~op2:0b101 barrier
   | _, DSB barrier -> encode_memory_barrier ~op2:0b100 barrier
-  | Pair (Reg _rd, Reg _rn), DUP _ -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      DUP lane_idx ) ->
+    let q, _ = vector_q_size vec in
+    let imm5 = simd_copy_imm5 vec (Neon_reg_name.Lane_index.to_int lane_idx) in
+    (* DUP (element): op=0, imm4=0000 *)
+    encode_simd_copy ~q ~op:0 ~imm5 ~imm4:0b0000 ~rn ~rd
   | Triple (Reg rd, Reg rn, Bitmask bitmask), EOR_immediate ->
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
     encode_logical_immediate ~sf:1 ~opc:0b10 ~n ~immr ~imms ~rn ~rd
@@ -1393,7 +1543,9 @@ let encode_instruction :
     let q, _ = vector_q_size vec in
     (* EOR: U=1, size=00, opcode=00011 *)
     encode_simd_three_same ~q ~u:1 ~size:0b00 ~rm ~opcode:0b00011 ~rn ~rd
-  | Quad (Reg _rd, Reg _rn, Reg _rm, Imm _), EXT -> assert false
+  | Quad (Reg rd, Reg rn, Reg rm, Imm (Six imm4)), EXT ->
+    (* EXT is 128-bit only (V16B), so Q=1 *)
+    encode_simd_extract ~q:1 ~rm:rm.index ~imm4 ~rn:rn.index ~rd:rd.index
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn } ),
@@ -1438,10 +1590,8 @@ let encode_instruction :
           Reg { reg_name = Neon (Vector _); index = rm } ),
       FCM_register cond ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FP vector compares (register):
-       FCMEQ: U=0, size=0x, opcode=11100
-       FCMGE: U=1, size=0x, opcode=11100
-       FCMGT: U=1, size=1x, opcode=11100 *)
+    (* FP vector compares (register): FCMEQ: U=0, size=0x, opcode=11100 FCMGE:
+       U=1, size=0x, opcode=11100 FCMGT: U=1, size=1x, opcode=11100 *)
     let u, size_hi =
       match cond with
       | Float_cond.EQ -> 0, 0
@@ -1456,12 +1606,10 @@ let encode_instruction :
           Reg { reg_name = Neon (Vector _); index = rn } ),
       FCM_zero cond ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FP vector compares (zero):
-       FCMGT (zero): U=0, size=1x, opcode=01100
-       FCMEQ (zero): U=0, size=1x, opcode=01101
-       FCMLT (zero): U=0, size=1x, opcode=01110
-       FCMGE (zero): U=1, size=1x, opcode=01100
-       FCMLE (zero): U=1, size=1x, opcode=01101 *)
+    (* FP vector compares (zero): FCMGT (zero): U=0, size=1x, opcode=01100 FCMEQ
+       (zero): U=0, size=1x, opcode=01101 FCMLT (zero): U=0, size=1x,
+       opcode=01110 FCMGE (zero): U=1, size=1x, opcode=01100 FCMLE (zero): U=1,
+       size=1x, opcode=01101 *)
     let u, opcode =
       match cond with
       | Float_cond.GT -> 0, 0b01100
@@ -1471,7 +1619,8 @@ let encode_instruction :
       | Float_cond.LE -> 1, 0b01101
       | _ -> Misc.fatal_error "Unsupported FCM_zero condition"
     in
-    let size = (1 lsl 1) lor sz in (* size=1x *)
+    let size = (1 lsl 1) lor sz in
+    (* size=1x *)
     encode_simd_two_reg_misc ~q ~u ~size ~opcode ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1523,8 +1672,32 @@ let encode_instruction :
           Reg { reg_name = Neon (Scalar D); index = rn } ),
       FCVT ) ->
     encode_fp_1_source ~ftype:1 ~opcode:0b000000 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), FCVTL_vector -> assert false
-  | Pair (Reg _rd, Reg _rn), FCVTN_vector -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      FCVTL_vector ) ->
+    (* FCVTL converts from narrower to wider FP (e.g., V2S->V2D) U=0,
+       opcode=10111, size encodes source element size (0=32-bit->64-bit) *)
+    let size =
+      match vec with
+      | V2D -> 0 (* 32-bit source -> 64-bit dest *)
+      | _ -> Misc.fatal_error "FCVTL_vector: unsupported destination type"
+    in
+    (* Q=0 for lower half (FCVTL), Q=1 for upper half (FCVTL2) *)
+    encode_simd_two_reg_misc ~q:0 ~u:0 ~size ~opcode:0b10111 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      FCVTN_vector ) ->
+    (* FCVTN converts from wider to narrower FP (e.g., V2D->V2S) U=0,
+       opcode=10110, size encodes destination element size *)
+    let size =
+      match vec with
+      | V2S -> 0 (* 64-bit source -> 32-bit dest *)
+      | _ -> Misc.fatal_error "FCVTN_vector: unsupported destination type"
+    in
+    (* Q=0 for lower half (FCVTN), Q=1 for upper half (FCVTN2) *)
+    encode_simd_two_reg_misc ~q:0 ~u:0 ~size ~opcode:0b10110 ~rn ~rd
   (* FCVTNS: FP to signed int, round to nearest with ties to even *)
   | ( Pair
         ( Reg { reg_name = GP X; index = rd },
@@ -1634,7 +1807,8 @@ let encode_instruction :
       FMIN_vector ) ->
     let q, sz = vector_q_fp_sz vec in
     (* FMIN: U=0, size=1x, opcode=11110 *)
-    encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11110 ~rn ~rd
+    encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11110 ~rn
+      ~rd
   | ( Quad
         ( Reg { reg_name = Neon (Scalar S); index = rd },
           Reg { reg_name = Neon (Scalar S); index = rn },
@@ -1854,12 +2028,9 @@ let encode_instruction :
           Reg { reg_name = Neon (Vector _); index = rn } ),
       FRINT_vector rm ) ->
     let q, sz = vector_q_fp_sz vec in
-    (* FRINT(mode) vector - encoding depends on rounding mode:
-       N: U=0, size=0x, opcode=11000
-       M: U=0, size=0x, opcode=11001
-       P: U=0, size=1x, opcode=11000
-       Z: U=0, size=1x, opcode=11001
-       X: U=1, size=0x, opcode=11001 *)
+    (* FRINT(mode) vector - encoding depends on rounding mode: N: U=0, size=0x,
+       opcode=11000 M: U=0, size=0x, opcode=11001 P: U=0, size=1x, opcode=11000
+       Z: U=0, size=1x, opcode=11001 X: U=1, size=0x, opcode=11001 *)
     let u, size_hi, opcode =
       match rm with
       | Rounding_mode.N -> 0, 0, 0b11000
@@ -1913,9 +2084,39 @@ let encode_instruction :
       FSUB_vector ) ->
     let q, sz = vector_q_fp_sz vec in
     (* FSUB: U=0, size=1x, opcode=11010 *)
-    encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11010 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), INS _ -> assert false
-  | Pair (Reg _rd, Reg _rn), INS_V _ -> assert false
+    encode_simd_three_same ~q ~u:0 ~size:(0b10 lor sz) ~rm ~opcode:0b11010 ~rn
+      ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = GP _; index = rn } ),
+      INS lane_idx ) ->
+    let imm5 = simd_copy_imm5 vec (Neon_reg_name.Lane_index.to_int lane_idx) in
+    (* INS (general): Q=1, op=0, imm4=0011 *)
+    encode_simd_copy ~q:1 ~op:0 ~imm5 ~imm4:0b0011 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Scalar _); index = rn } ),
+      INS lane_idx ) ->
+    (* INS from scalar D register - same as from GP X register *)
+    let imm5 = simd_copy_imm5 vec (Neon_reg_name.Lane_index.to_int lane_idx) in
+    (* INS (general): Q=1, op=0, imm4=0011 *)
+    encode_simd_copy ~q:1 ~op:0 ~imm5 ~imm4:0b0011 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      INS_V lanes ) ->
+    let dest_idx =
+      Neon_reg_name.Lane_index.to_int
+        (Neon_reg_name.Lane_index.Src_and_dest.dest_index lanes)
+    in
+    let src_idx =
+      Neon_reg_name.Lane_index.to_int
+        (Neon_reg_name.Lane_index.Src_and_dest.src_index lanes)
+    in
+    let imm5 = simd_copy_imm5 vec dest_idx in
+    (* INS (element): Q=1, op=1, imm4 encodes source index *)
+    let imm4 = src_idx in
+    encode_simd_copy ~q:1 ~op:1 ~imm5 ~imm4 ~rn ~rd
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem (Reg rn)), LDAR ->
     encode_load_acquire ~rd ~rn
   | Triple (Reg rt1, Reg rt2, Mem addressing), LDP ->
@@ -1966,8 +2167,31 @@ let encode_instruction :
     let rm_enc = Reg.gp_encoding rm in
     encode_logical_shifted_register ~sf ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_enc
       ~imm6:0 ~rn:31 ~rd:rd_enc
-  | Pair (Reg _rd, Reg _rn), MOV_vector -> assert false
-  | Pair (Reg _rd, Imm _), MOVI -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      MOV_vector ) ->
+    let q, _ = vector_q_size vec in
+    (* MOV is alias for ORR with rm=rn: U=0, size=10, opcode=00011 *)
+    encode_simd_three_same ~q ~u:0 ~size:0b10 ~rm:rn ~opcode:0b00011 ~rn ~rd
+  | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
+      MOVI ) ->
+    let q, _ = vector_q_size vec in
+    (* MOVI with byte replication: op=0, cmode=1110 imm8 = abcdefgh (8-bit
+       immediate replicated to all bytes) For zeroing, imm=0, abc=000,
+       defgh=00000 *)
+    let imm8 = imm land 0xFF in
+    let abc = (imm8 lsr 5) land 0b111 in
+    let defgh = imm8 land 0b11111 in
+    encode_simd_modified_imm ~q ~op:0 ~abc ~cmode:0b1110 ~defgh ~rd
+  | ( Pair (Reg { reg_name = Neon (Scalar _); index = rd }, Imm (Twelve imm)),
+      MOVI ) ->
+    (* MOVI to scalar (D register): Q=0 with 64-bit mode cmode=1110 gives byte
+       replication *)
+    let imm8 = imm land 0xFF in
+    let abc = (imm8 lsr 5) land 0b111 in
+    let defgh = imm8 land 0b11111 in
+    encode_simd_modified_imm ~q:0 ~op:0 ~abc ~cmode:0b1110 ~defgh ~rd
   | Triple (Reg rd, Imm imm, Shift shift), MOVK ->
     let imm16 = match imm with Sixteen_unsigned n -> n in
     let hw = (match shift.amount with Six n -> n) / 16 in
@@ -2085,7 +2309,15 @@ let encode_instruction :
   | Triple (Reg rd, Reg rn, Reg rm), SDIV ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b000011 ~rm ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Imm _), SHL -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Imm (Six shift) ),
+      SHL ) ->
+    let q, _ = vector_q_size vec in
+    let immh, immb = shl_immh_immb vec shift in
+    (* SHL: U=0, opcode=01010 *)
+    encode_simd_shift_imm ~q ~u:0 ~immh ~immb ~opcode:0b01010 ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn },
@@ -2102,7 +2334,23 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* SMIN: U=0, opcode=01101 *)
     encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b01101 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), SMOV _ -> assert false
+  | ( Pair
+        ( Reg { reg_name = GP gp; index = rd },
+          Reg { reg_name = Neon (Vector vec); index = rn } ),
+      SMOV lane_idx ) ->
+    let q = match gp with W -> 0 | X -> 1 in
+    let lane_int = Neon_reg_name.Lane_index.to_int lane_idx in
+    let imm5 = simd_copy_imm5 vec lane_int in
+    (* SMOV: op=0, imm4=0101 *)
+    encode_simd_copy ~q ~op:0 ~imm5 ~imm4:0b0101 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar _); index = rd },
+          Reg { reg_name = Neon (Vector vec); index = rn } ),
+      SMOV lane_idx ) ->
+    (* SMOV to scalar D - 64-bit, so Q=1 *)
+    let lane_int = Neon_reg_name.Lane_index.to_int lane_idx in
+    let imm5 = simd_copy_imm5 vec lane_int in
+    encode_simd_copy ~q:1 ~op:0 ~imm5 ~imm4:0b0101 ~rn ~rd
   | Triple (Reg rd, Reg rn, Reg rm), SMULH ->
     (* SMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
     (* Encoding: sf=1 op54=00 11011 op31=010 Rm o0=0 Ra=11111 Rn Rd *)
@@ -2162,7 +2410,15 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* SSHL: U=0, opcode=01000 *)
     encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b01000 ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Imm _), SSHR -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Imm (Six shift) ),
+      SSHR ) ->
+    let q, _ = vector_q_size vec in
+    let immh, immb = shr_immh_immb vec shift in
+    (* SSHR: U=0, opcode=00000 *)
+    encode_simd_shift_imm ~q ~u:0 ~immh ~immb ~opcode:0b00000 ~rn ~rd
   | Triple (Reg rt1, Reg rt2, Mem addressing), STP ->
     encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1 ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
@@ -2217,7 +2473,13 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_add_sub_shifted_reg ~op:1 ~s:1 ~shift ~imm6 ~rd ~rn ~rm
-  | Pair (Reg _rd, Reg _rn), SXTL -> assert false
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      SXTL ) ->
+    let immh = sxtl_immh vec in
+    (* SXTL is alias for SSHLL with shift=0: U=0, opcode=10100, Q=0 *)
+    encode_simd_shift_imm ~q:0 ~u:0 ~immh ~immb:0 ~opcode:0b10100 ~rn ~rd
   | ( Triple (Reg ({ reg_name = GP _; _ } as rt), Imm (Six bit), Imm (Sym sym)),
       TBNZ ) ->
     let imm14 = compute_branch_imm14 state ~instr_name:"TBNZ" sym in
@@ -2276,7 +2538,23 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* UMIN: U=1, opcode=01101 *)
     encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b01101 ~rn ~rd
-  | Pair (Reg _rd, Reg _rn), UMOV _ -> assert false
+  | ( Pair
+        ( Reg { reg_name = GP gp; index = rd },
+          Reg { reg_name = Neon (Vector vec); index = rn } ),
+      UMOV lane_idx ) ->
+    let q = match gp with W -> 0 | X -> 1 in
+    let lane_int = Neon_reg_name.Lane_index.to_int lane_idx in
+    let imm5 = simd_copy_imm5 vec lane_int in
+    (* UMOV: op=0, imm4=0111 *)
+    encode_simd_copy ~q ~op:0 ~imm5 ~imm4:0b0111 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Scalar _); index = rd },
+          Reg { reg_name = Neon (Vector vec); index = rn } ),
+      UMOV lane_idx ) ->
+    (* UMOV to scalar D - 64-bit, so Q=1 *)
+    let lane_int = Neon_reg_name.Lane_index.to_int lane_idx in
+    let imm5 = simd_copy_imm5 vec lane_int in
+    encode_simd_copy ~q:1 ~op:0 ~imm5 ~imm4:0b0111 ~rn ~rd
   | Triple (Reg rd, Reg rn, Reg rm), UMULH ->
     (* UMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
     (* Encoding: sf=1 op54=00 11011 op31=110 Rm o0=0 Ra=11111 Rn Rd *)
@@ -2336,8 +2614,22 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* USHL: U=1, opcode=01000 *)
     encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b01000 ~rn ~rd
-  | Triple (Reg _rd, Reg _rn, Imm _), USHR -> assert false
-  | Pair (Reg _rd, Reg _rn), UXTL -> assert false
+  | ( Triple
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn },
+          Imm (Six shift) ),
+      USHR ) ->
+    let q, _ = vector_q_size vec in
+    let immh, immb = shr_immh_immb vec shift in
+    (* USHR: U=1, opcode=00000 *)
+    encode_simd_shift_imm ~q ~u:1 ~immh ~immb ~opcode:0b00000 ~rn ~rd
+  | ( Pair
+        ( Reg { reg_name = Neon (Vector vec); index = rd },
+          Reg { reg_name = Neon (Vector _); index = rn } ),
+      UXTL ) ->
+    let immh = sxtl_immh vec in
+    (* UXTL is alias for USHLL with shift=0: U=1, opcode=10100, Q=0 *)
+    encode_simd_shift_imm ~q:0 ~u:1 ~immh ~immb:0 ~opcode:0b10100 ~rn ~rd
   | ( Pair
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { reg_name = Neon (Vector _); index = rn } ),

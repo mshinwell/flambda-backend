@@ -75,10 +75,18 @@ module Neon_reg_name : sig
     (** Neon vector register lane indices. *)
     type t
 
+    type lane_index = t
+
     val create : int -> t
+
+    val to_int : t -> int
 
     module Src_and_dest : sig
       type t
+
+      val dest_index : t -> lane_index
+
+      val src_index : t -> lane_index
     end
   end
 
