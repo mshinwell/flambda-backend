@@ -32,10 +32,10 @@ module L = Asm_targets.Asm_label
 module S = Asm_targets.Asm_symbol
 
 type reloc_type =
-  | ADR
-  | ADRP
-  | GOT_PAGE_OFF
-  | PAGE_OFF
+  | R_AARCH64_ADR_PREL_LO21
+  | R_AARCH64_ADR_PREL_PG_HI21
+  | R_AARCH64_LD64_GOT_LO12_NC
+  | R_AARCH64_ADD_ABS_LO12_NC
 
 (* TODO: Asm_directives uses strings for labels and symbols. We should change it
    to use Asm_label.t and Asm_symbol.t, and update this module accordingly. *)
@@ -984,10 +984,8 @@ let encode_load_store_gp_sized :
       let max_imm12 = 0xfff in
       let reloc_type =
         match reloc with
-        | GOT_PAGE_OFF -> GOT_PAGE_OFF
-        | PAGE_OFF -> PAGE_OFF
-        | LOWER_TWELVE -> PAGE_OFF
-        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC
+        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_type;
@@ -1237,10 +1235,8 @@ let encode_load_store_simd_fp :
       let max_imm12 = 0xfff in
       let reloc_type =
         match reloc with
-        | GOT_PAGE_OFF -> GOT_PAGE_OFF
-        | PAGE_OFF -> PAGE_OFF
-        | LOWER_TWELVE -> PAGE_OFF
-        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC
+        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_type;
@@ -1355,10 +1351,8 @@ let encode_instruction :
     | Needs_reloc reloc ->
       let reloc_type =
         match reloc with
-        | LOWER_TWELVE -> PAGE_OFF
-        | PAGE_OFF -> PAGE_OFF
-        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
-        | GOT_PAGE_OFF -> GOT_PAGE_OFF
+        | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC
+        | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_type;
@@ -1403,12 +1397,12 @@ let encode_instruction :
     encode_simd_across_lanes ~q ~u:0 ~size ~opcode:0b11011 ~rn ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_type:ADR;
+      ~reloc_type:R_AARCH64_ADR_PREL_LO21;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_type:ADRP;
+      ~reloc_type:R_AARCH64_ADR_PREL_PG_HI21;
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:1 ~immlo ~immhi ~rd
   | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
