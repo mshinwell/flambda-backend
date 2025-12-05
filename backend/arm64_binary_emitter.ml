@@ -166,8 +166,9 @@ let encode_data_proc_2_source ~sf ~s ~opcode ~rm ~rn ~rd =
   let result = logor result (of_int (Reg.gp_encoding rd)) in
   result
 
-(* Unconditional branch (register) - C4.1.93.13 Encoding: 1101011 | opc[3:0] |
-   op2[4:0] | op3[5:0] | Rn | op4[4:0] *)
+(* Unconditional branch (register) - C4.1.93.13
+
+   Encoding: 1101011 | opc[3:0] | op2[4:0] | op3[5:0] | Rn | op4[4:0] *)
 let encode_branch_register ~opc ~rn =
   let open Int32 in
   let result = zero in
@@ -191,8 +192,9 @@ let encode_branch_immediate ~op ~imm26 =
   let result = logor result (of_int (imm26 land 0x3FFFFFF)) in
   result
 
-(* Compare and branch (immediate) - C4.1.93.15 Encoding: sf | 011010 | op |
-   imm19 | Rt *)
+(* Compare and branch (immediate) - C4.1.93.15
+
+   Encoding: sf | 011010 | op | imm19 | Rt *)
 let encode_compare_branch ~sf ~op ~imm19 ~rt =
   let open Int32 in
   let result = zero in
@@ -203,8 +205,9 @@ let encode_compare_branch ~sf ~op ~imm19 ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Test and branch (immediate) - C4.1.93.16 Encoding: b5 | 011011 | op | b40 |
-   imm14 | Rt *)
+(* Test and branch (immediate) - C4.1.93.16
+
+   Encoding: b5 | 011011 | op | b40 | imm14 | Rt *)
 let encode_test_branch ~b5 ~op ~b40 ~imm14 ~rt =
   let open Int32 in
   let result = zero in
@@ -216,8 +219,9 @@ let encode_test_branch ~b5 ~op ~b40 ~imm14 ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Conditional select - C4.1.94.12 Encoding: sf | op | S | 11010100 | Rm | cond
-   | op2 | Rn | Rd *)
+(* Conditional select - C4.1.94.12
+
+   Encoding: sf | op | S | 11010100 | Rm | cond | op2 | Rn | Rd *)
 let encode_conditional_select ~sf ~op ~op2 ~rm ~cond ~rn ~rd =
   let open Int32 in
   let result = zero in
@@ -411,8 +415,13 @@ let sxtl_immh (type v s) (vec : (v, s) Neon_reg_name.Vector.t) =
 (* Helper to compute imm5 for SIMD copy instructions (DUP, INS, SMOV, UMOV).
    imm5 encodes element size and lane index:
 
-   - B: xxxx1 (index in bits 4:1) - H: xxx10 (index in bits 4:2) - S: xx100
-   (index in bits 4:3) - D: x1000 (index in bit 4) *)
+   - B: xxxx1 (index in bits 4:1)
+
+   - H: xxx10 (index in bits 4:2)
+
+   - S: xx100 (index in bits 4:3)
+
+   - D: x1000 (index in bit 4) *)
 let simd_copy_imm5 (type v s) (vec : (v, s) Neon_reg_name.Vector.t) lane_idx =
   match vec with
   | V8B | V16B -> (lane_idx lsl 1) lor 0b00001
@@ -504,9 +513,11 @@ let encode_simd_permute ~q ~size ~rm ~opcode ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-(* Floating-point data-processing (1 source) - C4.1.95.34 Format: M=0 | 0 | S=0
-   | 11110 | ftype | 1 | opcode | 10000 | Rn | Rd opcode: 000001=FABS,
-   000010=FNEG, 000011=FSQRT *)
+(* Floating-point data-processing (1 source) - C4.1.95.34
+
+   Format: M=0 | 0 | S=0 | 11110 | ftype | 1 | opcode | 10000 | Rn | Rd
+
+   opcode: 000001=FABS, 000010=FNEG, 000011=FSQRT *)
 let encode_fp_1_source ~ftype ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
@@ -561,9 +572,12 @@ let encode_fp_3_source ~ftype ~o1 ~rm ~o0 ~ra ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-(* Floating-point compare - C4.1.95.35 Format: M=0 | 0 | S=0 | 11110 | ftype | 1
-   | Rm | op=00 | 1000 | Rn | opcode2 opcode2: 00000=FCMP(reg),
-   01000=FCMP(zero), 10000=FCMPE(reg), 11000=FCMPE(zero) *)
+(* Floating-point compare - C4.1.95.35
+
+   Format: M=0 | 0 | S=0 | 11110 | ftype | 1 | Rm | op=00 | 1000 | Rn | opcode2
+
+   opcode2: 00000=FCMP(reg), 01000=FCMP(zero), 10000=FCMPE(reg),
+   11000=FCMPE(zero) *)
 let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let open Int32 in
   let result = zero in
@@ -577,17 +591,29 @@ let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let result = logor result (of_int opc2) in
   result
 
-(* Floating-point <-> integer conversion - C4.1.95.33 Format: sf | 0 | S=0 |
-   11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
+(* Floating-point <-> integer conversion - C4.1.95.33
+
+   Format: sf | 0 | S=0 | 11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
 
    Common opcodes:
 
-   - SCVTF (int->FP): rmode=00, opcode=010 - UCVTF (int->FP): rmode=00,
-   opcode=011 - FCVTNS (FP->int, nearest): rmode=00, opcode=000 - FCVTPS
-   (FP->int, +inf): rmode=01, opcode=000 - FCVTMS (FP->int, -inf): rmode=10,
-   opcode=000 - FCVTZS (FP->int, zero): rmode=11, opcode=000 - FCVTNU (FP->int,
-   nearest unsigned): rmode=00, opcode=001 - FCVTZU (FP->int, zero unsigned):
-   rmode=11, opcode=001 - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
+   - SCVTF (int->FP): rmode=00, opcode=010
+
+   - UCVTF (int->FP): rmode=00, opcode=011
+
+   - FCVTNS (FP->int, nearest): rmode=00, opcode=000
+
+   - FCVTPS (FP->int, +inf): rmode=01, opcode=000
+
+   - FCVTMS (FP->int, -inf): rmode=10, opcode=000
+
+   - FCVTZS (FP->int, zero): rmode=11, opcode=000
+
+   - FCVTNU (FP->int, nearest unsigned): rmode=00, opcode=001
+
+   - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
+
+   - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
 let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
@@ -601,8 +627,9 @@ let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let result = logor result (of_int rd) in
   result
 
-(* Floating-point immediate - C4.1.95.36 Format: M=0 | 0 | S=0 | 11110 | ftype |
-   1 | imm8 | 100 | imm5=00000 | Rd *)
+(* Floating-point immediate - C4.1.95.36
+
+   Format: M=0 | 0 | S=0 | 11110 | ftype | 1 | imm8 | 100 | imm5=00000 | Rd *)
 let encode_fp_immediate ~ftype ~imm8 ~rd =
   let open Int32 in
   let result = zero in
@@ -646,8 +673,11 @@ let encode_float_condition (cond : Float_cond.t) : int =
   | GT -> 0b1100
   | LE -> 0b1101
 
-(* Conditional branch (immediate) - C4.1.93.1 Encoding: 0101010 | 0 | imm19 | o0
-   | cond o0=0 for B.cond *)
+(* Conditional branch (immediate) - C4.1.93.1
+
+   Encoding: 0101010 | 0 | imm19 | o0 | cond
+
+   o0=0 for B.cond *)
 let encode_conditional_branch ~imm19 ~cond =
   let open Int32 in
   let result = zero in
@@ -830,8 +860,9 @@ let encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (post-indexed) - C4.1.96.15 Encoding: opc[1:0] | 101 | V |
-   001 | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (post-indexed) - C4.1.96.15
+
+   Encoding: opc[1:0] | 101 | V | 001 | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
@@ -847,8 +878,9 @@ let encode_load_store_pair_post_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (pre-indexed) - C4.1.96.17 Encoding: opc[1:0] | 101 | V | 011
-   | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (pre-indexed) - C4.1.96.17
+
+   Encoding: opc[1:0] | 101 | V | 011 | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
@@ -864,8 +896,9 @@ let encode_load_store_pair_pre_indexed ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   let result = logor result (of_int rt) in
   result
 
-(* Load/store pair (signed offset) - C4.1.96.16 Encoding: opc[1:0] | 101 | V |
-   010 | L | imm7 | Rt2 | Rn | Rt *)
+(* Load/store pair (signed offset) - C4.1.96.16
+
+   Encoding: opc[1:0] | 101 | V | 010 | L | imm7 | Rt2 | Rn | Rt *)
 let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
   assert (imm7 >= -0x40 && imm7 <= 0x3f);
   let open Int32 in
@@ -1053,7 +1086,9 @@ let encode_load_acquire :
 (* Memory barrier encoding. Format: 1101 0101 0000 0011 0011 | CRm[11:8] |
    op2[7:5] | 11111
 
-   - DMB: op2=101 - DSB: op2=100 *)
+   - DMB: op2=101
+
+   - DSB: op2=100 *)
 let encode_memory_barrier ~op2 (barrier : Memory_barrier.t) =
   let crm =
     match barrier with
@@ -1426,8 +1461,15 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* Integer vector compares (register):
 
-       - CMGT: U=0, opcode=00110 - CMGE: U=0, opcode=00111 - CMEQ: U=1,
-       opcode=10001 - CMHI: U=1, opcode=00110 - CMHS: U=1, opcode=00111 *)
+       - CMGT: U=0, opcode=00110
+
+       - CMGE: U=0, opcode=00111
+
+       - CMEQ: U=1, opcode=10001
+
+       - CMHI: U=1, opcode=00110
+
+       - CMHS: U=1, opcode=00111 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b00110
@@ -1444,9 +1486,15 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* Integer vector compares (zero):
 
-       - CMGT (zero): U=0, opcode=01000 - CMEQ (zero): U=0, opcode=01001 - CMLT
-       (zero): U=0, opcode=01010 - CMGE (zero): U=1, opcode=01000 - CMLE (zero):
-       U=1, opcode=01001 *)
+       - CMGT (zero): U=0, opcode=01000
+
+       - CMEQ (zero): U=0, opcode=01001
+
+       - CMLT (zero): U=0, opcode=01010
+
+       - CMGE (zero): U=1, opcode=01000
+
+       - CMLE (zero): U=1, opcode=01001 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b01000
@@ -1552,8 +1600,11 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FP vector compares (register):
 
-       - FCMEQ: U=0, size=0x, opcode=11100 - FCMGE: U=1, size=0x, opcode=11100 -
-       FCMGT: U=1, size=1x, opcode=11100 *)
+       - FCMEQ: U=0, size=0x, opcode=11100
+
+       - FCMGE: U=1, size=0x, opcode=11100
+
+       - FCMGT: U=1, size=1x, opcode=11100 *)
     let u, size_hi =
       match cond with
       | Float_cond.EQ -> 0, 0
@@ -1569,9 +1620,15 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FP vector compares (zero):
 
-       - FCMGT (zero): U=0, size=1x, opcode=01100 - FCMEQ (zero): U=0, size=1x,
-       opcode=01101 - FCMLT (zero): U=0, size=1x, opcode=01110 - FCMGE (zero):
-       U=1, size=1x, opcode=01100 - FCMLE (zero): U=1, size=1x, opcode=01101 *)
+       - FCMGT (zero): U=0, size=1x, opcode=01100
+
+       - FCMEQ (zero): U=0, size=1x, opcode=01101
+
+       - FCMLT (zero): U=0, size=1x, opcode=01110
+
+       - FCMGE (zero): U=1, size=1x, opcode=01100
+
+       - FCMLE (zero): U=1, size=1x, opcode=01101 *)
     let u, opcode =
       match cond with
       | Float_cond.GT -> 0, 0b01100
@@ -1881,9 +1938,15 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FRINT(mode) vector - encoding depends on rounding mode:
 
-       - N: U=0, size=0x, opcode=11000 - M: U=0, size=0x, opcode=11001 - P: U=0,
-       size=1x, opcode=11000 - Z: U=0, size=1x, opcode=11001 - X: U=1, size=0x,
-       opcode=11001 *)
+       - N: U=0, size=0x, opcode=11000
+
+       - M: U=0, size=0x, opcode=11001
+
+       - P: U=0, size=1x, opcode=11000
+
+       - Z: U=0, size=1x, opcode=11001
+
+       - X: U=1, size=0x, opcode=11001 *)
     let u, size_hi, opcode =
       match rm with
       | Rounding_mode.N -> 0, 0, 0b11000
