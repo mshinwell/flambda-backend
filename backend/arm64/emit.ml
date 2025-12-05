@@ -1138,7 +1138,8 @@ let emit_stack_realloc () =
     D.define_label sc_label;
     (* Pass the desired frame size on the stack, since all of the
        argument-passing registers may be in use. *)
-    A.ins2 MOV (DSL.reg_x reg_tmp1, DSL.imm sc_max_frame_size_in_bytes);
+    A.ins_mov_imm (DSL.reg_x reg_tmp1)
+      (DSL.imm_sixteen sc_max_frame_size_in_bytes);
     A.ins3 STP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
@@ -1231,7 +1232,7 @@ let emit_intconst dst n =
     if List.length dz <= List.length dn
     then (
       match dz with
-      | [] -> A.ins2 MOV (DSL.reg_x dst, DSL.xzr ())
+      | [] -> A.ins_mov_reg (DSL.reg_x dst) (DSL.xzr ())
       | (f, p) :: l ->
         A.ins3 MOVZ
           ( DSL.reg_x dst,
@@ -1987,7 +1988,7 @@ let move (src : Reg.t) (dst : Reg.t) =
     | (Vec256 | Vec512), _, _, _ | _, _, (Vec256 | Vec512), _ ->
       Misc.fatal_error "arm64: got 256/512 bit vector"
     | (Int | Val | Addr), Reg _, (Int | Val | Addr), Reg _ ->
-      A.ins2 MOV (DSL.reg_x dst, DSL.reg_x src)
+      A.ins_mov_reg (DSL.reg_x dst) (DSL.reg_x src)
     | Float, Reg _, Float, Stack _ ->
       A.ins2 STR_simd_and_fp (DSL.reg_d src, DSL.stack dst)
     | Float32, Reg _, Float32, Stack _ ->
@@ -2125,7 +2126,7 @@ let emit_instr i =
     if not (Reg.same_loc src dst)
     then
       match src.loc, dst.loc with
-      | Reg _, Reg _ -> A.ins2 MOV (DSL.reg_w dst, DSL.reg_w src)
+      | Reg _, Reg _ -> A.ins_mov_reg_w (DSL.reg_w dst) (DSL.reg_w src)
       | Reg _, Stack _ -> A.ins2 STR (DSL.reg_w src, DSL.stack dst)
       | Stack _, Reg _ -> A.ins2 LDR (DSL.reg_w dst, DSL.stack src)
       | Stack _, Stack _ | _, Unknown | Unknown, _ -> assert false)

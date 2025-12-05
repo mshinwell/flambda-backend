@@ -1384,20 +1384,6 @@ module Instruction_name = struct
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
           t
-    | MOV
-        : ( pair,
-            [< `Reg of
-               [< `GP of
-                  [< `X | `W]
-                  (* | `Neon of [< `Scalar of _ | `Vector of
-                     Neon_reg_name.Vector.t] *) ] ]
-            * [< `Reg of
-                 [< `GP of
-                    [< `X | `W | `XZR | `WZR]
-                    (* | `Neon of [< `Scalar of _ | `Vector of
-                       Neon_reg_name.Vector.t] *) ]
-              | `Imm of _ ] )
-          t
     | MOVI
         : ( pair,
             [< `Reg of
@@ -1462,9 +1448,9 @@ module Instruction_name = struct
           t
     | ORR_shifted_register
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Reg of [< `GP of [< `X]]]
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `XZR | `W | `WZR]]]
+            * [< `Reg of [< `GP of [< `X | `XZR | `W | `WZR]]]
             * [< `Optional of
                  [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
@@ -1991,7 +1977,6 @@ module Instruction_name = struct
         | LSLV -> "lslv"
         | LSRV -> "lsrv"
         | MADD -> "madd"
-        | MOV -> "mov"
         | MOVI -> "movi"
         | MOVK -> "movk"
         | MOVN -> "movn"
@@ -2374,9 +2359,6 @@ module Instruction_name = struct
       | MADD ->
         let (Quad (rd, rn, rm, ra)) = ops in
         [| o rd; o rn; o rm; o ra |]
-      | MOV ->
-        let (Pair (rd, src)) = ops in
-        [| o rd; o src |]
       | MOVI ->
         let (Pair (rd, imm)) = ops in
         [| o rd; o imm |]
@@ -2849,8 +2831,12 @@ module DSL = struct
     let ins_mov_vector rd rn = ins ORR_vector (Triple (rd, rn, rn))
 
     (* MOV <Xd>, <Xm> -> ORR <Xd>, XZR, <Xm> *)
-    let ins_mov_reg rd rm =
+    let ins_mov_reg rd (rm : [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t) =
       ins ORR_shifted_register (Quad (rd, xzr (), rm, Optional None))
+
+    (* MOV <Wd>, <Wm> -> ORR <Wd>, WZR, <Wm> *)
+    let ins_mov_reg_w rd rm =
+      ins ORR_shifted_register (Quad (rd, wzr (), rm, Optional None))
 
     (* MOV <Xd>, #<imm16> -> MOVZ <Xd>, #<imm16>, LSL #0 MOV <Wd>, #<imm16> ->
        MOVZ <Wd>, #<imm16>, LSL #0 *)

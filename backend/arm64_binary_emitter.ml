@@ -2039,24 +2039,6 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
-  (* TODO: MOV is an alias; this should be removed from Instruction_name.t and
-     handled via a rewrite rule. *)
-  | Pair (Reg ({ reg_name = GP _; _ } as rd), Imm imm), MOV ->
-    (* MOV (wide immediate): alias of MOVZ *)
-    let imm16 = match imm with Sixteen_unsigned n -> n | _ -> assert false in
-    let sf = Reg.gp_sf rd in
-    encode_move_wide ~sf ~opc:0b10 ~hw:0 ~imm16 ~rd
-  (* TODO: MOV is an alias; this should be removed from Instruction_name.t and
-     handled via a rewrite rule. *)
-  | ( Pair
-        (Reg ({ reg_name = GP _; _ } as rd), Reg ({ reg_name = GP _; _ } as rm)),
-      MOV ) ->
-    (* MOV (register): alias for ORR Rd, XZR, Rm *)
-    let sf = Reg.gp_sf rd in
-    let rd_enc = Reg.gp_encoding rd in
-    let rm_enc = Reg.gp_encoding rm in
-    encode_logical_shifted_register ~sf ~opc:0b01 ~shift:0 ~n:0 ~rm:rm_enc
-      ~imm6:0 ~rn:31 ~rd:rd_enc
   | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
     let q, _ = vector_q_size vec in

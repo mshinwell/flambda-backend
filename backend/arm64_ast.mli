@@ -1001,20 +1001,6 @@ module Instruction_name : sig
             * [`Reg of [`GP of [< `X | `W]]]
             * [`Reg of [`GP of [< `X | `W | `XZR | `WZR]]] )
           t
-    | MOV
-        : ( pair,
-            [< `Reg of
-               [< `GP of
-                  [< `X | `W]
-                  (* | `Neon of [< `Scalar of _ | `Vector of
-                     Neon_reg_name.Vector.t] *) ] ]
-            * [< `Reg of
-                 [< `GP of
-                    [< `X | `W | `XZR | `WZR]
-                    (* | `Neon of [< `Scalar of _ | `Vector of
-                       Neon_reg_name.Vector.t] *) ]
-              | `Imm of _ ] )
-          t
     | MOVI
         : ( pair,
             [< `Reg of
@@ -1079,9 +1065,9 @@ module Instruction_name : sig
           t
     | ORR_shifted_register
         : ( quad,
-            [< `Reg of [< `GP of [< `X]]]
-            * [< `Reg of [< `GP of [< `X | `XZR]]]
-            * [< `Reg of [< `GP of [< `X]]]
+            [< `Reg of [< `GP of [< `X | `W]]]
+            * [< `Reg of [< `GP of [< `X | `XZR | `W | `WZR]]]
+            * [< `Reg of [< `GP of [< `X | `XZR | `W | `WZR]]]
             * [< `Optional of
                  [< `Shift of [< `Lsl | `Lsr | `Asr] * [< `Six]] option ] )
           t
@@ -1768,7 +1754,12 @@ module DSL : sig
 
     val ins_mov_reg :
       [< `Reg of [< `GP of [< `X]]] Operand.t ->
-      [< `Reg of [< `GP of [< `X]]] Operand.t ->
+      [< `Reg of [< `GP of [< `X | `XZR]]] Operand.t ->
+      unit
+
+    val ins_mov_reg_w :
+      [< `Reg of [< `GP of [< `W]]] Operand.t ->
+      [< `Reg of [< `GP of [< `W]]] Operand.t ->
       unit
 
     val ins_mov_imm :
