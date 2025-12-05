@@ -503,11 +503,11 @@ module Symbol = struct
     | LOWER_TWELVE : [`Twelve] reloc_directive
     | GOT_PAGE : [`Twenty_one] reloc_directive
     | GOT_PAGE_OFF : [`Twelve] reloc_directive
-    | GOT : [`Sixty_four] reloc_directive
-    (* XXX is Sixty_four correct? *)
     | GOT_LOWER_TWELVE : [`Twelve] reloc_directive
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
+    | CALL26 : [`Twenty_six] reloc_directive
+    | JUMP26 : [`Twenty_six] reloc_directive
 
   type 'w same_unit_or_reloc =
     | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
@@ -528,7 +528,6 @@ module Symbol = struct
     let macosx = Target_system.is_macos () in
     match reloc with
     | LOWER_TWELVE -> Format.fprintf ppf ":lo12:%s" s
-    | GOT -> Format.fprintf ppf ":got:%s" s
     | GOT_LOWER_TWELVE -> Format.fprintf ppf ":got_lo12:%s" s
     | GOT_PAGE ->
       if macosx
@@ -546,6 +545,10 @@ module Symbol = struct
       if macosx
       then Format.fprintf ppf "%s@PAGEOFF" s
       else Format.fprintf ppf ":lo12:%s" s
+    | CALL26 | JUMP26 ->
+      (* For B/BL to external symbols, just print the symbol name; the assembler
+         handles the relocation *)
+      Format.fprintf ppf "%s" s
 
   let print_int_offset ppf ofs =
     if ofs > 0

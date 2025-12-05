@@ -1101,7 +1101,7 @@ let call_gc_sites = ref ([] : gc_call list)
 
 let emit_call_gc gc =
   A.labeled_ins1 gc.gc_lbl BL
-    (DSL.symbol Same_section_and_unit (S.create "caml_call_gc"));
+    (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_gc"));
   A.labeled_ins1 gc.gc_frame_lbl B
     (DSL.label Same_section_and_unit gc.gc_return_lbl)
 
@@ -1125,7 +1125,7 @@ let emit_local_realloc lr =
   D.define_label lr.lr_lbl;
   emit_debug_info lr.lr_dbg;
   A.ins1 BL
-    (DSL.symbol Same_section_and_unit (S.create "caml_call_local_realloc"));
+    (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_local_realloc"));
   A.ins1 B (DSL.label Same_section_and_unit lr.lr_return_lbl)
 
 (* Local stack reallocation *)
@@ -1154,7 +1154,7 @@ let emit_stack_realloc () =
         DSL.lr (),
         DSL.mem_pre_pair ~base:(DSL.Reg.sp ()) ~offset:(-16) );
     A.ins1 BL
-      (DSL.symbol Same_section_and_unit (S.create "caml_call_realloc_stack"));
+      (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_realloc_stack"));
     A.ins3 LDP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
@@ -1865,14 +1865,14 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
     else (
       (match n with
       | 16 ->
-        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc1"))
+        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc1"))
       | 24 ->
-        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc2"))
+        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc2"))
       | 32 ->
-        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc3"))
+        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc3"))
       | _ ->
         emit_intconst reg_x8 (Nativeint.of_int n);
-        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_allocN")));
+        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_allocN")));
       A.labeled_ins4 lbl_frame ADD_immediate
         ( DSL.reg_x i.res.(0),
           DSL.reg_x reg_alloc_ptr,
@@ -2179,7 +2179,7 @@ let emit_instr i =
     A.ins1 BLR (DSL.reg_x i.arg.(0));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op (Lcall_imm { func }) ->
-    A.ins1 BL (DSL.symbol Same_section_and_unit (S.create func.sym_name));
+    A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create func.sym_name));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> A.ins1 BR (DSL.reg_x i.arg.(0))
   | Lcall_op (Ltailcall_imm { func }) ->
@@ -2189,7 +2189,7 @@ let emit_instr i =
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
       | Some tailrec_entry_point ->
         A.ins1 B (DSL.label Same_section_and_unit tailrec_entry_point)
-    else A.ins1 B (DSL.symbol Same_section_and_unit (S.create func.sym_name))
+    else A.ins1 B (DSL.symbol (Needs_reloc JUMP26) (S.create func.sym_name))
   | Lcall_op (Lextcall { func; alloc; stack_ofs; _ }) ->
     if Config.runtime5 && stack_ofs > 0
     then (
@@ -2201,12 +2201,12 @@ let emit_instr i =
           DSL.optional_none );
       emit_load_symbol_addr reg_x8 (S.create func);
       A.ins1 BL
-        (DSL.symbol Same_section_and_unit (S.create "caml_c_call_stack_args"));
+        (DSL.symbol (Needs_reloc CALL26) (S.create "caml_c_call_stack_args"));
       record_frame i.live (Dbg_other i.dbg))
     else if alloc
     then (
       emit_load_symbol_addr reg_x8 (S.create func);
-      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_c_call"));
+      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_c_call"));
       record_frame i.live (Dbg_other i.dbg))
     else (
       (*= store ocaml stack in the frame pointer register
@@ -2224,7 +2224,7 @@ let emit_instr i =
             DSL.addressing (Iindexed offset) reg_domain_state_ptr );
         A.ins_mov_to_sp ~src:(DSL.reg_x reg_tmp1))
       else D.cfi_remember_state ();
-      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create func));
+      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create func));
       if Config.runtime5 then A.ins_mov_to_sp ~src:(DSL.fp ());
       D.cfi_restore_state ())
   | Lop (Stackoffset n) ->
@@ -2752,15 +2752,15 @@ let emit_instr i =
   | Lraise k -> (
     match k with
     | Lambda.Raise_regular ->
-      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_raise_exn"));
+      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_raise_exn"));
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_reraise ->
       if Config.runtime5
       then
         A.ins1 BL
-          (DSL.symbol Same_section_and_unit (S.create "caml_reraise_exn"))
+          (DSL.symbol (Needs_reloc CALL26) (S.create "caml_reraise_exn"))
       else
-        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_raise_exn"));
+        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_raise_exn"));
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_notrace ->
       A.ins_mov_to_sp ~src:(DSL.reg_x reg_trap_ptr);

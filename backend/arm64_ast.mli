@@ -167,11 +167,11 @@ module Symbol : sig
     | LOWER_TWELVE : [`Twelve] reloc_directive
     | GOT_PAGE : [`Twenty_one] reloc_directive
     | GOT_PAGE_OFF : [`Twelve] reloc_directive
-    | GOT : [`Sixty_four] reloc_directive
-    (* XXX is Sixty_four correct? *)
     | GOT_LOWER_TWELVE : [`Twelve] reloc_directive
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
+    | CALL26 : [`Twenty_six] reloc_directive
+    | JUMP26 : [`Twenty_six] reloc_directive
 
   type 'w same_unit_or_reloc =
     | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
