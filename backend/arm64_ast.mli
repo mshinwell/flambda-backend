@@ -162,6 +162,19 @@ module Reg : sig
   val gp_sf : [`GP of _] t -> int
 end
 
+(** Symbol references and relocations.
+
+    [Same_section_and_unit] is for references that the assembler can resolve
+    directly, such as PC-relative branches within a function. These use 19-bit
+    signed offsets giving +/-1MB range.
+
+    [Needs_reloc] is for references requiring linker involvement:
+    - ADRP/ADR instructions need PAGE relocations even for "local" labels
+      because the assembler doesn't know final page-relative offsets until
+      link time when sections are laid out.
+    - Calls to runtime functions (e.g. caml_call_gc) in other compilation
+      units need CALL26/JUMP26 relocations.
+    - GOT-relative references for position-independent code. *)
 module Symbol : sig
   type _ reloc_directive =
     | LOWER_TWELVE : [`Twelve] reloc_directive
