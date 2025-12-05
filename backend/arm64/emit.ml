@@ -131,6 +131,14 @@ module DSL : sig
   val reg_v4s :
     Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
 
+  val simd_operands_v4s_v4s_v4s :
+    Linear.instruction ->
+    ( Arm64_ast.triple,
+      [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+      * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+      * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] )
+    Arm64_ast.many
+
   val reg_v2d :
     Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
 
@@ -302,6 +310,12 @@ end = struct
   let reg_v2s reg = reg_v2s (reg_index reg)
 
   let reg_v4s reg = reg_v4s (reg_index reg)
+
+  let simd_operands_v4s_v4s_v4s i =
+    let rd = reg_v4s i.Linear.res.(0) in
+    let rn = reg_v4s i.Linear.arg.(0) in
+    let rm = reg_v4s i.Linear.arg.(1) in
+    Arm64_ast.Triple (rd, rn, rm)
 
   let reg_v2d reg = reg_v2d (reg_index reg)
 
