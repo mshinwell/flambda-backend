@@ -108,24 +108,6 @@ end = struct
     Hashtbl.find_opt t.label_offset_tbl name
 end
 
-let _encode_shift_type (type op) (kind : op Operand.Shift.Kind.t) =
-  match kind with LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
-
-let _encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
-  let open Int32 in
-  if imm12 < 0 || imm12 > 4095
-  then Misc.fatal_errorf "ADD/SUB immediate out of range: %d" imm12 ();
-  let result = zero in
-  let result = logor result (shift_left (of_int sf) 31) in
-  let result = logor result (shift_left (of_int op) 30) in
-  let result = logor result (shift_left (of_int s) 29) in
-  let result = logor result (shift_left (of_int 0b100010) 23) in
-  let result = logor result (shift_left (of_int sh) 22) in
-  let result = logor result (shift_left (of_int imm12) 10) in
-  let result = logor result (shift_left (of_int rn) 5) in
-  let result = logor result (of_int rd) in
-  result
-
 let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let max_shift = if sf = 1 then 63 else 31 in
@@ -139,21 +121,6 @@ let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let result = logor result (shift_left (of_int shift) 22) in
   let result = logor result (shift_left (of_int rm) 16) in
   let result = logor result (shift_left (of_int imm6) 10) in
-  let result = logor result (shift_left (of_int rn) 5) in
-  let result = logor result (of_int rd) in
-  result
-
-(* Logical (immediate) encoding - C4.1.92.6 Used for AND, ORR, EOR, ANDS with
-   bitmask immediates *)
-let _encode_logical_immediate ~sf ~opc ~n ~immr ~imms ~rn ~rd =
-  let open Int32 in
-  let result = zero in
-  let result = logor result (shift_left (of_int sf) 31) in
-  let result = logor result (shift_left (of_int opc) 29) in
-  let result = logor result (shift_left (of_int 0b100100) 23) in
-  let result = logor result (shift_left (of_int n) 22) in
-  let result = logor result (shift_left (of_int immr) 16) in
-  let result = logor result (shift_left (of_int imms) 10) in
   let result = logor result (shift_left (of_int rn) 5) in
   let result = logor result (of_int rd) in
   result
@@ -534,18 +501,6 @@ let encode_simd_permute ~q ~size ~rm ~opcode ~rn ~rd =
   let result = logor result (shift_left (of_int opcode) 12) in
   let result = logor result (shift_left (of_int 0b10) 10) in
   let result = logor result (shift_left (of_int rn) 5) in
-  let result = logor result (of_int rd) in
-  result
-
-(* Floating-point immediate - C4.1.95.36 *)
-let _encode_fp_immediate ~ftype ~imm8 ~rd =
-  let open Int32 in
-  let result = zero in
-  let result = logor result (shift_left (of_int 0b11110) 24) in
-  let result = logor result (shift_left (of_int ftype) 22) in
-  let result = logor result (shift_left (of_int 0b1) 21) in
-  let result = logor result (shift_left (of_int imm8) 13) in
-  let result = logor result (shift_left (of_int 0b100) 10) in
   let result = logor result (of_int rd) in
   result
 
