@@ -173,18 +173,18 @@ module Symbol : sig
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
 
-  type 'w same_section_or_reloc =
-    | Same_section : [`Nineteen] same_section_or_reloc
-    | Different_section : 'w reloc_directive -> 'w same_section_or_reloc
+  type 'w same_unit_or_reloc =
+    | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
+    | Needs_reloc : 'w reloc_directive -> 'w same_unit_or_reloc
 
   type 'w t = private
     { name : string;
       offset : int;
-      reloc : 'w same_section_or_reloc
+      reloc : 'w same_unit_or_reloc
     }
 
   (** Any OS-specific escaping/etc must have been applied first. *)
-  val create : 'w same_section_or_reloc -> ?offset:int -> string -> 'w t
+  val create : 'w same_unit_or_reloc -> ?offset:int -> string -> 'w t
 
   val print : Format.formatter -> _ t -> unit
 end
@@ -438,7 +438,7 @@ module Instruction_name : sig
         : ( quad,
             [< `Reg of [`GP of [< `X | `SP | `FP]]]
             * [< `Reg of [`GP of [< `X | `SP | `FP]]]
-            * [< `Imm of [< `Twelve]]
+            * [< `Imm of [< `Twelve | `Sym of [`Twelve]]]
             * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADD_shifted_register

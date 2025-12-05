@@ -509,18 +509,17 @@ module Symbol = struct
     | PAGE : [`Twenty_one] reloc_directive
     | PAGE_OFF : [`Twelve] reloc_directive
 
-  type 'w same_section_or_reloc =
-    | Same_section : [`Nineteen] same_section_or_reloc
-    | Different_section : 'w reloc_directive -> 'w same_section_or_reloc
+  type 'w same_unit_or_reloc =
+    | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
+    | Needs_reloc : 'w reloc_directive -> 'w same_unit_or_reloc
 
   type 'w t =
     { name : string;
       offset : int;
-      reloc : 'w same_section_or_reloc
+      reloc : 'w same_unit_or_reloc
     }
 
-  let create (type w) (reloc : w same_section_or_reloc) ?(offset = 0) name : w t
-      =
+  let create (type w) (reloc : w same_unit_or_reloc) ?(offset = 0) name : w t =
     { name; offset; reloc }
 
   let print_with_reloc_directive :
@@ -558,8 +557,9 @@ module Symbol = struct
   let print : type w. Format.formatter -> w t -> unit =
    fun ppf { name; offset; reloc } ->
     match reloc with
-    | Same_section -> Format.fprintf ppf "%s%a" name print_int_offset offset
-    | Different_section reloc ->
+    | Same_section_and_unit ->
+      Format.fprintf ppf "%s%a" name print_int_offset offset
+    | Needs_reloc reloc ->
       Format.fprintf ppf "%a%a" print_with_reloc_directive (name, reloc)
         print_int_offset offset
 end
@@ -821,7 +821,7 @@ module Instruction_name = struct
         : ( quad,
             [< `Reg of [`GP of [< `X | `SP | `FP]]]
             * [< `Reg of [`GP of [< `X | `SP | `FP]]]
-            * [< `Imm of [< `Twelve]]
+            * [< `Imm of [< `Twelve | `Sym of [`Twelve]]]
             * [< `Optional of [< `Fixed_shift of [< `Lsl_by_twelve]] option] )
           t
     | ADD_shifted_register

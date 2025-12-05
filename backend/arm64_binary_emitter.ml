@@ -980,7 +980,7 @@ let encode_load_store_gp_sized :
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
   | Offset_sym (rn, sym) -> (
     match sym.reloc with
-    | Different_section reloc ->
+    | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
       let reloc_type =
         match reloc with
@@ -1233,7 +1233,7 @@ let encode_load_store_simd_fp :
     encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:imm12_scaled ~rn ~rt
   | Offset_sym (rn, sym) -> (
     match sym.reloc with
-    | Different_section reloc ->
+    | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
       let reloc_type =
         match reloc with
@@ -1349,6 +1349,20 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADD_immediate ->
     let sh = match shift with Some _ -> 1 | None -> 0 in
     encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12 ~rn ~rd
+  | Quad (Reg rd, Reg rn, Imm (Sym sym), Optional shift), ADD_immediate -> (
+    let sh = match shift with Some _ -> 1 | None -> 0 in
+    match sym.reloc with
+    | Needs_reloc reloc ->
+      let reloc_type =
+        match reloc with
+        | LOWER_TWELVE -> PAGE_OFF
+        | PAGE_OFF -> PAGE_OFF
+        | GOT_LOWER_TWELVE -> GOT_PAGE_OFF
+        | GOT_PAGE_OFF -> GOT_PAGE_OFF
+      in
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+        ~reloc_type;
+      encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12:sym.offset ~rn ~rd)
   | ( Quad
         ( Reg ({ reg_name = GP _; _ } as rd),
           Reg ({ reg_name = GP _; _ } as rn),

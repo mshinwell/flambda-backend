@@ -233,14 +233,14 @@ module DSL : sig
   val reg_s7 : [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
 
   val emit_mem_symbol :
-    reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
+    reloc:[`Twelve] Arm64_ast.Symbol.same_unit_or_reloc ->
     ?offset:int ->
     Reg.t ->
     S.t ->
     [`Mem of [> `Offset_sym]] Arm64_ast.Operand.t
 
   val emit_mem_label :
-    reloc:[`Twelve] Arm64_ast.Symbol.same_section_or_reloc ->
+    reloc:[`Twelve] Arm64_ast.Symbol.same_unit_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
@@ -256,10 +256,16 @@ module DSL : sig
   val stack : Reg.t -> [`Mem of [> `Offset_imm]] Arm64_ast.Operand.t
 
   val label :
-    ?offset:int -> ?reloc:'w Arm64_ast.Symbol.same_section_or_reloc -> L.t -> 'a
+    ?offset:int ->
+    'w Arm64_ast.Symbol.same_unit_or_reloc ->
+    L.t ->
+    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
 
   val symbol :
-    ?offset:int -> ?reloc:'w Arm64_ast.Symbol.same_section_or_reloc -> S.t -> 'a
+    ?offset:int ->
+    'w Arm64_ast.Symbol.same_unit_or_reloc ->
+    S.t ->
+    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
 
   type scalar_fp_regs_3 = private
     | S_regs :
@@ -392,14 +398,14 @@ end = struct
 
   let v16b_v16b i = reg_v16b i.Linear.res.(0), reg_v16b i.Linear.arg.(0)
 
-  (* TODO: implement label and symbol properly *)
-  let label ?offset:_ ?reloc:_ (_lbl : L.t) = assert false
+  let label ?offset reloc lbl =
+    Arm64_ast.DSL.symbol (Arm64_ast.Symbol.create reloc ?offset (L.encode lbl))
 
-  let symbol ?offset:_ ?reloc:_ _s = assert false
+  let symbol ?offset reloc s =
+    Arm64_ast.DSL.symbol (Arm64_ast.Symbol.create reloc ?offset (S.encode s))
 
-  let emit_mem_symbol
-      ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc) ?offset r sym
-      =
+  let emit_mem_symbol ~(reloc : [`Twelve] Arm64_ast.Symbol.same_unit_or_reloc)
+      ?offset r sym =
     let index = reg_index r in
     let symbol = Arm64_ast.Symbol.create reloc ?offset (S.encode sym) in
     match r.typ with
@@ -412,7 +418,7 @@ end = struct
         "emit_mem_symbol: expected integer register for base, got %a"
         Printreg.reg r
 
-  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Symbol.same_section_or_reloc)
+  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Symbol.same_unit_or_reloc)
       ?offset r label =
     let index = reg_index r in
     let symbol = Arm64_ast.Symbol.create reloc ?offset (L.encode label) in
@@ -455,7 +461,7 @@ end = struct
     | Ibased (s, ofs) ->
       assert (not !Clflags.dlcode);
       (* see selection.ml *)
-      emit_mem_symbol r ~reloc:(Different_section LOWER_TWELVE) (S.create s)
+      emit_mem_symbol r ~reloc:(Needs_reloc LOWER_TWELVE) (S.create s)
         ~offset:ofs
 
   let stack (r : Reg.t) =
@@ -1094,8 +1100,10 @@ type gc_call =
 let call_gc_sites = ref ([] : gc_call list)
 
 let emit_call_gc gc =
-  A.labeled_ins1 gc.gc_lbl BL (DSL.symbol (S.create "caml_call_gc"));
-  A.labeled_ins1 gc.gc_frame_lbl B (DSL.label gc.gc_return_lbl)
+  A.labeled_ins1 gc.gc_lbl BL
+    (DSL.symbol Same_section_and_unit (S.create "caml_call_gc"));
+  A.labeled_ins1 gc.gc_frame_lbl B
+    (DSL.label Same_section_and_unit gc.gc_return_lbl)
 
 (* Record calls to local stack reallocation *)
 
@@ -1116,8 +1124,9 @@ let emit_debug_info ?discriminator dbg =
 let emit_local_realloc lr =
   D.define_label lr.lr_lbl;
   emit_debug_info lr.lr_dbg;
-  A.ins1 BL (DSL.symbol (S.create "caml_call_local_realloc"));
-  A.ins1 B (DSL.label lr.lr_return_lbl)
+  A.ins1 BL
+    (DSL.symbol Same_section_and_unit (S.create "caml_call_local_realloc"));
+  A.ins1 B (DSL.label Same_section_and_unit lr.lr_return_lbl)
 
 (* Local stack reallocation *)
 
@@ -1144,12 +1153,13 @@ let emit_stack_realloc () =
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
         DSL.mem_pre_pair ~base:(DSL.Reg.sp ()) ~offset:(-16) );
-    A.ins1 BL (DSL.symbol (S.create "caml_call_realloc_stack"));
+    A.ins1 BL
+      (DSL.symbol Same_section_and_unit (S.create "caml_call_realloc_stack"));
     A.ins3 LDP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
         DSL.mem_post_pair ~base:(DSL.Reg.sp ()) ~offset:16 );
-    A.ins1 B (DSL.label sc_return)
+    A.ins1 B (DSL.label Same_section_and_unit sc_return)
 
 (* Names of various instructions *)
 
@@ -1420,23 +1430,23 @@ let emit_load_symbol_addr dst s =
   let open Arm64_ast.Symbol in
   if macosx
   then (
-    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol s ~reloc:(Different_section GOT_PAGE));
+    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol (Needs_reloc GOT_PAGE) s);
     A.ins2 LDR
       ( DSL.reg_x dst,
-        DSL.emit_mem_symbol dst ~reloc:(Different_section GOT_PAGE_OFF) s ))
+        DSL.emit_mem_symbol dst ~reloc:(Needs_reloc GOT_PAGE_OFF) s ))
   else if not !Clflags.dlcode
   then (
-    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol s);
+    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol (Needs_reloc PAGE) s);
     A.ins4 ADD_immediate
       ( DSL.reg_x dst,
         DSL.reg_x dst,
-        DSL.symbol s ~reloc:(Different_section LOWER_TWELVE),
+        DSL.symbol (Needs_reloc LOWER_TWELVE) s,
         DSL.optional_none ))
   else (
-    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol ~reloc:(Different_section GOT) s);
+    A.ins2 ADRP (DSL.reg_x dst, DSL.symbol (Needs_reloc GOT_PAGE) s);
     A.ins2 LDR
       ( DSL.reg_x dst,
-        DSL.emit_mem_symbol dst ~reloc:(Different_section GOT_LOWER_TWELVE) s ))
+        DSL.emit_mem_symbol dst ~reloc:(Needs_reloc GOT_LOWER_TWELVE) s ))
 
 (* The following functions are used for calculating the sizes of the call GC and
    bounds check points emitted out-of-line from the function body. See
@@ -1804,7 +1814,7 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
         DSL.addressing (Iindexed domain_local_sp_offset) reg_domain_state_ptr );
     A.ins_cmp_reg (DSL.reg_x r) (DSL.reg_x reg_tmp1) DSL.optional_none;
     let lbl_call = L.create Text in
-    A.ins1 (B_cond LT) (DSL.label lbl_call);
+    A.ins1 (B_cond LT) (DSL.label Same_section_and_unit lbl_call);
     let lbl_after_alloc = L.create Text in
     D.define_label lbl_after_alloc;
     A.ins2 LDR
@@ -1835,11 +1845,11 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
       A.ins_cmp_reg (DSL.reg_x reg_alloc_ptr) (DSL.reg_x reg_tmp1)
         DSL.optional_none;
       (if not far
-      then A.ins1 (B_cond CC) (DSL.label lbl_call_gc)
+      then A.ins1 (B_cond CC) (DSL.label Same_section_and_unit lbl_call_gc)
       else
         let lbl = L.create Text in
-        A.ins1 (B_cond CS) (DSL.label lbl);
-        A.ins1 B (DSL.label lbl_call_gc);
+        A.ins1 (B_cond CS) (DSL.label Same_section_and_unit lbl);
+        A.ins1 B (DSL.label Same_section_and_unit lbl_call_gc);
         D.define_label lbl);
       A.labeled_ins4 lbl_after_alloc ADD_immediate
         ( DSL.reg_x i.res.(0),
@@ -1854,12 +1864,15 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
            :: !call_gc_sites)
     else (
       (match n with
-      | 16 -> A.ins1 BL (DSL.symbol (S.create "caml_alloc1"))
-      | 24 -> A.ins1 BL (DSL.symbol (S.create "caml_alloc2"))
-      | 32 -> A.ins1 BL (DSL.symbol (S.create "caml_alloc3"))
+      | 16 ->
+        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc1"))
+      | 24 ->
+        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc2"))
+      | 32 ->
+        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_alloc3"))
       | _ ->
         emit_intconst reg_x8 (Nativeint.of_int n);
-        A.ins1 BL (DSL.symbol (S.create "caml_allocN")));
+        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_allocN")));
       A.labeled_ins4 lbl_frame ADD_immediate
         ( DSL.reg_x i.res.(0),
           DSL.reg_x reg_alloc_ptr,
@@ -1880,22 +1893,22 @@ let assembly_code_for_poll i ~far ~return_label =
   then (
     match return_label with
     | None ->
-      A.ins1 (B_cond LS) (DSL.label lbl_call_gc);
+      A.ins1 (B_cond LS) (DSL.label Same_section_and_unit lbl_call_gc);
       D.define_label lbl_after_poll
     | Some return_label ->
-      A.ins1 (B_cond HI) (DSL.label return_label);
-      A.ins1 B (DSL.label lbl_call_gc))
+      A.ins1 (B_cond HI) (DSL.label Same_section_and_unit return_label);
+      A.ins1 B (DSL.label Same_section_and_unit lbl_call_gc))
   else
     match return_label with
     | None ->
-      A.ins1 (B_cond HI) (DSL.label lbl_after_poll);
-      A.ins1 B (DSL.label lbl_call_gc);
+      A.ins1 (B_cond HI) (DSL.label Same_section_and_unit lbl_after_poll);
+      A.ins1 B (DSL.label Same_section_and_unit lbl_call_gc);
       D.define_label lbl_after_poll
     | Some return_label ->
       let lbl = L.create Text in
-      A.ins1 (B_cond LS) (DSL.label lbl);
-      A.ins1 B (DSL.label return_label);
-      A.labeled_ins1 lbl B (DSL.label lbl_call_gc));
+      A.ins1 (B_cond LS) (DSL.label Same_section_and_unit lbl);
+      A.ins1 B (DSL.label Same_section_and_unit return_label);
+      A.labeled_ins1 lbl B (DSL.label Same_section_and_unit lbl_call_gc));
   call_gc_sites
     := { gc_lbl = lbl_call_gc;
          gc_return_lbl = lbl_after_poll;
@@ -1926,51 +1939,46 @@ let emit_load_literal dst lbl =
   let open Arm64_ast.Symbol in
   if macosx
   then (
-    A.ins2 ADRP
-      (DSL.reg_x reg_tmp1, DSL.label ~reloc:(Different_section PAGE) lbl);
+    A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbl);
     match dst.typ with
     | Float ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_d dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section PAGE_OFF) lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc PAGE_OFF) lbl )
     | Float32 ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_s dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section PAGE_OFF) lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc PAGE_OFF) lbl )
     | Val | Int | Addr ->
       A.ins2 LDR
         ( DSL.reg_x dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section PAGE_OFF) lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc PAGE_OFF) lbl )
     | Vec128 | Valx2 ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_q_operand dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section PAGE_OFF) lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc PAGE_OFF) lbl )
     | Vec256 | Vec512 ->
       Misc.fatal_errorf "emit_load_literal: unexpected vector register %a"
         Printreg.reg dst)
   else (
-    A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.label lbl);
+    A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbl);
     match dst.typ with
     | Float ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_d dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section LOWER_TWELVE)
-            lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc LOWER_TWELVE) lbl )
     | Float32 ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_s dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section LOWER_TWELVE)
-            lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc LOWER_TWELVE) lbl )
     | Val | Int | Addr ->
       A.ins2 LDR
         ( DSL.reg_x dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section LOWER_TWELVE)
-            lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc LOWER_TWELVE) lbl )
     | Vec128 | Valx2 ->
       A.ins2 LDR_simd_and_fp
         ( DSL.reg_q_operand dst,
-          DSL.emit_mem_label reg_tmp1 ~reloc:(Different_section LOWER_TWELVE)
-            lbl )
+          DSL.emit_mem_label reg_tmp1 ~reloc:(Needs_reloc LOWER_TWELVE) lbl )
     | Vec256 | Vec512 ->
       Misc.fatal_errorf "emit_load_literal: unexpected vector register %a"
         Printreg.reg dst)
@@ -2171,7 +2179,7 @@ let emit_instr i =
     A.ins1 BLR (DSL.reg_x i.arg.(0));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op (Lcall_imm { func }) ->
-    A.ins1 BL (DSL.symbol (S.create func.sym_name));
+    A.ins1 BL (DSL.symbol Same_section_and_unit (S.create func.sym_name));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> A.ins1 BR (DSL.reg_x i.arg.(0))
   | Lcall_op (Ltailcall_imm { func }) ->
@@ -2179,8 +2187,9 @@ let emit_instr i =
     then
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
-      | Some tailrec_entry_point -> A.ins1 B (DSL.label tailrec_entry_point)
-    else A.ins1 B (DSL.symbol (S.create func.sym_name))
+      | Some tailrec_entry_point ->
+        A.ins1 B (DSL.label Same_section_and_unit tailrec_entry_point)
+    else A.ins1 B (DSL.symbol Same_section_and_unit (S.create func.sym_name))
   | Lcall_op (Lextcall { func; alloc; stack_ofs; _ }) ->
     if Config.runtime5 && stack_ofs > 0
     then (
@@ -2191,12 +2200,13 @@ let emit_instr i =
           DSL.imm (Misc.align stack_ofs 16),
           DSL.optional_none );
       emit_load_symbol_addr reg_x8 (S.create func);
-      A.ins1 BL (DSL.symbol (S.create "caml_c_call_stack_args"));
+      A.ins1 BL
+        (DSL.symbol Same_section_and_unit (S.create "caml_c_call_stack_args"));
       record_frame i.live (Dbg_other i.dbg))
     else if alloc
     then (
       emit_load_symbol_addr reg_x8 (S.create func);
-      A.ins1 BL (DSL.symbol (S.create "caml_c_call"));
+      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_c_call"));
       record_frame i.live (Dbg_other i.dbg))
     else (
       (*= store ocaml stack in the frame pointer register
@@ -2214,7 +2224,7 @@ let emit_instr i =
             DSL.addressing (Iindexed offset) reg_domain_state_ptr );
         A.ins_mov_to_sp ~src:(DSL.reg_x reg_tmp1))
       else D.cfi_remember_state ();
-      A.ins1 BL (DSL.symbol (S.create func));
+      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create func));
       if Config.runtime5 then A.ins_mov_to_sp ~src:(DSL.fp ());
       D.cfi_restore_state ())
   | Lop (Stackoffset n) ->
@@ -2236,8 +2246,7 @@ let emit_instr i =
         (* see selection_utils.ml *)
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~reloc:(Different_section PAGE) ~offset:ofs (S.create s)
-          );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create s) );
         reg_tmp1
     in
     let default_addressing = DSL.addressing addressing_mode base in
@@ -2272,13 +2281,11 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
         let s = S.create s in
-        A.ins2 ADRP
-          ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~reloc:(Different_section PAGE) ~offset s );
+        A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
             DSL.reg_x reg_tmp1,
-            DSL.symbol s ~reloc:(Different_section LOWER_TWELVE) ~offset,
+            DSL.symbol ~offset (Needs_reloc LOWER_TWELVE) s,
             DSL.optional_none ));
       A.ins2 LDR_simd_and_fp (DSL.reg_q_operand dst, DSL.mem reg_tmp1)
     | Twofiftysix_aligned | Twofiftysix_unaligned | Fivetwelve_aligned
@@ -2296,8 +2303,7 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~reloc:(Different_section PAGE) ~offset:ofs (S.create s)
-          );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create s) );
         reg_tmp1
     in
     match size with
@@ -2329,13 +2335,11 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
         let s = S.create s in
-        A.ins2 ADRP
-          ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~reloc:(Different_section PAGE) ~offset s );
+        A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
             DSL.reg_x reg_tmp1,
-            DSL.symbol s ~reloc:(Different_section LOWER_TWELVE) ~offset,
+            DSL.symbol ~offset (Needs_reloc LOWER_TWELVE) s,
             DSL.optional_none );
         A.ins2 STR_simd_and_fp (DSL.reg_q_operand src, DSL.mem reg_tmp1))
     | Twofiftysix_aligned | Twofiftysix_unaligned | Fivetwelve_aligned
@@ -2646,33 +2650,39 @@ let emit_instr i =
     D.define_label lbl
   | Lbranch lbl ->
     let lbl = label_to_asm_label ~section:Text lbl in
-    A.ins1 B (DSL.label lbl)
+    A.ins1 B (DSL.label Same_section_and_unit lbl)
   | Lcondbranch (tst, lbl) -> (
     let lbl = label_to_asm_label ~section:Text lbl in
     match tst with
-    | Itruetest -> A.ins2 CBNZ (DSL.reg_x i.arg.(0), DSL.label lbl)
-    | Ifalsetest -> A.ins2 CBZ (DSL.reg_x i.arg.(0), DSL.label lbl)
+    | Itruetest ->
+      A.ins2 CBNZ (DSL.reg_x i.arg.(0), DSL.label Same_section_and_unit lbl)
+    | Ifalsetest ->
+      A.ins2 CBZ (DSL.reg_x i.arg.(0), DSL.label Same_section_and_unit lbl)
     | Iinttest cmp ->
       A.ins_cmp_reg
         (DSL.reg_x i.arg.(0))
         (DSL.reg_x i.arg.(1))
         DSL.optional_none;
       let comp = cond_for_comparison cmp in
-      A.ins1 (B_cond comp) (DSL.label lbl)
+      A.ins1 (B_cond comp) (DSL.label Same_section_and_unit lbl)
     | Iinttest_imm (cmp, n) ->
       emit_cmpimm i.arg.(0) n;
       let comp = cond_for_comparison cmp in
-      A.ins1 (B_cond comp) (DSL.label lbl)
+      A.ins1 (B_cond comp) (DSL.label Same_section_and_unit lbl)
     | Ifloattest (Float64, cmp) ->
       let comp = cond_for_float_comparison cmp in
       A.ins2 FCMP (DSL.reg_d i.arg.(0), DSL.reg_d i.arg.(1));
-      A.ins1 (B_cond_float comp) (DSL.label lbl)
+      A.ins1 (B_cond_float comp) (DSL.label Same_section_and_unit lbl)
     | Ifloattest (Float32, cmp) ->
       let comp = cond_for_float_comparison cmp in
       A.ins2 FCMP (DSL.reg_s i.arg.(0), DSL.reg_s i.arg.(1));
-      A.ins1 (B_cond_float comp) (DSL.label lbl)
-    | Ioddtest -> A.ins3 TBNZ (DSL.reg_x i.arg.(0), DSL.imm_six 0, DSL.label lbl)
-    | Ieventest -> A.ins3 TBZ (DSL.reg_x i.arg.(0), DSL.imm_six 0, DSL.label lbl)
+      A.ins1 (B_cond_float comp) (DSL.label Same_section_and_unit lbl)
+    | Ioddtest ->
+      A.ins3 TBNZ
+        (DSL.reg_x i.arg.(0), DSL.imm_six 0, DSL.label Same_section_and_unit lbl)
+    | Ieventest ->
+      A.ins3 TBZ
+        (DSL.reg_x i.arg.(0), DSL.imm_six 0, DSL.label Same_section_and_unit lbl)
     )
   | Lcondbranch3 (lbl0, lbl1, lbl2) -> (
     A.ins_cmp (DSL.reg_x i.arg.(0)) (DSL.imm 1) DSL.optional_none;
@@ -2680,20 +2690,21 @@ let emit_instr i =
     | None -> ()
     | Some lbl ->
       let lbl = label_to_asm_label ~section:Text lbl in
-      A.ins1 (B_cond LT) (DSL.label lbl));
+      A.ins1 (B_cond LT) (DSL.label Same_section_and_unit lbl));
     (match lbl1 with
     | None -> ()
     | Some lbl ->
       let lbl = label_to_asm_label ~section:Text lbl in
-      A.ins1 (B_cond EQ) (DSL.label lbl));
+      A.ins1 (B_cond EQ) (DSL.label Same_section_and_unit lbl));
     match lbl2 with
     | None -> ()
     | Some lbl ->
       let lbl = label_to_asm_label ~section:Text lbl in
-      A.ins1 (B_cond GT) (DSL.label lbl))
+      A.ins1 (B_cond GT) (DSL.label Same_section_and_unit lbl))
   | Lswitch jumptbl ->
+    let open Arm64_ast.Symbol in
     let lbltbl = L.create Text in
-    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label lbltbl);
+    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbltbl);
     A.ins4 ADD_shifted_register
       ( DSL.reg_x reg_tmp1,
         DSL.reg_x reg_tmp1,
@@ -2703,7 +2714,7 @@ let emit_instr i =
     D.define_label lbltbl;
     for j = 0 to Array.length jumptbl - 1 do
       let jumplbl = label_to_asm_label ~section:Text jumptbl.(j) in
-      A.ins1 B (DSL.label jumplbl)
+      A.ins1 B (DSL.label Same_section_and_unit jumplbl)
     done
   (*= Alternative:
         let lbltbl = Cmm.new_label() in
@@ -2723,8 +2734,9 @@ let emit_instr i =
     D.cfi_adjust_cfa_offset ~bytes:delta_bytes;
     stack_offset := !stack_offset + delta_bytes
   | Lpushtrap { lbl_handler } ->
+    let open Arm64_ast.Symbol in
     let lbl_handler = label_to_asm_label ~section:Text lbl_handler in
-    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label lbl_handler);
+    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbl_handler);
     stack_offset := !stack_offset + 16;
     A.ins3 STP
       ( DSL.reg_x reg_trap_ptr,
@@ -2740,12 +2752,15 @@ let emit_instr i =
   | Lraise k -> (
     match k with
     | Lambda.Raise_regular ->
-      A.ins1 BL (DSL.symbol (S.create "caml_raise_exn"));
+      A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_raise_exn"));
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_reraise ->
       if Config.runtime5
-      then A.ins1 BL (DSL.symbol (S.create "caml_reraise_exn"))
-      else A.ins1 BL (DSL.symbol (S.create "caml_raise_exn"));
+      then
+        A.ins1 BL
+          (DSL.symbol Same_section_and_unit (S.create "caml_reraise_exn"))
+      else
+        A.ins1 BL (DSL.symbol Same_section_and_unit (S.create "caml_raise_exn"));
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_notrace ->
       A.ins_mov_to_sp ~src:(DSL.reg_x reg_trap_ptr);
@@ -2765,7 +2780,7 @@ let emit_instr i =
       (DSL.reg_x reg_tmp1, DSL.addressing (Iindexed offset) reg_domain_state_ptr);
     emit_addimm reg_tmp1 reg_tmp1 f;
     A.ins_cmp_reg (DSL.sp ()) (DSL.reg_x reg_tmp1) DSL.optional_none;
-    A.ins1 (B_cond CC) (DSL.label overflow);
+    A.ins1 (B_cond CC) (DSL.label Same_section_and_unit overflow);
     D.define_label ret;
     stack_realloc
       := Some
