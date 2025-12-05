@@ -25,43 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-open Arm64_ast
-
-module Relocation : sig
-  module Kind : sig
-    type t = private
-      | R_AARCH64_ADR_PREL_LO21 of string
-      | R_AARCH64_ADR_PREL_PG_HI21 of string
-      | R_AARCH64_LD64_GOT_LO12_NC of string
-      | R_AARCH64_ADD_ABS_LO12_NC of string
-  end
-
-  type t = private
-    { offset_from_section_beginning : int;
-      kind : Kind.t
-    }
+module Relocation = struct
+  type t =
+    | X86 of X86_binary_emitter.Relocation.t
+    | Arm64 of Arm64_binary_emitter.Relocation.t
 end
-
-module Section_state : sig
-  type t
-
-  val buffer : t -> Buffer.t
-
-  val find_symbol_offset_in_bytes : t -> string -> int option
-
-  val find_label_offset_in_bytes : t -> string -> int option
-
-  val relocations : t -> Relocation.t list
-
-  val symbols : t -> (string, int) Hashtbl.t
-end
-
-type t
-
-val create : unit -> t
-
-val add_instruction : t -> Instruction.t -> unit
-
-val add_directive : t -> Asm_targets.Asm_directives.Directive.t -> unit
-
-val emit : t -> Section_state.t Asm_targets.Asm_section.Tbl.t

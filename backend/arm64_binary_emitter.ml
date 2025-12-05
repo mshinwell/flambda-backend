@@ -31,49 +31,30 @@ module D = Asm_targets.Asm_directives
 module L = Asm_targets.Asm_label
 module S = Asm_targets.Asm_symbol
 
-type reloc_type =
-  | R_AARCH64_ADR_PREL_LO21
-  | R_AARCH64_ADR_PREL_PG_HI21
-  | R_AARCH64_LD64_GOT_LO12_NC
-  | R_AARCH64_ADD_ABS_LO12_NC
+module Relocation = struct
+  module Kind = struct
+    type t =
+      | R_AARCH64_ADR_PREL_LO21 of string
+      | R_AARCH64_ADR_PREL_PG_HI21 of string
+      | R_AARCH64_LD64_GOT_LO12_NC of string
+      | R_AARCH64_ADD_ABS_LO12_NC of string
+  end
+
+  type t =
+    { offset_from_section_beginning : int;
+      kind : Kind.t
+    }
+end
 
 (* TODO: Asm_directives uses strings for labels and symbols. We should change it
    to use Asm_label.t and Asm_symbol.t, and update this module accordingly. *)
-module Section_state : sig
-  type t
-
-  val create : unit -> t
-
-  val buffer : t -> Buffer.t
-
-  val add_relocation_at_current_offset :
-    t -> symbol_name:string -> reloc_type:reloc_type -> unit
-
-  val define_symbol : t -> string -> unit
-
-  val define_label : t -> string -> unit
-
-  val find_symbol_offset_in_bytes : t -> string -> int option
-
-  val find_label_offset_in_bytes : t -> string -> int option
-
-  val offset_in_bytes : t -> int
-
-  val set_offset_in_bytes : t -> int -> unit
-end = struct
-  type relocation =
-    { offset_in_bytes : int;
-      symbol_name : string;
-      reloc_type : reloc_type
-    }
-  [@@warning "-69"]
-
+module Section_state = struct
   type t =
     { buffer : Buffer.t;
       mutable offset_in_bytes : int;
       symbol_offset_tbl : (string, int) Hashtbl.t;
       label_offset_tbl : (string, int) Hashtbl.t;
-      mutable relocations : relocation list
+      mutable relocations : Relocation.t list
     }
 
   let create () =
@@ -90,9 +71,11 @@ end = struct
 
   let set_offset_in_bytes t offset = t.offset_in_bytes <- offset
 
-  let add_relocation_at_current_offset t ~symbol_name ~reloc_type =
+  let add_relocation_at_current_offset t ~symbol_name:_ ~reloc_kind =
     t.relocations
-      <- { offset_in_bytes = t.offset_in_bytes; symbol_name; reloc_type }
+      <- { Relocation.offset_from_section_beginning = t.offset_in_bytes;
+           kind = reloc_kind
+         }
          :: t.relocations
 
   let define_symbol t name =
@@ -106,6 +89,12 @@ end = struct
 
   let find_label_offset_in_bytes t name =
     Hashtbl.find_opt t.label_offset_tbl name
+
+  let relocations t = List.rev t.relocations
+
+  let symbols t = t.symbol_offset_tbl
+
+  let labels t = t.label_offset_tbl
 end
 
 let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
@@ -982,13 +971,13 @@ let encode_load_store_gp_sized :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let reloc_type =
+      let reloc_kind : Relocation.Kind.t =
         match reloc with
-        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC
-        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC sym.name
+        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC sym.name
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_type;
+        ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       let imm12_unmasked = sym.offset lsr size in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
@@ -1233,13 +1222,13 @@ let encode_load_store_simd_fp :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      let reloc_type =
+      let reloc_kind : Relocation.Kind.t =
         match reloc with
-        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC
-        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC sym.name
+        | PAGE_OFF | LOWER_TWELVE -> R_AARCH64_ADD_ABS_LO12_NC sym.name
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_type;
+        ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       let imm12_unmasked = sym.offset / scale in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
@@ -1349,13 +1338,13 @@ let encode_instruction :
     let sh = match shift with Some _ -> 1 | None -> 0 in
     match sym.reloc with
     | Needs_reloc reloc ->
-      let reloc_type =
+      let reloc_kind : Relocation.Kind.t =
         match reloc with
-        | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC
-        | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC
+        | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC sym.name
+        | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC sym.name
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_type;
+        ~reloc_kind;
       encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12:sym.offset ~rn ~rd)
   | ( Quad
         ( Reg ({ reg_name = GP _; _ } as rd),
@@ -1397,12 +1386,12 @@ let encode_instruction :
     encode_simd_across_lanes ~q ~u:0 ~size ~opcode:0b11011 ~rn ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_type:R_AARCH64_ADR_PREL_LO21;
+      ~reloc_kind:(R_AARCH64_ADR_PREL_LO21 sym.name);
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_type:R_AARCH64_ADR_PREL_PG_HI21;
+      ~reloc_kind:(R_AARCH64_ADR_PREL_PG_HI21 sym.name);
     let immlo, immhi = split_21bit_immediate sym.offset in
     encode_adr ~op:1 ~immlo ~immhi ~rd
   | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
@@ -2691,10 +2680,4 @@ let emit emitter =
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
     section_tbl;
   emit_code_and_data emitter ~state_for_section;
-  (* Convert Section_state.t table to Buffer.t table *)
-  let buffer_tbl = Asm_section.Tbl.create 10 in
-  Asm_section.Tbl.iter
-    (fun section state ->
-      Asm_section.Tbl.add buffer_tbl section (Section_state.buffer state))
-    section_tbl;
-  buffer_tbl
+  section_tbl

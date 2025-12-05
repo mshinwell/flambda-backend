@@ -597,6 +597,7 @@
   x86_proc
   arm64_ast
   arm64_binary_emitter
+  binary_emitter
   zero_alloc_checker
   zero_alloc_info
   ;; backend/cfg

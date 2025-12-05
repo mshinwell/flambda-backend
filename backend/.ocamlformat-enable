@@ -26,6 +26,8 @@ arm64_ast.mli
 arm64_binary_emitter.ml
 arm64_binary_emitter.mli
 arm64_logical_immediates.ml
+binary_emitter.ml
+binary_emitter.mli
 arm64_logical_immediates.mli
 asm_targets/**/*.ml
 asm_targets/**/*.mli
