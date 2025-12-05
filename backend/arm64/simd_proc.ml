@@ -43,337 +43,305 @@ let simd_rounding_to_ast_rounding (rm : Simd.Rounding_mode.t) :
 type _ operand_shape =
   (* Binary vector operations: (result * arg0 * arg1) *)
   | V2S_V2S_V2S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]])
         operand_shape
   | V4S_V4S_V4S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]])
         operand_shape
   | V2D_V2D_V2D
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]]
+        * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]]
+        * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]])
         operand_shape
   | V16B_V16B_V16B
-      : ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+        * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+        * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]])
         operand_shape
-  (* EXT: three V16B operands plus immediate *)
+  (* EXT: three V16B operands plus immediate - uses old single-param form *)
   | V16B_V16B_V16B_imm6 :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Imm of [> `Six]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
+         * [< `Imm of [< `Six]])
          operand_shape
   | V8H_V8H_V8H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]]
+        * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]]
+        * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]])
         operand_shape
   | V4S_V8H_V8H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]]
+        * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]])
         operand_shape
   | V4S_V4H_V4H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]]
+        * [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]])
         operand_shape
   (* Unary vector operations: (result * arg) *)
   | V4S_V4S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+        * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]])
         operand_shape
   | V2D_V2S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V2S] * [< `S]]]])
         operand_shape
   | V2S_V2D_cvt
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V2S] * [< `S]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]])
         operand_shape
   | V16B_V16B
-      : ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+        * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]])
         operand_shape
   | V2D_V2D
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]]
+        * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]])
         operand_shape
   | V2D_V2D_imm6 :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Imm of [> `Six]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+         * [< `Imm of [< `Six]])
          operand_shape
   | V4S_V4S_imm6 :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-         * [> `Imm of [> `Six]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+         * [< `Imm of [< `Six]])
          operand_shape
   | V8H_V8H_imm6 :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-         * [> `Imm of [> `Six]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+         * [< `Imm of [< `Six]])
          operand_shape
   | V16B_V16B_imm6 :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Imm of [> `Six]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]]
+         * [< `Imm of [< `Six]])
          operand_shape
   | V8H_V8H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]]
+        * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]])
         operand_shape
   | V2S_V2D_narrow
-      : ([> `Reg of [> `Neon of [> `Vector of [`V2S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V2S] * [< `S]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]])
         operand_shape
   | V4H_V4S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V4H] * [< `H]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]])
         operand_shape
   | V8B_V8H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V8B]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V8B] * [< `B]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]])
         operand_shape
   | V4S_V4H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4H]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V4H] * [< `H]]]])
         operand_shape
   | V8H_V8B
-      : ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8B]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V8B] * [< `B]]]])
         operand_shape
   (* Narrowing operations with "to_First": (result * new_data) Result is
      i.res.(0) which also contains first arg, second is i.arg.(1) *)
   | V4S_V2D
-      : ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]])
         operand_shape
   | V8H_V4S
-      : ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]])
         operand_shape
   | V16B_V8H
-      : ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]]
+        * [< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]])
         operand_shape
   (* Scalar operations: (result * arg0 * arg1) or (result * arg) *)
   (* CR mshinwell: figure out how to combine these into one case. Seems like
      there might be trouble with variance here? *)
   | RegD_RegD_RegD
-      : (([> `Reg of [> `Neon of [> `Scalar of [> `D]]]] as 'r)
-         Arm64_ast.Operand.t
-        * 'r Arm64_ast.Operand.t
-        * 'r Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Scalar of [`D]]]]
+        * [`Reg of [`Neon of [`Scalar of [`D]]]]
+        * [`Reg of [`Neon of [`Scalar of [`D]]]])
         operand_shape
   | RegS_RegS_RegS
-      : (([> `Reg of [> `Neon of [> `Scalar of [> `S]]]] as 'r)
-         Arm64_ast.Operand.t
-        * 'r Arm64_ast.Operand.t
-        * 'r Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Scalar of [`S]]]]
+        * [`Reg of [`Neon of [`Scalar of [`S]]]]
+        * [`Reg of [`Neon of [`Scalar of [`S]]]])
         operand_shape
   | RegD_RegD
-      : ([> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Scalar of [`D]]]]
+        * [`Reg of [`Neon of [`Scalar of [`D]]]])
         operand_shape
   | RegS_RegS
-      : ([> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Arm64_ast.Operand.t)
+      : ([`Reg of [`Neon of [`Scalar of [`S]]]]
+        * [`Reg of [`Neon of [`Scalar of [`S]]]])
         operand_shape
   | RegD_RegX
-      : (([> `Reg of [> `Neon of [> `Scalar of [> `D]]]] as 'r)
-         Arm64_ast.Operand.t
-        * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Scalar of [< `D]]]]
+        * [< `Reg of [< `GP of [< `X]]])
         operand_shape
   | RegS_RegX
-      : (([> `Reg of [> `Neon of [> `Scalar of [> `S]]]] as 'r)
-         Arm64_ast.Operand.t
-        * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `Neon of [< `Scalar of [< `S]]]]
+        * [< `Reg of [< `GP of [< `X]]])
         operand_shape
   | RegX_RegD
-      : ([> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Scalar of [> `D]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `GP of [< `X]]]
+        * [< `Reg of [< `Neon of [< `Scalar of [< `D]]]])
         operand_shape
   | RegX_RegS
-      : ([> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-        * [> `Reg of [> `Neon of [> `Scalar of [> `S]]]] Arm64_ast.Operand.t)
+      : ([< `Reg of [< `GP of [< `X]]]
+        * [< `Reg of [< `Neon of [< `Scalar of [< `S]]]])
         operand_shape
   (* Extract lane: (scalar_result * vector_arg_with_lane) *)
   | Reg_LaneB :
       int
-      -> ([> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `B]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `B]]]]])
          operand_shape
   | Reg_LaneH :
       int
-      -> ([> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `H]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `H]]]]])
          operand_shape
   | Reg_LaneS :
       int
-      -> ([> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `S]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `S]]]]])
          operand_shape
   | Reg_LaneD :
       int
-      -> ([> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `X]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `D]]]]])
          operand_shape
-  (* Sign-extend lane to X register (for SMOV) *)
+  (* Sign-extend lane to X register (for SMOV) - lane in instruction *)
   | RegX_V16B :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]])
          operand_shape
   | RegX_V8H :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]])
          operand_shape
   | RegX_V4S :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]])
          operand_shape
-  (* Extract 64-bit lane to X register (for UMOV) *)
+  (* Extract 64-bit lane to X register (for UMOV) - lane in instruction *)
   | RegX_V2D :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]])
          operand_shape
-  (* Insert lane from GP register: (lane_index * vector_result * gp_arg) *)
+  (* Insert lane from GP register (for INS) - lane in instruction *)
   | V16B_W :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]]
+         * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]])
          operand_shape
   | V8H_W :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+         * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]])
          operand_shape
   | V4S_W :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+         * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]])
          operand_shape
   | V2D_X :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+         * [< `Reg of [< `GP of [< `W | `X] | `Neon of [< `Scalar of [< `D]]]])
          operand_shape
-  (* Copy lane to lane: (dst_lane * src_lane * dst_vector * src_vector) *)
+  (* Copy lane to lane (for INS_V) - lanes in instruction *)
   | V2D_V2D_lanes :
       int * int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]])
          operand_shape
   (* Insert lane: (vector_result_with_lane * scalar_arg) *)
   | LaneB_W :
       int
-      -> ([> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `B]]]]]
-          Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `B]]]]]
+         * [< `Reg of [< `GP of [< `W]]])
          operand_shape
   | LaneH_W :
       int
-      -> ([> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `H]]]]]
-          Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `H]]]]]
+         * [< `Reg of [< `GP of [< `W]]])
          operand_shape
   | LaneS_W :
       int
-      -> ([> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `S]]]]]
-          Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `W]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `S]]]]]
+         * [< `Reg of [< `GP of [< `W]]])
          operand_shape
   | LaneD_Reg :
       int
-      -> ([> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
-          Arm64_ast.Operand.t
-         * [> `Reg of [> `GP of [> `X]]] Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `D]]]]]
+         * [< `Reg of [< `GP of [< `X]]])
          operand_shape
   | LaneD_LaneD :
       int * int
-      -> ([> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
-          Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `D]]]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `D]]]]])
          operand_shape
   (* Dup lane: (vector_result * vector_arg_with_lane) *)
   | V16B_LaneB :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `B]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V16B] * [< `B]]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `B]]]]])
          operand_shape
   | V8H_LaneH :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `H]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V8H] * [< `H]]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `H]]]]])
          operand_shape
   | V4S_LaneS :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `S]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V4S] * [< `S]]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `S]]]]])
          operand_shape
   | V2D_LaneD :
       int
-      -> ([> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Lane of [> `Scalar of [> `D]]]]]
-           Arm64_ast.Operand.t)
+      -> ([< `Reg of [< `Neon of [< `Vector of [< `V2D] * [< `D]]]]
+         * [< `Reg of [< `Neon of [< `Lane of [< `Scalar of [< `D]]]]])
          operand_shape
-  (* DUP operand shapes: (Lane_index * dest_vector * src_vector) *)
+  (* DUP operand shapes: (dest_vector * src_vector) - lane in instruction *)
   | DUP_V16B :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V16B]]]] Arm64_ast.Operand.t)
+      -> ([`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+         * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]])
          operand_shape
   | DUP_V8H :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V8H]]]] Arm64_ast.Operand.t)
+      -> ([`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]]
+         * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]])
          operand_shape
   | DUP_V4S :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V4S]]]] Arm64_ast.Operand.t)
+      -> ([`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
+         * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]])
          operand_shape
   | DUP_V2D :
       int
-      -> (Arm64_ast.Neon_reg_name.Lane_index.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t
-         * [> `Reg of [> `Neon of [> `Vector of [`V2D]]]] Arm64_ast.Operand.t)
+      -> ([`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]]
+         * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]])
          operand_shape
 
 type simd_operation_with_operand_regs =
@@ -521,10 +489,13 @@ let simd_operation_with_operand_regs (op : Simd.operation) :
   | Shrq_n_s16 n -> S (SSHR, V8H_V8H_imm6 n)
   | Shrq_n_s8 n ->
     S (SSHR, V16B_V16B_imm6 n) (* Sign-extend lane to X register *)
-  | Getq_lane_s32 { lane } -> S (SMOV, RegX_V4S lane)
-  | Getq_lane_s16 { lane } -> S (SMOV, RegX_V8H lane)
+  | Getq_lane_s32 { lane } ->
+    S (SMOV (Arm64_ast.Neon_reg_name.Lane_index.create lane), RegX_V4S lane)
+  | Getq_lane_s16 { lane } ->
+    S (SMOV (Arm64_ast.Neon_reg_name.Lane_index.create lane), RegX_V8H lane)
   | Getq_lane_s8 { lane } ->
-    S (SMOV, RegX_V16B lane) (* Extract bytes from two vectors *)
+    S (SMOV (Arm64_ast.Neon_reg_name.Lane_index.create lane), RegX_V16B lane)
+    (* Extract bytes from two vectors *)
   | Extq_u8 n -> S (EXT, V16B_V16B_V16B_imm6 n) (* Compare against zero *)
   | Cmpz_f32 c -> S (FCM_zero c, V4S_V4S)
   | Cmpz_f64 c -> S (FCM_zero c, V2D_V2D)
@@ -570,18 +541,33 @@ let simd_operation_with_operand_regs (op : Simd.operation) :
     ->
     Transformed_in_emit (* Lane operations - extract 64-bit lane *)
   | Getq_lane_s64 { lane } ->
-    S (UMOV, RegX_V2D lane) (* Lane operations - insert from GP register *)
-  | Setq_lane_s8 { lane } -> S (INS, V16B_W lane)
-  | Setq_lane_s16 { lane } -> S (INS, V8H_W lane)
-  | Setq_lane_s32 { lane } -> S (INS, V4S_W lane)
-  | Setq_lane_s64 { lane } -> S (INS, V2D_X lane) (* Copy lane to lane *)
+    S (UMOV (Arm64_ast.Neon_reg_name.Lane_index.create lane), RegX_V2D lane)
+    (* Lane operations - insert from GP register *)
+  | Setq_lane_s8 { lane } ->
+    S (INS (Arm64_ast.Neon_reg_name.Lane_index.create lane), V16B_W lane)
+  | Setq_lane_s16 { lane } ->
+    S (INS (Arm64_ast.Neon_reg_name.Lane_index.create lane), V8H_W lane)
+  | Setq_lane_s32 { lane } ->
+    S (INS (Arm64_ast.Neon_reg_name.Lane_index.create lane), V4S_W lane)
+  | Setq_lane_s64 { lane } ->
+    S (INS (Arm64_ast.Neon_reg_name.Lane_index.create lane), V2D_X lane)
+    (* Copy lane to lane *)
   | Copyq_laneq_s64 { src_lane; dst_lane } ->
-    S (INS_V, V2D_V2D_lanes (src_lane, dst_lane)) (* Duplicate lane *)
-  | Dupq_lane_s8 { lane } -> S (DUP, DUP_V16B lane)
-  | Dupq_lane_s16 { lane } -> S (DUP, DUP_V8H lane)
-  | Dupq_lane_s32 { lane } -> S (DUP, DUP_V4S lane)
+    let lanes =
+      Arm64_ast.Neon_reg_name.Lane_index.Src_and_dest.create
+        ~src:(Arm64_ast.Neon_reg_name.Lane_index.create src_lane)
+        ~dest:(Arm64_ast.Neon_reg_name.Lane_index.create dst_lane)
+    in
+    S (INS_V lanes, V2D_V2D_lanes (src_lane, dst_lane))
+    (* Duplicate lane *)
+  | Dupq_lane_s8 { lane } ->
+    S (DUP (Arm64_ast.Neon_reg_name.Lane_index.create lane), DUP_V16B lane)
+  | Dupq_lane_s16 { lane } ->
+    S (DUP (Arm64_ast.Neon_reg_name.Lane_index.create lane), DUP_V8H lane)
+  | Dupq_lane_s32 { lane } ->
+    S (DUP (Arm64_ast.Neon_reg_name.Lane_index.create lane), DUP_V4S lane)
   | Dupq_lane_s64 { lane } ->
-    S (DUP, DUP_V2D lane)
+    S (DUP (Arm64_ast.Neon_reg_name.Lane_index.create lane), DUP_V2D lane)
     (* Population count - CNT only works on 8-bit elements *)
   | Cntq_u8 -> S (CNT_vector, V16B_V16B)
   | Cntq_u16 | Min_scalar_f32 | Min_scalar_f64 | Max_scalar_f32 | Max_scalar_f64

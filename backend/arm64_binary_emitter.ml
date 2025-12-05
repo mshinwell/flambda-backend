@@ -622,20 +622,17 @@ let encode_fp_compare ~ftype ~rm ~opc2 ~rn =
   let result = logor result (of_int opc2) in
   result
 
-(* Floating-point <-> integer conversion - C4.1.95.33
-   Format: sf | 0 | S=0 | 11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
+(* Floating-point <-> integer conversion - C4.1.95.33 Format: sf | 0 | S=0 |
+   11110 | ftype | 1 | rmode | opcode | 000000 | Rn | Rd
 
    Common opcodes:
 
-   - SCVTF (int->FP): rmode=00, opcode=010
-   - UCVTF (int->FP): rmode=00, opcode=011
-   - FCVTNS (FP->int, nearest): rmode=00, opcode=000
-   - FCVTPS (FP->int, +inf): rmode=01, opcode=000
-   - FCVTMS (FP->int, -inf): rmode=10, opcode=000
-   - FCVTZS (FP->int, zero): rmode=11, opcode=000
-   - FCVTNU (FP->int, nearest unsigned): rmode=00, opcode=001
-   - FCVTZU (FP->int, zero unsigned): rmode=11, opcode=001
-   - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
+   - SCVTF (int->FP): rmode=00, opcode=010 - UCVTF (int->FP): rmode=00,
+   opcode=011 - FCVTNS (FP->int, nearest): rmode=00, opcode=000 - FCVTPS
+   (FP->int, +inf): rmode=01, opcode=000 - FCVTMS (FP->int, -inf): rmode=10,
+   opcode=000 - FCVTZS (FP->int, zero): rmode=11, opcode=000 - FCVTNU (FP->int,
+   nearest unsigned): rmode=00, opcode=001 - FCVTZU (FP->int, zero unsigned):
+   rmode=11, opcode=001 - FMOV (FP->GP or GP->FP): rmode=00, opcode=110/111 *)
 let encode_fp_int_conv ~sf ~ftype ~rmode ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
@@ -799,8 +796,7 @@ let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
 
 (* Helper to encode add/sub shifted register instructions.
 
-   - op: 0=ADD, 1=SUB
-   - s: 0=no flags, 1=set flags *)
+   - op: 0=ADD, 1=SUB - s: 0=no flags, 1=set flags *)
 let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
@@ -1099,11 +1095,10 @@ let encode_load_acquire :
   let result = logor result (of_int rt) in
   result
 
-(* Memory barrier encoding.
-   Format: 1101 0101 0000 0011 0011 | CRm[11:8] | op2[7:5] | 11111
+(* Memory barrier encoding. Format: 1101 0101 0000 0011 0011 | CRm[11:8] |
+   op2[7:5] | 11111
 
-   - DMB: op2=101
-   - DSB: op2=100 *)
+   - DMB: op2=101 - DSB: op2=100 *)
 let encode_memory_barrier ~op2 (barrier : Memory_barrier.t) =
   let crm =
     match barrier with
@@ -1494,11 +1489,9 @@ let encode_instruction :
     let q, size = vector_q_size vec in
     (* Integer vector compares (zero):
 
-       - CMGT (zero): U=0, opcode=01000
-       - CMEQ (zero): U=0, opcode=01001
-       - CMLT (zero): U=0, opcode=01010
-       - CMGE (zero): U=1, opcode=01000
-       - CMLE (zero): U=1, opcode=01001 *)
+       - CMGT (zero): U=0, opcode=01000 - CMEQ (zero): U=0, opcode=01001 - CMLT
+       (zero): U=0, opcode=01010 - CMGE (zero): U=1, opcode=01000 - CMLE (zero):
+       U=1, opcode=01001 *)
     let u, opcode =
       match cond with
       | Cond.GT -> 0, 0b01000
@@ -1604,9 +1597,8 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FP vector compares (register):
 
-       - FCMEQ: U=0, size=0x, opcode=11100
-       - FCMGE: U=1, size=0x, opcode=11100
-       - FCMGT: U=1, size=1x, opcode=11100 *)
+       - FCMEQ: U=0, size=0x, opcode=11100 - FCMGE: U=1, size=0x, opcode=11100 -
+       FCMGT: U=1, size=1x, opcode=11100 *)
     let u, size_hi =
       match cond with
       | Float_cond.EQ -> 0, 0
@@ -1622,11 +1614,9 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FP vector compares (zero):
 
-       - FCMGT (zero): U=0, size=1x, opcode=01100
-       - FCMEQ (zero): U=0, size=1x, opcode=01101
-       - FCMLT (zero): U=0, size=1x, opcode=01110
-       - FCMGE (zero): U=1, size=1x, opcode=01100
-       - FCMLE (zero): U=1, size=1x, opcode=01101 *)
+       - FCMGT (zero): U=0, size=1x, opcode=01100 - FCMEQ (zero): U=0, size=1x,
+       opcode=01101 - FCMLT (zero): U=0, size=1x, opcode=01110 - FCMGE (zero):
+       U=1, size=1x, opcode=01100 - FCMLE (zero): U=1, size=1x, opcode=01101 *)
     let u, opcode =
       match cond with
       | Float_cond.GT -> 0, 0b01100
@@ -1936,11 +1926,9 @@ let encode_instruction :
     let q, sz = vector_q_fp_sz vec in
     (* FRINT(mode) vector - encoding depends on rounding mode:
 
-       - N: U=0, size=0x, opcode=11000
-       - M: U=0, size=0x, opcode=11001
-       - P: U=0, size=1x, opcode=11000
-       - Z: U=0, size=1x, opcode=11001
-       - X: U=1, size=0x, opcode=11001 *)
+       - N: U=0, size=0x, opcode=11000 - M: U=0, size=0x, opcode=11001 - P: U=0,
+       size=1x, opcode=11000 - Z: U=0, size=1x, opcode=11001 - X: U=1, size=0x,
+       opcode=11001 *)
     let u, size_hi, opcode =
       match rm with
       | Rounding_mode.N -> 0, 0, 0b11000
@@ -2051,15 +2039,15 @@ let encode_instruction :
   | Quad (Reg rd, Reg rn, Reg rm, Reg ra), MADD ->
     let sf = Reg.gp_sf rd in
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
-  (* TODO: MOV is an alias; this should be removed from Instruction_name.t
-     and handled via a rewrite rule. *)
+  (* TODO: MOV is an alias; this should be removed from Instruction_name.t and
+     handled via a rewrite rule. *)
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Imm imm), MOV ->
     (* MOV (wide immediate): alias of MOVZ *)
     let imm16 = match imm with Sixteen_unsigned n -> n | _ -> assert false in
     let sf = Reg.gp_sf rd in
     encode_move_wide ~sf ~opc:0b10 ~hw:0 ~imm16 ~rd
-  (* TODO: MOV is an alias; this should be removed from Instruction_name.t
-     and handled via a rewrite rule. *)
+  (* TODO: MOV is an alias; this should be removed from Instruction_name.t and
+     handled via a rewrite rule. *)
   | ( Pair
         (Reg ({ reg_name = GP _; _ } as rd), Reg ({ reg_name = GP _; _ } as rm)),
       MOV ) ->
@@ -2072,8 +2060,8 @@ let encode_instruction :
   | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
     let q, _ = vector_q_size vec in
-    (* MOVI with byte replication: op=0, cmode=1110
-       imm8 = abcdefgh (8-bit immediate replicated to all bytes)
+    (* MOVI with byte replication: op=0, cmode=1110 imm8 = abcdefgh (8-bit
+       immediate replicated to all bytes)
 
        For zeroing, imm=0, abc=000, defgh=00000 *)
     let imm8 = imm land 0xFF in
@@ -2358,8 +2346,8 @@ let encode_instruction :
         decode_shift_kind_int kind, decode_shift_amount_six amount
     in
     encode_add_sub_shifted_reg ~op:1 ~s:1 ~shift ~imm6 ~rd ~rn ~rm
-  (* TODO: SXTL is an alias; this should be removed from Instruction_name.t
-     and handled via a rewrite rule. *)
+  (* TODO: SXTL is an alias; this should be removed from Instruction_name.t and
+     handled via a rewrite rule. *)
   | ( Pair
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       SXTL ) ->
@@ -2380,8 +2368,8 @@ let encode_instruction :
     let b40 = bit land 0b11111 in
     let rt_enc = Reg.gp_encoding rt in
     encode_test_branch ~b5 ~op:0 ~b40 ~imm14 ~rt:rt_enc
-  (* TODO: TST is an alias; this should be removed from Instruction_name.t
-     and handled via a rewrite rule. *)
+  (* TODO: TST is an alias; this should be removed from Instruction_name.t and
+     handled via a rewrite rule. *)
   | Pair (Reg ({ reg_name = GP _; _ } as rn), Bitmask bitmask), TST ->
     (* TST is an alias for ANDS with XZR/WZR as destination (rd=31) *)
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
@@ -2507,8 +2495,8 @@ let encode_instruction :
     let immh, immb = shr_immh_immb vec shift in
     (* USHR: U=1, opcode=00000 *)
     encode_simd_shift_imm ~q ~u:1 ~immh ~immb ~opcode:0b00000 ~rn ~rd
-  (* TODO: UXTL is an alias; this should be removed from Instruction_name.t
-     and handled via a rewrite rule. *)
+  (* TODO: UXTL is an alias; this should be removed from Instruction_name.t and
+     handled via a rewrite rule. *)
   | ( Pair
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
       UXTL ) ->
