@@ -649,6 +649,8 @@ end
 
 module A = DSL.Acc
 
+let runtime_function name = DSL.symbol (Needs_reloc CALL26) (S.create name)
+
 (* SIMD instruction handling *)
 
 let simd_instr_size (op : Simd.operation) =
@@ -1100,8 +1102,7 @@ type gc_call =
 let call_gc_sites = ref ([] : gc_call list)
 
 let emit_call_gc gc =
-  A.labeled_ins1 gc.gc_lbl BL
-    (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_gc"));
+  A.labeled_ins1 gc.gc_lbl BL (runtime_function "caml_call_gc");
   A.labeled_ins1 gc.gc_frame_lbl B
     (DSL.label Same_section_and_unit gc.gc_return_lbl)
 
@@ -1124,8 +1125,7 @@ let emit_debug_info ?discriminator dbg =
 let emit_local_realloc lr =
   D.define_label lr.lr_lbl;
   emit_debug_info lr.lr_dbg;
-  A.ins1 BL
-    (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_local_realloc"));
+  A.ins1 BL (runtime_function "caml_call_local_realloc");
   A.ins1 B (DSL.label Same_section_and_unit lr.lr_return_lbl)
 
 (* Local stack reallocation *)
@@ -1153,8 +1153,7 @@ let emit_stack_realloc () =
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
         DSL.mem_pre_pair ~base:(DSL.Reg.sp ()) ~offset:(-16) );
-    A.ins1 BL
-      (DSL.symbol (Needs_reloc CALL26) (S.create "caml_call_realloc_stack"));
+    A.ins1 BL (runtime_function "caml_call_realloc_stack");
     A.ins3 LDP
       ( DSL.reg_x reg_tmp1,
         DSL.lr (),
@@ -1864,15 +1863,12 @@ let assembly_code_for_allocation i ~local ~n ~far ~dbginfo =
            :: !call_gc_sites)
     else (
       (match n with
-      | 16 ->
-        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc1"))
-      | 24 ->
-        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc2"))
-      | 32 ->
-        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_alloc3"))
+      | 16 -> A.ins1 BL (runtime_function "caml_alloc1")
+      | 24 -> A.ins1 BL (runtime_function "caml_alloc2")
+      | 32 -> A.ins1 BL (runtime_function "caml_alloc3")
       | _ ->
         emit_intconst reg_x8 (Nativeint.of_int n);
-        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_allocN")));
+        A.ins1 BL (runtime_function "caml_allocN"));
       A.labeled_ins4 lbl_frame ADD_immediate
         ( DSL.reg_x i.res.(0),
           DSL.reg_x reg_alloc_ptr,
@@ -2200,13 +2196,12 @@ let emit_instr i =
           DSL.imm (Misc.align stack_ofs 16),
           DSL.optional_none );
       emit_load_symbol_addr reg_x8 (S.create func);
-      A.ins1 BL
-        (DSL.symbol (Needs_reloc CALL26) (S.create "caml_c_call_stack_args"));
+      A.ins1 BL (runtime_function "caml_c_call_stack_args");
       record_frame i.live (Dbg_other i.dbg))
     else if alloc
     then (
       emit_load_symbol_addr reg_x8 (S.create func);
-      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_c_call"));
+      A.ins1 BL (runtime_function "caml_c_call");
       record_frame i.live (Dbg_other i.dbg))
     else (
       (*= store ocaml stack in the frame pointer register
@@ -2752,15 +2747,12 @@ let emit_instr i =
   | Lraise k -> (
     match k with
     | Lambda.Raise_regular ->
-      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_raise_exn"));
+      A.ins1 BL (runtime_function "caml_raise_exn");
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_reraise ->
       if Config.runtime5
-      then
-        A.ins1 BL
-          (DSL.symbol (Needs_reloc CALL26) (S.create "caml_reraise_exn"))
-      else
-        A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create "caml_raise_exn"));
+      then A.ins1 BL (runtime_function "caml_reraise_exn")
+      else A.ins1 BL (runtime_function "caml_raise_exn");
       record_frame Reg.Set.empty (Dbg_raise i.dbg)
     | Lambda.Raise_notrace ->
       A.ins_mov_to_sp ~src:(DSL.reg_x reg_trap_ptr);
