@@ -131,14 +131,6 @@ module DSL : sig
   val reg_v4s :
     Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
 
-  val simd_operands_v4s_v4s_v4s :
-    Linear.instruction ->
-    ( Arm64_ast.triple,
-      [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
-      * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]]
-      * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] )
-    Arm64_ast.many
-
   val reg_v2d :
     Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
 
@@ -154,6 +146,52 @@ module DSL : sig
 
   val reg_v4h :
     Reg.t -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Operand.t
+
+  (** Operand tuple helpers for SIMD instructions *)
+
+  val v4s_v4s_v4s :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+
+  val v2d_v2d_v2d :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+
+  val v8h_v8h_v8h :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+
+  val v16b_v16b_v16b :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+
+  val v4s_v4s :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+
+  val v2d_v2d :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+
+  val v8h_v8h :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+
+  val v16b_v16b :
+    Linear.instruction ->
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
 
   val reglane_b :
     Reg.t ->
@@ -311,12 +349,6 @@ end = struct
 
   let reg_v4s reg = reg_v4s (reg_index reg)
 
-  let simd_operands_v4s_v4s_v4s i =
-    let rd = reg_v4s i.Linear.res.(0) in
-    let rn = reg_v4s i.Linear.arg.(0) in
-    let rm = reg_v4s i.Linear.arg.(1) in
-    Arm64_ast.Triple (rd, rn, rm)
-
   let reg_v2d reg = reg_v2d (reg_index reg)
 
   let reg_v16b reg = reg_v16b (reg_index reg)
@@ -336,6 +368,29 @@ end = struct
   let reglane_s reg ~lane = reglane_s (reg_index reg) ~lane
 
   let reglane_d reg ~lane = reglane_d (reg_index reg) ~lane
+
+  (* Operand tuple helpers for SIMD instructions *)
+  let v4s_v4s_v4s i =
+    reg_v4s i.Linear.res.(0), reg_v4s i.Linear.arg.(0), reg_v4s i.Linear.arg.(1)
+
+  let v2d_v2d_v2d i =
+    reg_v2d i.Linear.res.(0), reg_v2d i.Linear.arg.(0), reg_v2d i.Linear.arg.(1)
+
+  let v8h_v8h_v8h i =
+    reg_v8h i.Linear.res.(0), reg_v8h i.Linear.arg.(0), reg_v8h i.Linear.arg.(1)
+
+  let v16b_v16b_v16b i =
+    ( reg_v16b i.Linear.res.(0),
+      reg_v16b i.Linear.arg.(0),
+      reg_v16b i.Linear.arg.(1) )
+
+  let v4s_v4s i = reg_v4s i.Linear.res.(0), reg_v4s i.Linear.arg.(0)
+
+  let v2d_v2d i = reg_v2d i.Linear.res.(0), reg_v2d i.Linear.arg.(0)
+
+  let v8h_v8h i = reg_v8h i.Linear.res.(0), reg_v8h i.Linear.arg.(0)
+
+  let v16b_v16b i = reg_v16b i.Linear.res.(0), reg_v16b i.Linear.arg.(0)
 
   (* TODO: implement label and symbol properly *)
   let label ?offset:_ ?reloc:_ (_lbl : L.t) = assert false
@@ -734,39 +789,371 @@ let simd_instr_size (op : Simd.operation) =
    op1 = DSL.reg_v2d i.arg.(0) in lane_idx, op0, op1 *)
 
 let simd_instr (op : Simd.operation) (i : Linear.instruction) =
-  let ins = DSL.Acc.ins in
+  let module Lane_index = Arm64_ast.Neon_reg_name.Lane_index in
+  (* Check register constraints for instructions that require res = arg0 *)
+  (match[@ocaml.warning "-4"] op with
+  | Copyq_laneq_s64 _ | Setq_lane_s8 _ | Setq_lane_s16 _ | Setq_lane_s32 _
+  | Setq_lane_s64 _ ->
+    if not (Reg.same_loc i.res.(0) i.arg.(0))
+    then
+      Misc.fatal_errorf
+        "simd_instr: Instruction %s requires res and arg0 to be the same \
+         register"
+        (Simd.print_name op)
+  | _ -> ());
   match[@ocaml.warning "-4"] op with
-  | Addq_f32 ->
-    ins FADD_vector (DSL.simd_operands_v4s_v4s_v4s i)
-    (* Two special cases for min/max scalar: generate a sequence that matches
-       the weird semantics of amd64 instruction "minss", even when the flag
-       [FPCR.AH] is not set. *)
-    (* | Min_scalar_f32 | Min_scalar_f64 -> ( match DSL.reg_fp_operand_3
-       i.res.(0) i.arg.(0) i.arg.(1) with | S_regs (rd, rn, rm) -> ins FCMP (rn,
-       rm); ins FCSEL (rd, rn, rm, DSL.cond MI) | D_regs (rd, rn, rm) -> ins
-       FCMP (rn, rm); ins FCSEL (rd, rn, rm, DSL.cond MI)) | Max_scalar_f32 |
-       Max_scalar_f64 -> ( match DSL.reg_fp_operand_3 i.res.(0) i.arg.(0)
-       i.arg.(1) with | S_regs (rd, rn, rm) -> ins FCMP (rn, rm); ins FCSEL (rd,
-       rn, rm, DSL.cond GT) | D_regs (rd, rn, rm) -> ins FCMP (rn, rm); ins
-       FCSEL (rd, rn, rm, DSL.cond GT)) | Cntq_u16 -> (* Population count for
-       16-bit elements: CNT on bytes then UADDLP to sum pairs *) (* XXX check
-       that this is ok *) let rd = DSL.reg_v8h i.res.(0) in let rs =
-       DSL.reg_v16b i.arg.(0) in ins CNT_vector (rs, rs); ins UADDLP_vector (rd,
-       rs) *)
-  | _ -> assert false
-(* ( (* The default case: one [Simd.operation] yields one instruction, together
-   with an operand shape. We ensure the operands match such shape and then the
-   instruction is emitted. *) (match[@ocaml.warning "-fragile-match"] op with |
-   Copyq_laneq_s64 _ | Setq_lane_s8 _ | Setq_lane_s16 _ | Setq_lane_s32 _ |
-   Setq_lane_s64 _ -> (* Check that register constraint has been applied during
-   selection *) if not (Reg.same_loc i.res.(0) i.arg.(0)) then Misc.fatal_errorf
-   "simd_instr:\n\ \ Instruction %s requires res and arg0 to be the same
-   register" (Simd.print_name op) | _ -> ()); match
-   Simd_proc.simd_operation_with_operand_regs op with | S (instr, shape) -> let
-   operands = simd_operands shape i in ins instr operands | Transformed_in_emit
-   -> (* This probably means that a case is missing just above. *)
-   Misc.fatal_errorf "simd_instr: Instruction %s should have been transformed\n\
-   \ earlier in Emit" (Simd.print_name op)) *)
+  (* Vector floating-point arithmetic - V4S *)
+  | Addq_f32 -> A.ins3 FADD_vector (DSL.v4s_v4s_v4s i)
+  | Subq_f32 -> A.ins3 FSUB_vector (DSL.v4s_v4s_v4s i)
+  | Mulq_f32 -> A.ins3 FMUL_vector (DSL.v4s_v4s_v4s i)
+  | Divq_f32 -> A.ins3 FDIV_vector (DSL.v4s_v4s_v4s i)
+  (* Vector floating-point arithmetic - V2D *)
+  | Addq_f64 -> A.ins3 FADD_vector (DSL.v2d_v2d_v2d i)
+  | Subq_f64 -> A.ins3 FSUB_vector (DSL.v2d_v2d_v2d i)
+  | Mulq_f64 -> A.ins3 FMUL_vector (DSL.v2d_v2d_v2d i)
+  | Divq_f64 -> A.ins3 FDIV_vector (DSL.v2d_v2d_v2d i)
+  (* Vector integer arithmetic - ADD *)
+  | Addq_s64 -> A.ins3 ADD_vector (DSL.v2d_v2d_v2d i)
+  | Addq_s32 -> A.ins3 ADD_vector (DSL.v4s_v4s_v4s i)
+  | Addq_s16 -> A.ins3 ADD_vector (DSL.v8h_v8h_v8h i)
+  | Addq_s8 -> A.ins3 ADD_vector (DSL.v16b_v16b_v16b i)
+  (* Vector integer arithmetic - SUB *)
+  | Subq_s64 -> A.ins3 SUB_vector (DSL.v2d_v2d_v2d i)
+  | Subq_s32 -> A.ins3 SUB_vector (DSL.v4s_v4s_v4s i)
+  | Subq_s16 -> A.ins3 SUB_vector (DSL.v8h_v8h_v8h i)
+  | Subq_s8 -> A.ins3 SUB_vector (DSL.v16b_v16b_v16b i)
+  (* Vector integer arithmetic - MUL *)
+  | Mulq_s32 -> A.ins3 MUL_vector (DSL.v4s_v4s_v4s i)
+  | Mulq_s16 -> A.ins3 MUL_vector (DSL.v8h_v8h_v8h i)
+  (* Vector integer arithmetic - NEG *)
+  | Negq_s64 -> A.ins2 NEG_vector (DSL.v2d_v2d i)
+  | Negq_s32 -> A.ins2 NEG_vector (DSL.v4s_v4s i)
+  | Negq_s16 -> A.ins2 NEG_vector (DSL.v8h_v8h i)
+  | Negq_s8 -> A.ins2 NEG_vector (DSL.v16b_v16b i)
+  (* Vector min/max - floating-point *)
+  | Minq_f32 -> A.ins3 FMIN_vector (DSL.v4s_v4s_v4s i)
+  | Minq_f64 -> A.ins3 FMIN_vector (DSL.v2d_v2d_v2d i)
+  | Maxq_f32 -> A.ins3 FMAX_vector (DSL.v4s_v4s_v4s i)
+  | Maxq_f64 -> A.ins3 FMAX_vector (DSL.v2d_v2d_v2d i)
+  (* Vector min/max - signed integer *)
+  | Minq_s32 -> A.ins3 SMIN_vector (DSL.v4s_v4s_v4s i)
+  | Minq_s16 -> A.ins3 SMIN_vector (DSL.v8h_v8h_v8h i)
+  | Minq_s8 -> A.ins3 SMIN_vector (DSL.v16b_v16b_v16b i)
+  | Maxq_s32 -> A.ins3 SMAX_vector (DSL.v4s_v4s_v4s i)
+  | Maxq_s16 -> A.ins3 SMAX_vector (DSL.v8h_v8h_v8h i)
+  | Maxq_s8 -> A.ins3 SMAX_vector (DSL.v16b_v16b_v16b i)
+  (* Vector min/max - unsigned integer *)
+  | Minq_u32 -> A.ins3 UMIN_vector (DSL.v4s_v4s_v4s i)
+  | Minq_u16 -> A.ins3 UMIN_vector (DSL.v8h_v8h_v8h i)
+  | Minq_u8 -> A.ins3 UMIN_vector (DSL.v16b_v16b_v16b i)
+  | Maxq_u32 -> A.ins3 UMAX_vector (DSL.v4s_v4s_v4s i)
+  | Maxq_u16 -> A.ins3 UMAX_vector (DSL.v8h_v8h_v8h i)
+  | Maxq_u8 -> A.ins3 UMAX_vector (DSL.v16b_v16b_v16b i)
+  (* Vector logical operations - all use V16B *)
+  | Orrq_s32 | Orrq_s64 | Orrq_s16 | Orrq_s8 ->
+    A.ins3 ORR_vector (DSL.v16b_v16b_v16b i)
+  | Andq_s32 | Andq_s64 | Andq_s16 | Andq_s8 ->
+    A.ins3 AND_vector (DSL.v16b_v16b_v16b i)
+  | Eorq_s32 | Eorq_s64 | Eorq_s16 | Eorq_s8 ->
+    A.ins3 EOR_vector (DSL.v16b_v16b_v16b i)
+  | Mvnq_s32 | Mvnq_s64 | Mvnq_s16 | Mvnq_s8 ->
+    A.ins2 MVN_vector (DSL.v16b_v16b i)
+  (* Vector absolute value *)
+  | Absq_s64 -> A.ins2 ABS_vector (DSL.v2d_v2d i)
+  | Absq_s32 -> A.ins2 ABS_vector (DSL.v4s_v4s i)
+  | Absq_s16 -> A.ins2 ABS_vector (DSL.v8h_v8h i)
+  | Absq_s8 -> A.ins2 ABS_vector (DSL.v16b_v16b i)
+  (* Vector sqrt and reciprocal estimates *)
+  | Sqrtq_f32 -> A.ins2 FSQRT_vector (DSL.v4s_v4s i)
+  | Sqrtq_f64 -> A.ins2 FSQRT_vector (DSL.v2d_v2d i)
+  | Rsqrteq_f32 -> A.ins2 FRSQRTE_vector (DSL.v4s_v4s i)
+  | Rsqrteq_f64 -> A.ins2 FRSQRTE_vector (DSL.v2d_v2d i)
+  | Recpeq_f32 -> A.ins2 FRECPE_vector (DSL.v4s_v4s i)
+  (* Vector conversions *)
+  | Cvtq_s32_f32 -> A.ins2 FCVTZS_vector (DSL.v4s_v4s i)
+  | Cvtq_s64_f64 -> A.ins2 FCVTZS_vector (DSL.v2d_v2d i)
+  | Cvtnq_s32_f32 -> A.ins2 FCVTNS_vector (DSL.v4s_v4s i)
+  | Cvtnq_s64_f64 -> A.ins2 FCVTNS_vector (DSL.v2d_v2d i)
+  | Cvtq_f32_s32 -> A.ins2 SCVTF_vector (DSL.v4s_v4s i)
+  | Cvtq_f64_s64 -> A.ins2 SCVTF_vector (DSL.v2d_v2d i)
+  | Cvt_f64_f32 ->
+    A.ins2 FCVTL_vector (DSL.reg_v2d i.res.(0), DSL.reg_v2s i.arg.(0))
+  | Cvt_f32_f64 ->
+    A.ins2 FCVTN_vector (DSL.reg_v2s i.res.(0), DSL.reg_v2d i.arg.(0))
+  (* Vector extend/narrow operations - signed extend *)
+  | Movl_s32 -> A.ins2 SXTL (DSL.reg_v2d i.res.(0), DSL.reg_v2s i.arg.(0))
+  | Movl_s16 -> A.ins2 SXTL (DSL.reg_v4s i.res.(0), DSL.reg_v4h i.arg.(0))
+  | Movl_s8 -> A.ins2 SXTL (DSL.reg_v8h i.res.(0), DSL.reg_v8b i.arg.(0))
+  (* Vector extend/narrow operations - unsigned extend *)
+  | Movl_u32 -> A.ins2 UXTL (DSL.reg_v2d i.res.(0), DSL.reg_v2s i.arg.(0))
+  | Movl_u16 -> A.ins2 UXTL (DSL.reg_v4s i.res.(0), DSL.reg_v4h i.arg.(0))
+  | Movl_u8 -> A.ins2 UXTL (DSL.reg_v8h i.res.(0), DSL.reg_v8b i.arg.(0))
+  (* Vector narrow operations *)
+  | Movn_s64 -> A.ins2 XTN (DSL.reg_v2s i.res.(0), DSL.reg_v2d i.arg.(0))
+  | Movn_s32 -> A.ins2 XTN (DSL.reg_v4h i.res.(0), DSL.reg_v4s i.arg.(0))
+  | Movn_s16 -> A.ins2 XTN (DSL.reg_v8b i.res.(0), DSL.reg_v8h i.arg.(0))
+  (* Vector narrow high operations - uses arg.(1) for source *)
+  | Movn_high_s64 -> A.ins2 XTN2 (DSL.reg_v4s i.res.(0), DSL.reg_v2d i.arg.(1))
+  | Movn_high_s32 -> A.ins2 XTN2 (DSL.reg_v8h i.res.(0), DSL.reg_v4s i.arg.(1))
+  | Movn_high_s16 -> A.ins2 XTN2 (DSL.reg_v16b i.res.(0), DSL.reg_v8h i.arg.(1))
+  (* Vector saturating narrow operations *)
+  | Qmovn_s64 -> A.ins2 SQXTN (DSL.reg_v2s i.res.(0), DSL.reg_v2d i.arg.(0))
+  | Qmovn_s32 -> A.ins2 SQXTN (DSL.reg_v4h i.res.(0), DSL.reg_v4s i.arg.(0))
+  | Qmovn_s16 -> A.ins2 SQXTN (DSL.reg_v8b i.res.(0), DSL.reg_v8h i.arg.(0))
+  | Qmovn_high_s64 ->
+    A.ins2 SQXTN2 (DSL.reg_v4s i.res.(0), DSL.reg_v2d i.arg.(1))
+  | Qmovn_high_s32 ->
+    A.ins2 SQXTN2 (DSL.reg_v8h i.res.(0), DSL.reg_v4s i.arg.(1))
+  | Qmovn_high_s16 ->
+    A.ins2 SQXTN2 (DSL.reg_v16b i.res.(0), DSL.reg_v8h i.arg.(1))
+  | Qmovn_u32 -> A.ins2 UQXTN (DSL.reg_v4h i.res.(0), DSL.reg_v4s i.arg.(0))
+  | Qmovn_u16 -> A.ins2 UQXTN (DSL.reg_v8b i.res.(0), DSL.reg_v8h i.arg.(0))
+  | Qmovn_high_u32 ->
+    A.ins2 UQXTN2 (DSL.reg_v8h i.res.(0), DSL.reg_v4s i.arg.(1))
+  | Qmovn_high_u16 ->
+    A.ins2 UQXTN2 (DSL.reg_v16b i.res.(0), DSL.reg_v8h i.arg.(1))
+  (* Vector pairwise operations *)
+  | Paddq_f32 -> A.ins3 FADDP_vector (DSL.v4s_v4s_v4s i)
+  | Paddq_f64 -> A.ins3 FADDP_vector (DSL.v2d_v2d_v2d i)
+  | Paddq_s64 -> A.ins3 ADDP_vector (DSL.v2d_v2d_v2d i)
+  | Paddq_s32 -> A.ins3 ADDP_vector (DSL.v4s_v4s_v4s i)
+  | Paddq_s16 -> A.ins3 ADDP_vector (DSL.v8h_v8h_v8h i)
+  | Paddq_s8 -> A.ins3 ADDP_vector (DSL.v16b_v16b_v16b i)
+  (* Vector zip operations *)
+  | Zip1_f32 ->
+    A.ins3 ZIP1
+      (DSL.reg_v2s i.res.(0), DSL.reg_v2s i.arg.(0), DSL.reg_v2s i.arg.(1))
+  | Zip1q_s8 -> A.ins3 ZIP1 (DSL.v16b_v16b_v16b i)
+  | Zip1q_s16 -> A.ins3 ZIP1 (DSL.v8h_v8h_v8h i)
+  | Zip1q_f32 -> A.ins3 ZIP1 (DSL.v4s_v4s_v4s i)
+  | Zip1q_f64 -> A.ins3 ZIP1 (DSL.v2d_v2d_v2d i)
+  | Zip2q_s8 -> A.ins3 ZIP2 (DSL.v16b_v16b_v16b i)
+  | Zip2q_s16 -> A.ins3 ZIP2 (DSL.v8h_v8h_v8h i)
+  | Zip2q_f32 -> A.ins3 ZIP2 (DSL.v4s_v4s_v4s i)
+  | Zip2q_f64 -> A.ins3 ZIP2 (DSL.v2d_v2d_v2d i)
+  (* Vector shift operations - unsigned *)
+  | Shlq_u64 -> A.ins3 USHL_vector (DSL.v2d_v2d_v2d i)
+  | Shlq_u32 -> A.ins3 USHL_vector (DSL.v4s_v4s_v4s i)
+  | Shlq_u16 -> A.ins3 USHL_vector (DSL.v8h_v8h_v8h i)
+  | Shlq_u8 -> A.ins3 USHL_vector (DSL.v16b_v16b_v16b i)
+  (* Vector shift operations - signed *)
+  | Shlq_s64 -> A.ins3 SSHL_vector (DSL.v2d_v2d_v2d i)
+  | Shlq_s32 -> A.ins3 SSHL_vector (DSL.v4s_v4s_v4s i)
+  | Shlq_s16 -> A.ins3 SSHL_vector (DSL.v8h_v8h_v8h i)
+  | Shlq_s8 -> A.ins3 SSHL_vector (DSL.v16b_v16b_v16b i)
+  (* Vector multiply long *)
+  | Mullq_s16 ->
+    A.ins3 SMULL_vector
+      (DSL.reg_v4s i.res.(0), DSL.reg_v4h i.arg.(0), DSL.reg_v4h i.arg.(1))
+  | Mullq_u16 ->
+    A.ins3 UMULL_vector
+      (DSL.reg_v4s i.res.(0), DSL.reg_v4h i.arg.(0), DSL.reg_v4h i.arg.(1))
+  | Mullq_high_s16 ->
+    A.ins3 SMULL2_vector
+      (DSL.reg_v4s i.res.(0), DSL.reg_v8h i.arg.(0), DSL.reg_v8h i.arg.(1))
+  | Mullq_high_u16 ->
+    A.ins3 UMULL2_vector
+      (DSL.reg_v4s i.res.(0), DSL.reg_v8h i.arg.(0), DSL.reg_v8h i.arg.(1))
+  (* Vector saturating arithmetic *)
+  | Qaddq_s16 -> A.ins3 SQADD_vector (DSL.v8h_v8h_v8h i)
+  | Qaddq_s8 -> A.ins3 SQADD_vector (DSL.v16b_v16b_v16b i)
+  | Qaddq_u16 -> A.ins3 UQADD_vector (DSL.v8h_v8h_v8h i)
+  | Qaddq_u8 -> A.ins3 UQADD_vector (DSL.v16b_v16b_v16b i)
+  | Qsubq_s16 -> A.ins3 SQSUB_vector (DSL.v8h_v8h_v8h i)
+  | Qsubq_s8 -> A.ins3 SQSUB_vector (DSL.v16b_v16b_v16b i)
+  | Qsubq_u16 -> A.ins3 UQSUB_vector (DSL.v8h_v8h_v8h i)
+  | Qsubq_u8 -> A.ins3 UQSUB_vector (DSL.v16b_v16b_v16b i)
+  (* Vector shift by immediate *)
+  | Shlq_n_u64 n ->
+    let rd, rn = DSL.v2d_v2d i in
+    A.ins3 SHL (rd, rn, DSL.imm_six n)
+  | Shlq_n_u32 n ->
+    let rd, rn = DSL.v4s_v4s i in
+    A.ins3 SHL (rd, rn, DSL.imm_six n)
+  | Shlq_n_u16 n ->
+    let rd, rn = DSL.v8h_v8h i in
+    A.ins3 SHL (rd, rn, DSL.imm_six n)
+  | Shlq_n_u8 n ->
+    let rd, rn = DSL.v16b_v16b i in
+    A.ins3 SHL (rd, rn, DSL.imm_six n)
+  | Shrq_n_u64 n ->
+    let rd, rn = DSL.v2d_v2d i in
+    A.ins3 USHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_u32 n ->
+    let rd, rn = DSL.v4s_v4s i in
+    A.ins3 USHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_u16 n ->
+    let rd, rn = DSL.v8h_v8h i in
+    A.ins3 USHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_u8 n ->
+    let rd, rn = DSL.v16b_v16b i in
+    A.ins3 USHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_s64 n ->
+    let rd, rn = DSL.v2d_v2d i in
+    A.ins3 SSHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_s32 n ->
+    let rd, rn = DSL.v4s_v4s i in
+    A.ins3 SSHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_s16 n ->
+    let rd, rn = DSL.v8h_v8h i in
+    A.ins3 SSHR (rd, rn, DSL.imm_six n)
+  | Shrq_n_s8 n ->
+    let rd, rn = DSL.v16b_v16b i in
+    A.ins3 SSHR (rd, rn, DSL.imm_six n)
+  (* Sign-extend lane to X register *)
+  | Getq_lane_s32 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (SMOV lane_idx) (DSL.reg_x i.res.(0), DSL.reg_v4s i.arg.(0))
+  | Getq_lane_s16 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (SMOV lane_idx) (DSL.reg_x i.res.(0), DSL.reg_v8h i.arg.(0))
+  | Getq_lane_s8 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (SMOV lane_idx) (DSL.reg_x i.res.(0), DSL.reg_v16b i.arg.(0))
+  (* Extract 64-bit lane *)
+  | Getq_lane_s64 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (UMOV lane_idx) (DSL.reg_x i.res.(0), DSL.reg_v2d i.arg.(0))
+  (* Extract bytes from two vectors *)
+  | Extq_u8 n ->
+    A.ins4 EXT
+      ( DSL.reg_v16b i.res.(0),
+        DSL.reg_v16b i.arg.(0),
+        DSL.reg_v16b i.arg.(1),
+        DSL.imm_six n )
+  (* Compare against zero - floating-point *)
+  | Cmpz_f32 c -> A.ins2 (FCM_zero c) (DSL.v4s_v4s i)
+  | Cmpz_f64 c -> A.ins2 (FCM_zero c) (DSL.v2d_v2d i)
+  (* Compare against zero - integer *)
+  | Cmpz_s32 c ->
+    A.ins2 (CM_zero (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v4s_v4s i)
+  | Cmpz_s64 c ->
+    A.ins2 (CM_zero (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v2d_v2d i)
+  | Cmpz_s16 c ->
+    A.ins2 (CM_zero (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v8h_v8h i)
+  | Cmpz_s8 c ->
+    A.ins2 (CM_zero (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v16b_v16b i)
+  (* Float vector compare *)
+  | Cmp_f32 ((EQ | GE | GT) as c) -> A.ins3 (FCM_register c) (DSL.v4s_v4s_v4s i)
+  | Cmp_f64 ((EQ | GE | GT) as c) -> A.ins3 (FCM_register c) (DSL.v2d_v2d_v2d i)
+  | Cmp_f32 (LT | LE | NE | CC | CS | LS | HI) ->
+    Misc.fatal_error "Cmp_f32 LT/LE should be transformed in Simd_selection"
+  | Cmp_f64 (LT | LE | NE | CC | CS | LS | HI) ->
+    Misc.fatal_error "Cmp_f64 LT/LE should be transformed in Simd_selection"
+  (* Scalar float min/max *)
+  | Fmin_f32 ->
+    A.ins3 FMIN (DSL.reg_s i.res.(0), DSL.reg_s i.arg.(0), DSL.reg_s i.arg.(1))
+  | Fmax_f32 ->
+    A.ins3 FMAX (DSL.reg_s i.res.(0), DSL.reg_s i.arg.(0), DSL.reg_s i.arg.(1))
+  | Fmin_f64 ->
+    A.ins3 FMIN (DSL.reg_d i.res.(0), DSL.reg_d i.arg.(0), DSL.reg_d i.arg.(1))
+  | Fmax_f64 ->
+    A.ins3 FMAX (DSL.reg_d i.res.(0), DSL.reg_d i.arg.(0), DSL.reg_d i.arg.(1))
+  (* Scalar rounding *)
+  | Round_f32 rm ->
+    A.ins2
+      (FRINT (Simd_proc.simd_rounding_to_ast_rounding rm))
+      (DSL.reg_s i.res.(0), DSL.reg_s i.arg.(0))
+  | Round_f64 rm ->
+    A.ins2
+      (FRINT (Simd_proc.simd_rounding_to_ast_rounding rm))
+      (DSL.reg_d i.res.(0), DSL.reg_d i.arg.(0))
+  (* Vector rounding *)
+  | Roundq_f32 rm ->
+    A.ins2
+      (FRINT_vector (Simd_proc.simd_rounding_to_ast_rounding rm))
+      (DSL.v4s_v4s i)
+  | Roundq_f64 rm ->
+    A.ins2
+      (FRINT_vector (Simd_proc.simd_rounding_to_ast_rounding rm))
+      (DSL.v2d_v2d i)
+  (* Float to signed integer with rounding *)
+  | Round_f32_s64 -> A.ins2 FCVTNS (DSL.reg_x i.res.(0), DSL.reg_s i.arg.(0))
+  | Round_f64_s64 -> A.ins2 FCVTNS (DSL.reg_x i.res.(0), DSL.reg_d i.arg.(0))
+  (* Integer vector compares *)
+  | Cmp_s32 ((EQ | GE | GT) as c) ->
+    A.ins3 (CM_register (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v4s_v4s_v4s i)
+  | Cmp_s64 ((EQ | GE | GT) as c) ->
+    A.ins3 (CM_register (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v2d_v2d_v2d i)
+  | Cmp_s16 ((EQ | GE | GT) as c) ->
+    A.ins3 (CM_register (Simd_proc.simd_cond_to_ast_cond c)) (DSL.v8h_v8h_v8h i)
+  | Cmp_s8 ((EQ | GE | GT) as c) ->
+    A.ins3
+      (CM_register (Simd_proc.simd_cond_to_ast_cond c))
+      (DSL.v16b_v16b_v16b i)
+  | Cmp_s32 (LT | LE) | Cmp_s64 (LT | LE) | Cmp_s16 (LT | LE) | Cmp_s8 (LT | LE)
+    ->
+    Misc.fatal_error "Cmp_s LT/LE should be transformed in Emit"
+  (* Lane operations - insert from GP register *)
+  | Setq_lane_s8 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (INS lane_idx) (DSL.reg_v16b i.res.(0), DSL.reg_w i.arg.(1))
+  | Setq_lane_s16 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (INS lane_idx) (DSL.reg_v8h i.res.(0), DSL.reg_w i.arg.(1))
+  | Setq_lane_s32 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (INS lane_idx) (DSL.reg_v4s i.res.(0), DSL.reg_w i.arg.(1))
+  | Setq_lane_s64 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (INS lane_idx) (DSL.reg_v2d i.res.(0), DSL.reg_x i.arg.(1))
+  (* Copy lane to lane *)
+  | Copyq_laneq_s64 { src_lane; dst_lane } ->
+    let lanes =
+      Lane_index.Src_and_dest.create
+        ~src:(Lane_index.create src_lane)
+        ~dest:(Lane_index.create dst_lane)
+    in
+    A.ins2 (INS_V lanes) (DSL.reg_v2d i.res.(0), DSL.reg_v2d i.arg.(1))
+  (* Duplicate lane *)
+  | Dupq_lane_s8 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (DUP lane_idx) (DSL.v16b_v16b i)
+  | Dupq_lane_s16 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (DUP lane_idx) (DSL.v8h_v8h i)
+  | Dupq_lane_s32 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (DUP lane_idx) (DSL.v4s_v4s i)
+  | Dupq_lane_s64 { lane } ->
+    let lane_idx = Lane_index.create lane in
+    A.ins2 (DUP lane_idx) (DSL.v2d_v2d i)
+  (* Population count - CNT only works on 8-bit elements *)
+  | Cntq_u8 -> A.ins2 CNT_vector (DSL.v16b_v16b i)
+  (* Population count for 16-bit elements: CNT on bytes then UADDLP to sum
+     pairs *)
+  | Cntq_u16 ->
+    let rd = DSL.reg_v8h i.res.(0) in
+    let rs = DSL.reg_v16b i.arg.(0) in
+    A.ins2 CNT_vector (rs, rs);
+    A.ins2 UADDLP_vector (rd, rs)
+  (* Two special cases for min/max scalar: generate a sequence that matches the
+     weird semantics of amd64 instruction "minss", even when the flag [FPCR.AH]
+     is not set. *)
+  | Min_scalar_f32 ->
+    let rd = DSL.reg_s i.res.(0) in
+    let rn = DSL.reg_s i.arg.(0) in
+    let rm = DSL.reg_s i.arg.(1) in
+    A.ins2 FCMP (rn, rm);
+    A.ins4 FCSEL (rd, rn, rm, DSL.cond MI)
+  | Min_scalar_f64 ->
+    let rd = DSL.reg_d i.res.(0) in
+    let rn = DSL.reg_d i.arg.(0) in
+    let rm = DSL.reg_d i.arg.(1) in
+    A.ins2 FCMP (rn, rm);
+    A.ins4 FCSEL (rd, rn, rm, DSL.cond MI)
+  | Max_scalar_f32 ->
+    let rd = DSL.reg_s i.res.(0) in
+    let rn = DSL.reg_s i.arg.(0) in
+    let rm = DSL.reg_s i.arg.(1) in
+    A.ins2 FCMP (rn, rm);
+    A.ins4 FCSEL (rd, rn, rm, DSL.cond GT)
+  | Max_scalar_f64 ->
+    let rd = DSL.reg_d i.res.(0) in
+    let rn = DSL.reg_d i.arg.(0) in
+    let rm = DSL.reg_d i.arg.(1) in
+    A.ins2 FCMP (rn, rm);
+    A.ins4 FCSEL (rd, rn, rm, DSL.cond GT)
 
 (* Record live pointers at call points *)
 

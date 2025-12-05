@@ -581,10 +581,10 @@ module Instruction_name : sig
           t
     | EXT
         : ( quad,
-            [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
-            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
-            * [< `Reg of [< `Neon of [< `Vector of [< `V16B]]]]
-            * [< `Imm of [< `Six]] )
+            [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+            * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+            * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]]
+            * [`Imm of [`Six]] )
           t
     | FABS
         : ( pair,
