@@ -169,9 +169,10 @@ end
     signed offsets giving +/-1MB range.
 
     [Needs_reloc] is for references requiring linker involvement:
-    - ADRP/ADR instructions need PAGE relocations even for "local" labels
-      because the assembler doesn't know final page-relative offsets until
-      link time when sections are laid out.
+    - ADRP instructions need PAGE relocations because they compute page-aligned
+      addresses that the assembler can't resolve until link time.
+    - ADR instructions for local labels within the same section and
+      compilation unit use Same_section_and_unit (no relocation needed).
     - Calls to runtime functions (e.g. caml_call_gc) in other compilation
       units need CALL26/JUMP26 relocations.
     - GOT-relative references for position-independent code. *)
@@ -471,7 +472,7 @@ module Instruction_name : sig
             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ADR
-        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Nineteen]]]) t
     | ADRP
         : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
     | AND_immediate

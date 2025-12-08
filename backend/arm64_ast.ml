@@ -844,7 +844,7 @@ module Instruction_name = struct
             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
     | ADR
-        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
+        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Nineteen]]]) t
     | ADRP
         : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
     | AND_immediate

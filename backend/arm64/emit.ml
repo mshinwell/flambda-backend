@@ -2694,7 +2694,7 @@ let emit_instr i =
   | Lswitch jumptbl ->
     let open Arm64_ast.Symbol in
     let lbltbl = L.create Text in
-    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbltbl);
+    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label Same_section_and_unit lbltbl);
     A.ins4 ADD_shifted_register
       ( DSL.reg_x reg_tmp1,
         DSL.reg_x reg_tmp1,
@@ -2726,7 +2726,7 @@ let emit_instr i =
   | Lpushtrap { lbl_handler } ->
     let open Arm64_ast.Symbol in
     let lbl_handler = label_to_asm_label ~section:Text lbl_handler in
-    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbl_handler);
+    A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label Same_section_and_unit lbl_handler);
     stack_offset := !stack_offset + 16;
     A.ins3 STP
       ( DSL.reg_x reg_trap_ptr,
