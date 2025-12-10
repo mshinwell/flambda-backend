@@ -65,3 +65,8 @@ val add_instruction : t -> Instruction.t -> unit
 val add_directive : t -> Asm_targets.Asm_directives.Directive.t -> unit
 
 val emit : t -> Section_state.t Asm_targets.Asm_section.Tbl.t
+
+(** Module implementing Binary_emitter.S for use by ocaml-jit *)
+module For_jit : Binary_emitter.S
+  with type Assembled_section.t = Section_state.t
+   and type Relocation.t = Relocation.t

@@ -2681,3 +2681,117 @@ let emit emitter =
     section_tbl;
   emit_code_and_data emitter ~state_for_section;
   section_tbl
+
+(* For_jit module implementing Binary_emitter.S *)
+module For_jit = struct
+  module Relocation = struct
+    type t = Relocation.t
+
+    let offset_from_section_beginning (r : t) = r.Relocation.offset_from_section_beginning
+
+    (* ARM64 relocations are always 32-bit patches within 32-bit instructions *)
+    let size (_ : t) : Binary_emitter.data_size = Binary_emitter.B32
+
+    let target_symbol (r : t) =
+      match r.Relocation.kind with
+      | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 sym
+      | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 sym
+      | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC sym
+      | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC sym -> sym
+
+    let is_got_reloc (r : t) =
+      match r.Relocation.kind with
+      | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC _ -> true
+      | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 _
+      | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 _
+      | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC _ -> false
+
+    let is_plt_reloc (_ : t) = false (* ARM64 doesn't use PLT in same way *)
+
+    let compute_value (r : t) ~place_address ~lookup_symbol =
+      let sym = target_symbol r in
+      match lookup_symbol sym with
+      | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
+      | Some target_addr ->
+        match r.Relocation.kind with
+        | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 _ ->
+          (* PC-relative offset for ADR instruction, low 21 bits *)
+          let offset = Int64.sub target_addr place_address in
+          Ok offset
+        | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 _ ->
+          (* Page-relative offset for ADRP instruction
+             Result = Page(target) - Page(place) *)
+          let page_mask = Int64.lognot 0xFFF_L in
+          let target_page = Int64.logand target_addr page_mask in
+          let place_page = Int64.logand place_address page_mask in
+          let offset = Int64.sub target_page place_page in
+          Ok offset
+        | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC _ ->
+          (* Lower 12 bits of absolute address *)
+          let low12 = Int64.logand target_addr 0xFFF_L in
+          Ok low12
+        | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC _ ->
+          (* Lower 12 bits of GOT entry address, scaled by 8 *)
+          let low12 = Int64.logand target_addr 0xFFF_L in
+          Ok low12
+  end
+
+  module Assembled_section = struct
+    type t = Section_state.t
+    type relocation = Relocation.t
+
+    let size t = Buffer.length (Section_state.buffer t)
+
+    let contents t = Buffer.contents (Section_state.buffer t)
+
+    let contents_mut t = Bytes.of_string (contents t)
+
+    let relocations t = Section_state.relocations t
+
+    let find_symbol_offset t name = Section_state.find_symbol_offset_in_bytes t name
+
+    let find_label_offset t name = Section_state.find_label_offset_in_bytes t name
+
+    let iter_symbols t ~f =
+      Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t)
+
+    let add_patch t ~offset ~size:sz ~data =
+      let buf = contents_mut t in
+      (match sz with
+       | Binary_emitter.B8 ->
+         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF))
+       | Binary_emitter.B16 ->
+         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
+         Bytes.set buf (offset + 1)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF))
+       | Binary_emitter.B32 ->
+         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
+         Bytes.set buf (offset + 1)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF));
+         Bytes.set buf (offset + 2)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 16) land 0xFF));
+         Bytes.set buf (offset + 3)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 24) land 0xFF))
+       | Binary_emitter.B64 ->
+         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
+         Bytes.set buf (offset + 1)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF));
+         Bytes.set buf (offset + 2)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 16) land 0xFF));
+         Bytes.set buf (offset + 3)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 24) land 0xFF));
+         Bytes.set buf (offset + 4)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 32) land 0xFF));
+         Bytes.set buf (offset + 5)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 40) land 0xFF));
+         Bytes.set buf (offset + 6)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 48) land 0xFF));
+         Bytes.set buf (offset + 7)
+           (Char.chr (Int64.to_int (Int64.shift_right_logical data 56) land 0xFF)));
+      (* Note: This creates a new bytes and patches it, but doesn't update the
+         original buffer. For a proper implementation, Section_state would need
+         a mutable buffer or we'd need a different approach. For now, this is
+         a placeholder that shows the interface. *)
+      ()
+  end
+end

@@ -25,8 +25,53 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-module Relocation = struct
-  type t =
-    | X86 of X86_binary_emitter.Relocation.t
-    | Arm64 of Arm64_binary_emitter.Relocation.t
+type data_size = B8 | B16 | B32 | B64
+
+module type Relocation = sig
+  type t
+
+  val offset_from_section_beginning : t -> int
+
+  val size : t -> data_size
+
+  val target_symbol : t -> string
+
+  val is_got_reloc : t -> bool
+
+  val is_plt_reloc : t -> bool
+
+  val compute_value :
+    t ->
+    place_address:int64 ->
+    lookup_symbol:(string -> int64 option) ->
+    (int64, string) result
+end
+
+module type Assembled_section = sig
+  type t
+
+  type relocation
+
+  val size : t -> int
+
+  val contents : t -> string
+
+  val contents_mut : t -> bytes
+
+  val relocations : t -> relocation list
+
+  val find_symbol_offset : t -> string -> int option
+
+  val find_label_offset : t -> string -> int option
+
+  val iter_symbols : t -> f:(name:string -> offset:int -> unit) -> unit
+
+  val add_patch : t -> offset:int -> size:data_size -> data:int64 -> unit
+end
+
+module type S = sig
+  module Relocation : Relocation
+
+  module Assembled_section :
+    Assembled_section with type relocation = Relocation.t
 end
