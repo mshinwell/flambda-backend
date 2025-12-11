@@ -48,13 +48,16 @@ end
 
 (* TODO: Asm_directives uses strings for labels and symbols. We should change it
    to use Asm_label.t and Asm_symbol.t, and update this module accordingly. *)
+type patch_size = P8 | P16 | P32 | P64
+
 module Section_state = struct
   type t =
     { buffer : Buffer.t;
       mutable offset_in_bytes : int;
       symbol_offset_tbl : (string, int) Hashtbl.t;
       label_offset_tbl : (string, int) Hashtbl.t;
-      mutable relocations : Relocation.t list
+      mutable relocations : Relocation.t list;
+      mutable patches : (int * patch_size * int64) list
     }
 
   let create () =
@@ -62,7 +65,8 @@ module Section_state = struct
       offset_in_bytes = 0;
       symbol_offset_tbl = Hashtbl.create 16;
       label_offset_tbl = Hashtbl.create 16;
-      relocations = []
+      relocations = [];
+      patches = []
     }
 
   let buffer t = t.buffer
@@ -95,6 +99,40 @@ module Section_state = struct
   let symbols t = t.symbol_offset_tbl
 
   let labels t = t.label_offset_tbl
+
+  let add_patch t ~offset ~size ~data =
+    t.patches <- (offset, size, data) :: t.patches
+
+  let contents_mut t =
+    let buf = Buffer.to_bytes t.buffer in
+    let set_int8 pos v =
+      Bytes.set buf pos (Char.chr (Int64.to_int v land 0xFF))
+    in
+    List.iter
+      (fun (pos, size, v) ->
+        match size with
+        | P8 -> set_int8 pos v
+        | P16 ->
+          set_int8 pos v;
+          set_int8 (pos + 1) (Int64.shift_right_logical v 8)
+        | P32 ->
+          set_int8 pos v;
+          set_int8 (pos + 1) (Int64.shift_right_logical v 8);
+          set_int8 (pos + 2) (Int64.shift_right_logical v 16);
+          set_int8 (pos + 3) (Int64.shift_right_logical v 24)
+        | P64 ->
+          set_int8 pos v;
+          set_int8 (pos + 1) (Int64.shift_right_logical v 8);
+          set_int8 (pos + 2) (Int64.shift_right_logical v 16);
+          set_int8 (pos + 3) (Int64.shift_right_logical v 24);
+          set_int8 (pos + 4) (Int64.shift_right_logical v 32);
+          set_int8 (pos + 5) (Int64.shift_right_logical v 40);
+          set_int8 (pos + 6) (Int64.shift_right_logical v 48);
+          set_int8 (pos + 7) (Int64.shift_right_logical v 56))
+      t.patches;
+    buf
+
+  let contents t = Bytes.to_string (contents_mut t)
 end
 
 let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
@@ -2742,9 +2780,9 @@ module For_jit = struct
 
     let size t = Buffer.length (Section_state.buffer t)
 
-    let contents t = Buffer.contents (Section_state.buffer t)
+    let contents t = Section_state.contents t
 
-    let contents_mut t = Bytes.of_string (contents t)
+    let contents_mut t = Section_state.contents_mut t
 
     let relocations t = Section_state.relocations t
 
@@ -2756,42 +2794,13 @@ module For_jit = struct
       Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t)
 
     let add_patch t ~offset ~size:sz ~data =
-      let buf = contents_mut t in
-      (match sz with
-       | Binary_emitter.B8 ->
-         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF))
-       | Binary_emitter.B16 ->
-         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
-         Bytes.set buf (offset + 1)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF))
-       | Binary_emitter.B32 ->
-         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
-         Bytes.set buf (offset + 1)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF));
-         Bytes.set buf (offset + 2)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 16) land 0xFF));
-         Bytes.set buf (offset + 3)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 24) land 0xFF))
-       | Binary_emitter.B64 ->
-         Bytes.set buf offset (Char.chr (Int64.to_int data land 0xFF));
-         Bytes.set buf (offset + 1)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 8) land 0xFF));
-         Bytes.set buf (offset + 2)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 16) land 0xFF));
-         Bytes.set buf (offset + 3)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 24) land 0xFF));
-         Bytes.set buf (offset + 4)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 32) land 0xFF));
-         Bytes.set buf (offset + 5)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 40) land 0xFF));
-         Bytes.set buf (offset + 6)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 48) land 0xFF));
-         Bytes.set buf (offset + 7)
-           (Char.chr (Int64.to_int (Int64.shift_right_logical data 56) land 0xFF)));
-      (* Note: This creates a new bytes and patches it, but doesn't update the
-         original buffer. For a proper implementation, Section_state would need
-         a mutable buffer or we'd need a different approach. For now, this is
-         a placeholder that shows the interface. *)
-      ()
+      let sz =
+        match sz with
+        | Binary_emitter.B8 -> P8
+        | Binary_emitter.B16 -> P16
+        | Binary_emitter.B32 -> P32
+        | Binary_emitter.B64 -> P64
+      in
+      Section_state.add_patch t ~offset ~size:sz ~data
   end
 end

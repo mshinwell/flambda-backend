@@ -54,6 +54,12 @@ module Section_state : sig
   val relocations : t -> Relocation.t list
 
   val symbols : t -> (string, int) Hashtbl.t
+
+  (** Returns mutable bytes with all patches applied. *)
+  val contents_mut : t -> bytes
+
+  (** Returns string with all patches applied. *)
+  val contents : t -> string
 end
 
 type t
