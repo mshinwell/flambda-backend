@@ -69,6 +69,18 @@ module type Assembled_section = sig
   val add_patch : t -> offset:int -> size:data_size -> data:int64 -> unit
 end
 
+module type Internal_assembler_hook = sig
+  type assembled_section
+
+  type hook = (string * assembled_section) list -> (string -> unit)
+
+  val register : hook -> unit
+
+  val unregister : unit -> unit
+
+  val get : unit -> hook option
+end
+
 module type S = sig
   module Relocation : Relocation
 
@@ -80,6 +92,9 @@ module type S = sig
 
     val write_entry : Buffer.t -> int64 -> unit
   end
+
+  module Internal_assembler :
+    Internal_assembler_hook with type assembled_section = Assembled_section.t
 end
 
 type arch =

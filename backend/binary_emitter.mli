@@ -86,6 +86,26 @@ module type Assembled_section = sig
   val add_patch : t -> offset:int -> size:data_size -> data:int64 -> unit
 end
 
+(** Internal assembler hook for JIT support.
+    When set, the binary emitter will call this function with assembled sections
+    instead of (or in addition to) writing to a file. *)
+module type Internal_assembler_hook = sig
+  type assembled_section
+
+  (** The hook function type. Takes assembled sections and returns a function
+      that writes binary content to a file (for object file output). *)
+  type hook = (string * assembled_section) list -> (string -> unit)
+
+  (** Register a hook to be called when code is generated *)
+  val register : hook -> unit
+
+  (** Unregister the hook *)
+  val unregister : unit -> unit
+
+  (** Get the current hook if any *)
+  val get : unit -> hook option
+end
+
 (** Combined signature that each architecture's binary emitter provides. *)
 module type S = sig
   module Relocation : Relocation
@@ -103,6 +123,10 @@ module type S = sig
         The address is the absolute target address to jump to. *)
     val write_entry : Buffer.t -> int64 -> unit
   end
+
+  (** Internal assembler hook for JIT support *)
+  module Internal_assembler :
+    Internal_assembler_hook with type assembled_section = Assembled_section.t
 end
 
 (** Architecture type for runtime selection *)

@@ -2825,4 +2825,18 @@ module For_jit = struct
         Buffer.add_char buf (Char.chr byte)
       done
   end
+
+  module Internal_assembler = struct
+    type assembled_section = Assembled_section.t
+
+    type hook = (string * assembled_section) list -> (string -> unit)
+
+    let current_hook : hook option ref = ref None
+
+    let register h = current_hook := Some h
+
+    let unregister () = current_hook := None
+
+    let get () = !current_hook
+  end
 end

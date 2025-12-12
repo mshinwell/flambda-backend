@@ -1775,4 +1775,18 @@ module For_jit = struct
       done;
       Buffer.add_string buf jmp_r10_instr
   end
+
+  module Internal_assembler = struct
+    type assembled_section = Assembled_section.t
+
+    type hook = (string * assembled_section) list -> (string -> unit)
+
+    let current_hook : hook option ref = ref None
+
+    let register h = current_hook := Some h
+
+    let unregister () = current_hook := None
+
+    let get () = !current_hook
+  end
 end
