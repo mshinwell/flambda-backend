@@ -62,3 +62,91 @@ let content t =
 
 let symbols { address; value = t } =
   Symbols.from_binary_section { address; value = t.binary_section }
+
+(* Generic implementation using the unified Binary_emitter interface.
+   Note: This doesn't type-erase the binary section - the type parameters
+   must be consistent across all operations. *)
+module Generic = struct
+  type need_reloc = Bin_table.empty
+
+  type relocated = Bin_table.filled
+
+  type ('section, 'reloc_state) t = {
+    binary_section : 'section;
+    got : 'reloc_state Bin_table.Generic.t;
+    plt : 'reloc_state Bin_table.Generic.t;
+  }
+
+  let from_binary_section (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      (section : a) : (a, need_reloc) t =
+    let got =
+      Bin_table.Generic.from_binary_section
+        (module E) ~name:"GOT" ~entry_size:Address.size
+        ~is_relevant_reloc:E.Relocation.is_got_reloc
+        ~write_entry:Address.emit section
+    in
+    let plt =
+      Bin_table.Generic.from_binary_section
+        (module E) ~name:"PLT" ~entry_size:E.Plt.entry_size
+        ~is_relevant_reloc:E.Relocation.is_plt_reloc
+        ~write_entry:(fun buf addr -> E.Plt.write_entry buf (Address.to_int64 addr))
+        section
+    in
+    { binary_section = section; got; plt }
+
+  let in_memory_size (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      (t : (a, _) t) =
+    E.Assembled_section.size t.binary_section
+    + Bin_table.Generic.in_memory_size t.got
+    + Bin_table.Generic.in_memory_size t.plt
+
+  let relocate (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      ~symbols (t : (a, need_reloc) t addressed) =
+    let open Result.Op in
+    let section_size = E.Assembled_section.size t.value.binary_section in
+    let got_address = Address.add_int t.address section_size in
+    let got = Bin_table.Generic.fill symbols t.value.got in
+    let plt_address =
+      Address.add_int got_address (Bin_table.Generic.in_memory_size got)
+    in
+    let plt = Bin_table.Generic.fill symbols t.value.plt in
+    let got_lookup =
+      Some (fun name -> Bin_table.Generic.symbol_address { address = got_address; value = got } name)
+    in
+    let plt_lookup =
+      Some (fun name -> Bin_table.Generic.symbol_address { address = plt_address; value = plt } name)
+    in
+    let+ () =
+      Relocate.Generic.all (module E) ~symbols
+        ~got_lookup ~plt_lookup
+        ~section_name:name
+        { address = t.address; value = t.value.binary_section }
+    in
+    let value = { t.value with got; plt } in
+    { t with value }
+
+  let content (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      (t : (a, relocated) t) =
+    E.Assembled_section.contents t.binary_section
+    ^ Bin_table.Generic.content t.got
+    ^ Bin_table.Generic.content t.plt
+
+  let symbols (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      { address; value = t } =
+    Symbols.from_binary_section_generic (module E) { address; value = t.binary_section }
+end

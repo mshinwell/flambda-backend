@@ -65,6 +65,21 @@ let from_binary_section { address; value = binary_section } =
       acc := String.Map.add ~key:name ~data:(Address.add_int address offset) !acc);
   !acc
 
+(* Generic version using the unified Binary_emitter interface *)
+let from_binary_section_generic (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    { address; value = binary_section } =
+  let acc = ref String.Map.empty in
+  E.Assembled_section.iter_symbols binary_section ~f:(fun ~name ~offset ->
+    match name with
+    | "caml_absf_mask" | "caml_negf_mask"
+    | "caml_absf32_mask" | "caml_negf32_mask" -> ()
+    | _ ->
+      acc := String.Map.add ~key:name ~data:(Address.add_int address offset) !acc);
+  !acc
+
 let find t name =
   match String.Map.find_opt name t with
   | Some addr -> Some addr

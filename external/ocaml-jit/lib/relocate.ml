@@ -16,18 +16,74 @@
 
 open Import
 
+let out_of_text_error ~got_or_plt ~section_name =
+  errorf
+    "Relocation through %s in section %S. Such relocations should not be found \
+     outside .text section"
+    got_or_plt section_name
+
+(* Generic relocate using Binary_emitter.S interface *)
+module Generic = struct
+  type table_lookup = string -> Address.t option
+
+  let one (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      ~symbols ~got_lookup ~plt_lookup ~section_name (binary_section : a addressed) (reloc : r) =
+    let open Result.Op in
+    let _sym = E.Relocation.target_symbol reloc in
+    let is_got = E.Relocation.is_got_reloc reloc in
+    let is_plt = E.Relocation.is_plt_reloc reloc in
+    (* Build lookup function that routes to GOT/PLT/symbols as appropriate *)
+    let lookup_symbol name =
+      if is_got then
+        match got_lookup with
+        | None -> None
+        | Some lookup ->
+          Option.map Address.to_int64 (lookup name)
+      else if is_plt then
+        match plt_lookup with
+        | None -> None
+        | Some lookup ->
+          Option.map Address.to_int64 (lookup name)
+      else
+        Option.map Address.to_int64 (Symbols.find symbols name)
+    in
+    (* Check for invalid GOT/PLT outside .text *)
+    let* () =
+      if is_got && Option.is_none got_lookup then
+        out_of_text_error ~got_or_plt:"GOT" ~section_name
+      else if is_plt && Option.is_none plt_lookup then
+        out_of_text_error ~got_or_plt:"PLT" ~section_name
+      else Ok ()
+    in
+    let offset = E.Relocation.offset_from_section_beginning reloc in
+    let place_address =
+      Int64.add (Address.to_int64 binary_section.address) (Int64.of_int offset)
+    in
+    let* data = E.Relocation.compute_value reloc ~place_address ~lookup_symbol in
+    let size = E.Relocation.size reloc in
+    E.Assembled_section.add_patch binary_section.value ~offset ~size ~data;
+    Ok ()
+
+  let all (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      ~symbols ~got_lookup ~plt_lookup ~section_name (binary_section : a addressed) =
+    let relocs = E.Assembled_section.relocations binary_section.value in
+    Result.List.iter_all relocs
+      ~f:(one (module E) ~symbols ~got_lookup ~plt_lookup ~section_name binary_section)
+end
+
+(* Legacy X86-specific implementation for backwards compatibility *)
 let relocation_doesn't_fit_error ~value ~target_address ~section_name
       ~min_value ~max_value =
   errorf
     "Computed value 0x%Lx for relocation of target address 0x%a in section %s \
      doesn't fit; permissible range is (0x%Lx, 0x%Lx)"
     value Address.pp target_address section_name min_value max_value
-
-let out_of_text_error ~got_or_plt ~section_name =
-  errorf
-    "Relocation through %s in section %S. Such relocations should not be found \
-     outside .text section"
-    got_or_plt section_name
 
 let unauthorized_absolute_reloc ~got_or_plt ~section_name =
   errorf
@@ -101,7 +157,11 @@ let one ~symbols ~got ~plt ~section_name binary_section t =
     relocation_doesn't_fit_error ~value:data ~target_address ~section_name
       ~min_value ~max_value
   else (
-    let size = Relocation.Size.to_data_size t.size in
+    let size : X86_binary_emitter.data_size =
+      match t.size with
+      | Relocation.Size.S32 -> B32
+      | S64 -> B64
+    in
     X86_binary_emitter.add_patch ~offset:t.offset_from_section_beginning ~size
       ~data binary_section.value;
     Ok ()

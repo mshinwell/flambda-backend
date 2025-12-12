@@ -74,6 +74,12 @@ module type S = sig
 
   module Assembled_section :
     Assembled_section with type relocation = Relocation.t
+
+  module Plt : sig
+    val entry_size : int
+
+    val write_entry : Buffer.t -> int64 -> unit
+  end
 end
 
 type arch =

@@ -47,3 +47,48 @@ val content : relocated t -> string
 val symbols : _ t addressed -> Symbols.t
 (** Return a mapping from symbols to absolute address for the symbols defined in the given
     text section. *)
+
+(** Generic text section using the unified Binary_emitter interface *)
+module Generic : sig
+  type need_reloc
+
+  type relocated
+
+  type ('section, 'reloc_state) t
+
+  val from_binary_section :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    'a ->
+    ('a, need_reloc) t
+
+  val in_memory_size :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    ('a, _) t ->
+    int
+
+  val relocate :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    symbols:Symbols.t ->
+    ('a, need_reloc) t addressed ->
+    (('a, relocated) t addressed, string list) result
+
+  val content :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    ('a, relocated) t ->
+    string
+
+  val symbols :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    ('a, _) t addressed ->
+    Symbols.t
+end

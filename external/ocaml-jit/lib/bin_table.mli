@@ -54,3 +54,27 @@ module type IN = sig
 end
 
 module Make (X : IN) : S
+
+(** Generic bin table using the unified Binary_emitter interface *)
+module Generic : sig
+  type _ t
+
+  val from_binary_section :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    name:string ->
+    entry_size:int ->
+    is_relevant_reloc:('r -> bool) ->
+    write_entry:(Buffer.t -> Address.t -> unit) ->
+    'a ->
+    empty t
+
+  val fill : Symbols.t -> empty t -> filled t
+
+  val in_memory_size : _ t -> int
+
+  val content : filled t -> string
+
+  val symbol_address : _ t addressed -> string -> Address.t option
+end

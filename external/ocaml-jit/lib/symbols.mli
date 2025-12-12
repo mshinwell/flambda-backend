@@ -26,6 +26,14 @@ val from_binary_section : X86_binary_emitter.buffer addressed -> t
     that should be available globally, such as ["caml_absf_mask"] will not
     be ignored so that we always use the global ones. *)
 
+val from_binary_section_generic :
+  (module Binary_emitter.S
+     with type Assembled_section.t = 'a
+      and type Relocation.t = 'r) ->
+  'a addressed ->
+  t
+(** Generic version using the unified Binary_emitter interface. *)
+
 val strict_union : t -> t -> t
 (** Returns the union of two symbols mappings. Raises an exception if there
     are conflicts.

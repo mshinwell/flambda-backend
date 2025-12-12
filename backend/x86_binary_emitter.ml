@@ -1754,4 +1754,25 @@ module For_jit = struct
       in
       add_patch ~offset ~size:sz ~data b
   end
+
+  module Plt = struct
+    (* x86-64 PLT entry:
+       movabs r10, <address>   ; 49 ba <8 bytes>
+       jmp *r10                ; 41 ff e2
+       Total: 10 bytes *)
+    let movabs_r10_opcode = "\x49\xba"
+    let jmp_r10_instr = "\x41\xff\xe2"
+
+    let entry_size =
+      String.length movabs_r10_opcode + 8 + String.length jmp_r10_instr
+
+    let write_entry buf address =
+      Buffer.add_string buf movabs_r10_opcode;
+      for i = 0 to 7 do
+        let byte = Int64.(to_int (logand (shift_right_logical address (i * 8))
+          0xFFL)) in
+        Buffer.add_char buf (Char.chr byte)
+      done;
+      Buffer.add_string buf jmp_r10_instr
+  end
 end

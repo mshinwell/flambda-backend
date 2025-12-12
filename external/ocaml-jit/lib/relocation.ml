@@ -36,8 +36,12 @@ module Size = struct
   type t = S64 | S32
 
   let to_data_size = function
-    | S64 -> X86_binary_emitter.B64
-    | S32 -> X86_binary_emitter.B32
+    | S64 -> Binary_emitter.B64
+    | S32 -> Binary_emitter.B32
+
+  let from_data_size : Binary_emitter.data_size -> t = function
+    | Binary_emitter.B64 -> S64
+    | Binary_emitter.B8 | Binary_emitter.B16 | Binary_emitter.B32 -> S32
 
   let to_int = function S32 -> 4 | S64 -> 8
 end

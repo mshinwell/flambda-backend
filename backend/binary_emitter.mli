@@ -92,6 +92,17 @@ module type S = sig
 
   module Assembled_section :
     Assembled_section with type relocation = Relocation.t
+
+  (** PLT (Procedure Linkage Table) stub generation for JIT.
+      Each PLT entry is a small piece of machine code that jumps to an address. *)
+  module Plt : sig
+    (** Size in bytes of each PLT entry *)
+    val entry_size : int
+
+    (** Write a PLT entry to the buffer that will jump to the given address.
+        The address is the absolute target address to jump to. *)
+    val write_entry : Buffer.t -> int64 -> unit
+  end
 end
 
 (** Architecture type for runtime selection *)

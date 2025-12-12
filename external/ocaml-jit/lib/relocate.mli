@@ -16,6 +16,25 @@
 
 open Import
 
+(** Generic relocation using the unified Binary_emitter interface *)
+module Generic : sig
+  (** Type for looking up symbol addresses in GOT/PLT tables *)
+  type table_lookup = string -> Address.t option
+
+  val all :
+    (module Binary_emitter.S
+       with type Assembled_section.t = 'a
+        and type Relocation.t = 'r) ->
+    symbols:Symbols.t ->
+    got_lookup:table_lookup option ->
+    plt_lookup:table_lookup option ->
+    section_name:string ->
+    'a addressed ->
+    (unit, string list) result
+end
+
+(** X86-specific relocations (legacy interface) *)
+
 val all_text :
   symbols:Symbols.t ->
   got:Bin_table.filled Jit_got.t addressed ->

@@ -102,3 +102,62 @@ module Make (X : IN) : S = struct
     let+ offset = symbol_offset t symbol in
     Address.add_int address offset
 end
+
+(* Generic implementation using the unified Binary_emitter interface *)
+module Generic = struct
+  type _ t = {
+    index_map : int String.Map.t;
+    content : Address.t array;
+    name : string;
+    entry_size : int;
+    write_entry : Buffer.t -> Address.t -> unit;
+  }
+
+  let from_binary_section (type a r)
+      (module E : Binary_emitter.S
+        with type Assembled_section.t = a
+         and type Relocation.t = r)
+      ~name ~entry_size ~is_relevant_reloc ~write_entry (section : a) =
+    let relocs = E.Assembled_section.relocations section in
+    let _, index_map =
+      List.fold_left relocs ~init:(0, String.Map.empty)
+        ~f:(fun (index, map) reloc ->
+          if is_relevant_reloc reloc then
+            let label = E.Relocation.target_symbol reloc in
+            if String.Map.mem label map then (index, map)
+            else (index + 1, String.Map.add ~key:label ~data:index map)
+          else (index, map))
+    in
+    { index_map; content = [||]; name; entry_size; write_entry }
+
+  let in_memory_size t = String.Map.cardinal t.index_map * t.entry_size
+
+  let fill symbols t =
+    let size = String.Map.cardinal t.index_map in
+    let content = Array.make size Address.placeholder in
+    String.Map.iter t.index_map ~f:(fun ~key:symbol_name ~data:index ->
+        match Symbols.find symbols symbol_name with
+        | Some addr -> content.(index) <- addr
+        | None ->
+            failwithf "Symbol %s refered to by the %s is unknown" symbol_name
+              t.name);
+    { t with content }
+
+  let content t =
+    let size = in_memory_size t in
+    if size = 0 then ""
+    else
+      let buf = Buffer.create size in
+      Array.iter t.content ~f:(t.write_entry buf);
+      Buffer.contents buf
+
+  let symbol_offset t symbol =
+    let open Option.Op in
+    let+ index = String.Map.find_opt symbol t.index_map in
+    index * t.entry_size
+
+  let symbol_address { address; value = t } symbol =
+    let open Option.Op in
+    let+ offset = symbol_offset t symbol in
+    Address.add_int address offset
+end

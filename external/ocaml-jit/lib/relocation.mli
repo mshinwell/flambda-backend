@@ -31,7 +31,9 @@ end
 module Size : sig
   type t = S64 | S32
 
-  val to_data_size : t -> X86_binary_emitter.data_size
+  val to_data_size : t -> Binary_emitter.data_size
+
+  val from_data_size : Binary_emitter.data_size -> t
 
   val to_int : t -> int
   (** Returns the size in bytes corresponding to the given relocation size *)

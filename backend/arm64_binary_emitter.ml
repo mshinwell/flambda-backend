@@ -2798,4 +2798,31 @@ module For_jit = struct
       let sz = match sz with B8 -> P8 | B16 -> P16 | B32 -> P32 | B64 -> P64 in
       Section_state.add_patch t ~offset ~size:sz ~data
   end
+
+  module Plt = struct
+    (* ARM64 PLT entry:
+       ldr x16, .+8          ; 58000050   - load address from next 8 bytes
+       br x16                ; d61f0200   - branch to x16
+       .quad <address>       ; 8 bytes of address
+       Total: 16 bytes *)
+    let entry_size = 16
+
+    let write_entry buf address =
+      (* ldr x16, .+8 - PC-relative load from 8 bytes ahead *)
+      Buffer.add_char buf '\x50';
+      Buffer.add_char buf '\x00';
+      Buffer.add_char buf '\x00';
+      Buffer.add_char buf '\x58';
+      (* br x16 - branch to register *)
+      Buffer.add_char buf '\x00';
+      Buffer.add_char buf '\x02';
+      Buffer.add_char buf '\x1f';
+      Buffer.add_char buf '\xd6';
+      (* 8-byte address (little-endian) *)
+      for i = 0 to 7 do
+        let byte = Int64.(to_int (logand (shift_right_logical address (i * 8))
+          0xFFL)) in
+        Buffer.add_char buf (Char.chr byte)
+      done
+  end
 end
