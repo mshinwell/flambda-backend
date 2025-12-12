@@ -2725,38 +2725,39 @@ module For_jit = struct
   module Relocation = struct
     type t = Relocation.t
 
-    let offset_from_section_beginning (r : t) = r.Relocation.offset_from_section_beginning
+    let offset_from_section_beginning (r : Relocation.t) =
+      r.offset_from_section_beginning
 
     (* ARM64 relocations are always 32-bit patches within 32-bit instructions *)
     let size (_ : t) : Binary_emitter.data_size = Binary_emitter.B32
 
-    let target_symbol (r : t) =
-      match r.Relocation.kind with
-      | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 sym
-      | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 sym
-      | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC sym
-      | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC sym -> sym
+    let target_symbol (r : Relocation.t) : string =
+      match r.kind with
+      | R_AARCH64_ADR_PREL_LO21 sym
+      | R_AARCH64_ADR_PREL_PG_HI21 sym
+      | R_AARCH64_LD64_GOT_LO12_NC sym
+      | R_AARCH64_ADD_ABS_LO12_NC sym -> sym
 
-    let is_got_reloc (r : t) =
-      match r.Relocation.kind with
-      | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC _ -> true
-      | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 _
-      | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 _
-      | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC _ -> false
+    let is_got_reloc (r : Relocation.t) =
+      match r.kind with
+      | R_AARCH64_LD64_GOT_LO12_NC _ -> true
+      | R_AARCH64_ADR_PREL_LO21 _
+      | R_AARCH64_ADR_PREL_PG_HI21 _
+      | R_AARCH64_ADD_ABS_LO12_NC _ -> false
 
     let is_plt_reloc (_ : t) = false (* ARM64 doesn't use PLT in same way *)
 
-    let compute_value (r : t) ~place_address ~lookup_symbol =
+    let compute_value (r : Relocation.t) ~place_address ~lookup_symbol =
       let sym = target_symbol r in
       match lookup_symbol sym with
       | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
       | Some target_addr ->
-        match r.Relocation.kind with
-        | Relocation.Kind.R_AARCH64_ADR_PREL_LO21 _ ->
+        (match r.kind with
+        | R_AARCH64_ADR_PREL_LO21 _ ->
           (* PC-relative offset for ADR instruction, low 21 bits *)
           let offset = Int64.sub target_addr place_address in
           Ok offset
-        | Relocation.Kind.R_AARCH64_ADR_PREL_PG_HI21 _ ->
+        | R_AARCH64_ADR_PREL_PG_HI21 _ ->
           (* Page-relative offset for ADRP instruction
              Result = Page(target) - Page(place) *)
           let page_mask = Int64.lognot 0xFFF_L in
@@ -2764,14 +2765,14 @@ module For_jit = struct
           let place_page = Int64.logand place_address page_mask in
           let offset = Int64.sub target_page place_page in
           Ok offset
-        | Relocation.Kind.R_AARCH64_ADD_ABS_LO12_NC _ ->
+        | R_AARCH64_ADD_ABS_LO12_NC _ ->
           (* Lower 12 bits of absolute address *)
           let low12 = Int64.logand target_addr 0xFFF_L in
           Ok low12
-        | Relocation.Kind.R_AARCH64_LD64_GOT_LO12_NC _ ->
+        | R_AARCH64_LD64_GOT_LO12_NC _ ->
           (* Lower 12 bits of GOT entry address, scaled by 8 *)
           let low12 = Int64.logand target_addr 0xFFF_L in
-          Ok low12
+          Ok low12)
   end
 
   module Assembled_section = struct
@@ -2793,14 +2794,8 @@ module For_jit = struct
     let iter_symbols t ~f =
       Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t)
 
-    let add_patch t ~offset ~size:sz ~data =
-      let sz =
-        match sz with
-        | Binary_emitter.B8 -> P8
-        | Binary_emitter.B16 -> P16
-        | Binary_emitter.B32 -> P32
-        | Binary_emitter.B64 -> P64
-      in
+    let add_patch t ~offset ~size:(sz : Binary_emitter.data_size) ~data =
+      let sz = match sz with B8 -> P8 | B16 -> P16 | B32 -> P32 | B64 -> P64 in
       Section_state.add_patch t ~offset ~size:sz ~data
   end
 end

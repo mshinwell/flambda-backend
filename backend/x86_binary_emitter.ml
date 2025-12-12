@@ -1648,16 +1648,20 @@ let labels b = b.labels
 
 (* For_jit module implementing Binary_emitter.S *)
 module For_jit = struct
+  (* Alias parent Relocation before shadowing it *)
+  module Reloc = Relocation
+  module Kind = Relocation.Kind
+
   module Relocation = struct
-    type t = Relocation.t
+    type t = Reloc.t
 
-    let offset_from_section_beginning (r : t) =
-      r.Relocation.offset_from_section_beginning
+    let offset_from_section_beginning (r : Reloc.t) =
+      r.Reloc.offset_from_section_beginning
 
-    let size (r : t) : Binary_emitter.data_size =
-      match r.Relocation.kind with
-      | Relocation.Kind.REL32 _ | Relocation.Kind.DIR32 _ -> Binary_emitter.B32
-      | Relocation.Kind.DIR64 _ -> Binary_emitter.B64
+    let size (r : Reloc.t) : Binary_emitter.data_size =
+      match r.Reloc.kind with
+      | Kind.REL32 _ | Kind.DIR32 _ -> Binary_emitter.B32
+      | Kind.DIR64 _ -> Binary_emitter.B64
 
     let parse_label label =
       match String.split_on_char '@' label with
@@ -1665,66 +1669,58 @@ module For_jit = struct
       | [sym; suffix] -> sym, Some suffix
       | _ -> label, None
 
-    let target_symbol (r : t) =
-      let label =
-        match r.Relocation.kind with
-        | Relocation.Kind.REL32 (label, _)
-        | Relocation.Kind.DIR32 (label, _)
-        | Relocation.Kind.DIR64 (label, _) -> label
+    let target_symbol (r : Reloc.t) =
+      let label = match r.Reloc.kind with
+        | Kind.REL32 (label, _)
+        | Kind.DIR32 (label, _)
+        | Kind.DIR64 (label, _) -> label
       in
       let sym, _ = parse_label label in
       sym
 
-    let is_got_reloc (r : t) =
-      let label =
-        match r.Relocation.kind with
-        | Relocation.Kind.REL32 (label, _)
-        | Relocation.Kind.DIR32 (label, _)
-        | Relocation.Kind.DIR64 (label, _) -> label
+    let is_got_reloc (r : Reloc.t) =
+      let label = match r.Reloc.kind with
+        | Kind.REL32 (label, _)
+        | Kind.DIR32 (label, _)
+        | Kind.DIR64 (label, _) -> label
       in
       let _, suffix = parse_label label in
-      match suffix with
-      | Some "GOTPCREL" -> true
-      | _ -> false
+      match suffix with Some "GOTPCREL" -> true | _ -> false
 
-    let is_plt_reloc (r : t) =
-      let label =
-        match r.Relocation.kind with
-        | Relocation.Kind.REL32 (label, _)
-        | Relocation.Kind.DIR32 (label, _)
-        | Relocation.Kind.DIR64 (label, _) -> label
+    let is_plt_reloc (r : Reloc.t) =
+      let label = match r.Reloc.kind with
+        | Kind.REL32 (label, _)
+        | Kind.DIR32 (label, _)
+        | Kind.DIR64 (label, _) -> label
       in
       let _, suffix = parse_label label in
-      match suffix with
-      | Some "PLT" -> true
-      | _ -> false
+      match suffix with Some "PLT" -> true | _ -> false
 
-    let compute_value (r : t) ~place_address ~lookup_symbol =
-      let label, addend =
-        match r.Relocation.kind with
-        | Relocation.Kind.REL32 (label, addend)
-        | Relocation.Kind.DIR32 (label, addend)
-        | Relocation.Kind.DIR64 (label, addend) -> label, addend
+    let compute_value (r : Reloc.t) ~place_address ~lookup_symbol =
+      let label, addend = match r.Reloc.kind with
+        | Kind.REL32 (label, addend)
+        | Kind.DIR32 (label, addend)
+        | Kind.DIR64 (label, addend) -> label, addend
       in
       let sym, _ = parse_label label in
       match lookup_symbol sym with
       | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
       | Some target_addr ->
         let target_addr = Int64.add target_addr addend in
-        match r.Relocation.kind with
-        | Relocation.Kind.REL32 _ ->
+        (match r.Reloc.kind with
+        | Kind.REL32 _ ->
           (* Relative: compute offset from place to target *)
           let rel_size = 4L in (* REL32 is 4 bytes *)
           let src_addr = Int64.add place_address rel_size in
           Ok (Int64.sub target_addr src_addr)
-        | Relocation.Kind.DIR32 _ | Relocation.Kind.DIR64 _ ->
+        | Kind.DIR32 _ | Kind.DIR64 _ ->
           (* Absolute: just use the target address *)
-          Ok target_addr
+          Ok target_addr)
   end
 
   module Assembled_section = struct
     type t = buffer
-    type relocation = Relocation.t
+    type relocation = Reloc.t
 
     let size b = Buffer.length b.buf
 
@@ -1749,7 +1745,7 @@ module For_jit = struct
           | None -> ())
         b.labels
 
-    let add_patch b ~offset ~size:sz ~data =
+    let add_patch b ~offset ~size:(sz : Binary_emitter.data_size) ~data =
       let sz = match sz with
         | Binary_emitter.B8 -> B8
         | Binary_emitter.B16 -> B16
