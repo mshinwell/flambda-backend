@@ -14,17 +14,23 @@
  *
  *)
 
-open! Import
+open Import
 
-include Bin_table.Make (struct
-  let name = "GOT"
+type 'a t = 'a Bin_table.t
 
-  let entry_size = Address.size
+let from_binary_section binary_section =
+  let module E = X86_binary_emitter.For_jit in
+  Bin_table.from_binary_section (module E)
+    ~name:"GOT"
+    ~entry_size:Address.size
+    ~is_relevant_reloc:E.Relocation.is_got_reloc
+    ~write_entry:Address.emit
+    binary_section
 
-  let entry_from_relocation reloc =
-    match (reloc : Relocation.t) with
-    | { target = Got label; kind = Relative; _ } -> Some label
-    | { target = Plt _ | Direct _; _ } | { kind = Absolute; _ } -> None
+let fill = Bin_table.fill
 
-  let write_entry buf address = Address.emit buf address
-end)
+let in_memory_size = Bin_table.in_memory_size
+
+let content = Bin_table.content
+
+let symbol_address = Bin_table.symbol_address

@@ -16,44 +16,35 @@
 
 open Import
 
-(** Generic relocation using the unified Binary_emitter interface *)
-module Generic : sig
-  (** Type for looking up symbol addresses in GOT/PLT tables *)
-  type table_lookup = string -> Address.t option
+(** Type for looking up symbol addresses in GOT/PLT tables *)
+type table_lookup = string -> Address.t option
 
-  val all :
-    (module Binary_emitter.S
-       with type Assembled_section.t = 'a
-        and type Relocation.t = 'r) ->
-    symbols:Symbols.t ->
-    got_lookup:table_lookup option ->
-    plt_lookup:table_lookup option ->
-    section_name:string ->
-    'a addressed ->
-    (unit, string list) result
-end
+(** Apply all relocations to the given binary section.
+    Uses the unified Binary_emitter interface. *)
+val all :
+  (module Binary_emitter.S
+     with type Assembled_section.t = 'a
+      and type Relocation.t = 'r) ->
+  symbols:Symbols.t ->
+  got_lookup:table_lookup option ->
+  plt_lookup:table_lookup option ->
+  section_name:string ->
+  'a addressed ->
+  (unit, string list) result
 
-(** X86-specific relocations (legacy interface) *)
-
+(** Apply all relocations to the .text section using x86 emitter.
+    Convenience wrapper that uses Jit_got and Jit_plt for lookups. *)
 val all_text :
   symbols:Symbols.t ->
   got:Bin_table.filled Jit_got.t addressed ->
   plt:Bin_table.filled Jit_plt.t addressed ->
   X86_binary_emitter.buffer addressed ->
   (unit, string list) result
-(** Apply all relocations to the given .text binary section as patches.
-    Symbols' absolute addresses are looked up using the provided tables for PLT and GOT based
-    relocations or the symbol map for other relocations.
-    It will return an error before applying any relocation if one or more of them can't properly be parsed
-    It will also return an error if a GOT or PLT relocation is marked as absolute but will still apply
-    other relocations.
-    Errors for either of the above mentioned cases are aggregated into a list. *)
 
-val all :
+(** Apply all relocations to a non-.text section using x86 emitter.
+    No GOT/PLT relocations are expected. *)
+val all_other :
   symbols:Symbols.t ->
   section_name:string ->
   X86_binary_emitter.buffer addressed ->
   (unit, string list) result
-(** Same as [apply_all_text] but for any other section.
-    The section is expected to contain no GOT nor PLT based relocations. If any such relocation is found
-    the function will return an error but still apply other relocations. *)

@@ -40,6 +40,6 @@ let save_text_section ~phrase_name { address; value = text_section } =
       Format.asprintf "%s.section%s.%a" phrase_name Jit_text_section.name
         Address.pp address
     in
-    write_bin_file ~filename (Jit_text_section.content text_section)
+    write_bin_file ~filename (Jit_text_section.X86.content text_section)
 
 let print_binary_section_map _binary_section_map = ()

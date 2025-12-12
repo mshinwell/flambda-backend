@@ -14,4 +14,16 @@
  *
  *)
 
-include Bin_table.S
+open Import
+
+type 'a t = 'a Bin_table.t
+
+val from_binary_section : X86_binary_emitter.buffer -> Bin_table.empty t
+
+val fill : Symbols.t -> Bin_table.empty t -> Bin_table.filled t
+
+val in_memory_size : _ t -> int
+
+val content : Bin_table.filled t -> string
+
+val symbol_address : _ t addressed -> string -> Address.t option

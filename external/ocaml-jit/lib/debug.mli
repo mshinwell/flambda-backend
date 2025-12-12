@@ -25,7 +25,7 @@ val save_binary_sections :
 
 val save_text_section :
   phrase_name:string ->
-  Jit_text_section.relocated Jit_text_section.t addressed ->
+  Jit_text_section.relocated Jit_text_section.X86.t addressed ->
   unit
 
 val print_binary_section_map : X86_binary_emitter.buffer String.Map.t -> unit
