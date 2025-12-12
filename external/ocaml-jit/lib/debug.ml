@@ -16,10 +16,6 @@
 
 open Import
 
-let print_ast _ = ()
-
-let print_section_map _section_map = ()
-
 let write_bin_file ~filename content =
   let oc = open_out_bin filename in
   output_string oc content;

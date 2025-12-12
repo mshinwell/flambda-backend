@@ -201,32 +201,15 @@ let jit_run entry_points =
       | Ok x -> Result x
       | Err s -> failwithf "Jit.run: %s" s)
 
-let get_arch () =
-  (* TODO: use target arch *)
-  match Sys.word_size with
-  | 32 -> X86_ast.X86
-  | 64 -> X86_ast.X64
-  | i -> failwithf "Unexpected word size: %d" i 16
-
-(** Assemble each section using X86_binary_emitter. Empty sections are filtered *)
-let binary_section_map_x86 ~arch section_map =
-  String.Map.filter_map section_map ~f:(fun name instructions ->
-      let binary_section = X86_section.assemble ~arch { name; instructions } in
-      if X86_binary_emitter.size binary_section = 0 then None
-      else Some binary_section)
-
-let jit_load_x86 ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
-  let module E = X86_binary_emitter.For_jit in
-  let arch = get_arch () in
-  let section_map =
-    List.fold_left
-      ~f:(fun section_map (name, instrs) ->
-        String.Map.add section_map
-          ~key:(X86_proc.Section_name.to_string name)
-          ~data:instrs)
-      section_map ~init:String.Map.empty
-  in
-  let binary_section_map = binary_section_map_x86 ~arch section_map in
+(** Load and run assembled binary sections.
+    This is the main generic JIT entry point that works with any architecture. *)
+let jit_load (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    ~phrase_name
+    ~outcome_ref
+    (binary_section_map : a String.Map.t) =
   Debug.print_binary_section_map (module E) binary_section_map;
   let other_sections, text = extract_text_section (module E) binary_section_map in
   let addressed_text, addressed_sections = alloc_all (module E) text other_sections in
@@ -249,29 +232,60 @@ let jit_load_x86 ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
   let result = jit_run entry_points in
   outcome_ref := Some result
 
+(* X86-specific entry points *)
+module X86 = struct
+  let get_arch () =
+    match Sys.word_size with
+    | 32 -> X86_ast.X86
+    | 64 -> X86_ast.X64
+    | i -> failwithf "Unexpected word size: %d" i 16
+
+  (** Assemble each section. Empty sections are filtered *)
+  let assemble_sections ~arch section_map =
+    String.Map.filter_map section_map ~f:(fun name instructions ->
+        let binary_section = X86_section.assemble ~arch { name; instructions } in
+        if X86_binary_emitter.size binary_section = 0 then None
+        else Some binary_section)
+
+  (** X86 internal assembler callback *)
+  let internal_assembler ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
+    let arch = get_arch () in
+    let section_map =
+      List.fold_left
+        ~f:(fun section_map (name, instrs) ->
+          String.Map.add section_map
+            ~key:(X86_proc.Section_name.to_string name)
+            ~data:instrs)
+        section_map ~init:String.Map.empty
+    in
+    let binary_section_map = assemble_sections ~arch section_map in
+    jit_load (module X86_binary_emitter.For_jit)
+      ~phrase_name ~outcome_ref binary_section_map
+
+  let with_jit ~phrase_name f =
+    let ias = !X86_proc.internal_assembler in
+    X86_proc.register_internal_assembler
+      (internal_assembler ~phrase_name ~outcome_ref:outcome_global);
+    try
+      let res = f () in
+      X86_proc.internal_assembler := ias;
+      res
+    with exn ->
+      X86_proc.internal_assembler := ias;
+      raise exn
+end
+
 let set_debug () =
   match Sys.getenv_opt "OCAML_JIT_DEBUG" with
   | Some ("true" | "1") -> Globals.debug := true
   | None | Some _ -> Globals.debug := false
-
-let with_jit_x86 ~phrase_name f =
-  let ias = !X86_proc.internal_assembler in
-  X86_proc.register_internal_assembler
-    (jit_load_x86 ~phrase_name ~outcome_ref:outcome_global);
-  try
-    let res = f () in
-    X86_proc.internal_assembler := ias;
-    res
-  with exn ->
-    X86_proc.internal_assembler := ias;
-    raise exn
 
 let need_symbol sym =
   match Symbols.find !Globals.symbols sym with
   | Some _ -> false
   | None -> not (ndl_existssym sym)
 
-let jit_load_body ~phrase_name ppf (program : Lambda.program) =
+let jit_load_lambda ~phrase_name ppf (program : Lambda.program) =
   let open Config in
   let dll =
     if !Clflags.keep_asm_file then phrase_name ^ ext_dll
@@ -295,8 +309,8 @@ let jit_load_body ~phrase_name ppf (program : Lambda.program) =
       outcome_global := None;
       res
 
-let jit_load ~phrase_name ppf program =
-  with_jit_x86 ~phrase_name (fun () -> jit_load_body ~phrase_name ppf program)
+let jit_load_program ~phrase_name ppf program =
+  X86.with_jit ~phrase_name (fun () -> jit_load_lambda ~phrase_name ppf program)
 
 let jit_lookup_symbol symbol =
   match Symbols.find !Globals.symbols symbol with
