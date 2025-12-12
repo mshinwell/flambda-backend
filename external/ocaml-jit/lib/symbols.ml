@@ -54,19 +54,7 @@ let aggregate ~current ~new_symbols =
     then Some new_
     else failwithf "Multiple occurrences of the symbol %s" symbol_name)
 
-let from_binary_section { address; value = binary_section } =
-  let module S = X86_binary_emitter.For_jit.Assembled_section in
-  let acc = ref String.Map.empty in
-  S.iter_symbols binary_section ~f:(fun ~name ~offset ->
-    match name with
-    | "caml_absf_mask" | "caml_negf_mask"
-    | "caml_absf32_mask" | "caml_negf32_mask" -> ()
-    | _ ->
-      acc := String.Map.add ~key:name ~data:(Address.add_int address offset) !acc);
-  !acc
-
-(* Generic version using the unified Binary_emitter interface *)
-let from_binary_section_generic (type a r)
+let from_binary_section (type a r)
     (module E : Binary_emitter.S
       with type Assembled_section.t = a
        and type Relocation.t = r)

@@ -73,13 +73,3 @@ let all (type a r)
   let relocs = E.Assembled_section.relocations binary_section.value in
   Result.List.iter_all relocs
     ~f:(one (module E) ~symbols ~got_lookup ~plt_lookup ~section_name binary_section)
-
-let all_text ~symbols ~got ~plt binary_section =
-  let got_lookup = Some (fun name -> Jit_got.symbol_address got name) in
-  let plt_lookup = Some (fun name -> Jit_plt.symbol_address plt name) in
-  all (module X86_binary_emitter.For_jit) ~symbols ~got_lookup ~plt_lookup
-    ~section_name:".text" binary_section
-
-let all_other ~symbols ~section_name binary_section =
-  all (module X86_binary_emitter.For_jit) ~symbols ~got_lookup:None ~plt_lookup:None
-    ~section_name binary_section

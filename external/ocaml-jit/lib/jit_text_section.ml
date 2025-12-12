@@ -100,24 +100,4 @@ let symbols (type a r)
       with type Assembled_section.t = a
        and type Relocation.t = r)
     { address; value = t } =
-  Symbols.from_binary_section_generic (module E) { address; value = t.binary_section }
-
-(* X86-specific convenience functions *)
-module X86 = struct
-  type 'a t = (X86_binary_emitter.buffer, 'a) t
-
-  let from_binary_section binary_section =
-    from_binary_section (module X86_binary_emitter.For_jit) binary_section
-
-  let in_memory_size t =
-    in_memory_size (module X86_binary_emitter.For_jit) t
-
-  let relocate ~symbols t =
-    relocate (module X86_binary_emitter.For_jit) ~symbols t
-
-  let content t =
-    content (module X86_binary_emitter.For_jit) t
-
-  let symbols t =
-    symbols (module X86_binary_emitter.For_jit) t
-end
+  Symbols.from_binary_section (module E) { address; value = t.binary_section }

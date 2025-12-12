@@ -70,21 +70,3 @@ val symbols :
   Symbols.t
 (** Return a mapping from symbols to absolute address for the symbols defined in the given
     text section. *)
-
-(** X86-specific convenience functions *)
-module X86 : sig
-  type 'a t = (X86_binary_emitter.buffer, 'a) t
-
-  val from_binary_section : X86_binary_emitter.buffer -> need_reloc t
-
-  val in_memory_size : _ t -> int
-
-  val relocate :
-    symbols:Symbols.t ->
-    need_reloc t addressed ->
-    (relocated t addressed, string list) result
-
-  val content : relocated t -> string
-
-  val symbols : _ t addressed -> Symbols.t
-end

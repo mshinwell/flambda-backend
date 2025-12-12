@@ -27,22 +27,6 @@ external ndl_existssym : string -> bool
   = "caml_sys_exit" "caml_natdynlink_existssym"
   [@@noalloc]
 
-(** Assemble each section using X86_binary_emitter. Empty sections are filtered *)
-let binary_section_map ~arch section_map =
-  String.Map.filter_map section_map ~f:(fun name instructions ->
-      let binary_section = X86_section.assemble ~arch { name; instructions } in
-      if X86_binary_emitter.size binary_section = 0 then None
-      else Some binary_section)
-
-let extract_text_section binary_section_map =
-  let name = Jit_text_section.name in
-  match String.Map.find_opt name binary_section_map with
-  | None -> failwithf "No text section in generated assembler"
-  | Some binary_section ->
-      let text = Jit_text_section.X86.from_binary_section binary_section in
-      let binary_section_map = String.Map.remove name binary_section_map in
-      (binary_section_map, text)
-
 let pagesize = Externals.get_page_size ()
 
 let round_to_pages section_size =
@@ -51,16 +35,42 @@ let round_to_pages section_size =
     let pages = ((section_size - 1) / pagesize) + 1 in
     pages * pagesize
 
-let alloc_all jit_text_section binary_section_map =
-  (* Allocate all sections contiguously (modulo rounding up to page boundaries)
-     to minimize the chance of relocation overflow. *)
+let is_ro name = String.starts_with ~prefix:".rodata" name
+
+let set_protection ~mprotect ~name address size =
+  match mprotect address size with
+  | Ok () -> ()
+  | Error code ->
+      failwithf "mprotect failed with code %d for section %s" code name
+
+(** Extract text section from a map of binary sections *)
+let extract_text_section (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    (binary_section_map : a String.Map.t) =
+  let name = Jit_text_section.name in
+  match String.Map.find_opt name binary_section_map with
+  | None -> failwithf "No text section in generated assembler"
+  | Some binary_section ->
+      let text = Jit_text_section.from_binary_section (module E) binary_section in
+      let binary_section_map = String.Map.remove name binary_section_map in
+      (binary_section_map, text)
+
+(** Allocate memory for all sections *)
+let alloc_all (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    jit_text_section
+    (binary_section_map : a String.Map.t) =
   let text_size =
-    round_to_pages (Jit_text_section.X86.in_memory_size jit_text_section)
+    round_to_pages (Jit_text_section.in_memory_size (module E) jit_text_section)
   in
   let total_size =
     String.Map.fold binary_section_map ~init:text_size
       ~f:(fun ~key:_ ~data:binary_section total_size ->
-        let size = round_to_pages (X86_binary_emitter.size binary_section) in
+        let size = round_to_pages (E.Assembled_section.size binary_section) in
         size + total_size)
   in
   match Externals.memalign total_size with
@@ -75,57 +85,78 @@ let alloc_all jit_text_section binary_section_map =
             let data = { address; value = binary_section } in
             let map = String.Map.add map ~key ~data in
             let size =
-              round_to_pages (X86_binary_emitter.size binary_section)
+              round_to_pages (E.Assembled_section.size binary_section)
             in
             let address = Address.add_int address size in
             (map, address))
       in
       (text, map)
 
-let local_symbol_map binary_section_map =
+(** Build symbol map from non-text sections *)
+let local_symbol_map (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    (binary_section_map : a addressed String.Map.t) =
   String.Map.fold binary_section_map ~init:Symbols.empty
     ~f:(fun ~key:_ ~data all_symbols ->
-      let section_symbols = Symbols.from_binary_section data in
+      let section_symbols = Symbols.from_binary_section (module E) data in
       Symbols.strict_union section_symbols all_symbols)
 
-let relocate_text ~symbols text_section =
-  match Jit_text_section.X86.relocate ~symbols text_section with
+(** Relocate text section *)
+let relocate_text (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    ~symbols text_section =
+  match Jit_text_section.relocate (module E) ~symbols text_section with
   | Ok text -> text
   | Error msgs ->
       failwithf "Failed to apply relocations to section %s properly:\n - %s"
         Jit_text_section.name
         (String.concat ~sep:"\n- " msgs)
 
-let relocate_other ~symbols addressed_sections =
+(** Relocate non-text sections *)
+let relocate_other (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    ~symbols addressed_sections =
   String.Map.iter addressed_sections
     ~f:(fun ~key:section_name ~data:binary_section ->
-      match Relocate.all_other ~symbols ~section_name binary_section with
+      match
+        Relocate.all (module E) ~symbols
+          ~got_lookup:None ~plt_lookup:None
+          ~section_name binary_section
+      with
       | Ok () -> ()
       | Error msgs ->
           failwithf "Failed to apply relocations to section %s properly:\n - %s"
             section_name
             (String.concat ~sep:"\n- " msgs))
 
-let is_ro name = String.starts_with ~prefix:".rodata" name
-
-let set_protection ~mprotect ~name address size =
-  match mprotect address size with
-  | Ok () -> ()
-  | Error code ->
-      failwithf "mprotect failed with code %d for section %s" code name
-
-let load_text { address; value = text_section } =
-  let size = Jit_text_section.X86.in_memory_size text_section in
-  let content = Jit_text_section.X86.content text_section in
+(** Load text section into memory *)
+let load_text (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    { address; value = text_section } =
+  let size = Jit_text_section.in_memory_size (module E) text_section in
+  let content = Jit_text_section.content (module E) text_section in
   Externals.load_section address content size;
   set_protection ~mprotect:Externals.mprotect_rx ~name:Jit_text_section.name
     address size
 
-let load_sections addressed_sections =
+(** Load non-text sections into memory *)
+let load_sections (type a r)
+    (module E : Binary_emitter.S
+      with type Assembled_section.t = a
+       and type Relocation.t = r)
+    addressed_sections =
   String.Map.iter addressed_sections
     ~f:(fun ~key:name ~data:{ address; value = binary_section } ->
-      let size = X86_binary_emitter.size binary_section in
-      let content = X86_binary_emitter.contents binary_section in
+      let size = E.Assembled_section.size binary_section in
+      let content = E.Assembled_section.contents binary_section in
       Externals.load_section address content size;
       if is_ro name then
         set_protection ~mprotect:Externals.mprotect_ro ~name address size)
@@ -177,7 +208,15 @@ let get_arch () =
   | 64 -> X86_ast.X64
   | i -> failwithf "Unexpected word size: %d" i 16
 
+(** Assemble each section using X86_binary_emitter. Empty sections are filtered *)
+let binary_section_map_x86 ~arch section_map =
+  String.Map.filter_map section_map ~f:(fun name instructions ->
+      let binary_section = X86_section.assemble ~arch { name; instructions } in
+      if X86_binary_emitter.size binary_section = 0 then None
+      else Some binary_section)
+
 let jit_load_x86 ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
+  let module E = X86_binary_emitter.For_jit in
   let arch = get_arch () in
   let section_map =
     List.fold_left
@@ -187,12 +226,12 @@ let jit_load_x86 ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
           ~data:instrs)
       section_map ~init:String.Map.empty
   in
-  let binary_section_map = binary_section_map ~arch section_map in
-  Debug.print_binary_section_map binary_section_map;
-  let other_sections, text = extract_text_section binary_section_map in
-  let addressed_text, addressed_sections = alloc_all text other_sections in
-  let other_sections_symbols = local_symbol_map addressed_sections in
-  let text_section_symbols = Jit_text_section.X86.symbols addressed_text in
+  let binary_section_map = binary_section_map_x86 ~arch section_map in
+  Debug.print_binary_section_map (module E) binary_section_map;
+  let other_sections, text = extract_text_section (module E) binary_section_map in
+  let addressed_text, addressed_sections = alloc_all (module E) text other_sections in
+  let other_sections_symbols = local_symbol_map (module E) addressed_sections in
+  let text_section_symbols = Jit_text_section.symbols (module E) addressed_text in
   let local_symbols =
     Symbols.strict_union other_sections_symbols text_section_symbols
   in
@@ -200,12 +239,12 @@ let jit_load_x86 ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
     Symbols.aggregate ~current:!Globals.symbols ~new_symbols:local_symbols
   in
   Globals.symbols := symbols;
-  let relocated_text = relocate_text ~symbols addressed_text in
-  relocate_other ~symbols addressed_sections;
-  Debug.save_binary_sections ~phrase_name addressed_sections;
-  Debug.save_text_section ~phrase_name relocated_text;
-  load_text relocated_text;
-  load_sections addressed_sections;
+  let relocated_text = relocate_text (module E) ~symbols addressed_text in
+  relocate_other (module E) ~symbols addressed_sections;
+  Debug.save_binary_sections (module E) ~phrase_name addressed_sections;
+  Debug.save_text_section (module E) ~phrase_name relocated_text;
+  load_text (module E) relocated_text;
+  load_sections (module E) addressed_sections;
   let entry_points = entry_points ~phrase_name symbols in
   let result = jit_run entry_points in
   outcome_ref := Some result
@@ -264,117 +303,3 @@ let jit_lookup_symbol symbol =
   | None -> (
       match ndl_loadsym symbol with exception _ -> None | obj -> Some obj)
   | Some x -> Some (Address.to_obj x)
-
-(* Generic JIT operations using the unified Binary_emitter interface.
-   These can be used when ARM64 JIT support is fully wired up. *)
-module Generic = struct
-  (** Extract text section from a map of binary sections *)
-  let extract_text_section (type a)
-      (module E : Binary_emitter.S with type Assembled_section.t = a)
-      (binary_section_map : a String.Map.t) =
-    let name = Jit_text_section.name in
-    match String.Map.find_opt name binary_section_map with
-    | None -> failwithf "No text section in generated assembler"
-    | Some binary_section ->
-        let text = Jit_text_section.from_binary_section (module E) binary_section in
-        let binary_section_map = String.Map.remove name binary_section_map in
-        (binary_section_map, text)
-
-  (** Allocate memory for all sections *)
-  let alloc_all (type a)
-      (module E : Binary_emitter.S with type Assembled_section.t = a)
-      jit_text_section
-      (binary_section_map : a String.Map.t) =
-    let text_size =
-      round_to_pages (Jit_text_section.in_memory_size (module E) jit_text_section)
-    in
-    let total_size =
-      String.Map.fold binary_section_map ~init:text_size
-        ~f:(fun ~key:_ ~data:binary_section total_size ->
-          let size = round_to_pages (E.Assembled_section.size binary_section) in
-          size + total_size)
-    in
-    match Externals.memalign total_size with
-    | Error msg ->
-        failwithf "posix_memalign for %d bytes failed: %s" total_size msg
-    | Ok address ->
-        let text = { address; value = jit_text_section } in
-        let address = Address.add_int address text_size in
-        let map, _address =
-          String.Map.fold binary_section_map ~init:(String.Map.empty, address)
-            ~f:(fun ~key ~data:binary_section (map, address) ->
-              let data = { address; value = binary_section } in
-              let map = String.Map.add map ~key ~data in
-              let size =
-                round_to_pages (E.Assembled_section.size binary_section)
-              in
-              let address = Address.add_int address size in
-              (map, address))
-        in
-        (text, map)
-
-  (** Build symbol map from non-text sections *)
-  let local_symbol_map (type a)
-      (module E : Binary_emitter.S with type Assembled_section.t = a)
-      (binary_section_map : a addressed String.Map.t) =
-    String.Map.fold binary_section_map ~init:Symbols.empty
-      ~f:(fun ~key:_ ~data all_symbols ->
-        let section_symbols = Symbols.from_binary_section_generic (module E) data in
-        Symbols.strict_union section_symbols all_symbols)
-
-  (** Relocate text section *)
-  let relocate_text (type a r)
-      (module E : Binary_emitter.S
-        with type Assembled_section.t = a
-         and type Relocation.t = r)
-      ~symbols text_section =
-    match Jit_text_section.relocate (module E) ~symbols text_section with
-    | Ok text -> text
-    | Error msgs ->
-        failwithf "Failed to apply relocations to section %s properly:\n - %s"
-          Jit_text_section.name
-          (String.concat ~sep:"\n- " msgs)
-
-  (** Relocate non-text sections *)
-  let relocate_other (type a r)
-      (module E : Binary_emitter.S
-        with type Assembled_section.t = a
-         and type Relocation.t = r)
-      ~symbols addressed_sections =
-    String.Map.iter addressed_sections
-      ~f:(fun ~key:section_name ~data:binary_section ->
-        match
-          Relocate.all (module E) ~symbols
-            ~got_lookup:None ~plt_lookup:None
-            ~section_name binary_section
-        with
-        | Ok () -> ()
-        | Error msgs ->
-            failwithf "Failed to apply relocations to section %s properly:\n - %s"
-              section_name
-              (String.concat ~sep:"\n- " msgs))
-
-  (** Load text section into memory *)
-  let load_text (type a r)
-      (module E : Binary_emitter.S
-        with type Assembled_section.t = a
-         and type Relocation.t = r)
-      { address; value = text_section } =
-    let size = Jit_text_section.in_memory_size (module E) text_section in
-    let content = Jit_text_section.content (module E) text_section in
-    Externals.load_section address content size;
-    set_protection ~mprotect:Externals.mprotect_rx ~name:Jit_text_section.name
-      address size
-
-  (** Load non-text sections into memory *)
-  let load_sections (type a)
-      (module E : Binary_emitter.S with type Assembled_section.t = a)
-      addressed_sections =
-    String.Map.iter addressed_sections
-      ~f:(fun ~key:name ~data:{ address; value = binary_section } ->
-        let size = E.Assembled_section.size binary_section in
-        let content = E.Assembled_section.contents binary_section in
-        Externals.load_section address content size;
-        if is_ro name then
-          set_protection ~mprotect:Externals.mprotect_ro ~name address size)
-end

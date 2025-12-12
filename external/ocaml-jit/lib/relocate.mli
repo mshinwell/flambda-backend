@@ -31,20 +31,3 @@ val all :
   section_name:string ->
   'a addressed ->
   (unit, string list) result
-
-(** Apply all relocations to the .text section using x86 emitter.
-    Convenience wrapper that uses Jit_got and Jit_plt for lookups. *)
-val all_text :
-  symbols:Symbols.t ->
-  got:Bin_table.filled Jit_got.t addressed ->
-  plt:Bin_table.filled Jit_plt.t addressed ->
-  X86_binary_emitter.buffer addressed ->
-  (unit, string list) result
-
-(** Apply all relocations to a non-.text section using x86 emitter.
-    No GOT/PLT relocations are expected. *)
-val all_other :
-  symbols:Symbols.t ->
-  section_name:string ->
-  X86_binary_emitter.buffer addressed ->
-  (unit, string list) result
