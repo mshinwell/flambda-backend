@@ -55,17 +55,15 @@ let aggregate ~current ~new_symbols =
     else failwithf "Multiple occurrences of the symbol %s" symbol_name)
 
 let from_binary_section { address; value = binary_section } =
-  let symbol_tbl = X86_binary_emitter.labels binary_section in
-  Misc.Stdlib.String.Tbl.fold
-    (fun name symbol acc ->
-      match (symbol.X86_binary_emitter.sy_pos, name) with
-      | None, _ -> failwithf "Symbol %s has no offset" name
-      | Some _, ("caml_absf_mask" | "caml_negf_mask" |
-                 "caml_absf32_mask" | "caml_negf32_mask") -> acc
-      | Some offset, _ ->
-          String.Map.add ~key:name ~data:(Address.add_int address offset) acc)
-    symbol_tbl
-    String.Map.empty
+  let module S = X86_binary_emitter.For_jit.Assembled_section in
+  let acc = ref String.Map.empty in
+  S.iter_symbols binary_section ~f:(fun ~name ~offset ->
+    match name with
+    | "caml_absf_mask" | "caml_negf_mask"
+    | "caml_absf32_mask" | "caml_negf32_mask" -> ()
+    | _ ->
+      acc := String.Map.add ~key:name ~data:(Address.add_int address offset) !acc);
+  !acc
 
 let find t name =
   match String.Map.find_opt name t with

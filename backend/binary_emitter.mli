@@ -93,3 +93,11 @@ module type S = sig
   module Assembled_section :
     Assembled_section with type relocation = Relocation.t
 end
+
+(** Architecture type for runtime selection *)
+type arch =
+  | Amd64
+  | Arm64
+
+(** The current architecture (determined at compile time via Sys.arch) *)
+val arch : arch

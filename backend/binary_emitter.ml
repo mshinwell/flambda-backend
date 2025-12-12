@@ -75,3 +75,13 @@ module type S = sig
   module Assembled_section :
     Assembled_section with type relocation = Relocation.t
 end
+
+type arch =
+  | Amd64
+  | Arm64
+
+let arch =
+  match Target_system.architecture () with
+  | X86_64 -> Amd64
+  | AArch64 -> Arm64
+  | _ -> failwith "Binary_emitter: unsupported architecture"
