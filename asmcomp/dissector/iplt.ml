@@ -46,7 +46,7 @@ type t =
     section_data : bytes
   }
 
-let iplt_symbol_name ~prefix symbol =
+let iplt_symbol_name ~prefix ~symbol =
   "iplt" ^ delimiter ^ prefix ^ delimiter ^ symbol
 
 (* Build the PLT entry template using X86_binary_emitter. The JMP instruction
@@ -68,7 +68,7 @@ let plt_entry_template =
   assert (String.length bytes = 8);
   bytes
 
-let build ~prefix ~igot symbols =
+let build ~prefix ~igot ~symbols =
   (* Remove duplicates while preserving order *)
   let seen = Hashtbl.create 16 in
   let unique_symbols =
@@ -84,10 +84,12 @@ let build ~prefix ~igot symbols =
   let entries =
     List.mapi
       (fun index original_symbol ->
-        let iplt_symbol = iplt_symbol_name ~prefix original_symbol in
-        let igot_symbol = Igot.igot_symbol_name ~prefix original_symbol in
+        let iplt_symbol = iplt_symbol_name ~prefix ~symbol:original_symbol in
+        let igot_symbol =
+          Igot.igot_symbol_name ~prefix ~symbol:original_symbol
+        in
         (* Verify the IGOT entry exists *)
-        (match Igot.find_entry igot original_symbol with
+        (match Igot.find_entry igot ~symbol:original_symbol with
         | None ->
           Misc.fatal_errorf "IPLT: no IGOT entry for symbol %s" original_symbol
         | Some _ -> ());
@@ -109,7 +111,7 @@ let section_data t = t.section_data
 
 let section_size t = Bytes.length t.section_data
 
-let find_entry t symbol =
+let find_entry t ~symbol =
   let rec find = function
     | [] -> None
     | entry :: rest ->

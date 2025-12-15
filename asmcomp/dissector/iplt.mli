@@ -62,7 +62,7 @@ type t
     @param prefix A unique prefix for this partition (e.g., "0", "1")
     @param igot The intermediate GOT (must contain entries for all symbols)
     @param symbols List of original symbol names needing PLT entries *)
-val build : prefix:string -> igot:Igot.t -> string list -> t
+val build : prefix:string -> igot:Igot.t -> symbols:string list -> t
 
 (** Returns the list of entries in the IPLT. *)
 val entries : t -> entry list
@@ -73,13 +73,13 @@ val section_data : t -> bytes
 (** Returns the size of the section in bytes. *)
 val section_size : t -> int
 
-(** [find_entry t symbol] returns the entry for [symbol], or [None] if not
+(** [find_entry t ~symbol] returns the entry for [symbol], or [None] if not
     found. *)
-val find_entry : t -> string -> entry option
+val find_entry : t -> symbol:string -> entry option
 
-(** [iplt_symbol_name ~prefix symbol] returns the IPLT symbol name for the
+(** [iplt_symbol_name ~prefix ~symbol] returns the IPLT symbol name for the
     given original symbol. *)
-val iplt_symbol_name : prefix:string -> string -> string
+val iplt_symbol_name : prefix:string -> symbol:string -> string
 
 (** A relocation for an IPLT entry. *)
 type relocation =

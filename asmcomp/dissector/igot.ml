@@ -45,10 +45,10 @@ type t =
     section_data : bytes
   }
 
-let igot_symbol_name ~prefix symbol =
+let igot_symbol_name ~prefix ~symbol =
   "igot" ^ delimiter ^ prefix ^ delimiter ^ symbol
 
-let build ~prefix symbols =
+let build ~prefix ~symbols =
   (* Remove duplicates while preserving order *)
   let seen = Hashtbl.create 16 in
   let unique_symbols =
@@ -65,7 +65,7 @@ let build ~prefix symbols =
   let entries =
     List.mapi
       (fun index original_symbol ->
-        let igot_symbol = igot_symbol_name ~prefix original_symbol in
+        let igot_symbol = igot_symbol_name ~prefix ~symbol:original_symbol in
         { index; original_symbol; igot_symbol })
       unique_symbols
   in
@@ -84,7 +84,7 @@ let section_data t = t.section_data
 
 let section_size t = Bytes.length t.section_data
 
-let find_entry t symbol =
+let find_entry t ~symbol =
   let rec find = function
     | [] -> None
     | entry :: rest ->

@@ -49,17 +49,17 @@ let build ~prefix (relocations : Extract_relocations.t) =
      GOT-only symbols. Combine the lists - Igot.build will deduplicate. *)
   let all_got_symbols = plt_symbols @ got_only_symbols in
   (* Build IGOT first (IPLT depends on it) *)
-  let igot = Igot.build ~prefix all_got_symbols in
+  let igot = Igot.build ~prefix ~symbols:all_got_symbols in
   (* Build IPLT for PLT symbols only *)
-  let iplt = Iplt.build ~prefix ~igot plt_symbols in
+  let iplt = Iplt.build ~prefix ~igot ~symbols:plt_symbols in
   { igot; iplt; plt_symbols; got_symbols = got_only_symbols }
 
 let igot_symbol_for_got_reloc t (reloc : Extract_relocations.relocation_entry) =
-  match Igot.find_entry t.igot reloc.symbol_name with
+  match Igot.find_entry t.igot ~symbol:reloc.symbol_name with
   | None -> None
   | Some entry -> Some entry.igot_symbol
 
 let iplt_symbol_for_plt_reloc t (reloc : Extract_relocations.relocation_entry) =
-  match Iplt.find_entry t.iplt reloc.symbol_name with
+  match Iplt.find_entry t.iplt ~symbol:reloc.symbol_name with
   | None -> None
   | Some entry -> Some entry.iplt_symbol
