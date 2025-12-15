@@ -1,0 +1,55 @@
+; Tests for Owee_archive module
+; Works on both Linux (ELF) and macOS (Mach-O) - archive reading is
+; platform-independent, but ELF section parsing only works on Linux.
+
+; Build the test executable
+(executable
+ (name test_archive)
+ (modules test_archive)
+ (libraries compiler_owee unix))
+
+; Compile test_file1.c to test_file1.o
+(rule
+ (enabled_if (= %{context_name} "main"))
+ (target test_file1.o)
+ (deps test_file1.c)
+ (action (run %{cc} -c %{deps} -o %{target})))
+
+; Compile test_file2.c to test_file2.o
+(rule
+ (enabled_if (= %{context_name} "main"))
+ (target test_file2.o)
+ (deps test_file2.c)
+ (action (run %{cc} -c %{deps} -o %{target})))
+
+; Create archive from the object files
+(rule
+ (enabled_if (= %{context_name} "main"))
+ (target test_archive.a)
+ (deps test_file1.o test_file2.o)
+ (action (run ar rcs %{target} %{deps})))
+
+; Run the test and capture output
+(rule
+ (enabled_if (= %{context_name} "main"))
+ (target test_archive.output)
+ (deps test_archive.exe test_archive.a)
+ (action (with-outputs-to %{target} (run ./test_archive.exe test_archive.a))))
+
+; Compare output to expected (Linux)
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps test_archive.linux.expected test_archive.output)
+ (action (diff test_archive.linux.expected test_archive.output)))
+
+; Compare output to expected (macOS)
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "macosx")))
+ (deps test_archive.macos.expected test_archive.output)
+ (action (diff test_archive.macos.expected test_archive.output)))
