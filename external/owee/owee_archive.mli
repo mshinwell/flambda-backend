@@ -43,31 +43,21 @@
 type t
 
 (** Metadata about a single member (object file) within the archive. *)
-type member = private {
-  name : string;
-  (** The filename of the member. Long filenames are resolved automatically
+type member = private
+  { name : string;
+        (** The filename of the member. Long filenames are resolved automatically
       (from the string table for System V/GNU, or inline for BSD). *)
-
-  size : int;
-  (** Size of the member content in bytes (not including the header). *)
-
-  data_offset : int;
-  (** Absolute offset within the archive buffer where member data begins.
+    size : int;
+        (** Size of the member content in bytes (not including the header). *)
+    data_offset : int;
+        (** Absolute offset within the archive buffer where member data begins.
       This can be used with [Bigarray.Array1.sub] to access the data
       without copying. *)
-
-  mtime : int;
-  (** Modification time as seconds since the Unix epoch. *)
-
-  uid : int;
-  (** User ID of the file owner. *)
-
-  gid : int;
-  (** Group ID of the file owner. *)
-
-  mode : int;
-  (** File permission bits (octal). *)
-}
+    mtime : int;  (** Modification time as seconds since the Unix epoch. *)
+    uid : int;  (** User ID of the file owner. *)
+    gid : int;  (** Group ID of the file owner. *)
+    mode : int  (** File permission bits (octal). *)
+  }
 
 (** [read buf] reads an ar archive from the given buffer. Returns the
     archive handle and a list of members. The buffer should contain
