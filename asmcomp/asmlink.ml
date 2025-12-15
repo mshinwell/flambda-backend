@@ -365,6 +365,24 @@ let link_actual unix linkenv ml_objfiles output_name ~cached_genfns_imports
             ~sourcefile_for_dwarf:(Some sourcefile_for_dwarf) genfns
             units_tolink cached_genfns_imports));
   Emitaux.reduce_heap_size ~reset:(fun () -> ());
+  (* Dissector pass (may modify ml_objfiles and startup_obj) *)
+  let ml_objfiles, startup_obj =
+    if !Clflags.dissector
+    then
+      let cached_genfns =
+        if !Oxcaml_flags.use_cached_generic_functions
+        then Some !Oxcaml_flags.cached_generic_functions_path
+        else None
+      in
+      let result =
+        Profile.record_call "dissector" (fun () ->
+            Dissector.run ~unix ~ml_objfiles ~startup_obj
+              ~ccobjs:(List.rev !Clflags.ccobjs) ~runtime_libs:(runtime_lib ())
+              ~cached_genfns)
+      in
+      result.ml_objfiles, result.startup_obj
+    else ml_objfiles, startup_obj
+  in
   Misc.try_finally
     (fun () -> call_linker ml_objfiles startup_obj output_name)
     ~always:(fun () -> remove_file startup_obj)

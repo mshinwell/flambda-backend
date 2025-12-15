@@ -55,6 +55,8 @@
 
 (copy_files# asmcomp/*.ml{,i})
 
+(copy_files# asmcomp/dissector/*.ml{,i})
+
 (copy_files# optcomp/*.ml{,i})
 
 (copy_files# backend/*.ml{,i})
@@ -538,6 +540,9 @@
   cm_bundle
   linkenv
   optlink
+  ;; asmcomp/dissector/
+  dissector
+  measure_object_files
   ;; backend/
   afl_instrument
   arch

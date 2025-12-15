@@ -1,0 +1,46 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
+(** Measuring allocated section sizes in object files.
+
+    This module computes the total size of allocated ELF sections across
+    a collection of object files, archives, and OCaml compilation units. *)
+
+(** [total_allocated_section_size unix ~files] computes the total size of all
+    allocated (SHF_ALLOC) sections across the given files.
+
+    Handles the following file types based on extension:
+    - .o: ELF object file, analyzed directly
+    - .a: archive file, all .o members analyzed
+    - .cmx: finds associated .o file (same basename)
+    - .cmxa: finds associated .a file, plus any lib_ccobjs
+
+    Files are tracked to avoid double-counting when the same file appears
+    multiple times or is referenced transitively. Returns 0L for files
+    that don't exist or have unrecognized extensions. *)
+val total_allocated_section_size :
+  (module Compiler_owee.Unix_intf.S) -> files:string list -> int64

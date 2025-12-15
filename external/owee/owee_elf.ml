@@ -144,6 +144,15 @@ type section = {
   sh_name_str : string;
 }
 
+module Section_flags = struct
+  let shf_write = 0x1L
+  let shf_alloc = 0x2L
+  let shf_execinstr = 0x4L
+
+  let is_set flags ~flag = Int64.logand flags flag <> 0L
+  let is_alloc flags = is_set flags ~flag:shf_alloc
+end
+
 let read_section header t n =
   seek t ((Int64.to_int header.e_shoff) + n * header.e_shentsize);
   ensure t 64 "Shdr truncated";

@@ -41,6 +41,27 @@ type section = {
   sh_name_str  : string;
 }
 
+(** ELF section header flags (sh_flags field). *)
+module Section_flags : sig
+  (** Section attribute flags. These can be combined with [Int64.logor]. *)
+
+  val shf_write : u64
+  (** Section contains writable data. *)
+
+  val shf_alloc : u64
+  (** Section occupies memory during process execution. *)
+
+  val shf_execinstr : u64
+  (** Section contains executable machine instructions. *)
+
+  val is_set : u64 -> flag:u64 -> bool
+  (** [is_set flags ~flag] returns true if [flag] is set in [flags]. *)
+
+  val is_alloc : u64 -> bool
+  (** [is_alloc flags] returns true if the section occupies memory during
+      execution (i.e., [shf_alloc] is set). *)
+end
+
 (** From a buffer pointing to an ELF image, [read_elf] decodes the header and
     section table. *)
 val read_elf : Owee_buf.t -> header * section array
