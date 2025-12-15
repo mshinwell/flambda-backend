@@ -11,8 +11,7 @@ File "fail19.ml", line 13, characters 15-18:
 Error: called function may allocate (indirect call)
 
 File "fail19.ml", line 15, characters 8-37:
-Error: expression may allocate
-       (probe "test" handler camlFail19.probe_handler_test_HIDE_STAMP)
+Error: expression may allocate (probe "test" handler camlFail19.probe_handler_test_HIDE_STAMP)
 
 File "fail19.ml", line 16, characters 8-16:
 Error: allocation of 24 bytes

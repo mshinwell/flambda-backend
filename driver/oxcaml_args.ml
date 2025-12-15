@@ -371,6 +371,36 @@ let mk_internal_assembler f =
     "Write object files directly instead of using the system assembler (x86-64 \
      ELF only)" )
 
+let mk_dissector f =
+  ( "-dissector",
+    Arg.Unit f,
+    " Enable the dissector pass (prevents relocation overflow when linking \
+     very large executables with the small code model)" )
+
+let mk_dissector_partition_size f =
+  ( "-dissector-partition-size",
+    Arg.Float f,
+    "<size> Set the partition size threshold in gigabytes for the dissector \
+     pass (default: 1.5)" )
+
+let mk_ddissector f =
+  ("-ddissector", Arg.Unit f, " Print verbose logging from the dissector pass")
+
+let mk_ddissector_sizes f =
+  ( "-ddissector-sizes",
+    Arg.Unit f,
+    " Dump allocated section sizes for each input file during linking" )
+
+let mk_ddissector_verbose f =
+  ( "-ddissector-verbose",
+    Arg.Unit f,
+    " Print detailed per-relocation logging from the dissector pass" )
+
+let mk_ddissector_partitions f =
+  ( "-ddissector-partitions",
+    Arg.Unit f,
+    " Keep partition .o files and print their paths (for debugging)" )
+
 let mk_gc_timings f =
   ("-dgc-timings", Arg.Unit f, "Output information about time spent in the GC")
 
@@ -1055,6 +1085,12 @@ module type Oxcaml_options = sig
   val long_frames_threshold : int -> unit
   val caml_apply_inline_fast_path : unit -> unit
   val internal_assembler : unit -> unit
+  val dissector : unit -> unit
+  val dissector_partition_size : float -> unit
+  val ddissector : unit -> unit
+  val ddissector_sizes : unit -> unit
+  val ddissector_verbose : unit -> unit
+  val ddissector_partitions : unit -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
   val dllvmir : unit -> unit
@@ -1196,6 +1232,12 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_debug_long_frames_threshold F.long_frames_threshold;
       mk_caml_apply_inline_fast_path F.caml_apply_inline_fast_path;
       mk_internal_assembler F.internal_assembler;
+      mk_dissector F.dissector;
+      mk_dissector_partition_size F.dissector_partition_size;
+      mk_ddissector F.ddissector;
+      mk_ddissector_sizes F.ddissector_sizes;
+      mk_ddissector_verbose F.ddissector_verbose;
+      mk_ddissector_partitions F.ddissector_partitions;
       mk_gc_timings F.gc_timings;
       mk_no_mach_ir F.no_mach_ir;
       mk_dllvmir F.dllvmir;
@@ -1424,6 +1466,12 @@ module Oxcaml_options_impl = struct
     set' Oxcaml_flags.caml_apply_inline_fast_path
 
   let internal_assembler = set' Oxcaml_flags.internal_assembler
+  let dissector = set' Clflags.dissector
+  let dissector_partition_size f = Clflags.dissector_partition_size := Some f
+  let ddissector = set' Clflags.ddissector
+  let ddissector_sizes = set' Clflags.ddissector_sizes
+  let ddissector_verbose = set' Clflags.ddissector_verbose
+  let ddissector_partitions = set' Clflags.ddissector_partitions
   let gc_timings = set' Oxcaml_flags.gc_timings
   let no_mach_ir () = ()
   let dllvmir () = set' Oxcaml_flags.dump_llvmir ()

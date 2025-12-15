@@ -1,0 +1,26 @@
+Archive: test_archive.a
+Number of members: 3
+
+Member:  (size=46)
+  (not ELF: No ELF magic number)
+
+Member: test_file1.o (size=1224)
+  .text: size=4
+  .comment: size=46
+  .eh_frame: size=48
+  .rela.eh_frame: size=24
+  .symtab: size=216
+  .strtab: size=22
+  .shstrtab: size=84
+
+Member: test_file2.o (size=1424)
+  .text: size=17
+  .rela.text: size=24
+  .data: size=4
+  .comment: size=46
+  .eh_frame: size=48
+  .rela.eh_frame: size=24
+  .symtab: size=264
+  .strtab: size=58
+  .shstrtab: size=89
+

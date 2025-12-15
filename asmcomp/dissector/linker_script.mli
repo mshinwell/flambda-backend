@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,28 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+(** Generate linker scripts for the dissector.
 
-open Typedtree
-open Compat
+    This module generates a linker script that places partition sections
+    in the correct output sections. It optionally incorporates an existing
+    linker script provided via --script= on the linker command line. *)
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+(** [generate ~existing_script ~partitions] generates a linker script string.
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+    @param existing_script Optional path to an existing linker script to
+      include. This is extracted from -Wl,-T,<path> or -Wl,--script=<path>
+      in Clflags.all_ccopts by the dissector.
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+    @param partitions List of linked partitions. The first partition (Main)
+      is skipped. Subsequent partitions get sections named .caml.p1.*,
+      .caml.p2.*, etc. *)
+val generate :
+  existing_script:string option -> partitions:Partition.Linked.t list -> string
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
-
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+(** [write ~output_file ~existing_script ~partitions] generates a linker script
+    and writes it to the specified file. *)
+val write :
+  output_file:string ->
+  existing_script:string option ->
+  partitions:Partition.Linked.t list ->
+  unit
