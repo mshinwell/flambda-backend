@@ -28,16 +28,20 @@
 type error =
   | Linker_error of
       { partition_index : int;
-        exit_code : int
+        exit_code : int;
+        files : string list
       }
 
 exception Error of error
 
 let report_error ppf = function
-  | Linker_error { partition_index; exit_code } ->
+  | Linker_error { partition_index; exit_code; files } ->
     Format.fprintf ppf
-      "Dissector: partial link of partition %d failed with exit code %d"
-      partition_index exit_code
+      "@[<v>Dissector: partial link of partition %d failed with exit code %d@,\
+       Files in partition:@,\
+      \  @[<v>%a@]@]" partition_index exit_code
+      (Format.pp_print_list ~pp_sep:Format.pp_print_cut Format.pp_print_string)
+      files
 
 let () =
   Location.register_error_of_exn (function
@@ -61,17 +65,26 @@ let link_one_partition ~temp_dir ~partition_index (partition : Partition.t) =
     Filename.concat temp_dir (Printf.sprintf "partition%d.o" partition_index)
   in
   write_response_file ~filename:response_file partition.files;
-  (* Config.native_pack_linker is something like "ld -r -o " *)
-  let cmd =
-    Printf.sprintf "%s%s --whole-archive @%s --no-whole-archive"
-      Config.native_pack_linker
-      (Filename.quote output_file)
-      (Filename.quote response_file)
-  in
-  let exit_code = Ccomp.command cmd in
-  if exit_code <> 0
-  then raise (Error (Linker_error { partition_index; exit_code }));
-  { Partition.partition; linked_object = output_file }
+  Misc.try_finally
+    (fun () ->
+      (* Config.native_pack_linker is something like "ld -r -o " *)
+      let cmd =
+        Printf.sprintf "%s%s --whole-archive @%s --no-whole-archive"
+          Config.native_pack_linker
+          (Filename.quote output_file)
+          (Filename.quote response_file)
+      in
+      let exit_code = Ccomp.command cmd in
+      (if exit_code <> 0
+      then
+        let files =
+          List.map
+            (fun (entry : Measure_object_files.file_size) -> entry.filename)
+            partition.files
+        in
+        raise (Error (Linker_error { partition_index; exit_code; files })));
+      { Partition.partition; linked_object = output_file })
+    ~always:(fun () -> Misc.remove_file response_file)
 
 let link_partitions ~temp_dir partitions =
   List.mapi

@@ -542,6 +542,7 @@
   optlink
   ;; asmcomp/dissector/
   dissector
+  extract_relocations
   measure_object_files
   partial_link
   partition

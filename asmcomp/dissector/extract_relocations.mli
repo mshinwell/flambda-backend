@@ -25,32 +25,36 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** Partial linking of object files.
+(** Extract relocations from partially-linked object files.
 
-    This module partially links groups of object files into single relocatable
-    object files, to work around relocation overflow issues when linking very
-    large executables with the small code model. *)
+    This module reads ELF object files and extracts relocations that need
+    to be converted to use an intermediate PLT or GOT when linking with
+    the dissector code model. *)
 
-type error =
-  | Linker_error of
-      { partition_index : int;
-        exit_code : int;
-        files : string list
-      }
+(** Information about a single relocation that needs conversion. *)
+type relocation_entry =
+  { symbol_name : string;
+    offset : int64
+  }
 
-exception Error of error
+(** The result of extracting relocations from object files. *)
+type t =
+  { convert_to_plt : relocation_entry list;
+        (** Relocations with type R_X86_64_PLT32 that need PLT entries. *)
+    convert_to_got : relocation_entry list
+        (** Relocations with type R_X86_64_REX_GOTPCRELX that need GOT entries. *)
+  }
 
-val report_error : Format.formatter -> error -> unit
+(** [extract unix ~filename] reads the ELF object file at [filename] and
+    extracts relocations from the .rela.text section that need to be
+    converted for the medium code model.
 
-(** [link_partitions ~temp_dir partitions] partially links each partition into
-    a single relocatable object file.
+    Returns the lists of PLT32 and REX_GOTPCRELX relocations found. *)
+val extract : (module Compiler_owee.Unix_intf.S) -> filename:string -> t
 
-    For each partition, creates a response file listing the input files, then
-    invokes the linker with:
-      ld --whole-archive @<response_file> --relocatable -o <output.o>
+(** [extract_from_linked_partitions unix linked_partitions] extracts
+    relocations from all the partially-linked object files.
 
-    Returns the list of linked partitions with paths to the output .o files.
-
-    @param temp_dir Directory for temporary and output files *)
-val link_partitions :
-  temp_dir:string -> Partition.t list -> Partition.linked list
+    Returns combined relocation information from all partitions. *)
+val extract_from_linked_partitions :
+  (module Compiler_owee.Unix_intf.S) -> Partition.linked list -> t
