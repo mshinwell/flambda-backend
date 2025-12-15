@@ -40,12 +40,10 @@ let () =
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
-type partition = Partition_object_files.partition
-
 type result =
   { ml_objfiles : string list;
     startup_obj : string;
-    partitions : partition list
+    partitions : Partition.t list
   }
 
 let dump_sizes file_sizes =

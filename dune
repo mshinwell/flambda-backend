@@ -543,6 +543,8 @@
   ;; asmcomp/dissector/
   dissector
   measure_object_files
+  partial_link
+  partition
   partition_object_files
   ;; backend/
   afl_instrument

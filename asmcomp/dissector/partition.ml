@@ -25,57 +25,21 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** Dissector pass for analyzing ELF object files.
-
-    The dissector analyzes all object files involved in a link to compute the
-    total size of allocated ELF sections. This information is used to partition
-    object files to prevent relocation overflow when linking very large
-    executables with the small code model. *)
-
-type error =
-  | Measure_error of Measure_object_files.error
-  | Partition_error of Partition_object_files.error
-
-exception Error of error
-
-val report_error : Format.formatter -> error -> unit
-
-(** Result of running the dissector. The object file lists may be modified
-    (e.g., partitioned) compared to the inputs. The [partitions] field contains
-    the partitioned files with their sizes, where each partition's total size
-    is at most the threshold (default 1 GiB, configurable via
-    -dissector-partition-size). *)
-type result =
-  { ml_objfiles : string list;
-    startup_obj : string;
-    partitions : Partition.t list
+type t =
+  { files : Measure_object_files.file_size list;
+    total_size : int64
   }
 
-(** Run the dissector pass.
+let create files =
+  let total_size =
+    List.fold_left
+      (fun acc (entry : Measure_object_files.file_size) ->
+        Int64.add acc entry.size)
+      0L files
+  in
+  { files; total_size }
 
-    Analyzes all object files that will be involved in a link, computes the
-    total size of allocated ELF sections, partitions files to stay under the
-    threshold, and potentially modifies the object file lists.
-
-    The startup_obj is analyzed like all other .o files but may need to be
-    handled specially during partitioning.
-
-    @param unix First-class Unix module for file operations
-    @param ml_objfiles The OCaml object files (.o, .a, .cmx, .cmxa)
-    @param startup_obj The startup object file
-    @param ccobjs Extra C object files from -cclib (Clflags.ccobjs)
-    @param runtime_libs Runtime libraries (from runtime_lib ())
-    @param cached_genfns Optional path to cached generic functions
-
-    Raises [Error (Partition_error (File_exceeds_partition_size _))] if any
-    single file exceeds the partition threshold.
-
-    Raises an error if Target_system is not Linux. *)
-val run :
-  unix:(module Compiler_owee.Unix_intf.S) ->
-  ml_objfiles:string list ->
-  startup_obj:string ->
-  ccobjs:string list ->
-  runtime_libs:string list ->
-  cached_genfns:string option ->
-  result
+type linked =
+  { partition : t;
+    linked_object : string
+  }

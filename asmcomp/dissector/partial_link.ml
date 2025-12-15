@@ -26,61 +26,55 @@
  ******************************************************************************)
 
 type error =
-  | File_exceeds_partition_size of
-      { filename : string;
-        size : int64;
-        threshold : int64
+  | Linker_error of
+      { partition_index : int;
+        exit_code : int
       }
 
 exception Error of error
 
 let report_error ppf = function
-  | File_exceeds_partition_size { filename; size; threshold } ->
+  | Linker_error { partition_index; exit_code } ->
     Format.fprintf ppf
-      "Dissector: file %s has allocated section size %Ld bytes, which exceeds \
-       partition threshold %Ld bytes"
-      filename size threshold
+      "Dissector: partial link of partition %d failed with exit code %d"
+      partition_index exit_code
 
 let () =
   Location.register_error_of_exn (function
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
-(* Default partition size: 1 GiB *)
-let default_partition_size = Int64.shift_left 1L 30
+let write_response_file ~filename files =
+  let oc = open_out filename in
+  List.iter
+    (fun (entry : Measure_object_files.file_size) ->
+      output_string oc entry.filename;
+      output_char oc '\n')
+    files;
+  close_out oc
 
-let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
-
-let partition_files ~threshold file_sizes =
-  (* Partition files into buckets, starting a new bucket when adding the next
-     file would exceed the threshold. The order of files is preserved. *)
-  let rec loop current_partition current_size partitions = function
-    | [] ->
-      (* Finish: add current partition if non-empty *)
-      let partitions =
-        if current_partition = []
-        then partitions
-        else List.rev current_partition :: partitions
-      in
-      List.rev partitions
-    | (entry : Measure_object_files.file_size) :: rest ->
-      (* Check if this file exceeds the threshold by itself *)
-      if entry.size > threshold
-      then
-        raise
-          (Error
-             (File_exceeds_partition_size
-                { filename = entry.filename; size = entry.size; threshold }));
-      (* Check if adding this file would exceed the threshold *)
-      let new_size = Int64.add current_size entry.size in
-      if new_size > threshold && current_partition <> []
-      then
-        (* Start a new partition *)
-        let partitions = List.rev current_partition :: partitions in
-        loop [entry] entry.size partitions rest
-      else
-        (* Add to current partition *)
-        loop (entry :: current_partition) new_size partitions rest
+let link_one_partition ~temp_dir ~partition_index (partition : Partition.t) =
+  let response_file =
+    Filename.concat temp_dir (Printf.sprintf "partition%d.txt" partition_index)
   in
-  let file_lists = loop [] 0L [] file_sizes in
-  List.map Partition.create file_lists
+  let output_file =
+    Filename.concat temp_dir (Printf.sprintf "partition%d.o" partition_index)
+  in
+  write_response_file ~filename:response_file partition.files;
+  (* Config.native_pack_linker is something like "ld -r -o " *)
+  let cmd =
+    Printf.sprintf "%s%s --whole-archive @%s --no-whole-archive"
+      Config.native_pack_linker
+      (Filename.quote output_file)
+      (Filename.quote response_file)
+  in
+  let exit_code = Ccomp.command cmd in
+  if exit_code <> 0
+  then raise (Error (Linker_error { partition_index; exit_code }));
+  { Partition.partition; linked_object = output_file }
+
+let link_partitions ~temp_dir partitions =
+  List.mapi
+    (fun partition_index partition ->
+      link_one_partition ~temp_dir ~partition_index partition)
+    partitions

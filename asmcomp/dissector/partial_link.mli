@@ -25,62 +25,31 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+(** Partial linking of object files.
+
+    This module partially links groups of object files into single relocatable
+    object files, to work around relocation overflow issues when linking very
+    large executables with the small code model. *)
+
 type error =
-  | File_exceeds_partition_size of
-      { filename : string;
-        size : int64;
-        threshold : int64
+  | Linker_error of
+      { partition_index : int;
+        exit_code : int
       }
 
 exception Error of error
 
-let report_error ppf = function
-  | File_exceeds_partition_size { filename; size; threshold } ->
-    Format.fprintf ppf
-      "Dissector: file %s has allocated section size %Ld bytes, which exceeds \
-       partition threshold %Ld bytes"
-      filename size threshold
+val report_error : Format.formatter -> error -> unit
 
-let () =
-  Location.register_error_of_exn (function
-    | Error err -> Some (Location.error_of_printer_file report_error err)
-    | _ -> None)
+(** [link_partitions ~temp_dir partitions] partially links each partition into
+    a single relocatable object file.
 
-(* Default partition size: 1 GiB *)
-let default_partition_size = Int64.shift_left 1L 30
+    For each partition, creates a response file listing the input files, then
+    invokes the linker with:
+      ld --whole-archive @<response_file> --relocatable -o <output.o>
 
-let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
+    Returns the list of linked partitions with paths to the output .o files.
 
-let partition_files ~threshold file_sizes =
-  (* Partition files into buckets, starting a new bucket when adding the next
-     file would exceed the threshold. The order of files is preserved. *)
-  let rec loop current_partition current_size partitions = function
-    | [] ->
-      (* Finish: add current partition if non-empty *)
-      let partitions =
-        if current_partition = []
-        then partitions
-        else List.rev current_partition :: partitions
-      in
-      List.rev partitions
-    | (entry : Measure_object_files.file_size) :: rest ->
-      (* Check if this file exceeds the threshold by itself *)
-      if entry.size > threshold
-      then
-        raise
-          (Error
-             (File_exceeds_partition_size
-                { filename = entry.filename; size = entry.size; threshold }));
-      (* Check if adding this file would exceed the threshold *)
-      let new_size = Int64.add current_size entry.size in
-      if new_size > threshold && current_partition <> []
-      then
-        (* Start a new partition *)
-        let partitions = List.rev current_partition :: partitions in
-        loop [entry] entry.size partitions rest
-      else
-        (* Add to current partition *)
-        loop (entry :: current_partition) new_size partitions rest
-  in
-  let file_lists = loop [] 0L [] file_sizes in
-  List.map Partition.create file_lists
+    @param temp_dir Directory for temporary and output files *)
+val link_partitions :
+  temp_dir:string -> Partition.t list -> Partition.linked list
