@@ -1,0 +1,112 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
+(* Each IGOT entry is 8 bytes (one 64-bit address) *)
+let entry_size = 8
+
+(* Delimiter for synthetic symbol names - unlikely to appear in normal
+   symbols *)
+let delimiter = "\xe2\x9a\xa1" (* Unicode lightning bolt U+26A1 in UTF-8 *)
+
+type entry =
+  { index : int;
+    original_symbol : string;
+    igot_symbol : string
+  }
+
+type t =
+  { entries : entry list;
+    by_original_symbol : entry option array;
+    symbols : string array;
+    section_data : bytes
+  }
+
+let igot_symbol_name ~prefix symbol =
+  "igot" ^ delimiter ^ prefix ^ delimiter ^ symbol
+
+let build ~prefix symbols =
+  (* Remove duplicates while preserving order *)
+  let seen = Hashtbl.create 16 in
+  let unique_symbols =
+    List.filter
+      (fun sym ->
+        if Hashtbl.mem seen sym
+        then false
+        else (
+          Hashtbl.add seen sym ();
+          true))
+      symbols
+  in
+  let symbols_array = Array.of_list unique_symbols in
+  let entries =
+    List.mapi
+      (fun index original_symbol ->
+        let igot_symbol = igot_symbol_name ~prefix original_symbol in
+        { index; original_symbol; igot_symbol })
+      unique_symbols
+  in
+  (* Build lookup table *)
+  let by_original_symbol = Array.make (Hashtbl.length seen) None in
+  List.iter
+    (fun entry -> by_original_symbol.(entry.index) <- Some entry)
+    entries;
+  (* Section data is zero-initialized *)
+  let section_data = Bytes.make (List.length entries * entry_size) '\x00' in
+  { entries; by_original_symbol; symbols = symbols_array; section_data }
+
+let entries t = t.entries
+
+let section_data t = t.section_data
+
+let section_size t = Bytes.length t.section_data
+
+let find_entry t symbol =
+  let rec find = function
+    | [] -> None
+    | entry :: rest ->
+      if String.equal entry.original_symbol symbol
+      then Some entry
+      else find rest
+  in
+  find t.entries
+
+type relocation =
+  { offset : int;
+    symbol : string;
+    addend : int64
+  }
+
+let entry_offset entry = entry.index * entry_size
+
+let relocations t =
+  List.map
+    (fun entry ->
+      { offset = entry_offset entry;
+        symbol = entry.original_symbol;
+        addend = 0L
+      })
+    t.entries

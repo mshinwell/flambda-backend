@@ -541,8 +541,11 @@
   linkenv
   optlink
   ;; asmcomp/dissector/
+  build_igot_and_iplt
   dissector
   extract_relocations
+  igot
+  iplt
   measure_object_files
   partial_link
   partition
