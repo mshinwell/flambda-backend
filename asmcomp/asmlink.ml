@@ -374,9 +374,10 @@ let link_actual unix linkenv ml_objfiles output_name ~cached_genfns_imports
         then Some !Oxcaml_flags.cached_generic_functions_path
         else None
       in
+      let temp_dir = Filename.get_temp_dir_name () in
       let result =
         Profile.record_call "dissector" (fun () ->
-            Dissector.run ~unix ~ml_objfiles ~startup_obj
+            Dissector.run ~unix ~temp_dir ~ml_objfiles ~startup_obj
               ~ccobjs:(List.rev !Clflags.ccobjs) ~runtime_libs:(runtime_lib ())
               ~cached_genfns)
       in

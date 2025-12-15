@@ -25,21 +25,7 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* ELF section type for RELA (relocations with addends) *)
-let sht_rela = 4
-
-let sht_symtab = 2
-
-(* x86-64 relocation types we care about *)
-let r_x86_64_plt32 = 4L
-
-let r_x86_64_rex_gotpcrelx = 42L
-
-(* Size of an Elf64_Rela entry in bytes *)
-let rela_entry_size = 24
-
-(* Size of an Elf64_Sym entry in bytes *)
-let sym_entry_size = 24
+module Rela = Compiler_owee.Owee_elf_relocation
 
 type relocation_entry =
   { symbol_name : string;
@@ -58,53 +44,31 @@ let merge t1 t2 =
     convert_to_got = t1.convert_to_got @ t2.convert_to_got
   }
 
-(* Extract symbol index from r_info (upper 32 bits) *)
-let r_sym r_info = Int64.shift_right_logical r_info 32
-
-(* Extract relocation type from r_info (lower 32 bits) *)
-let r_type r_info = Int64.logand r_info 0xFFFFFFFFL
-
-(* Read a symbol name from the symbol table *)
-let read_symbol_name ~symtab_body ~strtab_body ~sym_index =
-  let sym_offset = sym_index * sym_entry_size in
-  if sym_offset >= Compiler_owee.Owee_buf.size symtab_body
-  then None
-  else
-    (* Elf64_Sym: first 4 bytes are st_name (index into string table) *)
-    let cursor = Compiler_owee.Owee_buf.cursor symtab_body ~at:sym_offset in
-    let st_name = Compiler_owee.Owee_buf.Read.u32 cursor in
-    (* Read null-terminated string from strtab *)
-    if st_name >= Compiler_owee.Owee_buf.size strtab_body
-    then None
-    else
-      let cursor = Compiler_owee.Owee_buf.cursor strtab_body ~at:st_name in
-      Compiler_owee.Owee_buf.Read.zero_string cursor ()
-
-(* Parse RELA entries from a section body *)
+(* Parse RELA entries and extract PLT32 and REX_GOTPCRELX relocations for
+   undefined symbols (st_shndx = SHN_UNDEF). Only undefined symbols need PLT/GOT
+   entries since defined symbols can be resolved directly. *)
 let parse_rela_section ~rela_body ~symtab_body ~strtab_body =
-  let size = Compiler_owee.Owee_buf.size rela_body in
-  let num_entries = size / rela_entry_size in
   let convert_to_plt = ref [] in
   let convert_to_got = ref [] in
-  for i = 0 to num_entries - 1 do
-    let entry_offset = i * rela_entry_size in
-    let cursor = Compiler_owee.Owee_buf.cursor rela_body ~at:entry_offset in
-    let r_offset = Compiler_owee.Owee_buf.Read.u64 cursor in
-    let r_info = Compiler_owee.Owee_buf.Read.u64 cursor in
-    (* r_addend is not needed for our purposes *)
-    let reloc_type = r_type r_info in
-    if Int64.equal reloc_type r_x86_64_plt32
-       || Int64.equal reloc_type r_x86_64_rex_gotpcrelx
-    then
-      let sym_index = Int64.to_int (r_sym r_info) in
-      match read_symbol_name ~symtab_body ~strtab_body ~sym_index with
-      | None -> ()
-      | Some symbol_name ->
-        let entry = { symbol_name; offset = r_offset } in
-        if Int64.equal reloc_type r_x86_64_plt32
-        then convert_to_plt := entry :: !convert_to_plt
-        else convert_to_got := entry :: !convert_to_got
-  done;
+  Rela.iter_rela_entries ~rela_body ~f:(fun entry ->
+      if Int64.equal entry.r_type Rela.r_x86_64_plt32
+         || Int64.equal entry.r_type Rela.r_x86_64_rex_gotpcrelx
+      then
+        (* Only process relocations for undefined symbols *)
+        match Rela.read_symbol_shndx ~symtab_body ~sym_index:entry.r_sym with
+        | None -> ()
+        | Some shndx when shndx <> Rela.shn_undef -> ()
+        | Some _ -> (
+          match
+            Rela.read_symbol_name ~symtab_body ~strtab_body
+              ~sym_index:entry.r_sym
+          with
+          | None -> ()
+          | Some symbol_name ->
+            let reloc_entry = { symbol_name; offset = entry.r_offset } in
+            if Int64.equal entry.r_type Rela.r_x86_64_plt32
+            then convert_to_plt := reloc_entry :: !convert_to_plt
+            else convert_to_got := reloc_entry :: !convert_to_got));
   { convert_to_plt = List.rev !convert_to_plt;
     convert_to_got = List.rev !convert_to_got
   }
@@ -120,7 +84,7 @@ let find_section sections name =
 let find_symtab_section sections =
   Array.find_opt
     (fun (section : Compiler_owee.Owee_elf.section) ->
-      section.sh_type = sht_symtab)
+      section.sh_type = Rela.sht_symtab)
     sections
 
 let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =

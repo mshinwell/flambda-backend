@@ -28,12 +28,14 @@
 type error =
   | Measure_error of Measure_object_files.error
   | Partition_error of Partition_object_files.error
+  | Partial_link_error of Partial_link.error
 
 exception Error of error
 
 let report_error ppf = function
   | Measure_error err -> Measure_object_files.report_error ppf err
   | Partition_error err -> Partition_object_files.report_error ppf err
+  | Partial_link_error err -> Partial_link.report_error ppf err
 
 let () =
   Location.register_error_of_exn (function
@@ -43,7 +45,9 @@ let () =
 type result =
   { ml_objfiles : string list;
     startup_obj : string;
-    partitions : Partition.t list
+    partitions : Partition.t list;
+    linked_partitions : Partition.linked list;
+    relocations : Extract_relocations.t
   }
 
 let dump_sizes file_sizes =
@@ -57,8 +61,8 @@ let dump_sizes file_sizes =
   in
   Printf.eprintf "  %12Ld  TOTAL\n%!" total
 
-let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~ml_objfiles ~startup_obj
-    ~ccobjs ~runtime_libs ~cached_genfns =
+let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
+    ~startup_obj ~ccobjs ~runtime_libs ~cached_genfns =
   (* Check that we're targeting Linux *)
   (match Target_system.system () with
   | Linux -> ()
@@ -99,5 +103,20 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~ml_objfiles ~startup_obj
   Printf.eprintf "Dissector: total allocated section size = %Ld bytes\n%!" total;
   Printf.eprintf "Dissector: partitioned into %d partition(s)\n%!"
     (List.length partitions);
+  (* Partially link each partition *)
+  let linked_partitions =
+    try Partial_link.link_partitions ~temp_dir partitions
+    with Partial_link.Error err -> raise (Error (Partial_link_error err))
+  in
+  Printf.eprintf "Dissector: partially linked %d partition(s)\n%!"
+    (List.length linked_partitions);
+  (* Extract relocations from the partially-linked object files *)
+  let relocations =
+    Extract_relocations.extract_from_linked_partitions unix linked_partitions
+  in
+  Printf.eprintf
+    "Dissector: found %d PLT relocations and %d GOT relocations\n%!"
+    (List.length relocations.convert_to_plt)
+    (List.length relocations.convert_to_got);
   (* Return result *)
-  { ml_objfiles; startup_obj; partitions }
+  { ml_objfiles; startup_obj; partitions; linked_partitions; relocations }

@@ -35,6 +35,7 @@
 type error =
   | Measure_error of Measure_object_files.error
   | Partition_error of Partition_object_files.error
+  | Partial_link_error of Partial_link.error
 
 exception Error of error
 
@@ -44,23 +45,29 @@ val report_error : Format.formatter -> error -> unit
     (e.g., partitioned) compared to the inputs. The [partitions] field contains
     the partitioned files with their sizes, where each partition's total size
     is at most the threshold (default 1 GiB, configurable via
-    -dissector-partition-size). *)
+    -dissector-partition-size). The [linked_partitions] field contains the
+    partially-linked object files, and [relocations] contains the relocations
+    that need to be converted to use an intermediate PLT or GOT. *)
 type result =
   { ml_objfiles : string list;
     startup_obj : string;
-    partitions : Partition.t list
+    partitions : Partition.t list;
+    linked_partitions : Partition.linked list;
+    relocations : Extract_relocations.t
   }
 
 (** Run the dissector pass.
 
     Analyzes all object files that will be involved in a link, computes the
     total size of allocated ELF sections, partitions files to stay under the
-    threshold, and potentially modifies the object file lists.
+    threshold, partially links each partition, and extracts relocations that
+    need conversion to use an intermediate PLT or GOT.
 
     The startup_obj is analyzed like all other .o files but may need to be
     handled specially during partitioning.
 
     @param unix First-class Unix module for file operations
+    @param temp_dir Directory for temporary and output files
     @param ml_objfiles The OCaml object files (.o, .a, .cmx, .cmxa)
     @param startup_obj The startup object file
     @param ccobjs Extra C object files from -cclib (Clflags.ccobjs)
@@ -70,9 +77,12 @@ type result =
     Raises [Error (Partition_error (File_exceeds_partition_size _))] if any
     single file exceeds the partition threshold.
 
+    Raises [Error (Partial_link_error _)] if partial linking fails.
+
     Raises an error if Target_system is not Linux. *)
 val run :
   unix:(module Compiler_owee.Unix_intf.S) ->
+  temp_dir:string ->
   ml_objfiles:string list ->
   startup_obj:string ->
   ccobjs:string list ->
