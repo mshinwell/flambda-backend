@@ -30,69 +30,40 @@ module Rela = Compiler_owee.Owee_elf_relocation
 module Strtab = Compiler_owee.Owee_elf_string_table
 module Buf = Compiler_owee.Owee_buf
 
-(* ELF section types *)
-let sht_progbits = 1
+(* -------------------------------------------------------------------------- *)
+(* Alignment utilities *)
+(* -------------------------------------------------------------------------- *)
 
-let sht_rela = 4
-
-(* ELF section flags *)
-let shf_write = 0x1L
-
-let shf_alloc = 0x2L
-
-let shf_execinstr = 0x4L
-
-let shf_info_link = 0x40L
-
-(* Align a value up to the given alignment *)
 let align_up value alignment =
   let mask = alignment - 1 in
   (value + mask) land lnot mask
 
-let align_up64 value alignment =
-  let mask = Int64.sub alignment 1L in
-  Int64.logand (Int64.add value mask) (Int64.lognot mask)
+(* -------------------------------------------------------------------------- *)
+(* Symbol table reading - TODO: consider moving to owee *)
+(* -------------------------------------------------------------------------- *)
 
-(* Build a mapping from symbol names to their indices in the new symbol table.
-   Returns (symbol_to_index, next_index) *)
-let build_symbol_index_map ~original_symbols ~igot_and_iplt strtab =
-  let symbol_to_index = Hashtbl.create 256 in
-  (* First, add all original symbol names and their indices *)
-  List.iteri
-    (fun index (name, _st_info, _st_other, _st_shndx, _st_value, _st_size) ->
-      if not (Hashtbl.mem symbol_to_index name)
-      then Hashtbl.add symbol_to_index name index;
-      (* Also add to string table *)
-      ignore (Strtab.add strtab name))
-    original_symbols;
-  let next_index = List.length original_symbols in
-  (* Add IGOT symbols *)
-  let next_index =
-    List.fold_left
-      (fun idx (entry : Igot.entry) ->
-        Hashtbl.add symbol_to_index entry.igot_symbol idx;
-        ignore (Strtab.add strtab entry.igot_symbol);
-        idx + 1)
-      next_index
-      (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot)
-  in
-  (* Add IPLT symbols *)
-  let next_index =
-    List.fold_left
-      (fun idx (entry : Iplt.entry) ->
-        Hashtbl.add symbol_to_index entry.iplt_symbol idx;
-        ignore (Strtab.add strtab entry.iplt_symbol);
-        idx + 1)
-      next_index
-      (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt)
-  in
-  symbol_to_index, next_index
+type symbol_entry =
+  { name : string;
+    st_info : int;
+    st_other : int;
+    st_shndx : int;
+    st_value : int64;
+    st_size : int64
+  }
 
-(* Read all symbols from the original symbol table *)
-let read_original_symbols ~symtab_body ~strtab_body =
+let read_symbols ~symtab_body ~strtab_body =
   let num_symbols = Buf.size symtab_body / Rela.sym_entry_size in
-  let symbols = ref [] in
-  for i = num_symbols - 1 downto 0 do
+  let symbols =
+    Array.make num_symbols
+      { name = "";
+        st_info = 0;
+        st_other = 0;
+        st_shndx = 0;
+        st_value = 0L;
+        st_size = 0L
+      }
+  in
+  for i = 0 to num_symbols - 1 do
     let cursor = Buf.cursor symtab_body ~at:(i * Rela.sym_entry_size) in
     let st_name_offset = Buf.Read.u32 cursor in
     let st_info = Buf.Read.u8 cursor in
@@ -100,7 +71,6 @@ let read_original_symbols ~symtab_body ~strtab_body =
     let st_shndx = Buf.Read.u16 cursor in
     let st_value = Buf.Read.u64 cursor in
     let st_size = Buf.Read.u64 cursor in
-    (* Read the actual name string *)
     let name =
       if st_name_offset = 0
       then ""
@@ -110,395 +80,395 @@ let read_original_symbols ~symtab_body ~strtab_body =
         | Some s -> s
         | None -> ""
     in
-    symbols
-      := (name, st_info, st_other, st_shndx, st_value, st_size) :: !symbols
+    symbols.(i) <- { name; st_info; st_other; st_shndx; st_value; st_size }
   done;
-  !symbols
+  symbols
 
-(* Build a map from (offset, original_type) to new symbol name for relocations
-   that need rewriting *)
+(* -------------------------------------------------------------------------- *)
+(* Symbol index mapping *)
+(* -------------------------------------------------------------------------- *)
+
+let build_symbol_index_map ~original_symbols ~igot_and_iplt strtab =
+  let symbol_to_index = Hashtbl.create 256 in
+  (* Add original symbols *)
+  Array.iteri
+    (fun index sym ->
+      if not (Hashtbl.mem symbol_to_index sym.name)
+      then Hashtbl.add symbol_to_index sym.name index;
+      ignore (Strtab.add strtab sym.name))
+    original_symbols;
+  let next_index = ref (Array.length original_symbols) in
+  (* Add IGOT symbols *)
+  List.iter
+    (fun (entry : Igot.entry) ->
+      Hashtbl.add symbol_to_index entry.igot_symbol !next_index;
+      ignore (Strtab.add strtab entry.igot_symbol);
+      incr next_index)
+    (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot);
+  (* Add IPLT symbols *)
+  List.iter
+    (fun (entry : Iplt.entry) ->
+      Hashtbl.add symbol_to_index entry.iplt_symbol !next_index;
+      ignore (Strtab.add strtab entry.iplt_symbol);
+      incr next_index)
+    (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt);
+  symbol_to_index, !next_index
+
+(* -------------------------------------------------------------------------- *)
+(* Relocation rewriting *)
+(* -------------------------------------------------------------------------- *)
+
 let build_relocation_rewrite_map ~igot_and_iplt ~relocations =
   let map = Hashtbl.create 256 in
-  (* PLT32 relocations -> IPLT symbols *)
   List.iter
     (fun (entry : Extract_relocations.relocation_entry) ->
       match
         Build_igot_and_iplt.iplt_symbol_for_plt_reloc igot_and_iplt entry
       with
-      | Some iplt_sym ->
-        Hashtbl.add map (entry.offset, Rela.r_x86_64_plt32) iplt_sym
+      | Some sym -> Hashtbl.add map (entry.offset, Rela.r_x86_64_plt32) sym
       | None -> ())
     relocations.Extract_relocations.convert_to_plt;
-  (* GOTPCRELX relocations -> IGOT symbols *)
   List.iter
     (fun (entry : Extract_relocations.relocation_entry) ->
       match
         Build_igot_and_iplt.igot_symbol_for_got_reloc igot_and_iplt entry
       with
-      | Some igot_sym ->
-        Hashtbl.add map (entry.offset, Rela.r_x86_64_rex_gotpcrelx) igot_sym
+      | Some sym ->
+        Hashtbl.add map (entry.offset, Rela.r_x86_64_rex_gotpcrelx) sym
       | None -> ())
     relocations.Extract_relocations.convert_to_got;
   map
 
-(* Rewrite .rela.text entries, returning new entries *)
 let rewrite_rela_text ~rela_body ~symbol_to_index ~rewrite_map =
   let entries = ref [] in
   Rela.iter_rela_entries ~rela_body ~f:(fun entry ->
       let new_entry =
         match Hashtbl.find_opt rewrite_map (entry.r_offset, entry.r_type) with
-        | Some new_symbol_name -> (
-          match Hashtbl.find_opt symbol_to_index new_symbol_name with
-          | Some new_sym_index ->
-            (* Change to PC32 relocation pointing to IGOT/IPLT symbol *)
-            { entry with r_sym = new_sym_index; r_type = Rela.r_x86_64_pc32 }
-          | None ->
-            (* Symbol not found - keep original (shouldn't happen) *)
-            entry)
-        | None ->
-          (* Not a relocation we need to rewrite *)
-          entry
+        | Some new_sym_name -> (
+          match Hashtbl.find_opt symbol_to_index new_sym_name with
+          | Some idx -> { entry with r_sym = idx; r_type = Rela.r_x86_64_pc32 }
+          | None -> entry)
+        | None -> entry
       in
       entries := new_entry :: !entries);
   List.rev !entries
 
-(* Write symbol table entries to a cursor *)
-let write_symbols ~cursor ~symbols ~strtab ~igot_section_index
-    ~iplt_section_index ~igot_and_iplt =
-  (* Write original symbols *)
-  List.iter
-    (fun (name, st_info, st_other, st_shndx, st_value, st_size) ->
-      let st_name = Strtab.add strtab name in
-      let entry : Rela.sym_entry =
-        { st_name; st_info; st_other; st_shndx; st_value; st_size }
-      in
-      Rela.write_sym_entry ~cursor entry)
-    symbols;
-  (* Write IGOT symbol entries *)
-  List.iter
-    (fun (entry : Igot.entry) ->
-      let st_name = Strtab.add strtab entry.igot_symbol in
-      let sym_entry : Rela.sym_entry =
-        { st_name;
-          st_info =
-            Rela.make_st_info ~binding:Rela.Stb.local ~typ:Rela.Stt.notype;
-          st_other = 0;
-          st_shndx = igot_section_index;
-          st_value = Int64.of_int (Igot.entry_offset entry);
-          st_size = Int64.of_int Igot.entry_size
-        }
-      in
-      Rela.write_sym_entry ~cursor sym_entry)
-    (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot);
-  (* Write IPLT symbol entries *)
-  List.iter
-    (fun (entry : Iplt.entry) ->
-      let st_name = Strtab.add strtab entry.iplt_symbol in
-      let sym_entry : Rela.sym_entry =
-        { st_name;
-          st_info = Rela.make_st_info ~binding:Rela.Stb.local ~typ:Rela.Stt.func;
-          st_other = 0;
-          st_shndx = iplt_section_index;
-          st_value = Int64.of_int (Iplt.entry_offset entry);
-          st_size = Int64.of_int Iplt.entry_size
-        }
-      in
-      Rela.write_sym_entry ~cursor sym_entry)
-    (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt)
+(* -------------------------------------------------------------------------- *)
+(* Writing helpers *)
+(* -------------------------------------------------------------------------- *)
 
-(* Write relocation entries to a cursor *)
-let write_rela_entries ~cursor entries =
-  List.iter (fun entry -> Rela.write_rela_entry ~cursor entry) entries
+let write_symbol ~cursor ~strtab sym =
+  let st_name = Strtab.add strtab sym.name in
+  Rela.write_sym_entry ~cursor
+    { st_name;
+      st_info = sym.st_info;
+      st_other = sym.st_other;
+      st_shndx = sym.st_shndx;
+      st_value = sym.st_value;
+      st_size = sym.st_size
+    }
+
+let write_synthetic_symbol ~cursor ~strtab ~name ~section_index ~offset ~size
+    ~is_func =
+  let st_name = Strtab.add strtab name in
+  let st_info =
+    Rela.make_st_info ~binding:Rela.Stb.local
+      ~typ:(if is_func then Rela.Stt.func else Rela.Stt.notype)
+  in
+  Rela.write_sym_entry ~cursor
+    { st_name;
+      st_info;
+      st_other = 0;
+      st_shndx = section_index;
+      st_value = Int64.of_int offset;
+      st_size = Int64.of_int size
+    }
+
+let write_rela_entry ~cursor ~symbol_to_index ~r_offset ~symbol ~r_type
+    ~r_addend =
+  let r_sym =
+    match Hashtbl.find_opt symbol_to_index symbol with
+    | Some idx -> idx
+    | None -> 0
+  in
+  Rela.write_rela_entry ~cursor
+    { r_offset = Int64.of_int r_offset; r_sym; r_type; r_addend }
+
+(* -------------------------------------------------------------------------- *)
+(* File layout calculation *)
+(* -------------------------------------------------------------------------- *)
+
+type section_layout =
+  { offset : int;
+    size : int
+  }
+
+type file_layout =
+  { igot : section_layout;
+    rela_igot : section_layout;
+    iplt : section_layout;
+    rela_iplt : section_layout;
+    symtab : section_layout;
+    strtab : section_layout;
+    rela_text : section_layout;
+    shstrtab : section_layout;
+    section_headers_offset : int;
+    total_size : int
+  }
+
+let compute_layout ~original_data_end ~igot_and_iplt ~total_symbols ~strtab_size
+    ~rela_text_count ~shstrtab_size ~num_sections ~shentsize =
+  let current = ref (Int64.to_int original_data_end) in
+  let layout alignment size =
+    current := align_up !current alignment;
+    let offset = !current in
+    current := offset + size;
+    { offset; size }
+  in
+  let igot =
+    layout 16 (Igot.section_size igot_and_iplt.Build_igot_and_iplt.igot)
+  in
+  let rela_igot =
+    let count =
+      List.length (Igot.relocations igot_and_iplt.Build_igot_and_iplt.igot)
+    in
+    layout 8 (count * Rela.rela_entry_size)
+  in
+  let iplt =
+    layout 16 (Iplt.section_size igot_and_iplt.Build_igot_and_iplt.iplt)
+  in
+  let rela_iplt =
+    let count =
+      List.length (Iplt.relocations igot_and_iplt.Build_igot_and_iplt.iplt)
+    in
+    layout 8 (count * Rela.rela_entry_size)
+  in
+  let symtab = layout 8 (total_symbols * Rela.sym_entry_size) in
+  let strtab = layout 1 strtab_size in
+  let rela_text = layout 8 (rela_text_count * Rela.rela_entry_size) in
+  let shstrtab = layout 1 shstrtab_size in
+  let section_headers_offset = align_up !current 8 in
+  let total_size = section_headers_offset + (num_sections * shentsize) in
+  { igot;
+    rela_igot;
+    iplt;
+    rela_iplt;
+    symtab;
+    strtab;
+    rela_text;
+    shstrtab;
+    section_headers_offset;
+    total_size
+  }
+
+(* -------------------------------------------------------------------------- *)
+(* Main rewrite function *)
+(* -------------------------------------------------------------------------- *)
 
 let rewrite unix ~input_file ~output_file ~igot_and_iplt ~relocations =
   let module Unix = (val unix : Compiler_owee.Unix_intf.S) in
-  (* Read the original ELF *)
+  (* Read original ELF *)
   let input_buf = Buf.map_binary (module Unix) input_file in
   let header, sections = Elf.read_elf input_buf in
   (* Find required sections *)
-  let symtab_section =
+  let find_section_exn name =
+    match Elf.find_section sections name with
+    | Some s -> s
+    | None -> Misc.fatal_errorf "rewrite_sections: no %s section found" name
+  in
+  let find_section_by_type_exn typ =
     match
-      Array.find_opt
-        (fun (s : Elf.section) -> s.sh_type = Rela.sht_symtab)
-        sections
+      Array.find_opt (fun (s : Elf.section) -> s.sh_type = typ) sections
     with
     | Some s -> s
-    | None -> Misc.fatal_error "rewrite_sections: no symbol table found"
+    | None -> Misc.fatal_error "rewrite_sections: required section not found"
   in
+  let symtab_section = find_section_by_type_exn Elf.Section_type.sht_symtab in
   let strtab_section = sections.(symtab_section.sh_link) in
-  let rela_text_section =
-    match Elf.find_section sections ".rela.text" with
-    | Some s -> s
-    | None -> Misc.fatal_error "rewrite_sections: no .rela.text section found"
-  in
+  let rela_text_section = find_section_exn ".rela.text" in
+  let shstrtab_section = sections.(header.e_shstrndx) in
+  (* Read section bodies *)
   let symtab_body = Elf.section_body input_buf symtab_section in
   let strtab_body = Elf.section_body input_buf strtab_section in
   let rela_text_body = Elf.section_body input_buf rela_text_section in
   (* Read original symbols *)
-  let original_symbols = read_original_symbols ~symtab_body ~strtab_body in
-  (* Build new string table *)
+  let original_symbols = read_symbols ~symtab_body ~strtab_body in
+  (* Build new string table and symbol index map *)
   let strtab = Strtab.create () in
   let symbol_to_index, total_symbols =
     build_symbol_index_map ~original_symbols ~igot_and_iplt strtab
   in
-  (* Build relocation rewrite map *)
+  (* Build relocation rewrite map and rewrite .rela.text *)
   let rewrite_map = build_relocation_rewrite_map ~igot_and_iplt ~relocations in
-  (* Rewrite .rela.text entries *)
-  let new_rela_text_entries =
+  let new_rela_text =
     rewrite_rela_text ~rela_body:rela_text_body ~symbol_to_index ~rewrite_map
   in
-  (* Calculate new section indices *)
-  let num_original_sections = Array.length sections in
-  let igot_section_index = num_original_sections in
-  let rela_igot_section_index = num_original_sections + 1 in
-  let iplt_section_index = num_original_sections + 2 in
-  let rela_iplt_section_index = num_original_sections + 3 in
-  let num_new_sections = num_original_sections + 4 in
-  (* Calculate sizes *)
-  let igot_size = Igot.section_size igot_and_iplt.Build_igot_and_iplt.igot in
-  let iplt_size = Iplt.section_size igot_and_iplt.Build_igot_and_iplt.iplt in
-  let igot_relocs = Igot.relocations igot_and_iplt.Build_igot_and_iplt.igot in
-  let iplt_relocs = Iplt.relocations igot_and_iplt.Build_igot_and_iplt.iplt in
-  let rela_igot_size = List.length igot_relocs * Rela.rela_entry_size in
-  let rela_iplt_size = List.length iplt_relocs * Rela.rela_entry_size in
-  let new_symtab_size = total_symbols * Rela.sym_entry_size in
-  let new_strtab_size = Strtab.length strtab in
-  let new_rela_text_size =
-    List.length new_rela_text_entries * Rela.rela_entry_size
-  in
-  (* Calculate file layout - we'll append new data after original sections *)
-  (* Find the end of original section data *)
-  let original_data_end =
-    Array.fold_left
-      (fun acc (s : Elf.section) ->
-        let section_end = Int64.add s.sh_offset s.sh_size in
-        if section_end > acc then section_end else acc)
-      0L sections
-  in
-  (* Layout new sections with proper alignment *)
-  let current_offset = ref (Int64.to_int original_data_end) in
-  let align_and_advance alignment size =
-    current_offset := align_up !current_offset alignment;
-    let offset = !current_offset in
-    current_offset := offset + size;
-    offset
-  in
-  let igot_offset = align_and_advance 16 igot_size in
-  let rela_igot_offset = align_and_advance 8 rela_igot_size in
-  let iplt_offset = align_and_advance 16 iplt_size in
-  let rela_iplt_offset = align_and_advance 8 rela_iplt_size in
-  let new_symtab_offset = align_and_advance 8 new_symtab_size in
-  let new_strtab_offset = align_and_advance 1 new_strtab_size in
-  let new_rela_text_offset = align_and_advance 8 new_rela_text_size in
-  (* Section headers go at the end *)
-  let section_headers_offset = align_up !current_offset 8 in
-  let total_file_size =
-    section_headers_offset + (num_new_sections * header.e_shentsize)
-  in
-  (* Create output buffer *)
-  let output_buf =
-    Buf.map_binary_write (module Unix) output_file total_file_size
-  in
-  (* Copy original file content up to the original data end *)
-  let original_size = Int64.to_int original_data_end in
-  for i = 0 to original_size - 1 do
-    Bigarray.Array1.set output_buf i (Bigarray.Array1.get input_buf i)
-  done;
-  (* Find symtab section index for linking *)
-  let symtab_section_index =
-    let idx = ref 0 in
-    Array.iteri
-      (fun i (s : Elf.section) -> if s.sh_type = Rela.sht_symtab then idx := i)
-      sections;
-    !idx
-  in
-  (* Write IGOT data *)
-  let igot_data = Igot.section_data igot_and_iplt.Build_igot_and_iplt.igot in
-  Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:igot_offset)
-    igot_size igot_data;
-  (* Write IGOT relocations *)
-  let igot_rela_cursor = Buf.cursor output_buf ~at:rela_igot_offset in
-  List.iter
-    (fun (r : Igot.relocation) ->
-      (* Need to look up symbol index for original symbol *)
-      let r_sym =
-        match Hashtbl.find_opt symbol_to_index r.symbol with
-        | Some idx -> idx
-        | None -> 0
-      in
-      let entry : Rela.rela_entry =
-        { r_offset = Int64.of_int r.offset;
-          r_sym;
-          r_type = Rela.r_x86_64_64;
-          r_addend = r.addend
-        }
-      in
-      Rela.write_rela_entry ~cursor:igot_rela_cursor entry)
-    igot_relocs;
-  (* Write IPLT data *)
-  let iplt_data = Iplt.section_data igot_and_iplt.Build_igot_and_iplt.iplt in
-  Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:iplt_offset)
-    iplt_size iplt_data;
-  (* Write IPLT relocations *)
-  let iplt_rela_cursor = Buf.cursor output_buf ~at:rela_iplt_offset in
-  List.iter
-    (fun (r : Iplt.relocation) ->
-      (* IPLT relocs point to IGOT symbols *)
-      let r_sym =
-        match Hashtbl.find_opt symbol_to_index r.symbol with
-        | Some idx -> idx
-        | None -> 0
-      in
-      let entry : Rela.rela_entry =
-        { r_offset = Int64.of_int r.offset;
-          r_sym;
-          r_type = Rela.r_x86_64_pc32;
-          r_addend = r.addend
-        }
-      in
-      Rela.write_rela_entry ~cursor:iplt_rela_cursor entry)
-    iplt_relocs;
-  (* Write new symbol table *)
-  let symtab_cursor = Buf.cursor output_buf ~at:new_symtab_offset in
-  write_symbols ~cursor:symtab_cursor ~symbols:original_symbols ~strtab
-    ~igot_section_index ~iplt_section_index ~igot_and_iplt;
-  (* Write new string table *)
-  let strtab_data = Strtab.contents strtab in
-  Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:new_strtab_offset)
-    new_strtab_size strtab_data;
-  (* Write new .rela.text *)
-  let rela_text_cursor = Buf.cursor output_buf ~at:new_rela_text_offset in
-  write_rela_entries ~cursor:rela_text_cursor new_rela_text_entries;
-  (* Build new section headers array *)
-  let new_sections = Array.make num_new_sections sections.(0) in
-  (* Copy and update original sections *)
-  Array.iteri
-    (fun i (s : Elf.section) ->
-      let updated =
-        if String.equal s.sh_name_str ".symtab"
-        then
-          { s with
-            sh_offset = Int64.of_int new_symtab_offset;
-            sh_size = Int64.of_int new_symtab_size
-          }
-        else if String.equal s.sh_name_str ".strtab"
-        then
-          { s with
-            sh_offset = Int64.of_int new_strtab_offset;
-            sh_size = Int64.of_int new_strtab_size
-          }
-        else if String.equal s.sh_name_str ".rela.text"
-        then
-          { s with
-            sh_offset = Int64.of_int new_rela_text_offset;
-            sh_size = Int64.of_int new_rela_text_size
-          }
-        else s
-      in
-      new_sections.(i) <- updated)
-    sections;
-  (* Add new sections *)
-  (* Find shstrtab to add new section names *)
-  let shstrtab_section = sections.(header.e_shstrndx) in
-  (* Helper to add section name to shstrtab and get offset *)
+  (* Build shstrtab with new section names *)
   let shstrtab_builder = Strtab.create () in
-  (* First add all existing section names *)
   Array.iter
     (fun (s : Elf.section) ->
       ignore (Strtab.add shstrtab_builder s.sh_name_str))
     sections;
-  (* Add new section names *)
   let igot_name_offset = Strtab.add shstrtab_builder ".data.igot" in
   let rela_igot_name_offset = Strtab.add shstrtab_builder ".rela.data.igot" in
   let iplt_name_offset = Strtab.add shstrtab_builder ".text.iplt" in
   let rela_iplt_name_offset = Strtab.add shstrtab_builder ".rela.text.iplt" in
-  (* IGOT section *)
-  new_sections.(igot_section_index)
-    <- ({ sh_name = igot_name_offset;
-          sh_type = sht_progbits;
-          sh_flags = Int64.logor shf_write shf_alloc;
-          sh_addr = 0L;
-          sh_offset = Int64.of_int igot_offset;
-          sh_size = Int64.of_int igot_size;
-          sh_link = 0;
-          sh_info = 0;
-          sh_addralign = 16L;
-          sh_entsize = 0L;
-          sh_name_str = ".data.igot"
-        }
-         : Elf.section);
-  (* .rela.data.igot section *)
-  new_sections.(rela_igot_section_index)
-    <- ({ sh_name = rela_igot_name_offset;
-          sh_type = sht_rela;
-          sh_flags = shf_info_link;
-          sh_addr = 0L;
-          sh_offset = Int64.of_int rela_igot_offset;
-          sh_size = Int64.of_int rela_igot_size;
-          sh_link = symtab_section_index;
-          sh_info = igot_section_index;
-          sh_addralign = 8L;
-          sh_entsize = Int64.of_int Rela.rela_entry_size;
-          sh_name_str = ".rela.data.igot"
-        }
-         : Elf.section);
-  (* IPLT section *)
-  new_sections.(iplt_section_index)
-    <- ({ sh_name = iplt_name_offset;
-          sh_type = sht_progbits;
-          sh_flags = Int64.logor shf_execinstr shf_alloc;
-          sh_addr = 0L;
-          sh_offset = Int64.of_int iplt_offset;
-          sh_size = Int64.of_int iplt_size;
-          sh_link = 0;
-          sh_info = 0;
-          sh_addralign = 16L;
-          sh_entsize = 0L;
-          sh_name_str = ".text.iplt"
-        }
-         : Elf.section);
-  (* .rela.text.iplt section *)
-  new_sections.(rela_iplt_section_index)
-    <- ({ sh_name = rela_iplt_name_offset;
-          sh_type = sht_rela;
-          sh_flags = shf_info_link;
-          sh_addr = 0L;
-          sh_offset = Int64.of_int rela_iplt_offset;
-          sh_size = Int64.of_int rela_iplt_size;
-          sh_link = symtab_section_index;
-          sh_info = iplt_section_index;
-          sh_addralign = 8L;
-          sh_entsize = Int64.of_int Rela.rela_entry_size;
-          sh_name_str = ".rela.text.iplt"
-        }
-         : Elf.section);
-  (* Update shstrtab section with new size and write new content *)
-  let new_shstrtab_size = Strtab.length shstrtab_builder in
-  let new_shstrtab_offset = align_up !current_offset 1 in
+  (* Calculate new section indices *)
+  let num_original = Array.length sections in
+  let igot_idx, rela_igot_idx = num_original, num_original + 1 in
+  let iplt_idx, rela_iplt_idx = num_original + 2, num_original + 3 in
+  let num_sections = num_original + 4 in
+  (* Find symtab section index *)
+  let symtab_idx =
+    let idx = ref 0 in
+    Array.iteri
+      (fun i (s : Elf.section) ->
+        if s.sh_type = Elf.Section_type.sht_symtab then idx := i)
+      sections;
+    !idx
+  in
+  (* Find end of original data *)
+  let original_data_end =
+    Array.fold_left
+      (fun acc (s : Elf.section) -> max acc (Int64.add s.sh_offset s.sh_size))
+      0L sections
+  in
+  (* Compute layout *)
+  let layout =
+    compute_layout ~original_data_end ~igot_and_iplt ~total_symbols
+      ~strtab_size:(Strtab.length strtab)
+      ~rela_text_count:(List.length new_rela_text)
+      ~shstrtab_size:(Strtab.length shstrtab_builder)
+      ~num_sections ~shentsize:header.e_shentsize
+  in
+  (* Create output buffer and copy original data *)
+  let output_buf =
+    Buf.map_binary_write (module Unix) output_file layout.total_size
+  in
+  let original_size = Int64.to_int original_data_end in
+  for i = 0 to original_size - 1 do
+    Bigarray.Array1.set output_buf i (Bigarray.Array1.get input_buf i)
+  done;
+  (* Write IGOT section data *)
+  Buf.Write.fixed_bytes
+    (Buf.cursor output_buf ~at:layout.igot.offset)
+    layout.igot.size
+    (Igot.section_data igot_and_iplt.Build_igot_and_iplt.igot);
+  (* Write IGOT relocations *)
+  let cursor = Buf.cursor output_buf ~at:layout.rela_igot.offset in
+  List.iter
+    (fun (r : Igot.relocation) ->
+      write_rela_entry ~cursor ~symbol_to_index ~r_offset:r.offset
+        ~symbol:r.symbol ~r_type:Rela.r_x86_64_64 ~r_addend:r.addend)
+    (Igot.relocations igot_and_iplt.Build_igot_and_iplt.igot);
+  (* Write IPLT section data *)
+  Buf.Write.fixed_bytes
+    (Buf.cursor output_buf ~at:layout.iplt.offset)
+    layout.iplt.size
+    (Iplt.section_data igot_and_iplt.Build_igot_and_iplt.iplt);
+  (* Write IPLT relocations *)
+  let cursor = Buf.cursor output_buf ~at:layout.rela_iplt.offset in
+  List.iter
+    (fun (r : Iplt.relocation) ->
+      write_rela_entry ~cursor ~symbol_to_index ~r_offset:r.offset
+        ~symbol:r.symbol ~r_type:Rela.r_x86_64_pc32 ~r_addend:r.addend)
+    (Iplt.relocations igot_and_iplt.Build_igot_and_iplt.iplt);
+  (* Write symbol table *)
+  let cursor = Buf.cursor output_buf ~at:layout.symtab.offset in
+  Array.iter (fun sym -> write_symbol ~cursor ~strtab sym) original_symbols;
+  List.iter
+    (fun (entry : Igot.entry) ->
+      write_synthetic_symbol ~cursor ~strtab ~name:entry.igot_symbol
+        ~section_index:igot_idx ~offset:(Igot.entry_offset entry)
+        ~size:Igot.entry_size ~is_func:false)
+    (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot);
+  List.iter
+    (fun (entry : Iplt.entry) ->
+      write_synthetic_symbol ~cursor ~strtab ~name:entry.iplt_symbol
+        ~section_index:iplt_idx ~offset:(Iplt.entry_offset entry)
+        ~size:Iplt.entry_size ~is_func:true)
+    (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt);
+  (* Write string table *)
+  Buf.Write.fixed_bytes
+    (Buf.cursor output_buf ~at:layout.strtab.offset)
+    layout.strtab.size (Strtab.contents strtab);
+  (* Write .rela.text *)
+  let cursor = Buf.cursor output_buf ~at:layout.rela_text.offset in
+  List.iter (fun e -> Rela.write_rela_entry ~cursor e) new_rela_text;
+  (* Write shstrtab *)
+  Buf.Write.fixed_bytes
+    (Buf.cursor output_buf ~at:layout.shstrtab.offset)
+    layout.shstrtab.size
+    (Strtab.contents shstrtab_builder);
+  (* Build section headers *)
+  let new_sections = Array.make num_sections sections.(0) in
+  Array.iteri
+    (fun i (s : Elf.section) ->
+      new_sections.(i)
+        <- (if String.equal s.sh_name_str ".symtab"
+           then
+             { s with
+               sh_offset = Int64.of_int layout.symtab.offset;
+               sh_size = Int64.of_int layout.symtab.size
+             }
+           else if String.equal s.sh_name_str ".strtab"
+           then
+             { s with
+               sh_offset = Int64.of_int layout.strtab.offset;
+               sh_size = Int64.of_int layout.strtab.size
+             }
+           else if String.equal s.sh_name_str ".rela.text"
+           then
+             { s with
+               sh_offset = Int64.of_int layout.rela_text.offset;
+               sh_size = Int64.of_int layout.rela_text.size
+             }
+           else s))
+    sections;
+  (* Add IGOT section *)
+  new_sections.(igot_idx)
+    <- Elf.make_progbits_section ~sh_name:igot_name_offset
+         ~sh_name_str:".data.igot"
+         ~sh_flags:
+           (Int64.logor Elf.Section_flags.shf_write Elf.Section_flags.shf_alloc)
+         ~sh_offset:(Int64.of_int layout.igot.offset)
+         ~sh_size:(Int64.of_int layout.igot.size)
+         ~sh_addralign:16L;
+  (* Add IGOT relocation section *)
+  new_sections.(rela_igot_idx)
+    <- Elf.make_rela_section ~sh_name:rela_igot_name_offset
+         ~sh_name_str:".rela.data.igot"
+         ~sh_offset:(Int64.of_int layout.rela_igot.offset)
+         ~sh_size:(Int64.of_int layout.rela_igot.size)
+         ~sh_link:symtab_idx ~sh_info:igot_idx;
+  (* Add IPLT section *)
+  new_sections.(iplt_idx)
+    <- Elf.make_progbits_section ~sh_name:iplt_name_offset
+         ~sh_name_str:".text.iplt"
+         ~sh_flags:
+           (Int64.logor Elf.Section_flags.shf_execinstr
+              Elf.Section_flags.shf_alloc)
+         ~sh_offset:(Int64.of_int layout.iplt.offset)
+         ~sh_size:(Int64.of_int layout.iplt.size)
+         ~sh_addralign:16L;
+  (* Add IPLT relocation section *)
+  new_sections.(rela_iplt_idx)
+    <- Elf.make_rela_section ~sh_name:rela_iplt_name_offset
+         ~sh_name_str:".rela.text.iplt"
+         ~sh_offset:(Int64.of_int layout.rela_iplt.offset)
+         ~sh_size:(Int64.of_int layout.rela_iplt.size)
+         ~sh_link:symtab_idx ~sh_info:iplt_idx;
+  (* Update shstrtab section *)
   new_sections.(header.e_shstrndx)
     <- { shstrtab_section with
-         sh_offset = Int64.of_int new_shstrtab_offset;
-         sh_size = Int64.of_int new_shstrtab_size
+         sh_offset = Int64.of_int layout.shstrtab.offset;
+         sh_size = Int64.of_int layout.shstrtab.size
        };
-  (* Recalculate file size with shstrtab *)
-  current_offset := new_shstrtab_offset + new_shstrtab_size;
-  let section_headers_offset = align_up !current_offset 8 in
-  (* Note: total_file_size = section_headers_offset + (num_new_sections *
-     header.e_shentsize). We assume the buffer was allocated large enough. *)
-  (* Write new shstrtab *)
-  let shstrtab_data = Strtab.contents shstrtab_builder in
-  Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:new_shstrtab_offset)
-    new_shstrtab_size shstrtab_data;
-  (* Update header *)
+  (* Write ELF header and section headers *)
   let new_header =
     { header with
-      e_shoff = Int64.of_int section_headers_offset;
-      e_shnum = num_new_sections
+      e_shoff = Int64.of_int layout.section_headers_offset;
+      e_shnum = num_sections
     }
   in
-  (* Write ELF header and section headers *)
   Elf.write_elf output_buf new_header new_sections

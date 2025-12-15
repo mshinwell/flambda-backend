@@ -144,14 +144,55 @@ type section = {
   sh_name_str : string;
 }
 
+module Section_type = struct
+  let sht_null = 0
+  let sht_progbits = 1
+  let sht_symtab = 2
+  let sht_strtab = 3
+  let sht_rela = 4
+end
+
 module Section_flags = struct
   let shf_write = 0x1L
   let shf_alloc = 0x2L
   let shf_execinstr = 0x4L
+  let shf_info_link = 0x40L
 
   let is_set flags ~flag = Int64.logand flags flag <> 0L
   let is_alloc flags = is_set flags ~flag:shf_alloc
 end
+
+let make_progbits_section ~sh_name ~sh_name_str ~sh_flags ~sh_offset ~sh_size
+    ~sh_addralign =
+  { sh_name;
+    sh_type = Section_type.sht_progbits;
+    sh_flags;
+    sh_addr = 0L;
+    sh_offset;
+    sh_size;
+    sh_link = 0;
+    sh_info = 0;
+    sh_addralign;
+    sh_entsize = 0L;
+    sh_name_str
+  }
+
+let rela_entry_size = 24
+
+let make_rela_section ~sh_name ~sh_name_str ~sh_offset ~sh_size ~sh_link
+    ~sh_info =
+  { sh_name;
+    sh_type = Section_type.sht_rela;
+    sh_flags = Section_flags.shf_info_link;
+    sh_addr = 0L;
+    sh_offset;
+    sh_size;
+    sh_link;
+    sh_info;
+    sh_addralign = 8L;
+    sh_entsize = Int64.of_int rela_entry_size;
+    sh_name_str
+  }
 
 let read_section header t n =
   seek t ((Int64.to_int header.e_shoff) + n * header.e_shentsize);
