@@ -38,17 +38,22 @@ exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
-(** [total_allocated_section_size unix ~files] computes the total size of all
-    allocated (SHF_ALLOC) sections across the given files.
+type file_size =
+  { filename : string;
+    size : int64
+  }
+
+(** [measure_files unix ~files] computes the allocated section size for each
+    file in [files].
 
     Handles the following file types based on extension:
     - .o: ELF object file, analyzed directly
-    - .a: archive file, all .o members analyzed
+    - .a: archive file, all .o members analyzed and summed
     - .cmx: finds associated .o file (same basename)
     - .cmxa: finds associated .a file, plus any lib_ccobjs
 
     Files are tracked to avoid double-counting when the same file appears
-    multiple times or is referenced transitively. Returns 0L for files
-    that don't exist or have unrecognized extensions. *)
-val total_allocated_section_size :
-  (module Compiler_owee.Unix_intf.S) -> files:string list -> int64
+    multiple times or is referenced transitively. Returns an empty entry for
+    files with unrecognized extensions. *)
+val measure_files :
+  (module Compiler_owee.Unix_intf.S) -> files:string list -> file_size list

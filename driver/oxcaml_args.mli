@@ -84,6 +84,8 @@ module type Oxcaml_options = sig
   val caml_apply_inline_fast_path : unit -> unit
   val internal_assembler : unit -> unit
   val dissector : unit -> unit
+  val dissector_partition_size : float -> unit
+  val ddissector_sizes : unit -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
   val dllvmir : unit -> unit

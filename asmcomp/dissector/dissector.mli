@@ -32,24 +32,37 @@
     object files to prevent relocation overflow when linking very large
     executables with the small code model. *)
 
-type error = Measure_error of Measure_object_files.error
+type error =
+  | Measure_error of Measure_object_files.error
+  | File_exceeds_partition_size of
+      { filename : string;
+        size : int64;
+        threshold : int64
+      }
 
 exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
+(** A partition is a list of files with their sizes. *)
+type partition = Measure_object_files.file_size list
+
 (** Result of running the dissector. The object file lists may be modified
-    (e.g., partitioned) compared to the inputs. *)
+    (e.g., partitioned) compared to the inputs. The [partitions] field contains
+    the partitioned files with their sizes, where each partition's total size
+    is at most the threshold (default 1.5 GB, configurable via
+    -dissector-partition-size). *)
 type result =
   { ml_objfiles : string list;
-    startup_obj : string
+    startup_obj : string;
+    partitions : partition list
   }
 
 (** Run the dissector pass.
 
     Analyzes all object files that will be involved in a link, computes the
-    total size of allocated ELF sections, and potentially modifies the object
-    file lists (e.g., for partitioning).
+    total size of allocated ELF sections, partitions files to stay under the
+    threshold, and potentially modifies the object file lists.
 
     The startup_obj is analyzed like all other .o files but may need to be
     handled specially during partitioning.
@@ -60,6 +73,9 @@ type result =
     @param ccobjs Extra C object files from -cclib (Clflags.ccobjs)
     @param runtime_libs Runtime libraries (from runtime_lib ())
     @param cached_genfns Optional path to cached generic functions
+
+    Raises [Error (File_exceeds_partition_size _)] if any single file exceeds
+    the partition threshold.
 
     Raises an error if Target_system is not Linux. *)
 val run :

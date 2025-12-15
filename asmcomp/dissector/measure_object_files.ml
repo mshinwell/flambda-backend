@@ -72,8 +72,12 @@ let check_for_duplicates files =
       else Hashtbl.add seen file ())
     files
 
-let total_allocated_section_size (unix : (module Compiler_owee.Unix_intf.S))
-    ~files =
+type file_size =
+  { filename : string;
+    size : int64
+  }
+
+let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   (* Check for duplicates in the input list first *)
   check_for_duplicates files;
   let module Unix = (val unix) in
@@ -106,41 +110,39 @@ let total_allocated_section_size (unix : (module Compiler_owee.Unix_intf.S))
   (* Track which files we've already analyzed to avoid double-counting from
      transitive dependencies (e.g., lib_ccobjs in .cmxa files) *)
   let analyzed = Hashtbl.create 256 in
-  (* Analyze a single file based on its extension *)
+  (* Analyze a single file based on its extension, return list of (file, size)
+     pairs. For .cmxa files, this may include both the .a file and any
+     lib_ccobjs that haven't been analyzed yet. *)
   let rec analyze_one filename =
     if Hashtbl.mem analyzed filename
-    then 0L
+    then []
     else (
       Hashtbl.add analyzed filename ();
       if Filename.check_suffix filename ".o"
-      then allocated_size_of_object_file filename
+      then [{ filename; size = allocated_size_of_object_file filename }]
       else if Filename.check_suffix filename ".a"
-      then allocated_size_of_archive_file filename
+      then [{ filename; size = allocated_size_of_archive_file filename }]
       else if Filename.check_suffix filename ".cmx"
       then
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
         if Hashtbl.mem analyzed obj_file
-        then 0L
+        then []
         else (
           Hashtbl.add analyzed obj_file ();
-          allocated_size_of_object_file obj_file)
+          [{ filename; size = allocated_size_of_object_file obj_file }])
       else if Filename.check_suffix filename ".cmxa"
       then
         let archive_file = Filename.chop_suffix filename ".cmxa" ^ ".a" in
-        let archive_size =
+        let archive_entry =
           if Hashtbl.mem analyzed archive_file
-          then 0L
+          then []
           else (
             Hashtbl.add analyzed archive_file ();
-            allocated_size_of_archive_file archive_file)
+            [{ filename; size = allocated_size_of_archive_file archive_file }])
         in
         let cmxa = read_cmxa filename in
-        let ccobjs_size =
-          List.fold_left
-            (fun acc ccobj -> Int64.add acc (analyze_one ccobj))
-            0L cmxa.lib_ccobjs
-        in
-        Int64.add archive_size ccobjs_size
-      else 0L)
+        let ccobjs_entries = List.concat_map analyze_one cmxa.lib_ccobjs in
+        archive_entry @ ccobjs_entries
+      else [])
   in
-  List.fold_left (fun acc file -> Int64.add acc (analyze_one file)) 0L files
+  List.concat_map analyze_one files
