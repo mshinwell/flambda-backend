@@ -25,6 +25,23 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+type error =
+  | File_not_found of string
+  | Duplicate_file of string
+
+exception Error of error
+
+let report_error ppf = function
+  | File_not_found filename ->
+    Format.fprintf ppf "Dissector: file not found: %s" filename
+  | Duplicate_file filename ->
+    Format.fprintf ppf "Dissector: duplicate file in link: %s" filename
+
+let () =
+  Location.register_error_of_exn (function
+    | Error err -> Some (Location.error_of_printer_file report_error err)
+    | _ -> None)
+
 (* Compute the total allocated section size for a single ELF buffer *)
 let allocated_size_of_elf_buf buf =
   let _header, sections = Compiler_owee.Owee_elf.read_elf buf in
@@ -45,13 +62,25 @@ let read_cmxa filename : Cmx_format.library_infos =
   close_in chan;
   cmxa
 
+(* Check for duplicate files in the input list *)
+let check_for_duplicates files =
+  let seen = Hashtbl.create 256 in
+  List.iter
+    (fun file ->
+      if Hashtbl.mem seen file
+      then raise (Error (Duplicate_file file))
+      else Hashtbl.add seen file ())
+    files
+
 let total_allocated_section_size (unix : (module Compiler_owee.Unix_intf.S))
     ~files =
+  (* Check for duplicates in the input list first *)
+  check_for_duplicates files;
   let module Unix = (val unix) in
   (* Analyze a single .o file *)
   let allocated_size_of_object_file filename =
     if not (Sys.file_exists filename)
-    then 0L
+    then raise (Error (File_not_found filename))
     else
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
       allocated_size_of_elf_buf buf
@@ -59,7 +88,7 @@ let total_allocated_section_size (unix : (module Compiler_owee.Unix_intf.S))
   (* Analyze an archive (.a) file *)
   let allocated_size_of_archive_file filename =
     if not (Sys.file_exists filename)
-    then 0L
+    then raise (Error (File_not_found filename))
     else
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
       let archive, members = Compiler_owee.Owee_archive.read buf in
@@ -74,7 +103,8 @@ let total_allocated_section_size (unix : (module Compiler_owee.Unix_intf.S))
           else acc)
         0L members
   in
-  (* Track which files we've already analyzed to avoid double-counting *)
+  (* Track which files we've already analyzed to avoid double-counting from
+     transitive dependencies (e.g., lib_ccobjs in .cmxa files) *)
   let analyzed = Hashtbl.create 256 in
   (* Analyze a single file based on its extension *)
   let rec analyze_one filename =

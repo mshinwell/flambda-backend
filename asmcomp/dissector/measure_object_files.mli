@@ -30,6 +30,14 @@
     This module computes the total size of allocated ELF sections across
     a collection of object files, archives, and OCaml compilation units. *)
 
+type error =
+  | File_not_found of string
+  | Duplicate_file of string
+
+exception Error of error
+
+val report_error : Format.formatter -> error -> unit
+
 (** [total_allocated_section_size unix ~files] computes the total size of all
     allocated (SHF_ALLOC) sections across the given files.
 

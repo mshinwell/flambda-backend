@@ -25,6 +25,18 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+type error = Measure_error of Measure_object_files.error
+
+exception Error of error
+
+let report_error ppf = function
+  | Measure_error err -> Measure_object_files.report_error ppf err
+
+let () =
+  Location.register_error_of_exn (function
+    | Error err -> Some (Location.error_of_printer_file report_error err)
+    | _ -> None)
+
 type result =
   { ml_objfiles : string list;
     startup_obj : string
@@ -44,7 +56,10 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~ml_objfiles ~startup_obj
     @ match cached_genfns with None -> [] | Some f -> [f]
   in
   (* Compute total allocated section size *)
-  let total = Measure_object_files.total_allocated_section_size unix ~files in
+  let total =
+    try Measure_object_files.total_allocated_section_size unix ~files
+    with Measure_object_files.Error err -> raise (Error (Measure_error err))
+  in
   (* Print the total *)
   Printf.eprintf "Dissector: total allocated section size = %Ld bytes\n%!" total;
   (* Return inputs unchanged for now *)

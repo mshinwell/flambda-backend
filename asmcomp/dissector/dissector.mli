@@ -32,6 +32,12 @@
     object files to prevent relocation overflow when linking very large
     executables with the small code model. *)
 
+type error = Measure_error of Measure_object_files.error
+
+exception Error of error
+
+val report_error : Format.formatter -> error -> unit
+
 (** Result of running the dissector. The object file lists may be modified
     (e.g., partitioned) compared to the inputs. *)
 type result =
