@@ -896,6 +896,8 @@ let zero_alloc_assert = ref Zero_alloc_annotations.Assert.Assert_default (* -zer
 
 let no_auto_include_otherlibs = ref false      (* -no-auto-include-otherlibs *)
 
+let dissector = ref false                      (* -dissector *)
+
 let prepend_directory file_name =
   match !directory with
   | Some directory -> Filename.concat directory file_name
