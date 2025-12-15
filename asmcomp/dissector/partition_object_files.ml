@@ -46,8 +46,8 @@ let () =
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
-(* Default partition size: 1.5 GB *)
-let default_partition_size_gb = 1.5
+(* Default partition size: 1 GiB *)
+let default_partition_size = Int64.shift_left 1L 30
 
 let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
 

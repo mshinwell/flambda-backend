@@ -44,8 +44,8 @@ val report_error : Format.formatter -> error -> unit
 (** A partition is a list of files with their sizes. *)
 type partition = Measure_object_files.file_size list
 
-(** Default partition size threshold in gigabytes. *)
-val default_partition_size_gb : float
+(** Default partition size threshold in bytes (1 GiB). *)
+val default_partition_size : int64
 
 (** Convert gigabytes to bytes. *)
 val bytes_of_gb : float -> int64

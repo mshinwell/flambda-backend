@@ -80,12 +80,11 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~ml_objfiles ~startup_obj
   (* Dump sizes if requested *)
   if !Clflags.ddissector_sizes then dump_sizes file_sizes;
   (* Compute partition threshold *)
-  let partition_size_gb =
+  let threshold =
     match !Clflags.dissector_partition_size with
-    | Some gb -> gb
-    | None -> Partition_object_files.default_partition_size_gb
+    | Some gb -> Partition_object_files.bytes_of_gb gb
+    | None -> Partition_object_files.default_partition_size
   in
-  let threshold = Partition_object_files.bytes_of_gb partition_size_gb in
   (* Partition files *)
   let partitions =
     try Partition_object_files.partition_files ~threshold file_sizes

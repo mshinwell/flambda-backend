@@ -46,7 +46,7 @@ type partition = Partition_object_files.partition
 (** Result of running the dissector. The object file lists may be modified
     (e.g., partitioned) compared to the inputs. The [partitions] field contains
     the partitioned files with their sizes, where each partition's total size
-    is at most the threshold (default 1.5 GB, configurable via
+    is at most the threshold (default 1 GiB, configurable via
     -dissector-partition-size). *)
 type result =
   { ml_objfiles : string list;
