@@ -7,6 +7,8 @@ let sht_symtab = 2
 (* x86-64 relocation types *)
 let r_x86_64_plt32 = 4L
 let r_x86_64_rex_gotpcrelx = 42L
+let r_x86_64_64 = 1L
+let r_x86_64_pc32 = 2L
 
 (* Size of an Elf64_Rela entry in bytes *)
 let rela_entry_size = 24
@@ -79,3 +81,47 @@ let read_symbol_shndx ~symtab_body ~sym_index =
     (* st_shndx is at offset 6 within the symbol entry *)
     let cursor = Owee_buf.cursor symtab_body ~at:(sym_offset + 6) in
     Some (Owee_buf.Read.u16 cursor)
+
+(* Construct r_info from symbol index and relocation type *)
+let make_r_info ~sym ~typ =
+  Int64.logor (Int64.shift_left (Int64.of_int sym) 32) typ
+
+let write_rela_entry ~cursor entry =
+  Owee_buf.Write.u64 cursor entry.r_offset;
+  Owee_buf.Write.u64 cursor (make_r_info ~sym:entry.r_sym ~typ:entry.r_type);
+  Owee_buf.Write.u64 cursor entry.r_addend
+
+(* Symbol binding attributes *)
+module Stb = struct
+  let local = 0
+  let global = 1
+  let weak = 2
+end
+
+(* Symbol type attributes *)
+module Stt = struct
+  let notype = 0
+  let object_ = 1
+  let func = 2
+  let section = 3
+  let file = 4
+end
+
+let make_st_info ~binding ~typ = (binding lsl 4) lor typ
+
+type sym_entry =
+  { st_name : int;
+    st_info : int;
+    st_other : int;
+    st_shndx : int;
+    st_value : int64;
+    st_size : int64
+  }
+
+let write_sym_entry ~cursor entry =
+  Owee_buf.Write.u32 cursor entry.st_name;
+  Owee_buf.Write.u8 cursor entry.st_info;
+  Owee_buf.Write.u8 cursor entry.st_other;
+  Owee_buf.Write.u16 cursor entry.st_shndx;
+  Owee_buf.Write.u64 cursor entry.st_value;
+  Owee_buf.Write.u64 cursor entry.st_size

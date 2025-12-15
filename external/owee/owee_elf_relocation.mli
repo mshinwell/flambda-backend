@@ -55,3 +55,68 @@ val read_symbol_name :
     Returns [None] if the index is out of bounds.
     A value of [shn_undef] (0) indicates an undefined symbol. *)
 val read_symbol_shndx : symtab_body:Owee_buf.t -> sym_index:int -> int option
+
+(** {1 Additional Relocation Types} *)
+
+val r_x86_64_64 : int64
+(** R_X86_64_64 relocation type (64-bit absolute). *)
+
+val r_x86_64_pc32 : int64
+(** R_X86_64_PC32 relocation type (32-bit PC-relative). *)
+
+(** {1 Entry Sizes} *)
+
+val rela_entry_size : int
+(** Size of an Elf64_Rela entry in bytes (24). *)
+
+val sym_entry_size : int
+(** Size of an Elf64_Sym entry in bytes (24). *)
+
+(** {1 Writing RELA Entries} *)
+
+(** [write_rela_entry ~cursor entry] writes a RELA entry at the current
+    cursor position and advances the cursor by [rela_entry_size] bytes. *)
+val write_rela_entry : cursor:Owee_buf.cursor -> rela_entry -> unit
+
+(** {1 Symbol Table Writing} *)
+
+(** Symbol binding attributes for st_info. *)
+module Stb : sig
+  val local : int
+  val global : int
+  val weak : int
+end
+
+(** Symbol type attributes for st_info. *)
+module Stt : sig
+  val notype : int
+  val object_ : int
+  val func : int
+  val section : int
+  val file : int
+end
+
+(** [make_st_info ~binding ~typ] creates the st_info byte from binding and
+    type attributes. *)
+val make_st_info : binding:int -> typ:int -> int
+
+(** A symbol table entry to write. *)
+type sym_entry =
+  { st_name : int;
+    (** Index into string table. *)
+    st_info : int;
+    (** Symbol type and binding. *)
+    st_other : int;
+    (** Symbol visibility. *)
+    st_shndx : int;
+    (** Section header index. *)
+    st_value : int64;
+    (** Symbol value. *)
+    st_size : int64
+    (** Symbol size. *)
+  }
+
+(** [write_sym_entry ~cursor entry] writes a symbol table entry at the
+    current cursor position and advances the cursor by [sym_entry_size]
+    bytes. *)
+val write_sym_entry : cursor:Owee_buf.cursor -> sym_entry -> unit
