@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,48 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+(** Measuring allocated section sizes in object files.
 
-open Typedtree
-open Compat
+    This module computes the total size of allocated ELF sections across
+    a collection of object files, archives, and OCaml compilation units. *)
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+type error =
+  | File_not_found of string
+  | Duplicate_file of string
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+exception Error of error
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+val report_error : Format.formatter -> error -> unit
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
+(** Information about a single file's allocated section size. *)
+module File_size : sig
+  type t
 
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+  (** Returns the filename. *)
+  val filename : t -> string
+
+  (** Returns the total size of allocated sections in the file. *)
+  val size : t -> int64
+
+  (** Returns whether the file contains a .probes section. *)
+  val has_probes : t -> bool
+end
+
+(** [measure_files unix ~files] computes the allocated section size for each
+    file in [files].
+
+    Handles the following file types based on extension:
+
+    - .o: ELF object file, analyzed directly
+
+    - .a: archive file, all .o members analyzed and summed
+
+    - .cmx: finds associated .o file (same basename)
+
+    - .cmxa: finds associated .a file, plus any lib_ccobjs
+
+    Files are tracked to avoid double-counting when the same file appears
+    multiple times or is referenced transitively. Returns an empty entry for
+    files with unrecognized extensions. *)
+val measure_files :
+  (module Compiler_owee.Unix_intf.S) -> files:string list -> File_size.t list

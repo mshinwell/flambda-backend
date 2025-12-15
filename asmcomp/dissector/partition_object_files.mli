@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,33 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+(** Partitioning object files into size-limited buckets.
 
-open Typedtree
-open Compat
+    This module partitions a list of files with their sizes into buckets,
+    where each bucket's total size is at most a configurable threshold. *)
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+type error =
+  | File_exceeds_partition_size of
+      { filename : string;
+        size : int64;
+        threshold : int64
+      }
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+exception Error of error
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+val report_error : Format.formatter -> error -> unit
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
+(** Default partition size threshold in bytes (1 GiB). *)
+val default_partition_size : int64
 
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+(** Convert gigabytes to bytes. *)
+val bytes_of_gb : float -> int64
+
+(** [partition_files ~threshold file_sizes] partitions files into buckets,
+    starting a new bucket when adding the next file would exceed [threshold].
+    The order of files is preserved.
+
+    Raises [Error (File_exceeds_partition_size _)] if any single file exceeds
+    the threshold. *)
+val partition_files :
+  threshold:int64 -> Measure_object_files.File_size.t list -> Partition.t list

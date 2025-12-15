@@ -144,6 +144,56 @@ type section = {
   sh_name_str : string;
 }
 
+module Section_type = struct
+  let sht_null = 0
+  let sht_progbits = 1
+  let sht_symtab = 2
+  let sht_strtab = 3
+  let sht_rela = 4
+end
+
+module Section_flags = struct
+  let shf_write = 0x1L
+  let shf_alloc = 0x2L
+  let shf_execinstr = 0x4L
+  let shf_info_link = 0x40L
+
+  let is_set flags ~flag = Int64.logand flags flag <> 0L
+  let is_alloc flags = is_set flags ~flag:shf_alloc
+end
+
+let make_progbits_section ~sh_name ~sh_name_str ~sh_flags ~sh_offset ~sh_size
+    ~sh_addralign =
+  { sh_name;
+    sh_type = Section_type.sht_progbits;
+    sh_flags;
+    sh_addr = 0L;
+    sh_offset;
+    sh_size;
+    sh_link = 0;
+    sh_info = 0;
+    sh_addralign;
+    sh_entsize = 0L;
+    sh_name_str
+  }
+
+let rela_entry_size = 24
+
+let make_rela_section ~sh_name ~sh_name_str ~sh_offset ~sh_size ~sh_link
+    ~sh_info =
+  { sh_name;
+    sh_type = Section_type.sht_rela;
+    sh_flags = Section_flags.shf_info_link;
+    sh_addr = 0L;
+    sh_offset;
+    sh_size;
+    sh_link;
+    sh_info;
+    sh_addralign = 8L;
+    sh_entsize = Int64.of_int rela_entry_size;
+    sh_name_str
+  }
+
 let read_section header t n =
   seek t ((Int64.to_int header.e_shoff) + n * header.e_shentsize);
   ensure t 64 "Shdr truncated";
@@ -404,3 +454,25 @@ let find_symbol_table buf sections =
   match find_section_body buf sections ~section_name:".symtab" with
   | None -> None
   | Some symtab -> Some (Symbol_table.create [symtab])
+
+let iter_symbols ~symtab_body ~strtab_body ~f =
+  let num_symbols = (size symtab_body) / Symbol_table.Symbol.struct_size in
+  for i = 0 to num_symbols - 1 do
+    let sym_cursor = cursor symtab_body ~at:(i * Symbol_table.Symbol.struct_size) in
+    let st_name_offset = Read.u32 sym_cursor in
+    let st_info = Read.u8 sym_cursor in
+    let st_other = Read.u8 sym_cursor in
+    let st_shndx = Read.u16 sym_cursor in
+    let st_value = Read.u64 sym_cursor in
+    let st_size = Read.u64 sym_cursor in
+    let name =
+      if st_name_offset = 0
+      then ""
+      else
+        let name_cursor = cursor strtab_body ~at:st_name_offset in
+        match Read.zero_string name_cursor () with
+        | Some s -> s
+        | None -> ""
+    in
+    f ~name ~st_info ~st_other ~st_shndx ~st_value ~st_size
+  done

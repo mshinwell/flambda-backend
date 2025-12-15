@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,46 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+let sections = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
 
-open Typedtree
-open Compat
+let generate ~existing_script ~partitions =
+  let buf = Buffer.create 1024 in
+  (match existing_script with
+  | None -> ()
+  | Some path ->
+    Buffer.add_string buf
+      (Printf.sprintf "/* BEGIN include existing linker script: %s */\n" path);
+    let ic = open_in path in
+    (try
+       while true do
+         Buffer.add_string buf (input_line ic);
+         Buffer.add_char buf '\n'
+       done
+     with End_of_file -> close_in ic);
+    Buffer.add_string buf
+      (Printf.sprintf "/* END include existing linker script: %s */\n\n" path));
+  Buffer.add_string buf "SECTIONS {\n";
+  List.iter
+    (fun linked ->
+      match Partition.kind (Partition.Linked.partition linked) with
+      | Main -> ()
+      | Large_code _ ->
+        let prefix =
+          Partition.section_prefix
+            (Partition.kind (Partition.Linked.partition linked))
+        in
+        List.iter
+          (fun section ->
+            let name = prefix ^ section in
+            Buffer.add_string buf
+              (Printf.sprintf "%s : { *(%s) *(%s.*) }\n" name name name))
+          sections)
+    partitions;
+  Buffer.add_string buf "} INSERT AFTER .bss\n";
+  Buffer.contents buf
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
-
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
-
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
-
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
-
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+let write ~output_file ~existing_script ~partitions =
+  let contents = generate ~existing_script ~partitions in
+  let oc = open_out output_file in
+  output_string oc contents;
+  close_out oc

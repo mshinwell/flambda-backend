@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,32 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+(** Partial linking of object files.
 
-open Typedtree
-open Compat
+    This module partially links groups of object files into single relocatable
+    object files, to work around relocation overflow issues when linking very
+    large executables with the small code model. *)
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+type error =
+  | Linker_error of
+      { partition_index : int;
+        exit_code : int;
+        files : string list
+      }
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+exception Error of error
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+val report_error : Format.formatter -> error -> unit
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
+(** [link_partitions ~temp_dir partitions] partially links each partition into
+    a single relocatable object file.
 
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+    For each partition, creates a response file listing the input files, then
+    invokes the linker with:
+      ld --whole-archive @<response_file> --relocatable -o <output.o>
+
+    Returns the list of linked partitions with paths to the output .o files.
+
+    @param temp_dir Directory for temporary and output files *)
+val link_partitions :
+  temp_dir:string -> Partition.t list -> Partition.Linked.t list

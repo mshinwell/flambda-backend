@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,50 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+type kind =
+  | Main
+  | Large_code of int
 
-open Typedtree
-open Compat
+let symbol_prefix = function
+  | Main -> "main"
+  | Large_code n -> Printf.sprintf "p%d" n
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+let section_prefix = function
+  | Main -> ""
+  | Large_code n -> Printf.sprintf ".caml.p%d" n
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+type t =
+  { kind : kind;
+    files : Measure_object_files.File_size.t list;
+    total_size : int64
+  }
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+let kind t = t.kind
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
+let files t = t.files
 
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+let total_size t = t.total_size
+
+let create ~kind files =
+  let total_size =
+    List.fold_left
+      (fun acc entry ->
+        Int64.add acc (Measure_object_files.File_size.size entry))
+      0L files
+  in
+  { kind; files; total_size }
+
+module Linked = struct
+  type partition = t
+
+  type t =
+    { partition : partition;
+      linked_object : string
+    }
+
+  let partition t = t.partition
+
+  let linked_object t = t.linked_object
+
+  let create ~partition ~linked_object = { partition; linked_object }
+end

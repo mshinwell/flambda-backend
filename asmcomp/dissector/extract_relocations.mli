@@ -1,10 +1,10 @@
 (******************************************************************************
- *                                 Chamelon                                   *
- *                         Milla Valnet, OCamlPro                             *
+ *                                  OxCaml                                    *
  * -------------------------------------------------------------------------- *
  *                               MIT License                                  *
  *                                                                            *
- * Copyright (c) 2023 OCamlPro                                                *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
  *                                                                            *
  * Permission is hereby granted, free of charge, to any person obtaining a    *
  * copy of this software and associated documentation files (the "Software"), *
@@ -25,31 +25,42 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* Dummy expressions *)
+(** Extract relocations from partially-linked object files.
 
-open Typedtree
-open Compat
+    This module reads ELF object files and extracts relocations that need
+    to be converted to use an intermediate PLT or GOT when linking with
+    the dissector code model. *)
 
-(** [cases_view] is similar to an old version of the [texp_function] type. It
-    would take some work to update old clients to use the new [texp_function]
-    type, so instead we have this compatibility layer between [cases_view] and
-    the new version of [texp_function].
+(** Information about a single relocation that needs conversion. *)
+module Relocation_entry : sig
+  type t
 
-    (Though, at some point we should just update the clients and remove this
-    compatibility layer.) *)
+  (** Returns the symbol name for the relocation. *)
+  val symbol_name : t -> string
 
-type cases_view_identifier =
-  | Cases of texp_function_cases_identifier
-  | Param of texp_function_param_identifier
+  (** Returns the offset of the relocation within the section. *)
+  val offset : t -> int64
+end
 
-type cases_view = {
-  arg_label : Asttypes.arg_label;
-  param : Ident.t;
-  cases : value case list;
-  partial : partial;
-  optional_default : expression option;
-  cases_view_identifier : cases_view_identifier;
-}
+(** The result of extracting relocations from object files. *)
+type t
 
-val cases_view_to_function : cases_view -> texp_function
-val function_to_cases_view : texp_function -> cases_view
+(** Returns relocations with type R_X86_64_PLT32 that need PLT entries. *)
+val convert_to_plt : t -> Relocation_entry.t list
+
+(** Returns relocations with type R_X86_64_REX_GOTPCRELX that need GOT entries. *)
+val convert_to_got : t -> Relocation_entry.t list
+
+(** [extract unix ~filename] reads the ELF object file at [filename] and
+    extracts relocations from the .rela.text section that need to be
+    converted for the medium code model.
+
+    Returns the lists of PLT32 and REX_GOTPCRELX relocations found. *)
+val extract : (module Compiler_owee.Unix_intf.S) -> filename:string -> t
+
+(** [extract_from_linked_partitions unix linked_partitions] extracts
+    relocations from all the partially-linked object files.
+
+    Returns combined relocation information from all partitions. *)
+val extract_from_linked_partitions :
+  (module Compiler_owee.Unix_intf.S) -> Partition.Linked.t list -> t

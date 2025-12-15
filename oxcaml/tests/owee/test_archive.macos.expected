@@ -1,0 +1,9 @@
+Archive: test_archive.a
+Number of members: 2
+
+Member: test_file1.o (size=512)
+  (not ELF: No ELF magic number)
+
+Member: test_file2.o (size=704)
+  (not ELF: No ELF magic number)
+
