@@ -25,35 +25,63 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(** Measuring allocated section sizes in object files.
-
-    This module computes the total size of allocated ELF sections across
-    a collection of object files, archives, and OCaml compilation units. *)
-
 type error =
-  | File_not_found of string
-  | Duplicate_file of string
+  | File_exceeds_partition_size of
+      { filename : string;
+        size : int64;
+        threshold : int64
+      }
 
 exception Error of error
 
-val report_error : Format.formatter -> error -> unit
+let report_error ppf = function
+  | File_exceeds_partition_size { filename; size; threshold } ->
+    Format.fprintf ppf
+      "Dissector: file %s has allocated section size %Ld bytes, which exceeds \
+       partition threshold %Ld bytes"
+      filename size threshold
 
-type file_size = private
-  { filename : string;
-    size : int64
-  }
+let () =
+  Location.register_error_of_exn (function
+    | Error err -> Some (Location.error_of_printer_file report_error err)
+    | _ -> None)
 
-(** [measure_files unix ~files] computes the allocated section size for each
-    file in [files].
+(* Default partition size: 1.5 GB *)
+let default_partition_size_gb = 1.5
 
-    Handles the following file types based on extension:
-    - .o: ELF object file, analyzed directly
-    - .a: archive file, all .o members analyzed and summed
-    - .cmx: finds associated .o file (same basename)
-    - .cmxa: finds associated .a file, plus any lib_ccobjs
+let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
 
-    Files are tracked to avoid double-counting when the same file appears
-    multiple times or is referenced transitively. Returns an empty entry for
-    files with unrecognized extensions. *)
-val measure_files :
-  (module Compiler_owee.Unix_intf.S) -> files:string list -> file_size list
+type partition = Measure_object_files.file_size list
+
+let partition_files ~threshold file_sizes =
+  (* Partition files into buckets, starting a new bucket when adding the next
+     file would exceed the threshold. The order of files is preserved. *)
+  let rec loop current_partition current_size partitions = function
+    | [] ->
+      (* Finish: add current partition if non-empty *)
+      let partitions =
+        if current_partition = []
+        then partitions
+        else List.rev current_partition :: partitions
+      in
+      List.rev partitions
+    | (entry : Measure_object_files.file_size) :: rest ->
+      (* Check if this file exceeds the threshold by itself *)
+      if entry.size > threshold
+      then
+        raise
+          (Error
+             (File_exceeds_partition_size
+                { filename = entry.filename; size = entry.size; threshold }));
+      (* Check if adding this file would exceed the threshold *)
+      let new_size = Int64.add current_size entry.size in
+      if new_size > threshold && current_partition <> []
+      then
+        (* Start a new partition *)
+        let partitions = List.rev current_partition :: partitions in
+        loop [entry] entry.size partitions rest
+      else
+        (* Add to current partition *)
+        loop (entry :: current_partition) new_size partitions rest
+  in
+  loop [] 0L [] file_sizes
