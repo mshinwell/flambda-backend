@@ -49,9 +49,22 @@ type t =
 let iplt_symbol_name ~prefix symbol =
   "iplt" ^ delimiter ^ prefix ^ delimiter ^ symbol
 
-(* Machine code template for one PLT entry (8 bytes): ff 25 00 00 00 00 - jmp
-   [rip + 0] (displacement filled by relocation) 66 90 - 2-byte nop *)
-let plt_entry_template = "\xff\x25\x00\x00\x00\x00\x66\x90"
+(* Build the PLT entry template using X86_binary_emitter. The JMP instruction
+   is: jmp [rip + 0] which encodes as ff 25 00 00 00 00 We append a 2-byte nop
+   (66 90) for padding to reach 8 bytes. *)
+let plt_entry_template =
+  (* Create a section with a single JMP instruction *)
+  let jmp_instr = X86_ast.JMP (X86_ast.Mem64_RIP (X86_ast.QWORD, "dummy", 0)) in
+  let section =
+    { X86_binary_emitter.sec_name = ".text.iplt";
+      sec_instrs = [| X86_ast.Ins jmp_instr |]
+    }
+  in
+  let buffer = X86_binary_emitter.assemble_section X86_ast.X64 section in
+  let jmp_bytes = X86_binary_emitter.contents buffer in
+  (* The JMP should be 6 bytes, append 2-byte nop (66 90) for alignment *)
+  assert (String.length jmp_bytes = 6);
+  jmp_bytes ^ "\x66\x90"
 
 let build ~prefix ~igot symbols =
   (* Remove duplicates while preserving order *)
