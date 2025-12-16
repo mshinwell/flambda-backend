@@ -124,30 +124,22 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
     (Buf.cursor output_buf ~at:plan.layout.shstrtab_layout.offset)
     plan.layout.shstrtab_layout.size
     (Strtab.contents plan.shstrtab);
+  let relocate_section (s : Elf.section)
+      (layout : Form_rewrite_plan.section_layout) : Elf.section =
+    { s with
+      sh_offset = Int64.of_int layout.offset;
+      sh_size = Int64.of_int layout.size
+    }
+  in
+  let update_section (s : Elf.section) =
+    match s.sh_name_str with
+    | ".symtab" -> relocate_section s plan.layout.symtab_layout
+    | ".strtab" -> relocate_section s plan.layout.strtab_layout
+    | ".rela.text" -> relocate_section s plan.layout.rela_text
+    | _ -> s
+  in
   let new_sections = Array.make plan.num_sections sections.(0) in
-  Array.iteri
-    (fun i (s : Elf.section) ->
-      new_sections.(i)
-        <- (if String.equal s.sh_name_str ".symtab"
-           then
-             { s with
-               sh_offset = Int64.of_int plan.layout.symtab_layout.offset;
-               sh_size = Int64.of_int plan.layout.symtab_layout.size
-             }
-           else if String.equal s.sh_name_str ".strtab"
-           then
-             { s with
-               sh_offset = Int64.of_int plan.layout.strtab_layout.offset;
-               sh_size = Int64.of_int plan.layout.strtab_layout.size
-             }
-           else if String.equal s.sh_name_str ".rela.text"
-           then
-             { s with
-               sh_offset = Int64.of_int plan.layout.rela_text.offset;
-               sh_size = Int64.of_int plan.layout.rela_text.size
-             }
-           else s))
-    sections;
+  Array.iteri (fun i s -> new_sections.(i) <- update_section s) sections;
   new_sections.(plan.igot_idx)
     <- Elf.make_progbits_section ~sh_name:plan.igot_name_offset
          ~sh_name_str:".data.igot"
