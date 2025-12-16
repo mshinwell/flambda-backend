@@ -47,6 +47,29 @@ let log fmt =
   then Printf.eprintf ("Dissector: " ^^ fmt ^^ "\n%!")
   else Printf.ifprintf stderr fmt
 
+(* Extract existing linker script from -ccopt arguments. Looks for patterns
+   like: - "-Wl,-T,<path>" - "-Wl,--script=<path>" Returns the first match
+   found, or None if no linker script is specified. *)
+let extract_linker_script_from_ccopts ccopts =
+  let extract_from_wl_arg arg =
+    (* Handle -Wl,... arguments which are comma-separated *)
+    if String.starts_with ~prefix:"-Wl," arg
+    then
+      let parts = String.split_on_char ',' arg in
+      (* Look for -T followed by path, or --script=path *)
+      let rec find_script = function
+        | [] -> None
+        | "-T" :: path :: _ -> Some path
+        | part :: rest ->
+          if String.starts_with ~prefix:"--script=" part
+          then Some (String.sub part 9 (String.length part - 9))
+          else find_script rest
+      in
+      find_script parts
+    else None
+  in
+  List.find_map extract_from_wl_arg ccopts
+
 type result =
   { linked_partitions : Partition.linked list;
     linker_script : string
@@ -128,10 +151,12 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
         ~output_file ~partition_kind:kind ~igot_and_iplt ~relocations;
       log "rewrote %s -> %s" partition.linked_object output_file)
     linked_partitions;
-  (* TODO: Extract existing_script from linker command line flags
-     (--script=<path>) *)
+  let existing_script = extract_linker_script_from_ccopts !Clflags.all_ccopts in
+  (match existing_script with
+  | Some path -> log "found existing linker script: %s" path
+  | None -> ());
   let linker_script = Filename.concat temp_dir "linker.script" in
-  Linker_script.write ~output_file:linker_script ~existing_script:None
+  Linker_script.write ~output_file:linker_script ~existing_script
     ~partitions:linked_partitions;
   log "generated linker script: %s" linker_script;
   { linked_partitions; linker_script }

@@ -152,6 +152,6 @@ For `Large_code` partitions, sections are renamed in `form_rewrite_plan.ml`:
 
 The `Main` partition keeps original section names.
 
-## Current Limitations
+## Feature Complete
 
-1. **No existing linker script extraction**: Always passes `None` for existing_script (TODO in code)
+The OCaml implementation now has full feature parity with the Python prototype.

@@ -20,7 +20,7 @@ Comparison between the Python prototype (`synthetic_got.py`) and the OCaml imple
 | **Symbol prefix per partition** | ✅ "main", "1", "2", ... | ✅ "main", "p1", "p2", ... | ✅ Done |
 | **Section prefix renaming** | ✅ `.text` → `.caml.p1.text` | ✅ `.text` → `.caml.p1.text` | ✅ Done |
 | **Main partition (no rename)** | ✅ Main keeps original names | ✅ Main keeps original names | ✅ Done |
-| **Existing linker script** | ✅ Extracted from args | ❌ TODO, always None | ⚠️ **TODO** |
+| **Existing linker script** | ✅ Extracted from args | ✅ Extracted from `Clflags.all_ccopts` | ✅ Done |
 | **Verbose logging** | None | ✅ `-ddissector` flag | ✅ Done (OCaml bonus) |
 
 ## Detailed Differences
@@ -60,23 +60,10 @@ let rename_section ~partition_kind name =
 
 ### 4. Existing Linker Script Extraction
 
-**Python**: Extracts `--script=` from arguments:
-```python
-for i in range(len(args) - 1):
-    if args[i] == "-Xlinker" and args[i + 1].startswith("--script"):
-        script_index = i
-if script_index is not None:
-    linker_script = args[script_index + 1]
-```
+**Python**: Extracts `--script=` from linker arguments.
 
-**OCaml**: Has a TODO comment but always passes `None`:
-```ocaml
-(* TODO: Extract existing_script from linker command line flags
-   (--script=<path>) *)
-Linker_script.write ~output_file:linker_script ~existing_script:None
-```
-
-**Impact**: If the user provides a linker script, it won't be incorporated.
+**OCaml**: ✅ Now implemented. Extracts linker script from `Clflags.all_ccopts` by looking for
+`-Wl,-T,<path>` or `-Wl,--script=<path>` patterns.
 
 ### 5. PLT Entry Encoding
 
@@ -95,17 +82,9 @@ X86_ast.NOP; X86_ast.NOP
 
 **Impact**: Both are valid 8-byte sequences. The `66 90` is a 2-byte NOP using operand size prefix, while `90 90` is two 1-byte NOPs. Functionally equivalent.
 
-## Remaining TODOs
+## All Features Complete
 
-### 1. Existing Linker Script Extraction (Medium Priority)
-
-**Python**: Extracts `--script=` from linker arguments and incorporates it.
-
-**OCaml**: Has a TODO comment in `dissector.ml:131-132` but always passes `None`.
-
-**Implementation needed** in `dissector.ml` or `build_linker_args.ml`:
-- Parse `Clflags.all_ccopts` for `--script=<path>` or `-T <path>`
-- Extract the path and pass to `Linker_script.write`
+The OCaml implementation now has feature parity with the Python prototype.
 
 ## Completed Features
 
@@ -122,7 +101,8 @@ X86_ast.NOP; X86_ast.NOP
 | Symbol delimiter | `igot.ml`, `iplt.ml` | Snake emoji 🐍 |
 | IGOT/IPLT generation | `igot.ml`, `iplt.ml`, `build_igot_and_iplt.ml` | With partition-specific prefixes |
 | Relocation rewriting | `form_rewrite_plan.ml`, `rewrite_sections.ml` | PLT32→PC32, GOTPCRELX→PC32 |
-| Linker script | `linker_script.ml` | SECTIONS with INSERT AFTER .bss |
+| Linker script generation | `linker_script.ml` | SECTIONS with INSERT AFTER .bss |
+| Existing linker script | `dissector.ml` | Extracts from `-Wl,-T,<path>` in ccopts |
 | Verbose logging | `-ddissector` flag | OCaml bonus |
 | Configurable partition size | `-dissector-partition-size` flag | OCaml bonus |
 
