@@ -544,6 +544,7 @@
   build_igot_and_iplt
   dissector
   extract_relocations
+  form_rewrite_plan
   igot
   iplt
   measure_object_files
