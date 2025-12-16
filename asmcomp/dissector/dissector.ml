@@ -48,11 +48,7 @@ let log fmt =
   else Printf.ifprintf stderr fmt
 
 type result =
-  { ml_objfiles : string list;
-    startup_obj : string;
-    partitions : Partition.t list;
-    linked_partitions : Partition.linked list;
-    relocations : Extract_relocations.t;
+  { linked_partitions : Partition.linked list;
     linker_script : string
   }
 
@@ -137,10 +133,4 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   Linker_script.write ~output_file:linker_script ~existing_script:None
     ~partitions:linked_partitions;
   log "generated linker script: %s" linker_script;
-  { ml_objfiles;
-    startup_obj;
-    partitions;
-    linked_partitions;
-    relocations;
-    linker_script
-  }
+  { linked_partitions; linker_script }

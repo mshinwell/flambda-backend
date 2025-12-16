@@ -41,20 +41,14 @@ exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
-(** Result of running the dissector. The object file lists may be modified
-    (e.g., partitioned) compared to the inputs. The [partitions] field contains
-    the partitioned files with their sizes, where each partition's total size
-    is at most the threshold (default 1 GiB, configurable via
-    -dissector-partition-size). The [linked_partitions] field contains the
-    partially-linked object files, [relocations] contains the relocations
-    that need to be converted to use an intermediate PLT or GOT, and
-    [linker_script] is the path to the generated linker script. *)
+(** Result of running the dissector. After the dissector runs, all input
+    object files (ml_objfiles, startup_obj, ccobjs, runtime_libs) are baked
+    into the partition files. The [linked_partitions] field contains the
+    partially-linked partition object files, and [linker_script] is the path
+    to the generated linker script. Use {!Build_linker_args.build} to convert
+    this result into linker arguments. *)
 type result =
-  { ml_objfiles : string list;
-    startup_obj : string;
-    partitions : Partition.t list;
-    linked_partitions : Partition.linked list;
-    relocations : Extract_relocations.t;
+  { linked_partitions : Partition.linked list;
     linker_script : string
   }
 
