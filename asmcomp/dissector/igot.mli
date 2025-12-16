@@ -71,7 +71,7 @@ val find_entry : t -> symbol:string -> entry option
 val igot_symbol_name : prefix:string -> symbol:string -> string
 
 (** A relocation for an IGOT entry. *)
-type relocation =
+type relocation = private
   { offset : int;  (** Offset within the IGOT section. *)
     symbol : string;  (** The original external symbol to relocate to. *)
     addend : int64  (** Relocation addend (always 0 for IGOT). *)

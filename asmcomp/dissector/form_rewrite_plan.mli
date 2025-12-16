@@ -31,7 +31,7 @@
     all the modifications needed: new sections, relocated symbols, and
     file layout. The plan can then be executed by [Rewrite_sections]. *)
 
-type symbol_entry =
+type symbol_entry = private
   { name : string;
     st_info : int;
     st_other : int;
@@ -40,12 +40,12 @@ type symbol_entry =
     st_size : int64
   }
 
-type section_layout =
+type section_layout = private
   { offset : int;
     size : int
   }
 
-type layout =
+type layout = private
   { igot : section_layout;
     rela_igot : section_layout;
     iplt : section_layout;
@@ -58,7 +58,7 @@ type layout =
     total_size : int
   }
 
-type t =
+type t = private
   { original_symbols : symbol_entry array;
     symbol_to_index : (string, int) Hashtbl.t;
     total_symbols : int;

@@ -56,3 +56,5 @@ type linked =
   { partition : t;
     linked_object : string
   }
+
+let create_linked ~partition ~linked_object = { partition; linked_object }

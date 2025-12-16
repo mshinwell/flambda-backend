@@ -43,7 +43,7 @@
     GOT symbols. *)
 
 (** The result of building IGOT and IPLT sections. *)
-type t =
+type t = private
   { igot : Igot.t;
     iplt : Iplt.t;
     plt_symbols : string list;

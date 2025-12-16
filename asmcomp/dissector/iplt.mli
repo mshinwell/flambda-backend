@@ -84,7 +84,7 @@ val find_entry : t -> symbol:string -> entry option
 val iplt_symbol_name : prefix:string -> symbol:string -> string
 
 (** A relocation for an IPLT entry. *)
-type relocation =
+type relocation = private
   { offset : int;  (** Offset within the IPLT section (entry_offset + 2). *)
     symbol : string;  (** The IGOT symbol to relocate to. *)
     addend : int64

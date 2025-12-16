@@ -32,13 +32,13 @@
     the dissector code model. *)
 
 (** Information about a single relocation that needs conversion. *)
-type relocation_entry =
+type relocation_entry = private
   { symbol_name : string;
     offset : int64
   }
 
 (** The result of extracting relocations from object files. *)
-type t =
+type t = private
   { convert_to_plt : relocation_entry list;
         (** Relocations with type R_X86_64_PLT32 that need PLT entries. *)
     convert_to_got : relocation_entry list

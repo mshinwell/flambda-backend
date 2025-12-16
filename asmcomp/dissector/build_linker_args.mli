@@ -48,7 +48,7 @@
     again when using dissector output. *)
 
 (** The linker arguments produced by the dissector. *)
-type t =
+type t = private
   { object_files : string list;
         (** The rewritten partition .o files that replace ALL original object
             files. This includes what was previously startup_obj, ml_objfiles,

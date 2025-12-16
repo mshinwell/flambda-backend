@@ -83,7 +83,7 @@ let link_one_partition ~temp_dir ~partition_index (partition : Partition.t) =
             partition.files
         in
         raise (Error (Linker_error { partition_index; exit_code; files })));
-      { Partition.partition; linked_object = output_file })
+      Partition.create_linked ~partition ~linked_object:output_file)
     ~always:(fun () -> Misc.remove_file response_file)
 
 let link_partitions ~temp_dir partitions =

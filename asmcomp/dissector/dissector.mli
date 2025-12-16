@@ -47,7 +47,7 @@ val report_error : Format.formatter -> error -> unit
     partially-linked partition object files, and [linker_script] is the path
     to the generated linker script. Use {!Build_linker_args.build} to convert
     this result into linker arguments. *)
-type result =
+type result = private
   { linked_partitions : Partition.linked list;
     linker_script : string
   }

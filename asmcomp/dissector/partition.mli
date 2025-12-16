@@ -50,7 +50,7 @@ val symbol_prefix : kind -> string
 val section_prefix : kind -> string
 
 (** A partition before partial linking, containing files with their sizes. *)
-type t =
+type t = private
   { kind : kind;
     files : Measure_object_files.file_size list;
     total_size : int64
@@ -61,7 +61,10 @@ val create : kind:kind -> Measure_object_files.file_size list -> t
 
 (** A partition after partial linking, with the path to the partially linked
     object file. *)
-type linked =
+type linked = private
   { partition : t;
     linked_object : string
   }
+
+(** Create a linked partition. *)
+val create_linked : partition:t -> linked_object:string -> linked
