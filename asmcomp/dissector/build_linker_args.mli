@@ -35,28 +35,33 @@
     The original linker invocation combines:
     - startup_obj (the startup code)
     - ml_objfiles (OCaml .o files derived from .cmx/.cmxa)
-    - ccobjs (C object files from -cclib)
+    - ccobjs (C object files from -cclib, including lib_ccobjs from .cmxa)
     - runtime_libs (runtime library files)
 
     After dissector processing, all of these are baked into the rewritten
     partition .o files, so we replace them all with just the partition files
-    plus a linker script. *)
+    plus a linker script. The caller must NOT add ccobjs or runtime_libs
+    again when using dissector output. *)
 
 (** The linker arguments produced by the dissector. *)
 type t =
   { object_files : string list;
-        (** The rewritten partition .o files that replace all original object
-            files. These are the partially-linked partition files after
-            IGOT/IPLT rewriting. *)
+        (** The rewritten partition .o files that replace ALL original object
+            files. This includes what was previously startup_obj, ml_objfiles,
+            ccobjs, and runtime_libs - they are all baked into the partitions.
+            The caller should pass these files to the linker and NOT add
+            ccobjs or runtime_libs separately. *)
     linker_script : string
         (** Path to the generated linker script. This should be passed to the
-            linker via -T flag. *)
+            linker via -Wl,-T,<path> added to Clflags.all_ccopts. *)
   }
 
 (** [build result] constructs linker arguments from a dissector result.
 
     Returns the list of rewritten partition object files (with .rewritten
-    suffix) and the linker script path. The caller should:
-    1. Pass all [object_files] to the linker instead of the original files
-    2. Pass [-T linker_script] to include the generated linker script *)
+    suffix) and the linker script path. *)
 val build : Dissector.result -> t
+
+(** [linker_script_flag t] returns the linker flag for the linker script,
+    suitable for adding to Clflags.all_ccopts. Returns "-Wl,-T,<path>". *)
+val linker_script_flag : t -> string

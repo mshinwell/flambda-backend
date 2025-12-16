@@ -38,3 +38,5 @@ let build (result : Dissector.result) =
       result.linked_partitions
   in
   { object_files; linker_script = result.linker_script }
+
+let linker_script_flag t = Printf.sprintf "-Wl,-T,%s" t.linker_script
