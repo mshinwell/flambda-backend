@@ -27,7 +27,10 @@
 
 let sections = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
 
-let generate ~existing_script ~blocks =
+let partition_name index =
+  if index = 0 then "main" else Printf.sprintf "p%d" index
+
+let generate ~existing_script ~partitions =
   let buf = Buffer.create 1024 in
   (match existing_script with
   | None -> ()
@@ -44,10 +47,11 @@ let generate ~existing_script ~blocks =
     Buffer.add_string buf
       (Printf.sprintf "/* END include existing linker script: %s */\n\n" path));
   Buffer.add_string buf "SECTIONS {\n";
-  List.iter
-    (fun block ->
-      if not (String.equal block "main")
+  List.iteri
+    (fun index (_partition : Partition.linked) ->
+      if index > 0
       then
+        let block = partition_name index in
         let prefix = Printf.sprintf ".caml.%s" block in
         List.iter
           (fun section ->
@@ -55,12 +59,12 @@ let generate ~existing_script ~blocks =
             Buffer.add_string buf
               (Printf.sprintf "%s : { *(%s) *(%s.*) }\n" name name name))
           sections)
-    blocks;
+    partitions;
   Buffer.add_string buf "} INSERT AFTER .bss\n";
   Buffer.contents buf
 
-let write ~output_file ~existing_script ~blocks =
-  let contents = generate ~existing_script ~blocks in
+let write ~output_file ~existing_script ~partitions =
+  let contents = generate ~existing_script ~partitions in
   let oc = open_out output_file in
   output_string oc contents;
   close_out oc

@@ -46,14 +46,16 @@ val report_error : Format.formatter -> error -> unit
     the partitioned files with their sizes, where each partition's total size
     is at most the threshold (default 1 GiB, configurable via
     -dissector-partition-size). The [linked_partitions] field contains the
-    partially-linked object files, and [relocations] contains the relocations
-    that need to be converted to use an intermediate PLT or GOT. *)
+    partially-linked object files, [relocations] contains the relocations
+    that need to be converted to use an intermediate PLT or GOT, and
+    [linker_script] is the path to the generated linker script. *)
 type result =
   { ml_objfiles : string list;
     startup_obj : string;
     partitions : Partition.t list;
     linked_partitions : Partition.linked list;
-    relocations : Extract_relocations.t
+    relocations : Extract_relocations.t;
+    linker_script : string
   }
 
 (** Run the dissector pass.

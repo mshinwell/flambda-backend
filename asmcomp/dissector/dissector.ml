@@ -52,7 +52,8 @@ type result =
     startup_obj : string;
     partitions : Partition.t list;
     linked_partitions : Partition.linked list;
-    relocations : Extract_relocations.t
+    relocations : Extract_relocations.t;
+    linker_script : string
   }
 
 let dump_sizes file_sizes =
@@ -130,4 +131,16 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
         ~output_file ~igot_and_iplt ~relocations;
       log "rewrote %s -> %s" partition.linked_object output_file)
     linked_partitions;
-  { ml_objfiles; startup_obj; partitions; linked_partitions; relocations }
+  (* TODO: Extract existing_script from linker command line flags
+     (--script=<path>) *)
+  let linker_script = Filename.concat temp_dir "linker.script" in
+  Linker_script.write ~output_file:linker_script ~existing_script:None
+    ~partitions:linked_partitions;
+  log "generated linker script: %s" linker_script;
+  { ml_objfiles;
+    startup_obj;
+    partitions;
+    linked_partitions;
+    relocations;
+    linker_script
+  }

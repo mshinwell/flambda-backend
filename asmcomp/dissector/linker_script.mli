@@ -31,21 +31,21 @@
     in the correct output sections. It optionally incorporates an existing
     linker script provided via --script= on the linker command line. *)
 
-(** [generate ~existing_script ~blocks] generates a linker script string.
+(** [generate ~existing_script ~partitions] generates a linker script string.
 
     @param existing_script Optional path to an existing linker script to include.
       TODO: This should be extracted from the linker command line flags
       (looking for --script=<path>).
-    @param blocks List of block/partition names. The "main" block is skipped
-      as it uses standard section names. *)
-val generate : existing_script:string option -> blocks:string list -> string
+    @param partitions List of linked partitions. The first partition (index 0)
+      is treated as "main" and skipped. Subsequent partitions get sections
+      named .caml.p1.*, .caml.p2.*, etc. *)
+val generate :
+  existing_script:string option -> partitions:Partition.linked list -> string
 
-(** [write ~output_file ~existing_script ~blocks] generates a linker script
-    and writes it to the specified file.
-
-    @param output_file Path to write the linker script to. *)
+(** [write ~output_file ~existing_script ~partitions] generates a linker script
+    and writes it to the specified file. *)
 val write :
   output_file:string ->
   existing_script:string option ->
-  blocks:string list ->
+  partitions:Partition.linked list ->
   unit
