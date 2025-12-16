@@ -205,3 +205,19 @@ end
 (** Fish out both the dynamic and static symbol tables (.dynsym and .symtab)
     from the given ELF buffer and section array. *)
 val find_symbol_table : Owee_buf.t -> section array -> Symbol_table.t option
+
+(** [iter_symbols ~symtab_body ~strtab_body ~f] iterates over all symbols in
+    the symbol table, calling [f] with each symbol's name and raw fields.
+    This is a lower-level interface than Symbol_table for cases where you need
+    to process all symbols sequentially. *)
+val iter_symbols :
+  symtab_body:Owee_buf.t ->
+  strtab_body:Owee_buf.t ->
+  f:(name:string ->
+     st_info:int ->
+     st_other:int ->
+     st_shndx:int ->
+     st_value:int64 ->
+     st_size:int64 ->
+     unit) ->
+  unit
