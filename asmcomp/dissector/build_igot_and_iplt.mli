@@ -32,7 +32,9 @@
     entries rather than relying on the linker's default GOT/PLT placement.
 
     The transformation converts:
+
     - R_X86_64_PLT32 relocations to external symbols -> R_X86_64_PC32 to IPLT
+
     - R_X86_64_REX_GOTPCRELX relocations to external symbols -> R_X86_64_PC32
       to IGOT
 

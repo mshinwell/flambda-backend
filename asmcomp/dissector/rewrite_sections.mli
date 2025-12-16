@@ -35,17 +35,14 @@
     (e.g., .text -> .caml.p1.text) so the linker script can place them at
     higher addresses.
 
-    TODO: Determine how to handle .a (archive) files. Options include:
-    - Unpack the archive with "ar x", rewrite each .o file, then re-archive
-      with "ar rcs"
-    - Use owee's archive support to iterate over members in-place
-    - Only work with partially-linked .o files (current approach) and ensure
-      the dissector pipeline always produces .o files before this stage
-
     The transformation adds:
+
     - .data.igot section with R_X86_64_64 relocations to original symbols
+
     - .text.iplt section with R_X86_64_PC32 relocations to IGOT entries
+
     - Synthetic symbols for each IGOT and IPLT entry
+
     - Modified .rela.text entries pointing to IPLT/IGOT symbols instead of
       original external symbols *)
 

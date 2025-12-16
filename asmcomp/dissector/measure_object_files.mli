@@ -48,9 +48,13 @@ type file_size = private
     file in [files].
 
     Handles the following file types based on extension:
+
     - .o: ELF object file, analyzed directly
+
     - .a: archive file, all .o members analyzed and summed
+
     - .cmx: finds associated .o file (same basename)
+
     - .cmxa: finds associated .a file, plus any lib_ccobjs
 
     Files are tracked to avoid double-counting when the same file appears

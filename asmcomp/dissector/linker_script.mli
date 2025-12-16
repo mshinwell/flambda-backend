@@ -33,12 +33,13 @@
 
 (** [generate ~existing_script ~partitions] generates a linker script string.
 
-    @param existing_script Optional path to an existing linker script to include.
-      TODO: This should be extracted from the linker command line flags
-      (looking for --script=<path>).
-    @param partitions List of linked partitions. The first partition (index 0)
-      is treated as "main" and skipped. Subsequent partitions get sections
-      named .caml.p1.*, .caml.p2.*, etc. *)
+    @param existing_script Optional path to an existing linker script to
+      include. This is extracted from -Wl,-T,<path> or -Wl,--script=<path>
+      in Clflags.all_ccopts by the dissector.
+
+    @param partitions List of linked partitions. The first partition (Main)
+      is skipped. Subsequent partitions get sections named .caml.p1.*,
+      .caml.p2.*, etc. *)
 val generate :
   existing_script:string option -> partitions:Partition.linked list -> string
 

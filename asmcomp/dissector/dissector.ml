@@ -47,9 +47,9 @@ let log fmt =
   then Printf.eprintf ("Dissector: " ^^ fmt ^^ "\n%!")
   else Printf.ifprintf stderr fmt
 
-(* Extract existing linker script from -ccopt arguments. Looks for patterns
-   like: - "-Wl,-T,<path>" - "-Wl,--script=<path>" Returns the first match
-   found, or None if no linker script is specified. *)
+(* Extract existing linker script from -ccopt arguments. Looks for patterns like
+   "-Wl,-T,<path>" or "-Wl,--script=<path>". Returns the first match found, or
+   None if no linker script is specified. *)
 let extract_linker_script_from_ccopts ccopts =
   let extract_from_wl_arg arg =
     (* Handle -Wl,... arguments which are comma-separated *)

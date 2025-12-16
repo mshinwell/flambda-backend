@@ -32,8 +32,10 @@
     contains a jump instruction through the corresponding IGOT entry.
 
     Each PLT entry is 8 bytes:
+
     - ff 25 XX XX XX XX  : jmp [rip + displacement] (6 bytes)
-    - 66 90              : 2-byte nop padding
+
+    - 90 90              : 2-byte nop padding (two single-byte nops)
 
     The 4-byte displacement at offset +2 is filled by a PC32 relocation
     pointing to the corresponding IGOT entry. *)
