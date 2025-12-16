@@ -116,15 +116,16 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
     (List.length relocations.convert_to_got);
   List.iter
     (fun (partition : Partition.linked) ->
-      let igot_and_iplt =
-        Build_igot_and_iplt.build ~prefix:"__dissector_" relocations
-      in
-      log "built IGOT with %d entries, IPLT with %d entries"
+      let kind = partition.partition.kind in
+      let prefix = Partition.symbol_prefix kind in
+      let igot_and_iplt = Build_igot_and_iplt.build ~prefix relocations in
+      log "built IGOT with %d entries, IPLT with %d entries (prefix=%s)"
         (List.length (Igot.entries igot_and_iplt.igot))
-        (List.length (Iplt.entries igot_and_iplt.iplt));
+        (List.length (Iplt.entries igot_and_iplt.iplt))
+        prefix;
       let output_file = partition.linked_object ^ ".rewritten" in
       Rewrite_sections.rewrite unix ~input_file:partition.linked_object
-        ~output_file ~igot_and_iplt ~relocations;
+        ~output_file ~partition_kind:kind ~igot_and_iplt ~relocations;
       log "rewrote %s -> %s" partition.linked_object output_file)
     linked_partitions;
   (* TODO: Extract existing_script from linker command line flags

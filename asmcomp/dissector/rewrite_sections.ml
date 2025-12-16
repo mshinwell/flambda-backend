@@ -131,7 +131,15 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
       sh_size = Int64.of_int layout.size
     }
   in
+  (* Update sh_name to point to the (possibly renamed) section name in
+     shstrtab *)
+  let rename_section (s : Elf.section) : Elf.section =
+    match Hashtbl.find_opt plan.section_name_offsets s.sh_name_str with
+    | Some new_name_offset -> { s with sh_name = new_name_offset }
+    | None -> s
+  in
   let update_section (s : Elf.section) =
+    let s = rename_section s in
     match s.sh_name_str with
     | ".symtab" -> relocate_section s plan.layout.symtab_layout
     | ".strtab" -> relocate_section s plan.layout.strtab_layout
@@ -183,7 +191,8 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   in
   Elf.write_elf output_buf new_header new_sections
 
-let rewrite unix ~input_file ~output_file ~igot_and_iplt ~relocations =
+let rewrite unix ~input_file ~output_file ~partition_kind ~igot_and_iplt
+    ~relocations =
   let module Unix = (val unix : Compiler_owee.Unix_intf.S) in
   let input_buf = Buf.map_binary (module Unix) input_file in
   let header, sections = Elf.read_elf input_buf in
@@ -209,7 +218,7 @@ let rewrite unix ~input_file ~output_file ~igot_and_iplt ~relocations =
   let rela_text_body = Elf.section_body input_buf rela_text_section in
   let plan =
     Form_rewrite_plan.compute ~header ~sections ~symtab_body ~strtab_body
-      ~rela_text_body ~igot_and_iplt ~relocations
+      ~rela_text_body ~partition_kind ~igot_and_iplt ~relocations
   in
   execute_plan unix ~input_file ~output_file ~header ~sections ~shstrtab_section
     ~igot_and_iplt ~plan

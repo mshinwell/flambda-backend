@@ -25,19 +25,32 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+type kind =
+  | Main
+  | Large_code of int
+
+let symbol_prefix = function
+  | Main -> "main"
+  | Large_code n -> Printf.sprintf "p%d" n
+
+let section_prefix = function
+  | Main -> ""
+  | Large_code n -> Printf.sprintf ".caml.p%d" n
+
 type t =
-  { files : Measure_object_files.file_size list;
+  { kind : kind;
+    files : Measure_object_files.file_size list;
     total_size : int64
   }
 
-let create files =
+let create ~kind files =
   let total_size =
     List.fold_left
       (fun acc (entry : Measure_object_files.file_size) ->
         Int64.add acc entry.size)
       0L files
   in
-  { files; total_size }
+  { kind; files; total_size }
 
 type linked =
   { partition : t;

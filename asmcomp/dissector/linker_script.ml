@@ -27,9 +27,6 @@
 
 let sections = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
 
-let partition_name index =
-  if index = 0 then "main" else Printf.sprintf "p%d" index
-
 let generate ~existing_script ~partitions =
   let buf = Buffer.create 1024 in
   (match existing_script with
@@ -47,12 +44,12 @@ let generate ~existing_script ~partitions =
     Buffer.add_string buf
       (Printf.sprintf "/* END include existing linker script: %s */\n\n" path));
   Buffer.add_string buf "SECTIONS {\n";
-  List.iteri
-    (fun index (_partition : Partition.linked) ->
-      if index > 0
-      then
-        let block = partition_name index in
-        let prefix = Printf.sprintf ".caml.%s" block in
+  List.iter
+    (fun (partition : Partition.linked) ->
+      match partition.partition.kind with
+      | Main -> ()
+      | Large_code _ ->
+        let prefix = Partition.section_prefix partition.partition.kind in
         List.iter
           (fun section ->
             let name = prefix ^ section in

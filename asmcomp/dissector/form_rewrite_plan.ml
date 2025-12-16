@@ -67,6 +67,7 @@ type t =
     new_rela_text : Rela.rela_entry list;
     strtab : Strtab.t;
     shstrtab : Strtab.t;
+    section_name_offsets : (string, int) Hashtbl.t;
     igot_name_offset : int;
     rela_igot_name_offset : int;
     iplt_name_offset : int;
@@ -191,8 +192,35 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     total_size
   }
 
+(* Sections that should be renamed for Large_code partitions *)
+let sections_to_rename = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
+
+(* Rename a section name based on partition kind. For Large_code partitions,
+   .text -> .caml.p1.text, .rela.text -> .rela.caml.p1.text, etc. *)
+let rename_section ~partition_kind name =
+  match partition_kind with
+  | Partition.Main -> name
+  | Partition.Large_code _ ->
+    let prefix = Partition.section_prefix partition_kind in
+    (* Check if this is a section that needs renaming *)
+    let needs_rename =
+      List.exists
+        (fun s -> String.equal name s || String.starts_with ~prefix:s name)
+        sections_to_rename
+    in
+    let is_rela = String.starts_with ~prefix:".rela" name in
+    if needs_rename
+    then
+      if is_rela
+      then
+        (* .rela.text -> .rela.caml.p1.text *)
+        let base = String.sub name 5 (String.length name - 5) in
+        ".rela" ^ prefix ^ base
+      else prefix ^ name
+    else name
+
 let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
-    ~igot_and_iplt ~relocations =
+    ~partition_kind ~igot_and_iplt ~relocations =
   let original_symbols = read_symbols ~symtab_body ~strtab_body in
   let strtab = Strtab.create () in
   let symbol_to_index, total_symbols =
@@ -203,8 +231,12 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
     rewrite_rela_text ~rela_body:rela_text_body ~symbol_to_index ~rewrite_map
   in
   let shstrtab = Strtab.create () in
+  let section_name_offsets = Hashtbl.create 64 in
   Array.iter
-    (fun (s : Elf.section) -> ignore (Strtab.add shstrtab s.sh_name_str))
+    (fun (s : Elf.section) ->
+      let renamed = rename_section ~partition_kind s.sh_name_str in
+      let offset = Strtab.add shstrtab renamed in
+      Hashtbl.add section_name_offsets s.sh_name_str offset)
     sections;
   let igot_name_offset = Strtab.add shstrtab ".data.igot" in
   let rela_igot_name_offset = Strtab.add shstrtab ".rela.data.igot" in
@@ -242,6 +274,7 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
     new_rela_text;
     strtab;
     shstrtab;
+    section_name_offsets;
     igot_name_offset;
     rela_igot_name_offset;
     iplt_name_offset;

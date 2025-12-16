@@ -83,4 +83,8 @@ let partition_files ~threshold file_sizes =
         loop (entry :: current_partition) new_size partitions rest
   in
   let file_lists = loop [] 0L [] file_sizes in
-  List.map Partition.create file_lists
+  List.mapi
+    (fun i files ->
+      let kind : Partition.kind = if i = 0 then Main else Large_code i in
+      Partition.create ~kind files)
+    file_lists

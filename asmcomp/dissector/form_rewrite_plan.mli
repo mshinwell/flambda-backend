@@ -65,6 +65,10 @@ type t =
     new_rela_text : Compiler_owee.Owee_elf_relocation.rela_entry list;
     strtab : Compiler_owee.Owee_elf_string_table.t;
     shstrtab : Compiler_owee.Owee_elf_string_table.t;
+    section_name_offsets : (string, int) Hashtbl.t;
+        (** Maps original section names to their offsets in shstrtab. For
+            Large_code partitions, the stored offset points to the renamed
+            name (e.g., .caml.p1.text instead of .text). *)
     igot_name_offset : int;
     rela_igot_name_offset : int;
     iplt_name_offset : int;
@@ -79,14 +83,18 @@ type t =
   }
 
 (** [compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
-      ~igot_and_iplt ~relocations] analyzes the ELF structure and builds
-    a rewrite plan. *)
+      ~partition_kind ~igot_and_iplt ~relocations] analyzes the ELF structure
+    and builds a rewrite plan.
+
+    For [Large_code] partitions, section names are renamed with a prefix
+    (e.g., .text -> .caml.p1.text). *)
 val compute :
   header:Compiler_owee.Owee_elf.header ->
   sections:Compiler_owee.Owee_elf.section array ->
   symtab_body:Compiler_owee.Owee_buf.t ->
   strtab_body:Compiler_owee.Owee_buf.t ->
   rela_text_body:Compiler_owee.Owee_buf.t ->
+  partition_kind:Partition.kind ->
   igot_and_iplt:Build_igot_and_iplt.t ->
   relocations:Extract_relocations.t ->
   t

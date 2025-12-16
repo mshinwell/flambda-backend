@@ -31,6 +31,10 @@
     sections, their associated relocation sections, and rewrites the .rela.text
     section to redirect PLT32 and GOTPCRELX relocations through the IGOT/IPLT.
 
+    For Large_code partitions, sections are also renamed with a prefix
+    (e.g., .text -> .caml.p1.text) so the linker script can place them at
+    higher addresses.
+
     TODO: Determine how to handle .a (archive) files. Options include:
     - Unpack the archive with "ar x", rewrite each .o file, then re-archive
       with "ar rcs"
@@ -45,13 +49,19 @@
     - Modified .rela.text entries pointing to IPLT/IGOT symbols instead of
       original external symbols *)
 
-(** [rewrite unix ~input_file ~output_file ~igot_and_iplt ~relocations]
-    reads the ELF object file at [input_file], adds IGOT and IPLT sections,
-    rewrites relocations, and writes the result to [output_file].
+(** [rewrite unix ~input_file ~output_file ~partition_kind ~igot_and_iplt
+    ~relocations] reads the ELF object file at [input_file], adds IGOT and
+    IPLT sections, rewrites relocations, and writes the result to
+    [output_file].
+
+    For [Large_code] partitions, section names are also prefixed (e.g.,
+    .text -> .caml.p1.text). [Main] partition sections keep their original
+    names.
 
     @param unix First-class Unix module for file operations
     @param input_file Path to the input partially-linked object file
     @param output_file Path to write the rewritten object file
+    @param partition_kind The kind of partition (Main or Large_code)
     @param igot_and_iplt The IGOT and IPLT structures to add
     @param relocations The extracted relocations identifying which entries
       need rewriting *)
@@ -59,6 +69,7 @@ val rewrite :
   (module Compiler_owee.Unix_intf.S) ->
   input_file:string ->
   output_file:string ->
+  partition_kind:Partition.kind ->
   igot_and_iplt:Build_igot_and_iplt.t ->
   relocations:Extract_relocations.t ->
   unit
