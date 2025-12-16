@@ -542,6 +542,7 @@
   optlink
   ;; asmcomp/dissector/
   build_igot_and_iplt
+  build_linker_args
   dissector
   extract_relocations
   form_rewrite_plan
