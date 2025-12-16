@@ -32,7 +32,7 @@
 let entry_size = 8
 
 (* Delimiter for synthetic symbol names - same as IGOT *)
-let delimiter = "\xe2\x9a\xa1" (* Unicode lightning bolt U+26A1 in UTF-8 *)
+let delimiter = "\xf0\x9f\x90\x8d" (* Unicode snake emoji U+1F40D in UTF-8 *)
 
 type entry =
   { index : int;

@@ -52,8 +52,15 @@ let default_partition_size = Int64.shift_left 1L 30
 let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
 
 let partition_files ~threshold file_sizes =
-  (* Partition files into buckets, starting a new bucket when adding the next
-     file would exceed the threshold. The order of files is preserved. *)
+  (* Separate files with probes from files without probes. Files with probes
+     must go into the Main partition to ensure probes stay together. *)
+  let probes_files, regular_files =
+    List.partition
+      (fun (entry : Measure_object_files.file_size) -> entry.has_probes)
+      file_sizes
+  in
+  (* Partition regular files into buckets, starting a new bucket when adding the
+     next file would exceed the threshold. The order of files is preserved. *)
   let rec loop current_partition current_size partitions = function
     | [] ->
       (* Finish: add current partition if non-empty *)
@@ -82,7 +89,13 @@ let partition_files ~threshold file_sizes =
         (* Add to current partition *)
         loop (entry :: current_partition) new_size partitions rest
   in
-  let file_lists = loop [] 0L [] file_sizes in
+  let file_lists = loop [] 0L [] regular_files in
+  (* Add probes files to the first (Main) partition *)
+  let file_lists =
+    match file_lists with
+    | [] -> if probes_files = [] then [] else [probes_files]
+    | first :: rest -> (probes_files @ first) :: rest
+  in
   List.mapi
     (fun i files ->
       let kind : Partition.kind = if i = 0 then Main else Large_code i in

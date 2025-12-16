@@ -4,40 +4,33 @@ Comparison between the Python prototype (`synthetic_got.py`) and the OCaml imple
 
 ## Feature Comparison Table
 
-| Aspect | Python | OCaml | Notes |
-|--------|--------|-------|-------|
-| **File Measurement** | `read_elf_section_names_and_alloc_size` | `measure_object_files.allocated_size_of_elf_buf` | Both sum allocated section sizes |
-| **lib_ccobjs handling** | Not explicitly shown | ✅ Recursive via `read_cmxa` | OCaml handles .cmxa transitive deps |
-| **Probes handling** | ✅ Files with `.probes` → main bucket | ❌ Not implemented | Python ensures probes stay together |
-| **Partition threshold** | 1 GiB hardcoded | 1 GiB default, configurable | OCaml has `-dissector-partition-size` |
-| **Partial linker** | `ld.lld` | `Config.native_pack_linker` | OCaml uses configured linker |
-| **Symbol delimiter** | Snake emoji 🐍 | Lightning bolt ⚡ | Both use unlikely characters |
-| **GOT section name** | `.data.got` | `.data.igot` | OCaml uses "i" for intermediate |
-| **PLT section name** | `.text.plt` | `.text.iplt` | OCaml uses "i" for intermediate |
-| **PLT NOP padding** | `66 90` (prefixed nop) | `90 90` (two plain nops) | Minor difference |
-| **Symbol visibility** | GLOBAL + HIDDEN | LOCAL | Different approaches |
-| **Partition kind type** | Implicit (index 0 = main) | ✅ `Partition.kind` variant | OCaml uses explicit variant type |
-| **Symbol prefix per partition** | ✅ "main", "1", "2", ... | ✅ "main", "p1", "p2", ... | Both use unique prefixes |
-| **Section prefix renaming** | ✅ `.text` → `.caml.p1.text` | ✅ `.text` → `.caml.p1.text` | Both implemented |
-| **Main partition (no rename)** | ✅ Main keeps original names | ✅ Main keeps original names | Both skip renaming for Main |
-| **Existing linker script** | ✅ Extracted from args | ❌ TODO, always None | Gap in OCaml |
-| **Verbose logging** | None | ✅ `-ddissector` flag | OCaml has better debugging |
+| Aspect | Python | OCaml | Status |
+|--------|--------|-------|--------|
+| **File Measurement** | `read_elf_section_names_and_alloc_size` | `measure_object_files.analyze_elf_buf` | ✅ Done |
+| **lib_ccobjs handling** | Not explicitly shown | ✅ Recursive via `read_cmxa` | ✅ Done |
+| **Probes handling** | ✅ Files with `.probes` → main bucket | ✅ Files with `.probes` → Main partition | ✅ Done |
+| **Partition threshold** | 1 GiB hardcoded | 1 GiB default, configurable | ✅ Done |
+| **Partial linker** | `ld.lld` | `Config.native_pack_linker` | ✅ Done |
+| **Symbol delimiter** | Snake emoji 🐍 | Snake emoji 🐍 | ✅ Done |
+| **GOT section name** | `.data.got` | `.data.igot` | ✅ Done |
+| **PLT section name** | `.text.plt` | `.text.iplt` | ✅ Done |
+| **PLT NOP padding** | `66 90` (prefixed nop) | `90 90` (two plain nops) | ✅ OK (functionally equivalent) |
+| **Symbol visibility** | GLOBAL + HIDDEN | GLOBAL + HIDDEN | ✅ Done |
+| **Partition kind type** | Implicit (index 0 = main) | ✅ `Partition.kind` variant | ✅ Done |
+| **Symbol prefix per partition** | ✅ "main", "1", "2", ... | ✅ "main", "p1", "p2", ... | ✅ Done |
+| **Section prefix renaming** | ✅ `.text` → `.caml.p1.text` | ✅ `.text` → `.caml.p1.text` | ✅ Done |
+| **Main partition (no rename)** | ✅ Main keeps original names | ✅ Main keeps original names | ✅ Done |
+| **Existing linker script** | ✅ Extracted from args | ❌ TODO, always None | ⚠️ **TODO** |
+| **Verbose logging** | None | ✅ `-ddissector` flag | ✅ Done (OCaml bonus) |
 
 ## Detailed Differences
 
 ### 1. Probes Handling
 
-**Python**: Files containing a `.probes` section are placed in the "main" bucket:
-```python
-for archive in ocaml_archives:
-    has_probes, archive_size = archive_info[archive]
-    if has_probes:
-        main_bucket.append(archive)
-```
+**Python**: Files containing a `.probes` section are placed in the "main" bucket.
 
-**OCaml**: No special handling for probes. All files are partitioned purely by size.
-
-**Impact**: May cause issues if probes need to be in specific locations.
+**OCaml**: ✅ Now implemented. Files with `.probes` sections are detected in `measure_object_files.ml`
+and forced into the Main partition in `partition_object_files.ml`.
 
 ### 2. Section Prefix Renaming
 
@@ -61,18 +54,9 @@ let rename_section ~partition_kind name =
 
 ### 3. Symbol Visibility
 
-**Python**: Uses GLOBAL binding with HIDDEN visibility:
-```python
-st_bind=pl.lit("GLOBAL", dtype=st_bind_enum),
-st_visibility=pl.lit("HIDDEN", dtype=st_visibility_enum),
-```
+**Python**: Uses GLOBAL binding with HIDDEN visibility.
 
-**OCaml**: Uses LOCAL binding:
-```ocaml
-st_info = Rela.make_st_info ~binding:Rela.Stb.local ~typ:...
-```
-
-**Impact**: LOCAL symbols are not visible outside the object file, which should be fine since they're only referenced internally.
+**OCaml**: ✅ Now matches Python - uses GLOBAL binding with HIDDEN visibility (st_other = 2).
 
 ### 4. Existing Linker Script Extraction
 
@@ -111,44 +95,40 @@ X86_ast.NOP; X86_ast.NOP
 
 **Impact**: Both are valid 8-byte sequences. The `66 90` is a 2-byte NOP using operand size prefix, while `90 90` is two 1-byte NOPs. Functionally equivalent.
 
-## Missing Features in OCaml Implementation
+## Remaining TODOs
 
-1. ~~**Section renaming**: Sections need to be renamed with partition prefix~~ ✅ **DONE**
+### 1. Existing Linker Script Extraction (Medium Priority)
 
-2. **Probes handling**: Files with `.probes` should go to main bucket
+**Python**: Extracts `--script=` from linker arguments and incorporates it.
 
-3. **Existing linker script**: Need to extract `--script=` from command line and include it
+**OCaml**: Has a TODO comment in `dissector.ml:131-132` but always passes `None`.
 
-## Additional Features in OCaml Implementation
+**Implementation needed** in `dissector.ml` or `build_linker_args.ml`:
+- Parse `Clflags.all_ccopts` for `--script=<path>` or `-T <path>`
+- Extract the path and pass to `Linker_script.write`
 
-1. **Configurable partition size**: `-dissector-partition-size` flag
+## Completed Features
 
-2. **Verbose logging**: `-ddissector` flag for debugging
+| Feature | Location | Notes |
+|---------|----------|-------|
+| File measurement | `measure_object_files.ml` | Sums allocated section sizes |
+| lib_ccobjs handling | `measure_object_files.ml` | Recursive via `read_cmxa` |
+| Probes handling | `measure_object_files.ml`, `partition_object_files.ml` | Files with `.probes` → Main |
+| Partition by size | `partition_object_files.ml` | Configurable threshold |
+| Main partition kind | `partition.ml` | `Main` vs `Large_code of int` |
+| Section renaming | `form_rewrite_plan.ml` | `.text` → `.caml.p1.text` for non-main |
+| Symbol prefixes | `partition.ml` | `"main"`, `"p1"`, `"p2"`, etc. |
+| Symbol visibility | `rewrite_sections.ml` | GLOBAL + HIDDEN |
+| Symbol delimiter | `igot.ml`, `iplt.ml` | Snake emoji 🐍 |
+| IGOT/IPLT generation | `igot.ml`, `iplt.ml`, `build_igot_and_iplt.ml` | With partition-specific prefixes |
+| Relocation rewriting | `form_rewrite_plan.ml`, `rewrite_sections.ml` | PLT32→PC32, GOTPCRELX→PC32 |
+| Linker script | `linker_script.ml` | SECTIONS with INSERT AFTER .bss |
+| Verbose logging | `-ddissector` flag | OCaml bonus |
+| Configurable partition size | `-dissector-partition-size` flag | OCaml bonus |
 
-3. **lib_ccobjs handling**: Recursively processes .cmxa dependencies
+## Non-Issues (Acceptable Differences)
 
-4. **Better integration**: Hooks into the compiler's native linking flow
-
-## Recommendations
-
-### High Priority
-
-1. ~~**Implement section renaming** in `rewrite_sections.ml`~~ ✅ **DONE**
-   - For non-main partitions, rename `.text` → `.caml.pN.text` etc.
-   - Also rename `.rela.text` → `.rela.caml.pN.text`
-
-2. **Extract existing linker script** in `dissector.ml` or `build_linker_args.ml`:
-   - Parse `Clflags.all_ccopts` for `--script=` or `-T`
-   - Pass to `Linker_script.write`
-
-### Medium Priority
-
-3. **Add probes handling** in `partition_object_files.ml`:
-   - Check for `.probes` section in files
-   - Force files with probes into partition 0 (main)
-
-### Low Priority
-
-4. **Consider symbol visibility**: Evaluate whether GLOBAL+HIDDEN or LOCAL is better
-
-5. **PLT padding**: The current `90 90` is fine, but could match Python's `66 90` for consistency
+| Difference | Why it's OK |
+|------------|-------------|
+| PLT padding (`66 90` vs `90 90`) | Functionally equivalent NOP sequences |
+| Section names (`.data.got` vs `.data.igot`) | "i" prefix is clearer, avoids confusion with real GOT |

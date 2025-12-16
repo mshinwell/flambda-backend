@@ -40,7 +40,8 @@ val report_error : Format.formatter -> error -> unit
 
 type file_size = private
   { filename : string;
-    size : int64
+    size : int64;
+    has_probes : bool
   }
 
 (** [measure_files unix ~files] computes the allocated section size for each

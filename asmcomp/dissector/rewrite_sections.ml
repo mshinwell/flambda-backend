@@ -40,14 +40,17 @@ let write_symbol ~cursor ~strtab (sym : Form_rewrite_plan.symbol_entry) =
       st_size = sym.st_size
     }
 
+(* Symbol visibility: STV_HIDDEN = 2 *)
+let stv_hidden = 2
+
 let write_synthetic_symbol ~cursor ~strtab ~name ~section_index ~offset ~size
     ~is_func =
   Rela.write_sym_entry ~cursor
     { st_name = Strtab.add strtab name;
       st_info =
-        Rela.make_st_info ~binding:Rela.Stb.local
+        Rela.make_st_info ~binding:Rela.Stb.global
           ~typ:(if is_func then Rela.Stt.func else Rela.Stt.notype);
-      st_other = 0;
+      st_other = stv_hidden;
       st_shndx = section_index;
       st_value = Int64.of_int offset;
       st_size = Int64.of_int size

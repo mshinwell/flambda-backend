@@ -32,8 +32,8 @@
 
 ## Symbol Naming Convention
 
-- IGOT symbols: `igot⚡{prefix}⚡{original}` (using lightning bolt U+26A1 as delimiter)
-- IPLT symbols: `iplt⚡{prefix}⚡{original}`
+- IGOT symbols: `igot🐍{prefix}🐍{original}` (using snake emoji U+1F40D as delimiter)
+- IPLT symbols: `iplt🐍{prefix}🐍{original}`
 
 The delimiter is chosen to be unlikely to appear in normal symbol names.
 
@@ -101,9 +101,9 @@ From `form_rewrite_plan.ml`, the rewritten file layout is:
 ## Symbol Table Updates
 
 New symbols added for IGOT/IPLT entries:
-- Binding: `LOCAL`
+- Binding: `GLOBAL`
 - Type: `NOTYPE` for IGOT, `FUNC` for IPLT
-- Visibility: default (not hidden)
+- Visibility: `HIDDEN` (st_other = 2)
 
 ## Linker Script Generation
 
@@ -154,5 +154,4 @@ The `Main` partition keeps original section names.
 
 ## Current Limitations
 
-1. **No probes handling**: Files with `.probes` sections are not specially handled
-2. **No existing linker script extraction**: Always passes `None` for existing_script (TODO in code)
+1. **No existing linker script extraction**: Always passes `None` for existing_script (TODO in code)

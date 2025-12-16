@@ -42,15 +42,24 @@ let () =
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
-(* Compute the total allocated section size for a single ELF buffer *)
-let allocated_size_of_elf_buf buf =
+(* Analyze a single ELF buffer, returning (size, has_probes) *)
+let analyze_elf_buf buf =
   let _header, sections = Compiler_owee.Owee_elf.read_elf buf in
-  Array.fold_left
-    (fun acc (section : Compiler_owee.Owee_elf.section) ->
-      if Compiler_owee.Owee_elf.Section_flags.is_alloc section.sh_flags
-      then Int64.add acc section.sh_size
-      else acc)
-    0L sections
+  let size, has_probes =
+    Array.fold_left
+      (fun (acc_size, acc_probes) (section : Compiler_owee.Owee_elf.section) ->
+        let new_size =
+          if Compiler_owee.Owee_elf.Section_flags.is_alloc section.sh_flags
+          then Int64.add acc_size section.sh_size
+          else acc_size
+        in
+        let new_probes =
+          acc_probes || String.equal section.sh_name_str ".probes"
+        in
+        new_size, new_probes)
+      (0L, false) sections
+  in
+  size, has_probes
 
 (* Read a .cmxa file and return its library_infos *)
 let read_cmxa filename : Cmx_format.library_infos =
@@ -74,44 +83,46 @@ let check_for_duplicates files =
 
 type file_size =
   { filename : string;
-    size : int64
+    size : int64;
+    has_probes : bool
   }
 
 let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   (* Check for duplicates in the input list first *)
   check_for_duplicates files;
   let module Unix = (val unix) in
-  (* Analyze a single .o file *)
-  let allocated_size_of_object_file filename =
+  (* Analyze a single .o file, returning (size, has_probes) *)
+  let analyze_object_file filename =
     if not (Sys.file_exists filename)
     then raise (Error (File_not_found filename))
     else
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
-      allocated_size_of_elf_buf buf
+      analyze_elf_buf buf
   in
-  (* Analyze an archive (.a) file *)
-  let allocated_size_of_archive_file filename =
+  (* Analyze an archive (.a) file, returning (size, has_probes) *)
+  let analyze_archive_file filename =
     if not (Sys.file_exists filename)
     then raise (Error (File_not_found filename))
     else
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
       let archive, members = Compiler_owee.Owee_archive.read buf in
       List.fold_left
-        (fun acc member ->
+        (fun (acc_size, acc_probes) member ->
           if Filename.check_suffix member.Compiler_owee.Owee_archive.name ".o"
           then
             let member_buf =
               Compiler_owee.Owee_archive.member_body archive member
             in
-            Int64.add acc (allocated_size_of_elf_buf member_buf)
-          else acc)
-        0L members
+            let size, has_probes = analyze_elf_buf member_buf in
+            Int64.add acc_size size, acc_probes || has_probes
+          else acc_size, acc_probes)
+        (0L, false) members
   in
   (* Track which files we've already analyzed to avoid double-counting from
      transitive dependencies (e.g., lib_ccobjs in .cmxa files) *)
   let analyzed = Hashtbl.create 256 in
-  (* Analyze a single file based on its extension, return list of (file, size)
-     pairs. For .cmxa files, this may include both the .a file and any
+  (* Analyze a single file based on its extension, return list of file_size
+     records. For .cmxa files, this may include both the .a file and any
      lib_ccobjs that haven't been analyzed yet. *)
   let rec analyze_one filename =
     if Hashtbl.mem analyzed filename
@@ -119,9 +130,13 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
     else (
       Hashtbl.add analyzed filename ();
       if Filename.check_suffix filename ".o"
-      then [{ filename; size = allocated_size_of_object_file filename }]
+      then
+        let size, has_probes = analyze_object_file filename in
+        [{ filename; size; has_probes }]
       else if Filename.check_suffix filename ".a"
-      then [{ filename; size = allocated_size_of_archive_file filename }]
+      then
+        let size, has_probes = analyze_archive_file filename in
+        [{ filename; size; has_probes }]
       else if Filename.check_suffix filename ".cmx"
       then
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
@@ -129,7 +144,8 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
         then []
         else (
           Hashtbl.add analyzed obj_file ();
-          [{ filename; size = allocated_size_of_object_file obj_file }])
+          let size, has_probes = analyze_object_file obj_file in
+          [{ filename; size; has_probes }])
       else if Filename.check_suffix filename ".cmxa"
       then
         let archive_file = Filename.chop_suffix filename ".cmxa" ^ ".a" in
@@ -138,7 +154,8 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
           then []
           else (
             Hashtbl.add analyzed archive_file ();
-            [{ filename; size = allocated_size_of_archive_file archive_file }])
+            let size, has_probes = analyze_archive_file archive_file in
+            [{ filename; size; has_probes }])
         in
         let cmxa = read_cmxa filename in
         let ccobjs_entries = List.concat_map analyze_one cmxa.lib_ccobjs in
