@@ -898,6 +898,7 @@ let no_auto_include_otherlibs = ref false      (* -no-auto-include-otherlibs *)
 
 let dissector = ref false                      (* -dissector *)
 let dissector_partition_size = ref None        (* -dissector-partition-size *)
+let ddissector = ref false                     (* -ddissector *)
 let ddissector_sizes = ref false               (* -ddissector-sizes *)
 
 let prepend_directory file_name =

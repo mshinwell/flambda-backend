@@ -391,6 +391,9 @@ let mk_dissector_partition_size f =
     "<size> Set the partition size threshold in gigabytes for the dissector \
      pass (default: 1.5)" )
 
+let mk_ddissector f =
+  ("-ddissector", Arg.Unit f, " Print verbose logging from the dissector pass")
+
 let mk_ddissector_sizes f =
   ( "-ddissector-sizes",
     Arg.Unit f,
@@ -1142,6 +1145,7 @@ module type Oxcaml_options = sig
   val internal_assembler : unit -> unit
   val dissector : unit -> unit
   val dissector_partition_size : float -> unit
+  val ddissector : unit -> unit
   val ddissector_sizes : unit -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
@@ -1296,6 +1300,7 @@ module Make_oxcaml_options (F : Oxcaml_options) = struct
       mk_internal_assembler F.internal_assembler;
       mk_dissector F.dissector;
       mk_dissector_partition_size F.dissector_partition_size;
+      mk_ddissector F.ddissector;
       mk_ddissector_sizes F.ddissector_sizes;
       mk_gc_timings F.gc_timings;
       mk_no_mach_ir F.no_mach_ir;
@@ -1541,6 +1546,7 @@ module Oxcaml_options_impl = struct
   let internal_assembler = set' Oxcaml_flags.internal_assembler
   let dissector = set' Clflags.dissector
   let dissector_partition_size f = Clflags.dissector_partition_size := Some f
+  let ddissector = set' Clflags.ddissector
   let ddissector_sizes = set' Clflags.ddissector_sizes
   let gc_timings = set' Oxcaml_flags.gc_timings
   let no_mach_ir () = ()
