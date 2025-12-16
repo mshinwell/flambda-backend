@@ -547,6 +547,7 @@
   form_rewrite_plan
   igot
   iplt
+  linker_script
   measure_object_files
   partial_link
   partition
