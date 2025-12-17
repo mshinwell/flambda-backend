@@ -38,8 +38,10 @@ let build result =
   let obj_files =
     List.map
       (fun partition -> Partition.Linked.linked_object partition ^ ".rewritten")
-      (Dissector.linked_partitions result)
+      (Dissector.Result.linked_partitions result)
   in
-  { object_files = obj_files; linker_script = Dissector.linker_script result }
+  { object_files = obj_files;
+    linker_script = Dissector.Result.linker_script result
+  }
 
 let linker_script_flag t = Printf.sprintf "-Wl,-T,%s" t.linker_script

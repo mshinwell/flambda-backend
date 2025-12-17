@@ -45,13 +45,15 @@ val report_error : Format.formatter -> error -> unit
     object files (ml_objfiles, startup_obj, ccobjs, runtime_libs) are baked
     into the partition files. Use {!Build_linker_args.build} to convert this
     result into linker arguments. *)
-type result
+module Result : sig
+  type t
 
-(** Returns the partially-linked partition object files. *)
-val linked_partitions : result -> Partition.Linked.t list
+  (** Returns the partially-linked partition object files. *)
+  val linked_partitions : t -> Partition.Linked.t list
 
-(** Returns the path to the generated linker script. *)
-val linker_script : result -> string
+  (** Returns the path to the generated linker script. *)
+  val linker_script : t -> string
+end
 
 (** Run the dissector pass.
 
@@ -85,4 +87,4 @@ val run :
   ccobjs:string list ->
   runtime_libs:string list ->
   cached_genfns:string option ->
-  result
+  Result.t

@@ -32,54 +32,60 @@
     file layout. The plan can then be executed by [Rewrite_sections]. *)
 
 (** Information about an original symbol from the ELF symbol table. *)
-type symbol_entry
+module Symbol_entry : sig
+  type t
 
-val symbol_name : symbol_entry -> string
+  val name : t -> string
 
-val symbol_st_info : symbol_entry -> int
+  val st_info : t -> int
 
-val symbol_st_other : symbol_entry -> int
+  val st_other : t -> int
 
-val symbol_st_shndx : symbol_entry -> int
+  val st_shndx : t -> int
 
-val symbol_st_value : symbol_entry -> int64
+  val st_value : t -> int64
 
-val symbol_st_size : symbol_entry -> int64
+  val st_size : t -> int64
+end
 
 (** Layout of a section in the output file. *)
-type section_layout
+module Section_layout : sig
+  type t
 
-val layout_offset : section_layout -> int
+  val offset : t -> int
 
-val layout_size : section_layout -> int
+  val size : t -> int
+end
 
 (** Layout of all sections in the output file. *)
-type layout
+module Layout : sig
+  type t
 
-val layout_igot : layout -> section_layout
+  val igot : t -> Section_layout.t
 
-val layout_rela_igot : layout -> section_layout
+  val rela_igot : t -> Section_layout.t
 
-val layout_iplt : layout -> section_layout
+  val iplt : t -> Section_layout.t
 
-val layout_rela_iplt : layout -> section_layout
+  val rela_iplt : t -> Section_layout.t
 
-val layout_symtab : layout -> section_layout
+  val symtab : t -> Section_layout.t
 
-val layout_strtab : layout -> section_layout
+  val strtab : t -> Section_layout.t
 
-val layout_rela_text : layout -> section_layout
+  val rela_text : t -> Section_layout.t
 
-val layout_shstrtab : layout -> section_layout
+  val shstrtab : t -> Section_layout.t
 
-val layout_section_headers_offset : layout -> int
+  val section_headers_offset : t -> int
 
-val layout_total_size : layout -> int
+  val total_size : t -> int
+end
 
 (** A rewrite plan for an ELF file. *)
 type t
 
-val original_symbols : t -> symbol_entry array
+val original_symbols : t -> Symbol_entry.t array
 
 val symbol_to_index : t -> (string, int) Hashtbl.t
 
@@ -116,7 +122,7 @@ val num_sections : t -> int
 
 val symtab_idx : t -> int
 
-val layout : t -> layout
+val layout : t -> Layout.t
 
 (** [compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
       ~partition_kind ~igot_and_iplt ~relocations] analyzes the ELF structure

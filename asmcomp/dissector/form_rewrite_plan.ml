@@ -33,71 +33,77 @@ let align_up value alignment =
   let mask = alignment - 1 in
   (value + mask) land lnot mask
 
-type symbol_entry =
-  { name : string;
-    st_info : int;
-    st_other : int;
-    st_shndx : int;
-    st_value : int64;
-    st_size : int64
-  }
+module Symbol_entry = struct
+  type t =
+    { name : string;
+      st_info : int;
+      st_other : int;
+      st_shndx : int;
+      st_value : int64;
+      st_size : int64
+    }
 
-let symbol_name s = s.name
+  let name s = s.name
 
-let symbol_st_info s = s.st_info
+  let st_info s = s.st_info
 
-let symbol_st_other s = s.st_other
+  let st_other s = s.st_other
 
-let symbol_st_shndx s = s.st_shndx
+  let st_shndx s = s.st_shndx
 
-let symbol_st_value s = s.st_value
+  let st_value s = s.st_value
 
-let symbol_st_size s = s.st_size
+  let st_size s = s.st_size
+end
 
-type section_layout =
-  { offset : int;
-    size : int
-  }
+module Section_layout = struct
+  type t =
+    { offset : int;
+      size : int
+    }
 
-let layout_offset l = l.offset
+  let offset l = l.offset
 
-let layout_size l = l.size
+  let size l = l.size
+end
 
-type layout =
-  { igot : section_layout;
-    rela_igot : section_layout;
-    iplt : section_layout;
-    rela_iplt : section_layout;
-    symtab_layout : section_layout;
-    strtab_layout : section_layout;
-    rela_text : section_layout;
-    shstrtab_layout : section_layout;
-    section_headers_offset : int;
-    total_size : int
-  }
+module Layout = struct
+  type t =
+    { igot : Section_layout.t;
+      rela_igot : Section_layout.t;
+      iplt : Section_layout.t;
+      rela_iplt : Section_layout.t;
+      symtab : Section_layout.t;
+      strtab : Section_layout.t;
+      rela_text : Section_layout.t;
+      shstrtab : Section_layout.t;
+      section_headers_offset : int;
+      total_size : int
+    }
 
-let layout_igot l = l.igot
+  let igot l = l.igot
 
-let layout_rela_igot l = l.rela_igot
+  let rela_igot l = l.rela_igot
 
-let layout_iplt l = l.iplt
+  let iplt l = l.iplt
 
-let layout_rela_iplt l = l.rela_iplt
+  let rela_iplt l = l.rela_iplt
 
-let layout_symtab l = l.symtab_layout
+  let symtab l = l.symtab
 
-let layout_strtab l = l.strtab_layout
+  let strtab l = l.strtab
 
-let layout_rela_text l = l.rela_text
+  let rela_text l = l.rela_text
 
-let layout_shstrtab l = l.shstrtab_layout
+  let shstrtab l = l.shstrtab
 
-let layout_section_headers_offset l = l.section_headers_offset
+  let section_headers_offset l = l.section_headers_offset
 
-let layout_total_size l = l.total_size
+  let total_size l = l.total_size
+end
 
 type t =
-  { original_symbols : symbol_entry array;
+  { original_symbols : Symbol_entry.t array;
     symbol_to_index : (string, int) Hashtbl.t;
     total_symbols : int;
     new_rela_text : Rela.rela_entry list;
@@ -114,7 +120,7 @@ type t =
     rela_iplt_idx : int;
     num_sections : int;
     symtab_idx : int;
-    layout : layout
+    layout : Layout.t
   }
 
 let original_symbols t = t.original_symbols
@@ -158,14 +164,15 @@ let read_symbols ~symtab_body ~strtab_body =
   Elf.iter_symbols ~symtab_body ~strtab_body
     ~f:(fun ~name ~st_info ~st_other ~st_shndx ~st_value ~st_size ->
       symbols
-        := { name; st_info; st_other; st_shndx; st_value; st_size } :: !symbols);
+        := { Symbol_entry.name; st_info; st_other; st_shndx; st_value; st_size }
+           :: !symbols);
   Array.of_list (List.rev !symbols)
 
 let build_symbol_index_map ~original_symbols ~igot_and_iplt strtab =
   let symbol_to_index = Hashtbl.create 256 in
   Array.iteri
     (fun index sym ->
-      let name = symbol_name sym in
+      let name = Symbol_entry.name sym in
       if not (Hashtbl.mem symbol_to_index name)
       then Hashtbl.add symbol_to_index name index;
       ignore (Strtab.add strtab name))
@@ -232,7 +239,7 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     current := align_up !current alignment;
     let offset = !current in
     current := offset + size;
-    { offset; size }
+    { Section_layout.offset; size }
   in
   let igot_t = Build_igot_and_iplt.igot igot_and_iplt in
   let iplt_t = Build_igot_and_iplt.iplt igot_and_iplt in
@@ -246,20 +253,20 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     let count = List.length (Iplt.relocations iplt_t) in
     alloc 8 (count * Rela.rela_entry_size)
   in
-  let symtab_layout = alloc 8 (total_symbols * Rela.sym_entry_size) in
-  let strtab_layout = alloc 1 strtab_size in
+  let symtab = alloc 8 (total_symbols * Rela.sym_entry_size) in
+  let strtab = alloc 1 strtab_size in
   let rela_text = alloc 8 (rela_text_count * Rela.rela_entry_size) in
-  let shstrtab_layout = alloc 1 shstrtab_size in
+  let shstrtab = alloc 1 shstrtab_size in
   let section_headers_offset = align_up !current 8 in
   let total_size = section_headers_offset + (num_sections * shentsize) in
-  { igot;
+  { Layout.igot;
     rela_igot;
     iplt;
     rela_iplt;
-    symtab_layout;
-    strtab_layout;
+    symtab;
+    strtab;
     rela_text;
-    shstrtab_layout;
+    shstrtab;
     section_headers_offset;
     total_size
   }
@@ -267,8 +274,10 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
 (* Sections that should be renamed for Large_code partitions *)
 let sections_to_rename = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
 
-(* Rename a section name based on partition kind. For Large_code partitions,
-   .text -> .caml.p1.text, .rela.text -> .rela.caml.p1.text, etc. *)
+(* Rename a section name based on partition kind.
+
+   For Large_code partitions, .text -> .caml.p1.text, .rela.text ->
+   .rela.caml.p1.text, etc. *)
 let rename_section ~partition_kind name =
   match partition_kind with
   | Partition.Main -> name

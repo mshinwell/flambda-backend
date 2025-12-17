@@ -70,14 +70,16 @@ let extract_linker_script_from_ccopts ccopts =
   in
   List.find_map extract_from_wl_arg ccopts
 
-type result =
-  { linked_partitions : Partition.Linked.t list;
-    linker_script : string
-  }
+module Result = struct
+  type t =
+    { linked_partitions : Partition.Linked.t list;
+      linker_script : string
+    }
 
-let linked_partitions r = r.linked_partitions
+  let linked_partitions r = r.linked_partitions
 
-let linker_script r = r.linker_script
+  let linker_script r = r.linker_script
+end
 
 let dump_sizes file_sizes =
   Printf.eprintf "Dissector: allocated section sizes:\n";
@@ -166,4 +168,4 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   Linker_script.write ~output_file:linker_script ~existing_script
     ~partitions:linked_partitions;
   log "generated linker script: %s" linker_script;
-  { linked_partitions; linker_script }
+  { Result.linked_partitions; linker_script }

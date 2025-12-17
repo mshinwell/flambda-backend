@@ -65,7 +65,7 @@ val linker_script : t -> string
 
     Returns the list of rewritten partition object files (with .rewritten
     suffix) and the linker script path. *)
-val build : Dissector.result -> t
+val build : Dissector.Result.t -> t
 
 (** [linker_script_flag t] returns the linker flag for the linker script,
     suitable for adding to Clflags.all_ccopts. Returns "-Wl,-T,<path>". *)
