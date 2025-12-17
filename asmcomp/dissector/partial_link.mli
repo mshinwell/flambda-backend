@@ -53,4 +53,4 @@ val report_error : Format.formatter -> error -> unit
 
     @param temp_dir Directory for temporary and output files *)
 val link_partitions :
-  temp_dir:string -> Partition.t list -> Partition.linked list
+  temp_dir:string -> Partition.t list -> Partition.Linked.t list

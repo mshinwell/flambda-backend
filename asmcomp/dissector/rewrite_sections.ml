@@ -30,14 +30,14 @@ module Rela = Compiler_owee.Owee_elf_relocation
 module Strtab = Compiler_owee.Owee_elf_string_table
 module Buf = Compiler_owee.Owee_buf
 
-let write_symbol ~cursor ~strtab (sym : Form_rewrite_plan.symbol_entry) =
+let write_symbol ~cursor ~strtab sym =
   Rela.write_sym_entry ~cursor
-    { st_name = Strtab.add strtab sym.name;
-      st_info = sym.st_info;
-      st_other = sym.st_other;
-      st_shndx = sym.st_shndx;
-      st_value = sym.st_value;
-      st_size = sym.st_size
+    { st_name = Strtab.add strtab (Form_rewrite_plan.symbol_name sym);
+      st_info = Form_rewrite_plan.symbol_st_info sym;
+      st_other = Form_rewrite_plan.symbol_st_other sym;
+      st_shndx = Form_rewrite_plan.symbol_st_shndx sym;
+      st_value = Form_rewrite_plan.symbol_st_value sym;
+      st_size = Form_rewrite_plan.symbol_st_size sym
     }
 
 (* Symbol visibility: STV_HIDDEN = 2 *)
@@ -64,11 +64,15 @@ let write_rela ~cursor ~symbol_to_index ~r_offset ~symbol ~r_type ~r_addend =
     { r_offset = Int64.of_int r_offset; r_sym; r_type; r_addend }
 
 let execute_plan unix ~input_file ~output_file ~header ~sections
-    ~shstrtab_section ~igot_and_iplt ~(plan : Form_rewrite_plan.t) =
+    ~shstrtab_section ~igot_and_iplt ~plan =
   let module Unix = (val unix : Compiler_owee.Unix_intf.S) in
   let input_buf = Buf.map_binary (module Unix) input_file in
+  let plan_layout = Form_rewrite_plan.layout plan in
   let output_buf =
-    Buf.map_binary_write (module Unix) output_file plan.layout.total_size
+    Buf.map_binary_write
+      (module Unix)
+      output_file
+      (Form_rewrite_plan.layout_total_size plan_layout)
   in
   let original_data_end =
     Array.fold_left
@@ -79,117 +83,160 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   for i = 0 to original_size - 1 do
     Bigarray.Array1.set output_buf i (Bigarray.Array1.get input_buf i)
   done;
+  let igot_layout = Form_rewrite_plan.layout_igot plan_layout in
+  let rela_igot_layout = Form_rewrite_plan.layout_rela_igot plan_layout in
+  let iplt_layout = Form_rewrite_plan.layout_iplt plan_layout in
+  let rela_iplt_layout = Form_rewrite_plan.layout_rela_iplt plan_layout in
+  let symtab_layout = Form_rewrite_plan.layout_symtab plan_layout in
+  let strtab_layout = Form_rewrite_plan.layout_strtab plan_layout in
+  let rela_text_layout = Form_rewrite_plan.layout_rela_text plan_layout in
+  let shstrtab_layout = Form_rewrite_plan.layout_shstrtab plan_layout in
+  let igot = Build_igot_and_iplt.igot igot_and_iplt in
+  let iplt = Build_igot_and_iplt.iplt igot_and_iplt in
   Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:plan.layout.igot.offset)
-    plan.layout.igot.size
-    (Igot.section_data igot_and_iplt.Build_igot_and_iplt.igot);
-  let cursor = Buf.cursor output_buf ~at:plan.layout.rela_igot.offset in
+    (Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset igot_layout))
+    (Form_rewrite_plan.layout_size igot_layout)
+    (Igot.section_data igot);
+  let cursor =
+    Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset rela_igot_layout)
+  in
   List.iter
-    (fun (r : Igot.relocation) ->
-      write_rela ~cursor ~symbol_to_index:plan.symbol_to_index
-        ~r_offset:r.offset ~symbol:r.symbol ~r_type:Rela.r_x86_64_64
-        ~r_addend:r.addend)
-    (Igot.relocations igot_and_iplt.Build_igot_and_iplt.igot);
+    (fun r ->
+      write_rela ~cursor
+        ~symbol_to_index:(Form_rewrite_plan.symbol_to_index plan)
+        ~r_offset:(Igot.Relocation.offset r) ~symbol:(Igot.Relocation.symbol r)
+        ~r_type:Rela.r_x86_64_64 ~r_addend:(Igot.Relocation.addend r))
+    (Igot.relocations igot);
   Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:plan.layout.iplt.offset)
-    plan.layout.iplt.size
-    (Iplt.section_data igot_and_iplt.Build_igot_and_iplt.iplt);
-  let cursor = Buf.cursor output_buf ~at:plan.layout.rela_iplt.offset in
+    (Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset iplt_layout))
+    (Form_rewrite_plan.layout_size iplt_layout)
+    (Iplt.section_data iplt);
+  let cursor =
+    Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset rela_iplt_layout)
+  in
   List.iter
-    (fun (r : Iplt.relocation) ->
-      write_rela ~cursor ~symbol_to_index:plan.symbol_to_index
-        ~r_offset:r.offset ~symbol:r.symbol ~r_type:Rela.r_x86_64_pc32
-        ~r_addend:r.addend)
-    (Iplt.relocations igot_and_iplt.Build_igot_and_iplt.iplt);
-  let cursor = Buf.cursor output_buf ~at:plan.layout.symtab_layout.offset in
+    (fun r ->
+      write_rela ~cursor
+        ~symbol_to_index:(Form_rewrite_plan.symbol_to_index plan)
+        ~r_offset:(Iplt.Relocation.offset r) ~symbol:(Iplt.Relocation.symbol r)
+        ~r_type:Rela.r_x86_64_pc32 ~r_addend:(Iplt.Relocation.addend r))
+    (Iplt.relocations iplt);
+  let cursor =
+    Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset symtab_layout)
+  in
+  let plan_strtab = Form_rewrite_plan.strtab plan in
   Array.iter
-    (fun sym -> write_symbol ~cursor ~strtab:plan.strtab sym)
-    plan.original_symbols;
+    (fun sym -> write_symbol ~cursor ~strtab:plan_strtab sym)
+    (Form_rewrite_plan.original_symbols plan);
   List.iter
-    (fun (entry : Igot.entry) ->
-      write_synthetic_symbol ~cursor ~strtab:plan.strtab ~name:entry.igot_symbol
-        ~section_index:plan.igot_idx ~offset:(Igot.entry_offset entry)
-        ~size:Igot.entry_size ~is_func:false)
-    (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot);
+    (fun entry ->
+      write_synthetic_symbol ~cursor ~strtab:plan_strtab
+        ~name:(Igot.Entry.igot_symbol entry)
+        ~section_index:(Form_rewrite_plan.igot_idx plan)
+        ~offset:(Igot.Entry.offset entry) ~size:Igot.entry_size ~is_func:false)
+    (Igot.entries igot);
   List.iter
-    (fun (entry : Iplt.entry) ->
-      write_synthetic_symbol ~cursor ~strtab:plan.strtab ~name:entry.iplt_symbol
-        ~section_index:plan.iplt_idx ~offset:(Iplt.entry_offset entry)
-        ~size:Iplt.entry_size ~is_func:true)
-    (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt);
+    (fun entry ->
+      write_synthetic_symbol ~cursor ~strtab:plan_strtab
+        ~name:(Iplt.Entry.iplt_symbol entry)
+        ~section_index:(Form_rewrite_plan.iplt_idx plan)
+        ~offset:(Iplt.Entry.offset entry) ~size:Iplt.entry_size ~is_func:true)
+    (Iplt.entries iplt);
   Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:plan.layout.strtab_layout.offset)
-    plan.layout.strtab_layout.size
-    (Strtab.contents plan.strtab);
-  let cursor = Buf.cursor output_buf ~at:plan.layout.rela_text.offset in
-  List.iter (fun e -> Rela.write_rela_entry ~cursor e) plan.new_rela_text;
+    (Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset strtab_layout))
+    (Form_rewrite_plan.layout_size strtab_layout)
+    (Strtab.contents plan_strtab);
+  let cursor =
+    Buf.cursor output_buf ~at:(Form_rewrite_plan.layout_offset rela_text_layout)
+  in
+  List.iter
+    (fun e -> Rela.write_rela_entry ~cursor e)
+    (Form_rewrite_plan.new_rela_text plan);
   Buf.Write.fixed_bytes
-    (Buf.cursor output_buf ~at:plan.layout.shstrtab_layout.offset)
-    plan.layout.shstrtab_layout.size
-    (Strtab.contents plan.shstrtab);
-  let relocate_section (s : Elf.section)
-      (layout : Form_rewrite_plan.section_layout) : Elf.section =
+    (Buf.cursor output_buf
+       ~at:(Form_rewrite_plan.layout_offset shstrtab_layout))
+    (Form_rewrite_plan.layout_size shstrtab_layout)
+    (Strtab.contents (Form_rewrite_plan.shstrtab plan));
+  let relocate_section (s : Elf.section) layout : Elf.section =
     { s with
-      sh_offset = Int64.of_int layout.offset;
-      sh_size = Int64.of_int layout.size
+      sh_offset = Int64.of_int (Form_rewrite_plan.layout_offset layout);
+      sh_size = Int64.of_int (Form_rewrite_plan.layout_size layout)
     }
   in
   (* Update sh_name to point to the (possibly renamed) section name in
      shstrtab *)
+  let section_name_offsets = Form_rewrite_plan.section_name_offsets plan in
   let rename_section (s : Elf.section) : Elf.section =
-    match Hashtbl.find_opt plan.section_name_offsets s.sh_name_str with
+    match Hashtbl.find_opt section_name_offsets s.sh_name_str with
     | Some new_name_offset -> { s with sh_name = new_name_offset }
     | None -> s
   in
   let update_section (s : Elf.section) =
     let s = rename_section s in
     match s.sh_name_str with
-    | ".symtab" -> relocate_section s plan.layout.symtab_layout
-    | ".strtab" -> relocate_section s plan.layout.strtab_layout
-    | ".rela.text" -> relocate_section s plan.layout.rela_text
+    | ".symtab" -> relocate_section s symtab_layout
+    | ".strtab" -> relocate_section s strtab_layout
+    | ".rela.text" -> relocate_section s rela_text_layout
     | _ -> s
   in
-  let new_sections = Array.make plan.num_sections sections.(0) in
+  let num_sections = Form_rewrite_plan.num_sections plan in
+  let igot_idx = Form_rewrite_plan.igot_idx plan in
+  let rela_igot_idx = Form_rewrite_plan.rela_igot_idx plan in
+  let iplt_idx = Form_rewrite_plan.iplt_idx plan in
+  let rela_iplt_idx = Form_rewrite_plan.rela_iplt_idx plan in
+  let symtab_idx = Form_rewrite_plan.symtab_idx plan in
+  let new_sections = Array.make num_sections sections.(0) in
   Array.iteri (fun i s -> new_sections.(i) <- update_section s) sections;
-  new_sections.(plan.igot_idx)
-    <- Elf.make_progbits_section ~sh_name:plan.igot_name_offset
+  new_sections.(igot_idx)
+    <- Elf.make_progbits_section
+         ~sh_name:(Form_rewrite_plan.igot_name_offset plan)
          ~sh_name_str:".data.igot"
          ~sh_flags:
            (Int64.logor Elf.Section_flags.shf_write Elf.Section_flags.shf_alloc)
-         ~sh_offset:(Int64.of_int plan.layout.igot.offset)
-         ~sh_size:(Int64.of_int plan.layout.igot.size)
+         ~sh_offset:(Int64.of_int (Form_rewrite_plan.layout_offset igot_layout))
+         ~sh_size:(Int64.of_int (Form_rewrite_plan.layout_size igot_layout))
          ~sh_addralign:16L;
-  new_sections.(plan.rela_igot_idx)
-    <- Elf.make_rela_section ~sh_name:plan.rela_igot_name_offset
+  new_sections.(rela_igot_idx)
+    <- Elf.make_rela_section
+         ~sh_name:(Form_rewrite_plan.rela_igot_name_offset plan)
          ~sh_name_str:".rela.data.igot"
-         ~sh_offset:(Int64.of_int plan.layout.rela_igot.offset)
-         ~sh_size:(Int64.of_int plan.layout.rela_igot.size)
-         ~sh_link:plan.symtab_idx ~sh_info:plan.igot_idx;
-  new_sections.(plan.iplt_idx)
-    <- Elf.make_progbits_section ~sh_name:plan.iplt_name_offset
+         ~sh_offset:
+           (Int64.of_int (Form_rewrite_plan.layout_offset rela_igot_layout))
+         ~sh_size:
+           (Int64.of_int (Form_rewrite_plan.layout_size rela_igot_layout))
+         ~sh_link:symtab_idx ~sh_info:igot_idx;
+  new_sections.(iplt_idx)
+    <- Elf.make_progbits_section
+         ~sh_name:(Form_rewrite_plan.iplt_name_offset plan)
          ~sh_name_str:".text.iplt"
          ~sh_flags:
            (Int64.logor Elf.Section_flags.shf_execinstr
               Elf.Section_flags.shf_alloc)
-         ~sh_offset:(Int64.of_int plan.layout.iplt.offset)
-         ~sh_size:(Int64.of_int plan.layout.iplt.size)
+         ~sh_offset:(Int64.of_int (Form_rewrite_plan.layout_offset iplt_layout))
+         ~sh_size:(Int64.of_int (Form_rewrite_plan.layout_size iplt_layout))
          ~sh_addralign:16L;
-  new_sections.(plan.rela_iplt_idx)
-    <- Elf.make_rela_section ~sh_name:plan.rela_iplt_name_offset
+  new_sections.(rela_iplt_idx)
+    <- Elf.make_rela_section
+         ~sh_name:(Form_rewrite_plan.rela_iplt_name_offset plan)
          ~sh_name_str:".rela.text.iplt"
-         ~sh_offset:(Int64.of_int plan.layout.rela_iplt.offset)
-         ~sh_size:(Int64.of_int plan.layout.rela_iplt.size)
-         ~sh_link:plan.symtab_idx ~sh_info:plan.iplt_idx;
+         ~sh_offset:
+           (Int64.of_int (Form_rewrite_plan.layout_offset rela_iplt_layout))
+         ~sh_size:
+           (Int64.of_int (Form_rewrite_plan.layout_size rela_iplt_layout))
+         ~sh_link:symtab_idx ~sh_info:iplt_idx;
   new_sections.(header.Elf.e_shstrndx)
     <- ({ shstrtab_section with
-          sh_offset = Int64.of_int plan.layout.shstrtab_layout.offset;
-          sh_size = Int64.of_int plan.layout.shstrtab_layout.size
+          sh_offset =
+            Int64.of_int (Form_rewrite_plan.layout_offset shstrtab_layout);
+          sh_size = Int64.of_int (Form_rewrite_plan.layout_size shstrtab_layout)
         }
          : Elf.section);
   let new_header : Elf.header =
     { header with
-      e_shoff = Int64.of_int plan.layout.section_headers_offset;
-      e_shnum = plan.num_sections
+      e_shoff =
+        Int64.of_int
+          (Form_rewrite_plan.layout_section_headers_offset plan_layout);
+      e_shnum = num_sections
     }
   in
   Elf.write_elf output_buf new_header new_sections

@@ -38,11 +38,19 @@ exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
-type file_size = private
-  { filename : string;
-    size : int64;
-    has_probes : bool
-  }
+(** Information about a single file's allocated section size. *)
+module File_size : sig
+  type t
+
+  (** Returns the filename. *)
+  val filename : t -> string
+
+  (** Returns the total size of allocated sections in the file. *)
+  val size : t -> int64
+
+  (** Returns whether the file contains a .probes section. *)
+  val has_probes : t -> bool
+end
 
 (** [measure_files unix ~files] computes the allocated section size for each
     file in [files].
@@ -61,4 +69,4 @@ type file_size = private
     multiple times or is referenced transitively. Returns an empty entry for
     files with unrecognized extensions. *)
 val measure_files :
-  (module Compiler_owee.Unix_intf.S) -> files:string list -> file_size list
+  (module Compiler_owee.Unix_intf.S) -> files:string list -> File_size.t list

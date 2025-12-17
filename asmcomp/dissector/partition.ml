@@ -39,22 +39,36 @@ let section_prefix = function
 
 type t =
   { kind : kind;
-    files : Measure_object_files.file_size list;
+    files : Measure_object_files.File_size.t list;
     total_size : int64
   }
+
+let kind t = t.kind
+
+let files t = t.files
+
+let total_size t = t.total_size
 
 let create ~kind files =
   let total_size =
     List.fold_left
-      (fun acc (entry : Measure_object_files.file_size) ->
-        Int64.add acc entry.size)
+      (fun acc entry ->
+        Int64.add acc (Measure_object_files.File_size.size entry))
       0L files
   in
   { kind; files; total_size }
 
-type linked =
-  { partition : t;
-    linked_object : string
-  }
+module Linked = struct
+  type partition = t
 
-let create_linked ~partition ~linked_object = { partition; linked_object }
+  type t =
+    { partition : partition;
+      linked_object : string
+    }
+
+  let partition t = t.partition
+
+  let linked_object t = t.linked_object
+
+  let create ~partition ~linked_object = { partition; linked_object }
+end

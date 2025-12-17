@@ -44,13 +44,24 @@
 val entry_size : int
 
 (** An entry in the intermediate PLT. *)
-type entry = private
-  { index : int;  (** Index of this entry (0-based). *)
-    original_symbol : string;
-        (** The original external symbol this PLT entry calls. *)
-    iplt_symbol : string;  (** The synthetic symbol for this PLT entry. *)
-    igot_symbol : string  (** The IGOT symbol this entry jumps through. *)
-  }
+module Entry : sig
+  type t
+
+  (** Returns the index of this entry (0-based). *)
+  val index : t -> int
+
+  (** Returns the original external symbol this PLT entry calls. *)
+  val original_symbol : t -> string
+
+  (** Returns the synthetic symbol for this PLT entry. *)
+  val iplt_symbol : t -> string
+
+  (** Returns the IGOT symbol this entry jumps through. *)
+  val igot_symbol : t -> string
+
+  (** Returns the byte offset of the entry within the IPLT section. *)
+  val offset : t -> int
+end
 
 (** A built intermediate PLT section. *)
 type t
@@ -67,7 +78,7 @@ type t
 val build : prefix:string -> igot:Igot.t -> symbols:string list -> t
 
 (** Returns the list of entries in the IPLT. *)
-val entries : t -> entry list
+val entries : t -> Entry.t list
 
 (** Returns the section data (machine code). *)
 val section_data : t -> bytes
@@ -77,24 +88,27 @@ val section_size : t -> int
 
 (** [find_entry t ~symbol] returns the entry for [symbol], or [None] if not
     found. *)
-val find_entry : t -> symbol:string -> entry option
+val find_entry : t -> symbol:string -> Entry.t option
 
 (** [iplt_symbol_name ~prefix ~symbol] returns the IPLT symbol name for the
     given original symbol. *)
 val iplt_symbol_name : prefix:string -> symbol:string -> string
 
 (** A relocation for an IPLT entry. *)
-type relocation = private
-  { offset : int;  (** Offset within the IPLT section (entry_offset + 2). *)
-    symbol : string;  (** The IGOT symbol to relocate to. *)
-    addend : int64
-        (** Relocation addend (-4 to account for RIP pointing past displacement). *)
-  }
+module Relocation : sig
+  type t
+
+  (** Returns the offset within the IPLT section (entry_offset + 2). *)
+  val offset : t -> int
+
+  (** Returns the IGOT symbol to relocate to. *)
+  val symbol : t -> string
+
+  (** Returns the relocation addend (-4 to account for RIP pointing past
+      displacement). *)
+  val addend : t -> int64
+end
 
 (** [relocations t] returns the list of R_X86_64_PC32 relocations needed to
     fill the IPLT entries with displacements to their IGOT entries. *)
-val relocations : t -> relocation list
-
-(** [entry_offset entry] returns the byte offset of the entry within the IPLT
-    section. *)
-val entry_offset : entry -> int
+val relocations : t -> Relocation.t list

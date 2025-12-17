@@ -31,56 +31,92 @@
     all the modifications needed: new sections, relocated symbols, and
     file layout. The plan can then be executed by [Rewrite_sections]. *)
 
-type symbol_entry = private
-  { name : string;
-    st_info : int;
-    st_other : int;
-    st_shndx : int;
-    st_value : int64;
-    st_size : int64
-  }
+(** Information about an original symbol from the ELF symbol table. *)
+type symbol_entry
 
-type section_layout = private
-  { offset : int;
-    size : int
-  }
+val symbol_name : symbol_entry -> string
 
-type layout = private
-  { igot : section_layout;
-    rela_igot : section_layout;
-    iplt : section_layout;
-    rela_iplt : section_layout;
-    symtab_layout : section_layout;
-    strtab_layout : section_layout;
-    rela_text : section_layout;
-    shstrtab_layout : section_layout;
-    section_headers_offset : int;
-    total_size : int
-  }
+val symbol_st_info : symbol_entry -> int
 
-type t = private
-  { original_symbols : symbol_entry array;
-    symbol_to_index : (string, int) Hashtbl.t;
-    total_symbols : int;
-    new_rela_text : Compiler_owee.Owee_elf_relocation.rela_entry list;
-    strtab : Compiler_owee.Owee_elf_string_table.t;
-    shstrtab : Compiler_owee.Owee_elf_string_table.t;
-    section_name_offsets : (string, int) Hashtbl.t;
-        (** Maps original section names to their offsets in shstrtab. For
-            Large_code partitions, the stored offset points to the renamed
-            name (e.g., .caml.p1.text instead of .text). *)
-    igot_name_offset : int;
-    rela_igot_name_offset : int;
-    iplt_name_offset : int;
-    rela_iplt_name_offset : int;
-    igot_idx : int;
-    rela_igot_idx : int;
-    iplt_idx : int;
-    rela_iplt_idx : int;
-    num_sections : int;
-    symtab_idx : int;
-    layout : layout
-  }
+val symbol_st_other : symbol_entry -> int
+
+val symbol_st_shndx : symbol_entry -> int
+
+val symbol_st_value : symbol_entry -> int64
+
+val symbol_st_size : symbol_entry -> int64
+
+(** Layout of a section in the output file. *)
+type section_layout
+
+val layout_offset : section_layout -> int
+
+val layout_size : section_layout -> int
+
+(** Layout of all sections in the output file. *)
+type layout
+
+val layout_igot : layout -> section_layout
+
+val layout_rela_igot : layout -> section_layout
+
+val layout_iplt : layout -> section_layout
+
+val layout_rela_iplt : layout -> section_layout
+
+val layout_symtab : layout -> section_layout
+
+val layout_strtab : layout -> section_layout
+
+val layout_rela_text : layout -> section_layout
+
+val layout_shstrtab : layout -> section_layout
+
+val layout_section_headers_offset : layout -> int
+
+val layout_total_size : layout -> int
+
+(** A rewrite plan for an ELF file. *)
+type t
+
+val original_symbols : t -> symbol_entry array
+
+val symbol_to_index : t -> (string, int) Hashtbl.t
+
+val total_symbols : t -> int
+
+val new_rela_text : t -> Compiler_owee.Owee_elf_relocation.rela_entry list
+
+val strtab : t -> Compiler_owee.Owee_elf_string_table.t
+
+val shstrtab : t -> Compiler_owee.Owee_elf_string_table.t
+
+(** Maps original section names to their offsets in shstrtab. For Large_code
+    partitions, the stored offset points to the renamed name (e.g.,
+    .caml.p1.text instead of .text). *)
+val section_name_offsets : t -> (string, int) Hashtbl.t
+
+val igot_name_offset : t -> int
+
+val rela_igot_name_offset : t -> int
+
+val iplt_name_offset : t -> int
+
+val rela_iplt_name_offset : t -> int
+
+val igot_idx : t -> int
+
+val rela_igot_idx : t -> int
+
+val iplt_idx : t -> int
+
+val rela_iplt_idx : t -> int
+
+val num_sections : t -> int
+
+val symtab_idx : t -> int
+
+val layout : t -> layout
 
 (** [compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_body
       ~partition_kind ~igot_and_iplt ~relocations] analyzes the ELF structure

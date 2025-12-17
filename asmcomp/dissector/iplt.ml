@@ -34,15 +34,27 @@ let entry_size = 8
 (* Delimiter for synthetic symbol names - same as IGOT *)
 let delimiter = "\xf0\x9f\x90\x8d" (* Unicode snake emoji U+1F40D in UTF-8 *)
 
-type entry =
-  { index : int;
-    original_symbol : string;
-    iplt_symbol : string;
-    igot_symbol : string
-  }
+module Entry = struct
+  type t =
+    { index : int;
+      original_symbol : string;
+      iplt_symbol : string;
+      igot_symbol : string
+    }
+
+  let index e = e.index
+
+  let original_symbol e = e.original_symbol
+
+  let iplt_symbol e = e.iplt_symbol
+
+  let igot_symbol e = e.igot_symbol
+
+  let offset e = e.index * entry_size
+end
 
 type t =
-  { entries : entry list;
+  { entries : Entry.t list;
     section_data : bytes
   }
 
@@ -93,7 +105,7 @@ let build ~prefix ~igot ~symbols =
         | None ->
           Misc.fatal_errorf "IPLT: no IGOT entry for symbol %s" original_symbol
         | Some _ -> ());
-        { index; original_symbol; iplt_symbol; igot_symbol })
+        { Entry.index; original_symbol; iplt_symbol; igot_symbol })
       unique_symbols
   in
   (* Build section data *)
@@ -115,19 +127,25 @@ let find_entry t ~symbol =
   let rec find = function
     | [] -> None
     | entry :: rest ->
-      if String.equal entry.original_symbol symbol
+      if String.equal (Entry.original_symbol entry) symbol
       then Some entry
       else find rest
   in
   find t.entries
 
-type relocation =
-  { offset : int;
-    symbol : string;
-    addend : int64
-  }
+module Relocation = struct
+  type t =
+    { offset : int;
+      symbol : string;
+      addend : int64
+    }
 
-let entry_offset entry = entry.index * entry_size
+  let offset r = r.offset
+
+  let symbol r = r.symbol
+
+  let addend r = r.addend
+end
 
 (* The displacement field is at offset +2 within each entry *)
 let displacement_offset = 2
@@ -135,8 +153,9 @@ let displacement_offset = 2
 let relocations t =
   List.map
     (fun entry ->
-      { offset = entry_offset entry + displacement_offset;
-        symbol = entry.igot_symbol;
-        addend = -4L
-      })
+      Relocation.
+        { offset = Entry.offset entry + displacement_offset;
+          symbol = Entry.igot_symbol entry;
+          addend = -4L
+        })
     t.entries

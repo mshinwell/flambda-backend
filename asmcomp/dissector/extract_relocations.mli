@@ -32,18 +32,24 @@
     the dissector code model. *)
 
 (** Information about a single relocation that needs conversion. *)
-type relocation_entry = private
-  { symbol_name : string;
-    offset : int64
-  }
+module Relocation_entry : sig
+  type t
+
+  (** Returns the symbol name for the relocation. *)
+  val symbol_name : t -> string
+
+  (** Returns the offset of the relocation within the section. *)
+  val offset : t -> int64
+end
 
 (** The result of extracting relocations from object files. *)
-type t = private
-  { convert_to_plt : relocation_entry list;
-        (** Relocations with type R_X86_64_PLT32 that need PLT entries. *)
-    convert_to_got : relocation_entry list
-        (** Relocations with type R_X86_64_REX_GOTPCRELX that need GOT entries. *)
-  }
+type t
+
+(** Returns relocations with type R_X86_64_PLT32 that need PLT entries. *)
+val convert_to_plt : t -> Relocation_entry.t list
+
+(** Returns relocations with type R_X86_64_REX_GOTPCRELX that need GOT entries. *)
+val convert_to_got : t -> Relocation_entry.t list
 
 (** [extract unix ~filename] reads the ELF object file at [filename] and
     extracts relocations from the .rela.text section that need to be
@@ -57,4 +63,4 @@ val extract : (module Compiler_owee.Unix_intf.S) -> filename:string -> t
 
     Returns combined relocation information from all partitions. *)
 val extract_from_linked_partitions :
-  (module Compiler_owee.Unix_intf.S) -> Partition.linked list -> t
+  (module Compiler_owee.Unix_intf.S) -> Partition.Linked.t list -> t

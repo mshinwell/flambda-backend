@@ -48,17 +48,18 @@
     again when using dissector output. *)
 
 (** The linker arguments produced by the dissector. *)
-type t = private
-  { object_files : string list;
-        (** The rewritten partition .o files that replace ALL original object
-            files. This includes what was previously startup_obj, ml_objfiles,
-            ccobjs, and runtime_libs - they are all baked into the partitions.
-            The caller should pass these files to the linker and NOT add
-            ccobjs or runtime_libs separately. *)
-    linker_script : string
-        (** Path to the generated linker script. This should be passed to the
-            linker via -Wl,-T,<path> added to Clflags.all_ccopts. *)
-  }
+type t
+
+(** Returns the rewritten partition .o files that replace ALL original object
+    files. This includes what was previously startup_obj, ml_objfiles, ccobjs,
+    and runtime_libs - they are all baked into the partitions. The caller
+    should pass these files to the linker and NOT add ccobjs or runtime_libs
+    separately. *)
+val object_files : t -> string list
+
+(** Returns the path to the generated linker script. This should be passed to
+    the linker via -Wl,-T,<path> added to Clflags.all_ccopts. *)
+val linker_script : t -> string
 
 (** [build result] constructs linker arguments from a dissector result.
 

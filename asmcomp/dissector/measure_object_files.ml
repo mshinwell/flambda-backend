@@ -81,11 +81,19 @@ let check_for_duplicates files =
       else Hashtbl.add seen file ())
     files
 
-type file_size =
-  { filename : string;
-    size : int64;
-    has_probes : bool
-  }
+module File_size = struct
+  type t =
+    { filename : string;
+      size : int64;
+      has_probes : bool
+    }
+
+  let filename t = t.filename
+
+  let size t = t.size
+
+  let has_probes t = t.has_probes
+end
 
 let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   (* Check for duplicates in the input list first *)
@@ -132,11 +140,11 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
       if Filename.check_suffix filename ".o"
       then
         let size, has_probes = analyze_object_file filename in
-        [{ filename; size; has_probes }]
+        [{ File_size.filename; size; has_probes }]
       else if Filename.check_suffix filename ".a"
       then
         let size, has_probes = analyze_archive_file filename in
-        [{ filename; size; has_probes }]
+        [{ File_size.filename; size; has_probes }]
       else if Filename.check_suffix filename ".cmx"
       then
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
@@ -145,7 +153,7 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
         else (
           Hashtbl.add analyzed obj_file ();
           let size, has_probes = analyze_object_file obj_file in
-          [{ filename; size; has_probes }])
+          [{ File_size.filename; size; has_probes }])
       else if Filename.check_suffix filename ".cmxa"
       then
         let archive_file = Filename.chop_suffix filename ".cmxa" ^ ".a" in
@@ -155,7 +163,7 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
           else (
             Hashtbl.add analyzed archive_file ();
             let size, has_probes = analyze_archive_file archive_file in
-            [{ filename; size; has_probes }])
+            [{ File_size.filename; size; has_probes }])
         in
         let cmxa = read_cmxa filename in
         let ccobjs_entries = List.concat_map analyze_one cmxa.lib_ccobjs in

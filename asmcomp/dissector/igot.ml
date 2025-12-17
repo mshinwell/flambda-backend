@@ -32,15 +32,25 @@ let entry_size = 8
    symbols *)
 let delimiter = "\xf0\x9f\x90\x8d" (* Unicode snake emoji U+1F40D in UTF-8 *)
 
-type entry =
-  { index : int;
-    original_symbol : string;
-    igot_symbol : string
-  }
+module Entry = struct
+  type t =
+    { index : int;
+      original_symbol : string;
+      igot_symbol : string
+    }
+
+  let index e = e.index
+
+  let original_symbol e = e.original_symbol
+
+  let igot_symbol e = e.igot_symbol
+
+  let offset e = e.index * entry_size
+end
 
 type t =
-  { entries : entry list;
-    by_original_symbol : entry option array;
+  { entries : Entry.t list;
+    by_original_symbol : Entry.t option array;
     symbols : string array;
     section_data : bytes
   }
@@ -66,13 +76,13 @@ let build ~prefix ~symbols =
     List.mapi
       (fun index original_symbol ->
         let igot_symbol = igot_symbol_name ~prefix ~symbol:original_symbol in
-        { index; original_symbol; igot_symbol })
+        { Entry.index; original_symbol; igot_symbol })
       unique_symbols
   in
   (* Build lookup table *)
   let by_original_symbol = Array.make (Hashtbl.length seen) None in
   List.iter
-    (fun entry -> by_original_symbol.(entry.index) <- Some entry)
+    (fun entry -> by_original_symbol.(Entry.index entry) <- Some entry)
     entries;
   (* Section data is zero-initialized *)
   let section_data = Bytes.make (List.length entries * entry_size) '\x00' in
@@ -88,25 +98,32 @@ let find_entry t ~symbol =
   let rec find = function
     | [] -> None
     | entry :: rest ->
-      if String.equal entry.original_symbol symbol
+      if String.equal (Entry.original_symbol entry) symbol
       then Some entry
       else find rest
   in
   find t.entries
 
-type relocation =
-  { offset : int;
-    symbol : string;
-    addend : int64
-  }
+module Relocation = struct
+  type t =
+    { offset : int;
+      symbol : string;
+      addend : int64
+    }
 
-let entry_offset entry = entry.index * entry_size
+  let offset r = r.offset
+
+  let symbol r = r.symbol
+
+  let addend r = r.addend
+end
 
 let relocations t =
   List.map
     (fun entry ->
-      { offset = entry_offset entry;
-        symbol = entry.original_symbol;
-        addend = 0L
-      })
+      Relocation.
+        { offset = Entry.offset entry;
+          symbol = Entry.original_symbol entry;
+          addend = 0L
+        })
     t.entries

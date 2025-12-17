@@ -71,17 +71,23 @@ let extract_linker_script_from_ccopts ccopts =
   List.find_map extract_from_wl_arg ccopts
 
 type result =
-  { linked_partitions : Partition.linked list;
+  { linked_partitions : Partition.Linked.t list;
     linker_script : string
   }
+
+let linked_partitions r = r.linked_partitions
+
+let linker_script r = r.linker_script
 
 let dump_sizes file_sizes =
   Printf.eprintf "Dissector: allocated section sizes:\n";
   let total =
     List.fold_left
-      (fun acc (entry : Measure_object_files.file_size) ->
-        Printf.eprintf "  %12Ld  %s\n" entry.size entry.filename;
-        Int64.add acc entry.size)
+      (fun acc entry ->
+        Printf.eprintf "  %12Ld  %s\n"
+          (Measure_object_files.File_size.size entry)
+          (Measure_object_files.File_size.filename entry);
+        Int64.add acc (Measure_object_files.File_size.size entry))
       0L file_sizes
   in
   Printf.eprintf "  %12Ld  TOTAL\n%!" total
@@ -120,8 +126,8 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   in
   let total =
     List.fold_left
-      (fun acc (entry : Measure_object_files.file_size) ->
-        Int64.add acc entry.size)
+      (fun acc entry ->
+        Int64.add acc (Measure_object_files.File_size.size entry))
       0L file_sizes
   in
   log "total allocated section size = %Ld bytes" total;
@@ -135,21 +141,22 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
     Extract_relocations.extract_from_linked_partitions unix linked_partitions
   in
   log "found %d PLT relocations and %d GOT relocations"
-    (List.length relocations.convert_to_plt)
-    (List.length relocations.convert_to_got);
+    (List.length (Extract_relocations.convert_to_plt relocations))
+    (List.length (Extract_relocations.convert_to_got relocations));
   List.iter
-    (fun (partition : Partition.linked) ->
-      let kind = partition.partition.kind in
+    (fun linked ->
+      let kind = Partition.kind (Partition.Linked.partition linked) in
       let prefix = Partition.symbol_prefix kind in
       let igot_and_iplt = Build_igot_and_iplt.build ~prefix relocations in
       log "built IGOT with %d entries, IPLT with %d entries (prefix=%s)"
-        (List.length (Igot.entries igot_and_iplt.igot))
-        (List.length (Iplt.entries igot_and_iplt.iplt))
+        (List.length (Igot.entries (Build_igot_and_iplt.igot igot_and_iplt)))
+        (List.length (Iplt.entries (Build_igot_and_iplt.iplt igot_and_iplt)))
         prefix;
-      let output_file = partition.linked_object ^ ".rewritten" in
-      Rewrite_sections.rewrite unix ~input_file:partition.linked_object
-        ~output_file ~partition_kind:kind ~igot_and_iplt ~relocations;
-      log "rewrote %s -> %s" partition.linked_object output_file)
+      let input_file = Partition.Linked.linked_object linked in
+      let output_file = input_file ^ ".rewritten" in
+      Rewrite_sections.rewrite unix ~input_file ~output_file
+        ~partition_kind:kind ~igot_and_iplt ~relocations;
+      log "rewrote %s -> %s" input_file output_file)
     linked_partitions;
   let existing_script = extract_linker_script_from_ccopts !Clflags.all_ccopts in
   (match existing_script with

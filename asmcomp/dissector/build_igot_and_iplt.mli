@@ -43,16 +43,22 @@
     GOT symbols. *)
 
 (** The result of building IGOT and IPLT sections. *)
-type t = private
-  { igot : Igot.t;
-    iplt : Iplt.t;
-    plt_symbols : string list;
-        (** Original symbols that had PLT32 relocations (need IPLT entries). *)
-    got_symbols : string list
-        (** Original symbols that had GOTPCRELX relocations (need IGOT entries,
-        but not IPLT entries). These are in addition to [plt_symbols] which
-        also get IGOT entries. *)
-  }
+type t
+
+(** Returns the built IGOT. *)
+val igot : t -> Igot.t
+
+(** Returns the built IPLT. *)
+val iplt : t -> Iplt.t
+
+(** Returns the original symbols that had PLT32 relocations (need IPLT
+    entries). *)
+val plt_symbols : t -> string list
+
+(** Returns the original symbols that had GOTPCRELX relocations (need IGOT
+    entries, but not IPLT entries). These are in addition to the PLT symbols
+    which also get IGOT entries. *)
+val got_symbols : t -> string list
 
 (** [build ~prefix relocations] builds IGOT and IPLT sections from the
     extracted relocations.
@@ -69,10 +75,10 @@ val build : prefix:string -> Extract_relocations.t -> t
     Note: PLT32 relocations are redirected to IPLT entries, not directly to
     IGOT. Use [iplt_symbol_for_plt_reloc] instead. *)
 val igot_symbol_for_got_reloc :
-  t -> Extract_relocations.relocation_entry -> string option
+  t -> Extract_relocations.Relocation_entry.t -> string option
 
 (** [iplt_symbol_for_plt_reloc t reloc] returns the IPLT symbol name that
     should replace the original PLT32 relocation target, or [None] if the
     relocation doesn't need conversion. *)
 val iplt_symbol_for_plt_reloc :
-  t -> Extract_relocations.relocation_entry -> string option
+  t -> Extract_relocations.Relocation_entry.t -> string option

@@ -45,11 +45,14 @@ let generate ~existing_script ~partitions =
       (Printf.sprintf "/* END include existing linker script: %s */\n\n" path));
   Buffer.add_string buf "SECTIONS {\n";
   List.iter
-    (fun (partition : Partition.linked) ->
-      match partition.partition.kind with
+    (fun linked ->
+      match Partition.kind (Partition.Linked.partition linked) with
       | Main -> ()
       | Large_code _ ->
-        let prefix = Partition.section_prefix partition.partition.kind in
+        let prefix =
+          Partition.section_prefix
+            (Partition.kind (Partition.Linked.partition linked))
+        in
         List.iter
           (fun section ->
             let name = prefix ^ section in

@@ -226,7 +226,7 @@ let call_linker ?dissector_args file_list_rev startup_file output_name =
   and main_obj_runtime = !Clflags.output_complete_object in
   let files, c_lib =
     match dissector_args with
-    | Some (args : Build_linker_args.t) ->
+    | Some args ->
       (* Dissector mode: partition files contain everything (startup,
          ml_objfiles, ccobjs, runtime_lib). Don't add them again. Add linker
          script flag. *)
@@ -237,7 +237,7 @@ let call_linker ?dissector_args file_list_rev startup_file output_name =
         then ""
         else Config.native_c_libraries
       in
-      args.object_files, c_lib
+      Build_linker_args.object_files args, c_lib
     | None ->
       (* Normal mode: combine startup + ml_objfiles + ccobjs + runtime_lib *)
       let file_list_rev =

@@ -54,4 +54,4 @@ val bytes_of_gb : float -> int64
     Raises [Error (File_exceeds_partition_size _)] if any single file exceeds
     the threshold. *)
 val partition_files :
-  threshold:int64 -> Measure_object_files.file_size list -> Partition.t list
+  threshold:int64 -> Measure_object_files.File_size.t list -> Partition.t list

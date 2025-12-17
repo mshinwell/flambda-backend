@@ -51,20 +51,20 @@ let () =
 let write_response_file ~filename files =
   let oc = open_out filename in
   List.iter
-    (fun (entry : Measure_object_files.file_size) ->
-      output_string oc entry.filename;
+    (fun entry ->
+      output_string oc (Measure_object_files.File_size.filename entry);
       output_char oc '\n')
     files;
   close_out oc
 
-let link_one_partition ~temp_dir ~partition_index (partition : Partition.t) =
+let link_one_partition ~temp_dir ~partition_index partition =
   let response_file =
     Filename.concat temp_dir (Printf.sprintf "partition%d.txt" partition_index)
   in
   let output_file =
     Filename.concat temp_dir (Printf.sprintf "partition%d.o" partition_index)
   in
-  write_response_file ~filename:response_file partition.files;
+  write_response_file ~filename:response_file (Partition.files partition);
   Misc.try_finally
     (fun () ->
       (* Config.native_pack_linker is something like "ld -r -o " *)
@@ -78,12 +78,11 @@ let link_one_partition ~temp_dir ~partition_index (partition : Partition.t) =
       (if exit_code <> 0
       then
         let files =
-          List.map
-            (fun (entry : Measure_object_files.file_size) -> entry.filename)
-            partition.files
+          List.map Measure_object_files.File_size.filename
+            (Partition.files partition)
         in
         raise (Error (Linker_error { partition_index; exit_code; files })));
-      Partition.create_linked ~partition ~linked_object:output_file)
+      Partition.Linked.create ~partition ~linked_object:output_file)
     ~always:(fun () -> Misc.remove_file response_file)
 
 let link_partitions ~temp_dir partitions =

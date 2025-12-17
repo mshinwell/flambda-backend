@@ -42,10 +42,26 @@ type symbol_entry =
     st_size : int64
   }
 
+let symbol_name s = s.name
+
+let symbol_st_info s = s.st_info
+
+let symbol_st_other s = s.st_other
+
+let symbol_st_shndx s = s.st_shndx
+
+let symbol_st_value s = s.st_value
+
+let symbol_st_size s = s.st_size
+
 type section_layout =
   { offset : int;
     size : int
   }
+
+let layout_offset l = l.offset
+
+let layout_size l = l.size
 
 type layout =
   { igot : section_layout;
@@ -59,6 +75,26 @@ type layout =
     section_headers_offset : int;
     total_size : int
   }
+
+let layout_igot l = l.igot
+
+let layout_rela_igot l = l.rela_igot
+
+let layout_iplt l = l.iplt
+
+let layout_rela_iplt l = l.rela_iplt
+
+let layout_symtab l = l.symtab_layout
+
+let layout_strtab l = l.strtab_layout
+
+let layout_rela_text l = l.rela_text
+
+let layout_shstrtab l = l.shstrtab_layout
+
+let layout_section_headers_offset l = l.section_headers_offset
+
+let layout_total_size l = l.total_size
 
 type t =
   { original_symbols : symbol_entry array;
@@ -81,6 +117,42 @@ type t =
     layout : layout
   }
 
+let original_symbols t = t.original_symbols
+
+let symbol_to_index t = t.symbol_to_index
+
+let total_symbols t = t.total_symbols
+
+let new_rela_text t = t.new_rela_text
+
+let strtab t = t.strtab
+
+let shstrtab t = t.shstrtab
+
+let section_name_offsets t = t.section_name_offsets
+
+let igot_name_offset t = t.igot_name_offset
+
+let rela_igot_name_offset t = t.rela_igot_name_offset
+
+let iplt_name_offset t = t.iplt_name_offset
+
+let rela_iplt_name_offset t = t.rela_iplt_name_offset
+
+let igot_idx t = t.igot_idx
+
+let rela_igot_idx t = t.rela_igot_idx
+
+let iplt_idx t = t.iplt_idx
+
+let rela_iplt_idx t = t.rela_iplt_idx
+
+let num_sections t = t.num_sections
+
+let symtab_idx t = t.symtab_idx
+
+let layout t = t.layout
+
 let read_symbols ~symtab_body ~strtab_body =
   let symbols = ref [] in
   Elf.iter_symbols ~symtab_body ~strtab_body
@@ -93,44 +165,50 @@ let build_symbol_index_map ~original_symbols ~igot_and_iplt strtab =
   let symbol_to_index = Hashtbl.create 256 in
   Array.iteri
     (fun index sym ->
-      if not (Hashtbl.mem symbol_to_index sym.name)
-      then Hashtbl.add symbol_to_index sym.name index;
-      ignore (Strtab.add strtab sym.name))
+      let name = symbol_name sym in
+      if not (Hashtbl.mem symbol_to_index name)
+      then Hashtbl.add symbol_to_index name index;
+      ignore (Strtab.add strtab name))
     original_symbols;
   let next_index = ref (Array.length original_symbols) in
   List.iter
-    (fun (entry : Igot.entry) ->
-      Hashtbl.add symbol_to_index entry.igot_symbol !next_index;
-      ignore (Strtab.add strtab entry.igot_symbol);
+    (fun entry ->
+      let igot_sym = Igot.Entry.igot_symbol entry in
+      Hashtbl.add symbol_to_index igot_sym !next_index;
+      ignore (Strtab.add strtab igot_sym);
       incr next_index)
-    (Igot.entries igot_and_iplt.Build_igot_and_iplt.igot);
+    (Igot.entries (Build_igot_and_iplt.igot igot_and_iplt));
   List.iter
-    (fun (entry : Iplt.entry) ->
-      Hashtbl.add symbol_to_index entry.iplt_symbol !next_index;
-      ignore (Strtab.add strtab entry.iplt_symbol);
+    (fun entry ->
+      let iplt_sym = Iplt.Entry.iplt_symbol entry in
+      Hashtbl.add symbol_to_index iplt_sym !next_index;
+      ignore (Strtab.add strtab iplt_sym);
       incr next_index)
-    (Iplt.entries igot_and_iplt.Build_igot_and_iplt.iplt);
+    (Iplt.entries (Build_igot_and_iplt.iplt igot_and_iplt));
   symbol_to_index, !next_index
 
 let build_relocation_rewrite_map ~igot_and_iplt ~relocations =
   let map = Hashtbl.create 256 in
   List.iter
-    (fun (entry : Extract_relocations.relocation_entry) ->
+    (fun entry ->
       match
         Build_igot_and_iplt.iplt_symbol_for_plt_reloc igot_and_iplt entry
       with
-      | Some sym -> Hashtbl.add map (entry.offset, Rela.r_x86_64_plt32) sym
+      | Some sym ->
+        let offset = Extract_relocations.Relocation_entry.offset entry in
+        Hashtbl.add map (offset, Rela.r_x86_64_plt32) sym
       | None -> ())
-    relocations.Extract_relocations.convert_to_plt;
+    (Extract_relocations.convert_to_plt relocations);
   List.iter
-    (fun (entry : Extract_relocations.relocation_entry) ->
+    (fun entry ->
       match
         Build_igot_and_iplt.igot_symbol_for_got_reloc igot_and_iplt entry
       with
       | Some sym ->
-        Hashtbl.add map (entry.offset, Rela.r_x86_64_rex_gotpcrelx) sym
+        let offset = Extract_relocations.Relocation_entry.offset entry in
+        Hashtbl.add map (offset, Rela.r_x86_64_rex_gotpcrelx) sym
       | None -> ())
-    relocations.Extract_relocations.convert_to_got;
+    (Extract_relocations.convert_to_got relocations);
   map
 
 let rewrite_rela_text ~rela_body ~symbol_to_index ~rewrite_map =
@@ -156,22 +234,16 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     current := offset + size;
     { offset; size }
   in
-  let igot =
-    alloc 16 (Igot.section_size igot_and_iplt.Build_igot_and_iplt.igot)
-  in
+  let igot_t = Build_igot_and_iplt.igot igot_and_iplt in
+  let iplt_t = Build_igot_and_iplt.iplt igot_and_iplt in
+  let igot = alloc 16 (Igot.section_size igot_t) in
   let rela_igot =
-    let count =
-      List.length (Igot.relocations igot_and_iplt.Build_igot_and_iplt.igot)
-    in
+    let count = List.length (Igot.relocations igot_t) in
     alloc 8 (count * Rela.rela_entry_size)
   in
-  let iplt =
-    alloc 16 (Iplt.section_size igot_and_iplt.Build_igot_and_iplt.iplt)
-  in
+  let iplt = alloc 16 (Iplt.section_size iplt_t) in
   let rela_iplt =
-    let count =
-      List.length (Iplt.relocations igot_and_iplt.Build_igot_and_iplt.iplt)
-    in
+    let count = List.length (Iplt.relocations iplt_t) in
     alloc 8 (count * Rela.rela_entry_size)
   in
   let symtab_layout = alloc 8 (total_symbols * Rela.sym_entry_size) in

@@ -43,14 +43,15 @@ val report_error : Format.formatter -> error -> unit
 
 (** Result of running the dissector. After the dissector runs, all input
     object files (ml_objfiles, startup_obj, ccobjs, runtime_libs) are baked
-    into the partition files. The [linked_partitions] field contains the
-    partially-linked partition object files, and [linker_script] is the path
-    to the generated linker script. Use {!Build_linker_args.build} to convert
-    this result into linker arguments. *)
-type result = private
-  { linked_partitions : Partition.linked list;
-    linker_script : string
-  }
+    into the partition files. Use {!Build_linker_args.build} to convert this
+    result into linker arguments. *)
+type result
+
+(** Returns the partially-linked partition object files. *)
+val linked_partitions : result -> Partition.Linked.t list
+
+(** Returns the path to the generated linker script. *)
+val linker_script : result -> string
 
 (** Run the dissector pass.
 

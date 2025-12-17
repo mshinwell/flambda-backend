@@ -41,12 +41,12 @@
       is skipped. Subsequent partitions get sections named .caml.p1.*,
       .caml.p2.*, etc. *)
 val generate :
-  existing_script:string option -> partitions:Partition.linked list -> string
+  existing_script:string option -> partitions:Partition.Linked.t list -> string
 
 (** [write ~output_file ~existing_script ~partitions] generates a linker script
     and writes it to the specified file. *)
 val write :
   output_file:string ->
   existing_script:string option ->
-  partitions:Partition.linked list ->
+  partitions:Partition.Linked.t list ->
   unit

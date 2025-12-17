@@ -27,15 +27,25 @@
 
 module Rela = Compiler_owee.Owee_elf_relocation
 
-type relocation_entry =
-  { symbol_name : string;
-    offset : int64
-  }
+module Relocation_entry = struct
+  type t =
+    { symbol_name : string;
+      offset : int64
+    }
+
+  let symbol_name t = t.symbol_name
+
+  let offset t = t.offset
+end
 
 type t =
-  { convert_to_plt : relocation_entry list;
-    convert_to_got : relocation_entry list
+  { convert_to_plt : Relocation_entry.t list;
+    convert_to_got : Relocation_entry.t list
   }
+
+let convert_to_plt t = t.convert_to_plt
+
+let convert_to_got t = t.convert_to_got
 
 let empty = { convert_to_plt = []; convert_to_got = [] }
 
@@ -65,7 +75,9 @@ let parse_rela_section ~rela_body ~symtab_body ~strtab_body =
           with
           | None -> ()
           | Some symbol_name ->
-            let reloc_entry = { symbol_name; offset = entry.r_offset } in
+            let reloc_entry =
+              { Relocation_entry.symbol_name; offset = entry.r_offset }
+            in
             if Int64.equal entry.r_type Rela.r_x86_64_plt32
             then convert_to_plt := reloc_entry :: !convert_to_plt
             else convert_to_got := reloc_entry :: !convert_to_got));
@@ -116,7 +128,9 @@ let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =
 
 let extract_from_linked_partitions unix linked_partitions =
   List.fold_left
-    (fun acc (linked : Partition.linked) ->
-      let result = extract unix ~filename:linked.linked_object in
+    (fun acc linked ->
+      let result =
+        extract unix ~filename:(Partition.Linked.linked_object linked)
+      in
       merge acc result)
     empty linked_partitions

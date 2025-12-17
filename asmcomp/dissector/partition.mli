@@ -50,21 +50,33 @@ val symbol_prefix : kind -> string
 val section_prefix : kind -> string
 
 (** A partition before partial linking, containing files with their sizes. *)
-type t = private
-  { kind : kind;
-    files : Measure_object_files.file_size list;
-    total_size : int64
-  }
+type t
+
+(** Returns the kind of this partition. *)
+val kind : t -> kind
+
+(** Returns the files in this partition. *)
+val files : t -> Measure_object_files.File_size.t list
+
+(** Returns the total size of allocated sections across all files. *)
+val total_size : t -> int64
 
 (** Create a partition from a list of files with the given kind. *)
-val create : kind:kind -> Measure_object_files.file_size list -> t
+val create : kind:kind -> Measure_object_files.File_size.t list -> t
 
 (** A partition after partial linking, with the path to the partially linked
     object file. *)
-type linked = private
-  { partition : t;
-    linked_object : string
-  }
+module Linked : sig
+  type partition := t
 
-(** Create a linked partition. *)
-val create_linked : partition:t -> linked_object:string -> linked
+  type t
+
+  (** Returns the original partition. *)
+  val partition : t -> partition
+
+  (** Returns the path to the partially-linked object file. *)
+  val linked_object : t -> string
+
+  (** Create a linked partition. *)
+  val create : partition:partition -> linked_object:string -> t
+end

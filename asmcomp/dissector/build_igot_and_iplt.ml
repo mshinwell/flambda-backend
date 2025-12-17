@@ -32,34 +32,42 @@ type t =
     got_symbols : string list
   }
 
-let build ~prefix (relocations : Extract_relocations.t) =
+let igot t = t.igot
+
+let iplt t = t.iplt
+
+let plt_symbols t = t.plt_symbols
+
+let got_symbols t = t.got_symbols
+
+let build ~prefix relocations =
   (* Extract unique symbol names from PLT32 relocations *)
-  let plt_symbols =
-    List.map
-      (fun (r : Extract_relocations.relocation_entry) -> r.symbol_name)
-      relocations.convert_to_plt
+  let plt_syms =
+    List.map Extract_relocations.Relocation_entry.symbol_name
+      (Extract_relocations.convert_to_plt relocations)
   in
   (* Extract unique symbol names from GOTPCRELX relocations *)
   let got_only_symbols =
-    List.map
-      (fun (r : Extract_relocations.relocation_entry) -> r.symbol_name)
-      relocations.convert_to_got
+    List.map Extract_relocations.Relocation_entry.symbol_name
+      (Extract_relocations.convert_to_got relocations)
   in
   (* IGOT needs entries for both PLT symbols (PLT jumps through GOT) and
      GOT-only symbols. Combine the lists - Igot.build will deduplicate. *)
-  let all_got_symbols = plt_symbols @ got_only_symbols in
+  let all_got_symbols = plt_syms @ got_only_symbols in
   (* Build IGOT first (IPLT depends on it) *)
   let igot = Igot.build ~prefix ~symbols:all_got_symbols in
   (* Build IPLT for PLT symbols only *)
-  let iplt = Iplt.build ~prefix ~igot ~symbols:plt_symbols in
-  { igot; iplt; plt_symbols; got_symbols = got_only_symbols }
+  let iplt = Iplt.build ~prefix ~igot ~symbols:plt_syms in
+  { igot; iplt; plt_symbols = plt_syms; got_symbols = got_only_symbols }
 
-let igot_symbol_for_got_reloc t (reloc : Extract_relocations.relocation_entry) =
-  match Igot.find_entry t.igot ~symbol:reloc.symbol_name with
+let igot_symbol_for_got_reloc t reloc =
+  let symbol = Extract_relocations.Relocation_entry.symbol_name reloc in
+  match Igot.find_entry t.igot ~symbol with
   | None -> None
-  | Some entry -> Some entry.igot_symbol
+  | Some entry -> Some (Igot.Entry.igot_symbol entry)
 
-let iplt_symbol_for_plt_reloc t (reloc : Extract_relocations.relocation_entry) =
-  match Iplt.find_entry t.iplt ~symbol:reloc.symbol_name with
+let iplt_symbol_for_plt_reloc t reloc =
+  let symbol = Extract_relocations.Relocation_entry.symbol_name reloc in
+  match Iplt.find_entry t.iplt ~symbol with
   | None -> None
-  | Some entry -> Some entry.iplt_symbol
+  | Some entry -> Some (Iplt.Entry.iplt_symbol entry)

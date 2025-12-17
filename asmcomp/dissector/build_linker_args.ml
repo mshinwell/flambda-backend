@@ -30,13 +30,16 @@ type t =
     linker_script : string
   }
 
-let build (result : Dissector.result) =
-  let object_files =
+let object_files t = t.object_files
+
+let linker_script t = t.linker_script
+
+let build result =
+  let obj_files =
     List.map
-      (fun (partition : Partition.linked) ->
-        partition.linked_object ^ ".rewritten")
-      result.linked_partitions
+      (fun partition -> Partition.Linked.linked_object partition ^ ".rewritten")
+      (Dissector.linked_partitions result)
   in
-  { object_files; linker_script = result.linker_script }
+  { object_files = obj_files; linker_script = Dissector.linker_script result }
 
 let linker_script_flag t = Printf.sprintf "-Wl,-T,%s" t.linker_script
