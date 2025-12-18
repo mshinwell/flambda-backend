@@ -71,12 +71,17 @@ let read_cmxa filename : Cmx_format.library_infos =
   close_in chan;
   cmxa
 
-(* Check for duplicate files in the input list *)
+(* Check if a string is a linker option (starts with '-') rather than a file *)
+let is_linker_option s =
+  String.length s > 0 && String.get s 0 = '-'
+
+(* Check for duplicate files in the input list, ignoring linker options *)
 let check_for_duplicates files =
   let seen = Hashtbl.create 256 in
   List.iter
     (fun file ->
-      if Hashtbl.mem seen file
+      if is_linker_option file then ()
+      else if Hashtbl.mem seen file
       then raise (Error (Duplicate_file file))
       else Hashtbl.add seen file ())
     files
@@ -131,9 +136,12 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   let analyzed = Hashtbl.create 256 in
   (* Analyze a single file based on its extension, return list of file_size
      records. For .cmxa files, this may include both the .a file and any
-     lib_ccobjs that haven't been analyzed yet. *)
+     lib_ccobjs that haven't been analyzed yet. Linker options (starting with
+     '-') are ignored. *)
   let rec analyze_one filename =
-    if Hashtbl.mem analyzed filename
+    if is_linker_option filename
+    then []
+    else if Hashtbl.mem analyzed filename
     then []
     else (
       Hashtbl.add analyzed filename ();
