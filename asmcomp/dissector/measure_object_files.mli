@@ -38,6 +38,14 @@ exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
+(** The origin of a file, used to determine partition placement. *)
+type file_origin =
+  | OCaml  (** OCaml-compiled code (.o from .cmx, .a from .cmxa) *)
+  | C_stub  (** C stub libraries (from -cclib or lib_ccobjs) *)
+  | Runtime  (** Runtime library (libasmrun) *)
+  | Startup  (** Startup object file *)
+  | Cached_genfns  (** Cached generic functions *)
+
 (** Information about a single file's allocated section size. *)
 module File_size : sig
   type t
@@ -50,6 +58,9 @@ module File_size : sig
 
   (** Returns whether the file contains a .probes section. *)
   val has_probes : t -> bool
+
+  (** Returns the origin of the file. *)
+  val origin : t -> file_origin
 end
 
 (** [measure_files unix ~files] computes the allocated section size for each
@@ -67,6 +78,10 @@ end
 
     Files are tracked to avoid double-counting when the same file appears
     multiple times or is referenced transitively. Returns an empty entry for
-    files with unrecognized extensions. *)
+    files with unrecognized extensions.
+
+    Each file is paired with its origin, which determines partition placement. *)
 val measure_files :
-  (module Compiler_owee.Unix_intf.S) -> files:string list -> File_size.t list
+  (module Compiler_owee.Unix_intf.S) ->
+  files:(string * file_origin) list ->
+  File_size.t list

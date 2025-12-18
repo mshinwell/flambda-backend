@@ -42,6 +42,13 @@ let () =
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
+type file_origin =
+  | OCaml
+  | C_stub
+  | Runtime
+  | Startup
+  | Cached_genfns
+
 (* Analyze a single ELF buffer, returning (size, has_probes) *)
 let analyze_elf_buf buf =
   let _header, sections = Compiler_owee.Owee_elf.read_elf buf in
@@ -90,7 +97,8 @@ module File_size = struct
   type t =
     { filename : string;
       size : int64;
-      has_probes : bool
+      has_probes : bool;
+      origin : file_origin
     }
 
   let filename t = t.filename
@@ -98,11 +106,13 @@ module File_size = struct
   let size t = t.size
 
   let has_probes t = t.has_probes
+
+  let origin t = t.origin
 end
 
 let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
-  (* Check for duplicates in the input list first *)
-  check_for_duplicates files;
+  (* Check for duplicates in the input list first (extract just filenames) *)
+  check_for_duplicates (List.map fst files);
   let module Unix = (val unix) in
   (* Analyze a single .o file, returning (size, has_probes) *)
   let analyze_object_file filename =
@@ -137,8 +147,8 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   (* Analyze a single file based on its extension, return list of file_size
      records. For .cmxa files, this may include both the .a file and any
      lib_ccobjs that haven't been analyzed yet. Linker options (starting with
-     '-') are ignored. *)
-  let rec analyze_one filename =
+     '-') are ignored. The origin is propagated to the resulting entries. *)
+  let rec analyze_one (filename, origin) =
     if is_linker_option filename
     then []
     else if Hashtbl.mem analyzed filename
@@ -148,11 +158,11 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
       if Filename.check_suffix filename ".o"
       then
         let size, has_probes = analyze_object_file filename in
-        [{ File_size.filename; size; has_probes }]
+        [{ File_size.filename; size; has_probes; origin }]
       else if Filename.check_suffix filename ".a"
       then
         let size, has_probes = analyze_archive_file filename in
-        [{ File_size.filename; size; has_probes }]
+        [{ File_size.filename; size; has_probes; origin }]
       else if Filename.check_suffix filename ".cmx"
       then
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
@@ -161,7 +171,7 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
         else (
           Hashtbl.add analyzed obj_file ();
           let size, has_probes = analyze_object_file obj_file in
-          [{ File_size.filename; size; has_probes }])
+          [{ File_size.filename; size; has_probes; origin }])
       else if Filename.check_suffix filename ".cmxa"
       then
         let archive_file = Filename.chop_suffix filename ".cmxa" ^ ".a" in
@@ -171,10 +181,15 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
           else (
             Hashtbl.add analyzed archive_file ();
             let size, has_probes = analyze_archive_file archive_file in
-            [{ File_size.filename; size; has_probes }])
+            [{ File_size.filename; size; has_probes; origin }])
         in
         let cmxa = read_cmxa filename in
-        let ccobjs_entries = List.concat_map analyze_one cmxa.lib_ccobjs in
+        (* lib_ccobjs from .cmxa files are C stub libraries *)
+        let ccobjs_entries =
+          List.concat_map
+            (fun f -> analyze_one (f, C_stub))
+            cmxa.lib_ccobjs
+        in
         archive_entry @ ccobjs_entries
       else [])
   in
