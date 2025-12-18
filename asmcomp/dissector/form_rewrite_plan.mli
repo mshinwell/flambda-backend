@@ -116,11 +116,19 @@ val section_name_offsets : t -> (string, int * string) Hashtbl.t
 
 val igot_name_offset : t -> int
 
+val igot_name_str : t -> string
+
 val rela_igot_name_offset : t -> int
+
+val rela_igot_name_str : t -> string
 
 val iplt_name_offset : t -> int
 
+val iplt_name_str : t -> string
+
 val rela_iplt_name_offset : t -> int
+
+val rela_iplt_name_str : t -> string
 
 val igot_idx : t -> int
 
