@@ -391,12 +391,13 @@
      echo \"\"
 
      # Verify partition with module_b has IGOT ref to module_a
+     # Note: section is named .rela.caml.pN.data.igot for Large_code partitions
      echo \"=== Verifying cross-partition IGOT references ===\"
      if [ -z \"$PART_WITH_B\" ]; then
        echo \"ERROR: Could not find partition containing Large_module_b\"
        exit 1
      fi
-     IGOT_B=$(readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.data.igot/,/^Relocation/p' | grep 'camlLarge_module_a' || true)
+     IGOT_B=$(readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlLarge_module_a' || true)
      if [ -z \"$IGOT_B\" ]; then
        echo \"ERROR: Partition with module_b does not have IGOT ref to module_a\"
        exit 1
@@ -408,8 +409,8 @@
        echo \"ERROR: Could not find partition containing Large_module_c\"
        exit 1
      fi
-     IGOT_C_A=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.data.igot/,/^Relocation/p' | grep 'camlLarge_module_a' || true)
-     IGOT_C_B=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.data.igot/,/^Relocation/p' | grep 'camlLarge_module_b' || true)
+     IGOT_C_A=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlLarge_module_a' || true)
+     IGOT_C_B=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlLarge_module_b' || true)
      if [ -z \"$IGOT_C_A\" ]; then
        echo \"ERROR: Partition with module_c does not have IGOT ref to module_a\"
        exit 1
@@ -614,13 +615,14 @@
      echo \"Partition directory: $PARTITION_DIR\"
 
      # Check that IGOT sections exist and verify relocations
+     # Note: section names are .data.igot for Main partition or .caml.pN.data.igot for Large_code
      for part in $PARTITION_DIR/partition*.o.rewritten; do
        if readelf -S \"$part\" 2>/dev/null | grep -q '\\.data\\.igot'; then
-         echo \"Found .data.igot in $(basename $part)\"
+         echo \"Found .data.igot section in $(basename $part)\"
 
          # Count total IGOT relocs and R_X86_64_64 relocs
-         TOTAL=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.data.igot/,/^Relocation/p' | grep -c '^[0-9a-f]' || true)
-         R64=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.data.igot/,/^Relocation/p' | grep -c 'R_X86_64_64' || true)
+         TOTAL=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep -c '^[0-9a-f]' || true)
+         R64=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep -c 'R_X86_64_64' || true)
 
          echo \"Total IGOT relocs: $TOTAL, R_X86_64_64: $R64\"
 
