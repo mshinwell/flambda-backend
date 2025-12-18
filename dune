@@ -598,6 +598,7 @@
   arm64_ast
   arm64_binary_emitter
   binary_emitter
+  jit_backend
   zero_alloc_checker
   zero_alloc_info
   ;; backend/cfg

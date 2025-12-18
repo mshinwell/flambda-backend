@@ -232,82 +232,16 @@ let jit_load (type a r)
   let result = jit_run entry_points in
   outcome_ref := Some result
 
-(* X86-specific entry points *)
-module X86 = struct
-  let get_arch () =
-    match Sys.word_size with
-    | 32 -> X86_ast.X86
-    | 64 -> X86_ast.X64
-    | i -> failwithf "Unexpected word size: %d" i
-
-  (** Assemble each section. Empty sections are filtered.
-      This inlines the logic from x86_section.ml. *)
-  let assemble_sections ~arch section_map =
-    String.Map.filter_map section_map ~f:(fun name instructions ->
-        let section =
-          { X86_binary_emitter.sec_name = name;
-            sec_instrs = Array.of_list instructions
-          }
-        in
-        let binary_section = X86_binary_emitter.assemble_section arch section in
-        if X86_binary_emitter.size binary_section = 0 then None
-        else Some binary_section)
-
-  (** X86 internal assembler callback *)
-  let internal_assembler ~phrase_name ~outcome_ref ~delayed:_ section_map _filename =
-    let arch = get_arch () in
-    let section_map =
-      List.fold_left
-        ~f:(fun section_map (name, instrs) ->
-          String.Map.add section_map
-            ~key:(X86_proc.Section_name.to_string name)
-            ~data:instrs)
-        section_map ~init:String.Map.empty
-    in
-    let binary_section_map = assemble_sections ~arch section_map in
-    jit_load (module X86_binary_emitter.For_jit)
-      ~phrase_name ~outcome_ref binary_section_map
-
-  let with_jit ~phrase_name f =
-    let ias = !X86_proc.internal_assembler in
-    X86_proc.register_internal_assembler
-      (internal_assembler ~phrase_name ~outcome_ref:outcome_global);
-    try
-      let res = f () in
-      X86_proc.internal_assembler := ias;
-      res
-    with exn ->
-      X86_proc.internal_assembler := ias;
-      raise exn
-end
-
-(* ARM64-specific entry points *)
-module Arm64 = struct
-  (** ARM64 JIT hook - receives already-assembled sections from the emitter *)
-  let jit_hook ~phrase_name ~outcome_ref sections =
-    (* Convert list to String.Map *)
-    let binary_section_map =
-      List.fold_left sections ~init:String.Map.empty
-        ~f:(fun map (name, section) ->
-          String.Map.add map ~key:name ~data:section)
-    in
-    jit_load (module Arm64_binary_emitter.For_jit)
-      ~phrase_name ~outcome_ref binary_section_map;
-    (* Return a dummy file writer (not used for JIT) *)
-    fun _filename -> ()
-
-  let with_jit ~phrase_name f =
-    (* Register our hook with the ARM64 binary emitter *)
-    Arm64_binary_emitter.For_jit.Internal_assembler.register
-      (jit_hook ~phrase_name ~outcome_ref:outcome_global);
-    try
-      let res = f () in
-      Arm64_binary_emitter.For_jit.Internal_assembler.unregister ();
-      res
-    with exn ->
-      Arm64_binary_emitter.For_jit.Internal_assembler.unregister ();
-      raise exn
-end
+(* JIT callback that handles architecture-agnostic packed sections *)
+let jit_callback ~phrase_name ~outcome_ref packed =
+  let Jit_backend.Packed { emitter; sections } = packed in
+  (* Convert String_map to our String.Map *)
+  let binary_section_map =
+    Jit_backend.String_map.fold
+      (fun name section map -> String.Map.add map ~key:name ~data:section)
+      sections String.Map.empty
+  in
+  jit_load emitter ~phrase_name ~outcome_ref binary_section_map
 
 let set_debug () =
   match Sys.getenv_opt "OCAML_JIT_DEBUG" with
@@ -344,12 +278,14 @@ let jit_load_lambda ~phrase_name ppf (program : Lambda.program) =
       res
 
 let jit_load_program ~phrase_name ppf program =
-  let with_jit =
-    match Binary_emitter.arch with
-    | Binary_emitter.Amd64 -> X86.with_jit
-    | Binary_emitter.Arm64 -> Arm64.with_jit
-  in
-  with_jit ~phrase_name (fun () -> jit_load_lambda ~phrase_name ppf program)
+  Jit_backend.register (jit_callback ~phrase_name ~outcome_ref:outcome_global);
+  match jit_load_lambda ~phrase_name ppf program with
+  | result ->
+    Jit_backend.unregister ();
+    result
+  | exception exn ->
+    Jit_backend.unregister ();
+    raise exn
 
 let jit_lookup_symbol symbol =
   match Symbols.find !Globals.symbols symbol with

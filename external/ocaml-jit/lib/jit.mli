@@ -43,21 +43,3 @@ val jit_lookup_symbol : string -> Obj.t option
 
 val set_debug : unit -> unit
 (** Enables debugging if the OCAML_JIT_DEBUG env var is set. *)
-
-(** X86-specific entry points *)
-module X86 : sig
-  (** Assemble x86 AST sections into binary sections *)
-  val assemble_sections :
-    arch:X86_ast.arch ->
-    X86_ast.asm_line list String.Map.t ->
-    X86_binary_emitter.buffer String.Map.t
-
-  (** Register the x86 JIT as the internal assembler and run the given function *)
-  val with_jit : phrase_name:string -> (unit -> 'a) -> 'a
-end
-
-(** ARM64-specific entry points *)
-module Arm64 : sig
-  (** Register the arm64 JIT hook and run the given function *)
-  val with_jit : phrase_name:string -> (unit -> 'a) -> 'a
-end
