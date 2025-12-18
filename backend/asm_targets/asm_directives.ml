@@ -345,9 +345,8 @@ module Directive = struct
     in
     match t with
     | Align { bytes = n; fill = _ } ->
-      (* The flag [fill] is only relevant for the binary
-         emitter. On GAS, we can ignore it and just use [.align] in both
-         cases. *)
+      (* The flag [fill] is only relevant for the binary emitter. On GAS, we can
+         ignore it and just use [.align] in both cases. *)
       (* Some assemblers interpret the integer n as a 2^n alignment and others
          as a number of bytes. *)
       let n =
@@ -484,8 +483,8 @@ module Directive = struct
     in
     match t with
     | Align { bytes; fill = _ } ->
-      (* The flag [fill] is only relevant for the x86 binary
-         emitter. On MASM, we can ignore it. *)
+      (* The flag [fill] is only relevant for the x86 binary emitter. On MASM,
+         we can ignore it. *)
       bprintf buf "\tALIGN\t%d" bytes
     | Bytes { str; comment } ->
       buf_bytes_directive buf ~directive:"BYTE" str;
@@ -692,8 +691,7 @@ let emit_non_masm (d : Directive.t) =
 let section ~names ~flags ~args ~is_delayed =
   emit (Section { names; flags; args; is_delayed })
 
-let align ~fill ~bytes =
-  emit (Align { bytes; fill })
+let align ~fill ~bytes = emit (Align { bytes; fill })
 
 let should_generate_cfi () =
   (* We generate CFI info even if we're not generating any other debugging

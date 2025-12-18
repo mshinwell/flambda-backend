@@ -30,7 +30,11 @@
     This module defines abstract signatures that both architecture-specific
     binary emitters implement, allowing ocaml-jit to work with either. *)
 
-type data_size = B8 | B16 | B32 | B64
+type data_size =
+  | B8
+  | B16
+  | B32
+  | B64
 
 (** Signature for relocation types with operations to evaluate them. *)
 module type Relocation = sig
@@ -94,7 +98,7 @@ module type Internal_assembler_hook = sig
 
   (** The hook function type. Takes assembled sections and returns a function
       that writes binary content to a file (for object file output). *)
-  type hook = (string * assembled_section) list -> (string -> unit)
+  type hook = (string * assembled_section) list -> string -> unit
 
   (** Register a hook to be called when code is generated *)
   val register : hook -> unit

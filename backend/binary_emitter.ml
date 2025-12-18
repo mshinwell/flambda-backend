@@ -25,7 +25,11 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-type data_size = B8 | B16 | B32 | B64
+type data_size =
+  | B8
+  | B16
+  | B32
+  | B64
 
 module type Relocation = sig
   type t
@@ -72,7 +76,7 @@ end
 module type Internal_assembler_hook = sig
   type assembled_section
 
-  type hook = (string * assembled_section) list -> (string -> unit)
+  type hook = (string * assembled_section) list -> string -> unit
 
   val register : hook -> unit
 
@@ -106,4 +110,3 @@ let arch =
   | X86_64 -> Amd64
   | AArch64 -> Arm64
   | _ -> failwith "Binary_emitter: unsupported architecture"
-

@@ -40,6 +40,8 @@ module Relocation = struct
       | R_AARCH64_ADD_ABS_LO12_NC of string
       | R_AARCH64_CALL26 of string
       | R_AARCH64_JUMP26 of string
+      (* Absolute 64-bit data reference (ARM64_RELOC_UNSIGNED on macOS) *)
+      | R_AARCH64_ABS64 of string
   end
 
   type t =
@@ -50,7 +52,11 @@ end
 
 (* TODO: Asm_directives uses strings for labels and symbols. We should change it
    to use Asm_label.t and Asm_symbol.t, and update this module accordingly. *)
-type patch_size = P8 | P16 | P32 | P64
+type patch_size =
+  | P8
+  | P16
+  | P32
+  | P64
 
 module Section_state = struct
   type t =
@@ -96,7 +102,8 @@ module Section_state = struct
   let find_label_offset_in_bytes t name =
     Hashtbl.find_opt t.label_offset_tbl name
 
-  (* Look up both symbols and labels - used for branch targets which can be either *)
+  (* Look up both symbols and labels - used for branch targets which can be
+     either *)
   let find_symbol_or_label_offset_in_bytes t name =
     match Hashtbl.find_opt t.symbol_offset_tbl name with
     | Some _ as result -> result
@@ -156,6 +163,26 @@ let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let result = logor result (shift_left (of_int shift) 22) in
   let result = logor result (shift_left (of_int rm) 16) in
   let result = logor result (shift_left (of_int imm6) 10) in
+  let result = logor result (shift_left (of_int rn) 5) in
+  let result = logor result (of_int rd) in
+  result
+
+(* Add/subtract (extended register) encoding - C4.1.92.2 Encoding: sf op S 01011
+   00 1 Rm option imm3 Rn Rd Used when Rn is SP or when an extend operation is
+   needed *)
+let encode_add_sub_extended_register ~sf ~op ~s ~rm ~option ~imm3 ~rn ~rd =
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int sf) 31) in
+  let result = logor result (shift_left (of_int op) 30) in
+  let result = logor result (shift_left (of_int s) 29) in
+  let result = logor result (shift_left (of_int 0b01011) 24) in
+  let result = logor result (shift_left (of_int 0b00) 22) in
+  let result = logor result (shift_left (of_int 1) 21) in
+  (* bit 21 = 1 for extended *)
+  let result = logor result (shift_left (of_int rm) 16) in
+  let result = logor result (shift_left (of_int option) 13) in
+  let result = logor result (shift_left (of_int imm3) 10) in
   let result = logor result (shift_left (of_int rn) 5) in
   let result = logor result (of_int rd) in
   result
@@ -814,16 +841,34 @@ let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
 let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
  fun amount -> match amount with Six n -> n | _ -> assert false
 
+(* Check if a register is SP (stack pointer) by examining its name *)
+let is_sp_reg : type a. a Reg.t -> bool =
+ fun r ->
+  match r.reg_name with
+  | GP GP_reg_name.SP -> true
+  | GP GP_reg_name.WSP -> true
+  | _ -> false
+
 (* Helper to encode add/sub shifted register instructions.
 
-   - op: 0=ADD, 1=SUB - s: 0=no flags, 1=set flags *)
+   - op: 0=ADD, 1=SUB - s: 0=no flags, 1=set flags
+
+   When Rn is SP, we must use extended register encoding because the shifted
+   register form interprets register 31 as XZR, not SP. *)
 let encode_add_sub_shifted_reg ~op ~s ~shift ~imm6 ~rd ~rn ~rm =
   let sf = Reg.gp_sf rd in
   let rd_enc = Reg.gp_encoding rd in
   let rn_enc = Reg.gp_encoding rn in
   let rm_enc = Reg.gp_encoding rm in
-  encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm:rm_enc ~imm6 ~rn:rn_enc
-    ~rd:rd_enc
+  (* Check if Rn is SP - if so, use extended register encoding *)
+  if is_sp_reg rn && shift = 0 && imm6 = 0
+  then
+    (* Use extended register form with option=011 (UXTX/LSL for 64-bit) *)
+    encode_add_sub_extended_register ~sf ~op ~s ~rm:rm_enc ~option:0b011 ~imm3:0
+      ~rn:rn_enc ~rd:rd_enc
+  else
+    encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm:rm_enc ~imm6
+      ~rn:rn_enc ~rd:rd_enc
 
 (* Helper to encode logical shifted register instructions.
 
@@ -959,7 +1004,13 @@ let encode_load_store_gp_sized :
     size:int ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
+    [ `Base_reg
+    | `Offset_imm
+    | `Offset_unscaled
+    | `Offset_sym
+    | `Literal
+    | `Pre
+    | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~size ~opc ~rd addressing ->
@@ -1052,7 +1103,13 @@ let encode_load_store_gp :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
+    [ `Base_reg
+    | `Offset_imm
+    | `Offset_unscaled
+    | `Offset_sym
+    | `Literal
+    | `Pre
+    | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1070,7 +1127,13 @@ let encode_load_store_byte :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
+    [ `Base_reg
+    | `Offset_imm
+    | `Offset_unscaled
+    | `Offset_sym
+    | `Literal
+    | `Pre
+    | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1083,7 +1146,13 @@ let encode_load_store_halfword :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
+    [ `Base_reg
+    | `Offset_imm
+    | `Offset_unscaled
+    | `Offset_sym
+    | `Literal
+    | `Pre
+    | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1207,7 +1276,13 @@ let encode_load_store_simd_fp :
     instr_name:string ->
     is_load:bool ->
     rd:[`Neon of [`Scalar of s]] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
+    [ `Base_reg
+    | `Offset_imm
+    | `Offset_unscaled
+    | `Offset_sym
+    | `Literal
+    | `Pre
+    | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~is_load ~rd addressing ->
@@ -1301,11 +1376,13 @@ let encode_load_store_simd_fp :
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
 
-(* Helper to compute a 26-bit PC-relative offset for B/BL instructions.
-   If the symbol is undefined, creates a relocation and returns 0. *)
+(* Helper to compute a 26-bit PC-relative offset for B/BL instructions. If the
+   symbol is undefined, creates a relocation and returns 0. *)
 let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
+  match
+    Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+  with
   | None ->
     (* Symbol is undefined - create a relocation and use 0 as placeholder *)
     Section_state.add_relocation_at_current_offset state ~symbol_name
@@ -1329,7 +1406,9 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
 (* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)
 let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
+  match
+    Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+  with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
       symbol_name
@@ -1351,7 +1430,9 @@ let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
 (* Helper to compute a 14-bit PC-relative offset for TBZ/TBNZ instructions *)
 let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
+  match
+    Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
+  with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
       symbol_name
@@ -1481,7 +1562,8 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), B ->
     let imm26 =
       compute_branch_imm26 state ~instr_name:"B"
-        ~reloc_kind:(fun s -> R_AARCH64_JUMP26 s) sym
+        ~reloc_kind:(fun s -> R_AARCH64_JUMP26 s)
+        sym
     in
     encode_branch_immediate ~op:0 ~imm26
   | Singleton (Imm (Sym sym)), B_cond cond ->
@@ -1495,7 +1577,8 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), BL ->
     let imm26 =
       compute_branch_imm26 state ~instr_name:"BL"
-        ~reloc_kind:(fun s -> R_AARCH64_CALL26 s) sym
+        ~reloc_kind:(fun s -> R_AARCH64_CALL26 s)
+        sym
     in
     encode_branch_immediate ~op:1 ~imm26
   | Singleton (Reg rn), BLR -> encode_branch_register ~opc:0b0001 ~rn
@@ -2635,15 +2718,29 @@ let iter emitter ~state_for_section ~on_insn ~on_directive =
         Section_state.set_offset_in_bytes !current_state new_offset)
     (enqueued emitter)
 
-let eval_constant state c =
+let eval_constant state ~global_lookup c =
   let this () = Int64.of_int (Section_state.offset_in_bytes state) in
   let lookup name =
-    match Section_state.find_label_offset_in_bytes state name with
-    | Some offset -> Some (Int64.of_int offset)
-    | None -> (
-      match Section_state.find_symbol_offset_in_bytes state name with
+    (* When generating PIC code (dlcode=true), global symbols should not be
+       resolved as they may be interposed at runtime. We must emit zeros and let
+       the linker handle them via relocations. Note: global symbols appear both
+       in the symbol table (via Global directive) AND in the label table (via
+       the New_label for the : definition). So we check if the name is a
+       declared global symbol first. *)
+    let is_global_symbol =
+      Option.is_some (Section_state.find_symbol_offset_in_bytes state name)
+    in
+    if !Clflags.dlcode && is_global_symbol
+    then None
+    else
+      (* First try current section, then use global lookup for cross-section
+         refs *)
+      match Section_state.find_label_offset_in_bytes state name with
       | Some offset -> Some (Int64.of_int offset)
-      | None -> None)
+      | None -> (
+        match Section_state.find_symbol_offset_in_bytes state name with
+        | Some offset -> Some (Int64.of_int offset)
+        | None -> global_lookup name)
   in
   D.Directive.Constant.eval ~this ~lookup c
 
@@ -2665,7 +2762,7 @@ let compute_label_offsets emitter ~state_for_section =
         ())
 
 (* Second pass: emit machine code and data *)
-let emit_code_and_data emitter ~state_for_section =
+let emit_code_and_data emitter ~state_for_section ~global_lookup =
   iter emitter ~state_for_section
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
       let encoded = encode_instruction state name operands in
@@ -2689,13 +2786,13 @@ let emit_code_and_data emitter ~state_for_section =
         for _ = 1 to bytes do
           Buffer.add_char buf '\x00'
         done
-      | Align { bytes; fill } ->
+      | Align { bytes; fill } -> (
         let offset = Section_state.offset_in_bytes state in
         let remainder = offset mod bytes in
         if remainder <> 0
         then
           let padding = bytes - remainder in
-          (match fill with
+          match fill with
           | D.Nop ->
             (* Emit NOP instructions (4 bytes each) for code alignment *)
             let nop_count = padding / 4 in
@@ -2716,22 +2813,35 @@ let emit_code_and_data emitter ~state_for_section =
             done)
       | Const { constant; _ } -> (
         let module C = D.Directive.Constant_with_width in
+        let module Const = D.Directive.Constant in
         let c = C.constant constant in
         let width = C.width_in_bytes constant in
         let width_bytes = C.width_in_bytes_int width in
-        match eval_constant state c with
+        match eval_constant state ~global_lookup c with
         | Some value -> D.Directive.emit_int_le buf ~width_bytes value
         | None ->
-          (* External reference - emit zeros and would need relocation *)
+          (* External/global reference - emit zeros and record relocation *)
+          (* Extract the symbol name from the constant for the relocation *)
+          let rec extract_symbol_name = function
+            | Const.Named_thing name -> Some name
+            | Const.Add (a, _) -> extract_symbol_name a
+            | Const.Sub (a, _) -> extract_symbol_name a
+            | Const.Signed_int _ | Const.Unsigned_int _ | Const.This -> None
+          in
+          (match extract_symbol_name c with
+          | Some symbol_name when width_bytes = 8 ->
+            Section_state.add_relocation_at_current_offset state ~symbol_name
+              ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 symbol_name)
+          | _ -> ());
           for _ = 1 to width_bytes do
             Buffer.add_char buf '\x00'
           done)
       | Sleb128 { constant; _ } -> (
-        match eval_constant state constant with
+        match eval_constant state ~global_lookup constant with
         | Some value -> D.Directive.emit_sleb128 buf value
         | None -> Misc.fatal_error "Cannot emit SLEB128 for external symbol")
       | Uleb128 { constant; _ } -> (
-        match eval_constant state constant with
+        match eval_constant state ~global_lookup constant with
         | Some value -> D.Directive.emit_uleb128 buf value
         | None -> Misc.fatal_error "Cannot emit ULEB128 for external symbol")
       (* Directives that don't emit data *)
@@ -2758,7 +2868,14 @@ let emit emitter =
   Asm_section.Tbl.iter
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
     section_tbl;
-  emit_code_and_data emitter ~state_for_section;
+  (* Note: Cross-section label references (e.g., frametable in data section
+     referencing labels in text section) cannot be resolved at assembly time for
+     object file emission - they require linker relocations. The final address
+     depends on where the linker places each section. For JIT compilation where
+     all sections are placed contiguously, a global lookup could be implemented,
+     but for now we leave cross-section refs as relocations. *)
+  let global_lookup _name = None in
+  emit_code_and_data emitter ~state_for_section ~global_lookup;
   section_tbl
 
 (* For_jit module implementing Binary_emitter.S *)
@@ -2769,8 +2886,15 @@ module For_jit = struct
     let offset_from_section_beginning (r : Relocation.t) =
       r.offset_from_section_beginning
 
-    (* ARM64 relocations are always 32-bit patches within 32-bit instructions *)
-    let size (_ : t) : Binary_emitter.data_size = Binary_emitter.B32
+    (* ARM64 code relocations are 32-bit patches within 32-bit instructions, but
+       data relocations (ABS64) are 64-bit *)
+    let size (r : t) : Binary_emitter.data_size =
+      match r.kind with
+      | R_AARCH64_ABS64 _ -> Binary_emitter.B64
+      | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
+      | R_AARCH64_LD64_GOT_LO12_NC _ | R_AARCH64_ADD_ABS_LO12_NC _
+      | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ ->
+        Binary_emitter.B32
 
     let target_symbol (r : Relocation.t) : string =
       match r.kind with
@@ -2779,16 +2903,17 @@ module For_jit = struct
       | R_AARCH64_LD64_GOT_LO12_NC sym
       | R_AARCH64_ADD_ABS_LO12_NC sym
       | R_AARCH64_CALL26 sym
-      | R_AARCH64_JUMP26 sym -> sym
+      | R_AARCH64_JUMP26 sym
+      | R_AARCH64_ABS64 sym ->
+        sym
 
     let is_got_reloc (r : Relocation.t) =
       match r.kind with
       | R_AARCH64_LD64_GOT_LO12_NC _ -> true
-      | R_AARCH64_ADR_PREL_LO21 _
-      | R_AARCH64_ADR_PREL_PG_HI21 _
-      | R_AARCH64_ADD_ABS_LO12_NC _
-      | R_AARCH64_CALL26 _
-      | R_AARCH64_JUMP26 _ -> false
+      | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
+      | R_AARCH64_ADD_ABS_LO12_NC _ | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _
+      | R_AARCH64_ABS64 _ ->
+        false
 
     let is_plt_reloc (_ : t) = false (* ARM64 doesn't use PLT in same way *)
 
@@ -2796,15 +2921,15 @@ module For_jit = struct
       let sym = target_symbol r in
       match lookup_symbol sym with
       | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
-      | Some target_addr ->
-        (match r.kind with
+      | Some target_addr -> (
+        match r.kind with
         | R_AARCH64_ADR_PREL_LO21 _ ->
           (* PC-relative offset for ADR instruction, low 21 bits *)
           let offset = Int64.sub target_addr place_address in
           Ok offset
         | R_AARCH64_ADR_PREL_PG_HI21 _ ->
-          (* Page-relative offset for ADRP instruction
-             Result = Page(target) - Page(place) *)
+          (* Page-relative offset for ADRP instruction Result = Page(target) -
+             Page(place) *)
           let page_mask = Int64.lognot 0xFFF_L in
           let target_page = Int64.logand target_addr page_mask in
           let place_page = Int64.logand place_address page_mask in
@@ -2821,11 +2946,15 @@ module For_jit = struct
         | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ ->
           (* PC-relative offset for B/BL instructions, divided by 4 *)
           let offset = Int64.sub target_addr place_address in
-          Ok offset)
+          Ok offset
+        | R_AARCH64_ABS64 _ ->
+          (* Absolute 64-bit address *)
+          Ok target_addr)
   end
 
   module Assembled_section = struct
     type t = Section_state.t
+
     type relocation = Relocation.t
 
     let size t = Buffer.length (Section_state.buffer t)
@@ -2836,23 +2965,27 @@ module For_jit = struct
 
     let relocations t = Section_state.relocations t
 
-    let find_symbol_offset t name = Section_state.find_symbol_offset_in_bytes t name
+    let find_symbol_offset t name =
+      Section_state.find_symbol_offset_in_bytes t name
 
-    let find_label_offset t name = Section_state.find_label_offset_in_bytes t name
+    let find_label_offset t name =
+      Section_state.find_label_offset_in_bytes t name
 
     let iter_symbols t ~f =
-      Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t)
+      Hashtbl.iter
+        (fun name offset -> f ~name ~offset)
+        (Section_state.symbols t)
 
     let add_patch t ~offset ~size:(sz : Binary_emitter.data_size) ~data =
-      let sz = match sz with B8 -> P8 | B16 -> P16 | B32 -> P32 | B64 -> P64 in
+      let sz =
+        match sz with B8 -> P8 | B16 -> P16 | B32 -> P32 | B64 -> P64
+      in
       Section_state.add_patch t ~offset ~size:sz ~data
   end
 
   module Plt = struct
-    (* ARM64 PLT entry:
-       ldr x16, .+8          ; 58000050   - load address from next 8 bytes
-       br x16                ; d61f0200   - branch to x16
-       .quad <address>       ; 8 bytes of address
+    (* ARM64 PLT entry: ldr x16, .+8 ; 58000050 - load address from next 8 bytes
+       br x16 ; d61f0200 - branch to x16 .quad <address> ; 8 bytes of address
        Total: 16 bytes *)
     let entry_size = 16
 
@@ -2869,8 +3002,9 @@ module For_jit = struct
       Buffer.add_char buf '\xd6';
       (* 8-byte address (little-endian) *)
       for i = 0 to 7 do
-        let byte = Int64.(to_int (logand (shift_right_logical address (i * 8))
-          0xFFL)) in
+        let byte =
+          Int64.(to_int (logand (shift_right_logical address (i * 8)) 0xFFL))
+        in
         Buffer.add_char buf (Char.chr byte)
       done
   end
@@ -2878,7 +3012,7 @@ module For_jit = struct
   module Internal_assembler = struct
     type assembled_section = Assembled_section.t
 
-    type hook = (string * assembled_section) list -> (string -> unit)
+    type hook = (string * assembled_section) list -> string -> unit
 
     let current_hook : hook option ref = ref None
 

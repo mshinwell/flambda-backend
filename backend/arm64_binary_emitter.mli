@@ -36,6 +36,7 @@ module Relocation : sig
       | R_AARCH64_ADD_ABS_LO12_NC of string
       | R_AARCH64_CALL26 of string
       | R_AARCH64_JUMP26 of string
+      | R_AARCH64_ABS64 of string
   end
 
   type t = private
@@ -75,6 +76,7 @@ val add_directive : t -> Asm_targets.Asm_directives.Directive.t -> unit
 val emit : t -> Section_state.t Asm_targets.Asm_section.Tbl.t
 
 (** Module implementing Binary_emitter.S for use by ocaml-jit *)
-module For_jit : Binary_emitter.S
-  with type Assembled_section.t = Section_state.t
-   and type Relocation.t = Relocation.t
+module For_jit :
+  Binary_emitter.S
+    with type Assembled_section.t = Section_state.t
+     and type Relocation.t = Relocation.t

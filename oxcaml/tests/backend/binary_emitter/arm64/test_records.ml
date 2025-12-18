@@ -1,13 +1,22 @@
 (* Test records and data structures *)
 
 (* Simple record *)
-type point = { x : int; y : int }
+type point =
+  { x : int;
+    y : int
+  }
 
 (* Record with mutable field *)
-type counter = { mutable count : int; name : string }
+type counter =
+  { mutable count : int;
+    name : string
+  }
 
 (* Nested records *)
-type rect = { top_left : point; bottom_right : point }
+type rect =
+  { top_left : point;
+    bottom_right : point
+  }
 
 (* Record operations *)
 let make_point x y = { x; y }
@@ -23,9 +32,7 @@ let move_x p dx = { p with x = p.x + dx }
 let point_to_string { x; y } =
   "(" ^ string_of_int x ^ ", " ^ string_of_int y ^ ")"
 
-let is_origin = function
-  | { x = 0; y = 0 } -> true
-  | _ -> false
+let is_origin = function { x = 0; y = 0 } -> true | _ -> false
 
 (* Mutable record operations *)
 let make_counter name = { count = 0; name }

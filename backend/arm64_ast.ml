@@ -852,8 +852,7 @@ module Instruction_name = struct
             * [`Reg of [`Neon of [`Vector of 'v * 'w]]]
             * [`Reg of [`Neon of [`Vector of 'v * 'w]]] )
           t
-    | ADR
-        : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Nineteen]]]) t
+    | ADR : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Nineteen]]]) t
     | ADRP
         : (pair, [`Reg of [`GP of [`X]]] * [`Imm of [`Sym of [`Twenty_one]]]) t
     | AND_immediate
@@ -1306,7 +1305,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1318,7 +1317,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1330,7 +1329,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1342,7 +1341,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1354,7 +1353,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1366,7 +1365,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1378,7 +1377,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1638,7 +1637,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1650,7 +1649,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1662,7 +1661,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1674,7 +1673,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
-               | `Offset_unscaled
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -2627,13 +2626,12 @@ module DSL = struct
 
   let mem_offset ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
     (* Use unsigned scaled encoding for non-negative, 8-byte aligned offsets.
-       Use signed unscaled encoding (LDUR/STUR) for negative or unaligned offsets.
-       The scaled encoding requires alignment to access size; using 8-byte
-       alignment is safe for all access sizes (1, 2, 4, 8 bytes). *)
-    if offset >= 0 && offset mod 8 = 0 then
-      Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
-    else
-      Operand.Mem (Offset_unscaled (base, Nine_signed_unscaled offset))
+       Use signed unscaled encoding (LDUR/STUR) for negative or unaligned
+       offsets. The scaled encoding requires alignment to access size; using
+       8-byte alignment is safe for all access sizes (1, 2, 4, 8 bytes). *)
+    if offset >= 0 && offset mod 8 = 0
+    then Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
+    else Operand.Mem (Offset_unscaled (base, Nine_signed_unscaled offset))
 
   let mem_symbol ~(base : [`GP of [< `X | `SP]] Reg.t) ~symbol =
     Operand.Mem (Offset_sym (base, symbol))
@@ -2765,6 +2763,7 @@ module DSL = struct
   (* CR mshinwell: Acc should not be in this file *)
   module Acc = struct
     let emit_string = ref None
+
     let emit_instruction : (Instruction.t -> unit) option ref = ref None
 
     let set_emit_string ~emit_string:emit = emit_string := Some emit
@@ -2778,9 +2777,7 @@ module DSL = struct
         (operands : (num, a) many) =
       let instr = Instruction.create name ~operands in
       (* Emit to binary emitter if configured *)
-      (match !emit_instruction with
-      | Some emit -> emit instr
-      | None -> ());
+      (match !emit_instruction with Some emit -> emit instr | None -> ());
       (* Emit to text if configured *)
       let str = Format.asprintf "\t%a\n" Instruction.print instr in
       match !emit_string with None -> () | Some emit_string -> emit_string str

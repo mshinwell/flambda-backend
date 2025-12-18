@@ -2,14 +2,22 @@
 
 (* Nested conditionals *)
 let classify n =
-  if n < 0 then "negative"
-  else if n = 0 then "zero"
-  else if n < 10 then "small"
-  else if n < 100 then "medium"
+  if n < 0
+  then "negative"
+  else if n = 0
+  then "zero"
+  else if n < 10
+  then "small"
+  else if n < 100
+  then "medium"
   else "large"
 
 (* Pattern matching on variants *)
-type color = Red | Green | Blue | RGB of int * int * int
+type color =
+  | Red
+  | Green
+  | Blue
+  | RGB of int * int * int
 
 let color_to_int = function
   | Red -> 0xFF0000
@@ -18,29 +26,20 @@ let color_to_int = function
   | RGB (r, g, b) -> (r lsl 16) lor (g lsl 8) lor b
 
 (* Pattern matching on options *)
-let get_or_default default = function
-  | None -> default
-  | Some x -> x
+let get_or_default default = function None -> default | Some x -> x
 
 (* Pattern matching on lists *)
-let rec sum_list = function
-  | [] -> 0
-  | x :: xs -> x + sum_list xs
+let rec sum_list = function [] -> 0 | x :: xs -> x + sum_list xs
 
-let rec length_list = function
-  | [] -> 0
-  | _ :: xs -> 1 + length_list xs
+let rec length_list = function [] -> 0 | _ :: xs -> 1 + length_list xs
 
 (* Mutual recursion *)
-let rec is_even n =
-  if n = 0 then true else is_odd (n - 1)
-and is_odd n =
-  if n = 0 then false else is_even (n - 1)
+let rec is_even n = if n = 0 then true else is_odd (n - 1)
+
+and is_odd n = if n = 0 then false else is_even (n - 1)
 
 (* While loop equivalent using recursion *)
-let rec count_down n acc =
-  if n <= 0 then acc
-  else count_down (n - 1) (n :: acc)
+let rec count_down n acc = if n <= 0 then acc else count_down (n - 1) (n :: acc)
 
 (* Entry point *)
 let () =

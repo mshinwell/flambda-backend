@@ -106,11 +106,11 @@ let is_logical_immediate x =
    - imms encodes both the element size and number of 1s
 
    - immr encodes the rotation amount *)
-(* Create a mask with [n] low bits set to 1.
-   For n=64, shift_left 1n 64 wraps to 1 due to modular shift on 64-bit nativeint,
-   so we handle this case specially by returning -1n (all bits set). *)
+(* Create a mask with [n] low bits set to 1. For n=64, shift_left 1n 64 wraps to
+   1 due to modular shift on 64-bit nativeint, so we handle this case specially
+   by returning -1n (all bits set). *)
 let mask_of_width n =
-  if n >= 64 then (-1n) else Nativeint.(sub (shift_left 1n n) 1n)
+  if n >= 64 then -1n else Nativeint.(sub (shift_left 1n n) 1n)
 
 let encode_logical_immediate_fields (x : nativeint) : int * int * int =
   if not (is_logical_immediate x)
