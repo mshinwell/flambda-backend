@@ -133,42 +133,94 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
     then count
     else count_ones (Nativeint.shift_right_logical p 1) (pos + 1) (count + 1)
   in
-  (* Rotate pattern right to find canonical form (ones at LSB) *)
-  let rec find_rotation p rot =
-    if rot >= len
-    then 0, 0 (* shouldn't happen for valid immediates *)
+  (* Count total ones in the pattern *)
+  let rec count_all_ones p pos acc =
+    if pos >= len
+    then acc
     else
-      let first_one = find_first_one p 0 in
-      if first_one = 0
-      then
-        let ones = count_ones p 0 0 in
-        rot, ones
-      else
-        (* Rotate right by 1 *)
-        let bit = Nativeint.(logand p 1n) in
-        let p' =
-          Nativeint.(logor (shift_right_logical p 1) (shift_left bit (len - 1)))
-        in
-        find_rotation p' (rot + 1)
+      let bit = Nativeint.(logand p 1n) in
+      let acc' = if Nativeint.equal bit 1n then acc + 1 else acc in
+      count_all_ones (Nativeint.shift_right_logical p 1) (pos + 1) acc'
   in
-  let rotation, ones = find_rotation pattern 0 in
+  (* Find position of first zero starting from LSB *)
+  let rec find_first_zero p pos =
+    if pos >= len
+    then len
+    else if Nativeint.equal (Nativeint.logand p 1n) 0n
+    then pos
+    else find_first_zero (Nativeint.shift_right_logical p 1) (pos + 1)
+  in
+  (* Find position of first one starting from a position *)
+  let rec find_one_from p pos =
+    if pos >= len
+    then len
+    else if Nativeint.equal (Nativeint.logand p 1n) 1n
+    then pos
+    else find_one_from (Nativeint.shift_right_logical p 1) (pos + 1)
+  in
+  (* Determine rotation and ones count based on pattern type *)
+  let rotation, ones =
+    let first_one = find_first_one pattern 0 in
+    if first_one > 0
+    then begin
+      (* Pattern starts with zeros: 0+1+0* type *)
+      (* Rotate right by first_one to put ones at LSB *)
+      let rotated =
+        let shift = first_one in
+        Nativeint.(
+          logor
+            (shift_right_logical pattern shift)
+            (logand (shift_left pattern (len - shift)) mask))
+      in
+      let ones = count_ones rotated 0 0 in
+      first_one, ones
+    end
+    else begin
+      (* Pattern starts with one: check if it's 1+0+1* (ones wrap around) *)
+      let ones_from_lsb = count_ones pattern 0 0 in
+      if ones_from_lsb = len
+      then 0, len (* All ones - shouldn't happen for valid logical immediate *)
+      else
+        let first_zero = find_first_zero pattern 0 in
+        let shifted_for_search =
+          Nativeint.shift_right_logical pattern first_zero
+        in
+        let next_one_rel = find_one_from shifted_for_search 0 in
+        if next_one_rel >= len - first_zero
+        then (* No more ones after zeros: simple 1+0* pattern *)
+          0, ones_from_lsb
+        else begin
+          (* 1+0+1* pattern: ones at both ends wrap around *)
+          let total_ones = count_all_ones pattern 0 0 in
+          let first_one_after_zeros = first_zero + next_one_rel in
+          (* To canonicalize, rotate right by first_one_after_zeros *)
+          (* Then immr = (len - rotation) mod len will give correct result *)
+          first_one_after_zeros, total_ones
+        end
+    end
+  in
   (* Encode N based on element size *)
   let n = if len = 64 then 1 else 0 in
   (* immr encodes the rotation: ARM rotates the canonical form (1s at LSB) right
      by immr to produce the actual value. Since we rotated right by 'rotation'
      to get the canonical form, the inverse is (len - rotation) mod len. *)
   let immr = (len - rotation) mod len in
-  (* imms encodes the element size and number of ones Format:
-     NOT(element_size_encoding) : (ones - 1) Element size encoding: 0=64, 10=32,
-     110=16, 1110=8, 11110=4, 111110=2 *)
+  (* imms encoding: the highest 0 bit indicates element size, remaining bits
+     encode (ones - 1). For N=0:
+     - 32-bit element: imms = 0xxxxx (bit 5 = 0, bits 0-4 for ones)
+     - 16-bit element: imms = 10xxxx (bits 0-3 for ones)
+     - 8-bit element:  imms = 110xxx (bits 0-2 for ones)
+     - 4-bit element:  imms = 1110xx (bits 0-1 for ones)
+     - 2-bit element:  imms = 11110x (bit 0 for ones)
+     For N=1 (64-bit), all 6 bits encode ones. *)
   let size_encoding =
     match len with
     | 64 -> 0b000000
-    | 32 -> 0b100000
-    | 16 -> 0b110000
-    | 8 -> 0b111000
-    | 4 -> 0b111100
-    | 2 -> 0b111110
+    | 32 -> 0b000000
+    | 16 -> 0b100000
+    | 8 -> 0b110000
+    | 4 -> 0b111000
+    | 2 -> 0b111100
     | _ -> invalid_arg "invalid element size"
   in
   let imms = size_encoding lor (ones - 1) in

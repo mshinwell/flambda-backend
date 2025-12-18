@@ -1523,9 +1523,18 @@ let encode_instruction :
     (* ADDV: U=0, opcode=11011 *)
     encode_simd_across_lanes ~q ~u:0 ~size ~opcode:0b11011 ~rn ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADR ->
-    Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_kind:(R_AARCH64_ADR_PREL_LO21 sym.name);
-    let immlo, immhi = split_21bit_immediate sym.offset in
+    (* ADR only accepts Same_section_and_unit symbols (local labels) *)
+    let Same_section_and_unit = sym.reloc in
+    (* Compute PC-relative offset at assembly time *)
+    let target_offset =
+      match Section_state.find_label_offset_in_bytes state sym.name with
+      | Some off -> off
+      | None ->
+        Misc.fatal_errorf "ADR: label %s not found in current section" sym.name
+    in
+    let current_offset = Section_state.offset_in_bytes state in
+    let pc_rel = target_offset - current_offset + sym.offset in
+    let immlo, immhi = split_21bit_immediate pc_rel in
     encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
