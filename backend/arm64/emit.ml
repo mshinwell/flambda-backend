@@ -37,6 +37,9 @@ module S = Asm_targets.Asm_symbol
 module L = Asm_targets.Asm_label
 open! Int_replace_polymorphic_compare
 
+(* Binary emitter for JIT mode *)
+let jit_emitter : Arm64_binary_emitter.t option ref = ref None
+
 (* Tradeoff between code size and code speed *)
 
 let fastcode_flag = ref true
@@ -2901,9 +2904,22 @@ let begin_assembly _unix =
   Arm64_ast.DSL.Acc.set_emit_string ~emit_string:Emitaux.emit_string;
   Asm_targets.Asm_label.initialize ~new_label:(fun () ->
       Cmm.new_label () |> Label.to_int);
+  (* Set up binary emitter if JIT hook is registered *)
+  let use_jit = Option.is_some (Arm64_binary_emitter.For_jit.Internal_assembler.get ()) in
+  if use_jit then begin
+    let emitter = Arm64_binary_emitter.create () in
+    jit_emitter := Some emitter;
+    Arm64_ast.DSL.Acc.set_emit_instruction
+      ~emit_instruction:(Arm64_binary_emitter.add_instruction emitter)
+  end;
   let asm_line_buffer = Buffer.create 200 in
   D.initialize ~big_endian:Arch.big_endian
     ~emit_assembly_comments:!Oxcaml_flags.dasm_comments ~emit:(fun d ->
+      (* Emit to binary emitter if in JIT mode *)
+      (match !jit_emitter with
+      | Some emitter -> Arm64_binary_emitter.add_directive emitter d
+      | None -> ());
+      (* Emit to text *)
       Buffer.clear asm_line_buffer;
       D.Directive.print asm_line_buffer d;
       Buffer.add_string asm_line_buffer "\n";
@@ -2990,4 +3006,29 @@ let end_assembly () =
   if not !Oxcaml_flags.internal_assembler
   then Emitaux.Dwarf_helpers.emit_dwarf ();
   Probe_emission.emit_probe_notes ~slot_offset ~add_def_symbol:(fun _ -> ());
-  D.mark_stack_non_executable ()
+  D.mark_stack_non_executable ();
+  (* Finalize JIT if enabled *)
+  match !jit_emitter with
+  | None -> ()
+  | Some emitter ->
+    (* Clear the instruction emission callback *)
+    Arm64_ast.DSL.Acc.clear_emit_instruction ();
+    jit_emitter := None;
+    (* Get assembled sections *)
+    let section_tbl = Arm64_binary_emitter.emit emitter in
+    (* Convert to list of (name, section) pairs *)
+    let sections =
+      Asm_targets.Asm_section.Tbl.fold
+        (fun section state acc ->
+          let name = Asm_targets.Asm_section.to_string section in
+          (name, state) :: acc)
+        section_tbl []
+    in
+    (* Call the JIT hook if registered *)
+    match Arm64_binary_emitter.For_jit.Internal_assembler.get () with
+    | None -> ()
+    | Some hook ->
+      (* The hook expects (string * assembled_section) list and returns
+         a file writer function. We ignore the file writer for JIT. *)
+      let _file_writer = hook sections in
+      ()

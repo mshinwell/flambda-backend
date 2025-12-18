@@ -2740,12 +2740,23 @@ module DSL = struct
   (* CR mshinwell: Acc should not be in this file *)
   module Acc = struct
     let emit_string = ref None
+    let emit_instruction : (Instruction.t -> unit) option ref = ref None
 
     let set_emit_string ~emit_string:emit = emit_string := Some emit
+
+    let set_emit_instruction ~emit_instruction:emit =
+      emit_instruction := Some emit
+
+    let clear_emit_instruction () = emit_instruction := None
 
     let ins (type num a) (name : (num, a) Instruction_name.t)
         (operands : (num, a) many) =
       let instr = Instruction.create name ~operands in
+      (* Emit to binary emitter if configured *)
+      (match !emit_instruction with
+      | Some emit -> emit instr
+      | None -> ());
+      (* Emit to text if configured *)
       let str = Format.asprintf "\t%a\n" Instruction.print instr in
       match !emit_string with None -> () | Some emit_string -> emit_string str
 

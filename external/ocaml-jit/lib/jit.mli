@@ -31,7 +31,8 @@ val jit_load :
   'a String.Map.t ->
   unit
 
-(** Load and run a Lambda program. Currently uses x86 backend. *)
+(** Load and run a Lambda program. Automatically selects backend based on
+    architecture (x86 or arm64). *)
 val jit_load_program :
   phrase_name:string ->
   Format.formatter ->
@@ -52,5 +53,11 @@ module X86 : sig
     X86_binary_emitter.buffer String.Map.t
 
   (** Register the x86 JIT as the internal assembler and run the given function *)
+  val with_jit : phrase_name:string -> (unit -> 'a) -> 'a
+end
+
+(** ARM64-specific entry points *)
+module Arm64 : sig
+  (** Register the arm64 JIT hook and run the given function *)
   val with_jit : phrase_name:string -> (unit -> 'a) -> 'a
 end

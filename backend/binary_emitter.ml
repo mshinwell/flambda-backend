@@ -106,3 +106,4 @@ let arch =
   | X86_64 -> Amd64
   | AArch64 -> Arm64
   | _ -> failwith "Binary_emitter: unsupported architecture"
+

@@ -1672,7 +1672,14 @@ module DSL : sig
   module Acc : sig
     val set_emit_string : emit_string:(string -> unit) -> unit
 
+    (** Set a callback to receive instructions for binary emission (JIT). *)
+    val set_emit_instruction : emit_instruction:(Instruction.t -> unit) -> unit
+
+    (** Clear the binary emission callback. *)
+    val clear_emit_instruction : unit -> unit
+
     (** Passes the instruction to the function provided to [set_emit_string].
+        Also passes to [set_emit_instruction] callback if set.
         (Can't directly reference [Emitaux] due to a circular dependency.) *)
     val ins :
       ('num, 'operands) Instruction_name.t -> ('num, 'operands) many -> unit
