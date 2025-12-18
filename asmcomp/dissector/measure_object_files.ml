@@ -49,6 +49,13 @@ type file_origin =
   | Startup
   | Cached_genfns
 
+let string_of_origin = function
+  | OCaml -> "OCaml"
+  | C_stub -> "C_stub"
+  | Runtime -> "Runtime"
+  | Startup -> "Startup"
+  | Cached_genfns -> "Cached_genfns"
+
 (* Analyze a single ELF buffer, returning (size, has_probes) *)
 let analyze_elf_buf buf =
   let _header, sections = Compiler_owee.Owee_elf.read_elf buf in
@@ -114,6 +121,13 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   (* Check for duplicates in the input list first (extract just filenames) *)
   check_for_duplicates (List.map fst files);
   let module Unix = (val unix) in
+  (* Open output file if -ddissector-inputs is set *)
+  let out_channel = Option.map open_out !Clflags.ddissector_inputs in
+  let log fmt =
+    match out_channel with
+    | None -> Printf.ifprintf stderr fmt
+    | Some oc -> Printf.fprintf oc fmt
+  in
   (* Analyze a single .o file, returning (size, has_probes) *)
   let analyze_object_file filename =
     if not (Sys.file_exists filename)
@@ -122,24 +136,30 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
       analyze_elf_buf buf
   in
-  (* Analyze an archive (.a) file, returning (size, has_probes) *)
+  (* Analyze an archive (.a) file, returning (size, has_probes, member_names) *)
   let analyze_archive_file filename =
     if not (Sys.file_exists filename)
     then raise (Error (File_not_found filename))
     else
       let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
       let archive, members = Compiler_owee.Owee_archive.read buf in
-      List.fold_left
-        (fun (acc_size, acc_probes) member ->
-          if Filename.check_suffix member.Compiler_owee.Owee_archive.name ".o"
-          then
-            let member_buf =
-              Compiler_owee.Owee_archive.member_body archive member
-            in
-            let size, has_probes = analyze_elf_buf member_buf in
-            Int64.add acc_size size, acc_probes || has_probes
-          else acc_size, acc_probes)
-        (0L, false) members
+      let size, has_probes, member_names =
+        List.fold_left
+          (fun (acc_size, acc_probes, acc_names) member ->
+            let name = member.Compiler_owee.Owee_archive.name in
+            if Filename.check_suffix name ".o"
+            then
+              let member_buf =
+                Compiler_owee.Owee_archive.member_body archive member
+              in
+              let size, has_probes = analyze_elf_buf member_buf in
+              ( Int64.add acc_size size,
+                acc_probes || has_probes,
+                name :: acc_names )
+            else acc_size, acc_probes, acc_names)
+          (0L, false, []) members
+      in
+      size, has_probes, List.rev member_names
   in
   (* Track which files we've already analyzed to avoid double-counting from
      transitive dependencies (e.g., lib_ccobjs in .cmxa files) *)
@@ -148,47 +168,84 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
      records. For .cmxa files, this may include both the .a file and any
      lib_ccobjs that haven't been analyzed yet. Linker options (starting with
      '-') are ignored. The origin is propagated to the resulting entries. *)
-  let rec analyze_one (filename, origin) =
+  let rec analyze_one ~indent (filename, origin) =
     if is_linker_option filename
-    then []
+    then (
+      log "%sInput: %s (%s) [linker option, skipped]\n" indent filename
+        (string_of_origin origin);
+      [])
     else if Hashtbl.mem analyzed filename
-    then []
+    then (
+      log "%sInput: %s (%s) [already analyzed, skipped]\n" indent filename
+        (string_of_origin origin);
+      [])
     else (
       Hashtbl.add analyzed filename ();
       if Filename.check_suffix filename ".o"
-      then
+      then (
         let size, has_probes = analyze_object_file filename in
-        [{ File_size.filename; size; has_probes; origin = C_stub }]
+        log "%sInput: %s (%s)\n" indent filename (string_of_origin origin);
+        log "%s  -> %s (%Ld bytes, has_probes=%b)\n" indent filename size
+          has_probes;
+        [{ File_size.filename; size; has_probes; origin = C_stub }])
       else if Filename.check_suffix filename ".a"
-      then
-        let size, has_probes = analyze_archive_file filename in
-        [{ File_size.filename; size; has_probes; origin = C_stub }]
+      then (
+        let size, has_probes, member_names = analyze_archive_file filename in
+        log "%sInput: %s (%s)\n" indent filename (string_of_origin origin);
+        log "%s  -> %s (%Ld bytes, has_probes=%b)\n" indent filename size
+          has_probes;
+        log "%s  Members: %s\n" indent (String.concat ", " member_names);
+        [{ File_size.filename; size; has_probes; origin = C_stub }])
       else if Filename.check_suffix filename ".cmx"
-      then
+      then (
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
+        log "%sInput: %s (%s)\n" indent filename (string_of_origin origin);
         if Hashtbl.mem analyzed obj_file
-        then []
+        then (
+          log "%s  -> %s [already analyzed, skipped]\n" indent obj_file;
+          [])
         else (
           Hashtbl.add analyzed obj_file ();
           let size, has_probes = analyze_object_file obj_file in
-          [{ File_size.filename; size; has_probes; origin }])
+          log "%s  -> %s (%Ld bytes, has_probes=%b)\n" indent obj_file size
+            has_probes;
+          [{ File_size.filename; size; has_probes; origin }]))
       else if Filename.check_suffix filename ".cmxa"
-      then
+      then (
+        log "%sInput: %s (%s)\n" indent filename (string_of_origin origin);
         let archive_file = Filename.chop_suffix filename ".cmxa" ^ ".a" in
         let archive_entry =
           if Hashtbl.mem analyzed archive_file
-          then []
+          then (
+            log "%s  -> %s [already analyzed, skipped]\n" indent archive_file;
+            [])
           else (
             Hashtbl.add analyzed archive_file ();
-            let size, has_probes = analyze_archive_file archive_file in
+            let size, has_probes, member_names =
+              analyze_archive_file archive_file
+            in
+            log "%s  -> %s (%Ld bytes, has_probes=%b)\n" indent archive_file
+              size has_probes;
+            log "%s  Members: %s\n" indent (String.concat ", " member_names);
             [{ File_size.filename; size; has_probes; origin }])
         in
         let cmxa = read_cmxa filename in
         (* lib_ccobjs from .cmxa files are C stub libraries *)
         let ccobjs_entries =
-          List.concat_map (fun f -> analyze_one (f, C_stub)) cmxa.lib_ccobjs
+          if cmxa.lib_ccobjs = []
+          then []
+          else (
+            log "%s  lib_ccobjs:\n" indent;
+            List.concat_map
+              (fun f -> analyze_one ~indent:(indent ^ "    ") (f, C_stub))
+              cmxa.lib_ccobjs)
         in
-        archive_entry @ ccobjs_entries
-      else [])
+        archive_entry @ ccobjs_entries)
+      else (
+        log "%sInput: %s (%s) [unknown extension, skipped]\n" indent filename
+          (string_of_origin origin);
+        []))
   in
-  List.concat_map analyze_one files
+  let result = List.concat_map (analyze_one ~indent:"") files in
+  Option.iter close_out out_channel;
+  result
