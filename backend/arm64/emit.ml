@@ -254,9 +254,9 @@ module DSL : sig
   val addressing :
     addressing_mode ->
     Reg.t ->
-    [`Mem of [> `Offset_imm | `Offset_sym]] Arm64_ast.Operand.t
+    [`Mem of [> `Offset_imm | `Offset_unscaled | `Offset_sym]] Arm64_ast.Operand.t
 
-  val stack : Reg.t -> [`Mem of [> `Offset_imm]] Arm64_ast.Operand.t
+  val stack : Reg.t -> [`Mem of [> `Offset_imm | `Offset_unscaled]] Arm64_ast.Operand.t
 
   val label :
     ?offset:int ->
@@ -2904,9 +2904,12 @@ let begin_assembly _unix =
   Arm64_ast.DSL.Acc.set_emit_string ~emit_string:Emitaux.emit_string;
   Asm_targets.Asm_label.initialize ~new_label:(fun () ->
       Cmm.new_label () |> Label.to_int);
-  (* Set up binary emitter if JIT hook is registered *)
-  let use_jit = Option.is_some (Arm64_binary_emitter.For_jit.Internal_assembler.get ()) in
-  if use_jit then begin
+  (* Set up binary emitter if JIT hook is registered or save_binary_sections is set *)
+  let use_binary_emitter =
+    Option.is_some (Arm64_binary_emitter.For_jit.Internal_assembler.get ())
+    || !Oxcaml_flags.save_binary_sections
+  in
+  if use_binary_emitter then begin
     let emitter = Arm64_binary_emitter.create () in
     jit_emitter := Some emitter;
     Arm64_ast.DSL.Acc.set_emit_instruction
@@ -3007,7 +3010,7 @@ let end_assembly () =
   then Emitaux.Dwarf_helpers.emit_dwarf ();
   Probe_emission.emit_probe_notes ~slot_offset ~add_def_symbol:(fun _ -> ());
   D.mark_stack_non_executable ();
-  (* Finalize JIT if enabled *)
+  (* Finalize binary emitter if enabled *)
   match !jit_emitter with
   | None -> ()
   | Some emitter ->
@@ -3024,6 +3027,33 @@ let end_assembly () =
           (name, state) :: acc)
         section_tbl []
     in
+    (* Save sections to files if save_binary_sections is enabled *)
+    if !Oxcaml_flags.save_binary_sections then begin
+      let dir = !Emitaux.output_prefix ^ ".binary-sections" in
+      (try Sys.mkdir dir 0o755 with Sys_error _ -> ());
+      List.iter (fun (name, state) ->
+        (* Save binary content *)
+        let bin_filename = Filename.concat dir (name ^ ".bin") in
+        let oc = open_out_bin bin_filename in
+        output_string oc (Arm64_binary_emitter.Section_state.contents state);
+        close_out oc;
+        (* Save relocations if any *)
+        let relocs = Arm64_binary_emitter.Section_state.relocations state in
+        begin match relocs with
+        | [] -> ()
+        | _ ->
+          let reloc_filename = Filename.concat dir (name ^ ".relocs") in
+          let oc = open_out reloc_filename in
+          let module R = Arm64_binary_emitter.For_jit.Relocation in
+          List.iter (fun reloc ->
+            Printf.fprintf oc "%d %s\n"
+              (R.offset_from_section_beginning reloc)
+              (R.target_symbol reloc)
+          ) relocs;
+          close_out oc
+        end
+      ) sections
+    end;
     (* Call the JIT hook if registered *)
     match Arm64_binary_emitter.For_jit.Internal_assembler.get () with
     | None -> ()

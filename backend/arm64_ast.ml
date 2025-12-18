@@ -650,10 +650,13 @@ module Operand = struct
 
     type offset_imm = [`Offset_imm]
 
+    type offset_unscaled = [`Offset_unscaled]
+
     type offset_sym = [`Offset_sym]
 
     type offset =
       [ `Offset_imm
+      | `Offset_unscaled
       | `Offset_sym ]
 
     type literal = [`Literal]
@@ -672,6 +675,7 @@ module Operand = struct
     type any_single =
       [ `Base_reg
       | `Offset_imm
+      | `Offset_unscaled
       | `Offset_sym
       | `Literal
       | `Pre
@@ -692,6 +696,9 @@ module Operand = struct
       | Offset_imm :
           [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Imm.t
           -> [> `Offset_imm] t
+      | Offset_unscaled :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Imm.t
+          -> [> `Offset_unscaled] t
       | Offset_sym :
           [`GP of [< `X | `SP]] Reg.t * [`Twelve] Symbol.t
           -> [> `Offset_sym] t
@@ -722,6 +729,8 @@ module Operand = struct
       match t with
       | Reg r -> fprintf ppf "[%s]" (Reg.name r)
       | Offset_imm (r, imm) -> fprintf ppf "[%s, %a]" (Reg.name r) Imm.print imm
+      | Offset_unscaled (r, imm) ->
+        fprintf ppf "[%s, %a]" (Reg.name r) Imm.print imm
       | Offset_sym (r, sym) ->
         fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
       | Literal (r, sym) -> fprintf ppf "[%s, %a]" (Reg.name r) Symbol.print sym
@@ -1297,6 +1306,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1308,6 +1318,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1319,6 +1330,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1330,6 +1342,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1341,6 +1354,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1352,6 +1366,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1363,6 +1378,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1622,6 +1638,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1633,6 +1650,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1644,6 +1662,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1655,6 +1674,7 @@ module Instruction_name = struct
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+               | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -2606,9 +2626,12 @@ module DSL = struct
   let mem ~(base : [`GP of [< `X | `SP]] Reg.t) = Operand.Mem (Reg base)
 
   let mem_offset ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
-    (* XXX validate [offset]. We should probably call this [offset_in_bytes] to
-       avoid any confusion. It must be zero mod transfer size *)
-    Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
+    (* Use unsigned scaled encoding for non-negative offsets that fit,
+       otherwise use signed unscaled encoding (LDUR/STUR) *)
+    if offset >= 0 then
+      Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
+    else
+      Operand.Mem (Offset_unscaled (base, Nine_signed_unscaled offset))
 
   let mem_symbol ~(base : [`GP of [< `X | `SP]] Reg.t) ~symbol =
     Operand.Mem (Offset_sym (base, symbol))

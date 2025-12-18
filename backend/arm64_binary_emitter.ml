@@ -38,6 +38,8 @@ module Relocation = struct
       | R_AARCH64_ADR_PREL_PG_HI21 of string
       | R_AARCH64_LD64_GOT_LO12_NC of string
       | R_AARCH64_ADD_ABS_LO12_NC of string
+      | R_AARCH64_CALL26 of string
+      | R_AARCH64_JUMP26 of string
   end
 
   type t =
@@ -93,6 +95,12 @@ module Section_state = struct
 
   let find_label_offset_in_bytes t name =
     Hashtbl.find_opt t.label_offset_tbl name
+
+  (* Look up both symbols and labels - used for branch targets which can be either *)
+  let find_symbol_or_label_offset_in_bytes t name =
+    match Hashtbl.find_opt t.symbol_offset_tbl name with
+    | Some _ as result -> result
+    | None -> Hashtbl.find_opt t.label_offset_tbl name
 
   let relocations t = List.rev t.relocations
 
@@ -951,7 +959,7 @@ let encode_load_store_gp_sized :
     size:int ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~size ~opc ~rd addressing ->
@@ -961,6 +969,10 @@ let encode_load_store_gp_sized :
   | Reg rn ->
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+  | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
+    let rn = Reg.gp_encoding rn in
+    let imm9 = imm land 0x1FF in
+    encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
     (* This is encoded as "LDR (literal)" - only valid for word/doubleword *)
     if size < 0b10
@@ -1040,7 +1052,7 @@ let encode_load_store_gp :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1058,7 +1070,7 @@ let encode_load_store_byte :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1071,7 +1083,7 @@ let encode_load_store_halfword :
     instr_name:string ->
     opc:int ->
     rd:[`GP of a] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~opc ~rd addressing ->
@@ -1195,7 +1207,7 @@ let encode_load_store_simd_fp :
     instr_name:string ->
     is_load:bool ->
     rd:[`Neon of [`Scalar of s]] Reg.t ->
-    [`Base_reg | `Offset_imm | `Offset_sym | `Literal | `Pre | `Post]
+    [`Base_reg | `Offset_imm | `Offset_unscaled | `Offset_sym | `Literal | `Pre | `Post]
     Operand.Addressing_mode.t ->
     int32 =
  fun state ~instr_name ~is_load ~rd addressing ->
@@ -1213,6 +1225,10 @@ let encode_load_store_simd_fp :
   | Reg rn ->
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+  | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
+    let rn = Reg.gp_encoding rn in
+    let imm9 = imm land 0x1FF in
+    encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
     match Section_state.find_symbol_offset_in_bytes state sym.name with
     | None ->
@@ -1285,13 +1301,16 @@ let encode_load_store_simd_fp :
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
 
-(* Helper to compute a 26-bit PC-relative offset for B/BL instructions *)
-let compute_branch_imm26 state ~instr_name (sym : _ Symbol.t) =
+(* Helper to compute a 26-bit PC-relative offset for B/BL instructions.
+   If the symbol is undefined, creates a relocation and returns 0. *)
+let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
   | None ->
-    Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
-      symbol_name
+    (* Symbol is undefined - create a relocation and use 0 as placeholder *)
+    Section_state.add_relocation_at_current_offset state ~symbol_name
+      ~reloc_kind:(reloc_kind symbol_name);
+    0
   | Some target_offset ->
     let pc_relative_offset =
       target_offset - Section_state.offset_in_bytes state
@@ -1310,7 +1329,7 @@ let compute_branch_imm26 state ~instr_name (sym : _ Symbol.t) =
 (* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)
 let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
       symbol_name
@@ -1332,7 +1351,7 @@ let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
 (* Helper to compute a 14-bit PC-relative offset for TBZ/TBNZ instructions *)
 let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
   let symbol_name = sym.name in
-  match Section_state.find_symbol_offset_in_bytes state symbol_name with
+  match Section_state.find_symbol_or_label_offset_in_bytes state symbol_name with
   | None ->
     Misc.fatal_errorf "%s references undefined symbol '%s'" instr_name
       symbol_name
@@ -1460,7 +1479,10 @@ let encode_instruction :
     let sf = Reg.gp_sf rd in
     encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001010 ~rm ~rn ~rd
   | Singleton (Imm (Sym sym)), B ->
-    let imm26 = compute_branch_imm26 state ~instr_name:"B" sym in
+    let imm26 =
+      compute_branch_imm26 state ~instr_name:"B"
+        ~reloc_kind:(fun s -> R_AARCH64_JUMP26 s) sym
+    in
     encode_branch_immediate ~op:0 ~imm26
   | Singleton (Imm (Sym sym)), B_cond cond ->
     let imm19 = compute_branch_imm19 state ~instr_name:"B.cond" sym in
@@ -1471,7 +1493,10 @@ let encode_instruction :
     let cond = encode_float_condition cond in
     encode_conditional_branch ~imm19 ~cond
   | Singleton (Imm (Sym sym)), BL ->
-    let imm26 = compute_branch_imm26 state ~instr_name:"BL" sym in
+    let imm26 =
+      compute_branch_imm26 state ~instr_name:"BL"
+        ~reloc_kind:(fun s -> R_AARCH64_CALL26 s) sym
+    in
     encode_branch_immediate ~op:1 ~imm26
   | Singleton (Reg rn), BLR -> encode_branch_register ~opc:0b0001 ~rn
   | Singleton (Reg rn), BR -> encode_branch_register ~opc:0b0000 ~rn
@@ -2736,14 +2761,18 @@ module For_jit = struct
       | R_AARCH64_ADR_PREL_LO21 sym
       | R_AARCH64_ADR_PREL_PG_HI21 sym
       | R_AARCH64_LD64_GOT_LO12_NC sym
-      | R_AARCH64_ADD_ABS_LO12_NC sym -> sym
+      | R_AARCH64_ADD_ABS_LO12_NC sym
+      | R_AARCH64_CALL26 sym
+      | R_AARCH64_JUMP26 sym -> sym
 
     let is_got_reloc (r : Relocation.t) =
       match r.kind with
       | R_AARCH64_LD64_GOT_LO12_NC _ -> true
       | R_AARCH64_ADR_PREL_LO21 _
       | R_AARCH64_ADR_PREL_PG_HI21 _
-      | R_AARCH64_ADD_ABS_LO12_NC _ -> false
+      | R_AARCH64_ADD_ABS_LO12_NC _
+      | R_AARCH64_CALL26 _
+      | R_AARCH64_JUMP26 _ -> false
 
     let is_plt_reloc (_ : t) = false (* ARM64 doesn't use PLT in same way *)
 
@@ -2772,7 +2801,11 @@ module For_jit = struct
         | R_AARCH64_LD64_GOT_LO12_NC _ ->
           (* Lower 12 bits of GOT entry address, scaled by 8 *)
           let low12 = Int64.logand target_addr 0xFFF_L in
-          Ok low12)
+          Ok low12
+        | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ ->
+          (* PC-relative offset for B/BL instructions, divided by 4 *)
+          let offset = Int64.sub target_addr place_address in
+          Ok offset)
   end
 
   module Assembled_section = struct

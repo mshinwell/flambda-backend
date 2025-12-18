@@ -285,10 +285,13 @@ module Operand : sig
 
     type offset_imm = [`Offset_imm]
 
+    type offset_unscaled = [`Offset_unscaled]
+
     type offset_sym = [`Offset_sym]
 
     type offset =
       [ `Offset_imm
+      | `Offset_unscaled
       | `Offset_sym ]
 
     type literal = [`Literal]
@@ -307,6 +310,7 @@ module Operand : sig
     type any_single =
       [ `Base_reg
       | `Offset_imm
+      | `Offset_unscaled
       | `Offset_sym
       | `Literal
       | `Pre
@@ -326,6 +330,9 @@ module Operand : sig
       | Offset_imm :
           [`GP of [< `X | `SP]] Reg.t * [`Twelve_unsigned_scaled] Imm.t
           -> [> `Offset_imm] t
+      | Offset_unscaled :
+          [`GP of [< `X | `SP]] Reg.t * [`Nine_signed_unscaled] Imm.t
+          -> [> `Offset_unscaled] t
       | Offset_sym :
           [`GP of [< `X | `SP]] Reg.t * [`Twelve] Symbol.t
           -> [> `Offset_sym] t
@@ -925,6 +932,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -936,6 +944,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -947,6 +956,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -958,6 +968,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -969,6 +980,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -980,6 +992,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -991,6 +1004,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1250,6 +1264,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1261,6 +1276,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1272,6 +1288,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1283,6 +1300,7 @@ module Instruction_name : sig
             * [< `Mem of
                  [ `Base_reg
                  | `Offset_imm
+                 | `Offset_unscaled
                  | `Offset_sym
                  | `Literal
                  | `Pre
@@ -1561,7 +1579,7 @@ module DSL : sig
   val mem_offset :
     base:[`GP of [< `X | `SP]] Reg.t ->
     offset:int ->
-    [`Mem of [> `Offset_imm]] Operand.t
+    [`Mem of [> `Offset_imm | `Offset_unscaled]] Operand.t
 
   val mem_symbol :
     base:[`GP of [< `X | `SP]] Reg.t ->
