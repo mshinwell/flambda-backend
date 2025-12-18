@@ -106,6 +106,52 @@
  (deps simple_multipart.sections)
  (action (bash "grep -q '\\.caml\\.p1' simple_multipart.sections || (echo 'ERROR: simple_multipart.exe does not have multiple partitions'; exit 1)")))
 
+; Test 2b: Same as Test 2 but with -function-sections for user code
+; Tests dissector with multiple .text.* and .rela.text.* sections per object file
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target simple_funcsect.exe)
+ (deps simple.ml)
+ (action
+  (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.0015
+       %{deps} -o %{target})))
+
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target simple_funcsect.output)
+ (deps simple_funcsect.exe)
+ (action (with-outputs-to %{target} (run ./simple_funcsect.exe))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps simple.expected simple_funcsect.output)
+ (action (diff simple.expected simple_funcsect.output)))
+
+; Verify simple_funcsect.exe has multiple partitions and function sections
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target simple_funcsect.sections)
+ (deps simple_funcsect.exe)
+ (action (with-outputs-to %{target}
+   (run readelf -S %{deps}))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps simple_funcsect.sections)
+ (action (bash "grep -q '\\.caml\\.p1' simple_funcsect.sections || (echo 'ERROR: simple_funcsect.exe does not have multiple partitions'; exit 1)")))
+
 ; Test 3: Multi-module test with cross-partition OCaml references
 ; Uses multiple OCaml modules (A, B, C) that call each other's functions
 ; and access each other's data. With a small partition size, these modules
@@ -187,6 +233,37 @@
        (= %{system} "linux")))
  (deps cross_partition.sections)
  (action (bash "grep -q '\\.caml\\.p1' cross_partition.sections || (echo 'ERROR: cross_partition.exe does not have multiple partitions'; exit 1)")))
+
+; Test 3b: Same as Test 3 but with -function-sections for the main file
+; Tests dissector with mixed function-sections (main) and non-function-sections (modules)
+; This is realistic since stdlib has function-sections but user libs might not
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cross_partition_fs.exe)
+ (deps module_a.cmx module_a.o module_b.cmx module_b.o
+       module_c.cmx module_c.o cross_partition_main.ml)
+ (action
+  (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.0015
+       module_a.cmx module_b.cmx module_c.cmx cross_partition_main.ml
+       -o %{target})))
+
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cross_partition_fs.output)
+ (deps cross_partition_fs.exe)
+ (action (with-outputs-to %{target} (run ./cross_partition_fs.exe))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps cross_partition.expected cross_partition_fs.output)
+ (action (diff cross_partition.expected cross_partition_fs.output)))
 
 ; Test 4: Large multi-module test to force multiple partitions
 ; Uses larger modules to ensure they end up in different partitions,

@@ -1,0 +1,32 @@
+=== Large cross-partition test (4 partitions) ===
+
+Test 1: Direct calls to Large_module_a
+  Counter: 1, 2
+  Magic: 42
+  arr[5]: 5
+  f00010(100): 111
+
+Test 2: Calls through Large_module_b
+  B.increment: 1
+  B.call_a_increment: 3
+  B.call_a_magic: 42
+  B.get_a_arr_element(10): 10
+  B.arr[15]: 10015
+
+Test 3: Calls through Large_module_c
+  C.increment: 1
+  C.call_a_increment: 4
+  C.call_b_increment: 2
+  C.call_a_magic: 42
+  C.get_a_arr_element(20): 20
+  C.get_b_arr_element(25): 10025
+  C.arr[30]: 20030
+
+Test 4: call_all functions
+  A.call_all(1): 50015000
+  B.call_all(1): 60015000
+  C.call_all(1): 70015000
+  B.call_a_functions(1): 50015000
+  C.call_both_functions(1): 110030000
+
+=== All tests passed! ===
