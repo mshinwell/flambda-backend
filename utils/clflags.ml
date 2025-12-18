@@ -897,6 +897,7 @@ let zero_alloc_assert = ref Zero_alloc_annotations.Assert.Assert_default (* -zer
 let no_auto_include_otherlibs = ref false      (* -no-auto-include-otherlibs *)
 
 let dissector = ref false                      (* -dissector *)
+let dissector_partition_size_default = 1.0     (* Default partition size in GiB *)
 let dissector_partition_size = ref None        (* -dissector-partition-size *)
 let ddissector = ref false                     (* -ddissector *)
 let ddissector_sizes = ref false               (* -ddissector-sizes *)

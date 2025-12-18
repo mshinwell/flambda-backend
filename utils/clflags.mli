@@ -367,6 +367,7 @@ val zero_alloc_assert : Zero_alloc_annotations.Assert.t ref
 val no_auto_include_otherlibs : bool ref
 
 val dissector : bool ref
+val dissector_partition_size_default : float
 val dissector_partition_size : float option ref
 val ddissector : bool ref
 val ddissector_sizes : bool ref

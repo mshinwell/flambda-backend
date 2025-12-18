@@ -46,10 +46,10 @@ let () =
     | Error err -> Some (Location.error_of_printer_file report_error err)
     | _ -> None)
 
-(* Default partition size: 1 GiB *)
-let default_partition_size = Int64.shift_left 1L 30
-
 let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
+
+(* Default partition size in bytes, derived from Clflags *)
+let default_partition_size = bytes_of_gb Clflags.dissector_partition_size_default
 
 let partition_files ~threshold file_sizes =
   (* Separate files with probes from files without probes. Files with probes
