@@ -1158,9 +1158,11 @@ let encode_load_store_halfword :
  fun state ~instr_name ~opc ~rd addressing ->
   encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
 
-(* Load-Acquire (LDAR) encoding. Format: size[31:30] | 001000 | L[22] | 1 |
-   Rs=11111 | o0[15] | Rt2=11111 | Rn[9:5] | Rt[4:0] For LDAR: L=1, o0=1 size:
-   10 for 32-bit, 11 for 64-bit *)
+(* Load-Acquire (LDAR) encoding.
+   Format: size[31:30] | 001000 | o2[23] | L[22] | o1[21] | Rs[20:16] |
+           o0[15] | Rt2[14:10] | Rn[9:5] | Rt[4:0]
+   For LDAR: o2=1, L=1, o1=0, Rs=11111, o0=1, Rt2=11111
+   size: 10 for 32-bit, 11 for 64-bit *)
 let encode_load_acquire :
     type a. rd:[`GP of a] Reg.t -> rn:[`GP of _] Reg.t -> int32 =
  fun ~rd ~rn ->
@@ -1171,17 +1173,18 @@ let encode_load_acquire :
   in
   let rt = Reg.gp_encoding rd in
   let rn_enc = Reg.gp_encoding rn in
+  let o2 = 1 in
   let l = 1 in
+  let o1 = 0 in
   let o0 = 1 in
   let rs = 0b11111 in
   let rt2 = 0b11111 in
-  (* size[31:30] | 001000 | L[22] | 1[21] | Rs[20:16] | o0[15] | Rt2[14:10] |
-     Rn[9:5] | Rt[4:0] *)
   let open Int32 in
   let result = shift_left (of_int size) 30 in
   let result = logor result (shift_left (of_int 0b001000) 24) in
+  let result = logor result (shift_left (of_int o2) 23) in
   let result = logor result (shift_left (of_int l) 22) in
-  let result = logor result (shift_left (of_int 1) 21) in
+  let result = logor result (shift_left (of_int o1) 21) in
   let result = logor result (shift_left (of_int rs) 16) in
   let result = logor result (shift_left (of_int o0) 15) in
   let result = logor result (shift_left (of_int rt2) 10) in
@@ -2381,7 +2384,7 @@ let encode_instruction :
   | Triple (Reg rd, Reg rn, Reg rm), SMULH ->
     (* SMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
     (* Encoding: sf=1 op54=00 11011 op31=010 Rm o0=0 Ra=11111 Rn Rd *)
-    let ra = Arm64_ast.Reg.reg_x 31 in
+    let ra = Arm64_ast.Reg.xzr () in
     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b010 ~o0:0 ~rm ~ra ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
@@ -2584,7 +2587,7 @@ let encode_instruction :
   | Triple (Reg rd, Reg rn, Reg rm), UMULH ->
     (* UMULH is 64-bit only. Ra is encoded as 11111 (ignored for multiply-high) *)
     (* Encoding: sf=1 op54=00 11011 op31=110 Rm o0=0 Ra=11111 Rn Rd *)
-    let ra = Arm64_ast.Reg.reg_x 31 in
+    let ra = Arm64_ast.Reg.xzr () in
     encode_data_proc_3_source ~sf:1 ~op54:0b00 ~op31:0b110 ~o0:0 ~rm ~ra ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },

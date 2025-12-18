@@ -155,6 +155,10 @@ module Reg : sig
 
   val sp : unit -> [`GP of [`SP]] t
 
+  val xzr : unit -> [`GP of [`XZR]] t
+
+  val wzr : unit -> [`GP of [`WZR]] t
+
   val name : _ t -> string
 
   val gp_encoding : [`GP of _] t -> int
