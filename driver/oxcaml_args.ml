@@ -380,8 +380,9 @@ let mk_dissector f =
 let mk_dissector_partition_size f =
   ( "-dissector-partition-size",
     Arg.Float f,
-    "<size> Set the partition size threshold in gigabytes for the dissector \
-     pass (default: 1.5)" )
+    Printf.sprintf
+      "<size> Set the partition size threshold in gigabytes for the dissector \
+       pass (default: %g)" Clflags.dissector_partition_size_default )
 
 let mk_ddissector f =
   ("-ddissector", Arg.Unit f, " Print verbose logging from the dissector pass")
