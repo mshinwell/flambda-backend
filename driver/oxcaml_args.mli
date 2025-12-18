@@ -89,6 +89,7 @@ module type Oxcaml_options = sig
   val ddissector_sizes : unit -> unit
   val ddissector_verbose : unit -> unit
   val ddissector_partitions : unit -> unit
+  val ddissector_inputs : string -> unit
   val gc_timings : unit -> unit
   val no_mach_ir : unit -> unit
   val dllvmir : unit -> unit
