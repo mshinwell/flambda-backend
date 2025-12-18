@@ -2689,15 +2689,31 @@ let emit_code_and_data emitter ~state_for_section =
         for _ = 1 to bytes do
           Buffer.add_char buf '\x00'
         done
-      | Align { bytes; _ } ->
+      | Align { bytes; fill } ->
         let offset = Section_state.offset_in_bytes state in
         let remainder = offset mod bytes in
         if remainder <> 0
         then
           let padding = bytes - remainder in
-          for _ = 1 to padding do
-            Buffer.add_char buf '\x00'
-          done
+          (match fill with
+          | D.Nop ->
+            (* Emit NOP instructions (4 bytes each) for code alignment *)
+            let nop_count = padding / 4 in
+            let zero_count = padding mod 4 in
+            for _ = 1 to nop_count do
+              (* ARM64 NOP: 0xD503201F in little-endian *)
+              Buffer.add_char buf '\x1f';
+              Buffer.add_char buf '\x20';
+              Buffer.add_char buf '\x03';
+              Buffer.add_char buf '\xd5'
+            done;
+            for _ = 1 to zero_count do
+              Buffer.add_char buf '\x00'
+            done
+          | D.Zero ->
+            for _ = 1 to padding do
+              Buffer.add_char buf '\x00'
+            done)
       | Const { constant; _ } -> (
         let module C = D.Directive.Constant_with_width in
         let c = C.constant constant in

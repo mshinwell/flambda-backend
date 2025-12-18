@@ -2626,9 +2626,11 @@ module DSL = struct
   let mem ~(base : [`GP of [< `X | `SP]] Reg.t) = Operand.Mem (Reg base)
 
   let mem_offset ~(base : [`GP of [< `X | `SP]] Reg.t) ~offset =
-    (* Use unsigned scaled encoding for non-negative offsets that fit,
-       otherwise use signed unscaled encoding (LDUR/STUR) *)
-    if offset >= 0 then
+    (* Use unsigned scaled encoding for non-negative, 8-byte aligned offsets.
+       Use signed unscaled encoding (LDUR/STUR) for negative or unaligned offsets.
+       The scaled encoding requires alignment to access size; using 8-byte
+       alignment is safe for all access sizes (1, 2, 4, 8 bytes). *)
+    if offset >= 0 && offset mod 8 = 0 then
       Operand.Mem (Offset_imm (base, Twelve_unsigned_scaled offset))
     else
       Operand.Mem (Offset_unscaled (base, Nine_signed_unscaled offset))

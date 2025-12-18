@@ -1402,7 +1402,7 @@ let emit_literals p align emit_literal =
        ref does not support named text sections yet. Fix this when cleaning up
        the section mechanism. *)
     D.unsafe_set_internal_section_ref Text;
-    D.align ~fill_x86_bin_emitter:Nop ~bytes:align;
+    D.align ~fill:Nop ~bytes:align;
     List.iter emit_literal !p;
     p := [])
 
@@ -2824,7 +2824,7 @@ let fundecl fundecl =
   contains_calls := fundecl.fun_contains_calls;
   emit_named_text_section !function_name;
   let fun_sym = S.create fundecl.fun_name in
-  D.align ~fill_x86_bin_emitter:Nop ~bytes:8;
+  D.align ~fill:Nop ~bytes:8;
   D.global fun_sym;
   D.type_symbol ~ty:Function fun_sym;
   D.define_symbol_label ~section:Text fun_sym;
@@ -2886,11 +2886,11 @@ let emit_item (d : Cmm.data_item) =
     D.symbol_plus_offset ~offset_in_bytes:(Targetint.of_int o) sym
   | Cstring s -> D.string s
   | Cskip n -> D.space ~bytes:n
-  | Calign n -> D.align ~fill_x86_bin_emitter:Zero ~bytes:n
+  | Calign n -> D.align ~fill:Zero ~bytes:n
 
 let data l =
   D.data ();
-  D.align ~fill_x86_bin_emitter:Zero ~bytes:8;
+  D.align ~fill:Zero ~bytes:8;
   List.iter emit_item l
 
 let file_emitter ~file_num ~file_name =
@@ -2946,7 +2946,7 @@ let begin_assembly _unix =
   if macosx
   then (
     A.ins0 NOP;
-    D.align ~fill_x86_bin_emitter:Nop ~bytes:8);
+    D.align ~fill:Nop ~bytes:8);
   let code_end = Cmm_helpers.make_symbol "code_end" in
   Emitaux.Dwarf_helpers.begin_dwarf ~code_begin ~code_end ~file_emitter
 
@@ -2964,7 +2964,7 @@ let end_assembly () =
   D.global data_end_sym;
   D.define_symbol_label ~section:Data data_end_sym;
   D.int64 0L;
-  D.align ~fill_x86_bin_emitter:Zero ~bytes:8;
+  D.align ~fill:Zero ~bytes:8;
   (* #7887 *)
   let frametable = Cmm_helpers.make_symbol "frametable" in
   let frametable_sym = S.create frametable in
@@ -2989,7 +2989,7 @@ let end_assembly () =
       efa_u16 = (fun n -> D.uint16 n);
       efa_u32 = (fun n -> D.uint32 n);
       efa_word = (fun n -> D.targetint (Targetint.of_int_exn n));
-      efa_align = (fun n -> D.align ~fill_x86_bin_emitter:Zero ~bytes:n);
+      efa_align = (fun n -> D.align ~fill:Zero ~bytes:n);
       efa_label_rel =
         (fun lbl ofs ->
           let lbl = label_to_asm_label ~section:Data lbl in
@@ -3032,8 +3032,15 @@ let end_assembly () =
       let dir = !Emitaux.output_prefix ^ ".binary-sections" in
       (try Sys.mkdir dir 0o755 with Sys_error _ -> ());
       List.iter (fun (name, state) ->
+        (* Convert section name like ".text" to "section_text" *)
+        let safe_name =
+          if String.length name > 0 && Char.equal (String.get name 0) '.' then
+            "section_" ^ String.sub name 1 (String.length name - 1)
+          else
+            "section_" ^ name
+        in
         (* Save binary content *)
-        let bin_filename = Filename.concat dir (name ^ ".bin") in
+        let bin_filename = Filename.concat dir (safe_name ^ ".bin") in
         let oc = open_out_bin bin_filename in
         output_string oc (Arm64_binary_emitter.Section_state.contents state);
         close_out oc;
@@ -3042,7 +3049,7 @@ let end_assembly () =
         begin match relocs with
         | [] -> ()
         | _ ->
-          let reloc_filename = Filename.concat dir (name ^ ".relocs") in
+          let reloc_filename = Filename.concat dir (safe_name ^ ".relocs") in
           let oc = open_out reloc_filename in
           let module R = Arm64_binary_emitter.For_jit.Relocation in
           List.iter (fun reloc ->

@@ -106,12 +106,19 @@ let is_logical_immediate x =
    - imms encodes both the element size and number of 1s
 
    - immr encodes the rotation amount *)
+(* Create a mask with [n] low bits set to 1.
+   For n=64, shift_left 1n 64 wraps to 1 due to modular shift on 64-bit nativeint,
+   so we handle this case specially by returning -1n (all bits set). *)
+let mask_of_width n =
+  if n >= 64 then (-1n) else Nativeint.(sub (shift_left 1n n) 1n)
+
 let encode_logical_immediate_fields (x : nativeint) : int * int * int =
   if not (is_logical_immediate x)
   then
     invalid_arg "encode_logical_immediate_fields: not a valid logical immediate";
   let len = logical_imm_length x in
-  let pattern = Nativeint.(logand x (sub (shift_left 1n len) 1n)) in
+  let mask = mask_of_width len in
+  let pattern = Nativeint.(logand x mask) in
   (* Find the rightmost set bit position (start of ones run if not rotated) *)
   let rec find_first_one p pos =
     if pos >= len
@@ -147,8 +154,10 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
   let rotation, ones = find_rotation pattern 0 in
   (* Encode N based on element size *)
   let n = if len = 64 then 1 else 0 in
-  (* immr is the rotation amount *)
-  let immr = rotation in
+  (* immr encodes the rotation: ARM rotates the canonical form (1s at LSB) right
+     by immr to produce the actual value. Since we rotated right by 'rotation'
+     to get the canonical form, the inverse is (len - rotation) mod len. *)
+  let immr = (len - rotation) mod len in
   (* imms encodes the element size and number of ones Format:
      NOT(element_size_encoding) : (ones - 1) Element size encoding: 0=64, 10=32,
      110=16, 1110=8, 11110=4, 111110=2 *)

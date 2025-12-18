@@ -197,7 +197,7 @@ module Directive = struct
   type t =
     | Align of
         { bytes : int;
-          fill_x86_bin_emitter : align_padding
+          fill : align_padding
         }
     | Bytes of
         { str : string;
@@ -344,8 +344,8 @@ module Directive = struct
         | Some comment -> Printf.sprintf "\t/* %s */" comment
     in
     match t with
-    | Align { bytes = n; fill_x86_bin_emitter = _ } ->
-      (* The flag [fill_x86_bin_emitter] is only relevant for the binary
+    | Align { bytes = n; fill = _ } ->
+      (* The flag [fill] is only relevant for the binary
          emitter. On GAS, we can ignore it and just use [.align] in both
          cases. *)
       (* Some assemblers interpret the integer n as a 2^n alignment and others
@@ -483,8 +483,8 @@ module Directive = struct
         | Some comment -> Printf.sprintf "\t; %s" comment
     in
     match t with
-    | Align { bytes; fill_x86_bin_emitter = _ } ->
-      (* The flag [fill_x86_bin_emitter] is only relevant for the x86 binary
+    | Align { bytes; fill = _ } ->
+      (* The flag [fill] is only relevant for the x86 binary
          emitter. On MASM, we can ignore it. *)
       bprintf buf "\tALIGN\t%d" bytes
     | Bytes { str; comment } ->
@@ -692,8 +692,8 @@ let emit_non_masm (d : Directive.t) =
 let section ~names ~flags ~args ~is_delayed =
   emit (Section { names; flags; args; is_delayed })
 
-let align ~fill_x86_bin_emitter ~bytes =
-  emit (Align { bytes; fill_x86_bin_emitter })
+let align ~fill ~bytes =
+  emit (Align { bytes; fill })
 
 let should_generate_cfi () =
   (* We generate CFI info even if we're not generating any other debugging

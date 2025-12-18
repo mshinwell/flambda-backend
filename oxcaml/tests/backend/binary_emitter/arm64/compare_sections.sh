@@ -41,22 +41,23 @@ TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
 
 # Map binary emitter section names to Mach-O section names
-# On macOS, .text becomes __TEXT,__text, etc.
+# Binary emitter saves files as section_text.bin, section_data.bin, etc.
+# On macOS, these correspond to __text, __data, etc.
 map_section_name() {
     local bin_name="$1"
     case "$bin_name" in
-        ".text")
+        "section_text")
             echo "__text"
             ;;
-        ".rodata")
+        "section_rodata")
             echo "__const"
             ;;
-        ".data")
+        "section_data")
             echo "__data"
             ;;
         *)
-            # Strip leading dot and try as-is
-            echo "${bin_name#.}"
+            # Strip "section_" prefix and try as-is
+            echo "${bin_name#section_}"
             ;;
     esac
 }
@@ -69,6 +70,7 @@ extract_section() {
 
     if [ "$OBJDUMP_TYPE" = "llvm" ]; then
         # LLVM objdump: use --full-contents
+        # Parse hex bytes and pipe through xxd to convert to binary
         objdump --full-contents -j "$section" "$obj_file" 2>/dev/null | \
             awk '
             /^ [0-9a-f]+ / {
@@ -81,13 +83,8 @@ extract_section() {
                 sub(/  +[^ ].*$/, "", line)
                 # Remove all spaces
                 gsub(/ /, "", line)
-                hex = hex line
-            }
-            END {
-                for (i = 1; i <= length(hex); i += 2) {
-                    printf "%c", strtonum("0x" substr(hex, i, 2))
-                }
-            }' > "$output"
+                print line
+            }' | xxd -r -p > "$output"
     else
         # GNU objdump
         objdump -s -j "$section" "$obj_file" 2>/dev/null | \
@@ -95,15 +92,10 @@ extract_section() {
             /^ [0-9a-f]+ / {
                 for (i = 2; i <= 5 && i <= NF; i++) {
                     if ($i ~ /^[0-9a-fA-F]+$/) {
-                        hex = hex $i
+                        print $i
                     }
                 }
-            }
-            END {
-                for (i = 1; i <= length(hex); i += 2) {
-                    printf "%c", strtonum("0x" substr(hex, i, 2))
-                }
-            }' > "$output"
+            }' | xxd -r -p > "$output"
     fi
 }
 
@@ -191,7 +183,7 @@ for bin_file in "$BINARY_DIR"/*.bin; do
 
     # Compare based on section type
     case "$section_name" in
-        .text)
+        section_text)
             compare_text_section "$sys_section" "$bin_file" "$section_name" || ERRORS=$((ERRORS + 1))
             ;;
         *)
