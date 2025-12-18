@@ -107,10 +107,15 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   | Windows _ | MacOS_like | FreeBSD | NetBSD | OpenBSD | Generic_BSD | Solaris
   | Dragonfly | GNU | BeOS | Unknown ->
     Misc.fatal_error "The dissector pass is only supported on Linux targets");
-  (* Collect all files to analyze *)
+  (* Collect all files to analyze, tagging each with its origin *)
   let files =
-    ml_objfiles @ [startup_obj] @ ccobjs @ runtime_libs
-    @ match cached_genfns with None -> [] | Some f -> [f]
+    List.map (fun f -> f, Measure_object_files.OCaml) ml_objfiles
+    @ [(startup_obj, Measure_object_files.Startup)]
+    @ List.map (fun f -> f, Measure_object_files.C_stub) ccobjs
+    @ List.map (fun f -> f, Measure_object_files.Runtime) runtime_libs
+    @ (match cached_genfns with
+       | None -> []
+       | Some f -> [(f, Measure_object_files.Cached_genfns)])
   in
   (* Measure file sizes *)
   let file_sizes =
