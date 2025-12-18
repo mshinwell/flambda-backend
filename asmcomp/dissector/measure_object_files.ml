@@ -79,15 +79,15 @@ let read_cmxa filename : Cmx_format.library_infos =
   cmxa
 
 (* Check if a string is a linker option (starts with '-') rather than a file *)
-let is_linker_option s =
-  String.length s > 0 && String.get s 0 = '-'
+let is_linker_option s = String.length s > 0 && String.get s 0 = '-'
 
 (* Check for duplicate files in the input list, ignoring linker options *)
 let check_for_duplicates files =
   let seen = Hashtbl.create 256 in
   List.iter
     (fun file ->
-      if is_linker_option file then ()
+      if is_linker_option file
+      then ()
       else if Hashtbl.mem seen file
       then raise (Error (Duplicate_file file))
       else Hashtbl.add seen file ())
@@ -158,11 +158,11 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
       if Filename.check_suffix filename ".o"
       then
         let size, has_probes = analyze_object_file filename in
-        [{ File_size.filename; size; has_probes; origin }]
+        [{ File_size.filename; size; has_probes; origin = C_stub }]
       else if Filename.check_suffix filename ".a"
       then
         let size, has_probes = analyze_archive_file filename in
-        [{ File_size.filename; size; has_probes; origin }]
+        [{ File_size.filename; size; has_probes; origin = C_stub }]
       else if Filename.check_suffix filename ".cmx"
       then
         let obj_file = Filename.chop_suffix filename ".cmx" ^ ".o" in
@@ -186,9 +186,7 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
         let cmxa = read_cmxa filename in
         (* lib_ccobjs from .cmxa files are C stub libraries *)
         let ccobjs_entries =
-          List.concat_map
-            (fun f -> analyze_one (f, C_stub))
-            cmxa.lib_ccobjs
+          List.concat_map (fun f -> analyze_one (f, C_stub)) cmxa.lib_ccobjs
         in
         archive_entry @ ccobjs_entries
       else [])
