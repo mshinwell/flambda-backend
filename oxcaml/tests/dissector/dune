@@ -645,3 +645,33 @@
  (deps igot_verify.output)
  (action (bash "grep -q 'IGOT verification passed' igot_verify.output || (cat igot_verify.output; exit 1)")))
 
+; Test: Linker flags (-cclib) should not be treated as files
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cclib_test.exe)
+ (deps cclib_test.ml)
+ (action
+  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.01
+       -cclib -lstdc++ -cclib -lstdc++
+       %{deps} -o %{target})))
+
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cclib_test.output)
+ (deps cclib_test.exe)
+ (action
+  (with-outputs-to %{target}
+   (run ./cclib_test.exe))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps cclib_test.output)
+ (action (bash "grep -q 'cclib test passed' cclib_test.output")))
+
