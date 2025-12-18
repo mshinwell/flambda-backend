@@ -203,7 +203,7 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   new_sections.(igot_idx)
     <- Elf.make_progbits_section
          ~sh_name:(Form_rewrite_plan.igot_name_offset plan)
-         ~sh_name_str:".data.igot"
+         ~sh_name_str:(Form_rewrite_plan.igot_name_str plan)
          ~sh_flags:
            (Int64.logor Elf.Section_flags.shf_write Elf.Section_flags.shf_alloc)
          ~sh_offset:
@@ -214,7 +214,7 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   new_sections.(rela_igot_idx)
     <- Elf.make_rela_section
          ~sh_name:(Form_rewrite_plan.rela_igot_name_offset plan)
-         ~sh_name_str:".rela.data.igot"
+         ~sh_name_str:(Form_rewrite_plan.rela_igot_name_str plan)
          ~sh_offset:
            (Int64.of_int
               (Form_rewrite_plan.Section_layout.offset rela_igot_layout))
@@ -225,7 +225,7 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   new_sections.(iplt_idx)
     <- Elf.make_progbits_section
          ~sh_name:(Form_rewrite_plan.iplt_name_offset plan)
-         ~sh_name_str:".text.iplt"
+         ~sh_name_str:(Form_rewrite_plan.iplt_name_str plan)
          ~sh_flags:
            (Int64.logor Elf.Section_flags.shf_execinstr
               Elf.Section_flags.shf_alloc)
@@ -237,7 +237,7 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
   new_sections.(rela_iplt_idx)
     <- Elf.make_rela_section
          ~sh_name:(Form_rewrite_plan.rela_iplt_name_offset plan)
-         ~sh_name_str:".rela.text.iplt"
+         ~sh_name_str:(Form_rewrite_plan.rela_iplt_name_str plan)
          ~sh_offset:
            (Int64.of_int
               (Form_rewrite_plan.Section_layout.offset rela_iplt_layout))

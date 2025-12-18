@@ -125,9 +125,13 @@ type t =
     shstrtab : Strtab.t;
     section_name_offsets : (string, int * string) Hashtbl.t;
     igot_name_offset : int;
+    igot_name_str : string;
     rela_igot_name_offset : int;
+    rela_igot_name_str : string;
     iplt_name_offset : int;
+    iplt_name_str : string;
     rela_iplt_name_offset : int;
+    rela_iplt_name_str : string;
     igot_idx : int;
     rela_igot_idx : int;
     iplt_idx : int;
@@ -153,11 +157,19 @@ let section_name_offsets t = t.section_name_offsets
 
 let igot_name_offset t = t.igot_name_offset
 
+let igot_name_str t = t.igot_name_str
+
 let rela_igot_name_offset t = t.rela_igot_name_offset
+
+let rela_igot_name_str t = t.rela_igot_name_str
 
 let iplt_name_offset t = t.iplt_name_offset
 
+let iplt_name_str t = t.iplt_name_str
+
 let rela_iplt_name_offset t = t.rela_iplt_name_offset
+
+let rela_iplt_name_str t = t.rela_iplt_name_str
 
 let igot_idx t = t.igot_idx
 
@@ -394,10 +406,14 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
       let offset = Strtab.add shstrtab renamed in
       Hashtbl.add section_name_offsets s.sh_name_str (offset, renamed))
     sections;
-  let igot_name_offset = Strtab.add shstrtab ".data.igot" in
-  let rela_igot_name_offset = Strtab.add shstrtab ".rela.data.igot" in
-  let iplt_name_offset = Strtab.add shstrtab ".text.iplt" in
-  let rela_iplt_name_offset = Strtab.add shstrtab ".rela.text.iplt" in
+  let igot_name_str = rename_section ~partition_kind ".data.igot" in
+  let igot_name_offset = Strtab.add shstrtab igot_name_str in
+  let rela_igot_name_str = rename_section ~partition_kind ".rela.data.igot" in
+  let rela_igot_name_offset = Strtab.add shstrtab rela_igot_name_str in
+  let iplt_name_str = rename_section ~partition_kind ".text.iplt" in
+  let iplt_name_offset = Strtab.add shstrtab iplt_name_str in
+  let rela_iplt_name_str = rename_section ~partition_kind ".rela.text.iplt" in
+  let rela_iplt_name_offset = Strtab.add shstrtab rela_iplt_name_str in
   let num_original = Array.length sections in
   let igot_idx = num_original in
   let rela_igot_idx = num_original + 1 in
@@ -431,9 +447,13 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
     shstrtab;
     section_name_offsets;
     igot_name_offset;
+    igot_name_str;
     rela_igot_name_offset;
+    rela_igot_name_str;
     iplt_name_offset;
+    iplt_name_str;
     rela_iplt_name_offset;
+    rela_iplt_name_str;
     igot_idx;
     rela_igot_idx;
     iplt_idx;

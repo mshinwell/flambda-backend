@@ -25,7 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-let sections = [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"]
+let sections =
+  [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"; ".data.igot"; ".text.iplt"]
 
 let generate ~existing_script ~partitions =
   let buf = Buffer.create 1024 in
