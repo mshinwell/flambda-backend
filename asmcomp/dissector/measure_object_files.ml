@@ -182,9 +182,12 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
     else (
       Hashtbl.add analyzed filename ();
       if Filename.check_suffix filename ".o"
-      then
+      then (
         let size, has_probes = analyze_object_file filename in
-        [{ File_size.filename; size; has_probes; origin }]
+        log "%sInput: %s (%s)\n" indent filename (string_of_origin origin);
+        log "%s  -> %s (%Ld bytes, has_probes=%b)\n" indent filename size
+          has_probes;
+        [{ File_size.filename; size; has_probes; origin }])
       else if Filename.check_suffix filename ".a"
       then (
         let size, has_probes, member_names = analyze_archive_file filename in
