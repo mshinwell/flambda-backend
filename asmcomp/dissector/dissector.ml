@@ -78,10 +78,13 @@ let extract_linker_script_from_ccopts ccopts =
 module Result = struct
   type t =
     { linked_partitions : Partition.Linked.t list;
+      passthrough_files : string list;
       linker_script : string
     }
 
   let linked_partitions r = r.linked_partitions
+
+  let passthrough_files r = r.passthrough_files
 
   let linker_script r = r.linker_script
 end
@@ -131,10 +134,14 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
     | None -> Partition_object_files.default_partition_size
   in
   (* Partition files *)
-  let partitions =
+  let partition_result =
     try Partition_object_files.partition_files ~threshold file_sizes
     with Partition_object_files.Error err ->
       raise (Error (Partition_error err))
+  in
+  let partitions = Partition_object_files.partitions partition_result in
+  let passthrough_files =
+    Partition_object_files.passthrough_files partition_result
   in
   let total =
     List.fold_left
@@ -144,6 +151,8 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   in
   log "total allocated section size = %Ld bytes" total;
   log "partitioned into %d partition(s)" (List.length partitions);
+  log "%d passthrough file(s) (will bypass partial linking)"
+    (List.length passthrough_files);
   let linked_partitions =
     try Partial_link.link_partitions ~temp_dir partitions
     with Partial_link.Error err -> raise (Error (Partial_link_error err))
@@ -178,4 +187,4 @@ let run ~(unix : (module Compiler_owee.Unix_intf.S)) ~temp_dir ~ml_objfiles
   Linker_script.write ~output_file:linker_script ~existing_script
     ~partitions:linked_partitions;
   log "generated linker script: %s" linker_script;
-  { Result.linked_partitions; linker_script }
+  { Result.linked_partitions; passthrough_files; linker_script }

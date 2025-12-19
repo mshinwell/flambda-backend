@@ -35,11 +35,15 @@ let object_files t = t.object_files
 let linker_script t = t.linker_script
 
 let build result =
-  let obj_files =
+  let partition_files =
     List.map
       (fun partition -> Partition.Linked.linked_object partition ^ ".rewritten")
       (Dissector.Result.linked_partitions result)
   in
+  (* Passthrough files (C stubs) are added after the partition files. They
+     bypass partial linking and go directly to the final linker. *)
+  let passthrough_files = Dissector.Result.passthrough_files result in
+  let obj_files = partition_files @ passthrough_files in
   { object_files = obj_files;
     linker_script = Dissector.Result.linker_script result
   }
