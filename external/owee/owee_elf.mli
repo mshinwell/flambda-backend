@@ -57,6 +57,9 @@ module Section_type : sig
 
   val sht_rela : u32
   (** Relocation entries with addends. *)
+
+  val sht_symtab_shndx : u32
+  (** Extended section indices for symbols (when section count >= SHN_LORESERVE). *)
 end
 
 (** ELF section header flags (sh_flags field). *)

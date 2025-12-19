@@ -150,6 +150,7 @@ module Section_type = struct
   let sht_symtab = 2
   let sht_strtab = 3
   let sht_rela = 4
+  let sht_symtab_shndx = 18
 end
 
 module Section_flags = struct

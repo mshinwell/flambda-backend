@@ -71,6 +71,9 @@ module Layout : sig
 
   val symtab : t -> Section_layout.t
 
+  (** Layout of SYMTAB_SHNDX section, if the input file has one. *)
+  val symtab_shndx : t -> Section_layout.t option
+
   val strtab : t -> Section_layout.t
 
   val shstrtab : t -> Section_layout.t
@@ -141,6 +144,9 @@ val rela_iplt_idx : t -> int
 val num_sections : t -> int
 
 val symtab_idx : t -> int
+
+(** Index of the SYMTAB_SHNDX section in the input file, if present. *)
+val symtab_shndx_idx : t -> int option
 
 val layout : t -> Layout.t
 
