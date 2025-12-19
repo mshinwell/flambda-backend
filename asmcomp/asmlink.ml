@@ -238,15 +238,12 @@ let call_linker ?dissector_args file_list_rev startup_file output_name =
         then ""
         else Config.native_c_libraries
       in
-      (* Filter ccobjs to only include linker flags (starting with -).
-         These flags (e.g. -l:libfoo.a) must come before partition files
-         on the command line so that static libraries are available when
-         the linker processes the partition object files. *)
+      (* Filter ccobjs to only include linker flags (starting with -l) *)
       let linker_flags =
         List.filter (fun s -> String.length s > 0 && s.[0] = '-')
           (List.rev !Clflags.ccobjs)
       in
-      linker_flags @ Build_linker_args.object_files args, c_lib
+      Build_linker_args.object_files args @ linker_flags, c_lib
     | None ->
       (* Normal mode: combine startup + ml_objfiles + ccobjs + runtime_lib *)
       let file_list_rev =
