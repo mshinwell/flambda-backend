@@ -148,6 +148,13 @@ val symtab_idx : t -> int
 (** Index of the SYMTAB_SHNDX section in the input file, if present. *)
 val symtab_shndx_idx : t -> int option
 
+(** Index of a newly created SYMTAB_SHNDX section, if one needs to be created
+    because the input doesn't have one but new section indices >= SHN_LORESERVE. *)
+val new_symtab_shndx_idx : t -> int option
+
+(** Name offset in shstrtab for a newly created SYMTAB_SHNDX section. *)
+val symtab_shndx_name_offset : t -> int option
+
 val layout : t -> Layout.t
 
 (** [compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections

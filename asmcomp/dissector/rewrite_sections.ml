@@ -43,15 +43,22 @@ let write_symbol ~cursor ~strtab sym =
 (* Symbol visibility: STV_HIDDEN = 2 *)
 let stv_hidden = 2
 
+(* When section_index >= SHN_LORESERVE, we must use SHN_XINDEX and store the
+   actual index in the SYMTAB_SHNDX section. *)
 let write_synthetic_symbol ~cursor ~strtab ~name ~section_index ~offset ~size
     ~is_func =
+  let st_shndx =
+    if section_index >= Rela.shn_loreserve
+    then Rela.shn_xindex
+    else section_index
+  in
   Rela.write_sym_entry ~cursor
     { st_name = Strtab.add strtab name;
       st_info =
         Rela.make_st_info ~binding:Rela.Stb.global
           ~typ:(if is_func then Rela.Stt.func else Rela.Stt.notype);
       st_other = stv_hidden;
-      st_shndx = section_index;
+      st_shndx;
       st_value = Int64.of_int offset;
       st_size = Int64.of_int size
     }
@@ -151,37 +158,67 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
        ~at:(Form_rewrite_plan.Section_layout.offset strtab_layout))
     (Form_rewrite_plan.Section_layout.size strtab_layout)
     (Strtab.contents plan_strtab);
-  (* Write extended SYMTAB_SHNDX section if present. This section must have the
-     same number of entries as the symbol table. We copy original entries and
-     add zero entries for new symbols (new symbols have valid st_shndx values
-     that don't require extended section indices). *)
+  (* Write extended SYMTAB_SHNDX section if needed. This section must have the
+     same number of entries as the symbol table.
+
+     For symbols with st_shndx < SHN_LORESERVE, the SYMTAB_SHNDX entry is 0.
+     For symbols with st_shndx = SHN_XINDEX, the SYMTAB_SHNDX entry contains
+     the actual section index. *)
   (match
      ( Form_rewrite_plan.symtab_shndx_idx plan,
        Form_rewrite_plan.Layout.symtab_shndx plan_layout )
    with
-  | Some symtab_shndx_idx, Some symtab_shndx_layout ->
-    let original_symtab_shndx_section = sections.(symtab_shndx_idx) in
-    let original_symtab_shndx_body =
-      Elf.section_body input_buf original_symtab_shndx_section
-    in
+  | _, Some symtab_shndx_layout ->
     let cursor =
       Buf.cursor output_buf
         ~at:(Form_rewrite_plan.Section_layout.offset symtab_shndx_layout)
     in
-    (* Copy original entries *)
-    let original_size = Buf.size original_symtab_shndx_body in
-    for i = 0 to original_size - 1 do
-      Buf.Write.u8 cursor (Bigarray.Array1.get original_symtab_shndx_body i)
-    done;
-    (* Add zero entries for new symbols (4 bytes each) *)
-    let num_original = Array.length (Form_rewrite_plan.original_symbols plan) in
-    let total = Form_rewrite_plan.total_symbols plan in
-    let new_symbols = total - num_original in
-    for _ = 1 to new_symbols * 4 do
-      Buf.Write.u8 cursor 0
-    done
+    (* Helper to write a 32-bit little-endian value *)
+    let write_u32_le cursor value =
+      Buf.Write.u8 cursor (value land 0xff);
+      Buf.Write.u8 cursor ((value lsr 8) land 0xff);
+      Buf.Write.u8 cursor ((value lsr 16) land 0xff);
+      Buf.Write.u8 cursor ((value lsr 24) land 0xff)
+    in
+    (* Copy original entries if input has SYMTAB_SHNDX, else write zeros *)
+    (match Form_rewrite_plan.symtab_shndx_idx plan with
+    | Some symtab_shndx_idx ->
+      let original_symtab_shndx_section = sections.(symtab_shndx_idx) in
+      let original_symtab_shndx_body =
+        Elf.section_body input_buf original_symtab_shndx_section
+      in
+      let original_size = Buf.size original_symtab_shndx_body in
+      for i = 0 to original_size - 1 do
+        Buf.Write.u8 cursor (Bigarray.Array1.get original_symtab_shndx_body i)
+      done
+    | None ->
+      (* Input doesn't have SYMTAB_SHNDX; write zeros for all original symbols
+         (they all have st_shndx < SHN_LORESERVE) *)
+      let num_original =
+        Array.length (Form_rewrite_plan.original_symbols plan)
+      in
+      for _ = 1 to num_original do
+        write_u32_le cursor 0
+      done);
+    (* Write extended section indices for IGOT symbols *)
+    let igot_idx = Form_rewrite_plan.igot_idx plan in
+    let igot_shndx_entry =
+      if igot_idx >= Rela.shn_loreserve then igot_idx else 0
+    in
+    List.iter
+      (fun _ -> write_u32_le cursor igot_shndx_entry)
+      (Igot.entries igot);
+    (* Write extended section indices for IPLT symbols *)
+    let iplt_idx = Form_rewrite_plan.iplt_idx plan in
+    let iplt_shndx_entry =
+      if iplt_idx >= Rela.shn_loreserve then iplt_idx else 0
+    in
+    List.iter
+      (fun _ -> write_u32_le cursor iplt_shndx_entry)
+      (Iplt.entries iplt)
   | None, None -> ()
-  | _ -> Misc.fatal_error "SYMTAB_SHNDX state mismatch");
+  | Some _, None ->
+    Misc.fatal_error "SYMTAB_SHNDX in input but no layout allocated");
   (* Write rewritten .rela.text* sections back to their original locations *)
   List.iter
     (fun rewritten_section ->
@@ -283,6 +320,25 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
            (Int64.of_int
               (Form_rewrite_plan.Section_layout.size rela_iplt_layout))
          ~sh_link:symtab_idx ~sh_info:iplt_idx;
+  (* Create new SYMTAB_SHNDX section if needed *)
+  (match
+     ( Form_rewrite_plan.new_symtab_shndx_idx plan,
+       Form_rewrite_plan.symtab_shndx_name_offset plan,
+       symtab_shndx_layout_opt )
+   with
+  | Some new_idx, Some name_offset, Some symtab_shndx_layout ->
+    new_sections.(new_idx)
+      <- Elf.make_symtab_shndx_section ~sh_name:name_offset
+           ~sh_name_str:".symtab_shndx"
+           ~sh_offset:
+             (Int64.of_int
+                (Form_rewrite_plan.Section_layout.offset symtab_shndx_layout))
+           ~sh_size:
+             (Int64.of_int
+                (Form_rewrite_plan.Section_layout.size symtab_shndx_layout))
+           ~sh_link:symtab_idx
+  | None, None, _ -> ()
+  | _ -> Misc.fatal_error "Inconsistent new SYMTAB_SHNDX state");
   (* Update the shstrtab section that was already processed by update_section
      (which updated sh_name and sh_name_str), not the original shstrtab_section *)
   let updated_shstrtab = new_sections.(header.Elf.e_shstrndx) in

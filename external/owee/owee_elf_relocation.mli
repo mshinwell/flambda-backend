@@ -14,6 +14,14 @@ val sht_symtab : int
 val shn_undef : int
 (** Special section index indicating an undefined symbol. *)
 
+val shn_loreserve : int
+(** Start of reserved section indices (0xff00). Section indices >= this value
+    require extended section indices via SHT_SYMTAB_SHNDX. *)
+
+val shn_xindex : int
+(** Special section index (0xffff) indicating that the actual section index
+    is stored in the corresponding SHT_SYMTAB_SHNDX entry. *)
+
 (** {1 x86-64 Relocation Types} *)
 
 val r_x86_64_plt32 : int64

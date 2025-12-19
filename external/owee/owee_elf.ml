@@ -195,6 +195,24 @@ let make_rela_section ~sh_name ~sh_name_str ~sh_offset ~sh_size ~sh_link
     sh_name_str
   }
 
+(* Size of an entry in SYMTAB_SHNDX section (Elf32_Word) *)
+let symtab_shndx_entry_size = 4
+
+let make_symtab_shndx_section ~sh_name ~sh_name_str ~sh_offset ~sh_size ~sh_link
+    =
+  { sh_name;
+    sh_type = Section_type.sht_symtab_shndx;
+    sh_flags = 0L;
+    sh_addr = 0L;
+    sh_offset;
+    sh_size;
+    sh_link;
+    sh_info = 0;
+    sh_addralign = 4L;
+    sh_entsize = Int64.of_int symtab_shndx_entry_size;
+    sh_name_str
+  }
+
 let read_section header t n =
   seek t ((Int64.to_int header.e_shoff) + n * header.e_shentsize);
   ensure t 64 "Shdr truncated";

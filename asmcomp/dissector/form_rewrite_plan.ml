@@ -142,6 +142,10 @@ type t =
     num_sections : int;
     symtab_idx : int;
     symtab_shndx_idx : int option;
+    (* When we need to create a new SYMTAB_SHNDX section (input doesn't have one
+       but new section indices >= SHN_LORESERVE) *)
+    new_symtab_shndx_idx : int option;
+    symtab_shndx_name_offset : int option;
     layout : Layout.t
   }
 
@@ -188,6 +192,10 @@ let num_sections t = t.num_sections
 let symtab_idx t = t.symtab_idx
 
 let symtab_shndx_idx t = t.symtab_shndx_idx
+
+let new_symtab_shndx_idx t = t.new_symtab_shndx_idx
+
+let symtab_shndx_name_offset t = t.symtab_shndx_name_offset
 
 let layout t = t.layout
 
@@ -439,7 +447,6 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
   let rela_igot_idx = num_original + 1 in
   let iplt_idx = num_original + 2 in
   let rela_iplt_idx = num_original + 3 in
-  let num_sections = num_original + 4 in
   let symtab_idx =
     let idx = ref 0 in
     Array.iteri
@@ -457,6 +464,24 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
       sections;
     !idx
   in
+  (* We need SYMTAB_SHNDX if the input has one, OR if our new section indices
+     are >= SHN_LORESERVE (65280). *)
+  let needs_symtab_shndx =
+    Option.is_some symtab_shndx_idx || igot_idx >= Rela.shn_loreserve
+  in
+  (* If we need SYMTAB_SHNDX but the input doesn't have it, we need to create
+     a new section. *)
+  let need_new_symtab_shndx =
+    needs_symtab_shndx && Option.is_none symtab_shndx_idx
+  in
+  let new_symtab_shndx_idx, symtab_shndx_name_offset, num_sections =
+    if need_new_symtab_shndx
+    then
+      let idx = num_original + 4 in
+      let name_offset = Strtab.add shstrtab ".symtab_shndx" in
+      Some idx, Some name_offset, num_original + 5
+    else None, None, num_original + 4
+  in
   let original_data_end =
     Array.fold_left
       (fun acc (s : Elf.section) -> max acc (Int64.add s.sh_offset s.sh_size))
@@ -467,7 +492,7 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
       ~strtab_size:(Strtab.length strtab)
       ~shstrtab_size:(Strtab.length shstrtab) ~num_sections
       ~shentsize:header.Elf.e_shentsize
-      ~has_symtab_shndx:(Option.is_some symtab_shndx_idx)
+      ~has_symtab_shndx:needs_symtab_shndx
   in
   { original_symbols;
     symbol_to_index;
@@ -491,5 +516,7 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
     num_sections;
     symtab_idx;
     symtab_shndx_idx;
+    new_symtab_shndx_idx;
+    symtab_shndx_name_offset;
     layout
   }
