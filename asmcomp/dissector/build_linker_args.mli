@@ -53,12 +53,13 @@
 type t
 
 (** Returns the object files for the final linker. This includes:
+    - Passthrough files (ccobjs - C stub files that bypass partial linking)
     - Rewritten partition .o files (containing startup_obj, ml_objfiles,
       and runtime_libs that were partially linked)
-    - Passthrough files (ccobjs - C stub files that bypass partial linking)
 
-    The caller should pass these files to the linker and NOT add ccobjs or
-    runtime_libs separately. *)
+    The partition files come last to ensure they are linked after the libraries
+    they may depend on. The caller should pass these files to the linker and
+    NOT add ccobjs or runtime_libs separately. *)
 val object_files : t -> string list
 
 (** Returns the path to the generated linker script. This should be passed to
