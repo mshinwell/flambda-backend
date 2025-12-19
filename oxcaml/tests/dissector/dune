@@ -675,3 +675,118 @@
  (deps cclib_test.output)
  (action (bash "grep -q 'cclib test passed' cclib_test.output")))
 
+; Test: C stub passthrough - verify C stubs are NOT included in partition files
+; This test creates a C stub library, links it via -cclib, and verifies that
+; the C stub symbols do NOT appear in any partition*.o files (they should be
+; passed through to the final linker, not partially linked via ld -r).
+
+; Compile C stub into object file
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cstub.o)
+ (deps cstub.c)
+ (action
+  (run gcc -c -I %{ocaml_where} -o %{target} %{deps})))
+
+; Create static library from C stub
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target libcstub.a)
+ (deps cstub.o)
+ (action
+  (run ar rcs %{target} %{deps})))
+
+; Build executable with C stub library via -cclib
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cstub_passthrough.exe)
+ (deps cstub_passthrough.ml libcstub.a)
+ (action
+  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.01
+       -cclib ./libcstub.a
+       cstub_passthrough.ml -o %{target})))
+
+; Verify the executable runs correctly
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cstub_passthrough.output)
+ (deps cstub_passthrough.exe)
+ (action
+  (with-outputs-to %{target}
+   (run ./cstub_passthrough.exe))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps cstub_passthrough.output)
+ (action (bash "grep -q 'C stub passthrough test passed' cstub_passthrough.output")))
+
+; Verify C stub symbols are NOT in partition files (they should be passthrough)
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (target cstub_passthrough_verify.output)
+ (deps cstub_passthrough.ml libcstub.a)
+ (action
+  (with-outputs-to %{target}
+   (bash "
+     set +o pipefail
+     # Build with -ddissector-partitions and capture partition dir
+     OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.01 -ddissector-partitions \
+       -cclib ./libcstub.a \
+       cstub_passthrough.ml -o cstub_passthrough_verify.exe 2>&1)
+     PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
+
+     echo \"Partition directory: $PARTITION_DIR\"
+     echo \"\"
+
+     # Check each partition file for the C stub symbol
+     FOUND_IN_PARTITION=0
+     for part in $PARTITION_DIR/partition*.o.rewritten; do
+       PART_NAME=$(basename $part)
+       echo \"Checking $PART_NAME for C stub symbol...\"
+       if nm \"$part\" 2>/dev/null | grep -q 'caml_cstub_test_get_magic_number'; then
+         echo \"ERROR: Found C stub symbol in $PART_NAME - C stubs should NOT be in partition files!\"
+         FOUND_IN_PARTITION=1
+       else
+         echo \"OK: C stub symbol not in $PART_NAME\"
+       fi
+     done
+
+     echo \"\"
+     if [ \"$FOUND_IN_PARTITION\" = \"1\" ]; then
+       echo \"FAILED: C stub was included in partition files (should be passthrough)\"
+       exit 1
+     fi
+
+     # Verify the symbol IS in the final executable (to confirm it was linked)
+     if nm cstub_passthrough_verify.exe 2>/dev/null | grep -q 'caml_cstub_test_get_magic_number'; then
+       echo \"OK: C stub symbol is in final executable\"
+     else
+       echo \"ERROR: C stub symbol not found in final executable\"
+       exit 1
+     fi
+
+     echo \"\"
+     echo \"=== C stub passthrough verification passed ===\"
+   "))))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps cstub_passthrough_verify.output)
+ (action (bash "grep -q 'C stub passthrough verification passed' cstub_passthrough_verify.output || (cat cstub_passthrough_verify.output; exit 1)")))
+
