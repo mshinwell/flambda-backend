@@ -79,6 +79,7 @@ module Layout = struct
       iplt : Section_layout.t;
       rela_iplt : Section_layout.t;
       symtab : Section_layout.t;
+      symtab_shndx : Section_layout.t option;
       strtab : Section_layout.t;
       shstrtab : Section_layout.t;
       section_headers_offset : int;
@@ -94,6 +95,8 @@ module Layout = struct
   let rela_iplt l = l.rela_iplt
 
   let symtab l = l.symtab
+
+  let symtab_shndx l = l.symtab_shndx
 
   let strtab l = l.strtab
 
@@ -138,6 +141,7 @@ type t =
     rela_iplt_idx : int;
     num_sections : int;
     symtab_idx : int;
+    symtab_shndx_idx : int option;
     layout : Layout.t
   }
 
@@ -182,6 +186,8 @@ let rela_iplt_idx t = t.rela_iplt_idx
 let num_sections t = t.num_sections
 
 let symtab_idx t = t.symtab_idx
+
+let symtab_shndx_idx t = t.symtab_shndx_idx
 
 let layout t = t.layout
 
@@ -299,11 +305,15 @@ let rewrite_rela_section ~rela_body ~symtab_body ~strtab_body ~symbol_to_index
       entries := new_entry :: !entries);
   List.rev !entries
 
+(* Each entry in SYMTAB_SHNDX is 4 bytes (Elf64_Word) *)
+let symtab_shndx_entry_size = 4
+
 (* Compute file layout. Since we rewrite .rela.text* sections in place,
    we don't allocate new space for them - only for the new IGOT/IPLT sections
-   and the updated symtab/strtab/shstrtab. *)
+   and the updated symtab/strtab/shstrtab. If the input has a SYMTAB_SHNDX
+   section, we also allocate space for the extended version. *)
 let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
-    ~strtab_size ~shstrtab_size ~num_sections ~shentsize =
+    ~strtab_size ~shstrtab_size ~num_sections ~shentsize ~has_symtab_shndx =
   let current = ref (Int64.to_int original_data_end) in
   let alloc alignment size =
     current := align_up !current alignment;
@@ -324,6 +334,12 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     alloc 8 (count * Rela.rela_entry_size)
   in
   let symtab = alloc 8 (total_symbols * Rela.sym_entry_size) in
+  (* Allocate SYMTAB_SHNDX section if input has one *)
+  let symtab_shndx =
+    if has_symtab_shndx
+    then Some (alloc 4 (total_symbols * symtab_shndx_entry_size))
+    else None
+  in
   let strtab = alloc 1 strtab_size in
   let shstrtab = alloc 1 shstrtab_size in
   let section_headers_offset = align_up !current 8 in
@@ -333,6 +349,7 @@ let compute_file_layout ~original_data_end ~igot_and_iplt ~total_symbols
     iplt;
     rela_iplt;
     symtab;
+    symtab_shndx;
     strtab;
     shstrtab;
     section_headers_offset;
@@ -428,6 +445,15 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
       sections;
     !idx
   in
+  (* Find the SYMTAB_SHNDX section if present *)
+  let symtab_shndx_idx =
+    let idx = ref None in
+    Array.iteri
+      (fun i (s : Elf.section) ->
+        if s.sh_type = Elf.Section_type.sht_symtab_shndx then idx := Some i)
+      sections;
+    !idx
+  in
   let original_data_end =
     Array.fold_left
       (fun acc (s : Elf.section) -> max acc (Int64.add s.sh_offset s.sh_size))
@@ -438,6 +464,7 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
       ~strtab_size:(Strtab.length strtab)
       ~shstrtab_size:(Strtab.length shstrtab) ~num_sections
       ~shentsize:header.Elf.e_shentsize
+      ~has_symtab_shndx:(Option.is_some symtab_shndx_idx)
   in
   { original_symbols;
     symbol_to_index;
@@ -460,5 +487,6 @@ let compute ~header ~sections ~symtab_body ~strtab_body ~rela_text_sections
     rela_iplt_idx;
     num_sections;
     symtab_idx;
+    symtab_shndx_idx;
     layout
   }

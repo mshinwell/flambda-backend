@@ -151,6 +151,37 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
        ~at:(Form_rewrite_plan.Section_layout.offset strtab_layout))
     (Form_rewrite_plan.Section_layout.size strtab_layout)
     (Strtab.contents plan_strtab);
+  (* Write extended SYMTAB_SHNDX section if present. This section must have the
+     same number of entries as the symbol table. We copy original entries and
+     add zero entries for new symbols (new symbols have valid st_shndx values
+     that don't require extended section indices). *)
+  (match
+     ( Form_rewrite_plan.symtab_shndx_idx plan,
+       Form_rewrite_plan.Layout.symtab_shndx plan_layout )
+   with
+  | Some symtab_shndx_idx, Some symtab_shndx_layout ->
+    let original_symtab_shndx_section = sections.(symtab_shndx_idx) in
+    let original_symtab_shndx_body =
+      Elf.section_body input_buf original_symtab_shndx_section
+    in
+    let cursor =
+      Buf.cursor output_buf
+        ~at:(Form_rewrite_plan.Section_layout.offset symtab_shndx_layout)
+    in
+    (* Copy original entries *)
+    let original_size = Buf.size original_symtab_shndx_body in
+    for i = 0 to original_size - 1 do
+      Buf.Write.u8 cursor (Bigarray.Array1.get original_symtab_shndx_body i)
+    done;
+    (* Add zero entries for new symbols (4 bytes each) *)
+    let num_original = Array.length (Form_rewrite_plan.original_symbols plan) in
+    let total = Form_rewrite_plan.total_symbols plan in
+    let new_symbols = total - num_original in
+    for _ = 1 to new_symbols * 4 do
+      Buf.Write.u8 cursor 0
+    done
+  | None, None -> ()
+  | _ -> Misc.fatal_error "SYMTAB_SHNDX state mismatch");
   (* Write rewritten .rela.text* sections back to their original locations *)
   List.iter
     (fun rewritten_section ->
@@ -184,11 +215,18 @@ let execute_plan unix ~input_file ~output_file ~header ~sections
       { s with sh_name = new_name_offset; sh_name_str = renamed_str }
     | None -> s
   in
+  let symtab_shndx_layout_opt =
+    Form_rewrite_plan.Layout.symtab_shndx plan_layout
+  in
   let update_section (s : Elf.section) =
     let s = rename_section s in
     match s.sh_name_str with
     | ".symtab" -> relocate_section s symtab_layout
     | ".strtab" -> relocate_section s strtab_layout
+    | ".symtab_shndx" -> (
+      match symtab_shndx_layout_opt with
+      | Some symtab_shndx_layout -> relocate_section s symtab_shndx_layout
+      | None -> s)
     (* .rela.text* sections are rewritten in place, so no relocation needed *)
     | _ -> s
   in
