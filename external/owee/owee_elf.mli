@@ -106,6 +106,16 @@ val make_rela_section :
   sh_info:u32 ->
   section
 
+(** Create a SYMTAB_SHNDX section header for extended section indices.
+    sh_link should be the index of the associated symbol table. *)
+val make_symtab_shndx_section :
+  sh_name:u32 ->
+  sh_name_str:string ->
+  sh_offset:u64 ->
+  sh_size:u64 ->
+  sh_link:u32 ->
+  section
+
 (** From a buffer pointing to an ELF image, [read_elf] decodes the header and
     section table. *)
 val read_elf : Owee_buf.t -> header * section array

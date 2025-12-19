@@ -19,6 +19,12 @@ let sym_entry_size = 24
 (* Special section index for undefined symbols *)
 let shn_undef = 0
 
+(* Start of reserved section indices *)
+let shn_loreserve = 0xff00
+
+(* Section index stored in SHT_SYMTAB_SHNDX *)
+let shn_xindex = 0xffff
+
 type rela_entry =
   { r_offset : int64;
     r_sym : int;
