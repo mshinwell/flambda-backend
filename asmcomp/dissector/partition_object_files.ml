@@ -61,26 +61,26 @@ let partitions r = r.partitions
 let passthrough_files r = r.passthrough_files
 
 (* Check if a file should be passed directly to the final linker without
-   partial linking. C stub files (from -cclib or lib_ccobjs in .cmxa) may have
-   sections like .gcc_except_table that don't work well with ld -r. *)
+   partial linking. C stub files (from -cclib or lib_ccobjs in .cmxa) and
+   runtime libraries are passed through directly. *)
 let is_passthrough entry =
   match Measure_object_files.File_size.origin entry with
-  | Measure_object_files.C_stub -> true
+  | Measure_object_files.C_stub
+  | Measure_object_files.Runtime -> true
   | Measure_object_files.OCaml
-  | Measure_object_files.Runtime
   | Measure_object_files.Startup
   | Measure_object_files.Cached_genfns -> false
 
 (* Check if a file must go into the Main partition based on its origin.
-   Runtime, startup, and cached generic functions must all be in Main
-   to avoid complications with cross-partition references. *)
+   Startup and cached generic functions must be in Main to avoid
+   complications with cross-partition references. *)
 let must_be_in_main entry =
   match Measure_object_files.File_size.origin entry with
   | Measure_object_files.OCaml -> false
-  | Measure_object_files.C_stub ->
-    (* C_stub files are passthrough, not partitioned *)
+  | Measure_object_files.C_stub
+  | Measure_object_files.Runtime ->
+    (* C_stub and Runtime files are passthrough, not partitioned *)
     false
-  | Measure_object_files.Runtime
   | Measure_object_files.Startup
   | Measure_object_files.Cached_genfns -> true
 
@@ -91,16 +91,16 @@ let log fmt =
 
 let partition_files ~threshold file_sizes =
   log "partition_files: input has %d file(s)" (List.length file_sizes);
-  (* First, separate passthrough files (C_stub) that shouldn't be partially
-     linked. These will be passed directly to the final linker. *)
+  (* First, separate passthrough files (C_stub and Runtime) that shouldn't be
+     partially linked. These will be passed directly to the final linker. *)
   let passthrough_files, linkable_files =
     List.partition is_passthrough file_sizes
   in
-  log "  passthrough (C_stub): %d, linkable: %d"
+  log "  passthrough (C_stub/Runtime): %d, linkable: %d"
     (List.length passthrough_files) (List.length linkable_files);
   (* Separate files that must go into Main partition:
      - Files with probes (to keep probes together)
-     - Runtime, startup, cached genfns (by origin) *)
+     - Startup and cached genfns (by origin) *)
   let main_files, partitionable_files =
     List.partition
       (fun entry ->
