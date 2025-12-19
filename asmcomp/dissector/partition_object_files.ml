@@ -84,12 +84,20 @@ let must_be_in_main entry =
   | Measure_object_files.Startup
   | Measure_object_files.Cached_genfns -> true
 
+let log fmt =
+  if !Clflags.ddissector
+  then Printf.eprintf ("Dissector: " ^^ fmt ^^ "\n%!")
+  else Printf.ifprintf stderr fmt
+
 let partition_files ~threshold file_sizes =
+  log "partition_files: input has %d file(s)" (List.length file_sizes);
   (* First, separate passthrough files (C_stub) that shouldn't be partially
      linked. These will be passed directly to the final linker. *)
   let passthrough_files, linkable_files =
     List.partition is_passthrough file_sizes
   in
+  log "  passthrough (C_stub): %d, linkable: %d"
+    (List.length passthrough_files) (List.length linkable_files);
   (* Separate files that must go into Main partition:
      - Files with probes (to keep probes together)
      - Runtime, startup, cached genfns (by origin) *)
@@ -99,6 +107,8 @@ let partition_files ~threshold file_sizes =
         Measure_object_files.File_size.has_probes entry || must_be_in_main entry)
       linkable_files
   in
+  log "  main_files: %d, partitionable: %d"
+    (List.length main_files) (List.length partitionable_files);
   (* Calculate the size of main_files - this will be added to the first
      partition, so we need to account for it when partitioning. *)
   let main_files_size =
@@ -162,6 +172,8 @@ let partition_files ~threshold file_sizes =
         Partition.create ~kind files)
       file_lists
   in
+  log "  created %d partition(s) from %d file_list(s)"
+    (List.length partitions) (List.length file_lists);
   (* Return both partitions and passthrough files. Passthrough files are
      returned as just their filenames since they don't need further
      processing - they go directly to the final linker. *)

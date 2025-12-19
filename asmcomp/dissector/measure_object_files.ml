@@ -248,4 +248,22 @@ let measure_files (unix : (module Compiler_owee.Unix_intf.S)) ~files =
   in
   let result = List.concat_map (analyze_one ~indent:"") files in
   Option.iter close_out out_channel;
+  (* Log summary if -ddissector is enabled *)
+  if !Clflags.ddissector
+  then (
+    let count_by_origin =
+      List.fold_left
+        (fun counts entry ->
+          let origin = File_size.origin entry in
+          let current = try List.assoc origin counts with Not_found -> 0 in
+          (origin, current + 1)
+          :: List.filter (fun (o, _) -> o <> origin) counts)
+        [] result
+    in
+    Printf.eprintf "Dissector: measured %d file(s) by origin:\n"
+      (List.length result);
+    List.iter
+      (fun (origin, count) ->
+        Printf.eprintf "  %s: %d\n" (string_of_origin origin) count)
+      count_by_origin);
   result
