@@ -60,6 +60,7 @@ end
 
 type t =
   { entries : Entry.t list;
+    by_original_symbol : (string, Entry.t) Hashtbl.t;
     section_data : bytes
   }
 
@@ -86,15 +87,18 @@ let plt_entry_template =
   bytes
 
 let build ~prefix ~igot ~symbols =
-  (* Remove duplicates while preserving order *)
-  let seen = Hashtbl.create 16 in
+  (* Remove duplicates while preserving order, and build lookup table *)
+  let by_original_symbol = Hashtbl.create 256 in
   let unique_symbols =
     List.filter
       (fun sym ->
-        if Hashtbl.mem seen sym
+        if Hashtbl.mem by_original_symbol sym
         then false
         else (
-          Hashtbl.add seen sym ();
+          (* Placeholder - will be replaced below *)
+          Hashtbl.add by_original_symbol sym
+            { Entry.index = 0; original_symbol = sym; iplt_symbol = "";
+              igot_symbol = "" };
           true))
       symbols
   in
@@ -112,7 +116,9 @@ let build ~prefix ~igot ~symbols =
         | Some _ -> ());
         log_verbose "  IPLT entry %d: %s -> %s (via %s)" index original_symbol
           iplt_symbol igot_symbol;
-        { Entry.index; original_symbol; iplt_symbol; igot_symbol })
+        let entry = { Entry.index; original_symbol; iplt_symbol; igot_symbol } in
+        Hashtbl.replace by_original_symbol original_symbol entry;
+        entry)
       unique_symbols
   in
   (* Build section data *)
@@ -122,7 +128,7 @@ let build ~prefix ~igot ~symbols =
     Bytes.blit_string plt_entry_template 0 section_data (i * entry_size)
       entry_size
   done;
-  { entries; section_data }
+  { entries; by_original_symbol; section_data }
 
 let entries t = t.entries
 
@@ -130,15 +136,7 @@ let section_data t = t.section_data
 
 let section_size t = Bytes.length t.section_data
 
-let find_entry t ~symbol =
-  let rec find = function
-    | [] -> None
-    | entry :: rest ->
-      if String.equal (Entry.original_symbol entry) symbol
-      then Some entry
-      else find rest
-  in
-  find t.entries
+let find_entry t ~symbol = Hashtbl.find_opt t.by_original_symbol symbol
 
 module Relocation = struct
   type t =
