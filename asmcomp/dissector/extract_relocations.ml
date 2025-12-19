@@ -54,9 +54,24 @@ let convert_to_got t = t.convert_to_got
 
 let empty = { convert_to_plt = []; convert_to_got = [] }
 
-let merge t1 t2 =
-  { convert_to_plt = t1.convert_to_plt @ t2.convert_to_plt;
-    convert_to_got = t1.convert_to_got @ t2.convert_to_got
+(* Accumulator for efficient merging - stores lists in reverse order *)
+type accumulator =
+  { acc_plt : Relocation_entry.t list;
+    acc_got : Relocation_entry.t list
+  }
+
+let empty_accumulator = { acc_plt = []; acc_got = [] }
+
+(* Add entries to accumulator - O(n) where n is size of entries being added *)
+let accumulate acc entries =
+  { acc_plt = List.rev_append entries.convert_to_plt acc.acc_plt;
+    acc_got = List.rev_append entries.convert_to_got acc.acc_got
+  }
+
+(* Finalize accumulator into result - reverses the lists *)
+let finalize acc =
+  { convert_to_plt = List.rev acc.acc_plt;
+    convert_to_got = List.rev acc.acc_got
   }
 
 let reloc_type_name r_type =
@@ -125,7 +140,9 @@ let find_symtab_section sections =
       section.sh_type = Rela.sht_symtab)
     sections
 
-let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =
+(* Internal version that adds to an accumulator *)
+let extract_into_accumulator (unix : (module Compiler_owee.Unix_intf.S))
+    ~filename acc =
   let module Unix = (val unix) in
   log_verbose "extracting relocations from %s" filename;
   let buf = Compiler_owee.Owee_buf.map_binary (module Unix) filename in
@@ -136,17 +153,18 @@ let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =
   match rela_text_sections with
   | [] ->
     log_verbose "  no .rela.text* sections found";
-    empty
+    acc
   | _ -> (
-    log_verbose "  found %d .rela.text* sections" (List.length rela_text_sections);
+    log_verbose "  found %d .rela.text* sections"
+      (List.length rela_text_sections);
     (* Find symbol table *)
     match find_symtab_section sections with
-    | None -> empty
+    | None -> acc
     | Some symtab_section ->
       (* Find string table (sh_link of symtab points to it) *)
       let strtab_index = symtab_section.sh_link in
       if strtab_index >= Array.length sections
-      then empty
+      then acc
       else
         let strtab_section = sections.(strtab_index) in
         let symtab_body =
@@ -155,7 +173,7 @@ let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =
         let strtab_body =
           Compiler_owee.Owee_elf.section_body buf strtab_section
         in
-        (* Process all .rela.text* sections and merge results *)
+        (* Process all .rela.text* sections and accumulate results *)
         List.fold_left
           (fun acc (rela_section : Compiler_owee.Owee_elf.section) ->
             log_verbose "  processing section %s" rela_section.sh_name_str;
@@ -165,14 +183,18 @@ let extract (unix : (module Compiler_owee.Unix_intf.S)) ~filename =
             let result =
               parse_rela_section ~rela_body ~symtab_body ~strtab_body
             in
-            merge acc result)
-          empty rela_text_sections)
+            accumulate acc result)
+          acc rela_text_sections)
+
+let extract unix ~filename =
+  finalize (extract_into_accumulator unix ~filename empty_accumulator)
 
 let extract_from_linked_partitions unix linked_partitions =
-  List.fold_left
-    (fun acc linked ->
-      let result =
-        extract unix ~filename:(Partition.Linked.linked_object linked)
-      in
-      merge acc result)
-    empty linked_partitions
+  let acc =
+    List.fold_left
+      (fun acc linked ->
+        extract_into_accumulator unix
+          ~filename:(Partition.Linked.linked_object linked) acc)
+      empty_accumulator linked_partitions
+  in
+  finalize acc
