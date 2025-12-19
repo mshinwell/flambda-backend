@@ -83,13 +83,39 @@ let reloc_type_name r_type =
 
 (* Parse RELA entries and extract PLT32 and REX_GOTPCRELX relocations for
    undefined symbols (st_shndx = SHN_UNDEF). Only undefined symbols need PLT/GOT
-   entries since defined symbols can be resolved directly. *)
+   entries since defined symbols can be resolved directly.
+
+   - PLT32: function calls, rewritten to use IPLT
+   - REX_GOTPCRELX: GOT-relative references, rewritten to use IGOT
+
+   PC32 relocations to undefined symbols are an error - they occur when code
+   is compiled with -nodynlink, which is incompatible with the dissector. *)
 let parse_rela_section ~rela_body ~symtab_body ~strtab_body =
   let convert_to_plt = ref [] in
   let convert_to_got = ref [] in
   Rela.iter_rela_entries ~rela_body ~f:(fun entry ->
-      if Int64.equal entry.r_type Rela.r_x86_64_plt32
-         || Int64.equal entry.r_type Rela.r_x86_64_rex_gotpcrelx
+      (* Check for PC32 relocations to undefined symbols - these are an error *)
+      if Int64.equal entry.r_type Rela.r_x86_64_pc32
+      then (
+        match Rela.read_symbol_shndx ~symtab_body ~sym_index:entry.r_sym with
+        | Some shndx when shndx = Rela.shn_undef ->
+          let symbol_name =
+            match
+              Rela.read_symbol_name ~symtab_body ~strtab_body
+                ~sym_index:entry.r_sym
+            with
+            | Some name -> name
+            | None -> "<unknown>"
+          in
+          Misc.fatal_errorf
+            "Dissector: R_X86_64_PC32 relocation to undefined symbol %s at \
+             offset 0x%Lx. This occurs when code is compiled with -nodynlink. \
+             The dissector requires code to be compiled without -nodynlink \
+             (i.e., with dynamic linking support enabled)."
+            symbol_name entry.r_offset
+        | _ -> ())
+      else if Int64.equal entry.r_type Rela.r_x86_64_plt32
+              || Int64.equal entry.r_type Rela.r_x86_64_rex_gotpcrelx
       then
         (* Only process relocations for undefined symbols *)
         match Rela.read_symbol_shndx ~symtab_body ~sym_index:entry.r_sym with
