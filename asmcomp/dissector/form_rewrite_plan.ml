@@ -266,7 +266,10 @@ let reloc_type_name r_type =
 
 (* Rewrite a single .rela.text* section. Looks up each relocation's target
    symbol and rewrites PLT32/GOTPCRELX relocations to PC32 relocations
-   targeting the synthetic IPLT/IGOT symbols. *)
+   targeting the synthetic IPLT/IGOT symbols.
+
+   - PLT32: function calls -> PC32 to IPLT entry
+   - GOTPCRELX: GOT references -> PC32 to IGOT entry *)
 let rewrite_rela_section ~rela_body ~symtab_body ~strtab_body ~symbol_to_index
     ~plt_rewrite_map ~got_rewrite_map =
   let entries = ref [] in
