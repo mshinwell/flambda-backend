@@ -27,10 +27,10 @@
 
 (** Build linker arguments from dissector results.
 
-    After the dissector runs, all original object files (.o, .a) have been
-    partitioned and partially linked into partition object files. This module
-    constructs the replacement linker arguments that should be used instead
-    of the original files.
+    After the dissector runs, most original object files (.o, .a) have been
+    partitioned and partially linked into partition object files. C stub files
+    (ccobjs) are passed through directly without partial linking because they
+    may have sections like .gcc_except_table that don't work well with ld -r.
 
     The original linker invocation combines:
 
@@ -42,19 +42,23 @@
 
     - runtime_libs (runtime library files)
 
-    After dissector processing, all of these are baked into the rewritten
-    partition .o files, so we replace them all with just the partition files
-    plus a linker script. The caller must NOT add ccobjs or runtime_libs
-    again when using dissector output. *)
+    After dissector processing:
+    - startup_obj, ml_objfiles, and runtime_libs are baked into partitions
+    - ccobjs are passed through directly (not partially linked)
+
+    The caller must NOT add ccobjs or runtime_libs again when using dissector
+    output - they are already included in object_files. *)
 
 (** The linker arguments produced by the dissector. *)
 type t
 
-(** Returns the rewritten partition .o files that replace ALL original object
-    files. This includes what was previously startup_obj, ml_objfiles, ccobjs,
-    and runtime_libs - they are all baked into the partitions. The caller
-    should pass these files to the linker and NOT add ccobjs or runtime_libs
-    separately. *)
+(** Returns the object files for the final linker. This includes:
+    - Rewritten partition .o files (containing startup_obj, ml_objfiles,
+      and runtime_libs that were partially linked)
+    - Passthrough files (ccobjs - C stub files that bypass partial linking)
+
+    The caller should pass these files to the linker and NOT add ccobjs or
+    runtime_libs separately. *)
 val object_files : t -> string list
 
 (** Returns the path to the generated linker script. This should be passed to

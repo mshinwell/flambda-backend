@@ -41,15 +41,22 @@ exception Error of error
 
 val report_error : Format.formatter -> error -> unit
 
-(** Result of running the dissector. After the dissector runs, all input
-    object files (ml_objfiles, startup_obj, ccobjs, runtime_libs) are baked
-    into the partition files. Use {!Build_linker_args.build} to convert this
-    result into linker arguments. *)
+(** Result of running the dissector. After the dissector runs, most input
+    object files (ml_objfiles, startup_obj, runtime_libs) are baked into the
+    partition files. Passthrough files (ccobjs - C stub files) bypass partial
+    linking and are passed directly to the final linker.
+    Use {!Build_linker_args.build} to convert this result into linker
+    arguments. *)
 module Result : sig
   type t
 
   (** Returns the partially-linked partition object files. *)
   val linked_partitions : t -> Partition.Linked.t list
+
+  (** Returns the passthrough files that should be passed directly to the
+      final linker without partial linking. These are C stub files that may
+      have sections like .gcc_except_table that don't work well with ld -r. *)
+  val passthrough_files : t -> string list
 
   (** Returns the path to the generated linker script. *)
   val linker_script : t -> string

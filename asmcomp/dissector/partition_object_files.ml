@@ -51,27 +51,53 @@ let bytes_of_gb gb = Int64.of_float (gb *. 1024. *. 1024. *. 1024.)
 (* Default partition size in bytes, derived from Clflags *)
 let default_partition_size = bytes_of_gb Clflags.dissector_partition_size_default
 
+type result =
+  { partitions : Partition.t list;
+    passthrough_files : string list
+  }
+
+let partitions r = r.partitions
+
+let passthrough_files r = r.passthrough_files
+
+(* Check if a file should be passed directly to the final linker without
+   partial linking. C stub files (from -cclib or lib_ccobjs in .cmxa) may have
+   sections like .gcc_except_table that don't work well with ld -r. *)
+let is_passthrough entry =
+  match Measure_object_files.File_size.origin entry with
+  | Measure_object_files.C_stub -> true
+  | Measure_object_files.OCaml
+  | Measure_object_files.Runtime
+  | Measure_object_files.Startup
+  | Measure_object_files.Cached_genfns -> false
+
 (* Check if a file must go into the Main partition based on its origin.
-   C stubs, runtime, startup, and cached generic functions must all be in Main
-   to avoid complications with cross-partition references and special sections
-   like .gcc_except_table. *)
+   Runtime, startup, and cached generic functions must all be in Main
+   to avoid complications with cross-partition references. *)
 let must_be_in_main entry =
   match Measure_object_files.File_size.origin entry with
   | Measure_object_files.OCaml -> false
-  | Measure_object_files.C_stub
+  | Measure_object_files.C_stub ->
+    (* C_stub files are passthrough, not partitioned *)
+    false
   | Measure_object_files.Runtime
   | Measure_object_files.Startup
   | Measure_object_files.Cached_genfns -> true
 
 let partition_files ~threshold file_sizes =
+  (* First, separate passthrough files (C_stub) that shouldn't be partially
+     linked. These will be passed directly to the final linker. *)
+  let passthrough_files, linkable_files =
+    List.partition is_passthrough file_sizes
+  in
   (* Separate files that must go into Main partition:
      - Files with probes (to keep probes together)
-     - C stubs, runtime, startup, cached genfns (by origin) *)
+     - Runtime, startup, cached genfns (by origin) *)
   let main_files, partitionable_files =
     List.partition
       (fun entry ->
         Measure_object_files.File_size.has_probes entry || must_be_in_main entry)
-      file_sizes
+      linkable_files
   in
   (* Calculate the size of main_files - this will be added to the first
      partition, so we need to account for it when partitioning. *)
@@ -129,8 +155,17 @@ let partition_files ~threshold file_sizes =
     | [] -> if main_files = [] then [] else [main_files]
     | first :: rest -> (main_files @ first) :: rest
   in
-  List.mapi
-    (fun i files ->
-      let kind : Partition.kind = if i = 0 then Main else Large_code i in
-      Partition.create ~kind files)
-    file_lists
+  let partitions =
+    List.mapi
+      (fun i files ->
+        let kind : Partition.kind = if i = 0 then Main else Large_code i in
+        Partition.create ~kind files)
+      file_lists
+  in
+  (* Return both partitions and passthrough files. Passthrough files are
+     returned as just their filenames since they don't need further
+     processing - they go directly to the final linker. *)
+  let passthrough_filenames =
+    List.map Measure_object_files.File_size.filename passthrough_files
+  in
+  { partitions; passthrough_files = passthrough_filenames }
