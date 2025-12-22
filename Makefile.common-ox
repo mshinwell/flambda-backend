@@ -441,16 +441,16 @@ runtest-upstream-binary-emitter: install_for_test
              then \
 	       echo "Running testsuite with binary emitter in parallel (nproc=$$(nproc))"; \
                if [ "$(middle_end)" = "flambda2" ]; then \
-                 make --no-print-directory list-parallel FILE=$$(pwd)/../flambda2-test-list; \
+                 make --no-print-directory KEEP_TEST_DIR_ON_SUCCESS=1 list-parallel FILE=$$(pwd)/../flambda2-test-list; \
 	       else \
-                 make --no-print-directory parallel; \
+                 make --no-print-directory KEEP_TEST_DIR_ON_SUCCESS=1 parallel; \
                fi \
              else \
 	       echo "Running testsuite with binary emitter sequentially"; \
                if [ "$(middle_end)" = "flambda2" ]; then \
-                 make --no-print-directory list FILE=$$(pwd)/../flambda2-test-list; \
+                 make --no-print-directory KEEP_TEST_DIR_ON_SUCCESS=1 list FILE=$$(pwd)/../flambda2-test-list; \
 	       else \
-                 make --no-print-directory all; \
+                 make --no-print-directory KEEP_TEST_DIR_ON_SUCCESS=1 all; \
                fi \
              fi)
 
