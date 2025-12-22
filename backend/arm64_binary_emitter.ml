@@ -1038,8 +1038,9 @@ let encode_load_store_gp_sized :
   let rt = Reg.gp_encoding rd in
   match addressing with
   | Reg rn ->
+    (* Use unsigned offset encoding with imm12=0 to match assembler behavior *)
     let rn = Reg.gp_encoding rn in
-    encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+    encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:0 ~rn ~rt
   | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
     (* Prefer unsigned offset encoding when the offset is non-negative and
        properly aligned for the access size. This matches assembler behavior
@@ -1331,8 +1332,9 @@ let encode_load_store_simd_fp :
   let rt = rd.index in
   match addressing with
   | Reg rn ->
+    (* Use unsigned offset encoding with imm12=0 to match assembler behavior *)
     let rn = Reg.gp_encoding rn in
-    encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
+    encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12:0 ~rn ~rt
   | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
     (* Prefer unsigned offset encoding when the offset is non-negative and
        properly aligned for the access size. This matches assembler behavior. *)
@@ -2030,18 +2032,20 @@ let encode_instruction :
       FMOV_scalar_immediate ) ->
     let ftype = scalar_ftype scalar in
     let bits = Int64.bits_of_float f in
-    (* Extract imm8 from double-precision IEEE bits:
+    (* Extract imm8 from double-precision IEEE bits using VFPExpandImm inverse:
+       VFPExpandImm expands imm8 to: sign:NOT(imm8[6]):Replicate(imm8[6],8):imm8[5:0]:Zeros(48)
+       So to encode, we extract:
        imm8[7] = sign (bit 63)
-       imm8[6] = NOT(exp[10]) (inverted bit 62)
-       imm8[5:4] = exp[9:8] (bits 61:60)
-       imm8[3:0] = frac[51:48] (bits 51:48)
+       imm8[6] = NOT(bit 62) - inverted MSB of exponent
+       imm8[5:4] = bits 53:52 - lower exponent bits after the replicated part
+       imm8[3:0] = bits 51:48 - top 4 mantissa bits
        For single, we convert from double representation. *)
     let sign = Int64.(to_int (logand (shift_right_logical bits 63) 1L)) in
     let exp10 = Int64.(to_int (logand (shift_right_logical bits 62) 1L)) in
-    let exp9_8 = Int64.(to_int (logand (shift_right_logical bits 60) 3L)) in
+    let imm8_5_4 = Int64.(to_int (logand (shift_right_logical bits 52) 3L)) in
     let frac = Int64.(to_int (logand (shift_right_logical bits 48) 0xFL)) in
     let imm8 =
-      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_8 lsl 4) lor frac
+      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (imm8_5_4 lsl 4) lor frac
     in
     encode_fp_immediate ~ftype ~imm8 ~rd
   (* FMOV scalar immediate - Nativeint case (raw bits) *)
