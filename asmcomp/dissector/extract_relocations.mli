@@ -48,7 +48,8 @@ type t
 (** Returns relocations with type R_X86_64_PLT32 that need PLT entries. *)
 val convert_to_plt : t -> Relocation_entry.t list
 
-(** Returns relocations with type R_X86_64_REX_GOTPCRELX that need GOT entries. *)
+(** Returns relocations with type R_X86_64_REX_GOTPCRELX that need GOT
+    entries. *)
 val convert_to_got : t -> Relocation_entry.t list
 
 (** [extract unix ~filename] reads the ELF object file at [filename] and

@@ -184,7 +184,8 @@ val symtab_idx : t -> int
 val symtab_shndx_idx : t -> int option
 
 (** Returns the index of a newly created SYMTAB_SHNDX section, if one needs
-    to be created because the input lacks one but new indices >= SHN_LORESERVE. *)
+    to be created because the input lacks one but new indices >=
+    SHN_LORESERVE. *)
 val new_symtab_shndx_idx : t -> int option
 
 (** Returns the name offset in shstrtab for a new SYMTAB_SHNDX section. *)
