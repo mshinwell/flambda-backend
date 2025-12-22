@@ -827,6 +827,26 @@ let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
   let result = logor result (of_int (Reg.gp_encoding rd)) in
   result
 
+(* Helper to encode add/sub immediate with automatic shift detection.
+   When imm12 > 0xFFF but is a multiple of 4096 and the quotient fits in 12 bits,
+   use sh=1 and encode imm12 / 4096. This matches the assembler's behavior when
+   given large immediate values like #0x6000 which become #0x6, lsl #12. *)
+let encode_add_sub_imm_auto_shift ~op ~s ~imm12 ~shift_opt ~rn ~rd =
+  let sh_from_opt = match shift_opt with Some _ -> 1 | None -> 0 in
+  let sh, actual_imm12 =
+    if imm12 <= 0xFFF
+    then sh_from_opt, imm12
+    else if sh_from_opt = 1
+    then
+      Misc.fatal_errorf
+        "Cannot encode add/sub immediate with explicit shift and value > 0xFFF"
+    else if imm12 land 0xFFF = 0 && imm12 lsr 12 <= 0xFFF
+    then 1, imm12 lsr 12
+    else
+      Misc.fatal_errorf "Cannot encode add/sub immediate %d (0x%x)" imm12 imm12
+  in
+  encode_add_sub_immediate ~sf:1 ~op ~s ~sh ~imm12:actual_imm12 ~rn ~rd
+
 let encode_six_bit_shift (shift_opt : [`Shift of _ * [`Six]] Operand.t option) =
   match shift_opt with
   | Some (Shift shift) -> (match shift.amount with Six n -> n) / 16
@@ -1021,9 +1041,19 @@ let encode_load_store_gp_sized :
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
   | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
+    (* Prefer unsigned offset encoding when the offset is non-negative and
+       properly aligned for the access size. This matches assembler behavior
+       and provides a larger range for positive offsets.
+       scale = 1 << size (1 for byte, 2 for half, 4 for word, 8 for double) *)
+    let scale = 1 lsl size in
     let rn = Reg.gp_encoding rn in
-    let imm9 = imm land 0x1FF in
-    encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
+    if imm >= 0 && imm mod scale = 0 && imm / scale <= 0xFFF
+    then
+      let imm12 = imm / scale in
+      encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt
+    else
+      let imm9 = imm land 0x1FF in
+      encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
     (* This is encoded as "LDR (literal)" - only valid for word/doubleword *)
     if size < 0b10
@@ -1304,9 +1334,16 @@ let encode_load_store_simd_fp :
     let rn = Reg.gp_encoding rn in
     encode_load_store_unscaled ~size ~vr ~opc ~imm9:0 ~rn ~rt
   | Offset_unscaled (rn, Nine_signed_unscaled imm) ->
+    (* Prefer unsigned offset encoding when the offset is non-negative and
+       properly aligned for the access size. This matches assembler behavior. *)
     let rn = Reg.gp_encoding rn in
-    let imm9 = imm land 0x1FF in
-    encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
+    if imm >= 0 && imm mod scale = 0 && imm / scale <= 0xFFF
+    then
+      let imm12 = imm / scale in
+      encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt
+    else
+      let imm9 = imm land 0x1FF in
+      encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt
   | Literal (_rn, sym) -> (
     match Section_state.find_symbol_offset_in_bytes state sym.name with
     | None ->
@@ -1473,8 +1510,7 @@ let encode_instruction :
     (* ABS: U=0, opcode=01011 *)
     encode_simd_two_reg_misc ~q ~u:0 ~size ~opcode:0b01011 ~rn ~rd
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADD_immediate ->
-    let sh = match shift with Some _ -> 1 | None -> 0 in
-    encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12 ~rn ~rd
+    encode_add_sub_imm_auto_shift ~op:0 ~s:0 ~imm12 ~shift_opt:shift ~rn ~rd
   | Quad (Reg rd, Reg rn, Imm (Sym sym), Optional shift), ADD_immediate -> (
     let sh = match shift with Some _ -> 1 | None -> 0 in
     match sym.reloc with
@@ -1509,8 +1545,7 @@ let encode_instruction :
     (* ADDP: U=0, opcode=10111 *)
     encode_simd_three_same ~q ~u:0 ~size ~rm ~opcode:0b10111 ~rn ~rd
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), ADDS ->
-    let sh = match shift with Some _ -> 1 | None -> 0 in
-    encode_add_sub_immediate ~sf:1 ~op:0 ~s:1 ~sh ~imm12 ~rn ~rd
+    encode_add_sub_imm_auto_shift ~op:0 ~s:1 ~imm12 ~shift_opt:shift ~rn ~rd
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { index = rn; _ },
@@ -1995,15 +2030,18 @@ let encode_instruction :
       FMOV_scalar_immediate ) ->
     let ftype = scalar_ftype scalar in
     let bits = Int64.bits_of_float f in
-    (* Extract imm8 from double-precision IEEE bits: imm8 = sign(1) |
-       NOT(exp[10])(1) | exp[9:7](3) | frac[51:49](3) For single, we convert
-       from double representation *)
+    (* Extract imm8 from double-precision IEEE bits:
+       imm8[7] = sign (bit 63)
+       imm8[6] = NOT(exp[10]) (inverted bit 62)
+       imm8[5:4] = exp[9:8] (bits 61:60)
+       imm8[3:0] = frac[51:48] (bits 51:48)
+       For single, we convert from double representation. *)
     let sign = Int64.(to_int (logand (shift_right_logical bits 63) 1L)) in
     let exp10 = Int64.(to_int (logand (shift_right_logical bits 62) 1L)) in
-    let exp9_7 = Int64.(to_int (logand (shift_right_logical bits 59) 7L)) in
+    let exp9_8 = Int64.(to_int (logand (shift_right_logical bits 60) 3L)) in
     let frac = Int64.(to_int (logand (shift_right_logical bits 48) 0xFL)) in
     let imm8 =
-      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_7 lsl 3) lor frac
+      (sign lsl 7) lor ((1 - exp10) lsl 6) lor (exp9_8 lsl 4) lor frac
     in
     encode_fp_immediate ~ftype ~imm8 ~rd
   (* FMOV scalar immediate - Nativeint case (raw bits) *)
@@ -2462,8 +2500,7 @@ let encode_instruction :
     (* STRH: size=01, opc=00 *)
     encode_load_store_halfword state ~instr_name:"STRH" ~opc:0b00 ~rd addressing
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUB_immediate ->
-    let sh = match shift with Some _ -> 1 | None -> 0 in
-    encode_add_sub_immediate ~sf:1 ~op:1 ~s:0 ~sh ~imm12 ~rn ~rd
+    encode_add_sub_imm_auto_shift ~op:1 ~s:0 ~imm12 ~shift_opt:shift ~rn ~rd
   | ( Quad
         ( Reg ({ reg_name = GP _; _ } as rd),
           Reg ({ reg_name = GP _; _ } as rn),
@@ -2486,8 +2523,7 @@ let encode_instruction :
     (* SUB: U=1, opcode=10000 *)
     encode_simd_three_same ~q ~u:1 ~size ~rm ~opcode:0b10000 ~rn ~rd
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUBS_immediate ->
-    let sh = match shift with Some _ -> 1 | None -> 0 in
-    encode_add_sub_immediate ~sf:1 ~op:1 ~s:1 ~sh ~imm12 ~rn ~rd
+    encode_add_sub_imm_auto_shift ~op:1 ~s:1 ~imm12 ~shift_opt:shift ~rn ~rd
   | ( Quad
         ( Reg ({ reg_name = GP _; _ } as rd),
           Reg ({ reg_name = GP _; _ } as rn),
@@ -2880,12 +2916,13 @@ let emit emitter =
   Asm_section.Tbl.iter
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
     section_tbl;
-  (* Note: Cross-section label references (e.g., frametable in data section
-     referencing labels in text section) cannot be resolved at assembly time for
-     object file emission - they require linker relocations. The final address
-     depends on where the linker places each section. For JIT compilation where
-     all sections are placed contiguously, a global lookup could be implemented,
-     but for now we leave cross-section refs as relocations. *)
+  (* Global lookup for cross-section references.
+     For object file emission, cross-section label references cannot be resolved
+     at assembly time because they require knowing the final layout of all
+     sections. We return None to trigger the relocation path, emitting zeros
+     with a relocation that the linker will resolve.
+     Note: eval_constant first tries the current section before calling
+     global_lookup, so any call here means we're doing a cross-section reference. *)
   let global_lookup _name = None in
   emit_code_and_data emitter ~state_for_section ~global_lookup;
   section_tbl
