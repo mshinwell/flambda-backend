@@ -230,7 +230,7 @@
  (deps module_a.cmx module_a.o module_b.cmx module_b.o
        module_c.cmx module_c.o cross_partition_main.ml)
  (action
-  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0014
+  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016
        module_a.cmx module_b.cmx module_c.cmx cross_partition_main.ml
        -o %{target})))
 
@@ -285,7 +285,7 @@
  (deps module_a.cmx module_a.o module_b.cmx module_b.o
        module_c.cmx module_c.o cross_partition_main.ml)
  (action
-  (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.0014
+  (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.0016
        module_a.cmx module_b.cmx module_c.cmx cross_partition_main.ml
        -o %{target})))
 
@@ -534,7 +534,7 @@
        huge_module_c.cmx huge_module_c.o
        huge_main.ml)
  (action
-  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0014
+  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016
        huge_module_a.cmx huge_module_b.cmx huge_module_c.cmx huge_main.ml
        -o %{target})))
 
@@ -622,7 +622,7 @@
  (target cmxa_test.exe)
  (deps mylib.cmxa mylib.a mylib_a.cmi mylib_b.cmi cmxa_main.ml)
  (action
-  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0014
+  (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016
        mylib.cmxa cmxa_main.ml -o %{target})))
 
 (rule
@@ -679,7 +679,7 @@
    (bash "
      set +o pipefail
      # Build with -ddissector-partitions and capture partition dir from stderr
-     OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0014 -ddissector-partitions \
+     OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016 -ddissector-partitions \
        module_a.cmx module_b.cmx module_c.cmx cross_partition_main.ml \
        -o igot_verify.exe 2>&1)
      PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
