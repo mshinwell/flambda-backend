@@ -37,7 +37,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple.exe)
  (deps simple.ml)
  (action
@@ -47,7 +48,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple.output)
  (deps simple.exe)
  (action (with-outputs-to %{target} (run ./simple.exe))))
@@ -56,7 +58,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps simple.expected simple.output)
  (action (diff simple.expected simple.output)))
 
@@ -65,7 +68,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_multipart.exe)
  (deps simple.ml)
  (action
@@ -75,7 +79,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_multipart.output)
  (deps simple_multipart.exe)
  (action (with-outputs-to %{target} (run ./simple_multipart.exe))))
@@ -84,7 +89,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps simple.expected simple_multipart.output)
  (action (diff simple.expected simple_multipart.output)))
 
@@ -92,7 +98,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_multipart.sections)
  (deps simple_multipart.exe)
  (action (with-outputs-to %{target}
@@ -105,7 +112,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps simple_multipart.sections)
  (action (bash "
    if grep -q '\\.caml\\.p1' simple_multipart.sections; then
@@ -119,7 +127,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_funcsect.exe)
  (deps simple.ml)
  (action
@@ -129,7 +138,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_funcsect.output)
  (deps simple_funcsect.exe)
  (action (with-outputs-to %{target} (run ./simple_funcsect.exe))))
@@ -138,7 +148,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps simple.expected simple_funcsect.output)
  (action (diff simple.expected simple_funcsect.output)))
 
@@ -146,7 +157,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_funcsect.sections)
  (deps simple_funcsect.exe)
  (action (with-outputs-to %{target}
@@ -159,7 +171,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps simple_funcsect.sections)
  (action (bash "
    if grep -q '\\.caml\\.p1' simple_funcsect.sections; then
@@ -178,7 +191,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets module_a.cmi module_a.cmx module_a.o)
  (deps module_a.ml)
  (action
@@ -187,7 +201,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets module_b.cmi module_b.cmx module_b.o)
  (deps module_b.ml module_a.cmi module_a.cmx)
  (action
@@ -196,7 +211,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets module_c.cmi module_c.cmx module_c.o)
  (deps module_c.ml module_a.cmi module_a.cmx module_b.cmi module_b.cmx)
  (action
@@ -208,7 +224,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cross_partition.exe)
  (deps module_a.cmx module_a.o module_b.cmx module_b.o
        module_c.cmx module_c.o cross_partition_main.ml)
@@ -220,7 +237,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cross_partition.output)
  (deps cross_partition.exe)
  (action (with-outputs-to %{target} (run ./cross_partition.exe))))
@@ -229,7 +247,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cross_partition.expected cross_partition.output)
  (action (diff cross_partition.expected cross_partition.output)))
 
@@ -237,7 +256,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cross_partition.sections)
  (deps cross_partition.exe)
  (action (with-outputs-to %{target}
@@ -248,7 +268,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cross_partition.sections)
  (action (bash "grep -q '\\.caml\\.p1' cross_partition.sections || (echo 'ERROR: cross_partition.exe does not have multiple partitions'; exit 1)")))
 
@@ -258,7 +279,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cross_partition_fs.exe)
  (deps module_a.cmx module_a.o module_b.cmx module_b.o
        module_c.cmx module_c.o cross_partition_main.ml)
@@ -270,7 +292,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cross_partition_fs.output)
  (deps cross_partition_fs.exe)
  (action (with-outputs-to %{target} (run ./cross_partition_fs.exe))))
@@ -279,7 +302,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cross_partition.expected cross_partition_fs.output)
  (action (diff cross_partition.expected cross_partition_fs.output)))
 
@@ -290,7 +314,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets large_module_a.cmi large_module_a.cmx large_module_a.o)
  (deps large_module_a.ml)
  (action
@@ -299,7 +324,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets large_module_b.cmi large_module_b.cmx large_module_b.o)
  (deps large_module_b.ml large_module_a.cmi large_module_a.cmx)
  (action
@@ -308,7 +334,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets large_module_c.cmi large_module_c.cmx large_module_c.o)
  (deps large_module_c.ml large_module_a.cmi large_module_a.cmx
        large_module_b.cmi large_module_b.cmx)
@@ -322,7 +349,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target large_cross.exe)
  (deps large_module_a.cmx large_module_a.o
        large_module_b.cmx large_module_b.o
@@ -336,7 +364,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target large_cross.output)
  (deps large_cross.exe)
  (action (with-outputs-to %{target} (run ./large_cross.exe))))
@@ -345,7 +374,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps large_cross.expected large_cross.output)
  (action (diff large_cross.expected large_cross.output)))
 
@@ -353,7 +383,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target large_cross.sections)
  (deps large_cross.exe)
  (action (with-outputs-to %{target}
@@ -363,7 +394,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps large_cross.sections)
  (action (bash "grep -q '\\.caml\\.p3' large_cross.sections || (echo 'ERROR: large_cross.exe does not have 4 partitions (expected p0-p3)'; exit 1)")))
 
@@ -375,7 +407,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target large_cross_igot.output)
  (deps large_module_a.cmx large_module_a.o large_module_b.cmx large_module_b.o
        large_module_c.cmx large_module_c.o large_cross_main.ml)
@@ -447,7 +480,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps large_cross_igot.output)
  (action (bash "grep -q 'cross-partition verification passed' large_cross_igot.output || (cat large_cross_igot.output; exit 1)")))
 
@@ -459,7 +493,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets huge_module_a.cmi huge_module_a.cmx huge_module_a.o)
  (deps huge_module_a.ml)
  (action
@@ -468,7 +503,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets huge_module_b.cmi huge_module_b.cmx huge_module_b.o)
  (deps huge_module_b.ml huge_module_a.cmi huge_module_a.cmx)
  (action
@@ -477,7 +513,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets huge_module_c.cmi huge_module_c.cmx huge_module_c.o)
  (deps huge_module_c.ml huge_module_a.cmi huge_module_a.cmx
        huge_module_b.cmi huge_module_b.cmx)
@@ -489,7 +526,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target huge.exe)
  (deps huge_module_a.cmx huge_module_a.o
        huge_module_b.cmx huge_module_b.o
@@ -503,7 +541,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target huge.output)
  (deps huge.exe)
  (action (with-outputs-to %{target} (run ./huge.exe))))
@@ -512,7 +551,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps huge.expected huge.output)
  (action (diff huge.expected huge.output)))
 
@@ -520,7 +560,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target huge.sections)
  (deps huge.exe)
  (action (with-outputs-to %{target}
@@ -531,7 +572,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps huge.sections)
  (action (bash "grep -q '\\.caml\\.p1' huge.sections || (echo 'ERROR: huge.exe does not have multiple partitions'; exit 1)")))
 
@@ -542,7 +584,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets mylib_a.cmi mylib_a.cmx mylib_a.o)
  (deps mylib_a.ml)
  (action
@@ -551,7 +594,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets mylib_b.cmi mylib_b.cmx mylib_b.o)
  (deps mylib_b.ml mylib_a.cmi mylib_a.cmx)
  (action
@@ -561,7 +605,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (targets mylib.cmxa mylib.a)
  (deps mylib_a.cmx mylib_a.o mylib_b.cmx mylib_b.o)
  (action
@@ -572,7 +617,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cmxa_test.exe)
  (deps mylib.cmxa mylib.a mylib_a.cmi mylib_b.cmi cmxa_main.ml)
  (action
@@ -582,7 +628,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cmxa_test.output)
  (deps cmxa_test.exe)
  (action (with-outputs-to %{target} (run ./cmxa_test.exe))))
@@ -591,7 +638,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cmxa_test.expected cmxa_test.output)
  (action (diff cmxa_test.expected cmxa_test.output)))
 
@@ -599,7 +647,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cmxa_test.sections)
  (deps cmxa_test.exe)
  (action (with-outputs-to %{target}
@@ -610,7 +659,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cmxa_test.sections)
  (action (bash "grep -q '\\.caml\\.p1' cmxa_test.sections || (echo 'ERROR: cmxa_test.exe does not have multiple partitions'; exit 1)")))
 
@@ -619,7 +669,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target igot_verify.output)
  (deps module_a.cmx module_a.o module_b.cmx module_b.o
        module_c.cmx module_c.o cross_partition_main.ml)
@@ -662,7 +713,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps igot_verify.output)
  (action (bash "grep -q 'IGOT verification passed' igot_verify.output || (cat igot_verify.output; exit 1)")))
 
@@ -670,7 +722,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cclib_test.exe)
  (deps cclib_test.ml)
  (action
@@ -681,7 +734,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cclib_test.output)
  (deps cclib_test.exe)
  (action
@@ -692,7 +746,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cclib_test.output)
  (action (bash "grep -q 'cclib test passed' cclib_test.output")))
 
@@ -705,7 +760,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cstub.o)
  (deps cstub.c)
  (action
@@ -715,7 +771,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target libcstub.a)
  (deps cstub.o)
  (action
@@ -725,7 +782,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cstub_passthrough.exe)
  (deps cstub_passthrough.ml libcstub.a)
  (action
@@ -737,7 +795,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cstub_passthrough.output)
  (deps cstub_passthrough.exe)
  (action
@@ -748,7 +807,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cstub_passthrough.output)
  (action (bash "grep -q 'C stub passthrough test passed' cstub_passthrough.output")))
 
@@ -756,7 +816,8 @@
 (rule
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target cstub_passthrough_verify.output)
  (deps cstub_passthrough.ml libcstub.a)
  (action
@@ -808,7 +869,8 @@
  (alias runtest)
  (enabled_if
   (and (= %{context_name} "main")
-       (= %{system} "linux")))
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps cstub_passthrough_verify.output)
  (action (bash "grep -q 'C stub passthrough verification passed' cstub_passthrough_verify.output || (cat cstub_passthrough_verify.output; exit 1)")))
 
