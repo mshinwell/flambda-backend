@@ -25,24 +25,8 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-module Section = struct
-  (* ELF segment flags: PF_X = 1 (execute), PF_W = 2 (write), PF_R = 4 (read) *)
-  type t =
-    { name : string;
-      flags : int
-    }
-
-  (* Section definitions: - Code sections: 5 (R+X) - Data sections: 6 (R+W) -
-     Read-only sections: 4 (R only) *)
-  let all =
-    [ { name = ".text"; flags = 5 };
-      { name = ".rodata"; flags = 4 };
-      { name = ".data"; flags = 6 };
-      { name = ".bss"; flags = 6 };
-      { name = ".eh_frame"; flags = 4 };
-      { name = ".data.igot"; flags = 6 };
-      { name = ".text.iplt"; flags = 5 } ]
-end
+let sections =
+  [".text"; ".rodata"; ".data"; ".bss"; ".eh_frame"; ".data.igot"; ".text.iplt"]
 
 let generate ~existing_script ~partitions =
   let buf = Buffer.create 1024 in
@@ -69,14 +53,11 @@ let generate ~existing_script ~partitions =
       | Large_code _ ->
         let prefix = Partition.section_prefix kind in
         List.iter
-          (fun { Section.name = section; flags } ->
+          (fun section ->
             let name = prefix ^ section in
-            (* Use FLAGS attribute to specify segment permissions and avoid RWX
-               warnings from the linker *)
             Buffer.add_string buf
-              (Printf.sprintf "%s FLAGS(%d) : { *(%s) *(%s.*) }\n" name flags
-                 name name))
-          Section.all)
+              (Printf.sprintf "%s : { *(%s) *(%s.*) }\n" name name name))
+          sections)
     partitions;
   Buffer.add_string buf "} INSERT AFTER .bss\n";
   Buffer.contents buf
