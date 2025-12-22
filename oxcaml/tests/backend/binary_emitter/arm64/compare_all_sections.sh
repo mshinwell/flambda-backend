@@ -44,10 +44,20 @@ while IFS= read -r dir; do
 
     TOTAL=$((TOTAL + 1))
 
-    # Check if corresponding .o file exists
+    # Only compare object files (.o), skip executables (.opt, .byte, etc.)
+    # Executables contain linked stdlib which was assembled separately
     OBJ_FILE="${TEST_PATH}.o"
     if [ ! -f "$OBJ_FILE" ]; then
-        echo "SKIP: $TEST_NAME (no .o file)"
+        echo "SKIP: $TEST_NAME (no .o file - likely an executable)"
+        SKIPPED=$((SKIPPED + 1))
+        continue
+    fi
+
+    # Also skip if there's an executable with the same base name
+    # (e.g., sigint.binary-sections with sigint executable - the binary-sections
+    # is from the linker, not the .o file which might be a C file)
+    if [ -x "${TEST_PATH}" ] && [ -f "${TEST_PATH}" ]; then
+        echo "SKIP: $TEST_NAME (has matching executable - binary-sections from linker)"
         SKIPPED=$((SKIPPED + 1))
         continue
     fi

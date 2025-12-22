@@ -379,11 +379,13 @@ let encode_simd_two_reg_misc ~q ~u ~size ~opcode ~rn ~rd =
   result
 
 (* Advanced SIMD three same - C4.1.95.24 *)
+(* Encoding: 0 Q U 01110 size 1 Rm opcode 1 Rn Rd *)
 let encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd =
   let open Int32 in
   let result = zero in
-  let result = logor result (shift_left (of_int q) 31) in
-  let result = logor result (shift_left (of_int u) 30) in
+  (* Bit 31 is always 0, Q at bit 30, U at bit 29 *)
+  let result = logor result (shift_left (of_int q) 30) in
+  let result = logor result (shift_left (of_int u) 29) in
   let result = logor result (shift_left (of_int 0b01110) 24) in
   let result = logor result (shift_left (of_int size) 22) in
   let result = logor result (shift_left (of_int 0b1) 21) in
@@ -2256,23 +2258,23 @@ let encode_instruction :
     encode_data_proc_3_source ~sf ~op54:0b00 ~op31:0b000 ~o0:0 ~rm ~ra ~rn ~rd
   | ( Pair (Reg { reg_name = Neon (Vector vec); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
-    let q, _ = vector_q_size vec in
-    (* MOVI with byte replication: op=0, cmode=1110 imm8 = abcdefgh (8-bit
-       immediate replicated to all bytes)
-
+    let q, size = vector_q_size vec in
+    (* MOVI encoding depends on element size:
+       - For byte elements (size=00): op=0, cmode=1110, byte replication
+       - For 64-bit elements (size=11): op=1, cmode=1110, 64-bit immediate
        For zeroing, imm=0, abc=000, defgh=00000 *)
     let imm8 = imm land 0xFF in
     let abc = (imm8 lsr 5) land 0b111 in
     let defgh = imm8 land 0b11111 in
-    encode_simd_modified_imm ~q ~op:0 ~abc ~cmode:0b1110 ~defgh ~rd
+    let op = if size = 0b11 then 1 else 0 in
+    encode_simd_modified_imm ~q ~op ~abc ~cmode:0b1110 ~defgh ~rd
   | ( Pair (Reg { reg_name = Neon (Scalar _); index = rd }, Imm (Twelve imm)),
       MOVI ) ->
-    (* MOVI to scalar (D register): Q=0 with 64-bit mode cmode=1110 gives byte
-       replication *)
+    (* MOVI to scalar (D register): Q=0, op=1, cmode=1110 for 64-bit immediate *)
     let imm8 = imm land 0xFF in
     let abc = (imm8 lsr 5) land 0b111 in
     let defgh = imm8 land 0b11111 in
-    encode_simd_modified_imm ~q:0 ~op:0 ~abc ~cmode:0b1110 ~defgh ~rd
+    encode_simd_modified_imm ~q:0 ~op:1 ~abc ~cmode:0b1110 ~defgh ~rd
   | Triple (Reg rd, Imm imm, Shift shift), MOVK ->
     let imm16 = match imm with Sixteen_unsigned n -> n in
     let hw = (match shift.amount with Six n -> n) / 16 in
