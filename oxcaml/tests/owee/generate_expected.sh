@@ -71,11 +71,10 @@ for ((i=0; i<MEMBER_COUNT; i++)); do
   dd if="$ARCHIVE" bs=1 skip=$DATA_OFFSET count=$SIZE of="$TMPFILE" 2>/dev/null
 
   SECTIONS_FILE="$TMPDIR/owee_sections_$$.txt"
-  if readelf -S "$TMPFILE" > "$SECTIONS_FILE" 2>/dev/null; then
-    # Parse readelf output for section names and sizes
-    # readelf -S uses two lines per section:
-    #   [ N] name             TYPE             addr              offset
-    #        size             entsize          flags  link  info  align
+  # Use -SW for wide output (full section names, one line per section)
+  if readelf -SW "$TMPFILE" > "$SECTIONS_FILE" 2>/dev/null; then
+    # Parse readelf -SW output for section names and sizes
+    # Format: [ N] name TYPE addr off size es flg lk inf al
     awk '
       /^\s+\[[ 0-9]+\]/ {
         # Skip header line [Nr]
@@ -86,16 +85,15 @@ for ((i=0; i<MEMBER_COUNT; i++)); do
         gsub(/^\s+\[[ 0-9]+\]\s*/, "", line)
         split(line, parts, /\s+/)
         name = parts[1]
+        # Size is field 5 (after name, type, addr, off)
+        size_hex = parts[5]
 
         # Truncate long section names for consistency across systems
-        # E.g., ".note.gnu.property" vs ".note.gnu.pr[...]"
+        # E.g., ".note.gnu.property" -> ".note.gnu.prope"
         if (length(name) > 15) {
           name = substr(name, 1, 15)
         }
 
-        # Read next line for size
-        getline
-        size_hex = $1
         size_dec = strtonum("0x" size_hex)
 
         if (size_dec > 0 && substr(name, 1, 1) == ".") {
