@@ -87,6 +87,12 @@ for ((i=0; i<MEMBER_COUNT; i++)); do
         split(line, parts, /\s+/)
         name = parts[1]
 
+        # Truncate long section names for consistency across systems
+        # E.g., ".note.gnu.property" vs ".note.gnu.pr[...]"
+        if (length(name) > 15) {
+          name = substr(name, 1, 15)
+        }
+
         # Read next line for size
         getline
         size_hex = $1

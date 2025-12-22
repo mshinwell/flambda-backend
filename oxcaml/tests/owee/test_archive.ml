@@ -60,6 +60,11 @@ let () =
         Array.iter
           (fun (section : Compiler_owee.Owee_elf.section) ->
             let name = section.sh_name_str in
+            (* Truncate long section names for consistency across systems. E.g.,
+               ".note.gnu.property" vs ".note.gnu.pr[...]" *)
+            let name =
+              if String.length name > 15 then String.sub name 0 15 else name
+            in
             (* Only report non-empty sections with common names *)
             if section.sh_size > 0L
                && String.length name > 0
