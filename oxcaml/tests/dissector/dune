@@ -98,8 +98,21 @@
  (action (with-outputs-to %{target}
    (run readelf -S %{deps}))))
 
-; Partition check removed - with runtime passthrough, simple.ml alone doesn't
-; create multiple partitions. The test still verifies the dissector works.
+; Verify simple_multipart.exe has exactly 1 partition (simple.ml alone isn't
+; large enough to force multiple partitions with runtime passthrough).
+; With 1 partition, sections are named .text (not .caml.p0).
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps simple_multipart.sections)
+ (action (bash "
+   if grep -q '\\.caml\\.p1' simple_multipart.sections; then
+     echo 'ERROR: simple_multipart.exe has unexpected .caml.p1 section'
+     exit 1
+   fi
+   echo 'OK: simple_multipart.exe has exactly 1 partition'")))
 
 ; Test 2b: Same as Test 2 but with -function-sections for user code
 ; Tests dissector with multiple .text.* and .rela.text.* sections per object file
@@ -139,8 +152,21 @@
  (action (with-outputs-to %{target}
    (run readelf -S %{deps}))))
 
-; Partition check removed - with runtime passthrough, simple.ml alone doesn't
-; create multiple partitions. The test still verifies the dissector works.
+; Verify simple_funcsect.exe has exactly 1 partition (simple.ml alone isn't
+; large enough to force multiple partitions with runtime passthrough).
+; With 1 partition, sections are named .text (not .caml.p0).
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")))
+ (deps simple_funcsect.sections)
+ (action (bash "
+   if grep -q '\\.caml\\.p1' simple_funcsect.sections; then
+     echo 'ERROR: simple_funcsect.exe has unexpected .caml.p1 section'
+     exit 1
+   fi
+   echo 'OK: simple_funcsect.exe has exactly 1 partition'")))
 
 ; Test 3: Multi-module test with cross-partition OCaml references
 ; Uses multiple OCaml modules (A, B, C) that call each other's functions
