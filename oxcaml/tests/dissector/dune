@@ -677,13 +677,24 @@
  (action
   (with-outputs-to %{target}
    (bash "
+     set -e
      set +o pipefail
      # Build with -ddissector-partitions and capture partition dir from stderr
-     OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016 -ddissector-partitions \
+     echo 'Building igot_verify.exe...'
+     if ! OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.0016 -ddissector-partitions \
        module_a.cmx module_b.cmx module_c.cmx cross_partition_main.ml \
-       -o igot_verify.exe 2>&1)
+       -o igot_verify.exe 2>&1); then
+       echo 'ERROR: Build failed:'
+       echo \"$OUTPUT\"
+       exit 1
+     fi
+     echo \"Build output: $OUTPUT\"
      PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
 
+     if [ -z \"$PARTITION_DIR\" ]; then
+       echo 'ERROR: Could not find partition directory in output'
+       exit 1
+     fi
      echo \"Partition directory: $PARTITION_DIR\"
 
      # Check that IGOT sections exist and verify relocations
@@ -716,7 +727,7 @@
        (= %{system} "linux")
        (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps igot_verify.output)
- (action (bash "grep -q 'IGOT verification passed' igot_verify.output || (cat igot_verify.output; exit 1)")))
+ (action (bash "cat igot_verify.output; grep -q 'IGOT verification passed' igot_verify.output")))
 
 ; Test: Linker flags (-cclib) should not be treated as files
 (rule
