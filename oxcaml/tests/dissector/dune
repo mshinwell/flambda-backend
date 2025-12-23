@@ -329,6 +329,64 @@
      done
    ")))
 
+; Verify IPLT entries exist for cross-partition function calls
+(rule
+ (alias runtest)
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
+ (deps gen_module_a.cmx gen_module_a.o gen_module_b.cmx gen_module_b.o
+       gen_module_c.cmx gen_module_c.o gen_main.ml)
+ (action
+  (bash "
+     set -e
+     set +o pipefail
+     # Build with -ddissector-partitions and capture partition dir
+     OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.002 -ddissector-partitions \
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml \
+       -o iplt_verify.exe 2>&1)
+     PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
+
+     if [ -z \"$PARTITION_DIR\" ]; then
+       echo 'ERROR: Could not find partition directory in output'
+       echo \"Output was: $OUTPUT\"
+       exit 1
+     fi
+
+     # Find partitions containing modules B and C
+     PART_WITH_B=\"\"
+     PART_WITH_C=\"\"
+     for part in $PARTITION_DIR/partition*.o.rewritten; do
+       if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_b__code_begin'; then
+         PART_WITH_B=\"$part\"
+       fi
+       if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_c__code_begin'; then
+         PART_WITH_C=\"$part\"
+       fi
+     done
+
+     # Verify partition with module_b has IPLT section (renamed to .caml.pN.text.iplt)
+     if [ -z \"$PART_WITH_B\" ]; then
+       echo 'ERROR: Could not find partition containing Gen_module_b'
+       exit 1
+     fi
+     if ! readelf -SW \"$PART_WITH_B\" 2>/dev/null | grep -q 'text\\.iplt'; then
+       echo 'ERROR: Partition with module_b does not have IPLT section'
+       exit 1
+     fi
+
+     # Verify partition with module_c has IPLT section (renamed to .caml.pN.text.iplt)
+     if [ -z \"$PART_WITH_C\" ]; then
+       echo 'ERROR: Could not find partition containing Gen_module_c'
+       exit 1
+     fi
+     if ! readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -q 'text\\.iplt'; then
+       echo 'ERROR: Partition with module_c does not have IPLT section'
+       exit 1
+     fi
+   ")))
+
 ; Test 3: CMXA archive test
 ; Tests linking with a .cmxa archive through the dissector
 

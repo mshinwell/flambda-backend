@@ -71,6 +71,20 @@ let generate_module_b () =
   Buffer.add_string buf "let call_a_magic () = Gen_module_a.get_magic ()\n";
   Buffer.add_string buf "let call_a_functions x = Gen_module_a.call_all x\n";
   Buffer.add_string buf "let get_a_arr_element i = Gen_module_a.arr.(i)\n\n";
+  (* Direct mutable data access across partitions *)
+  Buffer.add_string buf "(* Direct mutable data access across partitions *)\n";
+  Buffer.add_string buf
+    "let read_a_counter_direct () = !(Gen_module_a.counter)\n";
+  Buffer.add_string buf
+    "let write_a_counter_direct v = Gen_module_a.counter := v\n\n";
+  (* Closures capturing cross-partition references *)
+  Buffer.add_string buf "(* Closures capturing cross-partition references *)\n";
+  Buffer.add_string buf
+    "let make_a_incrementer () = fun () -> Gen_module_a.increment ()\n";
+  Buffer.add_string buf
+    "let make_a_arr_reader i = fun () -> Gen_module_a.arr.(i)\n";
+  Buffer.add_string buf
+    "let captured_a_increment = Gen_module_a.increment\n\n";
   Buffer.add_string buf (generate_functions 10001 num_functions);
   Buffer.contents buf
 
@@ -91,6 +105,26 @@ let generate_module_c () =
      Gen_module_a.call_all x + Gen_module_b.call_all x\n";
   Buffer.add_string buf "let get_a_arr_element i = Gen_module_a.arr.(i)\n";
   Buffer.add_string buf "let get_b_arr_element i = Gen_module_b.arr.(i)\n\n";
+  (* Direct mutable data access across partitions *)
+  Buffer.add_string buf "(* Direct mutable data access across partitions *)\n";
+  Buffer.add_string buf
+    "let read_a_counter_direct () = !(Gen_module_a.counter)\n";
+  Buffer.add_string buf
+    "let read_b_counter_direct () = !(Gen_module_b.counter)\n";
+  Buffer.add_string buf
+    "let write_a_counter_direct v = Gen_module_a.counter := v\n";
+  Buffer.add_string buf
+    "let write_b_counter_direct v = Gen_module_b.counter := v\n\n";
+  (* Closures capturing cross-partition references *)
+  Buffer.add_string buf "(* Closures capturing cross-partition references *)\n";
+  Buffer.add_string buf
+    "let make_combined_incrementer () = \
+     fun () -> Gen_module_a.increment () + Gen_module_b.increment ()\n";
+  Buffer.add_string buf
+    "let make_multi_arr_reader i j = \
+     fun () -> Gen_module_a.arr.(i) + Gen_module_b.arr.(j)\n";
+  Buffer.add_string buf
+    "let captured_b_via_a = Gen_module_b.captured_a_increment\n\n";
   Buffer.add_string buf (generate_functions 20001 num_functions);
   Buffer.contents buf
 
@@ -160,8 +194,42 @@ let () =
   Printf.printf "  C.call_both_functions(1): %d\n" cross_c;
   print_newline ();
 
-  (* Test 5: Final counter state *)
-  print_endline "Test 5: Final counter state";
+  (* Test 5: Direct mutable data access across partitions *)
+  print_endline "Test 5: Direct mutable data access";
+  Printf.printf "  B.read_a_counter_direct: %d\n"
+    (Gen_module_b.read_a_counter_direct ());
+  Gen_module_b.write_a_counter_direct 100;
+  Printf.printf "  After B.write_a_counter_direct(100): %d\n"
+    (Gen_module_a.get_counter ());
+  Printf.printf "  C.read_a_counter_direct: %d\n"
+    (Gen_module_c.read_a_counter_direct ());
+  Printf.printf "  C.read_b_counter_direct: %d\n"
+    (Gen_module_c.read_b_counter_direct ());
+  Gen_module_c.write_a_counter_direct 200;
+  Gen_module_c.write_b_counter_direct 50;
+  Printf.printf "  After C writes - A.counter: %d, B.counter: %d\n"
+    (Gen_module_a.get_counter ()) (Gen_module_b.get_counter ());
+  print_newline ();
+
+  (* Test 6: Closures capturing cross-partition references *)
+  print_endline "Test 6: Closures with cross-partition refs";
+  let a_inc = Gen_module_b.make_a_incrementer () in
+  Printf.printf "  B.make_a_incrementer()(): %d\n" (a_inc ());
+  Printf.printf "  B.make_a_incrementer()() again: %d\n" (a_inc ());
+  let arr_reader = Gen_module_b.make_a_arr_reader 7 in
+  Printf.printf "  B.make_a_arr_reader(7)(): %d\n" (arr_reader ());
+  Printf.printf "  B.captured_a_increment(): %d\n"
+    (Gen_module_b.captured_a_increment ());
+  let combined_inc = Gen_module_c.make_combined_incrementer () in
+  Printf.printf "  C.make_combined_incrementer()(): %d\n" (combined_inc ());
+  let multi_reader = Gen_module_c.make_multi_arr_reader 3 5 in
+  Printf.printf "  C.make_multi_arr_reader(3,5)(): %d\n" (multi_reader ());
+  Printf.printf "  C.captured_b_via_a(): %d\n"
+    (Gen_module_c.captured_b_via_a ());
+  print_newline ();
+
+  (* Test 7: Final counter state *)
+  print_endline "Test 7: Final counter state";
   Printf.printf "  A.counter: %d\n" (Gen_module_a.get_counter ());
   Printf.printf "  B.counter: %d\n" (Gen_module_b.get_counter ());
   Printf.printf "  C.counter: %d\n" (Gen_module_c.get_counter ());
