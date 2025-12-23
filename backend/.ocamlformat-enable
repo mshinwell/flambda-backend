@@ -25,7 +25,7 @@ arm64/ast/**/*.ml
 arm64/ast/**/*.mli
 arm64/binary_emitter/**/*.ml
 arm64/binary_emitter/**/*.mli
-binary_emitter_intf.ml
+binary_emitter_intf/**/*.ml*
 arm64_logical_immediates.mli
 jit_backend.ml*
 asm_targets/**/*.ml

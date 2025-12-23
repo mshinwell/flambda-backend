@@ -129,26 +129,32 @@ module DSL : sig
     Reg.t -> [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2s :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v4s :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2d :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v16b :
     Reg.t ->
     [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v8h :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v8b :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v4h :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   (** Operand tuple helpers for SIMD instructions *)
 
@@ -220,7 +226,8 @@ module DSL : sig
     Reg.t -> [`Reg of [`Neon of [`Scalar of [`Q]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2d_operand :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v16b_operand :
     Reg.t ->
@@ -258,7 +265,8 @@ module DSL : sig
     Arm64_ast.Ast.Operand.t
 
   val stack :
-    Reg.t -> [`Mem of [> `Offset_imm | `Offset_unscaled]] Arm64_ast.Ast.Operand.t
+    Reg.t ->
+    [`Mem of [> `Offset_imm | `Offset_unscaled]] Arm64_ast.Ast.Operand.t
 
   val label :
     ?offset:int ->
@@ -404,34 +412,44 @@ end = struct
   let v16b_v16b i = reg_v16b i.Linear.res.(0), reg_v16b i.Linear.arg.(0)
 
   let label ?offset reloc lbl =
-    Arm64_ast.Ast.DSL.symbol (Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode lbl))
+    Arm64_ast.Ast.DSL.symbol
+      (Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode lbl))
 
   let symbol ?offset reloc s =
-    Arm64_ast.Ast.DSL.symbol (Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode s))
+    Arm64_ast.Ast.DSL.symbol
+      (Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode s))
 
-  let emit_mem_symbol ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc)
-      ?offset r sym =
+  let emit_mem_symbol
+      ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc) ?offset r sym
+      =
     let index = reg_index r in
     let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode sym) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
       then Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.sp ()) ~symbol
-      else Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.reg_x index) ~symbol
+      else
+        Arm64_ast.Ast.DSL.mem_symbol
+          ~base:(Arm64_ast.Ast.Reg.reg_x index)
+          ~symbol
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_symbol: expected integer register for base, got %a"
         Printreg.reg r
 
-  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc)
-      ?offset r label =
+  let emit_mem_label
+      ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc) ?offset r
+      label =
     let index = reg_index r in
     let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode label) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
       then Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.sp ()) ~symbol
-      else Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.reg_x index) ~symbol
+      else
+        Arm64_ast.Ast.DSL.mem_symbol
+          ~base:(Arm64_ast.Ast.Reg.reg_x index)
+          ~symbol
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_label: expected integer register for base, got %a"
@@ -454,7 +472,10 @@ end = struct
     | Val | Int | Addr ->
       if index = 31
       then Arm64_ast.Ast.DSL.mem_offset ~base:(Arm64_ast.Ast.Reg.sp ()) ~offset
-      else Arm64_ast.Ast.DSL.mem_offset ~base:(Arm64_ast.Ast.Reg.reg_x index) ~offset
+      else
+        Arm64_ast.Ast.DSL.mem_offset
+          ~base:(Arm64_ast.Ast.Reg.reg_x index)
+          ~offset
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_offset: expected integer register for base, got %a"
@@ -547,7 +568,8 @@ end = struct
   let reg_v2d_operand reg =
     let index = reg_index reg in
     match reg.typ with
-    | Vec128 | Valx2 -> Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v2d index)
+    | Vec128 | Valx2 ->
+      Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v2d index)
     | Val | Int | Addr | Float | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_v2d_operand: expected Vec128/Valx2 register, got %a" Printreg.reg
@@ -556,7 +578,8 @@ end = struct
   let reg_v16b_operand reg =
     let index = reg_index reg in
     match reg.typ with
-    | Vec128 | Valx2 -> Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v16b index)
+    | Vec128 | Valx2 ->
+      Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v16b index)
     | Val | Int | Addr | Float | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_v16b_operand: expected Vec128/Valx2 register, got %a" Printreg.reg
@@ -2704,7 +2727,8 @@ let emit_instr i =
       ( DSL.reg_x reg_tmp1,
         DSL.reg_x reg_tmp1,
         DSL.reg_x i.arg.(0),
-        DSL.optional_shift ~kind:Arm64_ast.Ast.Operand.Shift.Kind.LSL ~amount:2 );
+        DSL.optional_shift ~kind:Arm64_ast.Ast.Operand.Shift.Kind.LSL ~amount:2
+      );
     A.ins1 BR (DSL.reg_x reg_tmp1);
     D.define_label lbltbl;
     for j = 0 to Array.length jumptbl - 1 do
@@ -2909,7 +2933,8 @@ let begin_assembly _unix =
   (* Set up binary emitter if JIT hook is registered or save_binary_sections is
      set *)
   let use_binary_emitter =
-    Option.is_some (Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ())
+    Option.is_some
+      (Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ())
     || !Oxcaml_flags.save_binary_sections
   in
   if use_binary_emitter
@@ -2917,13 +2942,15 @@ let begin_assembly _unix =
     let emitter = Arm64_binary_emitter.Binary_emitter.create () in
     jit_emitter := Some emitter;
     Arm64_ast.Ast.DSL.Acc.set_emit_instruction
-      ~emit_instruction:(Arm64_binary_emitter.Binary_emitter.add_instruction emitter));
+      ~emit_instruction:
+        (Arm64_binary_emitter.Binary_emitter.add_instruction emitter));
   let asm_line_buffer = Buffer.create 200 in
   D.initialize ~big_endian:Arch.big_endian
     ~emit_assembly_comments:!Oxcaml_flags.dasm_comments ~emit:(fun d ->
       (* Emit to binary emitter if in JIT mode *)
       (match !jit_emitter with
-      | Some emitter -> Arm64_binary_emitter.Binary_emitter.add_directive emitter d
+      | Some emitter ->
+        Arm64_binary_emitter.Binary_emitter.add_directive emitter d
       | None -> ());
       (* Emit to text *)
       Buffer.clear asm_line_buffer;
@@ -3046,16 +3073,21 @@ let end_assembly () =
           (* Save binary content *)
           let bin_filename = Filename.concat dir (safe_name ^ ".bin") in
           let oc = open_out_bin bin_filename in
-          output_string oc (Arm64_binary_emitter.Binary_emitter.Section_state.contents state);
+          output_string oc
+            (Arm64_binary_emitter.Binary_emitter.Section_state.contents state);
           close_out oc;
           (* Save relocations if any *)
-          let relocs = Arm64_binary_emitter.Binary_emitter.Section_state.relocations state in
+          let relocs =
+            Arm64_binary_emitter.Binary_emitter.Section_state.relocations state
+          in
           match relocs with
           | [] -> ()
           | _ ->
             let reloc_filename = Filename.concat dir (safe_name ^ ".relocs") in
             let oc = open_out reloc_filename in
-            let module R = Arm64_binary_emitter.Binary_emitter.For_jit.Relocation in
+            let module R =
+              Arm64_binary_emitter.Binary_emitter.For_jit.Relocation
+            in
             List.iter
               (fun reloc ->
                 Printf.fprintf oc "%d %s\n"
@@ -3065,7 +3097,9 @@ let end_assembly () =
             close_out oc)
         sections);
     (* Call the JIT hook if registered *)
-    match Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get () with
+    match
+      Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ()
+    with
     | None -> ()
     | Some hook ->
       (* The hook expects (string * assembled_section) list and returns a file

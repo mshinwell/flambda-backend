@@ -162,7 +162,7 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
   let rotation, ones =
     let first_one = find_first_one pattern 0 in
     if first_one > 0
-    then begin
+    then
       (* Pattern starts with zeros: 0+1+0* type *)
       (* Rotate right by first_one to put ones at LSB *)
       let rotated =
@@ -174,8 +174,7 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
       in
       let ones = count_ones rotated 0 0 in
       first_one, ones
-    end
-    else begin
+    else
       (* Pattern starts with one: check if it's 1+0+1* (ones wrap around) *)
       let ones_from_lsb = count_ones pattern 0 0 in
       if ones_from_lsb = len
@@ -189,15 +188,13 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
         if next_one_rel >= len - first_zero
         then (* No more ones after zeros: simple 1+0* pattern *)
           0, ones_from_lsb
-        else begin
+        else
           (* 1+0+1* pattern: ones at both ends wrap around *)
           let total_ones = count_all_ones pattern 0 0 in
           let first_one_after_zeros = first_zero + next_one_rel in
           (* To canonicalize, rotate right by first_one_after_zeros *)
           (* Then immr = (len - rotation) mod len will give correct result *)
           first_one_after_zeros, total_ones
-        end
-    end
   in
   (* Encode N based on element size *)
   let n = if len = 64 then 1 else 0 in
@@ -206,12 +203,10 @@ let encode_logical_immediate_fields (x : nativeint) : int * int * int =
      to get the canonical form, the inverse is (len - rotation) mod len. *)
   let immr = (len - rotation) mod len in
   (* imms encoding: the highest 0 bit indicates element size, remaining bits
-     encode (ones - 1). For N=0:
-     - 32-bit element: imms = 0xxxxx (bit 5 = 0, bits 0-4 for ones)
-     - 16-bit element: imms = 10xxxx (bits 0-3 for ones)
-     - 8-bit element:  imms = 110xxx (bits 0-2 for ones)
-     - 4-bit element:  imms = 1110xx (bits 0-1 for ones)
-     - 2-bit element:  imms = 11110x (bit 0 for ones)
+     encode (ones - 1). For N=0: - 32-bit element: imms = 0xxxxx (bit 5 = 0,
+     bits 0-4 for ones) - 16-bit element: imms = 10xxxx (bits 0-3 for ones) -
+     8-bit element: imms = 110xxx (bits 0-2 for ones) - 4-bit element: imms =
+     1110xx (bits 0-1 for ones) - 2-bit element: imms = 11110x (bit 0 for ones)
      For N=1 (64-bit), all 6 bits encode ones. *)
   let size_encoding =
     match len with

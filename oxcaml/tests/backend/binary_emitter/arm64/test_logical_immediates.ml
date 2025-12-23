@@ -21,9 +21,12 @@
 (* Unboxed int64 operations - copied from Int64_u to avoid module dependency *)
 external box_int64 : int64# -> (int64[@local_opt]) = "%box_int64"
 external unbox_int64 : (int64[@local_opt]) -> int64# = "%unbox_int64"
-let[@inline always] logor x y = unbox_int64 (Int64.logor (box_int64 x) (box_int64 y))
-let[@inline always] logand x y = unbox_int64 (Int64.logand (box_int64 x) (box_int64 y))
-let[@inline always] logxor x y = unbox_int64 (Int64.logxor (box_int64 x) (box_int64 y))
+let[@inline always] logor x y =
+  unbox_int64 (Int64.logor (box_int64 x) (box_int64 y))
+let[@inline always] logand x y =
+  unbox_int64 (Int64.logand (box_int64 x) (box_int64 y))
+let[@inline always] logxor x y =
+  unbox_int64 (Int64.logxor (box_int64 x) (box_int64 y))
 
 (* === Simple consecutive 1s from LSB ===
    These are the basic patterns: N consecutive 1s starting at bit 0.
@@ -61,11 +64,11 @@ let[@inline never] test_or_100000000 x = logor x #0x100000000L  (* bit 32 *)
 (* === Rotated consecutive bit patterns ===
    Multiple consecutive 1s that don't start at bit 0.
    These require non-zero immr to encode the rotation. *)
-let[@inline never] test_or_6 x = logor x #0x6L            (* bits 1-2: 0b110 *)
-let[@inline never] test_or_1e x = logor x #0x1eL          (* bits 1-4: 0b11110 *)
-let[@inline never] test_or_7e0 x = logor x #0x7e0L        (* bits 5-10 *)
-let[@inline never] test_or_ff00 x = logor x #0xff00L      (* bits 8-15 *)
-let[@inline never] test_or_ff0000 x = logor x #0xff0000L  (* bits 16-23 *)
+let[@inline never] test_or_6 x = logor x #0x6L           (* bits 1-2: 0b110 *)
+let[@inline never] test_or_1e x = logor x #0x1eL         (* bits 1-4: 0b11110 *)
+let[@inline never] test_or_7e0 x = logor x #0x7e0L       (* bits 5-10 *)
+let[@inline never] test_or_ff00 x = logor x #0xff00L     (* bits 8-15 *)
+let[@inline never] test_or_ff0000 x = logor x #0xff0000L (* bits 16-23 *)
 let[@inline never] test_or_ff000000 x = logor x #0xff000000L  (* bits 24-31 *)
 
 (* === Wrapping patterns (1+0+1* type) ===

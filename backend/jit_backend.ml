@@ -107,6 +107,5 @@ let unregister () =
   | X86_64 ->
     X86_proc.internal_assembler := !saved_x86_internal_assembler;
     saved_x86_internal_assembler := None
-  | AArch64 ->
-    Arm64_binary_emitter.For_jit.Internal_assembler.unregister ()
+  | AArch64 -> Arm64_binary_emitter.For_jit.Internal_assembler.unregister ()
   | _ -> Misc.fatal_error "JIT not supported on this architecture"

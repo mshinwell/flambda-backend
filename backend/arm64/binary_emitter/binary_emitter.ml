@@ -118,8 +118,8 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
         (Char.chr
            (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
     ~on_directive:
-      (Encode_directive.emit_directive ~current_section ~section_base ~global_lookup
-         ~global_lookup_with_section ~section_tbl)
+      (Encode_directive.emit_directive ~current_section ~section_base
+         ~global_lookup ~global_lookup_with_section ~section_tbl)
 
 let emit emitter =
   let section_tbl = Asm_section.Tbl.create 10 in
