@@ -142,6 +142,19 @@
  (action
   (run %{bin:ocamlopt.opt} -c gen_module_c.ml)))
 
+; Compile gen_main.ml (needed by multiple tests, so compile once to avoid races)
+(rule
+ (enabled_if
+  (and (= %{context_name} "main")
+       (= %{system} "linux")
+       (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
+ (targets gen_main.cmi gen_main.cmx gen_main.o)
+ (deps gen_main.ml gen_module_a.cmi gen_module_a.cmx
+       gen_module_b.cmi gen_module_b.cmx
+       gen_module_c.cmi gen_module_c.cmx)
+ (action
+  (run %{bin:ocamlopt.opt} -c gen_main.ml)))
+
 ; Link with dissector - 3MB partition size forces each ~4MB module into
 ; its own partition, testing cross-partition OCaml calls
 (rule
@@ -153,10 +166,10 @@
  (deps gen_module_a.cmx gen_module_a.o
        gen_module_b.cmx gen_module_b.o
        gen_module_c.cmx gen_module_c.o
-       gen_main.ml)
+       gen_main.cmx gen_main.o)
  (action
   (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.002
-       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.cmx
        -o %{target})))
 
 (rule
@@ -199,10 +212,10 @@
  (deps gen_module_a.cmx gen_module_a.o
        gen_module_b.cmx gen_module_b.o
        gen_module_c.cmx gen_module_c.o
-       gen_main.ml)
+       gen_main.cmx gen_main.o)
  (action
   (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.002
-       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.cmx
        -o %{target})))
 
 (rule
@@ -231,14 +244,14 @@
        (= %{system} "linux")
        (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps gen_module_a.cmx gen_module_a.o gen_module_b.cmx gen_module_b.o
-       gen_module_c.cmx gen_module_c.o gen_main.ml)
+       gen_module_c.cmx gen_module_c.o gen_main.cmx gen_main.o)
  (action
   (bash "
      set -e
      set +o pipefail
      # Build with -ddissector-partitions and capture partition dir
      OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.002 -ddissector-partitions \
-       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml \
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.cmx \
        -o cross_partition_igot.exe 2>&1)
      PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
 
@@ -299,23 +312,30 @@
      echo \"PART_WITH_C: $PART_WITH_C\"
 
      # Verify partition with module_b has IGOT ref to module_a
+     # (get_a_static_data returns Gen_module_a.static_data, forcing an IGOT entry)
      IGOT_B=$(readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_a' || true)
      if [ -z \"$IGOT_B\" ]; then
        echo 'ERROR: Partition with module_b does not have IGOT ref to module_a'
        echo 'IGOT relocations in partition with module_b:'
        readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'All relocations in partition with module_b:'
+       readelf -r \"$PART_WITH_B\" 2>/dev/null | head -50
        echo 'Sections in partition with module_b:'
        readelf -SW \"$PART_WITH_B\" 2>/dev/null | grep -E 'igot|data'
        exit 1
      fi
+     echo 'Partition B IGOT has refs to module_a'
 
      # Verify partition with module_c has IGOT refs to both module_a AND module_b
+     # (get_a_static_data and get_b_static_data force IGOT entries)
      IGOT_C_A=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_a' || true)
      IGOT_C_B=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_b' || true)
      if [ -z \"$IGOT_C_A\" ]; then
        echo 'ERROR: Partition with module_c does not have IGOT ref to module_a'
        echo 'IGOT relocations in partition with module_c:'
        readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'All relocations in partition with module_c:'
+       readelf -r \"$PART_WITH_C\" 2>/dev/null | head -50
        echo 'Sections in partition with module_c:'
        readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -E 'igot|data'
        exit 1
@@ -324,10 +344,13 @@
        echo 'ERROR: Partition with module_c does not have IGOT ref to module_b'
        echo 'IGOT relocations in partition with module_c:'
        readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'All relocations in partition with module_c:'
+       readelf -r \"$PART_WITH_C\" 2>/dev/null | head -50
        echo 'Sections in partition with module_c:'
        readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -E 'igot|data'
        exit 1
      fi
+     echo 'Partition C IGOT has refs to module_a and module_b'
      echo 'IGOT verification passed'
    ")))
 
@@ -339,14 +362,14 @@
        (= %{system} "linux")
        (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps gen_module_a.cmx gen_module_a.o gen_module_b.cmx gen_module_b.o
-       gen_module_c.cmx gen_module_c.o gen_main.ml)
+       gen_module_c.cmx gen_module_c.o gen_main.cmx gen_main.o)
  (action
   (bash "
      set -e
      set +o pipefail
      # Build with -ddissector-partitions and capture partition dir from stderr
      OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.002 -ddissector-partitions \
-       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml \
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.cmx \
        -o igot_verify.exe 2>&1)
      PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
 
@@ -388,14 +411,14 @@
        (= %{system} "linux")
        (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (deps gen_module_a.cmx gen_module_a.o gen_module_b.cmx gen_module_b.o
-       gen_module_c.cmx gen_module_c.o gen_main.ml)
+       gen_module_c.cmx gen_module_c.o gen_main.cmx gen_main.o)
  (action
   (bash "
      set -e
      set +o pipefail
      # Build with -ddissector-partitions and capture partition dir
      OUTPUT=$(%{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.002 -ddissector-partitions \
-       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.ml \
+       gen_module_a.cmx gen_module_b.cmx gen_module_c.cmx gen_main.cmx \
        -o iplt_verify.exe 2>&1)
      PARTITION_DIR=$(echo \"$OUTPUT\" | grep 'Dissector partition files' | sed 's/.*in \\(.*\\)):/\\1/')
 

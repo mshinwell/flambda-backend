@@ -55,7 +55,10 @@ let generate_module_a () =
   Buffer.add_string buf "let counter = ref 0\n";
   Buffer.add_string buf "let increment () = incr counter; !counter\n";
   Buffer.add_string buf "let get_counter () = !counter\n";
-  Buffer.add_string buf "let get_magic () = 42\n\n";
+  Buffer.add_string buf "let get_magic () = 42\n";
+  (* Static constant that other modules will reference directly for IGOT testing *)
+  Buffer.add_string buf
+    "let static_data = [| 100; 200; 300; 400; 500 |]\n\n";
   Buffer.add_string buf (generate_functions 1 num_functions);
   Buffer.contents buf
 
@@ -66,7 +69,10 @@ let generate_module_b () =
   Buffer.add_string buf (generate_array_literal 200000 array_size);
   Buffer.add_string buf "let counter = ref 0\n";
   Buffer.add_string buf "let increment () = incr counter; !counter\n";
-  Buffer.add_string buf "let get_counter () = !counter\n\n";
+  Buffer.add_string buf "let get_counter () = !counter\n";
+  (* Static constant that other modules will reference directly for IGOT testing *)
+  Buffer.add_string buf
+    "let static_data = [| 600; 700; 800; 900; 1000 |]\n\n";
   Buffer.add_string buf "(* Cross-partition calls to A *)\n";
   Buffer.add_string buf "let call_a_increment () = Gen_module_a.increment ()\n";
   Buffer.add_string buf "let call_a_magic () = Gen_module_a.get_magic ()\n";
@@ -77,7 +83,10 @@ let generate_module_b () =
   Buffer.add_string buf
     "let read_a_counter_direct () = !(Gen_module_a.counter)\n";
   Buffer.add_string buf
-    "let write_a_counter_direct v = Gen_module_a.counter := v\n\n";
+    "let write_a_counter_direct v = Gen_module_a.counter := v\n";
+  (* Direct reference to static data - forces IGOT entry *)
+  Buffer.add_string buf
+    "let get_a_static_data () = Gen_module_a.static_data\n\n";
   (* Closures capturing cross-partition references *)
   Buffer.add_string buf "(* Closures capturing cross-partition references *)\n";
   Buffer.add_string buf
@@ -114,7 +123,12 @@ let generate_module_c () =
   Buffer.add_string buf
     "let write_a_counter_direct v = Gen_module_a.counter := v\n";
   Buffer.add_string buf
-    "let write_b_counter_direct v = Gen_module_b.counter := v\n\n";
+    "let write_b_counter_direct v = Gen_module_b.counter := v\n";
+  (* Direct references to static data - forces IGOT entries *)
+  Buffer.add_string buf
+    "let get_a_static_data () = Gen_module_a.static_data\n";
+  Buffer.add_string buf
+    "let get_b_static_data () = Gen_module_b.static_data\n\n";
   (* Closures capturing cross-partition references *)
   Buffer.add_string buf "(* Closures capturing cross-partition references *)\n";
   Buffer.add_string buf
@@ -209,6 +223,12 @@ let () =
   Gen_module_c.write_b_counter_direct 50;
   Printf.printf "  After C writes - A.counter: %d, B.counter: %d\n"
     (Gen_module_a.get_counter ()) (Gen_module_b.get_counter ());
+  let a_static = Gen_module_b.get_a_static_data () in
+  Printf.printf "  B.get_a_static_data()[0]: %d\n" a_static.(0);
+  let a_static_c = Gen_module_c.get_a_static_data () in
+  let b_static_c = Gen_module_c.get_b_static_data () in
+  Printf.printf "  C.get_a_static_data()[1]: %d\n" a_static_c.(1);
+  Printf.printf "  C.get_b_static_data()[2]: %d\n" b_static_c.(2);
   print_newline ();
 
   (* Test 6: Closures capturing cross-partition references *)

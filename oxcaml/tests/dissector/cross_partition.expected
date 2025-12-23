@@ -35,6 +35,9 @@ Test 5: Direct mutable data access
   C.read_a_counter_direct: 100
   C.read_b_counter_direct: 2
   After C writes - A.counter: 200, B.counter: 50
+  B.get_a_static_data()[0]: 100
+  C.get_a_static_data()[1]: 200
+  C.get_b_static_data()[2]: 800
 
 Test 6: Closures with cross-partition refs
   B.make_a_incrementer()(): 201
