@@ -38,7 +38,7 @@ module L = Asm_targets.Asm_label
 open! Int_replace_polymorphic_compare
 
 (* Binary emitter for JIT mode *)
-let jit_emitter : Arm64_binary_emitter.t option ref = ref None
+let jit_emitter : Arm64_binary_emitter.Binary_emitter.t option ref = ref None
 
 (* Tradeoff between code size and code speed *)
 

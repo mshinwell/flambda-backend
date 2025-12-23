@@ -66,7 +66,7 @@ val add_patch : offset:int -> size:data_size -> data:int64 -> buffer -> unit
 
 val labels : buffer -> symbol String.Tbl.t
 
-(** Module implementing Binary_emitter.S for use by ocaml-jit *)
-module For_jit : Binary_emitter.S
+(** Module implementing Binary_emitter_intf.S for use by ocaml-jit *)
+module For_jit : Binary_emitter_intf.S
   with type Assembled_section.t = buffer
    and type Relocation.t = Relocation.t

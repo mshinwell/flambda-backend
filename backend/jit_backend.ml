@@ -25,19 +25,23 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-(* JIT backend dispatch - architecture-independent interface for JIT.
-   This module allows jit.ml to register a callback without knowing about
+(* JIT backend dispatch - architecture-independent interface for JIT. This
+   module allows jit.ml to register a callback without knowing about
    architecture-specific emitters (X86_binary_emitter, Arm64_binary_emitter). *)
 
-module String_map = Map.Make(String)
+module String_map = Map.Make (String)
 
 (* Packed sections with their Binary_emitter.S module, hiding the
    architecture-specific types using an existential. *)
-type packed_sections = Packed : {
-  emitter : (module Binary_emitter.S with type Assembled_section.t = 'a
-                                      and type Relocation.t = 'r);
-  sections : 'a String_map.t;
-} -> packed_sections
+type packed_sections =
+  | Packed :
+      { emitter :
+          (module Binary_emitter_intf.S
+             with type Assembled_section.t = 'a
+              and type Relocation.t = 'r);
+        sections : 'a String_map.t
+      }
+      -> packed_sections
 
 type callback = packed_sections -> unit
 
@@ -48,12 +52,11 @@ let saved_x86_internal_assembler = ref None
 
 let register callback =
   current_callback := Some callback;
-  match Binary_emitter.arch with
+  match Binary_emitter.arch (* XXX use Target_system *) with
   | Binary_emitter.Amd64 ->
     (* Save old x86 internal assembler and register our hook *)
     saved_x86_internal_assembler := !X86_proc.internal_assembler;
-    X86_proc.register_internal_assembler
-      (fun ~delayed:_ sections _filename ->
+    X86_proc.register_internal_assembler (fun ~delayed:_ sections _filename ->
         (* Assemble each section *)
         let sections_map =
           List.fold_left
@@ -67,28 +70,32 @@ let register callback =
               let binary_section =
                 X86_binary_emitter.assemble_section X86_ast.X64 section
               in
-              if X86_binary_emitter.size binary_section = 0 then map
+              if X86_binary_emitter.size binary_section = 0
+              then map
               else String_map.add name_str binary_section map)
             String_map.empty sections
         in
-        let packed = Packed {
-          emitter = (module X86_binary_emitter.For_jit);
-          sections = sections_map;
-        } in
+        let packed =
+          Packed
+            { emitter = (module X86_binary_emitter.For_jit);
+              sections = sections_map
+            }
+        in
         callback packed)
   | Binary_emitter.Arm64 ->
     (* Register with ARM64 binary emitter's hook *)
-    Arm64_binary_emitter.For_jit.Internal_assembler.register
-      (fun sections ->
+    Arm64_binary_emitter.For_jit.Internal_assembler.register (fun sections ->
         let sections_map =
           List.fold_left
             (fun map (name, section) -> String_map.add name section map)
             String_map.empty sections
         in
-        let packed = Packed {
-          emitter = (module Arm64_binary_emitter.For_jit);
-          sections = sections_map;
-        } in
+        let packed =
+          Packed
+            { emitter = (module Arm64_binary_emitter.For_jit);
+              sections = sections_map
+            }
+        in
         callback packed;
         (* Return dummy file writer *)
         fun _filename -> ())

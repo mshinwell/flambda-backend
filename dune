@@ -724,7 +724,7 @@
   (:include %{project_root}/ocamlopt_flags.sexp))
  (instrumentation
   (backend bisect_ppx))
- (libraries ocamlcommon dwarf_flags asm_targets)
+ (libraries ocamlcommon dwarf_flags asm_targets arm64_binary_emitter)
  (modules oxcaml_args oxcaml_flags))
 
 (executable
@@ -791,6 +791,7 @@
    %{targets}
    %{dep:backend/debug/dwarf/dwarf_flags/dwarf_flags.a}
    %{dep:backend/asm_targets/asm_targets.a}
+   %{dep:backend/arm64_binary_emitter/arm64_binary_emitter.a}
    %{dep:backend/debug/dwarf/dwarf_low/dwarf_low.a}
    %{dep:backend/debug/dwarf/dwarf_high/dwarf_high.a}
    %{dep:oxcaml_common.a}
@@ -830,6 +831,7 @@
    %{targets}
    %{dep:backend/debug/dwarf/dwarf_flags/dwarf_flags.cma}
    %{dep:backend/asm_targets/asm_targets.cma}
+   %{dep:backend/arm64_binary_emitter/arm64_binary_emitter.cma}
    %{dep:backend/debug/dwarf/dwarf_low/dwarf_low.cma}
    %{dep:backend/debug/dwarf/dwarf_high/dwarf_high.cma}
    %{dep:oxcaml_common.cma}
@@ -869,6 +871,7 @@
    %{targets}
    %{dep:backend/debug/dwarf/dwarf_flags/dwarf_flags.cmxa}
    %{dep:backend/asm_targets/asm_targets.cmxa}
+   %{dep:backend/arm64_binary_emitter/arm64_binary_emitter.cmxa}
    %{dep:backend/debug/dwarf/dwarf_low/dwarf_low.cmxa}
    %{dep:backend/debug/dwarf/dwarf_high/dwarf_high.cmxa}
    %{dep:oxcaml_common.cmxa}

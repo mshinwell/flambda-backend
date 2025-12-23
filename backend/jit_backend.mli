@@ -33,11 +33,15 @@ module String_map : Map.S with type key = string
 
 (** Packed sections with their Binary_emitter.S module, hiding the
     architecture-specific types using an existential. *)
-type packed_sections = Packed : {
-  emitter : (module Binary_emitter.S with type Assembled_section.t = 'a
-                                      and type Relocation.t = 'r);
-  sections : 'a String_map.t;
-} -> packed_sections
+type packed_sections =
+  | Packed :
+      { emitter :
+          (module Binary_emitter_intf.S
+             with type Assembled_section.t = 'a
+              and type Relocation.t = 'r);
+        sections : 'a String_map.t
+      }
+      -> packed_sections
 
 type callback = packed_sections -> unit
 

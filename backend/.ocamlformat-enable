@@ -28,6 +28,7 @@ arm64/binary_emitter/**/*.mli
 arm64/arm64_logical_immediates.ml
 binary_emitter_intf.ml
 arm64_logical_immediates.mli
+jit_backend.ml*
 asm_targets/**/*.ml
 asm_targets/**/*.mli
 branch_relaxation.ml

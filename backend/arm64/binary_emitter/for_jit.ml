@@ -8,13 +8,13 @@ module Relocation = struct
 
   (* ARM64 code relocations are 32-bit patches within 32-bit instructions, but
      data relocations (ABS64) are 64-bit *)
-  let size (r : t) : Binary_emitter.data_size =
+  let size (r : t) : Binary_emitter_intf.data_size =
     match r.kind with
-    | R_AARCH64_ABS64 _ -> Binary_emitter.B64
+    | R_AARCH64_ABS64 _ -> Binary_emitter_intf.B64
     | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
     | R_AARCH64_LD64_GOT_LO12_NC _ | R_AARCH64_ADD_ABS_LO12_NC _
     | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ | R_AARCH64_PREL32_PAIR _ ->
-      Binary_emitter.B32
+      Binary_emitter_intf.B32
 
   let target_symbol (r : Relocation.t) : string =
     match r.kind with
@@ -104,7 +104,7 @@ module Assembled_section = struct
   let iter_symbols t ~f =
     Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t)
 
-  let add_patch t ~offset ~size:(sz : Binary_emitter.data_size) ~data =
+  let add_patch t ~offset ~size:(sz : Binary_emitter_intf.data_size) ~data =
     let sz = match sz with B8 -> P8 | B16 -> P16 | B32 -> P32 | B64 -> P64 in
     Section_state.add_patch t ~offset ~size:sz ~data
 end
