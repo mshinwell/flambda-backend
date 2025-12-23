@@ -1,3 +1,44 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
+open Arm64_ast.Ast
+
+(* Load register (literal) - C4.1.96.19 *)
+let encode_load_literal ~opc ~v ~imm19 ~rt =
+  assert (imm19 >= 0 && imm19 <= 0x7ffff);
+  let open Int32 in
+  let result = zero in
+  let result = logor result (shift_left (of_int opc) 30) in
+  let result = logor result (shift_left (of_int 0b011) 27) in
+  let result = logor result (shift_left (of_int v) 26) in
+  let result = logor result (shift_left (of_int imm19) 5) in
+  let result = logor result (of_int rt) in
+  result
+
 (* Load/store register (unscaled immediate) - C4.1.96.25 *)
 let encode_load_store_unscaled ~size ~vr ~opc ~imm9 ~rn ~rt =
   assert (imm9 >= 0 && imm9 <= 0x1ff);
@@ -512,15 +553,3 @@ let encode_load_store_simd_fp :
     let imm9 = imm land 0x1FF in
     let rn = Reg.gp_encoding rn in
     encode_load_store_post_indexed ~size ~vr ~opc ~imm9 ~rn ~rt
-
-(* Load register (literal) - C4.1.96.19 *)
-let encode_load_literal ~opc ~v ~imm19 ~rt =
-  assert (imm19 >= 0 && imm19 <= 0x7ffff);
-  let open Int32 in
-  let result = zero in
-  let result = logor result (shift_left (of_int opc) 30) in
-  let result = logor result (shift_left (of_int 0b011) 27) in
-  let result = logor result (shift_left (of_int v) 26) in
-  let result = logor result (shift_left (of_int imm19) 5) in
-  let result = logor result (of_int rt) in
-  result

@@ -25,7 +25,6 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-open Arm64_ast
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 module L = Asm_targets.Asm_label

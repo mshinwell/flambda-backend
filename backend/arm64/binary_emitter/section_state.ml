@@ -25,6 +25,12 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+type patch_size =
+  | P8
+  | P16
+  | P32
+  | P64
+
 type t =
   { buffer : Buffer.t;
     mutable offset_in_bytes : int;

@@ -1,3 +1,55 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
+open Arm64_ast.Ast
+
+(* Helper to extract Q (vector width) and size (element size) from vector
+   type *)
+let vector_q_size (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int =
+  match vec with
+  | V8B -> 0, 0b00 (* 64-bit, B elements *)
+  | V16B -> 1, 0b00 (* 128-bit, B elements *)
+  | V4H -> 0, 0b01 (* 64-bit, H elements *)
+  | V8H -> 1, 0b01 (* 128-bit, H elements *)
+  | V2S -> 0, 0b10 (* 64-bit, S elements *)
+  | V4S -> 1, 0b10 (* 128-bit, S elements *)
+  | V1D -> 0, 0b11 (* 64-bit, D elements *)
+  | V2D -> 1, 0b11 (* 128-bit, D elements *)
+
+(* Helper for FP vector operations - returns Q and the FP precision bit (sz) *)
+let vector_q_fp_sz (type v s) (vec : (v, s) Neon_reg_name.Vector.t) : int * int
+    =
+  match vec with
+  | V2S -> 0, 0 (* 64-bit, single-precision *)
+  | V4S -> 1, 0 (* 128-bit, single-precision *)
+  | V2D -> 1, 1 (* 128-bit, double-precision *)
+  | V8B | V16B | V4H | V8H | V1D ->
+    Misc.fatal_error "FP vector operations only support S and D element types"
+
 (* Helper to compute imm5 for SIMD copy instructions (DUP, INS, SMOV, UMOV).
    imm5 encodes element size and lane index:
 

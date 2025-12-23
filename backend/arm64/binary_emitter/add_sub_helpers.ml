@@ -1,3 +1,49 @@
+(******************************************************************************
+ *                                  OxCaml                                    *
+ * -------------------------------------------------------------------------- *
+ *                               MIT License                                  *
+ *                                                                            *
+ * Copyright (c) 2025 Jane Street Group LLC                                   *
+ * opensource-contacts@janestreet.com                                         *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included    *
+ * in all copies or substantial portions of the Software.                     *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER *
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING    *
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
+ * DEALINGS IN THE SOFTWARE.                                                  *
+ ******************************************************************************)
+
+open Arm64_ast.Ast
+
+(* Decode shift type and amount for add/sub shifted register instructions.
+   Returns (shift_type, amount) where shift_type is 00=LSL, 01=LSR, 10=ASR. *)
+let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
+ fun kind ->
+  match kind with Operand.Shift.Kind.LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
+
+let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
+ fun amount -> match amount with Six n -> n | _ -> assert false
+
+(* Check if a register is SP (stack pointer) by examining its name *)
+let is_sp_reg : type a. a Reg.t -> bool =
+ fun r ->
+  match r.reg_name with
+  | GP GP_reg_name.SP -> true
+  | GP GP_reg_name.WSP -> true
+  | _ -> false
+
 let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let open Int32 in
   let max_shift = if sf = 1 then 63 else 31 in

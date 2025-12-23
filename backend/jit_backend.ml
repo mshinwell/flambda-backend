@@ -52,8 +52,8 @@ let saved_x86_internal_assembler = ref None
 
 let register callback =
   current_callback := Some callback;
-  match Binary_emitter.arch (* XXX use Target_system *) with
-  | Binary_emitter.Amd64 ->
+  match Binary_emitter_intf.arch (* XXX use Target_system *) with
+  | Binary_emitter_intf.Amd64 ->
     (* Save old x86 internal assembler and register our hook *)
     saved_x86_internal_assembler := !X86_proc.internal_assembler;
     X86_proc.register_internal_assembler (fun ~delayed:_ sections _filename ->

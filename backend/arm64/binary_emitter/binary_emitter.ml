@@ -25,7 +25,7 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
-open Arm64_ast
+open Arm64_ast.Ast
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 module L = Asm_targets.Asm_label
@@ -170,7 +170,7 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
      offset_upper from the original expression. *)
   iter emitter ~state_for_section
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
-      let encoded = encode_instruction state name operands in
+      let encoded = Encode_instruction.encode_instruction state name operands in
       let buf = Section_state.buffer state in
       (* Emit as little-endian 32-bit *)
       Buffer.add_char buf (Char.chr (Int32.to_int encoded land 0xff));
@@ -184,7 +184,7 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
         (Char.chr
            (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
     ~on_directive:
-      (emit_directive ~current_section ~section_base ~global_lookup
+      (Encode_directive.emit_directive ~current_section ~section_base ~global_lookup
          ~global_lookup_with_section ~section_tbl)
 
 let emit emitter =
