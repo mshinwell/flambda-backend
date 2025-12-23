@@ -107,6 +107,22 @@ module Section_state = struct
   let find_label_offset_in_bytes t name =
     Hashtbl.find_opt t.label_offset_tbl name
 
+  (* Find the nearest global symbol at or before a given offset.
+     Returns (symbol_name, symbol_offset) or None. *)
+  let find_nearest_symbol_at_or_before t offset =
+    let best = ref None in
+    Hashtbl.iter
+      (fun name sym_offset ->
+        if sym_offset <= offset then begin
+          match !best with
+          | None -> best := Some (name, sym_offset)
+          | Some (_, best_offset) when sym_offset > best_offset ->
+            best := Some (name, sym_offset)
+          | Some _ -> ()
+        end)
+      t.symbol_offset_tbl;
+    !best
+
   (* Look up both symbols and labels - used for branch targets which can be
      either *)
   let find_symbol_or_label_offset_in_bytes t name =
@@ -2832,44 +2848,11 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
   (* Track current section to get the right base offset *)
   let current_section = ref Asm_section.Text in
   let get_current_section_base () = section_base !current_section in
-  (* For cross-section (Label - This) expressions in the frametable, we need to
-     compute the addend that the system assembler would store. The formula is:
-     addend = label_offset_in_text - (this_offset_in_data - frametable_offset) - 8
-     where 8 is the entry point offset in TEXT (the "entry" symbol).
-     This requires looking up the frametable symbol offset. *)
-  let compute_cross_section_addend ~label_name ~label_offset_in_text
-      ~this_offset_in_data ~offset_upper =
-    (* Look up the frametable symbol in DATA section. The symbol name follows
-       the pattern _caml<unit>__frametable but we don't know the unit name.
-       Search for any symbol ending in __frametable. *)
-    let frametable_offset =
-      let result = ref None in
-      Asm_section.Tbl.iter
-        (fun section state ->
-          if Asm_section.equal section Asm_section.Data && Option.is_none !result
-          then
-            Hashtbl.iter
-              (fun name offset ->
-                if (String.length name > 12
-                   && String.sub name (String.length name - 12) 12 = "__frametable")
-                   || name = "frametable"
-                then result := Some offset)
-              (Section_state.symbols state))
-        section_tbl;
-      match !result with
-      | Some offset -> offset
-      | None ->
-        (* Fallback: assume this IS in the frametable area, entry at offset 0 *)
-        0
-    in
-    let entry_offset = 8 in
-    (* addend = label_offset - (this_offset - frametable_offset + entry_offset) *)
-    let _ = label_name in (* silence unused warning *)
-    Int64.of_int
-      (label_offset_in_text
-      - (this_offset_in_data - frametable_offset + entry_offset)
-      + Int64.to_int offset_upper)
-  in
+  (* For cross-section (Label - This) expressions, we need to emit a relocation
+     pair (SUBTRACTOR + UNSIGNED) and store the addend. The linker will compute:
+       final_value = plus_symbol_addr - minus_symbol_addr + addend
+     We create symbols at the exact positions needed so the addend is just
+     the offset_upper from the original expression. *)
   iter emitter ~state_for_section
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
       let encoded = encode_instruction state name operands in
@@ -2960,25 +2943,84 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
                 (* Try cross-section lookup *)
                 match global_lookup_with_section label_name with
                 | None -> None  (* Not found at all *)
-                | Some (label_offset, label_section, _) ->
+                | Some (_, label_section, _) ->
                   if Asm_section.equal label_section !current_section
                   then None  (* Same section after all *)
                   else if Asm_section.equal label_section Asm_section.Text
                   then begin
-                    (* Cross-section: TEXT label referenced from DATA *)
-                    let this_offset = Section_state.offset_in_bytes state in
-                    let addend = compute_cross_section_addend
-                      ~label_name ~label_offset_in_text:label_offset
-                      ~this_offset_in_data:this_offset ~offset_upper
-                    in
-                    Some addend
+                    (* Cross-section: TEXT label referenced from DATA.
+                       We need to emit a PREL32_PAIR relocation.
+                       - minus_symbol (SUBTRACTOR): nearest global symbol in DATA
+                       - plus_symbol (UNSIGNED): nearest global symbol in TEXT
+                       The linker computes: plus_sym - minus_sym + addend
+                       So addend = (target - plus_sym) - (current - minus_sym) *)
+                    let current_pos = Section_state.offset_in_bytes state in
+                    (* Find nearest symbol in DATA for SUBTRACTOR *)
+                    (match Section_state.find_nearest_symbol_at_or_before state
+                             current_pos with
+                    | None -> None  (* No symbol in DATA to use *)
+                    | Some (minus_symbol, minus_sym_offset) ->
+                      (* Find nearest symbol in TEXT for UNSIGNED *)
+                      let text_state = Asm_section.Tbl.find section_tbl
+                          Asm_section.Text in
+                      (* Get target label offset in TEXT *)
+                      (match Section_state.find_label_offset_in_bytes text_state
+                               label_name with
+                      | None -> None
+                      | Some target_offset ->
+                        (match Section_state.find_nearest_symbol_at_or_before
+                                 text_state target_offset with
+                        | None -> None  (* No symbol in TEXT to use *)
+                        | Some (plus_symbol, plus_sym_offset) ->
+                          let addend =
+                            Int64.add offset_upper
+                              (Int64.sub
+                                (Int64.of_int (target_offset - plus_sym_offset))
+                                (Int64.of_int (current_pos - minus_sym_offset)))
+                          in
+                          Section_state.add_relocation_at_current_offset state
+                            ~symbol_name:plus_symbol
+                            ~reloc_kind:(Relocation.Kind.R_AARCH64_PREL32_PAIR
+                              { plus_symbol; minus_symbol });
+                          Some addend)))
                   end
                   else None  (* Other cross-section cases not handled *)
+        in
+        (* Check for absolute cross-section symbol reference.
+           For .8byte symbol where symbol is in a different section,
+           we must emit a relocation. *)
+        let try_cross_section_absolute () =
+          match c with
+          | Const.Named_thing name when width_bytes = 8 ->
+            (* Check if symbol is in a different section *)
+            (match Section_state.find_label_offset_in_bytes state name with
+            | Some _ -> None  (* Same section, can resolve *)
+            | None ->
+              match Section_state.find_symbol_offset_in_bytes state name with
+              | Some _ -> None  (* Same section symbol *)
+              | None ->
+                (* Try cross-section lookup *)
+                match global_lookup_with_section name with
+                | None -> None  (* Not found, will fall through to relocation *)
+                | Some (_, sym_section, _) ->
+                  if Asm_section.equal sym_section !current_section
+                  then None  (* Same section *)
+                  else begin
+                    (* Cross-section absolute reference - needs relocation *)
+                    Section_state.add_relocation_at_current_offset state
+                      ~symbol_name:name
+                      ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 name);
+                    Some 0L  (* Emit zero, relocation will patch *)
+                  end)
+          | _ -> None
         in
         let value_opt =
           match try_cross_section_label_rel () with
           | Some addend -> Some addend
-          | None -> eval_constant state ~current_section_base ~global_lookup c
+          | None ->
+            match try_cross_section_absolute () with
+            | Some v -> Some v
+            | None -> eval_constant state ~current_section_base ~global_lookup c
         in
         match value_opt with
         | Some value -> D.Directive.emit_int_le buf ~width_bytes value

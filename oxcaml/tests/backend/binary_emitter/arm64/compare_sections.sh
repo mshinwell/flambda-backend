@@ -102,15 +102,10 @@ if [ -f "$BINARY_SECTIONS_DIR/section_data.bin" ]; then
     fi
 fi
 
-# Only fail on TEXT section mismatch - DATA differences are expected
-# (different relocation encoding, metadata, etc.)
-if [ $TEXT_FAILED -eq 1 ]; then
+# Fail on either TEXT or DATA section mismatch
+if [ $TEXT_FAILED -eq 1 ] || [ $DATA_FAILED -eq 1 ]; then
     exit 1
 fi
 
-if [ $DATA_FAILED -eq 1 ]; then
-    echo "TEXT sections match (DATA differs - expected)"
-else
-    echo "All sections match!"
-fi
+echo "All sections match!"
 exit 0
