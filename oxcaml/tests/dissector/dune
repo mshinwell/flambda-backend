@@ -80,6 +80,7 @@
  (action (diff simple.expected simple.output)))
 
 ; Test 1b: Same as Test 1 but with -function-sections
+; Uses a separate source file to avoid race conditions with simple.exe
 (rule
  (enabled_if
   (and (= %{context_name} "main")
@@ -87,7 +88,7 @@
        (= %{system} "linux")
        (<> %{env:RUNTIME_DIR=runtime} "runtime4")))
  (target simple_funcsect.exe)
- (deps simple.ml)
+ (deps simple_funcsect.ml)
  (action
   (run %{bin:ocamlopt.opt} -function-sections -dissector -dissector-partition-size 0.01
        %{deps} -o %{target})))
