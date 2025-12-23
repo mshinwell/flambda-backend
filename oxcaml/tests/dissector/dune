@@ -611,7 +611,7 @@
  (deps cclib_test.ml)
  (action
   (run %{bin:ocamlopt.opt} -dissector -dissector-partition-size 0.01
-       -cclib -lstdc++ -cclib -lstdc++
+       -cclib -lm -cclib -lm
        %{deps} -o %{target})))
 
 (rule
