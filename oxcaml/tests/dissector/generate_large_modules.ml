@@ -2,16 +2,17 @@
 
    Usage: Run during build via dune
 
-   This generates modules that compile to ~3.6MB object files each, ensuring they
-   end up in different partitions when using -dissector-partition-size 0.002
-   (2MB). The compiled size is much larger than source due to array literal
-   expansion. *)
+   This generates modules that compile to ~3.6MB object files each, ensuring
+   they end up in different partitions when using -dissector-partition-size
+   0.002 (2MB). The compiled size is much larger than source due to array
+   literal expansion. *)
 
-(* Parameters tuned to produce ~3.6MB object files per module.
-   This ensures modules end up in separate partitions even with
-   a 2MB partition threshold, providing headroom for stdlib growth.
-   Note: array_size is limited to avoid stack overflow during compilation. *)
+(* Parameters tuned to produce ~3.6MB object files per module. This ensures
+   modules end up in separate partitions even with a 2MB partition threshold,
+   providing headroom for stdlib growth. Note: array_size is limited to avoid
+   stack overflow during compilation. *)
 let num_functions = 10000
+
 let array_size = 130000
 
 let output_file name content =
@@ -83,8 +84,7 @@ let generate_module_b () =
     "let make_a_incrementer () = fun () -> Gen_module_a.increment ()\n";
   Buffer.add_string buf
     "let make_a_arr_reader i = fun () -> Gen_module_a.arr.(i)\n";
-  Buffer.add_string buf
-    "let captured_a_increment = Gen_module_a.increment\n\n";
+  Buffer.add_string buf "let captured_a_increment = Gen_module_a.increment\n\n";
   Buffer.add_string buf (generate_functions 10001 num_functions);
   Buffer.contents buf
 
@@ -101,8 +101,8 @@ let generate_module_c () =
   Buffer.add_string buf "let call_b_increment () = Gen_module_b.increment ()\n";
   Buffer.add_string buf "let call_a_magic () = Gen_module_a.get_magic ()\n";
   Buffer.add_string buf
-    "let call_both_functions x = \
-     Gen_module_a.call_all x + Gen_module_b.call_all x\n";
+    "let call_both_functions x = Gen_module_a.call_all x + \
+     Gen_module_b.call_all x\n";
   Buffer.add_string buf "let get_a_arr_element i = Gen_module_a.arr.(i)\n";
   Buffer.add_string buf "let get_b_arr_element i = Gen_module_b.arr.(i)\n\n";
   (* Direct mutable data access across partitions *)
@@ -118,11 +118,11 @@ let generate_module_c () =
   (* Closures capturing cross-partition references *)
   Buffer.add_string buf "(* Closures capturing cross-partition references *)\n";
   Buffer.add_string buf
-    "let make_combined_incrementer () = \
-     fun () -> Gen_module_a.increment () + Gen_module_b.increment ()\n";
+    "let make_combined_incrementer () = fun () -> Gen_module_a.increment () + \
+     Gen_module_b.increment ()\n";
   Buffer.add_string buf
-    "let make_multi_arr_reader i j = \
-     fun () -> Gen_module_a.arr.(i) + Gen_module_b.arr.(j)\n";
+    "let make_multi_arr_reader i j = fun () -> Gen_module_a.arr.(i) + \
+     Gen_module_b.arr.(j)\n";
   Buffer.add_string buf
     "let captured_b_via_a = Gen_module_b.captured_a_increment\n\n";
   Buffer.add_string buf (generate_functions 20001 num_functions);
@@ -294,14 +294,16 @@ let () =
 let () =
   let args = Array.to_list Sys.argv |> List.tl in
   match args with
-  | [ "gen_module_a" ] -> output_file "gen_module_a.ml" (generate_module_a ())
-  | [ "gen_module_b" ] -> output_file "gen_module_b.ml" (generate_module_b ())
-  | [ "gen_module_c" ] -> output_file "gen_module_c.ml" (generate_module_c ())
-  | [ "gen_main" ] -> output_file "gen_main.ml" (generate_main ())
-  | [ "mylib_a" ] -> output_file "mylib_a.ml" (generate_mylib_a ())
-  | [ "mylib_b" ] -> output_file "mylib_b.ml" (generate_mylib_b ())
-  | [ "cmxa_main" ] -> output_file "cmxa_main.ml" (generate_cmxa_main ())
+  | ["gen_module_a"] -> output_file "gen_module_a.ml" (generate_module_a ())
+  | ["gen_module_b"] -> output_file "gen_module_b.ml" (generate_module_b ())
+  | ["gen_module_c"] -> output_file "gen_module_c.ml" (generate_module_c ())
+  | ["gen_main"] -> output_file "gen_main.ml" (generate_main ())
+  | ["mylib_a"] -> output_file "mylib_a.ml" (generate_mylib_a ())
+  | ["mylib_b"] -> output_file "mylib_b.ml" (generate_mylib_b ())
+  | ["cmxa_main"] -> output_file "cmxa_main.ml" (generate_cmxa_main ())
   | _ ->
-    Printf.eprintf "Usage: %s <gen_module_a|gen_module_b|gen_module_c|gen_main|\
-                    mylib_a|mylib_b|cmxa_main>\n" Sys.argv.(0);
+    Printf.eprintf
+      "Usage: %s \
+       <gen_module_a|gen_module_b|gen_module_c|gen_main|mylib_a|mylib_b|cmxa_main>\n"
+      Sys.argv.(0);
     exit 1
