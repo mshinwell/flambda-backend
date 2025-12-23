@@ -1,36 +1,37 @@
-=== Cross-partition OCaml reference test ===
+=== Cross-partition test ===
 
-Test 1: Direct calls to Module A
-  Counter after 2 increments: 1, 2
-  Magic number: 42
-  Factorial 5: 120
-  Array sum: 55
+Test 1: Direct calls to Gen_module_a
+  Counter: 1, 2
+  Magic: 42
+  arr[5]: 5
+  f00010(100): 111
 
-Test 2: Calls via Module B (B -> A)
-  Counter after double_increment: 4
-  Magic doubled: 84
-  Factorial sum 1-5: 153
-  Double array sum: 110
-  Greeting: Hello from module A, World!
+Test 2: Calls through Gen_module_b
+  B.increment: 1
+  B.call_a_increment: 3
+  B.call_a_magic: 42
+  B.get_a_arr_element(10): 10
+  B.arr[15]: 200015
 
-Test 3: Calls via Module C (C -> B -> A and C -> A)
-  Triple increment results: a=7, b=6
-  Chained magic: 126
-  Combined computation(3): 161
-  Full greeting: Hello from module A, World! (via Module C)
-  Sum all arrays: 655
+Test 3: Calls through Gen_module_c
+  C.increment: 1
+  C.call_a_increment: 4
+  C.call_b_increment: 2
+  C.call_a_magic: 42
+  C.get_a_arr_element(20): 20
+  C.get_b_arr_element(25): 200025
+  C.arr[30]: 400030
 
-Test 4: Float operations across partitions
-  Distance from origin to (3,4): 5.0
-  Triangle perimeter: 12.0
+Test 4: call_all functions
+  A.call_all(1): 50015000
+  B.call_all(1): 150015000
+  C.call_all(1): 250015000
+  B.call_a_functions(1): 50015000
+  C.call_both_functions(1): 200030000
 
-Test 5: Mutable state across partitions
-  After increment_all: a_direct=9, a_from_b=8, b_local=1
+Test 5: Final counter state
+  A.counter: 4
+  B.counter: 2
+  C.counter: 1
 
-Test 6: Recursive cross-partition calls
-  Compute chain(3): 45
-  Nested compute(2): 129
-
-=== Final state ===
-Final counter value: 15
-All tests passed!
+=== All tests passed! ===
