@@ -37,7 +37,10 @@ module Relocation : sig
       | R_AARCH64_CALL26 of string
       | R_AARCH64_JUMP26 of string
       | R_AARCH64_ABS64 of string
-      | R_AARCH64_PREL32_PAIR of { plus_symbol : string; minus_symbol : string }
+      | R_AARCH64_PREL32_PAIR of
+          { plus_symbol : string;
+            minus_symbol : string
+          }
   end
 
   type t = private

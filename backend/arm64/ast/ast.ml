@@ -605,7 +605,7 @@ module Operand = struct
     let print ppf n = Format.fprintf ppf "#%nd" n
 
     let decode_n_immr_imms (bitmask : t) : int * int * int =
-      Arm64_logical_immediates.encode_logical_immediate_fields bitmask
+      Logical_immediates.encode_logical_immediate_fields bitmask
   end
 
   module Shift = struct
@@ -2746,7 +2746,7 @@ module DSL = struct
   let imm_nativeint n = Operand.Imm (Operand.Imm.Nativeint n)
 
   let bitmask n =
-    if not (Arm64_logical_immediates.is_logical_immediate n)
+    if not (Logical_immediates.is_logical_immediate n)
     then
       Misc.fatal_errorf
         "Cannot encode logical immediate %nd as a bitmask immediate" n;
