@@ -108,7 +108,16 @@ module Section_state = struct
     Hashtbl.find_opt t.label_offset_tbl name
 
   (* Find the nearest global symbol at or before a given offset.
-     Returns (symbol_name, symbol_offset) or None. *)
+     Returns (symbol_name, symbol_offset) or None.
+
+     NOTE: This is a somewhat surprising design choice. For cross-section
+     relocations (e.g., frame table entries in DATA referencing labels in TEXT),
+     we could create local symbols at exact positions and use addend=0. However,
+     the system assembler instead uses existing global symbols (like
+     _camlFoo__frametable and _camlFoo__fib_code) and computes a non-zero addend.
+     We match this behavior to produce byte-identical output for testing purposes.
+     Both approaches are correct for linking - the linker computes the same
+     final value either way. *)
   let find_nearest_symbol_at_or_before t offset =
     let best = ref None in
     Hashtbl.iter
@@ -2950,6 +2959,7 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
                   then begin
                     (* Cross-section: TEXT label referenced from DATA.
                        We need to emit a PREL32_PAIR relocation.
+                       Use existing global symbols (matching assembler behavior):
                        - minus_symbol (SUBTRACTOR): nearest global symbol in DATA
                        - plus_symbol (UNSIGNED): nearest global symbol in TEXT
                        The linker computes: plus_sym - minus_sym + addend
