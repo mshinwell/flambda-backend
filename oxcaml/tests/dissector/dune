@@ -251,41 +251,84 @@
      # Find which partition contains each module (by looking for defined code_begin symbol)
      PART_WITH_B=\"\"
      PART_WITH_C=\"\"
+     echo 'Scanning partition files for module locations...'
      for part in $PARTITION_DIR/partition*.o.rewritten; do
+       echo \"Checking $part:\"
+       nm \"$part\" 2>/dev/null | grep 'code_begin' | head -5
        if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_b__code_begin'; then
          PART_WITH_B=\"$part\"
+         echo \"  -> Found Gen_module_b\"
        fi
        if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_c__code_begin'; then
          PART_WITH_C=\"$part\"
+         echo \"  -> Found Gen_module_c\"
        fi
      done
 
-     # Verify partition with module_b has IGOT ref to module_a
+     # Verify we found both partitions
      if [ -z \"$PART_WITH_B\" ]; then
        echo 'ERROR: Could not find partition containing Gen_module_b'
+       echo 'All partition nm output:'
+       for part in $PARTITION_DIR/partition*.o.rewritten; do
+         echo \"=== $part ===\"
+         nm \"$part\" 2>/dev/null | grep -E 'code_begin|camlGen_module' | head -20
+       done
        exit 1
      fi
+     if [ -z \"$PART_WITH_C\" ]; then
+       echo 'ERROR: Could not find partition containing Gen_module_c'
+       echo 'All partition nm output:'
+       for part in $PARTITION_DIR/partition*.o.rewritten; do
+         echo \"=== $part ===\"
+         nm \"$part\" 2>/dev/null | grep -E 'code_begin|camlGen_module' | head -20
+       done
+       exit 1
+     fi
+
+     # Verify B and C are in different partitions (essential for cross-partition testing)
+     if [ \"$PART_WITH_B\" = \"$PART_WITH_C\" ]; then
+       echo 'ERROR: Gen_module_b and Gen_module_c are in the same partition!'
+       echo \"Both are in: $PART_WITH_B\"
+       echo 'This means modules are not large enough to force separate partitions.'
+       echo 'Partition sizes:'
+       ls -la $PARTITION_DIR/partition*.o.rewritten
+       exit 1
+     fi
+
+     echo \"PART_WITH_B: $PART_WITH_B\"
+     echo \"PART_WITH_C: $PART_WITH_C\"
+
+     # Verify partition with module_b has IGOT ref to module_a
      IGOT_B=$(readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_a' || true)
      if [ -z \"$IGOT_B\" ]; then
        echo 'ERROR: Partition with module_b does not have IGOT ref to module_a'
+       echo 'IGOT relocations in partition with module_b:'
+       readelf -r \"$PART_WITH_B\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'Sections in partition with module_b:'
+       readelf -SW \"$PART_WITH_B\" 2>/dev/null | grep -E 'igot|data'
        exit 1
      fi
 
      # Verify partition with module_c has IGOT refs to both module_a AND module_b
-     if [ -z \"$PART_WITH_C\" ]; then
-       echo 'ERROR: Could not find partition containing Gen_module_c'
-       exit 1
-     fi
      IGOT_C_A=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_a' || true)
      IGOT_C_B=$(readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep 'camlGen_module_b' || true)
      if [ -z \"$IGOT_C_A\" ]; then
        echo 'ERROR: Partition with module_c does not have IGOT ref to module_a'
+       echo 'IGOT relocations in partition with module_c:'
+       readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'Sections in partition with module_c:'
+       readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -E 'igot|data'
        exit 1
      fi
      if [ -z \"$IGOT_C_B\" ]; then
        echo 'ERROR: Partition with module_c does not have IGOT ref to module_b'
+       echo 'IGOT relocations in partition with module_c:'
+       readelf -r \"$PART_WITH_C\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -30
+       echo 'Sections in partition with module_c:'
+       readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -E 'igot|data'
        exit 1
      fi
+     echo 'IGOT verification passed'
    ")))
 
 ; Verify IGOT relocations are all R_X86_64_64
@@ -314,19 +357,27 @@
      fi
 
      # Check that IGOT sections exist and verify relocations
+     echo 'Checking IGOT relocations in partition files...'
      for part in $PARTITION_DIR/partition*.o.rewritten; do
-       if readelf -S \"$part\" 2>/dev/null | grep -q '\\.data\\.igot'; then
+       echo \"Checking $part\"
+       if readelf -SW \"$part\" 2>/dev/null | grep -q 'data\\.igot'; then
          # Count total IGOT relocs and R_X86_64_64 relocs
          TOTAL=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep -c '^[0-9a-f]' || true)
          R64=$(readelf -r \"$part\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | grep -c 'R_X86_64_64' || true)
+         echo \"  IGOT relocs: Total=$TOTAL, R_X86_64_64=$R64\"
 
          if [ \"$TOTAL\" != \"$R64\" ]; then
            echo \"ERROR: Not all IGOT relocations are R_X86_64_64 in $(basename $part)\"
            echo \"Total: $TOTAL, R_X86_64_64: $R64\"
+           echo 'IGOT relocations:'
+           readelf -r \"$part\" 2>/dev/null | sed -n '/rela.*\\.data\\.igot/,/^Relocation/p' | head -50
            exit 1
          fi
+       else
+         echo \"  No IGOT section\"
        fi
      done
+     echo 'IGOT relocation type verification passed'
    ")))
 
 ; Verify IPLT entries exist for cross-partition function calls
@@ -357,34 +408,69 @@
      # Find partitions containing modules B and C
      PART_WITH_B=\"\"
      PART_WITH_C=\"\"
+     echo 'Scanning partition files for module locations...'
      for part in $PARTITION_DIR/partition*.o.rewritten; do
+       echo \"Checking $part:\"
+       nm \"$part\" 2>/dev/null | grep 'code_begin' | head -5
        if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_b__code_begin'; then
          PART_WITH_B=\"$part\"
+         echo \"  -> Found Gen_module_b\"
        fi
        if nm \"$part\" 2>/dev/null | grep -q ' T camlGen_module_c__code_begin'; then
          PART_WITH_C=\"$part\"
+         echo \"  -> Found Gen_module_c\"
        fi
      done
 
-     # Verify partition with module_b has IPLT section (renamed to .caml.pN.text.iplt)
+     # Verify we found both partitions
      if [ -z \"$PART_WITH_B\" ]; then
        echo 'ERROR: Could not find partition containing Gen_module_b'
+       echo 'All partition nm output:'
+       for part in $PARTITION_DIR/partition*.o.rewritten; do
+         echo \"=== $part ===\"
+         nm \"$part\" 2>/dev/null | grep -E 'code_begin|camlGen_module' | head -20
+       done
        exit 1
      fi
+     if [ -z \"$PART_WITH_C\" ]; then
+       echo 'ERROR: Could not find partition containing Gen_module_c'
+       echo 'All partition nm output:'
+       for part in $PARTITION_DIR/partition*.o.rewritten; do
+         echo \"=== $part ===\"
+         nm \"$part\" 2>/dev/null | grep -E 'code_begin|camlGen_module' | head -20
+       done
+       exit 1
+     fi
+
+     # Verify B and C are in different partitions (essential for cross-partition testing)
+     if [ \"$PART_WITH_B\" = \"$PART_WITH_C\" ]; then
+       echo 'ERROR: Gen_module_b and Gen_module_c are in the same partition!'
+       echo \"Both are in: $PART_WITH_B\"
+       echo 'This means modules are not large enough to force separate partitions.'
+       echo 'Partition sizes:'
+       ls -la $PARTITION_DIR/partition*.o.rewritten
+       exit 1
+     fi
+
+     echo \"PART_WITH_B: $PART_WITH_B\"
+     echo \"PART_WITH_C: $PART_WITH_C\"
+
+     # Verify partition with module_b has IPLT section (renamed to .caml.pN.text.iplt)
      if ! readelf -SW \"$PART_WITH_B\" 2>/dev/null | grep -q 'text\\.iplt'; then
        echo 'ERROR: Partition with module_b does not have IPLT section'
+       echo 'Sections in partition with module_b:'
+       readelf -SW \"$PART_WITH_B\" 2>/dev/null
        exit 1
      fi
 
      # Verify partition with module_c has IPLT section (renamed to .caml.pN.text.iplt)
-     if [ -z \"$PART_WITH_C\" ]; then
-       echo 'ERROR: Could not find partition containing Gen_module_c'
-       exit 1
-     fi
      if ! readelf -SW \"$PART_WITH_C\" 2>/dev/null | grep -q 'text\\.iplt'; then
        echo 'ERROR: Partition with module_c does not have IPLT section'
+       echo 'Sections in partition with module_c:'
+       readelf -SW \"$PART_WITH_C\" 2>/dev/null
        exit 1
      fi
+     echo 'IPLT verification passed'
    ")))
 
 ; Test 3: CMXA archive test
