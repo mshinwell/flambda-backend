@@ -107,7 +107,7 @@ module Section_state = struct
   let find_label_offset_in_bytes t name =
     Hashtbl.find_opt t.label_offset_tbl name
 
-  (* Find the nearest global symbol at or before a given offset.
+  (* Find the nearest global symbol strictly before a given offset.
      Returns (symbol_name, symbol_offset) or None.
 
      NOTE: This is a somewhat surprising design choice. For cross-section
@@ -117,12 +117,15 @@ module Section_state = struct
      _camlFoo__frametable and _camlFoo__fib_code) and computes a non-zero addend.
      We match this behavior to produce byte-identical output for testing purposes.
      Both approaches are correct for linking - the linker computes the same
-     final value either way. *)
-  let find_nearest_symbol_at_or_before t offset =
+     final value either way.
+
+     We use strict < rather than <= because the assembler doesn't use symbols
+     that are at the exact target offset (e.g., _code_end at a return address). *)
+  let find_nearest_symbol_before t offset =
     let best = ref None in
     Hashtbl.iter
       (fun name sym_offset ->
-        if sym_offset <= offset then begin
+        if sym_offset < offset then begin
           match !best with
           | None -> best := Some (name, sym_offset)
           | Some (_, best_offset) when sym_offset > best_offset ->
@@ -2966,7 +2969,7 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
                        So addend = (target - plus_sym) - (current - minus_sym) *)
                     let current_pos = Section_state.offset_in_bytes state in
                     (* Find nearest symbol in DATA for SUBTRACTOR *)
-                    (match Section_state.find_nearest_symbol_at_or_before state
+                    (match Section_state.find_nearest_symbol_before state
                              current_pos with
                     | None -> None  (* No symbol in DATA to use *)
                     | Some (minus_symbol, minus_sym_offset) ->
@@ -2978,7 +2981,7 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
                                label_name with
                       | None -> None
                       | Some target_offset ->
-                        (match Section_state.find_nearest_symbol_at_or_before
+                        (match Section_state.find_nearest_symbol_before
                                  text_state target_offset with
                         | None -> None  (* No symbol in TEXT to use *)
                         | Some (plus_symbol, plus_sym_offset) ->
