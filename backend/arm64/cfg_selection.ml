@@ -43,7 +43,7 @@ let is_offset chunk n =
        Misc.fatal_error "arm64: got 256/512 bit vector"
 
 let is_logical_immediate_int n =
-  Arm64_logical_immediates.is_logical_immediate (Nativeint.of_int n)
+  Arm64_ast.Logical_immediates.is_logical_immediate (Nativeint.of_int n)
 
 (* Signed immediates are simpler *)
 

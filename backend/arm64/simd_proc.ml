@@ -17,13 +17,13 @@
 
 open! Int_replace_polymorphic_compare [@@warning "-66"]
 
-(* Convert Simd.Cond.t to Arm64_ast.Cond.t *)
-let simd_cond_to_ast_cond (c : Simd.Cond.t) : Arm64_ast.Cond.t =
+(* Convert Simd.Cond.t to Arm64_ast.Ast.Cond.t *)
+let simd_cond_to_ast_cond (c : Simd.Cond.t) : Arm64_ast.Ast.Cond.t =
   match c with EQ -> EQ | GE -> GE | GT -> GT | LE -> LE | LT -> LT
 
-(* Convert Simd.Rounding_mode.t to Arm64_ast.Rounding_mode.t *)
+(* Convert Simd.Rounding_mode.t to Arm64_ast.Ast.Rounding_mode.t *)
 let simd_rounding_to_ast_rounding (rm : Simd.Rounding_mode.t) :
-    Arm64_ast.Rounding_mode.t =
+    Arm64_ast.Ast.Rounding_mode.t =
   match rm with
   | Current -> X (* Use current FPCR mode *)
   | Neg_inf -> M

@@ -31,7 +31,7 @@ open Reg
 open! Operation
 open Linear
 open Emitaux
-module I = Arm64_ast.Instruction_name
+module I = Arm64_ast.Ast.Instruction_name
 module D = Asm_targets.Asm_directives
 module S = Asm_targets.Asm_symbol
 module L = Asm_targets.Asm_label
@@ -95,204 +95,204 @@ let slot_offset loc stack_class =
   | Bytes_relative_to_domainstate_pointer _ ->
     Misc.fatal_errorf "Not a stack slot"
 
-(* This module builds on [Arm64_ast.DSL] to provide functions that work on
+(* This module builds on [Arm64_ast.Ast.DSL] to provide functions that work on
    normal [Reg.t] values. *)
 module DSL : sig
   [@@@ocaml.warning "-32"]
   (* Some values temporarily unused while SIMD disabled *)
 
   include module type of struct
-    include Arm64_ast.DSL
+    include Arm64_ast.Ast.DSL
   end
 
   module Cond : module type of struct
-    include Arm64_ast.Cond
+    include Arm64_ast.Ast.Cond
   end
 
   module Float_cond : module type of struct
-    include Arm64_ast.Float_cond
+    include Arm64_ast.Ast.Float_cond
   end
 
-  val reg_w : Reg.t -> [`Reg of [`GP of [`W]]] Arm64_ast.Operand.t
+  val reg_w : Reg.t -> [`Reg of [`GP of [`W]]] Arm64_ast.Ast.Operand.t
 
-  val reg_x : Reg.t -> [`Reg of [`GP of [`X]]] Arm64_ast.Operand.t
+  val reg_x : Reg.t -> [`Reg of [`GP of [`X]]] Arm64_ast.Ast.Operand.t
 
   val reg_d :
-    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Ast.Operand.t
 
   (** Like [reg_d] but accepts both Float and Float32 registers. Used for
       reinterpret casts where we want to treat both as D registers. *)
   val reg_d_of_float_reg :
-    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Ast.Operand.t
 
   val reg_s :
-    Reg.t -> [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2s :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v4s :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2d :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v16b :
     Reg.t ->
-    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v8h :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v8b :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V8B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v4h :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V4H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   (** Operand tuple helpers for SIMD instructions *)
 
   val v4s_v4s_v4s :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val v2d_v2d_v2d :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val v8h_v8h_v8h :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   val v16b_v16b_v16b :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val v4s_v4s :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V4S] * [`S]]]] Arm64_ast.Ast.Operand.t
 
   val v2d_v2d :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val v8h_v8h :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V8H] * [`H]]]] Arm64_ast.Ast.Operand.t
 
   val v16b_v16b :
     Linear.instruction ->
-    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
-    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
+    * [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val reglane_b :
     Reg.t ->
-    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
-    [`Reg of [`Neon of [`Lane of [`Scalar of [`B]]]]] Arm64_ast.Operand.t
+    lane:Arm64_ast.Ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`B]]]]] Arm64_ast.Ast.Operand.t
 
   val reglane_h :
     Reg.t ->
-    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
-    [`Reg of [`Neon of [`Lane of [`Scalar of [`H]]]]] Arm64_ast.Operand.t
+    lane:Arm64_ast.Ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`H]]]]] Arm64_ast.Ast.Operand.t
 
   val reglane_s :
     Reg.t ->
-    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
-    [`Reg of [`Neon of [`Lane of [`Scalar of [`S]]]]] Arm64_ast.Operand.t
+    lane:Arm64_ast.Ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`S]]]]] Arm64_ast.Ast.Operand.t
 
   val reglane_d :
     Reg.t ->
-    lane:Arm64_ast.Neon_reg_name.Lane_index.t ->
-    [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Arm64_ast.Operand.t
+    lane:Arm64_ast.Ast.Neon_reg_name.Lane_index.t ->
+    [`Reg of [`Neon of [`Lane of [`Scalar of [`D]]]]] Arm64_ast.Ast.Operand.t
 
   val reg_q_operand :
-    Reg.t -> [`Reg of [`Neon of [`Scalar of [`Q]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Scalar of [`Q]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v2d_operand :
-    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Operand.t
+    Reg.t -> [`Reg of [`Neon of [`Vector of [`V2D] * [`D]]]] Arm64_ast.Ast.Operand.t
 
   val reg_v16b_operand :
     Reg.t ->
-    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Operand.t
+    [`Reg of [`Neon of [`Vector of [`V16B] * [`B]]]] Arm64_ast.Ast.Operand.t
 
   val shift_operand :
-    'op Arm64_ast.Operand.Shift.Kind.t ->
+    'op Arm64_ast.Ast.Operand.Shift.Kind.t ->
     int ->
-    [`Shift of 'op * [`Six]] Arm64_ast.Operand.t
+    [`Shift of 'op * [`Six]] Arm64_ast.Ast.Operand.t
 
-  val imm_six : int -> [`Imm of [`Six]] Arm64_ast.Operand.t
+  val imm_six : int -> [`Imm of [`Six]] Arm64_ast.Ast.Operand.t
 
-  val reg_s7 : [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t
+  val reg_s7 : [`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Ast.Operand.t
 
   val emit_mem_symbol :
-    reloc:[`Twelve] Arm64_ast.Symbol.same_unit_or_reloc ->
+    reloc:[`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc ->
     ?offset:int ->
     Reg.t ->
     S.t ->
-    [`Mem of [> `Offset_sym]] Arm64_ast.Operand.t
+    [`Mem of [> `Offset_sym]] Arm64_ast.Ast.Operand.t
 
   val emit_mem_label :
-    reloc:[`Twelve] Arm64_ast.Symbol.same_unit_or_reloc ->
+    reloc:[`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc ->
     ?offset:int ->
     Reg.t ->
     L.t ->
-    [`Mem of [> `Offset_sym]] Arm64_ast.Operand.t
+    [`Mem of [> `Offset_sym]] Arm64_ast.Ast.Operand.t
 
-  val mem : Reg.t -> [`Mem of [> `Base_reg]] Arm64_ast.Operand.t
+  val mem : Reg.t -> [`Mem of [> `Base_reg]] Arm64_ast.Ast.Operand.t
 
   val addressing :
     addressing_mode ->
     Reg.t ->
     [`Mem of [> `Offset_imm | `Offset_unscaled | `Offset_sym]]
-    Arm64_ast.Operand.t
+    Arm64_ast.Ast.Operand.t
 
   val stack :
-    Reg.t -> [`Mem of [> `Offset_imm | `Offset_unscaled]] Arm64_ast.Operand.t
+    Reg.t -> [`Mem of [> `Offset_imm | `Offset_unscaled]] Arm64_ast.Ast.Operand.t
 
   val label :
     ?offset:int ->
-    'w Arm64_ast.Symbol.same_unit_or_reloc ->
+    'w Arm64_ast.Ast.Symbol.same_unit_or_reloc ->
     L.t ->
-    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
+    [`Imm of [`Sym of 'w]] Arm64_ast.Ast.Operand.t
 
   val symbol :
     ?offset:int ->
-    'w Arm64_ast.Symbol.same_unit_or_reloc ->
+    'w Arm64_ast.Ast.Symbol.same_unit_or_reloc ->
     S.t ->
-    [`Imm of [`Sym of 'w]] Arm64_ast.Operand.t
+    [`Imm of [`Sym of 'w]] Arm64_ast.Ast.Operand.t
 
   type scalar_fp_regs_3 = private
     | S_regs :
-        ([`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t as 'a)
+        ([`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Ast.Operand.t as 'a)
         * 'a
         * 'a
         -> scalar_fp_regs_3
     | D_regs :
-        ([`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t as 'a)
+        ([`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Ast.Operand.t as 'a)
         * 'a
         * 'a
         -> scalar_fp_regs_3
 
   type scalar_fp_regs_4 = private
     | S_regs :
-        ([`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Operand.t as 'a)
+        ([`Reg of [`Neon of [`Scalar of [`S]]]] Arm64_ast.Ast.Operand.t as 'a)
         * 'a
         * 'a
         * 'a
         -> scalar_fp_regs_4
     | D_regs :
-        ([`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Operand.t as 'a)
+        ([`Reg of [`Neon of [`Scalar of [`D]]]] Arm64_ast.Ast.Operand.t as 'a)
         * 'a
         * 'a
         * 'a
@@ -303,35 +303,35 @@ module DSL : sig
   val reg_fp_operand_4 : Reg.t -> Reg.t -> Reg.t -> Reg.t -> scalar_fp_regs_4
 
   module Reg : module type of struct
-    include Arm64_ast.Reg
+    include Arm64_ast.Ast.Reg
   end
 
   module Acc : sig
     include module type of struct
-      include Arm64_ast.DSL.Acc
+      include Arm64_ast.Ast.DSL.Acc
     end
 
     val labeled_ins1 :
       L.t ->
-      (Arm64_ast.singleton, 'a) Arm64_ast.Instruction_name.t ->
-      'a Arm64_ast.Operand.t ->
+      (Arm64_ast.Ast.singleton, 'a) Arm64_ast.Ast.Instruction_name.t ->
+      'a Arm64_ast.Ast.Operand.t ->
       unit
 
     val labeled_ins4 :
       L.t ->
-      (Arm64_ast.quad, 'a * 'b * 'c * 'd) Arm64_ast.Instruction_name.t ->
-      'a Arm64_ast.Operand.t
-      * 'b Arm64_ast.Operand.t
-      * 'c Arm64_ast.Operand.t
-      * 'd Arm64_ast.Operand.t ->
+      (Arm64_ast.Ast.quad, 'a * 'b * 'c * 'd) Arm64_ast.Ast.Instruction_name.t ->
+      'a Arm64_ast.Ast.Operand.t
+      * 'b Arm64_ast.Ast.Operand.t
+      * 'c Arm64_ast.Ast.Operand.t
+      * 'd Arm64_ast.Ast.Operand.t ->
       unit
   end
 end = struct
-  include Arm64_ast.DSL
-  module Cond = Arm64_ast.Cond
-  module Float_cond = Arm64_ast.Float_cond
+  include Arm64_ast.Ast.DSL
+  module Cond = Arm64_ast.Ast.Cond
+  module Float_cond = Arm64_ast.Ast.Float_cond
 
-  let imm_six n = Arm64_ast.DSL.imm_six n
+  let imm_six n = Arm64_ast.Ast.DSL.imm_six n
 
   (* See [Proc.int_reg_name]. *)
   let[@ocamlformat "disable"] int_reg_name_to_arch_index =
@@ -404,34 +404,34 @@ end = struct
   let v16b_v16b i = reg_v16b i.Linear.res.(0), reg_v16b i.Linear.arg.(0)
 
   let label ?offset reloc lbl =
-    Arm64_ast.DSL.symbol (Arm64_ast.Symbol.create reloc ?offset (L.encode lbl))
+    Arm64_ast.Ast.DSL.symbol (Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode lbl))
 
   let symbol ?offset reloc s =
-    Arm64_ast.DSL.symbol (Arm64_ast.Symbol.create reloc ?offset (S.encode s))
+    Arm64_ast.Ast.DSL.symbol (Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode s))
 
-  let emit_mem_symbol ~(reloc : [`Twelve] Arm64_ast.Symbol.same_unit_or_reloc)
+  let emit_mem_symbol ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc)
       ?offset r sym =
     let index = reg_index r in
-    let symbol = Arm64_ast.Symbol.create reloc ?offset (S.encode sym) in
+    let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode sym) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
-      then Arm64_ast.DSL.mem_symbol ~base:(Arm64_ast.Reg.sp ()) ~symbol
-      else Arm64_ast.DSL.mem_symbol ~base:(Arm64_ast.Reg.reg_x index) ~symbol
+      then Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.sp ()) ~symbol
+      else Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.reg_x index) ~symbol
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_symbol: expected integer register for base, got %a"
         Printreg.reg r
 
-  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Symbol.same_unit_or_reloc)
+  let emit_mem_label ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc)
       ?offset r label =
     let index = reg_index r in
-    let symbol = Arm64_ast.Symbol.create reloc ?offset (L.encode label) in
+    let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode label) in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
-      then Arm64_ast.DSL.mem_symbol ~base:(Arm64_ast.Reg.sp ()) ~symbol
-      else Arm64_ast.DSL.mem_symbol ~base:(Arm64_ast.Reg.reg_x index) ~symbol
+      then Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.sp ()) ~symbol
+      else Arm64_ast.Ast.DSL.mem_symbol ~base:(Arm64_ast.Ast.Reg.reg_x index) ~symbol
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_label: expected integer register for base, got %a"
@@ -442,8 +442,8 @@ end = struct
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
-      then Arm64_ast.DSL.mem ~base:(Arm64_ast.Reg.sp ())
-      else Arm64_ast.DSL.mem ~base:(Arm64_ast.Reg.reg_x index)
+      then Arm64_ast.Ast.DSL.mem ~base:(Arm64_ast.Ast.Reg.sp ())
+      else Arm64_ast.Ast.DSL.mem ~base:(Arm64_ast.Ast.Reg.reg_x index)
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf "mem: expected integer register for base, got %a"
         Printreg.reg r
@@ -453,8 +453,8 @@ end = struct
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
-      then Arm64_ast.DSL.mem_offset ~base:(Arm64_ast.Reg.sp ()) ~offset
-      else Arm64_ast.DSL.mem_offset ~base:(Arm64_ast.Reg.reg_x index) ~offset
+      then Arm64_ast.Ast.DSL.mem_offset ~base:(Arm64_ast.Ast.Reg.sp ()) ~offset
+      else Arm64_ast.Ast.DSL.mem_offset ~base:(Arm64_ast.Ast.Reg.reg_x index) ~offset
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "emit_mem_offset: expected integer register for base, got %a"
@@ -476,7 +476,7 @@ end = struct
       emit_mem_offset reg_domain_state_ptr ofs
     | Stack ((Local _ | Incoming _ | Outgoing _) as s) ->
       let ofs = slot_offset s (Stack_class.of_machtype r.typ) in
-      Arm64_ast.DSL.mem_offset ~base:(Arm64_ast.Reg.sp ()) ~offset:ofs
+      Arm64_ast.Ast.DSL.mem_offset ~base:(Arm64_ast.Ast.Reg.sp ()) ~offset:ofs
     | Reg _ | Unknown ->
       Misc.fatal_errorf "Emit.stack: register %a not on stack" Printreg.reg r
 
@@ -487,7 +487,7 @@ end = struct
       (* XXX is this the correct check for SP? What about XZR etc? *)
       if index = 31
       then Misc.fatal_error "DSL.reg_x: register 31 (SP) not valid here"
-      else Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_x index)
+      else Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_x index)
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf "reg_x: expected integer register, got %a" Printreg.reg
         reg
@@ -498,7 +498,7 @@ end = struct
     | Val | Int | Addr ->
       if index = 31
       then Misc.fatal_error "DSL.reg_w: register 31 not valid here"
-      else Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_w index)
+      else Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_w index)
     | Float | Float32 | Vec128 | Valx2 | Vec256 | Vec512 ->
       Misc.fatal_errorf "reg_w: expected integer register, got %a" Printreg.reg
         reg
@@ -508,7 +508,7 @@ end = struct
     match reg.typ with
     | Float | Vec128 | Valx2 ->
       (* Vec128/Valx2 allowed for scalar extraction from vectors *)
-      Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_d index)
+      Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_d index)
     | Val | Int | Addr | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf "reg_d: expected Float or Vec128/Valx2 register, got %a"
         Printreg.reg reg
@@ -519,7 +519,7 @@ end = struct
     let index = reg_index reg in
     match reg.typ with
     | Float | Float32 | Vec128 | Valx2 ->
-      Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_d index)
+      Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_d index)
     | Val | Int | Addr | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_d_of_float_reg: expected Float or Float32 register, got %a"
@@ -530,7 +530,7 @@ end = struct
     match reg.typ with
     | Float32 | Vec128 | Valx2 ->
       (* Vec128/Valx2 allowed for scalar extraction from vectors *)
-      Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_s index)
+      Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_s index)
     | Val | Int | Addr | Float | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_s: expected Float32 or Vec128/Valx2 register, got %a" Printreg.reg
@@ -539,7 +539,7 @@ end = struct
   let reg_q_operand reg =
     let index = reg_index reg in
     match reg.typ with
-    | Vec128 | Valx2 -> Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_q index)
+    | Vec128 | Valx2 -> Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_q index)
     | Val | Int | Addr | Float | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf "reg_q_operand: expected Vec128/Valx2 register, got %a"
         Printreg.reg reg
@@ -547,7 +547,7 @@ end = struct
   let reg_v2d_operand reg =
     let index = reg_index reg in
     match reg.typ with
-    | Vec128 | Valx2 -> Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_v2d index)
+    | Vec128 | Valx2 -> Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v2d index)
     | Val | Int | Addr | Float | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_v2d_operand: expected Vec128/Valx2 register, got %a" Printreg.reg
@@ -556,16 +556,16 @@ end = struct
   let reg_v16b_operand reg =
     let index = reg_index reg in
     match reg.typ with
-    | Vec128 | Valx2 -> Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_v16b index)
+    | Vec128 | Valx2 -> Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_v16b index)
     | Val | Int | Addr | Float | Float32 | Vec256 | Vec512 ->
       Misc.fatal_errorf
         "reg_v16b_operand: expected Vec128/Valx2 register, got %a" Printreg.reg
         reg
 
-  let shift_operand kind amount = Arm64_ast.DSL.shift ~kind ~amount
+  let shift_operand kind amount = Arm64_ast.Ast.DSL.shift ~kind ~amount
 
-  module Operand = Arm64_ast.Operand
-  module Reg = Arm64_ast.Reg
+  module Operand = Arm64_ast.Ast.Operand
+  module Reg = Arm64_ast.Ast.Reg
 
   type scalar_fp_regs_3 =
     | S_regs :
@@ -582,14 +582,14 @@ end = struct
     match r1.typ, r2.typ, r3.typ with
     | Float32, Float32, Float32 ->
       S_regs
-        ( Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_s index1),
-          Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_s index2),
-          Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_s index3) )
+        ( Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_s index1),
+          Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_s index2),
+          Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_s index3) )
     | Float, Float, Float ->
       D_regs
-        ( Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_d index1),
-          Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_d index2),
-          Arm64_ast.DSL.reg_op (Arm64_ast.Reg.reg_d index3) )
+        ( Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_d index1),
+          Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_d index2),
+          Arm64_ast.Ast.DSL.reg_op (Arm64_ast.Ast.Reg.reg_d index3) )
     | ( (Float32 | Float | Val | Int | Addr | Vec128 | Valx2 | Vec256 | Vec512),
         _,
         _ ) ->
@@ -640,7 +640,7 @@ end = struct
         Printreg.reg r1 Printreg.reg r2 Printreg.reg r3 Printreg.reg r4 ()
 
   module Acc = struct
-    include Arm64_ast.DSL.Acc
+    include Arm64_ast.Ast.DSL.Acc
 
     let labeled_ins1 lbl instr op =
       D.define_label lbl;
@@ -699,7 +699,7 @@ let simd_instr_size (op : Simd.operation) =
     1
 
 let simd_instr (op : Simd.operation) (i : Linear.instruction) =
-  let module Lane_index = Arm64_ast.Neon_reg_name.Lane_index in
+  let module Lane_index = Arm64_ast.Ast.Neon_reg_name.Lane_index in
   (* Check register constraints for instructions that require res = arg0 *)
   (match[@ocaml.warning "-4"] op with
   | Copyq_laneq_s64 _ | Setq_lane_s8 _ | Setq_lane_s16 _ | Setq_lane_s32 _
@@ -1240,7 +1240,7 @@ let emit_movk dst (f, p) =
       DSL.shift ~kind:LSL ~amount:p )
 
 let emit_intconst dst n =
-  if Arm64_logical_immediates.is_logical_immediate n
+  if Arm64_ast.Logical_immediates.is_logical_immediate n
   then A.ins3 ORR_immediate (DSL.reg_x dst, DSL.xzr (), DSL.bitmask n)
   else
     let dz = decompose_int 0x0000n n and dn = decompose_int 0xFFFFn n in
@@ -1266,7 +1266,7 @@ let emit_intconst dst n =
         List.iter (emit_movk dst) l
 
 let num_instructions_for_intconst n =
-  if Arm64_logical_immediates.is_logical_immediate n
+  if Arm64_ast.Logical_immediates.is_logical_immediate n
   then 1
   else
     let dz = decompose_int 0x0000n n and dn = decompose_int 0xFFFFn n in
@@ -1432,7 +1432,7 @@ let emit_literals () =
 (* Emit code to load the address of a symbol *)
 
 let emit_load_symbol_addr dst s =
-  let open Arm64_ast.Symbol in
+  let open Arm64_ast.Ast.Symbol in
   if macosx
   then (
     A.ins2 ADRP (DSL.reg_x dst, DSL.symbol (Needs_reloc GOT_PAGE) s);
@@ -1938,7 +1938,7 @@ let emit_named_text_section func_name =
 (* Emit code to load an emitted literal *)
 
 let emit_load_literal dst lbl =
-  let open Arm64_ast.Symbol in
+  let open Arm64_ast.Ast.Symbol in
   if macosx
   then (
     A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.label (Needs_reloc PAGE) lbl);
@@ -2232,7 +2232,7 @@ let emit_instr i =
     emit_stack_adjustment (-n);
     stack_offset := !stack_offset + n
   | Lop (Load { memory_chunk; addressing_mode; is_atomic; _ }) -> (
-    let open Arm64_ast.Symbol in
+    let open Arm64_ast.Ast.Symbol in
     assert (
       Cmm.equal_memory_chunk memory_chunk Cmm.Word_int
       || Cmm.equal_memory_chunk memory_chunk Cmm.Word_val
@@ -2292,7 +2292,7 @@ let emit_instr i =
     | Fivetwelve_unaligned ->
       Misc.fatal_error "arm64: got 256/512 bit vector")
   | Lop (Store (size, addr, assignment)) -> (
-    let open Arm64_ast.Symbol in
+    let open Arm64_ast.Ast.Symbol in
     (* NB: assignments other than Word_int and Word_val do not follow the
        Multicore OCaml memory model and so do not emit a barrier *)
     let src = i.arg.(0) in
@@ -2508,7 +2508,7 @@ let emit_instr i =
   | Lop Opaque -> assert (Reg.equal_location i.arg.(0).loc i.res.(0).loc)
   | Lop (Specific (Ishiftarith (op, shift))) ->
     let open I in
-    let open Arm64_ast.Operand.Shift.Kind in
+    let open Arm64_ast.Ast.Operand.Shift.Kind in
     let emit_shift_arith instr shift_kind shift_amount =
       A.ins4 instr
         ( DSL.reg_x i.res.(0),
@@ -2697,14 +2697,14 @@ let emit_instr i =
       let lbl = label_to_asm_label ~section:Text lbl in
       A.ins1 (B_cond GT) (local_label lbl))
   | Lswitch jumptbl ->
-    let open Arm64_ast.Symbol in
+    let open Arm64_ast.Ast.Symbol in
     let lbltbl = L.create Text in
     A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label Same_section_and_unit lbltbl);
     A.ins4 ADD_shifted_register
       ( DSL.reg_x reg_tmp1,
         DSL.reg_x reg_tmp1,
         DSL.reg_x i.arg.(0),
-        DSL.optional_shift ~kind:Arm64_ast.Operand.Shift.Kind.LSL ~amount:2 );
+        DSL.optional_shift ~kind:Arm64_ast.Ast.Operand.Shift.Kind.LSL ~amount:2 );
     A.ins1 BR (DSL.reg_x reg_tmp1);
     D.define_label lbltbl;
     for j = 0 to Array.length jumptbl - 1 do
@@ -2729,7 +2729,7 @@ let emit_instr i =
     D.cfi_adjust_cfa_offset ~bytes:delta_bytes;
     stack_offset := !stack_offset + delta_bytes
   | Lpushtrap { lbl_handler } ->
-    let open Arm64_ast.Symbol in
+    let open Arm64_ast.Ast.Symbol in
     let lbl_handler = label_to_asm_label ~section:Text lbl_handler in
     A.ins2 ADR (DSL.reg_x reg_tmp1, DSL.label Same_section_and_unit lbl_handler);
     stack_offset := !stack_offset + 16;
@@ -2903,27 +2903,27 @@ let file_emitter ~file_num ~file_name =
 let begin_assembly _unix =
   reset_debug_info ();
   Probe_emission.reset ();
-  Arm64_ast.DSL.Acc.set_emit_string ~emit_string:Emitaux.emit_string;
+  Arm64_ast.Ast.DSL.Acc.set_emit_string ~emit_string:Emitaux.emit_string;
   Asm_targets.Asm_label.initialize ~new_label:(fun () ->
       Cmm.new_label () |> Label.to_int);
   (* Set up binary emitter if JIT hook is registered or save_binary_sections is
      set *)
   let use_binary_emitter =
-    Option.is_some (Arm64_binary_emitter.For_jit.Internal_assembler.get ())
+    Option.is_some (Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ())
     || !Oxcaml_flags.save_binary_sections
   in
   if use_binary_emitter
   then (
-    let emitter = Arm64_binary_emitter.create () in
+    let emitter = Arm64_binary_emitter.Binary_emitter.create () in
     jit_emitter := Some emitter;
-    Arm64_ast.DSL.Acc.set_emit_instruction
-      ~emit_instruction:(Arm64_binary_emitter.add_instruction emitter));
+    Arm64_ast.Ast.DSL.Acc.set_emit_instruction
+      ~emit_instruction:(Arm64_binary_emitter.Binary_emitter.add_instruction emitter));
   let asm_line_buffer = Buffer.create 200 in
   D.initialize ~big_endian:Arch.big_endian
     ~emit_assembly_comments:!Oxcaml_flags.dasm_comments ~emit:(fun d ->
       (* Emit to binary emitter if in JIT mode *)
       (match !jit_emitter with
-      | Some emitter -> Arm64_binary_emitter.add_directive emitter d
+      | Some emitter -> Arm64_binary_emitter.Binary_emitter.add_directive emitter d
       | None -> ());
       (* Emit to text *)
       Buffer.clear asm_line_buffer;
@@ -3018,10 +3018,10 @@ let end_assembly () =
   | None -> ()
   | Some emitter -> (
     (* Clear the instruction emission callback *)
-    Arm64_ast.DSL.Acc.clear_emit_instruction ();
+    Arm64_ast.Ast.DSL.Acc.clear_emit_instruction ();
     jit_emitter := None;
     (* Get assembled sections *)
-    let section_tbl = Arm64_binary_emitter.emit emitter in
+    let section_tbl = Arm64_binary_emitter.Binary_emitter.emit emitter in
     (* Convert to list of (name, section) pairs *)
     let sections =
       Asm_targets.Asm_section.Tbl.fold
@@ -3046,16 +3046,16 @@ let end_assembly () =
           (* Save binary content *)
           let bin_filename = Filename.concat dir (safe_name ^ ".bin") in
           let oc = open_out_bin bin_filename in
-          output_string oc (Arm64_binary_emitter.Section_state.contents state);
+          output_string oc (Arm64_binary_emitter.Binary_emitter.Section_state.contents state);
           close_out oc;
           (* Save relocations if any *)
-          let relocs = Arm64_binary_emitter.Section_state.relocations state in
+          let relocs = Arm64_binary_emitter.Binary_emitter.Section_state.relocations state in
           match relocs with
           | [] -> ()
           | _ ->
             let reloc_filename = Filename.concat dir (safe_name ^ ".relocs") in
             let oc = open_out reloc_filename in
-            let module R = Arm64_binary_emitter.For_jit.Relocation in
+            let module R = Arm64_binary_emitter.Binary_emitter.For_jit.Relocation in
             List.iter
               (fun reloc ->
                 Printf.fprintf oc "%d %s\n"
@@ -3065,7 +3065,7 @@ let end_assembly () =
             close_out oc)
         sections);
     (* Call the JIT hook if registered *)
-    match Arm64_binary_emitter.For_jit.Internal_assembler.get () with
+    match Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get () with
     | None -> ()
     | Some hook ->
       (* The hook expects (string * assembled_section) list and returns a file

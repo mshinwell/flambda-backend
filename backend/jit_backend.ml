@@ -52,8 +52,8 @@ let saved_x86_internal_assembler = ref None
 
 let register callback =
   current_callback := Some callback;
-  match Binary_emitter_intf.arch (* XXX use Target_system *) with
-  | Binary_emitter_intf.Amd64 ->
+  match Target_system.architecture () with
+  | X86_64 ->
     (* Save old x86 internal assembler and register our hook *)
     saved_x86_internal_assembler := !X86_proc.internal_assembler;
     X86_proc.register_internal_assembler (fun ~delayed:_ sections _filename ->
@@ -82,7 +82,7 @@ let register callback =
             }
         in
         callback packed)
-  | Binary_emitter.Arm64 ->
+  | AArch64 ->
     (* Register with ARM64 binary emitter's hook *)
     Arm64_binary_emitter.For_jit.Internal_assembler.register (fun sections ->
         let sections_map =
@@ -99,12 +99,14 @@ let register callback =
         callback packed;
         (* Return dummy file writer *)
         fun _filename -> ())
+  | _ -> Misc.fatal_error "JIT not supported on this architecture"
 
 let unregister () =
   current_callback := None;
-  match Binary_emitter.arch with
-  | Binary_emitter.Amd64 ->
+  match Target_system.architecture () with
+  | X86_64 ->
     X86_proc.internal_assembler := !saved_x86_internal_assembler;
     saved_x86_internal_assembler := None
-  | Binary_emitter.Arm64 ->
+  | AArch64 ->
     Arm64_binary_emitter.For_jit.Internal_assembler.unregister ()
+  | _ -> Misc.fatal_error "JIT not supported on this architecture"

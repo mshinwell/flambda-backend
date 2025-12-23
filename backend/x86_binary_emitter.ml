@@ -1658,10 +1658,10 @@ module For_jit = struct
     let offset_from_section_beginning (r : Reloc.t) =
       r.Reloc.offset_from_section_beginning
 
-    let size (r : Reloc.t) : Binary_emitter.data_size =
+    let size (r : Reloc.t) : Binary_emitter_intf.data_size =
       match r.Reloc.kind with
-      | Kind.REL32 _ | Kind.DIR32 _ -> Binary_emitter.B32
-      | Kind.DIR64 _ -> Binary_emitter.B64
+      | Kind.REL32 _ | Kind.DIR32 _ -> Binary_emitter_intf.B32
+      | Kind.DIR64 _ -> Binary_emitter_intf.B64
 
     let parse_label label =
       match String.split_on_char '@' label with
@@ -1745,12 +1745,12 @@ module For_jit = struct
           | None -> ())
         b.labels
 
-    let add_patch b ~offset ~size:(sz : Binary_emitter.data_size) ~data =
+    let add_patch b ~offset ~size:(sz : Binary_emitter_intf.data_size) ~data =
       let sz = match sz with
-        | Binary_emitter.B8 -> B8
-        | Binary_emitter.B16 -> B16
-        | Binary_emitter.B32 -> B32
-        | Binary_emitter.B64 -> B64
+        | Binary_emitter_intf.B8 -> B8
+        | Binary_emitter_intf.B16 -> B16
+        | Binary_emitter_intf.B32 -> B32
+        | Binary_emitter_intf.B64 -> B64
       in
       add_patch ~offset ~size:sz ~data b
   end
