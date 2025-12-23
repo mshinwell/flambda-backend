@@ -56,9 +56,9 @@ let generate_module_a () =
   Buffer.add_string buf "let increment () = incr counter; !counter\n";
   Buffer.add_string buf "let get_counter () = !counter\n";
   Buffer.add_string buf "let get_magic () = 42\n";
-  (* Static constant that other modules will reference directly for IGOT testing *)
-  Buffer.add_string buf
-    "let static_data = [| 100; 200; 300; 400; 500 |]\n\n";
+  (* Static constant that other modules will reference directly for IGOT
+     testing *)
+  Buffer.add_string buf "let static_data = [| 100; 200; 300; 400; 500 |]\n\n";
   Buffer.add_string buf (generate_functions 1 num_functions);
   Buffer.contents buf
 
@@ -70,9 +70,9 @@ let generate_module_b () =
   Buffer.add_string buf "let counter = ref 0\n";
   Buffer.add_string buf "let increment () = incr counter; !counter\n";
   Buffer.add_string buf "let get_counter () = !counter\n";
-  (* Static constant that other modules will reference directly for IGOT testing *)
-  Buffer.add_string buf
-    "let static_data = [| 600; 700; 800; 900; 1000 |]\n\n";
+  (* Static constant that other modules will reference directly for IGOT
+     testing *)
+  Buffer.add_string buf "let static_data = [| 600; 700; 800; 900; 1000 |]\n\n";
   Buffer.add_string buf "(* Cross-partition calls to A *)\n";
   Buffer.add_string buf "let call_a_increment () = Gen_module_a.increment ()\n";
   Buffer.add_string buf "let call_a_magic () = Gen_module_a.get_magic ()\n";
@@ -125,8 +125,7 @@ let generate_module_c () =
   Buffer.add_string buf
     "let write_b_counter_direct v = Gen_module_b.counter := v\n";
   (* Direct references to static data - forces IGOT entries *)
-  Buffer.add_string buf
-    "let get_a_static_data () = Gen_module_a.static_data\n";
+  Buffer.add_string buf "let get_a_static_data () = Gen_module_a.static_data\n";
   Buffer.add_string buf
     "let get_b_static_data () = Gen_module_b.static_data\n\n";
   (* Closures capturing cross-partition references *)
