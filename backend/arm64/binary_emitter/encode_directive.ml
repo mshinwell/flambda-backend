@@ -28,6 +28,13 @@
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 module C = D.Directive.Constant
+module SS = Section_state
+
+let rec extract_symbol_name (cst : C.t) =
+  match cst with
+  | Named_thing name -> Some name
+  | Add (a, _) | Sub (a, _) -> extract_symbol_name a
+  | Signed_int _ | Unsigned_int _ | This -> None
 
 let extract_label_this_offset (cst : C.t) =
   match[@warning "-4"] cst with
@@ -39,7 +46,7 @@ let eval_constant state ~all_sections const =
   (* For same-section relative expressions like (Label - This), the offset
      within the section is all that matters. Cross-section references are
      detected and handled via relocations before this function is called. *)
-  let this () = Int64.of_int (Section_state.offset_in_bytes state) in
+  let this () = Int64.of_int (SS.offset_in_bytes state) in
   let lookup name =
     (* When generating PIC code (dlcode=true), global symbols should not be
        resolved as they may be interposed at runtime. We must emit zeros and let
@@ -48,16 +55,16 @@ let eval_constant state ~all_sections const =
        the New_label for the : definition). So we check if the name is a
        declared global symbol first. *)
     let is_global_symbol =
-      Option.is_some (Section_state.find_symbol_offset_in_bytes state name)
+      Option.is_some (SS.find_symbol_offset_in_bytes state name)
     in
     if !Clflags.dlcode && is_global_symbol
     then None
     else
       (* First try current section, then fall back to global lookup. *)
-      match Section_state.find_label_offset_in_bytes state name with
+      match SS.find_label_offset_in_bytes state name with
       | Some offset -> Some (Int64.of_int offset)
       | None -> (
-        match Section_state.find_symbol_offset_in_bytes state name with
+        match SS.find_symbol_offset_in_bytes state name with
         | Some offset -> Some (Int64.of_int offset)
         | None -> (
           match All_section_states.find_in_any_section all_sections name with
@@ -75,7 +82,7 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
   | None -> None
   | Some (label_name, offset_upper) -> (
     (* First check if label is in current section *)
-    match Section_state.find_label_offset_in_bytes state label_name with
+    match SS.find_label_offset_in_bytes state label_name with
     | Some _ -> None (* Same section, use normal eval *)
     | None -> (
       (* Try cross-section lookup *)
@@ -101,9 +108,9 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
           (* Cross-section: TEXT label referenced from DATA. The linker
              computes: plus_sym - minus_sym + addend So: addend = (target -
              plus_sym) - (current - minus_sym) *)
-          let current_pos = Section_state.offset_in_bytes state in
+          let current_pos = SS.offset_in_bytes state in
           (* Find nearest symbol in DATA for SUBTRACTOR *)
-          match Section_state.find_nearest_symbol_before state current_pos with
+          match SS.find_nearest_symbol_before state current_pos with
           | None ->
             Misc.fatal_error
               "No symbol in DATA section for cross-section relocation"
@@ -113,16 +120,11 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
               All_section_states.find_exn all_sections Asm_section.Text
             in
             (* Get target label offset in TEXT *)
-            match
-              Section_state.find_label_offset_in_bytes text_state label_name
-            with
+            match SS.find_label_offset_in_bytes text_state label_name with
             | None ->
               Misc.fatal_errorf "Label %s not found in TEXT section" label_name
             | Some target_offset -> (
-              match
-                Section_state.find_nearest_symbol_before text_state
-                  target_offset
-              with
+              match SS.find_nearest_symbol_before text_state target_offset with
               | None ->
                 Misc.fatal_error
                   "No symbol in TEXT section for cross-section relocation"
@@ -133,7 +135,7 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                        (Int64.of_int (target_offset - plus_sym_offset))
                        (Int64.of_int (current_pos - minus_sym_offset)))
                 in
-                Section_state.add_relocation_at_current_offset state
+                SS.add_relocation_at_current_offset state
                   ~symbol_name:plus_symbol
                   ~reloc_kind:
                     (R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol });
@@ -146,10 +148,10 @@ let is_cross_section_absolute_reference state ~all_sections ~current_section
   match[@warning "-4"] cst with
   | Named_thing name when width_bytes = 8 -> (
     (* Check if symbol is in a different section *)
-    match Section_state.find_label_offset_in_bytes state name with
+    match SS.find_label_offset_in_bytes state name with
     | Some _ -> None (* Same section, can resolve *)
     | None -> (
-      match Section_state.find_symbol_offset_in_bytes state name with
+      match SS.find_symbol_offset_in_bytes state name with
       | Some _ -> None (* Same section symbol *)
       | None -> (
         (* Try cross-section lookup *)
@@ -160,24 +162,18 @@ let is_cross_section_absolute_reference state ~all_sections ~current_section
           then None (* Same section *)
           else (
             (* Cross-section absolute reference - needs relocation *)
-            Section_state.add_relocation_at_current_offset state
-              ~symbol_name:name ~reloc_kind:(R_AARCH64_ABS64 name);
+            SS.add_relocation_at_current_offset state ~symbol_name:name
+              ~reloc_kind:(R_AARCH64_ABS64 name);
             Some 0L (* Emit zero, relocation will patch *)))))
   | _ -> None
-
-let rec extract_symbol_name (cst : C.t) =
-  match cst with
-  | Named_thing name -> Some name
-  | Add (a, _) | Sub (a, _) -> extract_symbol_name a
-  | Signed_int _ | Unsigned_int _ | This -> None
 
 (* Handle unresolved symbol reference by emitting zeros and recording a
    relocation for the linker to patch. *)
 let emit_unresolved_symbol_relocation state ~width_bytes c =
-  let buf = Section_state.buffer state in
+  let buf = SS.buffer state in
   (match extract_symbol_name c with
   | Some symbol_name when width_bytes = 8 ->
-    Section_state.add_relocation_at_current_offset state ~symbol_name
+    SS.add_relocation_at_current_offset state ~symbol_name
       ~reloc_kind:(R_AARCH64_ABS64 symbol_name)
   | Some symbol_name ->
     Misc.fatal_errorf
@@ -195,7 +191,7 @@ let emit_unresolved_symbol_relocation state ~width_bytes c =
 
 (* Emit a constant value, handling cross-section references and relocations. *)
 let emit_constant state ~all_sections ~current_section constant =
-  let buf = Section_state.buffer state in
+  let buf = SS.buffer state in
   let module C = D.Directive.Constant_with_width in
   let c = C.constant constant in
   let width = C.width_in_bytes constant in
@@ -217,9 +213,33 @@ let emit_constant state ~all_sections ~current_section constant =
   | Some value -> D.Directive.emit_int_le buf ~width_bytes value
   | None -> emit_unresolved_symbol_relocation state ~width_bytes c
 
+let emit_alignment state ~bytes ~(fill : D.align_padding) =
+  let buf = SS.buffer state in
+  let offset = SS.offset_in_bytes state in
+  let remainder = offset mod bytes in
+  if remainder <> 0
+  then
+    let padding = bytes - remainder in
+    match fill with
+    | Nop ->
+      (* Emit NOP instructions (4 bytes each) for code alignment *)
+      let nop_count = padding / 4 in
+      let zero_count = padding mod 4 in
+      let nop = Int64.of_int32 (Nop_helpers.encode_nop ()) in
+      for _ = 1 to nop_count do
+        D.Directive.emit_int_le buf ~width_bytes:4 nop
+      done;
+      for _ = 1 to zero_count do
+        Buffer.add_char buf '\x00'
+      done
+    | Zero ->
+      for _ = 1 to padding do
+        Buffer.add_char buf '\x00'
+      done
+
 let emit_directive state ~current_section ~all_sections
     (directive : D.Directive.t) =
-  let buf = Section_state.buffer state in
+  let buf = SS.buffer state in
   (* Update current section when we see a Section directive *)
   (match[@warning "-4"] directive with
   | Section { names; _ } -> (
@@ -233,28 +253,7 @@ let emit_directive state ~current_section ~all_sections
     for _ = 1 to bytes do
       Buffer.add_char buf '\x00'
     done
-  | Align { bytes; fill } -> (
-    let offset = Section_state.offset_in_bytes state in
-    let remainder = offset mod bytes in
-    if remainder <> 0
-    then
-      let padding = bytes - remainder in
-      match fill with
-      | Nop ->
-        (* Emit NOP instructions (4 bytes each) for code alignment *)
-        let nop_count = padding / 4 in
-        let zero_count = padding mod 4 in
-        let nop = Int64.of_int32 (Nop_helpers.encode_nop ()) in
-        for _ = 1 to nop_count do
-          D.Directive.emit_int_le buf ~width_bytes:4 nop
-        done;
-        for _ = 1 to zero_count do
-          Buffer.add_char buf '\x00'
-        done
-      | Zero ->
-        for _ = 1 to padding do
-          Buffer.add_char buf '\x00'
-        done)
+  | Align { bytes; fill } -> emit_alignment state ~bytes ~fill
   | Const { constant; _ } ->
     emit_constant state ~all_sections ~current_section:!current_section constant
   | Sleb128 { constant; _ } -> (
