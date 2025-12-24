@@ -250,12 +250,9 @@ let emit_directive state ~current_section ~all_sections
         (* Emit NOP instructions (4 bytes each) for code alignment *)
         let nop_count = padding / 4 in
         let zero_count = padding mod 4 in
+        let nop = Int64.of_int32 (Nop_helpers.encode_nop ()) in
         for _ = 1 to nop_count do
-          (* ARM64 NOP: 0xD503201F in little-endian *)
-          Buffer.add_char buf '\x1f';
-          Buffer.add_char buf '\x20';
-          Buffer.add_char buf '\x03';
-          Buffer.add_char buf '\xd5'
+          D.Directive.emit_int_le buf ~width_bytes:4 nop
         done;
         for _ = 1 to zero_count do
           Buffer.add_char buf '\x00'

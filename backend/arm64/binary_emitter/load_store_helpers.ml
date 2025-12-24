@@ -390,12 +390,6 @@ let encode_memory_barrier ~op2 (barrier : Memory_barrier.t) =
   let result = logor result (of_int 0b11111) in
   result
 
-(* NOP encoding: 1101 0101 0000 0011 0010 0000 000 11111 = 0xD503201F *)
-let encode_nop () = Int32.of_int 0xD503201F
-
-(* YIELD encoding: 1101 0101 0000 0011 0010 0000 001 11111 = 0xD503203F *)
-let encode_yield () = Int32.of_int 0xD503203F
-
 (* Encode LDP/STP instructions for GP registers. l=1 for load (LDP), l=0 for
    store (STP). opc: 00 for 32-bit (W), 10 for 64-bit (X) *)
 let encode_load_store_pair_gp :

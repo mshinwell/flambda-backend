@@ -917,7 +917,7 @@ let encode_instruction :
     let q, size = Simd_helpers.vector_q_size vec in
     (* NEG: U=1, opcode=01011 *)
     Simd_helpers.encode_simd_two_reg_misc ~q ~u:1 ~size ~opcode:0b01011 ~rn ~rd
-  | _, NOP -> Load_store_helpers.encode_nop ()
+  | _, NOP -> Nop_helpers.encode_nop ()
   | Triple (Reg rd, Reg rn, Bitmask bitmask), ORR_immediate ->
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in
     Logical_helpers.encode_logical_immediate ~sf:1 ~opc:0b01 ~n ~immr ~imms ~rn
@@ -1370,7 +1370,7 @@ let encode_instruction :
     (* XTN2: U=0, opcode=10010, Q=1 for XTN2 *)
     Simd_helpers.encode_simd_two_reg_misc ~q:1 ~u:0 ~size ~opcode:0b10010 ~rn
       ~rd
-  | _, YIELD -> Load_store_helpers.encode_yield ()
+  | _, YIELD -> Yield_helpers.encode_yield ()
   | ( Triple
         ( Reg { reg_name = Neon (Vector vec); index = rd },
           Reg { index = rn; _ },
