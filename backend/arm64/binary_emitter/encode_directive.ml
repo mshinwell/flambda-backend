@@ -27,6 +27,15 @@
 
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
+module Const = D.Directive.Constant
+
+let extract_label_this_offset = function[@warning "-4"]
+  | Const.Add
+      (Const.Sub (Const.Named_thing name, Const.This), Const.Signed_int offset)
+    ->
+    Some (name, offset)
+  | Const.Sub (Const.Named_thing name, Const.This) -> Some (name, 0L)
+  | _ -> None
 
 let eval_constant state ~all_sections const =
   (* For same-section relative expressions like (Label - This), the offset
@@ -58,6 +67,161 @@ let eval_constant state ~all_sections const =
           | None -> None))
   in
   D.Directive.Constant.eval ~this ~lookup const
+
+(* Handle cross-section (Label - This) + offset pattern. This occurs in
+   frametable entries where a DATA section location references a TEXT section
+   label (return address). We emit a PREL32_PAIR relocation using existing
+   global symbols (matching assembler behavior). *)
+let try_cross_section_relative_reference state ~all_sections ~current_section c
+    =
+  match extract_label_this_offset c with
+  | None -> None
+  | Some (label_name, offset_upper) -> (
+    (* First check if label is in current section *)
+    match Section_state.find_label_offset_in_bytes state label_name with
+    | Some _ -> None (* Same section, use normal eval *)
+    | None -> (
+      (* Try cross-section lookup *)
+      match All_section_states.find_in_any_section all_sections label_name with
+      | None -> None (* Not found at all *)
+      | Some (_, label_section) -> (
+        if Asm_section.equal label_section current_section
+        then None (* Same section after all *)
+        else if not (Asm_section.equal current_section Asm_section.Data)
+        then
+          Misc.fatal_errorf
+            "Cross-section (Label - This) from non-DATA section %s to %s not \
+             supported"
+            (Asm_section.to_string current_section)
+            (Asm_section.to_string label_section)
+        else if not (Asm_section.equal label_section Asm_section.Text)
+        then
+          Misc.fatal_errorf
+            "Cross-section (Label - This) from DATA to non-TEXT section %s not \
+             supported"
+            (Asm_section.to_string label_section)
+        else
+          (* Cross-section: TEXT label referenced from DATA. The linker
+             computes: plus_sym - minus_sym + addend So: addend = (target -
+             plus_sym) - (current - minus_sym) *)
+          let current_pos = Section_state.offset_in_bytes state in
+          (* Find nearest symbol in DATA for SUBTRACTOR *)
+          match Section_state.find_nearest_symbol_before state current_pos with
+          | None ->
+            Misc.fatal_error
+              "No symbol in DATA section for cross-section relocation"
+          | Some (minus_symbol, minus_sym_offset) -> (
+            (* Find nearest symbol in TEXT for UNSIGNED *)
+            let text_state =
+              All_section_states.find_exn all_sections Asm_section.Text
+            in
+            (* Get target label offset in TEXT *)
+            match
+              Section_state.find_label_offset_in_bytes text_state label_name
+            with
+            | None ->
+              Misc.fatal_errorf "Label %s not found in TEXT section" label_name
+            | Some target_offset -> (
+              match
+                Section_state.find_nearest_symbol_before text_state
+                  target_offset
+              with
+              | None ->
+                Misc.fatal_error
+                  "No symbol in TEXT section for cross-section relocation"
+              | Some (plus_symbol, plus_sym_offset) ->
+                let addend =
+                  Int64.add offset_upper
+                    (Int64.sub
+                       (Int64.of_int (target_offset - plus_sym_offset))
+                       (Int64.of_int (current_pos - minus_sym_offset)))
+                in
+                Section_state.add_relocation_at_current_offset state
+                  ~symbol_name:plus_symbol
+                  ~reloc_kind:
+                    (Relocation.Kind.R_AARCH64_PREL32_PAIR
+                       { plus_symbol; minus_symbol });
+                Some addend)))))
+
+(* Handle absolute cross-section symbol reference. For .8byte symbol where
+   symbol is in a different section, we must emit a relocation. *)
+let try_cross_section_absolute_reference state ~all_sections ~current_section
+    ~width_bytes c =
+  match[@warning "-4"] c with
+  | Const.Named_thing name when width_bytes = 8 -> (
+    (* Check if symbol is in a different section *)
+    match Section_state.find_label_offset_in_bytes state name with
+    | Some _ -> None (* Same section, can resolve *)
+    | None -> (
+      match Section_state.find_symbol_offset_in_bytes state name with
+      | Some _ -> None (* Same section symbol *)
+      | None -> (
+        (* Try cross-section lookup *)
+        match All_section_states.find_in_any_section all_sections name with
+        | None -> None (* Not found, will fall through to relocation *)
+        | Some (_, sym_section) ->
+          if Asm_section.equal sym_section current_section
+          then None (* Same section *)
+          else (
+            (* Cross-section absolute reference - needs relocation *)
+            Section_state.add_relocation_at_current_offset state
+              ~symbol_name:name
+              ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 name);
+            Some 0L (* Emit zero, relocation will patch *)))))
+  | _ -> None
+
+let rec extract_symbol_name = function
+  | Const.Named_thing name -> Some name
+  | Const.Add (a, _) -> extract_symbol_name a
+  | Const.Sub (a, _) -> extract_symbol_name a
+  | Const.Signed_int _ | Const.Unsigned_int _ | Const.This -> None
+
+(* Handle unresolved symbol reference by emitting zeros and recording a
+   relocation for the linker to patch. *)
+let emit_unresolved_symbol_relocation state ~width_bytes c =
+  let buf = Section_state.buffer state in
+  (match extract_symbol_name c with
+  | Some symbol_name when width_bytes = 8 ->
+    Section_state.add_relocation_at_current_offset state ~symbol_name
+      ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 symbol_name)
+  | Some symbol_name ->
+    Misc.fatal_errorf
+      "Unresolved %d-byte reference to symbol %s (only 8-byte relocations \
+       supported)"
+      width_bytes symbol_name
+  | None ->
+    Misc.fatal_errorf
+      "Unresolved %d-byte constant expression (only 8-byte relocations \
+       supported)"
+      width_bytes);
+  for _ = 1 to width_bytes do
+    Buffer.add_char buf '\x00'
+  done
+
+(* Emit a constant value, handling cross-section references and relocations. *)
+let emit_constant state ~all_sections ~current_section constant =
+  let buf = Section_state.buffer state in
+  let module C = D.Directive.Constant_with_width in
+  let c = C.constant constant in
+  let width = C.width_in_bytes constant in
+  let width_bytes = C.width_in_bytes_int width in
+  let value_opt =
+    match
+      try_cross_section_relative_reference state ~all_sections ~current_section
+        c
+    with
+    | Some addend -> Some addend
+    | None -> (
+      match
+        try_cross_section_absolute_reference state ~all_sections
+          ~current_section ~width_bytes c
+      with
+      | Some v -> Some v
+      | None -> eval_constant state ~all_sections c)
+  in
+  match value_opt with
+  | Some value -> D.Directive.emit_int_le buf ~width_bytes value
+  | None -> emit_unresolved_symbol_relocation state ~width_bytes c
 
 let emit_directive state ~current_section ~all_sections
     (directive : D.Directive.t) =
@@ -100,163 +264,8 @@ let emit_directive state ~current_section ~all_sections
         for _ = 1 to padding do
           Buffer.add_char buf '\x00'
         done)
-  | Const { constant; _ } -> (
-    let module C = D.Directive.Constant_with_width in
-    let module Const = D.Directive.Constant in
-    let c = C.constant constant in
-    let width = C.width_in_bytes constant in
-    let width_bytes = C.width_in_bytes_int width in
-    (* Check for cross-section (Label - This) + offset pattern. This occurs in
-       frametable entries where a DATA section location references a TEXT
-       section label (return address). *)
-    let try_cross_section_label_rel () =
-      (* Pattern: Add(Sub(Named_thing label, This), offset) or Sub(Named_thing
-         label, This) *)
-      let extract_label_this_offset = function[@warning "-4"]
-        | Const.Add
-            ( Const.Sub (Const.Named_thing name, Const.This),
-              Const.Signed_int offset ) ->
-          Some (name, offset)
-        | Const.Sub (Const.Named_thing name, Const.This) -> Some (name, 0L)
-        | _ -> None
-      in
-      match extract_label_this_offset c with
-      | None -> None
-      | Some (label_name, offset_upper) -> (
-        (* First check if label is in current section *)
-        match Section_state.find_label_offset_in_bytes state label_name with
-        | Some _ -> None (* Same section, use normal eval *)
-        | None -> (
-          (* Try cross-section lookup *)
-          match
-            All_section_states.find_in_any_section all_sections label_name
-          with
-          | None -> None (* Not found at all *)
-          | Some (_, label_section) -> (
-            if Asm_section.equal label_section !current_section
-            then None (* Same section after all *)
-            else if not (Asm_section.equal !current_section Asm_section.Data)
-            then
-              Misc.fatal_errorf
-                "Cross-section (Label - This) from non-DATA section %s to %s \
-                 not supported"
-                (Asm_section.to_string !current_section)
-                (Asm_section.to_string label_section)
-            else if not (Asm_section.equal label_section Asm_section.Text)
-            then
-              Misc.fatal_errorf
-                "Cross-section (Label - This) from DATA to non-TEXT section %s \
-                 not supported"
-                (Asm_section.to_string label_section)
-            else
-              (* Cross-section: TEXT label referenced from DATA. We emit a
-                 PREL32_PAIR relocation using existing global symbols (matching
-                 assembler behavior). The linker computes: plus_sym - minus_sym
-                 + addend So: addend = (target - plus_sym) - (current -
-                 minus_sym) *)
-              let current_pos = Section_state.offset_in_bytes state in
-              (* Find nearest symbol in DATA for SUBTRACTOR *)
-              match
-                Section_state.find_nearest_symbol_before state current_pos
-              with
-              | None ->
-                Misc.fatal_error
-                  "No symbol in DATA section for cross-section relocation"
-              | Some (minus_symbol, minus_sym_offset) -> (
-                (* Find nearest symbol in TEXT for UNSIGNED *)
-                let text_state =
-                  All_section_states.find_exn all_sections Asm_section.Text
-                in
-                (* Get target label offset in TEXT *)
-                match
-                  Section_state.find_label_offset_in_bytes text_state label_name
-                with
-                | None ->
-                  Misc.fatal_errorf "Label %s not found in TEXT section"
-                    label_name
-                | Some target_offset -> (
-                  match
-                    Section_state.find_nearest_symbol_before text_state
-                      target_offset
-                  with
-                  | None ->
-                    Misc.fatal_error
-                      "No symbol in TEXT section for cross-section relocation"
-                  | Some (plus_symbol, plus_sym_offset) ->
-                    let addend =
-                      Int64.add offset_upper
-                        (Int64.sub
-                           (Int64.of_int (target_offset - plus_sym_offset))
-                           (Int64.of_int (current_pos - minus_sym_offset)))
-                    in
-                    Section_state.add_relocation_at_current_offset state
-                      ~symbol_name:plus_symbol
-                      ~reloc_kind:
-                        (Relocation.Kind.R_AARCH64_PREL32_PAIR
-                           { plus_symbol; minus_symbol });
-                    Some addend)))))
-    in
-    (* Check for absolute cross-section symbol reference. For .8byte symbol
-       where symbol is in a different section, we must emit a relocation. *)
-    let try_cross_section_absolute () =
-      match[@warning "-4"] c with
-      | Const.Named_thing name when width_bytes = 8 -> (
-        (* Check if symbol is in a different section *)
-        match Section_state.find_label_offset_in_bytes state name with
-        | Some _ -> None (* Same section, can resolve *)
-        | None -> (
-          match Section_state.find_symbol_offset_in_bytes state name with
-          | Some _ -> None (* Same section symbol *)
-          | None -> (
-            (* Try cross-section lookup *)
-            match All_section_states.find_in_any_section all_sections name with
-            | None -> None (* Not found, will fall through to relocation *)
-            | Some (_, sym_section) ->
-              if Asm_section.equal sym_section !current_section
-              then None (* Same section *)
-              else (
-                (* Cross-section absolute reference - needs relocation *)
-                Section_state.add_relocation_at_current_offset state
-                  ~symbol_name:name
-                  ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 name);
-                Some 0L (* Emit zero, relocation will patch *)))))
-      | _ -> None
-    in
-    let value_opt =
-      match try_cross_section_label_rel () with
-      | Some addend -> Some addend
-      | None -> (
-        match try_cross_section_absolute () with
-        | Some v -> Some v
-        | None -> eval_constant state ~all_sections c)
-    in
-    match value_opt with
-    | Some value -> D.Directive.emit_int_le buf ~width_bytes value
-    | None ->
-      (* External/global reference - emit zeros and record relocation *)
-      let rec extract_symbol_name = function
-        | Const.Named_thing name -> Some name
-        | Const.Add (a, _) -> extract_symbol_name a
-        | Const.Sub (a, _) -> extract_symbol_name a
-        | Const.Signed_int _ | Const.Unsigned_int _ | Const.This -> None
-      in
-      (match extract_symbol_name c with
-      | Some symbol_name when width_bytes = 8 ->
-        Section_state.add_relocation_at_current_offset state ~symbol_name
-          ~reloc_kind:(Relocation.Kind.R_AARCH64_ABS64 symbol_name)
-      | Some symbol_name ->
-        Misc.fatal_errorf
-          "Unresolved %d-byte reference to symbol %s (only 8-byte relocations \
-           supported)"
-          width_bytes symbol_name
-      | None ->
-        Misc.fatal_errorf
-          "Unresolved %d-byte constant expression (only 8-byte relocations \
-           supported)"
-          width_bytes);
-      for _ = 1 to width_bytes do
-        Buffer.add_char buf '\x00'
-      done)
+  | Const { constant; _ } ->
+    emit_constant state ~all_sections ~current_section:!current_section constant
   | Sleb128 { constant; _ } -> (
     match eval_constant state ~all_sections constant with
     | Some value -> D.Directive.emit_sleb128 buf value
