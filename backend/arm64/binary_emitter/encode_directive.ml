@@ -128,10 +128,11 @@ let emit_directive state ~current_section ~all_sections
         | Some _ -> None (* Same section, use normal eval *)
         | None -> (
           (* Try cross-section lookup *)
-          match All_section_states.find_in_any_section all_sections label_name
+          match
+            All_section_states.find_in_any_section all_sections label_name
           with
           | None -> None (* Not found at all *)
-          | Some (_, label_section) ->
+          | Some (_, label_section) -> (
             if Asm_section.equal label_section !current_section
             then None (* Same section after all *)
             else if not (Asm_section.equal !current_section Asm_section.Data)
@@ -144,15 +145,15 @@ let emit_directive state ~current_section ~all_sections
             else if not (Asm_section.equal label_section Asm_section.Text)
             then
               Misc.fatal_errorf
-                "Cross-section (Label - This) from DATA to non-TEXT section \
-                 %s not supported"
+                "Cross-section (Label - This) from DATA to non-TEXT section %s \
+                 not supported"
                 (Asm_section.to_string label_section)
             else
               (* Cross-section: TEXT label referenced from DATA. We emit a
                  PREL32_PAIR relocation using existing global symbols (matching
-                 assembler behavior). The linker computes:
-                 plus_sym - minus_sym + addend
-                 So: addend = (target - plus_sym) - (current - minus_sym) *)
+                 assembler behavior). The linker computes: plus_sym - minus_sym
+                 + addend So: addend = (target - plus_sym) - (current -
+                 minus_sym) *)
               let current_pos = Section_state.offset_in_bytes state in
               (* Find nearest symbol in DATA for SUBTRACTOR *)
               match
@@ -193,7 +194,7 @@ let emit_directive state ~current_section ~all_sections
                       ~reloc_kind:
                         (Relocation.Kind.R_AARCH64_PREL32_PAIR
                            { plus_symbol; minus_symbol });
-                    Some addend))))
+                    Some addend)))))
     in
     (* Check for absolute cross-section symbol reference. For .8byte symbol
        where symbol is in a different section, we must emit a relocation. *)

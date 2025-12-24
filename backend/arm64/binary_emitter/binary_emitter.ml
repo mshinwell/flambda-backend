@@ -29,9 +29,8 @@ open Arm64_ast.Ast
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 
-(* Re-export sub-modules for the library interface *)
+(* Re-export modules for the library interface *)
 module All_section_states = All_section_states
-module Relocation = Relocation
 module Section_state = Section_state
 
 type instruction_or_directive =
@@ -64,10 +63,11 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
         Section_state.set_offset_in_bytes !current_state (offset + 4)
       | Directive d ->
         (match d with
-        | D.Directive.Section { names; _ } -> (
+        | Section { names; _ } -> (
           match Asm_section.of_names names with
           | Some section ->
-            current_state := All_section_states.get_or_create all_sections section
+            current_state
+              := All_section_states.get_or_create all_sections section
           | None ->
             Misc.fatal_errorf "Unknown section: %s" (String.concat ", " names))
         | _ -> ());

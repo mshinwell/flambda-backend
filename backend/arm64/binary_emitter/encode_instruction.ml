@@ -26,10 +26,6 @@
  ******************************************************************************)
 
 open Arm64_ast.Ast
-module Asm_section = Asm_targets.Asm_section
-module D = Asm_targets.Asm_directives
-module L = Asm_targets.Asm_label
-module S = Asm_targets.Asm_symbol
 
 let encode_instruction :
     type num operands.

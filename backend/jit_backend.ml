@@ -84,7 +84,8 @@ let register callback =
         callback packed)
   | AArch64 ->
     (* Register with ARM64 binary emitter's hook *)
-    Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.register (fun sections ->
+    Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.register
+      (fun sections ->
         let sections_map =
           List.fold_left
             (fun map (name, section) -> String_map.add name section map)
@@ -107,5 +108,6 @@ let unregister () =
   | X86_64 ->
     X86_proc.internal_assembler := !saved_x86_internal_assembler;
     saved_x86_internal_assembler := None
-  | AArch64 -> Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.unregister ()
+  | AArch64 ->
+    Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.unregister ()
   | _ -> Misc.fatal_error "JIT not supported on this architecture"

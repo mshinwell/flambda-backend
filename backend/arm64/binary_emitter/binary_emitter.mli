@@ -26,48 +26,7 @@
  ******************************************************************************)
 
 open Arm64_ast.Ast
-
-module Relocation : sig
-  module Kind : sig
-    type t = private
-      | R_AARCH64_ADR_PREL_LO21 of string
-      | R_AARCH64_ADR_PREL_PG_HI21 of string
-      | R_AARCH64_LD64_GOT_LO12_NC of string
-      | R_AARCH64_ADD_ABS_LO12_NC of string
-      | R_AARCH64_CALL26 of string
-      | R_AARCH64_JUMP26 of string
-      | R_AARCH64_ABS64 of string
-      | R_AARCH64_PREL32_PAIR of
-          { plus_symbol : string;
-            minus_symbol : string
-          }
-  end
-
-  type t = private
-    { offset_from_section_beginning : int;
-      kind : Kind.t
-    }
-end
-
-module Section_state : sig
-  type t
-
-  val buffer : t -> Buffer.t
-
-  val find_symbol_offset_in_bytes : t -> string -> int option
-
-  val find_label_offset_in_bytes : t -> string -> int option
-
-  val relocations : t -> Relocation.t list
-
-  val symbols : t -> (string, int) Hashtbl.t
-
-  (** Returns mutable bytes with all patches applied. *)
-  val contents_mut : t -> bytes
-
-  (** Returns string with all patches applied. *)
-  val contents : t -> string
-end
+module Section_state = Section_state
 
 type t
 
@@ -77,7 +36,7 @@ val add_instruction : t -> Instruction.t -> unit
 
 val add_directive : t -> Asm_targets.Asm_directives.Directive.t -> unit
 
-val emit : t -> Section_state.t Asm_targets.Asm_section.Tbl.t
+val emit : t -> All_section_states.t
 
 (** Module implementing Binary_emitter_intf.S for use by ocaml-jit *)
 module For_jit :
