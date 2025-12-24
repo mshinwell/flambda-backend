@@ -28,7 +28,7 @@
 module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 
-let eval_constant state ~global_lookup const =
+let eval_constant state ~all_sections const =
   (* For same-section relative expressions like (Label - This), the offset
      within the section is all that matters. Cross-section references are
      detected and handled via relocations before this function is called. *)
@@ -52,12 +52,15 @@ let eval_constant state ~global_lookup const =
       | None -> (
         match Section_state.find_symbol_offset_in_bytes state name with
         | Some offset -> Some (Int64.of_int offset)
-        | None -> global_lookup name)
+        | None -> (
+          match All_section_states.find_in_any_section all_sections name with
+          | Some (offset, _section) -> Some (Int64.of_int offset)
+          | None -> None))
   in
   D.Directive.Constant.eval ~this ~lookup const
 
-let emit_directive state ~current_section ~global_lookup
-    ~global_lookup_with_section (directive : D.Directive.t) ~section_tbl =
+let emit_directive state ~current_section ~all_sections
+    (directive : D.Directive.t) =
   let buf = Section_state.buffer state in
   (* Update current section when we see a Section directive *)
   (match directive with
@@ -125,7 +128,8 @@ let emit_directive state ~current_section ~global_lookup
         | Some _ -> None (* Same section, use normal eval *)
         | None -> (
           (* Try cross-section lookup *)
-          match global_lookup_with_section label_name with
+          match All_section_states.find_in_any_section all_sections label_name
+          with
           | None -> None (* Not found at all *)
           | Some (_, label_section) ->
             if Asm_section.equal label_section !current_section
@@ -160,7 +164,7 @@ let emit_directive state ~current_section ~global_lookup
               | Some (minus_symbol, minus_sym_offset) -> (
                 (* Find nearest symbol in TEXT for UNSIGNED *)
                 let text_state =
-                  Asm_section.Tbl.find section_tbl Asm_section.Text
+                  All_section_states.find_exn all_sections Asm_section.Text
                 in
                 (* Get target label offset in TEXT *)
                 match
@@ -204,7 +208,7 @@ let emit_directive state ~current_section ~global_lookup
           | Some _ -> None (* Same section symbol *)
           | None -> (
             (* Try cross-section lookup *)
-            match global_lookup_with_section name with
+            match All_section_states.find_in_any_section all_sections name with
             | None -> None (* Not found, will fall through to relocation *)
             | Some (_, sym_section) ->
               if Asm_section.equal sym_section !current_section
@@ -223,7 +227,7 @@ let emit_directive state ~current_section ~global_lookup
       | None -> (
         match try_cross_section_absolute () with
         | Some v -> Some v
-        | None -> eval_constant state ~global_lookup c)
+        | None -> eval_constant state ~all_sections c)
     in
     match value_opt with
     | Some value -> D.Directive.emit_int_le buf ~width_bytes value
@@ -253,11 +257,11 @@ let emit_directive state ~current_section ~global_lookup
         Buffer.add_char buf '\x00'
       done)
   | Sleb128 { constant; _ } -> (
-    match eval_constant state ~global_lookup constant with
+    match eval_constant state ~all_sections constant with
     | Some value -> D.Directive.emit_sleb128 buf value
     | None -> Misc.fatal_error "Cannot emit SLEB128 for external symbol")
   | Uleb128 { constant; _ } -> (
-    match eval_constant state ~global_lookup constant with
+    match eval_constant state ~all_sections constant with
     | Some value -> D.Directive.emit_uleb128 buf value
     | None -> Misc.fatal_error "Cannot emit ULEB128 for external symbol")
   (* Directives that don't emit data *)

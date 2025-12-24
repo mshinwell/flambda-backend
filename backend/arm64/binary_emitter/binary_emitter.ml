@@ -30,6 +30,7 @@ module Asm_section = Asm_targets.Asm_section
 module D = Asm_targets.Asm_directives
 
 (* Re-export sub-modules for the library interface *)
+module All_section_states = All_section_states
 module Relocation = Relocation
 module Section_state = Section_state
 
@@ -50,8 +51,10 @@ let add_instruction t i = enqueue t (Instruction i)
 
 let add_directive t d = enqueue t (Directive d)
 
-let iter emitter ~state_for_section ~on_insn ~on_directive =
-  let current_state = ref (state_for_section Asm_section.Text) in
+let iter emitter ~all_sections ~on_insn ~on_directive =
+  let current_state =
+    ref (All_section_states.get_or_create all_sections Asm_section.Text)
+  in
   List.iter
     (fun insn_or_directive ->
       match insn_or_directive with
@@ -63,7 +66,8 @@ let iter emitter ~state_for_section ~on_insn ~on_directive =
         (match d with
         | D.Directive.Section { names; _ } -> (
           match Asm_section.of_names names with
-          | Some section -> current_state := state_for_section section
+          | Some section ->
+            current_state := All_section_states.get_or_create all_sections section
           | None ->
             Misc.fatal_errorf "Unknown section: %s" (String.concat ", " names))
         | _ -> ());
@@ -76,8 +80,8 @@ let iter emitter ~state_for_section ~on_insn ~on_directive =
     (enqueued emitter)
 
 (* First pass: compute offsets of local symbol and label definitions *)
-let compute_label_offsets emitter ~state_for_section =
-  iter emitter ~state_for_section
+let compute_label_offsets emitter ~all_sections =
+  iter emitter ~all_sections
     ~on_insn:(fun _state _insn -> ())
     ~on_directive:(fun state directive ->
       match directive with
@@ -93,10 +97,9 @@ let compute_label_offsets emitter ~state_for_section =
         ())
 
 (* Second pass: emit machine code and data *)
-let emit_code_and_data emitter ~state_for_section ~global_lookup
-    ~global_lookup_with_section ~section_tbl =
+let emit_code_and_data emitter ~all_sections =
   let current_section = ref Asm_section.Text in
-  iter emitter ~state_for_section
+  iter emitter ~all_sections
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
       let encoded = Encode_instruction.encode_instruction state name operands in
       let buf = Section_state.buffer state in
@@ -112,51 +115,13 @@ let emit_code_and_data emitter ~state_for_section ~global_lookup
         (Char.chr
            (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
     ~on_directive:
-      (Encode_directive.emit_directive ~current_section ~global_lookup
-         ~global_lookup_with_section ~section_tbl)
+      (Encode_directive.emit_directive ~current_section ~all_sections)
 
 let emit emitter =
-  let section_tbl = Asm_section.Tbl.create 10 in
-  let state_for_section section =
-    match Asm_section.Tbl.find_opt section_tbl section with
-    | Some state -> state
-    | None ->
-      let state = Section_state.create () in
-      Asm_section.Tbl.add section_tbl section state;
-      state
-  in
-  compute_label_offsets emitter ~state_for_section;
-  (* Search all sections for a label/symbol. Returns the section containing it.
-     Cross-section references are handled via relocations. *)
-  let global_lookup_with_section name =
-    let result = ref None in
-    Asm_section.Tbl.iter
-      (fun section state ->
-        if Option.is_none !result
-        then
-          match Section_state.find_label_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section)
-          | None -> (
-            match Section_state.find_symbol_offset_in_bytes state name with
-            | Some offset -> result := Some (offset, section)
-            | None -> ()))
-      section_tbl;
-    !result
-  in
-  (* Global lookup returning offset within the section. For same-section
-     expressions this is all that's needed; cross-section expressions are
-     handled via relocations. *)
-  let global_lookup name =
-    match global_lookup_with_section name with
-    | Some (offset, _section) -> Some (Int64.of_int offset)
-    | None -> None
-  in
-  (* Reset offsets for second pass *)
-  Asm_section.Tbl.iter
-    (fun _section state -> Section_state.set_offset_in_bytes state 0)
-    section_tbl;
-  emit_code_and_data emitter ~state_for_section ~global_lookup
-    ~global_lookup_with_section ~section_tbl;
-  section_tbl
+  let all_sections = All_section_states.create () in
+  compute_label_offsets emitter ~all_sections;
+  All_section_states.reset_offsets all_sections;
+  emit_code_and_data emitter ~all_sections;
+  all_sections
 
 module For_jit = For_jit
