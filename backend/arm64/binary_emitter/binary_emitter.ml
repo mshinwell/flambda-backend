@@ -132,38 +132,14 @@ let emit emitter =
       state
   in
   compute_label_offsets emitter ~state_for_section;
-  (* Compute section sizes (final offset after first pass) and bases. Sections
-     are laid out contiguously: TEXT at 0, DATA after TEXT, etc. *)
-  let section_sizes = Asm_section.Tbl.create 10 in
-  Asm_section.Tbl.iter
-    (fun section state ->
-      Asm_section.Tbl.add section_sizes section
-        (Section_state.offset_in_bytes state))
-    section_tbl;
-  (* Compute section bases. We use a simple layout: TEXT at 0, DATA after TEXT,
-     other sections after DATA. The actual layout doesn't matter for correctness
-     as long as it's consistent - we just need relative positions to work
-     out. *)
-  let text_size =
-    Option.value ~default:0
-      (Asm_section.Tbl.find_opt section_sizes Asm_section.Text)
-  in
-  let data_size =
-    Option.value ~default:0
-      (Asm_section.Tbl.find_opt section_sizes Asm_section.Data)
-  in
-  let section_base section =
-    match section with
-    | Asm_section.Text -> 0
-    | Asm_section.Data -> text_size
-    | _ -> text_size + data_size (* Other sections after data *)
-  in
-  (* Global lookup for cross-section references. Returns (offset_in_section,
-     section, section_base) if found. For local labels (which start with L on
-     macOS), we can resolve cross-section references at assembly time because
-     the relative positions are fixed within the object file. For
-     global/external symbols in PIC mode, we return None to trigger the
-     relocation path. *)
+  (* For same-section relative expressions like (Label - This), the section
+     base cancels out, so we use 0 for all sections. Cross-section references
+     are handled via relocations (R_AARCH64_PREL32_PAIR for relative refs,
+     R_AARCH64_ABS64 for absolute refs) which the linker resolves. *)
+  let section_base (_ : Asm_section.t) = 0 in
+  (* Global lookup for cross-section references. Returns the section containing
+     the symbol if found. For global/external symbols in PIC mode, we return
+     None to trigger the relocation path. *)
   let global_lookup_with_section name =
     (* Search all sections for this label *)
     let result = ref None in
@@ -172,19 +148,21 @@ let emit emitter =
         if Option.is_none !result
         then
           match Section_state.find_label_offset_in_bytes state name with
-          | Some offset -> result := Some (offset, section, section_base section)
+          | Some offset -> result := Some (offset, section)
           | None -> (
             match Section_state.find_symbol_offset_in_bytes state name with
-            | Some offset ->
-              result := Some (offset, section, section_base section)
+            | Some offset -> result := Some (offset, section)
             | None -> ()))
       section_tbl;
     !result
   in
-  (* Simple global_lookup returning absolute offset for backward compat *)
+  (* Global lookup returning offset within the object file. Since section_base
+     is 0 for all sections, this is just the offset within the section. For
+     same-section expressions this works correctly; cross-section expressions
+     are handled via relocations. *)
   let global_lookup name =
     match global_lookup_with_section name with
-    | Some (offset, _section, base) -> Some (Int64.of_int (base + offset))
+    | Some (offset, _section) -> Some (Int64.of_int offset)
     | None -> None
   in
   (* Reset offsets for second pass *)

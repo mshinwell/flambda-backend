@@ -31,9 +31,9 @@ module L = Asm_targets.Asm_label
 module S = Asm_targets.Asm_symbol
 
 let eval_constant state ~current_section_base ~global_lookup const =
-  (* For cross-section references, we use "absolute" offsets (section_base +
-     offset_in_section) so that relative expressions like (Label - This) work
-     correctly even when Label and This are in different sections. *)
+  (* For same-section relative expressions like (Label - This), the section
+     base cancels out. Cross-section references are detected and handled via
+     relocations before this function is called. *)
   let this () =
     Int64.of_int (current_section_base + Section_state.offset_in_bytes state)
   in
@@ -50,9 +50,7 @@ let eval_constant state ~current_section_base ~global_lookup const =
     if !Clflags.dlcode && is_global_symbol
     then None
     else
-      (* First try current section, then use global lookup for cross-section
-         refs. For same-section lookups, add the current section base to get an
-         "absolute" offset. *)
+      (* First try current section, then fall back to global lookup. *)
       match Section_state.find_label_offset_in_bytes state name with
       | Some offset -> Some (Int64.of_int (current_section_base + offset))
       | None -> (
@@ -139,7 +137,7 @@ let emit_directive state ~current_section ~section_base ~global_lookup
             (* Try cross-section lookup *)
             match global_lookup_with_section label_name with
             | None -> None (* Not found at all *)
-            | Some (_, label_section, _) ->
+            | Some (_, label_section) ->
               if Asm_section.equal label_section !current_section
               then None (* Same section after all *)
               else if Asm_section.equal label_section Asm_section.Text
@@ -204,7 +202,7 @@ let emit_directive state ~current_section ~section_base ~global_lookup
             (* Try cross-section lookup *)
             match global_lookup_with_section name with
             | None -> None (* Not found, will fall through to relocation *)
-            | Some (_, sym_section, _) ->
+            | Some (_, sym_section) ->
               if Asm_section.equal sym_section !current_section
               then None (* Same section *)
               else (
