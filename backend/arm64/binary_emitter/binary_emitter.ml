@@ -93,15 +93,9 @@ let compute_label_offsets emitter ~state_for_section =
         ())
 
 (* Second pass: emit machine code and data *)
-let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
+let emit_code_and_data emitter ~state_for_section ~global_lookup
     ~global_lookup_with_section ~section_tbl =
-  (* Track current section to get the right base offset *)
   let current_section = ref Asm_section.Text in
-  (* For cross-section (Label - This) expressions, we need to emit a relocation
-     pair (SUBTRACTOR + UNSIGNED) and store the addend. The linker will compute:
-     final_value = plus_symbol_addr - minus_symbol_addr + addend We create
-     symbols at the exact positions needed so the addend is just the
-     offset_upper from the original expression. *)
   iter emitter ~state_for_section
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
       let encoded = Encode_instruction.encode_instruction state name operands in
@@ -118,8 +112,8 @@ let emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
         (Char.chr
            (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
     ~on_directive:
-      (Encode_directive.emit_directive ~current_section ~section_base
-         ~global_lookup ~global_lookup_with_section ~section_tbl)
+      (Encode_directive.emit_directive ~current_section ~global_lookup
+         ~global_lookup_with_section ~section_tbl)
 
 let emit emitter =
   let section_tbl = Asm_section.Tbl.create 10 in
@@ -132,16 +126,9 @@ let emit emitter =
       state
   in
   compute_label_offsets emitter ~state_for_section;
-  (* For same-section relative expressions like (Label - This), the section
-     base cancels out, so we use 0 for all sections. Cross-section references
-     are handled via relocations (R_AARCH64_PREL32_PAIR for relative refs,
-     R_AARCH64_ABS64 for absolute refs) which the linker resolves. *)
-  let section_base (_ : Asm_section.t) = 0 in
-  (* Global lookup for cross-section references. Returns the section containing
-     the symbol if found. For global/external symbols in PIC mode, we return
-     None to trigger the relocation path. *)
+  (* Search all sections for a label/symbol. Returns the section containing it.
+     Cross-section references are handled via relocations. *)
   let global_lookup_with_section name =
-    (* Search all sections for this label *)
     let result = ref None in
     Asm_section.Tbl.iter
       (fun section state ->
@@ -156,10 +143,9 @@ let emit emitter =
       section_tbl;
     !result
   in
-  (* Global lookup returning offset within the object file. Since section_base
-     is 0 for all sections, this is just the offset within the section. For
-     same-section expressions this works correctly; cross-section expressions
-     are handled via relocations. *)
+  (* Global lookup returning offset within the section. For same-section
+     expressions this is all that's needed; cross-section expressions are
+     handled via relocations. *)
   let global_lookup name =
     match global_lookup_with_section name with
     | Some (offset, _section) -> Some (Int64.of_int offset)
@@ -169,7 +155,7 @@ let emit emitter =
   Asm_section.Tbl.iter
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
     section_tbl;
-  emit_code_and_data emitter ~state_for_section ~section_base ~global_lookup
+  emit_code_and_data emitter ~state_for_section ~global_lookup
     ~global_lookup_with_section ~section_tbl;
   section_tbl
 
