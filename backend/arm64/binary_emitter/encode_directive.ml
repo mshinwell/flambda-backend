@@ -63,7 +63,7 @@ let emit_directive state ~current_section ~all_sections
     (directive : D.Directive.t) =
   let buf = Section_state.buffer state in
   (* Update current section when we see a Section directive *)
-  (match directive with
+  (match[@warning "-4"] directive with
   | D.Directive.Section { names; _ } -> (
     match Asm_section.of_names names with
     | Some section -> current_section := section
@@ -112,7 +112,7 @@ let emit_directive state ~current_section ~all_sections
     let try_cross_section_label_rel () =
       (* Pattern: Add(Sub(Named_thing label, This), offset) or Sub(Named_thing
          label, This) *)
-      let extract_label_this_offset = function
+      let extract_label_this_offset = function[@warning "-4"]
         | Const.Add
             ( Const.Sub (Const.Named_thing name, Const.This),
               Const.Signed_int offset ) ->
@@ -199,7 +199,7 @@ let emit_directive state ~current_section ~all_sections
     (* Check for absolute cross-section symbol reference. For .8byte symbol
        where symbol is in a different section, we must emit a relocation. *)
     let try_cross_section_absolute () =
-      match c with
+      match[@warning "-4"] c with
       | Const.Named_thing name when width_bytes = 8 -> (
         (* Check if symbol is in a different section *)
         match Section_state.find_label_offset_in_bytes state name with

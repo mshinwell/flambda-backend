@@ -62,7 +62,7 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
         let offset = Section_state.offset_in_bytes !current_state in
         Section_state.set_offset_in_bytes !current_state (offset + 4)
       | Directive d ->
-        (match d with
+        (match[@warning "-4"] d with
         | Section { names; _ } -> (
           match Asm_section.of_names names with
           | Some section ->

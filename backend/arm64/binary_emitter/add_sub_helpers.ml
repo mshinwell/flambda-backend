@@ -34,7 +34,13 @@ let decode_shift_kind_int : type a. a Operand.Shift.Kind.t -> int =
   match kind with Operand.Shift.Kind.LSL -> 0b00 | LSR -> 0b01 | ASR -> 0b10
 
 let decode_shift_amount_six : type a. a Operand.Imm.t -> int =
- fun amount -> match amount with Six n -> n | _ -> assert false
+ fun amount ->
+  match amount with
+  | Six n -> n
+  | Twelve _ | Seven_signed_scaled _ | Nine_signed_unscaled _
+  | Twelve_unsigned_scaled _ | Sixteen_unsigned _ | Sym _ | Float _
+  | Nativeint _ ->
+    Misc.fatal_error "decode_shift_amount_six: expected Six immediate"
 
 (* Check if a register is SP (stack pointer) by examining its name *)
 let is_sp_reg : type a. a Reg.t -> bool =
@@ -42,7 +48,8 @@ let is_sp_reg : type a. a Reg.t -> bool =
   match r.reg_name with
   | GP GP_reg_name.SP -> true
   | GP GP_reg_name.WSP -> true
-  | _ -> false
+  | GP (W | X | WZR | XZR | LR | FP) -> false
+  | Neon _ -> false
 
 let encode_add_sub_shifted_register ~sf ~op ~s ~shift ~rm ~imm6 ~rn ~rd =
   let open Int32 in

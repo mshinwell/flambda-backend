@@ -29,7 +29,11 @@ open Arm64_ast.Ast
 
 (* Helper to extract ftype from scalar precision: S=0, D=1 *)
 let scalar_ftype (type a) (s : [`Scalar of a] Neon_reg_name.t) : int =
-  match s with Scalar S -> 0 | Scalar D -> 1 | _ -> assert false
+  match s with
+  | Scalar S -> 0
+  | Scalar D -> 1
+  | Scalar B | Scalar H | Scalar Q ->
+    Misc.fatal_error "scalar_ftype: unsupported scalar precision"
 
 (* Floating-point data-processing (1 source) - C4.1.95.34
 

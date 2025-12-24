@@ -222,7 +222,9 @@ let encode_instruction :
       | Cond.EQ -> 1, 0b10001
       | Cond.HI -> 1, 0b00110
       | Cond.CS -> 1, 0b00111 (* HS/CS: unsigned greater or equal *)
-      | _ -> Misc.fatal_error "Unsupported CM_register condition"
+      | Cond.NE | Cond.CC | Cond.MI | Cond.PL | Cond.VS | Cond.VC | Cond.LS
+      | Cond.LT | Cond.LE ->
+        Misc.fatal_error "Unsupported CM_register condition"
     in
     Simd_helpers.encode_simd_three_same ~q ~u ~size ~rm ~opcode ~rn ~rd
   | ( Pair
@@ -247,7 +249,9 @@ let encode_instruction :
       | Cond.LT -> 0, 0b01010
       | Cond.GE -> 1, 0b01000
       | Cond.LE -> 1, 0b01001
-      | _ -> Misc.fatal_error "Unsupported CM_zero condition"
+      | Cond.NE | Cond.CS | Cond.CC | Cond.MI | Cond.PL | Cond.VS | Cond.VC
+      | Cond.HI | Cond.LS ->
+        Misc.fatal_error "Unsupported CM_zero condition"
     in
     Simd_helpers.encode_simd_two_reg_misc ~q ~u ~size ~opcode ~rn ~rd
   | Pair (Reg rd, Reg rn), CNT ->
@@ -369,7 +373,9 @@ let encode_instruction :
       | Float_cond.EQ -> 0, 0
       | Float_cond.GE -> 1, 0
       | Float_cond.GT -> 1, 1
-      | _ -> Misc.fatal_error "Unsupported FCM_register condition"
+      | Float_cond.LE | Float_cond.LT | Float_cond.NE | Float_cond.CC
+      | Float_cond.CS | Float_cond.LS | Float_cond.HI ->
+        Misc.fatal_error "Unsupported FCM_register condition"
     in
     let size = (size_hi lsl 1) lor sz in
     Simd_helpers.encode_simd_three_same ~q ~u ~size ~rm ~opcode:0b11100 ~rn ~rd
@@ -395,7 +401,9 @@ let encode_instruction :
       | Float_cond.LT -> 0, 0b01110
       | Float_cond.GE -> 1, 0b01100
       | Float_cond.LE -> 1, 0b01101
-      | _ -> Misc.fatal_error "Unsupported FCM_zero condition"
+      | Float_cond.NE | Float_cond.CC | Float_cond.CS | Float_cond.LS
+      | Float_cond.HI ->
+        Misc.fatal_error "Unsupported FCM_zero condition"
     in
     let size = (1 lsl 1) lor sz in
     (* size=1x *)
@@ -443,7 +451,8 @@ let encode_instruction :
     let size =
       match vec with
       | V2D -> 0 (* 32-bit source -> 64-bit dest *)
-      | _ -> Misc.fatal_error "FCVTL_vector: unsupported destination type"
+      | V8B | V16B | V4H | V8H | V2S | V4S | V1D ->
+        Misc.fatal_error "FCVTL_vector: unsupported destination type"
     in
     (* Q=0 for lower half (FCVTL), Q=1 for upper half (FCVTL2) *)
     Simd_helpers.encode_simd_two_reg_misc ~q:0 ~u:0 ~size ~opcode:0b10111 ~rn
@@ -456,7 +465,8 @@ let encode_instruction :
     let size =
       match vec with
       | V2S -> 0 (* 64-bit source -> 32-bit dest *)
-      | _ -> Misc.fatal_error "FCVTN_vector: unsupported destination type"
+      | V8B | V16B | V4H | V8H | V4S | V1D | V2D ->
+        Misc.fatal_error "FCVTN_vector: unsupported destination type"
     in
     (* Q=0 for lower half (FCVTN), Q=1 for upper half (FCVTN2) *)
     Simd_helpers.encode_simd_two_reg_misc ~q:0 ~u:0 ~size ~opcode:0b10110 ~rn
