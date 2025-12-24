@@ -25,7 +25,7 @@ let out_of_text_error ~got_or_plt ~section_name =
 type table_lookup = string -> Address.t option
 
 let one (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~symbols ~got_lookup ~plt_lookup ~section_name (binary_section : a addressed) (reloc : r) =
@@ -66,7 +66,7 @@ let one (type a r)
   Ok ()
 
 let all (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~symbols ~got_lookup ~plt_lookup ~section_name (binary_section : a addressed) =

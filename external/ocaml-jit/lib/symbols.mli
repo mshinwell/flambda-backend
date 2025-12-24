@@ -22,7 +22,7 @@ type t
 val empty : t
 
 val from_binary_section :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   'a addressed ->

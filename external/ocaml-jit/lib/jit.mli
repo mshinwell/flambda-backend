@@ -23,7 +23,7 @@ type evaluation_outcome =
 (** Load and run assembled binary sections.
     This is the main generic JIT entry point that works with any architecture. *)
 val jit_load :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   phrase_name:string ->

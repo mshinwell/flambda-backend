@@ -17,7 +17,7 @@
 open Import
 
 val save_binary_sections :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   phrase_name:string ->
@@ -25,7 +25,7 @@ val save_binary_sections :
   unit
 
 val save_text_section :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   phrase_name:string ->
@@ -33,7 +33,7 @@ val save_text_section :
   unit
 
 val print_binary_section_map :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   'a String.Map.t ->

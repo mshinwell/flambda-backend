@@ -26,7 +26,7 @@ val name : string
 (** Name of the text section: [".text"] *)
 
 val from_binary_section :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   'a ->
@@ -37,7 +37,7 @@ val from_binary_section :
     to properly allocate memory pages *)
 
 val in_memory_size :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   ('a, _) t ->
@@ -45,7 +45,7 @@ val in_memory_size :
 (** Returns the size (in bytes) the section + GOT and PLT will take up in the memory *)
 
 val relocate :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   symbols:Symbols.t ->
@@ -55,7 +55,7 @@ val relocate :
     The returned section can be written to memory and run. *)
 
 val content :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   ('a, relocated) t ->
@@ -63,7 +63,7 @@ val content :
 (** Return the text section along with the GOT and PLT tables, in binary form as a string *)
 
 val symbols :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   ('a, _) t addressed ->

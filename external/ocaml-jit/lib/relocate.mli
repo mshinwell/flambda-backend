@@ -22,7 +22,7 @@ type table_lookup = string -> Address.t option
 (** Apply all relocations to the given binary section.
     Uses the unified Binary_emitter interface. *)
 val all :
-  (module Binary_emitter.S
+  (module Binary_emitter_intf.S
      with type Assembled_section.t = 'a
       and type Relocation.t = 'r) ->
   symbols:Symbols.t ->

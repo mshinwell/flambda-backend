@@ -22,7 +22,7 @@ let write_bin_file ~filename content =
   close_out oc
 
 let save_binary_sections (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~phrase_name binary_section_map =
@@ -35,7 +35,7 @@ let save_binary_sections (type a r)
         write_bin_file ~filename (E.Assembled_section.contents buffer.value))
 
 let save_text_section (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~phrase_name { address; value = text_section } =
@@ -47,7 +47,7 @@ let save_text_section (type a r)
     write_bin_file ~filename (Jit_text_section.content (module E) text_section)
 
 let print_binary_section_map (type a r)
-    (module _ : Binary_emitter.S
+    (module _ : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (_binary_section_map : a String.Map.t) = ()

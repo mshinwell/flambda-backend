@@ -45,7 +45,7 @@ let set_protection ~mprotect ~name address size =
 
 (** Extract text section from a map of binary sections *)
 let extract_text_section (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (binary_section_map : a String.Map.t) =
@@ -59,7 +59,7 @@ let extract_text_section (type a r)
 
 (** Allocate memory for all sections *)
 let alloc_all (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     jit_text_section
@@ -94,7 +94,7 @@ let alloc_all (type a r)
 
 (** Build symbol map from non-text sections *)
 let local_symbol_map (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (binary_section_map : a addressed String.Map.t) =
@@ -105,7 +105,7 @@ let local_symbol_map (type a r)
 
 (** Relocate text section *)
 let relocate_text (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~symbols text_section =
@@ -118,7 +118,7 @@ let relocate_text (type a r)
 
 (** Relocate non-text sections *)
 let relocate_other (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~symbols addressed_sections =
@@ -137,7 +137,7 @@ let relocate_other (type a r)
 
 (** Load text section into memory *)
 let load_text (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     { address; value = text_section } =
@@ -149,7 +149,7 @@ let load_text (type a r)
 
 (** Load non-text sections into memory *)
 let load_sections (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     addressed_sections =
@@ -204,7 +204,7 @@ let jit_run entry_points =
 (** Load and run assembled binary sections.
     This is the main generic JIT entry point that works with any architecture. *)
 let jit_load (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~phrase_name

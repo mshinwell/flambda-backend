@@ -29,7 +29,7 @@ type _ t = {
 }
 
 let from_binary_section (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~name ~entry_size ~is_relevant_reloc ~write_entry (section : a) =

@@ -22,7 +22,7 @@ type relocated = Bin_table.filled
 
 let name = ".text"
 
-(* Generic text section that works with any Binary_emitter.S *)
+(* Generic text section that works with any Binary_emitter_intf.S *)
 type ('section, 'reloc_state) t = {
   binary_section : 'section;
   got : 'reloc_state Bin_table.t;
@@ -30,7 +30,7 @@ type ('section, 'reloc_state) t = {
 }
 
 let from_binary_section (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (section : a) : (a, need_reloc) t =
@@ -50,7 +50,7 @@ let from_binary_section (type a r)
   { binary_section = section; got; plt }
 
 let in_memory_size (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (t : (a, _) t) =
@@ -59,7 +59,7 @@ let in_memory_size (type a r)
   + Bin_table.in_memory_size t.plt
 
 let relocate (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     ~symbols (t : (a, need_reloc) t addressed) =
@@ -87,7 +87,7 @@ let relocate (type a r)
   { t with value }
 
 let content (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     (t : (a, relocated) t) =
@@ -96,7 +96,7 @@ let content (type a r)
   ^ Bin_table.content t.plt
 
 let symbols (type a r)
-    (module E : Binary_emitter.S
+    (module E : Binary_emitter_intf.S
       with type Assembled_section.t = a
        and type Relocation.t = r)
     { address; value = t } =
