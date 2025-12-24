@@ -104,16 +104,14 @@ let emit_code_and_data emitter ~all_sections =
       let encoded = Encode_instruction.encode_instruction state name operands in
       let buf = Section_state.buffer state in
       (* Emit as little-endian 32-bit *)
-      Buffer.add_char buf (Char.chr (Int32.to_int encoded land 0xff));
-      Buffer.add_char buf
-        (Char.chr
-           (Int32.to_int (Int32.shift_right_logical encoded 8) land 0xff));
-      Buffer.add_char buf
-        (Char.chr
-           (Int32.to_int (Int32.shift_right_logical encoded 16) land 0xff));
-      Buffer.add_char buf
-        (Char.chr
-           (Int32.to_int (Int32.shift_right_logical encoded 24) land 0xff)))
+      let emit shift =
+        Int32.to_int (Int32.shift_right_logical encoded shift) land 0xff
+        |> Char.chr |> Buffer.add_char buf
+      in
+      emit 0;
+      emit 8;
+      emit 16;
+      emit 24)
     ~on_directive:
       (Encode_directive.emit_directive ~current_section ~all_sections)
 
