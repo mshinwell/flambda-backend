@@ -84,10 +84,19 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
           | Some section ->
             current_state
               := All_section_states.get_or_create all_sections section
-          | None ->
-            (* Skip unknown sections like .note.GNU-stack (Linux stack
-               non-executable marker) - they contain no data we need *)
-            ())
+          | None -> (
+            (* Handle function sections (.text.caml.<funcname>) individually.
+               Each function section is tracked separately so we can compare
+               them against the assembler output during verification. *)
+            match names with
+            | [name] when String.length name > 5
+                       && String.sub name 0 5 = ".text" ->
+              current_state
+                := All_section_states.get_or_create_individual all_sections name
+            | _ ->
+              (* Skip unknown sections like .note.GNU-stack (Linux stack
+                 non-executable marker) - they contain no data we need *)
+              ()))
         | _ -> ());
         on_directive !current_state d;
         let offset_in_bytes = Section_state.offset_in_bytes !current_state in

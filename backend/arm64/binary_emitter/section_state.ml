@@ -62,6 +62,9 @@ let add_relocation_at_current_offset t ~symbol_name:_ ~reloc_kind =
        }
        :: t.relocations
 
+let add_relocation t (reloc : Relocation.t) =
+  t.relocations <- reloc :: t.relocations
+
 let define_symbol t name =
   Hashtbl.replace t.symbol_offset_tbl name t.offset_in_bytes
 

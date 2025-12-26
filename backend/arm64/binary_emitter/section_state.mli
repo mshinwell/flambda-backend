@@ -44,6 +44,8 @@ val set_offset_in_bytes : t -> int -> unit
 val add_relocation_at_current_offset :
   t -> symbol_name:string -> reloc_kind:Relocation.Kind.t -> unit
 
+val add_relocation : t -> Relocation.t -> unit
+
 val define_symbol : t -> string -> unit
 
 val define_label : t -> string -> unit

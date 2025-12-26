@@ -3019,12 +3019,61 @@ let end_assembly () =
     let section_tbl =
       Arm64_binary_emitter.Binary_emitter.emit ~for_jit:true emitter
     in
-    (* Convert to list of (name, section) pairs *)
+    (* Convert to list of (name, section) pairs. Include both standard
+       sections (by Asm_section.t) and individual sections (by name string,
+       for function sections like .text.caml.<funcname>). *)
     let sections =
-      Arm64_binary_emitter.All_section_states.fold section_tbl ~init:[]
-        ~f:(fun section state acc ->
-          let name = Asm_targets.Asm_section.to_string section in
-          (name, state) :: acc)
+      let from_standard =
+        Arm64_binary_emitter.All_section_states.fold section_tbl ~init:[]
+          ~f:(fun section state acc ->
+            let name = Asm_targets.Asm_section.to_string section in
+            (name, state) :: acc)
+      in
+      let from_individual =
+        Arm64_binary_emitter.All_section_states.fold_individual section_tbl
+          ~init:[] ~f:(fun name state acc -> (name, state) :: acc)
+      in
+      from_standard @ from_individual
+    in
+    (* For JIT, we need to aggregate all .text.* sections into a single .text
+       section because the JIT loader expects exactly one .text section. *)
+    let sections_for_jit =
+      let is_text_section sec_name =
+        let len = Stdlib.String.length sec_name in
+        len >= 5 && String.equal (Stdlib.String.sub sec_name 0 5) ".text"
+      in
+      let text_sections, other_sections =
+        List.partition (fun (sec_name, _) -> is_text_section sec_name) sections
+      in
+      match text_sections with
+      | [] -> sections
+      | [(sec_name, _)] when String.equal sec_name ".text" -> sections
+      | _ ->
+        (* Aggregate all text sections into one .text section. Sort by name
+           for deterministic ordering. *)
+        let sorted_text =
+          List.sort (fun (a, _) (b, _) -> String.compare a b) text_sections
+        in
+        let module SS = Arm64_binary_emitter.Binary_emitter.Section_state in
+        let aggregated = SS.create () in
+        List.iter
+          (fun (_name, state) ->
+            let content = SS.contents state in
+            let base_offset = Buffer.length (SS.buffer aggregated) in
+            Buffer.add_string (SS.buffer aggregated) content;
+            (* Copy relocations with adjusted offsets *)
+            List.iter
+              (fun (reloc : Arm64_binary_emitter.Relocation.t) ->
+                let adjusted =
+                  { reloc with
+                    offset_from_section_beginning =
+                      reloc.offset_from_section_beginning + base_offset
+                  }
+                in
+                SS.add_relocation aggregated adjusted)
+              (SS.relocations state))
+          sorted_text;
+        (".text", aggregated) :: other_sections
     in
     (* Save sections to files if save_binary_sections is enabled *)
     if !Oxcaml_flags.save_binary_sections
@@ -3075,6 +3124,7 @@ let end_assembly () =
     | None -> ()
     | Some hook ->
       (* The hook expects (string * assembled_section) list and returns a file
-         writer function. We ignore the file writer for JIT. *)
-      let _file_writer = hook sections in
+         writer function. We ignore the file writer for JIT. Use the
+         aggregated sections where all .text.* are merged into .text. *)
+      let _file_writer = hook sections_for_jit in
       ())

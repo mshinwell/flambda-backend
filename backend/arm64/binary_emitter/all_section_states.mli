@@ -46,6 +46,29 @@ val iter : t -> f:(Asm_section.t -> Section_state.t -> unit) -> unit
 val fold :
   t -> init:'a -> f:(Asm_section.t -> Section_state.t -> 'a -> 'a) -> 'a
 
+(** Individual sections: for sections tracked by their exact name string rather
+    than the [Asm_section.t] enum. This is needed for function sections where
+    each function gets its own [.text.caml.<funcname>] section. These sections
+    are tracked separately so we can compare them individually against the
+    assembler output during verification. *)
+
+val get_or_create_individual : t -> string -> Section_state.t
+
+val find_individual : t -> string -> Section_state.t option
+
+val iter_individual : t -> f:(string -> Section_state.t -> unit) -> unit
+
+val fold_individual :
+  t -> init:'a -> f:(string -> Section_state.t -> 'a -> 'a) -> 'a
+
+val find_in_any_individual_section : t -> string -> (int * string) option
+
+(** Search all sections for a label or symbol. Returns (offset, section,
+    section_state) if found. This is needed when the caller needs to access
+    the actual state where the label was found. *)
+val find_in_any_section_with_state :
+  t -> string -> (int * Asm_section.t * Section_state.t) option
+
 val find_in_any_section : t -> string -> (int * Asm_section.t) option
 
 val reset_offsets : t -> unit

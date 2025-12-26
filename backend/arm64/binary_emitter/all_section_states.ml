@@ -32,12 +32,19 @@ module D = Asm_targets.Asm_directives
 
 type t =
   { sections : Section_state.t Asm_section.Tbl.t;
+    (* Individual sections track sections by their exact name string rather than
+       the Asm_section.t enum. This is needed for function sections where each
+       function gets its own .text.caml.<funcname> section. These sections are
+       tracked separately so we can compare them individually against the
+       assembler output during verification. *)
+    individual_sections : (string, Section_state.t) Hashtbl.t;
     for_jit : bool;
     direct_assignments : (string, D.Directive.Constant.t) Hashtbl.t
   }
 
 let create ~for_jit =
   { sections = Asm_section.Tbl.create 10;
+    individual_sections = Hashtbl.create 16;
     for_jit;
     direct_assignments = Hashtbl.create 16
   }
@@ -60,6 +67,87 @@ let iter t ~f = Asm_section.Tbl.iter f t.sections
 
 let fold t ~init ~f = Asm_section.Tbl.fold f t.sections init
 
+(* Individual sections: for sections tracked by their exact name string, such
+   as function sections (.text.caml.<funcname>). *)
+
+let get_or_create_individual t name =
+  match Hashtbl.find_opt t.individual_sections name with
+  | Some state -> state
+  | None ->
+    let state = Section_state.create () in
+    Hashtbl.add t.individual_sections name state;
+    state
+
+let find_individual t name = Hashtbl.find_opt t.individual_sections name
+
+let iter_individual t ~f = Hashtbl.iter f t.individual_sections
+
+let fold_individual t ~init ~f = Hashtbl.fold f t.individual_sections init
+
+(* Search individual sections for a label or symbol. Returns (offset,
+   section_name) if found. *)
+let find_in_any_individual_section t name =
+  let result = ref None in
+  Hashtbl.iter
+    (fun section_name state ->
+      if Option.is_none !result
+      then
+        match Section_state.find_label_offset_in_bytes state name with
+        | Some offset -> result := Some (offset, section_name)
+        | None -> (
+          match Section_state.find_symbol_offset_in_bytes state name with
+          | Some offset -> result := Some (offset, section_name)
+          | None -> ()))
+    t.individual_sections;
+  !result
+
+(* Search all sections for a label or symbol. Returns (offset, section,
+   section_state) if found. This is needed when the caller needs to access
+   the actual state where the label was found. *)
+let find_in_any_section_with_state t name =
+  let result = ref None in
+  Asm_section.Tbl.iter
+    (fun section state ->
+      if Option.is_none !result
+      then
+        match Section_state.find_label_offset_in_bytes state name with
+        | Some offset -> result := Some (offset, section, state)
+        | None -> (
+          match Section_state.find_symbol_offset_in_bytes state name with
+          | Some offset -> result := Some (offset, section, state)
+          | None -> ()))
+    t.sections;
+  (* If not found in standard sections, search individual sections. *)
+  (if Option.is_none !result
+   then
+     Hashtbl.iter
+       (fun section_name state ->
+         if Option.is_none !result
+         then
+           match Section_state.find_label_offset_in_bytes state name with
+           | Some offset ->
+             (* Map .text.* to Text for relocation type purposes *)
+             let section =
+               if String.length section_name > 5
+                  && String.sub section_name 0 5 = ".text"
+               then Asm_section.Text
+               else Asm_section.Data
+             in
+             result := Some (offset, section, state)
+           | None -> (
+             match Section_state.find_symbol_offset_in_bytes state name with
+             | Some offset ->
+               let section =
+                 if String.length section_name > 5
+                    && String.sub section_name 0 5 = ".text"
+                 then Asm_section.Text
+                 else Asm_section.Data
+               in
+               result := Some (offset, section, state)
+             | None -> ()))
+       t.individual_sections);
+  !result
+
 (* Search all sections for a label or symbol. Returns (offset, section) if
    found. Cross-section references are handled via relocations. *)
 let find_in_any_section t name =
@@ -75,13 +163,32 @@ let find_in_any_section t name =
           | Some offset -> result := Some (offset, section)
           | None -> ()))
     t.sections;
+  (* If not found in standard sections, search individual sections. For
+     individual text sections like .text.caml.funcname, treat them as Text
+     for relocation purposes. *)
+  (if Option.is_none !result
+   then
+     match find_in_any_individual_section t name with
+     | Some (offset, section_name) ->
+       (* Treat .text.* individual sections as Text for relocation checking *)
+       let section =
+         if String.length section_name > 5
+            && String.sub section_name 0 5 = ".text"
+         then Asm_section.Text
+         else Asm_section.Data
+       in
+       result := Some (offset, section)
+     | None -> ());
   !result
 
 (* Reset all section offsets to 0 (for second pass). *)
 let reset_offsets t =
   Asm_section.Tbl.iter
     (fun _section state -> Section_state.set_offset_in_bytes state 0)
-    t.sections
+    t.sections;
+  Hashtbl.iter
+    (fun _name state -> Section_state.set_offset_in_bytes state 0)
+    t.individual_sections
 
 (* Direct assignments (e.g., .set temp0, L100 - L101) *)
 let add_direct_assignment t name expr =

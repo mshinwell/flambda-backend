@@ -150,6 +150,54 @@ let read_binary_relocations binary_sections_dir section_name =
     List.rev !relocs
   end
 
+(* Convert saved section filename back to original section name.
+   e.g., "section_text.caml.foo.bin" -> ".text.caml.foo" *)
+let section_name_of_filename filename =
+  if String.length filename > 12
+     && String.sub filename 0 8 = "section_"
+     && String.sub filename (String.length filename - 4) 4 = ".bin"
+  then
+    let name_part = String.sub filename 8 (String.length filename - 12) in
+    "." ^ name_part
+  else
+    filename
+
+(* List all text section files in binary-sections directory.
+   Returns list of (section_name, content) pairs. *)
+let list_binary_text_sections binary_sections_dir =
+  if not (Sys.file_exists binary_sections_dir) then []
+  else if not (Sys.is_directory binary_sections_dir) then []
+  else
+    let files = Sys.readdir binary_sections_dir in
+    Array.to_list files
+    |> List.filter (fun f ->
+         String.length f > 12
+         && String.sub f 0 12 = "section_text"
+         && String.sub f (String.length f - 4) 4 = ".bin")
+    |> List.map (fun f ->
+         let section_name = section_name_of_filename f in
+         let content = read_file_bytes (Filename.concat binary_sections_dir f) in
+         (section_name, content))
+
+(* List all text section relocation files in binary-sections directory.
+   Returns list of (section_name, relocations) pairs. *)
+let list_binary_text_relocations binary_sections_dir =
+  if not (Sys.file_exists binary_sections_dir) then []
+  else if not (Sys.is_directory binary_sections_dir) then []
+  else
+    let files = Sys.readdir binary_sections_dir in
+    Array.to_list files
+    |> List.filter (fun f ->
+         String.length f > 15
+         && String.sub f 0 12 = "section_text"
+         && String.sub f (String.length f - 7) 7 = ".relocs")
+    |> List.map (fun f ->
+         (* Convert section_text.caml.foo.relocs -> .text.caml.foo *)
+         let name_part = String.sub f 8 (String.length f - 15) in
+         let section_name = "." ^ name_part in
+         let relocs = read_binary_relocations binary_sections_dir name_part in
+         (section_name, relocs))
+
 module Owee_buf = Compiler_owee.Owee_buf
 module Owee_elf = Compiler_owee.Owee_elf
 module Owee_macho = Compiler_owee.Owee_macho
@@ -286,15 +334,160 @@ module Elf = struct
       let size = Owee_buf.size body in
       Some (Owee_buf.Read.fixed_string cursor size)
 
+  (* Check if a section name is a text section (includes .text.caml.* for
+     function sections) *)
+  let is_text_section_name name =
+    String.length name >= 5 && String.sub name 0 5 = ".text"
+
+  (* Extract all individual text sections as a list of (name, content) pairs.
+     When function sections are enabled, code is split into .text.caml.<funcname>
+     sections. We compare each individual section to ensure correctness. *)
+  let extract_individual_text_sections buf sections =
+    Array.to_list sections
+    |> List.filter (fun sec -> is_text_section_name sec.Owee_elf.sh_name_str)
+    |> List.map (fun sec ->
+         let body = Owee_elf.section_body buf sec in
+         let cursor = Owee_buf.cursor body in
+         let size = Owee_buf.size body in
+         (sec.Owee_elf.sh_name_str, Owee_buf.Read.fixed_string cursor size))
+
   let extract_sections buf sections =
-    let text = extract_section buf sections ~section_name:".text" in
     (* Try .data first, then .rodata *)
     let data =
       match extract_section buf sections ~section_name:".data" with
       | Some _ as d -> d
       | None -> extract_section buf sections ~section_name:".rodata"
     in
+    (* For text, if there's a single .text section, return it; otherwise
+       return None and let the caller use individual sections *)
+    let text_sections = extract_individual_text_sections buf sections in
+    let text =
+      match text_sections with
+      | [(".text", content)] -> Some content
+      | _ -> None  (* Multiple sections or function sections *)
+    in
     text, data
+
+  (* Get all individual text sections from ELF *)
+  let get_individual_text_sections buf sections =
+    extract_individual_text_sections buf sections
+
+  (* ELF relocation entry size for RELA (with addend): 24 bytes *)
+  let rela_entry_size = 24
+
+  (* Extract symbol index from r_info (upper 32 bits) *)
+  let sym_index_of_r_info r_info = Int64.to_int (Int64.shift_right_logical r_info 32)
+
+  (* Build a symbol name table from .symtab and .strtab sections *)
+  let build_symbol_names buf sections =
+    match Owee_elf.find_section sections ".symtab",
+          Owee_elf.find_section sections ".strtab" with
+    | Some symtab_sec, Some strtab_sec ->
+      let strtab_body = Owee_elf.section_body buf strtab_sec in
+      let symtab_body = Owee_elf.section_body buf symtab_sec in
+      let sym_entry_size = 24 in (* ELF64 symbol entry size *)
+      let num_symbols = Owee_buf.size symtab_body / sym_entry_size in
+      let names = Array.make num_symbols "" in
+      for i = 0 to num_symbols - 1 do
+        let cursor = Owee_buf.cursor symtab_body ~at:(i * sym_entry_size) in
+        let st_name = Owee_buf.Read.u32 cursor in
+        (* Get name from string table *)
+        let name_cursor = Owee_buf.cursor strtab_body ~at:st_name in
+        let name = match Owee_buf.Read.zero_string name_cursor () with
+          | Some s -> s
+          | None -> ""
+        in
+        names.(i) <- name
+      done;
+      Some names
+    | _ -> None
+
+  (* Extract relocations from a RELA section *)
+  let extract_rela_section buf sections symbol_names ~rela_section_name =
+    match Owee_elf.find_section sections rela_section_name with
+    | None -> []
+    | Some rela_sec ->
+      let rela_body = Owee_elf.section_body buf rela_sec in
+      let num_entries = Owee_buf.size rela_body / rela_entry_size in
+      let relocs = ref [] in
+      for i = 0 to num_entries - 1 do
+        let cursor = Owee_buf.cursor rela_body ~at:(i * rela_entry_size) in
+        let r_offset = Owee_buf.Read.u64 cursor in
+        let r_info = Owee_buf.Read.u64 cursor in
+        (* r_addend not needed for symbol comparison *)
+        let sym_idx = sym_index_of_r_info r_info in
+        let symbol_name =
+          match symbol_names with
+          | Some names when sym_idx < Array.length names -> names.(sym_idx)
+          | _ -> Printf.sprintf "sym_%d" sym_idx
+        in
+        (* Only include non-empty symbol names (index 0 is usually empty) *)
+        if symbol_name <> "" then
+          relocs := { be_offset = Int64.to_int r_offset;
+                      be_symbol = symbol_name } :: !relocs
+      done;
+      (* Sort by offset for comparison *)
+      List.sort (fun a b -> compare a.be_offset b.be_offset) !relocs
+
+  (* Extract relocations from a RELA section with an offset adjustment *)
+  let extract_rela_section_with_offset buf rela_sec symbol_names ~base_offset =
+    let rela_body = Owee_elf.section_body buf rela_sec in
+    let num_entries = Owee_buf.size rela_body / rela_entry_size in
+    let relocs = ref [] in
+    for i = 0 to num_entries - 1 do
+      let cursor = Owee_buf.cursor rela_body ~at:(i * rela_entry_size) in
+      let r_offset = Owee_buf.Read.u64 cursor in
+      let r_info = Owee_buf.Read.u64 cursor in
+      let sym_idx = sym_index_of_r_info r_info in
+      let symbol_name =
+        match symbol_names with
+        | Some names when sym_idx < Array.length names -> names.(sym_idx)
+        | _ -> Printf.sprintf "sym_%d" sym_idx
+      in
+      if symbol_name <> "" then
+        relocs := { be_offset = base_offset + Int64.to_int r_offset;
+                    be_symbol = symbol_name } :: !relocs
+    done;
+    !relocs
+
+  (* Extract relocations for a specific section by name *)
+  let extract_section_relocations buf sections symbol_names ~section_name =
+    let rela_name = ".rela" ^ section_name in
+    extract_rela_section buf sections symbol_names ~rela_section_name:rela_name
+
+  (* Extract relocations for each individual text section as a list of
+     (section_name, relocations) pairs *)
+  let extract_individual_text_relocations buf sections =
+    let symbol_names = build_symbol_names buf sections in
+    Array.to_list sections
+    |> List.filter (fun sec -> is_text_section_name sec.Owee_elf.sh_name_str)
+    |> List.map (fun sec ->
+         let relocs = extract_section_relocations buf sections symbol_names
+           ~section_name:sec.Owee_elf.sh_name_str in
+         (sec.Owee_elf.sh_name_str, relocs))
+
+  (* Extract all relocations for text and data sections. For text, returns
+     relocations for the single .text section if it exists, otherwise empty. *)
+  let extract_relocations buf sections =
+    let symbol_names = build_symbol_names buf sections in
+    (* Only get .text relocations if there's a single .text section *)
+    let text_relocs =
+      let text_sections =
+        Array.to_list sections
+        |> List.filter (fun sec -> is_text_section_name sec.Owee_elf.sh_name_str)
+      in
+      match text_sections with
+      | [sec] when sec.Owee_elf.sh_name_str = ".text" ->
+        extract_rela_section buf sections symbol_names ~rela_section_name:".rela.text"
+      | _ -> []  (* Multiple sections; use individual extraction *)
+    in
+    let data_relocs = extract_rela_section buf sections symbol_names
+      ~rela_section_name:".rela.data" in
+    text_relocs, data_relocs
+
+  (* Get all individual text section relocations from ELF *)
+  let get_individual_text_relocations buf sections =
+    extract_individual_text_relocations buf sections
 end
 
 (* Extract sections from object file using owee *)
@@ -330,10 +523,37 @@ let extract_obj_relocations unix obj_file =
     let _header, commands = Owee_macho.read buf in
     Macho.extract_relocations commands
   | "\x7FELF" ->
-    (* ELF format - TODO: implement ELF relocation extraction *)
-    [], []
+    (* ELF format *)
+    let _header, sections = Owee_elf.read_elf buf in
+    Elf.extract_relocations buf sections
   | _ ->
     [], []
+
+(* Extract individual text sections from ELF object file. Returns a list of
+   (section_name, content) pairs for all .text* sections. *)
+let extract_obj_individual_text_sections unix obj_file =
+  let buf = Owee_buf.map_binary unix obj_file in
+  let cursor = Owee_buf.cursor buf in
+  let magic = Owee_buf.Read.fixed_string cursor 4 in
+  Owee_buf.seek cursor 0;
+  match magic with
+  | "\x7FELF" ->
+    let _header, sections = Owee_elf.read_elf buf in
+    Elf.get_individual_text_sections buf sections
+  | _ -> []
+
+(* Extract individual text section relocations from ELF object file. Returns
+   a list of (section_name, relocations) pairs for all .text* sections. *)
+let extract_obj_individual_text_relocations unix obj_file =
+  let buf = Owee_buf.map_binary unix obj_file in
+  let cursor = Owee_buf.cursor buf in
+  let magic = Owee_buf.Read.fixed_string cursor 4 in
+  Owee_buf.seek cursor 0;
+  match magic with
+  | "\x7FELF" ->
+    let _header, sections = Owee_elf.read_elf buf in
+    Elf.get_individual_text_relocations buf sections
+  | _ -> []
 
 (* Group relocations by offset, returning (offset, [symbols]) pairs sorted by
    offset *)
@@ -390,6 +610,43 @@ let compare_relocations ~section_name ~expected ~actual =
   in
   loop exp_grouped act_grouped
 
+(* Compare individual text sections. Returns None if all match, or Some mismatch. *)
+let compare_individual_text_sections ~be_sections ~asm_sections =
+  (* Build a map of assembler sections for lookup *)
+  let asm_map = Hashtbl.create (List.length asm_sections) in
+  List.iter (fun (name, content) -> Hashtbl.add asm_map name content) asm_sections;
+  (* Compare each binary emitter section against the corresponding assembler section *)
+  let rec loop = function
+    | [] -> None
+    | (be_name, be_content) :: rest ->
+      match Hashtbl.find_opt asm_map be_name with
+      | None ->
+        Some (Missing_section (be_name ^ " (in object file)"))
+      | Some asm_content ->
+        match compare_section ~section_name:be_name ~expected:be_content ~actual:asm_content with
+        | Some mismatch -> Some mismatch
+        | None -> loop rest
+  in
+  loop be_sections
+
+(* Compare individual text section relocations. *)
+let compare_individual_text_relocations ~be_relocs ~asm_relocs =
+  let asm_map = Hashtbl.create (List.length asm_relocs) in
+  List.iter (fun (name, relocs) -> Hashtbl.add asm_map name relocs) asm_relocs;
+  let rec loop = function
+    | [] -> None
+    | (be_name, be_relocs) :: rest ->
+      let asm_section_relocs =
+        match Hashtbl.find_opt asm_map be_name with
+        | None -> []
+        | Some relocs -> relocs
+      in
+      match compare_relocations ~section_name:be_name ~expected:be_relocs ~actual:asm_section_relocs with
+      | Some mismatch -> Some mismatch
+      | None -> loop rest
+  in
+  loop be_relocs
+
 let compare unix ~obj_file ~binary_sections_dir =
   (* Check if binary sections directory exists *)
   if not (Sys.file_exists binary_sections_dir) then
@@ -401,6 +658,10 @@ let compare unix ~obj_file ~binary_sections_dir =
     let be_text = read_binary_section binary_sections_dir "text" in
     let be_data = read_binary_section binary_sections_dir "data" in
 
+    (* Check for individual text sections (function sections) *)
+    let be_individual_text = list_binary_text_sections binary_sections_dir in
+    let has_individual_sections = List.length be_individual_text > 0 in
+
     (* Extract sections from object file *)
     let asm_text, asm_data =
       try extract_obj_sections unix obj_file
@@ -410,14 +671,26 @@ let compare unix ~obj_file ~binary_sections_dir =
         raise (Failure msg)
     in
 
-    (* Compare text section *)
+    (* Compare text sections - either individual or aggregate *)
     let text_result =
-      match be_text, asm_text with
-      | None, None -> None
-      | Some _, None -> Some (Missing_section ".text (in object file)")
-      | None, Some _ -> Some (Missing_section ".text (in binary emitter output)")
-      | Some expected, Some actual ->
-        compare_section ~section_name:"text" ~expected ~actual
+      if has_individual_sections then begin
+        (* Individual function sections: compare each separately *)
+        let asm_individual_text =
+          try extract_obj_individual_text_sections unix obj_file
+          with _ -> []
+        in
+        compare_individual_text_sections
+          ~be_sections:be_individual_text
+          ~asm_sections:asm_individual_text
+      end else begin
+        (* Single text section *)
+        match be_text, asm_text with
+        | None, None -> None
+        | Some _, None -> Some (Missing_section ".text (in object file)")
+        | None, Some _ -> Some (Missing_section ".text (in binary emitter output)")
+        | Some expected, Some actual ->
+          compare_section ~section_name:"text" ~expected ~actual
+      end
     in
 
     match text_result with
@@ -440,16 +713,32 @@ let compare unix ~obj_file ~binary_sections_dir =
       match data_result with
       | Some mismatch -> Mismatch mismatch
       | None ->
-        (* Compare relocations for both text and data sections *)
-        let be_text_relocs = read_binary_relocations binary_sections_dir "text" in
+        (* Compare relocations *)
+        let text_reloc_result =
+          if has_individual_sections then begin
+            (* Individual function sections: compare each separately *)
+            let be_individual_relocs = list_binary_text_relocations binary_sections_dir in
+            let asm_individual_relocs =
+              try extract_obj_individual_text_relocations unix obj_file
+              with _ -> []
+            in
+            compare_individual_text_relocations
+              ~be_relocs:be_individual_relocs
+              ~asm_relocs:asm_individual_relocs
+          end else begin
+            let be_text_relocs = read_binary_relocations binary_sections_dir "text" in
+            let asm_text_relocs, _ =
+              try extract_obj_relocations unix obj_file
+              with _ -> [], []
+            in
+            compare_relocations ~section_name:"text"
+              ~expected:be_text_relocs ~actual:asm_text_relocs
+          end
+        in
         let be_data_relocs = read_binary_relocations binary_sections_dir "data" in
-        let asm_text_relocs, asm_data_relocs =
+        let _, asm_data_relocs =
           try extract_obj_relocations unix obj_file
           with _ -> [], []
-        in
-        let text_reloc_result =
-          compare_relocations ~section_name:"text"
-            ~expected:be_text_relocs ~actual:asm_text_relocs
         in
         (match text_reloc_result with
         | Some mismatch -> Mismatch mismatch
