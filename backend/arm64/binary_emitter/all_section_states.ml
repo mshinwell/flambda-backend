@@ -101,6 +101,24 @@ let find_in_any_individual_section t name =
     t.individual_sections;
   !result
 
+(* Search individual sections for a label or symbol. Returns (offset,
+   section_name, state) if found. Used when we need the actual section name
+   string for ELF relocations. *)
+let find_in_any_individual_section_with_state t name =
+  let result = ref None in
+  Hashtbl.iter
+    (fun section_name state ->
+      if Option.is_none !result
+      then
+        match Section_state.find_label_offset_in_bytes state name with
+        | Some offset -> result := Some (offset, section_name, state)
+        | None -> (
+          match Section_state.find_symbol_offset_in_bytes state name with
+          | Some offset -> result := Some (offset, section_name, state)
+          | None -> ()))
+    t.individual_sections;
+  !result
+
 (* Search all sections for a label or symbol. Returns (offset, section,
    section_state) if found. This is needed when the caller needs to access
    the actual state where the label was found. *)

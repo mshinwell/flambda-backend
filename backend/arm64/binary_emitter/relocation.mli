@@ -36,9 +36,22 @@ module Kind : sig
     | R_AARCH64_CALL26 of string
     | R_AARCH64_JUMP26 of string
     | R_AARCH64_ABS64 of string
+    (* Cross-section relative reference (SUBTRACTOR + UNSIGNED pair on macOS)
+       Used for expressions like (Label - This) where Label and This are in
+       different sections. The addend is stored in the data, and the linker will
+       compute: addend + plus_symbol - minus_symbol *)
     | R_AARCH64_PREL32_PAIR of
         { plus_symbol : string;
           minus_symbol : string
+        }
+    (* ELF section-relative 32-bit PC-relative reference. Used on ELF for
+       cross-section references when function sections are enabled. The
+       section_name is the target section (e.g., .text.caml.funcname) and
+       addend is the offset within that section. The linker computes:
+       section_address + addend - relocation_address *)
+    | R_AARCH64_PREL32 of
+        { section_name : string;
+          addend : int
         }
 end
 

@@ -378,7 +378,9 @@ module Elf = struct
   (* Extract symbol index from r_info (upper 32 bits) *)
   let sym_index_of_r_info r_info = Int64.to_int (Int64.shift_right_logical r_info 32)
 
-  (* Build a symbol name table from .symtab and .strtab sections *)
+  (* Build a symbol name table from .symtab and .strtab sections.
+     For section symbols (st_info type = STT_SECTION = 3), the name is derived
+     from the section header table using st_shndx. *)
   let build_symbol_names buf sections =
     match Owee_elf.find_section sections ".symtab",
           Owee_elf.find_section sections ".strtab" with
@@ -391,11 +393,22 @@ module Elf = struct
       for i = 0 to num_symbols - 1 do
         let cursor = Owee_buf.cursor symtab_body ~at:(i * sym_entry_size) in
         let st_name = Owee_buf.Read.u32 cursor in
-        (* Get name from string table *)
-        let name_cursor = Owee_buf.cursor strtab_body ~at:st_name in
-        let name = match Owee_buf.Read.zero_string name_cursor () with
-          | Some s -> s
-          | None -> ""
+        let st_info = Owee_buf.Read.u8 cursor in
+        let _st_other = Owee_buf.Read.u8 cursor in
+        let st_shndx = Owee_buf.Read.u16 cursor in
+        let st_type = st_info land 0xf in
+        let name =
+          if st_type = 3 (* STT_SECTION *) then
+            (* Section symbol: get name from section header table *)
+            if st_shndx > 0 && st_shndx < Array.length sections then
+              sections.(st_shndx).Owee_elf.sh_name_str
+            else ""
+          else
+            (* Regular symbol: get name from string table *)
+            let name_cursor = Owee_buf.cursor strtab_body ~at:st_name in
+            match Owee_buf.Read.zero_string name_cursor () with
+            | Some s -> s
+            | None -> ""
         in
         names.(i) <- name
       done;
@@ -735,21 +748,10 @@ let compare unix ~obj_file ~binary_sections_dir =
               ~expected:be_text_relocs ~actual:asm_text_relocs
           end
         in
-        (* For data relocations: when function sections are enabled, the
-           assembler uses section-relative relocations (R_AARCH64_PREL32
-           .text.caml.funcname+offset) while the binary emitter uses
-           symbol-pair relocations. These are semantically equivalent but
-           have different representations. Skip data relocation verification
-           in this case - the text section verification proves correctness. *)
-        let be_data_relocs =
-          if has_individual_sections then []
-          else read_binary_relocations binary_sections_dir "data"
-        in
+        let be_data_relocs = read_binary_relocations binary_sections_dir "data" in
         let _, asm_data_relocs =
-          if has_individual_sections then [], []
-          else
-            try extract_obj_relocations unix obj_file
-            with _ -> [], []
+          try extract_obj_relocations unix obj_file
+          with _ -> [], []
         in
         (match text_reloc_result with
         | Some mismatch -> Mismatch mismatch

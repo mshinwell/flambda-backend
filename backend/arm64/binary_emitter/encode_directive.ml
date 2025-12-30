@@ -82,8 +82,8 @@ let rec eval_constant state ~all_sections const =
 (* Handle cross-section (Label - This) + offset pattern. This occurs in
    frametable entries where a DATA section location references a TEXT section
    label (return address), or when DATA references read-only data sections like
-   .rodata.cst8. We emit a PREL32_PAIR relocation using existing global symbols
-   (matching assembler behaviour). *)
+   .rodata.cst8. On ELF with function sections, we emit R_AARCH64_PREL32 with
+   section name and addend. On macOS, we emit PREL32_PAIR using symbol pairs. *)
 let is_cross_section_relative_reference state ~all_sections ~current_section c =
   match extract_label_this_offset c with
   | None -> None
@@ -91,58 +91,104 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
     (* First check if label is in current section *)
     match SS.find_label_offset_in_bytes state label_name with
     | Some _ -> None (* Same section, use normal eval *)
-    | None -> (
-      (* Try cross-section lookup. Use find_in_any_section_with_state to get
-         the actual state where the label was found, which is needed when
-         function sections are enabled (labels are in individual sections). *)
-      match
-        All_section_states.find_in_any_section_with_state all_sections label_name
-      with
-      | None -> None (* Not found at all *)
-      | Some (target_offset, label_section, target_state) -> (
-        if Asm_section.equal label_section current_section
-        then None (* Same section after all *)
-        else if not (Asm_section.equal current_section Asm_section.Data)
-        then
-          Misc.fatal_errorf
-            "Cross-section (Label - This) from non-DATA section %s to %s not \
-             supported"
-            (Asm_section.to_string current_section)
-            (Asm_section.to_string label_section)
-        else
-          (* Cross-section: label in another section referenced from DATA.
-             The linker computes: plus_sym - minus_sym + addend
-             So: addend = (target - plus_sym) - (current - minus_sym) *)
-          let current_pos = SS.offset_in_bytes state in
-          (* Find nearest symbol in DATA for SUBTRACTOR *)
-          match SS.find_nearest_symbol_before state current_pos with
-          | None ->
-            Misc.fatal_error
-              "No symbol in DATA section for cross-section relocation"
-          | Some (minus_symbol, minus_sym_offset) -> (
-            (* Find nearest symbol in target section for UNSIGNED.
-               target_state is the actual section state where the label was
-               found (which may be an individual function section). *)
-            match SS.find_nearest_symbol_before target_state target_offset with
+    | None ->
+      let macosx = String.equal Config.system "macosx" in
+      let for_jit = All_section_states.for_jit all_sections in
+      (* On ELF (not JIT) with function sections, check individual sections
+         first. The assembler emits R_AARCH64_PREL32 with section symbol and
+         addend. For JIT mode, we aggregate sections so can't use section
+         symbols. *)
+      if (not macosx)
+         && (not for_jit)
+         && (match
+               All_section_states.find_in_any_individual_section_with_state
+                 all_sections label_name
+             with
+            | Some (target_offset, section_name, _target_state) ->
+              if not (Asm_section.equal current_section Asm_section.Data)
+              then
+                Misc.fatal_errorf
+                  "Cross-section (Label - This) from non-DATA section %s to \
+                   %s not supported"
+                  (Asm_section.to_string current_section)
+                  section_name
+              else (
+                (* ELF with function sections: use R_AARCH64_PREL32 with
+                   section symbol and addend. The addend is the offset of the
+                   label within the section plus any user-specified offset. *)
+                let addend = target_offset + Int64.to_int offset_upper in
+                SS.add_relocation_at_current_offset state ~symbol_name:section_name
+                  ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
+                true)
+            | None -> false)
+      then Some 0L (* ELF RELA: addend in relocation, emit 0 in data *)
+      else (
+        (* Try cross-section lookup for standard sections. Use
+           find_in_any_section_with_state to get the actual state where the
+           label was found. *)
+        match
+          All_section_states.find_in_any_section_with_state all_sections
+            label_name
+        with
+        | None -> None (* Not found at all *)
+        | Some (target_offset, label_section, _target_state) -> (
+          if Asm_section.equal label_section current_section
+          then None (* Same section after all *)
+          else if not (Asm_section.equal current_section Asm_section.Data)
+          then
+            Misc.fatal_errorf
+              "Cross-section (Label - This) from non-DATA section %s to %s \
+               not supported"
+              (Asm_section.to_string current_section)
+              (Asm_section.to_string label_section)
+          else if (not macosx) && not for_jit
+          then (
+            (* ELF without function sections: use R_AARCH64_PREL32 with
+               standard section symbol. The assembler uses section symbols
+               for cross-section references. *)
+            let section_name = Asm_section.to_string label_section in
+            let addend = target_offset + Int64.to_int offset_upper in
+            SS.add_relocation_at_current_offset state ~symbol_name:section_name
+              ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
+            Some 0L (* ELF RELA: addend in relocation, emit 0 in data *))
+          else
+            (* macOS or JIT: use symbol pairs (SUBTRACTOR + UNSIGNED).
+               The linker computes: plus_sym - minus_sym + addend
+               So: addend = (target - plus_sym) - (current - minus_sym) *)
+            let current_pos = SS.offset_in_bytes state in
+            (* Find nearest symbol in DATA for SUBTRACTOR *)
+            match SS.find_nearest_symbol_before state current_pos with
             | None ->
-              Misc.fatal_errorf
-                "No symbol in %s section for cross-section relocation"
-                (Asm_section.to_string label_section)
-            | Some (plus_symbol, plus_sym_offset) ->
-              let addend =
-                Int64.add offset_upper
-                  (Int64.sub
-                     (Int64.of_int (target_offset - plus_sym_offset))
-                     (Int64.of_int (current_pos - minus_sym_offset)))
+              Misc.fatal_error
+                "No symbol in DATA section for cross-section relocation"
+            | Some (minus_symbol, minus_sym_offset) -> (
+              (* Find nearest symbol in target section for UNSIGNED.
+                 Note: when using find_in_any_section_with_state, we get the
+                 target offset within the actual section state. *)
+              let target_state_for_lookup =
+                All_section_states.find_exn all_sections label_section
               in
-              SS.add_relocation_at_current_offset state ~symbol_name:plus_symbol
-                ~reloc_kind:
-                  (R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol });
-              (* On Linux ELF (RELA format), the addend is stored in the
-                 relocation entry, so emit 0 in the data. On macOS (Mach-O),
-                 the addend must be in the data. *)
-              let macosx = String.equal Config.system "macosx" in
-              Some (if macosx then addend else 0L)))))
+              match
+                SS.find_nearest_symbol_before target_state_for_lookup
+                  target_offset
+              with
+              | None ->
+                Misc.fatal_errorf
+                  "No symbol in %s section for cross-section relocation"
+                  (Asm_section.to_string label_section)
+              | Some (plus_symbol, plus_sym_offset) ->
+                let addend =
+                  Int64.add offset_upper
+                    (Int64.sub
+                       (Int64.of_int (target_offset - plus_sym_offset))
+                       (Int64.of_int (current_pos - minus_sym_offset)))
+                in
+                SS.add_relocation_at_current_offset state
+                  ~symbol_name:plus_symbol
+                  ~reloc_kind:
+                    (R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol });
+                (* On macOS (Mach-O), the addend must be in the data. *)
+                Some addend))))
 
 (* Handle absolute symbol reference. For .8byte symbol in JIT mode, we must emit
    a relocation so the JIT can patch it with the actual address. For non-JIT

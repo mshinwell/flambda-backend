@@ -3015,9 +3015,16 @@ let end_assembly () =
     | Some ("true" | "1") ->
       Arm64_binary_emitter.Binary_emitter.dump_instructions emitter
     | _ -> ());
-    (* Get assembled sections (for_jit:true since we're in JIT mode) *)
+    (* Get assembled sections. for_jit is true only when there's a JIT hook
+       registered (actual JIT compilation). When we're just saving binary
+       sections for verification, we're generating an object file and should
+       use for_jit:false to match ELF relocation format. *)
+    let for_jit =
+      Option.is_some
+        (Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ())
+    in
     let section_tbl =
-      Arm64_binary_emitter.Binary_emitter.emit ~for_jit:true emitter
+      Arm64_binary_emitter.Binary_emitter.emit ~for_jit emitter
     in
     (* Convert to list of (name, section) pairs. Include both standard
        sections (by Asm_section.t) and individual sections (by name string,

@@ -41,7 +41,8 @@ module Relocation = struct
     | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
     | R_AARCH64_ADR_GOT_PAGE _ | R_AARCH64_LD64_GOT_LO12_NC _
     | R_AARCH64_ADD_ABS_LO12_NC _ | R_AARCH64_LDST64_ABS_LO12_NC _
-    | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ | R_AARCH64_PREL32_PAIR _ ->
+    | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ | R_AARCH64_PREL32_PAIR _
+    | R_AARCH64_PREL32 _ ->
       Binary_emitter_intf.B32
 
   let target_symbol (r : Relocation.t) : string =
@@ -58,6 +59,7 @@ module Relocation = struct
       sym
     | R_AARCH64_PREL32_PAIR { plus_symbol; _ } ->
       plus_symbol (* Return the plus symbol as the primary target *)
+    | R_AARCH64_PREL32 { section_name; _ } -> section_name
 
   (* For paired relocations (SUBTRACTOR + UNSIGNED), returns both symbols.
      Returns [plus_symbol; minus_symbol] for pairs, [symbol] otherwise. *)
@@ -76,6 +78,7 @@ module Relocation = struct
     | R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol } ->
       (* Return both: UNSIGNED uses plus_symbol, SUBTRACTOR uses minus_symbol *)
       [plus_symbol; minus_symbol]
+    | R_AARCH64_PREL32 { section_name; _ } -> [section_name]
 
   let is_got_reloc (r : Relocation.t) =
     match r.kind with
@@ -83,7 +86,7 @@ module Relocation = struct
     | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
     | R_AARCH64_ADD_ABS_LO12_NC _ | R_AARCH64_LDST64_ABS_LO12_NC _
     | R_AARCH64_CALL26 _ | R_AARCH64_JUMP26 _ | R_AARCH64_ABS64 _
-    | R_AARCH64_PREL32_PAIR _ ->
+    | R_AARCH64_PREL32_PAIR _ | R_AARCH64_PREL32 _ ->
       false
 
   let is_plt_reloc (r : t) =
@@ -95,7 +98,7 @@ module Relocation = struct
     | R_AARCH64_ADR_PREL_LO21 _ | R_AARCH64_ADR_PREL_PG_HI21 _
     | R_AARCH64_ADR_GOT_PAGE _ | R_AARCH64_LD64_GOT_LO12_NC _
     | R_AARCH64_ADD_ABS_LO12_NC _ | R_AARCH64_LDST64_ABS_LO12_NC _
-    | R_AARCH64_ABS64 _ | R_AARCH64_PREL32_PAIR _ ->
+    | R_AARCH64_ABS64 _ | R_AARCH64_PREL32_PAIR _ | R_AARCH64_PREL32 _ ->
       false
 
   (* Helper: zero-extend int32 to int64 (don't sign-extend) *)
@@ -266,7 +269,14 @@ module Relocation = struct
         | Some minus_addr ->
           let _ = plus_symbol in
           (* target_addr is plus_symbol's address *)
-          Ok (Int64.sub target_addr minus_addr)))
+          Ok (Int64.sub target_addr minus_addr))
+      | R_AARCH64_PREL32 { section_name = _; addend } ->
+        (* ELF section-relative: section_address + addend - place_address.
+           For JIT, target_addr should be the section start address. *)
+        let result =
+          Int64.sub (Int64.add target_addr (Int64.of_int addend)) place_address
+        in
+        Ok result)
 end
 
 module Assembled_section = struct

@@ -63,6 +63,12 @@ val fold_individual :
 
 val find_in_any_individual_section : t -> string -> (int * string) option
 
+(** Search individual sections for a label or symbol. Returns (offset,
+    section_name, state) if found. Used when we need the actual section name
+    string for ELF relocations. *)
+val find_in_any_individual_section_with_state :
+  t -> string -> (int * string * Section_state.t) option
+
 (** Search all sections for a label or symbol. Returns (offset, section,
     section_state) if found. This is needed when the caller needs to access
     the actual state where the label was found. *)
