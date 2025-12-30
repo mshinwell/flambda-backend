@@ -334,10 +334,10 @@ let compare unix ~obj_file ~binary_sections_dir =
       match be_text with
       | Function_sections sections ->
         sections, Owee_object.extract_individual_text_sections buf
-      | No_function_sections be_opt ->
+      | No_function_sections be_opt -> (
         let asm_opt = Owee_object.extract_text_section buf in
         ( (match be_opt with Some s -> [".text", s] | None -> []),
-          match asm_opt with Some s -> [".text", s] | None -> [] )
+          match asm_opt with Some s -> [".text", s] | None -> [] ))
     in
     (* Normalize text relocations to (name, relocs) list *)
     let be_text_relocs, asm_text_relocs =
@@ -350,7 +350,9 @@ let compare unix ~obj_file ~binary_sections_dir =
           [".text", Owee_object.extract_text_relocations buf] )
     in
     (* Compare text sections *)
-    let text_result = compare_sections ~expected:be_text_list ~actual:asm_text_list in
+    let text_result =
+      compare_sections ~expected:be_text_list ~actual:asm_text_list
+    in
     match text_result with
     | Some m -> Mismatch m
     | None -> (
@@ -386,7 +388,9 @@ let compare unix ~obj_file ~binary_sections_dir =
           | Some m -> Mismatch m
           | None ->
             let text_size =
-              List.fold_left (fun acc (_, c) -> acc + String.length c) 0 be_text_list
+              List.fold_left
+                (fun acc (_, c) -> acc + String.length c)
+                0 be_text_list
             in
             let data_size = Option.fold ~none:0 ~some:String.length be_data in
             Match { text_size; data_size })))
