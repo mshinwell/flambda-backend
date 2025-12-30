@@ -233,10 +233,6 @@ let format_reloc (r : relocation) =
 
 let format_reloc_list relocs = String.concat ", " (List.map format_reloc relocs)
 
-let relocs_equal ~is_rela (e : relocation) (a : relocation) =
-  String.equal e.r_symbol a.r_symbol
-  && ((not is_rela) || e.r_addend = a.r_addend)
-
 let group_by_offset relocs =
   let tbl = Hashtbl.create 16 in
   List.iter
@@ -252,7 +248,7 @@ let group_by_offset relocs =
   |> List.sort (fun (o1, _) (o2, _) -> compare o1 o2)
   |> List.map (fun (offset, rs) -> offset, List.sort compare_reloc rs)
 
-let compare_relocations ~is_rela ~section_name ~expected ~actual =
+let compare_relocations ~section_name ~expected ~actual =
   let exp_grouped = group_by_offset expected in
   let act_grouped = group_by_offset actual in
   let rec loop exp act =
@@ -286,7 +282,7 @@ let compare_relocations ~is_rela ~section_name ~expected ~actual =
                actual =
                  Printf.sprintf "%s @ 0x%x" (format_reloc_list a_relocs) a_off
              })
-      else if not (List.equal (relocs_equal ~is_rela) e_relocs a_relocs)
+      else if not (List.equal Owee_object.relocs_equal e_relocs a_relocs)
       then
         Some
           (Relocation
@@ -299,7 +295,7 @@ let compare_relocations ~is_rela ~section_name ~expected ~actual =
   in
   loop exp_grouped act_grouped
 
-let compare_section_relocations ~is_rela ~expected ~actual =
+let compare_section_relocations ~expected ~actual =
   let actual_map = Hashtbl.create (List.length actual) in
   List.iter (fun (name, relocs) -> Hashtbl.add actual_map name relocs) actual;
   let rec loop = function
@@ -308,9 +304,7 @@ let compare_section_relocations ~is_rela ~expected ~actual =
       let actual =
         Option.value (Hashtbl.find_opt actual_map name) ~default:[]
       in
-      match
-        compare_relocations ~is_rela ~section_name:name ~expected ~actual
-      with
+      match compare_relocations ~section_name:name ~expected ~actual with
       | Some mismatch -> Some mismatch
       | None -> loop rest)
   in
@@ -332,7 +326,6 @@ let compare unix ~obj_file ~binary_sections_dir =
              (Printf.sprintf "Failed to read %s: %s" obj_file
                 (Printexc.to_string exn)))
     in
-    let is_rela = Owee_object.uses_rela_relocations buf in
     let be_text = read_text_sections binary_sections_dir in
     let be_data = read_section binary_sections_dir "data" in
     let asm_data = Owee_object.extract_data_section buf in
@@ -373,18 +366,22 @@ let compare unix ~obj_file ~binary_sections_dir =
       | None -> (
         (* Compare text relocations *)
         let text_reloc_result =
-          compare_section_relocations ~is_rela ~expected:be_text_relocs
+          compare_section_relocations ~expected:be_text_relocs
             ~actual:asm_text_relocs
         in
         match text_reloc_result with
         | Some m -> Mismatch m
         | None -> (
           (* Compare data relocations *)
-          let be_data_relocs = read_relocations binary_sections_dir "data" in
-          let asm_data_relocs = Owee_object.extract_data_relocations buf in
+          let be_data_relocs =
+            [".data", read_relocations binary_sections_dir "data"]
+          in
+          let asm_data_relocs =
+            [".data", Owee_object.extract_data_relocations buf]
+          in
           match
-            compare_relocations ~is_rela ~section_name:"data"
-              ~expected:be_data_relocs ~actual:asm_data_relocs
+            compare_section_relocations ~expected:be_data_relocs
+              ~actual:asm_data_relocs
           with
           | Some m -> Mismatch m
           | None ->
