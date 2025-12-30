@@ -114,6 +114,8 @@ let compute_label_offsets emitter ~all_sections =
       match directive with
       | New_label (name, _) -> Section_state.define_label state name
       | Global name -> Section_state.define_symbol state name
+      (* Weak symbols also have symbol table entries on ELF, so track them too *)
+      | Weak name -> Section_state.define_symbol state name
       | Direct_assignment (name, expr) ->
         All_section_states.add_direct_assignment all_sections name expr
       (* Directives that don't define labels or symbols *)
@@ -122,7 +124,7 @@ let compute_label_offsets emitter ~all_sections =
       | Cfi_restore_state | Cfi_def_cfa_register _ | Comment _ | Const _
       | File _ | Indirect_symbol _ | Loc _ | New_line | Private_extern _
       | Section _ | Size _ | Sleb128 _ | Space _ | Type _ | Uleb128 _
-      | Protected _ | Hidden _ | Weak _ | External _ | Reloc _ ->
+      | Protected _ | Hidden _ | External _ | Reloc _ ->
         ())
 
 (* Second pass: emit machine code and data *)

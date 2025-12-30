@@ -223,43 +223,43 @@ let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
     in
     (* Try to find the symbol in individual sections first (function sections) *)
     let try_individual_sections () =
-      match
-        All_section_states.find_in_any_individual_section_with_state all_sections
-          sym_name
-      with
-      | Some (label_offset, section_name, target_state) ->
-        (* Check if this is a global symbol in the target section *)
-        let is_global_in_target =
-          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
-        in
-        if is_local_label || not is_global_in_target
-        then Some (section_name, label_offset + sym_offset)
-        else None
-      | None -> None
-    in
-    (* Try to find in standard sections *)
-    let try_standard_sections () =
-      match
-        All_section_states.find_in_any_section_with_state all_sections sym_name
-      with
-      | Some (label_offset, section, target_state) ->
-        let section_name = Asm_section.to_string section in
-        let is_global_in_target =
-          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
-        in
-        if is_local_label || not is_global_in_target
-        then Some (section_name, label_offset + sym_offset)
-        else None
-      | None -> None
-    in
-    match try_individual_sections () with
-    | Some result -> result
-    | None -> (
-      match try_standard_sections () with
+        match
+          All_section_states.find_in_any_individual_section_with_state
+            all_sections sym_name
+        with
+        | Some (label_offset, section_name, target_state) ->
+          (* Check if this is a global symbol in the target section *)
+          let is_global_in_target =
+            Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
+          in
+          if is_local_label || not is_global_in_target
+          then Some (section_name, label_offset + sym_offset)
+          else None
+        | None -> None
+      in
+      (* Try to find in standard sections *)
+      let try_standard_sections () =
+        match
+          All_section_states.find_in_any_section_with_state all_sections sym_name
+        with
+        | Some (label_offset, section, target_state) ->
+          let section_name = Asm_section.to_string section in
+          let is_global_in_target =
+            Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
+          in
+          if is_local_label || not is_global_in_target
+          then Some (section_name, label_offset + sym_offset)
+          else None
+        | None -> None
+      in
+      match try_individual_sections () with
       | Some result -> result
-      | None ->
-        (* Symbol not found or is global - use original name *)
-        sym_name, sym_offset)
+      | None -> (
+        match try_standard_sections () with
+        | Some result -> result
+        | None ->
+          (* Symbol not found or is global - use original name *)
+          sym_name, sym_offset)
 
 (* When true, emit relocations for ALL 8-byte symbol references (matching
    assembler behavior). When false, only emit relocations for cross-section
@@ -284,11 +284,16 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
     if is_same_section
     then
       if for_jit || !emit_relocs_for_all_symbol_refs
-      then (
-        (* Emit relocation for all symbol references *)
-        SS.add_relocation_at_current_offset state ~symbol_name:name
-          ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
-        Some 0L (* Emit zero, relocation will patch *))
+      then
+        (* Emit relocation for all symbol references. On RELA platforms,
+           resolve local symbols to section + offset. *)
+        let resolved_sym, resolved_addend =
+          resolve_local_label_for_elf ~all_sections ~sym_name:name ~sym_offset:0
+        in
+        SS.add_relocation_at_current_offset state ~symbol_name:resolved_sym
+          ~reloc_kind:
+            (R_AARCH64_ABS64 { symbol = resolved_sym; addend = resolved_addend });
+        Some 0L (* Emit zero, relocation will patch *)
       else None (* Resolve same-section refs at emit time via eval_constant *)
     else
       (* Cross-section reference - always needs relocation *)
@@ -299,10 +304,17 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
            && (not for_jit)
            && not !emit_relocs_for_all_symbol_refs
         then None (* Same section after all, resolve at emit time *)
-        else (
-          SS.add_relocation_at_current_offset state ~symbol_name:name
-            ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
-          Some 0L (* Emit zero, relocation will patch *)))
+        else
+          (* Resolve local symbols to section + offset on RELA platforms *)
+          let resolved_sym, resolved_addend =
+            resolve_local_label_for_elf ~all_sections ~sym_name:name
+              ~sym_offset:0
+          in
+          SS.add_relocation_at_current_offset state ~symbol_name:resolved_sym
+            ~reloc_kind:
+              (R_AARCH64_ABS64
+                 { symbol = resolved_sym; addend = resolved_addend });
+          Some 0L (* Emit zero, relocation will patch *))
   | _ -> None
 
 (* Handle unresolved symbol reference by emitting zeros and recording a
