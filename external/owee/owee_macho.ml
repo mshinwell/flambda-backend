@@ -1259,3 +1259,75 @@ let read buf =
 let section_body buffer seg sec =
   let addr = Int64.add seg.seg_fileoff sec.sec_addr in
   Bigarray.Array1.sub buffer  (Int64.to_int addr) (Int64.to_int sec.sec_size)
+
+(* Find a segment by name in the load commands *)
+let find_segment commands seg_name =
+  let rec loop = function
+    | [] -> None
+    | LC_SEGMENT_64 seg :: _ when String.equal (Lazy.force seg).seg_segname seg_name ->
+      Some (Lazy.force seg)
+    | _ :: rest -> loop rest
+  in
+  loop commands
+
+(* Find a section by name within a segment *)
+let find_section segment sect_name =
+  let sections = segment.seg_sections in
+  let rec loop i =
+    if i >= Array.length sections then None
+    else if String.equal sections.(i).sec_sectname sect_name then Some sections.(i)
+    else loop (i + 1)
+  in
+  loop 0
+
+(* Find a section by name in any segment (useful for object files with unnamed segments) *)
+let find_section_any_segment commands sect_name =
+  let rec loop = function
+    | [] -> None
+    | LC_SEGMENT_64 seg :: rest ->
+      let seg = Lazy.force seg in
+      (match find_section seg sect_name with
+       | Some sec -> Some (seg, sec)
+       | None -> loop rest)
+    | _ :: rest -> loop rest
+  in
+  loop commands
+
+(* Extract section body as a string *)
+let section_body_string buf seg sec =
+  let body = section_body buf seg sec in
+  let cursor = Owee_buf.cursor body in
+  let size = Owee_buf.size body in
+  Owee_buf.Read.fixed_string cursor size
+
+(* Get symbol table from load commands *)
+let get_symbol_table commands =
+  let rec loop = function
+    | [] -> None
+    | LC_SYMTAB syms :: _ -> Some (Lazy.force syms)
+    | _ :: rest -> loop rest
+  in
+  loop commands
+
+(* A resolved relocation with offset, symbol name, and addend.
+   For Mach-O, addend is always 0 since it uses REL format. *)
+type resolved_relocation = {
+  r_offset : int;
+  r_symbol : string;
+  r_addend : int64;
+}
+
+(* Extract relocations from a section, resolving symbol names *)
+let extract_section_relocations symbols section =
+  let relocs = section.sec_relocs in
+  Array.to_list relocs
+  |> List.filter_map (fun reloc ->
+    match reloc with
+    | `Relocation_info ri when ri.ri_extern ->
+      let sym_idx = ri.ri_symbolnum in
+      if sym_idx < Array.length symbols then
+        let sym = symbols.(sym_idx) in
+        (* Mach-O uses implicit addends in the instruction/data *)
+        Some { r_offset = ri.ri_address; r_symbol = sym.sym_name; r_addend = 0L }
+      else None
+    | _ -> None)
