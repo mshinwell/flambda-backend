@@ -26,9 +26,9 @@
  ******************************************************************************)
 
 module Kind = struct
-  (* Relocation with symbol name and addend. On RELA platforms (Linux ELF),
-     the addend is stored in the relocation entry. On REL platforms (macOS
-     Mach-O), the addend is encoded in the instruction/data. *)
+  (* Relocation with symbol name and addend. On RELA platforms (Linux ELF), the
+     addend is stored in the relocation entry. On REL platforms (macOS Mach-O),
+     the addend is encoded in the instruction/data. *)
   type sym_with_addend =
     { symbol : string;
       addend : int
@@ -56,9 +56,9 @@ module Kind = struct
         }
     (* ELF section-relative 32-bit PC-relative reference. Used on ELF for
        cross-section references when function sections are enabled. The
-       section_name is the target section (e.g., .text.caml.funcname) and
-       addend is the offset within that section. The linker computes:
-       section_address + addend - relocation_address *)
+       section_name is the target section (e.g., .text.caml.funcname) and addend
+       is the offset within that section. The linker computes: section_address +
+       addend - relocation_address *)
     | R_AARCH64_PREL32 of
         { section_name : string;
           addend : int

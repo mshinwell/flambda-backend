@@ -53,7 +53,7 @@ let rec eval_constant state ~all_sections const =
     | Some expr ->
       (* Recursively evaluate the assigned expression *)
       eval_constant state ~all_sections expr
-    | None ->
+    | None -> (
       (* When generating PIC code (dlcode=true), global symbols should not be
          resolved as they may be interposed at runtime. We must emit zeros and
          let the linker handle them via relocations. Note: global symbols appear
@@ -75,7 +75,7 @@ let rec eval_constant state ~all_sections const =
           | None -> (
             match All_section_states.find_in_any_section all_sections name with
             | Some (offset, _section) -> Some (Int64.of_int offset)
-            | None -> None))
+            | None -> None)))
   in
   C.eval ~this ~lookup const
 
@@ -91,38 +91,38 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
     (* First check if label is in current section *)
     match SS.find_label_offset_in_bytes state label_name with
     | Some _ -> None (* Same section, use normal eval *)
-    | None ->
+    | None -> (
       let macosx = String.equal Config.system "macosx" in
       let for_jit = All_section_states.for_jit all_sections in
       (* On ELF (not JIT) with function sections, check individual sections
          first. The assembler emits R_AARCH64_PREL32 with section symbol and
          addend. For JIT mode, we aggregate sections so can't use section
          symbols. *)
-      if (not macosx)
-         && (not for_jit)
-         && (match
-               All_section_states.find_in_any_individual_section_with_state
-                 all_sections label_name
-             with
-            | Some (target_offset, section_name, _target_state) ->
-              if not (Asm_section.equal current_section Asm_section.Data)
-              then
-                Misc.fatal_errorf
-                  "Cross-section (Label - This) from non-DATA section %s to \
-                   %s not supported"
-                  (Asm_section.to_string current_section)
-                  section_name
-              else (
-                (* ELF with function sections: use R_AARCH64_PREL32 with
-                   section symbol and addend. The addend is the offset of the
-                   label within the section plus any user-specified offset. *)
-                let addend = target_offset + Int64.to_int offset_upper in
-                SS.add_relocation_at_current_offset state ~symbol_name:section_name
-                  ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
-                true)
-            | None -> false)
+      if (not macosx) && (not for_jit)
+         &&
+         match
+           All_section_states.find_in_any_individual_section_with_state
+             all_sections label_name
+         with
+         | Some (target_offset, section_name, _target_state) ->
+           if not (Asm_section.equal current_section Asm_section.Data)
+           then
+             Misc.fatal_errorf
+               "Cross-section (Label - This) from non-DATA section %s to %s \
+                not supported"
+               (Asm_section.to_string current_section)
+               section_name
+           else
+             (* ELF with function sections: use R_AARCH64_PREL32 with section
+                symbol and addend. The addend is the offset of the label within
+                the section plus any user-specified offset. *)
+             let addend = target_offset + Int64.to_int offset_upper in
+             SS.add_relocation_at_current_offset state ~symbol_name:section_name
+               ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
+             true
+         | None -> false
       then Some 0L (* ELF RELA: addend in relocation, emit 0 in data *)
-      else (
+      else
         (* Try cross-section lookup for standard sections. Use
            find_in_any_section_with_state to get the actual state where the
            label was found. *)
@@ -137,24 +137,24 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
           else if not (Asm_section.equal current_section Asm_section.Data)
           then
             Misc.fatal_errorf
-              "Cross-section (Label - This) from non-DATA section %s to %s \
-               not supported"
+              "Cross-section (Label - This) from non-DATA section %s to %s not \
+               supported"
               (Asm_section.to_string current_section)
               (Asm_section.to_string label_section)
           else if (not macosx) && not for_jit
           then (
-            (* ELF without function sections: use R_AARCH64_PREL32 with
-               standard section symbol. The assembler uses section symbols
-               for cross-section references. *)
+            (* ELF without function sections: use R_AARCH64_PREL32 with standard
+               section symbol. The assembler uses section symbols for
+               cross-section references. *)
             let section_name = Asm_section.to_string label_section in
             let addend = target_offset + Int64.to_int offset_upper in
             SS.add_relocation_at_current_offset state ~symbol_name:section_name
               ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
             Some 0L (* ELF RELA: addend in relocation, emit 0 in data *))
           else
-            (* macOS or JIT: use symbol pairs (SUBTRACTOR + UNSIGNED).
-               The linker computes: plus_sym - minus_sym + addend
-               So: addend = (target - plus_sym) - (current - minus_sym) *)
+            (* macOS or JIT: use symbol pairs (SUBTRACTOR + UNSIGNED). The
+               linker computes: plus_sym - minus_sym + addend So: addend =
+               (target - plus_sym) - (current - minus_sym) *)
             let current_pos = SS.offset_in_bytes state in
             (* Find nearest symbol in DATA for SUBTRACTOR *)
             match SS.find_nearest_symbol_before state current_pos with
@@ -162,9 +162,9 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
               Misc.fatal_error
                 "No symbol in DATA section for cross-section relocation"
             | Some (minus_symbol, minus_sym_offset) -> (
-              (* Find nearest symbol in target section for UNSIGNED.
-                 Note: when using find_in_any_section_with_state, we get the
-                 target offset within the actual section state. *)
+              (* Find nearest symbol in target section for UNSIGNED. Note: when
+                 using find_in_any_section_with_state, we get the target offset
+                 within the actual section state. *)
               let target_state_for_lookup =
                 All_section_states.find_exn all_sections label_section
               in
@@ -190,14 +190,16 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                 (* On macOS (Mach-O), the addend must be in the data. *)
                 Some addend))))
 
-(* Returns true if we're on a RELA platform (Linux ELF) where addends are
-   stored in the relocation entry rather than in the instruction/data.
-   On REL platforms (macOS Mach-O), addends are encoded in the instruction. *)
+(* Returns true if we're on a RELA platform (Linux ELF) where addends are stored
+   in the relocation entry rather than in the instruction/data. On REL platforms
+   (macOS Mach-O), addends are encoded in the instruction. *)
 let is_rela_platform () =
   match Config.system with
-  | "linux" | "linux_eabi" | "linux_eabihf" | "freebsd" | "netbsd" | "openbsd" -> true
+  | "linux" | "linux_eabi" | "linux_eabihf" | "freebsd" | "netbsd" | "openbsd"
+    ->
+    true
   | "macosx" | "darwin" -> false
-  | _ -> false  (* Default to REL behavior for unknown systems *)
+  | _ -> false (* Default to REL behavior for unknown systems *)
 
 (* When true, emit relocations for ALL 8-byte symbol references (matching
    assembler behavior). When false, only emit relocations for cross-section
@@ -207,8 +209,8 @@ let emit_relocs_for_all_symbol_refs = ref false
 
 (* Handle absolute symbol reference. For .8byte symbol references in object
    files, the assembler always emits relocations. We can either match that
-   behavior (for verification) or resolve same-section refs at emit time
-   (more efficient for JIT). *)
+   behavior (for verification) or resolve same-section refs at emit time (more
+   efficient for JIT). *)
 let is_absolute_symbol_reference state ~all_sections ~current_section
     ~width_bytes (cst : C.t) =
   match[@warning "-4"] cst with

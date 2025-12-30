@@ -1542,10 +1542,12 @@ module Oxcaml_options_impl = struct
 
   let internal_assembler = set' Oxcaml_flags.internal_assembler
   let save_binary_sections = set' Oxcaml_flags.save_binary_sections
+
   let verify_binary_emitter () =
     set' Oxcaml_flags.verify_binary_emitter ();
     (* Verification requires saving binary sections *)
     set' Oxcaml_flags.save_binary_sections ()
+
   let gc_timings = set' Oxcaml_flags.gc_timings
   let no_mach_ir () = ()
   let dllvmir () = set' Oxcaml_flags.dump_llvmir ()

@@ -118,8 +118,8 @@ let mangle flag =
   let dash_to_underscore c = match c with '-' -> '_' | c -> c in
   String.map dash_to_underscore flag
 
-(* Binary emitter comparison for ARM64: compare the binary-sections produced
-   by the existing executable compilation against the assembler's .o file. *)
+(* Binary emitter comparison for ARM64: compare the binary-sections produced by
+   the existing executable compilation against the assembler's .o file. *)
 let binary_emitter_compare name =
   let subst = function
     | "name" -> name
@@ -253,8 +253,8 @@ let () =
     List.map (fun (name, _) -> name, enabled_if_main_amd64_not_macos) tests
   in
   List.iter (print_test ~extra_flag:"-internal-assembler") tests;
-  (* Binary emitter comparison for ARM64 SIMD tests.
-     We test all files that run on ARM64 (enabled_if_main). *)
+  (* Binary emitter comparison for ARM64 SIMD tests. We test all files that run
+     on ARM64 (enabled_if_main). *)
   let arm64_binary_emitter_tests =
     [ "basic";
       "basic_u";

@@ -271,8 +271,8 @@ module Relocation = struct
           (* target_addr is plus_symbol's address *)
           Ok (Int64.sub target_addr minus_addr))
       | R_AARCH64_PREL32 { section_name = _; addend } ->
-        (* ELF section-relative: section_address + addend - place_address.
-           For JIT, target_addr should be the section start address. *)
+        (* ELF section-relative: section_address + addend - place_address. For
+           JIT, target_addr should be the section start address. *)
         let result =
           Int64.sub (Int64.add target_addr (Int64.of_int addend)) place_address
         in

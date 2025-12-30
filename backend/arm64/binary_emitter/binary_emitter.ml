@@ -89,8 +89,8 @@ let iter emitter ~all_sections ~on_insn ~on_directive =
                Each function section is tracked separately so we can compare
                them against the assembler output during verification. *)
             match names with
-            | [name] when String.length name > 5
-                       && String.sub name 0 5 = ".text" ->
+            | [name]
+              when String.length name > 5 && String.sub name 0 5 = ".text" ->
               current_state
                 := All_section_states.get_or_create_individual all_sections name
             | _ ->
@@ -122,7 +122,8 @@ let compute_label_offsets emitter ~all_sections =
       | Cfi_restore_state | Cfi_def_cfa_register _ | Comment _ | Const _
       | File _ | Indirect_symbol _ | Loc _ | New_line | Private_extern _
       | Section _ | Size _ | Sleb128 _ | Space _ | Type _ | Uleb128 _
-      | Protected _ | Hidden _ | Weak _ | External _ | Reloc _ -> ())
+      | Protected _ | Hidden _ | Weak _ | External _ | Reloc _ ->
+        ())
 
 (* Second pass: emit machine code and data *)
 let emit_code_and_data emitter ~all_sections =

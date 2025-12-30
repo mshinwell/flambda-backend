@@ -2906,7 +2906,8 @@ let begin_assembly _unix =
        symbol references to match assembler behavior *)
     if !Oxcaml_flags.save_binary_sections
     then
-      Arm64_binary_emitter.Binary_emitter.emit_relocs_for_all_symbol_refs := true;
+      Arm64_binary_emitter.Binary_emitter.emit_relocs_for_all_symbol_refs
+        := true;
     let emitter = Arm64_binary_emitter.Binary_emitter.create () in
     jit_emitter := Some emitter;
     Arm64_ast.Ast.DSL.Acc.set_emit_instruction
@@ -3022,8 +3023,8 @@ let end_assembly () =
     | _ -> ());
     (* Get assembled sections. for_jit is true only when there's a JIT hook
        registered (actual JIT compilation). When we're just saving binary
-       sections for verification, we're generating an object file and should
-       use for_jit:false to match ELF relocation format. *)
+       sections for verification, we're generating an object file and should use
+       for_jit:false to match ELF relocation format. *)
     let for_jit =
       Option.is_some
         (Arm64_binary_emitter.Binary_emitter.For_jit.Internal_assembler.get ())
@@ -3031,9 +3032,9 @@ let end_assembly () =
     let section_tbl =
       Arm64_binary_emitter.Binary_emitter.emit ~for_jit emitter
     in
-    (* Convert to list of (name, section) pairs. Include both standard
-       sections (by Asm_section.t) and individual sections (by name string,
-       for function sections like .text.caml.<funcname>). *)
+    (* Convert to list of (name, section) pairs. Include both standard sections
+       (by Asm_section.t) and individual sections (by name string, for function
+       sections like .text.caml.<funcname>). *)
     let sections =
       let from_standard =
         Arm64_binary_emitter.All_section_states.fold section_tbl ~init:[]
@@ -3061,8 +3062,8 @@ let end_assembly () =
       | [] -> sections
       | [(sec_name, _)] when String.equal sec_name ".text" -> sections
       | _ ->
-        (* Aggregate all text sections into one .text section. Sort by name
-           for deterministic ordering. *)
+        (* Aggregate all text sections into one .text section. Sort by name for
+           deterministic ordering. *)
         let sorted_text =
           List.sort (fun (a, _) (b, _) -> String.compare a b) text_sections
         in
@@ -3136,7 +3137,7 @@ let end_assembly () =
     | None -> ()
     | Some hook ->
       (* The hook expects (string * assembled_section) list and returns a file
-         writer function. We ignore the file writer for JIT. Use the
-         aggregated sections where all .text.* are merged into .text. *)
+         writer function. We ignore the file writer for JIT. Use the aggregated
+         sections where all .text.* are merged into .text. *)
       let _file_writer = hook sections_for_jit in
       ())

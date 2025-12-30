@@ -70,8 +70,9 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
       let imm26 = pc_relative_offset / 4 in
       if imm26 < -0x2000000 || imm26 > 0x1FFFFFF
       then
-        Misc.fatal_errorf "%s offset %d to symbol '%s' out of range (max ±128MB)"
-          instr_name pc_relative_offset symbol_name;
+        Misc.fatal_errorf
+          "%s offset %d to symbol '%s' out of range (max ±128MB)" instr_name
+          pc_relative_offset symbol_name;
       imm26
 
 (* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)

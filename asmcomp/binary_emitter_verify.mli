@@ -19,33 +19,39 @@
     extracted from object files produced by the system assembler.
 *)
 
-type section_mismatch = {
-  section_name : string;
-  byte_offset : int;
-  (** For .text, aligned to instruction boundary *)
-  instruction_offset : int option;
-  expected : string;  (** from binary emitter, hex dump *)
-  actual : string;    (** from assembler, hex dump *)
-  expected_size : int;
-  actual_size : int;
-}
+type section_mismatch =
+  { section_name : string;
+    byte_offset : int;  (** For .text, aligned to instruction boundary *)
+    instruction_offset : int option;
+    expected : string;  (** from binary emitter, hex dump *)
+    actual : string;  (** from assembler, hex dump *)
+    expected_size : int;
+    actual_size : int
+  }
 
-type relocation_mismatch = {
-  section_name : string;
-  offset : int;
-  expected : string;
-  actual : string;
-}
+type relocation_mismatch =
+  { section_name : string;
+    offset : int;
+    expected : string;
+    actual : string
+  }
 
 type mismatch =
   | Section_content of section_mismatch
-  | Section_size of { section_name : string; expected : int; actual : int }
+  | Section_size of
+      { section_name : string;
+        expected : int;
+        actual : int
+      }
   | Relocation of relocation_mismatch
   | Missing_section of string
   | Missing_binary_sections_dir of string
 
 type result =
-  | Match of { text_size : int; data_size : int }
+  | Match of
+      { text_size : int;
+        data_size : int
+      }
   | Mismatch of mismatch
   | Object_file_error of string
 

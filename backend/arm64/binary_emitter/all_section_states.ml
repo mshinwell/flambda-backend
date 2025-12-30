@@ -67,8 +67,8 @@ let iter t ~f = Asm_section.Tbl.iter f t.sections
 
 let fold t ~init ~f = Asm_section.Tbl.fold f t.sections init
 
-(* Individual sections: for sections tracked by their exact name string, such
-   as function sections (.text.caml.<funcname>). *)
+(* Individual sections: for sections tracked by their exact name string, such as
+   function sections (.text.caml.<funcname>). *)
 
 let get_or_create_individual t name =
   match Hashtbl.find_opt t.individual_sections name with
@@ -120,8 +120,8 @@ let find_in_any_individual_section_with_state t name =
   !result
 
 (* Search all sections for a label or symbol. Returns (offset, section,
-   section_state) if found. This is needed when the caller needs to access
-   the actual state where the label was found. *)
+   section_state) if found. This is needed when the caller needs to access the
+   actual state where the label was found. *)
 let find_in_any_section_with_state t name =
   let result = ref None in
   Asm_section.Tbl.iter
@@ -136,34 +136,34 @@ let find_in_any_section_with_state t name =
           | None -> ()))
     t.sections;
   (* If not found in standard sections, search individual sections. *)
-  (if Option.is_none !result
-   then
-     Hashtbl.iter
-       (fun section_name state ->
-         if Option.is_none !result
-         then
-           match Section_state.find_label_offset_in_bytes state name with
-           | Some offset ->
-             (* Map .text.* to Text for relocation type purposes *)
-             let section =
-               if String.length section_name > 5
-                  && String.sub section_name 0 5 = ".text"
-               then Asm_section.Text
-               else Asm_section.Data
-             in
-             result := Some (offset, section, state)
-           | None -> (
-             match Section_state.find_symbol_offset_in_bytes state name with
-             | Some offset ->
-               let section =
-                 if String.length section_name > 5
-                    && String.sub section_name 0 5 = ".text"
-                 then Asm_section.Text
-                 else Asm_section.Data
-               in
-               result := Some (offset, section, state)
-             | None -> ()))
-       t.individual_sections);
+  if Option.is_none !result
+  then
+    Hashtbl.iter
+      (fun section_name state ->
+        if Option.is_none !result
+        then
+          match Section_state.find_label_offset_in_bytes state name with
+          | Some offset ->
+            (* Map .text.* to Text for relocation type purposes *)
+            let section =
+              if String.length section_name > 5
+                 && String.sub section_name 0 5 = ".text"
+              then Asm_section.Text
+              else Asm_section.Data
+            in
+            result := Some (offset, section, state)
+          | None -> (
+            match Section_state.find_symbol_offset_in_bytes state name with
+            | Some offset ->
+              let section =
+                if String.length section_name > 5
+                   && String.sub section_name 0 5 = ".text"
+                then Asm_section.Text
+                else Asm_section.Data
+              in
+              result := Some (offset, section, state)
+            | None -> ()))
+      t.individual_sections;
   !result
 
 (* Search all sections for a label or symbol. Returns (offset, section) if
@@ -182,21 +182,21 @@ let find_in_any_section t name =
           | None -> ()))
     t.sections;
   (* If not found in standard sections, search individual sections. For
-     individual text sections like .text.caml.funcname, treat them as Text
-     for relocation purposes. *)
+     individual text sections like .text.caml.funcname, treat them as Text for
+     relocation purposes. *)
   (if Option.is_none !result
-   then
-     match find_in_any_individual_section t name with
-     | Some (offset, section_name) ->
-       (* Treat .text.* individual sections as Text for relocation checking *)
-       let section =
-         if String.length section_name > 5
-            && String.sub section_name 0 5 = ".text"
-         then Asm_section.Text
-         else Asm_section.Data
-       in
-       result := Some (offset, section)
-     | None -> ());
+  then
+    match find_in_any_individual_section t name with
+    | Some (offset, section_name) ->
+      (* Treat .text.* individual sections as Text for relocation checking *)
+      let section =
+        if String.length section_name > 5
+           && String.sub section_name 0 5 = ".text"
+        then Asm_section.Text
+        else Asm_section.Data
+      in
+      result := Some (offset, section)
+    | None -> ());
   !result
 
 (* Reset all section offsets to 0 (for second pass). *)
@@ -212,5 +212,4 @@ let reset_offsets t =
 let add_direct_assignment t name expr =
   Hashtbl.replace t.direct_assignments name expr
 
-let find_direct_assignment t name =
-  Hashtbl.find_opt t.direct_assignments name
+let find_direct_assignment t name = Hashtbl.find_opt t.direct_assignments name

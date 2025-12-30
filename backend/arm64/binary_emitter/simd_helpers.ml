@@ -67,9 +67,9 @@ let simd_copy_imm5 (type v s) (vec : (v, s) Neon_reg_name.Vector.t) lane_idx =
   | V2S | V4S -> (lane_idx lsl 3) lor 0b00100
   | V1D | V2D -> (lane_idx lsl 4) lor 0b01000
 
-(* Helper to compute imm4 for INS (element) source index.
-   imm4 encodes the source element index in the same size-dependent way as imm5,
-   but with one fewer bit (4 bits instead of 5):
+(* Helper to compute imm4 for INS (element) source index. imm4 encodes the
+   source element index in the same size-dependent way as imm5, but with one
+   fewer bit (4 bits instead of 5):
 
    - B: xxxx (index in bits 3:0)
 

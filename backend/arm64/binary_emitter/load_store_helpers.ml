@@ -255,8 +255,8 @@ let encode_load_store_gp_sized :
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
-         On REL platforms (macOS), encode addend in instruction. *)
+      (* On RELA platforms (Linux), encode 0 in instruction - addend is in
+         relocation. On REL platforms (macOS), encode addend in instruction. *)
       let offset =
         if Encode_directive.is_rela_platform () then 0 else sym.offset
       in
@@ -548,8 +548,8 @@ let encode_load_store_simd_fp :
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
-         On REL platforms (macOS), encode addend in instruction. *)
+      (* On RELA platforms (Linux), encode 0 in instruction - addend is in
+         relocation. On REL platforms (macOS), encode addend in instruction. *)
       let offset =
         if Encode_directive.is_rela_platform () then 0 else sym.offset
       in
