@@ -28,6 +28,7 @@
 open Arm64_ast.Ast
 
 val encode_instruction :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   ('num, 'operands) Instruction_name.t ->
   ('num, 'operands) many ->

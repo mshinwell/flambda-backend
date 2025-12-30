@@ -80,6 +80,26 @@ module Relocation = struct
       [plus_symbol; minus_symbol]
     | R_AARCH64_PREL32 { section_name; _ } -> [section_name]
 
+  (* For RELA platforms (Linux ELF), return symbols with their addends.
+     Returns [(symbol, addend); ...] pairs. *)
+  let target_symbols_with_addends (r : Relocation.t) : (string * int) list =
+    match r.kind with
+    | R_AARCH64_ADR_PREL_LO21 { symbol; addend }
+    | R_AARCH64_ADR_PREL_PG_HI21 { symbol; addend }
+    | R_AARCH64_ADR_GOT_PAGE { symbol; addend }
+    | R_AARCH64_LD64_GOT_LO12_NC { symbol; addend }
+    | R_AARCH64_ADD_ABS_LO12_NC { symbol; addend }
+    | R_AARCH64_LDST64_ABS_LO12_NC { symbol; addend }
+    | R_AARCH64_CALL26 { symbol; addend }
+    | R_AARCH64_JUMP26 { symbol; addend }
+    | R_AARCH64_ABS64 { symbol; addend } ->
+      [symbol, addend]
+    | R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol } ->
+      (* Return both: UNSIGNED uses plus_symbol, SUBTRACTOR uses minus_symbol.
+         Addends are 0 for PREL32_PAIR since they're computed from symbol diff. *)
+      [plus_symbol, 0; minus_symbol, 0]
+    | R_AARCH64_PREL32 { section_name; addend } -> [section_name, addend]
+
   let is_got_reloc (r : Relocation.t) =
     match r.kind with
     | R_AARCH64_ADR_GOT_PAGE _ | R_AARCH64_LD64_GOT_LO12_NC _ -> true

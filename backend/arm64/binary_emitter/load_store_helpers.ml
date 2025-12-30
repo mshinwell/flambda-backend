@@ -157,6 +157,7 @@ let encode_load_store_pair_signed_offset ~opc ~v ~l ~imm7 ~rt2 ~rn ~rt =
    (load/store and signed extension) *)
 let encode_load_store_gp_sized :
     type a.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     instr_name:string ->
     size:int ->
@@ -171,7 +172,7 @@ let encode_load_store_gp_sized :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~size ~opc ~rd addressing ->
+ fun ~all_sections state ~instr_name ~size ~opc ~rd addressing ->
   let vr = 0 in
   let rt = Reg.gp_encoding rd in
   match addressing with
@@ -241,8 +242,14 @@ let encode_load_store_gp_sized :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
+      let resolved_sym, resolved_addend =
+        Encode_directive.resolve_local_label_for_elf ~all_sections
+          ~sym_name:sym.name ~sym_offset:sym.offset
+      in
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
+        let r =
+          { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+        in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -252,8 +259,8 @@ let encode_load_store_gp_sized :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state
+        ~symbol_name:resolved_sym ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
@@ -279,6 +286,7 @@ let encode_load_store_gp_sized :
 
 let encode_load_store_gp :
     type a.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     instr_name:string ->
     opc:int ->
@@ -292,17 +300,19 @@ let encode_load_store_gp :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~opc ~rd addressing ->
+ fun ~all_sections state ~instr_name ~opc ~rd addressing ->
   let size =
     match rd.reg_name with
     | GP W | GP WZR | GP WSP -> 0b10
     | GP X | GP XZR | GP SP | GP LR | GP FP -> 0b11
   in
-  encode_load_store_gp_sized state ~instr_name ~size ~opc ~rd addressing
+  encode_load_store_gp_sized ~all_sections state ~instr_name ~size ~opc ~rd
+    addressing
 
 (* Byte load/store - size=00 *)
 let encode_load_store_byte :
     type a.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     instr_name:string ->
     opc:int ->
@@ -316,12 +326,14 @@ let encode_load_store_byte :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~opc ~rd addressing ->
-  encode_load_store_gp_sized state ~instr_name ~size:0b00 ~opc ~rd addressing
+ fun ~all_sections state ~instr_name ~opc ~rd addressing ->
+  encode_load_store_gp_sized ~all_sections state ~instr_name ~size:0b00 ~opc ~rd
+    addressing
 
 (* Halfword load/store - size=01 *)
 let encode_load_store_halfword :
     type a.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     instr_name:string ->
     opc:int ->
@@ -335,8 +347,9 @@ let encode_load_store_halfword :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~opc ~rd addressing ->
-  encode_load_store_gp_sized state ~instr_name ~size:0b01 ~opc ~rd addressing
+ fun ~all_sections state ~instr_name ~opc ~rd addressing ->
+  encode_load_store_gp_sized ~all_sections state ~instr_name ~size:0b01 ~opc ~rd
+    addressing
 
 (* Load-Acquire (LDAR) encoding. Format: size[31:30] | 001000 | o2[23] | L[22] |
    o1[21] | Rs[20:16] | o0[15] | Rt2[14:10] | Rn[9:5] | Rt[4:0] For LDAR: o2=1,
@@ -447,6 +460,7 @@ let encode_load_store_pair_gp :
    size: S->10, D->11, Q->00 *)
 let encode_load_store_simd_fp :
     type s.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     instr_name:string ->
     is_load:bool ->
@@ -460,7 +474,7 @@ let encode_load_store_simd_fp :
     | `Post ]
     Operand.Addressing_mode.t ->
     int32 =
- fun state ~instr_name ~is_load ~rd addressing ->
+ fun ~all_sections state ~instr_name ~is_load ~rd addressing ->
   let vr = 1 in
   let size, opc, scale =
     match rd.reg_name with
@@ -534,8 +548,14 @@ let encode_load_store_simd_fp :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
+      let resolved_sym, resolved_addend =
+        Encode_directive.resolve_local_label_for_elf ~all_sections
+          ~sym_name:sym.name ~sym_offset:sym.offset
+      in
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
+        let r =
+          { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+        in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -545,8 +565,8 @@ let encode_load_store_simd_fp :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state
+        ~symbol_name:resolved_sym ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)

@@ -1653,6 +1653,17 @@ module For_jit = struct
     (* x86 doesn't have paired relocations, so this just returns a singleton *)
     let target_symbols r = [target_symbol r]
 
+    (* x86 doesn't have paired relocations, so this just returns a singleton
+       with the addend from the relocation *)
+    let target_symbols_with_addends (r : Reloc.t) =
+      let label, addend = match r.Reloc.kind with
+        | Kind.REL32 (label, addend)
+        | Kind.DIR32 (label, addend)
+        | Kind.DIR64 (label, addend) -> label, addend
+      in
+      let sym, _ = parse_label label in
+      [sym, Int64.to_int addend]
+
     let is_got_reloc (r : Reloc.t) =
       let label = match r.Reloc.kind with
         | Kind.REL32 (label, _)

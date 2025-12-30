@@ -51,6 +51,7 @@ val encode_load_store_pair_signed_offset :
   opc:int -> v:int -> l:int -> imm7:int -> rt2:int -> rn:int -> rt:int -> int32
 
 val encode_load_store_gp_sized :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   instr_name:string ->
   size:int ->
@@ -67,6 +68,7 @@ val encode_load_store_gp_sized :
   int32
 
 val encode_load_store_gp :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   instr_name:string ->
   opc:int ->
@@ -82,6 +84,7 @@ val encode_load_store_gp :
   int32
 
 val encode_load_store_byte :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   instr_name:string ->
   opc:int ->
@@ -97,6 +100,7 @@ val encode_load_store_byte :
   int32
 
 val encode_load_store_halfword :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   instr_name:string ->
   opc:int ->
@@ -124,6 +128,7 @@ val encode_load_store_pair_gp :
   int32
 
 val encode_load_store_simd_fp :
+  all_sections:All_section_states.t ->
   Section_state.t ->
   instr_name:string ->
   is_load:bool ->

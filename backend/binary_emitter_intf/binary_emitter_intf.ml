@@ -51,6 +51,11 @@ module type Relocation = sig
       Used for saving relocations to files for verification. *)
   val target_symbols : t -> string list
 
+  (** For paired relocations, returns all symbols with their addends.
+      On RELA platforms (Linux ELF), addends are stored in relocations.
+      On REL platforms (macOS), addends are encoded in instructions. *)
+  val target_symbols_with_addends : t -> (string * int) list
+
   (** Is this a GOT relocation? (JIT needs to know for GOT table building) *)
   val is_got_reloc : t -> bool
 

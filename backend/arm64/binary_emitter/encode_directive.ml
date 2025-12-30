@@ -201,6 +201,66 @@ let is_rela_platform () =
   | "macosx" | "darwin" -> false
   | _ -> false (* Default to REL behavior for unknown systems *)
 
+(* On Linux ELF, local symbols don't have symbol table entries and the assembler
+   converts them to section symbol + offset. This includes:
+   1. Local labels starting with .L
+   2. File-scope symbols (defined via label, not global symbol)
+   We need to do the same for verification to pass. Returns (symbol_name, addend)
+   where symbol_name is either the original symbol or the section name, and
+   addend includes the offset within the section plus any original offset. *)
+let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
+  if not (is_rela_platform ())
+  then
+    (* macOS: use symbol names directly *)
+    sym_name, sym_offset
+  else
+    (* Linux ELF: check if this is a local/file-scope symbol that needs
+       conversion to section + offset *)
+    let is_local_label =
+      String.length sym_name >= 2
+      && Char.equal sym_name.[0] '.'
+      && Char.equal sym_name.[1] 'L'
+    in
+    (* Try to find the symbol in individual sections first (function sections) *)
+    let try_individual_sections () =
+      match
+        All_section_states.find_in_any_individual_section_with_state all_sections
+          sym_name
+      with
+      | Some (label_offset, section_name, target_state) ->
+        (* Check if this is a global symbol in the target section *)
+        let is_global_in_target =
+          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
+        in
+        if is_local_label || not is_global_in_target
+        then Some (section_name, label_offset + sym_offset)
+        else None
+      | None -> None
+    in
+    (* Try to find in standard sections *)
+    let try_standard_sections () =
+      match
+        All_section_states.find_in_any_section_with_state all_sections sym_name
+      with
+      | Some (label_offset, section, target_state) ->
+        let section_name = Asm_section.to_string section in
+        let is_global_in_target =
+          Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
+        in
+        if is_local_label || not is_global_in_target
+        then Some (section_name, label_offset + sym_offset)
+        else None
+      | None -> None
+    in
+    match try_individual_sections () with
+    | Some result -> result
+    | None -> (
+      match try_standard_sections () with
+      | Some result -> result
+      | None ->
+        (* Symbol not found or is global - use original name *)
+        sym_name, sym_offset)
+
 (* When true, emit relocations for ALL 8-byte symbol references (matching
    assembler behavior). When false, only emit relocations for cross-section
    references and resolve same-section refs at emit time. Set to true for

@@ -3122,11 +3122,15 @@ let end_assembly () =
             List.iter
               (fun reloc ->
                 (* For paired relocations (SUBTRACTOR + UNSIGNED), write both
-                   symbols as separate lines at the same offset. *)
+                   symbols as separate lines at the same offset. On RELA
+                   platforms (Linux), include addends for proper verification. *)
                 let offset = R.offset_from_section_beginning reloc in
                 List.iter
-                  (fun sym -> Printf.fprintf oc "%d %s\n" offset sym)
-                  (R.target_symbols reloc))
+                  (fun (sym, addend) ->
+                    if addend = 0
+                    then Printf.fprintf oc "%d %s\n" offset sym
+                    else Printf.fprintf oc "%d %s %d\n" offset sym addend)
+                  (R.target_symbols_with_addends reloc))
               relocs;
             close_out oc)
         sections);

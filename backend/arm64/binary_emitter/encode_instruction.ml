@@ -29,11 +29,12 @@ open Arm64_ast.Ast
 
 let encode_instruction :
     type num operands.
+    all_sections:All_section_states.t ->
     Section_state.t ->
     (num, operands) Instruction_name.t ->
     (num, operands) many ->
     int32 =
- fun state instr operands ->
+ fun ~all_sections state instr operands ->
   match operands, instr with
   | ( Pair
         (Reg { reg_name = Neon (Vector vec); index = rd }, Reg { index = rn; _ }),
@@ -48,14 +49,20 @@ let encode_instruction :
     let sh = match shift with Some _ -> 1 | None -> 0 in
     match sym.reloc with
     | Needs_reloc reloc ->
+      let resolved_sym, resolved_addend =
+        Encode_directive.resolve_local_label_for_elf ~all_sections
+          ~sym_name:sym.name ~sym_offset:sym.offset
+      in
       let reloc_kind : Relocation.Kind.t =
-        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
+        let r =
+          { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+        in
         match reloc with
         | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC r
         | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-        ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state
+        ~symbol_name:resolved_sym ~reloc_kind;
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
       let imm12 =
@@ -120,14 +127,20 @@ let encode_instruction :
     let immlo, immhi = Adr_helpers.split_21bit_immediate pc_rel in
     Adr_helpers.encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
+    let resolved_sym, resolved_addend =
+      Encode_directive.resolve_local_label_for_elf ~all_sections
+        ~sym_name:sym.name ~sym_offset:sym.offset
+    in
     let reloc_kind : Relocation.Kind.t =
-      let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
+      let r =
+        { Relocation.Kind.symbol = resolved_sym; addend = resolved_addend }
+      in
       match sym.reloc with
       | Needs_reloc GOT_PAGE -> R_AARCH64_ADR_GOT_PAGE r
       | Needs_reloc PAGE -> R_AARCH64_ADR_PREL_PG_HI21 r
     in
-    Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
-      ~reloc_kind;
+    Section_state.add_relocation_at_current_offset state
+      ~symbol_name:resolved_sym ~reloc_kind;
     (* On RELA platforms (Linux), encode 0 in instruction - addend is in
        relocation. On REL platforms (macOS), encode addend in instruction. *)
     let offset =
@@ -841,32 +854,32 @@ let encode_instruction :
     Load_store_helpers.encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1
       ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
-    Load_store_helpers.encode_load_store_gp state ~instr_name:"LDR" ~opc:0b01
-      ~rd addressing
+    Load_store_helpers.encode_load_store_gp ~all_sections state ~instr_name:"LDR"
+      ~opc:0b01 ~rd addressing
   | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
       LDR_simd_and_fp ) ->
-    Load_store_helpers.encode_load_store_simd_fp state ~instr_name:"LDR"
-      ~is_load:true ~rd addressing
+    Load_store_helpers.encode_load_store_simd_fp ~all_sections state
+      ~instr_name:"LDR" ~is_load:true ~rd addressing
   | Pair (Reg rd, Mem addressing), LDRB ->
     (* LDRB: size=00, opc=01 *)
-    Load_store_helpers.encode_load_store_byte state ~instr_name:"LDRB" ~opc:0b01
-      ~rd addressing
+    Load_store_helpers.encode_load_store_byte ~all_sections state
+      ~instr_name:"LDRB" ~opc:0b01 ~rd addressing
   | Pair (Reg rd, Mem addressing), LDRH ->
     (* LDRH: size=01, opc=01 *)
-    Load_store_helpers.encode_load_store_halfword state ~instr_name:"LDRH"
-      ~opc:0b01 ~rd addressing
+    Load_store_helpers.encode_load_store_halfword ~all_sections state
+      ~instr_name:"LDRH" ~opc:0b01 ~rd addressing
   | Pair (Reg rd, Mem addressing), LDRSB ->
     (* LDRSB (sign-extend byte to 64-bit): size=00, opc=10 *)
-    Load_store_helpers.encode_load_store_byte state ~instr_name:"LDRSB"
-      ~opc:0b10 ~rd addressing
+    Load_store_helpers.encode_load_store_byte ~all_sections state
+      ~instr_name:"LDRSB" ~opc:0b10 ~rd addressing
   | Pair (Reg rd, Mem addressing), LDRSH ->
     (* LDRSH (sign-extend halfword to 64-bit): size=01, opc=10 *)
-    Load_store_helpers.encode_load_store_halfword state ~instr_name:"LDRSH"
-      ~opc:0b10 ~rd addressing
+    Load_store_helpers.encode_load_store_halfword ~all_sections state
+      ~instr_name:"LDRSH" ~opc:0b10 ~rd addressing
   | Pair (Reg rd, Mem addressing), LDRSW ->
     (* LDRSW (sign-extend word to 64-bit): size=10, opc=10 *)
-    Load_store_helpers.encode_load_store_gp_sized state ~instr_name:"LDRSW"
-      ~size:0b10 ~opc:0b10 ~rd addressing
+    Load_store_helpers.encode_load_store_gp_sized ~all_sections state
+      ~instr_name:"LDRSW" ~size:0b10 ~opc:0b10 ~rd addressing
   | Triple (Reg rd, Reg rn, Reg rm), LSLV ->
     let sf = Reg.gp_sf rd in
     Data_proc_helpers.encode_data_proc_2_source ~sf ~s:0 ~opcode:0b001000 ~rm
@@ -1143,20 +1156,20 @@ let encode_instruction :
     Load_store_helpers.encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1
       ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
-    Load_store_helpers.encode_load_store_gp state ~instr_name:"STR" ~opc:0b00
-      ~rd addressing
+    Load_store_helpers.encode_load_store_gp ~all_sections state ~instr_name:"STR"
+      ~opc:0b00 ~rd addressing
   | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
       STR_simd_and_fp ) ->
-    Load_store_helpers.encode_load_store_simd_fp state ~instr_name:"STR"
-      ~is_load:false ~rd addressing
+    Load_store_helpers.encode_load_store_simd_fp ~all_sections state
+      ~instr_name:"STR" ~is_load:false ~rd addressing
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem addressing), STRB ->
     (* STRB: size=00, opc=00 *)
-    Load_store_helpers.encode_load_store_byte state ~instr_name:"STRB" ~opc:0b00
-      ~rd addressing
+    Load_store_helpers.encode_load_store_byte ~all_sections state
+      ~instr_name:"STRB" ~opc:0b00 ~rd addressing
   | Pair (Reg ({ reg_name = GP _; _ } as rd), Mem addressing), STRH ->
     (* STRH: size=01, opc=00 *)
-    Load_store_helpers.encode_load_store_halfword state ~instr_name:"STRH"
-      ~opc:0b00 ~rd addressing
+    Load_store_helpers.encode_load_store_halfword ~all_sections state
+      ~instr_name:"STRH" ~opc:0b00 ~rd addressing
   | Quad (Reg rd, Reg rn, Imm (Twelve imm12), Optional shift), SUB_immediate ->
     Add_sub_helpers.encode_add_sub_imm_auto_shift ~op:1 ~s:0 ~imm12
       ~shift_opt:shift ~rn ~rd

@@ -130,7 +130,9 @@ let emit_code_and_data emitter ~all_sections =
   let current_section = ref Asm_section.Text in
   iter emitter ~all_sections
     ~on_insn:(fun state (Instruction.I { name; operands }) ->
-      let encoded = Encode_instruction.encode_instruction state name operands in
+      let encoded =
+        Encode_instruction.encode_instruction ~all_sections state name operands
+      in
       let buf = Section_state.buffer state in
       (* Emit as little-endian 32-bit *)
       let emit shift =
