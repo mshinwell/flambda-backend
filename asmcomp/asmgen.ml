@@ -617,30 +617,32 @@ let compile_unit unix ~output_prefix ~asm_filename ~keep_asm ~obj_filename
         ~exceptionally:remove_asm_file;
       let assemble_result = Profile.record_call "assemble" assemble_file in
       if assemble_result <> 0 then raise (Error (Assembler_error asm_filename));
-      (* Verify binary emitter output if requested *)
-      (if !Oxcaml_flags.verify_binary_emitter
+      remove_asm_file ());
+  (* Verify binary emitter output if requested. This is done outside the
+     try_finally so that verification failures don't delete the object file,
+     making it easier to debug mismatches. *)
+  if !Oxcaml_flags.verify_binary_emitter
+  then (
+    let binary_sections_dir = output_prefix ^ ".binary-sections" in
+    match
+      Binary_emitter_verify.compare unix ~obj_file:obj_filename
+        ~binary_sections_dir
+    with
+    | Match { text_size; data_size } ->
+      if !Clflags.verbose
       then
-        let binary_sections_dir = output_prefix ^ ".binary-sections" in
-        match
-          Binary_emitter_verify.compare unix ~obj_file:obj_filename
-            ~binary_sections_dir
-        with
-        | Match { text_size; data_size } ->
-          if !Clflags.verbose
-          then
-            Format.eprintf "Binary emitter verified: text=%d data=%d bytes@."
-              text_size data_size
-        | Mismatch (Missing_binary_sections_dir _) ->
-          (* Binary sections dir missing - binary emitter didn't run (e.g.,
-             -stop-after linearization). Skip verification. *)
-          if !Clflags.verbose
-          then
-            Format.eprintf
-              "Binary emitter verification skipped (no binary sections)@."
-        | (Mismatch _ | Object_file_error _) as result ->
-          Binary_emitter_verify.print_result Format.err_formatter result;
-          raise (Error (Binary_emitter_mismatch obj_filename)));
-      remove_asm_file ())
+        Format.eprintf "Binary emitter verified: text=%d data=%d bytes@."
+          text_size data_size
+    | Mismatch (Missing_binary_sections_dir _) ->
+      (* Binary sections dir missing - binary emitter didn't run (e.g.,
+         -stop-after linearization). Skip verification. *)
+      if !Clflags.verbose
+      then
+        Format.eprintf
+          "Binary emitter verification skipped (no binary sections)@."
+    | (Mismatch _ | Object_file_error _) as result ->
+      Binary_emitter_verify.print_result Format.err_formatter result;
+      raise (Error (Binary_emitter_mismatch obj_filename)))
 
 let end_gen_implementation unix ?toplevel ~ppf_dump ~sourcefile make_cmm =
   Emitaux.Dwarf_helpers.init ~ppf_dump ~disable_dwarf:false ~sourcefile;
