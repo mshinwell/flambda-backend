@@ -133,13 +133,21 @@ let read_binary_section binary_sections_dir section_name =
   in
   if Sys.file_exists filename then Some (read_file_bytes filename) else None
 
-(* A binary emitter relocation: offset and symbol name *)
+(* A relocation: offset, symbol name, and addend *)
 type be_relocation =
   { be_offset : int;
-    be_symbol : string
+    be_symbol : string;
+    be_addend : int64
   }
 
-(* Read binary emitter relocations from .relocs file *)
+(* Symbol information: which section it's in and its offset within that section *)
+type symbol_info =
+  { sym_section : string;
+    sym_offset : int64
+  }
+
+(* Read binary emitter relocations from .relocs file.
+   Format: "offset symbol [addend]" where addend defaults to 0 *)
 let read_binary_relocations binary_sections_dir section_name =
   let filename =
     Filename.concat binary_sections_dir ("section_" ^ section_name ^ ".relocs")
@@ -155,7 +163,15 @@ let read_binary_relocations binary_sections_dir section_name =
          match String.split_on_char ' ' line with
          | [offset_str; symbol] ->
            let offset = int_of_string offset_str in
-           relocs := { be_offset = offset; be_symbol = symbol } :: !relocs
+           relocs
+             := { be_offset = offset; be_symbol = symbol; be_addend = 0L }
+                :: !relocs
+         | [offset_str; symbol; addend_str] ->
+           let offset = int_of_string offset_str in
+           let addend = Int64.of_string addend_str in
+           relocs
+             := { be_offset = offset; be_symbol = symbol; be_addend = addend }
+                :: !relocs
          | _ -> ()
        done
      with End_of_file -> ());
@@ -321,9 +337,11 @@ module Macho = struct
              if sym_idx < Array.length symbols
              then
                let sym = symbols.(sym_idx) in
+               (* Mach-O uses implicit addends in the instruction/data *)
                Some
                  { be_offset = ri.Owee_macho.ri_address;
-                   be_symbol = sym.Owee_macho.sym_name
+                   be_symbol = sym.Owee_macho.sym_name;
+                   be_addend = 0L
                  }
              else None
            | _ -> None)
@@ -415,7 +433,8 @@ module Elf = struct
 
   (* Build a symbol name table from .symtab and .strtab sections. For section
      symbols (st_info type = STT_SECTION = 3), the name is derived from the
-     section header table using st_shndx. *)
+     section header table using st_shndx. Returns an array indexed by symbol
+     index. *)
   let build_symbol_names buf sections =
     match
       ( Owee_elf.find_section sections ".symtab",
@@ -454,6 +473,57 @@ module Elf = struct
       Some names
     | _ -> None
 
+  (* Build a symbol table mapping symbol name to (section_name, offset).
+     This is used to resolve relocations that target different symbols
+     but refer to the same location. *)
+  let build_symbol_table buf sections =
+    match
+      ( Owee_elf.find_section sections ".symtab",
+        Owee_elf.find_section sections ".strtab" )
+    with
+    | Some symtab_sec, Some strtab_sec ->
+      let strtab_body = Owee_elf.section_body buf strtab_sec in
+      let symtab_body = Owee_elf.section_body buf symtab_sec in
+      let sym_entry_size = 24 in
+      let num_symbols = Owee_buf.size symtab_body / sym_entry_size in
+      let tbl = Hashtbl.create num_symbols in
+      for i = 0 to num_symbols - 1 do
+        let cursor = Owee_buf.cursor symtab_body ~at:(i * sym_entry_size) in
+        let st_name = Owee_buf.Read.u32 cursor in
+        let st_info = Owee_buf.Read.u8 cursor in
+        let _st_other = Owee_buf.Read.u8 cursor in
+        let st_shndx = Owee_buf.Read.u16 cursor in
+        let st_value = Owee_buf.Read.u64 cursor in
+        let st_type = st_info land 0xf in
+        let name, section_name =
+          if st_type = 3 (* STT_SECTION *)
+          then
+            if st_shndx > 0 && st_shndx < Array.length sections
+            then
+              let sec_name = sections.(st_shndx).Owee_elf.sh_name_str in
+              sec_name, sec_name
+            else "", ""
+          else
+            let sym_name =
+              let name_cursor = Owee_buf.cursor strtab_body ~at:st_name in
+              match Owee_buf.Read.zero_string name_cursor () with
+              | Some s -> s
+              | None -> ""
+            in
+            let sec_name =
+              if st_shndx > 0 && st_shndx < Array.length sections
+              then sections.(st_shndx).Owee_elf.sh_name_str
+              else ""
+            in
+            sym_name, sec_name
+        in
+        if name <> ""
+        then
+          Hashtbl.add tbl name { sym_section = section_name; sym_offset = st_value }
+      done;
+      Some tbl
+    | _ -> None
+
   (* Extract relocations from a RELA section *)
   let extract_rela_section buf sections symbol_names ~rela_section_name =
     match Owee_elf.find_section sections rela_section_name with
@@ -466,7 +536,7 @@ module Elf = struct
         let cursor = Owee_buf.cursor rela_body ~at:(i * rela_entry_size) in
         let r_offset = Owee_buf.Read.u64 cursor in
         let r_info = Owee_buf.Read.u64 cursor in
-        (* r_addend not needed for symbol comparison *)
+        let r_addend = Owee_buf.Read.u64 cursor in
         let sym_idx = sym_index_of_r_info r_info in
         let symbol_name =
           match symbol_names with
@@ -477,7 +547,10 @@ module Elf = struct
         if symbol_name <> ""
         then
           relocs
-            := { be_offset = Int64.to_int r_offset; be_symbol = symbol_name }
+            := { be_offset = Int64.to_int r_offset;
+                 be_symbol = symbol_name;
+                 be_addend = r_addend
+               }
                :: !relocs
       done;
       (* Sort by offset for comparison *)
@@ -492,6 +565,7 @@ module Elf = struct
       let cursor = Owee_buf.cursor rela_body ~at:(i * rela_entry_size) in
       let r_offset = Owee_buf.Read.u64 cursor in
       let r_info = Owee_buf.Read.u64 cursor in
+      let r_addend = Owee_buf.Read.u64 cursor in
       let sym_idx = sym_index_of_r_info r_info in
       let symbol_name =
         match symbol_names with
@@ -502,7 +576,8 @@ module Elf = struct
       then
         relocs
           := { be_offset = base_offset + Int64.to_int r_offset;
-               be_symbol = symbol_name
+               be_symbol = symbol_name;
+               be_addend = r_addend
              }
              :: !relocs
     done;
@@ -617,99 +692,103 @@ let extract_obj_individual_text_relocations unix obj_file =
     Elf.get_individual_text_relocations buf sections
   | _ -> []
 
-(* Check if a symbol is a local label (starts with .L) *)
-let is_local_label sym =
-  String.length sym >= 2 && sym.[0] = '.' && sym.[1] = 'L'
+(* Extract symbol table from object file. Returns a hashtable mapping symbol
+   names to their section and offset within that section. *)
+let extract_obj_symbol_table unix obj_file =
+  let buf = Owee_buf.map_binary unix obj_file in
+  let cursor = Owee_buf.cursor buf in
+  let magic = Owee_buf.Read.fixed_string cursor 4 in
+  Owee_buf.seek cursor 0;
+  match magic with
+  | "\x7FELF" ->
+    let _header, sections = Owee_elf.read_elf buf in
+    Elf.build_symbol_table buf sections
+  | "\xfe\xed\xfa\xcf" | "\xcf\xfa\xed\xfe" | "\xfe\xed\xfa\xce"
+  | "\xce\xfa\xed\xfe" ->
+    (* TODO: Mach-O symbol table extraction *)
+    None
+  | _ -> None
 
-(* Check if a symbol is a rodata section name *)
-let is_rodata_section sym =
-  String.length sym >= 7 && String.sub sym 0 7 = ".rodata"
+(* Resolve a relocation to its target location: (section_name, offset_in_section).
+   Uses the symbol table to look up where the symbol is defined, then adds the
+   addend to get the final offset. *)
+let resolve_relocation sym_table (r : be_relocation) : string * int64 =
+  match sym_table with
+  | None ->
+    (* No symbol table available; use symbol name as section, addend as offset *)
+    r.be_symbol, r.be_addend
+  | Some tbl -> (
+    match Hashtbl.find_opt tbl r.be_symbol with
+    | Some info ->
+      (* Symbol found: section + (symbol's offset in section + addend) *)
+      info.sym_section, Int64.add info.sym_offset r.be_addend
+    | None ->
+      (* Symbol not in table (e.g., external); use name as-is *)
+      r.be_symbol, r.be_addend)
 
-(* Check if a symbol is a data section name *)
-let is_data_section sym = String.equal sym ".data"
+(* A resolved target: section name and offset within that section *)
+type resolved_target =
+  { rt_section : string;
+    rt_offset : int64
+  }
 
-(* Check if a symbol is a text section name *)
-let is_text_section sym = String.equal sym ".text"
+let compare_resolved (a : resolved_target) (b : resolved_target) =
+  let c = String.compare a.rt_section b.rt_section in
+  if c <> 0 then c else Int64.compare a.rt_offset b.rt_offset
 
-(* Check if a symbol is a caml* symbol (OCaml-generated symbol) *)
-let is_caml_symbol sym = String.length sym >= 4 && String.sub sym 0 4 = "caml"
-
-(* Check if two symbol lists should be considered equivalent. The assembler
-   converts local labels and symbols to section-relative references in some
-   cases: - .L142 and .rodata.cst8 are equivalent when the label is in that
-   section - camlModule__const_block25 and .data are equivalent when the symbol
-   is in the data section We accept these differences since the final linked
-   result is the same. *)
-let symbols_equivalent e_syms a_syms =
-  if List.equal String.equal e_syms a_syms
-  then true
-  else
-    (* Check if one is local labels and the other is rodata sections *)
-    let e_all_local = List.for_all is_local_label e_syms in
-    let a_all_local = List.for_all is_local_label a_syms in
-    let e_all_rodata = List.for_all is_rodata_section e_syms in
-    let a_all_rodata = List.for_all is_rodata_section a_syms in
-    let e_all_data = List.for_all is_data_section e_syms in
-    let a_all_data = List.for_all is_data_section a_syms in
-    let e_all_text = List.for_all is_text_section e_syms in
-    let a_all_text = List.for_all is_text_section a_syms in
-    let e_all_caml = List.for_all is_caml_symbol e_syms in
-    let a_all_caml = List.for_all is_caml_symbol a_syms in
-    (* Accept: binary emitter uses local labels, assembler uses rodata
-       section *)
-    (e_all_local && a_all_rodata)
-    || (e_all_rodata && a_all_local)
-    (* Accept: binary emitter uses caml symbols, assembler uses data section *)
-    || (e_all_caml && a_all_data)
-    || (e_all_data && a_all_caml)
-    (* Accept: binary emitter uses caml symbols, assembler uses text section *)
-    || (e_all_caml && a_all_text)
-    || (e_all_text && a_all_caml)
-    (* Accept: binary emitter uses local labels, assembler uses data section *)
-    || (e_all_local && a_all_data)
-    || (e_all_data && a_all_local)
-
-(* Group relocations by offset, returning (offset, [symbols]) pairs sorted by
-   offset *)
-let group_relocations_by_offset relocs =
+(* Group relocations by offset, resolving each to its target location.
+   Returns (offset, [resolved_targets]) pairs sorted by offset. *)
+let group_relocations_by_offset sym_table relocs =
   let tbl = Hashtbl.create 16 in
   List.iter
     (fun r ->
+      let section, offset = resolve_relocation sym_table r in
+      let target = { rt_section = section; rt_offset = offset } in
       let existing = try Hashtbl.find tbl r.be_offset with Not_found -> [] in
-      Hashtbl.replace tbl r.be_offset (r.be_symbol :: existing))
+      Hashtbl.replace tbl r.be_offset (target :: existing))
     relocs;
   let pairs =
-    Hashtbl.fold (fun offset syms acc -> (offset, syms) :: acc) tbl []
+    Hashtbl.fold (fun offset targets acc -> (offset, targets) :: acc) tbl []
   in
-  (* Sort by offset, and sort symbols within each group for stable comparison *)
+  (* Sort by offset, and sort targets within each group for stable comparison *)
   List.sort (fun (o1, _) (o2, _) -> compare o1 o2) pairs
-  |> List.map (fun (offset, syms) -> offset, List.sort String.compare syms)
+  |> List.map (fun (offset, targets) ->
+         offset, List.sort compare_resolved targets)
 
-(* Compare two lists of relocations, handling paired relocations (multiple
-   symbols at the same offset) *)
-let compare_relocations ~section_name ~expected ~actual =
-  let exp_grouped = group_relocations_by_offset expected in
-  let act_grouped = group_relocations_by_offset actual in
+(* Format a resolved target for error messages *)
+let format_resolved (r : resolved_target) =
+  if r.rt_offset = 0L
+  then r.rt_section
+  else Printf.sprintf "%s+0x%Lx" r.rt_section r.rt_offset
+
+let format_resolved_list targets =
+  String.concat ", " (List.map format_resolved targets)
+
+(* Compare two lists of relocations by resolving them to actual locations.
+   Two relocations are equivalent if they resolve to the same (section, offset). *)
+let compare_relocations sym_table ~section_name ~expected ~actual =
+  let exp_grouped = group_relocations_by_offset sym_table expected in
+  let act_grouped = group_relocations_by_offset sym_table actual in
   let rec loop exp act =
     match exp, act with
     | [], [] -> None
-    | [], (offset, syms) :: _ ->
+    | [], (offset, targets) :: _ ->
       Some
         (Relocation
            { section_name;
              offset;
              expected = "(none)";
-             actual = String.concat ", " syms
+             actual = format_resolved_list targets
            })
-    | (offset, syms) :: _, [] ->
+    | (offset, targets) :: _, [] ->
       Some
         (Relocation
            { section_name;
              offset;
-             expected = String.concat ", " syms;
+             expected = format_resolved_list targets;
              actual = "(none)"
            })
-    | (e_off, e_syms) :: erest, (a_off, a_syms) :: arest ->
+    | (e_off, e_targets) :: erest, (a_off, a_targets) :: arest ->
       if e_off <> a_off
       then
         Some
@@ -717,18 +796,21 @@ let compare_relocations ~section_name ~expected ~actual =
              { section_name;
                offset = min e_off a_off;
                expected =
-                 Printf.sprintf "%s @ 0x%x" (String.concat ", " e_syms) e_off;
+                 Printf.sprintf "%s @ 0x%x" (format_resolved_list e_targets)
+                   e_off;
                actual =
-                 Printf.sprintf "%s @ 0x%x" (String.concat ", " a_syms) a_off
+                 Printf.sprintf "%s @ 0x%x" (format_resolved_list a_targets)
+                   a_off
              })
-      else if not (symbols_equivalent e_syms a_syms)
+      else if not (List.equal (fun a b -> compare_resolved a b = 0)
+                     e_targets a_targets)
       then
         Some
           (Relocation
              { section_name;
                offset = e_off;
-               expected = String.concat ", " e_syms;
-               actual = String.concat ", " a_syms
+               expected = format_resolved_list e_targets;
+               actual = format_resolved_list a_targets
              })
       else loop erest arest
   in
@@ -760,7 +842,7 @@ let compare_individual_text_sections ~be_sections ~asm_sections =
   loop be_sections
 
 (* Compare individual text section relocations. *)
-let compare_individual_text_relocations ~be_relocs ~asm_relocs =
+let compare_individual_text_relocations sym_table ~be_relocs ~asm_relocs =
   let asm_map = Hashtbl.create (List.length asm_relocs) in
   List.iter (fun (name, relocs) -> Hashtbl.add asm_map name relocs) asm_relocs;
   let rec loop = function
@@ -772,7 +854,7 @@ let compare_individual_text_relocations ~be_relocs ~asm_relocs =
         | Some relocs -> relocs
       in
       match
-        compare_relocations ~section_name:be_name ~expected:be_relocs
+        compare_relocations sym_table ~section_name:be_name ~expected:be_relocs
           ~actual:asm_section_relocs
       with
       | Some mismatch -> Some mismatch
@@ -802,6 +884,10 @@ let compare unix ~obj_file ~binary_sections_dir =
             (Printexc.to_string exn)
         in
         raise (Failure msg)
+    in
+    (* Build symbol table for relocation resolution *)
+    let sym_table =
+      try extract_obj_symbol_table unix obj_file with _ -> None
     in
     (* Compare text sections - either individual or aggregate *)
     let text_result =
@@ -854,8 +940,8 @@ let compare unix ~obj_file ~binary_sections_dir =
               try extract_obj_individual_text_relocations unix obj_file
               with _ -> []
             in
-            compare_individual_text_relocations ~be_relocs:be_individual_relocs
-              ~asm_relocs:asm_individual_relocs
+            compare_individual_text_relocations sym_table
+              ~be_relocs:be_individual_relocs ~asm_relocs:asm_individual_relocs
           else
             let be_text_relocs =
               read_binary_relocations binary_sections_dir "text"
@@ -863,8 +949,8 @@ let compare unix ~obj_file ~binary_sections_dir =
             let asm_text_relocs, _ =
               try extract_obj_relocations unix obj_file with _ -> [], []
             in
-            compare_relocations ~section_name:"text" ~expected:be_text_relocs
-              ~actual:asm_text_relocs
+            compare_relocations sym_table ~section_name:"text"
+              ~expected:be_text_relocs ~actual:asm_text_relocs
         in
         let be_data_relocs =
           read_binary_relocations binary_sections_dir "data"
@@ -876,8 +962,8 @@ let compare unix ~obj_file ~binary_sections_dir =
         | Some mismatch -> Mismatch mismatch
         | None -> (
           let data_reloc_result =
-            compare_relocations ~section_name:"data" ~expected:be_data_relocs
-              ~actual:asm_data_relocs
+            compare_relocations sym_table ~section_name:"data"
+              ~expected:be_data_relocs ~actual:asm_data_relocs
           in
           match data_reloc_result with
           | Some mismatch -> Mismatch mismatch
