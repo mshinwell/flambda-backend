@@ -622,7 +622,7 @@ let compile_unit unix ~output_prefix ~asm_filename ~keep_asm ~obj_filename
      try_finally so that verification failures don't delete the object file,
      making it easier to debug mismatches. *)
   if !Oxcaml_flags.verify_binary_emitter
-  then (
+  then
     let binary_sections_dir = output_prefix ^ ".binary-sections" in
     match
       Binary_emitter_verify.compare unix ~obj_file:obj_filename
@@ -642,7 +642,7 @@ let compile_unit unix ~output_prefix ~asm_filename ~keep_asm ~obj_filename
           "Binary emitter verification skipped (no binary sections)@."
     | (Mismatch _ | Object_file_error _) as result ->
       Binary_emitter_verify.print_result Format.err_formatter result;
-      raise (Error (Binary_emitter_mismatch obj_filename)))
+      raise (Error (Binary_emitter_mismatch obj_filename))
 
 let end_gen_implementation unix ?toplevel ~ppf_dump ~sourcefile make_cmm =
   Emitaux.Dwarf_helpers.init ~ppf_dump ~disable_dwarf:false ~sourcefile;

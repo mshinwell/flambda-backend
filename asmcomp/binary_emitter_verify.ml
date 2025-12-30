@@ -140,8 +140,19 @@ type be_relocation =
     be_addend : int64
   }
 
-(* Read binary emitter relocations from .relocs file.
-   Format: "offset symbol [addend]" where addend defaults to 0 *)
+(* Text sections from binary emitter: either a single aggregate section or
+   individual function sections *)
+type be_text_sections =
+  | No_function_sections of string option
+  | Function_sections of (string * string) list
+
+(* Text relocations from binary emitter *)
+type be_text_relocations =
+  | No_function_section_relocs of be_relocation list
+  | Function_section_relocs of (string * be_relocation list) list
+
+(* Read binary emitter relocations from .relocs file. Format: "offset symbol
+   [addend]" where addend defaults to 0 *)
 let read_binary_relocations binary_sections_dir section_name =
   let filename =
     Filename.concat binary_sections_dir ("section_" ^ section_name ^ ".relocs")
@@ -183,58 +194,71 @@ let section_name_of_filename filename =
     "." ^ name_part
   else filename
 
-(* List individual text section files (function sections) in binary-sections
-   directory. Returns list of (section_name, content) pairs. This only matches
-   individual function sections like section_text.caml.foo.bin, not the
-   aggregate section_text.bin. *)
-let list_binary_text_sections binary_sections_dir =
+(* Read text sections from binary-sections directory. Returns either
+   No_function_sections with the aggregate text section, or Function_sections
+   with a list of individual function sections. *)
+let read_binary_text_sections binary_sections_dir =
   if not (Sys.file_exists binary_sections_dir)
-  then []
+  then No_function_sections None
   else if not (Sys.is_directory binary_sections_dir)
-  then []
+  then No_function_sections None
   else
     let files = Sys.readdir binary_sections_dir in
-    Array.to_list files
-    |> List.filter (fun f ->
-           (* Match section_text.*.bin but not section_text.bin (the aggregate).
-              Individual sections have a function name after section_text. *)
-           String.length f > 17 (* "section_text.X.bin" minimum *)
-           && String.sub f 0 13 = "section_text."
-           && String.sub f (String.length f - 4) 4 = ".bin"
-           && f <> "section_text.bin")
-    |> List.map (fun f ->
-           let section_name = section_name_of_filename f in
-           let content =
-             read_file_bytes (Filename.concat binary_sections_dir f)
-           in
-           section_name, content)
+    let individual_sections =
+      Array.to_list files
+      |> List.filter (fun f ->
+             (* Match section_text.*.bin but not section_text.bin (the
+                aggregate). Individual sections have a function name after
+                section_text. *)
+             String.length f > 17 (* "section_text.X.bin" minimum *)
+             && String.sub f 0 13 = "section_text."
+             && String.sub f (String.length f - 4) 4 = ".bin"
+             && f <> "section_text.bin")
+      |> List.map (fun f ->
+             let section_name = section_name_of_filename f in
+             let content =
+               read_file_bytes (Filename.concat binary_sections_dir f)
+             in
+             section_name, content)
+    in
+    if List.length individual_sections > 0
+    then Function_sections individual_sections
+    else No_function_sections (read_binary_section binary_sections_dir "text")
 
-(* List individual text section relocation files in binary-sections directory.
-   Returns list of (section_name, relocations) pairs. This only matches
-   individual function sections like section_text.caml.foo.relocs, not the
-   aggregate section_text.relocs. *)
-let list_binary_text_relocations binary_sections_dir =
+(* Read text relocations from binary-sections directory. Returns either
+   No_function_section_relocs with the aggregate text relocations, or
+   Function_section_relocs with a list of per-function relocations. *)
+let read_binary_text_relocations binary_sections_dir =
   if not (Sys.file_exists binary_sections_dir)
-  then []
+  then No_function_section_relocs []
   else if not (Sys.is_directory binary_sections_dir)
-  then []
+  then No_function_section_relocs []
   else
     let files = Sys.readdir binary_sections_dir in
-    Array.to_list files
-    |> List.filter (fun f ->
-           (* Match section_text.*.relocs but not section_text.relocs (the
-              aggregate). Individual sections have a function name after
-              section_text. *)
-           String.length f > 20 (* "section_text.X.relocs" minimum *)
-           && String.sub f 0 13 = "section_text."
-           && String.sub f (String.length f - 7) 7 = ".relocs"
-           && f <> "section_text.relocs")
-    |> List.map (fun f ->
-           (* Convert section_text.caml.foo.relocs -> .text.caml.foo *)
-           let name_part = String.sub f 8 (String.length f - 15) in
-           let section_name = "." ^ name_part in
-           let relocs = read_binary_relocations binary_sections_dir name_part in
-           section_name, relocs)
+    let individual_relocs =
+      Array.to_list files
+      |> List.filter (fun f ->
+             (* Match section_text.*.relocs but not section_text.relocs (the
+                aggregate). Individual sections have a function name after
+                section_text. *)
+             String.length f > 20 (* "section_text.X.relocs" minimum *)
+             && String.sub f 0 13 = "section_text."
+             && String.sub f (String.length f - 7) 7 = ".relocs"
+             && f <> "section_text.relocs")
+      |> List.map (fun f ->
+             (* Convert section_text.caml.foo.relocs -> .text.caml.foo *)
+             let name_part = String.sub f 8 (String.length f - 15) in
+             let section_name = "." ^ name_part in
+             let relocs =
+               read_binary_relocations binary_sections_dir name_part
+             in
+             section_name, relocs)
+    in
+    if List.length individual_relocs > 0
+    then Function_section_relocs individual_relocs
+    else
+      No_function_section_relocs
+        (read_binary_relocations binary_sections_dir "text")
 
 module Owee_buf = Compiler_owee.Owee_buf
 module Owee_elf = Compiler_owee.Owee_elf
@@ -660,8 +684,8 @@ let relocs_equal ~is_rela (e : be_relocation) (a : be_relocation) =
   then if is_rela then e.be_addend = a.be_addend else true
   else false
 
-(* Group relocations by offset, keeping full relocation info.
-   Returns (offset, [relocations]) pairs sorted by offset. *)
+(* Group relocations by offset, keeping full relocation info. Returns (offset,
+   [relocations]) pairs sorted by offset. *)
 let group_relocations_by_offset relocs =
   let tbl = Hashtbl.create 16 in
   List.iter
@@ -669,10 +693,9 @@ let group_relocations_by_offset relocs =
       let existing = try Hashtbl.find tbl r.be_offset with Not_found -> [] in
       Hashtbl.replace tbl r.be_offset (r :: existing))
     relocs;
-  let pairs =
-    Hashtbl.fold (fun offset rs acc -> (offset, rs) :: acc) tbl []
-  in
-  (* Sort by offset, and sort relocations within each group for stable comparison *)
+  let pairs = Hashtbl.fold (fun offset rs acc -> (offset, rs) :: acc) tbl [] in
+  (* Sort by offset, and sort relocations within each group for stable
+     comparison *)
   let compare_reloc a b =
     let c = String.compare a.be_symbol b.be_symbol in
     if c <> 0 then c else Int64.compare a.be_addend b.be_addend
@@ -680,12 +703,11 @@ let group_relocations_by_offset relocs =
   List.sort (fun (o1, _) (o2, _) -> compare o1 o2) pairs
   |> List.map (fun (offset, rs) -> offset, List.sort compare_reloc rs)
 
-let format_reloc_list relocs =
-  String.concat ", " (List.map format_reloc relocs)
+let format_reloc_list relocs = String.concat ", " (List.map format_reloc relocs)
 
-(* Compare two lists of relocations directly.
-   For Mach-O (REL): compare symbol names only (addend is in section bytes).
-   For ELF (RELA): compare symbol names and addends. *)
+(* Compare two lists of relocations directly. For Mach-O (REL): compare symbol
+   names only (addend is in section bytes). For ELF (RELA): compare symbol names
+   and addends. *)
 let compare_relocations ~is_rela ~section_name ~expected ~actual =
   let exp_grouped = group_relocations_by_offset expected in
   let act_grouped = group_relocations_by_offset actual in
@@ -796,11 +818,8 @@ let compare unix ~obj_file ~binary_sections_dir =
   then Object_file_error (binary_sections_dir ^ " is not a directory")
   else
     (* Read binary emitter output *)
-    let be_text = read_binary_section binary_sections_dir "text" in
+    let be_text_sections = read_binary_text_sections binary_sections_dir in
     let be_data = read_binary_section binary_sections_dir "data" in
-    (* Check for individual text sections (function sections) *)
-    let be_individual_text = list_binary_text_sections binary_sections_dir in
-    let has_individual_sections = List.length be_individual_text > 0 in
     (* Extract sections from object file *)
     let asm_text, asm_data =
       try extract_obj_sections unix obj_file
@@ -815,15 +834,15 @@ let compare unix ~obj_file ~binary_sections_dir =
     let is_rela = try is_rela_format unix obj_file with _ -> false in
     (* Compare text sections - either individual or aggregate *)
     let text_result =
-      if has_individual_sections
-      then
+      match be_text_sections with
+      | Function_sections be_individual_text ->
         (* Individual function sections: compare each separately *)
         let asm_individual_text =
           try extract_obj_individual_text_sections unix obj_file with _ -> []
         in
         compare_individual_text_sections ~be_sections:be_individual_text
           ~asm_sections:asm_individual_text
-      else
+      | No_function_sections be_text -> (
         (* Single text section *)
         match be_text, asm_text with
         | None, None -> None
@@ -831,7 +850,7 @@ let compare unix ~obj_file ~binary_sections_dir =
         | None, Some _ ->
           Some (Missing_section ".text (in binary emitter output)")
         | Some expected, Some actual ->
-          compare_section ~section_name:"text" ~expected ~actual
+          compare_section ~section_name:"text" ~expected ~actual)
     in
     match text_result with
     | Some mismatch -> Mismatch mismatch
@@ -853,28 +872,22 @@ let compare unix ~obj_file ~binary_sections_dir =
       | Some mismatch -> Mismatch mismatch
       | None -> (
         (* Compare relocations *)
+        let be_text_relocs = read_binary_text_relocations binary_sections_dir in
         let text_reloc_result =
-          if has_individual_sections
-          then
-            (* Individual function sections: compare each separately *)
-            let be_individual_relocs =
-              list_binary_text_relocations binary_sections_dir
-            in
+          match be_text_relocs with
+          | Function_section_relocs be_individual_relocs ->
             let asm_individual_relocs =
               try extract_obj_individual_text_relocations unix obj_file
               with _ -> []
             in
             compare_individual_text_relocations ~is_rela
               ~be_relocs:be_individual_relocs ~asm_relocs:asm_individual_relocs
-          else
-            let be_text_relocs =
-              read_binary_relocations binary_sections_dir "text"
-            in
+          | No_function_section_relocs be_relocs ->
             let asm_text_relocs, _ =
               try extract_obj_relocations unix obj_file with _ -> [], []
             in
             compare_relocations ~is_rela ~section_name:"text"
-              ~expected:be_text_relocs ~actual:asm_text_relocs
+              ~expected:be_relocs ~actual:asm_text_relocs
         in
         let be_data_relocs =
           read_binary_relocations binary_sections_dir "data"
@@ -892,7 +905,15 @@ let compare unix ~obj_file ~binary_sections_dir =
           match data_reloc_result with
           | Some mismatch -> Mismatch mismatch
           | None ->
-            let text_size = Option.fold ~none:0 ~some:String.length be_text in
+            let text_size =
+              match be_text_sections with
+              | No_function_sections (Some s) -> String.length s
+              | No_function_sections None -> 0
+              | Function_sections sections ->
+                List.fold_left
+                  (fun acc (_, content) -> acc + String.length content)
+                  0 sections
+            in
             let data_size = Option.fold ~none:0 ~some:String.length be_data in
             Match { text_size; data_size })))
 
