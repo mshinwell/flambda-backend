@@ -190,6 +190,15 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                 (* On macOS (Mach-O), the addend must be in the data. *)
                 Some addend))))
 
+(* Returns true if we're on a RELA platform (Linux ELF) where addends are
+   stored in the relocation entry rather than in the instruction/data.
+   On REL platforms (macOS Mach-O), addends are encoded in the instruction. *)
+let is_rela_platform () =
+  match Config.system with
+  | "linux" | "linux_eabi" | "linux_eabihf" | "freebsd" | "netbsd" | "openbsd" -> true
+  | "macosx" | "darwin" -> false
+  | _ -> false  (* Default to REL behavior for unknown systems *)
+
 (* When true, emit relocations for ALL 8-byte symbol references (matching
    assembler behavior). When false, only emit relocations for cross-section
    references and resolve same-section refs at emit time. Set to true for
@@ -216,7 +225,7 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
       then (
         (* Emit relocation for all symbol references *)
         SS.add_relocation_at_current_offset state ~symbol_name:name
-          ~reloc_kind:(R_AARCH64_ABS64 name);
+          ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
         Some 0L (* Emit zero, relocation will patch *))
       else None (* Resolve same-section refs at emit time via eval_constant *)
     else
@@ -230,7 +239,7 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
         then None (* Same section after all, resolve at emit time *)
         else (
           SS.add_relocation_at_current_offset state ~symbol_name:name
-            ~reloc_kind:(R_AARCH64_ABS64 name);
+            ~reloc_kind:(R_AARCH64_ABS64 { symbol = name; addend = 0 });
           Some 0L (* Emit zero, relocation will patch *)))
   | _ -> None
 
@@ -241,7 +250,7 @@ let emit_unresolved_symbol_relocation state ~width_bytes c =
   (match extract_symbol_name c with
   | Some symbol_name when width_bytes = 8 ->
     SS.add_relocation_at_current_offset state ~symbol_name
-      ~reloc_kind:(R_AARCH64_ABS64 symbol_name)
+      ~reloc_kind:(R_AARCH64_ABS64 { symbol = symbol_name; addend = 0 })
   | Some symbol_name ->
     Misc.fatal_errorf
       "Unresolved %d-byte reference to symbol %s (only 8-byte relocations \

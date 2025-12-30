@@ -49,16 +49,17 @@ let encode_instruction :
     match sym.reloc with
     | Needs_reloc reloc ->
       let reloc_kind : Relocation.Kind.t =
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
-        | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC sym.name
-        | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC sym.name
+        | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC r
+        | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC r
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
-      (* When emitting for verification, use 0 offset (matching assembler behavior
-         where the linker patches the actual value). Otherwise use sym.offset. *)
+      (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
+         On REL platforms (macOS), encode addend in instruction. *)
       let imm12 =
-        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+        if Encode_directive.is_rela_platform () then 0 else sym.offset
       in
       Add_sub_helpers.encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12 ~rn ~rd)
   | ( Quad
@@ -119,16 +120,17 @@ let encode_instruction :
     Adr_helpers.encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
     let reloc_kind : Relocation.Kind.t =
+      let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
       match sym.reloc with
-      | Needs_reloc GOT_PAGE -> R_AARCH64_ADR_GOT_PAGE sym.name
-      | Needs_reloc PAGE -> R_AARCH64_ADR_PREL_PG_HI21 sym.name
+      | Needs_reloc GOT_PAGE -> R_AARCH64_ADR_GOT_PAGE r
+      | Needs_reloc PAGE -> R_AARCH64_ADR_PREL_PG_HI21 r
     in
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
       ~reloc_kind;
-    (* When emitting for verification, use 0 offset (matching assembler behavior
-       where the linker patches the actual value). Otherwise use sym.offset. *)
+    (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
+       On REL platforms (macOS), encode addend in instruction. *)
     let offset =
-      if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+      if Encode_directive.is_rela_platform () then 0 else sym.offset
     in
     let immlo, immhi = Adr_helpers.split_21bit_immediate offset in
     Adr_helpers.encode_adr ~op:1 ~immlo ~immhi ~rd
@@ -167,7 +169,7 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), B ->
     let imm26 =
       Branch_helpers.compute_branch_imm26 state ~instr_name:"B"
-        ~reloc_kind:(fun s -> R_AARCH64_JUMP26 s)
+        ~reloc_kind:(fun r -> R_AARCH64_JUMP26 r)
         sym
     in
     Branch_helpers.encode_branch_immediate ~op:0 ~imm26
@@ -186,7 +188,7 @@ let encode_instruction :
   | Singleton (Imm (Sym sym)), BL ->
     let imm26 =
       Branch_helpers.compute_branch_imm26 state ~instr_name:"BL"
-        ~reloc_kind:(fun s -> R_AARCH64_CALL26 s)
+        ~reloc_kind:(fun r -> R_AARCH64_CALL26 r)
         sym
     in
     Branch_helpers.encode_branch_immediate ~op:1 ~imm26

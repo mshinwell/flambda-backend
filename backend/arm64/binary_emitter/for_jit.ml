@@ -47,16 +47,16 @@ module Relocation = struct
 
   let target_symbol (r : Relocation.t) : string =
     match r.kind with
-    | R_AARCH64_ADR_PREL_LO21 sym
-    | R_AARCH64_ADR_PREL_PG_HI21 sym
-    | R_AARCH64_ADR_GOT_PAGE sym
-    | R_AARCH64_LD64_GOT_LO12_NC sym
-    | R_AARCH64_ADD_ABS_LO12_NC sym
-    | R_AARCH64_LDST64_ABS_LO12_NC sym
-    | R_AARCH64_CALL26 sym
-    | R_AARCH64_JUMP26 sym
-    | R_AARCH64_ABS64 sym ->
-      sym
+    | R_AARCH64_ADR_PREL_LO21 { symbol; _ }
+    | R_AARCH64_ADR_PREL_PG_HI21 { symbol; _ }
+    | R_AARCH64_ADR_GOT_PAGE { symbol; _ }
+    | R_AARCH64_LD64_GOT_LO12_NC { symbol; _ }
+    | R_AARCH64_ADD_ABS_LO12_NC { symbol; _ }
+    | R_AARCH64_LDST64_ABS_LO12_NC { symbol; _ }
+    | R_AARCH64_CALL26 { symbol; _ }
+    | R_AARCH64_JUMP26 { symbol; _ }
+    | R_AARCH64_ABS64 { symbol; _ } ->
+      symbol
     | R_AARCH64_PREL32_PAIR { plus_symbol; _ } ->
       plus_symbol (* Return the plus symbol as the primary target *)
     | R_AARCH64_PREL32 { section_name; _ } -> section_name
@@ -65,16 +65,16 @@ module Relocation = struct
      Returns [plus_symbol; minus_symbol] for pairs, [symbol] otherwise. *)
   let target_symbols (r : Relocation.t) : string list =
     match r.kind with
-    | R_AARCH64_ADR_PREL_LO21 sym
-    | R_AARCH64_ADR_PREL_PG_HI21 sym
-    | R_AARCH64_ADR_GOT_PAGE sym
-    | R_AARCH64_LD64_GOT_LO12_NC sym
-    | R_AARCH64_ADD_ABS_LO12_NC sym
-    | R_AARCH64_LDST64_ABS_LO12_NC sym
-    | R_AARCH64_CALL26 sym
-    | R_AARCH64_JUMP26 sym
-    | R_AARCH64_ABS64 sym ->
-      [sym]
+    | R_AARCH64_ADR_PREL_LO21 { symbol; _ }
+    | R_AARCH64_ADR_PREL_PG_HI21 { symbol; _ }
+    | R_AARCH64_ADR_GOT_PAGE { symbol; _ }
+    | R_AARCH64_LD64_GOT_LO12_NC { symbol; _ }
+    | R_AARCH64_ADD_ABS_LO12_NC { symbol; _ }
+    | R_AARCH64_LDST64_ABS_LO12_NC { symbol; _ }
+    | R_AARCH64_CALL26 { symbol; _ }
+    | R_AARCH64_JUMP26 { symbol; _ }
+    | R_AARCH64_ABS64 { symbol; _ } ->
+      [symbol]
     | R_AARCH64_PREL32_PAIR { plus_symbol; minus_symbol } ->
       (* Return both: UNSIGNED uses plus_symbol, SUBTRACTOR uses minus_symbol *)
       [plus_symbol; minus_symbol]

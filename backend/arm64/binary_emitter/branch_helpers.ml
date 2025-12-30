@@ -39,12 +39,17 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
   let is_global_symbol =
     Option.is_some (Section_state.find_symbol_offset_in_bytes state symbol_name)
   in
+  (* Create relocation with addend 0 (branching to symbol itself) *)
+  let make_reloc () =
+    let r = { Relocation.Kind.symbol = symbol_name; addend = 0 } in
+    Section_state.add_relocation_at_current_offset state ~symbol_name
+      ~reloc_kind:(reloc_kind r)
+  in
   (* On Linux ELF, emit relocations for global symbols to match assembler *)
   let macosx = String.equal Config.system "macosx" in
   if (not macosx) && is_global_symbol
   then (
-    Section_state.add_relocation_at_current_offset state ~symbol_name
-      ~reloc_kind:(reloc_kind symbol_name);
+    make_reloc ();
     0)
   else
     match
@@ -52,8 +57,7 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
     with
     | None ->
       (* Symbol is undefined - create a relocation and use 0 as placeholder *)
-      Section_state.add_relocation_at_current_offset state ~symbol_name
-        ~reloc_kind:(reloc_kind symbol_name);
+      make_reloc ();
       0
     | Some target_offset ->
       let pc_relative_offset =

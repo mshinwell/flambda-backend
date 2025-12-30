@@ -41,6 +41,11 @@ val emit_directive :
   D.Directive.t ->
   unit
 
+(** Returns true if we're on a RELA platform (Linux ELF) where addends are
+    stored in the relocation entry rather than in the instruction/data.
+    On REL platforms (macOS Mach-O), addends are encoded in the instruction. *)
+val is_rela_platform : unit -> bool
+
 (** When true, emit relocations for ALL 8-byte symbol references (matching
     assembler behavior). When false, only emit relocations for cross-section
     references and resolve same-section refs at emit time. Set to true for

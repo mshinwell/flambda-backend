@@ -26,16 +26,24 @@
  ******************************************************************************)
 
 module Kind : sig
+  (** Relocation with symbol name and addend. On RELA platforms (Linux ELF),
+      the addend is stored in the relocation entry. On REL platforms (macOS
+      Mach-O), the addend is encoded in the instruction/data. *)
+  type sym_with_addend =
+    { symbol : string;
+      addend : int
+    }
+
   type t =
-    | R_AARCH64_ADR_PREL_LO21 of string
-    | R_AARCH64_ADR_PREL_PG_HI21 of string
-    | R_AARCH64_ADR_GOT_PAGE of string
-    | R_AARCH64_LD64_GOT_LO12_NC of string
-    | R_AARCH64_ADD_ABS_LO12_NC of string
-    | R_AARCH64_LDST64_ABS_LO12_NC of string
-    | R_AARCH64_CALL26 of string
-    | R_AARCH64_JUMP26 of string
-    | R_AARCH64_ABS64 of string
+    | R_AARCH64_ADR_PREL_LO21 of sym_with_addend
+    | R_AARCH64_ADR_PREL_PG_HI21 of sym_with_addend
+    | R_AARCH64_ADR_GOT_PAGE of sym_with_addend
+    | R_AARCH64_LD64_GOT_LO12_NC of sym_with_addend
+    | R_AARCH64_ADD_ABS_LO12_NC of sym_with_addend
+    | R_AARCH64_LDST64_ABS_LO12_NC of sym_with_addend
+    | R_AARCH64_CALL26 of sym_with_addend
+    | R_AARCH64_JUMP26 of sym_with_addend
+    | R_AARCH64_ABS64 of sym_with_addend
     (* Cross-section relative reference (SUBTRACTOR + UNSIGNED pair on macOS)
        Used for expressions like (Label - This) where Label and This are in
        different sections. The addend is stored in the data, and the linker will

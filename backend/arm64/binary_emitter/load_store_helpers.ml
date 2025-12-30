@@ -242,22 +242,23 @@ let encode_load_store_gp_sized :
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
       let reloc_kind : Relocation.Kind.t =
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
-        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC sym.name
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
           (* Use LDST64 relocation for 64-bit load/store instructions. The
              immediate encoding differs from ADD: it's scaled by 8. *)
           if size = 0b11 (* XXX should this ever be an "ADD" one? *)
-          then R_AARCH64_LDST64_ABS_LO12_NC sym.name
-          else R_AARCH64_ADD_ABS_LO12_NC sym.name
+          then R_AARCH64_LDST64_ABS_LO12_NC r
+          else R_AARCH64_ADD_ABS_LO12_NC r
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      (* When emitting for verification, use 0 offset (matching assembler behavior
-         where the linker patches the actual value). Otherwise use sym.offset. *)
+      (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
+         On REL platforms (macOS), encode addend in instruction. *)
       let offset =
-        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+        if Encode_directive.is_rela_platform () then 0 else sym.offset
       in
       let imm12_unmasked = offset lsr size in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
@@ -534,22 +535,23 @@ let encode_load_store_simd_fp :
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
       let reloc_kind : Relocation.Kind.t =
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
-        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC sym.name
+        | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
           (* Use LDST64 relocation for 64-bit load/store instructions. The
              immediate encoding differs from ADD: it's scaled by 8. *)
           if size = 0b11
-          then R_AARCH64_LDST64_ABS_LO12_NC sym.name
-          else R_AARCH64_ADD_ABS_LO12_NC sym.name
+          then R_AARCH64_LDST64_ABS_LO12_NC r
+          else R_AARCH64_ADD_ABS_LO12_NC r
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      (* When emitting for verification, use 0 offset (matching assembler behavior
-         where the linker patches the actual value). Otherwise use sym.offset. *)
+      (* On RELA platforms (Linux), encode 0 in instruction - addend is in relocation.
+         On REL platforms (macOS), encode addend in instruction. *)
       let offset =
-        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+        if Encode_directive.is_rela_platform () then 0 else sym.offset
       in
       let imm12_unmasked = offset / scale in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
