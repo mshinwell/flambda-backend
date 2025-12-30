@@ -40,3 +40,9 @@ val emit_directive :
   all_sections:All_section_states.t ->
   D.Directive.t ->
   unit
+
+(** When true, emit relocations for ALL 8-byte symbol references (matching
+    assembler behavior). When false, only emit relocations for cross-section
+    references and resolve same-section refs at emit time. Set to true for
+    verification against the assembler. *)
+val emit_relocs_for_all_symbol_refs : bool ref

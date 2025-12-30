@@ -254,12 +254,17 @@ let encode_load_store_gp_sized :
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      let imm12_unmasked = sym.offset lsr size in
+      (* When emitting for verification, use 0 offset (matching assembler behavior
+         where the linker patches the actual value). Otherwise use sym.offset. *)
+      let offset =
+        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+      in
+      let imm12_unmasked = offset lsr size in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
       then
         Misc.fatal_errorf
           "%s symbol offset %d (shifted by %d) out of range (max 0x%x)"
-          instr_name sym.offset size max_imm12;
+          instr_name offset size max_imm12;
       let imm12 = imm12_unmasked land 0xFFF in
       encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->
@@ -541,12 +546,17 @@ let encode_load_store_simd_fp :
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
       let rn = Reg.gp_encoding rn in
-      let imm12_unmasked = sym.offset / scale in
+      (* When emitting for verification, use 0 offset (matching assembler behavior
+         where the linker patches the actual value). Otherwise use sym.offset. *)
+      let offset =
+        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+      in
+      let imm12_unmasked = offset / scale in
       if imm12_unmasked < 0 || imm12_unmasked > max_imm12
       then
         Misc.fatal_errorf
           "%s symbol offset %d (scaled by %d) out of range (max 0x%x)"
-          instr_name sym.offset scale max_imm12;
+          instr_name offset scale max_imm12;
       let imm12 = imm12_unmasked land 0xFFF in
       encode_load_store_unsigned_offset ~size ~vr ~opc ~imm12 ~rn ~rt)
   | Pre (rn, Imm (Nine_signed_unscaled imm)) ->

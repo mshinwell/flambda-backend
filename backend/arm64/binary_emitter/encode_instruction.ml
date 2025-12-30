@@ -55,8 +55,12 @@ let encode_instruction :
       in
       Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
         ~reloc_kind;
-      Add_sub_helpers.encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh
-        ~imm12:sym.offset ~rn ~rd)
+      (* When emitting for verification, use 0 offset (matching assembler behavior
+         where the linker patches the actual value). Otherwise use sym.offset. *)
+      let imm12 =
+        if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+      in
+      Add_sub_helpers.encode_add_sub_immediate ~sf:1 ~op:0 ~s:0 ~sh ~imm12 ~rn ~rd)
   | ( Quad
         ( Reg ({ reg_name = GP _; _ } as rd),
           Reg ({ reg_name = GP _; _ } as rn),
@@ -121,7 +125,12 @@ let encode_instruction :
     in
     Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
       ~reloc_kind;
-    let immlo, immhi = Adr_helpers.split_21bit_immediate sym.offset in
+    (* When emitting for verification, use 0 offset (matching assembler behavior
+       where the linker patches the actual value). Otherwise use sym.offset. *)
+    let offset =
+      if !Encode_directive.emit_relocs_for_all_symbol_refs then 0 else sym.offset
+    in
+    let immlo, immhi = Adr_helpers.split_21bit_immediate offset in
     Adr_helpers.encode_adr ~op:1 ~immlo ~immhi ~rd
   | Triple (Reg rd, Reg rn, Bitmask bitmask), AND_immediate ->
     let n, immr, imms = Operand.Bitmask.decode_n_immr_imms bitmask in

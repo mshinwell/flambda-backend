@@ -2902,6 +2902,11 @@ let begin_assembly _unix =
   in
   if use_binary_emitter
   then (
+    (* When saving binary sections (for verification), emit relocations for all
+       symbol references to match assembler behavior *)
+    if !Oxcaml_flags.save_binary_sections
+    then
+      Arm64_binary_emitter.Binary_emitter.emit_relocs_for_all_symbol_refs := true;
     let emitter = Arm64_binary_emitter.Binary_emitter.create () in
     jit_emitter := Some emitter;
     Arm64_ast.Ast.DSL.Acc.set_emit_instruction

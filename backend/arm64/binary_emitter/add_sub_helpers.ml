@@ -107,6 +107,7 @@ let encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12 ~rn ~rd =
    and encode imm12 / 4096. This matches the assembler's behavior when given
    large immediate values like #0x6000 which become #0x6, lsl #12. *)
 let encode_add_sub_imm_auto_shift ~op ~s ~imm12 ~shift_opt ~rn ~rd =
+  let sf = Reg.gp_sf rd in
   let sh_from_opt = match shift_opt with Some _ -> 1 | None -> 0 in
   let sh, actual_imm12 =
     if imm12 <= 0xFFF
@@ -120,7 +121,7 @@ let encode_add_sub_imm_auto_shift ~op ~s ~imm12 ~shift_opt ~rn ~rd =
     else
       Misc.fatal_errorf "Cannot encode add/sub immediate %d (0x%x)" imm12 imm12
   in
-  encode_add_sub_immediate ~sf:1 ~op ~s ~sh ~imm12:actual_imm12 ~rn ~rd
+  encode_add_sub_immediate ~sf ~op ~s ~sh ~imm12:actual_imm12 ~rn ~rd
 
 (* Helper to encode add/sub shifted register instructions.
 

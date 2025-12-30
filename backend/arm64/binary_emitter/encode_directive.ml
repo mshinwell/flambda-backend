@@ -190,10 +190,16 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                 (* On macOS (Mach-O), the addend must be in the data. *)
                 Some addend))))
 
-(* Handle absolute symbol reference. For .8byte symbol in JIT mode, we must emit
-   a relocation so the JIT can patch it with the actual address. For non-JIT
-   mode (object files), same-section references can be resolved at emit time,
-   but cross-section references need relocations. *)
+(* When true, emit relocations for ALL 8-byte symbol references (matching
+   assembler behavior). When false, only emit relocations for cross-section
+   references and resolve same-section refs at emit time. Set to true for
+   verification against the assembler. *)
+let emit_relocs_for_all_symbol_refs = ref false
+
+(* Handle absolute symbol reference. For .8byte symbol references in object
+   files, the assembler always emits relocations. We can either match that
+   behavior (for verification) or resolve same-section refs at emit time
+   (more efficient for JIT). *)
 let is_absolute_symbol_reference state ~all_sections ~current_section
     ~width_bytes (cst : C.t) =
   match[@warning "-4"] cst with
@@ -206,20 +212,22 @@ let is_absolute_symbol_reference state ~all_sections ~current_section
     in
     if is_same_section
     then
-      if for_jit
+      if for_jit || !emit_relocs_for_all_symbol_refs
       then (
-        (* JIT mode: all symbolic references need relocations *)
+        (* Emit relocation for all symbol references *)
         SS.add_relocation_at_current_offset state ~symbol_name:name
           ~reloc_kind:(R_AARCH64_ABS64 name);
         Some 0L (* Emit zero, relocation will patch *))
-      else None (* Non-JIT: same-section refs resolved by eval_constant *)
+      else None (* Resolve same-section refs at emit time via eval_constant *)
     else
       (* Cross-section reference - always needs relocation *)
       match All_section_states.find_in_any_section all_sections name with
       | None -> None (* Not found, will fall through to emit_unresolved *)
       | Some (_, sym_section) ->
         if Asm_section.equal sym_section current_section
-        then None (* Same section after all *)
+           && (not for_jit)
+           && not !emit_relocs_for_all_symbol_refs
+        then None (* Same section after all, resolve at emit time *)
         else (
           SS.add_relocation_at_current_offset state ~symbol_name:name
             ~reloc_kind:(R_AARCH64_ABS64 name);
