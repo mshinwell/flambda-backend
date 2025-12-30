@@ -3123,7 +3123,8 @@ let end_assembly () =
               (fun reloc ->
                 (* For paired relocations (SUBTRACTOR + UNSIGNED), write both
                    symbols as separate lines at the same offset. On RELA
-                   platforms (Linux), include addends for proper verification. *)
+                   platforms (Linux), include addends for proper
+                   verification. *)
                 let offset = R.offset_from_section_beginning reloc in
                 List.iter
                   (fun (sym, addend) ->

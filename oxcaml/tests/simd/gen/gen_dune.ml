@@ -113,7 +113,6 @@ let mangle flag =
   let dash_to_underscore c = match c with '-' -> '_' | c -> c in
   String.map dash_to_underscore flag
 
-
 let print_test ?extra_flag (name, enabled_if) =
   let name, extra_flags =
     match extra_flag with

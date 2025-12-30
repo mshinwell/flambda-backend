@@ -854,8 +854,8 @@ let encode_instruction :
     Load_store_helpers.encode_load_store_pair_gp ~instr_name:"LDP" ~l:1 ~rt1
       ~rt2 addressing
   | Pair (Reg rd, Mem addressing), LDR ->
-    Load_store_helpers.encode_load_store_gp ~all_sections state ~instr_name:"LDR"
-      ~opc:0b01 ~rd addressing
+    Load_store_helpers.encode_load_store_gp ~all_sections state
+      ~instr_name:"LDR" ~opc:0b01 ~rd addressing
   | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
       LDR_simd_and_fp ) ->
     Load_store_helpers.encode_load_store_simd_fp ~all_sections state
@@ -1156,8 +1156,8 @@ let encode_instruction :
     Load_store_helpers.encode_load_store_pair_gp ~instr_name:"STP" ~l:0 ~rt1
       ~rt2 addressing
   | Pair (Reg rd, Mem addressing), STR ->
-    Load_store_helpers.encode_load_store_gp ~all_sections state ~instr_name:"STR"
-      ~opc:0b00 ~rd addressing
+    Load_store_helpers.encode_load_store_gp ~all_sections state
+      ~instr_name:"STR" ~opc:0b00 ~rd addressing
   | ( Pair (Reg ({ reg_name = Neon (Scalar _); _ } as rd), Mem addressing),
       STR_simd_and_fp ) ->
     Load_store_helpers.encode_load_store_simd_fp ~all_sections state
