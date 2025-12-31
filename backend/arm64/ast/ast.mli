@@ -195,14 +195,27 @@ module Symbol : sig
     | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
     | Needs_reloc : 'w reloc_directive -> 'w same_unit_or_reloc
 
+  type target =
+    | Label of Asm_targets.Asm_label.t
+    | Symbol of Asm_targets.Asm_symbol.t
+
   type 'w t = private
-    { name : string;
+    { target : target;
       offset : int;
       reloc : 'w same_unit_or_reloc
     }
 
-  (** Any OS-specific escaping/etc must have been applied first. *)
-  val create : 'w same_unit_or_reloc -> ?offset:int -> string -> 'w t
+  val create_label :
+    'w same_unit_or_reloc -> ?offset:int -> Asm_targets.Asm_label.t -> 'w t
+
+  val create_symbol :
+    'w same_unit_or_reloc -> ?offset:int -> Asm_targets.Asm_symbol.t -> 'w t
+
+  (** Returns the encoded name of the target (label or symbol). *)
+  val name : _ t -> string
+
+  (** Returns true if the target is a label. *)
+  val is_label : _ t -> bool
 
   val print : Format.formatter -> _ t -> unit
 end

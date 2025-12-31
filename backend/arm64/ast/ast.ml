@@ -499,6 +499,9 @@ module Memory_barrier = struct
 end
 
 module Symbol = struct
+  module L = Asm_targets.Asm_label
+  module S = Asm_targets.Asm_symbol
+
   type _ reloc_directive =
     | LOWER_TWELVE : [`Twelve] reloc_directive
     | GOT_PAGE : [`Twenty_one] reloc_directive
@@ -513,14 +516,30 @@ module Symbol = struct
     | Same_section_and_unit : [`Nineteen] same_unit_or_reloc
     | Needs_reloc : 'w reloc_directive -> 'w same_unit_or_reloc
 
+  type target =
+    | Label of L.t
+    | Symbol of S.t
+
   type 'w t =
-    { name : string;
+    { target : target;
       offset : int;
       reloc : 'w same_unit_or_reloc
     }
 
-  let create (type w) (reloc : w same_unit_or_reloc) ?(offset = 0) name : w t =
-    { name; offset; reloc }
+  let create_label (type w) (reloc : w same_unit_or_reloc) ?(offset = 0) lbl :
+      w t =
+    { target = Label lbl; offset; reloc }
+
+  let create_symbol (type w) (reloc : w same_unit_or_reloc) ?(offset = 0) sym :
+      w t =
+    { target = Symbol sym; offset; reloc }
+
+  let name t =
+    match t.target with
+    | Label lbl -> L.encode lbl
+    | Symbol sym -> S.encode sym
+
+  let is_label t = match t.target with Label _ -> true | Symbol _ -> false
 
   let print_with_reloc_directive :
       type w. Format.formatter -> string * w reloc_directive -> unit =
@@ -558,13 +577,14 @@ module Symbol = struct
     else ()
 
   let print : type w. Format.formatter -> w t -> unit =
-   fun ppf { name; offset; reloc } ->
-    match reloc with
+   fun ppf t ->
+    let target_name = name t in
+    match t.reloc with
     | Same_section_and_unit ->
-      Format.fprintf ppf "%s%a" name print_int_offset offset
+      Format.fprintf ppf "%s%a" target_name print_int_offset t.offset
     | Needs_reloc reloc ->
-      Format.fprintf ppf "%a%a" print_with_reloc_directive (name, reloc)
-        print_int_offset offset
+      Format.fprintf ppf "%a%a" print_with_reloc_directive (target_name, reloc)
+        print_int_offset t.offset
 end
 
 module Operand = struct

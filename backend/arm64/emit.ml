@@ -37,6 +37,15 @@ module S = Asm_targets.Asm_symbol
 module L = Asm_targets.Asm_label
 open! Int_replace_polymorphic_compare
 
+(* Convert Cmm.is_global to Asm_symbol.visibility *)
+let visibility_of_cmm_global : Cmm.is_global -> S.visibility = function
+  | Cmm.Global -> S.Global
+  | Cmm.Local -> S.Local
+
+(* Create symbol from Cmm.symbol, preserving visibility *)
+let symbol_of_cmm_symbol (s : Cmm.symbol) : S.t =
+  S.create ~visibility:(visibility_of_cmm_global s.sym_global) s.sym_name
+
 (* Binary emitter for JIT mode *)
 let jit_emitter : Arm64_binary_emitter.Binary_emitter.t option ref = ref None
 
@@ -377,17 +386,17 @@ end = struct
 
   let label ?offset reloc lbl =
     Arm64_ast.Ast.DSL.symbol
-      (Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode lbl))
+      (Arm64_ast.Ast.Symbol.create_label reloc ?offset lbl)
 
   let symbol ?offset reloc s =
     Arm64_ast.Ast.DSL.symbol
-      (Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode s))
+      (Arm64_ast.Ast.Symbol.create_symbol reloc ?offset s)
 
   let emit_mem_symbol
       ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc) ?offset r sym
       =
     let index = reg_index r in
-    let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (S.encode sym) in
+    let symbol = Arm64_ast.Ast.Symbol.create_symbol reloc ?offset sym in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
@@ -405,7 +414,7 @@ end = struct
       ~(reloc : [`Twelve] Arm64_ast.Ast.Symbol.same_unit_or_reloc) ?offset r
       label =
     let index = reg_index r in
-    let symbol = Arm64_ast.Ast.Symbol.create reloc ?offset (L.encode label) in
+    let symbol = Arm64_ast.Ast.Symbol.create_label reloc ?offset label in
     match r.typ with
     | Val | Int | Addr ->
       if index = 31
@@ -451,7 +460,8 @@ end = struct
     | Ibased (s, ofs) ->
       assert (not !Clflags.dlcode);
       (* see selection.ml *)
-      emit_mem_symbol r ~reloc:(Needs_reloc LOWER_TWELVE) (S.create s)
+      (* Symbol from addressing mode - treat as global since original info lost *)
+      emit_mem_symbol r ~reloc:(Needs_reloc LOWER_TWELVE) (S.create_global s)
         ~offset:ofs
 
   let stack (r : Reg.t) =
@@ -639,7 +649,8 @@ end
 
 module A = DSL.Acc
 
-let runtime_function name = DSL.symbol (Needs_reloc CALL26) (S.create name)
+let runtime_function name =
+  DSL.symbol (Needs_reloc CALL26) (S.create_global name)
 
 let local_label lbl = DSL.label Same_section_and_unit lbl
 
@@ -1912,7 +1923,7 @@ let emit_named_text_section func_name =
     (* CR sspies: Clean this up and add proper support for function sections in
        the new asm directives. *)
     D.switch_to_section_raw
-      ~names:[".text.caml." ^ S.encode (S.create func_name)]
+      ~names:[".text.caml." ^ S.encode (S.create_global func_name)]
       ~flags:(Some "ax") ~args:["%progbits"] ~is_delayed:false;
     (* Warning: We set the internal section ref to Text here, because it
        currently does not supported named text sections. In the rest of this
@@ -2162,12 +2173,12 @@ let emit_instr i =
       let lbl = vec128_literal l in
       emit_load_literal i.res.(0) lbl)
   | Lop (Const_symbol s) ->
-    emit_load_symbol_addr i.res.(0) (S.create s.sym_name)
+    emit_load_symbol_addr i.res.(0) (symbol_of_cmm_symbol s)
   | Lcall_op Lcall_ind ->
     A.ins1 BLR (DSL.reg_x i.arg.(0));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op (Lcall_imm { func }) ->
-    A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create func.sym_name));
+    A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (symbol_of_cmm_symbol func));
     record_frame i.live (Dbg_other i.dbg)
   | Lcall_op Ltailcall_ind -> A.ins1 BR (DSL.reg_x i.arg.(0))
   | Lcall_op (Ltailcall_imm { func }) ->
@@ -2176,7 +2187,7 @@ let emit_instr i =
       match !tailrec_entry_point with
       | None -> Misc.fatal_error "jump to missing tailrec entry point"
       | Some tailrec_entry_point -> A.ins1 B (local_label tailrec_entry_point)
-    else A.ins1 B (DSL.symbol (Needs_reloc JUMP26) (S.create func.sym_name))
+    else A.ins1 B (DSL.symbol (Needs_reloc JUMP26) (symbol_of_cmm_symbol func))
   | Lcall_op (Lextcall { func; alloc; stack_ofs; _ }) ->
     if Config.runtime5 && stack_ofs > 0
     then (
@@ -2186,12 +2197,12 @@ let emit_instr i =
           DSL.sp (),
           DSL.imm (Misc.align stack_ofs 16),
           DSL.optional_none );
-      emit_load_symbol_addr reg_x8 (S.create func);
+      emit_load_symbol_addr reg_x8 (S.create_global func);
       A.ins1 BL (runtime_function "caml_c_call_stack_args");
       record_frame i.live (Dbg_other i.dbg))
     else if alloc
     then (
-      emit_load_symbol_addr reg_x8 (S.create func);
+      emit_load_symbol_addr reg_x8 (S.create_global func);
       A.ins1 BL (runtime_function "caml_c_call");
       record_frame i.live (Dbg_other i.dbg))
     else (
@@ -2210,7 +2221,7 @@ let emit_instr i =
             DSL.addressing (Iindexed offset) reg_domain_state_ptr );
         A.ins_mov_to_sp ~src:(DSL.reg_x reg_tmp1))
       else D.cfi_remember_state ();
-      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create func));
+      A.ins1 BL (DSL.symbol (Needs_reloc CALL26) (S.create_global func));
       if Config.runtime5 then A.ins_mov_to_sp ~src:(DSL.fp ());
       D.cfi_restore_state ())
   | Lop (Stackoffset n) ->
@@ -2232,7 +2243,7 @@ let emit_instr i =
         (* see selection_utils.ml *)
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create s) );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create_global s) );
         reg_tmp1
     in
     let default_addressing = DSL.addressing addressing_mode base in
@@ -2266,7 +2277,7 @@ let emit_instr i =
       | Ibased (s, offset) ->
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
-        let s = S.create s in
+        let s = S.create_global s in
         A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
@@ -2289,7 +2300,7 @@ let emit_instr i =
         assert (not !Clflags.dlcode);
         A.ins2 ADRP
           ( DSL.reg_x reg_tmp1,
-            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create s) );
+            DSL.symbol ~offset:ofs (Needs_reloc PAGE) (S.create_global s) );
         reg_tmp1
     in
     match size with
@@ -2320,7 +2331,7 @@ let emit_instr i =
       | Ibased (s, offset) ->
         assert (not !Clflags.dlcode);
         (* see selection_utils.ml *)
-        let s = S.create s in
+        let s = S.create_global s in
         A.ins2 ADRP (DSL.reg_x reg_tmp1, DSL.symbol ~offset (Needs_reloc PAGE) s);
         A.ins4 ADD_immediate
           ( DSL.reg_x reg_tmp1,
@@ -2545,7 +2556,7 @@ let emit_instr i =
       Probe_emission.find_or_add_semaphore name enabled_at_init i.dbg
     in
     (* Load address of the semaphore symbol *)
-    emit_load_symbol_addr reg_tmp1 (S.create semaphore_sym);
+    emit_load_symbol_addr reg_tmp1 (S.create_global semaphore_sym);
     (* Load unsigned 2-byte integer value from offset 2 *)
     A.ins2 LDRH (DSL.reg_w i.res.(0), DSL.addressing (Iindexed 2) reg_tmp1);
     (* Compare with 0 and set result to 1 if non-zero, 0 if zero *)
@@ -2812,7 +2823,7 @@ let fundecl fundecl =
   prologue_required := fundecl.fun_prologue_required;
   contains_calls := fundecl.fun_contains_calls;
   emit_named_text_section !function_name;
-  let fun_sym = S.create fundecl.fun_name in
+  let fun_sym = S.create_global fundecl.fun_name in
   D.align ~fill:Nop ~bytes:8;
   D.global fun_sym;
   D.type_symbol ~ty:Function fun_sym;
@@ -2847,7 +2858,7 @@ let fundecl fundecl =
 let emit_item (d : Cmm.data_item) =
   match d with
   | Cdefine_symbol s ->
-    let sym = S.create s.sym_name in
+    let sym = symbol_of_cmm_symbol s in
     if !Clflags.dlcode || Cmm.equal_is_global s.sym_global Cmm.Global
     then
       (* GOT relocations against non-global symbols don't seem to work properly:
@@ -2868,10 +2879,10 @@ let emit_item (d : Cmm.data_item) =
     D.float64_from_bits word0
   | Cvec256 _ | Cvec512 _ -> Misc.fatal_error "arm64: got 256/512 bit vector"
   | Csymbol_address s ->
-    let sym = S.create s.sym_name in
+    let sym = symbol_of_cmm_symbol s in
     D.symbol sym
   | Csymbol_offset (s, o) ->
-    let sym = S.create s.sym_name in
+    let sym = symbol_of_cmm_symbol s in
     D.symbol_plus_offset ~offset_in_bytes:(Targetint.of_int o) sym
   | Cstring s -> D.string s
   | Cskip n -> D.space ~bytes:n
@@ -2929,12 +2940,12 @@ let begin_assembly _unix =
   D.file ~file_num:None ~file_name:"";
   (* PR#7037 *)
   let data_begin = Cmm_helpers.make_symbol "data_begin" in
-  let data_begin_sym = S.create data_begin in
+  let data_begin_sym = S.create_global data_begin in
   D.data ();
   D.global data_begin_sym;
   D.define_symbol_label ~section:Data data_begin_sym;
   let code_begin = Cmm_helpers.make_symbol "code_begin" in
-  let code_begin_sym = S.create code_begin in
+  let code_begin_sym = S.create_global code_begin in
   emit_named_text_section code_begin;
   D.global code_begin_sym;
   D.define_symbol_label ~section:Text code_begin_sym;
@@ -2951,12 +2962,12 @@ let begin_assembly _unix =
 
 let end_assembly () =
   let code_end = Cmm_helpers.make_symbol "code_end" in
-  let code_end_sym = S.create code_end in
+  let code_end_sym = S.create_global code_end in
   emit_named_text_section code_end;
   D.global code_end_sym;
   D.define_symbol_label ~section:Text code_end_sym;
   let data_end = Cmm_helpers.make_symbol "data_end" in
-  let data_end_sym = S.create data_end in
+  let data_end_sym = S.create_global data_end in
   D.data ();
   D.int64 0L;
   (* PR#6329 *)
@@ -2966,7 +2977,7 @@ let end_assembly () =
   D.align ~fill:Zero ~bytes:8;
   (* #7887 *)
   let frametable = Cmm_helpers.make_symbol "frametable" in
-  let frametable_sym = S.create frametable in
+  let frametable_sym = S.create_global frametable in
   D.global frametable_sym;
   D.define_symbol_label ~section:Data frametable_sym;
   (* CR sspies: Share the [emit_frames] code with the x86 backend. *)

@@ -35,7 +35,7 @@ open Arm64_ast.Ast
    behavior which uses RELA relocations with zero in the instruction for all
    global symbol references, allowing for symbol interposition at link time. *)
 let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
-  let symbol_name = sym.name in
+  let symbol_name = Symbol.name sym in
   let is_global_symbol =
     Option.is_some (Section_state.find_symbol_offset_in_bytes state symbol_name)
   in
@@ -77,7 +77,7 @@ let compute_branch_imm26 state ~instr_name ~reloc_kind (sym : _ Symbol.t) =
 
 (* Helper to compute a 19-bit PC-relative offset for CBZ/CBNZ instructions *)
 let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
-  let symbol_name = sym.name in
+  let symbol_name = Symbol.name sym in
   match
     Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
   with
@@ -101,7 +101,7 @@ let compute_branch_imm19 state ~instr_name (sym : _ Symbol.t) =
 
 (* Helper to compute a 14-bit PC-relative offset for TBZ/TBNZ instructions *)
 let compute_branch_imm14 state ~instr_name (sym : _ Symbol.t) =
-  let symbol_name = sym.name in
+  let symbol_name = Symbol.name sym in
   match
     Section_state.find_symbol_or_label_offset_in_bytes state symbol_name
   with
