@@ -45,6 +45,12 @@ val create_global : string -> t
 (** [create_local] creates a local symbol. Shorthand for [create ~visibility:Local]. *)
 val create_local : string -> t
 
+(** [create_without_encoding] creates a symbol from an already-encoded string.
+    Use this when you have a string that already includes the symbol prefix
+    (e.g., "_camlFoo" on macOS). The string will be used as-is without further
+    encoding. *)
+val create_without_encoding : visibility:visibility -> string -> t
+
 val encode : t -> string
 
 val to_raw_string : t -> string

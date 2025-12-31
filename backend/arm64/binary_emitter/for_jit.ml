@@ -27,6 +27,8 @@
 
 (* For_jit module implementing Binary_emitter_intf.S *)
 
+module Asm_symbol = Asm_targets.Asm_symbol
+
 module Relocation = struct
   type t = Relocation.t
 
@@ -87,8 +89,10 @@ module Assembled_section = struct
   let iter_symbols t ~f =
     (* For JIT, we need to export both global symbols and local labels. Local
        labels like _camlFoo__immstring51 need to be resolvable. *)
-    Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.symbols t);
-    Hashtbl.iter (fun name offset -> f ~name ~offset) (Section_state.labels t)
+    Section_state.iter_symbols t ~f:(fun sym offset ->
+        let name = Asm_symbol.encode sym in
+        f ~name ~offset);
+    Section_state.iter_labels t ~f:(fun name offset -> f ~name ~offset)
 
   let add_patch t ~offset ~size:(sz : Binary_emitter_intf.data_size) ~data =
     let sz =

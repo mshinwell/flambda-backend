@@ -113,10 +113,14 @@ let compute_label_offsets emitter ~all_sections =
     ~on_directive:(fun state directive ->
       match directive with
       | New_label (name, _) -> Section_state.define_label state name
-      | Global name -> Section_state.define_symbol state name
+      | Global name ->
+        Section_state.define_symbol state ~name
+          ~visibility:Asm_targets.Asm_symbol.Global
       (* Weak symbols also have symbol table entries on ELF, so track them
          too *)
-      | Weak name -> Section_state.define_symbol state name
+      | Weak name ->
+        Section_state.define_symbol state ~name
+          ~visibility:Asm_targets.Asm_symbol.Local
       | Direct_assignment (name, expr) ->
         All_section_states.add_direct_assignment all_sections name expr
       (* Directives that don't define labels or symbols *)

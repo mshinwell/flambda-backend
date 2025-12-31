@@ -25,16 +25,25 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+module Asm_label = Asm_targets.Asm_label
+module Asm_symbol = Asm_targets.Asm_symbol
+module Symbol = Arm64_ast.Ast.Symbol
+
 type patch_size =
   | P8
   | P16
   | P32
   | P64
 
+(* We store symbols with their visibility so we can reconstruct Asm_symbol.t
+   when returning from find_nearest_symbol_before. Labels are stored as plain
+   strings since reconstructing Asm_label.t from encoded strings is complex. *)
 type t =
   { buffer : Buffer.t;
     mutable offset_in_bytes : int;
-    symbol_offset_tbl : (string, int) Hashtbl.t;
+    (* Maps encoded symbol name -> (visibility, offset) *)
+    symbol_offset_tbl : (string, Asm_symbol.visibility * int) Hashtbl.t;
+    (* Maps encoded label name -> offset *)
     label_offset_tbl : (string, int) Hashtbl.t;
     mutable relocations : Relocation.t list;
     mutable patches : (int * patch_size * int64) list
@@ -65,19 +74,21 @@ let add_relocation_at_current_offset t ~reloc_kind =
 let add_relocation t (reloc : Relocation.t) =
   t.relocations <- reloc :: t.relocations
 
-let define_symbol t name =
-  Hashtbl.replace t.symbol_offset_tbl name t.offset_in_bytes
+let define_symbol t ~name ~visibility =
+  Hashtbl.replace t.symbol_offset_tbl name (visibility, t.offset_in_bytes)
 
 let define_label t name =
   Hashtbl.replace t.label_offset_tbl name t.offset_in_bytes
 
 let find_symbol_offset_in_bytes t name =
-  Hashtbl.find_opt t.symbol_offset_tbl name
+  match Hashtbl.find_opt t.symbol_offset_tbl name with
+  | Some (_, offset) -> Some offset
+  | None -> None
 
 let find_label_offset_in_bytes t name = Hashtbl.find_opt t.label_offset_tbl name
 
 (* Find the nearest global symbol strictly before a given offset. Returns
-   (symbol_name, symbol_offset) or None.
+   (symbol, symbol_offset) or None.
 
    NOTE: This is a somewhat surprising design choice. For cross-section
    relocations (e.g., frame table entries in DATA referencing labels in TEXT),
@@ -93,29 +104,41 @@ let find_label_offset_in_bytes t name = Hashtbl.find_opt t.label_offset_tbl name
 let find_nearest_symbol_before t offset =
   let best = ref None in
   Hashtbl.iter
-    (fun name sym_offset ->
+    (fun name (visibility, sym_offset) ->
       if sym_offset < offset
       then
         match !best with
-        | None -> best := Some (name, sym_offset)
-        | Some (_, best_offset) when sym_offset > best_offset ->
-          best := Some (name, sym_offset)
+        | None -> best := Some (name, visibility, sym_offset)
+        | Some (_, _, best_offset) when sym_offset > best_offset ->
+          best := Some (name, visibility, sym_offset)
         | Some _ -> ())
     t.symbol_offset_tbl;
-  !best
+  match !best with
+  | None -> None
+  | Some (name, visibility, sym_offset) ->
+    let sym = Asm_symbol.create_without_encoding ~visibility name in
+    Some (sym, sym_offset)
 
-(* Look up both symbols and labels - used for branch targets which can be
-   either *)
-let find_symbol_or_label_offset_in_bytes t name =
-  match Hashtbl.find_opt t.symbol_offset_tbl name with
-  | Some _ as result -> result
-  | None -> Hashtbl.find_opt t.label_offset_tbl name
+(* Look up a target (symbol or label) by its typed value *)
+let find_target_offset_in_bytes t (target : Symbol.target) =
+  match target with
+  | Symbol sym ->
+    let name = Asm_symbol.encode sym in
+    find_symbol_offset_in_bytes t name
+  | Label lbl ->
+    let name = Asm_label.encode lbl in
+    find_label_offset_in_bytes t name
 
 let relocations t = List.rev t.relocations
 
-let symbols t = t.symbol_offset_tbl
+let iter_symbols t ~f =
+  Hashtbl.iter
+    (fun name (visibility, offset) ->
+      let sym = Asm_symbol.create_without_encoding ~visibility name in
+      f sym offset)
+    t.symbol_offset_tbl
 
-let labels t = t.label_offset_tbl
+let iter_labels t ~f = Hashtbl.iter (fun name offset -> f name offset) t.label_offset_tbl
 
 let add_patch t ~offset ~size ~data =
   t.patches <- (offset, size, data) :: t.patches

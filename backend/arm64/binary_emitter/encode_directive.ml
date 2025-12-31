@@ -185,21 +185,16 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
                 Misc.fatal_errorf
                   "No symbol in %s section for cross-section relocation"
                   (Asm_section.to_string label_section)
-              | Some (plus_symbol, plus_sym_offset) ->
+              | Some (plus_sym, plus_sym_offset) ->
                 let addend =
                   Int64.add offset_upper
                     (Int64.sub
                        (Int64.of_int (target_offset - plus_sym_offset))
                        (Int64.of_int (current_pos - minus_sym_offset)))
                 in
-                (* Convert string symbol names to Symbol.target.
-                   Global symbols returned by find_nearest_symbol_before. *)
-                let plus_target : Symbol.target =
-                  Symbol (Asm_symbol.create ~visibility:Global plus_symbol)
-                in
-                let minus_target : Symbol.target =
-                  Symbol (Asm_symbol.create ~visibility:Global minus_symbol)
-                in
+                (* find_nearest_symbol_before returns Asm_symbol.t directly *)
+                let plus_target : Symbol.target = Symbol plus_sym in
+                let minus_target : Symbol.target = Symbol minus_symbol in
                 SS.add_relocation_at_current_offset state
                   ~reloc_kind:
                     (R_AARCH64_PREL32_PAIR { plus_target; minus_target });

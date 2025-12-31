@@ -25,6 +25,9 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************)
 
+module Asm_symbol = Asm_targets.Asm_symbol
+module Symbol = Arm64_ast.Ast.Symbol
+
 type patch_size =
   | P8
   | P16
@@ -45,23 +48,34 @@ val add_relocation_at_current_offset : t -> reloc_kind:Relocation.Kind.t -> unit
 
 val add_relocation : t -> Relocation.t -> unit
 
-val define_symbol : t -> string -> unit
+(** Define a symbol at the current offset. The name should be already encoded
+    (e.g., with the platform symbol prefix). *)
+val define_symbol :
+  t -> name:string -> visibility:Asm_symbol.visibility -> unit
 
+(** Define a label at the current offset. The name should be already encoded. *)
 val define_label : t -> string -> unit
 
+(** Find the offset of a symbol by its encoded name. *)
 val find_symbol_offset_in_bytes : t -> string -> int option
 
+(** Find the offset of a label by its encoded name. *)
 val find_label_offset_in_bytes : t -> string -> int option
 
-val find_nearest_symbol_before : t -> int -> (string * int) option
+(** Find the nearest global symbol strictly before a given offset.
+    Returns the symbol and its offset. *)
+val find_nearest_symbol_before : t -> int -> (Asm_symbol.t * int) option
 
-val find_symbol_or_label_offset_in_bytes : t -> string -> int option
+(** Look up a target (symbol or label) by encoded name. *)
+val find_target_offset_in_bytes : t -> Symbol.target -> int option
 
 val relocations : t -> Relocation.t list
 
-val symbols : t -> (string, int) Hashtbl.t
+(** Iterate over all defined symbols with their offsets. *)
+val iter_symbols : t -> f:(Asm_symbol.t -> int -> unit) -> unit
 
-val labels : t -> (string, int) Hashtbl.t
+(** Iterate over all defined labels with their offsets (as encoded strings). *)
+val iter_labels : t -> f:(string -> int -> unit) -> unit
 
 val add_patch : t -> offset:int -> size:patch_size -> data:int64 -> unit
 
