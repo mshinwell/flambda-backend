@@ -3119,8 +3119,7 @@ let end_assembly () =
             let module R =
               Arm64_binary_emitter.Binary_emitter.For_jit.Relocation
             in
-            let module ED =
-              Arm64_binary_emitter.Binary_emitter.Encode_directive
+            let module ED = Arm64_binary_emitter.Binary_emitter.Encode_directive
             in
             List.iter
               (fun reloc ->

@@ -242,12 +242,10 @@ let encode_load_store_gp_sized :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      (* Keep original symbol name in relocation for JIT use.
-         The conversion to section+offset for verification is done in emit.ml *)
+      (* Keep original symbol name in relocation for JIT use. The conversion to
+         section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r =
-          { Relocation.Kind.symbol = sym.name; addend = sym.offset }
-        in
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -257,8 +255,8 @@ let encode_load_store_gp_sized :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state
-        ~symbol_name:sym.name ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+        ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
@@ -546,12 +544,10 @@ let encode_load_store_simd_fp :
     match sym.reloc with
     | Needs_reloc reloc ->
       let max_imm12 = 0xfff in
-      (* Keep original symbol name in relocation for JIT use.
-         The conversion to section+offset for verification is done in emit.ml *)
+      (* Keep original symbol name in relocation for JIT use. The conversion to
+         section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r =
-          { Relocation.Kind.symbol = sym.name; addend = sym.offset }
-        in
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
         | GOT_PAGE_OFF | GOT_LOWER_TWELVE -> R_AARCH64_LD64_GOT_LO12_NC r
         | PAGE_OFF | LOWER_TWELVE ->
@@ -561,8 +557,8 @@ let encode_load_store_simd_fp :
           then R_AARCH64_LDST64_ABS_LO12_NC r
           else R_AARCH64_ADD_ABS_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state
-        ~symbol_name:sym.name ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+        ~reloc_kind;
       let rn = Reg.gp_encoding rn in
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)

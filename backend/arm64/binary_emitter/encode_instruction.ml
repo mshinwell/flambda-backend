@@ -49,18 +49,16 @@ let encode_instruction :
     let sh = match shift with Some _ -> 1 | None -> 0 in
     match sym.reloc with
     | Needs_reloc reloc ->
-      (* Keep original symbol name in relocation for JIT use.
-         The conversion to section+offset for verification is done in emit.ml *)
+      (* Keep original symbol name in relocation for JIT use. The conversion to
+         section+offset for verification is done in emit.ml *)
       let reloc_kind : Relocation.Kind.t =
-        let r =
-          { Relocation.Kind.symbol = sym.name; addend = sym.offset }
-        in
+        let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
         match reloc with
         | LOWER_TWELVE | PAGE_OFF -> R_AARCH64_ADD_ABS_LO12_NC r
         | GOT_LOWER_TWELVE | GOT_PAGE_OFF -> R_AARCH64_LD64_GOT_LO12_NC r
       in
-      Section_state.add_relocation_at_current_offset state
-        ~symbol_name:sym.name ~reloc_kind;
+      Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+        ~reloc_kind;
       (* On RELA platforms (Linux), encode 0 in instruction - addend is in
          relocation. On REL platforms (macOS), encode addend in instruction. *)
       let imm12 =
@@ -125,18 +123,16 @@ let encode_instruction :
     let immlo, immhi = Adr_helpers.split_21bit_immediate pc_rel in
     Adr_helpers.encode_adr ~op:0 ~immlo ~immhi ~rd
   | Pair (Reg rd, Imm (Sym sym)), ADRP ->
-    (* Keep original symbol name in relocation for JIT use.
-       The conversion to section+offset for verification is done in emit.ml *)
+    (* Keep original symbol name in relocation for JIT use. The conversion to
+       section+offset for verification is done in emit.ml *)
     let reloc_kind : Relocation.Kind.t =
-      let r =
-        { Relocation.Kind.symbol = sym.name; addend = sym.offset }
-      in
+      let r = { Relocation.Kind.symbol = sym.name; addend = sym.offset } in
       match sym.reloc with
       | Needs_reloc GOT_PAGE -> R_AARCH64_ADR_GOT_PAGE r
       | Needs_reloc PAGE -> R_AARCH64_ADR_PREL_PG_HI21 r
     in
-    Section_state.add_relocation_at_current_offset state
-      ~symbol_name:sym.name ~reloc_kind;
+    Section_state.add_relocation_at_current_offset state ~symbol_name:sym.name
+      ~reloc_kind;
     (* On RELA platforms (Linux), encode 0 in instruction - addend is in
        relocation. On REL platforms (macOS), encode addend in instruction. *)
     let offset =

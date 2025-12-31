@@ -211,12 +211,12 @@ module Relocation = struct
     let sym = target_symbol r in
     match lookup_symbol sym with
     | None -> Error (Printf.sprintf "Symbol not found: %s" sym)
-    | Some sym_addr ->
-      (* Add the addend to get the actual target address.
-         On RELA platforms (Linux), the addend is stored in the relocation. *)
+    | Some sym_addr -> (
+      (* Add the addend to get the actual target address. On RELA platforms
+         (Linux), the addend is stored in the relocation. *)
       let addend = get_addend r.kind in
       let target_addr = Int64.add sym_addr (Int64.of_int addend) in
-      (match r.kind with
+      match r.kind with
       | R_AARCH64_ADR_PREL_LO21 _ ->
         (* PC-relative offset for ADR instruction, low 21 bits. ADR has the same
            bit layout as ADRP but the immediate is a byte offset, not a page
