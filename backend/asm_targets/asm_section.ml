@@ -50,6 +50,7 @@ type t =
   | Sixtyfour_byte_literals
   | Jump_tables
   | Text
+  | Function_text of string
   | Stapsdt_base
   | Stapsdt_note
   | Probes
@@ -79,7 +80,7 @@ let is_delayed = function
       | Debug_rnglists | Debug_addr | Debug_loc | Debug_ranges )
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
   | Thirtytwo_byte_literals | Sixtyfour_byte_literals | Jump_tables | Text
-  | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
+  | Function_text _ | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
     false
 
 let print ppf t =
@@ -103,6 +104,7 @@ let print ppf t =
     | Sixtyfour_byte_literals -> "Sixtyfour_byte_literals"
     | Jump_tables -> "Jump_tables"
     | Text -> "Text"
+    | Function_text name -> Printf.sprintf "(Function_text %s)" name
     | Stapsdt_base -> "Stapsdt_base"
     | Stapsdt_note -> "Stapsdt_note"
     | Probes -> "Probes"
@@ -125,7 +127,7 @@ module Tbl = Hashtbl.Make (struct
 end)
 
 let section_is_text = function
-  | Text -> true
+  | Text | Function_text _ -> true
   | Data | Read_only_data | Eight_byte_literals | Sixteen_byte_literals
   | Thirtytwo_byte_literals | Sixtyfour_byte_literals | Jump_tables | DWARF _
   | Stapsdt_base | Stapsdt_note | Probes | Note_ocaml_eh ->
@@ -146,6 +148,7 @@ let details t ~first_occurrence =
   let names, flags, args =
     match t, Target_system.architecture (), system with
     | Text, _, _ -> text ()
+    | Function_text name, _, _ -> [name], Some "ax", ["@progbits"]
     | Data, _, _ -> data ()
     | DWARF dwarf, _, MacOS_like ->
       let name =
@@ -287,4 +290,10 @@ let of_names names =
   | ["__DATA"; "__note_stapsdt"] -> Some Stapsdt_note
   (* Windows *)
   | [".rdata"] -> Some Read_only_data
+  (* Function sections - .text.caml.funcname etc. *)
+  | [name]
+    when String.length name > 5
+         && String.equal (String.sub name 0 5) ".text"
+         && Char.equal name.[5] '.' ->
+    Some (Function_text name)
   | _ -> None

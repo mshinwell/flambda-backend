@@ -57,12 +57,12 @@ module Kind = struct
           minus_target : Symbol.target
         }
     (* ELF section-relative 32-bit PC-relative reference. Used on ELF for
-       cross-section references when function sections are enabled. The
-       section_name is the target section (e.g., .text.caml.funcname) and addend
-       is the offset within that section. The linker computes: section_address +
-       addend - relocation_address *)
+       cross-section references when function sections are enabled. The section
+       is the target section (e.g., Text or Function_text ".text.caml.func") and
+       addend is the offset within that section. The linker computes:
+       section_address + addend - relocation_address *)
     | R_AARCH64_PREL32 of
-        { section_name : string;
+        { section : Asm_targets.Asm_section.t;
           addend : int
         }
 end
@@ -97,8 +97,9 @@ let primary_target (r : t) : Symbol.target =
   | R_AARCH64_ABS64 { target; _ } ->
     target
   | R_AARCH64_PREL32_PAIR { plus_target; _ } -> plus_target
-  | R_AARCH64_PREL32 { section_name; _ } ->
+  | R_AARCH64_PREL32 { section; _ } ->
     (* Section names are treated as global symbols *)
+    let section_name = Asm_targets.Asm_section.to_string section in
     Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)
 
 let all_targets (r : t) : Symbol.target list =
@@ -115,7 +116,8 @@ let all_targets (r : t) : Symbol.target list =
     [target]
   | R_AARCH64_PREL32_PAIR { plus_target; minus_target } ->
     [plus_target; minus_target]
-  | R_AARCH64_PREL32 { section_name; _ } ->
+  | R_AARCH64_PREL32 { section; _ } ->
+    let section_name = Asm_targets.Asm_section.to_string section in
     [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name)]
 
 let all_targets_with_addends (r : t) : (Symbol.target * int) list =
@@ -132,7 +134,8 @@ let all_targets_with_addends (r : t) : (Symbol.target * int) list =
     [target, addend]
   | R_AARCH64_PREL32_PAIR { plus_target; minus_target } ->
     [plus_target, 0; minus_target, 0]
-  | R_AARCH64_PREL32 { section_name; addend } ->
+  | R_AARCH64_PREL32 { section; addend } ->
+    let section_name = Asm_targets.Asm_section.to_string section in
     [Symbol (Asm_targets.Asm_symbol.create ~visibility:Global section_name), addend]
 
 let is_got_reloc (r : t) =

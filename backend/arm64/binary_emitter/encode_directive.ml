@@ -113,21 +113,21 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
            All_section_states.find_in_any_individual_section_with_state
              all_sections label_name
          with
-         | Some (target_offset, section_name, _target_state) ->
+         | Some (target_offset, section, _target_state) ->
            if not (Asm_section.equal current_section Asm_section.Data)
            then
              Misc.fatal_errorf
                "Cross-section (Label - This) from non-DATA section %s to %s \
                 not supported"
                (Asm_section.to_string current_section)
-               section_name
+               (Asm_section.to_string section)
            else
              (* ELF with function sections: use R_AARCH64_PREL32 with section
                 symbol and addend. The addend is the offset of the label within
                 the section plus any user-specified offset. *)
              let addend = target_offset + Int64.to_int offset_upper in
              SS.add_relocation_at_current_offset state
-               ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
+               ~reloc_kind:(R_AARCH64_PREL32 { section; addend });
              true
          | None -> false
       then Some 0L (* ELF RELA: addend in relocation, emit 0 in data *)
@@ -155,10 +155,9 @@ let is_cross_section_relative_reference state ~all_sections ~current_section c =
             (* ELF without function sections: use R_AARCH64_PREL32 with standard
                section symbol. The assembler uses section symbols for
                cross-section references. *)
-            let section_name = Asm_section.to_string label_section in
             let addend = target_offset + Int64.to_int offset_upper in
             SS.add_relocation_at_current_offset state
-              ~reloc_kind:(R_AARCH64_PREL32 { section_name; addend });
+              ~reloc_kind:(R_AARCH64_PREL32 { section = label_section; addend });
             Some 0L (* ELF RELA: addend in relocation, emit 0 in data *))
           else
             (* macOS or JIT: use symbol pairs (SUBTRACTOR + UNSIGNED). The
@@ -238,13 +237,15 @@ let resolve_local_label_for_elf ~all_sections ~sym_name ~sym_offset =
         All_section_states.find_in_any_individual_section_with_state
           all_sections sym_name
       with
-      | Some (label_offset, section_name, target_state) ->
+      | Some (label_offset, section, target_state) ->
         (* Check if this is a global symbol in the target section *)
         let is_global_in_target =
           Option.is_some (SS.find_symbol_offset_in_bytes target_state sym_name)
         in
         if is_local_label || not is_global_in_target
-        then Some (section_name, label_offset + sym_offset)
+        then
+          let section_name = Asm_section.to_string section in
+          Some (section_name, label_offset + sym_offset)
         else None
       | None -> None
     in

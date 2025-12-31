@@ -61,13 +61,12 @@ val iter_individual : t -> f:(string -> Section_state.t -> unit) -> unit
 val fold_individual :
   t -> init:'a -> f:(string -> Section_state.t -> 'a -> 'a) -> 'a
 
-val find_in_any_individual_section : t -> string -> (int * string) option
+val find_in_any_individual_section : t -> string -> (int * Asm_section.t) option
 
 (** Search individual sections for a label or symbol. Returns (offset,
-    section_name, state) if found. Used when we need the actual section name
-    string for ELF relocations. *)
+    section, state) if found. *)
 val find_in_any_individual_section_with_state :
-  t -> string -> (int * string * Section_state.t) option
+  t -> string -> (int * Asm_section.t * Section_state.t) option
 
 (** Search all sections for a label or symbol. Returns (offset, section,
     section_state) if found. This is needed when the caller needs to access

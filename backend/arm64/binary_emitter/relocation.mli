@@ -53,12 +53,12 @@ module Kind : sig
           minus_target : Arm64_ast.Ast.Symbol.target
         }
     (* ELF section-relative 32-bit PC-relative reference. Used on ELF for
-       cross-section references when function sections are enabled. The
-       section_name is the target section (e.g., .text.caml.funcname) and addend
-       is the offset within that section. The linker computes: section_address +
-       addend - relocation_address *)
+       cross-section references when function sections are enabled. The section
+       is the target section (e.g., Text or Function_text ".text.caml.func") and
+       addend is the offset within that section. The linker computes:
+       section_address + addend - relocation_address *)
     | R_AARCH64_PREL32 of
-        { section_name : string;
+        { section : Asm_targets.Asm_section.t;
           addend : int
         }
 end

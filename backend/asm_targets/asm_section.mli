@@ -50,6 +50,7 @@ type t =
   | Sixtyfour_byte_literals
   | Jump_tables
   | Text
+  | Function_text of string  (** Individual function section, e.g. ".text.caml.func" *)
   | Stapsdt_base
   | Stapsdt_note
   | Probes
